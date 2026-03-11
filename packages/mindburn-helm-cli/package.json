@@ -1,6 +1,6 @@
 {
-    "name": "@mindburn/helm",
-    "version": "0.9.0",
+    "name": "@mindburn/helm-cli",
+    "version": "1.0.1",
     "description": "HELM conformance verification CLI — one command, progressive disclosure, cryptographic proof",
     "type": "module",
     "bin": {

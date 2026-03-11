@@ -1,6 +1,6 @@
 {
   "name": "@mindburn/helm-mastra",
-  "version": "0.9.0",
+  "version": "1.0.1",
   "description": "HELM governance adapter for Mastra agent framework — sandbox-aware",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -13,7 +13,7 @@
     "lint": "biome lint ."
   },
   "dependencies": {
-    "@mindburn/helm-sdk": "^0.1.1"
+    "@mindburn/helm": "^1.0.1"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.1.0"

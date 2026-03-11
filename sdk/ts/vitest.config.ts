@@ -5,7 +5,7 @@ import path from 'node:path'
 export default defineConfig({
   resolve: {
     alias: {
-      '@mindburn/helm-sdk': path.resolve(__dirname, 'src/index.ts'),
+      '@mindburn/helm': path.resolve(__dirname, 'src/index.ts'),
     },
   },
   test: {

@@ -5,13 +5,13 @@ Typed TypeScript/JavaScript client for the HELM kernel API. Zero runtime depende
 ## Install
 
 ```bash
-npm install @mindburn/helm-sdk
+npm install @mindburn/helm
 ```
 
 ## Quick Example
 
 ```typescript
-import { HelmClient } from '@mindburn/helm-sdk';
+import { HelmClient } from '@mindburn/helm';
 
 const helm = new HelmClient({ baseUrl: 'http://localhost:8080' });
 

@@ -24,8 +24,8 @@
  * ```
  */
 
-import { HelmClient, HelmApiError } from '@mindburn/helm-sdk';
-import type { HelmClientConfig, Receipt } from '@mindburn/helm-sdk';
+import { HelmClient, HelmApiError } from '@mindburn/helm';
+import type { HelmClientConfig, Receipt } from '@mindburn/helm';
 import { createHash } from 'node:crypto';
 
 // ── Types ───────────────────────────────────────────────────────

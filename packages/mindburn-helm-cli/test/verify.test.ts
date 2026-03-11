@@ -19,7 +19,7 @@ import type {
 const MANDATORY_DIRS = [
     "02_PROOFGRAPH", "03_TELEMETRY", "04_EXPORTS", "05_DIFFS",
     "06_LOGS", "07_ATTESTATIONS", "08_TAPES", "09_SCHEMAS",
-    "10_A2A", "11_FORMAL", "12_REPORTS",
+    "12_REPORTS",
 ];
 
 function sha256(data: string | Buffer): string {

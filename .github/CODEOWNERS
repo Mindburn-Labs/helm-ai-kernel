@@ -19,11 +19,11 @@
 /.goreleaser.yml    @Mindburn-Labs/helm-core
 
 # ── SDKs ─────────────────────────────────────────────
-/sdk/ts/            @Mindburn-Labs/helm-sdk
-/sdk/python/        @Mindburn-Labs/helm-sdk
-/sdk/go/            @Mindburn-Labs/helm-sdk
-/sdk/java/          @Mindburn-Labs/helm-sdk
-/sdk/rust/          @Mindburn-Labs/helm-sdk
+/sdk/ts/            @Mindburn-Labs/helm
+/sdk/python/        @Mindburn-Labs/helm
+/sdk/go/            @Mindburn-Labs/helm
+/sdk/java/          @Mindburn-Labs/helm
+/sdk/rust/          @Mindburn-Labs/helm
 
 # ── Security-sensitive paths ─────────────────────────
 /SECURITY.md        @Mindburn-Labs/helm-core

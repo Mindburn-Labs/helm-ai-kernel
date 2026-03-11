@@ -388,7 +388,7 @@ jobs:
 
   # npm adapter publish intentionally omitted.
   # The adapters currently ship in-repo but are not yet clean standalone
-  # publish targets against the public @mindburn/helm-sdk release line.
+  # publish targets against the public @mindburn/helm release line.
 
   # ── crates.io Publish (OIDC) ───────────────────────
   publish-crates:

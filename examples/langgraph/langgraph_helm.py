@@ -5,7 +5,7 @@ Routes a LangGraph agentic pipeline through a HELM-governed proxy,
 producing receipts and EvidencePack for every LLM decision.
 
 Prerequisites:
-    pip install langgraph langchain-openai helm-sdk
+    pip install langgraph langchain-openai helm
 
 Environment:
     HELM_PROXY_URL  - HELM proxy URL (default: http://localhost:8080)

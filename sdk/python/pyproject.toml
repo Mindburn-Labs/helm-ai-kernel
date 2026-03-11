@@ -1,5 +1,5 @@
 [project]
-name = "helm-sdk"
+name = "helm"
 version = "0.9.0"
 description = "Python SDK for HELM — fail-closed tool calling for AI agents"
 readme = "README.md"

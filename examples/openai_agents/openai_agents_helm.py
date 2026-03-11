@@ -5,7 +5,7 @@ Routes OpenAI agent API calls through a HELM-governed proxy,
 producing cryptographic receipts for every tool call and response.
 
 Prerequisites:
-    pip install openai helm-sdk
+    pip install openai helm
 
 Environment:
     HELM_PROXY_URL  - HELM proxy URL (default: http://localhost:8080)

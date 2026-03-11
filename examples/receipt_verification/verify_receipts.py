@@ -9,7 +9,7 @@ Demonstrates how to:
 5. Export and verify evidence packs
 
 Prerequisites:
-  pip install helm-sdk
+  pip install helm
 """
 import hashlib
 import json

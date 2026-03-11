@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/artifacts"
@@ -178,18 +179,6 @@ func isMemoryError(err error) bool {
 		return false
 	}
 	msg := err.Error()
-	return strContains(msg, "memory") && (strContains(msg, "limit") || strContains(msg, "grow") || strContains(msg, "exceeded"))
-}
-
-func strContains(s, substr string) bool {
-	return len(s) >= len(substr) && strSearch(s, substr)
-}
-
-func strSearch(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(msg, "memory") &&
+		(strings.Contains(msg, "limit") || strings.Contains(msg, "grow") || strings.Contains(msg, "exceeded"))
 }

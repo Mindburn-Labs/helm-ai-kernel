@@ -172,3 +172,7 @@ func runBundleInspect(args []string, stdout, stderr io.Writer) int {
 	_, _ = fmt.Fprintln(stdout, string(out))
 	return 0
 }
+
+func init() {
+	Register(Subcommand{Name: "bundle", Aliases: []string{}, Usage: "List and verify loaded policy bundles", RunFn: runBundleCmd})
+}

@@ -114,14 +114,8 @@ type PolicyRef struct {
 	Hash string `json:"hash"`
 }
 
-// Legacy verdict aliases kept during migration. New code MUST use VerdictAllow,
-// VerdictDeny, and VerdictEscalate from verdict.go.
-const (
-	VerdictPass    = string(VerdictAllow)
-	VerdictFail    = string(VerdictDeny)
-	VerdictWarn    = string(VerdictEscalate)
-	VerdictPending = "PENDING"
-)
+// VerdictPending is a transient verdict state with no canonical constant equivalent.
+const VerdictPending = "PENDING"
 
 // AuthorizedExecutionIntent represents a derived, signed intent to execute a specific effect.
 // It decouples the "Permission" (Decision) from "Action" (Execution). (Sequence 8)

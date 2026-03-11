@@ -19,7 +19,7 @@ func TestExecutor_DigestMismatch_I14(t *testing.T) {
 	// 2. Setup Decision with Digest
 	decision := &contracts.DecisionRecord{
 		ID:            "dec-1",
-		Verdict:       contracts.VerdictPass,
+		Verdict:       string(contracts.VerdictAllow),
 		EffectDigest:  "sha256:expected-hash",
 		PhenotypeHash: "hash-v1",
 		Signature:     "valid-sig",

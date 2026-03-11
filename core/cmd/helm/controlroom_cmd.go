@@ -85,3 +85,7 @@ func runControlRoom(args []string, stdout, stderr io.Writer) int {
 	}
 	return 0
 }
+
+func init() {
+	Register(Subcommand{Name: "control-room", Aliases: []string{}, Usage: "Launch the Control Room UI", RunFn: runControlRoom})
+}

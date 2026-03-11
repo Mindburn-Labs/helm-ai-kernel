@@ -237,3 +237,8 @@ func runTrustCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 }
+
+func init() {
+	Register(Subcommand{Name: "doctor", Aliases: []string{}, Usage: "Check system health and configuration", RunFn: func(args []string, stdout, stderr io.Writer) int { return runDoctorCmd(stdout, stderr) }})
+	Register(Subcommand{Name: "init", Aliases: []string{}, Usage: "Initialize a new HELM project", RunFn: runInitCmd})
+}

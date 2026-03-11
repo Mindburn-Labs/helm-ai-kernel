@@ -363,3 +363,7 @@ func runDemoCompany(args []string, stdout, stderr io.Writer) int {
 	}
 	return 0
 }
+
+func init() {
+	Register(Subcommand{Name: "demo", Aliases: []string{}, Usage: "Run governed demonstrations (demo company)", RunFn: runDemoCmd})
+}

@@ -227,3 +227,7 @@ func (f *multiFlag) Set(value string) error {
 	*f = append(*f, value)
 	return nil
 }
+
+func init() {
+	Register(Subcommand{Name: "conform", Aliases: []string{"conformance"}, Usage: "Run conformance gates (--profile, --json)", RunFn: runConform})
+}

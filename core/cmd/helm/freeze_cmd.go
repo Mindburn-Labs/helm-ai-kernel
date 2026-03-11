@@ -169,3 +169,8 @@ func runFreezeCmd(args []string, stdout, stderr io.Writer, action string) int {
 
 	return 0
 }
+
+func init() {
+	Register(Subcommand{Name: "freeze", Aliases: []string{}, Usage: "Activate global freeze (--principal)", RunFn: func(args []string, stdout, stderr io.Writer) int { return runFreezeCmd(args, stdout, stderr, "freeze") }})
+	Register(Subcommand{Name: "unfreeze", Aliases: []string{}, Usage: "Deactivate freeze (--principal)", RunFn: func(args []string, stdout, stderr io.Writer) int { return runFreezeCmd(args, stdout, stderr, "unfreeze") }})
+}

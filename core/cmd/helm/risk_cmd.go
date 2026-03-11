@@ -131,3 +131,7 @@ func runRiskCmd(args []string, stdout, stderr io.Writer) int {
 
 	return 0
 }
+
+func init() {
+	Register(Subcommand{Name: "risk-summary", Aliases: []string{}, Usage: "Risk assessment (--effect, --list)", RunFn: runRiskCmd})
+}

@@ -142,3 +142,7 @@ func loadTapeEntries(tapesDir string) ([]tape.Entry, error) {
 
 	return entries, nil
 }
+
+func init() {
+	Register(Subcommand{Name: "replay", Aliases: []string{}, Usage: "Replay and verify from tapes (--evidence)", RunFn: runReplayCmd})
+}

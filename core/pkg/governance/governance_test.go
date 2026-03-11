@@ -51,7 +51,7 @@ func TestGuardian_Authorize(t *testing.T) {
 			t.Fatalf("Authorize failed: %v", err)
 		}
 
-		if dec.Verdict != "PASS" { // contracts.VerdictPass
+		if dec.Verdict != "ALLOW" { // contracts.VerdictAllow
 			t.Errorf("Expected PASS, got %s", dec.Verdict)
 		}
 		if dec.Signature == "" {

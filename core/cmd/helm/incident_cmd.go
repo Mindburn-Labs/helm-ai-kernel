@@ -647,3 +647,8 @@ func safeReceipt(r string) string {
 	}
 	return r
 }
+
+func init() {
+	Register(Subcommand{Name: "incident", Aliases: []string{}, Usage: "Manage incidents (list, show, ack, create)", RunFn: runIncidentCmd})
+	Register(Subcommand{Name: "brief", Aliases: []string{}, Usage: "Generate daily system health brief", RunFn: runBriefCmd})
+}

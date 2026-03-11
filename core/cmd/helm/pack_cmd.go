@@ -117,10 +117,10 @@ func runPackCmd(args []string, stdout, stderr io.Writer) int {
 	case "list":
 		return runPackList(args[1:], stdout, stderr)
 	case "create":
-		// Backward-compatible: delegate to legacy evidence pack create
+		// Built-in evidence pack creation
 		return handlePackCreate(args[1:])
 	case "verify":
-		// Backward-compatible: delegate to legacy evidence pack verify
+		// Built-in evidence pack verification
 		return handlePackVerify(args[1:])
 	case "--help", "-h":
 		printPackUsage(stdout)
@@ -131,6 +131,26 @@ func runPackCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 }
+
+func init() {
+	Register(Subcommand{
+		Name:    "pack",
+		Aliases: []string{},
+		Usage:   "Governed self-extension lifecycle and evidence pack management",
+		RunFn:   runPackCmd,
+	})
+	Register(Subcommand{
+		Name:    "coverage",
+		Aliases: []string{},
+		Usage:   "Show coverage statistics",
+		RunFn: func(args []string, stdout, stderr io.Writer) int {
+			// Moved from main.go
+			fmt.Fprintln(stdout, "[helm] coverage factory: ready")
+			return 0
+		},
+	})
+}
+
 
 func printPackUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: helm pack <propose|build|test|promote|install|list> [flags]")
@@ -753,4 +773,167 @@ func emitEvolutionEvent(evt EvolutionEvent) {
 		_, _ = f.Write(append(data, '\n'))
 		_ = f.Close()
 	}
+}
+
+func handlePackCreate(args []string) int {
+	cmd := flag.NewFlagSet("pack create", flag.ContinueOnError)
+	cmd.SetOutput(os.Stderr)
+
+	var (
+		sessionID   string
+		receiptsDir string
+		outPath     string
+		jsonOutput  bool
+	)
+
+	cmd.StringVar(&sessionID, "session", "", "Session ID for the evidence pack (REQUIRED)")
+	cmd.StringVar(&receiptsDir, "receipts", "", "Directory containing receipt files (REQUIRED)")
+	cmd.StringVar(&outPath, "out", "", "Output path for the .tar pack (REQUIRED)")
+	cmd.BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+
+	if err := cmd.Parse(args); err != nil {
+		return 2
+	}
+
+	if sessionID == "" || receiptsDir == "" || outPath == "" {
+		fmt.Fprintln(os.Stderr, "Error: --session, --receipts, and --out are required")
+		cmd.Usage()
+		return 2
+	}
+
+	// Read all files from receipts directory
+	files := make(map[string][]byte)
+	err := filepath.Walk(receiptsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		relPath, _ := filepath.Rel(receiptsDir, path)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", relPath, err)
+		}
+		files[relPath] = data
+		return nil
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading receipts: %v\n", err)
+		return 2
+	}
+
+	if len(files) == 0 {
+		fmt.Fprintln(os.Stderr, "Error: no files found in receipts directory")
+		return 2
+	}
+
+	// Auto-include proofgraph.json if it exists alongside receipts (Gap #22)
+	pgPath := filepath.Join(receiptsDir, "proofgraph.json")
+	if _, err := os.Stat(pgPath); err == nil {
+		if _, exists := files["proofgraph.json"]; !exists {
+			data, readErr := os.ReadFile(pgPath)
+			if readErr == nil {
+				files["proofgraph.json"] = data
+			}
+		}
+	}
+
+	// Auto-include trust_roots.json from artifacts if it exists (Gap #28)
+	for _, trustPath := range []string{
+		filepath.Join(receiptsDir, "..", "artifacts", "trust_roots.json"),
+		filepath.Join(receiptsDir, "trust_roots.json"),
+		"artifacts/trust_roots.json",
+	} {
+		if _, err := os.Stat(trustPath); err == nil {
+			if _, exists := files["trust_roots.json"]; !exists {
+				data, readErr := os.ReadFile(trustPath)
+				if readErr == nil {
+					files["trust_roots.json"] = data
+				}
+			}
+			break
+		}
+	}
+
+	// Create the pack
+	if err := ExportPack(sessionID, files, outPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating pack: %v\n", err)
+		return 2
+	}
+
+	if jsonOutput {
+		result := map[string]any{
+			"session_id": sessionID,
+			"pack_path":  outPath,
+			"file_count": len(files),
+			"status":     "created",
+		}
+		data, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(data))
+	} else {
+		fmt.Printf("✅ Evidence pack created: %s (%d files)\n", outPath, len(files))
+	}
+
+	return 0
+}
+
+func handlePackVerify(args []string) int {
+	cmd := flag.NewFlagSet("pack verify", flag.ContinueOnError)
+	cmd.SetOutput(os.Stderr)
+
+	var (
+		bundlePath string
+		jsonOutput bool
+	)
+
+	cmd.StringVar(&bundlePath, "bundle", "", "Path to evidence pack .tar (REQUIRED)")
+	cmd.BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+
+	if err := cmd.Parse(args); err != nil {
+		return 2
+	}
+
+	if bundlePath == "" {
+		fmt.Fprintln(os.Stderr, "Error: --bundle is required")
+		cmd.Usage()
+		return 2
+	}
+
+	manifest, err := VerifyPack(bundlePath)
+	if err != nil {
+		if jsonOutput {
+			result := map[string]any{
+				"bundle": bundlePath,
+				"valid":  false,
+				"error":  err.Error(),
+			}
+			data, _ := json.MarshalIndent(result, "", "  ")
+			fmt.Println(string(data))
+		} else {
+			fmt.Fprintf(os.Stderr, "❌ Verification failed: %v\n", err)
+		}
+		return 1
+	}
+
+	if jsonOutput {
+		result := map[string]any{
+			"bundle":      bundlePath,
+			"valid":       true,
+			"session_id":  manifest.SessionID,
+			"version":     manifest.Version,
+			"exported_at": manifest.ExportedAt,
+			"file_count":  len(manifest.FileHashes),
+		}
+		data, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(data))
+	} else {
+		fmt.Printf("✅ Pack verified: %s\n", bundlePath)
+		fmt.Printf("   Session:  %s\n", manifest.SessionID)
+		fmt.Printf("   Version:  %s\n", manifest.Version)
+		fmt.Printf("   Exported: %s\n", manifest.ExportedAt)
+		fmt.Printf("   Files:    %d\n", len(manifest.FileHashes))
+	}
+
+	return 0
 }

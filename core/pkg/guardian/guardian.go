@@ -2,6 +2,8 @@ package guardian
 
 import (
 	"context"
+	crand "crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -44,11 +46,72 @@ type Clock interface {
 	Now() time.Time
 }
 
+// Contextualizer attaches contextual metadata to decisions (Sequence 1.5)
+type Contextualizer interface {
+	GetContext(req DecisionRequest) (map[string]any, error)
+}
+
 // wallClock is the default clock (for backward compatibility during migration).
 // Production code SHOULD inject a kernel authority clock instead.
 type wallClock struct{}
 
 func (wallClock) Now() time.Time { return time.Now() }
+
+// GuardianOption configures optional dependencies for the Guardian.
+type GuardianOption func(*Guardian)
+
+// WithBudgetTracker injects a budget enforcement gate.
+func WithBudgetTracker(t BudgetGate) GuardianOption { return func(g *Guardian) { g.tracker = t } }
+
+// WithAuditLog injects an audit logger.
+func WithAuditLog(l *AuditLog) GuardianOption { return func(g *Guardian) { g.auditLog = l } }
+
+// WithTemporalGuardian injects a temporal replay protector.
+func WithTemporalGuardian(tg *TemporalGuardian) GuardianOption { return func(g *Guardian) { g.temporal = tg } }
+
+// WithEnvFingerprint sets the boot-sequence environment fingerprint.
+func WithEnvFingerprint(fp string) GuardianOption { return func(g *Guardian) { g.envFprint = fp } }
+
+// WithPDP injects an external policy decision point.
+func WithPDP(p pdp.PolicyDecisionPoint) GuardianOption { return func(g *Guardian) { g.pdp = p } }
+
+// WithComplianceChecker injects a compliance verifier phase.
+func WithComplianceChecker(c ComplianceChecker) GuardianOption {
+	return func(g *Guardian) { g.complianceChecker = c }
+}
+
+// WithFreezeController injects the global freeze kill-switch.
+func WithFreezeController(fc *kernel.FreezeController) GuardianOption {
+	return func(g *Guardian) { g.freezeCtrl = fc }
+}
+
+// WithContextGuard injects the environment mismatch detector.
+func WithContextGuard(cg *kernel.ContextGuard) GuardianOption {
+	return func(g *Guardian) { g.contextGuard = cg }
+}
+
+// WithIsolationChecker injects the identity isolation enforcer.
+func WithIsolationChecker(ic *identity.IsolationChecker) GuardianOption {
+	return func(g *Guardian) { g.isolationChecker = ic }
+}
+
+// WithEgressChecker injects the network egress firewall.
+func WithEgressChecker(ec *firewall.EgressChecker) GuardianOption {
+	return func(g *Guardian) { g.egressChecker = ec }
+}
+
+// WithThreatScanner injects the canonical threat scanner.
+func WithThreatScanner(ts *threatscan.Scanner) GuardianOption {
+	return func(g *Guardian) { g.threatScanner = ts }
+}
+
+// WithDelegationStore injects the delegation session store.
+func WithDelegationStore(ds identity.DelegationStore) GuardianOption {
+	return func(g *Guardian) { g.delegationStore = ds }
+}
+
+// WithClock injects a deterministic or authority clock.
+func WithClock(c Clock) GuardianOption { return func(g *Guardian) { g.clock = c } }
 
 // Guardian enforces the Proof Requirement Graph (PRG)
 type Guardian struct {
@@ -71,94 +134,110 @@ type Guardian struct {
 	delegationStore   identity.DelegationStore   // Delegation session store (§Gate 5)
 }
 
-// NewGuardian creates a new Guardian instance.
-// If clock is nil, a default wall-clock is used for backward compatibility.
-// Production code SHOULD pass a kernel authority clock.
-// tracker is optional; if nil, budget checks are skipped.
-func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.Registry, clock ...Clock) *Guardian {
-	var c Clock
-	if len(clock) > 0 && clock[0] != nil {
-		c = clock[0]
-	} else {
-		c = wallClock{}
+// NewGuardian creates a new Guardian instance. Optional dependencies can be injected
+// using GuardianOption functions (e.g., WithBudgetTracker).
+func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.Registry, opts ...GuardianOption) *Guardian {
+	pe, prgErr := prg.NewPolicyEngine()
+	if prgErr != nil {
+		slog.Warn("[guardian] PRG policy engine init failed", "error", prgErr)
 	}
 
-	pe, _ := prg.NewPolicyEngine()
-
-	return &Guardian{
+	g := &Guardian{
 		signer:   signer,
 		prg:      ruleGraph,
 		pe:       pe,
 		registry: reg,
-		clock:    c,
 	}
+
+	for _, opt := range opts {
+		opt(g)
+	}
+
+	if g.clock == nil {
+		g.clock = wallClock{}
+	}
+
+	return g
 }
 
-// SetBudgetTracker allows injecting the budget gate after initialization
+// newDecisionID generates a cryptographically random decision ID.
+// Uses crypto/rand to prevent ID collisions under concurrent load
+// (replaces the previous time.UnixNano() approach).
+func newDecisionID() string {
+	var b [16]byte
+	_, _ = crand.Read(b[:])
+	return "dec-" + hex.EncodeToString(b[:])
+}
+
+// SetBudgetTracker configures the budget enforcement gate (Phase 4.1).
+// Deprecated: Use WithBudgetTracker GuardianOption in NewGuardian instead.
 func (g *Guardian) SetBudgetTracker(t BudgetGate) {
 	g.tracker = t
 }
 
-// SetAuditLog allows injecting the audit log after initialization
+// SetAuditLog configures the persistent audit sink.
+// Deprecated: Use WithAuditLog GuardianOption in NewGuardian instead.
 func (g *Guardian) SetAuditLog(l *AuditLog) {
 	g.auditLog = l
 }
 
-// SetTemporalGuardian allows injecting the temporal guardian after initialization
+// SetTemporalGuardian provides non-repudiation replay protection (Phase 4.3).
+// Deprecated: Use WithTemporalGuardian GuardianOption in NewGuardian instead.
 func (g *Guardian) SetTemporalGuardian(tg *TemporalGuardian) {
 	g.temporal = tg
 }
 
-// SetEnvFingerprint sets the boot-sequence environment fingerprint
+// SetEnvFingerprint supplies the execution context fingerprint for proofs (Phase 3).
+// Deprecated: Use WithEnvFingerprint GuardianOption in NewGuardian instead.
 func (g *Guardian) SetEnvFingerprint(fp string) {
 	g.envFprint = fp
 }
 
-// SetPolicyDecisionPoint injects an external PDP backend.
-// When set, EvaluateDecision delegates policy evaluation to this PDP
-// while Guardian retains signing, enforcement, and proof binding.
+// SetPolicyDecisionPoint injects an external policy backend (Phase 2 bridge).
+// Deprecated: Use WithPDP GuardianOption in NewGuardian instead.
 func (g *Guardian) SetPolicyDecisionPoint(p pdp.PolicyDecisionPoint) {
 	g.pdp = p
 }
 
-// SetComplianceChecker injects a ComplianceChecker for pre-check evaluation.
+// SetComplianceChecker sets a phase 1.2 verifier.
+// Deprecated: Use WithComplianceChecker GuardianOption in NewGuardian instead.
 func (g *Guardian) SetComplianceChecker(c ComplianceChecker) {
 	g.complianceChecker = c
 }
 
-// SetFreezeController injects the global freeze/kill-switch primitive.
-// When frozen, ALL decisions are denied with SYSTEM_FROZEN.
+// SetFreezeController injects the global kill-switch. Required for gate 2.
+// Deprecated: Use WithFreezeController GuardianOption in NewGuardian instead.
 func (g *Guardian) SetFreezeController(fc *kernel.FreezeController) {
 	g.freezeCtrl = fc
 }
 
-// SetContextGuard injects the environment fingerprint validation guard.
-// When the guard detects a mismatch, decisions are denied with CONTEXT_MISMATCH.
+// SetContextGuard injects the environment mismatch detector. Required for gate 3.
+// Deprecated: Use WithContextGuard GuardianOption in NewGuardian instead.
 func (g *Guardian) SetContextGuard(cg *kernel.ContextGuard) {
 	g.contextGuard = cg
 }
 
-// SetIsolationChecker injects the agent identity isolation checker.
-// Detects credential reuse across agent principals.
+// SetIsolationChecker injects the credential reuse detector. Required for gate 4.
+// Deprecated: Use WithIsolationChecker GuardianOption in NewGuardian instead.
 func (g *Guardian) SetIsolationChecker(ic *identity.IsolationChecker) {
 	g.isolationChecker = ic
 }
 
-// SetEgressChecker injects the network egress policy enforcer.
+// SetEgressChecker injects the network firewall policy enforcer. Required for gate 5.
+// Deprecated: Use WithEgressChecker GuardianOption in NewGuardian instead.
 func (g *Guardian) SetEgressChecker(ec *firewall.EgressChecker) {
 	g.egressChecker = ec
 }
 
-// SetThreatScanner injects the canonical threat signal scanner.
-// When set, all untrusted textual inputs are scanned before PDP evaluation.
-// Findings are attached to the DecisionRecord InputContext.
+// SetThreatScanner injects the canonical threat scanner for phase 6 checking.
+// Deprecated: Use WithThreatScanner GuardianOption in NewGuardian instead.
 func (g *Guardian) SetThreatScanner(ts *threatscan.Scanner) {
 	g.threatScanner = ts
 }
 
-// SetDelegationStore injects the delegation session store.
-// When set, Guardian Gate 5 validates delegation sessions and
-// intersects capabilities with the policy stack before PRG evaluation.
+// SetDelegationStore provides the state engine for recursive decision linking.
+// Required for complex Multi-Agent routing logic (Phase 6).
+// Deprecated: Use WithDelegationStore GuardianOption in NewGuardian instead.
 func (g *Guardian) SetDelegationStore(ds identity.DelegationStore) {
 	g.delegationStore = ds
 }
@@ -393,7 +472,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 	if g.freezeCtrl != nil && g.freezeCtrl.IsFrozen() {
 		now := g.clock.Now()
 		decision := &contracts.DecisionRecord{
-			ID:         fmt.Sprintf("dec-%d", now.UnixNano()),
+			ID:         newDecisionID(),
 			Timestamp:  now,
 			Verdict:    string(contracts.VerdictDeny),
 			Reason:     string(contracts.ReasonSystemFrozen),
@@ -408,7 +487,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		if err := g.contextGuard.ValidateCurrent(); err != nil {
 			now := g.clock.Now()
 			decision := &contracts.DecisionRecord{
-				ID:         fmt.Sprintf("dec-%d", now.UnixNano()),
+				ID:         newDecisionID(),
 				Timestamp:  now,
 				Verdict:    string(contracts.VerdictDeny),
 				Reason:     fmt.Sprintf("CONTEXT_MISMATCH: %v", err),
@@ -433,7 +512,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			if err := g.isolationChecker.ValidateAgentIdentity(req.Principal, credHash, sessionID); err != nil {
 				now := g.clock.Now()
 				decision := &contracts.DecisionRecord{
-					ID:         fmt.Sprintf("dec-%d", now.UnixNano()),
+					ID:         newDecisionID(),
 					Timestamp:  now,
 					Verdict:    string(contracts.VerdictDeny),
 					Reason:     fmt.Sprintf("IDENTITY_ISOLATION_VIOLATION: %v", err),
@@ -456,7 +535,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			if !result.Allowed {
 				now := g.clock.Now()
 				decision := &contracts.DecisionRecord{
-					ID:         fmt.Sprintf("dec-%d", now.UnixNano()),
+					ID:         newDecisionID(),
 					Timestamp:  now,
 					Verdict:    string(contracts.VerdictDeny),
 					Reason:     fmt.Sprintf("DATA_EGRESS_BLOCKED: %s", result.ReasonCode),
@@ -518,7 +597,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				}
 
 				decision := &contracts.DecisionRecord{
-					ID:         fmt.Sprintf("dec-%d", now.UnixNano()),
+					ID:         newDecisionID(),
 					Timestamp:  now,
 					Verdict:    string(contracts.VerdictDeny),
 					ReasonCode: string(reasonCode),
@@ -549,7 +628,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			session, loadErr := g.delegationStore.Load(sessionID)
 			if loadErr != nil {
 				decision := &contracts.DecisionRecord{
-					ID:         fmt.Sprintf("dec-%d", now.UnixNano()),
+					ID:         newDecisionID(),
 					Timestamp:  now,
 					Verdict:    string(contracts.VerdictDeny),
 					Reason:     fmt.Sprintf("DELEGATION_INVALID: %v", loadErr),
@@ -560,7 +639,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			}
 			if session == nil {
 				decision := &contracts.DecisionRecord{
-					ID:         fmt.Sprintf("dec-%d", now.UnixNano()),
+					ID:         newDecisionID(),
 					Timestamp:  now,
 					Verdict:    string(contracts.VerdictDeny),
 					Reason:     "DELEGATION_INVALID: session not found",
@@ -575,7 +654,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			nonceChecker := g.delegationStore.IsNonceUsed
 			if validErr := identity.ValidateSession(session, verifier, now, nonceChecker); validErr != nil {
 				decision := &contracts.DecisionRecord{
-					ID:         fmt.Sprintf("dec-%d", now.UnixNano()),
+					ID:         newDecisionID(),
 					Timestamp:  now,
 					Verdict:    string(contracts.VerdictDeny),
 					Reason:     fmt.Sprintf("DELEGATION_INVALID: %v", validErr),
@@ -591,7 +670,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			// Scope check: is the requested tool/resource within session scope?
 			if req.Resource != "" && !session.IsToolAllowed(req.Resource) {
 				decision := &contracts.DecisionRecord{
-					ID:         fmt.Sprintf("dec-%d", now.UnixNano()),
+					ID:         newDecisionID(),
 					Timestamp:  now,
 					Verdict:    string(contracts.VerdictDeny),
 					Reason:     fmt.Sprintf("DELEGATION_SCOPE_VIOLATION: tool %q not in session scope", req.Resource),
@@ -609,7 +688,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			if req.Resource != "" && req.Action != "" && len(session.Capabilities) > 0 {
 				if !session.IsActionAllowed(req.Resource, req.Action) {
 					decision := &contracts.DecisionRecord{
-						ID:         fmt.Sprintf("dec-%d", now.UnixNano()),
+						ID:         newDecisionID(),
 						Timestamp:  now,
 						Verdict:    string(contracts.VerdictDeny),
 						Reason:     fmt.Sprintf("DELEGATION_SCOPE_VIOLATION: action %q on %q not granted", req.Action, req.Resource),
@@ -678,7 +757,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 	}
 
 	decision := &contracts.DecisionRecord{
-		ID:             fmt.Sprintf("dec-%d", g.clock.Now().UnixNano()),
+		ID:             newDecisionID(),
 		Timestamp:      g.clock.Now(),
 		Verdict:        string(contracts.VerdictDeny), // Default deny
 		EffectDigest:   effectDigest,

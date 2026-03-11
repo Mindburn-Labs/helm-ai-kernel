@@ -189,7 +189,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		execReq := ToolExecutionRequest{
 			ToolName:  req.Method,
 			Arguments: req.Params,
-			SessionID: "mcp-http",
+			SessionID: fmt.Sprintf("mcp-http-%s-%p", r.RemoteAddr, r),
 		}
 		if delegationID := r.Header.Get("X-HELM-Delegation-Session-ID"); delegationID != "" {
 			execReq.DelegationSessionID = delegationID

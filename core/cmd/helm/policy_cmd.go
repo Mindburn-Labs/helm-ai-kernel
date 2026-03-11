@@ -307,3 +307,7 @@ func getTemplate(name string) *PolicyTemplate {
 	}
 	return nil
 }
+
+func init() {
+	Register(Subcommand{Name: "policy", Aliases: []string{}, Usage: "Policy compilation and testing", RunFn: runPolicyCmd})
+}

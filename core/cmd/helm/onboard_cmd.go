@@ -112,3 +112,7 @@ trust:
 
 	return 0
 }
+
+func init() {
+	Register(Subcommand{Name: "onboard", Usage: "One-command local setup (SQLite + keys + config)", RunFn: runOnboardCmd})
+}

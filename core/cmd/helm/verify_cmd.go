@@ -246,3 +246,7 @@ func hasConformanceSignature(root string) bool {
 	_, err := os.Stat(filepath.Join(root, "07_ATTESTATIONS", "conformance_report.sig"))
 	return err == nil
 }
+
+func init() {
+	Register(Subcommand{Name: "verify", Aliases: []string{}, Usage: "Verify EvidencePack bundle (--bundle, --json)", RunFn: runVerifyCmd})
+}

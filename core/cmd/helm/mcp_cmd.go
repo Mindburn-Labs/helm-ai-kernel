@@ -428,3 +428,7 @@ func runMCPPrintConfig(args []string, stdout, stderr io.Writer) int {
 
 	return 0
 }
+
+func init() {
+	Register(Subcommand{Name: "mcp", Aliases: []string{}, Usage: "MCP server and distribution commands", RunFn: runMCPCmd})
+}

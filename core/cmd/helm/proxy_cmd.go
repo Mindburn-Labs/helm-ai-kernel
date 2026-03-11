@@ -636,3 +636,7 @@ func persistProofGraph(pg *proofgraph.Graph, path string) {
 		log.Printf("[WARN] failed to persist ProofGraph to %s: %v", path, err)
 	}
 }
+
+func init() {
+	Register(Subcommand{Name: "proxy", Aliases: []string{}, Usage: "OpenAI-compatible governance proxy", RunFn: runProxyCmd})
+}

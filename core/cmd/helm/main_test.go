@@ -22,7 +22,7 @@ func TestRun_Help(t *testing.T) {
 	exitCode := Run(args, &stdout, &stderr)
 
 	assert.Equal(t, 0, exitCode)
-	assert.Contains(t, stdout.String(), "helm <command> [flags]")
+	assert.Contains(t, stdout.String(), "helm <command> [options]")
 }
 
 // TestRun_Unknown verifies that unknown commands output warning and default to server.

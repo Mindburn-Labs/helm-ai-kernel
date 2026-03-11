@@ -295,3 +295,7 @@ func runSandboxConform(args []string, stdout, stderr io.Writer) int {
 	}
 	return 0
 }
+
+func init() {
+	Register(Subcommand{Name: "sandbox", Aliases: []string{}, Usage: "Governed sandbox execution (exec, conform)", RunFn: runSandboxCmd})
+}

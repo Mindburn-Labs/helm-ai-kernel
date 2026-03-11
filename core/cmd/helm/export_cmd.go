@@ -339,3 +339,7 @@ func deterministicTarArchive(srcDir, dstPath string) error {
 
 	return nil
 }
+
+func init() {
+	Register(Subcommand{Name: "export", Aliases: []string{}, Usage: "Export EvidencePack (--evidence, --out)", RunFn: runExportCmd})
+}

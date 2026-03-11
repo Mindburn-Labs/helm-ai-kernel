@@ -199,7 +199,9 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 	if err != nil {
 		return nil, nil, fmt.Errorf("receipt creation failed: %w", err)
 	}
-	e.finalizeExecution(ctx, decision, toolName)
+	if err := e.finalizeExecution(ctx, decision, toolName); err != nil {
+		return nil, nil, err
+	}
 
 	// Metering
 	if e.meter != nil {
@@ -337,14 +339,18 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 		}
 	}
 	if e.receiptStore != nil {
-		_ = e.receiptStore.Store(ctx, receipt)
+		if storeErr := e.receiptStore.Store(ctx, receipt); storeErr != nil {
+			return nil, fmt.Errorf("fail-closed: receipt persistence failed: %w", storeErr)
+		}
 	}
 	return receipt, nil
 }
 
-func (e *SafeExecutor) finalizeExecution(ctx context.Context, decision *contracts.DecisionRecord, toolName string) {
+func (e *SafeExecutor) finalizeExecution(ctx context.Context, decision *contracts.DecisionRecord, toolName string) error {
 	if e.outboxStore != nil {
-		_ = e.outboxStore.MarkDone(ctx, decision.ID)
+		if err := e.outboxStore.MarkDone(ctx, decision.ID); err != nil {
+			return fmt.Errorf("fail-closed: outbox mark-done failed: %w", err)
+		}
 	}
 	if e.AuditLog != nil {
 		_ = e.AuditLog.Append("executor", "execute_effect", map[string]interface{}{
@@ -353,6 +359,7 @@ func (e *SafeExecutor) finalizeExecution(ctx context.Context, decision *contract
 			"status":      "SUCCESS",
 		})
 	}
+	return nil
 }
 
 // Match interfaces for compiler output

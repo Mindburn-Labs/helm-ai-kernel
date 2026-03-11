@@ -12,7 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@mindburn/helm": ["../src/index.ts"]
+      "@mindburn/helm": ["../dist/index.d.ts"]
     }
   },
   "include": ["src"],

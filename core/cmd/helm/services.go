@@ -14,16 +14,22 @@ import (
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/authz"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/config"
+	helmcontext "github.com/Mindburn-Labs/helm-oss/core/pkg/context"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts/economic"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/credentials"
 	helmcrypto "github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/evidence"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/governance"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/kernelruntime"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/kms"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/memory"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/merkle"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/observability"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/pack"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/runtime/obligation"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/runtime/sandbox"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/simulation"
 )
 
 // Services holds all initialized subsystems for the HELM runtime.
@@ -53,6 +59,24 @@ type Services struct {
 
 	// --- Security ---
 	Guardian *guardian.Guardian
+
+	// --- Governed Memory (LKS/CKS) ---
+	GovMemory *memory.InMemoryStore
+
+	// --- Context Bundles ---
+	BundleStore *helmcontext.BundleStore
+
+	// --- Economic Ledger ---
+	EconLedger *economic.Ledger
+
+	// --- Edge Governance ---
+	EdgeAssistant *governance.EdgeAssistant
+
+	// --- Simulation ---
+	SimRunner *simulation.Runner
+
+	// --- Compatibility Matrix ---
+	CompatMatrix *pack.CompatibilityMatrix
 }
 
 // NewServices initializes all subsystems.
@@ -155,6 +179,43 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	// --- 11. Kernel Runtime ---
 	s.KernelRT = kernelruntime.New(s.Config)
 	logger.Info("subsystem ready", "component", " KernelRuntime initialized")
+
+	// --- 12. Governed Memory (LKS/CKS) ---
+	s.GovMemory = memory.NewInMemoryStore()
+	logger.Info("subsystem ready", "component", " Governed Memory (LKS/CKS) initialized")
+
+	// --- 13. Context Bundles ---
+	s.BundleStore = helmcontext.NewBundleStore()
+	logger.Info("subsystem ready", "component", " Context Bundle Store initialized")
+
+	// --- 14. Economic Ledger ---
+	s.EconLedger = economic.NewLedger()
+	logger.Info("subsystem ready", "component", " Economic Ledger initialized")
+
+	// --- 15. Edge Governance ---
+	s.EdgeAssistant = &governance.EdgeAssistant{
+		Config: governance.EdgeConfig{
+			Mode:         governance.EdgeFull,
+			MaxLatencyMs: 100,
+			CacheTTL:     5 * time.Minute,
+		},
+		Fallback: governance.FallbackPolicy{
+			PolicyID: "default-fallback",
+			Strategy: governance.FallbackDenyAll,
+		},
+	}
+	logger.Info("subsystem ready", "component", " Edge Governance initialized")
+
+	// --- 16. Simulation Runner ---
+	s.SimRunner = simulation.NewRunner()
+	logger.Info("subsystem ready", "component", " Simulation Runner initialized")
+
+	// --- 17. Compatibility Matrix ---
+	s.CompatMatrix = &pack.CompatibilityMatrix{
+		MatrixID: "helm-oss-v1",
+		Version:  displayVersion(),
+	}
+	logger.Info("subsystem ready", "component", " Compatibility Matrix initialized")
 
 	logger.Info("subsystem ready", "component", " All subsystems initialized successfully")
 	return s, nil

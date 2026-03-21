@@ -24,6 +24,25 @@ deterministic proof.
 
 ---
 
+### 1.1 Execution Security Model
+
+HELM enforces security through three independent, composable layers.
+See [EXECUTION_SECURITY_MODEL.md](EXECUTION_SECURITY_MODEL.md) for the
+full canonical reference.
+
+| Layer | Property | Function |
+| :---- | :------- | :------- |
+| **A — Surface Containment** | Design-time | Reduces the **bounded surface** — the maximum set of reachable tools and destinations |
+| **B — Dispatch Enforcement** | Dispatch-time | **Runtime execution enforcement** — per-call **execution admissibility** check at the PEP boundary |
+| **C — Verifiable Receipts** | Post-execution | **Verifiable receipts** — cryptographic proof of every decision, offline-verifiable |
+
+No single layer is sufficient. Layer A reduces blast radius, Layer B gates
+each call, Layer C proves correct operation independently.
+
+For OWASP MCP threat alignment, see [OWASP_MCP_THREAT_MAPPING.md](OWASP_MCP_THREAT_MAPPING.md).
+
+---
+
 ## 2. Trust Boundaries
 
 The **Trusted Computing Base (TCB)** is explicitly bounded. CI enforces
@@ -176,13 +195,16 @@ checkpoint, low-risk receipts can be replaced by inclusion proofs.
 
 ## Normative References
 
-| Document                                 | Scope                              |
-| :--------------------------------------- | :--------------------------------- |
-| [GOVERNANCE_SPEC.md](GOVERNANCE_SPEC.md) | PDP contracts, denial, jurisdiction |
-| [SECURITY_MODEL.md](SECURITY_MODEL.md)   | Execution pipeline, crypto, sandbox |
-| [TCB_POLICY.md](TCB_POLICY.md)           | TCB boundary rules                 |
-| [THREAT_MODEL.md](THREAT_MODEL.md)       | Adversary classes                  |
-| [CONFORMANCE.md](CONFORMANCE.md)         | Gate definitions, levels           |
-| [OSS_SCOPE.md](OSS_SCOPE.md)             | Shipped vs. spec boundary          |
+| Document                                                         | Scope                              |
+| :--------------------------------------------------------------- | :--------------------------------- |
+| [EXECUTION_SECURITY_MODEL.md](EXECUTION_SECURITY_MODEL.md)       | Three-layer execution security model |
+| [OWASP_MCP_THREAT_MAPPING.md](OWASP_MCP_THREAT_MAPPING.md)       | OWASP MCP threat alignment         |
+| [CAPABILITY_MANIFESTS.md](CAPABILITY_MANIFESTS.md)               | Layer A configuration primitives   |
+| [GOVERNANCE_SPEC.md](GOVERNANCE_SPEC.md)                         | PDP contracts, denial, jurisdiction |
+| [SECURITY_MODEL.md](SECURITY_MODEL.md)                           | Execution pipeline, crypto, sandbox |
+| [TCB_POLICY.md](TCB_POLICY.md)                                   | TCB boundary rules                 |
+| [THREAT_MODEL.md](THREAT_MODEL.md)                               | Adversary classes                  |
+| [CONFORMANCE.md](CONFORMANCE.md)                                 | Gate definitions, levels           |
+| [OSS_SCOPE.md](OSS_SCOPE.md)                                     | Shipped vs. spec boundary          |
 
 _Canonical revision: 2026-03-08 · HELM UCS v1.2_

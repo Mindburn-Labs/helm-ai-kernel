@@ -163,6 +163,75 @@
 
 ---
 
+## OWASP MCP Alignment
+
+HELM's threat model maps to the OWASP MCP agentic threat taxonomy.
+See [OWASP_MCP_THREAT_MAPPING.md](OWASP_MCP_THREAT_MAPPING.md) for
+the complete threat-to-defense matrix covering all three layers of
+HELM's [Execution Security Model](EXECUTION_SECURITY_MODEL.md).
+
+---
+
+### T11: Tool Poisoning
+
+**Attack:** Malicious tool descriptions in MCP server responses trick the agent
+into calling dangerous tools or passing attacker-controlled arguments.
+
+**Defense (Layer A — Surface Containment):**
+
+- Capability manifests explicitly declare permitted tools. Poisoned tool
+  descriptions for undeclared tools never reach the executor.
+- Connector allowlists restrict which MCP servers are reachable.
+
+**Defense (Layer B — Dispatch Enforcement):**
+
+- Schema PEP validates all tool arguments against pinned schemas.
+  Injected payloads that violate schema are rejected.
+- Unknown tools produce `DENY_TOOL_NOT_FOUND`.
+
+**Residual risk:** If a declared tool's description is poisoned at the MCP
+server, HELM blocks schema-violating args but cannot detect semantic
+manipulation within valid schemas.
+
+### T12: Parameter Injection
+
+**Attack:** Crafted tool arguments embed hidden commands, extra fields,
+or exploit downstream system parsers through carefully constructed payloads.
+
+**Defense (Layer B — Dispatch Enforcement):**
+
+- JCS canonicalization (RFC 8785) normalizes all arguments, eliminating
+  encoding-based injection vectors.
+- Schema validation rejects unknown/extra fields (deny on unknown).
+- SHA-256 hash of canonical args bound into signed receipt ensures
+  post-hoc detection of any manipulation.
+
+**Residual risk:** Arguments that are valid per schema but semantically
+malicious. HELM enforces structural safety, not semantic intent.
+
+### T13: Capability Escalation
+
+**Attack:** Agent or delegated sub-agent attempts to gain higher privileges
+than granted — accessing tools outside its profile, bypassing read-only
+restrictions, or expanding its delegation scope.
+
+**Defense (Layer A — Surface Containment):**
+
+- Side-effect class profiles enforce read-only / write-limited boundaries.
+- Domain-scoped tool bundles isolate capability domains.
+
+**Defense (Layer B — Dispatch Enforcement):**
+
+- Delegation sessions enforce `capabilities ⊆ delegator's policy`.
+  Any out-of-scope request produces `DELEGATION_SCOPE_VIOLATION`.
+- P0 ceilings are non-overridable — no policy layer can escalate past them.
+- Identity isolation violations produce `IDENTITY_ISOLATION_VIOLATION`.
+
+**Residual risk:** None within the delegation model — escalation is a
+hard block. Social engineering of the delegator is out of scope.
+
+---
+
 ## Out of Scope
 
 - Content safety / prompt injection within the text domain

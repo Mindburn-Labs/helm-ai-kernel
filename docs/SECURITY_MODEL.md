@@ -9,6 +9,18 @@ HELM assumes every external input is adversarial. The kernel enforces a strict
 policy enforcement point (PEP) at every execution boundary. If validation fails
 at any stage, execution halts — there is no fallback path.
 
+## Three-Layer Execution Security Model
+
+This security model implements all three layers of HELM's canonical execution
+security architecture. See [EXECUTION_SECURITY_MODEL.md](EXECUTION_SECURITY_MODEL.md)
+for the full layer definitions.
+
+| This Document Section | Layer |
+| :--- | :--- |
+| Sandbox Model (WASI) | **A — Surface Containment** |
+| Execution Pipeline, Cryptographic Chain, Approval Ceremonies, Delegation | **B — Dispatch Enforcement** |
+| EvidencePack | **C — Verifiable Receipts** |
+
 ## Execution Pipeline
 
 The canonical execution protocol is the Verified Planning Loop (VPL) — see

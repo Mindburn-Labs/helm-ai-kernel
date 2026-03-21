@@ -1,6 +1,6 @@
-# Start Here: 5-Minute Quickstart + Conformance
+# Start Here
 
-Everything you need to go from zero to verified HELM in under 5 minutes.
+Go from zero to verified HELM in 5 minutes.
 
 ---
 
@@ -74,11 +74,11 @@ Every step produced signed, append-only, replayable proof.
 
 ## Next Steps
 
-- 📖 [README](https://github.com/Mindburn-Labs/helm-oss#readme) — full architecture + comparison
-- 🔒 [Security Model](../docs/SECURITY_MODEL.md) — TCB, threat model, crypto chain
-- 🐳 [Deploy your own](../deploy/README.md) — 3-minute DigitalOcean deploy
-- 📦 [SDK](../sdk/) — Python + TypeScript client libraries
-- 📋 [Use Cases](../docs/use-cases/) — UC-001 through UC-012
+- [README](https://github.com/Mindburn-Labs/helm-oss#readme) — architecture and comparison
+- [Security Model](../docs/SECURITY_MODEL.md) — TCB, threat model, crypto chain
+- [Deploy your own](../deploy/README.md) — 3-minute DigitalOcean deploy
+- [SDK](../sdk/) — Python + TypeScript client libraries
+- [Use Cases](../docs/use-cases/) — UC-001 through UC-012
 
 ---
 

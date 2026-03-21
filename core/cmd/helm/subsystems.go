@@ -14,6 +14,9 @@ import (
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/guardian"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel/ui"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/memory"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/replay"
 	trustregistry "github.com/Mindburn-Labs/helm-oss/core/pkg/trust/registry"
 )
 
@@ -237,6 +240,114 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 		mcpGateway.RegisterRoutes(mux)
 		log.Println("[helm] routes: MCP gateway routes registered")
 	}
+
+	// ═══════════════════════════════════════════════════════════════
+	// NEW SUBSYSTEM ROUTES (v7/v9 gap implementations)
+	// ═══════════════════════════════════════════════════════════════
+
+	// --- Governed Memory (LKS/CKS) ---
+	mux.HandleFunc("/api/v1/memory/list", func(w http.ResponseWriter, r *http.Request) {
+		tier := memory.MemoryTier(r.URL.Query().Get("tier"))
+		if tier == "" {
+			tier = memory.TierLKS
+		}
+		ns := r.URL.Query().Get("namespace")
+		entries, err := svc.GovMemory.List(tier, ns)
+		if err != nil {
+			api.WriteInternal(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"tier": tier, "entries": entries, "count": len(entries)})
+	})
+
+	mux.HandleFunc("/api/v1/memory/promote", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		var req memory.PromotionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			api.WriteBadRequest(w, "Invalid body")
+			return
+		}
+		result, err := memory.Promote(svc.GovMemory, req)
+		if err != nil {
+			api.WriteError(w, http.StatusConflict, "Promotion Failed", err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(result)
+	})
+
+	// --- Context Bundles ---
+	mux.HandleFunc("/api/v1/context/bundles", func(w http.ResponseWriter, r *http.Request) {
+		bundles := svc.BundleStore.ListContexts()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"bundles": bundles, "count": len(bundles)})
+	})
+
+	// --- Economic Ledger ---
+	mux.HandleFunc("/api/v1/economic/authorities", func(w http.ResponseWriter, r *http.Request) {
+		authorities := svc.EconLedger.ListAuthorities()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"authorities": authorities, "count": len(authorities)})
+	})
+
+	mux.HandleFunc("/api/v1/economic/charges", func(w http.ResponseWriter, r *http.Request) {
+		charges := svc.EconLedger.ListCharges()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"charges": charges, "count": len(charges)})
+	})
+
+	mux.HandleFunc("/api/v1/economic/allocations", func(w http.ResponseWriter, r *http.Request) {
+		allocations := svc.EconLedger.ListAllocations()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"allocations": allocations, "count": len(allocations)})
+	})
+
+	// --- Edge Governance ---
+	mux.HandleFunc("/api/v1/governance/edge/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mode":          svc.EdgeAssistant.Config.Mode,
+			"fallback":      svc.EdgeAssistant.Fallback.Strategy,
+			"max_latency_ms": svc.EdgeAssistant.Config.MaxLatencyMs,
+		})
+	})
+
+	// --- Replay Visualizer ---
+	mux.HandleFunc("/api/v1/replay/timeline", func(w http.ResponseWriter, r *http.Request) {
+		// Build timeline from receipt store (empty if no receipts)
+		timeline, err := replay.BuildTimeline("live-"+time.Now().Format("20060102-150405"), nil)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": "empty", "message": err.Error()})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(timeline)
+	})
+
+	// --- Simulation ---
+	mux.HandleFunc("/api/v1/simulation/status", func(w http.ResponseWriter, r *http.Request) {
+		runs := svc.SimRunner.ListRuns()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"runs": runs, "count": len(runs)})
+	})
+
+	// --- Compatibility Matrix ---
+	mux.HandleFunc("/api/v1/compatibility", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(svc.CompatMatrix)
+	})
+
+	// --- Control Surfaces ---
+	mux.HandleFunc("/api/v1/surfaces", func(w http.ResponseWriter, r *http.Request) {
+		surfaces := ui.AllSurfaces()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"surfaces": surfaces, "count": len(surfaces)})
+	})
 
 	// Suppress unused variable
 	_ = ctx

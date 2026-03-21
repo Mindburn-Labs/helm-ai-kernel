@@ -6,7 +6,7 @@
 
 HELM OSS is the **open execution kernel** of the HELM stack.
 
-It exists to keep the deterministic boundary small, portable, and independently trustworthy. The commercial HELM Platform layers must extend this kernel, not replace it.
+It exists to keep the deterministic boundary small, portable, and independently trustworthy. The commercial HELM layers must extend this kernel, not replace it.
 
 ## Kernel TCB (Trusted Computing Base)
 
@@ -62,22 +62,58 @@ The following packages were removed to minimize the attack surface:
 | `heuristic/`               | Heuristic analysis            |
 | `perimeter/`               | Network perimeter             |
 
-## Boundary truth
+## First-Class Execution Surfaces
+
+### MCP Interceptor
+
+The MCP gateway (`core/pkg/mcp/`) is a **first-class governed surface**,
+not an adapter. It provides:
+
+- Tool discovery with governance metadata (`/mcp/v1/capabilities`)
+- Governed tool execution with signed receipts (`/mcp/v1/execute`)
+- Schema validation against pinned tool contracts
+- Full ProofGraph integration — MCP calls produce the same receipt chain
+  as OpenAI proxy calls
+
+### OpenAI-Compatible Proxy
+
+The governed proxy (`/v1/chat/completions`) intercepts OpenAI-compatible
+tool calls and routes them through the PEP boundary.
+
+### Bounded-Surface Primitives
+
+The OSS kernel includes configurable surface containment primitives
+(see [CAPABILITY_MANIFESTS.md](CAPABILITY_MANIFESTS.md)):
+
+- Domain-scoped tool bundles
+- Explicit capability manifests
+- Read-only / write-limited / side-effect-class profiles
+- Connector allowlists
+- Destination scoping
+- Filesystem/network deny-by-default (WASI)
+- Sandbox profile requirement per tool class
+
+## Boundary Truth
 
 OSS includes:
 
-- fail-closed enforcement
-- policy evaluation
-- receipts and ProofGraph
-- replay and verification
-- adapters and integration surfaces
+- **Surface containment** — capability manifests, tool bundles, sandbox profiles
+- **Dispatch enforcement** — fail-closed PEP, policy evaluation, budget gates
+- **Verifiable receipts** — signed receipts, ProofGraph, replay
+- **MCP interceptor** — first-class governed MCP surface
+- **OpenAI proxy** — governed proxy for OpenAI-compatible SDKs
+- Adapters and integration surfaces
 
 OSS does not include:
 
-- managed federation
-- pack distribution and entitlements
-- compliance intelligence workflows
+- Surface Design Studio (policy UI)
+- Policy rollout / staging / shadow enforcement
+- Certified connector program
+- Managed federation
+- Pack distribution and entitlements
+- Compliance intelligence workflows
 - Mission Control / Studio operations surfaces
-- full OrgDNA deployment lifecycle
+- Enterprise evidence retention / legal hold
+- Managed control plane and team operations
 
-The invariant is simple: OSS must stay fully useful on its own. The paid layer monetizes shared organizational control around the kernel, not artificial runtime crippleware.
+The invariant is simple: OSS must stay fully useful on its own. The commercial layer monetizes shared organizational control around the kernel, not artificial runtime crippleware.

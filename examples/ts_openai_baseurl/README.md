@@ -1,6 +1,6 @@
-# TypeScript — Vercel AI SDK Example
+# TypeScript — OpenAI SDK Example
 
-Shows HELM integration with the Vercel AI SDK / native fetch.
+Shows HELM integration with the OpenAI-compatible TypeScript SDK / native fetch.
 
 ## Prerequisites
 

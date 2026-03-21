@@ -1,6 +1,6 @@
-# Integration: Vercel AI SDK
+# Integration: AI SDK (TypeScript)
 
-Use HELM as the base URL for the Vercel AI SDK.
+Use HELM as the base URL for any OpenAI-compatible AI SDK.
 
 ## Setup
 
@@ -42,9 +42,9 @@ for await (const chunk of result.textStream) {
 
 ## What Changes
 
-- Vercel AI SDK sends all requests through HELM proxy
+- AI SDK sends all requests through HELM proxy
 - Tool calls are receipted and schema-validated
 - Streaming works via SSE passthrough
 - No additional packages needed
 
-→ Full example: [examples/ts_vercel_baseurl/](../../examples/ts_vercel_baseurl/)
+→ Full example: [examples/ts_openai_baseurl/](../../examples/ts_openai_baseurl/)

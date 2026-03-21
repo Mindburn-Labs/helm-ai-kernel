@@ -33,7 +33,7 @@ This directory contains runnable integration examples for SDK, agent frameworks,
 |---------|----------|-------------|
 | [`js_openai_baseurl`](js_openai_baseurl/) | JavaScript | OpenAI SDK with HELM proxy |
 | [`python_openai_baseurl`](python_openai_baseurl/) | Python | OpenAI SDK with HELM proxy |
-| [`ts_vercel_baseurl`](ts_vercel_baseurl/) | TypeScript | Vercel AI SDK with HELM proxy |
+| [`ts_openai_baseurl`](ts_openai_baseurl/) | TypeScript | TypeScript fetch with HELM proxy |
 
 ## Verification
 

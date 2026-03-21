@@ -13,7 +13,7 @@
 | LangChain                 | Python     | Callback handler    | Reference      |
 | Mastra                    | TypeScript | Middleware          | Reference      |
 | CrewAI                    | Python     | Tool wrapper        | Reference      |
-| Vercel AI SDK             | TypeScript | Middleware          | Reference      |
+| AI SDK (generic)          | TypeScript | Middleware          | Reference      |
 | Microsoft Agent Framework | .NET       | Middleware          | Planned        |
 | AutoGen                   | Python     | Tool wrapper        | Planned        |
 | DSPy                      | Python     | Module wrapper      | Planned        |
@@ -142,7 +142,7 @@ agent = Agent(
 )
 ```
 
-### Pattern 7: Vercel AI SDK
+### Pattern 7: AI SDK (generic)
 
 ```typescript
 import { generateText } from "ai";

@@ -154,7 +154,7 @@ print(response.choices[0].message.content)
 
 → Full example: [examples/python_openai_baseurl/main.py](examples/python_openai_baseurl/main.py)
 
-### TypeScript — Vercel AI SDK / fetch
+### TypeScript — fetch
 
 The only change:
 

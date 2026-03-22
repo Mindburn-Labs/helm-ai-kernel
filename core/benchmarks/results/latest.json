@@ -4,9 +4,9 @@
   "go_os": "darwin",
   "go_version": "go1.24.0",
   "helm_version": "0.3.0",
-  "hot_path_p99_us": 75,
+  "hot_path_p99_us": 65,
   "num_cpu": 16,
-  "overhead_p99_us": 73,
+  "overhead_p99_us": 63,
   "overhead_under_5ms": true,
   "scenarios": [
     {
@@ -15,21 +15,21 @@
       "p50_us": 0,
       "p95_us": 1,
       "p99_us": 2,
-      "mean_us": 0.1666,
-      "stddev_us": 2.3227234962431504,
+      "mean_us": 0.1932,
+      "stddev_us": 2.414844458759198,
       "min_us": 0,
-      "max_us": 126
+      "max_us": 127
     },
     {
       "name": "helm_allow",
       "iterations": 10000,
       "p50_us": 46,
-      "p95_us": 54,
-      "p99_us": 75,
-      "mean_us": 47.9619,
-      "stddev_us": 11.149181512111092,
-      "min_us": 40,
-      "max_us": 409
+      "p95_us": 52,
+      "p99_us": 65,
+      "mean_us": 47.102,
+      "stddev_us": 8.972669390989477,
+      "min_us": 41,
+      "max_us": 318
     },
     {
       "name": "helm_deny",
@@ -37,11 +37,11 @@
       "p50_us": 20,
       "p95_us": 23,
       "p99_us": 29,
-      "mean_us": 20.924,
-      "stddev_us": 5.887989809773787,
+      "mean_us": 20.8169,
+      "stddev_us": 5.505122559035353,
       "min_us": 18,
-      "max_us": 317
+      "max_us": 167
     }
   ],
-  "timestamp": "2026-03-22T17:06:26Z"
+  "timestamp": "2026-03-22T17:15:34Z"
 }

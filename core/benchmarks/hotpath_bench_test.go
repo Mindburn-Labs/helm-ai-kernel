@@ -275,6 +275,8 @@ func TestOverheadReport(t *testing.T) {
 			return time.Since(start)
 		}},
 		{"helm_deny", func(h *benchHarness) time.Duration {
+			// Guardian deny evaluation only — no receipt signing/store in deny path.
+			// This is correct: deny decisions are fail-closed at the Guardian boundary.
 			start := time.Now()
 			_, _ = h.guardian.EvaluateDecision(context.Background(), guardian.DecisionRequest{
 				Principal: "agent", Action: "execute", Resource: "undeclared-tool",
@@ -352,13 +354,15 @@ func TestOverheadReport(t *testing.T) {
 		baseline := results[0]
 		allow := results[1]
 		overheadP99 := allow.P99Us - baseline.P99Us
-		overheadPct := (overheadP99 / baseline.P99Us) * 100
 
 		t.Logf("")
 		t.Logf("=== OVERHEAD ANALYSIS ===")
 		t.Logf("Baseline p99:         %8.1f µs", baseline.P99Us)
 		t.Logf("HELM allow p99:       %8.1f µs", allow.P99Us)
-		t.Logf("Incremental overhead: %8.1f µs (%.1f%%)", overheadP99, overheadPct)
+		t.Logf("Incremental overhead: %8.1f µs", overheadP99)
+		if baseline.P99Us > 0 {
+			t.Logf("Ratio (allow/base):   %8.1fx", allow.P99Us/baseline.P99Us)
+		}
 		t.Logf("Overhead < 5ms:       %v", overheadP99 < 5000)
 	}
 

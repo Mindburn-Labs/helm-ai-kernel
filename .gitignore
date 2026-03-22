@@ -57,6 +57,8 @@ mise.*.local.*
 
 # ─── Artifacts and evidence outputs ───────────────────────────────────────────
 artifacts/
+!artifacts/golden/
+!artifacts/golden/**
 reports/
 
 # ─── Temporary and logs ──────────────────────────────────────────────────────
@@ -94,3 +96,4 @@ sdk/ts/src/*.d.ts
 
 # ─── SDK generator temp ──────────────────────────────────────────────────────
 .gen_tmp/
+helm.yaml

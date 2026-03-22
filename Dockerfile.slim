@@ -13,6 +13,9 @@ RUN apk add --no-cache ca-certificates tzdata && \
     adduser -D -h /home/helm helm
 COPY --from=builder /helm /usr/local/bin/helm
 
+# Create data dir writable by helm user (for root.key, receipts, etc.)
+RUN mkdir -p /home/helm/data && chown helm:helm /home/helm/data
+
 USER helm
 WORKDIR /home/helm
 

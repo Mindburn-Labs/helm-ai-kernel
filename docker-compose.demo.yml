@@ -27,6 +27,8 @@ services:
         condition: service_healthy
     environment:
       DEMO_DOMAIN: "${DEMO_DOMAIN:-localhost}"
+    profiles:
+      - with-caddy
 
   # ── Database ────────────────────────────────────────
   postgres:
@@ -44,15 +46,19 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── HELM Kernel ─────────────────────────────────────
+  # ── HELM Engine ─────────────────────────────────────
   helm:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.slim
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+    ports:
+      - "${HELM_PORT:-8420}:8080"
+    volumes:
+      - helm_data:/home/helm/data
     environment:
       DATABASE_URL: "postgres://helm_demo:helm-demo-only@postgres:5432/helm_demo?sslmode=disable"
       HELM_REGION: "demo"
@@ -98,5 +104,6 @@ services:
 
 volumes:
   pgdata:
+  helm_data:
   caddy_data:
   caddy_config:

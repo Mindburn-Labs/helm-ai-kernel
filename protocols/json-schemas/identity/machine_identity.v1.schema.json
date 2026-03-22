@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm-oss.org/schemas/identity/machine_identity.v1.schema.json",
+  "title": "Machine Identity",
+  "description": "Schema for machine-level identity and attestation in HELM-governed systems.",
+  "type": "object",
+  "required": ["identity_id", "type", "public_key", "registered_at"],
+  "properties": {
+    "identity_id": { "type": "string", "description": "Unique machine identity identifier" },
+    "type": { "type": "string", "enum": ["KERNEL", "CONNECTOR", "AGENT", "GATEWAY", "EDGE_NODE"] },
+    "public_key": { "type": "string", "description": "Ed25519 public key (hex-encoded)" },
+    "attestation": {
+      "type": "object",
+      "properties": {
+        "method": { "type": "string", "enum": ["TPM", "SGX", "SOFTWARE", "HSM"] },
+        "evidence": { "type": "string" },
+        "verified_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "trust_state": {
+      "type": "object",
+      "properties": {
+        "trusted": { "type": "boolean" },
+        "trust_level": { "type": "string", "enum": ["FULL", "CONDITIONAL", "UNTRUSTED", "REVOKED"] },
+        "last_verified": { "type": "string", "format": "date-time" },
+        "verification_chain": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "capabilities": { "type": "array", "items": { "type": "string" } },
+    "registered_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" }
+  }
+}

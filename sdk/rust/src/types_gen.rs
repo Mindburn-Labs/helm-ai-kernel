@@ -119,9 +119,9 @@ pub struct ChatCompletionRequest {
     #[serde(rename = "model")]
     pub model: String,
     #[serde(rename = "messages")]
-    pub messages: Vec<models::ChatCompletionRequestMessagesInner>,
+    pub messages: Vec<ChatCompletionRequestMessagesInner>,
     #[serde(rename = "tools", skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<models::ChatCompletionRequestToolsInner>>,
+    pub tools: Option<Vec<ChatCompletionRequestToolsInner>>,
     #[serde(rename = "temperature", skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
     #[serde(rename = "max_tokens", skip_serializing_if = "Option::is_none")]
@@ -131,7 +131,7 @@ pub struct ChatCompletionRequest {
 }
 
 impl ChatCompletionRequest {
-    pub fn new(model: String, messages: Vec<models::ChatCompletionRequestMessagesInner>) -> ChatCompletionRequest {
+    pub fn new(model: String, messages: Vec<ChatCompletionRequestMessagesInner>) -> ChatCompletionRequest {
         ChatCompletionRequest {
             model,
             messages,
@@ -208,7 +208,7 @@ pub struct ChatCompletionRequestToolsInner {
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     pub r#type: Option<Type>,
     #[serde(rename = "function", skip_serializing_if = "Option::is_none")]
-    pub function: Option<Box<models::ChatCompletionRequestToolsInnerFunction>>,
+    pub function: Option<Box<ChatCompletionRequestToolsInnerFunction>>,
 }
 
 impl ChatCompletionRequestToolsInner {
@@ -285,9 +285,9 @@ pub struct ChatCompletionResponse {
     #[serde(rename = "model", skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(rename = "choices", skip_serializing_if = "Option::is_none")]
-    pub choices: Option<Vec<models::ChatCompletionResponseChoicesInner>>,
+    pub choices: Option<Vec<ChatCompletionResponseChoicesInner>>,
     #[serde(rename = "usage", skip_serializing_if = "Option::is_none")]
-    pub usage: Option<Box<models::ChatCompletionResponseUsage>>,
+    pub usage: Option<Box<ChatCompletionResponseUsage>>,
 }
 
 impl ChatCompletionResponse {
@@ -319,7 +319,7 @@ pub struct ChatCompletionResponseChoicesInner {
     #[serde(rename = "index", skip_serializing_if = "Option::is_none")]
     pub index: Option<i32>,
     #[serde(rename = "message", skip_serializing_if = "Option::is_none")]
-    pub message: Option<Box<models::ChatCompletionResponseChoicesInnerMessage>>,
+    pub message: Option<Box<ChatCompletionResponseChoicesInnerMessage>>,
     #[serde(rename = "finish_reason", skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<String>,
 }
@@ -349,10 +349,10 @@ impl ChatCompletionResponseChoicesInner {
 pub struct ChatCompletionResponseChoicesInnerMessage {
     #[serde(rename = "role", skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
-    #[serde(rename = "content", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "content", default, skip_serializing_if = "Option::is_none")]
     pub content: Option<Option<String>>,
     #[serde(rename = "tool_calls", skip_serializing_if = "Option::is_none")]
-    pub tool_calls: Option<Vec<models::ChatCompletionResponseChoicesInnerMessageToolCallsInner>>,
+    pub tool_calls: Option<Vec<ChatCompletionResponseChoicesInnerMessageToolCallsInner>>,
 }
 
 impl ChatCompletionResponseChoicesInnerMessage {
@@ -383,7 +383,7 @@ pub struct ChatCompletionResponseChoicesInnerMessageToolCallsInner {
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     pub r#type: Option<String>,
     #[serde(rename = "function", skip_serializing_if = "Option::is_none")]
-    pub function: Option<Box<models::ChatCompletionResponseChoicesInnerMessageToolCallsInnerFunction>>,
+    pub function: Option<Box<ChatCompletionResponseChoicesInnerMessageToolCallsInnerFunction>>,
 }
 
 impl ChatCompletionResponseChoicesInnerMessageToolCallsInner {
@@ -606,7 +606,7 @@ impl Effect {
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EffectBoundary {
     #[serde(rename = "effect")]
-    pub effect: Box<models::Effect>,
+    pub effect: Box<Effect>,
     /// Agent/user identity (e.g. agent:analyst)
     #[serde(rename = "principal")]
     pub principal: String,
@@ -617,7 +617,7 @@ pub struct EffectBoundary {
 
 impl EffectBoundary {
     /// The boundary contract for submitting effects to the kernel
-    pub fn new(effect: models::Effect, principal: String) -> EffectBoundary {
+    pub fn new(effect: Effect, principal: String) -> EffectBoundary {
         EffectBoundary {
             effect: Box::new(effect),
             principal,
@@ -686,12 +686,12 @@ pub struct GovernanceDecision {
     #[serde(rename = "effect_id")]
     pub effect_id: String,
     #[serde(rename = "verdict")]
-    pub verdict: Verdict,
+    pub verdict: GovernanceVerdict,
     /// Null for ALLOW. Registered code from reason-codes-v1.json for DENY/ESCALATE.
-    #[serde(rename = "reason_code", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "reason_code", default, skip_serializing_if = "Option::is_none")]
     pub reason_code: Option<Option<String>>,
     #[serde(rename = "receipt", skip_serializing_if = "Option::is_none")]
-    pub receipt: Option<Box<models::Receipt>>,
+    pub receipt: Option<Box<Receipt>>,
     /// Names of policy bundles active during evaluation
     #[serde(rename = "active_packs", skip_serializing_if = "Option::is_none")]
     pub active_packs: Option<Vec<String>>,
@@ -699,7 +699,7 @@ pub struct GovernanceDecision {
 
 impl GovernanceDecision {
     /// PDP decision for an effect
-    pub fn new(decision_id: String, effect_id: String, verdict: Verdict) -> GovernanceDecision {
+    pub fn new(decision_id: String, effect_id: String, verdict: GovernanceVerdict) -> GovernanceDecision {
         GovernanceDecision {
             decision_id,
             effect_id,
@@ -712,7 +712,7 @@ impl GovernanceDecision {
 }
 /// 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum Verdict {
+pub enum GovernanceVerdict {
     #[serde(rename = "ALLOW")]
     Allow,
     #[serde(rename = "DENY")]
@@ -721,8 +721,8 @@ pub enum Verdict {
     Escalate,
 }
 
-impl Default for Verdict {
-    fn default() -> Verdict {
+impl Default for GovernanceVerdict {
+    fn default() -> GovernanceVerdict {
         Self::Allow
     }
 }
@@ -769,11 +769,11 @@ impl HealthCheck200Response {
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct HelmError {
     #[serde(rename = "error")]
-    pub error: Box<models::HelmErrorError>,
+    pub error: Box<HelmErrorError>,
 }
 
 impl HelmError {
-    pub fn new(error: models::HelmErrorError) -> HelmError {
+    pub fn new(error: HelmErrorError) -> HelmError {
         HelmError {
             error: Box::new(error),
         }
@@ -797,7 +797,7 @@ pub struct HelmErrorError {
     #[serde(rename = "message")]
     pub message: String,
     #[serde(rename = "type")]
-    pub r#type: Type,
+    pub r#type: ErrorType,
     /// Machine-readable error code
     #[serde(rename = "code")]
     pub code: String,
@@ -810,7 +810,7 @@ pub struct HelmErrorError {
 }
 
 impl HelmErrorError {
-    pub fn new(message: String, r#type: Type, code: String, reason_code: ReasonCode) -> HelmErrorError {
+    pub fn new(message: String, r#type: ErrorType, code: String, reason_code: ReasonCode) -> HelmErrorError {
         HelmErrorError {
             message,
             r#type,
@@ -822,7 +822,7 @@ impl HelmErrorError {
 }
 /// 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum Type {
+pub enum ErrorType {
     #[serde(rename = "invalid_request")]
     InvalidRequest,
     #[serde(rename = "authentication_error")]
@@ -835,8 +835,8 @@ pub enum Type {
     InternalError,
 }
 
-impl Default for Type {
-    fn default() -> Type {
+impl Default for ErrorType {
+    fn default() -> ErrorType {
         Self::InvalidRequest
     }
 }
@@ -899,7 +899,7 @@ pub struct McpCapabilityManifest {
     #[serde(rename = "governance", skip_serializing_if = "Option::is_none")]
     pub governance: Option<String>,
     #[serde(rename = "tools", skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<models::McpToolRef>>,
+    pub tools: Option<Vec<McpToolRef>>,
 }
 
 impl McpCapabilityManifest {
@@ -1038,7 +1038,7 @@ impl McpToolCallRequest {
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct McpToolCallResponse {
     #[serde(rename = "result", skip_serializing_if = "Option::is_none")]
-    pub result: Option<Box<models::McpToolCallResponseResult>>,
+    pub result: Option<Box<McpToolCallResponseResult>>,
     #[serde(rename = "error", skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(rename = "reason_code", skip_serializing_if = "Option::is_none")]
@@ -1168,7 +1168,7 @@ pub struct McpjsonrpcRequest {
     #[serde(rename = "jsonrpc")]
     pub jsonrpc: Jsonrpc,
     #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
-    pub id: Option<Box<models::McpjsonrpcRequestId>>,
+    pub id: Option<Box<McpjsonrpcRequestId>>,
     #[serde(rename = "method")]
     pub method: String,
     #[serde(rename = "params", skip_serializing_if = "Option::is_none")]
@@ -1240,11 +1240,11 @@ pub struct McpjsonrpcResponse {
     #[serde(rename = "jsonrpc", skip_serializing_if = "Option::is_none")]
     pub jsonrpc: Option<Jsonrpc>,
     #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
-    pub id: Option<Box<models::McpjsonrpcResponseId>>,
+    pub id: Option<Box<McpjsonrpcResponseId>>,
     #[serde(rename = "result", skip_serializing_if = "Option::is_none")]
     pub result: Option<std::collections::HashMap<String, serde_json::Value>>,
     #[serde(rename = "error", skip_serializing_if = "Option::is_none")]
-    pub error: Option<Box<models::McpjsonrpcError>>,
+    pub error: Option<Box<McpjsonrpcError>>,
 }
 
 impl McpjsonrpcResponse {
@@ -1257,18 +1257,7 @@ impl McpjsonrpcResponse {
         }
     }
 }
-/// 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum Jsonrpc {
-    #[serde(rename = "2.0")]
-    Variant2Period0,
-}
-
-impl Default for Jsonrpc {
-    fn default() -> Jsonrpc {
-        Self::Variant2Period0
-    }
-}
+// Duplicate Jsonrpc enum removed (canonical def at line 1190)
 
 /*
  * HELM Kernel API
@@ -1410,15 +1399,15 @@ pub struct OssLocalCapabilitiesResponse {
     #[serde(rename = "http_api")]
     pub http_api: bool,
     #[serde(rename = "mcp")]
-    pub mcp: Box<models::OssLocalCapabilitiesMcp>,
+    pub mcp: Box<OssLocalCapabilitiesMcp>,
     #[serde(rename = "proxy")]
-    pub proxy: Box<models::OssLocalCapabilitiesProxy>,
+    pub proxy: Box<OssLocalCapabilitiesProxy>,
     #[serde(rename = "features")]
-    pub features: Box<models::OssLocalCapabilitiesFeatures>,
+    pub features: Box<OssLocalCapabilitiesFeatures>,
 }
 
 impl OssLocalCapabilitiesResponse {
-    pub fn new(studio_mode: StudioMode, read_only: bool, http_api: bool, mcp: models::OssLocalCapabilitiesMcp, proxy: models::OssLocalCapabilitiesProxy, features: models::OssLocalCapabilitiesFeatures) -> OssLocalCapabilitiesResponse {
+    pub fn new(studio_mode: StudioMode, read_only: bool, http_api: bool, mcp: OssLocalCapabilitiesMcp, proxy: OssLocalCapabilitiesProxy, features: OssLocalCapabilitiesFeatures) -> OssLocalCapabilitiesResponse {
         OssLocalCapabilitiesResponse {
             studio_mode,
             read_only,
@@ -1551,7 +1540,7 @@ impl OssLocalPathsView {
 /// OssLocalProofgraphResponse : Local proofgraph payload. When the file is unavailable, `status` is `unavailable` and `nodes` is empty.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OssLocalProofgraphResponse {
-    #[serde(rename = "nodes", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "nodes", default, skip_serializing_if = "Option::is_none")]
     pub nodes: Option<Option<serde_json::Value>>,
     #[serde(rename = "path", skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
@@ -1597,13 +1586,13 @@ pub struct OssLocalReplayReport {
     #[serde(rename = "provider", skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
     #[serde(rename = "summary")]
-    pub summary: Box<models::OssLocalRunSummary>,
+    pub summary: Box<OssLocalRunSummary>,
     #[serde(rename = "receipts")]
-    pub receipts: Vec<models::OssLocalDecision>,
+    pub receipts: Vec<OssLocalDecision>,
 }
 
 impl OssLocalReplayReport {
-    pub fn new(summary: models::OssLocalRunSummary, receipts: Vec<models::OssLocalDecision>) -> OssLocalReplayReport {
+    pub fn new(summary: OssLocalRunSummary, receipts: Vec<OssLocalDecision>) -> OssLocalReplayReport {
         OssLocalReplayReport {
             version: None,
             schema_version: None,
@@ -1636,7 +1625,7 @@ pub struct OssLocalReportMeta {
     #[serde(rename = "generated_at", skip_serializing_if = "Option::is_none")]
     pub generated_at: Option<String>,
     #[serde(rename = "summary", skip_serializing_if = "Option::is_none")]
-    pub summary: Option<Box<models::OssLocalRunSummary>>,
+    pub summary: Option<Box<OssLocalRunSummary>>,
 }
 
 impl OssLocalReportMeta {
@@ -1787,17 +1776,17 @@ pub struct OssLocalSummaryResponse {
     #[serde(rename = "generated_at")]
     pub generated_at: String,
     #[serde(rename = "runtime")]
-    pub runtime: Box<models::OssLocalRuntimeStatus>,
+    pub runtime: Box<OssLocalRuntimeStatus>,
     #[serde(rename = "paths")]
-    pub paths: Box<models::OssLocalPathsView>,
+    pub paths: Box<OssLocalPathsView>,
     #[serde(rename = "latest_report", skip_serializing_if = "Option::is_none")]
-    pub latest_report: Option<Box<models::OssLocalReportMeta>>,
+    pub latest_report: Option<Box<OssLocalReportMeta>>,
     #[serde(rename = "stats")]
-    pub stats: Box<models::OssLocalStats>,
+    pub stats: Box<OssLocalStats>,
 }
 
 impl OssLocalSummaryResponse {
-    pub fn new(mode: Mode, connected: bool, generated_at: String, runtime: models::OssLocalRuntimeStatus, paths: models::OssLocalPathsView, stats: models::OssLocalStats) -> OssLocalSummaryResponse {
+    pub fn new(mode: Mode, connected: bool, generated_at: String, runtime: OssLocalRuntimeStatus, paths: OssLocalPathsView, stats: OssLocalStats) -> OssLocalSummaryResponse {
         OssLocalSummaryResponse {
             mode,
             connected,
@@ -1836,7 +1825,7 @@ impl Default for Mode {
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OssLocalTimelineResponse {
     #[serde(rename = "decisions")]
-    pub decisions: Vec<models::OssLocalDecision>,
+    pub decisions: Vec<OssLocalDecision>,
     #[serde(rename = "total")]
     pub total: i32,
     #[serde(rename = "source", skip_serializing_if = "Option::is_none")]
@@ -1844,7 +1833,7 @@ pub struct OssLocalTimelineResponse {
 }
 
 impl OssLocalTimelineResponse {
-    pub fn new(decisions: Vec<models::OssLocalDecision>, total: i32) -> OssLocalTimelineResponse {
+    pub fn new(decisions: Vec<OssLocalDecision>, total: i32) -> OssLocalTimelineResponse {
         OssLocalTimelineResponse {
             decisions,
             total,
@@ -1868,12 +1857,12 @@ impl OssLocalTimelineResponse {
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PdpRequest {
     #[serde(rename = "boundary")]
-    pub boundary: Box<models::EffectBoundary>,
+    pub boundary: Box<EffectBoundary>,
 }
 
 impl PdpRequest {
     /// Request to the Policy Decision Point
-    pub fn new(boundary: models::EffectBoundary) -> PdpRequest {
+    pub fn new(boundary: EffectBoundary) -> PdpRequest {
         PdpRequest {
             boundary: Box::new(boundary),
         }
@@ -1895,12 +1884,12 @@ impl PdpRequest {
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PdpResponse {
     #[serde(rename = "decision")]
-    pub decision: Box<models::GovernanceDecision>,
+    pub decision: Box<GovernanceDecision>,
 }
 
 impl PdpResponse {
     /// Response from the Policy Decision Point
-    pub fn new(decision: models::GovernanceDecision) -> PdpResponse {
+    pub fn new(decision: GovernanceDecision) -> PdpResponse {
         PdpResponse {
             decision: Box::new(decision),
         }
@@ -1929,7 +1918,7 @@ pub struct PolicyBundle {
     #[serde(rename = "content_hash")]
     pub content_hash: String,
     /// Ed25519 signature over content_hash
-    #[serde(rename = "signature", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "signature", default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<Option<String>>,
     #[serde(rename = "pack_type", skip_serializing_if = "Option::is_none")]
     pub pack_type: Option<PackType>,
@@ -2118,7 +2107,7 @@ pub struct VerificationResult {
     #[serde(rename = "verdict", skip_serializing_if = "Option::is_none")]
     pub verdict: Option<Verdict>,
     #[serde(rename = "checks", skip_serializing_if = "Option::is_none")]
-    pub checks: Option<Box<models::VerificationResultChecks>>,
+    pub checks: Option<Box<VerificationResultChecks>>,
     #[serde(rename = "errors", skip_serializing_if = "Option::is_none")]
     pub errors: Option<Vec<String>>,
 }
@@ -2132,20 +2121,7 @@ impl VerificationResult {
         }
     }
 }
-/// 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum Verdict {
-    #[serde(rename = "PASS")]
-    Pass,
-    #[serde(rename = "FAIL")]
-    Fail,
-}
-
-impl Default for Verdict {
-    fn default() -> Verdict {
-        Self::Pass
-    }
-}
+// Duplicate Verdict enum removed (canonical def at line 541)
 
 /*
  * HELM Kernel API

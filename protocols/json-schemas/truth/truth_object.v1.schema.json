@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm-oss.org/schemas/truth/truth_object.v1.schema.json",
+  "title": "Truth Object",
+  "description": "An immutable versioned governance artifact in the HELM Truth Registry.",
+  "type": "object",
+  "required": ["object_id", "type", "name", "version", "content_hash", "registered_at"],
+  "properties": {
+    "object_id": { "type": "string" },
+    "type": { "type": "string", "enum": ["POLICY", "SCHEMA", "REGULATION", "ORG_GENOME", "PACK_ABI", "ATTESTATION"] },
+    "name": { "type": "string" },
+    "version": {
+      "type": "object",
+      "required": ["major", "minor", "patch"],
+      "properties": {
+        "major": { "type": "integer" },
+        "minor": { "type": "integer" },
+        "patch": { "type": "integer" },
+        "epoch": { "type": "string" },
+        "label": { "type": "string" }
+      }
+    },
+    "content_hash": { "type": "string" },
+    "freshness": {
+      "type": "object",
+      "properties": {
+        "last_validated": { "type": "string", "format": "date-time" },
+        "valid_until": { "type": "string", "format": "date-time" },
+        "stale": { "type": "boolean" }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "properties": {
+        "breaking_change": { "type": "boolean" },
+        "deprecated_since": { "type": "string" },
+        "replaced_by": { "type": "string" },
+        "compatible_with": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "author_id": { "type": "string" },
+        "source_ref": { "type": "string" },
+        "tool": { "type": "string" }
+      }
+    },
+    "registered_at": { "type": "string", "format": "date-time" },
+    "signature": { "type": "string" }
+  }
+}

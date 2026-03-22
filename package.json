@@ -1,0 +1,28 @@
+{
+  "name": "helm-oss",
+  "version": "1.0.0",
+  "description": "[![CI](https://github.com/Mindburn-Labs/helm-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/Mindburn-Labs/helm-oss/actions/workflows/ci.yml) [![Conformance](https://img.shields.io/badge/conformance-L1%20%2B%20L2-brightgreen)](docs/CONFORMANCE.md) [![Provenance](https://img.shields.io/badge/provenance-SLSA-blue)](https://github.com/Mindburn-Labs/helm-oss/releases) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "example": "examples"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mindburn-Labs/helm-oss.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Mindburn-Labs/helm-oss/issues"
+  },
+  "homepage": "https://github.com/Mindburn-Labs/helm-oss#readme",
+  "devDependencies": {
+    "ts-proto": "^2.11.5"
+  }
+}

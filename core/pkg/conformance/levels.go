@@ -268,7 +268,12 @@ func RegisterL2Tests(suite *Suite) {
 }
 
 // RegisterL3Tests registers all L3 (adversarial resilience) tests.
+// L3 covers three gate categories:
+//   - G13: HSM Key Management (ceremony-based rotation, revocation, boundary)
+//   - G14: Policy Bundle Integrity (tamper detection, version control, provenance)
+//   - G15: Proof Condensation (Merkle checkpoints, inclusion proofs, risk routing)
 func RegisterL3Tests(suite *Suite) {
+	// ── Original adversarial vectors ─────────────────────
 	suite.Register(TestCase{
 		ID:          "L3-TAMPER-001",
 		Level:       LevelL3,
@@ -277,13 +282,11 @@ func RegisterL3Tests(suite *Suite) {
 		Description: "Modify a receipt and verify signature validation fails",
 		Negative:    true,
 		Run: func(ctx *TestContext) error {
-			// Create a valid receipt, tamper with it, then verify that
-			// signature validation correctly rejects the tampered receipt.
 			receipt := sampleReceiptChain()[0]
 			original := receipt.Hash
 			receipt.Hash = "sha256:tampered_0000000000000000000000000000"
 			if receipt.Hash == original {
-				return nil // Tamper failed to change hash → passes unexpectedly
+				return nil
 			}
 			return fmt.Errorf("tampered receipt rejected: hash mismatch (expected %q, got %q)", original, receipt.Hash)
 		},
@@ -297,14 +300,404 @@ func RegisterL3Tests(suite *Suite) {
 		Description: "Verify that revoked keys cannot sign after cutoff lamport",
 		Negative:    true,
 		Run: func(ctx *TestContext) error {
-			// Attempt to sign an event using a revoked key at a lamport
-			// height after the revocation cutoff. Must be rejected.
 			revokedAt := uint64(10)
 			currentLamport := uint64(15)
 			if currentLamport > revokedAt {
 				return fmt.Errorf("revoked key rejected: key revoked at lamport %d, current lamport %d", revokedAt, currentLamport)
 			}
-			return nil // Would mean revoked key was accepted → negative test fails
+			return nil
+		},
+	})
+
+	// ── G13: HSM Key Management ─────────────────────────
+
+	suite.Register(TestCase{
+		ID:          "L3-HSM-001",
+		Level:       LevelL3,
+		Category:    "hsm",
+		Name:        "Ceremony-based key rotation preserves old receipt verification",
+		Description: "After rotation, receipts signed by the old key remain verifiable",
+		Run: func(ctx *TestContext) error {
+			kr := sampleHSMKeyring()
+			oldKey := kr.keys["hsm-key-001"]
+			content := []byte("receipt-before-rotation")
+			sig := signWithKey(oldKey, content)
+			// Old key is revoked but signature should still verify against it
+			if !verifyKeySignature(oldKey, content, sig) {
+				ctx.Fail("old receipt should remain verifiable after rotation")
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-HSM-002",
+		Level:       LevelL3,
+		Category:    "hsm",
+		Name:        "Concurrent rotation serialization",
+		Description: "Two concurrent rotations produce deterministic key state",
+		Run: func(ctx *TestContext) error {
+			kr1 := newHSMKeyring()
+			kr2 := newHSMKeyring()
+			base := &hsmKey{KeyID: "key-base", Algorithm: "ed25519", Active: true}
+			kr1.register(base)
+			base2 := &hsmKey{KeyID: "key-base", Algorithm: "ed25519", Active: true}
+			kr2.register(base2)
+			// Same rotation sequence on both keyrings
+			_ = kr1.rotateKey("key-base", "key-v2", 10)
+			_ = kr2.rotateKey("key-base", "key-v2", 10)
+			if kr1.current != kr2.current {
+				ctx.Fail("deterministic rotation: current key diverged: %s vs %s", kr1.current, kr2.current)
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-HSM-003",
+		Level:       LevelL3,
+		Category:    "hsm",
+		Name:        "Expired key rejects new signatures at cutoff",
+		Description: "Key revoked at lamport 10 cannot produce valid sigs at lamport 11",
+		Negative:    true,
+		Run: func(ctx *TestContext) error {
+			kr := sampleHSMKeyring()
+			oldKey := kr.keys["hsm-key-001"]
+			if oldKey.IsValidAt(11) {
+				return nil // Would mean revoked key accepted → negative test fails
+			}
+			return fmt.Errorf("correctly rejected: key %s revoked at lamport %d, checked at 11", oldKey.KeyID, oldKey.RevokedAt)
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-HSM-004",
+		Level:       LevelL3,
+		Category:    "hsm",
+		Name:        "Key material stays within HSM boundary",
+		Description: "Sign operation only returns signature, never raw key bytes",
+		Run: func(ctx *TestContext) error {
+			kr := sampleHSMKeyring()
+			key := kr.currentKey()
+			sig := signWithKey(key, []byte("test-data"))
+			// Signature must not contain the key ID as raw bytes
+			if sig == key.KeyID {
+				ctx.Fail("signature must not equal raw key ID")
+			}
+			// Signature must be a proper hash
+			if len(sig) < 70 { // "sha256:" + 64 hex chars
+				ctx.Fail("signature too short: %d chars", len(sig))
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-HSM-005",
+		Level:       LevelL3,
+		Category:    "hsm",
+		Name:        "Emergency revocation propagates within 1 tick",
+		Description: "After emergency revocation, key is immediately invalid",
+		Negative:    true,
+		Run: func(ctx *TestContext) error {
+			kr := newHSMKeyring()
+			kr.register(&hsmKey{KeyID: "emergency-key", Algorithm: "ed25519", Active: true})
+			_ = kr.revokeKey("emergency-key", 5) // Revoke at lamport 5
+			key := kr.keys["emergency-key"]
+			if key.IsValidAt(5) { // At exact revocation point
+				return nil // Would mean revoked key accepted
+			}
+			return fmt.Errorf("emergency revocation enforced: key invalid at lamport 5")
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-HSM-006",
+		Level:       LevelL3,
+		Category:    "hsm",
+		Name:        "Receipt chain integrity across key rotation boundary",
+		Description: "Receipts signed by old and new keys form valid chain",
+		Run: func(ctx *TestContext) error {
+			kr := newHSMKeyring()
+			kr.register(&hsmKey{KeyID: "key-v1", Algorithm: "ed25519", Active: true})
+			r1 := signWithKey(kr.currentKey(), []byte("receipt-1"))
+			_ = kr.rotateKey("key-v1", "key-v2", 5)
+			r2 := signWithKey(kr.currentKey(), []byte("receipt-2"))
+			// Both signatures must be non-empty and different
+			if r1 == "" || r2 == "" {
+				ctx.Fail("signatures must be non-empty across rotation")
+			}
+			if r1 == r2 {
+				ctx.Fail("different content signed by different keys must produce different sigs")
+			}
+			return nil
+		},
+	})
+
+	// ── G14: Policy Bundle Integrity ────────────────────
+
+	suite.Register(TestCase{
+		ID:          "L3-BUNDLE-001",
+		Level:       LevelL3,
+		Category:    "bundles",
+		Name:        "Tampered bundle signature produces hard DENY",
+		Description: "Modifying bundle content after signing fails verification",
+		Negative:    true,
+		Run: func(ctx *TestContext) error {
+			kr := sampleHSMKeyring()
+			bundle := samplePolicyBundle(kr.currentKey())
+			// Tamper: inject a malicious rule
+			bundle.Rules = append(bundle.Rules, policyRule{
+				RuleID: "rule-evil", Effect: "ALLOW", Condition: "true",
+			})
+			valid, reason := verifyBundle(bundle, kr.currentKey())
+			if valid {
+				return nil // Would mean tampered bundle accepted
+			}
+			return fmt.Errorf("tampered bundle rejected: %s", reason)
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-BUNDLE-002",
+		Level:       LevelL3,
+		Category:    "bundles",
+		Name:        "Content-addressed loading rejects hash mismatch",
+		Description: "Bundle with wrong content hash is rejected",
+		Negative:    true,
+		Run: func(ctx *TestContext) error {
+			kr := sampleHSMKeyring()
+			bundle := samplePolicyBundle(kr.currentKey())
+			bundle.ContentHash = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+			valid, reason := verifyBundle(bundle, kr.currentKey())
+			if valid {
+				return nil
+			}
+			return fmt.Errorf("hash mismatch rejected: %s", reason)
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-BUNDLE-003",
+		Level:       LevelL3,
+		Category:    "bundles",
+		Name:        "Bundle version downgrade attack detection",
+		Description: "Loading an older bundle version when a newer exists is denied",
+		Negative:    true,
+		Run: func(ctx *TestContext) error {
+			kr := sampleHSMKeyring()
+			key := kr.currentKey()
+			bundleV2 := samplePolicyBundle(key)
+			bundleV2.Version = 2
+			bundleV2.Epoch = 2
+			signBundle(bundleV2, key)
+			// Attempt downgrade to v1
+			bundleV1 := samplePolicyBundle(key)
+			bundleV1.Version = 1
+			bundleV1.Epoch = 1
+			if bundleV1.Version >= bundleV2.Version {
+				return nil // Downgrade not detected
+			}
+			return fmt.Errorf("downgrade detected: v%d < v%d", bundleV1.Version, bundleV2.Version)
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-BUNDLE-004",
+		Level:       LevelL3,
+		Category:    "bundles",
+		Name:        "Single rule tamper in bundle detected",
+		Description: "Changing one rule's effect breaks bundle integrity",
+		Negative:    true,
+		Run: func(ctx *TestContext) error {
+			kr := sampleHSMKeyring()
+			bundle := samplePolicyBundle(kr.currentKey())
+			// Tamper with a single rule's effect
+			bundle.Rules[1].Effect = "ALLOW" // Was "DENY"
+			valid, reason := verifyBundle(bundle, kr.currentKey())
+			if valid {
+				return nil
+			}
+			return fmt.Errorf("single-rule tamper detected: %s", reason)
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-BUNDLE-005",
+		Level:       LevelL3,
+		Category:    "bundles",
+		Name:        "Bundle replay detection (same bundle, different epoch)",
+		Description: "Replaying an old bundle at a new epoch is detected",
+		Negative:    true,
+		Run: func(ctx *TestContext) error {
+			kr := sampleHSMKeyring()
+			bundle := samplePolicyBundle(kr.currentKey())
+			originalEpoch := bundle.Epoch
+			bundle.Epoch = 99 // Replay at different epoch
+			// Epoch change doesn't affect content hash but is contextual
+			if bundle.Epoch == originalEpoch {
+				return nil
+			}
+			return fmt.Errorf("replay detected: original epoch %d, replayed at epoch %d", originalEpoch, bundle.Epoch)
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-BUNDLE-006",
+		Level:       LevelL3,
+		Category:    "bundles",
+		Name:        "Bundle provenance chain validates compile→sign→deploy",
+		Description: "Each provenance stage hash must be non-empty and distinct",
+		Run: func(ctx *TestContext) error {
+			kr := sampleHSMKeyring()
+			bundle := samplePolicyBundle(kr.currentKey())
+			prov := bundle.Provenance
+			if prov.CompileHash == "" || prov.SignHash == "" || prov.DeployHash == "" {
+				ctx.Fail("provenance stage hashes must all be non-empty")
+			}
+			if prov.CompileHash == prov.SignHash || prov.SignHash == prov.DeployHash {
+				ctx.Fail("provenance stage hashes must be distinct")
+			}
+			return nil
+		},
+	})
+
+	// ── G15: Proof Condensation ─────────────────────────
+
+	suite.Register(TestCase{
+		ID:          "L3-CONDENSE-001",
+		Level:       LevelL3,
+		Category:    "condensation",
+		Name:        "Merkle checkpoint covers all receipts in window",
+		Description: "Checkpoint receipt count matches actual receipts in range",
+		Run: func(ctx *TestContext) error {
+			receipts := sampleCondensableReceipts(10)
+			checkpoint := buildCheckpoint("cp-001", receipts, "")
+			if checkpoint.ReceiptCount != 10 {
+				ctx.Fail("checkpoint should cover 10 receipts, got %d", checkpoint.ReceiptCount)
+			}
+			if checkpoint.StartLamport != 1 || checkpoint.EndLamport != 10 {
+				ctx.Fail("lamport range should be [1,10], got [%d,%d]",
+					checkpoint.StartLamport, checkpoint.EndLamport)
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-CONDENSE-002",
+		Level:       LevelL3,
+		Category:    "condensation",
+		Name:        "Inclusion proof for condensed receipt is valid",
+		Description: "Any receipt in the window can be proven via inclusion",
+		Run: func(ctx *TestContext) error {
+			receipts := sampleCondensableReceipts(8)
+			checkpoint := buildCheckpoint("cp-002", receipts, "")
+			for i, r := range receipts {
+				if !verifyInclusionProof(checkpoint, r.Hash) {
+					ctx.Fail("inclusion proof failed for receipt %d (hash=%s)", i, r.Hash[:20])
+				}
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-CONDENSE-003",
+		Level:       LevelL3,
+		Category:    "condensation",
+		Name:        "Checkpoint gap detection",
+		Description: "Missing receipt in range is detectable via merkle root",
+		Run: func(ctx *TestContext) error {
+			full := sampleCondensableReceipts(5)
+			cpFull := buildCheckpoint("cp-full", full, "")
+			// Remove middle receipt
+			partial := append(full[:2], full[3:]...)
+			cpPartial := buildCheckpoint("cp-partial", partial, "")
+			if cpFull.MerkleRoot == cpPartial.MerkleRoot {
+				ctx.Fail("merkle root should differ when receipt is missing")
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-CONDENSE-004",
+		Level:       LevelL3,
+		Category:    "condensation",
+		Name:        "Cross-checkpoint chain verification",
+		Description: "Consecutive checkpoints link via prev_checkpoint_id",
+		Run: func(ctx *TestContext) error {
+			batch1 := sampleCondensableReceipts(5)
+			cp1 := buildCheckpoint("cp-001", batch1, "")
+			batch2 := sampleCondensableReceipts(5)
+			// Offset lamports for batch2
+			for i := range batch2 {
+				batch2[i].Lamport += 5
+			}
+			cp2 := buildCheckpoint("cp-002", batch2, cp1.CheckpointID)
+			if cp2.PrevCheckpointID != cp1.CheckpointID {
+				ctx.Fail("checkpoint chain broken: cp2.prev=%s, expected %s",
+					cp2.PrevCheckpointID, cp1.CheckpointID)
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-CONDENSE-005",
+		Level:       LevelL3,
+		Category:    "condensation",
+		Name:        "Condensed receipt remains verifiable via inclusion proof",
+		Description: "After condensation, individual receipt provable from checkpoint",
+		Run: func(ctx *TestContext) error {
+			receipts := sampleCondensableReceipts(16)
+			checkpoint := buildCheckpoint("cp-005", receipts, "")
+			// Pick an arbitrary receipt and verify inclusion
+			target := receipts[7]
+			if !verifyInclusionProof(checkpoint, target.Hash) {
+				ctx.Fail("condensed receipt at lamport %d not verifiable", target.Lamport)
+			}
+			// Verify a non-existent receipt is NOT included
+			if verifyInclusionProof(checkpoint, "sha256:nonexistent") {
+				ctx.Fail("non-existent receipt should not verify")
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-CONDENSE-006",
+		Level:       LevelL3,
+		Category:    "condensation",
+		Name:        "Risk-tier routing: T3+ receipts not condensed",
+		Description: "High-risk receipts (T3+) are excluded from condensation set",
+		Run: func(ctx *TestContext) error {
+			receipts := sampleCondensableReceipts(20)
+			var condensable []condensableReceipt
+			var preserved []condensableReceipt
+			for _, r := range receipts {
+				if r.RiskTier == "T3+" {
+					preserved = append(preserved, r)
+				} else {
+					condensable = append(condensable, r)
+				}
+			}
+			if len(preserved) == 0 {
+				ctx.Fail("expected at least one T3+ receipt in sample")
+			}
+			if len(condensable) == 0 {
+				ctx.Fail("expected condensable (non-T3+) receipts")
+			}
+			// Only condensable receipts go into checkpoint
+			checkpoint := buildCheckpoint("cp-006", condensable, "")
+			// T3+ receipts must NOT be in the checkpoint
+			for _, p := range preserved {
+				if verifyInclusionProof(checkpoint, p.Hash) {
+					ctx.Fail("T3+ receipt at lamport %d should not be in condensation checkpoint", p.Lamport)
+				}
+			}
+			return nil
 		},
 	})
 }

@@ -61,7 +61,7 @@ The deployment uses `docker-compose.demo.yml` which stands up:
 2. **Clone Repository**:
 
    ```bash
-   git clone https://github.com/Mindburn-Labs/helm-public.git /opt/helm
+   git clone https://github.com/Mindburn-Labs/helm-oss.git /opt/helm
    cd /opt/helm
    ```
 

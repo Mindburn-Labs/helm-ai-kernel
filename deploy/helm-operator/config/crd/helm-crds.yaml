@@ -1,0 +1,194 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: policybundles.helm.mindburn.ai
+  labels:
+    app.kubernetes.io/name: helm-operator
+    app.kubernetes.io/part-of: helm
+spec:
+  group: helm.mindburn.ai
+  names:
+    kind: PolicyBundle
+    listKind: PolicyBundleList
+    plural: policybundles
+    singular: policybundle
+    shortNames:
+      - pb
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - bundleId
+                - version
+                - contentHash
+                - signature
+                - signerKeyId
+                - conformanceLevel
+              properties:
+                bundleId:
+                  type: string
+                  description: Unique identifier for this policy bundle
+                version:
+                  type: integer
+                  minimum: 1
+                  description: Monotonically increasing bundle version
+                contentHash:
+                  type: string
+                  pattern: "^sha256:[0-9a-f]{64}$"
+                  description: SHA-256 content-addressed hash of bundle rules
+                signature:
+                  type: string
+                  description: HSM-backed signature of the content hash
+                signerKeyId:
+                  type: string
+                  description: Key ID used to sign the bundle
+                sourceUrl:
+                  type: string
+                  format: uri
+                  description: URL to fetch the bundle archive
+                conformanceLevel:
+                  type: string
+                  enum: ["L1", "L2", "L3"]
+                  description: Minimum conformance level required
+                refreshInterval:
+                  type: string
+                  pattern: "^[0-9]+(s|m|h)$"
+                  description: How often to check for bundle updates
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: ["Pending", "Active", "Failed", "Superseded"]
+                loadedAt:
+                  type: string
+                  format: date-time
+                verifiedHash:
+                  type: string
+                errorMessage:
+                  type: string
+                observedGeneration:
+                  type: integer
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Bundle
+          type: string
+          jsonPath: .spec.bundleId
+        - name: Version
+          type: integer
+          jsonPath: .spec.version
+        - name: Level
+          type: string
+          jsonPath: .spec.conformanceLevel
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: guardiansidecars.helm.mindburn.ai
+  labels:
+    app.kubernetes.io/name: helm-operator
+    app.kubernetes.io/part-of: helm
+spec:
+  group: helm.mindburn.ai
+  names:
+    kind: GuardianSidecar
+    listKind: GuardianSidecarList
+    plural: guardiansidecars
+    singular: guardiansidecar
+    shortNames:
+      - gs
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - image
+                - conformanceLevel
+                - policyBundleRef
+              properties:
+                image:
+                  type: string
+                  description: Guardian container image
+                conformanceLevel:
+                  type: string
+                  enum: ["L1", "L2", "L3"]
+                  description: Minimum conformance level to enforce
+                policyBundleRef:
+                  type: string
+                  description: Name of the PolicyBundle CR to use
+                namespaceSelector:
+                  type: object
+                  properties:
+                    matchLabels:
+                      type: object
+                      additionalProperties:
+                        type: string
+                podSelector:
+                  type: object
+                  properties:
+                    matchLabels:
+                      type: object
+                      additionalProperties:
+                        type: string
+                resources:
+                  type: object
+                  properties:
+                    requests:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    limits:
+                      type: object
+                      additionalProperties:
+                        type: string
+                failClosed:
+                  type: boolean
+                  default: true
+                  description: Block pod if sidecar fails to start
+            status:
+              type: object
+              properties:
+                injectedPodCount:
+                  type: integer
+                phase:
+                  type: string
+                  enum: ["Ready", "Injecting", "Error"]
+                observedGeneration:
+                  type: integer
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Image
+          type: string
+          jsonPath: .spec.image
+        - name: Level
+          type: string
+          jsonPath: .spec.conformanceLevel
+        - name: Pods
+          type: integer
+          jsonPath: .status.injectedPodCount
+        - name: Phase
+          type: string
+          jsonPath: .status.phase

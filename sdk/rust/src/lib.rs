@@ -8,6 +8,26 @@ pub mod client;
 pub mod types_gen;
 pub use types_gen::*;
 
+// ── Proto-generated types (available when compiled with `--features codegen`) ──
+#[cfg(feature = "codegen")]
+pub mod generated {
+    pub mod kernel {
+        include!("generated/helm.kernel.v1.rs");
+    }
+    pub mod authority {
+        include!("generated/helm.authority.v1.rs");
+    }
+    pub mod effects {
+        include!("generated/helm.effects.v1.rs");
+    }
+    pub mod intervention {
+        include!("generated/helm.intervention.v1.rs");
+    }
+    pub mod truth {
+        include!("generated/helm.truth.v1.rs");
+    }
+}
+
 /// Error returned by HELM API calls.
 #[derive(Debug)]
 pub struct HelmApiError {

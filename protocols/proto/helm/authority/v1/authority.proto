@@ -1,0 +1,45 @@
+// HELM Authority Protocol Buffer Definitions
+//
+// Canonical IDL for the authority evaluation types.
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.authority.v1;
+
+option go_package = "helm.sh/authority/v1;authorityv1";
+
+import "google/protobuf/timestamp.proto";
+
+enum EvaluationResult {
+  EVALUATION_RESULT_UNSPECIFIED = 0;
+  EVALUATION_RESULT_ALLOW = 1;
+  EVALUATION_RESULT_DENY = 2;
+  EVALUATION_RESULT_REQUIRE_APPROVAL = 3;
+  EVALUATION_RESULT_REQUIRE_EVIDENCE = 4;
+  EVALUATION_RESULT_DEFER = 5;
+}
+
+message EvaluationRequest {
+  string request_id = 1;
+  string principal_id = 2;
+  string principal_type = 3;
+  repeated string effect_types = 4;
+  string policy_epoch = 5;
+  string idempotency_key = 6;
+  map<string, string> context = 7;
+  google.protobuf.Timestamp timestamp = 8;
+}
+
+message EvaluationDecision {
+  string decision_id = 1;
+  string request_id = 2;
+  EvaluationResult result = 3;
+  repeated string reason_codes = 4;
+  string policy_epoch = 5;
+  google.protobuf.Timestamp issued_at = 6;
+  google.protobuf.Timestamp expires_at = 7;
+  string content_hash = 8;
+}
+
+service AuthorityService {
+  rpc Evaluate(EvaluationRequest) returns (EvaluationDecision);
+}

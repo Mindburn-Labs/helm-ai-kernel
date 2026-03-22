@@ -1,4 +1,4 @@
-.PHONY: build test test-race test-sdk-ts test-sdk-py test-all crucible lint proxy clean docker demo demo-down release-binaries verify-boundary onboard demo-cli mcp-pack mcp-install release-all
+.PHONY: build test test-race test-sdk-ts test-sdk-py test-all test-a2a test-otel test-l3 test-owasp crucible crucible-full lint proxy clean docker demo demo-down release-binaries verify-boundary onboard demo-cli mcp-pack mcp-install release-all operator-crds
 
 build:
 	cd core && go build -o ../bin/helm ./cmd/helm/
@@ -27,10 +27,32 @@ verify-fixtures:
 
 test-all: test test-sdk-ts test-sdk-py test-cli verify-fixtures
 
+# ── Strategic Test Targets ──────────────────────────────────
+test-a2a:
+	cd core && go test ./pkg/a2a/... -v -count=1
+
+test-otel:
+	cd core && go test ./pkg/otel/... -v -count=1
+
+test-l3:
+	cd core && go test ./pkg/conformance/... -v -count=1 -run "L3-"
+
+test-owasp:
+	cd core && go test ./pkg/conformance/... -v -count=1 -run "OWASP-"
+
 # ── Crucible (adversarial + conformance + use cases) ──
 crucible: test
 	bash scripts/usecases/run_all.sh
 	@echo "✅ Crucible passed"
+
+crucible-full: test test-a2a test-otel test-l3
+	bash scripts/usecases/run_all.sh
+	@echo "✅ Full Crucible passed (incl. L3 + A2A + OTel)"
+
+# ── Kubernetes Operator ───────────────────────────────
+operator-crds:
+	kubectl apply -f deploy/helm-operator/config/crd/helm-crds.yaml
+	@echo "✅ CRDs applied"
 
 # ── Lint ───────────────────────────────────────────────
 lint:

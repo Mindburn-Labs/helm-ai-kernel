@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  HELM OSS End-to-End Repo Audit                                 ║
-# ║  Adapted for the open-source repository (helm-public)                      ║
+# ║  Adapted for the open-source repository (helm-oss)                         ║
 # ║                                                                            ║
 # ║  Usage:                                                                    ║
 # ║    bash scripts/ci/repo_audit.sh                   # run all sections      ║

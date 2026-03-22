@@ -45,6 +45,16 @@ non-TCB supporting infrastructure:
 | `replay/`              | Replay engine for verification             | ✅ Active |
 | `mcp/`                 | Tool catalog + MCP gateway                 | ✅ Active |
 | `kernel/`              | Rate limiting, backpressure                | ✅ Active |
+| `a2a/`                 | Agent-to-Agent trust protocol              | ✅ Active |
+| `otel/`                | OpenTelemetry governance telemetry         | ✅ Active |
+
+### Deployment Infrastructure
+
+| Package                         | Purpose                                  | Status    |
+| ------------------------------- | ---------------------------------------- | --------- |
+| `deploy/helm-operator/`         | K8s CRDs (PolicyBundle, GuardianSidecar) | ✅ Active |
+| `protocols/spec/`               | RFC-style protocol specification         | ✅ Active |
+| `protocols/conformance/v1/owasp/` | Machine-readable OWASP threat vectors  | ✅ Active |
 
 ## Removed from TCB (Enterprise)
 

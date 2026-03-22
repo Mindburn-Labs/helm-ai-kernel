@@ -1,0 +1,84 @@
+// HELM Intervention Fabric Protocol Buffer Definitions
+//
+// Canonical IDL for intervention objects and receipts.
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.intervention.v1;
+
+option go_package = "helm.sh/intervention/v1;interventionv1";
+
+import "google/protobuf/timestamp.proto";
+
+enum InterventionReason {
+  INTERVENTION_REASON_UNSPECIFIED = 0;
+  INTERVENTION_REASON_POLICY_DENY = 1;
+  INTERVENTION_REASON_APPROVAL_NEEDED = 2;
+  INTERVENTION_REASON_EVIDENCE_GAP = 3;
+  INTERVENTION_REASON_RISK_THRESHOLD = 4;
+  INTERVENTION_REASON_MANUAL_TRIGGER = 5;
+  INTERVENTION_REASON_BUDGET_EXCEEDED = 6;
+}
+
+enum InterventionState {
+  INTERVENTION_STATE_UNSPECIFIED = 0;
+  INTERVENTION_STATE_PENDING = 1;
+  INTERVENTION_STATE_ACTIVE = 2;
+  INTERVENTION_STATE_RESOLVED = 3;
+  INTERVENTION_STATE_EXPIRED = 4;
+  INTERVENTION_STATE_CANCELED = 5;
+}
+
+enum InterventionDecision {
+  INTERVENTION_DECISION_UNSPECIFIED = 0;
+  INTERVENTION_DECISION_APPROVE = 1;
+  INTERVENTION_DECISION_DENY = 2;
+  INTERVENTION_DECISION_MODIFY = 3;
+  INTERVENTION_DECISION_ESCALATE = 4;
+  INTERVENTION_DECISION_CANCEL = 5;
+}
+
+message InterventionScope {
+  repeated string target_resources = 1;
+  repeated string target_actions = 2;
+  double max_budget = 3;
+  string jurisdiction = 4;
+}
+
+message InterventionOption {
+  string option_id = 1;
+  string label = 2;
+  string description = 3;
+  string type = 4;
+}
+
+message InterventionObject {
+  string intervention_id = 1;
+  string execution_id = 2;
+  string principal_id = 3;
+  InterventionReason reason = 4;
+  InterventionState state = 5;
+  string description = 6;
+  repeated string effect_types = 7;
+  string policy_epoch = 8;
+  InterventionScope scope = 9;
+  repeated InterventionOption options = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp expires_at = 12;
+  string content_hash = 13;
+}
+
+message InterventionReceipt {
+  string receipt_id = 1;
+  string intervention_id = 2;
+  string decider_id = 3;
+  string decider_type = 4;
+  InterventionDecision decision = 5;
+  string selected_option = 6;
+  string rationale = 7;
+  repeated string conditions = 8;
+  string policy_epoch = 9;
+  google.protobuf.Timestamp issued_at = 10;
+  string signature = 11;
+  string signer_public_key = 12;
+  string content_hash = 13;
+}

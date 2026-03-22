@@ -5,12 +5,13 @@
 Cutting a release is fully automated. Push a tag and CI handles everything.
 
 ```bash
-# 1. Update version in core/cmd/helm/main.go and all package manifests
+# 1. Update VERSION file (single source of truth)
 # 2. Update CHANGELOG.md
 
 # 3. Tag and push
-git tag -s v1.0.0 -m "HELM v1.0.0"
-git push origin v1.0.0
+VERSION=$(cat VERSION)
+git tag -s "v${VERSION}" -m "HELM v${VERSION}"
+git push origin "v${VERSION}"
 ```
 
 That's it. The `release.yml` workflow runs on tag push and:

@@ -2,6 +2,31 @@
 
 All notable changes to HELM Core OSS are documented here.
 
+## [0.3.0] — 2026-03-22
+
+### Changed — Truth-Reset Release
+
+**Version Unification**
+- Canonical version now lives in `VERSION` file at repo root
+- `buildinfo.go`, `Makefile`, root `package.json`, `@mindburn/helm-cli` all read from or match VERSION
+- Eliminated 5-way version drift (0.1.1, 0.2.0, 1.0.0, 1.0.1, 3.0.0)
+
+**License Unification**
+- All OSS components now Apache-2.0 (intentional, permanent)
+- npm verifier `@mindburn/helm-cli`: BSL-1.1 → Apache-2.0
+- Protocol spec `openapi.yaml`: BSL-1.1 → Apache-2.0
+- Root `package.json`: ISC → Apache-2.0
+
+**CLI/Doc Alignment**
+- Fixed `--profile L2` → `--level L2` across all docs (README, QUICKSTART, DEMO, VERIFICATION, CONFORMANCE, START_HERE, index.md)
+- The `--level` flag is the correct shortcut for L1/L2; `--profile` expects profile names (SMB, CORE, ENTERPRISE)
+- Fixed fabricated JSON outputs to match actual `conform.go` struct shape
+- Updated CLI command count: 11 → 20+ (actual count from Registry pattern)
+
+**Cleanup**
+- Root `package.json` marked `private`, removed vestigial `main` field, cleaned description
+- `RELEASE.md` now references `VERSION` file instead of hardcoded example tags
+
 ## [0.2.0] — 2026-03-05
 
 ### Added

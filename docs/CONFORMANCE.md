@@ -28,24 +28,16 @@ make build
 
 ```json
 {
-  "profile": "L2",
-  "verdict": "PASS",
-  "gates": 12,
-  "failed": 0,
-  "details": {
-    "jcs_canonicalization": "PASS",
-    "pep_boundary": "PASS",
-    "wasi_sandbox": "PASS",
-    "approval_ceremony": "PASS",
-    "proofgraph_dag": "PASS",
-    "trust_registry": "PASS",
-    "evidence_pack": "PASS",
-    "offline_replay": "PASS",
-    "output_drift": "PASS",
-    "idempotency": "PASS",
-    "island_mode": "PASS",
-    "conformance_gates": "PASS"
-  }
+  "run_id": "conform-...",
+  "profile": "CORE",
+  "pass": true,
+  "timestamp": "2026-03-22T...",
+  "duration": "...",
+  "gate_results": [
+    {"gate_id": "G0", "pass": true, "reasons": []},
+    {"gate_id": "G1", "pass": true, "reasons": []},
+    {"gate_id": "G2", "pass": true, "reasons": []}
+  ]
 }
 ```
 

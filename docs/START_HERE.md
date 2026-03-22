@@ -36,7 +36,7 @@ make build
 make crucible
 
 # Or run conformance directly
-./bin/helm conform --profile L2 --json
+./bin/helm conform --level L2 --json
 ```
 
 Expected: 12/12 use cases pass, conformance L1+L2 verified.

@@ -101,7 +101,7 @@ This runs with **no network access**. It verifies signatures, causal chain integ
 ## Step 7 — Conformance L1 + L2
 
 ```bash
-./bin/helm conform --profile L2 --json | jq .
+./bin/helm conform --level L2 --json | jq .
 ```
 
 Conformance L1 (structural): JCS canonicalization, schema validation, PEP boundary, fail-closed.

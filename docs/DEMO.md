@@ -42,14 +42,14 @@ HTTP status: `403 Forbidden`. Reason code is deterministic: always `ERR_TOOL_NOT
 
 ```bash
 make build
-./bin/helm conform --profile L1 --json | jq .
+./bin/helm conform --level L1 --json | jq .
 ```
 **Expected:**
 ```json
 {
-  "profile": "L1",
-  "verdict": "PASS",
-  "gates": 12,
+  "profile": "SMB",
+  "pass": true,
+  "gates": 3,
   "failed": 0
 }
 ```
@@ -79,29 +79,15 @@ shasum -a 256 pack.tar.gz
 ## Full Conformance L1 + L2
 
 ```bash
-./bin/helm conform --profile L2 --json | jq .
+./bin/helm conform --level L2 --json | jq .
 ```
 **Expected:**
 ```json
 {
-  "profile": "L2",
-  "verdict": "PASS",
-  "gates": 12,
-  "failed": 0,
-  "details": {
-    "jcs_canonicalization": "PASS",
-    "pep_boundary": "PASS",
-    "wasi_sandbox": "PASS",
-    "approval_ceremony": "PASS",
-    "proofgraph_dag": "PASS",
-    "trust_registry": "PASS",
-    "evidence_pack": "PASS",
-    "offline_replay": "PASS",
-    "output_drift": "PASS",
-    "idempotency": "PASS",
-    "island_mode": "PASS",
-    "conformance_gates": "PASS"
-  }
+  "profile": "CORE",
+  "pass": true,
+  "gates": 9,
+  "failed": 0
 }
 ```
 

@@ -1,8 +1,8 @@
 {
   "name": "helm-oss",
-  "version": "1.0.0",
-  "description": "[![CI](https://github.com/Mindburn-Labs/helm-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/Mindburn-Labs/helm-oss/actions/workflows/ci.yml) [![Conformance](https://img.shields.io/badge/conformance-L1%20%2B%20L2-brightgreen)](docs/CONFORMANCE.md) [![Provenance](https://img.shields.io/badge/provenance-SLSA-blue)](https://github.com/Mindburn-Labs/helm-oss/releases) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)",
-  "main": "index.js",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Fail-closed execution firewall for AI agents",
   "directories": {
     "doc": "docs",
     "example": "examples"
@@ -15,9 +15,8 @@
     "url": "git+https://github.com/Mindburn-Labs/helm-oss.git"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "author": "Mindburn Labs",
+  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/Mindburn-Labs/helm-oss/issues"
   },

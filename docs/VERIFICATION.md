@@ -145,7 +145,7 @@ helm sandbox exec --provider daytona -- echo "hello"
 
 ```bash
 # Run conformance suite
-helm conform --profile L2 --json
+helm conform --level L2 --json
 ```
 
 ---

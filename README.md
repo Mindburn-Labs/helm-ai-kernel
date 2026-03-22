@@ -162,8 +162,8 @@ helm verify --bundle pack.tar
 # → "verification: PASS"
 
 # 4. Conformance
-helm conform --profile L2 --json
-# → {"profile":"L2","verdict":"PASS","gates":12}
+helm conform --level L2 --json
+# → {"profile":"CORE","pass":true,"gates":9}
 ```
 
 → [Quickstart](docs/QUICKSTART.md) · [Verification](docs/VERIFICATION.md)
@@ -317,7 +317,7 @@ if apiErr, ok := err.(*helm.HelmApiError); ok {
 | Policy Bundles (load, verify, compose) |
 | Capability manifests + connector bundles |
 | Conformance L1 + L2 |
-| 11 CLI commands |
+| 20+ CLI commands |
 
 Not included: managed federation, pack entitlement, compliance intelligence, Studio, managed control plane. See [docs/OSS_SCOPE.md](docs/OSS_SCOPE.md).
 

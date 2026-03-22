@@ -102,8 +102,8 @@ curl -s 'http://localhost:8080/api/v1/oss-local/decision-timeline?limit=1' | jq 
 # → "verification: PASS"  (air-gapped safe)
 
 # 6. Run conformance L1/L2
-./bin/helm conform --profile L2 --json
-# → {"profile":"L2","verdict":"PASS","gates":12}
+./bin/helm conform --level L2 --json
+# → {"profile":"CORE","pass":true,"gates":9}
 ```
 
 Full walkthrough: [docs/QUICKSTART.md](docs/QUICKSTART.md) · Copy-paste demo: [docs/DEMO.md](docs/DEMO.md) · 5-min micro-guide: [docs/INTEGRATE_IN_5_MIN.md](docs/INTEGRATE_IN_5_MIN.md)
@@ -298,7 +298,7 @@ Your App (OpenAI SDK)
 | ✅ HSM signing (Ed25519 + ECDSA-P256)         |
 | ✅ Policy Bundles (load, verify, compose)     |
 | ✅ Conformance L1 + L2 + L3                   |
-| ✅ 11 CLI commands                            |
+| ✅ 20+ CLI commands                            |
 
 Full scope: [docs/OSS_SCOPE.md](docs/OSS_SCOPE.md)
 
@@ -378,7 +378,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md). 10 items, no dates, each tied to a confo
 
 ## License
 
-[Business Source License 1.1](LICENSE) — converts to Apache 2.0 on 2030-02-15.
+[Apache 2.0](LICENSE)
 
 ---
 

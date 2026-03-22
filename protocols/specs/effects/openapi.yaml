@@ -11,7 +11,7 @@ info:
     name: HELM Core Team
     url: https://github.com/Mindburn-Labs/helm-oss
   license:
-    name: BSL-1.1
+    name: Apache-2.0
     url: https://github.com/Mindburn-Labs/helm-oss/blob/main/LICENSE
 
 servers:

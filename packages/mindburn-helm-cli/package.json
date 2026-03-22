@@ -1,6 +1,6 @@
 {
     "name": "@mindburn/helm-cli",
-    "version": "1.0.1",
+    "version": "0.3.0",
     "description": "HELM conformance verification CLI — one command, progressive disclosure, cryptographic proof",
     "type": "module",
     "bin": {
@@ -35,7 +35,7 @@
     "engines": {
         "node": ">=18"
     },
-    "license": "BSL-1.1",
+    "license": "Apache-2.0",
     "repository": {
         "type": "git",
         "url": "https://github.com/Mindburn-Labs/helm-oss",

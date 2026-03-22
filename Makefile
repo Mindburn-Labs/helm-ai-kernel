@@ -92,7 +92,7 @@ sbom: build
 # ── Provenance ─────────────────────────────────────────
 provenance:
 	cd core && CGO_ENABLED=0 go build -ldflags="-s -w \
-		-X main.version=0.1.1 \
+		-X main.version=$(VERSION) \
 		-X main.commit=$$(git rev-parse HEAD) \
 		-X main.buildTime=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 		-o ../bin/helm ./cmd/helm/
@@ -100,7 +100,7 @@ provenance:
 	@echo "✅ Provenance build: bin/helm + bin/helm.sha256"
 
 # ── Release Binaries (cross-compile) ──────────────────
-VERSION ?= 0.2.0
+VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.3.0)
 COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildTime=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 

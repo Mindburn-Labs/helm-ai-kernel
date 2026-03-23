@@ -95,7 +95,7 @@ All notable changes to HELM Core OSS are documented here.
 ### Removed
 
 - `cli/` directory (v2, superseded by `packages/mindburn-helm-cli/`).
-- Internal planning docs: `OSS_CUTLINE.md`, `UNKNOWNs.md`, TITAN docs, investment memo.
+- Internal planning docs: `OSS_CUTLINE.md`, `UNKNOWNs.md`, and other internal-only materials.
 - Dead redirect stubs for `HELM_Unified_Canonical_Standard.md`.
 
 ## [0.1.1] — 2026-02-19

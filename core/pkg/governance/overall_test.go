@@ -56,7 +56,7 @@ func TestEnvelopeIntegration(t *testing.T) {
 	assert.Equal(t, governance.DataClassInternal, env.DataClassification)
 
 	// 2. Add Confidential
-	b.AddUserInput("My email is ivan@mindburn.org", "u1")
+	b.AddUserInput("My email is user@example.com", "u1")
 	env = b.Build()
 	assert.Equal(t, governance.DataClassConfidential, env.DataClassification)
 

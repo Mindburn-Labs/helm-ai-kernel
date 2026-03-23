@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://helm.dev/schemas/effects/infra/scale_droplet.json",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/scale_droplet.json",
   "title": "Scale Droplet Effect",
   "description": "Resizes an existing DigitalOcean droplet (vertical scaling)",
   "type": "object",

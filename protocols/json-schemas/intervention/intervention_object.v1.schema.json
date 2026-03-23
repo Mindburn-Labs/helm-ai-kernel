@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://helm-oss.org/schemas/intervention/intervention_object.v1.schema.json",
+  "$id": "https://helm.mindburn.org/schemas/intervention/intervention_object.v1.schema.json",
   "title": "Intervention Object",
   "description": "A request for human intervention in a HELM-governed execution.",
   "type": "object",

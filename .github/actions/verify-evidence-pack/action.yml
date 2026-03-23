@@ -39,7 +39,7 @@ runs:
       shell: bash
       run: |
         if ! command -v helm &> /dev/null; then
-          curl -fsSL https://helm.sh/install.sh | HELM_VERSION=${{ inputs.helm-version }} sh
+          curl -fsSL https://helm.mindburn.run/install.sh | HELM_VERSION=${{ inputs.helm-version }} sh
         fi
 
     - name: Verify EvidencePack

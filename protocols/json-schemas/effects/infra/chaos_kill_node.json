@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://helm.dev/schemas/effects/infra/chaos_kill_node.json",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/chaos_kill_node.json",
   "title": "Chaos Kill Node Effect",
   "description": "Simulates a node failure for chaos testing",
   "type": "object",

@@ -214,8 +214,8 @@ jobs:
           echo "Binary built with provenance: commit=$COMMIT, time=$BUILD_TIME"
       - name: Generate provenance attestation
         run: |
-          sha256sum bin/helm > bin/helm.sha256
-          echo "Provenance: sha256=$(cat bin/helm.sha256)"
+          sha256sum bin/helm > bin/helm.mindburn.runa256
+          echo "Provenance: sha256=$(cat bin/helm.mindburn.runa256)"
 
   doc-hash:
     runs-on: ubuntu-latest

@@ -1,4 +1,4 @@
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: IndustryPack
 metadata:
   name: finance-sox
@@ -50,7 +50,7 @@ spec:
     - code: DENY_FINANCE_UNAUTHORIZED_TRADING
     - code: DENY_FINANCE_LIMIT_EXCEEDED
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: IndustryPack
 metadata:
   name: healthcare-hipaa
@@ -93,7 +93,7 @@ spec:
     - code: DENY_HEALTHCARE_MINIMUM_NECESSARY
     - code: DENY_HEALTHCARE_BAA_REQUIRED
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: IndustryPack
 metadata:
   name: public-sector
@@ -108,7 +108,7 @@ spec:
     - code: DENY_PUBSEC_CLEARANCE_REQUIRED
     - code: DENY_PUBSEC_FIPS_REQUIRED
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: IndustryPack
 metadata:
   name: education-ferpa
@@ -120,7 +120,7 @@ spec:
     - code: DENY_EDU_STUDENT_RECORDS
     - code: DENY_EDU_PARENTAL_CONSENT
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: IndustryPack
 metadata:
   name: saas-b2b
@@ -133,7 +133,7 @@ spec:
     - code: DENY_SAAS_DATA_RETENTION
     - code: DENY_SAAS_AVAILABILITY_SLA
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: IndustryPack
 metadata:
   name: fintech-payments
@@ -146,7 +146,7 @@ spec:
     - code: DENY_FINTECH_CARD_DATA_EXPOSURE
     - code: DENY_FINTECH_KYC_REQUIRED
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: IndustryPack
 metadata:
   name: ecommerce
@@ -158,7 +158,7 @@ spec:
     - code: DENY_ECOM_PRICING_MANIPULATION
     - code: DENY_ECOM_CONSUMER_CONSENT
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: IndustryPack
 metadata:
   name: manufacturing
@@ -170,7 +170,7 @@ spec:
     - code: DENY_MFG_OT_BOUNDARY
     - code: DENY_MFG_SAFETY_SYSTEM
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: IndustryPack
 metadata:
   name: logistics

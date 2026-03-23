@@ -1,4 +1,4 @@
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: JurisdictionPack
 metadata:
   name: uk-dpa
@@ -33,7 +33,7 @@ spec:
     - code: DENY_UK_DPA_NO_LAWFUL_BASIS
       description: No lawful basis under UK GDPR
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: JurisdictionPack
 metadata:
   name: china-pipl
@@ -72,7 +72,7 @@ spec:
     - code: DENY_DSL_CRITICAL_DATA
       description: Critical data processing requires security review
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: JurisdictionPack
 metadata:
   name: japan-appi
@@ -104,7 +104,7 @@ spec:
     - code: DENY_APPI_CROSS_BORDER_TRANSFER
       description: Cross-border transfer without consent or recognized jurisdiction
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: JurisdictionPack
 metadata:
   name: singapore-pdpa
@@ -119,7 +119,7 @@ spec:
     - code: DENY_PDPA_ACCESS_CORRECTION
       description: Access and correction obligations not met
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: JurisdictionPack
 metadata:
   name: india-dpdpa
@@ -134,7 +134,7 @@ spec:
     - code: DENY_DPDPA_CROSS_BORDER
       description: Transfer to restricted jurisdiction
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: JurisdictionPack
 metadata:
   name: uae-pdpl
@@ -147,7 +147,7 @@ spec:
     - code: DENY_PDPL_CONSENT_REQUIRED
       description: Consent required under UAE PDPL
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: JurisdictionPack
 metadata:
   name: brazil-lgpd
@@ -162,7 +162,7 @@ spec:
     - code: DENY_LGPD_CROSS_BORDER
       description: Cross-border transfer without adequacy
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: JurisdictionPack
 metadata:
   name: canada-pipeda
@@ -175,7 +175,7 @@ spec:
     - code: DENY_PIPEDA_CONSENT_REQUIRED
       description: Consent required under PIPEDA
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: JurisdictionPack
 metadata:
   name: australia-nz

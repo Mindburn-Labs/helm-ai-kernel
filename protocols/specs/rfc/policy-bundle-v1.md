@@ -43,7 +43,7 @@ my-bundle/
 ## 4. Manifest Format
 
 ```yaml
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: PolicyBundle
 metadata:
   name: corporate-baseline
@@ -75,7 +75,7 @@ spec:
 ## 5. Policy File Format
 
 ```yaml
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: DenyRule
 metadata:
   name: deny-system-writes
@@ -149,7 +149,7 @@ bundle_loader:
 ```yaml
 bundle_loader:
   remote:
-    url: https://bundles.helm.sh/corporate-baseline/v1.2.0
+    url: https://bundles.mindburn.run/corporate-baseline/v1.2.0
     refresh_interval: 1h
     signature_verification: required
 ```

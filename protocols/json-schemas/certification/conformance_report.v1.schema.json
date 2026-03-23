@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://helm.sh/schemas/certification/conformance_report.v1.schema.json",
+  "$id": "https://helm.mindburn.run/schemas/certification/conformance_report.v1.schema.json",
   "title": "Conformance Report v1",
   "description": "Cryptographically signed report attesting to standard conformance",
   "type": "object",

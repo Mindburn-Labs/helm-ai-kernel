@@ -39,7 +39,7 @@ func (tm *TokenManager) GenerateToken(p Principal, duration time.Duration) (stri
 			Subject:   p.ID(),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(duration)),
-			Issuer:    "helm.sh/identity",
+			Issuer:    "helm.mindburn.run/identity",
 			Audience:  jwt.ClaimStrings{"helm.internal"},
 		},
 		Type: p.Type(),

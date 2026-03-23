@@ -5,7 +5,7 @@
 syntax = "proto3";
 package helm.intervention.v1;
 
-option go_package = "helm.sh/intervention/v1;interventionv1";
+option go_package = "helm.mindburn.run/intervention/v1;interventionv1";
 
 import "google/protobuf/timestamp.proto";
 

@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://helm.dev/schemas/effects/infra/emit_metric.json",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/emit_metric.json",
   "title": "Emit Metric Effect",
   "description": "Emits an infrastructure metric",
   "type": "object",

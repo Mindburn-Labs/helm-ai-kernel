@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://helm.sh/schemas/verification/proof_pack.v1.schema.json",
+  "$id": "https://helm.mindburn.run/schemas/verification/proof_pack.v1.schema.json",
   "title": "Proof Pack v1",
   "description": "Artifact containing verification evidence (TLA+ check results, invariant proofs)",
   "type": "object",

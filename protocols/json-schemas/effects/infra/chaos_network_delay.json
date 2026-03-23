@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://helm.dev/schemas/effects/infra/chaos_network_delay.json",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/chaos_network_delay.json",
   "title": "Chaos Network Delay Effect",
   "description": "Injects network latency for chaos testing",
   "type": "object",

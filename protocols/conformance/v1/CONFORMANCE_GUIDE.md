@@ -90,7 +90,7 @@ This is the **non-negotiable kernel invariant**.
 Implementations passing Level 4 conformance may display:
 
 ```
-[![HELM Conformant](https://helm.sh/badges/conformant-v1.svg)](https://helm.sh/conformance)
+[![HELM Conformant](https://helm.mindburn.run/badges/conformant-v1.svg)](https://helm.mindburn.run/conformance)
 ```
 
 ## 8. Compatibility Tiers

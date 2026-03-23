@@ -1,4 +1,4 @@
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: BusinessPreset
 metadata:
   name: engineering
@@ -42,7 +42,7 @@ spec:
       reason_code: TEMPORAL_INTERVENTION
       reason: "Infrastructure changes to production/staging require approval"
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: BusinessPreset
 metadata:
   name: customer-support
@@ -74,7 +74,7 @@ spec:
       reason_code: POLICY_VIOLATION
       reason: "Bulk PII export requires escalation to data protection team"
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: BusinessPreset
 metadata:
   name: finance-ops
@@ -103,7 +103,7 @@ spec:
       reason_code: TEMPORAL_INTERVENTION
       reason: "Payments over $5,000 require treasury approval"
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: BusinessPreset
 metadata:
   name: hr-people
@@ -134,7 +134,7 @@ spec:
       reason_code: POLICY_VIOLATION
       reason: "Employee data requires need-to-know authorization"
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: BusinessPreset
 metadata:
   name: legal-compliance
@@ -163,7 +163,7 @@ spec:
       reason_code: POLICY_VIOLATION
       reason: "Attorney-client privileged materials cannot be shared without counsel approval"
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: BusinessPreset
 metadata:
   name: marketing
@@ -191,7 +191,7 @@ spec:
       reason_code: POLICY_VIOLATION
       reason: "Marketing emails require prior consent under GDPR/CAN-SPAM"
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: BusinessPreset
 metadata:
   name: sales
@@ -220,7 +220,7 @@ spec:
       reason_code: TEMPORAL_INTERVENTION
       reason: "Discounts above 25% require sales leadership approval"
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: BusinessPreset
 metadata:
   name: data-science
@@ -251,7 +251,7 @@ spec:
       reason_code: POLICY_VIOLATION
       reason: "PII data must be anonymized before model training"
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: BusinessPreset
 metadata:
   name: security-ops
@@ -282,7 +282,7 @@ spec:
       reason_code: POLICY_VIOLATION
       reason: "Vulnerability details cannot be shared without authorized disclosure"
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: BusinessPreset
 metadata:
   name: product-management
@@ -314,7 +314,7 @@ spec:
       reason_code: POLICY_VIOLATION
       reason: "Unreleased product information cannot be shared externally"
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: BusinessPreset
 metadata:
   name: executive
@@ -343,7 +343,7 @@ spec:
       reason_code: POLICY_VIOLATION
       reason: "Material nonpublic information subject to insider trading regulations"
 ---
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: BusinessPreset
 metadata:
   name: operations

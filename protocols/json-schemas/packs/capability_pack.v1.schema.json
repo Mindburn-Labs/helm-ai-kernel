@@ -8,7 +8,7 @@
   "properties": {
     "apiVersion": {
       "type": "string",
-      "const": "helm.sh/v1",
+      "const": "helm.mindburn.run/v1",
       "description": "API version"
     },
     "kind": {

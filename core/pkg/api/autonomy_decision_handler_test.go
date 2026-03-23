@@ -188,7 +188,7 @@ func TestDecisionHandler_Resolve(t *testing.T) {
 	// Resolve it
 	resolveBody, _ := json.Marshal(map[string]string{
 		"option_id":   "yes",
-		"resolved_by": "operator@helm.dev",
+		"resolved_by": "operator@mindburn.org",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/decisions/dr-resolve-1/resolve", bytes.NewReader(resolveBody))
 	rec := httptest.NewRecorder()

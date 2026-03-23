@@ -17,7 +17,7 @@ This is the **only function a framework needs to call** to be HELM-governed.
 ### Go (In-Process)
 
 ```go
-import "helm.sh/core/pkg/guardian"
+import "helm.mindburn.run/core/pkg/guardian"
 
 decision, err := g.SignDecision(effect, requirements)
 // decision.Verdict is ALLOW/DENY/ESCALATE

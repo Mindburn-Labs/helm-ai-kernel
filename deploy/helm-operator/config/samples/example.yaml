@@ -1,24 +1,24 @@
 # Example: A signed policy bundle deployed to a cluster
-apiVersion: helm.mindburn.ai/v1alpha1
+apiVersion: helm.mindburn.org/v1alpha1
 kind: PolicyBundle
 metadata:
   name: production-policies
   namespace: helm-system
   labels:
-    helm.mindburn.ai/environment: production
+    helm.mindburn.org/environment: production
 spec:
   bundleId: "bundle-prod-v3"
   version: 3
   contentHash: "sha256:a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
   signature: "sha256:f0e1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f0e1"
   signerKeyId: "hsm-prod-key-003"
-  sourceUrl: "https://bundles.mindburn.ai/prod/v3/bundle.tar.gz"
+  sourceUrl: "https://bundles.mindburn.org/prod/v3/bundle.tar.gz"
   conformanceLevel: "L3"
   refreshInterval: "5m"
 
 ---
 # Example: Guardian sidecar injection for governed workloads
-apiVersion: helm.mindburn.ai/v1alpha1
+apiVersion: helm.mindburn.org/v1alpha1
 kind: GuardianSidecar
 metadata:
   name: default-guardian
@@ -29,10 +29,10 @@ spec:
   policyBundleRef: "production-policies"
   namespaceSelector:
     matchLabels:
-      helm.mindburn.ai/governed: "true"
+      helm.mindburn.org/governed: "true"
   podSelector:
     matchLabels:
-      helm.mindburn.ai/inject-guardian: "true"
+      helm.mindburn.org/inject-guardian: "true"
   resources:
     requests:
       cpu: "50m"

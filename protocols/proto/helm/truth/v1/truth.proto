@@ -5,7 +5,7 @@
 syntax = "proto3";
 package helm.truth.v1;
 
-option go_package = "helm.sh/truth/v1;truthv1";
+option go_package = "helm.mindburn.run/truth/v1;truthv1";
 
 import "google/protobuf/timestamp.proto";
 

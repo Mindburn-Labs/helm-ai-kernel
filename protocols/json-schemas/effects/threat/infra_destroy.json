@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://helm.dev/schemas/effects/threat/infra_destroy.json",
+  "$id": "https://helm.mindburn.run/schemas/effects/threat/infra_destroy.json",
   "title": "Infrastructure Destroy Effect",
   "description": "Destroys infrastructure resources (e.g., terraform destroy). Irreversible without backup.",
   "type": "object",

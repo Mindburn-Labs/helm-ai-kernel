@@ -10,7 +10,7 @@
 syntax = "proto3";
 package helm.policy.v1;
 
-option go_package = "helm.sh/policy/v1;policyv1";
+option go_package = "helm.mindburn.run/policy/v1;policyv1";
 
 import "google/protobuf/timestamp.proto";
 import "v1/foundations.proto";

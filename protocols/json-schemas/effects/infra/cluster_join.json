@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://helm.dev/schemas/effects/infra/cluster_join.json",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/cluster_join.json",
   "title": "Cluster Join Effect",
   "description": "Registers a new node to the HELM cluster",
   "type": "object",

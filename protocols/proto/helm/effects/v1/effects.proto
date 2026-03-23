@@ -5,7 +5,7 @@
 syntax = "proto3";
 package helm.effects.v1;
 
-option go_package = "helm.sh/effects/v1;effectsv1";
+option go_package = "helm.mindburn.run/effects/v1;effectsv1";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";

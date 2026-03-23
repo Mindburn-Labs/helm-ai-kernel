@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://helm-oss.org/schemas/truth/truth_object.v1.schema.json",
+  "$id": "https://helm.mindburn.org/schemas/truth/truth_object.v1.schema.json",
   "title": "Truth Object",
   "description": "An immutable versioned governance artifact in the HELM Truth Registry.",
   "type": "object",

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://helm-oss.org/schemas/orgdna/orggenome.v1.schema.json",
+  "$id": "https://helm.mindburn.org/schemas/orgdna/orggenome.v1.schema.json",
   "title": "OrgGenome",
   "description": "Declarative organizational genome — the single source of truth for structure, policies, modules, and governance rules.",
   "type": "object",

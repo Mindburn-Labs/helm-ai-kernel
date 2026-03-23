@@ -588,7 +588,7 @@ const file_helm_effects_v1_effects_proto_rawDesc = "" +
 	"\x13EFFECT_TYPE_NETWORK\x10\x05\x12\x17\n" +
 	"\x13EFFECT_TYPE_FINANCE\x10\x062p\n" +
 	"\x15EffectsGatewayService\x12W\n" +
-	"\aExecute\x12%.helm.effects.v1.GatewayEffectRequest\x1a%.helm.effects.v1.GatewayEffectOutcomeB\x1eZ\x1chelm.sh/effects/v1;effectsv1b\x06proto3"
+	"\aExecute\x12%.helm.effects.v1.GatewayEffectRequest\x1a%.helm.effects.v1.GatewayEffectOutcomeB\x1eZ\x1chelm.mindburn.run/effects/v1;effectsv1b\x06proto3"
 
 var (
 	file_helm_effects_v1_effects_proto_rawDescOnce sync.Once

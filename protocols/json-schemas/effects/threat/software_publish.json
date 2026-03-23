@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://helm.dev/schemas/effects/threat/software_publish.json",
+  "$id": "https://helm.mindburn.run/schemas/effects/threat/software_publish.json",
   "title": "Software Publish Effect",
   "description": "Publishes a software artifact to a registry. Irreversible in public registries.",
   "type": "object",

@@ -8,7 +8,7 @@ Cloud-native operator for deploying and managing HELM governance in Kubernetes c
 Declares a signed, content-addressed policy bundle. The operator controller reconciles this CR to ensure the Guardian instance has the correct policy loaded.
 
 ```yaml
-apiVersion: helm.mindburn.ai/v1alpha1
+apiVersion: helm.mindburn.org/v1alpha1
 kind: PolicyBundle
 metadata:
   name: production-policies
@@ -25,7 +25,7 @@ spec:
 Annotation-driven sidecar injection for governed workloads. Injects the Guardian container into matching pods.
 
 ```yaml
-apiVersion: helm.mindburn.ai/v1alpha1
+apiVersion: helm.mindburn.org/v1alpha1
 kind: GuardianSidecar
 metadata:
   name: default-guardian
@@ -43,7 +43,7 @@ spec:
 kubectl apply -f config/crd/helm-crds.yaml
 
 # Verify CRDs registered
-kubectl get crd | grep helm.mindburn.ai
+kubectl get crd | grep helm.mindburn.org
 
 # Apply sample resources
 kubectl apply -f config/samples/example.yaml
@@ -84,7 +84,7 @@ kubectl get guardiansidecars
 ## Conformance Admission Webhook
 
 The operator includes a validating admission webhook that:
-1. Checks deployments for `helm.mindburn.ai/conformance-level` annotation
+1. Checks deployments for `helm.mindburn.org/conformance-level` annotation
 2. Rejects deployments that don't meet the minimum conformance level
 3. Validates PolicyBundle references exist and are in `Active` phase
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://helm.sh/schemas/reason-codes/v1",
+  "$id": "https://helm.mindburn.run/schemas/reason-codes/v1",
   "title": "HELM Reason Code Registry v1",
   "description": "Machine-readable registry of HELM governance reason codes",
   "type": "object",

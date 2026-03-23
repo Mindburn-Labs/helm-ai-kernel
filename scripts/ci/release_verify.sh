@@ -33,15 +33,15 @@ else
 fi
 
 # 2. Checksum file exists and matches
-if [ -f "$PROJECT_ROOT/bin/helm.sha256" ]; then
+if [ -f "$PROJECT_ROOT/bin/helm.mindburn.runa256" ]; then
     cd "$PROJECT_ROOT"
-    if shasum -a 256 -c bin/helm.sha256 > /dev/null 2>&1; then
-        check "Checksum matches (bin/helm.sha256)" 0
+    if shasum -a 256 -c bin/helm.mindburn.runa256 > /dev/null 2>&1; then
+        check "Checksum matches (bin/helm.mindburn.runa256)" 0
     else
-        check "Checksum matches (bin/helm.sha256)" 1
+        check "Checksum matches (bin/helm.mindburn.runa256)" 1
     fi
 else
-    check "Checksum file exists (bin/helm.sha256)" 1
+    check "Checksum file exists (bin/helm.mindburn.runa256)" 1
 fi
 
 # 3. SBOM exists and is CycloneDX format

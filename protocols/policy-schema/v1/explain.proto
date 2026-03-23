@@ -17,7 +17,7 @@
 syntax = "proto3";
 package helm.explain.v1;
 
-option go_package = "helm.sh/explain/v1;explainv1";
+option go_package = "helm.mindburn.run/explain/v1;explainv1";
 
 // ── Shared Types ───────────────────────────────────────────────
 

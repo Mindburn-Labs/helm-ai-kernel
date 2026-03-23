@@ -26,8 +26,8 @@ echo "Droplet IP: $DROPLET_IP"
 
 Point your domain at `$DROPLET_IP`:
 ```bash
-# Example: demo.helm.dev → 1.2.3.4
-doctl compute domain records create helm.dev \
+# Example: demo.helm.mindburn.run → 1.2.3.4
+doctl compute domain records create helm.mindburn.run \
   --record-type A \
   --record-name demo \
   --record-data "$DROPLET_IP" \
@@ -40,7 +40,7 @@ doctl compute domain records create helm.dev \
 ssh root@$DROPLET_IP << 'EOF'
   git clone https://github.com/Mindburn-Labs/helm.git /opt/helm
   cd /opt/helm
-  export DEMO_DOMAIN=demo.helm.dev   # ← your domain
+  export DEMO_DOMAIN=demo.helm.mindburn.run   # ← your domain
   docker compose -f docker-compose.demo.yml up -d
 EOF
 ```
@@ -106,7 +106,7 @@ bash deploy/demo-reset.sh
 
 ```bash
 # Health check
-curl -s https://demo.helm.dev/health
+curl -s https://demo.helm.mindburn.run/health
 
 # Logs
 docker compose -f docker-compose.demo.yml logs -f helm

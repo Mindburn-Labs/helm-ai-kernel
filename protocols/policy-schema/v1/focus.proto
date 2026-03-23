@@ -8,7 +8,7 @@
 syntax = "proto3";
 package helm.focus.v1;
 
-option go_package = "helm.sh/focus/v1;focusv1";
+option go_package = "helm.mindburn.run/focus/v1;focusv1";
 
 import "google/protobuf/timestamp.proto";
 

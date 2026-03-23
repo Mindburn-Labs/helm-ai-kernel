@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://helm-oss.org/schemas/authority/authority_evaluation.v1.schema.json",
+  "$id": "https://helm.mindburn.org/schemas/authority/authority_evaluation.v1.schema.json",
   "title": "Authority Evaluation",
   "description": "Canonical authority evaluation request and decision types for the HELM authority model.",
   "type": "object",

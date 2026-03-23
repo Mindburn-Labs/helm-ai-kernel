@@ -85,13 +85,13 @@ JSON Schema files MUST include a `version` property at the top level:
 YAML-based artifacts MUST include an `apiVersion` field:
 
 ```yaml
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: PolicyBundle
 metadata:
   version: "1.2.0"
 ```
 
-The `apiVersion` prefix (`helm.sh/vN`) indicates the API surface major
+The `apiVersion` prefix (`helm.mindburn.run/vN`) indicates the API surface major
 version. It MUST be incremented only on breaking changes.
 
 ### 3.3 Protobuf and Wire Formats

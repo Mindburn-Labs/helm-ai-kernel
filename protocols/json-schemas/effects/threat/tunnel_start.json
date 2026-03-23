@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://helm.dev/schemas/effects/threat/tunnel_start.json",
+  "$id": "https://helm.mindburn.run/schemas/effects/threat/tunnel_start.json",
   "title": "Tunnel Start Effect",
   "description": "Establishes a network tunnel (SSH, VPN, reverse proxy). Enables persistent covert channels.",
   "type": "object",

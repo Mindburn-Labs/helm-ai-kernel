@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://helm-oss.org/schemas/identity/machine_identity.v1.schema.json",
+  "$id": "https://helm.mindburn.org/schemas/identity/machine_identity.v1.schema.json",
   "title": "Machine Identity",
   "description": "Schema for machine-level identity and attestation in HELM-governed systems.",
   "type": "object",

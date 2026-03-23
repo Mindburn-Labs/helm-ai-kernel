@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://helm.dev/schemas/effects/threat/env_recreate.json",
+  "$id": "https://helm.mindburn.run/schemas/effects/threat/env_recreate.json",
   "title": "Environment Recreate Effect",
   "description": "Recreates or replaces an execution environment. May invalidate context fingerprints.",
   "type": "object",

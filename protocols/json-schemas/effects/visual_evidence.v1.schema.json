@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://helm.sh/schemas/effects/visual_evidence.v1.schema.json",
+  "$id": "https://helm.mindburn.run/schemas/effects/visual_evidence.v1.schema.json",
   "title": "Visual Evidence v1",
   "description": "Multimodal evidence binding a visual state to an action",
   "type": "object",

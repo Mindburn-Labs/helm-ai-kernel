@@ -8,7 +8,7 @@
 syntax = "proto3";
 package helm.kernel.v1;
 
-option go_package = "helm.sh/kernel/v1;kernelv1";
+option go_package = "helm.mindburn.run/kernel/v1;kernelv1";
 
 import "google/protobuf/timestamp.proto";
 

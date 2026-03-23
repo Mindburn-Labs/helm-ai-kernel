@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://helm.dev/schemas/effects/infra/create_droplet.json",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/create_droplet.json",
   "title": "Create Droplet Effect",
   "description": "Provisions a new DigitalOcean droplet for HELM workloads",
   "type": "object",

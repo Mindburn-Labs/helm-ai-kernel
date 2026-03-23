@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://helm.dev/schemas/effects/threat/data_egress.json",
+  "$id": "https://helm.mindburn.run/schemas/effects/threat/data_egress.json",
   "title": "Data Egress Effect",
   "description": "Transmits data to an external endpoint. Primary exfiltration vector.",
   "type": "object",

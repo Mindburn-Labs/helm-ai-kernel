@@ -8,6 +8,6 @@
 syntax = "proto3";
 package helm.policy.experimental;
 
-option go_package = "helm.sh/policy/experimental;experimental";
+option go_package = "helm.mindburn.run/policy/experimental;experimental";
 
 // Placeholder — experimental messages will be added here as needed.

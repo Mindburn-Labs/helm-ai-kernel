@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://helm.dev/schemas/effects/threat/cloud_compute_budget.json",
+  "$id": "https://helm.mindburn.run/schemas/effects/threat/cloud_compute_budget.json",
   "title": "Cloud Compute Budget Effect",
   "description": "Consumes cloud compute resources against a tenant budget. Crypto-mining vector.",
   "type": "object",

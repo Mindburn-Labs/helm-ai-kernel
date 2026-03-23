@@ -8,7 +8,7 @@
 syntax = "proto3";
 package helm.tools.v1;
 
-option go_package = "helm.sh/tools/v1;toolsv1";
+option go_package = "helm.mindburn.run/tools/v1;toolsv1";
 
 import "v1/foundations.proto";
 

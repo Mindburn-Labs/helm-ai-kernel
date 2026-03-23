@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://helm.dev/schemas/effects/infra/send_alert.json",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/send_alert.json",
   "title": "Send Alert Effect",
   "description": "Sends an infrastructure alert",
   "type": "object",

@@ -10,7 +10,7 @@ import (
 )
 
 // APIVersion is the current manifest schema version.
-const APIVersion = "integrations.helm.dev/v1"
+const APIVersion = "integrations.helm.mindburn.run/v1"
 
 // IntegrationManifest is the top-level manifest for an integration connector.
 // It describes everything needed to install, connect, certify, operate, drift-check,

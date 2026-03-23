@@ -7,7 +7,7 @@
 syntax = "proto3";
 package helm.policy.v1;
 
-option go_package = "helm.sh/policy/v1;policyv1";
+option go_package = "helm.mindburn.run/policy/v1;policyv1";
 
 // HashRef is a typed content hash. Used for canonical digests of
 // governance configuration snapshots, PolicyBundles, CPI semantics, and receipts.

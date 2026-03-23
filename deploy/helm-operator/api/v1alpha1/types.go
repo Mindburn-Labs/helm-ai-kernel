@@ -15,7 +15,7 @@ import (
 // into the Guardian runtime. The controller watches for PolicyBundle CRs
 // and ensures the Guardian instance has the correct policy bundle loaded.
 //
-// apiVersion: helm.mindburn.ai/v1alpha1
+// apiVersion: helm.mindburn.org/v1alpha1
 // kind: PolicyBundle
 type PolicyBundle struct {
 	TypeMeta   `json:",inline"`
@@ -63,7 +63,7 @@ type PolicyBundleStatus struct {
 // GuardianSidecar specifies how to inject and configure a Guardian
 // sidecar container into governed workloads.
 //
-// apiVersion: helm.mindburn.ai/v1alpha1
+// apiVersion: helm.mindburn.org/v1alpha1
 // kind: GuardianSidecar
 type GuardianSidecar struct {
 	TypeMeta   `json:",inline"`
@@ -136,7 +136,7 @@ type ResourceList map[string]string
 
 const (
 	// GroupName is the API group for HELM CRDs.
-	GroupName = "helm.mindburn.ai"
+	GroupName = "helm.mindburn.org"
 	// GroupVersion is the API version.
 	GroupVersion = "v1alpha1"
 	// APIVersion is the fully-qualified API version string.

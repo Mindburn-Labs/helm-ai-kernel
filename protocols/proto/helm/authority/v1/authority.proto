@@ -5,7 +5,7 @@
 syntax = "proto3";
 package helm.authority.v1;
 
-option go_package = "helm.sh/authority/v1;authorityv1";
+option go_package = "helm.mindburn.run/authority/v1;authorityv1";
 
 import "google/protobuf/timestamp.proto";
 

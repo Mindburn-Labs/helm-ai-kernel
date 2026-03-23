@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://helm.dev/schemas/effects/infra/scale_cluster.json",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/scale_cluster.json",
   "title": "Scale Cluster Effect",
   "description": "Scales the HELM cluster horizontally",
   "type": "object",

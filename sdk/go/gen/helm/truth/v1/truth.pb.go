@@ -734,7 +734,7 @@ const file_helm_truth_v1_truth_proto_rawDesc = "" +
 	"\x14TruthRegistryService\x12B\n" +
 	"\bRegister\x12\x1a.helm.truth.v1.TruthObject\x1a\x1a.helm.truth.v1.TruthObject\x12A\n" +
 	"\x03Get\x12\x1e.helm.truth.v1.GetTruthRequest\x1a\x1a.helm.truth.v1.TruthObject\x12M\n" +
-	"\tGetLatest\x12$.helm.truth.v1.GetLatestTruthRequest\x1a\x1a.helm.truth.v1.TruthObjectB\x1aZ\x18helm.sh/truth/v1;truthv1b\x06proto3"
+	"\tGetLatest\x12$.helm.truth.v1.GetLatestTruthRequest\x1a\x1a.helm.truth.v1.TruthObjectB\x1aZ\x18helm.mindburn.run/truth/v1;truthv1b\x06proto3"
 
 var (
 	file_helm_truth_v1_truth_proto_rawDescOnce sync.Once

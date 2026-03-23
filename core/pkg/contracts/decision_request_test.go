@@ -106,7 +106,7 @@ func TestDecisionRequest_Validate_EmptyOptionID(t *testing.T) {
 
 func TestDecisionRequest_Resolve_Success(t *testing.T) {
 	dr := validDecisionRequest()
-	err := dr.Resolve("opt-a", "operator@helm.dev")
+	err := dr.Resolve("opt-a", "operator@mindburn.org")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -117,8 +117,8 @@ func TestDecisionRequest_Resolve_Success(t *testing.T) {
 	if dr.ResolvedOptionID != "opt-a" {
 		t.Errorf("expected opt-a, got %s", dr.ResolvedOptionID)
 	}
-	if dr.ResolvedBy != "operator@helm.dev" {
-		t.Errorf("expected operator@helm.dev, got %s", dr.ResolvedBy)
+	if dr.ResolvedBy != "operator@mindburn.org" {
+		t.Errorf("expected operator@mindburn.org, got %s", dr.ResolvedBy)
 	}
 	if dr.ResolvedAt == nil {
 		t.Fatal("ResolvedAt must be set")
@@ -127,7 +127,7 @@ func TestDecisionRequest_Resolve_Success(t *testing.T) {
 
 func TestDecisionRequest_Resolve_InvalidOption(t *testing.T) {
 	dr := validDecisionRequest()
-	err := dr.Resolve("nonexistent", "operator@helm.dev")
+	err := dr.Resolve("nonexistent", "operator@mindburn.org")
 	if err == nil {
 		t.Fatal("expected error for unknown option ID")
 	}
@@ -135,10 +135,10 @@ func TestDecisionRequest_Resolve_InvalidOption(t *testing.T) {
 
 func TestDecisionRequest_Resolve_NotPending(t *testing.T) {
 	dr := validDecisionRequest()
-	_ = dr.Resolve("opt-a", "operator@helm.dev")
+	_ = dr.Resolve("opt-a", "operator@mindburn.org")
 
 	// Try resolving again — should fail
-	err := dr.Resolve("opt-b", "other@helm.dev")
+	err := dr.Resolve("opt-b", "other@mindburn.org")
 	if err == nil {
 		t.Fatal("expected error for resolving non-pending request")
 	}
@@ -150,7 +150,7 @@ func TestDecisionRequest_IsBlocking(t *testing.T) {
 		t.Fatal("pending request should be blocking")
 	}
 
-	_ = dr.Resolve("opt-a", "operator@helm.dev")
+	_ = dr.Resolve("opt-a", "operator@mindburn.org")
 	if dr.IsBlocking() {
 		t.Fatal("resolved request should not be blocking")
 	}
@@ -164,7 +164,7 @@ func TestDecisionRequest_Skip_Allowed(t *testing.T) {
 	dr := validDecisionRequest()
 	dr.SkipAllowed = true
 
-	err := dr.Skip("operator@helm.dev")
+	err := dr.Skip("operator@mindburn.org")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestDecisionRequest_Skip_NotAllowed(t *testing.T) {
 	dr := validDecisionRequest()
 	dr.SkipAllowed = false
 
-	err := dr.Skip("operator@helm.dev")
+	err := dr.Skip("operator@mindburn.org")
 	if err == nil {
 		t.Fatal("expected error for skip not allowed")
 	}
@@ -186,9 +186,9 @@ func TestDecisionRequest_Skip_NotAllowed(t *testing.T) {
 func TestDecisionRequest_Skip_NotPending(t *testing.T) {
 	dr := validDecisionRequest()
 	dr.SkipAllowed = true
-	_ = dr.Resolve("opt-a", "operator@helm.dev")
+	_ = dr.Resolve("opt-a", "operator@mindburn.org")
 
-	err := dr.Skip("other@helm.dev")
+	err := dr.Skip("other@mindburn.org")
 	if err == nil {
 		t.Fatal("expected error for skipping non-pending request")
 	}
@@ -236,7 +236,7 @@ func TestDecisionRequest_CheckExpiry_NoExpiry(t *testing.T) {
 
 func TestDecisionRequest_CheckExpiry_AlreadyResolved(t *testing.T) {
 	dr := validDecisionRequest()
-	_ = dr.Resolve("opt-a", "operator@helm.dev")
+	_ = dr.Resolve("opt-a", "operator@mindburn.org")
 	dr.ExpiresAt = time.Now().UTC().Add(-1 * time.Hour)
 
 	expired := dr.CheckExpiry()

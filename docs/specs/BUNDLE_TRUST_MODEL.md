@@ -113,7 +113,7 @@ bundle_sources:
   - type: file
     path: /etc/helm/bundles/
   - type: https
-    url: https://bundles.helm.sh/corporate-baseline
+    url: https://bundles.mindburn.run/corporate-baseline
     poll_interval: 300s
     verify: true
 ```

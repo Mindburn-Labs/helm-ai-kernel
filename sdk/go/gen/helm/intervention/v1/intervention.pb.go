@@ -693,7 +693,7 @@ const file_helm_intervention_v1_intervention_proto_rawDesc = "" +
 	"\x1aINTERVENTION_DECISION_DENY\x10\x02\x12 \n" +
 	"\x1cINTERVENTION_DECISION_MODIFY\x10\x03\x12\"\n" +
 	"\x1eINTERVENTION_DECISION_ESCALATE\x10\x04\x12 \n" +
-	"\x1cINTERVENTION_DECISION_CANCEL\x10\x05B(Z&helm.sh/intervention/v1;interventionv1b\x06proto3"
+	"\x1cINTERVENTION_DECISION_CANCEL\x10\x05B(Z&helm.mindburn.run/intervention/v1;interventionv1b\x06proto3"
 
 var (
 	file_helm_intervention_v1_intervention_proto_rawDescOnce sync.Once

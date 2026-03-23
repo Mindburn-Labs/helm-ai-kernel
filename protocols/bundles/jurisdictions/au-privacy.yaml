@@ -1,4 +1,4 @@
-apiVersion: helm.sh/v1
+apiVersion: helm.mindburn.run/v1
 kind: JurisdictionPack
 metadata:
   name: au-privacy

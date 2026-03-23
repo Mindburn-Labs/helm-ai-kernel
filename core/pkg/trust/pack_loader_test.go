@@ -47,7 +47,7 @@ func TestValidatePackName(t *testing.T) {
 		wantErr bool
 	}{
 		{"org.example/my-pack", false},
-		{"helm.io/core-pack", false},
+		{"helm.mindburn.run/core-pack", false},
 		{"a/b", false},
 		{"invalid", true},        // No org separator
 		{"Org/pack", true},       // Uppercase

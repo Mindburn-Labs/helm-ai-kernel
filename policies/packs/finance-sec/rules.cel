@@ -1,0 +1,61 @@
+// Financial Services — Policy Pack for HELM
+//
+// Compliance-mapped CEL rules for capital markets, banking, and
+// regulated financial operations. Maps to SEC, FCA, DORA, and MiFID II.
+//
+// Available variables:
+//   tool       — tool name being invoked
+//   effect     — effect level (E0-E4)
+//   agent_id   — requesting agent
+//   args       — tool arguments map
+//   context    — session context (includes: account_type, trade_value, asset_class)
+
+// ─── Pre-Trade Compliance ─────────────────────────────────────────────────
+// SEC Rule 15c3-5: Pre-trade risk controls for market access.
+// Block trades exceeding position limits.
+!(tool == "place_order"
+  && has(args.value)
+  && double(args.value) > double(context.get("position_limit", "1000000")))
+
+// ─── Wash Trade Detection ─────────────────────────────────────────────────
+// Block rapid buy/sell of same instrument within short window.
+&& !(tool == "place_order"
+  && has(context.recent_opposite_trade)
+  && context.recent_opposite_trade == "true")
+
+// ─── Restricted List Enforcement ──────────────────────────────────────────
+// Block trading in restricted securities (insider trading prevention).
+&& !(tool in ["place_order", "submit_rfq", "create_swap"]
+  && has(args.instrument)
+  && has(context.restricted_instruments)
+  && args.instrument in context.restricted_instruments)
+
+// ─── Segregation of Duties ────────────────────────────────────────────────
+// Same agent cannot both create and approve an order.
+&& !(tool == "approve_order"
+  && has(context.order_creator)
+  && context.order_creator == agent_id)
+
+// ─── MiFID II Best Execution ──────────────────────────────────────────────
+// Require best execution documentation for client orders.
+&& !(tool == "place_order"
+  && context.get("account_type", "") == "client"
+  && !has(context.best_execution_report))
+
+// ─── AML/KYC Gate ─────────────────────────────────────────────────────────
+// Block transactions above threshold without verified KYC.
+&& !(tool in ["wire_transfer", "crypto_transfer", "large_payment"]
+  && has(args.amount)
+  && double(args.amount) > 10000
+  && !has(context.kyc_verified))
+
+// ─── Audit Trail Requirements (SEC 17a-4, DORA Art 11) ────────────────────
+// All E2+ effects in financial context MUST produce receipts (enforced by Guardian).
+// This rule ensures metadata includes required regulatory fields.
+&& !(effect in ["E2", "E3", "E4"]
+  && !has(context.regulatory_jurisdiction))
+
+// ─── PII and Client Data Protection ──────────────────────────────────────
+// Block tools accessing client PII without data classification context.
+&& !(tool in ["query_client_data", "export_client_records", "share_client_info"]
+  && !has(context.data_classification))

@@ -1,0 +1,42 @@
+// Healthcare HIPAA — Policy Pack for HELM
+//
+// HIPAA compliance-mapped CEL rules for healthcare AI agents.
+// Maps to the Privacy Rule, Security Rule, and Breach Notification Rule.
+
+// ─── PHI Access Control (Privacy Rule §164.502) ──────────────────────────
+// Minimum Necessary: Only access the minimum PHI needed.
+!(tool in ["query_patient_records", "read_medical_history", "access_lab_results"]
+  && !has(context.minimum_necessary_justification))
+
+// ─── 18 HIPAA Identifiers — DLP Gate ─────────────────────────────────────
+// Block tools that may output HIPAA-protected identifiers without redaction.
+&& !(tool in ["export_data", "generate_report", "send_message"]
+  && has(context.contains_phi)
+  && context.contains_phi == "true"
+  && !has(context.phi_redacted))
+
+// ─── Break-Glass Override (Emergency Access) ──────────────────────────────
+// Allow emergency PHI access with enhanced audit trail.
+|| (has(context.break_glass)
+  && context.break_glass == "true"
+  && has(context.break_glass_reason))
+
+// ─── Authorized Disclosure Only ──────────────────────────────────────────
+// Block sharing PHI outside covered entities.
+&& !(tool in ["share_data", "send_to_external", "api_call"]
+  && has(context.data_contains_phi)
+  && !has(context.baa_verified))
+
+// ─── Audit Trail (Security Rule §164.312(b)) ─────────────────────────────
+// All PHI access MUST be logged with specific fields.
+// (Enforced by Guardian receipt chain — this rule ensures metadata present)
+&& !(has(context.phi_access)
+  && context.phi_access == "true"
+  && !has(context.access_purpose))
+
+// ─── Encryption at Rest (Security Rule §164.312(a)(2)(iv)) ───────────────
+// Block PHI writes to unencrypted storage.
+&& !(tool in ["write_file", "save_record", "store_data"]
+  && has(context.contains_phi)
+  && context.contains_phi == "true"
+  && !has(context.storage_encrypted))

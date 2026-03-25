@@ -11,7 +11,7 @@ Goal: **prove HELM works without trusting us.** Every step is one command.
 ## Prerequisites
 
 - Docker + Docker Compose
-- Go 1.25+ (for building from source)
+- Go 1.24+ (for building from source)
 - `jq` (for JSON output)
 
 ---
@@ -54,7 +54,7 @@ This is the PEP boundary in action. Unknown tool URNs, schema mismatches, and mi
 make build
 ```
 
-This produces `bin/helm` and `bin/helm-node`.
+This produces `bin/helm`.
 
 ---
 

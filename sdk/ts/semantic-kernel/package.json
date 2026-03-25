@@ -1,6 +1,6 @@
 {
   "name": "@mindburn/helm-semantic-kernel",
-  "version": "1.0.2",
+  "version": "0.3.0",
   "description": "HELM governance adapter for Microsoft Semantic Kernel",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,5 +14,10 @@
     "directory": "sdk/ts/semantic-kernel"
   },
   "license": "Apache-2.0",
-  "keywords": ["helm", "governance", "semantic-kernel", "ai-safety"]
+  "keywords": [
+    "helm",
+    "governance",
+    "semantic-kernel",
+    "ai-safety"
+  ]
 }

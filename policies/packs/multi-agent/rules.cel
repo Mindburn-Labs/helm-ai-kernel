@@ -1,0 +1,37 @@
+// Multi-Agent Governance — Policy Pack for HELM
+//
+// Rules for managing delegation chains, agent-to-agent communication,
+// and multi-agent orchestration safety.
+
+// ─── Delegation Depth Limit ───────────────────────────────────────────────
+// Prevent infinite delegation chains.
+!(has(context.delegation_depth)
+  && int(context.delegation_depth) > 5)
+
+// ─── Privilege Escalation Prevention ──────────────────────────────────────
+// Delegated agent cannot have higher effect level than delegator.
+&& !(has(context.delegator_max_effect)
+  && has(context.delegatee_effect)
+  && context.delegatee_effect > context.delegator_max_effect)
+
+// ─── Session Isolation ────────────────────────────────────────────────────
+// Agents in different sessions cannot access each other's context.
+&& !(has(context.cross_session_access)
+  && context.cross_session_access == "true")
+
+// ─── Delegation TTL ──────────────────────────────────────────────────────
+// Delegation sessions must have a time-to-live.
+&& !(tool == "delegate"
+  && !has(args.ttl_seconds))
+
+// ─── Agent Identity Required ─────────────────────────────────────────────
+// All agents in multi-agent chains must have verifiable identity.
+&& !(has(context.is_delegated)
+  && context.is_delegated == "true"
+  && !has(context.delegator_cert_hash))
+
+// ─── Resource Budget Splitting ────────────────────────────────────────────
+// Delegated agents cannot exceed the delegator's remaining budget.
+&& !(has(context.delegated_budget)
+  && has(context.delegator_remaining_budget)
+  && double(context.delegated_budget) > double(context.delegator_remaining_budget))

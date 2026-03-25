@@ -1,0 +1,55 @@
+// General Safety — Policy Pack for HELM
+//
+// Universal safety rules for any AI agent deployment.
+// Provides sensible defaults that can be extended.
+
+// ─── Effect Level Gating ──────────────────────────────────────────────────
+// Allow read-only (E0, E1) by default.
+// Require explicit approval for mutations and external effects.
+effect in ["E0", "E1"]
+|| (effect == "E2" && tool in [
+  "write_file", "create_file", "replace_file_content",
+  "run_command", "git_commit"
+])
+|| (effect in ["E3", "E4"] && has(context.explicit_approval))
+
+// ─── Budget Limits ────────────────────────────────────────────────────────
+// Enforce per-session budget (cost in USD cents).
+&& (
+  !has(context.session_cost_cents)
+  || int(context.session_cost_cents) < int(context.get("budget_limit_cents", "100000"))
+)
+
+// ─── Rate Limiting ────────────────────────────────────────────────────────
+// Max tool calls per minute per agent.
+&& (
+  !has(context.calls_this_minute)
+  || int(context.calls_this_minute) < 120
+)
+
+// ─── Egress Allowlist ─────────────────────────────────────────────────────
+// Block HTTP requests to non-allowlisted domains.
+&& !(tool == "http_request"
+  && has(args.url)
+  && !args.url.startsWith("https://api.")
+  && !args.url.startsWith("https://github.com"))
+
+// ─── Dangerous Operations ─────────────────────────────────────────────────
+// Block destructive operations without confirmation.
+&& !(tool in [
+  "delete_file", "rm_rf", "drop_table", "drop_database",
+  "format_disk", "shutdown", "reboot"
+])
+
+// ─── Credential Protection ────────────────────────────────────────────────
+// Block tools that access secrets/credentials.
+&& !(tool in ["read_env", "get_secret", "list_credentials"]
+  && !has(context.secrets_approved))
+
+// ─── Filesystem Boundaries ────────────────────────────────────────────────
+// Restrict file operations to allowed directories.
+&& !(tool in ["write_file", "delete_file", "read_file"]
+  && has(args.path)
+  && (args.path.startsWith("/etc/")
+    || args.path.startsWith("/usr/")
+    || args.path.startsWith("/boot/")))

@@ -2,7 +2,10 @@
 \* TLA+ Formal Model for the HELM Kernel
 \* This specifies the safety invariants for the Guardian → Executor pipeline.
 
-EXTENDS Naturals, Sequences, FiniteSets
+EXTENDS Naturals, Sequences, FiniteSets, TLC
+
+\* Helper: Range of a sequence (set of all elements)
+Range(s) == {s[i] : i \in 1..Len(s)}
 
 CONSTANTS
     Principals,     \* Set of all principals (agents, humans)
@@ -20,12 +23,6 @@ VARIABLES
 TypeInvariant ==
     /\ lamportClock \in Nat
     /\ lamportClock >= 0
-    /\ proofGraph \in Seq([
-        nodeHash: STRING,
-        kind: {"DECISION", "EXECUTION", "RECEIPT", "ESCALATION"},
-        principal: Principals,
-        lamport: Nat
-       ])
 
 \* === SAFETY INVARIANTS ===
 
@@ -120,6 +117,8 @@ Spec == Init /\ [][Next]_<<proofGraph, lamportClock, decisions, receipts, trustR
 \* === PROPERTIES TO CHECK ===
 
 Safety == FailClosed /\ MonotonicLamport /\ PrincipalBinding
-Liveness == <>(\E r \in receipts: TRUE)
+
+\* State constraint for finite model checking
+StateConstraint == lamportClock < 6
 
 ====

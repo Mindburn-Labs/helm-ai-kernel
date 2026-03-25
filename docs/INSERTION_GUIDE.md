@@ -14,7 +14,7 @@ Point your OpenAI-compatible SDK at HELM instead of the upstream API. HELM proxi
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://localhost:8787/v1",  # HELM proxy
+    base_url="http://localhost:8080/v1",  # HELM proxy
     api_key="your-openai-key",            # passed through to upstream
 )
 
@@ -30,7 +30,7 @@ response = client.chat.completions.create(
 import OpenAI from "openai";
 
 const client = new OpenAI({
-  baseURL: "http://localhost:8787/v1",  // HELM proxy
+  baseURL: "http://localhost:8080/v1",  // HELM proxy
   apiKey: process.env.OPENAI_API_KEY,
 });
 ```
@@ -38,7 +38,7 @@ const client = new OpenAI({
 ### Environment variable (any SDK)
 
 ```bash
-export OPENAI_BASE_URL=http://localhost:8787/v1
+export OPENAI_BASE_URL=http://localhost:8080/v1
 # Every OpenAI-compatible SDK now routes through HELM.
 ```
 
@@ -46,7 +46,7 @@ export OPENAI_BASE_URL=http://localhost:8787/v1
 
 ```bash
 helm proxy --upstream https://api.openai.com \
-           --listen :8787 \
+           --listen :8080 \
            --schema ./schemas/openai-tools.yaml
 ```
 
@@ -103,7 +103,7 @@ import (
 )
 
 func main() {
-    client := helmclient.New("http://localhost:8787")
+    client := helmclient.New("http://localhost:8080")
 
     // Submit a governed tool call
     result, err := client.ExecuteTool(context.Background(), helmclient.ToolRequest{

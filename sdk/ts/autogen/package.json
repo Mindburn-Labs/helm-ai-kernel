@@ -1,6 +1,6 @@
 {
   "name": "@mindburn/helm-autogen",
-  "version": "1.0.2",
+  "version": "0.3.0",
   "description": "HELM governance adapter for AutoGen",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,5 +14,10 @@
     "directory": "sdk/ts/autogen"
   },
   "license": "Apache-2.0",
-  "keywords": ["helm", "governance", "autogen", "ai-safety"]
+  "keywords": [
+    "helm",
+    "governance",
+    "autogen",
+    "ai-safety"
+  ]
 }

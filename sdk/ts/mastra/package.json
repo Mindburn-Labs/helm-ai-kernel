@@ -1,11 +1,13 @@
 {
   "name": "@mindburn/helm-mastra",
-  "version": "1.0.2",
+  "version": "0.3.0",
   "description": "HELM governance adapter for Mastra agent framework — sandbox-aware",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build",
@@ -32,5 +34,11 @@
     "url": "https://github.com/Mindburn-Labs/helm-oss",
     "directory": "sdk/ts/mastra"
   },
-  "keywords": ["helm", "mastra", "daytona", "governance", "sandbox"]
+  "keywords": [
+    "helm",
+    "mastra",
+    "daytona",
+    "governance",
+    "sandbox"
+  ]
 }

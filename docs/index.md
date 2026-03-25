@@ -334,8 +334,7 @@ docker compose -f docker-compose.demo.yml up -d
 helm/
 ├── api/openapi/         # OpenAPI 3.1 spec (single source of truth)
 ├── core/               # Go kernel (8-package TCB + executor + ProofGraph)
-│   ├── cmd/helm/       # CLI: proxy, export, verify, replay, conform, ...
-│   └── cmd/helm-node/  # Kernel API server
+│   └── cmd/helm/       # CLI + kernel server
 ├── sdk/                # Multi-language SDKs (TS, Python, Go, Rust, Java)
 │   ├── ts/             #   npm @mindburn/helm
 │   ├── python/         #   pip helm

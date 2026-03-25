@@ -1,0 +1,61 @@
+// OWASP LLM Top 10 — Policy Pack for HELM
+//
+// Maps OWASP's 2025 LLM Top 10 risks to CEL governance rules.
+// Reference: https://owasp.org/www-project-top-10-for-large-language-model-applications/
+//
+// Available variables:
+//   tool       — tool name being invoked
+//   effect     — effect level (E0-E4)
+//   agent_id   — requesting agent
+//   args       — tool arguments map
+//   context    — session context
+
+// ─── LLM01: Prompt Injection ──────────────────────────────────────────────
+// Block tool calls with suspiciously long or encoded arguments that
+// may indicate prompt injection attempts.
+!(size(args.get("prompt", "")) > 10000)
+&& !(args.get("prompt", "").contains("ignore previous instructions"))
+&& !(args.get("prompt", "").contains("system:"))
+
+// ─── LLM02: Insecure Output Handling ──────────────────────────────────────
+// Require output validation for any tool producing external-facing content.
+// E3 (external) and E4 (irreversible) effects require explicit allow-listing.
+&& !(effect in ["E3", "E4"]
+  && !(tool in [
+  "send_email", "publish", "deploy", "execute_sql", "http_request"
+]))
+
+// ─── LLM03: Training Data Poisoning ──────────────────────────────────────
+// Block tools that modify training data or model weights.
+&& !(tool in ["update_training_data", "fine_tune", "modify_weights", "upload_dataset"])
+
+// ─── LLM04: Model Denial of Service ──────────────────────────────────────
+// Limit context window size and concurrent requests.
+&& !(has(args.max_tokens) && args.max_tokens > 32000)
+
+// ─── LLM05: Supply Chain Vulnerabilities ──────────────────────────────────
+// Block installation of unvetted packages/plugins.
+&& !(tool in ["install_package", "add_dependency", "load_plugin"]
+  && !args.get("source", "").startsWith("registry.helm.mindburn.org"))
+
+// ─── LLM06: Sensitive Information Disclosure ──────────────────────────────
+// Block tools that may leak PII, credentials, or internal data.
+&& !(tool in ["read_env", "dump_database", "export_credentials", "list_secrets"])
+
+// ─── LLM07: Insecure Plugin Design ──────────────────────────────────────
+// Require all plugin calls to go through HELM governance.
+// (Enforced at infrastructure level — this rule blocks bypass attempts)
+&& !(tool == "raw_plugin_call")
+
+// ─── LLM08: Excessive Agency ─────────────────────────────────────────────
+// Limit effect escalation: agents cannot self-promote to higher effect levels.
+&& !(effect == "E4" && !has(context.escalation_approved))
+
+// ─── LLM09: Overreliance ─────────────────────────────────────────────────
+// Require human approval for high-stakes E3/E4 actions.
+// (Enforced via delegation gate — this rule requires approval context)
+&& !(effect in ["E3", "E4"] && !has(context.human_approved))
+
+// ─── LLM10: Model Theft ──────────────────────────────────────────────────
+// Block tools that export or copy model artifacts.
+&& !(tool in ["export_model", "copy_weights", "serialize_model", "download_model"])

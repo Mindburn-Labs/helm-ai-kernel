@@ -462,6 +462,7 @@ jobs:
           TAG_VERSION=${GITHUB_REF_NAME#v}
           mvn versions:set -DnewVersion="$TAG_VERSION" -DgenerateBackupPoms=false
           mvn deploy -P release -DskipTests
+          # Note: the central-publishing-maven-plugin automatically uploads since <extensions>true</extensions> is set
 
   # NuGet (.NET) publish removed — no sdk/dotnet directory exists yet.
   # Re-add when a .NET SDK is implemented.

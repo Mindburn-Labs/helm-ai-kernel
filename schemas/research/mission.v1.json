@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/research/mission.v1.json",
+  "title": "ResearchMission",
+  "type": "object",
+  "required": ["id", "type", "title", "objective", "state"],
+  "properties": {
+    "id": { "type": "string" },
+    "type": { "enum": ["daily_brief", "weekly_paper", "technical_benchmark", "threat_report", "strategic_memo", "custom_mission"] },
+    "title": { "type": "string", "minLength": 1 },
+    "objective": { "type": "string" },
+    "state": { "enum": ["created", "queued", "running", "drafting", "verifying", "awaiting_override", "promoted", "published", "failed", "canceled"] },
+    "budget": {
+      "type": "object",
+      "properties": {
+        "tokens_max": { "type": "integer" },
+        "cents_max": { "type": "integer" }
+      }
+    },
+    "trigger": {
+      "type": "object",
+      "properties": {
+        "type": { "enum": ["manual", "cron", "event"] },
+        "cron": { "type": "string" }
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

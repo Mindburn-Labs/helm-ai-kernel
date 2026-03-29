@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/research/evidence_pack.v1.json",
+  "title": "EvidencePack",
+  "type": "object",
+  "required": ["pack_id", "mission_id", "trace_hash", "sealed_at"],
+  "properties": {
+    "pack_id": { "type": "string" },
+    "mission_id": { "type": "string" },
+    "trace_hash": { "type": "string" },
+    "source_manifest": { "type": "array", "items": { "$ref": "source_snapshot.v1.json" } },
+    "model_manifest": { "type": "array", "items": { "type": "object" } },
+    "tool_manifest": { "type": "array", "items": { "type": "object" } },
+    "sealed_at": { "type": "string", "format": "date-time" }
+  }
+}

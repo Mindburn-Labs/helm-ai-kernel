@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/research/source_snapshot.v1.json",
+  "title": "SourceSnapshot",
+  "type": "object",
+  "required": ["id", "mission_id", "url", "state"],
+  "properties": {
+    "id": { "type": "string" },
+    "mission_id": { "type": "string" },
+    "url": { "type": "string", "format": "uri" },
+    "canonical_url": { "type": "string" },
+    "title": { "type": ["string", "null"] },
+    "content_hash": { "type": "string" },
+    "snapshot_hash": { "type": "string" },
+    "state": { "enum": ["discovered", "captured", "verified", "disputed", "drifted"] },
+    "is_primary": { "type": "boolean" },
+    "freshness_score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "captured_at": { "type": ["string", "null"], "format": "date-time" }
+  }
+}

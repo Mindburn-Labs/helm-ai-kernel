@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/research/promotion_receipt.v1.json",
+  "title": "PromotionReceipt",
+  "type": "object",
+  "required": ["receipt_id", "mission_id", "evidence_pack_hash", "policy_decision", "manifest_hash"],
+  "properties": {
+    "receipt_id": { "type": "string" },
+    "mission_id": { "type": "string" },
+    "publication_id": { "type": "string" },
+    "evidence_pack_hash": { "type": "string" },
+    "requested_model": { "type": "string" },
+    "actual_model": { "type": "string" },
+    "fallback_used": { "type": "boolean" },
+    "policy_decision": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+    "reason_codes": { "type": "array", "items": { "type": "string" } },
+    "manifest_hash": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

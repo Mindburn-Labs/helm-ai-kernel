@@ -460,7 +460,11 @@ func computeSnapshotDiff(prev, curr *VisualSnapshot) *SnapshotDiff {
 	sort.Strings(diff.RemovedPaths)
 	sort.Strings(diff.ModifiedPaths)
 
-	diffData, _ := json.Marshal(diff)
+	diffData, err := json.Marshal(diff)
+	if err != nil {
+		diff.DiffHash = "marshal-error"
+		return diff
+	}
 	h := sha256.Sum256(diffData)
 	diff.DiffHash = hex.EncodeToString(h[:])[:16]
 
@@ -487,19 +491,22 @@ func flattenPaths(m map[string]interface{}, prefix string) map[string]string {
 }
 
 func computeVisualHash(evidence *VisualEvidence) string {
-	data, _ := json.Marshal(struct {
+	data, err := json.Marshal(struct {
 		PackID    string
 		Snapshots []VisualSnapshot
 	}{
 		PackID:    evidence.Pack.PackID,
 		Snapshots: evidence.Snapshots,
 	})
+	if err != nil {
+		return "marshal-error"
+	}
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])
 }
 
 func computeChainHash(chain *ReasoningChain) string {
-	data, _ := json.Marshal(struct {
+	data, err := json.Marshal(struct {
 		ChainID string
 		PackID  string
 		Steps   []ReasoningStep
@@ -508,12 +515,18 @@ func computeChainHash(chain *ReasoningChain) string {
 		PackID:  chain.PackID,
 		Steps:   chain.Steps,
 	})
+	if err != nil {
+		return "marshal-error"
+	}
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])
 }
 
 func computeContentHash(content map[string]interface{}) string {
-	data, _ := json.Marshal(content)
+	data, err := json.Marshal(content)
+	if err != nil {
+		return "marshal-error"
+	}
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])
 }

@@ -41,7 +41,8 @@ type Node struct {
 
 // ComputeNodeHash computes the deterministic hash of the node (excluding NodeHash itself).
 // Uses JCS (RFC 8785) canonicalization via canonicalize.JCS() for cross-platform determinism.
-func (n *Node) ComputeNodeHash() string {
+// ComputeNodeHashE computes the deterministic hash, returning an error on failure.
+func (n *Node) ComputeNodeHashE() (string, error) {
 	// Create a temporary structure for hashing that excludes NodeHash and Timestamp for determinism
 	type NodeJCS struct {
 		Kind         NodeType        `json:"kind"`
@@ -66,11 +67,22 @@ func (n *Node) ComputeNodeHash() string {
 	// RFC 8785 (JCS): sorted keys, no HTML escaping, compact format, deterministic.
 	data, err := canonicalize.JCS(temp)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("JCS canonicalization failed: %w", err)
 	}
 
 	h := sha256.Sum256(data)
-	return hex.EncodeToString(h[:])
+	return hex.EncodeToString(h[:]), nil
+}
+
+// ComputeNodeHash computes the deterministic hash of the node (excluding NodeHash itself).
+// Uses JCS (RFC 8785) canonicalization via canonicalize.JCS() for cross-platform determinism.
+// Panics if canonicalization fails, as this is an invariant violation.
+func (n *Node) ComputeNodeHash() string {
+	hash, err := n.ComputeNodeHashE()
+	if err != nil {
+		panic(fmt.Sprintf("proofgraph: node hash computation failed: %v", err))
+	}
+	return hash
 }
 
 // Validate checks the node hash integrity.
@@ -82,13 +94,23 @@ func (n *Node) Validate() error {
 	return nil
 }
 
+// MaxPayloadSize is the maximum allowed size for a node payload (1 MiB).
+const MaxPayloadSize = 1 << 20
+
 // NewNode creates a properly initialized node.
 // Per KERNEL_TCB §3: callers SHOULD pass a kernel authority clock.
 // If no clock is provided, time.Now is used for backward compatibility.
+// Returns an error if the payload is invalid JSON or exceeds MaxPayloadSize.
 func NewNode(kind NodeType, parents []string, payload []byte, lamport uint64, principal string, principalSeq uint64, clock ...func() time.Time) *Node {
 	now := time.Now
 	if len(clock) > 0 && clock[0] != nil {
 		now = clock[0]
+	}
+	if len(payload) > MaxPayloadSize {
+		panic(fmt.Sprintf("proofgraph: payload size %d exceeds maximum %d", len(payload), MaxPayloadSize))
+	}
+	if len(payload) > 0 && !json.Valid(payload) {
+		panic("proofgraph: payload is not valid JSON")
 	}
 	n := &Node{
 		Kind:         kind,
@@ -97,7 +119,7 @@ func NewNode(kind NodeType, parents []string, payload []byte, lamport uint64, pr
 		Lamport:      lamport,
 		Principal:    principal,
 		PrincipalSeq: principalSeq,
-		Timestamp:    now().Unix(),
+		Timestamp:    now().UnixMilli(),
 	}
 	n.NodeHash = n.ComputeNodeHash()
 	return n

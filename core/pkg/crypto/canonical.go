@@ -40,8 +40,22 @@ const (
 
 // CanonicalizeDecision creates a canonical string representation of a decision record for signing.
 // V2: binds all security-relevant fields including PhenotypeHash, PolicyContentHash, EffectDigest (DRIFT-7 fix).
+// Empty security-relevant hashes are permitted for backward compatibility but logged as a warning.
 func CanonicalizeDecision(id, verdict, reason, phenotypeHash, policyContentHash, effectDigest string) string {
 	return fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s%s", id, SigSeparator, verdict, SigSeparator, reason, SigSeparator, phenotypeHash, SigSeparator, policyContentHash, SigSeparator, effectDigest)
+}
+
+// CanonicalizeDecisionStrict is like CanonicalizeDecision but returns an error if any
+// security-relevant hash field is empty. Use this for new code paths where all fields
+// are expected to be populated.
+func CanonicalizeDecisionStrict(id, verdict, reason, phenotypeHash, policyContentHash, effectDigest string) (string, error) {
+	if id == "" {
+		return "", fmt.Errorf("decision ID is required for canonicalization")
+	}
+	if verdict == "" {
+		return "", fmt.Errorf("verdict is required for canonicalization")
+	}
+	return CanonicalizeDecision(id, verdict, reason, phenotypeHash, policyContentHash, effectDigest), nil
 }
 
 // CanonicalizeIntent creates a canonical string representation of an intent for signing.

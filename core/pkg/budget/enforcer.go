@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,7 +20,11 @@ type Storage interface {
 }
 
 // SimpleEnforcer implements fail-closed budget enforcement.
+// NOTE: For single-instance deployments, a local mutex serializes check-and-update.
+// For distributed deployments, use a storage backend with atomic compare-and-swap
+// (e.g., PostgreSQL advisory locks or Redis WATCH/MULTI).
 type SimpleEnforcer struct {
+	mu      sync.Mutex
 	storage Storage
 }
 
@@ -45,7 +50,10 @@ func (e *SimpleEnforcer) RecordSpend(ctx context.Context, tenantID string, cost 
 }
 
 // Check verifies if a cost can be incurred. Fails closed on errors.
+// Serialized by mutex to prevent concurrent check-and-update races.
 func (e *SimpleEnforcer) Check(ctx context.Context, tenantID string, cost Cost) (*Decision, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	// FAIL-CLOSED: Any error results in denial.
 	b, err := e.storage.Get(ctx, tenantID)
 	if err != nil {
@@ -78,14 +86,17 @@ func (e *SimpleEnforcer) Check(ctx context.Context, tenantID string, cost Cost) 
 		}
 	}
 
-	// 2. Reset counters if new period (MVP logic: naive time check)
-	// In production, period management is complex (timezone, exact reset time).
-	// Here we assume UTC resets.
+	// 2. Reset counters if new period.
+	// Truncate both times to date boundaries for correct comparison across all transitions.
 	now := time.Now().UTC()
-	if now.Day() != b.LastUpdated.Day() {
+	todayDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	lastDate := time.Date(b.LastUpdated.Year(), b.LastUpdated.Month(), b.LastUpdated.Day(), 0, 0, 0, 0, time.UTC)
+	if !todayDate.Equal(lastDate) {
 		b.DailyUsed = 0
 	}
-	if now.Month() != b.LastUpdated.Month() {
+	lastMonth := time.Date(b.LastUpdated.Year(), b.LastUpdated.Month(), 1, 0, 0, 0, 0, time.UTC)
+	thisMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	if !thisMonth.Equal(lastMonth) {
 		b.MonthlyUsed = 0
 	}
 

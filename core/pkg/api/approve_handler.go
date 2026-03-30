@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
@@ -15,6 +16,7 @@ import (
 // This is the backend half of the HITL bridge. The frontend uses WebCrypto API
 // to sign the intent hash, and this handler verifies the signature cryptographically.
 type ApproveHandler struct {
+	mu sync.RWMutex
 	// pendingApprovals maps intent_hash → ApprovalRequest
 	pendingApprovals map[string]*contracts.ApprovalRequest
 	// allowedKeys is the set of authorized Ed25519 public keys (hex-encoded)
@@ -45,6 +47,8 @@ func (h *ApproveHandler) WithClock(clock func() time.Time) *ApproveHandler {
 
 // RegisterPendingApproval adds an intent to the pending approval queue.
 func (h *ApproveHandler) RegisterPendingApproval(req *contracts.ApprovalRequest) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.pendingApprovals[req.IntentHash] = req
 }
 
@@ -59,64 +63,68 @@ func (h *ApproveHandler) RegisterPendingApproval(req *contracts.ApprovalRequest)
 //  6. Return 200 with the signed receipt
 func (h *ApproveHandler) HandleApprove(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		WriteMethodNotAllowed(w)
 		return
 	}
 
 	var receipt contracts.ApprovalReceipt
 	if err := json.NewDecoder(r.Body).Decode(&receipt); err != nil {
-		http.Error(w, fmt.Sprintf("invalid request body: %v", err), http.StatusBadRequest)
+		WriteBadRequest(w, fmt.Sprintf("invalid request body: %v", err))
 		return
 	}
 
 	// Validate required fields
 	if receipt.IntentHash == "" || receipt.PublicKey == "" || receipt.Signature == "" {
-		http.Error(w, "missing required fields: intent_hash, public_key, signature", http.StatusBadRequest)
+		WriteBadRequest(w, "missing required fields: intent_hash, public_key, signature")
 		return
 	}
 
 	// Check if the intent exists in pending queue
+	h.mu.Lock()
 	pending, ok := h.pendingApprovals[receipt.IntentHash]
 	if !ok {
-		http.Error(w, "intent not found or already processed", http.StatusNotFound)
+		h.mu.Unlock()
+		WriteNotFound(w, "intent not found or already processed")
 		return
 	}
 
 	if pending.Status != contracts.ApprovalPending {
-		http.Error(w, fmt.Sprintf("intent already %s", pending.Status), http.StatusConflict)
+		h.mu.Unlock()
+		WriteConflict(w, fmt.Sprintf("intent already %s", pending.Status))
 		return
 	}
 
 	// Check expiry
 	if h.clock().After(pending.ExpiresAt) {
 		pending.Status = contracts.ApprovalExpired
-		http.Error(w, "approval request has expired", http.StatusGone)
+		h.mu.Unlock()
+		WriteError(w, http.StatusGone, "Gone", "approval request has expired")
 		return
 	}
+	h.mu.Unlock()
 
 	// Decode public key
 	pubKeyBytes, err := hex.DecodeString(receipt.PublicKey)
 	if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
-		http.Error(w, "invalid public key", http.StatusBadRequest)
+		WriteBadRequest(w, "invalid public key")
 		return
 	}
 
 	// Decode signature
 	sigBytes, err := hex.DecodeString(receipt.Signature)
 	if err != nil {
-		http.Error(w, "invalid signature encoding", http.StatusBadRequest)
+		WriteBadRequest(w, "invalid signature encoding")
 		return
 	}
 
 	// Ensure the public key is authorized (KID check)
-	if len(h.allowedKeys) > 0 { // If empty, we fail closed by default but here we check existence
+	if len(h.allowedKeys) > 0 {
 		if _, authorized := h.allowedKeys[receipt.PublicKey]; !authorized {
-			http.Error(w, "public key not found in authorized approver registry", http.StatusForbidden)
+			WriteForbidden(w, "public key not found in authorized approver registry")
 			return
 		}
 	} else {
-		// If the list is completely empty, nobody is authorized.
-		http.Error(w, "no authorized approver registry configured", http.StatusForbidden)
+		WriteForbidden(w, "no authorized approver registry configured")
 		return
 	}
 
@@ -132,14 +140,16 @@ func (h *ApproveHandler) HandleApprove(w http.ResponseWriter, r *http.Request) {
 		receipt.Nonce)
 
 	if !ed25519.Verify(pubKey, []byte(message), sigBytes) {
-		http.Error(w, "signature verification failed — approval rejected", http.StatusForbidden)
+		WriteForbidden(w, "signature verification failed — approval rejected")
 		return
 	}
 
 	// Signature valid — approve the intent
 	receipt.Timestamp = h.clock()
+	h.mu.Lock()
 	pending.Status = contracts.ApprovalApproved
 	pending.Receipt = &receipt
+	h.mu.Unlock()
 
 	// Respond with the signed approval
 	w.Header().Set("Content-Type", "application/json")
@@ -154,6 +164,8 @@ func (h *ApproveHandler) HandleApprove(w http.ResponseWriter, r *http.Request) {
 
 // GetPendingApprovals returns all pending approval requests.
 func (h *ApproveHandler) GetPendingApprovals() []*contracts.ApprovalRequest {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	var pending []*contracts.ApprovalRequest
 	for _, req := range h.pendingApprovals {
 		if req.Status == contracts.ApprovalPending {

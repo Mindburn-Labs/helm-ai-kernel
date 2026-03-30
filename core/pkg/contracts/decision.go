@@ -126,7 +126,8 @@ type AuthorizedExecutionIntent struct {
 	IdempotencyKey   string    `json:"idempotency_key"`
 	IssuedAt         time.Time `json:"issued_at"`
 	ExpiresAt        time.Time `json:"expires_at"`
-	Signer           string    `json:"signer"`       // Kernel Identity
-	Signature        string    `json:"signature"`    // Sig of the Intent
-	AllowedTool      string    `json:"allowed_tool"` // Constraint
+	Signer           string    `json:"signer"`         // Kernel Identity
+	Signature        string    `json:"signature"`      // Sig of the Intent
+	SignatureType    string    `json:"signature_type"` // Algorithm binding (e.g. "ed25519:key-id")
+	AllowedTool      string    `json:"allowed_tool"`   // Constraint
 }

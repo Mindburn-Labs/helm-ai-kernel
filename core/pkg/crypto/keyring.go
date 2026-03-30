@@ -126,8 +126,23 @@ func (k *KeyRing) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bool, er
 	k.mu.RLock()
 	defer k.mu.RUnlock()
 
-	// Intent signature is just hex usually?
-	// We verify against all keys since we don't have KeyID in intent signature structure yet.
+	// If the intent has a SignatureType with key ID (e.g. "ed25519:key-id"), verify against that specific key.
+	if i.SignatureType != "" {
+		parts := strings.Split(i.SignatureType, SigSeparator)
+		if len(parts) == 2 {
+			keyID := parts[1]
+			signer, exists := k.signers[keyID]
+			if !exists {
+				return false, fmt.Errorf("unknown or revoked key: %s", keyID)
+			}
+			if v, ok := signer.(Verifier); ok {
+				return v.VerifyIntent(i)
+			}
+			return false, fmt.Errorf("key %s does not implement Verifier", keyID)
+		}
+	}
+
+	// Fallback: try all keys for backward compatibility with intents that lack SignatureType.
 	for _, s := range k.signers {
 		if v, ok := s.(Verifier); ok {
 			if verified, err := v.VerifyIntent(i); verified && err == nil {
@@ -135,7 +150,6 @@ func (k *KeyRing) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bool, er
 			}
 		}
 	}
-	// Fallback/Fail
 	return false, fmt.Errorf("no key verified the intent")
 }
 
@@ -204,10 +218,13 @@ func (k *KeyRing) SignReceipt(r *contracts.Receipt) error {
 }
 
 // VerifyReceipt verifies a receipt against the keyring.
+// If the receipt's signature contains a key ID prefix (e.g. "ed25519:key-id:sig"),
+// verification targets that specific key. Otherwise falls back to trying all keys.
 func (k *KeyRing) VerifyReceipt(r *contracts.Receipt) (bool, error) {
 	k.mu.RLock()
 	defer k.mu.RUnlock()
-	// Try all keys since receipt doesn't have key ID
+	// Try all keys since receipt doesn't have a separate key ID field yet.
+	// Future: add SignatureType to Receipt for targeted verification.
 	for _, s := range k.signers {
 		if v, ok := s.(Verifier); ok {
 			if verified, err := v.VerifyReceipt(r); verified && err == nil {

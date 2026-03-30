@@ -67,6 +67,11 @@ func (v *Validator) WithClock(clock func() time.Time) *Validator {
 func (v *Validator) Validate(env *contracts.AutonomyEnvelope) *ValidationResult {
 	result := &ValidationResult{Valid: true}
 
+	if env == nil {
+		v.addError(result, "envelope", "REQUIRED", "envelope must not be nil")
+		return result
+	}
+
 	// Required identity fields
 	v.requireNonEmpty(result, "envelope_id", env.EnvelopeID)
 	v.requireNonEmpty(result, "version", env.Version)

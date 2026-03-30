@@ -39,7 +39,10 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 			timestamp TIMESTAMPTZ,
 			executor_id TEXT,
 			prev_hash TEXT,
-			lamport_clock BIGINT
+			lamport_clock BIGINT,
+			output_hash TEXT DEFAULT '',
+			args_hash TEXT DEFAULT '',
+			blob_hash TEXT DEFAULT ''
 		);
 		CREATE INDEX IF NOT EXISTS idx_receipts_executor_id ON receipts(executor_id);
 	`
@@ -47,31 +50,21 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 	return err
 }
 
+// receiptColumns is the canonical column list for receipt queries.
+const receiptColumns = `receipt_id, decision_id, execution_intent_id, status, timestamp, executor_id, prev_hash, lamport_clock, output_hash, args_hash, blob_hash`
+
 func (s *PostgresReceiptStore) Get(ctx context.Context, decisionID string) (*contracts.Receipt, error) {
-	query := `
-		SELECT receipt_id, decision_id, execution_intent_id, status, timestamp
-		FROM receipts
-		WHERE decision_id = $1
-	`
+	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE decision_id = $1`
 	return s.queryOne(ctx, query, decisionID)
 }
 
 func (s *PostgresReceiptStore) GetByReceiptID(ctx context.Context, receiptID string) (*contracts.Receipt, error) {
-	query := `
-		SELECT receipt_id, decision_id, execution_intent_id, status, timestamp
-		FROM receipts
-		WHERE receipt_id = $1
-	`
+	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE receipt_id = $1`
 	return s.queryOne(ctx, query, receiptID)
 }
 
 func (s *PostgresReceiptStore) List(ctx context.Context, limit int) ([]*contracts.Receipt, error) {
-	query := `
-		SELECT receipt_id, decision_id, execution_intent_id, status, timestamp
-		FROM receipts
-		ORDER BY timestamp DESC
-		LIMIT $1
-	`
+	query := `SELECT ` + receiptColumns + ` FROM receipts ORDER BY timestamp DESC LIMIT $1`
 	rows, err := s.db.QueryContext(ctx, query, limit)
 	if err != nil {
 		return nil, err
@@ -80,11 +73,11 @@ func (s *PostgresReceiptStore) List(ctx context.Context, limit int) ([]*contract
 
 	var receipts []*contracts.Receipt
 	for rows.Next() {
-		var r contracts.Receipt
-		if err := rows.Scan(&r.ReceiptID, &r.DecisionID, &r.EffectID, &r.Status, &r.Timestamp); err != nil {
+		r, err := scanReceipt(rows)
+		if err != nil {
 			return nil, err
 		}
-		receipts = append(receipts, &r)
+		receipts = append(receipts, r)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -92,23 +85,39 @@ func (s *PostgresReceiptStore) List(ctx context.Context, limit int) ([]*contract
 	return receipts, nil
 }
 
+// scanner is an interface satisfied by both *sql.Row and *sql.Rows.
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+func scanReceipt(s scanner) (*contracts.Receipt, error) {
+	var r contracts.Receipt
+	err := s.Scan(
+		&r.ReceiptID, &r.DecisionID, &r.EffectID, &r.Status, &r.Timestamp,
+		&r.ExecutorID, &r.PrevHash, &r.LamportClock, &r.OutputHash, &r.ArgsHash, &r.BlobHash,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
 func (s *PostgresReceiptStore) queryOne(ctx context.Context, query string, arg any) (*contracts.Receipt, error) {
 	row := s.db.QueryRowContext(ctx, query, arg)
-	var r contracts.Receipt
-	err := row.Scan(&r.ReceiptID, &r.DecisionID, &r.EffectID, &r.Status, &r.Timestamp)
+	r, err := scanReceipt(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.New("receipt not found")
 		}
 		return nil, err
 	}
-	return &r, nil
+	return r, nil
 }
 
 func (s *PostgresReceiptStore) Store(ctx context.Context, r *contracts.Receipt) error {
 	query := `
-		INSERT INTO receipts (receipt_id, decision_id, execution_intent_id, status, result, timestamp, executor_id, prev_hash, lamport_clock)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO receipts (receipt_id, decision_id, execution_intent_id, status, result, timestamp, executor_id, prev_hash, lamport_clock, output_hash, args_hash, blob_hash)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (receipt_id) DO NOTHING
 	`
 	_, err := s.db.ExecContext(ctx, query,
@@ -121,6 +130,9 @@ func (s *PostgresReceiptStore) Store(ctx context.Context, r *contracts.Receipt) 
 		r.ExecutorID,
 		r.PrevHash,
 		r.LamportClock,
+		r.OutputHash,
+		r.ArgsHash,
+		r.BlobHash,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert receipt: %w", err)
@@ -130,13 +142,7 @@ func (s *PostgresReceiptStore) Store(ctx context.Context, r *contracts.Receipt) 
 
 // GetLastForSession returns the most recent receipt for a session (by executor_id) for causal DAG chaining.
 func (s *PostgresReceiptStore) GetLastForSession(ctx context.Context, sessionID string) (*contracts.Receipt, error) {
-	query := `
-		SELECT receipt_id, decision_id, execution_intent_id, status, timestamp
-		FROM receipts
-		WHERE executor_id = $1
-		ORDER BY lamport_clock DESC
-		LIMIT 1
-	`
+	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE executor_id = $1 ORDER BY lamport_clock DESC LIMIT 1`
 	r, err := s.queryOne(ctx, query, sessionID)
 	if err != nil {
 		if err.Error() == "receipt not found" {

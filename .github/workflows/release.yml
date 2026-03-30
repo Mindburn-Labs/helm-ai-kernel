@@ -223,7 +223,7 @@ jobs:
         run: |
           mkdir -p golden-out
           ./bin/helm onboard --yes
-          ./bin/helm demo company --template starter --provider mock
+          ./bin/helm demo organization --template starter --provider mock
           ./bin/helm export --evidence ./data/evidence --out golden-out/golden-evidencepack.tar || true
           cp data/evidence/run-report.html golden-out/golden-run-report.html 2>/dev/null || \
             find . -name 'run-report.html' -exec cp {} golden-out/golden-run-report.html \; 2>/dev/null || true

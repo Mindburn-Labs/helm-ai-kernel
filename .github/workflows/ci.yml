@@ -58,8 +58,8 @@ jobs:
         run: cd core && go build -o ../bin/helm ./cmd/helm/
       - name: Onboard
         run: ./bin/helm onboard --yes
-      - name: Demo company (mock)
-        run: ./bin/helm demo company --template starter --provider mock
+      - name: Demo organization (mock)
+        run: ./bin/helm demo organization --template starter --provider mock
       - name: Sandbox exec (mock)
         run: ./bin/helm sandbox exec --provider mock -- echo "ci-test"
       - name: Pack lifecycle
@@ -157,7 +157,7 @@ jobs:
       - name: Run demo and validate artifacts
         run: |
           ./bin/helm onboard --yes
-          ./bin/helm demo company --template starter --provider mock
+          ./bin/helm demo organization --template starter --provider mock
 
           # Proof report must exist and be well-formed
           test -f data/evidence/run-report.html || (echo 'FAIL: proof report HTML missing' && exit 1)

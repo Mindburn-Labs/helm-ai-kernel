@@ -1,0 +1,88 @@
+# P1 — Compiled Trading Policy Bundle
+# Derived from TradingPolicySet CEL rules. Compiled and activated in Studio.
+# Evaluated by HELM Guardian on every governed trade intent.
+
+name: titan-p1-trading
+priority: 1
+description: Titan trading policy bundle — budget, velocity, approval gates
+
+rules:
+  # ── Budget Policies (DENY on breach) ──────────────────────────────────
+
+  - id: budget-per-venue
+    description: Per-venue notional ceiling
+    effect: DENY
+    condition: "venue_notional_usd > policy.budget_per_venue_usd"
+    default_value: 25000
+
+  - id: budget-per-category
+    description: Per-category notional ceiling
+    effect: DENY
+    condition: "category_notional_usd > policy.budget_per_category_usd"
+    default_value: 50000
+
+  - id: budget-daily-notional
+    description: Rolling 24h notional traded
+    effect: DENY
+    condition: "daily_notional_usd > policy.budget_daily_notional_usd"
+    default_value: 100000
+
+  # ── Velocity Policies (DENY on breach) ────────────────────────────────
+
+  - id: velocity-trades-per-hour
+    description: Max trades per rolling hour
+    effect: DENY
+    condition: "trades_last_hour > policy.max_trades_per_hour"
+    default_value: 100
+
+  - id: velocity-exposure-per-minute
+    description: Max exposure change per minute
+    effect: DENY
+    condition: "exposure_change_last_minute_usd > policy.max_exposure_per_minute_usd"
+    default_value: 10000
+
+  - id: velocity-orders-per-second
+    description: Burst order rate limit
+    effect: DENY
+    condition: "orders_last_second > policy.max_orders_per_second"
+    default_value: 5
+
+  # ── Approval Gates (REQUIRE_APPROVAL) ─────────────────────────────────
+
+  - id: gate-large-trade
+    description: Large trades require operator approval
+    effect: REQUIRE_APPROVAL
+    condition: "notional_usd > policy.large_trade_threshold_usd"
+    default_value: 10000
+
+  - id: gate-new-venue
+    description: First trade on a new venue requires approval
+    effect: REQUIRE_APPROVAL
+    condition: "is_first_trade_on_venue == true"
+
+  - id: gate-mode-change
+    description: Paper to live promotion requires approval
+    effect: REQUIRE_APPROVAL
+    condition: "action.type == 'SET_MODE' AND action.target != 'Paper'"
+
+  # ── Risk Tier Routing ─────────────────────────────────────────────────
+
+  - id: tier-e0-auto-allow
+    description: Read operations auto-allowed
+    effect: ALLOW
+    condition: "effect_class IN ['E0', 'E1']"
+
+  - id: tier-e2-standard
+    description: Standard financial effects go through normal auth
+    effect: EVALUATE
+    condition: "effect_class == 'E2'"
+
+  - id: tier-e3-human-review
+    description: High-risk effects require human review
+    effect: REQUIRE_APPROVAL
+    condition: "effect_class == 'E3'"
+
+  - id: tier-e4-auto-deny
+    description: Forbidden effect class
+    effect: DENY
+    condition: "effect_class == 'E4'"

@@ -1,0 +1,55 @@
+# P0 — Hard Platform Ceilings
+# Set in Studio Govern surface. Cannot be overridden by P1 or P2.
+# These are the absolute boundaries of Titan's autonomy envelope.
+
+name: titan-p0-ceilings
+priority: 0
+description: Hard platform ceilings for Titan autonomous trading
+
+rules:
+  - id: max-daily-loss
+    description: Maximum daily loss before forced halt
+    effect: DENY
+    condition: "daily_loss_usd > ceiling.max_daily_loss_usd"
+    action: halt_system
+    default_value: 5000
+
+  - id: max-gross-exposure
+    description: Maximum gross exposure across all venues
+    effect: DENY
+    condition: "gross_exposure_usd > ceiling.max_gross_exposure_usd"
+    default_value: 100000
+
+  - id: max-leverage
+    description: Maximum account leverage
+    effect: DENY
+    condition: "leverage > ceiling.max_leverage"
+    default_value: 5.0
+
+  - id: allowed-venues
+    description: Whitelist of allowed trading venues
+    effect: DENY
+    condition: "venue NOT IN ceiling.allowed_venues"
+    default_value:
+      - polymarket
+      - bybit
+      - binance
+      - hyperliquid
+
+  - id: allowed-symbols
+    description: Whitelist of tradeable symbols (empty = all allowed)
+    effect: DENY
+    condition: "symbol NOT IN ceiling.allowed_symbols AND ceiling.allowed_symbols IS NOT EMPTY"
+    default_value: []
+
+  - id: live-mode-authority
+    description: Only Admin role can promote to live mode
+    effect: REQUIRE_APPROVAL
+    condition: "action.type == 'SET_MODE' AND action.target IN ['LiveLimited', 'LiveFull']"
+    required_role: ADMIN
+
+  - id: global-halt-authority
+    description: Global halt requires Operator or Admin role
+    effect: ALLOW
+    condition: "action.type == 'HALT'"
+    required_role: OPERATOR

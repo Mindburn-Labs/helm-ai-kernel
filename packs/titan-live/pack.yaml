@@ -1,0 +1,240 @@
+# Titan Live — HELM System Pack
+#
+# Packages the Titan autonomous trading system as a governed operating system
+# inside HELM. Titan remains the sovereign organism; HELM becomes the
+# governing execution control plane, evidence layer, and Mission Control.
+#
+# Pack type: governed_operating_system
+
+name: titan-live
+version: "1.0.0"
+type: governed_operating_system
+description: >
+  AI-native hedge fund trading organism governed by HELM.
+  5-phase pipeline: Scavenger → Hunter → Sentinel → Execution → Brain.
+  All trade decisions policy-bound, receipted, and auditable.
+
+provider:
+  id: mindburn-labs
+  name: Mindburn Labs
+  category: autonomous_trading
+
+# ── Connectors ──────────────────────────────────────────────────────────
+
+connectors:
+  - id: titan-runtime
+    type: nats_rpc
+    description: Read-only system state, health, mode, venues, topology
+    trust_level: VERIFIED
+    rate_limit_per_minute: 600
+
+  - id: titan-brain
+    type: nats_rpc
+    description: Plan staging, intent submission, signal explanation, bounded control
+    trust_level: VERIFIED
+    rate_limit_per_minute: 100
+
+  - id: titan-execution
+    type: nats_rpc
+    description: Truth snapshots, fills, order state, position deltas
+    trust_level: VERIFIED
+    rate_limit_per_minute: 600
+
+  - id: titan-ops
+    type: http_signed
+    description: Halt/resume/throttle, incident ack, signed operator proxy
+    trust_level: RESTRICTED
+    rate_limit_per_minute: 10
+
+  - id: titan-evidence
+    type: proofgraph
+    description: Receipts, proof adapters, export bundles, replay packages
+    trust_level: FULL
+    rate_limit_per_minute: 600
+
+# ── Capabilities ────────────────────────────────────────────────────────
+
+capabilities:
+  - id: "cap://titan/read-state@v1"
+    connector: titan-runtime
+    risk_class: E0
+    description: Read system status, mode, breaker, venue health
+
+  - id: "cap://titan/read-positions@v1"
+    connector: titan-execution
+    risk_class: E0
+    description: Read open positions and balances
+
+  - id: "cap://titan/ask-core@v1"
+    connector: titan-brain
+    risk_class: E1
+    description: Natural language query to Titan Core (Claude)
+
+  - id: "cap://titan/place-order@v1"
+    connector: titan-brain
+    risk_class: E2
+    rollback: true
+    description: Submit governed trade intent
+
+  - id: "cap://titan/risk-control@v1"
+    connector: titan-ops
+    risk_class: E3
+    rollback: false
+    description: Halt, flatten, throttle, circuit break
+
+  - id: "cap://titan/arm-system@v1"
+    connector: titan-ops
+    risk_class: E3
+    rollback: true
+    description: Arm system for live trading
+
+  - id: "cap://titan/disarm-system@v1"
+    connector: titan-ops
+    risk_class: E2
+    rollback: true
+    description: Disarm system (stop trading)
+
+  - id: "cap://titan/set-mode@v1"
+    connector: titan-ops
+    risk_class: E3
+    rollback: true
+    description: Change execution mode (paper/live-limited/live-full)
+
+# ── Topology ────────────────────────────────────────────────────────────
+
+topology:
+  nodes:
+    - id: scavenger
+      label: "Phase 1: Scavenger"
+      kind: service
+      tier: data
+      group: pipeline
+
+    - id: hunter
+      label: "Phase 2: Hunter"
+      kind: service
+      tier: analysis
+      group: pipeline
+
+    - id: sentinel
+      label: "Phase 3: Sentinel"
+      kind: service
+      tier: risk
+      group: pipeline
+
+    - id: execution
+      label: "Phase 4: Execution (Rust)"
+      kind: service
+      tier: execution
+      group: pipeline
+
+    - id: brain
+      label: "Phase 5: Brain (TitanCore)"
+      kind: service
+      tier: cognitive
+      group: pipeline
+
+    - id: helm-pep
+      label: "HELM PEP"
+      kind: gateway
+      tier: governance
+      group: helm
+
+    - id: ai-quant
+      label: "AI Quant Research"
+      kind: service
+      tier: research
+
+    - id: nats
+      label: "NATS JetStream"
+      kind: infrastructure
+      tier: messaging
+
+    - id: postgres
+      label: "PostgreSQL"
+      kind: infrastructure
+      tier: storage
+
+    - id: redis
+      label: "Redis"
+      kind: infrastructure
+      tier: cache
+
+    - id: helm-kernel
+      label: "HELM Kernel"
+      kind: gateway
+      tier: governance
+      group: helm
+
+    - id: helm-bridge
+      label: "HELM Bridge"
+      kind: bridge
+      tier: governance
+      group: helm
+
+    - id: ops-api
+      label: "Ops API"
+      kind: service
+      tier: control
+
+    - id: mobile-gateway
+      label: "Mobile Gateway"
+      kind: service
+      tier: operator
+
+  edges:
+    - from: scavenger
+      to: hunter
+      label: market briefs
+
+    - from: hunter
+      to: sentinel
+      label: research packs
+
+    - from: sentinel
+      to: brain
+      label: risk verdicts
+
+    - from: brain
+      to: helm-pep
+      label: execution intents
+
+    - from: helm-pep
+      to: execution
+      label: governed commands
+
+    - from: execution
+      to: helm-bridge
+      label: fills + receipts
+
+    - from: helm-bridge
+      to: helm-kernel
+      label: proof nodes
+
+# ── Evidence ────────────────────────────────────────────────────────────
+
+evidence:
+  retention_days: 90
+  signing: ed25519
+  anchoring: asynchronous_batch
+  anchor_cadence:
+    - per_hour
+    - per_trading_session
+    - per_nav_cut
+
+# ── Boot Runbook ────────────────────────────────────────────────────────
+
+boot:
+  steps:
+    - verify_operator_authorization
+    - verify_release_provenance
+    - verify_infrastructure_ready    # NATS, Postgres, Redis
+    - verify_policy_hash_parity
+    - verify_venue_health_probes
+    - verify_symbol_venue_ceilings   # Against P0
+    - verify_mode_and_incidents
+    - start_components_ordered
+    - subscribe_projections
+    - emit_readiness_receipt
+    - transition_to_live_view
+  fail_behavior: stop_and_emit_denial

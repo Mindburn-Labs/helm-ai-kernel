@@ -1,0 +1,58 @@
+# P2 — Transient Overlays
+# Applied dynamically via Studio or operator commands.
+# Override P1 rules for bounded time periods.
+# Visible in Govern surface as active overlays.
+
+name: titan-p2-overlays
+priority: 2
+description: Transient policy overlays for Titan
+
+overlay_templates:
+  - id: freeze-symbol
+    description: Freeze trading on a specific symbol
+    effect: DENY
+    condition: "symbol == overlay.frozen_symbol"
+    params:
+      frozen_symbol: { type: string, required: true }
+    ttl_minutes: 1440  # 24h default
+
+  - id: reduce-only
+    description: Allow only position reduction, no new exposure
+    effect: DENY
+    condition: "is_new_exposure == true"
+    ttl_minutes: 480  # 8h default
+
+  - id: incident-throttle
+    description: Reduce velocity limits during incident response
+    effect: OVERRIDE
+    overrides:
+      - velocity-trades-per-hour: 10
+      - velocity-exposure-per-minute: 1000
+    ttl_minutes: 120  # 2h default
+
+  - id: venue-quarantine
+    description: Quarantine a venue — no new orders
+    effect: DENY
+    condition: "venue == overlay.quarantined_venue"
+    params:
+      quarantined_venue: { type: string, required: true }
+    ttl_minutes: 720  # 12h default
+
+  - id: investor-demo
+    description: Suppress noise notifications while preserving live truth
+    effect: PASS_THROUGH
+    config:
+      suppress_p2_notifications: true
+      suppress_p3_notifications: true
+      redact_pii: true
+    ttl_minutes: 120  # 2h default
+
+  - id: emergency-caution
+    description: Tighten all limits to minimum safe values
+    effect: OVERRIDE
+    overrides:
+      - budget-per-venue: 5000
+      - budget-daily-notional: 10000
+      - velocity-trades-per-hour: 10
+      - gate-large-trade: 1000
+    ttl_minutes: 60  # 1h default

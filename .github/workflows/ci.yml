@@ -95,6 +95,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install pytest
+        run: pip install pytest
       - name: OpenAI Agents adapter
         run: cd sdk/python/openai_agents && python -m pytest test_helm_openai_agents.py -v
       - name: MS Agent Framework adapter

@@ -11,7 +11,7 @@ PUBLISHING_DOC="$ROOT/docs/PUBLISHING.md"
 require_pattern() {
   local pattern="$1"
   local file="$2"
-  if ! rg -q --fixed-strings "$pattern" "$file"; then
+  if ! grep -qF "$pattern" "$file"; then
     echo "FAIL: expected pattern not found in $file"
     echo "  pattern: $pattern"
     exit 1
@@ -21,7 +21,7 @@ require_pattern() {
 reject_pattern() {
   local pattern="$1"
   local file="$2"
-  if rg -q --fixed-strings "$pattern" "$file"; then
+  if grep -qF "$pattern" "$file"; then
     echo "FAIL: forbidden pattern found in $file"
     echo "  pattern: $pattern"
     exit 1

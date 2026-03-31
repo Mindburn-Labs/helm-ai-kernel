@@ -59,7 +59,7 @@ func TestGraph_LamportMonotonicity(t *testing.T) {
 }
 
 func TestNode_HashIntegrity(t *testing.T) {
-	n := NewNode(NodeTypeIntent, nil, []byte(`test`), 1, "p", 1)
+	n := NewNode(NodeTypeIntent, nil, []byte(`"test"`), 1, "p", 1)
 	if err := n.Validate(); err != nil {
 		t.Fatalf("fresh node should validate: %v", err)
 	}

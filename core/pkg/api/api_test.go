@@ -162,8 +162,9 @@ func TestWriteInternal(t *testing.T) {
 
 func TestMemoryIdempotencyStore_SetAndCheck(t *testing.T) {
 	store := &MemoryIdempotencyStore{
-		entries: make(map[string]*cachedResponse),
-		ttl:     1 * time.Minute,
+		entries:  make(map[string]*cachedResponse),
+		inflight: make(map[string]chan struct{}),
+		ttl:      1 * time.Minute,
 	}
 
 	headers := make(http.Header)
@@ -184,8 +185,9 @@ func TestMemoryIdempotencyStore_SetAndCheck(t *testing.T) {
 
 func TestMemoryIdempotencyStore_CheckMiss(t *testing.T) {
 	store := &MemoryIdempotencyStore{
-		entries: make(map[string]*cachedResponse),
-		ttl:     1 * time.Minute,
+		entries:  make(map[string]*cachedResponse),
+		inflight: make(map[string]chan struct{}),
+		ttl:      1 * time.Minute,
 	}
 
 	_, exists := store.Check("nonexistent")
@@ -213,8 +215,9 @@ func TestMemoryIdempotencyStore_TTLExpiry(t *testing.T) {
 
 func TestIdempotencyMiddleware_GET_PassesThrough(t *testing.T) {
 	store := &MemoryIdempotencyStore{
-		entries: make(map[string]*cachedResponse),
-		ttl:     1 * time.Minute,
+		entries:  make(map[string]*cachedResponse),
+		inflight: make(map[string]chan struct{}),
+		ttl:      1 * time.Minute,
 	}
 
 	handler := IdempotencyMiddleware(store)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -234,8 +237,9 @@ func TestIdempotencyMiddleware_GET_PassesThrough(t *testing.T) {
 
 func TestIdempotencyMiddleware_POST_CachesAndReplays(t *testing.T) {
 	store := &MemoryIdempotencyStore{
-		entries: make(map[string]*cachedResponse),
-		ttl:     1 * time.Minute,
+		entries:  make(map[string]*cachedResponse),
+		inflight: make(map[string]chan struct{}),
+		ttl:      1 * time.Minute,
 	}
 
 	callCount := 0
@@ -269,8 +273,9 @@ func TestIdempotencyMiddleware_POST_CachesAndReplays(t *testing.T) {
 
 func TestIdempotencyMiddleware_NoKey_PassesThrough(t *testing.T) {
 	store := &MemoryIdempotencyStore{
-		entries: make(map[string]*cachedResponse),
-		ttl:     1 * time.Minute,
+		entries:  make(map[string]*cachedResponse),
+		inflight: make(map[string]chan struct{}),
+		ttl:      1 * time.Minute,
 	}
 
 	called := false

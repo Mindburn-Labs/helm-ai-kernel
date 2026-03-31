@@ -68,12 +68,16 @@ type OpenAIChatResponse struct {
 // For CLI-based governance with interactive upstream forwarding, use:
 //
 //	helm proxy --upstream <url>
+// maxOpenAIRequestSize is the maximum allowed request body size (10 MiB).
+const maxOpenAIRequestSize = 10 << 20
+
 func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		WriteMethodNotAllowed(w)
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxOpenAIRequestSize)
 	var req OpenAIChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		WriteBadRequest(w, "Invalid request body")

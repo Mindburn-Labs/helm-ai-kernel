@@ -18,9 +18,10 @@ type rateLimitConfig struct {
 
 // GlobalRateLimiter manages per-IP rate limiters.
 type GlobalRateLimiter struct {
-	visitors map[string]*visitor
-	mu       sync.Mutex
-	config   rateLimitConfig
+	visitors   map[string]*visitor
+	mu         sync.Mutex
+	config     rateLimitConfig
+	trustProxy bool // When true, extract client IP from X-Forwarded-For / X-Real-IP
 }
 
 // visitor tracks the rate limiter and last seen time for an IP.
@@ -42,6 +43,13 @@ func NewGlobalRateLimiter(rps, burst int) *GlobalRateLimiter {
 	}
 	// Start background cleanup
 	go rl.cleanupVisitors()
+	return rl
+}
+
+// WithTrustProxy enables extraction of client IP from X-Forwarded-For / X-Real-IP headers.
+// Only enable when HELM is behind a trusted reverse proxy.
+func (rl *GlobalRateLimiter) WithTrustProxy(trust bool) *GlobalRateLimiter {
+	rl.trustProxy = trust
 	return rl
 }
 
@@ -76,18 +84,36 @@ func (rl *GlobalRateLimiter) cleanupVisitors() {
 	}
 }
 
+// clientIP extracts the client IP address from the request.
+// When trustProxy is enabled, it prefers X-Real-IP and X-Forwarded-For headers.
+func (rl *GlobalRateLimiter) clientIP(r *http.Request) string {
+	if rl.trustProxy {
+		// X-Real-IP takes priority (single IP set by proxy)
+		if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
+			return strings.TrimSpace(realIP)
+		}
+		// X-Forwarded-For: client, proxy1, proxy2 — take the first (leftmost) entry
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			if comma := strings.IndexByte(xff, ','); comma > 0 {
+				return strings.TrimSpace(xff[:comma])
+			}
+			return strings.TrimSpace(xff)
+		}
+	}
+
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		ip = r.RemoteAddr
+		ip = strings.TrimPrefix(ip, "[")
+		ip = strings.TrimSuffix(ip, "]")
+	}
+	return ip
+}
+
 // Middleware returns a Handler that enforces rate limits.
 func (rl *GlobalRateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			// Fallback if unable to split (e.g. no port or weird format)
-			// In production, check X-Forwarded-For if behind proxy
-			ip = r.RemoteAddr
-			// Basic cleanup of ipv6 brackets if present
-			ip = strings.TrimPrefix(ip, "[")
-			ip = strings.TrimSuffix(ip, "]")
-		}
+		ip := rl.clientIP(r)
 
 		limiter := rl.getVisitor(ip)
 		if !limiter.Allow() {

@@ -165,7 +165,9 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 // (replaces the previous time.UnixNano() approach).
 func newDecisionID() string {
 	var b [16]byte
-	_, _ = crand.Read(b[:])
+	if _, err := crand.Read(b[:]); err != nil {
+		panic(fmt.Sprintf("guardian: crypto/rand failure: %v", err))
+	}
 	return "dec-" + hex.EncodeToString(b[:])
 }
 
@@ -478,7 +480,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			Reason:     string(contracts.ReasonSystemFrozen),
 			ReasonCode: string(contracts.ReasonSystemFrozen),
 		}
-		_ = g.signer.SignDecision(decision)
+		if signErr := g.signer.SignDecision(decision); signErr != nil {
+			return nil, fmt.Errorf("failed to sign freeze-deny decision: %w", signErr)
+		}
 		return decision, nil
 	}
 
@@ -493,7 +497,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				Reason:     fmt.Sprintf("CONTEXT_MISMATCH: %v", err),
 				ReasonCode: string(contracts.ReasonContextMismatch),
 			}
-			_ = g.signer.SignDecision(decision)
+			if signErr := g.signer.SignDecision(decision); signErr != nil {
+				return nil, fmt.Errorf("failed to sign context-mismatch decision: %w", signErr)
+			}
 			return decision, nil
 		}
 	}
@@ -518,7 +524,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					Reason:     fmt.Sprintf("IDENTITY_ISOLATION_VIOLATION: %v", err),
 					ReasonCode: string(contracts.ReasonIdentityIsolationViolation),
 				}
-				_ = g.signer.SignDecision(decision)
+				if signErr := g.signer.SignDecision(decision); signErr != nil {
+					return nil, fmt.Errorf("failed to sign isolation-violation decision: %w", signErr)
+				}
 				return decision, nil
 			}
 		}
@@ -541,7 +549,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					Reason:     fmt.Sprintf("DATA_EGRESS_BLOCKED: %s", result.ReasonCode),
 					ReasonCode: string(contracts.ReasonDataEgressBlocked),
 				}
-				_ = g.signer.SignDecision(decision)
+				if signErr := g.signer.SignDecision(decision); signErr != nil {
+					return nil, fmt.Errorf("failed to sign egress-blocked decision: %w", signErr)
+				}
 				return decision, nil
 			}
 		}
@@ -606,7 +616,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 						"threat_scan": scanResult.Ref(),
 					},
 				}
-				_ = g.signer.SignDecision(decision)
+				if signErr := g.signer.SignDecision(decision); signErr != nil {
+					return nil, fmt.Errorf("failed to sign threat-deny decision: %w", signErr)
+				}
 				if g.auditLog != nil {
 					decisionBytes, _ := canonicalize.JCS(decision)
 					_, _ = g.auditLog.Append("guardian", "THREAT_DENY", decision.ID, string(decisionBytes))
@@ -634,7 +646,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					Reason:     fmt.Sprintf("DELEGATION_INVALID: %v", loadErr),
 					ReasonCode: string(contracts.ReasonDelegationInvalid),
 				}
-				_ = g.signer.SignDecision(decision)
+				if signErr := g.signer.SignDecision(decision); signErr != nil {
+					return nil, fmt.Errorf("failed to sign delegation-invalid decision: %w", signErr)
+				}
 				return decision, nil
 			}
 			if session == nil {
@@ -645,7 +659,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					Reason:     "DELEGATION_INVALID: session not found",
 					ReasonCode: string(contracts.ReasonDelegationInvalid),
 				}
-				_ = g.signer.SignDecision(decision)
+				if signErr := g.signer.SignDecision(decision); signErr != nil {
+					return nil, fmt.Errorf("failed to sign delegation-invalid decision: %w", signErr)
+				}
 				return decision, nil
 			}
 
@@ -660,7 +676,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					Reason:     fmt.Sprintf("DELEGATION_INVALID: %v", validErr),
 					ReasonCode: string(contracts.ReasonDelegationInvalid),
 				}
-				_ = g.signer.SignDecision(decision)
+				if signErr := g.signer.SignDecision(decision); signErr != nil {
+					return nil, fmt.Errorf("failed to sign delegation-invalid decision: %w", signErr)
+				}
 				return decision, nil
 			}
 
@@ -676,7 +694,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					Reason:     fmt.Sprintf("DELEGATION_SCOPE_VIOLATION: tool %q not in session scope", req.Resource),
 					ReasonCode: string(contracts.ReasonDelegationScopeViolation),
 				}
-				_ = g.signer.SignDecision(decision)
+				if signErr := g.signer.SignDecision(decision); signErr != nil {
+					return nil, fmt.Errorf("failed to sign delegation-scope decision: %w", signErr)
+				}
 				if g.auditLog != nil {
 					decisionBytes, _ := canonicalize.JCS(decision)
 					_, _ = g.auditLog.Append("guardian", "DELEGATION_SCOPE_DENY", decision.ID, string(decisionBytes))
@@ -694,7 +714,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 						Reason:     fmt.Sprintf("DELEGATION_SCOPE_VIOLATION: action %q on %q not granted", req.Action, req.Resource),
 						ReasonCode: string(contracts.ReasonDelegationScopeViolation),
 					}
-					_ = g.signer.SignDecision(decision)
+					if signErr := g.signer.SignDecision(decision); signErr != nil {
+						return nil, fmt.Errorf("failed to sign delegation-scope decision: %w", signErr)
+					}
 					if g.auditLog != nil {
 						decisionBytes, _ := canonicalize.JCS(decision)
 						_, _ = g.auditLog.Append("guardian", "DELEGATION_SCOPE_DENY", decision.ID, string(decisionBytes))
@@ -790,7 +812,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			decision.ReasonCode = string(contracts.ReasonPDPError)
 			decision.Reason = fmt.Sprintf("%s: %v", contracts.ReasonPDPError, pdpErr)
 			decision.PolicyBackend = string(g.pdp.Backend())
-			_ = g.signer.SignDecision(decision)
+			if signErr := g.signer.SignDecision(decision); signErr != nil {
+				return nil, fmt.Errorf("failed to sign PDP-error decision: %w", signErr)
+			}
 			return decision, nil
 		}
 
@@ -807,7 +831,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			decision.Verdict = string(contracts.VerdictDeny)
 			decision.ReasonCode = reasonCode
 			decision.Reason = fmt.Sprintf("%s (ref=%s)", reasonCode, pdpResp.PolicyRef)
-			_ = g.signer.SignDecision(decision)
+			if signErr := g.signer.SignDecision(decision); signErr != nil {
+				return nil, fmt.Errorf("failed to sign PDP-deny decision: %w", signErr)
+			}
 			// Audit log for PDP denials
 			if g.auditLog != nil {
 				decisionBytes, _ := canonicalize.JCS(decision)

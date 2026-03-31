@@ -10,6 +10,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -166,7 +167,9 @@ func (h *DecisionHandler) handleResolve(w http.ResponseWriter, r *http.Request, 
 
 	// Check expiry before resolving
 	if dr.CheckExpiry() {
-		_ = h.store.Update(dr)
+		if err := h.store.Update(dr); err != nil {
+			slog.Error("failed to persist expired decision state", "decision_id", id, "error", err)
+		}
 		WriteBadRequest(w, "decision has expired")
 		return
 	}

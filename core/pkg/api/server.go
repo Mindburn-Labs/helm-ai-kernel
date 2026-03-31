@@ -109,10 +109,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r)
 }
 
-// ListenAndServe starts the API server.
+// ListenAndServe starts the API server with production-grade timeouts.
 func (s *Server) ListenAndServe(addr string) error {
 	log.Printf("HELM API server listening on %s", addr)
-	return http.ListenAndServe(addr, s)
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           s,
+		ReadHeaderTimeout: 15 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	return srv.ListenAndServe()
 }
 
 func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
@@ -268,6 +276,16 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.mu.RUnlock()
+
+	if len(receipts) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"valid":    true,
+			"session":  sessionID,
+			"receipts": 0,
+			"chain":    map[string]any{},
+		})
+		return
+	}
 
 	// Verify chain: Lamport monotonicity
 	valid := true

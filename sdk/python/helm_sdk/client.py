@@ -84,7 +84,8 @@ class HelmClient:
         resp = self._client.post("/v1/chat/completions", json=asdict(req))
         self._check(resp)
         data = resp.json()
-        return ChatCompletionResponse(**{k: data.get(k) for k in ChatCompletionResponse.__dataclass_fields__})
+        # Only pass fields that are present in the response to preserve dataclass defaults
+        return ChatCompletionResponse(**{k: data[k] for k in ChatCompletionResponse.__dataclass_fields__ if k in data})
 
     # ── Approval Ceremony ───────────────────────────
     def approve_intent(self, req: ApprovalRequest) -> Receipt:
@@ -145,7 +146,7 @@ class HelmClient:
         return ConformanceResult(**resp.json())
 
     # ── System ──────────────────────────────────────
-    def health(self) -> dict[str, str]:
+    def health(self) -> dict[str, Any]:
         resp = self._client.get("/healthz")
         self._check(resp)
         return resp.json()

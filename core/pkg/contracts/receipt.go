@@ -34,6 +34,23 @@ type Receipt struct {
 	RuntimeType    string `json:"runtime_type,omitempty"`    // e.g. "ollama", "vllm"
 	RuntimeVersion string `json:"runtime_version,omitempty"` // Exact semver of the inference engine
 	ModelHash      string `json:"model_hash,omitempty"`      // SHA-256 snapshot of the loaded weights
+
+	// V5: Execution Plane — sandbox and evidence enrichment
+	NetworkLogRef     string              `json:"network_log_ref,omitempty"`      // Reference to network activity log
+	SecretEventsRef   string              `json:"secret_events_ref,omitempty"`    // Reference to secret access audit log
+	PortExposures     []PortExposureEvent `json:"port_exposures,omitempty"`       // Port exposure events during execution
+	SandboxLeaseID    string              `json:"sandbox_lease_id,omitempty"`     // Execution lease that governed this receipt
+	EffectGraphNodeID string              `json:"effect_graph_node_id,omitempty"` // Which DAG node produced this receipt
+}
+
+// PortExposureEvent records a port being exposed or accessed during sandbox execution.
+type PortExposureEvent struct {
+	Port         int       `json:"port"`
+	Protocol     string    `json:"protocol"`                // "tcp", "udp"
+	Direction    string    `json:"direction"`               // "inbound", "outbound"
+	AllowedPeers []string  `json:"allowed_peers,omitempty"` // Permitted peer addresses
+	StartedAt    time.Time `json:"started_at"`
+	ClosedAt     time.Time `json:"closed_at,omitempty"`
 }
 
 // ReplayScriptRef points to the script that can reproduce this receipt's effect.

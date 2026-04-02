@@ -41,6 +41,57 @@ type EvidencePack struct {
 
 	// Attestation
 	Attestation EvidencePackAttestation `json:"attestation"`
+
+	// V2: Execution Plane — enriched evidence
+	NetworkLogs    []NetworkLogRef    `json:"network_logs,omitempty"`
+	SecretEvents   []SecretEventRef   `json:"secret_events,omitempty"`
+	PortExposures  []PortExposureRef  `json:"port_exposures,omitempty"`
+	GitDiffs       []GitDiffRef       `json:"git_diffs,omitempty"`
+	ReplayManifest *ReplayManifestRef `json:"replay_manifest,omitempty"`
+}
+
+// NetworkLogRef references a network activity log captured during execution.
+type NetworkLogRef struct {
+	LogID       string    `json:"log_id"`
+	Hash        string    `json:"hash"`
+	Source      string    `json:"source,omitempty"` // "sandbox", "firewall", "proxy"
+	CapturedAt  time.Time `json:"captured_at"`
+	BytesCaptured int64   `json:"bytes_captured,omitempty"`
+}
+
+// SecretEventRef references a secret access audit log.
+type SecretEventRef struct {
+	EventID    string    `json:"event_id"`
+	Hash       string    `json:"hash"`
+	SecretRef  string    `json:"secret_ref"`    // Identifier (never the secret value)
+	Action     string    `json:"action"`        // "issue", "access", "revoke"
+	OccurredAt time.Time `json:"occurred_at"`
+}
+
+// PortExposureRef references a port exposure event.
+type PortExposureRef struct {
+	EventID string    `json:"event_id"`
+	Hash    string    `json:"hash"`
+	Port    int       `json:"port"`
+	Source  string    `json:"source,omitempty"`
+	StartedAt time.Time `json:"started_at"`
+}
+
+// GitDiffRef references a git diff captured during execution.
+type GitDiffRef struct {
+	DiffID     string    `json:"diff_id"`
+	Hash       string    `json:"hash"`
+	Repository string    `json:"repository,omitempty"`
+	FromRef    string    `json:"from_ref,omitempty"` // Base commit
+	ToRef      string    `json:"to_ref,omitempty"`   // Head commit
+	CapturedAt time.Time `json:"captured_at"`
+}
+
+// ReplayManifestRef references the replay manifest for reconstructing this run.
+type ReplayManifestRef struct {
+	ManifestID string `json:"manifest_id"`
+	Hash       string `json:"hash"`
+	Mode       string `json:"mode"` // "dry", "bounded", "full"
 }
 
 // EvidencePackIdentity tracks the actor submitting the effect.

@@ -22,6 +22,9 @@ type PlanSpec struct {
 	Parallelism       *Parallelism       `json:"parallelism,omitempty"`
 	ArtifactRefs      []PlanArtifactRef  `json:"artifact_refs,omitempty"`
 	PolicyConstraints *PolicyConstraints `json:"policy_constraints,omitempty"`
+
+	// Truth Discipline — plan-level epistemic metadata.
+	Truth *TruthAnnotation `json:"truth,omitempty"`
 }
 
 // PlanArtifactRef points to external resources in a plan.
@@ -52,6 +55,18 @@ type PlanStep struct {
 	CheckpointBefore   bool           `json:"checkpoint_before,omitempty"`
 	CheckpointAfter    bool           `json:"checkpoint_after,omitempty"`
 	RollbackOnFailure  bool           `json:"rollback_on_failure,omitempty"`
+
+	// Truth Discipline — epistemic metadata per HitCC discipline.
+	Justification     string    `json:"justification,omitempty"`
+	FactSet           []FactRef `json:"fact_set,omitempty"`
+	Unknowns          []Unknown `json:"unknowns,omitempty"`
+	Confidence        float64   `json:"confidence,omitempty"`
+	EvidenceRefs      []string  `json:"evidence_refs,omitempty"`
+	BlockingQuestions []string  `json:"blocking_questions,omitempty"`
+
+	// Execution Binding — sandbox profile assignment.
+	RequestedBackend string `json:"requested_backend,omitempty"` // "docker", "wasi", "native"
+	RequestedProfile string `json:"requested_profile,omitempty"` // sandbox profile name
 }
 
 // Edge represents a dependency between steps.

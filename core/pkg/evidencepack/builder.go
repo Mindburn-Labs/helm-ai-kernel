@@ -87,6 +87,69 @@ func (b *Builder) AddRawEntry(path, contentType string, data []byte) {
 	}
 }
 
+// AddNetworkLog adds a network activity log to the pack.
+func (b *Builder) AddNetworkLog(name string, log []byte) error {
+	if len(log) == 0 {
+		return fmt.Errorf("empty network log: %s", name)
+	}
+	b.entries["network/"+name+".log"] = entryData{
+		content:     log,
+		contentType: "text/plain",
+	}
+	return nil
+}
+
+// AddSecretAccessLog adds a secret access audit log to the pack.
+func (b *Builder) AddSecretAccessLog(name string, events interface{}) error {
+	data, err := json.MarshalIndent(events, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal secret events %s: %w", name, err)
+	}
+	b.entries["secrets/"+name+".json"] = entryData{
+		content:     data,
+		contentType: "application/json",
+	}
+	return nil
+}
+
+// AddPortExposure adds a port exposure event to the pack.
+func (b *Builder) AddPortExposure(name string, event interface{}) error {
+	data, err := json.MarshalIndent(event, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal port exposure %s: %w", name, err)
+	}
+	b.entries["ports/"+name+".json"] = entryData{
+		content:     data,
+		contentType: "application/json",
+	}
+	return nil
+}
+
+// AddGitDiff adds a git diff to the pack.
+func (b *Builder) AddGitDiff(name string, diff []byte) error {
+	if len(diff) == 0 {
+		return fmt.Errorf("empty git diff: %s", name)
+	}
+	b.entries["diffs/"+name+".diff"] = entryData{
+		content:     diff,
+		contentType: "text/x-diff",
+	}
+	return nil
+}
+
+// AddReplayManifest adds a replay manifest to the pack.
+func (b *Builder) AddReplayManifest(name string, manifest interface{}) error {
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal replay manifest %s: %w", name, err)
+	}
+	b.entries["replay/"+name+".json"] = entryData{
+		content:     data,
+		contentType: "application/json",
+	}
+	return nil
+}
+
 // Build constructs the manifest and returns all entries ready for archiving.
 func (b *Builder) Build() (*Manifest, map[string][]byte, error) {
 	if len(b.entries) == 0 {

@@ -3,6 +3,7 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -95,6 +96,11 @@ func (b *SandboxBroker) PrepareExecution(
 		return nil, fmt.Errorf("no runner registered for backend %q", execLease.Backend)
 	}
 
+	// Verify the verdict's profile backend matches the lease backend.
+	if verdict.Profile.Backend != execLease.Backend {
+		return nil, fmt.Errorf("backend mismatch: lease=%q verdict=%q", execLease.Backend, verdict.Profile.Backend)
+	}
+
 	// Activate lease.
 	sandboxID := fmt.Sprintf("sbx-%s-%d", execLease.Backend, b.clock().UnixNano())
 	if err := b.leases.Activate(ctx, execLease.LeaseID, sandboxID); err != nil {
@@ -171,14 +177,26 @@ func (b *SandboxBroker) Execute(
 }
 
 // cleanup revokes tokens and completes the lease.
+// Errors are logged but not returned — cleanup is best-effort.
 func (b *SandboxBroker) cleanup(ctx context.Context, prepared *PreparedExecution) {
 	// Revoke all issued tokens.
 	for _, tokenID := range prepared.Tokens {
-		_ = b.credBroker.RevokeToken(tokenID)
+		if err := b.credBroker.RevokeToken(tokenID); err != nil {
+			slog.Warn("failed to revoke scoped token during cleanup",
+				"token_id", tokenID,
+				"lease_id", prepared.Lease.LeaseID,
+				"error", err,
+			)
+		}
 	}
 
 	// Complete the lease.
-	_ = b.leases.Complete(ctx, prepared.Lease.LeaseID)
+	if err := b.leases.Complete(ctx, prepared.Lease.LeaseID); err != nil {
+		slog.Warn("failed to complete lease during cleanup",
+			"lease_id", prepared.Lease.LeaseID,
+			"error", err,
+		)
+	}
 }
 
 // buildNetworkPolicy constructs a network policy from an execution profile.

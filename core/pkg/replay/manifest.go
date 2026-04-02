@@ -120,7 +120,13 @@ func (e *Engine) replayDry(ctx context.Context, manifest *ReplayManifest) (*Sess
 	}
 
 	// Compute hashes.
-	originalHash, _ := computeRunHash(events)
+	originalHash, err := computeRunHash(events)
+	if err != nil {
+		session.Status = SessionStatusFailed
+		session.DivergenceInfo = fmt.Sprintf("failed to compute original hash: %v", err)
+		session.CompletedAt = e.clock()
+		return session, nil
+	}
 	session.OriginalHash = originalHash
 	session.ReplayHash = originalHash // In dry mode, replay hash equals original.
 	session.Status = SessionStatusComplete
@@ -135,7 +141,10 @@ func (e *Engine) replayExecute(ctx context.Context, manifest *ReplayManifest) (*
 		return nil, fmt.Errorf("fetch events: %w", err)
 	}
 
-	originalHash, _ := computeRunHash(events)
+	originalHash, err := computeRunHash(events)
+	if err != nil {
+		return nil, fmt.Errorf("compute original hash: %w", err)
+	}
 
 	session := &Session{
 		SessionID:    fmt.Sprintf("replay-%s-%s-%d", manifest.Mode, manifest.RunID, e.clock().UnixNano()),
@@ -201,7 +210,13 @@ func (e *Engine) replayExecute(ctx context.Context, manifest *ReplayManifest) (*
 		}
 	}
 
-	replayHash, _ := computeReplayHash(session.Steps)
+	replayHash, err := computeReplayHash(session.Steps)
+	if err != nil {
+		session.Status = SessionStatusFailed
+		session.DivergenceInfo = fmt.Sprintf("failed to compute replay hash: %v", err)
+		session.CompletedAt = e.clock()
+		return session, nil
+	}
 	session.ReplayHash = replayHash
 	session.Status = SessionStatusComplete
 	session.CompletedAt = e.clock()

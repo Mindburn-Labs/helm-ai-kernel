@@ -3,6 +3,7 @@ package intentcompiler
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
 )
@@ -14,7 +15,7 @@ type DecompositionStrategy interface {
 
 // StaticDecomposer uses rule-based pattern matching to decompose tasks.
 type StaticDecomposer struct {
-	idCounter int
+	idCounter atomic.Int64
 }
 
 // NewStaticDecomposer creates a new rule-based decomposer.
@@ -23,13 +24,13 @@ func NewStaticDecomposer() *StaticDecomposer {
 }
 
 func (d *StaticDecomposer) nextID() string {
-	d.idCounter++
-	return fmt.Sprintf("step-%d", d.idCounter)
+	n := d.idCounter.Add(1)
+	return fmt.Sprintf("step-%d", n)
 }
 
 // ResetCounter resets the ID counter (useful for testing).
 func (d *StaticDecomposer) ResetCounter() {
-	d.idCounter = 0
+	d.idCounter.Store(0)
 }
 
 // Decompose breaks a raw task into steps. For structured input (already a step

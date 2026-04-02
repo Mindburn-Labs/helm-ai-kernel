@@ -36,7 +36,7 @@ type LeaseManager interface {
 
 // InMemoryLeaseManager is a thread-safe in-memory implementation.
 type InMemoryLeaseManager struct {
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	leases  map[string]*ExecutionLease
 	clock   func() time.Time
 	counter int64
@@ -172,8 +172,8 @@ func (m *InMemoryLeaseManager) Revoke(_ context.Context, leaseID string, reason 
 
 // Get returns a lease by ID.
 func (m *InMemoryLeaseManager) Get(_ context.Context, leaseID string) (*ExecutionLease, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	lease, ok := m.leases[leaseID]
 	if !ok {
@@ -185,8 +185,8 @@ func (m *InMemoryLeaseManager) Get(_ context.Context, leaseID string) (*Executio
 
 // ListActive returns all non-terminal leases.
 func (m *InMemoryLeaseManager) ListActive(_ context.Context) ([]*ExecutionLease, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	var result []*ExecutionLease
 	for _, lease := range m.leases {

@@ -2,6 +2,7 @@ package contracts_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -260,20 +261,11 @@ func TestFactRef_JSON_OmitsEmptyStringFields(t *testing.T) {
 	}
 	s := string(data)
 	// Hash (string with omitempty) should be omitted when empty.
-	if stringContains(s, `"hash"`) {
+	if strings.Contains(s, `"hash"`) {
 		t.Fatalf("expected hash omitted, got %s", s)
 	}
 	// fact_id, source, claim must be present.
-	if !stringContains(s, `"fact_id"`) {
+	if !strings.Contains(s, `"fact_id"`) {
 		t.Fatalf("expected fact_id present, got %s", s)
 	}
-}
-
-func stringContains(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

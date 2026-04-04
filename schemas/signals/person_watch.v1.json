@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/signals/person_watch.v1.json",
+  "title": "Person Watch",
+  "description": "A person entity for relationship context and signal routing.",
+  "type": "object",
+  "required": ["person_id", "display_name", "role_class"],
+  "properties": {
+    "person_id": { "type": "string" },
+    "display_name": { "type": "string" },
+    "role_class": {
+      "type": "string",
+      "enum": ["founder", "exec", "customer", "candidate", "partner", "investor", "vendor", "other"]
+    },
+    "email": { "type": "string", "format": "email" },
+    "identities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "connector_id": { "type": "string" },
+          "external_id": { "type": "string" }
+        }
+      }
+    },
+    "program_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "last_signal_at": { "type": "string", "format": "date-time" },
+    "pending_action_count": { "type": "integer", "minimum": 0 },
+    "relationship_notes_hash": { "type": "string" }
+  }
+}

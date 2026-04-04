@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/reference_pack.v1.json",
+  "title": "Reference Pack",
+  "description": "Workspace template that pre-configures programs, virtual employees, capability grants, budget envelopes, and signal watches.",
+  "type": "object",
+  "required": ["pack_id", "label", "version", "programs", "employees"],
+  "properties": {
+    "pack_id": { "type": "string", "pattern": "^[a-z0-9-]+-v[0-9]+$" },
+    "label": { "type": "string" },
+    "description": { "type": "string" },
+    "version": { "type": "integer", "minimum": 1 },
+    "programs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["program_id", "label", "status"],
+        "properties": {
+          "program_id": { "type": "string" },
+          "label": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "paused", "archived"] },
+          "signal_filters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "class": { "type": "string" },
+                "sensitivity_min": { "type": "string" },
+                "person_role_class": { "type": "string" },
+                "channel_pattern": { "type": "string" },
+                "topic_tags": { "type": "array", "items": { "type": "string" } },
+                "keywords": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "employees": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["employee_id", "display_name", "role", "execution_mode", "tool_scope"],
+        "properties": {
+          "employee_id": { "type": "string" },
+          "display_name": { "type": "string" },
+          "role": { "type": "string" },
+          "execution_mode": { "type": "string", "enum": ["AUTONOMOUS", "SUPERVISED", "MANUAL"] },
+          "tool_scope": {
+            "type": "object",
+            "properties": {
+              "allowed_tools": { "type": "array", "items": { "type": "string" } },
+              "blocked_tools": { "type": "array", "items": { "type": "string" } },
+              "max_risk_class": { "type": "string", "enum": ["R0", "R1", "R2", "R3"] },
+              "requires_approval_above": { "type": "string", "enum": ["R0", "R1", "R2"] }
+            }
+          },
+          "presence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "channel_type": { "type": "string" },
+                "channel_id": { "type": "string" },
+                "display_name": { "type": "string" },
+                "active": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "capability_grants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["employee_id", "connector_id", "tool_names"],
+        "properties": {
+          "employee_id": { "type": "string" },
+          "connector_id": { "type": "string" },
+          "tool_names": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "max_daily_actions": { "type": "integer", "minimum": 1 },
+          "max_budget_cents": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "budget_envelopes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["employee_id", "period", "limit_cents"],
+        "properties": {
+          "employee_id": { "type": "string" },
+          "period": { "type": "string", "enum": ["daily", "weekly", "monthly"] },
+          "limit_cents": { "type": "integer", "minimum": 0 },
+          "alert_threshold_pct": { "type": "integer", "minimum": 0, "maximum": 100 }
+        }
+      }
+    },
+    "policy_overlay": {
+      "type": "object",
+      "description": "Pack-specific governance policy overrides."
+    }
+  }
+}

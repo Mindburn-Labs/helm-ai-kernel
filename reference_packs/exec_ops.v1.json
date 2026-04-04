@@ -1,0 +1,129 @@
+{
+  "pack_id": "exec-ops-v1",
+  "label": "Executive Operations",
+  "description": "Governs meeting follow-ups, email triage, scheduling, and document summaries for founders and executive teams.",
+  "version": 1,
+  "programs": [
+    {
+      "program_id": "prog-exec-comms",
+      "label": "Executive Communications",
+      "status": "active",
+      "signal_filters": [
+        { "class": "EMAIL", "sensitivity_min": "INTERNAL" },
+        { "class": "CHAT_MESSAGE", "channel_pattern": "#exec-*" },
+        { "class": "MEETING" }
+      ]
+    },
+    {
+      "program_id": "prog-strategic-planning",
+      "label": "Strategic Planning",
+      "status": "active",
+      "signal_filters": [
+        { "class": "DOC_UPDATE", "topic_tags": ["strategy", "roadmap", "OKR"] },
+        { "class": "MEETING", "topic_tags": ["board", "strategy", "quarterly"] }
+      ]
+    },
+    {
+      "program_id": "prog-board-relations",
+      "label": "Board Relations",
+      "status": "active",
+      "signal_filters": [
+        { "class": "EMAIL", "person_role_class": "investor" },
+        { "class": "MEETING", "topic_tags": ["board", "investor"] }
+      ]
+    }
+  ],
+  "employees": [
+    {
+      "employee_id": "ve-exec-assistant",
+      "display_name": "Executive Assistant",
+      "role": "exec-assistant",
+      "execution_mode": "SUPERVISED",
+      "tool_scope": {
+        "allowed_tools": [
+          "gmail.send", "gmail.read_thread", "gmail.list_threads", "gmail.draft_create",
+          "gcalendar.create_event", "gcalendar.read_availability", "gcalendar.list_events",
+          "slack.send_message", "slack.read_channel",
+          "gdocs.read_document"
+        ],
+        "max_risk_class": "R2",
+        "requires_approval_above": "R1"
+      },
+      "presence": [
+        { "channel_type": "email", "active": true },
+        { "channel_type": "slack", "active": true },
+        { "channel_type": "calendar", "active": true }
+      ]
+    },
+    {
+      "employee_id": "ve-meeting-scribe",
+      "display_name": "Meeting Scribe",
+      "role": "meeting-scribe",
+      "execution_mode": "AUTONOMOUS",
+      "tool_scope": {
+        "allowed_tools": [
+          "meetings.list_transcripts", "meetings.get_transcript", "meetings.extract_action_items",
+          "gdocs.read_document", "gdocs.create_document"
+        ],
+        "max_risk_class": "R1"
+      },
+      "presence": [
+        { "channel_type": "meetings", "active": true }
+      ]
+    }
+  ],
+  "capability_grants": [
+    {
+      "employee_id": "ve-exec-assistant",
+      "connector_id": "gmail-v1",
+      "tool_names": ["gmail.send", "gmail.read_thread", "gmail.list_threads", "gmail.draft_create"],
+      "max_daily_actions": 200,
+      "max_budget_cents": 500
+    },
+    {
+      "employee_id": "ve-exec-assistant",
+      "connector_id": "gcalendar-v1",
+      "tool_names": ["gcalendar.create_event", "gcalendar.read_availability", "gcalendar.list_events"],
+      "max_daily_actions": 100
+    },
+    {
+      "employee_id": "ve-exec-assistant",
+      "connector_id": "slack-v1",
+      "tool_names": ["slack.send_message", "slack.read_channel"],
+      "max_daily_actions": 150
+    },
+    {
+      "employee_id": "ve-meeting-scribe",
+      "connector_id": "meetings-v1",
+      "tool_names": ["meetings.list_transcripts", "meetings.get_transcript", "meetings.extract_action_items"],
+      "max_daily_actions": 50
+    },
+    {
+      "employee_id": "ve-meeting-scribe",
+      "connector_id": "gdocs-drive-v1",
+      "tool_names": ["gdocs.read_document", "gdocs.create_document"],
+      "max_daily_actions": 30
+    }
+  ],
+  "budget_envelopes": [
+    {
+      "employee_id": "ve-exec-assistant",
+      "period": "daily",
+      "limit_cents": 5000,
+      "alert_threshold_pct": 80
+    },
+    {
+      "employee_id": "ve-meeting-scribe",
+      "period": "daily",
+      "limit_cents": 1500,
+      "alert_threshold_pct": 90
+    }
+  ],
+  "policy_overlay": {
+    "r2_default_approval": "single_human",
+    "r3_requires_ceremony": true,
+    "external_email_requires_draft_preview": true,
+    "calendar_invite_max_attendees": 20,
+    "meeting_transcript_sensitivity_floor": "CONFIDENTIAL"
+  }
+}

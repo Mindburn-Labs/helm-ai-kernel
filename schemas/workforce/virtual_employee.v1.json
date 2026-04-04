@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/workforce/virtual_employee.v1.json",
+  "title": "Virtual Employee",
+  "description": "A governed agent principal with manager, role, scope, budget, and lifecycle.",
+  "type": "object",
+  "required": ["employee_id", "workspace_id", "role", "status", "created_at"],
+  "properties": {
+    "employee_id": { "type": "string" },
+    "workspace_id": { "type": "string" },
+    "display_name": { "type": "string" },
+    "role": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["active", "suspended", "terminated"]
+    },
+    "manager_employee_id": { "type": "string" },
+    "granted_connector_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "budget_envelope_id": { "type": "string" },
+    "skill_lineage": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "active_work_queue_size": { "type": "integer", "minimum": 0 },
+    "anomaly_count": { "type": "integer", "minimum": 0 },
+    "kill_switch_active": { "type": "boolean", "default": false },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

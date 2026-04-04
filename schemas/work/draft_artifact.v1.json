@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/work/draft_artifact.v1.json",
+  "title": "Draft Artifact",
+  "description": "Preview of an effect before execution (email draft, calendar invite, etc.).",
+  "type": "object",
+  "required": ["artifact_id", "proposal_id", "artifact_type", "content_hash", "created_at"],
+  "properties": {
+    "artifact_id": { "type": "string" },
+    "proposal_id": { "type": "string" },
+    "artifact_type": {
+      "type": "string",
+      "enum": ["email_draft", "chat_message_draft", "calendar_event_draft", "document_draft", "purchase_request", "candidate_screen"]
+    },
+    "content_hash": { "type": "string" },
+    "rendered_preview_url": { "type": "string" },
+    "body_markdown": { "type": "string" },
+    "metadata": { "type": "object" },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

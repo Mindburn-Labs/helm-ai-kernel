@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/effects/send_chat_message_effect.v1.json",
+  "title": "Send Chat Message Effect",
+  "description": "Parameters for sending a chat message through a governed connector.",
+  "type": "object",
+  "required": ["request_id", "connector_instance_id", "channel_id", "message_body_hash"],
+  "properties": {
+    "request_id": { "type": "string" },
+    "connector_instance_id": { "type": "string" },
+    "idempotency_key": { "type": "string" },
+    "channel_id": { "type": "string" },
+    "message_body_hash": { "type": "string" },
+    "thread_ts": { "type": "string" },
+    "from_employee_id": { "type": "string" },
+    "proposal_id": { "type": "string" }
+  }
+}

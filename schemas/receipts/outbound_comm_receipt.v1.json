@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/receipts/outbound_comm_receipt.v1.json",
+  "title": "Outbound Communication Receipt",
+  "description": "Receipt for an outbound communication effect (email, chat message).",
+  "type": "object",
+  "required": ["receipt_hash", "effect_type", "connector_id", "proposal_id", "content_hash", "sent_at", "delivery_status"],
+  "properties": {
+    "receipt_hash": { "type": "string" },
+    "effect_type": { "type": "string" },
+    "connector_id": { "type": "string" },
+    "proposal_id": { "type": "string" },
+    "content_hash": { "type": "string" },
+    "sent_at": { "type": "string", "format": "date-time" },
+    "delivery_status": {
+      "type": "string",
+      "enum": ["sent", "delivered", "bounced", "failed"]
+    },
+    "external_message_id": { "type": "string" },
+    "proofgraph_node": { "type": "string" }
+  }
+}

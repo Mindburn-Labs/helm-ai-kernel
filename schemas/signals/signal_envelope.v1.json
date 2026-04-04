@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/signals/signal_envelope.v1.json",
+  "title": "Signal Envelope",
+  "description": "Canonical typed envelope for an inbound business event.",
+  "type": "object",
+  "required": ["signal_id", "class", "source", "provenance", "sensitivity", "content_hash", "raw_payload", "received_at"],
+  "properties": {
+    "signal_id": {
+      "type": "string",
+      "description": "Unique identifier for this signal."
+    },
+    "class": {
+      "type": "string",
+      "enum": ["EMAIL", "CHAT_MESSAGE", "DOC_UPDATE", "MEETING", "TICKET", "CRM_UPDATE", "APPROVAL", "SYSTEM_ALERT"],
+      "description": "Business event type classification."
+    },
+    "source": {
+      "type": "object",
+      "required": ["source_id", "source_type", "connector_id"],
+      "properties": {
+        "source_id": { "type": "string" },
+        "source_type": { "type": "string" },
+        "principal_id": { "type": "string" },
+        "connector_id": { "type": "string" },
+        "trust_level": { "type": "string", "enum": ["FULL", "VERIFIED", "RESTRICTED", "UNTRUSTED"] }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "properties": {
+        "entity_type": { "type": "string" },
+        "entity_id": { "type": "string" },
+        "entity_name": { "type": "string" }
+      }
+    },
+    "thread_ref": {
+      "type": "object",
+      "properties": {
+        "thread_id": { "type": "string" },
+        "parent_id": { "type": "string" },
+        "sequence_no": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["artifact_id", "mime_type", "hash"],
+        "properties": {
+          "artifact_id": { "type": "string" },
+          "mime_type": { "type": "string" },
+          "hash": { "type": "string" },
+          "size_bytes": { "type": "integer", "minimum": 0 },
+          "uri": { "type": "string" }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["ingested_at", "ingested_by", "normalized_at"],
+      "properties": {
+        "ingested_at": { "type": "string", "format": "date-time" },
+        "ingested_by": { "type": "string" },
+        "source_timestamp": { "type": "string", "format": "date-time" },
+        "chain_hash": { "type": "string" },
+        "normalized_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "sensitivity": {
+      "type": "string",
+      "enum": ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"]
+    },
+    "content_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "raw_payload": {
+      "description": "Original event payload preserved as-is."
+    },
+    "idempotency_key": { "type": "string" },
+    "external_id": { "type": "string" },
+    "received_at": { "type": "string", "format": "date-time" }
+  }
+}

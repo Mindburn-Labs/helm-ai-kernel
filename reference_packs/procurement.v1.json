@@ -1,0 +1,105 @@
+{
+  "pack_id": "procurement-v1",
+  "label": "Procurement / Spend Requests",
+  "description": "Governs vendor intake, spend request generation, budget checks, and approval routing for procurement workflows.",
+  "version": 1,
+  "programs": [
+    {
+      "program_id": "prog-vendor-management",
+      "label": "Vendor Management",
+      "status": "active",
+      "signal_filters": [
+        { "class": "EMAIL", "person_role_class": "vendor" },
+        { "class": "EMAIL", "keywords": ["invoice", "contract", "proposal", "quote", "NDA"] },
+        { "class": "DOC_UPDATE", "topic_tags": ["contract", "vendor", "procurement"] }
+      ]
+    },
+    {
+      "program_id": "prog-budget-requests",
+      "label": "Budget Requests",
+      "status": "active",
+      "signal_filters": [
+        { "class": "EMAIL", "keywords": ["budget", "purchase", "spend", "expense"] },
+        { "class": "APPROVAL", "topic_tags": ["spend", "purchase"] }
+      ]
+    }
+  ],
+  "employees": [
+    {
+      "employee_id": "ve-procurement-assistant",
+      "display_name": "Procurement Assistant",
+      "role": "procurement-assistant",
+      "execution_mode": "SUPERVISED",
+      "tool_scope": {
+        "allowed_tools": [
+          "gmail.send", "gmail.read_thread", "gmail.list_threads", "gmail.draft_create",
+          "gdocs.read_document", "gdocs.create_document", "gdrive.list_files"
+        ],
+        "max_risk_class": "R2",
+        "requires_approval_above": "R1"
+      },
+      "presence": [
+        { "channel_type": "email", "active": true },
+        { "channel_type": "gdocs", "active": true }
+      ]
+    },
+    {
+      "employee_id": "ve-budget-checker",
+      "display_name": "Budget Checker",
+      "role": "budget-checker",
+      "execution_mode": "AUTONOMOUS",
+      "tool_scope": {
+        "allowed_tools": [
+          "gdocs.read_document", "gdrive.list_files", "gdrive.get_file"
+        ],
+        "max_risk_class": "R0"
+      },
+      "presence": [
+        { "channel_type": "gdocs", "active": true }
+      ]
+    }
+  ],
+  "capability_grants": [
+    {
+      "employee_id": "ve-procurement-assistant",
+      "connector_id": "gmail-v1",
+      "tool_names": ["gmail.send", "gmail.read_thread", "gmail.list_threads", "gmail.draft_create"],
+      "max_daily_actions": 100,
+      "max_budget_cents": 200
+    },
+    {
+      "employee_id": "ve-procurement-assistant",
+      "connector_id": "gdocs-drive-v1",
+      "tool_names": ["gdocs.read_document", "gdocs.create_document", "gdrive.list_files"],
+      "max_daily_actions": 50,
+      "max_budget_cents": 100
+    },
+    {
+      "employee_id": "ve-budget-checker",
+      "connector_id": "gdocs-drive-v1",
+      "tool_names": ["gdocs.read_document", "gdrive.list_files", "gdrive.get_file"],
+      "max_daily_actions": 200
+    }
+  ],
+  "budget_envelopes": [
+    {
+      "employee_id": "ve-procurement-assistant",
+      "period": "daily",
+      "limit_cents": 2000,
+      "alert_threshold_pct": 75
+    },
+    {
+      "employee_id": "ve-budget-checker",
+      "period": "daily",
+      "limit_cents": 500,
+      "alert_threshold_pct": 90
+    }
+  ],
+  "policy_overlay": {
+    "vendor_email_requires_draft_preview": true,
+    "spend_request_above_cents_requires_dual_control": 50000,
+    "contract_documents_sensitivity_floor": "CONFIDENTIAL",
+    "all_financial_effects_require_ceremony": true,
+    "vendor_data_residency_check": true
+  }
+}

@@ -1,0 +1,121 @@
+{
+  "pack_id": "customer-ops-v1",
+  "label": "Revenue / Customer Operations",
+  "description": "Governs customer follow-ups, CRM task sync, account escalation drafts, and expansion opportunity routing.",
+  "version": 1,
+  "programs": [
+    {
+      "program_id": "prog-active-customers",
+      "label": "Active Customers",
+      "status": "active",
+      "signal_filters": [
+        { "class": "EMAIL", "person_role_class": "customer" },
+        { "class": "CHAT_MESSAGE", "channel_pattern": "#customer-*" },
+        { "class": "MEETING", "person_role_class": "customer" }
+      ]
+    },
+    {
+      "program_id": "prog-expansion-pipeline",
+      "label": "Expansion Pipeline",
+      "status": "active",
+      "signal_filters": [
+        { "class": "CRM_UPDATE", "topic_tags": ["expansion", "upsell", "renewal"] },
+        { "class": "EMAIL", "keywords": ["pricing", "upgrade", "enterprise", "expansion"] }
+      ]
+    },
+    {
+      "program_id": "prog-support-escalation",
+      "label": "Support Escalation",
+      "status": "active",
+      "signal_filters": [
+        { "class": "TICKET", "topic_tags": ["escalation", "critical", "P0", "P1"] },
+        { "class": "SYSTEM_ALERT", "topic_tags": ["customer-impact"] }
+      ]
+    }
+  ],
+  "employees": [
+    {
+      "employee_id": "ve-customer-success",
+      "display_name": "Customer Success Assistant",
+      "role": "customer-success",
+      "execution_mode": "SUPERVISED",
+      "tool_scope": {
+        "allowed_tools": [
+          "gmail.send", "gmail.read_thread", "gmail.list_threads", "gmail.draft_create",
+          "slack.send_message", "slack.read_channel",
+          "gcalendar.create_event", "gcalendar.read_availability"
+        ],
+        "max_risk_class": "R2",
+        "requires_approval_above": "R1"
+      },
+      "presence": [
+        { "channel_type": "email", "active": true },
+        { "channel_type": "slack", "active": true },
+        { "channel_type": "calendar", "active": true }
+      ]
+    },
+    {
+      "employee_id": "ve-crm-sync",
+      "display_name": "CRM Sync Agent",
+      "role": "crm-sync",
+      "execution_mode": "AUTONOMOUS",
+      "tool_scope": {
+        "allowed_tools": [
+          "linear.create_issue", "linear.update_issue", "linear.list_issues", "linear.add_comment"
+        ],
+        "max_risk_class": "R1"
+      },
+      "presence": [
+        { "channel_type": "linear", "active": true }
+      ]
+    }
+  ],
+  "capability_grants": [
+    {
+      "employee_id": "ve-customer-success",
+      "connector_id": "gmail-v1",
+      "tool_names": ["gmail.send", "gmail.read_thread", "gmail.list_threads", "gmail.draft_create"],
+      "max_daily_actions": 200,
+      "max_budget_cents": 400
+    },
+    {
+      "employee_id": "ve-customer-success",
+      "connector_id": "slack-v1",
+      "tool_names": ["slack.send_message", "slack.read_channel"],
+      "max_daily_actions": 100
+    },
+    {
+      "employee_id": "ve-customer-success",
+      "connector_id": "gcalendar-v1",
+      "tool_names": ["gcalendar.create_event", "gcalendar.read_availability"],
+      "max_daily_actions": 50
+    },
+    {
+      "employee_id": "ve-crm-sync",
+      "connector_id": "linear-v1",
+      "tool_names": ["linear.create_issue", "linear.update_issue", "linear.list_issues", "linear.add_comment"],
+      "max_daily_actions": 100,
+      "max_budget_cents": 200
+    }
+  ],
+  "budget_envelopes": [
+    {
+      "employee_id": "ve-customer-success",
+      "period": "daily",
+      "limit_cents": 4000,
+      "alert_threshold_pct": 80
+    },
+    {
+      "employee_id": "ve-crm-sync",
+      "period": "daily",
+      "limit_cents": 1000,
+      "alert_threshold_pct": 90
+    }
+  ],
+  "policy_overlay": {
+    "customer_email_requires_draft_preview": true,
+    "customer_data_sensitivity_floor": "CONFIDENTIAL",
+    "escalation_auto_route_to_manager": true,
+    "expansion_signals_require_program_tagging": true
+  }
+}

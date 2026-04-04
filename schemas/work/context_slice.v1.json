@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/work/context_slice.v1.json",
+  "title": "Context Slice",
+  "description": "Provenance context that generated an action proposal.",
+  "type": "object",
+  "required": ["slice_id", "signal_ids", "reasoning_hash"],
+  "properties": {
+    "slice_id": { "type": "string" },
+    "signal_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "reasoning_hash": { "type": "string" },
+    "program_id": { "type": "string" },
+    "person_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "model_run_id": { "type": "string" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "alternative_proposals": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

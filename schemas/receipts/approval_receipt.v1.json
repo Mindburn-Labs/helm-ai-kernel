@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/receipts/approval_receipt.v1.json",
+  "title": "Approval Receipt",
+  "description": "Receipt for a completed approval ceremony.",
+  "type": "object",
+  "required": ["receipt_hash", "ceremony_id", "request_id", "final_outcome", "approver_chain", "sealed_at"],
+  "properties": {
+    "receipt_hash": { "type": "string" },
+    "ceremony_id": { "type": "string" },
+    "request_id": { "type": "string" },
+    "final_outcome": {
+      "type": "string",
+      "enum": ["APPROVED", "DENIED", "TIMED_OUT"]
+    },
+    "approver_chain": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "sealed_at": { "type": "string", "format": "date-time" },
+    "proofgraph_node": { "type": "string" }
+  }
+}

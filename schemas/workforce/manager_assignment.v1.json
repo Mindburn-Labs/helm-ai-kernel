@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/workforce/manager_assignment.v1.json",
+  "title": "Manager Assignment",
+  "description": "Binds a virtual employee to a human or senior VE manager.",
+  "type": "object",
+  "required": ["assignment_id", "employee_id", "manager_identity", "created_at"],
+  "properties": {
+    "assignment_id": { "type": "string" },
+    "employee_id": { "type": "string" },
+    "manager_identity": { "type": "string" },
+    "scope": {
+      "type": "string",
+      "enum": ["all", "program", "connector"]
+    },
+    "scope_ref": { "type": "string" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

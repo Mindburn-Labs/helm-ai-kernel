@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/workforce/budget_envelope.v1.json",
+  "title": "Budget Envelope",
+  "description": "Spend budget allocated to a virtual employee.",
+  "type": "object",
+  "required": ["envelope_id", "employee_id", "period", "limit_cents", "created_at"],
+  "properties": {
+    "envelope_id": { "type": "string" },
+    "employee_id": { "type": "string" },
+    "period": {
+      "type": "string",
+      "enum": ["daily", "weekly", "monthly"]
+    },
+    "limit_cents": { "type": "integer", "minimum": 0 },
+    "spent_cents": { "type": "integer", "minimum": 0, "default": 0 },
+    "remaining_cents": { "type": "integer", "minimum": 0 },
+    "connector_breakdown": {
+      "type": "object",
+      "additionalProperties": { "type": "integer" }
+    },
+    "alert_threshold_pct": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "reset_at": { "type": "string", "format": "date-time" }
+  }
+}

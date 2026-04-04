@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	helmapi "github.com/Mindburn-Labs/helm-oss/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/artifacts"
 	helmauth "github.com/Mindburn-Labs/helm-oss/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
@@ -216,7 +217,11 @@ func runServer() {
 	}
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
-		Handler:           helmauth.CORSMiddleware(nil)(mux),
+		Handler: helmauth.SecurityHeaders(
+			helmauth.CORSMiddleware(nil)(
+				helmapi.NewGlobalRateLimiter(60, 120).WithTrustProxy(true).Middleware(mux),
+			),
+		),
 		ReadHeaderTimeout: 15 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

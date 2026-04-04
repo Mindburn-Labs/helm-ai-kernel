@@ -26,6 +26,27 @@ const (
 
 	// Resource effects
 	EffectTypeCloudComputeBudget = "CLOUD_COMPUTE_BUDGET" // Consume cloud compute resources against budget
+
+	// Business communication effects
+	EffectTypeSendEmail       = "SEND_EMAIL"        // Send email through governed connector
+	EffectTypeSendChatMessage = "SEND_CHAT_MESSAGE"  // Send chat message (Slack, Teams, etc.)
+	EffectTypeCreateCalEvent  = "CREATE_CAL_EVENT"   // Create calendar event
+
+	// Document/collaboration effects
+	EffectTypeUpdateDoc     = "UPDATE_DOC"      // Update document in connected store
+	EffectTypeCreateTask    = "CREATE_TASK"      // Create task/issue in project management
+	EffectTypeCommentTicket = "COMMENT_TICKET"   // Comment on ticket/issue
+
+	// HR/Recruiting effects
+	EffectTypeScreenCandidate = "SCREEN_CANDIDATE" // Screen recruiting candidate
+
+	// Financial effects
+	EffectTypeRequestPurchase = "REQUEST_PURCHASE" // Generate purchase/spend request
+	EffectTypeExecutePayment  = "EXECUTE_PAYMENT"  // Execute financial payment
+
+	// Integration effects
+	EffectTypeCallWebhook      = "CALL_WEBHOOK"       // Call external webhook
+	EffectTypeRunSandboxedCode = "RUN_SANDBOXED_CODE"  // Run code in governed sandbox
 )
 
 // DefaultEffectCatalog returns the canonical EffectTypeCatalog pre-populated
@@ -190,6 +211,100 @@ func DefaultEffectCatalog() *EffectTypeCatalog {
 				CompensationRequired: true,
 				ReceiptSchema:        "effects/threat/cloud_compute_budget.json",
 			},
+			// ── Business Effects ──────────────────────────────────────────
+			{
+				TypeID:               EffectTypeSendEmail,
+				Name:                 "Send Email",
+				Description:          "Sends an email through a governed connector. External-facing, compensatable via recall.",
+				Idempotency:          IdempotencyRef{Strategy: "content_hash", KeyComposition: []string{"to", "subject", "body_hash"}},
+				Classification:       Classification{Reversibility: "compensatable", BlastRadius: "dataset", Urgency: "time_sensitive"},
+				DefaultApprovalLevel: "single_human",
+				RequiresEvidence:     true,
+				ReceiptSchema:        "effects/send_email_effect.v1.json",
+			},
+			{
+				TypeID:         EffectTypeSendChatMessage,
+				Name:           "Send Chat Message",
+				Description:    "Sends a chat message (Slack, Teams, etc.). Reversible via deletion.",
+				Idempotency:    IdempotencyRef{Strategy: "content_hash", KeyComposition: []string{"channel_id", "body_hash"}},
+				Classification: Classification{Reversibility: "reversible", BlastRadius: "single_record", Urgency: "time_sensitive"},
+				ReceiptSchema:  "effects/send_chat_message_effect.v1.json",
+			},
+			{
+				TypeID:         EffectTypeCreateCalEvent,
+				Name:           "Create Calendar Event",
+				Description:    "Creates a calendar event. Reversible via cancellation.",
+				Idempotency:    IdempotencyRef{Strategy: "content_hash", KeyComposition: []string{"title", "start_time", "end_time"}},
+				Classification: Classification{Reversibility: "reversible", BlastRadius: "single_record", Urgency: "time_sensitive"},
+				ReceiptSchema:  "effects/create_calendar_event_effect.v1.json",
+			},
+			{
+				TypeID:         EffectTypeUpdateDoc,
+				Name:           "Update Document",
+				Description:    "Updates a document in a connected document store. Compensatable via version history.",
+				Idempotency:    IdempotencyRef{Strategy: "content_hash"},
+				Classification: Classification{Reversibility: "compensatable", BlastRadius: "single_record", Urgency: "time_sensitive"},
+			},
+			{
+				TypeID:         EffectTypeCreateTask,
+				Name:           "Create Task",
+				Description:    "Creates a task or issue in a project management tool. Reversible via deletion.",
+				Idempotency:    IdempotencyRef{Strategy: "content_hash"},
+				Classification: Classification{Reversibility: "reversible", BlastRadius: "single_record", Urgency: "time_sensitive"},
+			},
+			{
+				TypeID:         EffectTypeCommentTicket,
+				Name:           "Comment on Ticket",
+				Description:    "Adds a comment to a ticket or issue. May be customer-visible.",
+				Idempotency:    IdempotencyRef{Strategy: "content_hash"},
+				Classification: Classification{Reversibility: "reversible", BlastRadius: "single_record", Urgency: "time_sensitive"},
+			},
+			{
+				TypeID:               EffectTypeScreenCandidate,
+				Name:                 "Screen Candidate",
+				Description:          "Screens a recruiting candidate. External-facing HR action.",
+				Idempotency:          IdempotencyRef{Strategy: "content_hash", KeyComposition: []string{"candidate_id", "job_id", "screen_type"}},
+				Classification:       Classification{Reversibility: "compensatable", BlastRadius: "dataset", Urgency: "time_sensitive"},
+				DefaultApprovalLevel: "single_human",
+				RequiresEvidence:     true,
+				ReceiptSchema:        "effects/screen_candidate_effect.v1.json",
+			},
+			{
+				TypeID:               EffectTypeRequestPurchase,
+				Name:                 "Request Purchase",
+				Description:          "Generates a procurement purchase request. Financial effect requiring dual control.",
+				Idempotency:          IdempotencyRef{Strategy: "client_provided"},
+				Classification:       Classification{Reversibility: "compensatable", BlastRadius: "system_wide", Urgency: "time_sensitive"},
+				DefaultApprovalLevel: "dual_control",
+				RequiresEvidence:     true,
+				CompensationRequired: true,
+				ReceiptSchema:        "effects/request_purchase_effect.v1.json",
+			},
+			{
+				TypeID:               EffectTypeExecutePayment,
+				Name:                 "Execute Payment",
+				Description:          "Executes a financial payment. Irreversible. Requires dual control approval.",
+				Idempotency:          IdempotencyRef{Strategy: "client_provided"},
+				Classification:       Classification{Reversibility: "irreversible", BlastRadius: "system_wide", Urgency: "immediate"},
+				DefaultApprovalLevel: "dual_control",
+				RequiresEvidence:     true,
+			},
+			{
+				TypeID:               EffectTypeCallWebhook,
+				Name:                 "Call Webhook",
+				Description:          "Calls an external webhook endpoint. External-facing integration.",
+				Idempotency:          IdempotencyRef{Strategy: "content_hash"},
+				Classification:       Classification{Reversibility: "irreversible", BlastRadius: "dataset", Urgency: "time_sensitive"},
+				DefaultApprovalLevel: "single_human",
+				RequiresEvidence:     true,
+			},
+			{
+				TypeID:         EffectTypeRunSandboxedCode,
+				Name:           "Run Sandboxed Code",
+				Description:    "Executes code in a governed sandbox. Compensatable via sandbox reset.",
+				Idempotency:    IdempotencyRef{Strategy: "content_hash"},
+				Classification: Classification{Reversibility: "compensatable", BlastRadius: "single_record", Urgency: "time_sensitive"},
+			},
 		},
 	}
 }
@@ -214,6 +329,16 @@ func EffectRiskClass(effectTypeID string) string {
 		return "E2" // Medium Risk (budget-gated)
 	case EffectTypeAgentIdentityIsolation:
 		return "E1" // Low Risk (validation check)
+	// Business effects — R2 (external-facing communication)
+	case EffectTypeSendEmail, EffectTypeScreenCandidate, EffectTypeCallWebhook:
+		return "E2" // Medium Risk (external-facing)
+	// Business effects — R3 (financial / irreversible)
+	case EffectTypeExecutePayment, EffectTypeRequestPurchase:
+		return "E4" // Critical / Financial
+	// Business effects — R1 (internal / reversible)
+	case EffectTypeSendChatMessage, EffectTypeCreateCalEvent, EffectTypeUpdateDoc,
+		EffectTypeCreateTask, EffectTypeCommentTicket, EffectTypeRunSandboxedCode:
+		return "E1" // Low Risk / Reversible
 	default:
 		return "E3" // Fail-closed: unknown effect types default to high risk
 	}

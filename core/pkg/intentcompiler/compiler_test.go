@@ -123,7 +123,7 @@ func TestCompile_ProfileAssignment(t *testing.T) {
 }
 
 func TestCompile_ConstraintPropagation(t *testing.T) {
-	deadline := time.Date(2026, 4, 3, 0, 0, 0, 0, time.UTC)
+	deadline := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
 	c := intentcompiler.NewCompiler().WithClock(fixedClock)
 
 	result, err := c.Compile(&intentcompiler.CompileRequest{

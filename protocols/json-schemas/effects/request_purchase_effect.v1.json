@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/request_purchase_effect.v1.json",
+  "title": "Request Purchase Effect",
+  "description": "Generates a procurement purchase request. Financial effect requiring dual control.",
+  "type": "object",
+  "required": [
+    "effect_id",
+    "amount",
+    "currency"
+  ],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "const": "REQUEST_PURCHASE"
+    },
+    "amount": {
+      "type": "number"
+    },
+    "currency": {
+      "type": "string"
+    },
+    "vendor": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "x-helm": {
+    "category": "business",
+    "risk_class": "E4",
+    "approval_level": "dual_control",
+    "reversible": true
+  }
+}

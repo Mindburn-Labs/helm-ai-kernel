@@ -1,0 +1,19 @@
+name: channel-ceilings
+description: "Hard limits for channel operations"
+rules:
+  - id: max-messages-per-minute
+    effect: DENY
+    description: "Rate limit outbound messages"
+    condition: "rate > 60"
+  - id: max-attachment-size-mb
+    effect: DENY
+    description: "Block oversized attachments"
+    condition: "attachment_size_mb > 25"
+  - id: block-unknown-senders
+    effect: REQUIRE_APPROVAL
+    description: "Unknown sender trust requires approval"
+    condition: "sender_trust == 'unknown'"
+  - id: quarantine-suspicious
+    effect: DENY
+    description: "Auto-quarantine suspicious senders"
+    condition: "sender_trust == 'suspicious'"

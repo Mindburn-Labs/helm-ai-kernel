@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/update_doc_effect.v1.json",
+  "title": "Update Document Effect",
+  "description": "Updates a document in a connected document store. Compensatable via version history.",
+  "type": "object",
+  "required": [
+    "effect_id",
+    "document_id"
+  ],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "const": "UPDATE_DOC"
+    },
+    "document_id": {
+      "type": "string"
+    },
+    "content_hash": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "x-helm": {
+    "category": "business",
+    "risk_class": "E1",
+    "approval_level": "",
+    "reversible": true
+  }
+}

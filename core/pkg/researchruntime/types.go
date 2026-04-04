@@ -259,7 +259,7 @@ type TracePack struct {
 	Metadata   map[string]any             `json:"metadata,omitempty"`
 }
 
-type EvidencePack struct {
+type ResearchEvidencePack struct {
 	PackID           string         `json:"pack_id"`
 	MissionID        string         `json:"mission_id"`
 	TraceHash        string         `json:"trace_hash"`

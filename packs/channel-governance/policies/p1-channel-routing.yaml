@@ -1,0 +1,15 @@
+name: channel-routing
+description: "Routing and session management policies"
+rules:
+  - id: session-timeout-minutes
+    effect: AUDIT
+    description: "Log sessions exceeding timeout"
+    condition: "session_age_minutes > 30"
+  - id: require-thread-context
+    effect: REQUIRE_APPROVAL
+    description: "New threads from low-trust senders need approval"
+    condition: "sender_trust == 'known_low' && thread_id == ''"
+  - id: cross-channel-block
+    effect: DENY
+    description: "Prevent cross-channel session migration"
+    condition: "session_channel != envelope_channel"

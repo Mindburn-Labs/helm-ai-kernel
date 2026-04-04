@@ -36,7 +36,8 @@ type RuntimeConnector struct {
 
 // NewRuntimeConnector creates the Titan runtime connector.
 func NewRuntimeConnector(nc *nats.Conn, cfg Config) *RuntimeConnector {
-	gate := connector.NewZeroTrustGate(connector.TrustPolicy{
+	gate := connector.NewZeroTrustGate()
+	gate.SetPolicy(&connector.TrustPolicy{
 		ConnectorID:        RuntimeConnectorID,
 		TrustLevel:         connector.TrustLevelVerified,
 		MaxTTLSeconds:      30,
@@ -103,7 +104,8 @@ type BrainConnector struct {
 
 // NewBrainConnector creates the Titan brain connector.
 func NewBrainConnector(nc *nats.Conn, cfg Config) *BrainConnector {
-	gate := connector.NewZeroTrustGate(connector.TrustPolicy{
+	gate := connector.NewZeroTrustGate()
+	gate.SetPolicy(&connector.TrustPolicy{
 		ConnectorID:        BrainConnectorID,
 		TrustLevel:         connector.TrustLevelVerified,
 		MaxTTLSeconds:      10,
@@ -276,7 +278,7 @@ func (c *EvidenceConnector) AppendReceipt(receipt Receipt, nodeType proofgraph.N
 	if err != nil {
 		return err
 	}
-	_, err = c.graph.Append(nodeType, data)
+	_, err = c.graph.Append(nodeType, data, "titan-connector", 0)
 	return err
 }
 

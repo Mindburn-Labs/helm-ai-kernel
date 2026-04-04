@@ -26,7 +26,7 @@ type SealInput struct {
 // Seal creates an EvidencePack and PromotionReceipt from the mission's evidence.
 // Uses evidencepack.Builder for pack construction and
 // researchruntime.BuildPromotionReceipt for receipt hashing.
-func Seal(_ context.Context, input SealInput) (*researchruntime.EvidencePack, *researchruntime.PromotionReceipt, error) {
+func Seal(_ context.Context, input SealInput) (*researchruntime.ResearchEvidencePack, *researchruntime.PromotionReceipt, error) {
 	packID := uuid.NewString()
 
 	// Use evidencepack.Builder to construct the pack.
@@ -92,7 +92,7 @@ func Seal(_ context.Context, input SealInput) (*researchruntime.EvidencePack, *r
 	}
 
 	// Build EvidencePack domain object.
-	pack := &researchruntime.EvidencePack{
+	pack := &researchruntime.ResearchEvidencePack{
 		PackID:         manifest.PackID,
 		MissionID:      input.MissionID,
 		SourceManifest: input.Sources,

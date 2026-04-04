@@ -51,8 +51,8 @@ func TestRunRiskSummaryListJSON(t *testing.T) {
 	if !ok {
 		t.Fatalf("effect_types missing from list payload: %v", payload)
 	}
-	if len(effectTypes) != 10 {
-		t.Fatalf("effect_types length = %d, want 10", len(effectTypes))
+	if len(effectTypes) != 21 {
+		t.Fatalf("effect_types length = %d, want 21", len(effectTypes))
 	}
 }
 

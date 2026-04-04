@@ -6,8 +6,8 @@ import (
 
 func TestDefaultEffectCatalog_Count(t *testing.T) {
 	catalog := DefaultEffectCatalog()
-	if len(catalog.EffectTypes) != 10 {
-		t.Errorf("DefaultEffectCatalog: want 10 effect types, got %d", len(catalog.EffectTypes))
+	if len(catalog.EffectTypes) != 21 {
+		t.Errorf("DefaultEffectCatalog: want 21 effect types, got %d", len(catalog.EffectTypes))
 	}
 }
 

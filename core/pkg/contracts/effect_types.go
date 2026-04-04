@@ -244,6 +244,7 @@ func DefaultEffectCatalog() *EffectTypeCatalog {
 				Description:    "Updates a document in a connected document store. Compensatable via version history.",
 				Idempotency:    IdempotencyRef{Strategy: "content_hash"},
 				Classification: Classification{Reversibility: "compensatable", BlastRadius: "single_record", Urgency: "time_sensitive"},
+				ReceiptSchema:  "effects/update_doc_effect.v1.json",
 			},
 			{
 				TypeID:         EffectTypeCreateTask,
@@ -251,6 +252,7 @@ func DefaultEffectCatalog() *EffectTypeCatalog {
 				Description:    "Creates a task or issue in a project management tool. Reversible via deletion.",
 				Idempotency:    IdempotencyRef{Strategy: "content_hash"},
 				Classification: Classification{Reversibility: "reversible", BlastRadius: "single_record", Urgency: "time_sensitive"},
+				ReceiptSchema:  "effects/create_task_effect.v1.json",
 			},
 			{
 				TypeID:         EffectTypeCommentTicket,
@@ -258,6 +260,7 @@ func DefaultEffectCatalog() *EffectTypeCatalog {
 				Description:    "Adds a comment to a ticket or issue. May be customer-visible.",
 				Idempotency:    IdempotencyRef{Strategy: "content_hash"},
 				Classification: Classification{Reversibility: "reversible", BlastRadius: "single_record", Urgency: "time_sensitive"},
+				ReceiptSchema:  "effects/comment_ticket_effect.v1.json",
 			},
 			{
 				TypeID:               EffectTypeScreenCandidate,
@@ -288,6 +291,7 @@ func DefaultEffectCatalog() *EffectTypeCatalog {
 				Classification:       Classification{Reversibility: "irreversible", BlastRadius: "system_wide", Urgency: "immediate"},
 				DefaultApprovalLevel: "dual_control",
 				RequiresEvidence:     true,
+				ReceiptSchema:        "effects/execute_payment_effect.v1.json",
 			},
 			{
 				TypeID:               EffectTypeCallWebhook,
@@ -297,6 +301,7 @@ func DefaultEffectCatalog() *EffectTypeCatalog {
 				Classification:       Classification{Reversibility: "irreversible", BlastRadius: "dataset", Urgency: "time_sensitive"},
 				DefaultApprovalLevel: "single_human",
 				RequiresEvidence:     true,
+				ReceiptSchema:        "effects/call_webhook_effect.v1.json",
 			},
 			{
 				TypeID:         EffectTypeRunSandboxedCode,
@@ -304,6 +309,7 @@ func DefaultEffectCatalog() *EffectTypeCatalog {
 				Description:    "Executes code in a governed sandbox. Compensatable via sandbox reset.",
 				Idempotency:    IdempotencyRef{Strategy: "content_hash"},
 				Classification: Classification{Reversibility: "compensatable", BlastRadius: "single_record", Urgency: "time_sensitive"},
+				ReceiptSchema:  "effects/run_sandboxed_code_effect.v1.json",
 			},
 		},
 	}

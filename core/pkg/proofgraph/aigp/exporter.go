@@ -90,7 +90,7 @@ func (e *Exporter) ExportNode(node *proofgraph.Node) (*ProofCarryingDecision, er
 	pcd := &ProofCarryingDecision{
 		Version:   PCDVersion,
 		ID:        fmt.Sprintf("pcd:%s", node.NodeHash),
-		Timestamp: time.Unix(node.Timestamp, 0).UTC(),
+		Timestamp: time.UnixMilli(node.Timestamp).UTC(),
 		Action: GovernanceAction{
 			Type:      nodeTypeToAction(node.Kind),
 			Principal: node.Principal,

@@ -21,7 +21,7 @@ func TestAutonomyHandler_GetState_Empty(t *testing.T) {
 	handler := api.NewAutonomyHandler(provider)
 
 	mux := http.NewServeMux()
-	handler.Register(mux)
+	handler.Register(mux, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/autonomy/state", nil)
 	rec := httptest.NewRecorder()
@@ -69,7 +69,7 @@ func TestAutonomyHandler_GetState_WithBlockers(t *testing.T) {
 
 	handler := api.NewAutonomyHandler(provider)
 	mux := http.NewServeMux()
-	handler.Register(mux)
+	handler.Register(mux, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/autonomy/state", nil)
 	rec := httptest.NewRecorder()
@@ -95,7 +95,7 @@ func TestAutonomyHandler_MethodNotAllowed(t *testing.T) {
 	provider := api.NewInMemoryAutonomyProvider()
 	handler := api.NewAutonomyHandler(provider)
 	mux := http.NewServeMux()
-	handler.Register(mux)
+	handler.Register(mux, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/autonomy/state", nil)
 	rec := httptest.NewRecorder()
@@ -277,7 +277,7 @@ func TestControlEndpoint_PauseAndResume(t *testing.T) {
 	provider.SetPosture(contracts.PostureTransact) // enough for PAUSE/RUN
 	handler := api.NewAutonomyHandler(provider)
 	mux := http.NewServeMux()
-	handler.Register(mux)
+	handler.Register(mux, nil)
 
 	// Pause
 	body := `{"action":"PAUSE"}`
@@ -321,7 +321,7 @@ func TestControlEndpoint_FreezeRequiresSovereign(t *testing.T) {
 	provider.SetPosture(contracts.PostureObserve) // too low for FREEZE
 	handler := api.NewAutonomyHandler(provider)
 	mux := http.NewServeMux()
-	handler.Register(mux)
+	handler.Register(mux, nil)
 
 	body := `{"action":"FREEZE"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/autonomy/control", bytes.NewBufferString(body))
@@ -347,7 +347,7 @@ func TestControlEndpoint_InvalidAction(t *testing.T) {
 	provider := api.NewInMemoryAutonomyProvider()
 	handler := api.NewAutonomyHandler(provider)
 	mux := http.NewServeMux()
-	handler.Register(mux)
+	handler.Register(mux, nil)
 
 	body := `{"action":"EXPLODE"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/autonomy/control", bytes.NewBufferString(body))
@@ -363,7 +363,7 @@ func TestControlEndpoint_MethodNotAllowed(t *testing.T) {
 	provider := api.NewInMemoryAutonomyProvider()
 	handler := api.NewAutonomyHandler(provider)
 	mux := http.NewServeMux()
-	handler.Register(mux)
+	handler.Register(mux, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/autonomy/control", nil)
 	rec := httptest.NewRecorder()

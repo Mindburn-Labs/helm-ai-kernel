@@ -1,0 +1,44 @@
+{
+  "name": "@mindburn/helm-haystack",
+  "version": "0.3.0",
+  "description": "HELM governance adapter for Haystack Node.js client — pipeline call governor",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "test": "vitest",
+    "lint": "biome lint ."
+  },
+  "dependencies": {
+    "@mindburn/helm": "^0.3.0"
+  },
+  "peerDependencies": {},
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.1",
+    "typescript": "^5.4.0",
+    "vitest": "^4.0.18"
+  },
+  "overrides": {
+    "rollup": "^4.59.0"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mindburn-Labs/helm-oss",
+    "directory": "sdk/ts/haystack"
+  },
+  "keywords": [
+    "helm",
+    "haystack",
+    "deepset",
+    "pipeline",
+    "governance",
+    "ai-safety",
+    "function-calling"
+  ]
+}

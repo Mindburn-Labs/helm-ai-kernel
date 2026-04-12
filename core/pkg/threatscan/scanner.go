@@ -60,6 +60,15 @@ func New(opts ...Option) *Scanner {
 	s.rules = append(s.rules, credentialExposureRules()...)
 	s.rules = append(s.rules, softwarePublishRules()...)
 	s.rules = append(s.rules, suspiciousFetchRules()...)
+
+	// Phase G: expanded detection vectors for prompt defense hardening
+	s.rules = append(s.rules, socialEngineeringRules()...)
+	s.rules = append(s.rules, encodingEvasionRules()...)
+	s.rules = append(s.rules, privilegeEscalationRules()...)
+	s.rules = append(s.rules, dataExfiltrationRules()...)
+	s.rules = append(s.rules, modelManipulationRules()...)
+	s.rules = append(s.rules, contextAbuseRules()...)
+	s.rules = append(s.rules, indirectInjectionRules()...)
 	return s
 }
 

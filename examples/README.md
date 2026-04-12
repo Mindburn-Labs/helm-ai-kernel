@@ -35,6 +35,13 @@ This directory contains runnable integration examples for SDK, agent frameworks,
 | [`python_openai_baseurl`](python_openai_baseurl/) | Python | OpenAI SDK with HELM proxy |
 | [`ts_openai_baseurl`](ts_openai_baseurl/) | TypeScript | TypeScript fetch with HELM proxy |
 
+## Streaming Governance (SSE)
+
+| Example | Language | Description |
+|---------|----------|-------------|
+| [`streaming_python`](streaming_python/) | Python | SSE streaming with per-request governance |
+| [`streaming_ts`](streaming_ts/) | TypeScript | SSE streaming with per-request governance |
+
 ## Verification
 
 | Example | Description |

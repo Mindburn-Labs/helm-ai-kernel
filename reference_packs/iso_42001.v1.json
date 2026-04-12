@@ -1,0 +1,81 @@
+{
+  "pack_id": "iso-42001-v1",
+  "label": "ISO 42001 AI Management System",
+  "description": "Governs agent operations under an AI Management System (AIMS) aligned with ISO/IEC 42001:2023. Enforces responsible AI governance, risk management, performance monitoring, and continuous improvement.",
+  "version": 1,
+  "compliance_framework": "ISO_42001",
+  "programs": [
+    {
+      "program_id": "prog-leadership",
+      "label": "Leadership & Planning (Clause 5-6)",
+      "status": "active",
+      "controls": [
+        { "control_id": "5.1", "description": "Top management demonstrates leadership and commitment to AIMS", "enforcement": "MANDATORY" },
+        { "control_id": "6.1", "description": "Actions to address risks and opportunities", "enforcement": "MANDATORY" },
+        { "control_id": "6.2", "description": "AI objectives and planning to achieve them", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "audit", "condition": "true", "reason": "ISO 42001 6.1: all AI operations must be traceable for risk assessment" }
+      ]
+    },
+    {
+      "program_id": "prog-operational-control",
+      "label": "Operational Planning & Control (Clause 8)",
+      "status": "active",
+      "controls": [
+        { "control_id": "8.1", "description": "Operational planning and control", "enforcement": "MANDATORY" },
+        { "control_id": "8.2", "description": "AI risk assessment", "enforcement": "MANDATORY" },
+        { "control_id": "8.3", "description": "AI risk treatment", "enforcement": "MANDATORY" },
+        { "control_id": "8.4", "description": "AI system lifecycle processes", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "require_approval", "condition": "risk_level >= HIGH", "reason": "ISO 42001 8.2: high-risk AI actions require explicit risk treatment" },
+        { "action": "deny", "condition": "aibom_missing == true", "reason": "ISO 42001 8.4: AI system lifecycle requires documentation" }
+      ]
+    },
+    {
+      "program_id": "prog-performance-evaluation",
+      "label": "Performance Evaluation (Clause 9)",
+      "status": "active",
+      "controls": [
+        { "control_id": "9.1", "description": "Monitoring, measurement, analysis and evaluation", "enforcement": "MANDATORY" },
+        { "control_id": "9.2", "description": "Internal audit", "enforcement": "MANDATORY" },
+        { "control_id": "9.3", "description": "Management review", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "audit", "condition": "true", "reason": "ISO 42001 9.1: continuous monitoring of AI system performance" }
+      ]
+    },
+    {
+      "program_id": "prog-improvement",
+      "label": "Improvement (Clause 10)",
+      "status": "active",
+      "controls": [
+        { "control_id": "10.1", "description": "Nonconformity and corrective action", "enforcement": "MANDATORY" },
+        { "control_id": "10.2", "description": "Continual improvement", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "escalate", "condition": "compliance_score < 80", "reason": "ISO 42001 10.1: nonconformity detected, corrective action required" }
+      ]
+    }
+  ],
+  "annex_b_controls": [
+    "B.2 Policies for AI", "B.3 Internal organization",
+    "B.4 Resources for AI systems", "B.5 Assessing impacts",
+    "B.6 AI system lifecycle", "B.7 Data for AI systems",
+    "B.8 Information for interested parties", "B.9 Use of AI systems",
+    "B.10 Third-party relationships"
+  ],
+  "budget_constraints": {
+    "daily_limit_cents": 200000,
+    "risk_score_cap": 500
+  },
+  "evidence_requirements": {
+    "receipt_signing": "MANDATORY",
+    "proofgraph_enabled": true,
+    "evidence_pack_retention_days": 1825,
+    "audit_chain_verification": true,
+    "aibom_required": true,
+    "management_review_interval_days": 90
+  }
+}

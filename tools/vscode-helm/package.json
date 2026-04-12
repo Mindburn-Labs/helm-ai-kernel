@@ -1,0 +1,139 @@
+{
+  "name": "helm-governance",
+  "displayName": "HELM Governance",
+  "description": "HELM AI Execution Firewall — Policy editing, ProofGraph visualization, receipt inspection, and compliance scoring for governed AI agents.",
+  "version": "0.3.0",
+  "publisher": "mindburn-labs",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "helm",
+    "ai",
+    "governance",
+    "firewall",
+    "compliance",
+    "proofgraph",
+    "cel",
+    "policy"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mindburn-Labs/helm-oss"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:cel",
+    "onLanguage:yaml",
+    "workspaceContains:**/helm.yaml",
+    "onCommand:helm.verifyReceipt",
+    "onCommand:helm.complianceScore",
+    "onCommand:helm.proofgraphVisualize"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "cel",
+        "aliases": ["CEL", "Common Expression Language"],
+        "extensions": [".cel"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "cel",
+        "scopeName": "source.cel",
+        "path": "./syntaxes/cel.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "helm.verifyReceipt",
+        "title": "HELM: Verify Receipt",
+        "category": "HELM"
+      },
+      {
+        "command": "helm.complianceScore",
+        "title": "HELM: Show Compliance Score",
+        "category": "HELM"
+      },
+      {
+        "command": "helm.proofgraphVisualize",
+        "title": "HELM: Visualize ProofGraph",
+        "category": "HELM"
+      },
+      {
+        "command": "helm.evaluatePolicy",
+        "title": "HELM: Evaluate Policy",
+        "category": "HELM"
+      },
+      {
+        "command": "helm.inspectDecision",
+        "title": "HELM: Inspect Decision Record",
+        "category": "HELM"
+      }
+    ],
+    "views": {
+      "helm-explorer": [
+        {
+          "id": "helm.complianceView",
+          "name": "Compliance Scores"
+        },
+        {
+          "id": "helm.receiptsView",
+          "name": "Recent Receipts"
+        },
+        {
+          "id": "helm.agentsView",
+          "name": "Governed Agents"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "helm-explorer",
+          "title": "HELM Governance",
+          "icon": "media/helm-icon.svg"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "HELM Governance",
+      "properties": {
+        "helm.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:8080",
+          "description": "HELM server URL"
+        },
+        "helm.autoVerify": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically verify receipts on save"
+        },
+        "helm.complianceFrameworks": {
+          "type": "array",
+          "default": ["eu_ai_act", "hipaa", "sox", "gdpr"],
+          "description": "Compliance frameworks to track"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}

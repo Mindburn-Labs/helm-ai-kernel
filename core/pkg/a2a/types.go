@@ -44,6 +44,18 @@ const (
 	FeatureProofGraphSync    Feature = "PROOFGRAPH_SYNC"
 	FeatureEvidenceExport    Feature = "EVIDENCE_EXPORT"
 	FeaturePolicyNegotiation Feature = "POLICY_NEGOTIATION"
+	// FeatureAgentPayments indicates AP2 (Agent Payments Protocol) support.
+	// See Sprint 3.5 for full AP2 implementation.
+	FeatureAgentPayments Feature = "AGENT_PAYMENTS"
+
+	// FeatureIATPAuth indicates IATP challenge-response mutual authentication.
+	FeatureIATPAuth Feature = "IATP_AUTH"
+
+	// FeaturePeerVouching indicates peer vouching with joint liability support.
+	FeaturePeerVouching Feature = "PEER_VOUCHING"
+
+	// FeatureTrustPropagation indicates transitive trust score propagation.
+	FeatureTrustPropagation Feature = "TRUST_PROPAGATION"
 )
 
 // DenyReason is a deterministic reason code for negotiation failure.
@@ -55,6 +67,8 @@ const (
 	DenyPolicyViolation     DenyReason = "POLICY_VIOLATION"
 	DenySignatureInvalid    DenyReason = "SIGNATURE_INVALID"
 	DenyAgentNotTrusted     DenyReason = "AGENT_NOT_TRUSTED"
+	DenyChallengeFailure    DenyReason = "CHALLENGE_FAILURE"
+	DenyVouchRevoked        DenyReason = "VOUCH_REVOKED"
 )
 
 // Envelope wraps an agent-to-agent interaction with negotiation metadata.

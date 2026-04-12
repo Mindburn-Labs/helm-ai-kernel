@@ -39,6 +39,9 @@ func NewEd25519Signer(keyID string) (*Ed25519Signer, error) {
 	}, nil
 }
 
+// GetKeyID returns the key identifier.
+func (s *Ed25519Signer) GetKeyID() string { return s.KeyID }
+
 func NewEd25519SignerFromKey(priv ed25519.PrivateKey, keyID string) *Ed25519Signer {
 	return &Ed25519Signer{
 		privKey: priv,

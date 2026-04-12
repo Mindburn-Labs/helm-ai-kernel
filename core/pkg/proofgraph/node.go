@@ -23,6 +23,17 @@ const (
 	NodeTypeTrustEvent    NodeType = "TRUST_EVENT"
 	NodeTypeCheckpoint    NodeType = "CHECKPOINT"
 	NodeTypeMergeDecision NodeType = "MERGE_DECISION"
+	NodeTypeTrustScore    NodeType = "TRUST_SCORE"
+	NodeTypeAgentKill      NodeType = "AGENT_KILL"
+	NodeTypeAgentRevive    NodeType = "AGENT_REVIVE"
+	NodeTypeSagaStart      NodeType = "SAGA_START"
+	NodeTypeSagaCompensate NodeType = "SAGA_COMPENSATE"
+	NodeTypeVouch          NodeType = "VOUCH"
+	NodeTypeSlash          NodeType = "SLASH"
+	NodeTypeFederation     NodeType = "FEDERATION"
+	NodeTypeHWAttestation      NodeType = "HW_ATTESTATION"
+	NodeTypeZKProof            NodeType = "ZK_PROOF"
+	NodeTypeDecentralizedProof NodeType = "DECENTRALIZED_PROOF"
 )
 
 // Node is a single vertex in the ProofGraph DAG.

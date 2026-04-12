@@ -27,6 +27,13 @@ const (
 	ThreatClassSuspiciousFetch    ThreatClass = "SUSPICIOUS_EXTERNAL_FETCH_PATTERN"
 	ThreatClassCredentialExposure ThreatClass = "CREDENTIAL_EXPOSURE_PATTERN"
 	ThreatClassSoftwarePublish    ThreatClass = "SOFTWARE_PUBLISH_PATTERN"
+
+	// Phase G: expanded detection vectors for prompt defense hardening
+	ThreatClassPrivilegeEscalation ThreatClass = "PRIVILEGE_ESCALATION_PATTERN"
+	ThreatClassDataExfiltration    ThreatClass = "DATA_EXFILTRATION_PATTERN"
+	ThreatClassModelManipulation   ThreatClass = "MODEL_MANIPULATION_PATTERN"
+	ThreatClassContextAbuse        ThreatClass = "CONTEXT_ABUSE_PATTERN"
+	ThreatClassIndirectInjection   ThreatClass = "INDIRECT_INJECTION_PATTERN"
 )
 
 // ThreatSeverity grades the confidence/impact of a finding.

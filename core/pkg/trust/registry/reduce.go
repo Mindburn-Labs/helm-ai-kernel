@@ -44,6 +44,8 @@ func (s *TrustState) Apply(event *TrustEvent) error {
 		return s.applyTenantRegister(event)
 	case EventTenantSuspend:
 		return s.applyTenantSuspend(event)
+	case EventTrustScoreUpdate:
+		return s.applyTrustScoreUpdate(event)
 	default:
 		if s.StrictMode {
 			return fmt.Errorf("strict mode: unknown trust event type %q (event %s)", event.EventType, event.ID)
@@ -282,5 +284,34 @@ func (s *TrustState) applyTenantSuspend(event *TrustEvent) error {
 	lamport := event.Lamport
 	entry.SuspendedAtLamport = &lamport
 	s.Tenants[p.TenantID] = entry
+	return nil
+}
+
+// ── Behavioral Trust Score Handler ──────────────────────────
+
+type trustScoreUpdatePayload struct {
+	AgentID   string `json:"agent_id"`
+	Score     int    `json:"score"`
+	Tier      string `json:"tier"`
+	EventType string `json:"score_event_type"`
+	Delta     int    `json:"delta"`
+}
+
+func (s *TrustState) applyTrustScoreUpdate(event *TrustEvent) error {
+	var p trustScoreUpdatePayload
+	if err := json.Unmarshal(event.Payload, &p); err != nil {
+		return fmt.Errorf("invalid TRUST_SCORE_UPDATE payload: %w", err)
+	}
+	if p.AgentID == "" {
+		return fmt.Errorf("TRUST_SCORE_UPDATE requires agent_id")
+	}
+	s.BehavioralScores[p.AgentID] = BehavioralScoreEntry{
+		AgentID:        p.AgentID,
+		Score:          p.Score,
+		Tier:           p.Tier,
+		EventType:      p.EventType,
+		Delta:          p.Delta,
+		UpdatedLamport: event.Lamport,
+	}
 	return nil
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/pdp"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/threatscan"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/trust"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -85,6 +86,11 @@ func WithFreezeController(fc *kernel.FreezeController) GuardianOption {
 	return func(g *Guardian) { g.freezeCtrl = fc }
 }
 
+// WithAgentKillSwitch injects the per-agent kill switch.
+func WithAgentKillSwitch(ks *kernel.AgentKillSwitch) GuardianOption {
+	return func(g *Guardian) { g.agentKillSwitch = ks }
+}
+
 // WithContextGuard injects the environment mismatch detector.
 func WithContextGuard(cg *kernel.ContextGuard) GuardianOption {
 	return func(g *Guardian) { g.contextGuard = cg }
@@ -110,6 +116,19 @@ func WithDelegationStore(ds identity.DelegationStore) GuardianOption {
 	return func(g *Guardian) { g.delegationStore = ds }
 }
 
+// WithBehavioralTrustScorer injects the dynamic behavioral trust scorer.
+// When configured, the agent's trust score and tier are injected into
+// the decision context as "trust_score" (float64 0.0-1.0) and "trust_tier"
+// (string), allowing CEL policies to reference them.
+func WithBehavioralTrustScorer(s *trust.BehavioralTrustScorer) GuardianOption {
+	return func(g *Guardian) { g.behavioralScorer = s }
+}
+
+// WithPrivilegeResolver injects the privilege tier resolver.
+func WithPrivilegeResolver(r PrivilegeResolver) GuardianOption {
+	return func(g *Guardian) { g.privilegeResolver = r }
+}
+
 // WithClock injects a deterministic or authority clock.
 func WithClock(c Clock) GuardianOption { return func(g *Guardian) { g.clock = c } }
 
@@ -127,11 +146,14 @@ type Guardian struct {
 	pdp               pdp.PolicyDecisionPoint    // Optional pluggable policy backend
 	complianceChecker ComplianceChecker          // Optional compliance pre-check
 	freezeCtrl        *kernel.FreezeController   // Global kill-switch (§Phase 2)
+	agentKillSwitch   *kernel.AgentKillSwitch   // Per-agent kill switch (§Phase E)
 	contextGuard      *kernel.ContextGuard       // Environment mismatch detection (§Phase 3)
 	isolationChecker  *identity.IsolationChecker // Agent credential reuse detection (§Phase 4)
 	egressChecker     *firewall.EgressChecker    // Network egress enforcement (§Phase 5)
 	threatScanner     *threatscan.Scanner        // Canonical threat signal scanner (§Phase 6)
 	delegationStore   identity.DelegationStore   // Delegation session store (§Gate 5)
+	behavioralScorer  *trust.BehavioralTrustScorer // Dynamic behavioral trust scorer (MIN-82)
+	privilegeResolver PrivilegeResolver            // Privilege tier resolver (MIN-82 Phase 3)
 }
 
 // NewGuardian creates a new Guardian instance. Optional dependencies can be injected
@@ -357,6 +379,7 @@ func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.Decisio
 		decision.Verdict = string(contracts.VerdictDeny)
 		decision.ReasonCode = string(contracts.ReasonMissingRequirement)
 		decision.Reason = string(contracts.ReasonMissingRequirement)
+		g.recordBehavioralEvent(decision.SubjectID, trust.EventPolicyViolate, "PRG requirement not met")
 		return g.signer.SignDecision(decision)
 	}
 
@@ -366,6 +389,7 @@ func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.Decisio
 	decision.RequirementSetHash = rule.Hash()
 	decision.Timestamp = g.clock.Now() // Authority time (KERNEL_TCB §3)
 	// Optionally link evidence hashes in the decision record (needs schema update)
+	g.recordBehavioralEvent(decision.SubjectID, trust.EventPolicyComply, "PRG evaluation passed")
 
 	return g.signer.SignDecision(decision)
 }
@@ -418,6 +442,18 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 	}
 
 	return intent, nil
+}
+
+// recordBehavioralEvent records a trust score event if the behavioral scorer is configured.
+// This is a fire-and-forget operation that does not affect the decision outcome.
+func (g *Guardian) recordBehavioralEvent(principal string, eventType trust.ScoreEventType, reason string) {
+	if g.behavioralScorer == nil || principal == "" {
+		return
+	}
+	g.behavioralScorer.RecordEvent(principal, trust.ScoreEvent{
+		EventType: eventType,
+		Reason:    reason,
+	})
 }
 
 // checkEnvelope validates the structural integrity of the Effect envelope.
@@ -482,6 +518,22 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		}
 		if signErr := g.signer.SignDecision(decision); signErr != nil {
 			return nil, fmt.Errorf("failed to sign freeze-deny decision: %w", signErr)
+		}
+		return decision, nil
+	}
+
+	// Gate 0.5: Per-agent kill switch — if agent is killed, deny immediately
+	if g.agentKillSwitch != nil && g.agentKillSwitch.IsKilled(req.Principal) {
+		now := g.clock.Now()
+		decision := &contracts.DecisionRecord{
+			ID:         newDecisionID(),
+			Timestamp:  now,
+			Verdict:    string(contracts.VerdictDeny),
+			Reason:     string(contracts.ReasonAgentKilled),
+			ReasonCode: string(contracts.ReasonAgentKilled),
+		}
+		if signErr := g.signer.SignDecision(decision); signErr != nil {
+			return nil, fmt.Errorf("failed to sign agent-killed decision: %w", signErr)
 		}
 		return decision, nil
 	}
@@ -552,6 +604,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				if signErr := g.signer.SignDecision(decision); signErr != nil {
 					return nil, fmt.Errorf("failed to sign egress-blocked decision: %w", signErr)
 				}
+				g.recordBehavioralEvent(req.Principal, trust.EventEgressBlocked, fmt.Sprintf("egress blocked: %s", result.ReasonCode))
 				return decision, nil
 			}
 		}
@@ -623,6 +676,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					decisionBytes, _ := canonicalize.JCS(decision)
 					_, _ = g.auditLog.Append("guardian", "THREAT_DENY", decision.ID, string(decisionBytes))
 				}
+				g.recordBehavioralEvent(req.Principal, trust.EventThreatDetected, fmt.Sprintf("threat scan: %d findings", scanResult.FindingCount))
 				return decision, nil
 			}
 		}
@@ -742,6 +796,73 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 	}
 
 	// ── End pre-PDP gates ──
+
+	// ── Behavioral trust score enrichment ──
+	// Inject trust_score (float64) and trust_tier (string) into context
+	// so CEL policies can reference them (e.g., input["trust_score"] > 0.6).
+	if g.behavioralScorer != nil {
+		trustScore := g.behavioralScorer.GetScore(req.Principal)
+		if req.Context == nil {
+			req.Context = make(map[string]interface{})
+		}
+		req.Context["trust_score"] = trustScore.Normalized()
+		req.Context["trust_tier"] = string(trustScore.Tier)
+
+		span.SetAttributes(
+			attribute.Float64("behavioral_trust.score", trustScore.Normalized()),
+			attribute.String("behavioral_trust.tier", string(trustScore.Tier)),
+		)
+	}
+
+	// ── Privilege tier enforcement ──
+	// Check that the agent's assigned (or effective) privilege tier
+	// permits the requested effect type.
+	if g.privilegeResolver != nil {
+		assignedTier, tierErr := g.privilegeResolver.ResolveTier(ctx, req.Principal)
+		if tierErr != nil {
+			slog.Warn("[guardian] privilege tier resolution failed", "principal", req.Principal, "error", tierErr)
+			// Fail-closed: treat as restricted on resolver error
+			assignedTier = TierRestricted
+		}
+
+		// Apply trust-based downgrade if behavioral scorer is available
+		effectiveTier := assignedTier
+		if g.behavioralScorer != nil {
+			trustScore := g.behavioralScorer.GetScore(req.Principal)
+			effectiveTier = EffectiveTier(assignedTier, trustScore.Tier)
+		}
+
+		requiredTier := RequiredTierForEffect(req.Action)
+		if effectiveTier < requiredTier {
+			now := g.clock.Now()
+			decision := &contracts.DecisionRecord{
+				ID:         newDecisionID(),
+				Timestamp:  now,
+				Verdict:    string(contracts.VerdictDeny),
+				ReasonCode: string(contracts.ReasonInsufficientPrivilege),
+				Reason:     fmt.Sprintf("INSUFFICIENT_PRIVILEGE: agent tier %s < required %s for %s", effectiveTier, requiredTier, req.Action),
+			}
+			if signErr := g.signer.SignDecision(decision); signErr != nil {
+				return nil, fmt.Errorf("failed to sign privilege-deny decision: %w", signErr)
+			}
+			span.SetAttributes(
+				attribute.String("privilege.assigned", assignedTier.String()),
+				attribute.String("privilege.effective", effectiveTier.String()),
+				attribute.String("privilege.required", requiredTier.String()),
+			)
+			return decision, nil
+		}
+
+		// Inject privilege context for CEL policies
+		if req.Context == nil {
+			req.Context = make(map[string]interface{})
+		}
+		req.Context["privilege_tier"] = effectiveTier.String()
+
+		span.SetAttributes(
+			attribute.String("privilege.effective", effectiveTier.String()),
+		)
+	}
 
 	// 1. Construct Effect from Request
 	effect := &contracts.Effect{
@@ -863,9 +984,41 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		}
 	}
 
+	// 3.5: Compliance check — evaluate against active obligations
+	if g.complianceChecker != nil {
+		compResult, compErr := g.complianceChecker.CheckCompliance(ctx, req.Principal, req.Action, req.Context)
+		if compErr != nil {
+			// Fail-closed: compliance check error → DENY
+			decision.Verdict = string(contracts.VerdictDeny)
+			decision.ReasonCode = "COMPLIANCE_ERROR"
+			decision.Reason = fmt.Sprintf("compliance check error: %v", compErr)
+			if signErr := g.signer.SignDecision(decision); signErr != nil {
+				return nil, fmt.Errorf("failed to sign compliance-error decision: %w", signErr)
+			}
+			return decision, nil
+		}
+		if !compResult.Compliant {
+			decision.Verdict = string(contracts.VerdictDeny)
+			decision.ReasonCode = "COMPLIANCE_VIOLATION"
+			decision.Reason = fmt.Sprintf("compliance violation: %s (obligations: %v)", compResult.Reason, compResult.ViolatedObligations)
+			if signErr := g.signer.SignDecision(decision); signErr != nil {
+				return nil, fmt.Errorf("failed to sign compliance-deny decision: %w", signErr)
+			}
+			g.recordBehavioralEvent(req.Principal, trust.EventPolicyViolate, "compliance violation")
+			return decision, nil
+		}
+	}
+
 	err := g.SignDecision(ctx, decision, effect, []string{}, intervention)
 	if err != nil {
 		return nil, err
+	}
+
+	// 3.7: Record behavioral event based on final verdict
+	if decision.Verdict == string(contracts.VerdictAllow) {
+		g.recordBehavioralEvent(req.Principal, trust.EventPolicyComply, "decision allowed")
+	} else if decision.Verdict == string(contracts.VerdictDeny) {
+		g.recordBehavioralEvent(req.Principal, trust.EventPolicyViolate, "decision denied: "+decision.ReasonCode)
 	}
 
 	// 4. F2: Persistence — audit failure is a hard error
@@ -903,4 +1056,62 @@ func toMap(v any) (map[string]interface{}, error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+// OutputScanResult describes the outcome of post-execution output scanning.
+type OutputScanResult struct {
+	// Clean is true if the output passed scanning without high-risk findings.
+	Clean bool `json:"clean"`
+	// Quarantined is true if the output was quarantined (high-risk findings detected).
+	Quarantined bool `json:"quarantined"`
+	// ScanResult is the underlying threat scan result.
+	ScanResult *contracts.ThreatScanResult `json:"scan_result,omitempty"`
+	// DecisionID links this scan to the governing decision.
+	DecisionID string `json:"decision_id"`
+}
+
+// EvaluateOutput scans tool execution output for threats (OWASP Agentic #6: Output Validation).
+// This complements EvaluateDecision (input validation) with post-execution output scanning.
+// If high-risk findings are detected, the output is quarantined — callers MUST NOT forward
+// quarantined output to end users or downstream agents without sanitization.
+func (g *Guardian) EvaluateOutput(ctx context.Context, decisionID string, output string, trustLevel contracts.InputTrustLevel) (*OutputScanResult, error) {
+	_, span := otel.Tracer("helm.kernel").Start(ctx, "Guardian.EvaluateOutput")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("decision_id", decisionID),
+		attribute.Int("output_length", len(output)),
+	)
+
+	result := &OutputScanResult{
+		DecisionID: decisionID,
+		Clean:      true,
+	}
+
+	if g.threatScanner == nil || output == "" {
+		return result, nil
+	}
+
+	// Scan output with tool-output channel designation
+	scanResult := g.threatScanner.ScanInput(output, contracts.SourceChannelToolOutput, trustLevel)
+	result.ScanResult = scanResult
+
+	// Quarantine if high-risk findings detected
+	if scanResult.FindingCount > 0 && threatscan.ContainsHighRiskFindings(scanResult) {
+		result.Clean = false
+		result.Quarantined = true
+
+		span.SetAttributes(
+			attribute.Bool("quarantined", true),
+			attribute.Int("finding_count", scanResult.FindingCount),
+			attribute.String("max_severity", string(scanResult.MaxSeverity)),
+		)
+
+		if g.auditLog != nil {
+			auditData, _ := canonicalize.JCS(result)
+			_, _ = g.auditLog.Append("guardian", "OUTPUT_QUARANTINE", decisionID, string(auditData))
+		}
+	}
+
+	return result, nil
 }

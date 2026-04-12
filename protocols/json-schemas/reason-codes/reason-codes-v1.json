@@ -149,6 +149,13 @@
       "since": "1.1.0"
     },
     {
+      "code": "INSUFFICIENT_PRIVILEGE",
+      "applies_to": ["DENY"],
+      "domain": "privilege",
+      "description": "Agent privilege tier insufficient for requested effect type",
+      "since": "1.2.0"
+    },
+    {
       "code": "APPROVAL_REQUIRED",
       "applies_to": ["ESCALATE"],
       "domain": "approval",
@@ -174,6 +181,13 @@
       "applies_to": ["DENY"],
       "domain": "delegation",
       "description": "Delegate attempted an action outside the session's granted capabilities",
+      "since": "1.3.0"
+    },
+    {
+      "code": "AGENT_KILLED",
+      "applies_to": ["DENY"],
+      "domain": "agent_lifecycle",
+      "description": "Agent has been terminated via per-agent kill switch",
       "since": "1.3.0"
     },
     {

@@ -34,8 +34,9 @@ func CanonicalMarshal(v interface{}) ([]byte, error) {
 
 // Signature components separators and prefixes
 const (
-	SigSeparator     = ":"
-	SigPrefixEd25519 = "ed25519"
+	SigSeparator       = ":"
+	SigPrefixEd25519   = "ed25519"
+	SigPrefixMLDSA65   = "ml-dsa-65"
 )
 
 // CanonicalizeDecision creates a canonical string representation of a decision record for signing.

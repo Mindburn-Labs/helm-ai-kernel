@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -233,6 +234,110 @@ func BenchmarkGuardian_EvalOnly(b *testing.B) {
 	}
 }
 
+// ── Scenario 5: Isolated CEL policy evaluation ──
+
+// BenchmarkPolicyEval_CEL_Only measures pure CEL expression evaluation
+// with a pre-compiled, cached program. This is the direct apples-to-apples
+// comparison to Microsoft Agent Governance Toolkit's claimed 12µs/rule.
+func BenchmarkPolicyEval_CEL_Only(b *testing.B) {
+	engine, err := prg.NewPolicyEngine()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	expression := `input["action"] == "EXECUTE_TOOL" && input["risk_level"] < 3`
+	// PolicyEngine.Evaluate passes its argument directly as the CEL activation,
+	// so we must wrap the data in an "input" key matching the CEL variable name.
+	activation := map[string]interface{}{
+		"input": map[string]interface{}{
+			"action":     "EXECUTE_TOOL",
+			"risk_level": int64(2),
+			"principal":  "bench-agent",
+			"resource":   "safe-tool",
+		},
+	}
+
+	// Pre-warm: compile and cache the expression
+	result, err := engine.Evaluate(expression, activation)
+	if err != nil {
+		b.Fatal(err)
+	}
+	if !result {
+		b.Fatal("expected true from pre-warm evaluation")
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_, _ = engine.Evaluate(expression, activation)
+	}
+}
+
+// BenchmarkPolicyEval_Throughput measures concurrent CEL evaluation throughput.
+// Use the result to compute ops/sec: b.N / b.Elapsed().Seconds().
+// Direct comparison to Microsoft Agent Governance Toolkit's claimed 72K ops/sec.
+func BenchmarkPolicyEval_Throughput(b *testing.B) {
+	engine, err := prg.NewPolicyEngine()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	expression := `input["action"] == "EXECUTE_TOOL" && input["risk_level"] < 3`
+	activation := map[string]interface{}{
+		"input": map[string]interface{}{
+			"action":     "EXECUTE_TOOL",
+			"risk_level": int64(2),
+			"principal":  "bench-agent",
+			"resource":   "safe-tool",
+		},
+	}
+
+	// Pre-warm
+	if _, err := engine.Evaluate(expression, activation); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, _ = engine.Evaluate(expression, activation)
+		}
+	})
+}
+
+// ── Scenario 6: Isolated Ed25519 signing ──
+
+// BenchmarkEd25519_SignOnly measures pure Ed25519 receipt signing
+// without Guardian evaluation or store persistence. This isolates the
+// cryptographic overhead that is included in HELM's full path but absent
+// from competitors that skip signing.
+func BenchmarkEd25519_SignOnly(b *testing.B) {
+	signer, err := crypto.NewEd25519Signer("bench-key")
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		receipt := &contracts.Receipt{
+			ReceiptID:    fmt.Sprintf("rcpt-%d", i),
+			DecisionID:   "decision-bench",
+			EffectID:     fmt.Sprintf("eff-%d", i),
+			Status:       "EXECUTED",
+			OutputHash:   "sha256:mock-output",
+			PrevHash:     "sha256:genesis",
+			LamportClock: uint64(i),
+			ArgsHash:     "sha256:mock-args",
+			Timestamp:    time.Now(),
+		}
+		if err := signer.SignReceipt(receipt); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // ── Composite overhead measurement ──
 
 // TestOverheadReport runs all scenarios and writes a structured JSON report
@@ -242,6 +347,27 @@ func BenchmarkGuardian_EvalOnly(b *testing.B) {
 func TestOverheadReport(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping overhead report in short mode")
+	}
+
+	// Set up isolated CEL engine for policy eval scenarios
+	celEngine, err := prg.NewPolicyEngine()
+	if err != nil {
+		t.Fatal(err)
+	}
+	celExpr := `input["action"] == "EXECUTE_TOOL" && input["risk_level"] < 3`
+	// PolicyEngine.Evaluate passes its argument directly as the CEL activation,
+	// so we must wrap the data in an "input" key matching the CEL variable name.
+	celInput := map[string]interface{}{
+		"input": map[string]interface{}{
+			"action":     "EXECUTE_TOOL",
+			"risk_level": int64(2),
+			"principal":  "bench-agent",
+			"resource":   "safe-tool",
+		},
+	}
+	// Pre-warm CEL cache
+	if _, err := celEngine.Evaluate(celExpr, celInput); err != nil {
+		t.Fatal(err)
 	}
 
 	// Measure each scenario with explicit timing
@@ -282,6 +408,27 @@ func TestOverheadReport(t *testing.T) {
 				Principal: "agent", Action: "execute", Resource: "undeclared-tool",
 				Context: map[string]interface{}{"key": "value"},
 			})
+			return time.Since(start)
+		}},
+		{"cel_eval_only", func(_ *benchHarness) time.Duration {
+			start := time.Now()
+			_, _ = celEngine.Evaluate(celExpr, celInput)
+			return time.Since(start)
+		}},
+		{"ed25519_sign_only", func(h *benchHarness) time.Duration {
+			receipt := &contracts.Receipt{
+				ReceiptID:    fmt.Sprintf("rcpt-%d", time.Now().UnixNano()),
+				DecisionID:   "decision-bench",
+				EffectID:     "eff-bench",
+				Status:       "EXECUTED",
+				OutputHash:   "sha256:mock-output",
+				PrevHash:     "sha256:genesis",
+				LamportClock: 1,
+				ArgsHash:     "sha256:mock-args",
+				Timestamp:    time.Now(),
+			}
+			start := time.Now()
+			_ = h.signer.SignReceipt(receipt)
 			return time.Since(start)
 		}},
 	}
@@ -366,6 +513,40 @@ func TestOverheadReport(t *testing.T) {
 		t.Logf("Overhead < 5ms:       %v", overheadP99 < 5000)
 	}
 
+	// Measure CEL throughput (concurrent ops/sec)
+	celThroughputOps := 0
+	celThroughputDur := 2 * time.Second
+	t.Logf("")
+	t.Logf("=== CEL THROUGHPUT (concurrent, %v window) ===", celThroughputDur)
+	{
+		numWorkers := runtime.NumCPU()
+		var wg sync.WaitGroup
+		counts := make([]int, numWorkers)
+		start := time.Now()
+		deadline := start.Add(celThroughputDur)
+		for w := 0; w < numWorkers; w++ {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				localCount := 0
+				for time.Now().Before(deadline) {
+					_, _ = celEngine.Evaluate(celExpr, celInput)
+					localCount++
+				}
+				counts[idx] = localCount
+			}(w)
+		}
+		wg.Wait()
+		elapsed := time.Since(start)
+		totalOps := 0
+		for _, c := range counts {
+			totalOps += c
+		}
+		celThroughputOps = int(float64(totalOps) / elapsed.Seconds())
+		t.Logf("Workers: %d  Total ops: %d  Elapsed: %v  Throughput: %d ops/sec",
+			numWorkers, totalOps, elapsed, celThroughputOps)
+	}
+
 	// Write JSON report
 	report := map[string]any{
 		"helm_version": "0.3.0",
@@ -382,6 +563,32 @@ func TestOverheadReport(t *testing.T) {
 		report["overhead_p99_us"] = results[1].P99Us - results[0].P99Us
 		report["overhead_under_5ms"] = (results[1].P99Us - results[0].P99Us) < 5000
 	}
+
+	// Competitive comparison: isolated component benchmarks vs Microsoft Agent Governance Toolkit
+	competitiveComparison := map[string]any{
+		"microsoft_agent_os": map[string]any{
+			"claimed_policy_eval_us":   12,
+			"claimed_throughput_ops_sec": 72000,
+		},
+	}
+	helmMetrics := map[string]any{
+		"measured_throughput_ops_sec": celThroughputOps,
+	}
+	// Find cel_eval_only and ed25519_sign_only results
+	for _, r := range results {
+		switch r.Name {
+		case "cel_eval_only":
+			helmMetrics["measured_cel_eval_p99_us"] = r.P99Us
+			helmMetrics["measured_cel_eval_mean_us"] = r.MeanUs
+		case "ed25519_sign_only":
+			helmMetrics["measured_signing_p99_us"] = r.P99Us
+			helmMetrics["measured_signing_mean_us"] = r.MeanUs
+		case "helm_allow":
+			helmMetrics["measured_total_allow_p99_us"] = r.P99Us
+		}
+	}
+	competitiveComparison["helm"] = helmMetrics
+	report["competitive_comparison"] = competitiveComparison
 
 	reportJSON, _ := json.MarshalIndent(report, "", "  ")
 

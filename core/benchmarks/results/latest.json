@@ -1,47 +1,83 @@
 {
-  "baseline_p99_us": 2,
+  "baseline_p99_us": 4,
+  "competitive_comparison": {
+    "helm": {
+      "measured_cel_eval_mean_us": 0.0062,
+      "measured_cel_eval_p99_us": 0,
+      "measured_signing_mean_us": 19.1572,
+      "measured_signing_p99_us": 26,
+      "measured_throughput_ops_sec": 5689755,
+      "measured_total_allow_p99_us": 76
+    },
+    "microsoft_agent_os": {
+      "claimed_policy_eval_us": 12,
+      "claimed_throughput_ops_sec": 72000
+    }
+  },
   "go_arch": "arm64",
   "go_os": "darwin",
   "go_version": "go1.25.0",
   "helm_version": "0.3.0",
-  "hot_path_p99_us": 65,
+  "hot_path_p99_us": 76,
   "num_cpu": 16,
-  "overhead_p99_us": 63,
+  "overhead_p99_us": 72,
   "overhead_under_5ms": true,
   "scenarios": [
     {
       "name": "baseline_no_helm",
       "iterations": 10000,
       "p50_us": 0,
-      "p95_us": 1,
-      "p99_us": 2,
-      "mean_us": 0.1619,
-      "stddev_us": 2.1796991512591815,
+      "p95_us": 2,
+      "p99_us": 4,
+      "mean_us": 0.6123,
+      "stddev_us": 3.268331181199359,
       "min_us": 0,
-      "max_us": 129
+      "max_us": 143
     },
     {
       "name": "helm_allow",
       "iterations": 10000,
-      "p50_us": 38,
-      "p95_us": 44,
-      "p99_us": 65,
-      "mean_us": 38.6236,
-      "stddev_us": 10.691553817850782,
-      "min_us": 32,
-      "max_us": 267
+      "p50_us": 52,
+      "p95_us": 60,
+      "p99_us": 76,
+      "mean_us": 54.5467,
+      "stddev_us": 14.76952332033775,
+      "min_us": 51,
+      "max_us": 553
     },
     {
       "name": "helm_deny",
       "iterations": 10000,
-      "p50_us": 16,
-      "p95_us": 19,
-      "p99_us": 27,
-      "mean_us": 17.055,
-      "stddev_us": 6.784922622992846,
-      "min_us": 14,
-      "max_us": 179
+      "p50_us": 23,
+      "p95_us": 26,
+      "p99_us": 35,
+      "mean_us": 24.054,
+      "stddev_us": 8.9036331910069,
+      "min_us": 22,
+      "max_us": 335
+    },
+    {
+      "name": "cel_eval_only",
+      "iterations": 10000,
+      "p50_us": 0,
+      "p95_us": 0,
+      "p99_us": 0,
+      "mean_us": 0.0062,
+      "stddev_us": 0.6199689992249613,
+      "min_us": 0,
+      "max_us": 62
+    },
+    {
+      "name": "ed25519_sign_only",
+      "iterations": 10000,
+      "p50_us": 19,
+      "p95_us": 21,
+      "p99_us": 26,
+      "mean_us": 19.1572,
+      "stddev_us": 3.042119024627379,
+      "min_us": 18,
+      "max_us": 145
     }
   ],
-  "timestamp": "2026-04-04T21:04:20Z"
+  "timestamp": "2026-04-12T16:25:21Z"
 }

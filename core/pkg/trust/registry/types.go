@@ -28,8 +28,11 @@ const (
 	EventPolicyRevoke   EventType = "POLICY_REVOKE"
 	EventRoleGrant      EventType = "ROLE_GRANT"
 	EventRoleRevoke     EventType = "ROLE_REVOKE"
-	EventTenantRegister EventType = "TENANT_REGISTER"
-	EventTenantSuspend  EventType = "TENANT_SUSPEND"
+	EventTenantRegister    EventType = "TENANT_REGISTER"
+	EventTenantSuspend     EventType = "TENANT_SUSPEND"
+	EventTrustScoreUpdate  EventType = "TRUST_SCORE_UPDATE"
+	EventOrgTrustEstablish EventType = "ORG_TRUST_ESTABLISH"
+	EventOrgTrustRevoke    EventType = "ORG_TRUST_REVOKE"
 )
 
 // TrustEvent is the atomic unit of trust state change.
@@ -131,26 +134,38 @@ type TenantEntry struct {
 	SuspendedAtLamport  *uint64 `json:"suspended_at_lamport,omitempty"`
 }
 
+// BehavioralScoreEntry records a behavioral trust score update in the trust state.
+type BehavioralScoreEntry struct {
+	AgentID        string `json:"agent_id"`
+	Score          int    `json:"score"`          // 0-1000
+	Tier           string `json:"tier"`           // PRISTINE, TRUSTED, NEUTRAL, SUSPECT, HOSTILE
+	EventType      string `json:"event_type"`     // POLICY_COMPLY, POLICY_VIOLATE, etc.
+	Delta          int    `json:"delta"`           // Score change applied
+	UpdatedLamport uint64 `json:"updated_lamport"`
+}
+
 // TrustState is the complete trust state at a given lamport height.
 // It is derived deterministically from folding all events up to that height.
 type TrustState struct {
-	Lamport    uint64                 `json:"lamport"`
-	Keys       map[string]KeyEntry    `json:"keys"`
-	DIDs       map[string]DIDEntry    `json:"dids"`
-	Policies   map[string]PolicyEntry `json:"policies"`
-	Roles      map[string][]RoleEntry `json:"roles"` // subjectID -> roles
-	Tenants    map[string]TenantEntry `json:"tenants"`
-	StrictMode bool                   `json:"-"` // Runtime-only: reject unknown event types
+	Lamport          uint64                          `json:"lamport"`
+	Keys             map[string]KeyEntry             `json:"keys"`
+	DIDs             map[string]DIDEntry             `json:"dids"`
+	Policies         map[string]PolicyEntry          `json:"policies"`
+	Roles            map[string][]RoleEntry          `json:"roles"` // subjectID -> roles
+	Tenants          map[string]TenantEntry          `json:"tenants"`
+	BehavioralScores map[string]BehavioralScoreEntry `json:"behavioral_scores,omitempty"` // agentID -> latest score
+	StrictMode       bool                            `json:"-"` // Runtime-only: reject unknown event types
 }
 
 // NewTrustState creates an empty trust state (forward-compatible: unknown events silently skipped).
 func NewTrustState() *TrustState {
 	return &TrustState{
-		Keys:     make(map[string]KeyEntry),
-		DIDs:     make(map[string]DIDEntry),
-		Policies: make(map[string]PolicyEntry),
-		Roles:    make(map[string][]RoleEntry),
-		Tenants:  make(map[string]TenantEntry),
+		Keys:             make(map[string]KeyEntry),
+		DIDs:             make(map[string]DIDEntry),
+		Policies:         make(map[string]PolicyEntry),
+		Roles:            make(map[string][]RoleEntry),
+		Tenants:          make(map[string]TenantEntry),
+		BehavioralScores: make(map[string]BehavioralScoreEntry),
 	}
 }
 

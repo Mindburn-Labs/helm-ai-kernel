@@ -1,0 +1,163 @@
+# Default values for helm-firewall
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/mindburn-labs/helm-oss
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Whether to create a ServiceAccount
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  fsGroup: 65534
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9090
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # kubernetes.io/ingress.class: nginx
+  # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: helm.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: helm-tls
+  #    hosts:
+  #      - helm.local
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# HELM-specific configuration
+helm:
+  # Proxy mode: forward to upstream LLM provider
+  proxy:
+    enabled: true
+    upstream: "https://api.openai.com/v1"
+
+  # Region identifier
+  region: "us"
+
+  # Demo mode (disables real connectors, uses ephemeral keys)
+  demoMode: false
+
+  # Signing key configuration
+  signing:
+    algorithm: "ed25519"  # or "ml-dsa-65"
+    # Key value (used only if existingSecret is not set)
+    key: ""
+    # Use an existing Kubernetes secret for the signing key
+    # The secret must contain a key named "signing-key"
+    existingSecret: ""
+
+  # Storage backend
+  storage:
+    type: "sqlite"  # or "postgres"
+    sqlite:
+      path: "/data/helm.db"
+    postgres:
+      host: ""
+      port: 5432
+      database: "helm"
+      user: "helm"
+      password: ""
+      sslMode: "disable"
+      # Use an existing secret containing DATABASE_URL
+      existingSecret: ""
+      # Key in the existing secret that contains the database URL
+      existingSecretKey: "DATABASE_URL"
+
+  # Metrics and observability
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+      interval: 30s
+      labels: {}
+
+  # Policy configuration
+  policy:
+    # Name of a ConfigMap containing policy files to mount
+    configMap: ""
+
+# Persistent storage (used when storage.type=sqlite)
+persistence:
+  enabled: true
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+  # Existing PVC to use
+  existingClaim: ""
+
+# Liveness and readiness probes
+probes:
+  liveness:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Optional PostgreSQL subchart (requires adding bitnami/postgresql dependency)
+postgresql:
+  enabled: false
+  auth:
+    database: helm
+    username: helm
+    password: ""
+    # existingSecret: ""

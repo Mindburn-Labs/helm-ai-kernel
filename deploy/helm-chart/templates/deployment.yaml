@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "helm-firewall.fullname" . }}
+  labels:
+    {{- include "helm-firewall.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "helm-firewall.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "helm-firewall.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "helm-firewall.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ include "helm-firewall.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - server
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            {{- if .Values.helm.metrics.enabled }}
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+            {{- end }}
+          env:
+            - name: HELM_REGION
+              value: {{ .Values.helm.region | quote }}
+            {{- if .Values.helm.proxy.enabled }}
+            - name: HELM_ENABLE_OPENAI_PROXY
+              value: "1"
+            - name: HELM_UPSTREAM_URL
+              value: {{ .Values.helm.proxy.upstream | quote }}
+            {{- end }}
+            {{- if .Values.helm.demoMode }}
+            - name: HELM_DEMO_MODE
+              value: "1"
+            {{- end }}
+            - name: HELM_SIGNING_ALGORITHM
+              value: {{ .Values.helm.signing.algorithm | quote }}
+            - name: EVIDENCE_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helm-firewall.signingSecretName" . }}
+                  key: signing-key
+            {{- if eq .Values.helm.storage.type "postgres" }}
+            {{- if .Values.helm.storage.postgres.existingSecret }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.helm.storage.postgres.existingSecret }}
+                  key: {{ .Values.helm.storage.postgres.existingSecretKey }}
+            {{- else if .Values.postgresql.enabled }}
+            - name: DATABASE_URL
+              value: "postgres://{{ .Values.postgresql.auth.username }}:$(POSTGRES_PASSWORD)@{{ include "helm-firewall.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}?sslmode=disable"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helm-firewall.fullname" . }}-postgresql
+                  key: password
+            {{- else }}
+            - name: DATABASE_URL
+              value: {{ include "helm-firewall.databaseURL" . | quote }}
+            {{- end }}
+            {{- end }}
+          {{- with .Values.probes.liveness }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.probes.readiness }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            {{- if and (eq .Values.helm.storage.type "sqlite") .Values.persistence.enabled }}
+            - name: data
+              mountPath: /data
+            {{- end }}
+            {{- if .Values.helm.policy.configMap }}
+            - name: policy
+              mountPath: /etc/helm/policy
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        {{- if and (eq .Values.helm.storage.type "sqlite") .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "helm-firewall.pvcName" . }}
+        {{- end }}
+        {{- if .Values.helm.policy.configMap }}
+        - name: policy
+          configMap:
+            name: {{ .Values.helm.policy.configMap }}
+        {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

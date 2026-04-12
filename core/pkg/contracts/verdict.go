@@ -76,6 +76,12 @@ const (
 	ReasonDelegationInvalid        ReasonCode = "DELEGATION_INVALID"
 	ReasonDelegationScopeViolation ReasonCode = "DELEGATION_SCOPE_VIOLATION"
 
+	// ── Privilege Tier Reasons (MIN-82 Phase 3) ──────────────
+	ReasonInsufficientPrivilege ReasonCode = "INSUFFICIENT_PRIVILEGE"
+
+	// ── Agent Lifecycle Reasons ────────────────────────────
+	ReasonAgentKilled ReasonCode = "AGENT_KILLED"
+
 	// ── Threat Signal Reasons (v1.2) ───────────────────────
 	ReasonTaintedInputDeny           ReasonCode = "TAINTED_INPUT_HIGH_RISK_DENY"
 	ReasonPromptInjectionDetected    ReasonCode = "PROMPT_INJECTION_DETECTED"
@@ -124,6 +130,8 @@ func CoreReasonCodes() []ReasonCode {
 		ReasonApprovalTimeout,
 		ReasonDelegationInvalid,
 		ReasonDelegationScopeViolation,
+		ReasonInsufficientPrivilege,
+		ReasonAgentKilled,
 		ReasonTaintedInputDeny,
 		ReasonPromptInjectionDetected,
 		ReasonUnicodeObfuscationDetected,

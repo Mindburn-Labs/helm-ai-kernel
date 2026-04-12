@@ -117,6 +117,44 @@ The claim is scoped: **75µs p99 on the governed allow hot path in the benchmark
 }
 ```
 
+## Competitive Comparison
+
+HELM's headline 75µs p99 measures the **full governance path**: policy evaluation + Ed25519 signing + SQLite persistence. Competitors often report isolated policy evaluation numbers without cryptographic signing or persistence. To enable apples-to-apples comparison, HELM includes isolated benchmarks that break down each component.
+
+| Component | Microsoft Agent OS | HELM | Factor |
+|---|---|---|---|
+| Policy rule evaluation (isolated CEL, cached) | 12µs/rule | **87ns** (`BenchmarkPolicyEval_CEL_Only`) | **137x faster** |
+| Concurrent throughput | 72K ops/sec | **9.6M ops/sec** (`BenchmarkPolicyEval_Throughput`) | **133x higher** |
+| Ed25519 receipt signing | N/A (not included) | **14µs** (`BenchmarkEd25519_SignOnly`) | — |
+| Full governance path (eval + sign + persist) | Not claimed | **75µs p99** | — |
+
+**How to run the isolated benchmarks:**
+
+```bash
+cd core && go test -bench='BenchmarkPolicyEval_CEL_Only|BenchmarkPolicyEval_Throughput|BenchmarkEd25519_SignOnly' -benchmem -count=5 ./benchmarks/
+```
+
+The full overhead report (`make bench-report`) includes a `competitive_comparison` section in `benchmarks/results/latest.json` with measured values for all components plus Microsoft's claimed numbers for reference.
+
+**Key distinction:** Microsoft's Agent Governance Toolkit reports 12µs/rule for isolated policy evaluation and 72K ops/sec throughput. These numbers exclude cryptographic signing. HELM's full path includes Ed25519 signing on every decision and receipt, providing tamper-evident proof of governance that can be independently verified. The isolated CEL evaluation benchmark (`BenchmarkPolicyEval_CEL_Only`) is the direct comparison point.
+
+## Post-Quantum Signing (ML-DSA-65)
+
+HELM supports ML-DSA-65 (FIPS 204) post-quantum digital signatures via cloudflare/circl. These benchmarks show the overhead of PQ signing vs Ed25519:
+
+| Operation | Ed25519 | ML-DSA-65 | Factor |
+|---|---|---|---|
+| Key generation | ~5µs | 146µs | 29x slower |
+| Sign | ~20µs | 774µs | 39x slower |
+| Verify | ~41µs | 42µs | **~1x (parity)** |
+| Sign receipt | ~20µs | 298µs | 15x slower |
+| Sign decision | ~20µs | 299µs | 15x slower |
+| Verify receipt | ~41µs | 46µs | **~1x (parity)** |
+
+**Key insight:** ML-DSA-65 verification is nearly as fast as Ed25519 (~42µs vs ~41µs). Signing is 15-39x slower but still under 1ms. For governance workloads where verification is more frequent than signing, ML-DSA-65 adds minimal overhead while providing quantum resistance.
+
+Run with: `cd core && go test -bench=BenchmarkMLDSA -benchmem ./pkg/crypto/`
+
 ## Regression gating
 
 Run `make bench-report` on release candidates. If `hot_path_p99_us` exceeds 5000 (5ms), the release should be investigated. The 5ms threshold is a conservative regression gate — the expected range is 50–200µs depending on hardware.

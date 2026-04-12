@@ -9,10 +9,16 @@ import (
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
 )
 
+// KeyIDer is implemented by signers that expose their key identifier.
+// This enables algorithm-agnostic key registration in the KeyRing.
+type KeyIDer interface {
+	GetKeyID() string
+}
+
 // KeyRing implements Signer/Verifier for multiple keys (Rotation support).
 type KeyRing struct {
 	mu      sync.RWMutex
-	signers map[string]Signer // map keyID -> Verifier
+	signers map[string]Signer // map keyID -> Signer
 }
 
 // NewKeyRing creates a new empty KeyRing.
@@ -22,11 +28,16 @@ func NewKeyRing() *KeyRing {
 	}
 }
 
-// AddKey adds a signer to the keyring.
+// AddKey adds a signer to the keyring. The signer must implement KeyIDer
+// (Ed25519Signer, MLDSASigner) or be an *Ed25519Signer (legacy path).
 func (k *KeyRing) AddKey(s Signer) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	// In a real impl, we'd extract KeyID from Signer interface or cast
+	if kid, ok := s.(KeyIDer); ok {
+		k.signers[kid.GetKeyID()] = s
+		return
+	}
+	// Legacy fallback for Ed25519Signer (uses exported KeyID field)
 	if ed, ok := s.(*Ed25519Signer); ok {
 		k.signers[ed.KeyID] = s
 	}
@@ -62,7 +73,8 @@ func (k *KeyRing) SignDecision(d *contracts.DecisionRecord) error {
 	return k.signers[selectedKey].SignDecision(d)
 }
 
-// VerifyKey verifies signature for a specific key
+// VerifyKey verifies signature for a specific key.
+// Supports Ed25519 and ML-DSA-65 signers.
 func (k *KeyRing) VerifyKey(keyID string, message []byte, signature []byte) (bool, error) {
 	k.mu.RLock()
 	defer k.mu.RUnlock()
@@ -72,7 +84,7 @@ func (k *KeyRing) VerifyKey(keyID string, message []byte, signature []byte) (boo
 		return false, fmt.Errorf("unknown key: %s", keyID)
 	}
 
-	if v, ok := signer.(*Ed25519Signer); ok {
+	if v, ok := signer.(Verifier); ok {
 		return v.Verify(message, signature), nil
 	}
 

@@ -1,0 +1,56 @@
+{
+  "name": "CEL",
+  "scopeName": "source.cel",
+  "fileTypes": ["cel"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#operators" },
+    { "include": "#builtins" },
+    { "include": "#helm-functions" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "match": "//.*$", "name": "comment.line.double-slash.cel" }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        { "match": "\"[^\"]*\"", "name": "string.quoted.double.cel" },
+        { "match": "'[^']*'", "name": "string.quoted.single.cel" }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        { "match": "\\b\\d+(\\.\\d+)?\\b", "name": "constant.numeric.cel" }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        { "match": "\\b(true|false|null)\\b", "name": "constant.language.cel" },
+        { "match": "\\b(in|has|exists|all|filter|map|size)\\b", "name": "keyword.other.cel" },
+        { "match": "\\b(input|request|resource|action|principal)\\b", "name": "variable.language.cel" }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        { "match": "(==|!=|>=|<=|>|<|&&|\\|\\||!)", "name": "keyword.operator.cel" }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        { "match": "\\b(string|int|uint|double|bool|bytes|list|map|timestamp|duration)\\b", "name": "support.type.cel" },
+        { "match": "\\b(contains|startsWith|endsWith|matches|size)\\b", "name": "support.function.cel" }
+      ]
+    },
+    "helm-functions": {
+      "patterns": [
+        { "match": "\\b(trust_score|trust_tier|privilege_tier|compliance_score)\\b", "name": "variable.other.helm.cel" },
+        { "match": "\\binput\\[\"[^\"]+\"\\]", "name": "variable.other.property.cel" }
+      ]
+    }
+  }
+}

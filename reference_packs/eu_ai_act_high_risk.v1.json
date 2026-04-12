@@ -1,0 +1,83 @@
+{
+  "pack_id": "eu-ai-act-high-risk-v1",
+  "label": "EU AI Act High-Risk System Compliance",
+  "description": "Governs AI agent operations classified as high-risk under the EU AI Act (Regulation 2024/1689). Enforces risk management, data governance, transparency, human oversight, and technical documentation requirements per Articles 6-15 and Annex III.",
+  "version": 1,
+  "compliance_framework": "EU_AI_ACT",
+  "risk_classification": "HIGH",
+  "annex_iii_areas": [
+    "BIOMETRICS", "CRITICAL_INFRASTRUCTURE", "EDUCATION", "EMPLOYMENT",
+    "ESSENTIAL_SERVICES", "LAW_ENFORCEMENT", "MIGRATION", "JUSTICE"
+  ],
+  "programs": [
+    {
+      "program_id": "prog-risk-management",
+      "label": "Risk Management System (Art. 9)",
+      "status": "active",
+      "controls": [
+        { "control_id": "Art.9(2)(a)", "description": "Identify and analyze known/foreseeable risks", "enforcement": "MANDATORY" },
+        { "control_id": "Art.9(2)(b)", "description": "Estimate and evaluate risks from intended use and foreseeable misuse", "enforcement": "MANDATORY" },
+        { "control_id": "Art.9(4)", "description": "Implement risk mitigation measures", "enforcement": "MANDATORY" },
+        { "control_id": "Art.9(5)", "description": "Test for risk management effectiveness", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "deny", "condition": "risk_level == CRITICAL AND autonomy_level > 0", "reason": "Art.9: critical-risk actions require human approval" },
+        { "action": "require_approval", "condition": "risk_level == HIGH", "reason": "Art.9: high-risk actions require oversight" }
+      ]
+    },
+    {
+      "program_id": "prog-transparency",
+      "label": "Transparency & Information (Art. 13)",
+      "status": "active",
+      "controls": [
+        { "control_id": "Art.13(1)", "description": "Design for sufficient transparency for deployers", "enforcement": "MANDATORY" },
+        { "control_id": "Art.13(3)(b)(ii)", "description": "Describe input data specifications", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "audit", "condition": "true", "reason": "Art.13: all decisions must be explainable and logged" }
+      ]
+    },
+    {
+      "program_id": "prog-human-oversight",
+      "label": "Human Oversight (Art. 14)",
+      "status": "active",
+      "controls": [
+        { "control_id": "Art.14(1)", "description": "Human oversight measures built in or identified", "enforcement": "MANDATORY" },
+        { "control_id": "Art.14(4)(a)", "description": "Humans can understand capabilities and limitations", "enforcement": "MANDATORY" },
+        { "control_id": "Art.14(4)(e)", "description": "Humans can decide not to use or override", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "escalate", "condition": "effect_type IN [EXECUTE_PAYMENT, INFRA_DESTROY, SOFTWARE_PUBLISH]", "reason": "Art.14: high-impact actions require human oversight" }
+      ]
+    },
+    {
+      "program_id": "prog-technical-documentation",
+      "label": "Technical Documentation (Art. 11)",
+      "status": "active",
+      "controls": [
+        { "control_id": "Art.11(1)", "description": "Technical documentation drawn up before market placement", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "deny", "condition": "aibom_missing == true", "reason": "Art.11: AI system must have technical documentation (AI-BOM)" }
+      ]
+    }
+  ],
+  "enforcement_dates": {
+    "prohibited_practices": "2025-02-02",
+    "gpai_obligations": "2025-08-02",
+    "high_risk_full": "2026-08-02",
+    "high_risk_annex_i": "2027-08-02"
+  },
+  "budget_constraints": {
+    "daily_limit_cents": 200000,
+    "risk_score_cap": 400
+  },
+  "evidence_requirements": {
+    "receipt_signing": "MANDATORY",
+    "proofgraph_enabled": true,
+    "evidence_pack_retention_days": 3650,
+    "audit_chain_verification": true,
+    "aibom_required": true,
+    "conformity_assessment": true
+  }
+}

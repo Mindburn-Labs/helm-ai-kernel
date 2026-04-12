@@ -1,0 +1,19 @@
+{{- if and (eq .Values.helm.storage.type "sqlite") .Values.persistence.enabled (not .Values.persistence.existingClaim) -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "helm-firewall.pvcName" . }}
+  labels:
+    {{- include "helm-firewall.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- range .Values.persistence.accessModes }}
+    - {{ . }}
+    {{- end }}
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+{{- end }}

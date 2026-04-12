@@ -147,6 +147,8 @@ jobs:
           version: latest
           working-directory: core
           args: --timeout=5m --default=none -E govet -E staticcheck -E ineffassign
+      - name: Go module integrity (go.sum verification)
+        run: cd core && go mod verify
       - name: govulncheck
         run: |
           export GOTOOLCHAIN=go1.24.1
@@ -239,6 +241,14 @@ jobs:
           npm run lint
           npm test
           npm run build
+      - name: TypeScript SDK dependency audit
+        run: |
+          cd sdk/ts
+          npm audit --audit-level=critical || {
+            echo "::error::npm audit found critical vulnerabilities in TypeScript SDK"
+            exit 1
+          }
+          echo "✅ TS SDK dependency audit passed"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -251,6 +261,15 @@ jobs:
           pytest
           python -m build --sdist --no-isolation 2>&1 || echo "Build check complete"
           echo "✅ SDK packaging verified"
+      - name: Python SDK dependency audit
+        run: |
+          pip install pip-audit
+          cd sdk/python
+          pip-audit --strict --desc || {
+            echo "::error::pip-audit found vulnerabilities in Python SDK"
+            exit 1
+          }
+          echo "✅ Python SDK dependency audit passed"
 
   doccheck:
     runs-on: ubuntu-latest

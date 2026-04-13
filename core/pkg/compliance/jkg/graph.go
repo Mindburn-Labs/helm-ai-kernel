@@ -81,6 +81,9 @@ const (
 	RegulatorGLEIF     RegulatorID = "GLOBAL-GLEIF" // Global Legal Entity Identifier Foundation
 	RegulatorCompHouse RegulatorID = "GB-CH"        // UK Companies House
 	RegulatorEURLex    RegulatorID = "EU-EURLEX"    // EUR-Lex legislative database
+
+	// CSR: Commodity/derivatives regulators
+	RegulatorCFTC RegulatorID = "US-CFTC" // Commodity Futures Trading Commission
 )
 
 // JurisdictionScope classifies the level of a jurisdiction.

@@ -27,12 +27,13 @@ import (
 
 // Server is the HELM Governance REST API server.
 type Server struct {
-	mu       sync.RWMutex
-	pdp      pdp.PolicyDecisionPoint
-	receipts map[string]*Receipt
-	sessions map[string][]string // sessionID → []receiptID
-	lamport  uint64
-	mux      *http.ServeMux
+	mu             sync.RWMutex
+	pdp            pdp.PolicyDecisionPoint
+	receipts       map[string]*Receipt
+	sessions       map[string][]string // sessionID → []receiptID
+	lamport        uint64
+	mux            *http.ServeMux
+	allowedOrigins []string // CORS allowed origins (nil = no CORS headers)
 }
 
 // Receipt stored in-memory.
@@ -73,17 +74,19 @@ type EvaluateResponse struct {
 
 // ServerConfig configures the API server.
 type ServerConfig struct {
-	PDP  pdp.PolicyDecisionPoint
-	Addr string // e.g., ":8443"
+	PDP            pdp.PolicyDecisionPoint
+	Addr           string   // e.g., ":8443"
+	AllowedOrigins []string // CORS allowed origins (nil = no CORS headers emitted)
 }
 
 // NewServer creates a new HELM API server.
 func NewServer(cfg ServerConfig) *Server {
 	s := &Server{
-		pdp:      cfg.PDP,
-		receipts: make(map[string]*Receipt),
-		sessions: make(map[string][]string),
-		mux:      http.NewServeMux(),
+		pdp:            cfg.PDP,
+		receipts:       make(map[string]*Receipt),
+		sessions:       make(map[string][]string),
+		mux:            http.NewServeMux(),
+		allowedOrigins: cfg.AllowedOrigins,
 	}
 	s.registerRoutes()
 	return s
@@ -98,8 +101,18 @@ func (s *Server) registerRoutes() {
 
 // ServeHTTP implements http.Handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// CORS for web apps
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	// SEC: CORS uses same-origin by default. Callers should wrap with
+	// auth.CORSMiddleware for configurable origin allowlisting.
+	// Wildcard CORS removed to prevent cross-origin receipt exfiltration.
+	origin := r.Header.Get("Origin")
+	if origin != "" && s.allowedOrigins != nil {
+		for _, ao := range s.allowedOrigins {
+			if ao == "*" || ao == origin {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				break
+			}
+		}
+	}
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	if r.Method == http.MethodOptions {

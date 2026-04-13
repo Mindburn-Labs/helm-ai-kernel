@@ -94,6 +94,9 @@ const (
 	SourceUKCH     SourceType = "UK-CH"     // UK Companies House
 	SourceSECEDGAR SourceType = "SEC-EDGAR" // SEC EDGAR Submissions
 	SourceSECXBRL  SourceType = "SEC-XBRL"  // SEC EDGAR XBRL
+
+	// CSR Class 11: Commodity/derivatives regulators
+	SourceCFTC SourceType = "CFTC" // US Commodity Futures Trading Commission
 )
 
 // ChangeType indicates the type of regulatory change.

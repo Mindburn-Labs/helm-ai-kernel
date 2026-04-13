@@ -175,15 +175,31 @@ func TestHealth(t *testing.T) {
 }
 
 func TestCORS(t *testing.T) {
+	// With no AllowedOrigins configured, CORS headers should NOT be set (secure default).
 	srv := newTestServer(t)
 	req := httptest.NewRequest(http.MethodOptions, "/api/v1/evaluate", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
-		t.Error("OPTIONS should return 200 for CORS")
+		t.Error("OPTIONS should return 200 for preflight")
 	}
-	if w.Header().Get("Access-Control-Allow-Origin") != "*" {
-		t.Error("CORS headers should be set")
+	if w.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Error("CORS origin should NOT be set when AllowedOrigins is nil (secure default)")
+	}
+
+	// With explicit AllowedOrigins, matching origin should be reflected.
+	helmPDP := pdp.NewHelmPDP("test-v1", map[string]bool{"read_file": true})
+	srvWithOrigins := NewServer(ServerConfig{
+		PDP:            helmPDP,
+		AllowedOrigins: []string{"https://app.example.com"},
+	})
+	req2 := httptest.NewRequest(http.MethodOptions, "/api/v1/evaluate", nil)
+	req2.Header.Set("Origin", "https://app.example.com")
+	w2 := httptest.NewRecorder()
+	srvWithOrigins.ServeHTTP(w2, req2)
+	if w2.Header().Get("Access-Control-Allow-Origin") != "https://app.example.com" {
+		t.Errorf("expected CORS origin https://app.example.com, got %q", w2.Header().Get("Access-Control-Allow-Origin"))
 	}
 }
 

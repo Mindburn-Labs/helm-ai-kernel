@@ -305,6 +305,8 @@ func CreateDefaultAdaptersAll() []SourceAdapter {
 		NewUKCompaniesHouseAdapter(),
 		NewSECEDGARAdapter(),
 		NewSECXBRLAdapter(),
+		// CSR Class 11: Commodity/derivatives
+		NewCFTCAdapter(nil),
 		// Legacy
 		NewFinCENAdapter(),
 		NewFCAAdapter(),

@@ -141,10 +141,11 @@ func (m *GovernanceMetrics) Snapshot() MetricsSnapshot {
 
 // Handler returns an http.HandlerFunc that serves metrics as JSON.
 // Dashboard fetches from this endpoint.
+// SEC: Wildcard CORS removed. Callers should use the auth.CORSMiddleware
+// on the parent mux to set appropriate origin policies.
 func (m *GovernanceMetrics) Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		json.NewEncoder(w).Encode(m.Snapshot())
 	}
 }

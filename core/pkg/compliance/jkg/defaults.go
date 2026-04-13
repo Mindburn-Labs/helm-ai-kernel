@@ -14,7 +14,7 @@ func DefaultJurisdictions() []*Jurisdiction {
 		{
 			Code:       JurisdictionUS,
 			Name:       "United States",
-			Regulators: []RegulatorID{RegulatorFinCEN, RegulatorSEC},
+			Regulators: []RegulatorID{RegulatorFinCEN, RegulatorSEC, RegulatorCFTC},
 			TimeZone:   "EST",
 		},
 		{
@@ -77,6 +77,15 @@ func DefaultRegulators() []*Regulator {
 			Scope:             []string{"securities", "investment"},
 			Website:           "https://www.sec.gov",
 			EnforcementPowers: []string{"civil_penalties", "disgorgement", "bans"},
+		},
+		{
+			ID:                RegulatorCFTC,
+			Name:              "Commodity Futures Trading Commission",
+			Jurisdiction:      JurisdictionUS,
+			Scope:             []string{"derivatives", "commodities", "prediction_markets", "swaps"},
+			Website:           "https://www.cftc.gov",
+			FeedURL:           "https://www.cftc.gov/RSS/RSSData",
+			EnforcementPowers: []string{"civil_penalties", "cease_and_desist", "disgorgement", "trading_bans"},
 		},
 		{
 			ID:                RegulatorFCA,

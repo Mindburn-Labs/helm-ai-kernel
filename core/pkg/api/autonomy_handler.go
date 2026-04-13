@@ -51,9 +51,15 @@ func NewAutonomyHandler(provider AutonomyStateProvider) *AutonomyHandler {
 }
 
 // Register mounts the autonomy routes on the given mux.
-func (h *AutonomyHandler) Register(mux *http.ServeMux) {
+// The control endpoint requires admin auth (H-2: fail-closed if HELM_ADMIN_API_KEY unset).
+// State endpoint is read-only and does not require auth.
+func (h *AutonomyHandler) Register(mux *http.ServeMux, adminAuth func(http.Handler) http.Handler) {
 	mux.HandleFunc("/api/autonomy/state", h.HandleGetState)
-	mux.HandleFunc("/api/autonomy/control", h.HandleControl)
+	if adminAuth != nil {
+		mux.Handle("/api/autonomy/control", adminAuth(http.HandlerFunc(h.HandleControl)))
+	} else {
+		mux.HandleFunc("/api/autonomy/control", h.HandleControl)
+	}
 }
 
 // ──────────────────────────────────────────────────────────────

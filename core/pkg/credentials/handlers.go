@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/api"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/auth"
 	"github.com/google/uuid"
 )
 
@@ -26,25 +27,34 @@ func NewHandler(store *Store) *Handler {
 }
 
 // RegisterRoutes registers credential API routes on the given mux.
+// All credential routes require authentication (H-1: no more spoofable X-Operator-ID).
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/v1/credentials/status", h.handleStatus)
-	mux.HandleFunc("GET /api/v1/credentials/config", h.handleConfig)
-	mux.HandleFunc("POST /api/v1/credentials/google/token", h.handleGoogleToken)
-	mux.HandleFunc("POST /api/v1/credentials/google/refresh", h.handleGoogleRefresh)
-	mux.HandleFunc("DELETE /api/v1/credentials/google", h.handleDeleteGoogle)
-	mux.HandleFunc("POST /api/v1/credentials/openai", h.handleStoreOpenAI)
-	mux.HandleFunc("DELETE /api/v1/credentials/openai", h.handleDeleteOpenAI)
-	mux.HandleFunc("POST /api/v1/credentials/anthropic", h.handleStoreAnthropic)
-	mux.HandleFunc("DELETE /api/v1/credentials/anthropic", h.handleDeleteAnthropic)
+	adminAuth := auth.AdminAPIKeyMiddleware()
+	wrap := func(handler http.HandlerFunc) http.Handler {
+		return adminAuth(handler)
+	}
+
+	mux.Handle("GET /api/v1/credentials/status", wrap(h.handleStatus))
+	mux.Handle("GET /api/v1/credentials/config", wrap(h.handleConfig))
+	mux.Handle("POST /api/v1/credentials/google/token", wrap(h.handleGoogleToken))
+	mux.Handle("POST /api/v1/credentials/google/refresh", wrap(h.handleGoogleRefresh))
+	mux.Handle("DELETE /api/v1/credentials/google", wrap(h.handleDeleteGoogle))
+	mux.Handle("POST /api/v1/credentials/openai", wrap(h.handleStoreOpenAI))
+	mux.Handle("DELETE /api/v1/credentials/openai", wrap(h.handleDeleteOpenAI))
+	mux.Handle("POST /api/v1/credentials/anthropic", wrap(h.handleStoreAnthropic))
+	mux.Handle("DELETE /api/v1/credentials/anthropic", wrap(h.handleDeleteAnthropic))
 }
 
-// getOperatorID extracts operator ID from request (auth middleware sets this)
+// getOperatorID extracts operator ID from the authenticated principal in context.
+// Falls back to "default-operator" only if no principal is set (should not happen
+// when auth middleware is wired correctly — this fallback exists for graceful
+// degradation during development only).
 func getOperatorID(r *http.Request) string {
-	// In production, this comes from JWT claims set by auth middleware
-	if id := r.Header.Get("X-Operator-ID"); id != "" {
-		return id
+	// Primary: extract from authenticated principal (set by JWT or API key middleware)
+	if principal, err := auth.GetPrincipal(r.Context()); err == nil {
+		return principal.GetID()
 	}
-	// Fallback for testing
+	// Fallback for development/testing only — never reachable when middleware is active
 	return "default-operator"
 }
 

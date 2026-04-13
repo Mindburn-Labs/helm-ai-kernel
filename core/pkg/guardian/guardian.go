@@ -154,6 +154,7 @@ type Guardian struct {
 	delegationStore   identity.DelegationStore   // Delegation session store (§Gate 5)
 	behavioralScorer  *trust.BehavioralTrustScorer // Dynamic behavioral trust scorer (MIN-82)
 	privilegeResolver PrivilegeResolver            // Privilege tier resolver (MIN-82 Phase 3)
+	otel              *OTelInstrumentation         // Optional OTel tracing & metrics
 }
 
 // NewGuardian creates a new Guardian instance. Optional dependencies can be injected

@@ -81,6 +81,18 @@ const (
 	ReasonTaintedInvokeDeny          = "TAINTED_PRIVILEGED_INVOKE_DENY" // privileged invoke from tainted source
 	ReasonTaintedEgressDeny          = "TAINTED_DATA_EGRESS_DENY"       // data egress from tainted source
 	ReasonTaintedEscalate            = "TAINTED_HIGH_RISK_ESCALATE"     // high-risk effect requires approval
+
+	// --- L3 Conformance (v1.4.0) ---
+	ReasonSignedEvidencePackInvalid    = "SIGNED_EVIDENCE_PACK_INVALID"     // evidence pack signature invalid or missing
+	ReasonSignedEvidencePackUnsigned   = "SIGNED_EVIDENCE_PACK_UNSIGNED"    // evidence pack lacks cryptographic signature
+	ReasonGovernanceChainBroken        = "GOVERNANCE_CHAIN_BROKEN"          // governance decision chain hash mismatch
+	ReasonGovernanceChainMissing       = "GOVERNANCE_CHAIN_MISSING"         // no governance chain found
+	ReasonDelegationSessionProofMissing = "DELEGATION_SESSION_PROOF_MISSING" // delegation session lacks proof
+	ReasonDelegationSessionExpired     = "DELEGATION_SESSION_EXPIRED"       // delegation session past TTL
+	ReasonDelegationScopeExceeded      = "DELEGATION_SCOPE_EXCEEDED"        // delegation exceeded granted scope
+	ReasonMultiPartyQuorumNotMet       = "MULTI_PARTY_QUORUM_NOT_MET"       // multi-party attestation quorum missing
+	ReasonMultiPartySignerDuplicate    = "MULTI_PARTY_SIGNER_DUPLICATE"     // duplicate signer in attestation set
+	ReasonMultiPartySignerUnauthorized = "MULTI_PARTY_SIGNER_UNAUTHORIZED"  // signer not in authorized set
 )
 
 // AllReasonCodes returns the full set of normative reason codes.
@@ -127,5 +139,15 @@ func AllReasonCodes() []string {
 		ReasonTaintedInvokeDeny,
 		ReasonTaintedEgressDeny,
 		ReasonTaintedEscalate,
+		ReasonSignedEvidencePackInvalid,
+		ReasonSignedEvidencePackUnsigned,
+		ReasonGovernanceChainBroken,
+		ReasonGovernanceChainMissing,
+		ReasonDelegationSessionProofMissing,
+		ReasonDelegationSessionExpired,
+		ReasonDelegationScopeExceeded,
+		ReasonMultiPartyQuorumNotMet,
+		ReasonMultiPartySignerDuplicate,
+		ReasonMultiPartySignerUnauthorized,
 	}
 }

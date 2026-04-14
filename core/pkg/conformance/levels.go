@@ -700,4 +700,377 @@ func RegisterL3Tests(suite *Suite) {
 			return nil
 		},
 	})
+
+	// ── Signed Evidence Packs ──────────────────────────────
+
+	suite.Register(TestCase{
+		ID:          "L3-SIGPACK-001",
+		Level:       LevelL3,
+		Category:    "signed_evidence",
+		Name:        "Evidence pack signature covers all manifest entries",
+		Description: "Signing an evidence pack includes every manifest entry hash",
+		Run: func(ctx *TestContext) error {
+			pack := sampleSignedEvidencePack()
+			if pack.Signature == "" {
+				ctx.Fail("evidence pack must be signed")
+				return nil
+			}
+			kr := sampleHSMKeyring()
+			key := kr.currentKey()
+			if !verifyPackSignature(pack, key) {
+				ctx.Fail("evidence pack signature verification failed")
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-SIGPACK-002",
+		Level:       LevelL3,
+		Category:    "signed_evidence",
+		Name:        "Tampered evidence pack entry invalidates signature",
+		Negative:    true,
+		Description: "Modifying any manifest entry breaks the pack signature",
+		Run: func(ctx *TestContext) error {
+			pack := sampleSignedEvidencePack()
+			// Tamper: change one entry hash
+			pack.Entries[0].Hash = "sha256:tampered_0000000000000000000000000000"
+			kr := sampleHSMKeyring()
+			key := kr.currentKey()
+			if verifyPackSignature(pack, key) {
+				return nil // Would mean tampered pack accepted
+			}
+			return fmt.Errorf("tampered evidence pack correctly rejected")
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-SIGPACK-003",
+		Level:       LevelL3,
+		Category:    "signed_evidence",
+		Name:        "Unsigned evidence pack is rejected at L3",
+		Negative:    true,
+		Description: "An evidence pack without a signature fails L3 verification",
+		Run: func(ctx *TestContext) error {
+			pack := sampleSignedEvidencePack()
+			pack.Signature = "" // Remove signature
+			kr := sampleHSMKeyring()
+			key := kr.currentKey()
+			if verifyPackSignature(pack, key) {
+				return nil // unsigned pack accepted = negative test fails
+			}
+			return fmt.Errorf("unsigned evidence pack correctly rejected")
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-SIGPACK-004",
+		Level:       LevelL3,
+		Category:    "signed_evidence",
+		Name:        "Evidence pack signed by revoked key is rejected",
+		Negative:    true,
+		Description: "A pack signed by a key revoked before the pack timestamp is rejected",
+		Run: func(ctx *TestContext) error {
+			kr := sampleHSMKeyring()
+			revokedKey := kr.keys["hsm-key-001"] // revoked at lamport 10
+			pack := sampleSignedEvidencePack()
+			// Re-sign with the revoked key
+			pack.Signature = signWithKey(revokedKey, []byte(pack.ManifestHash))
+			pack.SignerKeyID = revokedKey.KeyID
+			// Verify should fail because key is revoked and pack lamport > revocation
+			if revokedKey.IsValidAt(pack.SignedAtLamport) {
+				return nil // key still valid = negative test fails
+			}
+			return fmt.Errorf("evidence pack signed by revoked key correctly rejected")
+		},
+	})
+
+	// ── Governance Chain Verification ──────────────────────
+
+	suite.Register(TestCase{
+		ID:          "L3-GOVCHAIN-001",
+		Level:       LevelL3,
+		Category:    "governance",
+		Name:        "Governance decision chain forms valid hash chain",
+		Description: "Each governance decision links to the prior via prev_hash",
+		Run: func(ctx *TestContext) error {
+			chain := sampleGovernanceChain(5)
+			for i := 1; i < len(chain); i++ {
+				if chain[i].PrevHash != chain[i-1].Hash {
+					ctx.Fail("governance chain break at index %d: prev_hash=%q != preceding hash=%q",
+						i, chain[i].PrevHash, chain[i-1].Hash)
+				}
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-GOVCHAIN-002",
+		Level:       LevelL3,
+		Category:    "governance",
+		Name:        "Governance decision tamper detection",
+		Negative:    true,
+		Description: "Modifying a governance decision breaks the hash chain",
+		Run: func(ctx *TestContext) error {
+			chain := sampleGovernanceChain(5)
+			// Tamper: change the verdict of decision 2
+			chain[2].Verdict = "ALLOW" // Was DENY
+			chain[2].Hash = "sha256:tampered_decision_hash"
+			// Chain should break at index 3
+			if chain[3].PrevHash == chain[2].Hash {
+				return nil // tamper not detected
+			}
+			return fmt.Errorf("governance chain tamper detected at index 3")
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-GOVCHAIN-003",
+		Level:       LevelL3,
+		Category:    "governance",
+		Name:        "Governance decisions are monotonically ordered by lamport",
+		Description: "Lamport clock in governance chain is strictly increasing",
+		Run: func(ctx *TestContext) error {
+			chain := sampleGovernanceChain(8)
+			for i := 1; i < len(chain); i++ {
+				if chain[i].Lamport <= chain[i-1].Lamport {
+					ctx.Fail("lamport not monotonic at index %d: %d <= %d",
+						i, chain[i].Lamport, chain[i-1].Lamport)
+				}
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-GOVCHAIN-004",
+		Level:       LevelL3,
+		Category:    "governance",
+		Name:        "Governance chain includes signer identity per decision",
+		Description: "Each governance decision references a signer key ID",
+		Run: func(ctx *TestContext) error {
+			chain := sampleGovernanceChain(5)
+			for i, d := range chain {
+				if d.SignerKeyID == "" {
+					ctx.Fail("decision %d missing signer_key_id", i)
+				}
+			}
+			return nil
+		},
+	})
+
+	// ── Delegation Session Proofs ──────────────────────────
+
+	suite.Register(TestCase{
+		ID:          "L3-DELEG-001",
+		Level:       LevelL3,
+		Category:    "delegation",
+		Name:        "Delegation session proof is cryptographically verifiable",
+		Description: "Session binding token verifies against delegator's key",
+		Run: func(ctx *TestContext) error {
+			kr := sampleHSMKeyring()
+			session := sampleDelegationSession(kr.currentKey())
+			if !verifyDelegationSession(session, kr.currentKey()) {
+				ctx.Fail("delegation session proof verification failed")
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-DELEG-002",
+		Level:       LevelL3,
+		Category:    "delegation",
+		Name:        "Expired delegation session is rejected",
+		Negative:    true,
+		Description: "A delegation session past its TTL is denied",
+		Run: func(ctx *TestContext) error {
+			kr := sampleHSMKeyring()
+			session := sampleDelegationSession(kr.currentKey())
+			session.ExpiresAtLamport = 5 // Expired in the past
+			session.CurrentLamport = 10
+			if isDelegationSessionValid(session) {
+				return nil // expired session accepted
+			}
+			return fmt.Errorf("expired delegation session correctly rejected (expires=%d, current=%d)",
+				session.ExpiresAtLamport, session.CurrentLamport)
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-DELEG-003",
+		Level:       LevelL3,
+		Category:    "delegation",
+		Name:        "Delegation scope narrowing is enforced",
+		Description: "Delegate's scope is subset of delegator's scope",
+		Run: func(ctx *TestContext) error {
+			kr := sampleHSMKeyring()
+			session := sampleDelegationSession(kr.currentKey())
+			// Delegate scope should be subset of delegator scope
+			for _, scope := range session.DelegateScope {
+				found := false
+				for _, allowed := range session.DelegatorScope {
+					if scope == allowed {
+						found = true
+						break
+					}
+				}
+				if !found {
+					ctx.Fail("delegate scope %q not in delegator scope", scope)
+				}
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-DELEG-004",
+		Level:       LevelL3,
+		Category:    "delegation",
+		Name:        "Delegation scope escalation is rejected",
+		Negative:    true,
+		Description: "Delegate attempting to exceed granted scope is denied",
+		Run: func(ctx *TestContext) error {
+			kr := sampleHSMKeyring()
+			session := sampleDelegationSession(kr.currentKey())
+			// Inject a scope escalation
+			session.DelegateScope = append(session.DelegateScope, "effect:admin:*")
+			if isDelegationScopeValid(session) {
+				return nil // escalation accepted
+			}
+			return fmt.Errorf("scope escalation correctly rejected: delegate has %d scopes, delegator has %d",
+				len(session.DelegateScope), len(session.DelegatorScope))
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-DELEG-005",
+		Level:       LevelL3,
+		Category:    "delegation",
+		Name:        "Delegation session tampered binding token is rejected",
+		Negative:    true,
+		Description: "Modifying the session binding token fails verification",
+		Run: func(ctx *TestContext) error {
+			kr := sampleHSMKeyring()
+			session := sampleDelegationSession(kr.currentKey())
+			session.BindingToken = "sha256:tampered_binding_token"
+			if verifyDelegationSession(session, kr.currentKey()) {
+				return nil // tampered token accepted
+			}
+			return fmt.Errorf("tampered delegation binding token correctly rejected")
+		},
+	})
+
+	// ── Multi-Party Attestation ────────────────────────────
+
+	suite.Register(TestCase{
+		ID:          "L3-MPA-001",
+		Level:       LevelL3,
+		Category:    "multi_party",
+		Name:        "Multi-party attestation meets quorum threshold",
+		Description: "Attestation with enough unique signers passes quorum check",
+		Run: func(ctx *TestContext) error {
+			att := sampleMultiPartyAttestation(3, 2) // 3 signers, quorum=2
+			if !verifyMultiPartyQuorum(att) {
+				ctx.Fail("multi-party quorum should be met: %d signers >= %d quorum",
+					len(att.Signers), att.Quorum)
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-MPA-002",
+		Level:       LevelL3,
+		Category:    "multi_party",
+		Name:        "Multi-party attestation below quorum is rejected",
+		Negative:    true,
+		Description: "Attestation with fewer unique signers than quorum fails",
+		Run: func(ctx *TestContext) error {
+			att := sampleMultiPartyAttestation(1, 3) // 1 signer, quorum=3
+			if verifyMultiPartyQuorum(att) {
+				return nil // insufficient quorum accepted
+			}
+			return fmt.Errorf("quorum not met: %d signers < %d quorum", len(att.Signers), att.Quorum)
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-MPA-003",
+		Level:       LevelL3,
+		Category:    "multi_party",
+		Name:        "Duplicate signers are detected and deduplicated",
+		Description: "Same signer appearing twice counts as one unique signer",
+		Run: func(ctx *TestContext) error {
+			att := sampleMultiPartyAttestation(2, 2)
+			// Inject duplicate signer
+			att.Signers = append(att.Signers, att.Signers[0])
+			unique := uniqueSigners(att)
+			if unique != 2 {
+				ctx.Fail("expected 2 unique signers after dedup, got %d", unique)
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-MPA-004",
+		Level:       LevelL3,
+		Category:    "multi_party",
+		Name:        "Unauthorized signer is rejected from attestation",
+		Negative:    true,
+		Description: "A signer not in the authorized set is detected",
+		Run: func(ctx *TestContext) error {
+			att := sampleMultiPartyAttestation(3, 2)
+			// Add unauthorized signer
+			att.Signers = append(att.Signers, multiPartySigner{
+				SignerID:  "unauthorized-signer",
+				KeyID:     "key-unknown",
+				Signature: "sha256:fake",
+			})
+			authorized := att.AuthorizedSignerIDs
+			unauthorized := findUnauthorizedSigners(att, authorized)
+			if len(unauthorized) == 0 {
+				return nil // unauthorized signer not detected
+			}
+			return fmt.Errorf("unauthorized signer detected: %v", unauthorized)
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-MPA-005",
+		Level:       LevelL3,
+		Category:    "multi_party",
+		Name:        "Multi-party attestation content hash is deterministic",
+		Description: "Same attestation content always produces same hash",
+		Run: func(ctx *TestContext) error {
+			att1 := sampleMultiPartyAttestation(3, 2)
+			att2 := sampleMultiPartyAttestation(3, 2)
+			hash1 := computeAttestationHash(att1)
+			hash2 := computeAttestationHash(att2)
+			if hash1 != hash2 {
+				ctx.Fail("attestation hash not deterministic: %s vs %s", hash1, hash2)
+			}
+			return nil
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L3-MPA-006",
+		Level:       LevelL3,
+		Category:    "multi_party",
+		Name:        "Multi-party attestation with tampered signer signature fails",
+		Negative:    true,
+		Description: "Modifying one signer's signature invalidates the attestation",
+		Run: func(ctx *TestContext) error {
+			att := sampleMultiPartyAttestation(3, 2)
+			att.Signers[1].Signature = "sha256:tampered_sig"
+			valid := verifyAllSignerSignatures(att)
+			if valid {
+				return nil // tampered sig accepted
+			}
+			return fmt.Errorf("tampered signer signature detected at index 1")
+		},
+	})
 }

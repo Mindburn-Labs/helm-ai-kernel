@@ -306,3 +306,283 @@ func sampleCondensableReceipts(count int) []condensableReceipt {
 	}
 	return receipts
 }
+
+// ── Signed Evidence Pack Fixtures ───────────────────────────
+
+// signedEvidencePack is an evidence pack with a cryptographic signature.
+type signedEvidencePack struct {
+	PackID          string              `json:"pack_id"`
+	ManifestHash    string              `json:"manifest_hash"`
+	Entries         []signedPackEntry `json:"entries"`
+	Signature       string              `json:"signature"`
+	SignerKeyID     string              `json:"signer_key_id"`
+	SignedAtLamport uint64              `json:"signed_at_lamport"`
+}
+
+// signedPackEntry represents a single entry in a signed evidence pack.
+type signedPackEntry struct {
+	Path string `json:"path"`
+	Hash string `json:"hash"`
+}
+
+// computePackManifestHash computes a deterministic hash over sorted entries.
+func computePackManifestHash(entries []signedPackEntry) string {
+	sorted := make([]signedPackEntry, len(entries))
+	copy(sorted, entries)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Path < sorted[j].Path
+	})
+	data, _ := json.Marshal(sorted)
+	h := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(h[:])
+}
+
+// sampleSignedEvidencePack returns a valid signed evidence pack.
+func sampleSignedEvidencePack() *signedEvidencePack {
+	entries := []signedPackEntry{
+		{Path: "receipts/001.json", Hash: "sha256:aaa111"},
+		{Path: "receipts/002.json", Hash: "sha256:bbb222"},
+		{Path: "trust/events.json", Hash: "sha256:ccc333"},
+		{Path: "proofgraph/dag.json", Hash: "sha256:ddd444"},
+	}
+	manifestHash := computePackManifestHash(entries)
+	kr := sampleHSMKeyring()
+	key := kr.currentKey()
+	sig := signWithKey(key, []byte(manifestHash))
+
+	return &signedEvidencePack{
+		PackID:          "pack-signed-001",
+		ManifestHash:    manifestHash,
+		Entries:         entries,
+		Signature:       sig,
+		SignerKeyID:     key.KeyID,
+		SignedAtLamport: 15,
+	}
+}
+
+// verifyPackSignature verifies the signature of a signed evidence pack.
+func verifyPackSignature(pack *signedEvidencePack, key *hsmKey) bool {
+	if pack.Signature == "" {
+		return false
+	}
+	expectedManifestHash := computePackManifestHash(pack.Entries)
+	if pack.ManifestHash != expectedManifestHash {
+		return false
+	}
+	return verifyKeySignature(key, []byte(pack.ManifestHash), pack.Signature)
+}
+
+// ── Governance Chain Fixtures ───────────────────────────────
+
+// governanceDecision represents a governance decision in a hash chain.
+type governanceDecision struct {
+	DecisionID  string `json:"decision_id"`
+	Hash        string `json:"hash"`
+	PrevHash    string `json:"prev_hash"`
+	Lamport     uint64 `json:"lamport"`
+	Verdict     string `json:"verdict"`
+	EffectType  string `json:"effect_type"`
+	SignerKeyID string `json:"signer_key_id"`
+}
+
+// sampleGovernanceChain returns a valid governance decision hash chain.
+func sampleGovernanceChain(count int) []governanceDecision {
+	chain := make([]governanceDecision, count)
+	prevHash := ""
+	verdicts := []string{"ALLOW", "DENY", "ALLOW", "ALLOW", "DENY", "ALLOW", "DENY", "ALLOW"}
+	for i := 0; i < count; i++ {
+		verdict := verdicts[i%len(verdicts)]
+		data := fmt.Sprintf("gov-decision:%d:%s:%s", i, verdict, prevHash)
+		h := sha256.Sum256([]byte(data))
+		hash := "sha256:" + hex.EncodeToString(h[:])
+		chain[i] = governanceDecision{
+			DecisionID:  fmt.Sprintf("gov-dec-%03d", i+1),
+			Hash:        hash,
+			PrevHash:    prevHash,
+			Lamport:     uint64(i + 1),
+			Verdict:     verdict,
+			EffectType:  "api_call",
+			SignerKeyID: "hsm-key-002",
+		}
+		prevHash = hash
+	}
+	return chain
+}
+
+// ── Delegation Session Proof Fixtures ───────────────────────
+
+// delegationSession represents a delegation session with cryptographic proof.
+type delegationSession struct {
+	SessionID         string   `json:"session_id"`
+	DelegatorID       string   `json:"delegator_id"`
+	DelegateID        string   `json:"delegate_id"`
+	DelegatorScope    []string `json:"delegator_scope"`
+	DelegateScope     []string `json:"delegate_scope"`
+	CreatedAtLamport  uint64   `json:"created_at_lamport"`
+	ExpiresAtLamport  uint64   `json:"expires_at_lamport"`
+	CurrentLamport    uint64   `json:"current_lamport"`
+	BindingToken      string   `json:"binding_token"`
+	SignerKeyID       string   `json:"signer_key_id"`
+}
+
+// computeSessionBindingToken creates a cryptographic binding for a delegation session.
+func computeSessionBindingToken(session *delegationSession, key *hsmKey) string {
+	canonical := fmt.Sprintf("helm:delegation:v1\x00%s\x00%s\x00%s\x00%d\x00%d",
+		session.SessionID, session.DelegatorID, session.DelegateID,
+		session.CreatedAtLamport, session.ExpiresAtLamport)
+	return signWithKey(key, []byte(canonical))
+}
+
+// sampleDelegationSession returns a valid delegation session with proof.
+func sampleDelegationSession(key *hsmKey) *delegationSession {
+	session := &delegationSession{
+		SessionID:        "deleg-session-001",
+		DelegatorID:      "agent:supervisor",
+		DelegateID:       "agent:worker",
+		DelegatorScope:   []string{"effect:file_read:*", "effect:api_call:internal", "effect:exec:sandbox"},
+		DelegateScope:    []string{"effect:file_read:*", "effect:api_call:internal"},
+		CreatedAtLamport: 5,
+		ExpiresAtLamport: 100,
+		CurrentLamport:   20,
+		SignerKeyID:      key.KeyID,
+	}
+	session.BindingToken = computeSessionBindingToken(session, key)
+	return session
+}
+
+// verifyDelegationSession verifies the binding token of a delegation session.
+func verifyDelegationSession(session *delegationSession, key *hsmKey) bool {
+	if session.BindingToken == "" {
+		return false
+	}
+	expected := computeSessionBindingToken(session, key)
+	return session.BindingToken == expected
+}
+
+// isDelegationSessionValid checks if a session is within its TTL.
+func isDelegationSessionValid(session *delegationSession) bool {
+	return session.CurrentLamport < session.ExpiresAtLamport
+}
+
+// isDelegationScopeValid checks if delegate scope is subset of delegator scope.
+func isDelegationScopeValid(session *delegationSession) bool {
+	allowed := make(map[string]bool, len(session.DelegatorScope))
+	for _, s := range session.DelegatorScope {
+		allowed[s] = true
+	}
+	for _, s := range session.DelegateScope {
+		if !allowed[s] {
+			return false
+		}
+	}
+	return true
+}
+
+// ── Multi-Party Attestation Fixtures ────────────────────────
+
+// multiPartySigner represents a single signer in a multi-party attestation.
+type multiPartySigner struct {
+	SignerID  string `json:"signer_id"`
+	KeyID     string `json:"key_id"`
+	Signature string `json:"signature"`
+}
+
+// multiPartyAttestation represents a multi-party attestation over a decision.
+type multiPartyAttestation struct {
+	AttestationID       string             `json:"attestation_id"`
+	DecisionHash        string             `json:"decision_hash"`
+	Signers             []multiPartySigner `json:"signers"`
+	Quorum              int                `json:"quorum"`
+	AuthorizedSignerIDs []string           `json:"authorized_signer_ids"`
+	ContentHash         string             `json:"content_hash"`
+}
+
+// sampleMultiPartyAttestation returns a multi-party attestation with the given signers.
+func sampleMultiPartyAttestation(numSigners, quorum int) *multiPartyAttestation {
+	kr := sampleHSMKeyring()
+	key := kr.currentKey()
+	decisionHash := "sha256:decision_hash_for_attestation"
+
+	authorizedIDs := make([]string, numSigners)
+	signers := make([]multiPartySigner, numSigners)
+	for i := 0; i < numSigners; i++ {
+		signerID := fmt.Sprintf("signer-%03d", i+1)
+		authorizedIDs[i] = signerID
+		content := fmt.Sprintf("helm:mpa:v1\x00%s\x00%s", decisionHash, signerID)
+		sig := signWithKey(key, []byte(content))
+		signers[i] = multiPartySigner{
+			SignerID:  signerID,
+			KeyID:     key.KeyID,
+			Signature: sig,
+		}
+	}
+
+	att := &multiPartyAttestation{
+		AttestationID:       "mpa-001",
+		DecisionHash:        decisionHash,
+		Signers:             signers,
+		Quorum:              quorum,
+		AuthorizedSignerIDs: authorizedIDs,
+	}
+	att.ContentHash = computeAttestationHash(att)
+	return att
+}
+
+// verifyMultiPartyQuorum checks if the attestation meets its quorum.
+func verifyMultiPartyQuorum(att *multiPartyAttestation) bool {
+	unique := uniqueSigners(att)
+	return unique >= att.Quorum
+}
+
+// uniqueSigners returns the count of unique signer IDs.
+func uniqueSigners(att *multiPartyAttestation) int {
+	seen := make(map[string]bool)
+	for _, s := range att.Signers {
+		seen[s.SignerID] = true
+	}
+	return len(seen)
+}
+
+// findUnauthorizedSigners returns signer IDs not in the authorized set.
+func findUnauthorizedSigners(att *multiPartyAttestation, authorizedIDs []string) []string {
+	authorized := make(map[string]bool, len(authorizedIDs))
+	for _, id := range authorizedIDs {
+		authorized[id] = true
+	}
+	var unauthorized []string
+	for _, s := range att.Signers {
+		if !authorized[s.SignerID] {
+			unauthorized = append(unauthorized, s.SignerID)
+		}
+	}
+	return unauthorized
+}
+
+// computeAttestationHash computes a deterministic hash over the attestation content.
+func computeAttestationHash(att *multiPartyAttestation) string {
+	// Hash over decision_hash + sorted signer IDs (not signatures) for determinism
+	signerIDs := make([]string, len(att.Signers))
+	for i, s := range att.Signers {
+		signerIDs[i] = s.SignerID
+	}
+	sort.Strings(signerIDs)
+	canonical := fmt.Sprintf("helm:mpa:hash:v1\x00%s\x00%d", att.DecisionHash, att.Quorum)
+	for _, id := range signerIDs {
+		canonical += "\x00" + id
+	}
+	h := sha256.Sum256([]byte(canonical))
+	return "sha256:" + hex.EncodeToString(h[:])
+}
+
+// verifyAllSignerSignatures checks that all signer signatures are valid.
+func verifyAllSignerSignatures(att *multiPartyAttestation) bool {
+	kr := sampleHSMKeyring()
+	key := kr.currentKey()
+	for _, s := range att.Signers {
+		content := fmt.Sprintf("helm:mpa:v1\x00%s\x00%s", att.DecisionHash, s.SignerID)
+		if !verifyKeySignature(key, []byte(content), s.Signature) {
+			return false
+		}
+	}
+	return true
+}

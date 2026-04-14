@@ -141,8 +141,35 @@ func TestCheckPanicRecordNoneExists(t *testing.T) {
 
 func TestAllReasonCodesCountAbove20(t *testing.T) {
 	codes := AllReasonCodes()
-	if len(codes) < 20 {
-		t.Fatalf("expected at least 20 reason codes, got %d", len(codes))
+	if len(codes) < 30 {
+		t.Fatalf("expected at least 30 reason codes (including L3), got %d", len(codes))
+	}
+}
+
+func TestL3ReasonCodesPresent(t *testing.T) {
+	codes := AllReasonCodes()
+	codeSet := make(map[string]bool, len(codes))
+	for _, c := range codes {
+		codeSet[c] = true
+	}
+
+	l3Codes := []string{
+		ReasonSignedEvidencePackInvalid,
+		ReasonSignedEvidencePackUnsigned,
+		ReasonGovernanceChainBroken,
+		ReasonGovernanceChainMissing,
+		ReasonDelegationSessionProofMissing,
+		ReasonDelegationSessionExpired,
+		ReasonDelegationScopeExceeded,
+		ReasonMultiPartyQuorumNotMet,
+		ReasonMultiPartySignerDuplicate,
+		ReasonMultiPartySignerUnauthorized,
+	}
+
+	for _, code := range l3Codes {
+		if !codeSet[code] {
+			t.Errorf("missing L3 reason code: %s", code)
+		}
 	}
 }
 

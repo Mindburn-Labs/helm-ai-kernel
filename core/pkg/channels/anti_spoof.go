@@ -26,11 +26,21 @@ type AntiSpoofValidator interface {
 
 // DefaultAntiSpoofValidator performs basic envelope integrity checks.
 // It is intentionally conservative: any suspicious signal causes the envelope to fail.
-type DefaultAntiSpoofValidator struct{}
+type DefaultAntiSpoofValidator struct {
+	// secrets holds the per-channel signing secrets for signature verification.
+	secrets SignatureSecrets
+}
 
-// NewAntiSpoofValidator returns a DefaultAntiSpoofValidator.
+// NewAntiSpoofValidator returns a DefaultAntiSpoofValidator with no signature secrets.
+// Signature verification is skipped when secrets are not configured.
 func NewAntiSpoofValidator() *DefaultAntiSpoofValidator {
 	return &DefaultAntiSpoofValidator{}
+}
+
+// NewAntiSpoofValidatorWithSecrets returns a validator configured with channel signing secrets.
+// When secrets are provided, the validator will verify HMAC/token signatures for each channel.
+func NewAntiSpoofValidatorWithSecrets(secrets SignatureSecrets) *DefaultAntiSpoofValidator {
+	return &DefaultAntiSpoofValidator{secrets: secrets}
 }
 
 // antiSpoofMaxClockSkewMs is the maximum tolerated age of an inbound message timestamp.
@@ -83,7 +93,7 @@ func (v *DefaultAntiSpoofValidator) Validate(_ context.Context, env ChannelEnvel
 
 	// Check 4: channel-specific placeholder.
 	// Each channel may extend this with signature or HMAC verification.
-	if err := channelSpecificCheck(env); err != nil {
+	if err := channelSpecificCheck(env, v.secrets); err != nil {
 		return fail(fmt.Sprintf("channel-specific check failed: %s", err.Error()))
 	}
 
@@ -100,26 +110,12 @@ func (v *DefaultAntiSpoofValidator) Validate(_ context.Context, env ChannelEnvel
 	}, nil
 }
 
-// channelSpecificCheck is a placeholder for per-channel signature validation.
-// Implementations should verify HMAC headers, bot tokens, or similar channel-level proofs.
-func channelSpecificCheck(env ChannelEnvelope) error {
-	switch env.Channel {
-	case ChannelSlack:
-		// TODO: verify X-Slack-Signature HMAC when SignatureRef is populated.
-		return nil
-	case ChannelTelegram:
-		// TODO: verify Telegram bot token hash.
-		return nil
-	case ChannelLark:
-		// TODO: verify Lark verification token.
-		return nil
-	case ChannelWhatsApp:
-		// TODO: verify WhatsApp webhook signature.
-		return nil
-	case ChannelSignal:
-		// TODO: verify Signal message authentication.
-		return nil
-	default:
+// channelSpecificCheck verifies per-channel cryptographic signatures.
+// It delegates to the appropriate ChannelSignatureVerifier based on the channel kind.
+func channelSpecificCheck(env ChannelEnvelope, secrets SignatureSecrets) error {
+	if !ValidChannelKind(env.Channel) {
 		return fmt.Errorf("unknown channel %q", env.Channel)
 	}
+	verifier := NewSignatureVerifier(env.Channel, secrets)
+	return verifier.Verify(env)
 }

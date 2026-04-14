@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -112,23 +113,28 @@ func TestIsAllowed_IslandMode(t *testing.T) {
 
 func locateProfiles(t *testing.T) string {
 	t.Helper()
-	// Try to find profiles directory relative to this test file
+
+	// Primary strategy: locate relative to this source file (works regardless of cwd).
+	_, thisFile, _, ok := runtime.Caller(0)
+	if ok {
+		srcDir := filepath.Dir(thisFile)
+		p := filepath.Join(srcDir, "profiles")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+
+	// Fallback: cwd-relative candidates
 	candidates := []string{
 		"profiles",
 		"../config/profiles",
-		filepath.Join(os.Getenv("GOPATH"), "src/github.com/Mindburn-Labs/helm-oss/core/pkg/config/profiles"),
 	}
 	for _, c := range candidates {
 		if _, err := os.Stat(c); err == nil {
 			return c
 		}
 	}
-	// Try to find from working directory
-	wd, _ := os.Getwd()
-	p := filepath.Join(wd, "profiles")
-	if _, err := os.Stat(p); err == nil {
-		return p
-	}
-	t.Skip("profiles directory not found")
+
+	t.Fatalf("profiles directory not found (source dir: %s)", filepath.Dir(thisFile))
 	return ""
 }

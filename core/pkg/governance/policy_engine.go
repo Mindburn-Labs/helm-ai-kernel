@@ -126,3 +126,42 @@ func (pe *PolicyEngine) Evaluate(ctx context.Context, policyID string, req contr
 	decision.Reason = "No specific policy requested"
 	return decision, nil
 }
+
+// EvaluateInline compiles and evaluates an ad-hoc CEL expression against the provided
+// variables. This is the governance-level convenience for inline policy checks (e.g.,
+// "risk_score < 80") without requiring pre-registration via LoadPolicy.
+// Returns true if the expression evaluates to a boolean true, false otherwise.
+// Fail-closed: any error in compilation or evaluation returns (false, err).
+func (pe *PolicyEngine) EvaluateInline(expr string, vars map[string]interface{}) (bool, error) {
+	// Build a dynamic CEL environment from the provided variable keys.
+	envOpts := make([]cel.EnvOption, 0, len(vars))
+	for k := range vars {
+		envOpts = append(envOpts, cel.Variable(k, cel.DynType))
+	}
+
+	env, err := cel.NewEnv(envOpts...)
+	if err != nil {
+		return false, fmt.Errorf("failed to create inline CEL env: %w", err)
+	}
+
+	ast, issues := env.Compile(expr)
+	if issues != nil && issues.Err() != nil {
+		return false, fmt.Errorf("inline policy compilation failed: %w", issues.Err())
+	}
+
+	prg, err := env.Program(ast)
+	if err != nil {
+		return false, fmt.Errorf("inline program construction failed: %w", err)
+	}
+
+	out, _, err := prg.Eval(vars)
+	if err != nil {
+		return false, fmt.Errorf("inline evaluation failed: %w", err)
+	}
+
+	allowed, ok := out.Value().(bool)
+	if !ok {
+		return false, fmt.Errorf("inline expression did not evaluate to bool")
+	}
+	return allowed, nil
+}

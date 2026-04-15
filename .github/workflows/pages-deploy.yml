@@ -1,0 +1,50 @@
+name: Deploy Dashboard to GitHub Pages
+
+# Deploys dashboard/ to GitHub Pages → try.mindburn.org.
+#
+# Triggered on pushes to main that touch dashboard/, and via workflow_dispatch.
+# Uses the official actions/deploy-pages flow (not the legacy branch-based
+# Pages source), which allows serving from an arbitrary path.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dashboard/**'
+      - '.github/workflows/pages-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Pages artifact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - name: Upload dashboard/ as Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dashboard/
+
+  deploy:
+    name: Deploy to try.mindburn.org
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

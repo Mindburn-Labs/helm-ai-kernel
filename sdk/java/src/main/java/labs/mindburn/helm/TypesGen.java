@@ -3,8 +3,57 @@
 
 package labs.mindburn.helm;
 
-import java.util.List;
-import java.util.Map;
+import java.io.IOException;
+import java.util.*;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import com.fasterxml.jackson.annotation.*;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.annotation.*;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
+import org.openapitools.jackson.nullable.JsonNullable;
+
+public interface TypesGen {
+
+// Minimal AbstractOpenApiSchema base class for oneOf/anyOf union types.
+// Normally provided by the OpenAPI Generator runtime library.
+abstract class AbstractOpenApiSchema {
+    private Object instance;
+    private String schemaType;
+    private Boolean nullable;
+    public AbstractOpenApiSchema() {}
+    public AbstractOpenApiSchema(String schemaType, Boolean nullable) {
+        this.schemaType = schemaType;
+        this.nullable = nullable;
+    }
+    public Object getActualInstance() { return instance; }
+    public void setActualInstance(Object instance) { this.instance = instance; }
+    public String getSchemaType() { return schemaType; }
+    public void setSchemaType(String schemaType) { this.schemaType = schemaType; }
+    public Boolean isNullable() { return nullable != null ? nullable : false; }
+    public Map<String, Class<?>> getSchemas() { return Collections.emptyMap(); }
+}
+
+// Minimal JSON utility stub for OpenAPI Generator runtime.
+static class JSON {
+    private static final Map<Class<?>, Map<String, Class<?>>> descendants = new HashMap<>();
+    public static void registerDescendants(Class<?> parent, Map<String, Class<?>> map) {
+        descendants.put(parent, map);
+    }
+    public static boolean isInstanceOf(Class<?> clazz, Object instance, Set<Class<?>> visited) {
+        return clazz.isInstance(instance);
+    }
+    public static ObjectMapper getDefault() { return new ObjectMapper(); }
+}
+
+
+
 /*
  * HELM Kernel API
  * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs. 
@@ -30,7 +79,7 @@ import java.util.Map;
   AddTrustKey200Response.JSON_PROPERTY_KEY_ID
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class AddTrustKey200Response {
+public static class AddTrustKey200Response {
   public static final String JSON_PROPERTY_STATUS = "status";
   private String status;
 
@@ -238,7 +287,7 @@ public class AddTrustKey200Response {
   AddTrustKeyRequest.JSON_PROPERTY_PUBLIC_KEY
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class AddTrustKeyRequest {
+public static class AddTrustKeyRequest {
   public static final String JSON_PROPERTY_TENANT_ID = "tenant_id";
   private String tenantId;
 
@@ -447,7 +496,7 @@ public class AddTrustKeyRequest {
   ApprovalRequest.JSON_PROPERTY_CHALLENGE_RESPONSE
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class ApprovalRequest {
+public static class ApprovalRequest {
   public static final String JSON_PROPERTY_INTENT_HASH = "intent_hash";
   private String intentHash;
 
@@ -693,7 +742,7 @@ public class ApprovalRequest {
   ChatCompletionRequest.JSON_PROPERTY_STREAM
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class ChatCompletionRequest {
+public static class ChatCompletionRequest {
   public static final String JSON_PROPERTY_MODEL = "model";
   private String model;
 
@@ -1032,11 +1081,11 @@ public class ChatCompletionRequest {
   ChatCompletionRequestMessagesInner.JSON_PROPERTY_TOOL_CALL_ID
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class ChatCompletionRequestMessagesInner {
+public static class ChatCompletionRequestMessagesInner {
   /**
    * Gets or Sets role
    */
-  public enum RoleEnum {
+  public static enum RoleEnum {
     SYSTEM("system"),
     
     USER("user"),
@@ -1278,11 +1327,11 @@ public class ChatCompletionRequestMessagesInner {
   ChatCompletionRequestToolsInner.JSON_PROPERTY_FUNCTION
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class ChatCompletionRequestToolsInner {
+public static class ChatCompletionRequestToolsInner {
   /**
    * Gets or Sets type
    */
-  public enum TypeEnum {
+  public static enum TypeEnum {
     FUNCTION("function");
 
     private String value;
@@ -1484,7 +1533,7 @@ public class ChatCompletionRequestToolsInner {
   ChatCompletionRequestToolsInnerFunction.JSON_PROPERTY_PARAMETERS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class ChatCompletionRequestToolsInnerFunction {
+public static class ChatCompletionRequestToolsInnerFunction {
   public static final String JSON_PROPERTY_NAME = "name";
   private String name;
 
@@ -1695,7 +1744,7 @@ public class ChatCompletionRequestToolsInnerFunction {
   ChatCompletionResponse.JSON_PROPERTY_USAGE
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class ChatCompletionResponse {
+public static class ChatCompletionResponse {
   public static final String JSON_PROPERTY_ID = "id";
   private String id;
 
@@ -2021,7 +2070,7 @@ public class ChatCompletionResponse {
   ChatCompletionResponseChoicesInner.JSON_PROPERTY_FINISH_REASON
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class ChatCompletionResponseChoicesInner {
+public static class ChatCompletionResponseChoicesInner {
   public static final String JSON_PROPERTY_INDEX = "index";
   private Integer index;
 
@@ -2229,7 +2278,7 @@ public class ChatCompletionResponseChoicesInner {
   ChatCompletionResponseChoicesInnerMessage.JSON_PROPERTY_TOOL_CALLS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class ChatCompletionResponseChoicesInnerMessage {
+public static class ChatCompletionResponseChoicesInnerMessage {
   public static final String JSON_PROPERTY_ROLE = "role";
   private String role;
 
@@ -2469,7 +2518,7 @@ public class ChatCompletionResponseChoicesInnerMessage {
   ChatCompletionResponseChoicesInnerMessageToolCallsInner.JSON_PROPERTY_FUNCTION
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class ChatCompletionResponseChoicesInnerMessageToolCallsInner {
+public static class ChatCompletionResponseChoicesInnerMessageToolCallsInner {
   public static final String JSON_PROPERTY_ID = "id";
   private String id;
 
@@ -2676,7 +2725,7 @@ public class ChatCompletionResponseChoicesInnerMessageToolCallsInner {
   ChatCompletionResponseChoicesInnerMessageToolCallsInnerFunction.JSON_PROPERTY_ARGUMENTS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class ChatCompletionResponseChoicesInnerMessageToolCallsInnerFunction {
+public static class ChatCompletionResponseChoicesInnerMessageToolCallsInnerFunction {
   public static final String JSON_PROPERTY_NAME = "name";
   private String name;
 
@@ -2849,7 +2898,7 @@ public class ChatCompletionResponseChoicesInnerMessageToolCallsInnerFunction {
   ChatCompletionResponseUsage.JSON_PROPERTY_TOTAL_TOKENS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class ChatCompletionResponseUsage {
+public static class ChatCompletionResponseUsage {
   public static final String JSON_PROPERTY_PROMPT_TOKENS = "prompt_tokens";
   private Integer promptTokens;
 
@@ -3056,11 +3105,11 @@ public class ChatCompletionResponseUsage {
   ConformanceRequest.JSON_PROPERTY_PROFILE
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class ConformanceRequest {
+public static class ConformanceRequest {
   /**
    * Gets or Sets level
    */
-  public enum LevelEnum {
+  public static enum LevelEnum {
     L1("L1"),
     
     L2("L2");
@@ -3267,7 +3316,7 @@ public class ConformanceRequest {
   ConformanceResult.JSON_PROPERTY_DETAILS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class ConformanceResult {
+public static class ConformanceResult {
   public static final String JSON_PROPERTY_REPORT_ID = "report_id";
   private String reportId;
 
@@ -3277,7 +3326,7 @@ public class ConformanceResult {
   /**
    * Gets or Sets verdict
    */
-  public enum VerdictEnum {
+  public static enum VerdictEnum {
     PASS("PASS"),
     
     FAIL("FAIL");
@@ -3616,7 +3665,7 @@ public class ConformanceResult {
   Effect.JSON_PROPERTY_BUDGET_ID
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class Effect {
+public static class Effect {
   public static final String JSON_PROPERTY_EFFECT_TYPE = "effect_type";
   private String effectType;
 
@@ -3871,7 +3920,7 @@ public class Effect {
   EffectBoundary.JSON_PROPERTY_CONTEXT
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class EffectBoundary {
+public static class EffectBoundary {
   public static final String JSON_PROPERTY_EFFECT = "effect";
   private Effect effect;
 
@@ -4090,14 +4139,14 @@ public class EffectBoundary {
   ExportRequest.JSON_PROPERTY_FORMAT
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class ExportRequest {
+public static class ExportRequest {
   public static final String JSON_PROPERTY_SESSION_ID = "session_id";
   private String sessionId;
 
   /**
    * Gets or Sets format
    */
-  public enum FormatEnum {
+  public static enum FormatEnum {
     TAR_GZ("tar.gz");
 
     private String value;
@@ -4299,7 +4348,7 @@ public class ExportRequest {
   GovernanceDecision.JSON_PROPERTY_ACTIVE_PACKS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class GovernanceDecision {
+public static class GovernanceDecision {
   public static final String JSON_PROPERTY_DECISION_ID = "decision_id";
   private String decisionId;
 
@@ -4309,7 +4358,7 @@ public class GovernanceDecision {
   /**
    * Gets or Sets verdict
    */
-  public enum VerdictEnum {
+  public static enum VerdictEnum {
     ALLOW("ALLOW"),
     
     DENY("DENY"),
@@ -4679,7 +4728,7 @@ public class GovernanceDecision {
   HealthCheck200Response.JSON_PROPERTY_VERSION
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class HealthCheck200Response {
+public static class HealthCheck200Response {
   public static final String JSON_PROPERTY_STATUS = "status";
   private String status;
 
@@ -4850,7 +4899,7 @@ public class HealthCheck200Response {
   HelmError.JSON_PROPERTY_ERROR
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class HelmError {
+public static class HelmError {
   public static final String JSON_PROPERTY_ERROR = "error";
   private HelmErrorError error;
 
@@ -4990,14 +5039,14 @@ public class HelmError {
   HelmErrorError.JSON_PROPERTY_DETAILS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class HelmErrorError {
+public static class HelmErrorError {
   public static final String JSON_PROPERTY_MESSAGE = "message";
   private String message;
 
   /**
    * Gets or Sets type
    */
-  public enum TypeEnum {
+  public static enum TypeEnum {
     INVALID_REQUEST("invalid_request"),
     
     AUTHENTICATION_ERROR("authentication_error"),
@@ -5044,7 +5093,7 @@ public class HelmErrorError {
   /**
    * HELM-specific reason code
    */
-  public enum ReasonCodeEnum {
+  public static enum ReasonCodeEnum {
     DENY_TOOL_NOT_FOUND("DENY_TOOL_NOT_FOUND"),
     
     DENY_SCHEMA_MISMATCH("DENY_SCHEMA_MISMATCH"),
@@ -5381,7 +5430,7 @@ public class HelmErrorError {
   MCPCapabilityManifest.JSON_PROPERTY_TOOLS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class MCPCapabilityManifest {
+public static class MCPCapabilityManifest {
   public static final String JSON_PROPERTY_SERVER_NAME = "server_name";
   private String serverName;
 
@@ -5636,7 +5685,7 @@ public class MCPCapabilityManifest {
   MCPJSONRPCError.JSON_PROPERTY_MESSAGE
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class MCPJSONRPCError {
+public static class MCPJSONRPCError {
   public static final String JSON_PROPERTY_CODE = "code";
   private Integer code;
 
@@ -5810,11 +5859,11 @@ public class MCPJSONRPCError {
   MCPJSONRPCRequest.JSON_PROPERTY_PARAMS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class MCPJSONRPCRequest {
+public static class MCPJSONRPCRequest {
   /**
    * Gets or Sets jsonrpc
    */
-  public enum JsonrpcEnum {
+  public static enum JsonrpcEnum {
     _2_0("2.0");
 
     private String value;
@@ -6094,7 +6143,7 @@ public class MCPJSONRPCRequest {
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
 @JsonDeserialize(using = MCPJSONRPCRequestId.MCPJSONRPCRequestIdDeserializer.class)
 @JsonSerialize(using = MCPJSONRPCRequestId.MCPJSONRPCRequestIdSerializer.class)
-public class MCPJSONRPCRequestId extends AbstractOpenApiSchema {
+public static class MCPJSONRPCRequestId extends AbstractOpenApiSchema {
     private static final Logger log = Logger.getLogger(MCPJSONRPCRequestId.class.getName());
 
     public static class MCPJSONRPCRequestIdSerializer extends StdSerializer<MCPJSONRPCRequestId> {
@@ -6358,11 +6407,11 @@ public class MCPJSONRPCRequestId extends AbstractOpenApiSchema {
   MCPJSONRPCResponse.JSON_PROPERTY_ERROR
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class MCPJSONRPCResponse {
+public static class MCPJSONRPCResponse {
   /**
    * Gets or Sets jsonrpc
    */
-  public enum JsonrpcEnum {
+  public static enum JsonrpcEnum {
     _2_0("2.0");
 
     private String value;
@@ -6642,7 +6691,7 @@ public class MCPJSONRPCResponse {
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
 @JsonDeserialize(using = MCPJSONRPCResponseId.MCPJSONRPCResponseIdDeserializer.class)
 @JsonSerialize(using = MCPJSONRPCResponseId.MCPJSONRPCResponseIdSerializer.class)
-public class MCPJSONRPCResponseId extends AbstractOpenApiSchema {
+public static class MCPJSONRPCResponseId extends AbstractOpenApiSchema {
     private static final Logger log = Logger.getLogger(MCPJSONRPCResponseId.class.getName());
 
     public static class MCPJSONRPCResponseIdSerializer extends StdSerializer<MCPJSONRPCResponseId> {
@@ -6907,7 +6956,7 @@ public class MCPJSONRPCResponseId extends AbstractOpenApiSchema {
   MCPProtectedResourceMetadata.JSON_PROPERTY_RESOURCE_DOCUMENTATION
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class MCPProtectedResourceMetadata {
+public static class MCPProtectedResourceMetadata {
   public static final String JSON_PROPERTY_RESOURCE = "resource";
   private String resource;
 
@@ -7226,7 +7275,7 @@ public class MCPProtectedResourceMetadata {
   MCPRemoteDiscovery.JSON_PROPERTY_GOVERNANCE
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class MCPRemoteDiscovery {
+public static class MCPRemoteDiscovery {
   public static final String JSON_PROPERTY_SERVER_NAME = "server_name";
   private String serverName;
 
@@ -7620,7 +7669,7 @@ public class MCPRemoteDiscovery {
   MCPToolCallRequest.JSON_PROPERTY_PARAMS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class MCPToolCallRequest {
+public static class MCPToolCallRequest {
   public static final String JSON_PROPERTY_METHOD = "method";
   private String method;
 
@@ -7808,7 +7857,7 @@ public class MCPToolCallRequest {
   MCPToolCallResponse.JSON_PROPERTY_RECEIPT_ID
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class MCPToolCallResponse {
+public static class MCPToolCallResponse {
   public static final String JSON_PROPERTY_RESULT = "result";
   private MCPToolCallResponseResult result;
 
@@ -8117,7 +8166,7 @@ public class MCPToolCallResponse {
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
 @JsonDeserialize(using = MCPToolCallResponseResult.MCPToolCallResponseResultDeserializer.class)
 @JsonSerialize(using = MCPToolCallResponseResult.MCPToolCallResponseResultSerializer.class)
-public class MCPToolCallResponseResult extends AbstractOpenApiSchema {
+public static class MCPToolCallResponseResult extends AbstractOpenApiSchema {
     private static final Logger log = Logger.getLogger(MCPToolCallResponseResult.class.getName());
 
     public static class MCPToolCallResponseResultSerializer extends StdSerializer<MCPToolCallResponseResult> {
@@ -8155,17 +8204,17 @@ public class MCPToolCallResponseResult extends AbstractOpenApiSchema {
             try {
                 boolean attemptParsing = true;
                 // ensure that we respect type coercion as set on the client ObjectMapper
-                if (Map<String, Object>.class.equals(Integer.class) || Map<String, Object>.class.equals(Long.class) || Map<String, Object>.class.equals(Float.class) || Map<String, Object>.class.equals(Double.class) || Map<String, Object>.class.equals(Boolean.class) || Map<String, Object>.class.equals(String.class)) {
+                if (Map.class.equals(Integer.class) || Map.class.equals(Long.class) || Map.class.equals(Float.class) || Map.class.equals(Double.class) || Map.class.equals(Boolean.class) || Map.class.equals(String.class)) {
                     attemptParsing = typeCoercion;
                     if (!attemptParsing) {
-                        attemptParsing |= ((Map<String, Object>.class.equals(Integer.class) || Map<String, Object>.class.equals(Long.class)) && token == JsonToken.VALUE_NUMBER_INT);
-                        attemptParsing |= ((Map<String, Object>.class.equals(Float.class) || Map<String, Object>.class.equals(Double.class)) && token == JsonToken.VALUE_NUMBER_FLOAT);
-                        attemptParsing |= (Map<String, Object>.class.equals(Boolean.class) && (token == JsonToken.VALUE_FALSE || token == JsonToken.VALUE_TRUE));
-                        attemptParsing |= (Map<String, Object>.class.equals(String.class) && token == JsonToken.VALUE_STRING);
+                        attemptParsing |= ((Map.class.equals(Integer.class) || Map.class.equals(Long.class)) && token == JsonToken.VALUE_NUMBER_INT);
+                        attemptParsing |= ((Map.class.equals(Float.class) || Map.class.equals(Double.class)) && token == JsonToken.VALUE_NUMBER_FLOAT);
+                        attemptParsing |= (Map.class.equals(Boolean.class) && (token == JsonToken.VALUE_FALSE || token == JsonToken.VALUE_TRUE));
+                        attemptParsing |= (Map.class.equals(String.class) && token == JsonToken.VALUE_STRING);
                     }
                 }
                 if (attemptParsing) {
-                    deserialized = tree.traverse(jp.getCodec()).readValueAs(Map<String, Object>.class);
+                    deserialized = tree.traverse(jp.getCodec()).readValueAs(Map.class);
                     // TODO: there is no validation against JSON schema constraints
                     // (min, max, enum, pattern...), this does not perform a strict JSON
                     // validation, which means the 'match' count may be higher than it should be.
@@ -8238,7 +8287,7 @@ public class MCPToolCallResponseResult extends AbstractOpenApiSchema {
     }
 
     static {
-        schemas.put("Map<String, Object>", Map<String, Object>.class);
+        schemas.put("Map<String, Object>", Map.class);
         schemas.put("String", String.class);
         JSON.registerDescendants(MCPToolCallResponseResult.class, Collections.unmodifiableMap(schemas));
     }
@@ -8258,7 +8307,7 @@ public class MCPToolCallResponseResult extends AbstractOpenApiSchema {
      */
     @Override
     public void setActualInstance(Object instance) {
-        if (JSON.isInstanceOf(Map<String, Object>.class, instance, new HashSet<Class<?>>())) {
+        if (JSON.isInstanceOf(Map.class, instance, new HashSet<Class<?>>())) {
             super.setActualInstance(instance);
             return;
         }
@@ -8289,7 +8338,7 @@ public class MCPToolCallResponseResult extends AbstractOpenApiSchema {
      * @return The actual instance of `Map<String, Object>`
      * @throws ClassCastException if the instance is not `Map<String, Object>`
      */
-    public Map<String, Object> getMap<String, Object>() throws ClassCastException {
+    public Map<String, Object> getMapStringObject() throws ClassCastException {
         return (Map<String, Object>)super.getActualInstance();
     }
 
@@ -8344,12 +8393,14 @@ public class MCPToolCallResponseResult extends AbstractOpenApiSchema {
         }
         return joiner.toString();
     }
-    if (getActualInstance() instanceof Map<String, Object>) {
+    @SuppressWarnings("unchecked")
+    Map<String, Object> _mapInstance = (getActualInstance() instanceof Map) ? (Map<String, Object>) getActualInstance() : null;
+    if (_mapInstance != null) {
         if (getActualInstance() != null) {
           for (String _key : ((Map<String, Object>)getActualInstance()).keySet()) {
             joiner.add(String.format("%sone_of_1%s%s=%s", prefix, suffix,
                 "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-                getActualInstance().get(_key), URLEncoder.encode(String.valueOf(((Map<String, Object>)getActualInstance()).get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+                ((Map<String, Object>)getActualInstance()).get(_key), URLEncoder.encode(String.valueOf(((Map<String, Object>)getActualInstance()).get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
           }
         }
         return joiner.toString();
@@ -8385,7 +8436,7 @@ public class MCPToolCallResponseResult extends AbstractOpenApiSchema {
   MCPToolRef.JSON_PROPERTY_SCHEMA
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class MCPToolRef {
+public static class MCPToolRef {
   public static final String JSON_PROPERTY_NAME = "name";
   private String name;
 
@@ -8642,7 +8693,7 @@ public class MCPToolRef {
   OSSLocalCapabilitiesFeatures.JSON_PROPERTY_WORKSPACE_COLLABORATION
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class OSSLocalCapabilitiesFeatures {
+public static class OSSLocalCapabilitiesFeatures {
   public static final String JSON_PROPERTY_IMPORT_RUN_REPORT = "import_run_report";
   private Boolean importRunReport;
 
@@ -8920,7 +8971,7 @@ public class OSSLocalCapabilitiesFeatures {
   OSSLocalCapabilitiesMCP.JSON_PROPERTY_AUTH_MODES
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class OSSLocalCapabilitiesMCP {
+public static class OSSLocalCapabilitiesMCP {
   public static final String JSON_PROPERTY_STDIO = "stdio";
   private Boolean stdio;
 
@@ -9127,7 +9178,7 @@ public class OSSLocalCapabilitiesMCP {
   OSSLocalCapabilitiesProxy.JSON_PROPERTY_PROOFGRAPH_ENDPOINT
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class OSSLocalCapabilitiesProxy {
+public static class OSSLocalCapabilitiesProxy {
   public static final String JSON_PROPERTY_RECEIPTS_ENDPOINT = "receipts_endpoint";
   private Boolean receiptsEndpoint;
 
@@ -9303,11 +9354,11 @@ public class OSSLocalCapabilitiesProxy {
   OSSLocalCapabilitiesResponse.JSON_PROPERTY_FEATURES
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class OSSLocalCapabilitiesResponse {
+public static class OSSLocalCapabilitiesResponse {
   /**
    * Gets or Sets studioMode
    */
-  public enum StudioModeEnum {
+  public static enum StudioModeEnum {
     OSS_LOCAL("oss_local");
 
     private String value;
@@ -9658,7 +9709,7 @@ public class OSSLocalCapabilitiesResponse {
   OSSLocalDecision.JSON_PROPERTY_LAMPORT_CLOCK
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class OSSLocalDecision {
+public static class OSSLocalDecision {
   public static final String JSON_PROPERTY_ID = "id";
   private String id;
 
@@ -10183,7 +10234,7 @@ public class OSSLocalDecision {
   OSSLocalPathsView.JSON_PROPERTY_PROOFGRAPH
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class OSSLocalPathsView {
+public static class OSSLocalPathsView {
   public static final String JSON_PROPERTY_EVIDENCE_DIR = "evidence_dir";
   private String evidenceDir;
 
@@ -10462,7 +10513,7 @@ public class OSSLocalPathsView {
   OSSLocalProofgraphResponse.JSON_PROPERTY_MESSAGE
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class OSSLocalProofgraphResponse {
+public static class OSSLocalProofgraphResponse {
   public static final String JSON_PROPERTY_NODES = "nodes";
   private JsonNullable<Object> nodes = JsonNullable.<Object>of(null);
 
@@ -10728,7 +10779,7 @@ public class OSSLocalProofgraphResponse {
   OSSLocalReplayReport.JSON_PROPERTY_RECEIPTS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class OSSLocalReplayReport {
+public static class OSSLocalReplayReport {
   public static final String JSON_PROPERTY_VERSION = "version";
   private String version;
 
@@ -11090,7 +11141,7 @@ public class OSSLocalReplayReport {
   OSSLocalReportMeta.JSON_PROPERTY_SUMMARY
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class OSSLocalReportMeta {
+public static class OSSLocalReportMeta {
   public static final String JSON_PROPERTY_TEMPLATE = "template";
   private String template;
 
@@ -11337,7 +11388,7 @@ public class OSSLocalReportMeta {
   OSSLocalRunSummary.JSON_PROPERTY_IS_DEMO
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class OSSLocalRunSummary {
+public static class OSSLocalRunSummary {
   public static final String JSON_PROPERTY_TOTAL = "total";
   private Integer total;
 
@@ -11685,7 +11736,7 @@ public class OSSLocalRunSummary {
   OSSLocalRuntimeStatus.JSON_PROPERTY_BUILD_TIME
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class OSSLocalRuntimeStatus {
+public static class OSSLocalRuntimeStatus {
   public static final String JSON_PROPERTY_STATUS = "status";
   private String status;
 
@@ -11897,7 +11948,7 @@ public class OSSLocalRuntimeStatus {
   OSSLocalStats.JSON_PROPERTY_LAST_REASON_CODE
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class OSSLocalStats {
+public static class OSSLocalStats {
   public static final String JSON_PROPERTY_RECEIPT_COUNT = "receipt_count";
   private Integer receiptCount;
 
@@ -12249,11 +12300,11 @@ public class OSSLocalStats {
   OSSLocalSummaryResponse.JSON_PROPERTY_STATS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class OSSLocalSummaryResponse {
+public static class OSSLocalSummaryResponse {
   /**
    * Gets or Sets mode
    */
-  public enum ModeEnum {
+  public static enum ModeEnum {
     OSS_LOCAL("oss_local");
 
     private String value;
@@ -12630,7 +12681,7 @@ public class OSSLocalSummaryResponse {
   OSSLocalTimelineResponse.JSON_PROPERTY_SOURCE
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class OSSLocalTimelineResponse {
+public static class OSSLocalTimelineResponse {
   public static final String JSON_PROPERTY_DECISIONS = "decisions";
   private List<OSSLocalDecision> decisions = new ArrayList<>();
 
@@ -12849,7 +12900,7 @@ public class OSSLocalTimelineResponse {
   PDPRequest.JSON_PROPERTY_BOUNDARY
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class PDPRequest {
+public static class PDPRequest {
   public static final String JSON_PROPERTY_BOUNDARY = "boundary";
   private EffectBoundary boundary;
 
@@ -12985,7 +13036,7 @@ public class PDPRequest {
   PDPResponse.JSON_PROPERTY_DECISION
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class PDPResponse {
+public static class PDPResponse {
   public static final String JSON_PROPERTY_DECISION = "decision";
   private GovernanceDecision decision;
 
@@ -13125,7 +13176,7 @@ public class PDPResponse {
   PolicyBundle.JSON_PROPERTY_PACK_TYPE
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class PolicyBundle {
+public static class PolicyBundle {
   public static final String JSON_PROPERTY_NAME = "name";
   private String name;
 
@@ -13141,7 +13192,7 @@ public class PolicyBundle {
   /**
    * Gets or Sets packType
    */
-  public enum PackTypeEnum {
+  public static enum PackTypeEnum {
     JURISDICTION("jurisdiction"),
     
     INDUSTRY("industry"),
@@ -13470,7 +13521,7 @@ public class PolicyBundle {
   Receipt.JSON_PROPERTY_PRINCIPAL
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class Receipt {
+public static class Receipt {
   public static final String JSON_PROPERTY_RECEIPT_ID = "receipt_id";
   private String receiptId;
 
@@ -13483,7 +13534,7 @@ public class Receipt {
   /**
    * Gets or Sets status
    */
-  public enum StatusEnum {
+  public static enum StatusEnum {
     APPROVED("APPROVED"),
     
     DENIED("DENIED"),
@@ -14029,7 +14080,7 @@ public class Receipt {
   RevokeTrustKeyRequest.JSON_PROPERTY_KEY_ID
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class RevokeTrustKeyRequest {
+public static class RevokeTrustKeyRequest {
   public static final String JSON_PROPERTY_TENANT_ID = "tenant_id";
   private String tenantId;
 
@@ -14203,7 +14254,7 @@ public class RevokeTrustKeyRequest {
   Session.JSON_PROPERTY_LAST_LAMPORT_CLOCK
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class Session {
+public static class Session {
   public static final String JSON_PROPERTY_SESSION_ID = "session_id";
   private String sessionId;
 
@@ -14446,11 +14497,11 @@ public class Session {
   VerificationResult.JSON_PROPERTY_ERRORS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class VerificationResult {
+public static class VerificationResult {
   /**
    * Gets or Sets verdict
    */
-  public enum VerdictEnum {
+  public static enum VerdictEnum {
     PASS("PASS"),
     
     FAIL("FAIL");
@@ -14701,11 +14752,11 @@ public class VerificationResult {
   VerificationResultChecks.JSON_PROPERTY_POLICY_COMPLIANCE
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class VerificationResultChecks {
+public static class VerificationResultChecks {
   /**
    * Gets or Sets signatures
    */
-  public enum SignaturesEnum {
+  public static enum SignaturesEnum {
     PASS("PASS"),
     
     FAIL("FAIL");
@@ -14743,7 +14794,7 @@ public class VerificationResultChecks {
   /**
    * Gets or Sets causalChain
    */
-  public enum CausalChainEnum {
+  public static enum CausalChainEnum {
     PASS("PASS"),
     
     FAIL("FAIL");
@@ -14781,7 +14832,7 @@ public class VerificationResultChecks {
   /**
    * Gets or Sets policyCompliance
    */
-  public enum PolicyComplianceEnum {
+  public static enum PolicyComplianceEnum {
     PASS("PASS"),
     
     FAIL("FAIL");
@@ -15015,7 +15066,7 @@ public class VerificationResultChecks {
   VersionInfo.JSON_PROPERTY_GO_VERSION
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-20T17:05:00.266460834Z[Etc/UTC]", comments = "Generator version: 7.4.0")
-public class VersionInfo {
+public static class VersionInfo {
   public static final String JSON_PROPERTY_VERSION = "version";
   private String version;
 
@@ -15233,3 +15284,5 @@ public class VersionInfo {
   }
 }
 
+
+}

@@ -1,12 +1,5 @@
-// Package linear provides a HELM connector for the Linear project management API.
-//
-// Architecture:
-//   - types.go:     Request/response types for Linear operations
-//   - client.go:    HTTP client stub (requires API key for production use)
-//   - connector.go: High-level connector composing client + ZeroTrust gate + ProofGraph
-//
-// Per HELM Standard v1.2: every tool call becomes an INTENT -> EFFECT chain
-// in the ProofGraph DAG.
+// types.go: Request/response types for Linear operations.
+// Package-level documentation lives in client.go.
 package linear
 
 import "time"

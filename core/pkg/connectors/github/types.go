@@ -1,12 +1,5 @@
-// Package github provides a HELM connector for the GitHub API.
-//
-// Architecture:
-//   - types.go:     Request/response types for GitHub operations
-//   - client.go:    HTTP client stub (requires personal access token for production use)
-//   - connector.go: High-level connector composing client + ZeroTrust gate + ProofGraph
-//
-// Per HELM Standard v1.2: every tool call becomes an INTENT -> EFFECT chain
-// in the ProofGraph DAG.
+// types.go: Request/response types for GitHub operations.
+// Package-level documentation lives in client.go.
 package github
 
 import "time"

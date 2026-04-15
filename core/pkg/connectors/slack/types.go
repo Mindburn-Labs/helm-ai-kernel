@@ -1,12 +1,5 @@
-// Package slack provides the HELM connector for Slack API interactions.
-//
-// Architecture:
-//   - types.go:     Request/response types for Slack operations
-//   - client.go:    HTTP client for Slack API (stub implementation)
-//   - connector.go: High-level connector composing client + ZeroTrust + ProofGraph
-//
-// Per HELM Standard v1.2: every Slack action becomes an
-// INTENT -> EFFECT chain in the ProofGraph DAG.
+// types.go: Request/response types for Slack operations.
+// Package-level documentation lives in client.go.
 package slack
 
 import "time"

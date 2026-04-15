@@ -32,12 +32,23 @@ type Connector struct {
 }
 
 // Config configures a new GitHub connector.
+//
+// Token is optional. When empty, the underlying Client returns "not connected"
+// errors for every method — useful for unit tests and schema-validation paths
+// that should not touch the network. Set Token (a GitHub personal access token,
+// classic or fine-grained) to enable real API calls.
 type Config struct {
 	BaseURL     string
 	ConnectorID string
+	Token       string
 }
 
 // NewConnector creates a new GitHub connector.
+//
+// If cfg.Token is non-empty, the connector will make authenticated requests
+// to the GitHub REST API with rate-limit awareness and retry-on-transient.
+// If cfg.Token is empty, every tool call returns a "not connected" error
+// (preserving backward compatibility with token-less unit tests).
 func NewConnector(cfg Config) *Connector {
 	if cfg.ConnectorID == "" {
 		cfg.ConnectorID = ConnectorID
@@ -53,8 +64,15 @@ func NewConnector(cfg Config) *Connector {
 		RequireProvenance:  true,
 	})
 
+	var client *Client
+	if cfg.Token != "" {
+		client = NewClientWithToken(cfg.BaseURL, cfg.Token)
+	} else {
+		client = NewClient(cfg.BaseURL)
+	}
+
 	return &Connector{
-		client:      NewClient(cfg.BaseURL),
+		client:      client,
 		gate:        gate,
 		graph:       proofgraph.NewGraph(),
 		connectorID: cfg.ConnectorID,

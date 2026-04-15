@@ -32,12 +32,22 @@ type Connector struct {
 }
 
 // Config configures a new Linear connector.
+// Config configures a new Linear connector.
+//
+// Token is optional. When empty, the underlying GraphQL client returns
+// "not connected" errors — useful for unit tests. Set Token (Linear personal
+// API key `lin_api_...` or OAuth bearer) to enable real API access.
 type Config struct {
 	BaseURL     string
 	ConnectorID string
+	Token       string
 }
 
 // NewConnector creates a new Linear connector.
+//
+// If cfg.Token is non-empty, the connector makes real authenticated GraphQL
+// calls to Linear's API. If empty, every tool call returns a "not connected"
+// error (preserving backward compat with token-less unit tests).
 func NewConnector(cfg Config) *Connector {
 	if cfg.ConnectorID == "" {
 		cfg.ConnectorID = ConnectorID
@@ -53,8 +63,15 @@ func NewConnector(cfg Config) *Connector {
 		RequireProvenance:  true,
 	})
 
+	var client *Client
+	if cfg.Token != "" {
+		client = NewClientWithToken(cfg.BaseURL, cfg.Token)
+	} else {
+		client = NewClient(cfg.BaseURL)
+	}
+
 	return &Connector{
-		client:      NewClient(cfg.BaseURL),
+		client:      client,
 		gate:        gate,
 		graph:       proofgraph.NewGraph(),
 		connectorID: cfg.ConnectorID,

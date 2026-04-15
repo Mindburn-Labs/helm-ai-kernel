@@ -1,3 +1,8 @@
+// Package github is a STUB connector. All public methods return "not connected"
+// errors until a real GitHub REST/GraphQL client ships with OAuth, rate-limit
+// handling, retry, and pagination. Tracked as roadmap item P2-01 (real connector
+// set: GitHub + Slack + Linear). DO NOT depend on this package for production
+// workloads — the stub return value is a sentinel error, not a placeholder value.
 package github
 
 import (
@@ -7,7 +12,7 @@ import (
 	"time"
 )
 
-// Client is an HTTP client for the GitHub REST API.
+// Client is an HTTP client for the GitHub REST API. STUB — see package doc.
 // All methods return descriptive errors until a personal access token is configured.
 type Client struct {
 	baseURL    string

@@ -1,3 +1,8 @@
+// Package slack is a STUB connector. All public methods return "not connected"
+// errors until a real Slack API client ships (bot token auth, signed-request
+// verification, event handling). Tracked as roadmap item P2-02 (real connector
+// set: GitHub + Slack + Linear). DO NOT depend on this package for production
+// workloads.
 package slack
 
 import (
@@ -7,9 +12,7 @@ import (
 	"time"
 )
 
-// Client is the HTTP client for the Slack API.
-// In production, this would use a real bot token and Slack API endpoints.
-// The current implementation is a stub that returns structured errors.
+// Client is the HTTP client for the Slack API. STUB — see package doc.
 type Client struct {
 	botToken   string
 	httpClient *http.Client

@@ -46,7 +46,7 @@ This chain runs on every governed tool call. It is the boundary overhead — the
 
 ## Results
 
-Measured on commit `4e52909d`.
+Measured on commit `4e52909d`. Machine-readable artifact committed at [benchmarks/results/latest.json](../benchmarks/results/latest.json). CI auto-refresh begins with the `benchmarks.yml` workflow in v0.4.0 — subsequent runs overwrite this file with fresh measurements and the new commit SHA.
 
 | Scenario | p50 | p95 | p99 | mean | σ | min | max |
 |----------|-----|-----|-----|------|---|-----|-----|

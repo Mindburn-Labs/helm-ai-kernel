@@ -25,9 +25,9 @@ May your context windows be long and your hallucinations few. See .github/AI_NOT
 
 **Fail-closed execution firewall** · **TLA+-verified policy pipeline** · **Post-quantum crypto** · **Court-admissible evidence packs**
 
-**Runtime governance kernel for AI agents** — deterministic policy enforcement, cryptographic proof chains, and 22 regulatory compliance frameworks. Covers all **10 OWASP Agentic risks** with **formally verified** correctness proofs. Single static binary, 75us p99 overhead.
+**Fail-closed AI execution substrate** — deterministic runtime with signed canonical receipts and offline-verifiable replay. Every agent tool call passes through a non-bypassable policy boundary ([core/pkg/firewall/firewall.go](core/pkg/firewall/firewall.go)), gets JCS-canonicalized and SHA-256 hashed, and produces an Ed25519-signed receipt in a causal DAG you can export and replay. 7 regulatory framework packages plus 9 signed reference policy bundles (SOC 2, PCI-DSS, ISO 42001, EU AI Act, HIPAA, GDPR, DORA). Maps all **10 OWASP Agentic risks** to enforcement sites in code. Single static Go binary, 75µs p99 on the benchmark harness ([methodology](docs/BENCHMARKS.md)).
 
-**Works with any stack** — OpenAI, Anthropic, LangChain, CrewAI, LlamaIndex, Vercel AI, Semantic Kernel, and 12+ more. Go · Python · TypeScript · Rust · Java.
+**Works with your stack** — OpenAI-compatible proxy (any SDK; zero code change) plus native adapters for Anthropic, LangChain/LangGraph, CrewAI, LlamaIndex, Vercel AI, Semantic Kernel, Haystack, Dify, Flowise, Mistral, Gemini, and any MCP server. SDKs in Go, Python, TypeScript, Rust, Java.
 
 HELM is a deterministic proxy that sits between your AI agent and the tools it calls. Every tool invocation passes through a fail-closed policy gate, gets canonicalized (JCS + SHA-256), and produces an Ed25519-signed receipt. The receipts form a causal DAG (ProofGraph) that can be exported and verified offline.
 
@@ -265,7 +265,7 @@ Every HELM security feature is grounded in peer-reviewed research:
 | **Evidence** | Court-admissible packs (JCS + SHA-256) | CloudEvents logs | -- | -- | -- |
 | **Formal verification** | TLA+ proofs | None | None | None | None |
 | **Policy sandbox** | WASM (wazero, deterministic) | YAML rules | -- | -- | Rego/Cedar |
-| **Compliance** | 22 regulatory frameworks | 4 frameworks | -- | -- | -- |
+| **Compliance** | 7 framework packages + 9 signed reference bundles | 4 frameworks | -- | -- | -- |
 | **Latency** | 75us p99 ([benchmarked](docs/BENCHMARKS.md)) | 0.1ms (no signing) | 100ms+ | 50ms+ | < 5ms |
 | **Distribution** | Single static binary | pip install | pip install | pip install | Binary |
 
@@ -401,10 +401,10 @@ if apiErr, ok := err.(*helm.HelmApiError); ok {
 | **Circuit Breakers** | CLOSED/OPEN/HALF_OPEN state machine per connector + registry | [effects/circuitbreaker.go](core/pkg/effects/circuitbreaker.go) |
 | **Reversibility Classification** | Effect types tagged as fully/partially/irreversible with approval gating | [effects/reversibility.go](core/pkg/effects/reversibility.go) |
 | **SLO Engine** | Latency/error-rate objectives with error budget tracking and exhaustion alerts | [slo/](core/pkg/slo/) |
-| **22 Compliance Frameworks** | GDPR, HIPAA, SOX, SEC, MiCA, DORA, FCA, EU AI Act, CFTC + RegWatch monitoring | [compliance/](core/pkg/compliance/) |
+| **Compliance Frameworks** | 7 Go packages (GDPR, HIPAA, SOX, SEC, MiCA, DORA, FCA) + 9 signed reference policy bundles (SOC 2, PCI-DSS, ISO 42001, EU AI Act high-risk, HIPAA covered entity, GDPR, customer-ops, procurement, recruiting) + RegWatch monitoring | [compliance/](core/pkg/compliance/) · [reference_packs/](reference_packs/) |
 | **OpenTelemetry** | Traces (gate-level spans) + metrics (decision latency, gate denials, effect throughput) | [guardian/otel.go](core/pkg/guardian/otel.go) |
 | **CloudEvents SIEM Export** | ProofGraph nodes serialized as CloudEvents v1.0 for Splunk/Datadog/Elastic | [cloudevents/](core/pkg/proofgraph/cloudevents/) |
-| **Multi-Agent Runtime** | MAMA lanes-based concurrency, agent roster, deterministic scheduling | [mama/](core/pkg/mama/) |
+| **Multi-Agent Runtime** (experimental) | MAMA lanes-based concurrency scaffolding — see package README for current status; public API unstable | [experimental/mama/](core/pkg/experimental/mama/) |
 | **Agent Lifecycle** | Virtual employee management (create/suspend/resume/terminate) with budget envelopes | [workforce/](core/pkg/workforce/) |
 | **Fault Attribution** | Shapley-value causal attribution from ProofGraph for multi-agent failures | [attribution/](core/pkg/proofgraph/attribution/) |
 | **Hybrid PQ Signing** | Ed25519 + ML-DSA-65 on every receipt (quantum-ready, dual-verify) | [crypto/hybrid_signer.go](core/pkg/crypto/hybrid_signer.go) |
@@ -470,7 +470,7 @@ helm-oss/
 │   └── cmd/helm/        # CLI: proxy, export, verify, replay, conform
 ├── packages/
 │   └── mindburn-helm-cli/  # @mindburn/helm-cli (npm verifier)
-├── sdk/                 # TypeScript, Python, Go, Rust
+├── sdk/                 # TypeScript, Python, Go, Rust, Java
 ├── examples/            # Runnable per-language + MCP examples
 ├── deploy/              # Caddy, compose, deploy guide
 ├── docs/                # Threat model, security model, conformance

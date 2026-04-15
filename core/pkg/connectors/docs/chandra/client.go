@@ -1,3 +1,7 @@
+// Package chandra is a STUB connector. All public methods return "not connected"
+// errors until a real Chandra document intelligence API client ships. Tracked
+// as roadmap item P2-04 (marked-experimental connector set). DO NOT depend on
+// this package for production workloads.
 package chandra
 
 import (
@@ -7,9 +11,8 @@ import (
 	"time"
 )
 
-// Client is the HTTP client for the Chandra document intelligence API.
-// In production this would authenticate against the real Chandra endpoint.
-// The current implementation is a stub that returns structured errors.
+// Client is the HTTP client for the Chandra document intelligence API. STUB —
+// see package doc.
 type Client struct {
 	apiKey     string
 	baseURL    string

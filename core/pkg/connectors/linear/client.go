@@ -1,3 +1,7 @@
+// Package linear is a STUB connector. All public methods return "not connected"
+// errors until a real Linear GraphQL client ships. Tracked as roadmap item P2-03
+// (real connector set: GitHub + Slack + Linear). DO NOT depend on this package
+// for production workloads.
 package linear
 
 import (
@@ -7,8 +11,7 @@ import (
 	"time"
 )
 
-// Client is an HTTP client for the Linear GraphQL API.
-// All methods return descriptive errors until an API key is configured.
+// Client is an HTTP client for the Linear GraphQL API. STUB — see package doc.
 type Client struct {
 	baseURL    string
 	httpClient *http.Client

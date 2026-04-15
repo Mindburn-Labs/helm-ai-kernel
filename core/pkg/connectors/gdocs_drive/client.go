@@ -1,3 +1,7 @@
+// Package gdocs_drive is a STUB connector. All public methods return "not connected"
+// errors until a real Google Docs/Drive API client ships. Tracked as roadmap
+// item P2-04 (marked-experimental connector set). DO NOT depend on this package
+// for production workloads.
 package gdocs_drive
 
 import (
@@ -7,8 +11,8 @@ import (
 	"time"
 )
 
-// Client is an HTTP client for the Google Docs and Google Drive APIs.
-// All methods return descriptive errors until OAuth2 credentials are configured.
+// Client is an HTTP client for the Google Docs and Google Drive APIs. STUB —
+// see package doc.
 type Client struct {
 	baseURL    string
 	httpClient *http.Client

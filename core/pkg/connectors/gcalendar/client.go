@@ -1,3 +1,7 @@
+// Package gcalendar is a STUB connector. All public methods return "not connected"
+// errors until a real Google Calendar API client ships. Tracked as roadmap item
+// P2-04 (marked-experimental connector set). DO NOT depend on this package for
+// production workloads.
 package gcalendar
 
 import (
@@ -7,9 +11,7 @@ import (
 	"time"
 )
 
-// Client is the HTTP client for the Google Calendar API.
-// In production, this would use real OAuth2 credentials and Calendar API endpoints.
-// The current implementation is a stub that returns structured errors.
+// Client is the HTTP client for the Google Calendar API. STUB — see package doc.
 type Client struct {
 	baseURL    string
 	httpClient *http.Client

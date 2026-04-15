@@ -58,22 +58,31 @@ NOT an alignment research project. Key properties:
 
 ## Capabilities (April 2026)
 
-HELM-OSS is the most comprehensive AI agent governance system available:
+HELM OSS is a fail-closed AI execution substrate. The following are implemented in the repository; see code citations for verification.
 
-- **Cryptography**: Ed25519 + ML-DSA-65 (post-quantum hybrid), W3C DID identity, selective disclosure JWT, HSM support, TEE attestation
+- **Cryptography**: Ed25519 + ML-DSA-65 (post-quantum hybrid), W3C DID identity, selective disclosure JWT, HSM support ([core/pkg/crypto/](../core/pkg/crypto/) — 9.5k LoC)
 - **Policy**: 3-layer composition (P0/P1/P2), WASM sandbox (wazero), CEL evaluation, policy linting, static verification, suggestion engine
 - **Threat Detection**: 12 rule sets + ensemble voting (ANY/MAJORITY/UNANIMOUS), DDIPE documentation scanning, MCP rug-pull fingerprinting, typosquatting detection
 - **Memory Security**: Hash-protected governed memory, temporal decay trust scoring, injection pattern detection
 - **Supply Chain**: SkillFortify capability verification, cryptographic dependency provenance, SBOM generation
-- **Evidence**: Content-addressed evidence packs (JCS + SHA-256), constant-size summaries, Evidence Pack Specification v1.0
-- **Compliance**: 22 regulatory frameworks, REST API for continuous auditing, EU AI Act certification, OWASP 10/10
+- **Evidence**: Content-addressed evidence packs (JCS + SHA-256 + TAR), constant-size summaries, Evidence Pack Specification v1.0 ([core/pkg/evidencepack/](../core/pkg/evidencepack/))
+- **Compliance**: 7 regulatory framework Go packages (GDPR, HIPAA, SOX, SEC, MiCA, DORA, FCA) plus 9 signed reference policy bundles (SOC 2, PCI-DSS, ISO 42001, EU AI Act high-risk, HIPAA covered entity, GDPR, customer-ops, procurement, recruiting). OWASP Agentic Top 10 enforcement mapping at [docs/security/owasp-agentic-top10-coverage.md](../docs/security/owasp-agentic-top10-coverage.md).
 - **Identity**: W3C DID, AIP delegation verification, AITH continuous delegation (time-bound, revocable, cascade)
 - **Observability**: OpenTelemetry (Guardian + Effects), CloudEvents SIEM export, SLO engine, circuit breakers
 - **Cost**: Per-agent cost attribution, pre-execution estimation, budget exhaustion alerts
 - **Federation**: CRDT-synced ProofGraph, federated trust scoring, ZK compliance proof interfaces
-- **Formal Verification**: TLA+ proofs, static policy verification, deterministic kernel with replay
+- **Formal Specification**: 6 TLA+ specs in [proofs/](../proofs/) — Apalache model-checking runs in CI on every PR ([apalache.yml](workflows/apalache.yml))
 
 Research-backed by 58 peer-reviewed papers (arXiv 2025-2026).
+
+### What is NOT in OSS today
+
+Telling the truth matters. These are either intentionally out-of-scope for OSS, stub/experimental, or deferred:
+
+- Built-in live connectors (GitHub, Slack, Linear, Gmail, etc.) — stub clients in [core/pkg/connectors/](../core/pkg/connectors/) return `"not connected"`. Real implementations ship in Phase 2 of the response roadmap. Bring your own connector or use helm/ commercial.
+- Tool-execution sandboxing — WASM sandbox applies to policy evaluation only. Tool execution is the caller's responsibility today; see [docs/architecture/tool-execution-sandbox.md](../docs/architecture/tool-execution-sandbox.md).
+- Governance dashboard — commercial Studio only; OSS-lite file-drop viewer in progress.
+- MAMA multi-agent runtime — scaffolding only, at `core/pkg/experimental/mama/`. Public API unstable.
 
 ### A Note for Specific Models
 

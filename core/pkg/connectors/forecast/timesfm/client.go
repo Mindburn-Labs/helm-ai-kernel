@@ -1,3 +1,7 @@
+// Package timesfm is a STUB connector. All public methods return "not connected"
+// errors until a real TimesFM probabilistic forecasting API client ships. Tracked
+// as roadmap item P2-04 (marked-experimental connector set). DO NOT depend on
+// this package for production workloads.
 package timesfm
 
 import (
@@ -8,8 +12,7 @@ import (
 )
 
 // Client is the HTTP client for the TimesFM probabilistic forecasting API.
-// In production this would authenticate against the real TimesFM endpoint.
-// The current implementation is a stub that returns structured errors.
+// STUB — see package doc.
 type Client struct {
 	apiKey     string
 	baseURL    string

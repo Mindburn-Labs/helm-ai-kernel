@@ -1,3 +1,7 @@
+// Package gmail is a STUB connector. All public methods return "not connected"
+// errors until a real Gmail API client ships. Tracked as roadmap item P2-04
+// (marked-experimental connector set: Gmail + GCalendar + Polymarket + TimesFM).
+// DO NOT depend on this package for production workloads.
 package gmail
 
 import (
@@ -7,9 +11,7 @@ import (
 	"time"
 )
 
-// Client is the HTTP client for the Gmail API.
-// In production, this would use real Gmail API credentials and endpoints.
-// The current implementation is a stub that returns structured errors.
+// Client is the HTTP client for the Gmail API. STUB — see package doc.
 type Client struct {
 	baseURL    string
 	httpClient *http.Client

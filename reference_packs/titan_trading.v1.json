@@ -1,0 +1,134 @@
+{
+  "pack_id": "titan-trading-v1",
+  "label": "Titan Algorithmic Trading Governance",
+  "description": "P0/P1/P2 policy bundle for Titan's 5-phase trading pipeline. Enforces position limits, drawdown circuit breakers, and market restrictions. Consumed by HelmIntentGate in titan-brain.",
+  "version": 1,
+  "programs": [
+    {
+      "program_id": "prog-polymarket-live",
+      "label": "Polymarket Live Trading",
+      "status": "active",
+      "signal_filters": [
+        { "class": "TRADE_INTENT", "venue": "polymarket" }
+      ]
+    },
+    {
+      "program_id": "prog-paper-trading",
+      "label": "Paper Trading (All Venues)",
+      "status": "active",
+      "signal_filters": [
+        { "class": "TRADE_INTENT", "mode": "paper" }
+      ]
+    }
+  ],
+  "policy_layers": {
+    "p0_ceilings": {
+      "description": "Absolute limits — never exceeded regardless of strategy or operator override",
+      "rules": [
+        {
+          "rule_id": "p0-max-daily-exposure",
+          "description": "Maximum total USD exposure across all venues in a 24h rolling window",
+          "cel_expression": "intent.cumulative_daily_exposure_usd <= 500.0",
+          "parameters": { "max_daily_exposure_usd": 500.0 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p0-max-single-position",
+          "description": "Maximum single position size",
+          "cel_expression": "intent.size_usd <= 100.0",
+          "parameters": { "max_single_position_usd": 100.0 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p0-prohibited-markets",
+          "description": "Block specific market categories (politics/elections in jurisdictions where prohibited)",
+          "cel_expression": "!(intent.market_category in ['US_ELECTION_2026', 'SANCTIONS_ENTITY'])",
+          "parameters": { "prohibited_categories": ["US_ELECTION_2026", "SANCTIONS_ENTITY"] },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p0-max-open-positions",
+          "description": "Maximum number of concurrent open positions",
+          "cel_expression": "state.open_position_count <= 20",
+          "parameters": { "max_open_positions": 20 },
+          "on_violation": "DENY"
+        }
+      ]
+    },
+    "p1_operational_rules": {
+      "description": "Signed governance rules — compiled to WASM/CEL bytecode, updated via policy bundle rotation",
+      "rules": [
+        {
+          "rule_id": "p1-daily-drawdown-limit",
+          "description": "Halt all trading if daily PnL drops below threshold",
+          "cel_expression": "state.daily_pnl_usd >= -50.0",
+          "parameters": { "max_daily_drawdown_usd": -50.0 },
+          "on_violation": "DENY",
+          "circuit_breaker": { "cooldown_minutes": 60, "auto_reset": true }
+        },
+        {
+          "rule_id": "p1-consecutive-loss-breaker",
+          "description": "Pause trading after N consecutive losing trades",
+          "cel_expression": "state.consecutive_losses <= 5",
+          "parameters": { "max_consecutive_losses": 5 },
+          "on_violation": "DENY",
+          "circuit_breaker": { "cooldown_minutes": 30, "auto_reset": true }
+        },
+        {
+          "rule_id": "p1-min-edge-threshold",
+          "description": "Reject trades where expected edge is below minimum",
+          "cel_expression": "intent.expected_edge_bps >= 50",
+          "parameters": { "min_edge_bps": 50 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p1-venue-concentration-limit",
+          "description": "No more than 80% of capital on any single venue",
+          "cel_expression": "state.venue_exposure_pct(intent.venue_id) <= 0.80",
+          "parameters": { "max_venue_concentration_pct": 0.80 },
+          "on_violation": "REQUIRE_APPROVAL"
+        },
+        {
+          "rule_id": "p1-slippage-guard",
+          "description": "Reject if estimated slippage exceeds threshold for the position size",
+          "cel_expression": "intent.estimated_slippage_bps <= 200",
+          "parameters": { "max_slippage_bps": 200 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p1-pyusd-depeg-guard",
+          "description": "Halt Polymarket trading if PYUSD deviates from USDC beyond threshold (MIN-180)",
+          "cel_expression": "state.pyusd_usdc_deviation_bps <= 100",
+          "parameters": { "max_depeg_bps": 100 },
+          "on_violation": "DENY",
+          "circuit_breaker": { "cooldown_minutes": 120, "auto_reset": false }
+        }
+      ]
+    },
+    "p2_overlays": {
+      "description": "Per-session narrowing — operator or strategy-specific overrides that can only tighten, never loosen P0/P1",
+      "rules": [
+        {
+          "rule_id": "p2-paper-mode-bypass",
+          "description": "Paper trades bypass P1 drawdown/loss breakers but respect P0 ceilings",
+          "cel_expression": "intent.mode == 'paper'",
+          "effect": "SKIP_P1",
+          "scope": ["p1-daily-drawdown-limit", "p1-consecutive-loss-breaker"]
+        },
+        {
+          "rule_id": "p2-research-court-required",
+          "description": "Live trades >$50 require a passing research court verdict",
+          "cel_expression": "intent.mode != 'paper' && intent.size_usd > 50.0 ? has(intent.research_verdict) && intent.research_verdict == 'APPROVED' : true",
+          "on_violation": "REQUIRE_APPROVAL"
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "created_at": "2026-04-16T00:00:00Z",
+    "created_by": "audit-close-out-session",
+    "applicable_to": ["titan-brain", "titan-execution-rs"],
+    "helm_protocol_version": "2025-11-25",
+    "anchor_tickets": ["MIN-57", "MIN-55", "MIN-180"]
+  }
+}

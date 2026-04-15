@@ -49,10 +49,10 @@ test-otel:
 	cd core && go test ./pkg/otel/... -v -count=1
 
 test-l3:
-	cd core && go test ./pkg/conformance/... -v -count=1 -run "L3-"
+	cd core && go test ./pkg/conformance/... -v -count=1 -run "TestL3|L3-"
 
 test-owasp:
-	cd core && go test ./pkg/conformance/... -v -count=1 -run "OWASP-"
+	cd core && go test ./pkg/conformance/... -v -count=1 -run "TestOWASP"
 
 # ── Crucible (adversarial + conformance + use cases) ──
 crucible: test

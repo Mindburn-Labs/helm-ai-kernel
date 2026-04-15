@@ -1,0 +1,177 @@
+name: Python Publish
+
+# Publishes HELM Python SDK primaries to PyPI.
+#
+# TRIGGER POLICY
+# --------------
+# Default: workflow_dispatch only. The first successful publish of v0.4.0 is a
+# human-approved event. Once stable, uncomment the `release:` block so future
+# tagged releases auto-publish.
+#
+# PACKAGES
+# --------
+# Primary set for v0.4.0 (per Phase 3 Decision 2):
+#   helm-sdk, helm-langchain, helm-crewai, helm-openai-agents, helm-anthropic
+# Plus one deferred-primary:
+#   helm-autogen
+# Plus stretch:
+#   helm-semantic-kernel
+#
+# SECURITY
+# --------
+# Uses environment-scoped `PYPI_TOKEN` in the `pypi-production` environment.
+# Environment requires reviewer approval for deployment — configure in
+# Settings → Environments → pypi-production.
+#
+# FUTURE MIGRATION
+# ----------------
+# Migrate each package to PyPI Trusted Publishing (OIDC) after first release
+# to eliminate the long-lived token. See
+# https://docs.pypi.org/trusted-publishers/ for per-package configuration.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (must match VERSION file, e.g. 0.4.0)'
+        required: true
+        type: string
+      packages:
+        description: 'Comma-separated package dirs to publish (empty = all primaries)'
+        required: false
+        default: ''
+        type: string
+      dry_run:
+        description: 'Build packages but do not upload'
+        required: false
+        default: false
+        type: boolean
+  # Uncomment after first successful dispatch to enable release-triggered publish:
+  # release:
+  #   types: [published]
+
+permissions:
+  contents: read
+  id-token: write  # for PyPI attestations
+
+concurrency:
+  group: python-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.pkg.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pkg:
+          - { name: helm-sdk,             dir: sdk/python/helm_sdk }
+          - { name: helm-langchain,       dir: sdk/python/langchain }
+          - { name: helm-crewai,          dir: sdk/python/crewai }
+          - { name: helm-openai-agents,   dir: sdk/python/openai_agents }
+          - { name: helm-anthropic,       dir: sdk/python/anthropic }
+          - { name: helm-autogen,         dir: sdk/python/autogen }
+          - { name: helm-semantic-kernel, dir: sdk/python/semantic_kernel }
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Sanity-check requested version matches VERSION file
+        id: version
+        run: |
+          FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
+          REQUESTED="${{ github.event.inputs.version }}"
+          if [ -n "$REQUESTED" ] && [ "$REQUESTED" != "$FILE_VERSION" ]; then
+            echo "::error::Requested version $REQUESTED does not match VERSION file $FILE_VERSION"
+            exit 1
+          fi
+          echo "version=$FILE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing version: $FILE_VERSION"
+
+      - name: Install build tools
+        run: pip install --upgrade build twine
+
+      - name: Check if this package is in requested filter
+        id: gate
+        run: |
+          REQUESTED='${{ github.event.inputs.packages }}'
+          if [ -z "$REQUESTED" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          elif echo "$REQUESTED" | tr ',' '\n' | grep -qx "${{ matrix.pkg.dir }}"; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping ${{ matrix.pkg.name }} (not in --packages filter)"
+          fi
+
+      - name: Build sdist + wheel
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          cd ${{ matrix.pkg.dir }}
+          rm -rf dist
+          python -m build
+
+      - name: Validate metadata
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          cd ${{ matrix.pkg.dir }}
+          twine check dist/*
+
+      - name: Smoke-install the wheel
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          cd ${{ matrix.pkg.dir }}
+          # Verify the built wheel is installable in a clean env
+          python -m venv /tmp/smoke-${{ matrix.pkg.name }}
+          /tmp/smoke-${{ matrix.pkg.name }}/bin/pip install dist/*.whl
+
+      - name: Upload dist artifact
+        if: steps.gate.outputs.publish == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.pkg.name }}
+          path: ${{ matrix.pkg.dir }}/dist/
+          retention-days: 7
+
+  publish:
+    name: Publish ${{ matrix.pkg.name }} to PyPI
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event.inputs.dry_run != 'true'
+    environment:
+      name: pypi-production
+      url: https://pypi.org/project/${{ matrix.pkg.name }}/
+    strategy:
+      fail-fast: false
+      max-parallel: 1  # serial publish so a mid-matrix failure doesn't leave half-published tags
+      matrix:
+        pkg:
+          - { name: helm-sdk,             dir: sdk/python/helm_sdk }
+          - { name: helm-langchain,       dir: sdk/python/langchain }
+          - { name: helm-crewai,          dir: sdk/python/crewai }
+          - { name: helm-openai-agents,   dir: sdk/python/openai_agents }
+          - { name: helm-anthropic,       dir: sdk/python/anthropic }
+          - { name: helm-autogen,         dir: sdk/python/autogen }
+          - { name: helm-semantic-kernel, dir: sdk/python/semantic_kernel }
+    steps:
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ matrix.pkg.name }}
+          path: dist/
+        continue-on-error: true  # some packages may have been filtered out
+
+      - name: Publish to PyPI
+        if: hashFiles('dist/*') != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_TOKEN }}
+          packages-dir: dist/
+          skip-existing: true   # tolerant of re-runs; mid-publish failures can retry safely
+          verbose: true

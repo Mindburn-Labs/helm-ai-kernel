@@ -1,0 +1,69 @@
+name: crates.io Publish
+
+# Publishes the HELM Rust SDK crate (`helm-sdk`) to crates.io.
+#
+# TRIGGER POLICY: workflow_dispatch only initially. Release-trigger enabled
+# after first successful manual publish.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (must match VERSION file)'
+        required: true
+        type: string
+      dry_run:
+        description: 'cargo publish --dry-run only'
+        required: false
+        default: false
+        type: boolean
+  # release:
+  #   types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crates-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish helm-sdk to crates.io
+    runs-on: ubuntu-latest
+    environment:
+      name: crates-production
+      url: https://crates.io/crates/helm-sdk
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Version sanity check
+        run: |
+          FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
+          REQUESTED="${{ github.event.inputs.version }}"
+          if [ "$REQUESTED" != "$FILE_VERSION" ]; then
+            echo "::error::Requested $REQUESTED != VERSION $FILE_VERSION"
+            exit 1
+          fi
+          CARGO_VERSION=$(grep '^version' sdk/rust/Cargo.toml | head -1 | cut -d'"' -f2)
+          if [ "$CARGO_VERSION" != "$FILE_VERSION" ]; then
+            echo "::error::sdk/rust/Cargo.toml version $CARGO_VERSION != VERSION $FILE_VERSION"
+            exit 1
+          fi
+
+      - name: cargo check
+        working-directory: sdk/rust
+        run: cargo check --release
+
+      - name: cargo publish --dry-run (always runs)
+        working-directory: sdk/rust
+        run: cargo publish --dry-run
+
+      - name: cargo publish
+        if: github.event.inputs.dry_run != 'true'
+        working-directory: sdk/rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_TOKEN }}
+        run: cargo publish

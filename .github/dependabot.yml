@@ -1,0 +1,188 @@
+# Dependabot configuration for HELM OSS.
+#
+# Ecosystems covered:
+#   - github-actions   — all workflow files
+#   - gomod            — core Go kernel + SDK
+#   - pip              — Python SDKs
+#   - npm              — TypeScript SDKs + root npm workspace
+#   - cargo            — Rust SDK
+#   - maven            — Java SDK
+#
+# Schedule: weekly on Monday (morning UTC). Groups security fixes
+# separately for immediate review.
+#
+# Severity: high + critical security advisories open PRs immediately
+# (automatic-security-updates repo setting, not here).
+version: 2
+
+updates:
+
+  # --- GitHub Actions ---
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps-actions)"
+    labels:
+      - dependencies
+      - github-actions
+
+  # --- Go modules ---
+  - package-ecosystem: gomod
+    directory: /core
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 10
+    groups:
+      go-core:
+        applies-to: version-updates
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps-go)"
+    labels:
+      - dependencies
+      - go
+    ignore:
+      # gnark pin — cryptographic primitives; upgrade only with external review
+      - dependency-name: "github.com/consensys/gnark*"
+
+  - package-ecosystem: gomod
+    directory: /sdk/go
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    commit-message:
+      prefix: "chore(deps-go-sdk)"
+    labels:
+      - dependencies
+      - go
+
+  - package-ecosystem: gomod
+    directory: /tests/conformance
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    commit-message:
+      prefix: "chore(deps-go-conformance)"
+    labels:
+      - dependencies
+      - go
+      - conformance
+
+  # --- Python SDKs ---
+  - package-ecosystem: pip
+    directories:
+      - /sdk/python
+      - /sdk/python/langchain
+      - /sdk/python/crewai
+      - /sdk/python/anthropic
+      - /sdk/python/openai_agents
+      - /sdk/python/autogen
+      - /sdk/python/semantic_kernel
+      - /sdk/python/llamaindex
+      - /sdk/python/haystack
+      - /sdk/python/google_adk
+      - /sdk/python/dify
+      - /sdk/python/smolagents
+      - /sdk/python/microsoft_agents
+      - /sdk/python/mistral
+      - /sdk/python/pydanticai
+      - /sdk/python/nostr_wot
+      - /sdk/python/mcp_trust
+      - /sdk/python/langgraph
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    groups:
+      python:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps-py)"
+    labels:
+      - dependencies
+      - python
+
+  # --- npm workspaces ---
+  - package-ecosystem: npm
+    directories:
+      - /sdk/ts
+      - /sdk/ts/anthropic
+      - /sdk/ts/crewai-js
+      - /sdk/ts/langchain
+      - /sdk/ts/openai-agents
+      - /sdk/ts/claude-code
+      - /sdk/ts/autogen
+      - /sdk/ts/semantic-kernel
+      - /sdk/ts/llamaindex-ts
+      - /sdk/ts/copilot
+      - /sdk/ts/vercel-ai
+      - /sdk/ts/mastra
+      - /sdk/ts/dify
+      - /sdk/ts/flowise
+      - /sdk/ts/gemini
+      - /sdk/ts/haystack
+      - /sdk/ts/mistral
+      - /sdk/ts/langgraph
+      - /packages/mindburn-helm-cli
+      - /tools/vscode-helm
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    groups:
+      npm:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps-npm)"
+    labels:
+      - dependencies
+      - typescript
+
+  # --- Rust ---
+  - package-ecosystem: cargo
+    directory: /sdk/rust
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    commit-message:
+      prefix: "chore(deps-rust)"
+    labels:
+      - dependencies
+      - rust
+
+  # --- Java ---
+  - package-ecosystem: maven
+    directory: /sdk/java
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    commit-message:
+      prefix: "chore(deps-java)"
+    labels:
+      - dependencies
+      - java

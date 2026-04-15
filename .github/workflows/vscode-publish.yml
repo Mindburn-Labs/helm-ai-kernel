@@ -1,0 +1,100 @@
+name: VS Code Marketplace Publish
+
+# Publishes the HELM Governance VS Code extension to:
+#   - VS Code Marketplace (VSCE)
+#   - Open VSX (for Cursor, Windsurf, VSCodium)
+#
+# TRIGGER POLICY: workflow_dispatch only. Human-gated.
+#
+# REQUIRED SECRETS (env: vscode-marketplace)
+#   VSCE_PAT   — Azure DevOps PAT with `All accessible organizations` + marketplace scope
+#   OVSX_PAT   — Open VSX personal access token
+#
+# STATUS: 2026-04-15
+#   ✗ VSCE_PAT — NOT YET SET. Publisher `mindburn-labs` must be registered on
+#     https://marketplace.visualstudio.com/manage/publishers/ first.
+#   ✗ OVSX_PAT — NOT YET SET. Register namespace at https://open-vsx.org/
+#
+# SETUP COMMANDS once tokens exist:
+#   gh api --method PUT /repos/Mindburn-Labs/helm-oss/environments/vscode-marketplace
+#   gh secret set VSCE_PAT --env vscode-marketplace --body '<token>'
+#   gh secret set OVSX_PAT --env vscode-marketplace --body '<token>'
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Extension version (must match tools/vscode-helm/package.json)'
+        required: true
+        type: string
+      skip_ovsx:
+        description: 'Skip Open VSX publish'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vscode-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish VS Code Extension
+    runs-on: ubuntu-latest
+    environment:
+      name: vscode-marketplace
+      url: https://marketplace.visualstudio.com/items?itemName=mindburn-labs.helm-governance
+    defaults:
+      run:
+        working-directory: tools/vscode-helm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Guard — require marketplace tokens
+        run: |
+          if [ -z "${{ secrets.VSCE_PAT }}" ]; then
+            echo "::error::VSCE_PAT not set. Register publisher 'mindburn-labs' at marketplace.visualstudio.com first."
+            exit 1
+          fi
+
+      - name: Version sanity check
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          REQUESTED="${{ github.event.inputs.version }}"
+          if [ "$REQUESTED" != "$PKG_VERSION" ]; then
+            echo "::error::Requested $REQUESTED != package.json $PKG_VERSION"
+            exit 1
+          fi
+
+      - name: Install + compile
+        run: |
+          npm ci --prefer-offline --no-audit
+          npm run compile
+
+      - name: Package extension (VSIX)
+        run: npx --yes @vscode/vsce package
+
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx --yes @vscode/vsce publish --packagePath *.vsix
+
+      - name: Publish to Open VSX
+        if: github.event.inputs.skip_ovsx != 'true' && secrets.OVSX_PAT != ''
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx --yes ovsx publish *.vsix
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-governance-${{ github.event.inputs.version }}.vsix
+          path: tools/vscode-helm/*.vsix
+          retention-days: 30

@@ -1,0 +1,108 @@
+name: Maven Central Publish
+
+# Publishes the HELM Java SDK to Maven Central via Sonatype Central Portal.
+#
+# TRIGGER POLICY: workflow_dispatch only. Human-gated publish.
+#
+# CREDENTIALS
+#   MAVEN_USERNAME / MAVEN_PASSWORD   — Sonatype Central user token (set in env)
+#   MAVEN_GPG_PRIVATE_KEY             — ASCII-armored GPG private key for signing
+#   MAVEN_GPG_PASSPHRASE              — passphrase for the above key
+#
+# STATUS: 2026-04-15
+#   ✓ MAVEN_USERNAME  set in maven-central environment
+#   ✓ MAVEN_PASSWORD  set in maven-central environment
+#   ✗ MAVEN_GPG_PRIVATE_KEY  — NOT YET SET. Required by Sonatype for Central publication.
+#   ✗ MAVEN_GPG_PASSPHRASE   — NOT YET SET.
+#
+# Maven Central requires GPG-signed artifacts. Generate a key dedicated to
+# Maven Central publication (do not reuse personal keys), upload the public
+# half to a keyserver, and install the private half + passphrase into this
+# environment:
+#
+#   gpg --full-generate-key  # RSA 4096, name=Mindburn Labs, email=ops@mindburn.org
+#   gpg --armor --export-secret-keys KEY_ID > private.asc
+#   gpg --armor --export          KEY_ID   | curl -T - https://keys.openpgp.org
+#   gh secret set MAVEN_GPG_PRIVATE_KEY --env maven-central --body-file private.asc
+#   gh secret set MAVEN_GPG_PASSPHRASE  --env maven-central --body 'your-passphrase'
+#   rm private.asc
+#
+# Namespace (`org.mindburn.helm`) must be verified by Sonatype before first
+# publish — add a TXT record `sonatype.mindburn.org TXT OSSRH-<id>` via doctl
+# or the Central Portal's automated DNS verification flow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (must match VERSION file)'
+        required: true
+        type: string
+      auto_publish:
+        description: 'Auto-publish after staging? (false = manual release via Portal UI)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maven-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish helm-sdk (Java) to Maven Central
+    runs-on: ubuntu-latest
+    environment:
+      name: maven-central
+      url: https://central.sonatype.com/artifact/org.mindburn.helm/helm-sdk
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          server-id: central
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
+          gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+      - name: Version sanity check
+        run: |
+          FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
+          REQUESTED="${{ github.event.inputs.version }}"
+          if [ "$REQUESTED" != "$FILE_VERSION" ]; then
+            echo "::error::Requested $REQUESTED != VERSION $FILE_VERSION"
+            exit 1
+          fi
+          # Cross-check pom.xml version
+          POM_VERSION=$(grep -m1 '<version>' sdk/java/pom.xml | sed 's/.*<version>\([^<]*\)<\/version>.*/\1/')
+          if [ "$POM_VERSION" != "$FILE_VERSION" ]; then
+            echo "::error::sdk/java/pom.xml version $POM_VERSION != VERSION $FILE_VERSION"
+            exit 1
+          fi
+
+      - name: Guard — require GPG signing secrets
+        run: |
+          if [ -z "${{ secrets.MAVEN_GPG_PRIVATE_KEY }}" ] || [ -z "${{ secrets.MAVEN_GPG_PASSPHRASE }}" ]; then
+            echo "::error::MAVEN_GPG_PRIVATE_KEY and MAVEN_GPG_PASSPHRASE must be set in the maven-central environment. See workflow header for setup commands."
+            exit 1
+          fi
+
+      - name: Deploy to Central Portal
+        working-directory: sdk/java
+        env:
+          MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: |
+          AUTO="${{ github.event.inputs.auto_publish }}"
+          mvn --batch-mode \
+              -Dmaven.test.skip=false \
+              -DautoPublish=${AUTO} \
+              -DwaitUntil=published \
+              deploy

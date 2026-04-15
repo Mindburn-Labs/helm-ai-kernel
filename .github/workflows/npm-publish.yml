@@ -1,0 +1,156 @@
+name: npm Publish
+
+# Publishes HELM TypeScript SDK primaries to npm.
+#
+# TRIGGER POLICY: workflow_dispatch only for v0.4.0 first ship. Uncomment the
+# release: block after the first successful manual dispatch.
+#
+# PACKAGES (v0.4.0 primary + stretch per Decision 2):
+#   @mindburn/helm, @mindburn/helm-cli,
+#   @mindburn/helm-anthropic, @mindburn/helm-crewai-js,
+#   @mindburn/helm-langchain, @mindburn/helm-openai-agents,
+#   @mindburn/helm-claude-code
+#   @mindburn/helm-semantic-kernel (stretch)
+#
+# SECURITY: env-scoped NPM_TOKEN + npm provenance attestation.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (must match VERSION file)'
+        required: true
+        type: string
+      packages:
+        description: 'Comma-separated package dirs (empty = all primaries)'
+        required: false
+        default: ''
+        type: string
+      dry_run:
+        description: 'Build but do not upload'
+        required: false
+        default: false
+        type: boolean
+  # release:
+  #   types: [published]
+
+permissions:
+  contents: read
+  id-token: write   # required for npm --provenance
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.pkg.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pkg:
+          - { name: "@mindburn/helm",                 dir: sdk/ts }
+          - { name: "@mindburn/helm-cli",             dir: packages/mindburn-helm-cli }
+          - { name: "@mindburn/helm-anthropic",       dir: sdk/ts/anthropic }
+          - { name: "@mindburn/helm-crewai-js",       dir: sdk/ts/crewai-js }
+          - { name: "@mindburn/helm-langchain",       dir: sdk/ts/langchain }
+          - { name: "@mindburn/helm-openai-agents",   dir: sdk/ts/openai-agents }
+          - { name: "@mindburn/helm-claude-code",     dir: sdk/ts/claude-code }
+          - { name: "@mindburn/helm-semantic-kernel", dir: sdk/ts/semantic-kernel }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Version sanity check
+        run: |
+          FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
+          REQUESTED="${{ github.event.inputs.version }}"
+          if [ "$REQUESTED" != "$FILE_VERSION" ]; then
+            echo "::error::Requested $REQUESTED != VERSION file $FILE_VERSION"
+            exit 1
+          fi
+
+      - name: Filter gate
+        id: gate
+        run: |
+          REQUESTED='${{ github.event.inputs.packages }}'
+          if [ -z "$REQUESTED" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          elif echo "$REQUESTED" | tr ',' '\n' | grep -qx "${{ matrix.pkg.dir }}"; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install + build
+        if: steps.gate.outputs.publish == 'true'
+        working-directory: ${{ matrix.pkg.dir }}
+        run: |
+          npm ci --prefer-offline --no-audit
+          if [ -f package.json ] && grep -q '"build"' package.json; then
+            npm run build
+          fi
+
+      - name: npm pack (smoke-test the tarball)
+        if: steps.gate.outputs.publish == 'true'
+        working-directory: ${{ matrix.pkg.dir }}
+        run: npm pack --dry-run
+
+      - name: Upload tarball artifact
+        if: steps.gate.outputs.publish == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-pack-${{ strategy.job-index }}
+          path: ${{ matrix.pkg.dir }}
+          retention-days: 3
+
+  publish:
+    name: Publish ${{ matrix.pkg.name }}
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event.inputs.dry_run != 'true'
+    environment:
+      name: npm-production
+      url: https://www.npmjs.com/package/${{ matrix.pkg.name }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        pkg:
+          - { name: "@mindburn/helm",                 dir: sdk/ts }
+          - { name: "@mindburn/helm-cli",             dir: packages/mindburn-helm-cli }
+          - { name: "@mindburn/helm-anthropic",       dir: sdk/ts/anthropic }
+          - { name: "@mindburn/helm-crewai-js",       dir: sdk/ts/crewai-js }
+          - { name: "@mindburn/helm-langchain",       dir: sdk/ts/langchain }
+          - { name: "@mindburn/helm-openai-agents",   dir: sdk/ts/openai-agents }
+          - { name: "@mindburn/helm-claude-code",     dir: sdk/ts/claude-code }
+          - { name: "@mindburn/helm-semantic-kernel", dir: sdk/ts/semantic-kernel }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Build
+        working-directory: ${{ matrix.pkg.dir }}
+        run: |
+          npm ci --prefer-offline --no-audit
+          if grep -q '"build"' package.json; then npm run build; fi
+
+      - name: Publish with provenance
+        working-directory: ${{ matrix.pkg.dir }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          # --access public for scoped packages
+          # --provenance emits Sigstore attestation (npm shows "Provenance" badge)
+          # || true tolerates re-publish-same-version (registry rejects idempotently)
+          npm publish --access public --provenance || \
+            (echo "::warning::publish returned non-zero; may be benign if version already published"; exit 0)

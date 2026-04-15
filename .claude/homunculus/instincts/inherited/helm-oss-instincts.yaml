@@ -1,0 +1,318 @@
+# Instincts generated from https://github.com/Mindburn-Labs/helm-oss
+# Generated: 2026-04-15T19:49:32.085Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: helm-oss-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: chore
+
+## Evidence
+
+- 1 commits analyzed
+- Detected conventional commit pattern
+- Examples: chore(deps-npm): bump the npm group across 18 directories with 5 updates
+
+---
+id: helm-oss-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Commit Length
+
+## Action
+
+Write moderate-length commit messages (~72 characters)
+
+## Evidence
+
+- Average commit message length: 72 chars
+- Based on 1 commits
+
+---
+id: helm-oss-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Naming Files
+
+## Action
+
+Use camelCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: camelCase
+
+---
+id: helm-oss-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: helm-oss-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: helm-oss-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: helm-oss-instinct-file-naming
+trigger: "When creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Instinct File Naming
+
+## Action
+
+Name the file using camelCase
+
+## Evidence
+
+- Pattern in namingConventions.files
+
+---
+id: helm-oss-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Instinct Function Naming
+
+## Action
+
+Name the function using camelCase
+
+## Evidence
+
+- Pattern in namingConventions.functions
+
+---
+id: helm-oss-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Instinct Class Naming
+
+## Action
+
+Name the class using PascalCase
+
+## Evidence
+
+- Pattern in namingConventions.classes
+
+---
+id: helm-oss-instinct-constant-naming
+trigger: "When declaring a constant"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Instinct Constant Naming
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE
+
+## Evidence
+
+- Pattern in namingConventions.constants
+
+---
+id: helm-oss-instinct-import-style
+trigger: "When importing modules"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Instinct Import Style
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in importStyle: relative
+
+---
+id: helm-oss-instinct-export-style
+trigger: "When exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle: named
+
+---
+id: helm-oss-instinct-git-commit-prefix
+trigger: "When writing a commit message for dependency updates or maintenance"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Instinct Git Commit Prefix
+
+## Action
+
+Start the commit message with 'chore'
+
+## Evidence
+
+- Seen in commit: chore(deps-npm): bump the npm group across 18 directories with 5 updates
+
+---
+id: helm-oss-instinct-git-commit-format
+trigger: "When writing any commit message"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Instinct Git Commit Format
+
+## Action
+
+Use the Conventional Commits format: <type>(<scope>): <description>
+
+## Evidence
+
+- Pattern in commits.type: conventional
+- Seen in commit: chore(deps-npm): bump the npm group across 18 directories with 5 updates
+
+---
+id: helm-oss-instinct-monorepo-structure
+trigger: "When adding a new package or tool"
+confidence: 0.8
+domain: architecture
+source: repo-analysis
+source_repo: Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Instinct Monorepo Structure
+
+## Action
+
+Place it under 'sdk', 'packages', or 'tools' folder according to its purpose
+
+## Evidence
+
+- Pattern in architecture.folderStructure.commonFolders
+
+---
+id: helm-oss-instinct-test-location
+trigger: "When creating tests for a package or module"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: Mindburn-Labs/helm-oss
+---
+
+# Helm Oss Instinct Test Location
+
+## Action
+
+Place tests in a separate location from source code
+
+## Evidence
+
+- Pattern in architecture.folderStructure.testLocation: separate
+

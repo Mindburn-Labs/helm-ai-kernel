@@ -391,7 +391,7 @@ if apiErr, ok := err.(*helm.HelmApiError); ok {
 
 | Capability | What It Does | Links |
 |-----------|-------------|-------|
-| **6-Gate Guardian Pipeline** | TLA+-verified policy enforcement (Freeze -> Context -> Identity -> Egress -> Threat -> Delegation) | [guardian/](core/pkg/guardian/) |
+| **6-Gate Guardian Pipeline** | TLA+-specified policy enforcement (Freeze -> Context -> Identity -> Egress -> Threat -> Delegation), model-checked in CI via [apalache.yml](.github/workflows/apalache.yml). See [gate-to-code map](docs/architecture/guardian-pipeline.md). | [guardian/](core/pkg/guardian/) |
 | **3-Layer Policy Composition** | P0 ceilings -> P1 signed bundles -> P2 per-session overlays (WASM sandbox via wazero) | [policy/](core/pkg/policy/) |
 | **Causal Proof DAG** | ProofGraph with CRDT sync, Rekor transparency log anchoring, Lamport ordering | [proofgraph/](core/pkg/proofgraph/) |
 | **Post-Quantum Crypto** | Ed25519 + ML-DSA-65 (NIST FIPS 204), HSM support, key rotation, selective disclosure JWT | [crypto/](core/pkg/crypto/) |

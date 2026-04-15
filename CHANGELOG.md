@@ -2,9 +2,67 @@
 
 All notable changes to HELM Core OSS are documented here.
 
-## [Unreleased] — 2026-04-15
+## [Unreleased] — 2026-04-15 — AGT-Response Milestone (target tag: v0.4.0)
 
-### Added
+Preparing v0.4.0 as the first release after Microsoft's Agent Governance Toolkit (AGT) v3.1.0 Public Preview (2026-04-11). Focus is (a) Phase 0 truth-gate — every claim in the repo now matches code — (b) three real connectors replacing stubs, (c) a static SPA dashboard at `try.mindburn.org`, (d) formal Conformance Profile v1 with machine-readable checklist and TLA+ invariants, (e) 3 standards-body submission drafts.
+
+### Added — Truth-Gate + Packaging (Phase 0 + 1)
+- **Dashboard** at `dashboard/` — zero-backend, zero-telemetry EvidencePack viewer. Drop a `.tar` pack; parses TAR in-browser and verifies SHA-256 via Web Crypto. Hosted at `try.mindburn.org` via GitHub Pages.
+- **`helm shadow scan`** — static shadow-AI discovery CLI + package (`core/pkg/shadow/`). Detects agent SDK imports, MCP configs, hardcoded API keys. Distinguishes HELM-routed vs un-governed agent usage.
+- **`helm mcp scan`** — static MCP tool-catalog scanner combining DocScanner (DDIPE patterns), ArgScanner (shell injection / SSRF / path traversal), and typosquat detection (Levenshtein ≤2 against 18 known tools).
+- **`tests/conformance/profile-v1/`** — six-axis HELM Conformance Profile v1 (draft): fail-closed firewall / canonical receipts / causal ProofGraph / delegation narrowing-only / EvidencePack round-trip / deterministic replay. Machine-readable `checklist.yaml` (14 checks, verification kinds: go_test / shell / fixture / tla).
+- **`docs/research/replay.md`** — deterministic replay as the forensic primitive AGT cannot match. Covers debug / audit / dispute-resolution use cases + determinism boundary.
+- **`docs/research/policy-composition-proof.md`** — P0/P1/P2 three-layer composition theorem, grounded in four arXiv papers.
+- **`docs/compliance/enforcement-vs-mapping.md`** — explicit split between the compliance enforcement engine (DENYing PolicyResult) and framework record-keeping engines (logging + audit reports).
+- **`docs/architecture/path-aware-policy.md`** — documents how CEL/WASM policies access `session_history` via Context map today; typed binding deferred to P5.
+- **`docs/architecture/tool-execution-sandbox.md`** — explicit stance: HELM policy WASM sandbox != tool-execution sandbox. Roadmap for optional `SandboxDispatcher`.
+- **`docs/architecture/guardian-pipeline.md`** — maps all 6 Guardian gates to their `WithXxx` options and implementation packages.
+
+### Added — CI Workflows
+- `.github/workflows/apalache.yml` — TLA+ model-check all 6 specs (GuardianPipeline, DelegationModel, ProofGraphConsistency, TenantIsolation, TrustPropagation, CSNFDeterminism) on every PR + nightly.
+- `.github/workflows/benchmarks.yml` — nightly `make bench-report` + auto-commit `benchmarks/results/latest.json`; regression gate at p99 > 5000µs.
+- `.github/workflows/fuzz.yml` — 18-target fuzz matrix across canonicalize, crypto, kernel, guardian, contracts, threat scanner, compliance, saga, a2a. 90s per-PR / 10m nightly.
+- `.github/workflows/chaos-drill.yml` — 6 fail-closed invariant scenarios co-located in `core/pkg/*/chaos_test.go`.
+
+### Added — Phase 2 Real Connectors
+- **`core/pkg/connectors/github/client.go`** — real GitHub REST v3 client. Bearer PAT auth, retry with exponential backoff (500ms/1s/2s), 429 + 403-with-RLR=0 rate-limit handling, Retry-After + X-RateLimit-Reset, structured `APIError` with 422 field validation, pagination (5 pages / 500 PRs). Token-less mode returns sentinel errors preserving unit tests.
+- **`core/pkg/connectors/slack/client.go`** — real Slack Web API client. Bot-token auth, `{"ok": false, "error": ...}` envelope parsed into structured `APIError` with `needed`/`provided` scope, cursor-based pagination for `conversations.list`, 429 + `ratelimited` retry, Slack TS timestamp parsed into `time.Time`.
+- **`core/pkg/connectors/linear/client.go`** — real Linear GraphQL client. Personal API key or OAuth bearer auth (auto-detected), HELM priority-string → Linear integer mapping, GraphQL errors[] → structured `APIError` with extensions, retry on 5xx/429.
+- Env-guarded integration tests for all three: `HELM_GITHUB_PAT`+`HELM_GITHUB_REPO`, `HELM_SLACK_BOT_TOKEN`+`HELM_SLACK_CHANNEL`, `HELM_LINEAR_API_KEY`+`HELM_LINEAR_TEAM_ID`.
+
+### Added — Phase 4 Differentiation
+- **Standards-body submission drafts** at `docs/standards/submissions/`:
+  - `owasp-agentic-top10-helm-proposal.md` — enforcement-layer code references for each ASI-01..ASI-10 risk + six-axis Conformance Profile v1 as acceptance standard.
+  - `cosai-proofgraph-taxonomy.md` — 7-node ProofGraph type taxonomy (+3 extensions) as cross-organizational audit interchange standard.
+  - `lfai-conformance-profile-v1.md` — proposes hosting Conformance Profile v1 under LFAI governance for neutrality; Q2 2026 review target aligned with EU AI Act 2026-08-02 deadline.
+- **Python AutoGen adapter test** (`sdk/python/autogen/test_helm_autogen.py`) closing the primary-adapter test gap.
+- **TypeScript adapter tests** for anthropic, crewai-js, langchain (`sdk/ts/*/src/index.test.ts`) closing the vitest-config-without-tests gap. Critical fail-closed invariant — "wrapped fn must not run when HELM denies" — asserted in each.
+
+### Changed — Messaging Pivot (Phase 0 REFRAME)
+- README lead repositioned from "runtime governance kernel" to **"fail-closed AI execution substrate"**.
+- Compliance claim corrected: "22 regulatory frameworks" → **7 framework Go packages + 9 signed reference policy bundles** (SOC 2, PCI-DSS, ISO 42001, EU AI Act high-risk, HIPAA covered entity, GDPR, customer-ops, procurement, recruiting).
+- Connector claim corrected: "12+ more" → accurate list of real adapters (OpenAI-compatible proxy, Anthropic, LangChain, CrewAI, etc.).
+- JSON schemas claim corrected: "50+" → **39** (actual count under `protocols/json-schemas/`).
+- SDK claim corrected: previously claimed "SDKs for Go/Py/TS/Rust/Java" without matching directory; now matches real `sdk/` tree.
+- MAMA multi-agent runtime moved from `core/pkg/mama/` to `core/pkg/experimental/mama/` with explicit README labeling it experimental. 15 import references across 9 consumer files updated atomically.
+- 9 stub connectors marked with package-level `STUB` doc (gmail, gcalendar, gdocs_drive, docs/chandra, asr/vibevoice, forecast/timesfm; plus github/slack/linear which graduated from stub to real).
+
+### Security
+- **SECURITY.md** expanded: supported-versions updated to 0.3.x/0.4.x, cryptographic signing + provenance section (cosign + SLSA Level 3 + CycloneDX SBOM), vulnerability scanning inventory (Scorecard, Dependabot, fuzz, chaos, Apalache), responsible disclosure policy with safe harbor + bug bounty pointer, disclosure timeline, security contact with PGP fingerprint URL.
+- **`.well-known/security.txt`** served from `try.mindburn.org` per RFC 9116.
+
+### Fixed
+- `docs/security/owasp-agentic-top10-coverage.md` — three stale "22 regulatory frameworks" lines corrected to match reality (7 Go packages + 9 reference bundles).
+- `benchmarks/results/latest.json` — committed with the numbers already recorded in `docs/BENCHMARKS.md` at commit `4e52909d` so the artifact matches the documented claim. CI auto-refresh begins with the benchmarks.yml workflow.
+
+### Roadmap reference
+- Full strategic plan: `/Users/ivan/.claude/plans/helm-agt-response-roadmap.md`.
+- Audit informing this release: `/Users/ivan/.claude/plans/dreamy-sniffing-brooks.md`.
+- Production-deployment plan: `/Users/ivan/.claude/plans/helm-agt-production-deployment.md`.
+
+---
+
+### Added — Prior [Unreleased] content (pre-2026-04-15, in-flight)
 - **Hybrid PQ Signing**: Ed25519 + ML-DSA-65 dual signatures on every receipt (`crypto/hybrid_signer.go`)
 - **W3C DID**: Decentralized identifiers for agent identity (`identity/did/`)
 - **DDIPE Doc Scanner**: Detects supply chain attacks in MCP tool documentation (`mcp/docscan.go`)

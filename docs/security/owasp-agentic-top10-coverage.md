@@ -230,3 +230,64 @@ Unlike library-based governance frameworks, HELM enforces governance at the kern
 | **Compliance** | 22 regulatory frameworks | 4 frameworks |
 | **Evidence** | Court-admissible evidence packs (JCS + SHA-256) | CloudEvents export |
 | **Determinism** | Kernel PRNG + reducer + concurrency artifacts | Stateless (no guarantees) |
+
+## MCP Defense-Placement Taxonomy (MCP-DPT)
+
+Per arXiv 2604.07551, defenses in MCP architecture should be placed at specific layers.
+HELM implements defense at the gateway level -- validated as the optimal placement for
+policy enforcement -- but extends coverage to all eight identified layers.
+
+| MCP-DPT Layer | Defense Type | HELM Implementation |
+|---------------|-------------|---------------------|
+| Client-side | Input validation | `threatscan/` (12 rule sets) |
+| Transport | mTLS, session auth | `crypto/` (Ed25519 + ML-DSA-65) |
+| Gateway | Policy enforcement | `guardian/` (6-gate pipeline) |
+| Server-side | Tool sandboxing | `policy/wasm/` (wazero) |
+| Response | Output quarantine | `Guardian.EvaluateOutput()` |
+| Metadata | Rug-pull detection | `mcp/rugpull.go` (fingerprinting) |
+| Documentation | DDIPE scanning | `mcp/docscan.go` (7 patterns) |
+| Cross-server | Typosquatting | `mcp/typosquat.go` (Levenshtein) |
+
+HELM is the only governance system that implements defense at ALL 8 MCP-DPT layers.
+
+### Layer Details
+
+**Client-side (Input Validation):** The `threatscan/` package runs 12 rule sets against
+all inbound content before it reaches the guardian pipeline. This catches prompt injection,
+encoding attacks, and known malicious patterns at the earliest possible point.
+
+**Transport (mTLS + Session Auth):** All HELM-to-MCP-server connections use mutual TLS
+with Ed25519 or ML-DSA-65 (post-quantum) certificates. Session tokens are bound to the
+TLS channel via channel binding, preventing token theft from being useful.
+
+**Gateway (Policy Enforcement):** The guardian's 6-gate pipeline (Freeze, Context, Identity,
+Egress, Threat, Delegation) is the primary enforcement point. Every tool call must pass
+all six gates to receive an EffectPermit. This is fail-closed: any gate denial blocks
+execution.
+
+**Server-side (Tool Sandboxing):** Custom policy logic runs in WASM sandboxes via wazero.
+WASM modules have no filesystem, network, or clock access. Execution is metered by fuel
+to prevent infinite loops. The sandbox is deterministic across platforms.
+
+**Response (Output Quarantine):** `Guardian.EvaluateOutput()` scans tool responses before
+they reach the agent. High-risk findings (PII, credentials, injection attempts in
+responses) trigger quarantine. The original response is logged but not forwarded.
+
+**Metadata (Rug-Pull Detection):** `mcp/rugpull.go` fingerprints MCP server tool
+definitions at policy-bind time and detects changes at runtime. If a tool's schema,
+description, or capabilities change between sessions, HELM blocks the call and alerts
+the operator. This defends against supply-chain attacks where a trusted MCP server is
+compromised.
+
+**Documentation (DDIPE Scanning):** `mcp/docscan.go` scans MCP server documentation and
+tool descriptions for 7 patterns that indicate deceptive or dangerous behavior (hidden
+side effects, privilege escalation instructions, data exfiltration hints, etc.).
+
+**Cross-server (Typosquatting):** `mcp/typosquat.go` computes Levenshtein distance between
+requested MCP server names and known-good servers. Requests to servers with suspiciously
+similar names (e.g., `github-mcp` vs `githuh-mcp`) are flagged for human review.
+
+### References
+
+- **arXiv 2604.07551** -- "MCP-DPT: Defense-Placement Taxonomy for Model Context Protocol"
+  (systematic classification of defense layers in MCP architecture)

@@ -485,10 +485,21 @@ var (
 
 // DecisionRequest represents a request for a governance decision.
 type DecisionRequest struct {
-	Principal string                 `json:"principal"`
-	Action    string                 `json:"action"`
-	Resource  string                 `json:"resource"` // Tool name or effect type
-	Context   map[string]interface{} `json:"context"`
+	Principal      string                 `json:"principal"`
+	Action         string                 `json:"action"`
+	Resource       string                 `json:"resource"` // Tool name or effect type
+	Context        map[string]interface{} `json:"context"`
+	SessionHistory []SessionAction        `json:"session_history,omitempty"`
+}
+
+// SessionAction represents a previous action in the current session.
+// Per arXiv 2603.16586, path-based policies evaluate the full execution
+// history, catching multi-step attack chains that stateless checks miss.
+type SessionAction struct {
+	Action    string `json:"action"`
+	Resource  string `json:"resource"`
+	Verdict   string `json:"verdict"`   // ALLOW, DENY, ESCALATE
+	Timestamp int64  `json:"timestamp"` // Unix milliseconds
 }
 
 // EvaluateDecision evaluates a request against the governance policy (PRG + Temporal).
@@ -797,6 +808,26 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 	}
 
 	// ── End pre-PDP gates ──
+
+	// ── Session history enrichment (arXiv 2603.16586: path-aware policies) ──
+	// Inject session history into the request context so CEL/WASM policies
+	// can evaluate the full execution path, not just the current action.
+	if len(req.SessionHistory) > 0 {
+		if req.Context == nil {
+			req.Context = make(map[string]interface{})
+		}
+		req.Context["session_history"] = req.SessionHistory
+		req.Context["session_action_count"] = len(req.SessionHistory)
+
+		// Compute session risk: count of DENY verdicts in history
+		denyCount := 0
+		for _, sa := range req.SessionHistory {
+			if sa.Verdict == "DENY" {
+				denyCount++
+			}
+		}
+		req.Context["session_deny_count"] = denyCount
+	}
 
 	// ── Behavioral trust score enrichment ──
 	// Inject trust_score (float64) and trust_tier (string) into context

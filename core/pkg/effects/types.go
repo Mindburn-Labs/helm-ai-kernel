@@ -35,14 +35,26 @@ type EffectRequest struct {
 
 // EffectOutcome is the result of executing an effect through the gateway.
 type EffectOutcome struct {
-	RequestID   string        `json:"request_id"`
-	PermitID    string        `json:"permit_id"`
-	Success     bool          `json:"success"`
-	Output      any           `json:"output,omitempty"`
-	Error       string        `json:"error,omitempty"`
-	OutputHash  string        `json:"output_hash,omitempty"`
-	Duration    time.Duration `json:"duration"`
-	CompletedAt time.Time     `json:"completed_at"`
+	RequestID          string         `json:"request_id"`
+	PermitID           string         `json:"permit_id"`
+	Success            bool           `json:"success"`
+	Output             any            `json:"output,omitempty"`
+	Error              string         `json:"error,omitempty"`
+	OutputHash         string         `json:"output_hash,omitempty"`
+	Duration           time.Duration  `json:"duration"`
+	CompletedAt        time.Time      `json:"completed_at"`
+	EstimatedCostCents int64          `json:"estimated_cost_cents,omitempty"`
+	CostBreakdown      *CostBreakdown `json:"cost_breakdown,omitempty"`
+}
+
+// CostBreakdown itemizes the cost components of an effect execution.
+// Used for per-agent, per-department cost attribution in ProofGraph rollups.
+type CostBreakdown struct {
+	InputTokens    int64 `json:"input_tokens,omitempty"`
+	OutputTokens   int64 `json:"output_tokens,omitempty"`
+	ModelCostCents int64 `json:"model_cost_cents,omitempty"`
+	ToolCostCents  int64 `json:"tool_cost_cents,omitempty"`
+	TotalCents     int64 `json:"total_cents"`
 }
 
 // EffectPermit is the canonical authorization token for a single effect execution.

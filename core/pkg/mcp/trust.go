@@ -55,18 +55,29 @@ func WithTrustClock(clock func() time.Time) TrustScorerOption {
 	}
 }
 
+// FederatedTrustReport represents trust information received from a federated peer.
+type FederatedTrustReport struct {
+	PeerID     string    `json:"peer_id"`
+	ServerID   string    `json:"server_id"`
+	ToolName   string    `json:"tool_name"`
+	Score      int       `json:"score"`       // 0-1000
+	ReportedAt time.Time `json:"reported_at"`
+}
+
 // TrustScorer computes and tracks trust scores for MCP tools.
 type TrustScorer struct {
-	mu     sync.RWMutex
-	scores map[string]*TrustScore // key: "serverID:toolName"
-	clock  func() time.Time
+	mu               sync.RWMutex
+	scores           map[string]*TrustScore            // key: "serverID:toolName"
+	federatedReports map[string][]FederatedTrustReport  // key: "serverID:toolName"
+	clock            func() time.Time
 }
 
 // NewTrustScorer creates a new TrustScorer with the given options.
 func NewTrustScorer(opts ...TrustScorerOption) *TrustScorer {
 	s := &TrustScorer{
-		scores: make(map[string]*TrustScore),
-		clock:  time.Now,
+		scores:           make(map[string]*TrustScore),
+		federatedReports: make(map[string][]FederatedTrustReport),
+		clock:            time.Now,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -143,6 +154,17 @@ func (s *TrustScorer) recalculate(ts *TrustScore) {
 			errorRate = 1.0
 		}
 		score -= errorRate * 200.0
+	}
+
+	// Blend with federated reports: final = 0.7 * local + 0.3 * avg(federated)
+	key := trustKey(ts.ServerID, ts.ToolName)
+	if reports, ok := s.federatedReports[key]; ok && len(reports) > 0 {
+		var fedSum int
+		for _, r := range reports {
+			fedSum += r.Score
+		}
+		fedAvg := float64(fedSum) / float64(len(reports))
+		score = 0.7*score + 0.3*fedAvg
 	}
 
 	// Clamp
@@ -229,6 +251,23 @@ func (s *TrustScorer) AllScores() []*TrustScore {
 		return result[i].ToolName < result[j].ToolName
 	})
 	return result
+}
+
+// RecordFederatedReport incorporates a trust report from a federated peer.
+// Federated scores are blended with local scores: final = 0.7*local + 0.3*avg(federated).
+// This implements trust-but-verify: local observations dominate, but peer
+// intelligence is factored in to detect threats seen elsewhere.
+func (s *TrustScorer) RecordFederatedReport(report FederatedTrustReport) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := trustKey(report.ServerID, report.ToolName)
+	s.federatedReports[key] = append(s.federatedReports[key], report)
+
+	// Recalculate if we already have a local score for this tool.
+	if ts, ok := s.scores[key]; ok {
+		s.recalculate(ts)
+	}
 }
 
 // tierFromScore maps a numeric score to its TrustTier.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/mama/agents"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/agents"
 )
 
 var ErrFallbackExhausted = errors.New("serving: all inference fallback pools exhausted")

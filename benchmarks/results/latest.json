@@ -1,0 +1,67 @@
+{
+  "helm_version": "0.3.0",
+  "commit": "4e52909d",
+  "go_version": "go1.24.0",
+  "go_os": "darwin",
+  "go_arch": "arm64",
+  "num_cpu": 10,
+  "iterations_per_scenario": 10000,
+  "warmup_iterations": 100,
+  "hot_path_p99_us": 75,
+  "baseline_p99_us": 2,
+  "overhead_p99_us": 73,
+  "overhead_under_5ms": true,
+  "scenarios": [
+    {
+      "name": "baseline_no_helm",
+      "description": "Mock tool call with no governance \u2014 JSON marshal only",
+      "p50_us": 0,
+      "p95_us": 1,
+      "p99_us": 2,
+      "mean_us": 0.17,
+      "stddev_us": 2.3,
+      "min_us": 0,
+      "max_us": 126
+    },
+    {
+      "name": "helm_allow",
+      "description": "Full governed allow: Guardian eval + Ed25519 sign + SQLite persist",
+      "p50_us": 46,
+      "p95_us": 54,
+      "p99_us": 75,
+      "mean_us": 48,
+      "stddev_us": 11.1,
+      "min_us": 40,
+      "max_us": 409
+    },
+    {
+      "name": "helm_deny",
+      "description": "Undeclared tool \u2192 Guardian fail-closed deny evaluation",
+      "p50_us": 20,
+      "p95_us": 23,
+      "p99_us": 29,
+      "mean_us": 21,
+      "stddev_us": 5.9,
+      "min_us": 18,
+      "max_us": 317
+    }
+  ],
+  "competitive_comparison": {
+    "policy_rule_evaluation_isolated_ns": 87,
+    "concurrent_throughput_ops_per_sec": 9600000,
+    "ed25519_receipt_sign_us": 14,
+    "full_governance_path_p99_us": 75,
+    "microsoft_agt_policy_rule_us_claimed": 12,
+    "microsoft_agt_throughput_ops_per_sec_claimed": 72000
+  },
+  "environment": {
+    "sqlite_mode": "WAL",
+    "sqlite_synchronous": "NORMAL",
+    "signing": "Ed25519 (crypto/ed25519, not CGo)"
+  },
+  "provenance": {
+    "recorded_in_doc": "docs/BENCHMARKS.md",
+    "recorded_at_commit": "4e52909d",
+    "note": "This file reflects the single measurement recorded in docs/BENCHMARKS.md at the cited commit. CI auto-refresh begins with the benchmarks.yml workflow in v0.4.0 \u2014 subsequent runs overwrite this file with fresh data and commit SHA."
+  }
+}

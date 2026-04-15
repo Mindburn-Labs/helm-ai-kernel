@@ -3,8 +3,8 @@ package agents
 import (
 	"context"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/mama/command"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/mama/runtime"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/command"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/runtime"
 )
 
 // AgentRole strictly types the roles allowed inside the MAMA execution budget.

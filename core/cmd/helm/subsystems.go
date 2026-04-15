@@ -19,7 +19,7 @@ import (
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/memory"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/replay"
 	trustregistry "github.com/Mindburn-Labs/helm-oss/core/pkg/trust/registry"
-	mamahttp "github.com/Mindburn-Labs/helm-oss/core/pkg/mama/http"
+	mamahttp "github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/http"
 )
 
 // RegisterSubsystemRoutes registers all subsystem API routes on the given mux.

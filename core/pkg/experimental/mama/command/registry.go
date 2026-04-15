@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/mama/runtime"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/runtime"
 )
 
 // Command represents a high-level intent parsed from the UI or scheduler.

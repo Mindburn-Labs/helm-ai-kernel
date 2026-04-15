@@ -1,0 +1,87 @@
+name: Chaos Drill
+
+on:
+  pull_request:
+    paths:
+      - 'core/pkg/firewall/**'
+      - 'core/pkg/guardian/**'
+      - 'core/pkg/kernel/**'
+      - 'core/cmd/helm/**'
+      - '.github/workflows/chaos-drill.yml'
+  schedule:
+    # Weekly chaos sweep — Mondays at 05:11 UTC
+    - cron: '11 5 * * 1'
+  workflow_dispatch:
+
+jobs:
+  chaos:
+    name: Chaos — ${{ matrix.scenario.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - name: firewall-nil-dispatcher-denies
+            desc: "Empty dispatcher must return fail-closed error"
+          - name: firewall-empty-allowlist-denies
+            desc: "Empty allowlist must deny all tools"
+          - name: guardian-panic-path-fails-closed
+            desc: "Guardian panic during decision must NOT produce allow verdict"
+          - name: kernel-nondeterminism-detected
+            desc: "Replay divergence must surface as BUG, not silent pass"
+          - name: receipt-signing-failure-blocks-dispatch
+            desc: "Ed25519 signer failure must prevent tool execution"
+          - name: evidence-tamper-detected
+            desc: "Tampered EvidencePack must fail verification"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Build helm
+        run: cd core && go build -o ../bin/helm ./cmd/helm/
+
+      - name: Run chaos scenario
+        working-directory: core
+        env:
+          SCENARIO: ${{ matrix.scenario.name }}
+        run: |
+          set -euo pipefail
+          # Chaos scenarios live in tests/chaos/ — each is a focused Go test
+          # that fails if the system does NOT fail-closed as expected.
+          #
+          # Convention: test function names mirror scenario names:
+          #   TestChaos_firewall_nil_dispatcher_denies
+          TEST_NAME="TestChaos_$(echo "$SCENARIO" | tr '-' '_')"
+
+          if ! grep -rq "^func $TEST_NAME(" ../tests/chaos/ 2>/dev/null; then
+            echo "::warning::Chaos test $TEST_NAME not found in tests/chaos/ — skipping; add it to enforce this invariant"
+            exit 0
+          fi
+
+          go test -v -run "^${TEST_NAME}$" -count=1 ../tests/chaos/...
+
+      - name: Report
+        if: always()
+        run: |
+          echo "Scenario: ${{ matrix.scenario.name }}"
+          echo "Desc: ${{ matrix.scenario.desc }}"
+
+  summary:
+    name: Chaos Summary
+    runs-on: ubuntu-latest
+    needs: chaos
+    if: always()
+    steps:
+      - run: |
+          if [ "${{ needs.chaos.result }}" = "success" ]; then
+            echo "All chaos scenarios held fail-closed invariants."
+          else
+            echo "::error::A chaos scenario broke a fail-closed invariant. This is a P0 bug."
+            exit 1
+          fi

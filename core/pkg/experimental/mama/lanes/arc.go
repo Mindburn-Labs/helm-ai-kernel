@@ -3,9 +3,9 @@ package lanes
 import (
 	"context"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/mama/agents"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/mama/command"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/mama/runtime"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/agents"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/command"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/runtime"
 )
 
 // RunARCExploration executes the standardized agent loop over an ARC puzzle.

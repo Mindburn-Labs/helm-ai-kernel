@@ -28,7 +28,7 @@ generation, threat scanning. Works on Linux, macOS, and Windows.
 **Pain:** "How do I govern multi-agent workflows?"
 
 **HELM solution:** ProofGraph causal DAG tracks every decision across agents. Circuit breakers
-prevent cascades. HELM's multi-agent runtime (`mama/`) provides lane-based concurrency
+prevent cascades. HELM's multi-agent runtime (`experimental/mama/`) provides lane-based concurrency
 isolation. Each agent gets its own governance envelope with delegation depth limits.
 Parent agents can constrain child agents via P2 overlays (session-scoped narrowing).
 

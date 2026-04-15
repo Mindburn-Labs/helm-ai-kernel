@@ -1,0 +1,78 @@
+name: Fuzz
+
+on:
+  pull_request:
+    paths:
+      - 'core/pkg/guardian/**'
+      - 'core/pkg/policy/**'
+      - 'core/pkg/evidencepack/**'
+      - 'core/pkg/proofgraph/**'
+      - 'core/pkg/firewall/**'
+      - 'core/pkg/crypto/**'
+      - '.github/workflows/fuzz.yml'
+  schedule:
+    # Nightly deep fuzz run — 10 minutes per target
+    - cron: '37 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  fuzz:
+    name: Fuzz ${{ matrix.target.pkg }} :: ${{ matrix.target.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { pkg: './pkg/guardian',     name: 'FuzzDecisionRequest' }
+          - { pkg: './pkg/firewall',     name: 'FuzzFirewallCallTool' }
+          - { pkg: './pkg/policy',       name: 'FuzzPolicyEval' }
+          - { pkg: './pkg/evidencepack', name: 'FuzzManifestParse' }
+          - { pkg: './pkg/proofgraph',   name: 'FuzzNodeAppend' }
+          - { pkg: './pkg/crypto',       name: 'FuzzSignerRoundTrip' }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Set fuzz duration
+        id: fuzz
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "dur=10m" >> "$GITHUB_OUTPUT"
+          else
+            echo "dur=90s" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check fuzz target exists
+        working-directory: core
+        id: exists
+        run: |
+          if grep -q "^func ${{ matrix.target.name }}(" ${{ matrix.target.pkg }}/*.go 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Fuzz target ${{ matrix.target.name }} not found in ${{ matrix.target.pkg }} — skipping"
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run fuzz target
+        if: steps.exists.outputs.exists == 'true'
+        working-directory: core
+        run: |
+          go test \
+            -run=^$ \
+            -fuzz=^${{ matrix.target.name }}$ \
+            -fuzztime=${{ steps.fuzz.outputs.dur }} \
+            ${{ matrix.target.pkg }}
+
+      - name: Upload fuzz corpus on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-corpus-${{ matrix.target.name }}
+          path: core/${{ matrix.target.pkg }}/testdata/fuzz/
+          if-no-files-found: ignore

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/mama/command"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/mama/runtime"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/command"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/runtime"
 )
 
 // ExecutorAgent is the ONLY subagent permitted to mutate the environment.

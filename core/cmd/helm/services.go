@@ -30,8 +30,8 @@ import (
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/runtime/obligation"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/runtime/sandbox"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/simulation"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/mama/command"
-	mamaruntime "github.com/Mindburn-Labs/helm-oss/core/pkg/mama/runtime"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/command"
+	mamaruntime "github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/runtime"
 )
 
 // Services holds all initialized subsystems for the HELM runtime.

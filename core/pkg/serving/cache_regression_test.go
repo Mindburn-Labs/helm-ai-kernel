@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/mama/agents"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/agents"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/serving"
 )
 

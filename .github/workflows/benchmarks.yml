@@ -1,0 +1,85 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'core/pkg/guardian/**'
+      - 'core/pkg/crypto/**'
+      - 'core/pkg/store/**'
+      - 'core/benchmarks/**'
+      - 'benchmarks/**'
+      - '.github/workflows/benchmarks.yml'
+  schedule:
+    # Nightly full bench sweep with results committed
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bench:
+    name: Benchmark hot path
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Run benchmarks
+        run: |
+          set -euo pipefail
+          make bench-report
+          test -f benchmarks/results/latest.json || {
+            echo "::error::bench-report did not produce benchmarks/results/latest.json"
+            exit 1
+          }
+
+      - name: Extract key metrics
+        id: metrics
+        run: |
+          P99=$(jq -r '.hot_path_p99_us' benchmarks/results/latest.json)
+          OVERHEAD=$(jq -r '.overhead_p99_us' benchmarks/results/latest.json)
+          echo "p99=$P99"  >> "$GITHUB_OUTPUT"
+          echo "overhead=$OVERHEAD" >> "$GITHUB_OUTPUT"
+          echo "hot_path_p99_us = $P99"
+          echo "overhead_p99_us = $OVERHEAD"
+
+      - name: Regression gate (fail if p99 > 5000µs)
+        run: |
+          P99=${{ steps.metrics.outputs.p99 }}
+          if (( $(echo "$P99 > 5000" | bc -l) )); then
+            echo "::error::hot_path_p99_us=$P99 exceeds 5000µs regression ceiling"
+            exit 1
+          fi
+          echo "p99=$P99 is within regression envelope"
+
+      - name: Commit updated results (main only, scheduled only)
+        if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          git config user.name  "helm-bench-bot"
+          git config user.email "helm-bench-bot@users.noreply.github.com"
+          git add benchmarks/results/latest.json
+          if git diff --staged --quiet; then
+            echo "No benchmark change"
+          else
+            SHA=$(git rev-parse --short HEAD)
+            git commit -m "chore(bench): refresh latest.json @ $SHA"
+            git push
+          fi
+
+      - name: Upload bench artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results-${{ github.run_id }}
+          path: benchmarks/results/latest.json

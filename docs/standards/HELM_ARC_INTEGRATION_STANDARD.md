@@ -867,11 +867,11 @@ Definition of done:
 
 * only if a canonical MAMA root already exists:
 
-  * `core/pkg/mama/lanes/arc.go`
+  * `core/pkg/experimental/mama/lanes/arc.go`
 
 Rule:
 
-* if `mama/` is not yet canonical, do not create it just for ARC
+* if `experimental/mama/` is not yet canonical, do not create it just for ARC
 * lane logic must live in the existing mission control runtime location
 
 Definition of done:

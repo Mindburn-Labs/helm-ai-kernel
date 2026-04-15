@@ -105,7 +105,7 @@ Formal Verification: TLA+ (`proofs/GuardianPipeline.tla`)
 - Delegation depth limits (configurable, default: 3)
 - `core/pkg/proofgraph/` — Causal DAG with Lamport ordering tracks all effects
 - Circuit breaker patterns — Guardian Gate 1 (Freeze) halts cascading failures
-- `core/pkg/mama/` — Multi-agent runtime with lane-based concurrency isolation
+- `core/pkg/experimental/mama/` — Multi-agent runtime with lane-based concurrency isolation
 
 ### 8. Sensitive Data Exposure
 
@@ -164,7 +164,7 @@ Run `make bench` to reproduce. Results at `benchmarks/results/latest.json`.
 | GOVERN 1 | Policies | P0/P1/P2 three-layer composition, WASM sandbox | `core/pkg/policy/wasm/` |
 | GOVERN 2 | Accountability | Evidence packs, ProofGraph, receipt chain | `core/pkg/evidencepack/` |
 | GOVERN 3 | Workforce | Agent lifecycle, delegation chains | `core/pkg/identity/` |
-| GOVERN 4 | Organizational | Compliance frameworks (22 regulatory regimes) | `core/pkg/compliance/` |
+| GOVERN 4 | Organizational | 7 compliance framework Go packages (GDPR, HIPAA, SOX, SEC, MiCA, DORA, FCA) + 9 signed reference policy bundles | `core/pkg/compliance/` · `reference_packs/` |
 | GOVERN 5 | Processes | RegWatch continuous monitoring | `core/pkg/compliance/regwatch/` |
 | GOVERN 6 | Plan | Policy bundles, versioned governance | `protocols/policy-schema/` |
 | MAP 1 | Context | Context guard (environment fingerprinting) | `core/pkg/kernel/` |
@@ -203,8 +203,8 @@ Run `make bench` to reproduce. Results at `benchmarks/results/latest.json`.
 
 | Article | Requirement | HELM Coverage |
 |---------|------------|---------------|
-| Art. 9 | Risk Management | 22 compliance frameworks, RegWatch monitoring, threat scanner |
-| Art. 11 | Technical Documentation | Evidence packs with manifest, 186+ JSON schemas |
+| Art. 9 | Risk Management | 7 compliance framework Go packages + 9 signed reference policy bundles + RegWatch monitoring + threat scanner |
+| Art. 11 | Technical Documentation | Evidence packs with manifest, 39 signed JSON schemas |
 | Art. 12 | Record-Keeping | ProofGraph causal DAG (immutable, Rekor-anchored) |
 | Art. 13 | Transparency | CloudEvents export, OTel traces, receipt chain |
 | Art. 14 | Human Oversight | Kill switch, ESCALATE verdict, approval workflows |
@@ -237,7 +237,7 @@ Unlike library-based governance frameworks, HELM enforces governance at the kern
 | **Audit trail** | Causal DAG with CRDT sync + Rekor anchoring | Linear log chain |
 | **Crypto** | Ed25519 + ML-DSA-65 (post-quantum) | Ed25519 only |
 | **Formal verification** | TLA+ proofs | None |
-| **Compliance** | 22 regulatory frameworks | 4 frameworks |
+| **Compliance** | 7 framework packages + 9 signed reference bundles | 4 frameworks |
 | **Evidence** | Court-admissible evidence packs (JCS + SHA-256) | CloudEvents export |
 | **Determinism** | Kernel PRNG + reducer + concurrency artifacts | Stateless (no guarantees) |
 

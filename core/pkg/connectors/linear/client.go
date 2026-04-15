@@ -34,6 +34,19 @@ func (c *Client) UpdateIssue(_ context.Context, req *UpdateIssueRequest) error {
 	return fmt.Errorf("linear: UpdateIssue(%q): not connected: requires API key", req.IssueID)
 }
 
+// GetIssue retrieves a single issue by ID.
+// TODO: Implement GraphQL query against Linear API.
+// The real implementation should send a query like:
+//
+//	query { issue(id: "...") { id title description state { name } priority assignee { name } createdAt updatedAt } }
+//
+// Rate limiting: Linear enforces 1,500 requests/hour with complexity-weighted
+// cost per query. The connector's ZeroTrustGate rate limit should stay well
+// below this ceiling.
+func (c *Client) GetIssue(_ context.Context, issueID string) (*GetIssueResponse, error) {
+	return nil, fmt.Errorf("linear: GetIssue(%q): not connected: requires API key", issueID)
+}
+
 // ListIssues lists issues, optionally filtered by team or state.
 func (c *Client) ListIssues(_ context.Context, teamID, state string) (*ListIssuesResponse, error) {
 	return nil, fmt.Errorf("linear: ListIssues(team=%q, state=%q): not connected: requires API key", teamID, state)

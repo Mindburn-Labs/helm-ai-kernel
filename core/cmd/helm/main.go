@@ -205,6 +205,12 @@ func runServer() {
 	}
 
 	// Start API Server
+	// SEC: Default to localhost to prevent accidental network exposure (OpenClaw vector).
+	// Set HELM_BIND_ADDR=0.0.0.0 to listen on all interfaces when intentionally exposing.
+	bindAddr := "127.0.0.1"
+	if envBind := os.Getenv("HELM_BIND_ADDR"); envBind != "" {
+		bindAddr = envBind
+	}
 	port := 8080
 	if envPort := os.Getenv("HELM_PORT"); envPort != "" {
 		if p, err := strconv.Atoi(envPort); err == nil {
@@ -216,7 +222,7 @@ func runServer() {
 		extraRoutes(mux)
 	}
 	server := &http.Server{
-		Addr:              fmt.Sprintf(":%d", port),
+		Addr:              fmt.Sprintf("%s:%d", bindAddr, port),
 		Handler: helmauth.SecurityHeaders(
 			helmauth.CORSMiddleware(nil)(
 				helmapi.NewGlobalRateLimiter(60, 120).WithTrustProxy(true).Middleware(mux),
@@ -227,8 +233,11 @@ func runServer() {
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
+	if bindAddr == "0.0.0.0" {
+		log.Printf("[helm] WARNING: API server binding to all interfaces (0.0.0.0:%d) — ensure firewall rules are in place", port)
+	}
 	go func() {
-		log.Printf("[helm] API server: :%d", port)
+		log.Printf("[helm] API server: %s:%d", bindAddr, port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("API server failed", "error", err)
 		}
@@ -249,7 +258,7 @@ func runServer() {
 	healthMux.HandleFunc("/health", healthHandler)
 	healthMux.HandleFunc("/healthz", healthHandler)
 	healthServer := &http.Server{
-		Addr:              fmt.Sprintf(":%d", healthPort),
+		Addr:              fmt.Sprintf("%s:%d", bindAddr, healthPort),
 		Handler:           healthMux,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       5 * time.Second,
@@ -257,13 +266,13 @@ func runServer() {
 		IdleTimeout:       30 * time.Second,
 	}
 	go func() {
-		log.Printf("[helm] health server: :%d", healthPort)
+		log.Printf("[helm] health server: %s:%d", bindAddr, healthPort)
 		if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("[helm] health server error: %v", err)
 		}
 	}()
 
-	log.Printf("[helm] ready: http://localhost:%d", port)
+	log.Printf("[helm] ready: http://%s:%d", bindAddr, port)
 	log.Println("[helm] press ctrl+c to stop")
 
 	// Graceful Shutdown

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/api"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel/ui"
@@ -219,10 +220,10 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 		log.Println("[helm] routes: Credential management routes registered")
 	}
 
-	// --- Trust Keys ---
+	// --- Trust Keys (C-2: require admin auth — fail-closed if HELM_ADMIN_API_KEY unset) ---
 	trustKeys := &api.TrustKeyHandler{Registry: trustregistry.NewTrustRegistry()}
-	mux.HandleFunc("/api/v1/trust/keys/add", trustKeys.HandleAddKey)
-	mux.HandleFunc("/api/v1/trust/keys/revoke", trustKeys.HandleRevokeKey)
+	mux.Handle("/api/v1/trust/keys/add", auth.RequireAdminAuth(trustKeys.HandleAddKey))
+	mux.Handle("/api/v1/trust/keys/revoke", auth.RequireAdminAuth(trustKeys.HandleRevokeKey))
 
 	// --- OSS Local Read Surface ---
 	ossLocal := api.NewOSSLocalHandler(api.OSSLocalConfig{

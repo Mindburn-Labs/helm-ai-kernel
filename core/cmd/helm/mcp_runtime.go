@@ -386,7 +386,12 @@ func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, execut
 }
 
 func newLocalMCPHTTPServer(port int, authMode string) (*http.Server, error) {
-	baseURL := fmt.Sprintf("http://localhost:%d", port)
+	// SEC: Default to localhost to prevent accidental network exposure.
+	mcpBind := "127.0.0.1"
+	if envBind := os.Getenv("HELM_BIND_ADDR"); envBind != "" {
+		mcpBind = envBind
+	}
+	baseURL := fmt.Sprintf("http://%s:%d", mcpBind, port)
 	gateway, err := newConfiguredLocalMCPGateway(mcppkg.GatewayConfig{
 		BaseURL:  baseURL,
 		AuthMode: authMode,
@@ -415,7 +420,7 @@ func newLocalMCPHTTPServer(port int, authMode string) (*http.Server, error) {
 	}
 
 	return &http.Server{
-		Addr:              fmt.Sprintf(":%d", port),
+		Addr:              fmt.Sprintf("%s:%d", mcpBind, port),
 		Handler:           handler,
 		ReadHeaderTimeout: 15 * time.Second,
 		ReadTimeout:       30 * time.Second,

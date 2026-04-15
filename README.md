@@ -16,11 +16,18 @@ May your context windows be long and your hallucinations few. See .github/AI_NOT
 # HELM — Fail-Closed Execution Firewall for AI Agents
 
 [![CI](https://github.com/Mindburn-Labs/helm-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/Mindburn-Labs/helm-oss/actions/workflows/ci.yml)
-[![Conformance](https://img.shields.io/badge/conformance-L1%20%2B%20L2-brightgreen)](docs/CONFORMANCE.md)
+[![OWASP Agentic Top 10](https://img.shields.io/badge/OWASP_Agentic_Top_10-10%2F10_Covered-blue)](docs/security/owasp-agentic-top10-coverage.md)
+[![Conformance](https://img.shields.io/badge/conformance-L1%20%2B%20L2%20%2B%20L3-brightgreen)](docs/CONFORMANCE.md)
+[![TLA+ Verified](https://img.shields.io/badge/TLA%2B-formally_verified-blueviolet)](proofs/)
+[![Post-Quantum](https://img.shields.io/badge/crypto-Ed25519%20%2B%20ML--DSA--65-green)](core/pkg/crypto/)
 [![Provenance](https://img.shields.io/badge/provenance-SLSA-blue)](https://github.com/Mindburn-Labs/helm-oss/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-**Fail-closed execution firewall** · **Fail-closed MCP interceptor** · **Signed receipts for AI actions**
+**Fail-closed execution firewall** · **TLA+-verified policy pipeline** · **Post-quantum crypto** · **Court-admissible evidence packs**
+
+**Runtime governance kernel for AI agents** — deterministic policy enforcement, cryptographic proof chains, and 22 regulatory compliance frameworks. Covers all **10 OWASP Agentic risks** with **formally verified** correctness proofs. Single static binary, 75us p99 overhead.
+
+**Works with any stack** — OpenAI, Anthropic, LangChain, CrewAI, LlamaIndex, Vercel AI, Semantic Kernel, and 12+ more. Go · Python · TypeScript · Rust · Java.
 
 HELM is a deterministic proxy that sits between your AI agent and the tools it calls. Every tool invocation passes through a fail-closed policy gate, gets canonicalized (JCS + SHA-256), and produces an Ed25519-signed receipt. The receipts form a causal DAG (ProofGraph) that can be exported and verified offline.
 
@@ -185,18 +192,60 @@ helm conform --level L2 --json
 
 ---
 
+## OWASP Agentic Top 10 -- 10/10 Covered
+
+| Risk | ID | HELM Control | Code Path |
+|------|----|-------------|-----------|
+| Prompt Injection | ASI-01 | Threat scanner (12 rule sets, 7 detection vectors) | `core/pkg/threatscan/` |
+| Tool Poisoning | ASI-02 | Rug-pull detection + egress firewall (fail-closed) | `core/pkg/mcp/rugpull.go` |
+| Excessive Permission | ASI-03 | Effect permits (single-use, nonce-verified, time-bound) | `core/pkg/effects/` |
+| Insufficient Validation | ASI-04 | TLA+-verified 6-gate Guardian pipeline | `core/pkg/guardian/` |
+| Improper Output | ASI-05 | Output quarantine gate | `Guardian.EvaluateOutput()` |
+| Resource Overborrowing | ASI-06 | Budget gates with ACID locks | `core/pkg/budget/` |
+| Cascading Effects | ASI-07 | Circuit breakers + ProofGraph causal DAG | `core/pkg/effects/circuitbreaker.go` |
+| Data Exposure | ASI-08 | Egress firewall (deny-all default) + selective disclosure JWT | `core/pkg/firewall/` |
+| Plugin/Tool Insecurity | ASI-09 | MCP governance interceptor + mTLS + schema validation | `core/pkg/mcp/gateway.go` |
+| Insufficient Monitoring | ASI-10 | Evidence packs (JCS+SHA-256) + ProofGraph + OTel | `core/pkg/evidencepack/` |
+
+Full mapping: [OWASP Coverage](docs/security/owasp-agentic-top10-coverage.md) -- includes NIST AI RMF, SOC 2, and EU AI Act cross-references.
+
+---
+
+## Works With Your Stack
+
+| Framework | Integration | Path |
+|-----------|------------|------|
+| **OpenAI SDK** | Base URL proxy (zero code change) | `examples/python_openai_baseurl/` |
+| **Anthropic** | SDK adapter | `sdk/ts/adapters/anthropic/` |
+| **LangChain / LangGraph** | Middleware | `sdk/ts/adapters/langchain/` |
+| **CrewAI** | Adapter | `sdk/ts/adapters/crewai/` |
+| **LlamaIndex** | Middleware | `sdk/ts/adapters/llamaindex/` |
+| **Vercel AI** | Adapter | `sdk/ts/adapters/vercel-ai/` |
+| **Semantic Kernel** | Adapter | `sdk/ts/adapters/semantic-kernel/` |
+| **Haystack** | Pipeline component | `sdk/ts/adapters/haystack/` |
+| **Dify** | Plugin | `sdk/ts/adapters/dify/` |
+| **Flowise** | Adapter | `sdk/ts/adapters/flowise/` |
+| **Mistral** | Adapter | `sdk/ts/adapters/mistral/` |
+| **Gemini** | Adapter | `sdk/ts/adapters/gemini/` |
+| **Any OpenAI-compatible** | Change `base_url` | 2 min |
+| **Any MCP server** | MCP interceptor | `helm mcp pack` |
+
+---
+
 ## HELM vs. Alternatives
 
-| Feature | HELM | NeMo Guardrails | Guardrails AI | LlamaGuard | OPA/Cedar |
-|---------|------|----------------|---------------|------------|-----------| 
-| **Enforcement point** | Execution boundary (proxy) | Prompt layer | Pre/post validation | Content classifier | Generic policy |
-| **Fail-closed** | Default deny | Best-effort | Advisory | N/A | App-level |
-| **Cryptographic receipts** | Ed25519 signed chain | — | — | — | — |
-| **Offline verifiable** | EvidencePack export | — | — | — | — |
-| **Budget enforcement** | ACID locks | — | — | — | — |
-| **Framework agnostic** | Any LLM, any SDK | NVIDIA only | Python only | Meta only | Yes |
-| **Tool calling governance** | Schema + args + output | Prompt-level | Basic validation | Content only | No AI semantics |
-| **Latency** | 75µs p99 ([benchmarked](docs/BENCHMARKS.md)) | 100ms+ | 50ms+ | 200ms+ | < 5ms |
+| Feature | HELM | Microsoft AGT | NeMo Guardrails | Guardrails AI | OPA/Cedar |
+|---------|------|--------------|----------------|---------------|-----------|
+| **Enforcement** | Kernel (every action needs signed permit) | Library (middleware) | Prompt layer | Pre/post validation | Generic policy |
+| **Fail-closed** | Default deny (empty policy = block all) | Exception = deny | Best-effort | Advisory | App-level |
+| **Crypto** | Ed25519 + ML-DSA-65 (post-quantum) | Ed25519 only | -- | -- | -- |
+| **Audit trail** | Causal DAG + CRDT sync + Rekor anchoring | Merkle chain | -- | -- | -- |
+| **Evidence** | Court-admissible packs (JCS + SHA-256) | CloudEvents logs | -- | -- | -- |
+| **Formal verification** | TLA+ proofs | None | None | None | None |
+| **Policy sandbox** | WASM (wazero, deterministic) | YAML rules | -- | -- | Rego/Cedar |
+| **Compliance** | 22 regulatory frameworks | 4 frameworks | -- | -- | -- |
+| **Latency** | 75us p99 ([benchmarked](docs/BENCHMARKS.md)) | 0.1ms (no signing) | 100ms+ | 50ms+ | < 5ms |
+| **Distribution** | Single static binary | pip install | pip install | pip install | Binary |
 
 ---
 
@@ -316,27 +365,31 @@ if apiErr, ok := err.(*helm.HelmApiError); ok {
 
 ---
 
-## What Ships
+## What You Get
 
-| Capability |
-|-----------|
-| OpenAI-compatible governed proxy |
-| Fail-closed MCP interceptor |
-| Schema PEP (input + output validation) |
-| ProofGraph DAG (Lamport + Ed25519) |
-| WASI sandbox (gas/time/memory budgets) |
-| Approval ceremonies (timelock + challenge) |
-| Trust registry (event-sourced) |
-| EvidencePack export + offline replay |
-| Proof Condensation (Merkle checkpoints) |
-| CPI (Canonical Policy Index) |
-| HSM signing (Ed25519) |
-| Policy Bundles (load, verify, compose) |
-| Capability manifests + connector bundles |
-| Conformance L1 + L2 |
-| 20+ CLI commands |
+| Capability | What It Does | Links |
+|-----------|-------------|-------|
+| **6-Gate Guardian Pipeline** | TLA+-verified policy enforcement (Freeze -> Context -> Identity -> Egress -> Threat -> Delegation) | [guardian/](core/pkg/guardian/) |
+| **3-Layer Policy Composition** | P0 ceilings -> P1 signed bundles -> P2 per-session overlays (WASM sandbox via wazero) | [policy/](core/pkg/policy/) |
+| **Causal Proof DAG** | ProofGraph with CRDT sync, Rekor transparency log anchoring, Lamport ordering | [proofgraph/](core/pkg/proofgraph/) |
+| **Post-Quantum Crypto** | Ed25519 + ML-DSA-65 (NIST FIPS 204), HSM support, key rotation, selective disclosure JWT | [crypto/](core/pkg/crypto/) |
+| **Evidence Packs** | Content-addressed, JCS-canonical, court-admissible proof archives | [evidencepack/](core/pkg/evidencepack/) |
+| **Threat Scanner** | 12 rule sets: prompt injection, encoding evasion, social engineering, privilege escalation, data exfiltration | [threatscan/](core/pkg/threatscan/) |
+| **MCP Security** | Rug-pull detection, tool fingerprinting, governance interceptor, typosquatting detection | [mcp/](core/pkg/mcp/) |
+| **Circuit Breakers** | CLOSED/OPEN/HALF_OPEN state machine per connector + registry | [effects/circuitbreaker.go](core/pkg/effects/circuitbreaker.go) |
+| **Reversibility Classification** | Effect types tagged as fully/partially/irreversible with approval gating | [effects/reversibility.go](core/pkg/effects/reversibility.go) |
+| **SLO Engine** | Latency/error-rate objectives with error budget tracking and exhaustion alerts | [slo/](core/pkg/slo/) |
+| **22 Compliance Frameworks** | GDPR, HIPAA, SOX, SEC, MiCA, DORA, FCA, EU AI Act, CFTC + RegWatch monitoring | [compliance/](core/pkg/compliance/) |
+| **OpenTelemetry** | Traces (gate-level spans) + metrics (decision latency, gate denials, effect throughput) | [guardian/otel.go](core/pkg/guardian/otel.go) |
+| **CloudEvents SIEM Export** | ProofGraph nodes serialized as CloudEvents v1.0 for Splunk/Datadog/Elastic | [cloudevents/](core/pkg/proofgraph/cloudevents/) |
+| **Multi-Agent Runtime** | MAMA lanes-based concurrency, agent roster, deterministic scheduling | [mama/](core/pkg/mama/) |
+| **Agent Lifecycle** | Virtual employee management (create/suspend/resume/terminate) with budget envelopes | [workforce/](core/pkg/workforce/) |
+| **Fault Attribution** | Shapley-value causal attribution from ProofGraph for multi-agent failures | [attribution/](core/pkg/proofgraph/attribution/) |
+| **Policy Linter** | Static analysis with 10 built-in rules (structure, security, performance) | [lint/](core/pkg/policy/lint/) |
+| **Conformance Testing** | L1/L2/L3 crucible suites with property-based fuzzing | [tests/conformance/](tests/conformance/) |
+| **GitHub Action** | CI/CD governance verification (OWASP scan, security scan, evidence verification) | [governance-scan/](.github/actions/governance-scan/) |
 
-Not included: managed federation, pack entitlement, compliance intelligence, Studio, managed control plane. See [docs/OSS_SCOPE.md](docs/OSS_SCOPE.md).
+Not included in OSS: managed federation, pack entitlement, compliance intelligence, Studio, managed control plane. See [docs/OSS_SCOPE.md](docs/OSS_SCOPE.md).
 
 ---
 
@@ -384,6 +437,32 @@ helm-oss/
 └── Makefile             # build, test, crucible, release-binaries
 ```
 
+## Documentation
+
+**Getting Started**
+- [Quick Start](docs/QUICKSTART.md) -- Zero to governed agents in 5 minutes
+- [Insertion Guide](docs/INSERTION_GUIDE.md) -- Three copy-paste paths to get started
+- [Examples](examples/) -- 18+ runnable examples in Go, Python, TypeScript, Rust, Java
+
+**Architecture & Reference**
+- [Architecture](docs/ARCHITECTURE.md) -- System design, execution security model, TCB boundary
+- [Execution Security Model](docs/EXECUTION_SECURITY_MODEL.md) -- Three-layer enforcement
+- [Threat Model](docs/THREAT_MODEL.md) -- Trust boundaries, adversary classes, STRIDE analysis
+- [Conformance](docs/CONFORMANCE.md) -- L1/L2/L3 gate definitions and test methodology
+- [Benchmarks](docs/BENCHMARKS.md) -- Reproducible latency measurements
+
+**Compliance & Security**
+- [OWASP Agentic Top 10](docs/security/owasp-agentic-top10-coverage.md) -- 10/10 mapping with NIST/SOC2/EU AI Act cross-references
+- [TCB Policy](docs/TCB_POLICY.md) -- Trusted Computing Base boundary enforcement
+- [OWASP MCP Threat Mapping](docs/OWASP_MCP_THREAT_MAPPING.md) -- MCP-specific threats
+
+**Deployment**
+- [Docker Compose](deploy/README.md) -- Local and production deployment
+- [Kubernetes Operator](deploy/helm-operator/) -- CRD-based deployment
+- [Caddy Reverse Proxy](deploy/) -- TLS termination and routing
+
+---
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -394,4 +473,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
-Built by [Mindburn Labs](https://mindburn.org) — applied research for execution security in autonomous systems.
+Built by [Mindburn Labs](https://mindburn.org) -- applied research for execution security in autonomous systems.

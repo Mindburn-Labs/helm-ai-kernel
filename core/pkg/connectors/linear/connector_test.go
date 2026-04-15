@@ -61,6 +61,7 @@ func TestDispatch_AllTools(t *testing.T) {
 	}{
 		{"linear.create_issue", map[string]any{"team_id": "team-1", "title": "Bug fix"}},
 		{"linear.update_issue", map[string]any{"issue_id": "issue-1", "state": "done"}},
+		{"linear.get_issue", map[string]any{"issue_id": "issue-1"}},
 		{"linear.list_issues", map[string]any{"team_id": "team-1"}},
 		{"linear.add_comment", map[string]any{"issue_id": "issue-1", "body": "Working on it"}},
 	}
@@ -234,6 +235,7 @@ func TestDispatch_MissingRequiredParams(t *testing.T) {
 		{"linear.create_issue", map[string]any{}, "missing required param team_id"},
 		{"linear.create_issue", map[string]any{"team_id": "t"}, "missing required param title"},
 		{"linear.update_issue", map[string]any{}, "missing required param issue_id"},
+		{"linear.get_issue", map[string]any{}, "missing required param issue_id"},
 		{"linear.add_comment", map[string]any{}, "missing required param issue_id"},
 		{"linear.add_comment", map[string]any{"issue_id": "i"}, "missing required param body"},
 	}
@@ -254,10 +256,11 @@ func TestDispatch_MissingRequiredParams(t *testing.T) {
 func TestAllowedDataClasses(t *testing.T) {
 	classes := AllowedDataClasses()
 	expected := map[string]bool{
-		"linear.issue.create":  true,
-		"linear.issue.update":  true,
-		"linear.issue.list":    true,
-		"linear.comment.add":   true,
+		"linear.issue.create": true,
+		"linear.issue.update": true,
+		"linear.issue.read":   true,
+		"linear.issue.list":   true,
+		"linear.comment.add":  true,
 	}
 	if len(classes) != len(expected) {
 		t.Fatalf("got %d data classes, want %d", len(classes), len(expected))

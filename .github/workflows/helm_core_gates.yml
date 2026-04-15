@@ -153,6 +153,23 @@ jobs:
         run: |
           export GOTOOLCHAIN=go1.24.1
           cd core && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: Dependency diff (block new critical CVEs)
+        if: github.event_name == 'pull_request'
+        run: |
+          # Compare go.sum against base branch to detect new dependencies
+          git fetch origin ${{ github.base_ref }} --depth=1
+          if git diff origin/${{ github.base_ref }}...HEAD -- core/go.sum | grep -q '^+'; then
+            echo "📦 go.sum changed — running vulnerability check on new deps..."
+            export GOTOOLCHAIN=go1.24.1
+            cd core && go run golang.org/x/vuln/cmd/govulncheck@latest ./... 2>&1 | tee /tmp/vulncheck.txt
+            if grep -qE 'Vulnerability|CRITICAL|HIGH' /tmp/vulncheck.txt; then
+              echo "❌ New dependencies introduce known vulnerabilities"
+              exit 1
+            fi
+            echo "✅ No new vulnerabilities from dependency changes"
+          else
+            echo "✅ go.sum unchanged — skipping dependency diff"
+          fi
       - name: No TODOs in production code
         run: |
           # Fail-closed: zero TODOs allowed in non-test Go files.

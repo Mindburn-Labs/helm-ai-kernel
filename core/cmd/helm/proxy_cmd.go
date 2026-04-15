@@ -514,7 +514,13 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	// Proxy everything else
 	mux.HandleFunc("/", proxy.ServeHTTP)
 
-	addr := fmt.Sprintf(":%d", port)
+	// SEC: Default to localhost to prevent accidental network exposure (OpenClaw vector).
+	// The proxy is designed as a local sidecar — use HELM_BIND_ADDR=0.0.0.0 to expose.
+	proxyBind := "127.0.0.1"
+	if envBind := os.Getenv("HELM_BIND_ADDR"); envBind != "" {
+		proxyBind = envBind
+	}
+	addr := fmt.Sprintf("%s:%d", proxyBind, port)
 
 	// Responses WebSocket mode: register /v1/responses handler for WS upgrade
 	if websocket {
@@ -549,7 +555,7 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			errMsg := map[string]any{
 				"error": map[string]any{
 					"type":    "websocket_not_ready",
-					"message": "Responses WebSocket mode endpoint registered at /v1/responses. Full WS upgrade requires websocket library dependency. Use OPENAI_WEBSOCKET_BASE_URL=ws://localhost" + addr + " to target this endpoint.",
+					"message": "Responses WebSocket mode endpoint registered at /v1/responses. Full WS upgrade requires websocket library dependency. Use OPENAI_WEBSOCKET_BASE_URL=ws://" + addr + " to target this endpoint.",
 				},
 			}
 			data, _ := json.Marshal(errMsg)
@@ -560,12 +566,12 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	_, _ = fmt.Fprintf(stdout, "HELM Proxy Sidecar\n")
 	_, _ = fmt.Fprintf(stdout, "══════════════════\n")
 	_, _ = fmt.Fprintf(stdout, "  Upstream:    %s\n", upstream)
-	_, _ = fmt.Fprintf(stdout, "  Listen:      http://localhost%s\n", addr)
-	_, _ = fmt.Fprintf(stdout, "  Health:      http://localhost%s/healthz\n", addr)
+	_, _ = fmt.Fprintf(stdout, "  Listen:      http://%s\n", addr)
+	_, _ = fmt.Fprintf(stdout, "  Health:      http://%s/healthz\n", addr)
 	_, _ = fmt.Fprintf(stdout, "  Receipts:    %s\n", receiptPath)
 	_, _ = fmt.Fprintf(stdout, "  Tenant:      %s\n", tenantID)
 	if websocket {
-		_, _ = fmt.Fprintf(stdout, "  WebSocket:   ws://localhost%s/v1/responses (Responses API mode)\n", addr)
+		_, _ = fmt.Fprintf(stdout, "  WebSocket:   ws://%s/v1/responses (Responses API mode)\n", addr)
 	}
 	if budgetEnforcer != nil {
 		_, _ = fmt.Fprintf(stdout, "  Budget:      daily=%d monthly=%d cents\n", dailyLimit, monthlyLimit)
@@ -583,11 +589,11 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	_, _ = fmt.Fprintf(stdout, "  Governance:  Guardian → ProofGraph → Budget\n")
 	_, _ = fmt.Fprintf(stdout, "\n")
 	_, _ = fmt.Fprintf(stdout, "  Drop-in usage:\n")
-	_, _ = fmt.Fprintf(stdout, "    export OPENAI_BASE_URL=http://localhost%s/v1\n", addr)
+	_, _ = fmt.Fprintf(stdout, "    export OPENAI_BASE_URL=http://%s/v1\n", addr)
 	_, _ = fmt.Fprintf(stdout, "    python your_app.py\n")
 	if websocket {
 		_, _ = fmt.Fprintf(stdout, "\n  Responses WebSocket:\n")
-		_, _ = fmt.Fprintf(stdout, "    export OPENAI_WEBSOCKET_BASE_URL=ws://localhost%s\n", addr)
+		_, _ = fmt.Fprintf(stdout, "    export OPENAI_WEBSOCKET_BASE_URL=ws://%s\n", addr)
 		_, _ = fmt.Fprintf(stdout, "    # Agents SDK JS uses /v1/responses over WebSocket\n")
 	}
 	_, _ = fmt.Fprintf(stdout, "\n")

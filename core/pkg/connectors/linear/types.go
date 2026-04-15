@@ -19,6 +19,7 @@ func AllowedDataClasses() []string {
 	return []string{
 		"linear.issue.create",
 		"linear.issue.update",
+		"linear.issue.read",
 		"linear.issue.list",
 		"linear.comment.add",
 	}
@@ -28,6 +29,7 @@ func AllowedDataClasses() []string {
 var toolDataClassMap = map[string]string{
 	"linear.create_issue": "linear.issue.create",
 	"linear.update_issue": "linear.issue.update",
+	"linear.get_issue":    "linear.issue.read",
 	"linear.list_issues":  "linear.issue.list",
 	"linear.add_comment":  "linear.comment.add",
 }
@@ -68,6 +70,11 @@ type UpdateIssueRequest struct {
 	State       *string `json:"state,omitempty"`
 	Priority    *string `json:"priority,omitempty"`
 	AssigneeID  *string `json:"assignee_id,omitempty"`
+}
+
+// GetIssueResponse is the response from retrieving a single Linear issue.
+type GetIssueResponse struct {
+	Issue Issue `json:"issue"`
 }
 
 // ListIssuesResponse is the response from listing Linear issues.

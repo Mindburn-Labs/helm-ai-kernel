@@ -5,10 +5,74 @@ title: mcp
 # Integration: Model Context Protocol (MCP)
 
 HELM provides an MCP gateway that governs tool execution via the MCP protocol.
-The OSS runtime now exposes two surfaces:
+The OSS runtime exposes two surfaces:
 
 - `/mcp` for modern streamable HTTP / JSON-RPC clients with protocol negotiation
 - `/mcp/v1/*` as a legacy HTTP compatibility layer for scripts and smoke tests
+
+Protocol version: **2025-11-25** (also supports 2025-06-18 and 2025-03-26).
+
+## Claude Desktop Integration
+
+### Option 1: MCPB Bundle (recommended)
+
+Build and install the .mcpb bundle:
+
+```bash
+make mcp-pack          # produces dist/helm.mcpb
+```
+
+Then double-click `dist/helm.mcpb` or drag it into Claude Desktop.
+
+The bundle contains:
+- `manifest.json` — full capability manifest with tool definitions, protocol version, and governance metadata
+- `claude_desktop_config.json` — drop-in config snippet
+- `server/helm` — the HELM binary
+
+### Option 2: Manual Configuration
+
+Add the following to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
+or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "helm-governance": {
+      "command": "/path/to/helm",
+      "args": ["mcp", "serve", "--transport", "stdio"],
+      "env": {}
+    }
+  }
+}
+```
+
+Replace `/path/to/helm` with the absolute path to your built binary (`bin/helm`).
+
+### Option 3: Remote HTTP
+
+Start the server and point Claude Desktop at the remote URL:
+
+```bash
+helm mcp serve --transport http --port 9100
+```
+
+The MCP endpoint is `http://localhost:9100/mcp`.
+
+## Claude Code Integration
+
+```bash
+make mcp-install       # generates helm-mcp-plugin/
+claude plugin install ./helm-mcp-plugin
+```
+
+## Other Clients
+
+```bash
+helm mcp print-config --client windsurf   # Windsurf
+helm mcp print-config --client cursor     # Cursor
+helm mcp print-config --client vscode     # VS Code
+helm mcp print-config --client codex      # Codex
+```
 
 ## Modern MCP Endpoint
 
@@ -92,12 +156,20 @@ The OSS runtime uses a local bearer-token gate for remote HTTP and publishes pro
 
 ## What HELM Adds to MCP
 
-- **Schema PEP** — input and output validation on every tool call
+- **Fail-closed governance** — all tool calls pass through the Guardian 6-gate pipeline (Freeze, Context, Identity, Egress, Threat, Delegation)
+- **Schema PEP** — input and output validation on every tool call (JCS canonical hash)
 - **Protocol negotiation** — supports `2025-11-25`, `2025-06-18`, and `2025-03-26`
 - **Structured tool results** — `structuredContent` + text content for backwards compatibility
-- **Receipts** — Ed25519-signed execution receipts
-- **Budget enforcement** — ACID budget locks, fail-closed on ceiling breach
-- **Approval ceremonies** — timelock + challenge/response for sensitive operations
+- **Receipts** — Ed25519-signed execution receipts with receipt IDs
 - **ProofGraph** — append-only DAG of all tool executions
+- **Rug-pull detection** — cryptographic fingerprinting detects tool definition mutations between sessions
+- **Typosquat detection** — Levenshtein-based cross-server tool name similarity checks
+- **Trust scoring** — behavioral trust scores (0-1000) for MCP tools based on schema stability, uptime, error rate
+- **Delegation scoping** — per-session tool access control for delegated agents
+- **Elicitation** — structured approval/input requests for ESCALATE verdicts
 
-→ Full example: [examples/mcp_client/](../../examples/mcp_client/)
+## Bundle Manifest
+
+The project root `mcp-bundle.json` is the canonical description of the HELM MCP server capabilities. It is used by `helm mcp pack` to generate the `.mcpb` bundle and can be referenced by CI/CD tooling.
+
+Full example: [examples/mcp_client/](../../examples/mcp_client/)

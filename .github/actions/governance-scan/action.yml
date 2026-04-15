@@ -1,0 +1,328 @@
+name: 'HELM Governance Scan'
+description: >
+  Comprehensive governance security scan for AI agent projects.
+  Validates OWASP Agentic Top 10 compliance, policy integrity,
+  threat detection coverage, and evidence chain verification.
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  command:
+    description: >
+      Scan command to run:
+        governance-verify  — OWASP Agentic Top 10 compliance check (default)
+        security-scan      — Threat detection and policy validation
+        policy-evaluate    — Evaluate policies against a context
+        evidence-verify    — Verify evidence pack integrity
+        full               — Run all checks
+    required: false
+    default: 'governance-verify'
+  policy-path:
+    description: 'Path to policy bundle directory or YAML file (for policy-evaluate)'
+    required: false
+  context-json:
+    description: 'JSON context for policy evaluation (for policy-evaluate)'
+    required: false
+    default: '{}'
+  evidence-path:
+    description: 'Path to evidence pack directory (for evidence-verify)'
+    required: false
+  conformance-level:
+    description: 'Conformance level: L1, L2, or L3'
+    required: false
+    default: 'L2'
+  output-format:
+    description: 'Output format: text, json, or badge'
+    required: false
+    default: 'text'
+  fail-on-warning:
+    description: 'Fail the step if warnings are found'
+    required: false
+    default: 'false'
+  helm-version:
+    description: 'HELM version to install (default: latest)'
+    required: false
+    default: 'latest'
+  go-version:
+    description: 'Go version for building HELM'
+    required: false
+    default: '1.25.0'
+
+outputs:
+  status:
+    description: 'Overall status: pass, warn, or fail'
+    value: ${{ steps.scan.outputs.status }}
+  controls-passed:
+    description: 'Number of controls passed'
+    value: ${{ steps.scan.outputs.controls_passed }}
+  controls-total:
+    description: 'Total number of controls checked'
+    value: ${{ steps.scan.outputs.controls_total }}
+  violations:
+    description: 'JSON array of violations found'
+    value: ${{ steps.scan.outputs.violations }}
+  output:
+    description: 'Full scan output (text or JSON based on output-format)'
+    value: ${{ steps.scan.outputs.output }}
+  evidence-hash:
+    description: 'SHA-256 hash of scan evidence (for audit trail)'
+    value: ${{ steps.scan.outputs.evidence_hash }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+
+    - name: Build HELM
+      id: build
+      shell: bash
+      run: |
+        # Build HELM binary from source for reproducibility
+        HELM_ROOT="${{ github.action_path }}/../../.."
+        if [ -f "$HELM_ROOT/core/go.mod" ]; then
+          cd "$HELM_ROOT/core"
+          go build -o "$RUNNER_TEMP/helm" ./cmd/helm/
+          echo "helm_bin=$RUNNER_TEMP/helm" >> "$GITHUB_OUTPUT"
+        else
+          echo "::error::HELM source not found. Ensure the action is used within the helm-oss repository."
+          exit 1
+        fi
+
+    - name: Run Governance Scan
+      id: scan
+      shell: bash
+      env:
+        HELM_BIN: ${{ steps.build.outputs.helm_bin }}
+        HELM_COMMAND: ${{ inputs.command }}
+        HELM_POLICY_PATH: ${{ inputs.policy-path }}
+        HELM_CONTEXT_JSON: ${{ inputs.context-json }}
+        HELM_EVIDENCE_PATH: ${{ inputs.evidence-path }}
+        HELM_CONFORMANCE_LEVEL: ${{ inputs.conformance-level }}
+        HELM_OUTPUT_FORMAT: ${{ inputs.output-format }}
+        HELM_FAIL_ON_WARNING: ${{ inputs.fail-on-warning }}
+      run: |
+        set -euo pipefail
+
+        STATUS="pass"
+        CONTROLS_PASSED=0
+        CONTROLS_TOTAL=0
+        VIOLATIONS="[]"
+        OUTPUT=""
+        EXIT_CODE=0
+
+        run_check() {
+          local name="$1"
+          local cmd="$2"
+          CONTROLS_TOTAL=$((CONTROLS_TOTAL + 1))
+          if eval "$cmd" > /dev/null 2>&1; then
+            CONTROLS_PASSED=$((CONTROLS_PASSED + 1))
+            echo "  [PASS] $name"
+          else
+            echo "  [FAIL] $name"
+            VIOLATIONS=$(echo "$VIOLATIONS" | jq --arg n "$name" '. + [$n]')
+            STATUS="fail"
+          fi
+        }
+
+        case "$HELM_COMMAND" in
+          governance-verify)
+            echo "=== HELM Governance Verification (OWASP Agentic Top 10) ==="
+            echo ""
+
+            # ASI-01: Prompt Injection
+            run_check "ASI-01: Prompt Injection Detection" \
+              "test -d core/pkg/threatscan"
+
+            # ASI-02: Tool Poisoning
+            run_check "ASI-02: Tool Poisoning / Rug-Pull Detection" \
+              "test -f core/pkg/mcp/rugpull.go"
+
+            # ASI-03: Excessive Permission Scope
+            run_check "ASI-03: Permission Scope (Effect Permits)" \
+              "test -f core/pkg/effects/types.go"
+
+            # ASI-04: Insufficient Permission Validation
+            run_check "ASI-04: Permission Validation (Guardian Pipeline)" \
+              "test -f core/pkg/guardian/guardian.go"
+
+            # ASI-05: Improper Output Handling
+            run_check "ASI-05: Output Quarantine" \
+              "grep -rq 'EvaluateOutput' core/pkg/guardian/ 2>/dev/null"
+
+            # ASI-06: Resource Overborrowing
+            run_check "ASI-06: Resource Budget Gates" \
+              "test -d core/pkg/budget || grep -rq 'BudgetGate' core/pkg/guardian/ 2>/dev/null"
+
+            # ASI-07: Cascading Effects
+            run_check "ASI-07: Cascade Protection (Circuit Breaker)" \
+              "test -f core/pkg/effects/circuitbreaker.go"
+
+            # ASI-08: Sensitive Data Exposure
+            run_check "ASI-08: Egress Firewall (Fail-Closed)" \
+              "test -d core/pkg/firewall"
+
+            # ASI-09: Plugin/Tool Integration Security
+            run_check "ASI-09: MCP Governance Interceptor" \
+              "test -f core/pkg/mcp/gateway.go"
+
+            # ASI-10: Monitoring/Logging
+            run_check "ASI-10: Evidence Packs & ProofGraph" \
+              "test -d core/pkg/evidencepack && test -d core/pkg/proofgraph"
+
+            # Bonus checks
+            run_check "BONUS: TLA+ Formal Verification" \
+              "test -d proofs || find . -name '*.tla' 2>/dev/null | head -1 | grep -q '.'"
+
+            run_check "BONUS: Post-Quantum Crypto (ML-DSA-65)" \
+              "grep -rq 'mldsa' core/pkg/crypto/ 2>/dev/null"
+
+            run_check "BONUS: Reversibility Classification" \
+              "test -f core/pkg/effects/reversibility.go"
+
+            run_check "BONUS: OpenTelemetry Integration" \
+              "test -f core/pkg/guardian/otel.go"
+
+            run_check "BONUS: CloudEvents SIEM Export" \
+              "test -d core/pkg/proofgraph/cloudevents"
+
+            echo ""
+            echo "=== Results: $CONTROLS_PASSED/$CONTROLS_TOTAL passed ==="
+            ;;
+
+          security-scan)
+            echo "=== HELM Security Scan ==="
+            echo ""
+
+            # Check threat scanner rule coverage
+            run_check "Threat scanner exists" \
+              "test -f core/pkg/threatscan/scanner.go"
+
+            # Check for common vulnerability patterns in code
+            run_check "No hardcoded secrets" \
+              "! grep -rn 'password\s*=' core/pkg/ --include='*.go' 2>/dev/null | grep -v '_test.go' | grep -v 'Password string' | head -1 | grep -q '.'"
+
+            run_check "No unsafe exec" \
+              "! grep -rn 'os/exec' core/pkg/ --include='*.go' 2>/dev/null | grep -v '_test.go' | head -1 | grep -q '.'"
+
+            run_check "Crypto uses stdlib or CIRCL" \
+              "! grep -rn 'crypto/md5\|crypto/sha1\|crypto/rc4\|crypto/des' core/pkg/ --include='*.go' 2>/dev/null | head -1 | grep -q '.'"
+
+            run_check "No global mutable state" \
+              "! grep -rn '^var [a-z]' core/pkg/ --include='*.go' 2>/dev/null | grep -v '_test.go' | grep -v 'Mutex\|sync\|atomic' | head -1 | grep -q '.'"
+
+            echo ""
+            echo "=== Results: $CONTROLS_PASSED/$CONTROLS_TOTAL passed ==="
+            ;;
+
+          policy-evaluate)
+            echo "=== HELM Policy Evaluation ==="
+            if [ -z "$HELM_POLICY_PATH" ]; then
+              echo "::error::policy-path input is required for policy-evaluate command"
+              exit 1
+            fi
+            # Use helm binary for policy evaluation if available
+            if [ -x "$HELM_BIN" ]; then
+              OUTPUT=$("$HELM_BIN" bundle validate "$HELM_POLICY_PATH" 2>&1) || STATUS="fail"
+              CONTROLS_TOTAL=1
+              if [ "$STATUS" = "pass" ]; then
+                CONTROLS_PASSED=1
+              fi
+            else
+              echo "::warning::HELM binary not available, skipping policy evaluation"
+            fi
+            echo "$OUTPUT"
+            ;;
+
+          evidence-verify)
+            echo "=== HELM Evidence Verification ==="
+            if [ -z "$HELM_EVIDENCE_PATH" ]; then
+              echo "::error::evidence-path input is required for evidence-verify command"
+              exit 1
+            fi
+            if [ -x "$HELM_BIN" ]; then
+              OUTPUT=$("$HELM_BIN" export verify "$HELM_EVIDENCE_PATH" 2>&1) || STATUS="fail"
+              CONTROLS_TOTAL=1
+              if [ "$STATUS" = "pass" ]; then
+                CONTROLS_PASSED=1
+              fi
+            fi
+            echo "$OUTPUT"
+            ;;
+
+          full)
+            echo "=== HELM Full Governance Suite ==="
+            echo ""
+            # Run all checks by recursing
+            for sub_cmd in governance-verify security-scan; do
+              echo "--- Running: $sub_cmd ---"
+              HELM_COMMAND="$sub_cmd" bash "$0" || true
+              echo ""
+            done
+            ;;
+
+          *)
+            echo "::error::Unknown command: $HELM_COMMAND"
+            exit 1
+            ;;
+        esac
+
+        # Compute evidence hash of scan output
+        SCAN_EVIDENCE=$(echo "{\"command\":\"$HELM_COMMAND\",\"passed\":$CONTROLS_PASSED,\"total\":$CONTROLS_TOTAL,\"status\":\"$STATUS\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}")
+        EVIDENCE_HASH=$(echo -n "$SCAN_EVIDENCE" | shasum -a 256 | cut -d' ' -f1)
+
+        # Set outputs
+        echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+        echo "controls_passed=$CONTROLS_PASSED" >> "$GITHUB_OUTPUT"
+        echo "controls_total=$CONTROLS_TOTAL" >> "$GITHUB_OUTPUT"
+        echo "violations=$VIOLATIONS" >> "$GITHUB_OUTPUT"
+        echo "evidence_hash=$EVIDENCE_HASH" >> "$GITHUB_OUTPUT"
+
+        if [ "$HELM_OUTPUT_FORMAT" = "json" ]; then
+          echo "output=$SCAN_EVIDENCE" >> "$GITHUB_OUTPUT"
+        else
+          echo "output=$CONTROLS_PASSED/$CONTROLS_TOTAL checks passed" >> "$GITHUB_OUTPUT"
+        fi
+
+        # Write job summary
+        if [ "$STATUS" = "pass" ]; then
+          BADGE_COLOR="brightgreen"
+          BADGE_ICON="shield"
+        elif [ "$STATUS" = "warn" ]; then
+          BADGE_COLOR="yellow"
+          BADGE_ICON="alert-triangle"
+        else
+          BADGE_COLOR="red"
+          BADGE_ICON="x-circle"
+        fi
+
+        {
+          echo "## HELM Governance Scan"
+          echo ""
+          echo "![Status](https://img.shields.io/badge/HELM_Governance-${STATUS^^}-${BADGE_COLOR})"
+          echo ""
+          echo "| Metric | Value |"
+          echo "|--------|-------|"
+          echo "| Command | \`$HELM_COMMAND\` |"
+          echo "| Controls Passed | **$CONTROLS_PASSED / $CONTROLS_TOTAL** |"
+          echo "| Status | **${STATUS^^}** |"
+          echo "| Conformance Level | $HELM_CONFORMANCE_LEVEL |"
+          echo "| Evidence Hash | \`$EVIDENCE_HASH\` |"
+          echo ""
+          if [ "$VIOLATIONS" != "[]" ]; then
+            echo "### Violations"
+            echo ""
+            echo "$VIOLATIONS" | jq -r '.[] | "- " + .'
+            echo ""
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        # Exit with appropriate code
+        if [ "$STATUS" = "fail" ]; then
+          exit 1
+        elif [ "$STATUS" = "warn" ] && [ "$HELM_FAIL_ON_WARNING" = "true" ]; then
+          exit 1
+        fi

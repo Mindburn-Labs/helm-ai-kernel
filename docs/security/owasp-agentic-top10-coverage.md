@@ -1,25 +1,26 @@
 # HELM vs OWASP Agentic Top 10 Coverage Matrix
 
-Generated: 2026-04-12
+Generated: 2026-04-13
 HELM Version: 0.3.0
 Guardian Pipeline: 6-gate + output quarantine
+Formal Verification: TLA+ (`proofs/GuardianPipeline.tla`)
 
 ## Coverage Summary
 
-| # | OWASP Agentic Risk | Coverage | Guardian Gates | Conformance Proof |
-|---|-------------------|----------|---------------|-------------------|
-| 1 | Prompt Injection | FULL | Threat, Context | `threatscan/` scanner, `SourceChannelDirectInput` |
-| 2 | Tool Poisoning | FULL | Egress, Threat, Freeze | `firewall/` fail-closed allowlist, `owasp_threat_vectors.json` UC-013 |
-| 3 | Excessive Permission Scope | FULL | Delegation, Identity | Effect class ceilings (E1-E4), blast radius checks, UC-019 |
-| 4 | Insufficient Permission Validation | FULL | Identity, Delegation | P0/P1/P2 policy layers, CPI verdict enforcement, UC-020 |
-| 5 | Improper Output Handling | FULL | Output Quarantine | `Guardian.EvaluateOutput()`, `SourceChannelToolOutput` scanning |
-| 6 | Resource Overborrowing | FULL | Context, Delegation | Budget gate (`budget/`), spend ceilings, token limits, UC-017 |
-| 7 | Uncontrolled Cascading Effects | FULL | Delegation, Freeze | Delegation depth limits, proofgraph causal DAG, circuit breaker |
-| 8 | Sensitive Data Exposure | FULL | Egress, Context | Egress firewall (fail-closed), data classification caps, selective disclosure JWT |
-| 9 | Insecure Plugin/Tool Integration | FULL | Threat, Egress | MCP governance interceptor, connector policy, mTLS, tool schema validation |
-| 10 | Insufficient Monitoring/Logging | FULL | All gates | Evidence packs (JCS+SHA-256), proofgraph, OTel integration, receipt chain |
+| # | OWASP Risk (ASI-XX) | Coverage | Guardian Gates | Code Path | Conformance |
+|---|---------------------|----------|---------------|-----------|-------------|
+| ASI-01 | Prompt Injection | **FULL** | Threat, Context | `core/pkg/threatscan/` (12 rule sets, 7 detection vectors) | `make test-owasp` |
+| ASI-02 | Tool Poisoning | **FULL** | Egress, Threat, Freeze | `core/pkg/mcp/rugpull.go` (fingerprinting), `core/pkg/firewall/` (fail-closed) | UC-013 |
+| ASI-03 | Excessive Permission | **FULL** | Delegation, Identity | `core/pkg/effects/` (EffectPermit scope binding), P2 narrowing | UC-019 |
+| ASI-04 | Insufficient Validation | **FULL** | Identity, Delegation | `core/pkg/guardian/` (TLA+-verified), P0/P1/P2 CPI | UC-020 |
+| ASI-05 | Improper Output | **FULL** | Output Quarantine | `Guardian.EvaluateOutput()`, `SourceChannelToolOutput` | `make crucible` |
+| ASI-06 | Resource Overborrowing | **FULL** | Context, Delegation | `core/pkg/budget/`, token ceilings, MCP rate limiting | UC-017 |
+| ASI-07 | Cascading Effects | **FULL** | Delegation, Freeze | `core/pkg/effects/circuitbreaker.go`, `core/pkg/proofgraph/` (causal DAG) | `make crucible` |
+| ASI-08 | Data Exposure | **FULL** | Egress, Context | `core/pkg/firewall/` (deny-all default), `core/pkg/crypto/sdjwt/` | `make crucible` |
+| ASI-09 | Plugin/Tool Insecurity | **FULL** | Threat, Egress | `core/pkg/mcp/gateway.go` (governance interceptor), mTLS, schema validation | `make crucible` |
+| ASI-10 | Insufficient Monitoring | **FULL** | All gates | `core/pkg/evidencepack/`, `core/pkg/proofgraph/`, `core/pkg/guardian/otel.go` | `make crucible-full` |
 
-**Result: 10/10 FULL coverage**
+**Result: 10/10 FULL coverage — verified by TLA+ formal proofs and L1/L2/L3 conformance suites**
 
 ## Detailed Mapping
 
@@ -144,15 +145,88 @@ Guardian Pipeline: 6-gate + output quarantine
 
 Run `make bench` to reproduce. Results at `benchmarks/results/latest.json`.
 
+## Cross-Framework Compliance Mapping
+
+### NIST AI RMF 1.0 Alignment
+
+| NIST Function | Category | HELM Coverage | Code Path |
+|---------------|----------|---------------|-----------|
+| GOVERN 1 | Policies | P0/P1/P2 three-layer composition, WASM sandbox | `core/pkg/policy/wasm/` |
+| GOVERN 2 | Accountability | Evidence packs, ProofGraph, receipt chain | `core/pkg/evidencepack/` |
+| GOVERN 3 | Workforce | Agent lifecycle, delegation chains | `core/pkg/identity/` |
+| GOVERN 4 | Organizational | Compliance frameworks (22 regulatory regimes) | `core/pkg/compliance/` |
+| GOVERN 5 | Processes | RegWatch continuous monitoring | `core/pkg/compliance/regwatch/` |
+| GOVERN 6 | Plan | Policy bundles, versioned governance | `protocols/policy-schema/` |
+| MAP 1 | Context | Context guard (environment fingerprinting) | `core/pkg/kernel/` |
+| MAP 2 | Requirements | JKG jurisdiction knowledge graph | `core/pkg/compliance/jkg/` |
+| MAP 3 | Benefits/Costs | Budget gates, spend ceilings | `core/pkg/budget/` |
+| MAP 5 | Impact Assessment | Reversibility classification, blast radius | `core/pkg/effects/reversibility.go` |
+| MEASURE 1 | Metrics | OTel integration, decision histograms | `core/pkg/guardian/otel.go` |
+| MEASURE 2 | Evaluation | Conformance testing (L1/L2/L3) | `tests/conformance/` |
+| MANAGE 1 | Risk Response | Guardian 6-gate pipeline, kill switch | `core/pkg/guardian/` |
+| MANAGE 2 | Prioritization | Threat severity levels, trust scoring | `core/pkg/threatscan/` |
+| MANAGE 3 | Communication | CloudEvents export, SIEM integration | `core/pkg/proofgraph/cloudevents/` |
+| MANAGE 4 | Monitoring | ProofGraph causal DAG, circuit breakers | `core/pkg/proofgraph/`, `core/pkg/effects/` |
+
+**Result: 16/19 NIST functions addressed (84%)**
+
+### SOC 2 Type II Mapping
+
+| SOC 2 Criteria | Control | HELM Implementation |
+|----------------|---------|---------------------|
+| CC1.1 | COSO Integrity | TLA+ formal verification of Guardian pipeline |
+| CC2.1 | Communication | CloudEvents SIEM export, OTel tracing |
+| CC3.1 | Risk Assessment | Threat scanner (12 rule sets), reversibility classification |
+| CC4.1 | Monitoring | ProofGraph causal DAG, evidence packs, circuit breakers |
+| CC5.1 | Control Activities | 6-gate Guardian pipeline (fail-closed), effect permits |
+| CC6.1 | Logical Access | Ed25519 + ML-DSA-65 identity, delegation chains, P0/P1/P2 policies |
+| CC6.2 | System Access | MCP governance interceptor, egress firewall (deny-all default) |
+| CC6.3 | Data Access | Selective disclosure JWT, data classification in policy bundles |
+| CC7.1 | System Monitoring | OTel metrics (decisions, gate denials, latency histograms) |
+| CC7.2 | Anomaly Detection | Behavioral trust scorer, rogue agent detection, rug-pull detection |
+| CC7.3 | Security Events | Tamper-evident evidence packs (JCS + SHA-256), Rekor anchoring |
+| CC8.1 | Change Management | WASM policy bundles (content-addressed, immutable), conformance tests |
+| CC9.1 | Risk Mitigation | Circuit breakers, kill switch (global + per-agent), saga orchestration |
+| A1.1 | Availability | Circuit breaker registry, health probes, recovery timeout |
+
+### EU AI Act (Regulation 2024/1689) Alignment
+
+| Article | Requirement | HELM Coverage |
+|---------|------------|---------------|
+| Art. 9 | Risk Management | 22 compliance frameworks, RegWatch monitoring, threat scanner |
+| Art. 11 | Technical Documentation | Evidence packs with manifest, 186+ JSON schemas |
+| Art. 12 | Record-Keeping | ProofGraph causal DAG (immutable, Rekor-anchored) |
+| Art. 13 | Transparency | CloudEvents export, OTel traces, receipt chain |
+| Art. 14 | Human Oversight | Kill switch, ESCALATE verdict, approval workflows |
+| Art. 15 | Robustness | TLA+ formal verification, L1/L2/L3 conformance, fuzz testing |
+
 ## Conformance Verification
 
 ```bash
 # Run OWASP conformance vectors
 make test-owasp
 
-# Full conformance (includes OWASP)
+# Full conformance (L1 + L2 + L3 + A2A + OTel)
 make crucible-full
 
 # Benchmark Guardian latency
 make bench-report
+
+# Run all OWASP + compliance checks
+make test-all
 ```
+
+## Architectural Differentiators
+
+Unlike library-based governance frameworks, HELM enforces governance at the kernel level:
+
+| Dimension | HELM (Kernel) | Library Governance |
+|-----------|--------------|-------------------|
+| **Enforcement model** | Fail-closed (every action needs a signed permit) | Opt-in middleware |
+| **Policy integrity** | Signed WASM bundles, content-addressed | Unsigned YAML files |
+| **Audit trail** | Causal DAG with CRDT sync + Rekor anchoring | Linear log chain |
+| **Crypto** | Ed25519 + ML-DSA-65 (post-quantum) | Ed25519 only |
+| **Formal verification** | TLA+ proofs | None |
+| **Compliance** | 22 regulatory frameworks | 4 frameworks |
+| **Evidence** | Court-admissible evidence packs (JCS + SHA-256) | CloudEvents export |
+| **Determinism** | Kernel PRNG + reducer + concurrency artifacts | Stateless (no guarantees) |

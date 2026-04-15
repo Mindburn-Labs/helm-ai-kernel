@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -11,6 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	mcppkg "github.com/Mindburn-Labs/helm-oss/core/pkg/mcp"
 )
 
 // runMCPCmd implements `helm mcp` — MCP server distribution and management.
@@ -149,9 +152,12 @@ func generateClaudeCodePlugin(stdout, stderr io.Writer) int {
 	pluginJSON := map[string]any{
 		"name":        "helm-governance",
 		"version":     strings.TrimPrefix(displayVersion(), "v"),
-		"description": "HELM Execution Authority — governed tool execution with receipts and EvidencePack",
+		"description": "HELM Execution Authority — fail-closed AI governance firewall with policy enforcement, Ed25519-signed receipts, and tamper-evident EvidencePack audit trail.",
 		"author":      "Mindburn Labs",
+		"license":     "Apache-2.0",
 		"homepage":    "https://github.com/Mindburn-Labs/helm-oss",
+		"protocol":    mcppkg.LatestProtocolVersion,
+		"governance":  "helm:pep:v1",
 	}
 	data, _ := json.MarshalIndent(pluginJSON, "", "  ")
 	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0644); err != nil {
@@ -234,22 +240,98 @@ func generateMCPBundle(outPath string, stdout, stderr io.Writer) int {
 		binaryName = "helm.exe"
 	}
 
-	// manifest.json — MCPB bundle manifest
+	ver := strings.TrimPrefix(displayVersion(), "v")
+
+	// Build tool definitions from the catalog so the manifest stays in sync
+	// with whatever tools the runtime actually exposes.
+	catalog := mcppkg.NewToolCatalog()
+	catalog.RegisterCommonTools()
+	registeredTools, _ := catalog.Search(context.Background(), "")
+
+	manifestTools := make([]map[string]any, 0, len(registeredTools))
+	for _, tool := range registeredTools {
+		entry := map[string]any{
+			"name":        tool.Name,
+			"description": tool.Description,
+		}
+		if tool.Title != "" {
+			entry["title"] = tool.Title
+		}
+		if tool.Schema != nil {
+			entry["inputSchema"] = tool.Schema
+		}
+		if tool.OutputSchema != nil {
+			entry["outputSchema"] = tool.OutputSchema
+		}
+		if tool.Annotations != nil {
+			annotations := map[string]any{}
+			if tool.Annotations.ReadOnlyHint {
+				annotations["readOnlyHint"] = true
+			}
+			if tool.Annotations.DestructiveHint {
+				annotations["destructiveHint"] = true
+			}
+			if tool.Annotations.IdempotentHint {
+				annotations["idempotentHint"] = true
+			}
+			if tool.Annotations.OpenWorldHint {
+				annotations["openWorldHint"] = true
+			}
+			if len(annotations) > 0 {
+				entry["annotations"] = annotations
+			}
+		}
+		manifestTools = append(manifestTools, entry)
+	}
+
+	// manifest.json — MCPB bundle manifest (enriched with capabilities)
 	// See: https://github.com/modelcontextprotocol/mcpb/blob/main/MANIFEST.md
 	manifest := map[string]any{
 		"manifest_version": "1.0",
 		"name":             "helm-governance",
-		"version":          strings.TrimPrefix(displayVersion(), "v"),
-		"description":      "HELM Execution Authority — governed tool execution with receipts and EvidencePack",
+		"version":          ver,
+		"description":      "HELM Execution Authority — fail-closed AI governance firewall with policy enforcement, Ed25519-signed receipts, and tamper-evident EvidencePack audit trail.",
 		"author": map[string]string{
 			"name":    "Mindburn Labs",
 			"url":     "https://github.com/Mindburn-Labs/helm-oss",
 			"support": "https://github.com/Mindburn-Labs/helm-oss/issues",
 		},
+		"license": "Apache-2.0",
+		"homepage": "https://github.com/Mindburn-Labs/helm-oss",
+		"repository": map[string]string{
+			"type": "git",
+			"url":  "https://github.com/Mindburn-Labs/helm-oss.git",
+		},
 		"server": map[string]any{
 			"type":    "binary",
 			"command": "./" + binaryName,
 			"args":    []string{"mcp", "serve", "--transport", "stdio"},
+		},
+		"protocol": map[string]any{
+			"version":            mcppkg.LatestProtocolVersion,
+			"supported_versions": mcppkg.SupportedProtocolVersions,
+		},
+		"capabilities": map[string]any{
+			"tools": map[string]any{
+				"listChanged": false,
+			},
+		},
+		"tools": manifestTools,
+		"governance": map[string]any{
+			"engine":     "helm:pep:v1",
+			"model":      "fail-closed",
+			"features":   []string{
+				"guardian-6-gate-pipeline",
+				"ed25519-signed-receipts",
+				"schema-pep-validation",
+				"proofgraph-audit-trail",
+				"rug-pull-detection",
+				"typosquat-detection",
+				"trust-scoring",
+				"delegation-scope-enforcement",
+				"elicitation-support",
+			},
+			"verdicts":   []string{"ALLOW", "DENY", "ESCALATE"},
 		},
 		"platform_overrides": map[string]any{
 			"win32": map[string]any{
@@ -263,6 +345,23 @@ func generateMCPBundle(outPath string, stdout, stderr io.Writer) int {
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	if err := os.WriteFile(filepath.Join(bundleDir, "manifest.json"), manifestData, 0644); err != nil {
 		fmt.Fprintf(stderr, "Error writing manifest: %v\n", err)
+		return 2
+	}
+
+	// Generate claude_desktop_config.json — drop-in snippet for Claude Desktop
+	// manual configuration (alternative to .mcpb drag-and-drop install).
+	claudeDesktopConfig := map[string]any{
+		"mcpServers": map[string]any{
+			"helm-governance": map[string]any{
+				"command": "./" + binaryName,
+				"args":    []string{"mcp", "serve", "--transport", "stdio"},
+				"env":     map[string]string{},
+			},
+		},
+	}
+	claudeConfigData, _ := json.MarshalIndent(claudeDesktopConfig, "", "  ")
+	if err := os.WriteFile(filepath.Join(bundleDir, "claude_desktop_config.json"), claudeConfigData, 0644); err != nil {
+		fmt.Fprintf(stderr, "Error writing Claude Desktop config: %v\n", err)
 		return 2
 	}
 
@@ -301,6 +400,10 @@ func generateMCPBundle(outPath string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "Error writing manifest to bundle: %v\n", err)
 		return 2
 	}
+	if err := writeBundleZipEntry(zipWriter, "claude_desktop_config.json", claudeConfigData, 0644); err != nil {
+		fmt.Fprintf(stderr, "Error writing Claude Desktop config to bundle: %v\n", err)
+		return 2
+	}
 	if err := writeBundleZipEntry(zipWriter, filepath.ToSlash(filepath.Join("server", binaryName)), binData, 0755); err != nil {
 		fmt.Fprintf(stderr, "Error writing binary to bundle: %v\n", err)
 		return 2
@@ -310,15 +413,20 @@ func generateMCPBundle(outPath string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	fmt.Fprintf(stdout, "%s✅ MCPB bundle generated%s\n\n", ColorBold+ColorGreen, ColorReset)
-	fmt.Fprintf(stdout, "  Bundle:    %s\n", outPath)
-	fmt.Fprintf(stdout, "  Manifest:  manifest.json\n")
-	fmt.Fprintf(stdout, "  Server:    server/%s (type=binary)\n", binaryName)
-	fmt.Fprintf(stdout, "  Platform:  %s/%s (+ win32 override)\n\n", runtime.GOOS, runtime.GOARCH)
-	fmt.Fprintln(stdout, "  To install in Claude Desktop:")
-	fmt.Fprintf(stdout, "    Double-click %s or drag into Claude Desktop\n\n", outPath)
-	fmt.Fprintln(stdout, "  For cross-platform bundles, build for each target OS/arch")
-	fmt.Fprintln(stdout, "  and include all binaries in server/ with platform_overrides.")
+	fmt.Fprintf(stdout, "%sMCPB bundle generated%s\n\n", ColorBold+ColorGreen, ColorReset)
+	fmt.Fprintf(stdout, "  Bundle:     %s\n", outPath)
+	fmt.Fprintf(stdout, "  Manifest:   manifest.json\n")
+	fmt.Fprintf(stdout, "  Config:     claude_desktop_config.json\n")
+	fmt.Fprintf(stdout, "  Server:     server/%s (type=binary)\n", binaryName)
+	fmt.Fprintf(stdout, "  Protocol:   MCP %s\n", mcppkg.LatestProtocolVersion)
+	fmt.Fprintf(stdout, "  Tools:      %d registered\n", len(manifestTools))
+	fmt.Fprintf(stdout, "  Governance: helm:pep:v1 (fail-closed)\n")
+	fmt.Fprintf(stdout, "  Platform:   %s/%s (+ win32 override)\n\n", runtime.GOOS, runtime.GOARCH)
+	fmt.Fprintln(stdout, "  Install in Claude Desktop:")
+	fmt.Fprintf(stdout, "    1. Double-click %s, or\n", outPath)
+	fmt.Fprintln(stdout, "    2. Drag the .mcpb file into Claude Desktop, or")
+	fmt.Fprintln(stdout, "    3. Merge claude_desktop_config.json into")
+	fmt.Fprintln(stdout, "       ~/Library/Application Support/Claude/claude_desktop_config.json")
 	fmt.Fprintln(stdout, "")
 
 	return 0

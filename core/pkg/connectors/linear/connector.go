@@ -190,6 +190,13 @@ func (c *Connector) dispatch(ctx context.Context, toolName string, params map[st
 		}
 		return map[string]string{"status": "updated", "issue_id": req.IssueID}, nil
 
+	case "linear.get_issue":
+		issueID := stringParam(params, "issue_id")
+		if issueID == "" {
+			return nil, fmt.Errorf("linear: get_issue: missing required param issue_id")
+		}
+		return c.client.GetIssue(ctx, issueID)
+
 	case "linear.list_issues":
 		teamID := stringParam(params, "team_id")
 		state := stringParam(params, "state")

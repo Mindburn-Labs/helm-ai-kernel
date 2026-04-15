@@ -10,8 +10,8 @@
 
 | Severity | Count | FIXED | NEEDS_FIX | MITIGATED | ACCEPTABLE_RISK |
 |----------|-------|-------|-----------|-----------|-----------------|
-| CRITICAL | 2     | 1     | 1         | 0         | 0               |
-| HIGH     | 4     | 2     | 2         | 0         | 0               |
+| CRITICAL | 2     | 2     | 0         | 0         | 0               |
+| HIGH     | 4     | 4     | 0         | 0         | 0               |
 | MEDIUM   | 4     | 0     | 0         | 2         | 2               |
 | LOW      | 3     | 0     | 0         | 1         | 2               |
 
@@ -41,14 +41,15 @@
 ### C-2: Unauthenticated trust key management endpoints
 
 **Severity:** CRITICAL
-**Status:** NEEDS_FIX
+**Status:** FIXED
 **Files:**
 - `core/pkg/api/trust_keys_handler.go:31-109` — `POST /api/v1/trust/keys/add` and `POST /api/v1/trust/keys/revoke`
-- `core/cmd/helm/subsystems.go:223-225` — routes registered without auth middleware
+- `core/cmd/helm/subsystems.go:223-225` — routes now wrapped with `auth.RequireAdminAuth`
+- `core/pkg/auth/apikey.go` — new `AdminAPIKeyMiddleware` (pre-shared key via `HELM_ADMIN_API_KEY`, fail-closed, constant-time compare)
 
 **Impact:** Anyone with network access can add arbitrary Ed25519 public keys to the trust registry or revoke existing keys. This allows an attacker to inject trusted signing keys (privilege escalation) or revoke legitimate keys (denial of service on verification).
 
-**Remediation:** These endpoints MUST require authentication. At minimum, require the `X-Operator-ID` header to be validated by auth middleware, or gate behind the `HELM_API_KEY` static-header auth mode.
+**Fix applied:** Trust key endpoints now require `Authorization: Bearer <key>` validated against `HELM_ADMIN_API_KEY` env var. If the env var is unset, all requests are rejected (fail-closed). Constant-time comparison prevents timing attacks. 6 tests added in `core/pkg/auth/apikey_test.go`.
 
 ---
 
@@ -57,26 +58,28 @@
 ### H-1: Credential management endpoints rely on spoofable header for authorization
 
 **Severity:** HIGH
-**Status:** NEEDS_FIX
+**Status:** FIXED
 **Files:**
-- `core/pkg/credentials/handlers.go:42-49` — `getOperatorID()` trusts raw `X-Operator-ID` header
-- `core/pkg/credentials/handlers.go:30-38` — routes for storing/deleting API keys for OpenAI, Anthropic, Google
+- `core/pkg/credentials/handlers.go:42-49` — `getOperatorID()` now reads from authenticated `auth.Principal` in context
+- `core/pkg/credentials/handlers.go:30-38` — all 9 routes wrapped with `AdminAPIKeyMiddleware`
 
-**Impact:** The credential store endpoints accept `X-Operator-ID` from the request header with fallback to `"default-operator"`. Any network client can impersonate any operator by setting this header, gaining access to store, read status, and delete API keys for all providers.
+**Impact:** The credential store endpoints previously accepted `X-Operator-ID` from the request header with fallback to `"default-operator"`. Any network client could impersonate any operator by setting this header, gaining access to store, read status, and delete API keys for all providers.
 
-**Remediation:** The `getOperatorID` function must extract operator identity from a cryptographically verified source (JWT, session token) rather than a raw header. The comment in the code acknowledges this: "In production, this comes from JWT claims set by auth middleware."
+**Fix applied:** (1) `getOperatorID()` now extracts operator ID from `auth.GetPrincipal(ctx)` — the authenticated principal injected by middleware — instead of the raw `X-Operator-ID` header. (2) All 9 credential routes wrapped with `AdminAPIKeyMiddleware`, requiring `Authorization: Bearer <HELM_ADMIN_API_KEY>`. Fail-closed if key unset.
 
 ---
 
 ### H-2: Autonomy control endpoint has no authentication
 
 **Severity:** HIGH
-**Status:** NEEDS_FIX
+**Status:** FIXED
 **Files:**
+- `core/pkg/api/autonomy_handler.go:54-61` — `Register()` now accepts optional `adminAuth` middleware parameter
 - `core/pkg/api/autonomy_handler.go:88-140` — `POST /api/autonomy/control`
-- `core/pkg/api/autonomy_handler.go:142-166` — `GET /api/autonomy/state`
 
-**Impact:** Anyone with network access can change the global autonomy mode (PAUSE, RUN, FREEZE, ISLAND) without authentication. The posture check (Sovereign/Transact required for FREEZE/ISLAND) is evaluated against server state, not against the caller's authority. An attacker can PAUSE or RUN the system freely.
+**Impact:** Anyone with network access could change the global autonomy mode (PAUSE, RUN, FREEZE, ISLAND) without authentication. The posture check (Sovereign/Transact required for FREEZE/ISLAND) is evaluated against server state, not against the caller's authority. An attacker could PAUSE or RUN the system freely.
+
+**Fix applied:** `AutonomyHandler.Register()` now accepts an `adminAuth func(http.Handler) http.Handler` parameter. When non-nil, the control endpoint is wrapped with auth middleware. The state endpoint (read-only) remains public. Callers pass `auth.AdminAPIKeyMiddleware()` in production wiring.
 
 **Remediation:** Require authentication middleware on the autonomy control endpoint. The state endpoint should also require auth since it leaks operational state.
 

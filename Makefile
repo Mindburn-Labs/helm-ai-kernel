@@ -20,7 +20,7 @@ test-sdk-ts:
 	cd sdk/ts && npm test -- --run
 
 test-sdk-py:
-	cd sdk/python && pip install -q '.[dev]' && pytest -v
+	cd sdk/python && pip install -q '.[dev]' && pytest -v --tb=short --cov=helm_sdk --cov-report=term-missing --cov-fail-under=80
 
 test-cli:
 	cd packages/mindburn-helm-cli && npm test -- --run

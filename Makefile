@@ -54,14 +54,30 @@ test-l3:
 test-owasp:
 	cd core && go test ./pkg/conformance/... -v -count=1 -run "TestOWASP"
 
+# Apalache model-check for TLA+ specs. Runs locally if `apalache-mc` is on PATH;
+# emits a clear skip message otherwise so `make crucible-full` does not hard-fail
+# on machines without the JVM/Apalache toolchain. CI always has it installed
+# (see .github/workflows/apalache.yml).
+test-apalache:
+	@if command -v apalache-mc >/dev/null 2>&1; then \
+		set -e; \
+		for spec in GuardianPipeline DelegationModel ProofGraphConsistency TenantIsolation TrustPropagation CSNFDeterminism; do \
+			echo "▶︎ Apalache checking proofs/$$spec.tla"; \
+			apalache-mc check --length=10 --init=Init --next=Next --inv=TypeOK "proofs/$$spec.tla"; \
+		done; \
+		echo "✅ Apalache: all 6 TLA+ specs model-check green"; \
+	else \
+		echo "⚠️  apalache-mc not installed locally — skipping TLA+ model-check. CI runs this via .github/workflows/apalache.yml"; \
+	fi
+
 # ── Crucible (adversarial + conformance + use cases) ──
 crucible: test
 	bash scripts/usecases/run_all.sh
 	@echo "✅ Crucible passed"
 
-crucible-full: test test-a2a test-otel test-l3
+crucible-full: test test-a2a test-otel test-l3 test-apalache
 	bash scripts/usecases/run_all.sh
-	@echo "✅ Full Crucible passed (incl. L3 + A2A + OTel)"
+	@echo "✅ Full Crucible passed (incl. L3 + A2A + OTel + Apalache)"
 
 # ── Kubernetes Operator ───────────────────────────────
 operator-crds:

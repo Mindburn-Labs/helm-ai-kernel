@@ -52,19 +52,23 @@ jobs:
           SCENARIO: ${{ matrix.scenario.name }}
         run: |
           set -euo pipefail
-          # Chaos scenarios live in tests/chaos/ — each is a focused Go test
-          # that fails if the system does NOT fail-closed as expected.
+          # Chaos scenarios live co-located with the packages they stress:
+          #   core/pkg/firewall/chaos_test.go       (firewall invariants)
+          #   core/pkg/evidencepack/chaos_test.go   (tamper detection)
+          #   core/pkg/guardian/chaos_test.go       (guardian panic path)
+          #   core/pkg/kernel/chaos_test.go         (kernel determinism)
+          #   core/pkg/crypto/chaos_test.go         (receipt signing failure)
           #
           # Convention: test function names mirror scenario names:
-          #   TestChaos_firewall_nil_dispatcher_denies
+          #   firewall-nil-dispatcher-denies → TestChaos_firewall_nil_dispatcher_denies
           TEST_NAME="TestChaos_$(echo "$SCENARIO" | tr '-' '_')"
 
-          if ! grep -rq "^func $TEST_NAME(" ../tests/chaos/ 2>/dev/null; then
-            echo "::warning::Chaos test $TEST_NAME not found in tests/chaos/ — skipping; add it to enforce this invariant"
+          if ! grep -rq "^func $TEST_NAME(" pkg/ 2>/dev/null; then
+            echo "::warning::Chaos test $TEST_NAME not found under core/pkg/**/chaos_test.go — skipping; add it to enforce this invariant"
             exit 0
           fi
 
-          go test -v -run "^${TEST_NAME}$" -count=1 ../tests/chaos/...
+          go test -v -run "^${TEST_NAME}$" -count=1 ./pkg/...
 
       - name: Report
         if: always()

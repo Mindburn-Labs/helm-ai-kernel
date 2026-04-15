@@ -3,17 +3,28 @@ name: Fuzz
 on:
   pull_request:
     paths:
-      - 'core/pkg/guardian/**'
-      - 'core/pkg/policy/**'
-      - 'core/pkg/evidencepack/**'
-      - 'core/pkg/proofgraph/**'
-      - 'core/pkg/firewall/**'
+      - 'core/pkg/canonicalize/**'
+      - 'core/pkg/contracts/**'
       - 'core/pkg/crypto/**'
+      - 'core/pkg/guardian/**'
+      - 'core/pkg/kernel/**'
+      - 'core/pkg/proofgraph/**'
+      - 'core/pkg/threatscan/**'
+      - 'core/pkg/a2a/**'
+      - 'core/pkg/saga/**'
+      - 'core/pkg/compliance/**'
       - '.github/workflows/fuzz.yml'
   schedule:
     # Nightly deep fuzz run — 10 minutes per target
     - cron: '37 2 * * *'
   workflow_dispatch:
+
+# Matrix targets reflect actual fuzz functions in the tree. The list is
+# discovered by:
+#   rg "^func Fuzz[A-Z]" core/pkg/ --type go
+# and copied here. Each entry is one package + one fuzz function name.
+# A PR changing fuzz function names must update this workflow in the same PR.
+# The "Check fuzz target exists" step below guards against drift.
 
 jobs:
   fuzz:
@@ -24,12 +35,34 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - { pkg: './pkg/guardian',     name: 'FuzzDecisionRequest' }
-          - { pkg: './pkg/firewall',     name: 'FuzzFirewallCallTool' }
-          - { pkg: './pkg/policy',       name: 'FuzzPolicyEval' }
-          - { pkg: './pkg/evidencepack', name: 'FuzzManifestParse' }
-          - { pkg: './pkg/proofgraph',   name: 'FuzzNodeAppend' }
-          - { pkg: './pkg/crypto',       name: 'FuzzSignerRoundTrip' }
+          # Canonicalization (JCS / RFC 8785)
+          - { pkg: './pkg/canonicalize',            name: 'FuzzJCS' }
+          - { pkg: './pkg/canonicalize',            name: 'FuzzJCSString' }
+          # Contracts / receipts
+          - { pkg: './pkg/contracts',               name: 'FuzzReceiptCanonicalization' }
+          # Crypto / signing
+          - { pkg: './pkg/crypto',                  name: 'FuzzKeyRingSignVerify' }
+          # Guardian decision evaluation
+          - { pkg: './pkg/guardian',                name: 'FuzzEvaluateDecision' }
+          # Kernel CSNF
+          - { pkg: './pkg/kernel',                  name: 'FuzzCSNFTransform' }
+          - { pkg: './pkg/kernel',                  name: 'FuzzCSNFNormalizeJSON' }
+          - { pkg: './pkg/kernel',                  name: 'FuzzValidateCSNFCompliance' }
+          # ProofGraph
+          - { pkg: './pkg/proofgraph',              name: 'FuzzNodeComputeHash' }
+          # Threat scanner
+          - { pkg: './pkg/threatscan',              name: 'FuzzScanInput' }
+          # A2A envelope
+          - { pkg: './pkg/a2a',                     name: 'FuzzEnvelopeValidation' }
+          # Saga orchestrator
+          - { pkg: './pkg/saga',                    name: 'FuzzSagaExecution' }
+          # Compliance / JKG + CEL
+          - { pkg: './pkg/compliance/jkg',          name: 'FuzzJKGParse' }
+          - { pkg: './pkg/compliance/jkg',          name: 'FuzzObligationOperations' }
+          - { pkg: './pkg/compliance/jkg',          name: 'FuzzRegulatorLookup' }
+          - { pkg: './pkg/compliance/jkg',          name: 'FuzzGraphOperations' }
+          - { pkg: './pkg/compliance/compiler',     name: 'FuzzCELCompile' }
+          - { pkg: './pkg/compliance/compiler',     name: 'FuzzCompileRoundtrip' }
 
     steps:
       - uses: actions/checkout@v4

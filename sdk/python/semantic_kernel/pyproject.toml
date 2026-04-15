@@ -1,0 +1,16 @@
+[project]
+name = "helm-semantic-kernel"
+version = "0.4.0"
+description = "HELM governance adapter for semantic kernel — fail-closed tool calling for AI agents"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Mindburn Labs", email = "oss@mindburn.org" }]
+dependencies = ["helm-sdk>=0.4.0", "httpx>=0.25.0"]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["helm_semantic_kernel"]

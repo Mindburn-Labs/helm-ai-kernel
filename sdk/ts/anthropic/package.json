@@ -1,6 +1,6 @@
 {
   "name": "@mindburn/helm-anthropic",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "HELM governance adapter for Anthropic Claude TypeScript SDK — tool_use governor",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

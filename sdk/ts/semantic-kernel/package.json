@@ -1,6 +1,6 @@
 {
   "name": "@mindburn/helm-semantic-kernel",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "HELM governance adapter for Microsoft Semantic Kernel",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

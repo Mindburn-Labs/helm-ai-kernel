@@ -142,6 +142,53 @@ gate chain, not parallel to it. This means:
 This ordering ensures delegation never bypasses any existing security
 gate. See [ARCHITECTURE.md §2.1](ARCHITECTURE.md#21-delegation-model).
 
+## Hybrid Post-Quantum Signing
+
+> *Added April 2026*
+
+Every receipt is dual-signed with Ed25519 (classical) and ML-DSA-65 (FIPS 204, post-quantum) via `crypto/hybrid_signer.go`. Both signatures must verify for a receipt to be considered valid. This provides quantum-resistant guarantees without sacrificing current Ed25519 ecosystem compatibility.
+
+The execution pipeline diagram above now produces two signatures per receipt:
+
+1. **Ed25519** — fast (19.5us), backward-compatible
+2. **ML-DSA-65** — post-quantum safe (300us signing, 42.5us verify)
+
+## Memory Governance
+
+> *Added April 2026*
+
+Agent memory is a first-class governed resource, not a passive data store.
+
+**Memory Integrity** (`kernel/memory_integrity.go`): Every memory write computes a SHA-256 hash over the canonical content. Reads verify the hash before returning data. Any modification outside the governed write path is detected and triggers `MEMORY_INTEGRITY_VIOLATION`.
+
+**Memory Trust Scoring** (`kernel/memory_trust.go`): Each memory entry carries a trust score that decays over time (temporal decay). Injection detection identifies entries planted by external or untrusted sources and downgrades their trust score. Low-trust memories are excluded from agent decision-making.
+
+These defenses mitigate memory poisoning attacks (arXiv 2603.20357, 2601.05504) where adversaries inject false context into long-running agent memory.
+
+## Supply Chain Defense
+
+> *Added April 2026*
+
+HELM defends against MCP tool supply chain attacks at three layers:
+
+**SkillFortify** (`pack/verify_capabilities.go`): Static analysis of skill pack capability declarations. Verifies that declared capabilities match actual tool behavior before deployment. Blocks packs that declare read-only access but invoke write tools.
+
+**Dependency Provenance** (`pack/provenance.go`): Cryptographic publisher signature verification. Every skill pack carries a publisher signature chain. HELM verifies the chain back to a trusted root before loading any pack.
+
+**DDIPE Document Scanning** (`mcp/docscan.go`): Detects supply chain attacks embedded in MCP tool documentation (arXiv 2604.08407). Tool descriptions are scanned for embedded instructions, hidden directives, and social engineering patterns before the agent sees them.
+
+## Ensemble Threat Detection
+
+> *Added April 2026*
+
+The ensemble scanner (`threatscan/ensemble.go`) runs multiple independent threat scanners in parallel and aggregates results via configurable voting strategies:
+
+- **ANY** — flag if any scanner detects a threat (highest sensitivity)
+- **MAJORITY** — flag if >50% of scanners agree (balanced)
+- **UNANIMOUS** — flag only if all scanners agree (lowest false-positive rate)
+
+This eliminates single-scanner blind spots and makes adversarial evasion significantly harder.
+
 ## EvidencePack
 
 Every session can be exported as a deterministic `.tar` containing:

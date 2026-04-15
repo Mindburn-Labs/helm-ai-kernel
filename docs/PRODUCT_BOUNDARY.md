@@ -28,6 +28,23 @@ Everything needed for a single team to govern AI agent tool execution:
 | Trust registry | Event-sourced key management |
 | SDKs | TypeScript, Python, Go, Rust, Java |
 | CI boundary checks | Reusable GitHub Actions workflow |
+| Hybrid PQ signing | Ed25519 + ML-DSA-65 dual signatures on every decision |
+| W3C DID identity | Decentralized agent identifiers |
+| Memory governance | Integrity verification, trust scoring, poisoning defense |
+| Ensemble scanner | Quorum-based multi-engine threat detection |
+| SkillFortify | Runtime tool integrity verification |
+| Supply chain provenance | Signed attestations for tools, policies, models |
+| Cost attribution | Per-decision cost tracking and pre-execution estimation |
+| MCPTox | Rug-pull, typosquatting, supply chain detection for MCP tools |
+| ZK compliance proofs | Prove compliance without revealing policy details |
+| Evidence summaries | Constant-size cryptographic summaries of evidence packs |
+| Continuous delegation (AIP) | Narrowing delegation with continuous monitoring |
+| Reversibility engine | Effect compensation tracking and rollback verification |
+| CloudEvents export | Governance decisions as CloudEvents for SIEM integration |
+| SLO engine | SLO violations trigger governance actions automatically |
+| Replay comparison | Side-by-side replay diff for policy drift detection |
+| Federated trust | Cross-org trust roots with policy narrowing |
+| OTel integration | Full OpenTelemetry traces, metrics, and spans |
 
 **Nothing security-critical or runtime-essential is paywalled.**
 

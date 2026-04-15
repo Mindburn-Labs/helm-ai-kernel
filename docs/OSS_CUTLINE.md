@@ -24,6 +24,24 @@ For the authoritative scope definition, see [OSS_SCOPE.md](OSS_SCOPE.md).
 | Proof Condensation (Merkle) | L2 |
 | OpenAI-compatible proxy | L1 |
 | MCP interceptor | L1 |
+| Hybrid Ed25519 + ML-DSA-65 signing | L2 |
+| W3C DID agent identity | L2 |
+| Memory integrity + trust governance | L2 |
+| Ensemble threat scanner (quorum-based) | L2 |
+| Evidence summaries (constant-size) | L2 |
+| SkillFortify (tool integrity verification) | L2 |
+| Supply chain provenance (signed attestations) | L2 |
+| Cost attribution + pre-execution estimation | L2 |
+| Continuous delegation (AIP) | L2 |
+| Replay comparison (policy drift detection) | L2 |
+| ZK compliance proofs | L2 |
+| MCPTox (rug-pull/typosquatting detection) | L2 |
+| Reversibility engine | L2 |
+| SLO engine (governance-driven) | L2 |
+| CloudEvents SIEM export | L2 |
+| OTel integration (WithOTel) | L2 |
+| Federated trust (cross-org) | L3 |
+| DDIPE document scanning | L2 |
 
 ## Not Shipped (Spec Only)
 

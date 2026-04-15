@@ -102,6 +102,24 @@ HELM's full path includes: PRG rule lookup + CEL evaluation + Ed25519 decision s
 | **Decentralized proofs** | None | Proof market integration (SPN/Boundless compatible) | **HELM** |
 | **SaaS blueprint** | None | Multi-tenant onboarding, billing/metering, isolation audit | **HELM** |
 | **Evidence streaming** | None | StreamBuilder + StreamReader for multi-GB packs | **HELM** |
+| **Hybrid PQ signing** | None (ML-DSA-65 marketing only) | Ed25519 + ML-DSA-65 dual signatures per decision | **HELM** |
+| **W3C DID identity** | None | Decentralized agent identifiers (W3C DID spec) | **HELM** |
+| **Memory governance** | None | Integrity verification + trust scoring across sessions | **HELM** |
+| **Ensemble threat scanning** | Single scanner | Quorum-based multi-engine (prompt, exfil, PII, toxicity) | **HELM** |
+| **Evidence summaries** | None | Constant-size cryptographic summaries of large packs | **HELM** |
+| **SkillFortify** | None | Runtime tool integrity verification (tampering, drift) | **HELM** |
+| **Supply chain provenance** | None | End-to-end signed attestations for tools + policies + models | **HELM** |
+| **Cost attribution** | None | Per-decision cost attribution + pre-execution estimation | **HELM** |
+| **Policy suggestion** | None | AI-assisted suggestion + formal verification of invariants | **HELM** |
+| **Continuous delegation (AIP)** | None | Narrowing delegation with continuous monitoring | **HELM** |
+| **Replay comparison** | None | Side-by-side replay diff for policy drift detection | **HELM** |
+| **Federated trust** | None documented | Cross-org trust roots + policy inheritance + narrowing | **HELM** |
+| **ZK compliance proofs** | None | Prove compliance without revealing policy/decision details | **HELM** |
+| **MCPTox** | None | Rug-pull, typosquatting, supply chain detection for MCP tools | **HELM** |
+| **Reversibility engine** | None | Declares reversible effects, tracks + verifies compensation | **HELM** |
+| **SLO-driven governance** | SLO alerting only | SLO violations trigger governance actions (throttle/freeze) | **HELM** |
+| **CloudEvents SIEM export** | None | Governance decisions as CloudEvents for SIEM ingestion | **HELM** |
+| **DDIPE doc scanning** | None | Automated governance extraction from organizational documents | **HELM** |
 | **Framework adapters** | 20+ (LangChain, CrewAI, AutoGen, OpenAI, Google, etc.) | 12 (LangChain, CrewAI, LlamaIndex, OpenAI, Semantic Kernel, Mastra, AutoGen + MCP gateway) | Microsoft |
 | **SDK languages** | 5 (Python primary, TS/.NET/Rust/Go basic) | 5 (Go primary, TS/Python mature, Rust/Java functional) | Parity |
 | **CLI tooling** | `agt verify`, `agt doctor`, `agt lint-policy` | `helm verify`, `helm doctor`, `helm conform`, `helm freeze`, `helm kill` | Parity |
@@ -143,16 +161,17 @@ HELM's full path includes: PRG rule lookup + CEL evaluation + Ed25519 decision s
 | Category | HELM Wins | Microsoft Wins | Parity |
 |---|---|---|---|
 | Performance | 6 | 0 | 1 |
-| Cryptography | 5 | 0 | 0 |
-| Proof & Verification | 7 | 0 | 0 |
-| Trust & Identity | 5 | 0 | 1 |
-| Compliance & Governance | 5 | 0 | 2 |
-| Execution & Safety | 6 | 0 | 0 |
+| Cryptography | 7 | 0 | 0 |
+| Proof & Verification | 9 | 0 | 0 |
+| Trust & Identity | 7 | 0 | 1 |
+| Compliance & Governance | 8 | 0 | 2 |
+| Execution & Safety | 9 | 0 | 0 |
+| Observability & SRE | 4 | 0 | 0 |
 | Developer Experience | 3 | 1 | 2 |
 | Architecture | 7 | 0 | 0 |
-| **Total** | **44** | **1** | **6** |
+| **Total** | **60** | **1** | **6** |
 
-**HELM wins 44 out of 51 competitive dimensions. Microsoft wins 1 (framework adapter count). 6 dimensions at parity.**
+**HELM wins 60 out of 67 competitive dimensions. Microsoft wins 1 (framework adapter count). 6 dimensions at parity.**
 
 ---
 

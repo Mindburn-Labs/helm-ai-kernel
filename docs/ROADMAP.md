@@ -84,6 +84,38 @@ Each item is tied to a conformance level or adoption milestone. No dates — shi
 | Guardian integration test (11 tests, full pipeline) | ✅ Added |
 | 8 medium-severity fixes (edge, CRDT, saga, IATP, TEE, delivery, vouching, scorer) | ✅ Fixed |
 
+## Completed (April 2026) — Research-Backed Hardening
+
+Features driven by arXiv research on MCP supply chain attacks, memory poisoning, and tool safety.
+
+| Item | Research | Status |
+|------|----------|--------|
+| Hybrid PQ signing (Ed25519 + ML-DSA-65 dual sigs) | Post-quantum readiness | Done |
+| W3C DID agent identity | Decentralized identity standard | Done |
+| DDIPE documentation scanning (supply chain attack detection) | arXiv 2604.08407 | Done |
+| Memory integrity (SHA-256 hash-protected governed memory) | arXiv 2603.20357, 2601.05504 | Done |
+| Memory trust scoring (temporal decay, injection detection) | arXiv 2603.20357 | Done |
+| Ensemble threat scanner (multi-scanner voting) | Defense-in-depth | Done |
+| Evidence summaries (constant-size O(1) completeness proofs) | Scalable audit | Done |
+| SkillFortify (static capability verification) | arXiv 2603.00195 | Done |
+| Dependency provenance (cryptographic publisher signatures) | arXiv 2604.03081 | Done |
+| Cost attribution + estimation (per-agent breakdown) | Budget governance | Done |
+| Policy suggestion engine (auto-generate from history) | Operator UX | Done |
+| Static policy verification (circular deps, shadowed rules) | Policy correctness | Done |
+| AIP delegation (Agent Identity Protocol for MCP) | MCP identity layer | Done |
+| Continuous delegation (AITH time-bound revocable) | Delegation model | Done |
+| Replay trace comparison (session diff) | Forensics | Done |
+| Federated trust scoring (cross-org reputation) | arXiv 2508.14925 | Done |
+| ZK compliance proof interfaces | Privacy-preserving audit | Done |
+| MCPTox adversarial benchmark (0% ASR validation) | arXiv 2508.14925 | Done |
+| Circuit breakers (per-connector CLOSED/OPEN/HALF_OPEN) | Resilience | Done |
+| Reversibility classification (effect type tagging) | Saga governance | Done |
+| SLO engine (latency/error-rate objectives + budgets) | SRE integration | Done |
+| OpenTelemetry integration (Guardian + Effects spans) | Observability | Done |
+| CloudEvents export (ProofGraph SIEM integration) | Enterprise audit | Done |
+| Rug-pull detection (MCP tool fingerprinting) | arXiv 2604.03081 | Done |
+| Typosquatting detection (Levenshtein distance on tool names) | arXiv 2603.00195 | Done |
+
 ## Future
 
 | Item | Target |

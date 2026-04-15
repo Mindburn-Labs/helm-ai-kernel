@@ -92,3 +92,70 @@ helm bundle verify policy-bundle.yaml --hash <expected>
 # Inspect bundle without loading
 helm bundle inspect policy-bundle.yaml
 ```
+
+---
+
+## Policy Suggestion Engine (`policy/suggest/`)
+
+> *Added April 2026*
+
+The suggestion engine analyzes execution history (receipts and ProofGraph) to auto-generate policy rules. This reduces manual policy authoring and catches gaps in coverage.
+
+### How It Works
+
+1. **History scan** — Reads the receipt store for recent executions (configurable window)
+2. **Pattern detection** — Identifies repeated tool call patterns, common argument shapes, and typical risk profiles
+3. **Rule generation** — Produces candidate policy rules in the standard bundle format
+4. **Confidence scoring** — Each suggestion includes a confidence score (0.0-1.0) based on observation frequency
+
+### Usage
+
+```go
+import "github.com/Mindburn-Labs/helm-oss/core/pkg/policy/suggest"
+
+suggestions, err := suggest.FromHistory(store, suggest.Options{
+    Window:          7 * 24 * time.Hour,
+    MinConfidence:   0.8,
+    MaxSuggestions:  20,
+})
+```
+
+```bash
+# CLI
+helm policy suggest --window 7d --min-confidence 0.8
+```
+
+Suggestions are advisory — they are never auto-applied. An operator must review and promote them into a policy bundle.
+
+---
+
+## Static Policy Verification (`policy/verify/`)
+
+> *Added April 2026*
+
+Static analysis catches policy defects before deployment:
+
+| Check | Description |
+|-------|-------------|
+| **Circular dependencies** | Detects rules that reference each other in cycles |
+| **Shadowed rules** | Identifies rules that can never fire because a broader rule always matches first |
+| **Dead rules** | Finds rules that match no known tool in the capability manifest |
+| **Conflicting verdicts** | Flags rules that produce opposite verdicts for the same action pattern |
+
+### Usage
+
+```go
+import "github.com/Mindburn-Labs/helm-oss/core/pkg/policy/verify"
+
+report, err := verify.Bundle(bundle)
+for _, issue := range report.Issues {
+    fmt.Printf("[%s] %s: %s\n", issue.Severity, issue.RuleID, issue.Message)
+}
+```
+
+```bash
+# CLI
+helm policy verify policy-bundle.yaml
+```
+
+Verification runs automatically during `helm bundle verify` and `make crucible`.

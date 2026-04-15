@@ -432,6 +432,123 @@ if incident_rate > limit:       score *= 0.5
 
 ---
 
+## SLO Engine — Governance-Driven SLO Enforcement
+
+**Package:** `core/pkg/observability/slo_engine.go`
+
+The SLO Engine extends basic SLO tracking with automatic governance actions. When SLO violations are detected, the engine triggers graduated responses — not just alerts.
+
+### Governance Actions on SLO Breach
+
+| SLO State | Burn Rate | Governance Action |
+|---|---|---|
+| Healthy | < 1.0 | None — normal operations |
+| Warning | 1.0-3.0 | Log warning, emit CloudEvent |
+| Degraded | 3.0-10.0 | Throttle: reduce allowed request rate by 50% |
+| Critical | 10.0-50.0 | Escalate: require human approval for all elevated operations |
+| Emergency | > 50.0 | Freeze: block all non-essential effects, emit circuit breaker |
+
+### Configuration
+
+```go
+engine := observability.NewSLOEngine(observability.SLOEngineConfig{
+    Tracker:           tracker,
+    GovernanceActions: true,       // Enable automatic governance responses
+    EscalateThreshold: 10.0,      // Burn rate triggers escalation
+    FreezeThreshold:   50.0,      // Burn rate triggers freeze
+    NotifySink:        cloudEventsExporter,
+})
+```
+
+---
+
+## Receipted Circuit Breakers
+
+HELM's circuit breakers record every state transition as a ProofGraph node. This means auditors can verify exactly when a breaker tripped, why, and when it recovered.
+
+### ProofGraph Integration
+
+```go
+breaker := resiliency.NewReceiptedCircuitBreaker(
+    "guardian-backend",
+    5,                    // failure threshold
+    10 * time.Second,     // reset timeout
+    proofGraph,           // ProofGraph for receipting
+    signer,               // Ed25519 signer
+)
+```
+
+Each state transition (CLOSED -> OPEN, OPEN -> HALF_OPEN, HALF_OPEN -> CLOSED/OPEN) produces a signed `TRUST_EVENT` node in the ProofGraph with:
+- Breaker name, old state, new state
+- Failure count, last error summary
+- Timestamp (Lamport-ordered)
+- Ed25519 signature
+
+---
+
+## Cost Estimation for SRE Planning
+
+**Package:** `core/pkg/budget/cost_attribution.go`
+
+SRE teams can use cost estimation to project agent spend and set budget alerts:
+
+### Pre-Execution Cost Estimation
+
+```go
+estimate, err := budget.EstimateCost(ctx, budget.CostEstimateRequest{
+    Tool:       "llm-inference",
+    Parameters: map[string]any{"model": "claude-sonnet", "max_tokens": 4096},
+    TenantID:   "org-1",
+})
+// estimate.AmountCents  — projected cost
+// estimate.Confidence   — estimation confidence (0.0-1.0)
+// estimate.Model        — estimation model used (token_count, fixed, api_price)
+```
+
+### Cost Attribution Dashboard Metrics
+
+| Metric | Type | Labels |
+|---|---|---|
+| `helm_cost_estimated_cents` | Histogram | `tenant_id`, `tool_id`, `model` |
+| `helm_cost_actual_cents` | Histogram | `tenant_id`, `tool_id`, `model` |
+| `helm_cost_overrun_ratio` | Gauge | `tenant_id` |
+| `helm_budget_burn_rate` | Gauge | `tenant_id` |
+
+---
+
+## Ensemble Threat Scanner Operations
+
+**Package:** `core/pkg/threatscan/ensemble.go`
+
+The ensemble scanner runs multiple independent threat detection engines and uses quorum-based verdicts to prevent single-scanner bypass.
+
+### Scanner Health Monitoring
+
+| Metric | Description |
+|---|---|
+| `helm_scanner_health{scanner="prompt_injection"}` | Scanner availability (1=healthy, 0=down) |
+| `helm_scanner_latency{scanner="..."}` | Per-scanner evaluation latency |
+| `helm_scanner_detections{scanner="..."}` | Detection count per scanner |
+| `helm_ensemble_quorum_failures` | Requests where quorum could not be reached (insufficient scanners) |
+
+### Operational Behavior
+
+- If a scanner is unavailable, the ensemble **fails closed** — insufficient quorum triggers `DENY`
+- Scanner timeouts are configurable per engine (default: 100ms)
+- Scanners run in parallel; total ensemble latency is bounded by the slowest scanner + quorum evaluation
+
+### MCPTox Scanner
+
+The MCPTox scanner detects MCP-specific supply chain threats:
+
+| Detection | Description |
+|---|---|
+| **Rug-pull** | Tool behavior changed after initial approval (schema hash drift) |
+| **Typosquatting** | Tool name is suspiciously similar to a known tool (Levenshtein distance < 2) |
+| **Supply chain** | Tool package dependencies include known-malicious or recently-transferred packages |
+
+---
+
 ## Comparison with Microsoft Agent SRE
 
 | Capability | Microsoft AGT | HELM | Notes |
@@ -444,3 +561,9 @@ if incident_rate > limit:       score *= 0.5
 | Audit trail | Append-only log | SHA-256 hash-chained, tamper-evident | **HELM advantage** |
 | Simulation | Not documented | Budget/staffing/stress scenario framework | **HELM advantage** |
 | Pack telemetry | Not documented | Trust scoring + MTTR + confidence | **HELM advantage** |
+| SLO-driven governance | SLO alerting only | SLO violations trigger governance actions (throttle/freeze) | **HELM advantage** |
+| Receipted breakers | Not documented | Circuit breaker transitions receipted in ProofGraph | **HELM advantage** |
+| Cost estimation | Not documented | Pre-execution cost estimation with confidence scoring | **HELM advantage** |
+| Ensemble scanning | Single scanner | Quorum-based multi-engine with fail-closed on unavailability | **HELM advantage** |
+| MCPTox detection | Not documented | Rug-pull, typosquatting, supply chain attack detection | **HELM advantage** |
+| CloudEvents SIEM | Not documented | Governance decisions as CloudEvents for SIEM ingestion | **HELM advantage** |

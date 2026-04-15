@@ -121,4 +121,49 @@ This document tracks high-signal individuals identified through live conversatio
 
 ---
 
+## Capability Radar — New Differentiators for CTO Conversations
+
+These capabilities are unique to HELM and map directly to CTO-level concerns. Use in outreach and positioning.
+
+### Cost & Financial Governance
+| Capability | CTO Pitch | Status |
+|---|---|---|
+| **Cost attribution** | Per-decision cost attribution — know exactly which agent, tool, and session spent what. | Shipped |
+| **Cost estimation** | Pre-execution cost estimation — budget enforcement knows what an action will cost before it runs. | Shipped |
+| **SLO-driven governance** | SLO violations automatically trigger governance actions (throttle, escalate, freeze) — not just alerts. | Shipped |
+
+### Compliance & Certification
+| Capability | CTO Pitch | Status |
+|---|---|---|
+| **ZK compliance proofs** | Prove your agents are compliant to auditors without revealing proprietary policies or decision details. | Shipped |
+| **Hybrid PQ signing** | Dual Ed25519 + ML-DSA-65 — future-proof signing that satisfies both current and post-quantum requirements. No migration cliff. | Shipped |
+| **W3C DID identity** | Decentralized agent identity — no vendor lock-in to a central identity provider. | Shipped |
+| **Evidence summaries** | Constant-size cryptographic summaries — auditors verify a 256-byte summary instead of GB-scale archives. | Shipped |
+
+### Agent Workforce Management
+| Capability | CTO Pitch | Status |
+|---|---|---|
+| **Memory governance** | Prevents memory poisoning across agent sessions. Trust-scored, integrity-verified agent memory. | Shipped |
+| **Continuous delegation (AIP)** | Agents delegate to sub-agents with narrowing constraints, continuously monitored. No confused deputy. | Shipped |
+| **SkillFortify** | Runtime tool integrity verification — detects tampering, version drift, unauthorized modifications. | Shipped |
+| **Federated trust** | Cross-org trust roots — partner organizations can trust each other's agents without shared infrastructure. | Shipped |
+
+### Supply Chain & Threat Defense
+| Capability | CTO Pitch | Status |
+|---|---|---|
+| **MCPTox** | Detects rug-pull (tool behavior change post-approval), typosquatting, and supply chain attacks in MCP tool registries. | Shipped |
+| **Ensemble scanner** | Multiple independent threat scanners with quorum-based verdicts — no single scanner bypass. | Shipped |
+| **Supply chain provenance** | End-to-end signed attestations for tools, policies, and model artifacts. | Shipped |
+| **DDIPE doc scanning** | Automated extraction of governance-relevant data from organizational documents. | Shipped |
+
+### Observability & Operations
+| Capability | CTO Pitch | Status |
+|---|---|---|
+| **CloudEvents SIEM export** | Governance decisions exported as CloudEvents — plugs directly into Splunk, Sentinel, Elastic. | Shipped |
+| **OTel-native** | Full OpenTelemetry integration — traces, metrics, spans across the entire governance path. | Shipped |
+| **Replay comparison** | Side-by-side replay diffs — see exactly how policy changes affect agent behavior before deployment. | Shipped |
+| **Reversibility engine** | Declares which effects are reversible, tracks compensation actions, verifies rollback completion. | Shipped |
+
+---
+
 *This file is internal. Update after each operator loop cycle.*

@@ -183,6 +183,104 @@ entries := timeline.Query(observability.TimelineQuery{
 
 Entry types: `ACTION`, `TOOL_CALL`, `DECISION`, `PROOF`, `RECONCILIATION`, `ESCALATION`, `EVIDENCE`
 
+## OTel Integration — Enabling & Configuration
+
+### Enabling OTel in Code
+
+Use the `WithOTel()` option to enable OpenTelemetry instrumentation on any HELM component:
+
+```go
+guardian := guardian.NewGuardian(signer, graph, pdp,
+    guardian.WithOTel(),          // Enable OTel tracing + metrics
+    guardian.WithOTelEndpoint("localhost:4317"),  // OTLP gRPC endpoint
+)
+
+executor := executor.NewSafeExecutor(guardian,
+    executor.WithOTel(),          // Traces every tool execution
+)
+```
+
+### Span Names
+
+HELM emits the following spans (all prefixed `helm.`):
+
+| Span | Parent | Description |
+|---|---|---|
+| `helm.guardian.evaluate` | root | Full PEP evaluation (6-gate pipeline) |
+| `helm.guardian.gate.freeze` | evaluate | Freeze gate check |
+| `helm.guardian.gate.context` | evaluate | Context gate check |
+| `helm.guardian.gate.identity` | evaluate | Identity gate check |
+| `helm.guardian.gate.egress` | evaluate | Egress gate check |
+| `helm.guardian.gate.threat` | evaluate | Threat gate check |
+| `helm.guardian.gate.delegation` | evaluate | Delegation gate check |
+| `helm.guardian.pdp` | evaluate | Policy decision evaluation |
+| `helm.guardian.sign` | evaluate | Ed25519/ML-DSA-65 decision signing |
+| `helm.executor.execute` | root | Tool execution with receipt |
+| `helm.proofgraph.append` | executor | ProofGraph node insertion |
+| `helm.evidence.export` | root | EvidencePack export |
+| `helm.evidence.verify` | root | EvidencePack verification |
+| `helm.threatscan.ensemble` | evaluate | Ensemble threat scanning |
+| `helm.budget.check` | evaluate | Budget/cost estimation check |
+| `helm.memory.verify` | evaluate | Memory integrity verification |
+
+### Exported Metrics (OTel)
+
+In addition to the RED metrics listed above, `WithOTel()` exports:
+
+| Metric | Type | Description |
+|---|---|---|
+| `helm.guardian.gate.duration` | Histogram | Per-gate latency (labeled by gate name) |
+| `helm.threat.scanner.duration` | Histogram | Per-scanner latency in ensemble |
+| `helm.threat.scanner.detections` | Counter | Detection count per scanner type |
+| `helm.cost.estimated` | Counter | Pre-execution estimated cost (USD cents) |
+| `helm.cost.actual` | Counter | Post-execution actual cost (USD cents) |
+| `helm.memory.integrity.checks` | Counter | Memory integrity verification count |
+| `helm.memory.integrity.failures` | Counter | Memory integrity failures |
+| `helm.slo.violations` | Counter | SLO violation events |
+| `helm.circuit_breaker.state_changes` | Counter | Circuit breaker state transitions |
+
+---
+
+## CloudEvents SIEM Export
+
+**Package:** `core/pkg/otel/cloudevents.go`
+
+HELM can export governance decisions as [CloudEvents](https://cloudevents.io/) for ingestion by SIEM systems (Splunk, Microsoft Sentinel, Elastic Security, Datadog).
+
+### Setup
+
+```go
+exporter, err := otel.NewCloudEventsExporter(otel.CloudEventsConfig{
+    Sink:       "https://siem.company.com/api/events",  // SIEM endpoint
+    Source:     "helm/guardian/prod-1",
+    AuthToken:  os.Getenv("SIEM_TOKEN"),
+    BatchSize:  100,
+    FlushInterval: 5 * time.Second,
+})
+
+guardian := guardian.NewGuardian(signer, graph, pdp,
+    guardian.WithCloudEvents(exporter),
+)
+```
+
+### Event Types
+
+| CloudEvent Type | Triggered When |
+|---|---|
+| `helm.decision.allow` | PDP allows an effect |
+| `helm.decision.deny` | PDP denies an effect |
+| `helm.decision.escalate` | PDP escalates to human review |
+| `helm.threat.detected` | Ensemble scanner flags a threat |
+| `helm.budget.exhausted` | Tenant budget exceeded |
+| `helm.slo.violation` | SLO target breached |
+| `helm.circuit_breaker.open` | Circuit breaker trips open |
+| `helm.trust.change` | Agent trust score changes |
+| `helm.memory.tamper` | Memory integrity failure detected |
+
+Each event includes: `decision_id`, `tenant_id`, `agent_id`, `tool_id`, `verdict`, `reason_code`, `cost_usd`, and `trace_id` for correlation with OTel traces.
+
+---
+
 ## Grafana Dashboard Templates
 
 Pre-built dashboards in `deploy/grafana/`:

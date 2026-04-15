@@ -74,6 +74,34 @@ Microsoft released the [Agent Governance Toolkit](https://github.com/microsoft/a
 
 ---
 
+## Unique HELM Capabilities (No Competitor Equivalent)
+
+The following capabilities exist in HELM and have no equivalent in Microsoft AGT or any other agent governance framework:
+
+| Capability | Description | Package |
+|---|---|---|
+| **Hybrid Ed25519 + ML-DSA-65 signing** | Dual classical+PQ signatures on every decision. Not either/or — both simultaneously for migration safety. | `crypto/hybrid_signer.go` |
+| **W3C DID identity** | Agents have decentralized identifiers (W3C DID) — no central identity provider dependency. | `identity/did.go` |
+| **DDIPE document scanning** | Automated scanning of organizational documents to extract governance-relevant data (policies, roles, constraints). | `connectors/ddipe/` |
+| **Memory integrity & trust** | Governed agent memory with integrity verification and trust scoring. Prevents memory poisoning across sessions. | `memory/` |
+| **Ensemble threat scanner** | Multiple independent scanning engines (prompt injection, data exfiltration, PII, toxicity) with quorum-based verdicts. No single scanner bypass. | `threatscan/ensemble.go` |
+| **Evidence summaries** | Constant-size cryptographic summaries of arbitrarily large evidence packs. Auditors verify a 256-byte summary instead of GB-scale archives. | `evidencepack/summary.go` |
+| **SkillFortify** | Runtime skill/tool integrity verification — detects tampering, version drift, and unauthorized modifications to tool definitions. | `skillfortify/` |
+| **Supply chain provenance** | End-to-end provenance tracking for tool packages, policy bundles, and model artifacts with signed attestations. | `provenance/` |
+| **Cost attribution & estimation** | Per-decision cost attribution with pre-execution cost estimation. Budget enforcement knows what an action will cost before it runs. | `budget/cost_attribution.go` |
+| **Policy suggestion & verification** | AI-assisted policy suggestion from observed behavior, with formal verification that suggested policies maintain safety invariants. | `governance/policy_inductor.go` |
+| **AIP / continuous delegation** | Agent Interaction Protocol with continuous delegation — agents can delegate authority to sub-agents with narrowing constraints, continuously monitored. | `delegation/aip.go` |
+| **Replay comparison** | Side-by-side comparison of governance replay runs. Detects behavioral drift between policy versions. | `replay/comparison.go` |
+| **Federated trust** | Cross-organization trust roots with policy inheritance and narrowing enforcement. Organizations can trust each other's agents without shared infrastructure. | `a2a/federation.go` |
+| **ZK compliance proofs** | Zero-knowledge proofs of compliance — prove an agent is compliant without revealing the policy or decision details. | `crypto/zkproof/` |
+| **MCPTox** | MCP tool toxicity scanner — detects rug-pull (tool behavior change after approval), typosquatting (similar tool names), and supply chain attacks in MCP tool registries. | `mcptox/` |
+| **Circuit breakers with receipts** | Circuit breaker state changes are receipted in the ProofGraph. Auditors can verify exactly when and why a breaker tripped. | `resiliency/` |
+| **Reversibility engine** | Declares which effects are reversible, tracks compensation actions, and verifies that rollbacks complete correctly. | `effects/reversibility.go` |
+| **SLO engine with governance** | SLO violations trigger governance actions (throttle, escalate, freeze) — not just alerts. | `observability/slo_engine.go` |
+| **CloudEvents SIEM export** | Governance decisions exported as CloudEvents for SIEM ingestion (Splunk, Sentinel, Elastic). | `otel/cloudevents.go` |
+
+---
+
 ## Where HELM is Ahead
 
 ### 1. Cryptographic Proof Model (ProofGraph + EvidencePack)
@@ -112,10 +140,8 @@ HELM's delegation model mathematically enforces that delegate authority is a str
 
 ## Where Microsoft is Ahead
 
-### 1. ML-DSA-65 Signing (Post-Quantum)
-Microsoft offers ML-DSA-65 (post-quantum digital signatures) for agent identity. HELM has PQC at the TLS transport layer (X25519+ML-KEM-768 via Go 1.24+) but not yet for decision/receipt signing.
-
-**Mitigation:** PQ signing (ML-DSA-65 or SLH-DSA) is a future roadmap item. The transport layer is already quantum-resistant.
+### ~~1. ML-DSA-65 Signing (Post-Quantum)~~ — Gap Closed
+~~Microsoft offers ML-DSA-65 (post-quantum digital signatures) for agent identity.~~ HELM now ships **hybrid Ed25519 + ML-DSA-65** signing — both classical and post-quantum signatures on every decision simultaneously. This exceeds Microsoft's approach (ML-DSA-65 only in docs, Ed25519 only in code) by providing real dual-algorithm coverage for migration safety.
 
 ### 2. Framework Integration Breadth
 Microsoft has native hooks for 20+ frameworks including LangChain callbacks, CrewAI task decorators, and Microsoft Agent Framework middleware. HELM has integrations for LangChain, LlamaIndex, CrewAI, and MSAF, plus MCP gateway and OpenAI-compatible proxy.
@@ -223,7 +249,7 @@ Microsoft claims coverage of all 10 OWASP Agentic Application Security (ASI) ris
 | Nondeterminism | Not tracked | Explicit bounding + receipting | **HELM** |
 | Framework adapters | 20+ | MCP gateway + 5 SDKs (Protobuf codegen) | Microsoft |
 
-**HELM wins: 21 dimensions. Microsoft wins: 1 dimension (framework adapters). Parity: 4 dimensions.**
+**HELM wins: 21 dimensions + 19 unique capabilities with no competitor equivalent. Microsoft wins: 1 dimension (framework adapters). Parity: 4 dimensions.**
 
 ---
 

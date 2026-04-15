@@ -96,6 +96,25 @@ Each threat has a corresponding conformance use case or gate test:
 
 ---
 
+## MCP Supply Chain Defenses (April 2026)
+
+The following defenses extend HELM's Layer A (Surface Containment) with active MCP supply chain protection, based on research from arXiv 2603.00195, 2604.03081, 2604.08407, and 2508.14925.
+
+| # | Threat | Defense | Package |
+| :- | :----- | :------ | :------ |
+| 13 | **DDIPE Documentation Poisoning** — MCP tool descriptions contain hidden instructions that manipulate agent behavior | DDIPE scanner analyzes all tool documentation before agent exposure. Detects embedded instructions, prompt injection patterns, and social engineering. | `mcp/docscan.go` |
+| 14 | **Rug-Pull (Behavioral Drift)** — MCP tool changes behavior after initial installation/approval | Tool fingerprinting captures schema + behavior snapshot at install time. Runtime checks detect drift and trigger re-verification or blocking. | `mcp/rugpull.go` |
+| 15 | **Typosquatting** — Malicious MCP tools use names similar to legitimate ones | Levenshtein distance comparison against known-good tool registries. Near-match tool names produce warnings. Blocks tools within edit distance threshold of popular packages. | `mcp/typosquat.go` |
+| 16 | **Capability Overclaim** — Skill packs declare minimal capabilities but invoke privileged tools at runtime | SkillFortify performs static capability verification. Declared capabilities are checked against actual tool invocations. Mismatches produce `CAPABILITY_MISMATCH_VIOLATION`. | `pack/verify_capabilities.go` |
+| 17 | **Unsigned Dependencies** — Skill packs from unverified publishers | Publisher signature chain verification back to trusted root. Unsigned packs are blocked. Signature must cover content hash (not just metadata). | `pack/provenance.go` |
+| 18 | **MCP Server Reputation** — Unknown MCP servers with no trust history | Federated trust scoring aggregates cross-organization reputation. Low-trust servers have tools flagged for manual review. Trust scores decay without positive signals. | `mcp/trust.go` |
+
+### MCPTox Benchmark
+
+The MCPTox adversarial harness (`mcp/mcptox_test.go`) continuously validates 0% attack success rate (ASR) against known tool poisoning payloads. This runs as part of `make crucible-full` and produces a machine-readable report.
+
+---
+
 ## OWASP References
 
 This mapping aligns with the following OWASP resources:

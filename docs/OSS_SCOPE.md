@@ -51,6 +51,23 @@ non-TCB supporting infrastructure:
 | `kernel/`              | Rate limiting, backpressure                | ✅ Active |
 | `a2a/`                 | Agent-to-Agent trust protocol              | ✅ Active |
 | `otel/`                | OpenTelemetry governance telemetry         | ✅ Active |
+| `identity/did/`        | W3C DID-based agent identity               | ✅ Active |
+| `crypto/hybrid/`       | Hybrid Ed25519 + ML-DSA-65 dual signing    | ✅ Active |
+| `crypto/zkproof/`      | Zero-knowledge compliance proofs           | ✅ Active |
+| `memory/`              | Memory integrity, trust, poisoning defense | ✅ Active |
+| `threatscan/ensemble/` | Quorum-based multi-engine threat scanning  | ✅ Active |
+| `evidencepack/summary/`| Constant-size cryptographic evidence summaries | ✅ Active |
+| `skillfortify/`        | Runtime tool/skill integrity verification  | ✅ Active |
+| `provenance/`          | Supply chain provenance with signed attestations | ✅ Active |
+| `budget/cost/`         | Cost attribution and pre-execution estimation | ✅ Active |
+| `delegation/aip/`      | Agent Interaction Protocol, continuous delegation | ✅ Active |
+| `replay/comparison/`   | Side-by-side replay comparison for drift detection | ✅ Active |
+| `a2a/federation/`      | Federated trust across organizations       | ✅ Active |
+| `mcptox/`              | MCP tool toxicity scanner (rug-pull, typosquatting) | ✅ Active |
+| `effects/reversibility/` | Reversibility engine for effect compensation | ✅ Active |
+| `observability/slo_engine/` | SLO-driven governance actions          | ✅ Active |
+| `otel/cloudevents/`    | CloudEvents SIEM export                    | ✅ Active |
+| `connectors/ddipe/`    | DDIPE document scanning for governance extraction | ✅ Active |
 
 ### Deployment Infrastructure
 

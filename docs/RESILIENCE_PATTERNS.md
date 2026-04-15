@@ -119,15 +119,74 @@ receipt, _ := tracker.Receipt(runID)
 
 The `NondeterminismReceipt` captures the exact input/output hashes of each nondeterministic operation, enabling post-hoc verification that governance was applied to the actual data.
 
+## Pattern 9: Per-Connector Circuit Breakers
+
+> *Added April 2026*
+
+**Package:** `core/pkg/effects/circuitbreaker.go`
+
+Each connector gets an independent circuit breaker instance, isolating failures to the affected connector without degrading others.
+
+```
+Connector A: CLOSED (healthy)
+Connector B: OPEN (5 failures, waiting for reset)
+Connector C: HALF_OPEN (probing recovery)
+```
+
+- **Per-connector isolation:** One failing connector does not trip breakers on unrelated connectors
+- **State is receipted:** Circuit breaker state transitions are recorded in the ProofGraph
+- **Composable with reversibility:** IRREVERSIBLE effects are blocked when the circuit is OPEN; REVERSIBLE effects may proceed with elevated monitoring
+
+## Pattern 10: SLO Engine
+
+**Package:** `core/pkg/slo/engine.go`
+
+Service Level Objectives with error budget tracking:
+
+- **Latency SLOs** — p50/p99 latency targets per tool or connector
+- **Error-rate SLOs** — maximum failure percentage over a sliding window
+- **Budget burn** — tracks remaining error budget as a 0.0-1.0 gauge
+- **Automatic response** — when budget < threshold, the engine can restrict new executions to low-risk-only or trigger alerts
+
+SLO violations are surfaced as Prometheus metrics (`helm.slo.violations`) and OTel attributes on decision spans.
+
+## Pattern 11: Ensemble Threat Scanning
+
+**Package:** `core/pkg/threatscan/ensemble.go`
+
+Multiple threat scanners run in parallel with configurable voting:
+
+| Strategy | Behavior | Use Case |
+|----------|----------|----------|
+| **ANY** | Flag if any scanner detects | High-security environments |
+| **MAJORITY** | Flag if >50% agree | Balanced (default) |
+| **UNANIMOUS** | Flag only if all agree | Low false-positive tolerance |
+
+Each scanner result is individually receipted, enabling post-hoc analysis of which scanners flagged which threats. The ensemble eliminates single-scanner blind spots.
+
+## Pattern 12: Pre-Execution Cost Estimation
+
+**Package:** `core/pkg/budget/estimate.go`
+
+Before an effect executes, the cost estimator predicts the cost based on:
+
+- **Connector pricing model** — API call costs, token counts, compute time
+- **Historical data** — moving average of actual costs for similar operations
+- **Risk multiplier** — higher-risk effects carry a cost premium
+
+The estimate is attached to the `CostBreakdown` field in `effects/types.go` and surfaced in the ProofGraph for per-agent cost attribution. Budget gates can deny effects whose estimated cost exceeds remaining budget.
+
 ## Composition
 
 These patterns layer for defense-in-depth:
 
 ```
-Request → Kill Switch (Pattern 1) → Circuit Breaker (Pattern 2)
+Request → Kill Switch (Pattern 1) → Ensemble Scan (Pattern 11)
+       → Circuit Breaker (Pattern 2/9) → Cost Estimation (Pattern 12)
        → Temporal Guardian (Pattern 5) → Risk Budget (Pattern 4)
-       → Policy Evaluation (Pattern 1) → Signing (Pattern 7)
-       → Audit Chain (Pattern 6) → Nondeterminism Receipt (Pattern 8)
+       → SLO Check (Pattern 10) → Policy Evaluation (Pattern 1)
+       → Signing (Pattern 7) → Audit Chain (Pattern 6)
+       → Nondeterminism Receipt (Pattern 8)
 ```
 
 Each layer is independently fail-safe. Removing any single layer does not compromise the others.

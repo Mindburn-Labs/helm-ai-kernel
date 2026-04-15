@@ -234,6 +234,53 @@ restrictions, or expanding its delegation scope.
 **Residual risk:** None within the delegation model — escalation is a
 hard block. Social engineering of the delegator is out of scope.
 
+### T14: MCP Supply Chain Attacks
+
+> *arXiv 2603.00195, 2604.03081, 2604.08407*
+
+**Attack:** Adversary publishes a malicious MCP tool or compromises an existing one. The attack surface includes typosquatted tool names, poisoned documentation, and tools whose behavior changes after installation (rug-pulls).
+
+**Defense:**
+
+- **SkillFortify** (`pack/verify_capabilities.go`): Static capability verification rejects packs whose declared capabilities do not match actual tool behavior.
+- **Dependency provenance** (`pack/provenance.go`): Publisher signature chain verification back to a trusted root. Unsigned or incorrectly signed packs are blocked.
+- **DDIPE scanning** (`mcp/docscan.go`): Documentation is analyzed for embedded instructions, hidden directives, and social engineering patterns before the agent processes it.
+- **Typosquatting detection** (`mcp/typosquat.go`): Levenshtein distance comparison against known-good tool registries. Near-match tool names trigger warnings.
+- **Rug-pull detection** (`mcp/rugpull.go`): Tool fingerprinting detects behavioral drift between installation and runtime. Schema or behavior changes trigger re-verification.
+
+**Residual risk:** Semantic attacks that remain within valid schemas and produce plausible-looking but incorrect output. Mitigated by ensemble scanning and behavioral trust scoring.
+
+### T15: Agent Memory Poisoning
+
+> *arXiv 2603.20357, 2601.05504*
+
+**Attack:** Adversary injects false context into an agent's long-term memory (via tool outputs, conversation history, or cross-session persistence) to influence future decisions without the operator's knowledge.
+
+**Defense:**
+
+- **Memory integrity** (`kernel/memory_integrity.go`): SHA-256 hash verification on every memory read. Modifications outside the governed write path produce `MEMORY_INTEGRITY_VIOLATION`.
+- **Memory trust scoring** (`kernel/memory_trust.go`): Temporal decay reduces the influence of older memories. Injection detection identifies entries planted by untrusted sources and downgrades their trust score. Low-trust memories are excluded from agent decision-making.
+- **Ensemble scanning** (`threatscan/ensemble.go`): Multi-scanner voting detects injection patterns in memory content before it is persisted.
+
+**Residual risk:** Gradual poisoning that stays within statistical norms of legitimate memory writes. Mitigated by temporal decay and periodic memory audits.
+
+### T16: MCP Tool Poisoning via Documentation
+
+> *arXiv 2508.14925*
+
+**Attack:** Malicious MCP server returns tool descriptions containing hidden instructions that manipulate the agent's behavior — causing it to exfiltrate data, call unintended tools, or bypass safety constraints through the tool description itself rather than through tool arguments.
+
+**Defense (Layer A):**
+
+- **DDIPE doc scanning** (`mcp/docscan.go`): All tool documentation is scanned before being exposed to the agent. Detects embedded instructions, prompt injection patterns, and social engineering.
+- **MCPTox benchmark** (`mcp/mcptox_test.go`): Continuous adversarial testing validates 0% attack success rate (ASR) against known tool poisoning payloads.
+
+**Defense (Layer B):**
+
+- **Federated trust scoring** (`mcp/trust.go`): Cross-organization reputation scoring for MCP servers. Servers with low trust scores have their tool descriptions flagged for manual review.
+
+**Residual risk:** Novel social engineering patterns not covered by current detection heuristics. Mitigated by ensemble scanning and MCPTox continuous testing.
+
 ---
 
 ## Out of Scope

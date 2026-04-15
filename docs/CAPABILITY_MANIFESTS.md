@@ -185,6 +185,76 @@ is permitted. Undeclared sandbox profiles → `DENY`.
 
 ---
 
+## 8. Skill Integrity (SkillFortify)
+
+Every tool/skill in the manifest can be **integrity-verified** at runtime via SkillFortify:
+
+```yaml
+# capability-manifest.yaml
+skills:
+  file_read:
+    version: "2.1.0"
+    integrity:
+      sha256: "a1b2c3d4..."    # Content-addressed tool definition hash
+      provenance: "registry.helm.dev/tools/file_read@2.1.0"
+      signed_by: "did:helm:publisher-key-id"
+```
+
+**Properties:**
+- Tool definitions are content-hashed at manifest deployment time
+- Runtime execution verifies the hash matches before dispatch
+- Version drift (tool definition changed without manifest update) is detected and triggers `DENY`
+- Tampered tool definitions are rejected with `DenialReason.PROVENANCE`
+
+---
+
+## 9. Supply Chain Provenance
+
+Tool packages and policy bundles carry **signed provenance attestations**:
+
+| Field | Description |
+| :--- | :--- |
+| `origin` | Registry URL or content-addressed source |
+| `publisher_did` | W3C DID of the publisher |
+| `build_hash` | SHA-256 of the build inputs |
+| `signature` | Ed25519 or hybrid Ed25519+ML-DSA-65 attestation |
+| `timestamp` | RFC 3339 publish time (verified against trust clock) |
+
+---
+
+## 10. Cost Envelope
+
+Every tool class can declare a **cost envelope** for pre-execution budget enforcement:
+
+```yaml
+# capability-manifest.yaml
+agent: research-assistant
+capabilities:
+  bundles: [analytics, filesystem]
+  cost_envelope:
+    max_cost_per_call_usd: 0.50
+    max_cost_per_session_usd: 10.00
+    estimation_model: token_count  # token_count, fixed, api_price
+```
+
+**Enforcement:** The PDP estimates cost before execution and denies actions that would exceed the cost envelope.
+
+---
+
+## 11. Memory Governance Profile
+
+Capability manifests can declare memory governance constraints:
+
+```yaml
+memory:
+  persistence: session_only    # session_only, cross_session, none
+  integrity: verified          # verified, unverified
+  trust_floor: 0.5             # minimum trust score for memory entries
+  max_entries: 1000
+```
+
+---
+
 ## Relationship to Other Layers
 
 Surface containment (Layer A) sets the **maximum possible scope**.
@@ -220,6 +290,10 @@ Layer C (Receipts)      → proves the outcome
 | Manifest validation | `core/pkg/manifest/` |
 | Budget ceilings | `core/pkg/runtime/budget/` |
 | Connector contracts | `core/pkg/contracts/` |
+| SkillFortify | `core/pkg/skillfortify/` |
+| Supply chain provenance | `core/pkg/provenance/` |
+| Cost attribution | `core/pkg/budget/cost_attribution.go` |
+| Memory governance | `core/pkg/memory/` |
 
 ---
 

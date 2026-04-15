@@ -118,6 +118,70 @@ Save as `grafana-helm-dashboard.json` and import:
 }
 ```
 
+---
+
+## OBS-003: OpenTelemetry Integration
+
+HELM instruments the Guardian and Effects pipelines with native OpenTelemetry spans and metrics.
+
+### Guardian Spans (`guardian/otel.go`)
+
+Every governance decision emits an OTel span with the following attributes:
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `helm.decision.id` | string | Unique decision identifier |
+| `helm.decision.verdict` | string | ALLOW, DENY, or ESCALATE |
+| `helm.decision.gate` | string | Gate that produced the verdict (Freeze, Context, Identity, Egress, Threat, Delegation) |
+| `helm.decision.latency_us` | int64 | Decision latency in microseconds |
+| `helm.tool.id` | string | Tool being evaluated |
+| `helm.tenant.id` | string | Tenant isolation boundary |
+
+The Guardian span is the parent of all gate sub-spans, enabling per-gate latency visibility in Jaeger/Tempo.
+
+### Effects Spans (`effects/otel.go`)
+
+Effect execution emits spans with:
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `helm.effect.id` | string | Effect identifier |
+| `helm.effect.connector` | string | Connector used for execution |
+| `helm.effect.reversibility` | string | REVERSIBLE, PARTIALLY_REVERSIBLE, or IRREVERSIBLE |
+| `helm.effect.cost_usd` | float64 | Estimated cost of the effect |
+| `helm.effect.circuit_breaker` | string | Circuit breaker state (CLOSED, OPEN, HALF_OPEN) |
+
+### Metrics
+
+OTel metrics complement the existing Prometheus exposition:
+
+```yaml
+# Guardian decision histogram (OTel native)
+helm.guardian.decision.duration    # histogram, microseconds
+helm.guardian.gate.denials         # counter, per gate name
+
+# Effects throughput
+helm.effects.executions            # counter, per connector
+helm.effects.circuit_breaker.trips # counter, per connector
+helm.effects.cost.total            # counter, USD, per agent
+
+# SLO budget burn
+helm.slo.budget.remaining          # gauge, 0.0-1.0
+helm.slo.violations                # counter, per objective
+```
+
+### Configuration
+
+```yaml
+# helm.yaml
+observability:
+  otel:
+    enabled: true
+    endpoint: "localhost:4317"    # OTLP gRPC
+    sampling_rate: 1.0           # 1.0 = all, 0.1 = 10%
+    service_name: "helm-kernel"
+```
+
 ### AlertManager Rules
 
 ```yaml

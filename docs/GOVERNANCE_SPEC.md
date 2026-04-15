@@ -140,3 +140,65 @@ Each transition produces a ProofGraph node.
 | Signal Controller   | `signal_controller.go`   | Control signal routing              |
 | State Estimator     | `state_estimator.go`     | Governance state estimation         |
 | Swarm PDP           | `swarm_pdp.go`           | Multi-agent PDP coordination        |
+
+---
+
+## 8. Path-Aware Policy Evaluation
+
+The PDP supports **path-aware policies** — policies that consider the full session history (prior decisions, tool calls, and trust score changes) when evaluating a new request.
+
+**Session history** is passed via `PDPRequest.ContextDescriptor.SessionHistory`, which contains an ordered list of prior `DecisionRecord` hashes. Policies can express constraints such as:
+
+- "Allow `file_write` only if a preceding `file_read` in the same session returned data from the same path"
+- "Deny `http_post` if `http_get` to an untrusted domain occurred earlier in the session"
+- "Escalate if more than 5 ALLOW decisions have been issued in the current session without a human checkpoint"
+
+Path-aware evaluation is implemented via CEL macros that traverse the session history:
+
+```
+session.prior_decisions.exists(d, d.tool == "file_read" && d.target == request.target)
+```
+
+---
+
+## 9. Ensemble Threat Scanning
+
+Source: [`threatscan/ensemble.go`](../core/pkg/threatscan/ensemble.go)
+
+The governance pipeline supports **ensemble scanning** — multiple independent threat scanners run in parallel on every request, and a quorum-based verdict determines the outcome.
+
+| Scanner | Detection Target |
+|---|---|
+| Prompt injection | Direct/indirect injection attempts |
+| Data exfiltration | Sensitive data leakage via tool output |
+| PII detector | Personal information in inputs/outputs |
+| Toxicity classifier | Harmful or abusive content |
+| MCPTox | Rug-pull, typosquatting, supply chain attacks in MCP tool registries |
+
+**Quorum policy:** Configurable via `threat_scan.quorum` in the policy bundle. Default: any single scanner flagging triggers `ESCALATE`; two or more scanners flagging triggers `DENY`.
+
+---
+
+## 10. Memory Governance
+
+Source: [`memory/`](../core/pkg/memory/)
+
+Agent memory (context, conversation history, learned state) is subject to governance:
+
+- **Integrity verification**: Memory snapshots are content-addressed (SHA-256). Any mutation outside governed operations is detected.
+- **Trust scoring**: Memory entries carry trust scores derived from the provenance of the data that produced them.
+- **Cross-session poisoning prevention**: Memory imported from prior sessions is re-evaluated against current policy before use.
+- **Selective disclosure**: Memory can be exported with redaction (via ZK proofs) for compliance without revealing sensitive content.
+
+---
+
+## 11. Cost Attribution
+
+Source: [`budget/cost_attribution.go`](../core/pkg/budget/cost_attribution.go)
+
+Every governance decision carries a **cost attribution record**:
+
+- **Pre-execution estimation**: The PDP includes estimated cost in the `PDPResponse` before the effect executes, allowing budget enforcement to reject actions that would exceed limits.
+- **Post-execution attribution**: Actual cost is recorded and attributed to the specific agent, session, tenant, tool, and decision.
+- **Cost dimensions**: LLM token cost, compute time, external API calls, storage, network egress.
+- **Aggregation**: Cost rolls up through the tenant hierarchy for organizational budgeting.

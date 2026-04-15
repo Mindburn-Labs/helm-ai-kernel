@@ -2,6 +2,41 @@
 
 All notable changes to HELM Core OSS are documented here.
 
+## [Unreleased] — 2026-04-15
+
+### Added
+- **Hybrid PQ Signing**: Ed25519 + ML-DSA-65 dual signatures on every receipt (`crypto/hybrid_signer.go`)
+- **W3C DID**: Decentralized identifiers for agent identity (`identity/did/`)
+- **DDIPE Doc Scanner**: Detects supply chain attacks in MCP tool documentation (`mcp/docscan.go`)
+- **Memory Integrity**: SHA-256 hash-protected governed memory (`kernel/memory_integrity.go`)
+- **Memory Trust Scoring**: Temporal decay trust with injection detection (`kernel/memory_trust.go`)
+- **Ensemble Scanner**: Multi-scanner voting (ANY/MAJORITY/UNANIMOUS) (`threatscan/ensemble.go`)
+- **Evidence Summaries**: Constant-size O(1) completeness proofs (`evidencepack/summary.go`)
+- **SkillFortify**: Static capability verification for skills (`pack/verify_capabilities.go`)
+- **Provenance Verification**: Cryptographic publisher signature checking (`pack/provenance.go`)
+- **Cost Attribution**: Per-agent cost breakdown in ProofGraph (`effects/types.go`)
+- **Cost Estimation**: Pre-execution cost prediction (`budget/estimate.go`)
+- **Policy Suggestions**: Auto-generate rules from execution history (`policy/suggest/`)
+- **Policy Verification**: Static analysis (circular deps, shadowed rules) (`policy/verify/`)
+- **AIP Delegation**: Agent Identity Protocol for MCP (`mcp/aip.go`)
+- **Continuous Delegation**: AITH time-bound revocable delegation (`identity/continuous_delegation.go`)
+- **Replay Comparison**: Trace diff across governance sessions (`replay/compare.go`)
+- **Federated Trust**: Cross-org reputation scoring (`mcp/trust.go`)
+- **ZK Proof Interfaces**: Privacy-preserving compliance verification (`crypto/zkp/`)
+- **MCPTox Harness**: Benchmark validating 0% ASR (`mcp/mcptox_test.go`)
+- **Evidence Pack Spec v1.0**: Formal interchange standard (`protocols/spec/evidence-pack-v1.md`)
+- **Circuit Breakers**: CLOSED/OPEN/HALF_OPEN per connector (`effects/circuitbreaker.go`)
+- **Reversibility Classification**: Effect types tagged by reversibility (`effects/reversibility.go`)
+- **SLO Engine**: Latency/error-rate objectives with budgets (`slo/engine.go`)
+- **OpenTelemetry**: Guardian + Effects spans and metrics (`guardian/otel.go`, `effects/otel.go`)
+- **CloudEvents**: ProofGraph SIEM export (`proofgraph/cloudevents/`)
+- **Rug-Pull Detection**: MCP tool fingerprinting (`mcp/rugpull.go`)
+- **Typosquatting Detection**: Levenshtein distance on tool names (`mcp/typosquat.go`)
+- **GitHub Action**: Governance scan CI/CD (`.github/actions/governance-scan/`)
+- **`helm doctor`**: Diagnostic CLI command
+- **`helm certify`**: Evidence pack certification (7 frameworks)
+- **`helm workforce`**: Agent fleet management (hire/list/suspend/terminate)
+
 ## [0.3.0] — 2026-03-22
 
 ### Changed — Truth-Reset Release

@@ -47,7 +47,7 @@ Security fixes are backported to the current release and the immediately precedi
 
 | Version | Supported | Notes |
 |---------|-----------|-------|
-| 0.4.x   | ✅        | Current (Phase 0–4 AGT-response) |
+| 0.4.x   | ✅        | Current |
 | 0.3.x   | ✅        | Previous minor; fixes backported through 2026-10 |
 | 0.2.x   | ❌        | End of life |
 | 0.1.x   | ❌        | End of life |

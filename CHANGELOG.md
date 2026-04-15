@@ -2,16 +2,16 @@
 
 All notable changes to HELM Core OSS are documented here.
 
-## [Unreleased] — 2026-04-15 — AGT-Response Milestone (target tag: v0.4.0)
+## [0.4.0] — 2026-04-15 — Truth Gate, Real Connectors, Dashboard
 
-Preparing v0.4.0 as the first release after Microsoft's Agent Governance Toolkit (AGT) v3.1.0 Public Preview (2026-04-11). Focus is (a) Phase 0 truth-gate — every claim in the repo now matches code — (b) three real connectors replacing stubs, (c) a static SPA dashboard at `try.mindburn.org`, (d) formal Conformance Profile v1 with machine-readable checklist and TLA+ invariants, (e) 3 standards-body submission drafts.
+This release closes every docs-to-code claim gap in the repo, ships the first real connector set (GitHub, Slack, Linear) replacing stubs, introduces a zero-backend EvidencePack viewer at `try.mindburn.org`, and formalizes a six-axis Conformance Profile v1 with TLA+ invariants model-checked in CI. Standards-body submission drafts ship alongside the technical work.
 
 ### Added — Truth-Gate + Packaging (Phase 0 + 1)
 - **Dashboard** at `dashboard/` — zero-backend, zero-telemetry EvidencePack viewer. Drop a `.tar` pack; parses TAR in-browser and verifies SHA-256 via Web Crypto. Hosted at `try.mindburn.org` via GitHub Pages.
 - **`helm shadow scan`** — static shadow-AI discovery CLI + package (`core/pkg/shadow/`). Detects agent SDK imports, MCP configs, hardcoded API keys. Distinguishes HELM-routed vs un-governed agent usage.
 - **`helm mcp scan`** — static MCP tool-catalog scanner combining DocScanner (DDIPE patterns), ArgScanner (shell injection / SSRF / path traversal), and typosquat detection (Levenshtein ≤2 against 18 known tools).
 - **`tests/conformance/profile-v1/`** — six-axis HELM Conformance Profile v1 (draft): fail-closed firewall / canonical receipts / causal ProofGraph / delegation narrowing-only / EvidencePack round-trip / deterministic replay. Machine-readable `checklist.yaml` (14 checks, verification kinds: go_test / shell / fixture / tla).
-- **`docs/research/replay.md`** — deterministic replay as the forensic primitive AGT cannot match. Covers debug / audit / dispute-resolution use cases + determinism boundary.
+- **`docs/research/replay.md`** — deterministic replay as HELM's forensic primitive for AI agent sessions. Covers debug / audit / dispute-resolution use cases + determinism boundary.
 - **`docs/research/policy-composition-proof.md`** — P0/P1/P2 three-layer composition theorem, grounded in four arXiv papers.
 - **`docs/compliance/enforcement-vs-mapping.md`** — explicit split between the compliance enforcement engine (DENYing PolicyResult) and framework record-keeping engines (logging + audit reports).
 - **`docs/architecture/path-aware-policy.md`** — documents how CEL/WASM policies access `session_history` via Context map today; typed binding deferred to P5.
@@ -54,11 +54,6 @@ Preparing v0.4.0 as the first release after Microsoft's Agent Governance Toolkit
 ### Fixed
 - `docs/security/owasp-agentic-top10-coverage.md` — three stale "22 regulatory frameworks" lines corrected to match reality (7 Go packages + 9 reference bundles).
 - `benchmarks/results/latest.json` — committed with the numbers already recorded in `docs/BENCHMARKS.md` at commit `4e52909d` so the artifact matches the documented claim. CI auto-refresh begins with the benchmarks.yml workflow.
-
-### Roadmap reference
-- Full strategic plan: `/Users/ivan/.claude/plans/helm-agt-response-roadmap.md`.
-- Audit informing this release: `/Users/ivan/.claude/plans/dreamy-sniffing-brooks.md`.
-- Production-deployment plan: `/Users/ivan/.claude/plans/helm-agt-production-deployment.md`.
 
 ---
 

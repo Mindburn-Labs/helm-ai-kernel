@@ -300,7 +300,7 @@ func writeHumanReport(w io.Writer, r mcpScanReport) {
 			fmt.Fprintf(w, "  [%s] %s :: %s\n", f.Severity, f.ToolName, f.Pattern)
 			fmt.Fprintf(w, "         %s\n", f.Description)
 			if f.MatchedText != "" {
-				fmt.Fprintf(w, "         matched: %s\n", truncate(f.MatchedText, 80))
+				fmt.Fprintf(w, "         matched: %s\n", truncateScanOutput(f.MatchedText, 80))
 			}
 		}
 		fmt.Fprintln(w)
@@ -319,7 +319,7 @@ func writeHumanReport(w io.Writer, r mcpScanReport) {
 	}
 }
 
-func truncate(s string, n int) string {
+func truncateScanOutput(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}

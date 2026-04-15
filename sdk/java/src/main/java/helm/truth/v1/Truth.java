@@ -6,6 +6,7 @@
 package helm.truth.v1;
 
 @com.google.protobuf.Generated
+@SuppressWarnings("all")
 public final class Truth extends com.google.protobuf.GeneratedFile {
   private Truth() {}
   static {
@@ -237,7 +238,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.truth.v1.VersionScope}
    */
-  public static final class VersionScope extends
+  @SuppressWarnings("all")
+public static final class VersionScope extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.truth.v1.VersionScope)
       VersionScopeOrBuilder {
@@ -586,7 +588,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.truth.v1.VersionScope}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.truth.v1.VersionScope)
         helm.truth.v1.Truth.VersionScopeOrBuilder {
@@ -1105,7 +1108,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.truth.v1.FreshnessInfo}
    */
-  public static final class FreshnessInfo extends
+  @SuppressWarnings("all")
+public static final class FreshnessInfo extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.truth.v1.FreshnessInfo)
       FreshnessInfoOrBuilder {
@@ -1396,7 +1400,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.truth.v1.FreshnessInfo}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.truth.v1.FreshnessInfo)
         helm.truth.v1.Truth.FreshnessInfoOrBuilder {
@@ -1967,7 +1972,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.truth.v1.CompatibilityInfo}
    */
-  public static final class CompatibilityInfo extends
+  @SuppressWarnings("all")
+public static final class CompatibilityInfo extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.truth.v1.CompatibilityInfo)
       CompatibilityInfoOrBuilder {
@@ -2329,7 +2335,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.truth.v1.CompatibilityInfo}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.truth.v1.CompatibilityInfo)
         helm.truth.v1.Truth.CompatibilityInfoOrBuilder {
@@ -2893,7 +2900,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.truth.v1.ProvenanceInfo}
    */
-  public static final class ProvenanceInfo extends
+  @SuppressWarnings("all")
+public static final class ProvenanceInfo extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.truth.v1.ProvenanceInfo)
       ProvenanceInfoOrBuilder {
@@ -3226,7 +3234,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.truth.v1.ProvenanceInfo}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.truth.v1.ProvenanceInfo)
         helm.truth.v1.Truth.ProvenanceInfoOrBuilder {
@@ -3803,7 +3812,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.truth.v1.TruthObject}
    */
-  public static final class TruthObject extends
+  @SuppressWarnings("all")
+public static final class TruthObject extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.truth.v1.TruthObject)
       TruthObjectOrBuilder {
@@ -4449,7 +4459,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.truth.v1.TruthObject}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.truth.v1.TruthObject)
         helm.truth.v1.Truth.TruthObjectOrBuilder {
@@ -5888,7 +5899,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.truth.v1.LineageEntry}
    */
-  public static final class LineageEntry extends
+  @SuppressWarnings("all")
+public static final class LineageEntry extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.truth.v1.LineageEntry)
       LineageEntryOrBuilder {
@@ -6414,7 +6426,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.truth.v1.LineageEntry}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.truth.v1.LineageEntry)
         helm.truth.v1.Truth.LineageEntryOrBuilder {
@@ -7271,7 +7284,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.truth.v1.GetTruthRequest}
    */
-  public static final class GetTruthRequest extends
+  @SuppressWarnings("all")
+public static final class GetTruthRequest extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.truth.v1.GetTruthRequest)
       GetTruthRequestOrBuilder {
@@ -7504,7 +7518,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.truth.v1.GetTruthRequest}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.truth.v1.GetTruthRequest)
         helm.truth.v1.Truth.GetTruthRequestOrBuilder {
@@ -7792,7 +7807,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.truth.v1.GetLatestTruthRequest}
    */
-  public static final class GetLatestTruthRequest extends
+  @SuppressWarnings("all")
+public static final class GetLatestTruthRequest extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.truth.v1.GetLatestTruthRequest)
       GetLatestTruthRequestOrBuilder {
@@ -8054,7 +8070,8 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.truth.v1.GetLatestTruthRequest}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.truth.v1.GetLatestTruthRequest)
         helm.truth.v1.Truth.GetLatestTruthRequestOrBuilder {

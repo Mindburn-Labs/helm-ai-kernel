@@ -6,6 +6,7 @@
 package helm.authority.v1;
 
 @com.google.protobuf.Generated
+@SuppressWarnings("all")
 public final class Authority extends com.google.protobuf.GeneratedFile {
   private Authority() {}
   static {
@@ -320,7 +321,8 @@ java.lang.String defaultValue);
   /**
    * Protobuf type {@code helm.authority.v1.EvaluationRequest}
    */
-  public static final class EvaluationRequest extends
+  @SuppressWarnings("all")
+public static final class EvaluationRequest extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.authority.v1.EvaluationRequest)
       EvaluationRequestOrBuilder {
@@ -353,7 +355,7 @@ java.lang.String defaultValue);
       return helm.authority.v1.Authority.internal_static_helm_authority_v1_EvaluationRequest_descriptor;
     }
 
-    @SuppressWarnings({"rawtypes"})
+    
     @java.lang.Override
     protected com.google.protobuf.MapFieldReflectionAccessor internalGetMapFieldReflection(
         int number) {
@@ -965,7 +967,8 @@ java.lang.String defaultValue) {
     /**
      * Protobuf type {@code helm.authority.v1.EvaluationRequest}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.authority.v1.EvaluationRequest)
         helm.authority.v1.Authority.EvaluationRequestOrBuilder {
@@ -974,7 +977,7 @@ java.lang.String defaultValue) {
         return helm.authority.v1.Authority.internal_static_helm_authority_v1_EvaluationRequest_descriptor;
       }
 
-      @SuppressWarnings({"rawtypes"})
+      
       protected com.google.protobuf.MapFieldReflectionAccessor internalGetMapFieldReflection(
           int number) {
         switch (number) {
@@ -985,7 +988,7 @@ java.lang.String defaultValue) {
                 "Invalid map field number: " + number);
         }
       }
-      @SuppressWarnings({"rawtypes"})
+      
       protected com.google.protobuf.MapFieldReflectionAccessor internalGetMutableMapFieldReflection(
           int number) {
         switch (number) {
@@ -2137,7 +2140,8 @@ java.lang.String defaultValue) {
   /**
    * Protobuf type {@code helm.authority.v1.EvaluationDecision}
    */
-  public static final class EvaluationDecision extends
+  @SuppressWarnings("all")
+public static final class EvaluationDecision extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.authority.v1.EvaluationDecision)
       EvaluationDecisionOrBuilder {
@@ -2690,7 +2694,8 @@ java.lang.String defaultValue) {
     /**
      * Protobuf type {@code helm.authority.v1.EvaluationDecision}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.authority.v1.EvaluationDecision)
         helm.authority.v1.Authority.EvaluationDecisionOrBuilder {

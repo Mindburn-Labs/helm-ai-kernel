@@ -6,6 +6,7 @@
 package helm.intervention.v1;
 
 @com.google.protobuf.Generated
+@SuppressWarnings("all")
 public final class Intervention extends com.google.protobuf.GeneratedFile {
   private Intervention() {}
   static {
@@ -569,7 +570,8 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.intervention.v1.InterventionScope}
    */
-  public static final class InterventionScope extends
+  @SuppressWarnings("all")
+public static final class InterventionScope extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.intervention.v1.InterventionScope)
       InterventionScopeOrBuilder {
@@ -938,7 +940,8 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.intervention.v1.InterventionScope}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.intervention.v1.InterventionScope)
         helm.intervention.v1.Intervention.InterventionScopeOrBuilder {
@@ -1561,7 +1564,8 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.intervention.v1.InterventionOption}
    */
-  public static final class InterventionOption extends
+  @SuppressWarnings("all")
+public static final class InterventionOption extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.intervention.v1.InterventionOption)
       InterventionOptionOrBuilder {
@@ -1944,7 +1948,8 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.intervention.v1.InterventionOption}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.intervention.v1.InterventionOption)
         helm.intervention.v1.Intervention.InterventionOptionOrBuilder {
@@ -2655,7 +2660,8 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.intervention.v1.InterventionObject}
    */
-  public static final class InterventionObject extends
+  @SuppressWarnings("all")
+public static final class InterventionObject extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.intervention.v1.InterventionObject)
       InterventionObjectOrBuilder {
@@ -3434,7 +3440,8 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.intervention.v1.InterventionObject}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.intervention.v1.InterventionObject)
         helm.intervention.v1.Intervention.InterventionObjectOrBuilder {
@@ -5295,7 +5302,8 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.intervention.v1.InterventionReceipt}
    */
-  public static final class InterventionReceipt extends
+  @SuppressWarnings("all")
+public static final class InterventionReceipt extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.intervention.v1.InterventionReceipt)
       InterventionReceiptOrBuilder {
@@ -6106,7 +6114,8 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.intervention.v1.InterventionReceipt}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.intervention.v1.InterventionReceipt)
         helm.intervention.v1.Intervention.InterventionReceiptOrBuilder {

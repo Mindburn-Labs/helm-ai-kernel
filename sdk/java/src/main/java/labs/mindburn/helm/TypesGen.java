@@ -19,7 +19,15 @@ import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import org.openapitools.jackson.nullable.JsonNullable;
 
+/**
+ * Combined HELM SDK Models
+ * Silenced for internal warnings as this is generated code.
+ */
+@SuppressWarnings("all")
 public interface TypesGen {
+
+
+
 
 // Minimal AbstractOpenApiSchema base class for oneOf/anyOf union types.
 // Normally provided by the OpenAPI Generator runtime library.
@@ -15283,6 +15291,7 @@ public static class VersionInfo {
     return joiner.toString();
   }
 }
+
 
 
 }

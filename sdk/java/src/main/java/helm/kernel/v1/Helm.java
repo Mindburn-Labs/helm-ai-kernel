@@ -6,6 +6,7 @@
 package helm.kernel.v1;
 
 @com.google.protobuf.Generated
+@SuppressWarnings("all")
 public final class Helm extends com.google.protobuf.GeneratedFile {
   private Helm() {}
   static {
@@ -475,7 +476,8 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.kernel.v1.Effect}
    */
-  public static final class Effect extends
+  @SuppressWarnings("all")
+public static final class Effect extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.kernel.v1.Effect)
       EffectOrBuilder {
@@ -835,7 +837,8 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.kernel.v1.Effect}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.kernel.v1.Effect)
         helm.kernel.v1.Helm.EffectOrBuilder {
@@ -1467,7 +1470,8 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.kernel.v1.DecisionRecord}
    */
-  public static final class DecisionRecord extends
+  @SuppressWarnings("all")
+public static final class DecisionRecord extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.kernel.v1.DecisionRecord)
       DecisionRecordOrBuilder {
@@ -2174,7 +2178,8 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.kernel.v1.DecisionRecord}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.kernel.v1.DecisionRecord)
         helm.kernel.v1.Helm.DecisionRecordOrBuilder {
@@ -3463,7 +3468,8 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.kernel.v1.AuthorizedExecutionIntent}
    */
-  public static final class AuthorizedExecutionIntent extends
+  @SuppressWarnings("all")
+public static final class AuthorizedExecutionIntent extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.kernel.v1.AuthorizedExecutionIntent)
       AuthorizedExecutionIntentOrBuilder {
@@ -4031,7 +4037,8 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.kernel.v1.AuthorizedExecutionIntent}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.kernel.v1.AuthorizedExecutionIntent)
         helm.kernel.v1.Helm.AuthorizedExecutionIntentOrBuilder {
@@ -5228,7 +5235,8 @@ java.lang.String defaultValue);
   /**
    * Protobuf type {@code helm.kernel.v1.Receipt}
    */
-  public static final class Receipt extends
+  @SuppressWarnings("all")
+public static final class Receipt extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.kernel.v1.Receipt)
       ReceiptOrBuilder {
@@ -5267,7 +5275,7 @@ java.lang.String defaultValue);
       return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_Receipt_descriptor;
     }
 
-    @SuppressWarnings({"rawtypes"})
+    
     @java.lang.Override
     protected com.google.protobuf.MapFieldReflectionAccessor internalGetMapFieldReflection(
         int number) {
@@ -6198,7 +6206,8 @@ java.lang.String defaultValue) {
     /**
      * Protobuf type {@code helm.kernel.v1.Receipt}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.kernel.v1.Receipt)
         helm.kernel.v1.Helm.ReceiptOrBuilder {
@@ -6207,7 +6216,7 @@ java.lang.String defaultValue) {
         return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_Receipt_descriptor;
       }
 
-      @SuppressWarnings({"rawtypes"})
+      
       protected com.google.protobuf.MapFieldReflectionAccessor internalGetMapFieldReflection(
           int number) {
         switch (number) {
@@ -6218,7 +6227,7 @@ java.lang.String defaultValue) {
                 "Invalid map field number: " + number);
         }
       }
-      @SuppressWarnings({"rawtypes"})
+      
       protected com.google.protobuf.MapFieldReflectionAccessor internalGetMutableMapFieldReflection(
           int number) {
         switch (number) {
@@ -7854,7 +7863,8 @@ java.lang.String defaultValue) {
   /**
    * Protobuf type {@code helm.kernel.v1.PDPRequest}
    */
-  public static final class PDPRequest extends
+  @SuppressWarnings("all")
+public static final class PDPRequest extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.kernel.v1.PDPRequest)
       PDPRequestOrBuilder {
@@ -8164,7 +8174,8 @@ java.lang.String defaultValue) {
     /**
      * Protobuf type {@code helm.kernel.v1.PDPRequest}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.kernel.v1.PDPRequest)
         helm.kernel.v1.Helm.PDPRequestOrBuilder {
@@ -8828,7 +8839,8 @@ java.lang.String defaultValue) {
   /**
    * Protobuf type {@code helm.kernel.v1.SubjectDescriptor}
    */
-  public static final class SubjectDescriptor extends
+  @SuppressWarnings("all")
+public static final class SubjectDescriptor extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.kernel.v1.SubjectDescriptor)
       SubjectDescriptorOrBuilder {
@@ -9167,7 +9179,8 @@ java.lang.String defaultValue) {
     /**
      * Protobuf type {@code helm.kernel.v1.SubjectDescriptor}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.kernel.v1.SubjectDescriptor)
         helm.kernel.v1.Helm.SubjectDescriptorOrBuilder {
@@ -9705,7 +9718,8 @@ java.lang.String defaultValue) {
   /**
    * Protobuf type {@code helm.kernel.v1.ContextDescriptor}
    */
-  public static final class ContextDescriptor extends
+  @SuppressWarnings("all")
+public static final class ContextDescriptor extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.kernel.v1.ContextDescriptor)
       ContextDescriptorOrBuilder {
@@ -10073,7 +10087,8 @@ java.lang.String defaultValue) {
     /**
      * Protobuf type {@code helm.kernel.v1.ContextDescriptor}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.kernel.v1.ContextDescriptor)
         helm.kernel.v1.Helm.ContextDescriptorOrBuilder {
@@ -10782,7 +10797,8 @@ java.lang.String defaultValue) {
   /**
    * Protobuf type {@code helm.kernel.v1.PDPResponse}
    */
-  public static final class PDPResponse extends
+  @SuppressWarnings("all")
+public static final class PDPResponse extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.kernel.v1.PDPResponse)
       PDPResponseOrBuilder {
@@ -11172,7 +11188,8 @@ java.lang.String defaultValue) {
     /**
      * Protobuf type {@code helm.kernel.v1.PDPResponse}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.kernel.v1.PDPResponse)
         helm.kernel.v1.Helm.PDPResponseOrBuilder {
@@ -11980,7 +11997,8 @@ java.lang.String defaultValue) {
   /**
    * Protobuf type {@code helm.kernel.v1.Obligation}
    */
-  public static final class Obligation extends
+  @SuppressWarnings("all")
+public static final class Obligation extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.kernel.v1.Obligation)
       ObligationOrBuilder {
@@ -12356,7 +12374,8 @@ java.lang.String defaultValue) {
     /**
      * Protobuf type {@code helm.kernel.v1.Obligation}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.kernel.v1.Obligation)
         helm.kernel.v1.Helm.ObligationOrBuilder {
@@ -13004,7 +13023,8 @@ java.lang.String defaultValue);
   /**
    * Protobuf type {@code helm.kernel.v1.EffectRequest}
    */
-  public static final class EffectRequest extends
+  @SuppressWarnings("all")
+public static final class EffectRequest extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.kernel.v1.EffectRequest)
       EffectRequestOrBuilder {
@@ -13031,7 +13051,7 @@ java.lang.String defaultValue);
       return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_EffectRequest_descriptor;
     }
 
-    @SuppressWarnings({"rawtypes"})
+    
     @java.lang.Override
     protected com.google.protobuf.MapFieldReflectionAccessor internalGetMapFieldReflection(
         int number) {
@@ -13393,7 +13413,8 @@ java.lang.String defaultValue) {
     /**
      * Protobuf type {@code helm.kernel.v1.EffectRequest}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.kernel.v1.EffectRequest)
         helm.kernel.v1.Helm.EffectRequestOrBuilder {
@@ -13402,7 +13423,7 @@ java.lang.String defaultValue) {
         return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_EffectRequest_descriptor;
       }
 
-      @SuppressWarnings({"rawtypes"})
+      
       protected com.google.protobuf.MapFieldReflectionAccessor internalGetMapFieldReflection(
           int number) {
         switch (number) {
@@ -13413,7 +13434,7 @@ java.lang.String defaultValue) {
                 "Invalid map field number: " + number);
         }
       }
-      @SuppressWarnings({"rawtypes"})
+      
       protected com.google.protobuf.MapFieldReflectionAccessor internalGetMutableMapFieldReflection(
           int number) {
         switch (number) {
@@ -14038,7 +14059,8 @@ java.lang.String defaultValue) {
   /**
    * Protobuf type {@code helm.kernel.v1.EffectResponse}
    */
-  public static final class EffectResponse extends
+  @SuppressWarnings("all")
+public static final class EffectResponse extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.kernel.v1.EffectResponse)
       EffectResponseOrBuilder {
@@ -14414,7 +14436,8 @@ java.lang.String defaultValue) {
     /**
      * Protobuf type {@code helm.kernel.v1.EffectResponse}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.kernel.v1.EffectResponse)
         helm.kernel.v1.Helm.EffectResponseOrBuilder {
@@ -15149,7 +15172,8 @@ java.lang.String defaultValue) {
   /**
    * Protobuf type {@code helm.kernel.v1.ExecutionResult}
    */
-  public static final class ExecutionResult extends
+  @SuppressWarnings("all")
+public static final class ExecutionResult extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.kernel.v1.ExecutionResult)
       ExecutionResultOrBuilder {
@@ -15521,7 +15545,8 @@ java.lang.String defaultValue) {
     /**
      * Protobuf type {@code helm.kernel.v1.ExecutionResult}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.kernel.v1.ExecutionResult)
         helm.kernel.v1.Helm.ExecutionResultOrBuilder {
@@ -16137,7 +16162,8 @@ java.lang.String defaultValue) {
   /**
    * Protobuf type {@code helm.kernel.v1.CompletionReceipt}
    */
-  public static final class CompletionReceipt extends
+  @SuppressWarnings("all")
+public static final class CompletionReceipt extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.kernel.v1.CompletionReceipt)
       CompletionReceiptOrBuilder {
@@ -16413,7 +16439,8 @@ java.lang.String defaultValue) {
     /**
      * Protobuf type {@code helm.kernel.v1.CompletionReceipt}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.kernel.v1.CompletionReceipt)
         helm.kernel.v1.Helm.CompletionReceiptOrBuilder {

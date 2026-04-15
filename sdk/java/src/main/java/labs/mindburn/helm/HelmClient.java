@@ -65,8 +65,8 @@ public class HelmClient {
                 HelmError err = gson.fromJson(resp.body(), HelmError.class);
                 throw new HelmApiException(
                         resp.statusCode(),
-                        err != null && err.error != null ? err.error.message : resp.body(),
-                        err != null && err.error != null ? err.error.reason_code : "ERROR_INTERNAL");
+                        err != null && err.getError() != null ? err.getError().getMessage() : resp.body(),
+                        err != null && err.getError() != null ? String.valueOf(err.getError().getReasonCode()) : "ERROR_INTERNAL");
             }
             return gson.fromJson(resp.body(), type);
         } catch (IOException | InterruptedException e) {
@@ -81,8 +81,8 @@ public class HelmClient {
                 HelmError err = gson.fromJson(resp.body(), HelmError.class);
                 throw new HelmApiException(
                         resp.statusCode(),
-                        err != null && err.error != null ? err.error.message : resp.body(),
-                        err != null && err.error != null ? err.error.reason_code : "ERROR_INTERNAL");
+                        err != null && err.getError() != null ? err.getError().getMessage() : resp.body(),
+                        err != null && err.getError() != null ? String.valueOf(err.getError().getReasonCode()) : "ERROR_INTERNAL");
             }
             return gson.fromJson(resp.body(), typeToken.getType());
         } catch (IOException | InterruptedException e) {
@@ -144,8 +144,8 @@ public class HelmClient {
                 HelmError err = gson.fromJson(new String(resp.body()), HelmError.class);
                 throw new HelmApiException(
                         resp.statusCode(),
-                        err != null && err.error != null ? err.error.message : "export failed",
-                        err != null && err.error != null ? err.error.reason_code : "ERROR_INTERNAL");
+                        err != null && err.getError() != null ? err.getError().getMessage() : "export failed",
+                        err != null && err.getError() != null ? String.valueOf(err.getError().getReasonCode()) : "ERROR_INTERNAL");
             }
             return resp.body();
         } catch (IOException | InterruptedException e) {

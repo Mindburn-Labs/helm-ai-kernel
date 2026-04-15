@@ -6,6 +6,7 @@
 package helm.effects.v1;
 
 @com.google.protobuf.Generated
+@SuppressWarnings("all")
 public final class Effects extends com.google.protobuf.GeneratedFile {
   private Effects() {}
   static {
@@ -257,7 +258,8 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.effects.v1.EffectScope}
    */
-  public static final class EffectScope extends
+  @SuppressWarnings("all")
+public static final class EffectScope extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.effects.v1.EffectScope)
       EffectScopeOrBuilder {
@@ -602,7 +604,8 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.effects.v1.EffectScope}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.effects.v1.EffectScope)
         helm.effects.v1.Effects.EffectScopeOrBuilder {
@@ -1315,7 +1318,8 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.effects.v1.EffectPermit}
    */
-  public static final class EffectPermit extends
+  @SuppressWarnings("all")
+public static final class EffectPermit extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.effects.v1.EffectPermit)
       EffectPermitOrBuilder {
@@ -2177,7 +2181,8 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.effects.v1.EffectPermit}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.effects.v1.EffectPermit)
         helm.effects.v1.Effects.EffectPermitOrBuilder {
@@ -3879,7 +3884,8 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.effects.v1.GatewayEffectRequest}
    */
-  public static final class GatewayEffectRequest extends
+  @SuppressWarnings("all")
+public static final class GatewayEffectRequest extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.effects.v1.GatewayEffectRequest)
       GatewayEffectRequestOrBuilder {
@@ -4511,7 +4517,8 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.effects.v1.GatewayEffectRequest}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.effects.v1.GatewayEffectRequest)
         helm.effects.v1.Effects.GatewayEffectRequestOrBuilder {
@@ -5651,7 +5658,8 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
   /**
    * Protobuf type {@code helm.effects.v1.GatewayEffectOutcome}
    */
-  public static final class GatewayEffectOutcome extends
+  @SuppressWarnings("all")
+public static final class GatewayEffectOutcome extends
       com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:helm.effects.v1.GatewayEffectOutcome)
       GatewayEffectOutcomeOrBuilder {
@@ -6165,7 +6173,8 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
     /**
      * Protobuf type {@code helm.effects.v1.GatewayEffectOutcome}
      */
-    public static final class Builder extends
+    @SuppressWarnings("all")
+public static final class Builder extends
         com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:helm.effects.v1.GatewayEffectOutcome)
         helm.effects.v1.Effects.GatewayEffectOutcomeOrBuilder {

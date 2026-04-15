@@ -196,18 +196,39 @@ helm conform --level L2 --json
 
 | Risk | ID | HELM Control | Code Path |
 |------|----|-------------|-----------|
-| Prompt Injection | ASI-01 | Threat scanner (12 rule sets, 7 detection vectors) | `core/pkg/threatscan/` |
-| Tool Poisoning | ASI-02 | Rug-pull detection + egress firewall (fail-closed) | `core/pkg/mcp/rugpull.go` |
+| Prompt Injection | ASI-01 | Ensemble threat scanner (multi-scanner voting, 12 rule sets, 7 detection vectors) | `core/pkg/threatscan/ensemble.go` |
+| Tool Poisoning | ASI-02 | Rug-pull detection + DDIPE doc scanning + egress firewall (fail-closed) | `core/pkg/mcp/rugpull.go` · `core/pkg/mcp/docscan.go` |
 | Excessive Permission | ASI-03 | Effect permits (single-use, nonce-verified, time-bound) | `core/pkg/effects/` |
 | Insufficient Validation | ASI-04 | TLA+-verified 6-gate Guardian pipeline | `core/pkg/guardian/` |
 | Improper Output | ASI-05 | Output quarantine gate | `Guardian.EvaluateOutput()` |
-| Resource Overborrowing | ASI-06 | Budget gates with ACID locks | `core/pkg/budget/` |
+| Resource Overborrowing | ASI-06 | Budget gates with ACID locks + memory integrity protection | `core/pkg/budget/` · `core/pkg/kernel/memory_integrity.go` |
 | Cascading Effects | ASI-07 | Circuit breakers + ProofGraph causal DAG | `core/pkg/effects/circuitbreaker.go` |
 | Data Exposure | ASI-08 | Egress firewall (deny-all default) + selective disclosure JWT | `core/pkg/firewall/` |
-| Plugin/Tool Insecurity | ASI-09 | MCP governance interceptor + mTLS + schema validation | `core/pkg/mcp/gateway.go` |
+| Plugin/Tool Insecurity | ASI-09 | MCP governance interceptor + mTLS + SkillFortify capability verification + schema validation | `core/pkg/mcp/gateway.go` · `core/pkg/pack/verify_capabilities.go` |
 | Insufficient Monitoring | ASI-10 | Evidence packs (JCS+SHA-256) + ProofGraph + OTel | `core/pkg/evidencepack/` |
 
 Full mapping: [OWASP Coverage](docs/security/owasp-agentic-top10-coverage.md) -- includes NIST AI RMF, SOC 2, and EU AI Act cross-references.
+
+---
+
+## Research-Backed Security
+
+Every HELM security feature is grounded in peer-reviewed research:
+
+| Capability | Paper | What It Does |
+|-----------|-------|-------------|
+| Path-aware policies | arXiv 2603.16586 | Evaluates full session history, not just current action |
+| Ensemble defense (100% mitigation) | arXiv 2509.14285 | Multi-scanner voting catches what single scanners miss |
+| DDIPE scanning | arXiv 2604.03081 | Blocks supply chain attacks via poisoned documentation |
+| Memory integrity | arXiv 2603.20357 | SHA-256 hash-protected memory with tamper detection |
+| SkillFortify | arXiv 2603.00195 | Formal proof that skills can't exceed declared capabilities |
+| Dependency provenance | arXiv 2604.08407 | Prevents LiteLLM-style supply chain attacks |
+| Hybrid PQ signing | ePrint 2025/2025 | Ed25519 + ML-DSA-65 on every receipt (quantum-ready) |
+| W3C DID identity | arXiv 2511.02841 | Standard decentralized identifiers for agents |
+| ZK compliance proofs | arXiv 2512.14737 | Prove governance without revealing decisions |
+| Federated trust | arXiv 2512.02410 | Cross-organization reputation scoring |
+
+58 papers cited. Full research plan: [docs/research/](docs/research/)
 
 ---
 
@@ -238,8 +259,9 @@ Full mapping: [OWASP Coverage](docs/security/owasp-agentic-top10-coverage.md) --
 |---------|------|--------------|----------------|---------------|-----------|
 | **Enforcement** | Kernel (every action needs signed permit) | Library (middleware) | Prompt layer | Pre/post validation | Generic policy |
 | **Fail-closed** | Default deny (empty policy = block all) | Exception = deny | Best-effort | Advisory | App-level |
-| **Crypto** | Ed25519 + ML-DSA-65 (post-quantum) | Ed25519 only | -- | -- | -- |
-| **Audit trail** | Causal DAG + CRDT sync + Rekor anchoring | Merkle chain | -- | -- | -- |
+| **Crypto** | Hybrid Ed25519 + ML-DSA-65 (post-quantum, dual-verify) | Ed25519 only | -- | -- | -- |
+| **Agent identity** | W3C DID + AIP delegation chains | -- | -- | -- | -- |
+| **Audit trail** | Causal DAG + CRDT sync + Rekor anchoring + ZK compliance proofs | Merkle chain | -- | -- | -- |
 | **Evidence** | Court-admissible packs (JCS + SHA-256) | CloudEvents logs | -- | -- | -- |
 | **Formal verification** | TLA+ proofs | None | None | None | None |
 | **Policy sandbox** | WASM (wazero, deterministic) | YAML rules | -- | -- | Rego/Cedar |
@@ -385,6 +407,24 @@ if apiErr, ok := err.(*helm.HelmApiError); ok {
 | **Multi-Agent Runtime** | MAMA lanes-based concurrency, agent roster, deterministic scheduling | [mama/](core/pkg/mama/) |
 | **Agent Lifecycle** | Virtual employee management (create/suspend/resume/terminate) with budget envelopes | [workforce/](core/pkg/workforce/) |
 | **Fault Attribution** | Shapley-value causal attribution from ProofGraph for multi-agent failures | [attribution/](core/pkg/proofgraph/attribution/) |
+| **Hybrid PQ Signing** | Ed25519 + ML-DSA-65 on every receipt (quantum-ready, dual-verify) | [crypto/hybrid_signer.go](core/pkg/crypto/hybrid_signer.go) |
+| **W3C DID Identity** | Decentralized identifiers for agent identity (standard interop) | [identity/did/](core/pkg/identity/did/) |
+| **Memory Integrity** | SHA-256 hash-protected governed memory with tamper detection | [kernel/memory_integrity.go](core/pkg/kernel/memory_integrity.go) |
+| **Memory Trust Scoring** | Temporal decay trust scoring for memory entries | [kernel/memory_trust.go](core/pkg/kernel/memory_trust.go) |
+| **Ensemble Threat Scanner** | Multi-scanner voting with ANY/MAJORITY/UNANIMOUS strategies | [threatscan/ensemble.go](core/pkg/threatscan/ensemble.go) |
+| **Constant-Size Evidence Summaries** | O(1) evidence completeness proof for large evidence packs | [evidencepack/summary.go](core/pkg/evidencepack/summary.go) |
+| **SkillFortify** | Static analysis proving skills can't exceed declared capabilities | [pack/verify_capabilities.go](core/pkg/pack/verify_capabilities.go) |
+| **Dependency Provenance** | Cryptographic verification of pack publisher signatures | [pack/provenance.go](core/pkg/pack/provenance.go) |
+| **Cost Attribution** | Per-agent cost breakdown + pre-execution cost estimation | [effects/types.go](core/pkg/effects/types.go) · [budget/estimate.go](core/pkg/budget/estimate.go) |
+| **Policy Suggestion Engine** | Auto-suggest policy rules from ProofGraph analysis | [policy/suggest/](core/pkg/policy/suggest/) |
+| **Static Policy Verification** | Detect circular deps, shadowed rules, escalation loops | [policy/verify/](core/pkg/policy/verify/) |
+| **Federated Trust Scoring** | Cross-organization reputation blending for MCP servers | [mcp/trust.go](core/pkg/mcp/trust.go) |
+| **ZK Compliance Proofs** | Zero-knowledge proof interfaces for privacy-preserving audit | [crypto/zkp/](core/pkg/crypto/zkp/) |
+| **AIP Delegation Verification** | Agent Identity Protocol for MCP delegation chains | [mcp/aip.go](core/pkg/mcp/aip.go) |
+| **Continuous Delegation** | Time-bound, revocable, scope-narrowing delegation (AITH) | [identity/continuous_delegation.go](core/pkg/identity/continuous_delegation.go) |
+| **Replay Trace Comparison** | Compare governance decisions across sessions | [replay/compare.go](core/pkg/replay/compare.go) |
+| **DDIPE Doc Scanning** | Scans MCP tool docs for 7 executable payload patterns | [mcp/docscan.go](core/pkg/mcp/docscan.go) |
+| **MCPTox Benchmark** | Validates HELM blocks all MCPTox attack categories | [mcp/mcptox_test.go](core/pkg/mcp/mcptox_test.go) |
 | **Policy Linter** | Static analysis with 10 built-in rules (structure, security, performance) | [lint/](core/pkg/policy/lint/) |
 | **Conformance Testing** | L1/L2/L3 crucible suites with property-based fuzzing | [tests/conformance/](tests/conformance/) |
 | **GitHub Action** | CI/CD governance verification (OWASP scan, security scan, evidence verification) | [governance-scan/](.github/actions/governance-scan/) |
@@ -450,6 +490,11 @@ helm-oss/
 - [Threat Model](docs/THREAT_MODEL.md) -- Trust boundaries, adversary classes, STRIDE analysis
 - [Conformance](docs/CONFORMANCE.md) -- L1/L2/L3 gate definitions and test methodology
 - [Benchmarks](docs/BENCHMARKS.md) -- Reproducible latency measurements
+
+**Research & Specifications**
+- [Developer Pain Points Guide](docs/developer-guide/pain-points-solved.md) -- How HELM solves 77 developer challenges
+- [Determinism Whitepaper](docs/research/determinism-whitepaper.md) -- Separating governance from LLM nondeterminism
+- [Evidence Pack Specification v1.0](protocols/spec/evidence-pack-v1.md) -- Formal standard for evidence interchange
 
 **Compliance & Security**
 - [OWASP Agentic Top 10](docs/security/owasp-agentic-top10-coverage.md) -- 10/10 mapping with NIST/SOC2/EU AI Act cross-references

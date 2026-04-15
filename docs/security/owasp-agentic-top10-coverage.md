@@ -30,6 +30,7 @@ Formal Verification: TLA+ (`proofs/GuardianPipeline.tla`)
 
 **HELM Coverage:**
 - `core/pkg/threatscan/` — Threat scanner with multiple detection strategies
+- `core/pkg/threatscan/ensemble.go` — Ensemble scanner with multi-scanner voting for higher detection accuracy (per arXiv 2509.14285)
 - Guardian Gate 5 (Threat) — Scans all inputs before execution
 - `SourceChannelDirectInput` classification for user-provided content
 - `conform/adversarial/threat_scenarios.go` — Adversarial scenario test suite
@@ -45,6 +46,9 @@ Formal Verification: TLA+ (`proofs/GuardianPipeline.tla`)
 - `core/pkg/firewall/` — Network egress firewall (fail-closed: empty allowlist = deny-all)
 - Guardian Gate 4 (Egress) — All outbound connections gated
 - Tool schema validation in MCP gateway (`core/pkg/mcp/gateway.go`)
+- `core/pkg/mcp/docscan.go` — DDIPE documentation scanning (7 patterns) detects deceptive tool descriptions that hide malicious behavior
+- `core/pkg/pack/verify_capabilities.go` — SkillFortify static capability analysis at install time, blocks tools that exceed declared capabilities
+- `core/pkg/pack/provenance.go` — Ed25519 publisher signature verification prevents tampered or unsigned tool packages
 - Effect class ceilings prevent E4 (irreversible) by default
 - `owasp_threat_vectors.json` UC-013 tests `exec_shell` with `curl | bash`
 
@@ -86,6 +90,8 @@ Formal Verification: TLA+ (`proofs/GuardianPipeline.tla`)
 
 **HELM Coverage:**
 - `core/pkg/budget/` — Budget gate with spend ceilings
+- `core/pkg/budget/estimate.go` — Pre-execution cost estimation using moving averages, enabling proactive budget enforcement before tool calls execute
+- `core/pkg/effects/types.go` — CostBreakdown struct provides per-action cost attribution (compute, API, storage, network), enabling granular spend analysis
 - Token consumption tracking per session
 - Rate limiting in MCP gateway
 - P0 ceilings define absolute resource limits
@@ -118,6 +124,8 @@ Formal Verification: TLA+ (`proofs/GuardianPipeline.tla`)
 
 **HELM Coverage:**
 - MCP governance interceptor (`core/pkg/mcp/gateway.go`)
+- `core/pkg/pack/verify_capabilities.go` — SkillFortify capability verification ensures plugins only access declared capabilities; blocks undeclared filesystem, network, or shell access
+- `core/pkg/mcp/aip.go` — AIP delegation verification validates agent-to-agent delegation chains, preventing unauthorized privilege escalation across plugin boundaries
 - Connector policy enforcement (`core/pkg/connectors/`)
 - mTLS for service-to-service communication (`core/pkg/crypto/`)
 - Tool schema validation before execution
@@ -129,7 +137,9 @@ Formal Verification: TLA+ (`proofs/GuardianPipeline.tla`)
 
 **HELM Coverage:**
 - Evidence packs (`core/pkg/evidencepack/`) — JCS-canonicalized, SHA-256 hashed
+- `core/pkg/evidencepack/summary.go` — Constant-size evidence summaries (O(1) output regardless of pack size), enabling efficient integrity verification without reading entire packs
 - Proofgraph (`core/pkg/proofgraph/`) — Complete causal audit trail
+- `core/pkg/policy/suggest/` — Policy suggestion engine that analyzes decision history and recommends policy improvements (deny pattern grouping, missing rules, overly broad permits)
 - OpenTelemetry integration for metrics and traces
 - Receipt chain — Every decision produces a tamper-evident receipt
 - `make bench-report` — Performance and overhead monitoring
@@ -291,3 +301,29 @@ similar names (e.g., `github-mcp` vs `githuh-mcp`) are flagged for human review.
 
 - **arXiv 2604.07551** -- "MCP-DPT: Defense-Placement Taxonomy for Model Context Protocol"
   (systematic classification of defense layers in MCP architecture)
+
+## Supply Chain Security
+
+Per arXiv 2603.00195 (CVE-2026-25253) and arXiv 2604.08407 (LiteLLM attack, March 2026),
+supply chain attacks on agent skill ecosystems are the most critical emerging threat.
+
+| Defense | Implementation | Paper |
+|---------|---------------|-------|
+| Capability verification | `pack/verify_capabilities.go` (SkillFortify) | arXiv 2603.00195 |
+| Provenance verification | `pack/provenance.go` (Ed25519 publisher signatures) | arXiv 2604.08407 |
+| Documentation scanning | `mcp/docscan.go` (DDIPE detection, 7 patterns) | arXiv 2604.03081 |
+| Rug-pull detection | `mcp/rugpull.go` (SHA-256 fingerprinting) | arXiv 2603.22489 |
+| Typosquatting detection | `mcp/typosquat.go` (Levenshtein distance) | arXiv 2508.14925 |
+| Ensemble defense | `threatscan/ensemble.go` (multi-scanner voting) | arXiv 2509.14285 |
+
+## Memory Governance
+
+Per arXiv 2601.05504 (MINJA: 95% injection success) and arXiv 2512.16962
+(MemoryGraft: persistent compromise via experience retrieval), memory-based
+agents are highly vulnerable without explicit memory governance.
+
+| Defense | Implementation | Paper |
+|---------|---------------|-------|
+| Hash-protected entries | `kernel/memory_integrity.go` (SHA-256 per entry) | arXiv 2603.20357 |
+| Trust scoring | `kernel/memory_trust.go` (temporal decay + source trust) | arXiv 2601.05504 |
+| Injection detection | 5 pattern checks on memory content | arXiv 2601.05504 |

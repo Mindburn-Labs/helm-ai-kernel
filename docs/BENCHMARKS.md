@@ -155,6 +155,19 @@ HELM supports ML-DSA-65 (FIPS 204) post-quantum digital signatures via cloudflar
 
 Run with: `cd core && go test -bench=BenchmarkMLDSA -benchmem ./pkg/crypto/`
 
+## Research-Backed Components (April 2026)
+
+| Component | Estimated Overhead | Notes |
+|-----------|-------------------|-------|
+| Hybrid signing (Ed25519 + ML-DSA-65) | ~1.2ms | ML-DSA-65: 0.65ms sign + 0.53ms verify (per ePrint 2025/2025) |
+| Ensemble scanner (3 scanners, ANY) | ~1.5ms | 3x single scanner, parallelizable |
+| Memory integrity (SHA-256 per entry) | < 10µs | Single hash computation |
+| Evidence summary generation | < 100µs | O(n) manifest scan, O(1) output |
+| SkillFortify verification | < 50ms | Static byte-pattern scan, one-time at install |
+| DID generation | < 1ms | Base58 encoding + multicodec prefix |
+| Cost estimation | < 10µs | Moving average lookup |
+| Policy suggestion | < 5ms | O(n) event scan with grouping |
+
 ## Regression gating
 
 Run `make bench-report` on release candidates. If `hot_path_p99_us` exceeds 5000 (5ms), the release should be investigated. The 5ms threshold is a conservative regression gate — the expected range is 50–200µs depending on hardware.

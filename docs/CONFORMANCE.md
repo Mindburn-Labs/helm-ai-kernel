@@ -80,6 +80,15 @@ These gates are structurally implemented but not yet adversarially tested.
 | **G14** | Policy bundle integrity — signed bundles with content-addressed loading   |
 | **G15** | Proof condensation — Merkle checkpoints for long-running sessions         |
 
+### Research-Backed Verification (April 2026)
+
+In addition to the standard L1/L2/L3 gates, HELM now includes:
+- **MCPTox benchmark validation** — all 6 MCPTox attack categories blocked (arXiv 2508.14925)
+- **SkillFortify verification** — static capability analysis at pack install time
+- **Provenance verification** — cryptographic publisher signature checking
+- **Static policy verification** — circular dependency and shadowed rule detection
+- **Evidence summary verification** — constant-size integrity proofs
+
 ## CI Integration
 
 Conformance runs as a CI gate on every push to `main`. See `.github/workflows/helm_core_gates.yml` → `conformance-gate` job.

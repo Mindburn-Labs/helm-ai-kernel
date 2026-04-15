@@ -206,6 +206,45 @@ checkpoint, low-risk receipts can be replaced by inclusion proofs.
 
 ---
 
+## Research-Backed Extensions (April 2026)
+
+The following subsystems extend the core architecture with capabilities grounded in peer-reviewed research (58 arXiv papers, 2025-2026).
+
+### Cryptographic Identity & Trust
+- **Hybrid Signing** (`crypto/hybrid_signer.go`): Every receipt signed with both Ed25519 (classical) and ML-DSA-65 (post-quantum). Per ePrint 2025/2025, hybrid mode provides transitional quantum safety.
+- **W3C DID** (`identity/did/`): Agents are addressable via `did:key` identifiers (W3C DID Core 1.0). Per arXiv 2511.02841, DIDs with Verifiable Credentials are the emerging standard for agent identity.
+- **Continuous Delegation** (`identity/continuous_delegation.go`): Time-bound, revocable, scope-narrowing delegation with cascade revocation. Per arXiv 2604.07695 (AITH protocol).
+- **AIP Verification** (`mcp/aip.go`): Agent Identity Protocol verification for MCP delegation chains. Per arXiv 2603.24775.
+
+### Threat Detection & Defense
+- **Ensemble Scanner** (`threatscan/ensemble.go`): Multi-scanner voting with ANY/MAJORITY/UNANIMOUS strategies. Per arXiv 2509.14285, coordinated defense achieves 100% attack mitigation.
+- **DDIPE Scanner** (`mcp/docscan.go`): Detects Document-Driven Implicit Payload Execution in MCP tool documentation. Per arXiv 2604.03081.
+- **MCPTox Harness** (`mcp/mcptox_test.go`): Validates HELM blocks all MCPTox attack categories. Per arXiv 2508.14925 (o1-mini: 72.8% ASR unprotected).
+
+### Memory Governance
+- **Memory Integrity** (`kernel/memory_integrity.go`): SHA-256 hash-protected memory entries with tamper detection. Per arXiv 2603.20357.
+- **Memory Trust Scoring** (`kernel/memory_trust.go`): Temporal decay + source trust + injection pattern detection. Per arXiv 2601.05504 (MINJA: 95% injection success without protection).
+
+### Supply Chain Security
+- **SkillFortify** (`pack/verify_capabilities.go`): Static analysis proving skills cannot exceed declared capabilities. Per arXiv 2603.00195 (CVE-2026-25253).
+- **Provenance Verification** (`pack/provenance.go`): Cryptographic verification of pack publisher signatures. Per arXiv 2604.08407 (LiteLLM supply chain attack, March 2026).
+
+### Evidence & Compliance
+- **Constant-Size Summaries** (`evidencepack/summary.go`): O(1) evidence completeness proof. Per arXiv 2511.17118.
+- **Cost Attribution** (`effects/types.go`): Per-agent, per-department cost breakdown in ProofGraph.
+- **Cost Estimation** (`budget/estimate.go`): Pre-execution cost prediction from historical data.
+
+### Policy Intelligence
+- **Policy Suggestions** (`policy/suggest/`): Auto-generate policy rules from execution history. Per arXiv 2601.10440.
+- **Static Verification** (`policy/verify/`): Detect circular dependencies, shadowed rules, escalation loops. Per arXiv 2512.09758.
+- **Replay Comparison** (`replay/compare.go`): Compare governance decisions across sessions. Per arXiv 2601.00481.
+
+### Federation
+- **Federated Trust** (`mcp/trust.go`): Cross-organization reputation scoring with 0.7/0.3 local/federated blending. Per arXiv 2602.15055.
+- **ZK Compliance Proofs** (`crypto/zkp/`): Interfaces for zero-knowledge governance verification. Per arXiv 2512.14737. Full circuit implementation planned Q3 2026.
+
+---
+
 ## Normative References
 
 | Document                                                         | Scope                              |

@@ -18,7 +18,7 @@ prost = { version = "0.13", optional = true }
 prost-types = { version = "0.13", optional = true }
 
 [build-dependencies]
-tonic-build = { version = "0.14", optional = true }
+tonic-build = { version = "0.12", optional = true }
 
 [features]
 codegen = ["dep:tonic", "dep:prost", "dep:prost-types", "dep:tonic-build"]

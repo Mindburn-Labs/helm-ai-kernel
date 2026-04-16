@@ -6,6 +6,19 @@ All notable changes to HELM Core OSS are documented here.
 
 This release closes every docs-to-code claim gap in the repo, ships the first real connector set (GitHub, Slack, Linear) replacing stubs, introduces a zero-backend EvidencePack viewer at `try.mindburn.org`, and formalizes a six-axis Conformance Profile v1 with TLA+ invariants model-checked in CI. Standards-body submission drafts ship alongside the technical work.
 
+### Distribution — v0.4.0 published to
+
+| Registry | Coordinate | Install |
+|----------|------------|---------|
+| **PyPI** | `helm-sdk` + 6 framework adapters | `pip install helm-sdk helm-langchain helm-crewai helm-openai-agents helm-anthropic helm-autogen helm-semantic-kernel` |
+| **npm** | `@mindburn/helm` + 7 adapters + `@mindburn/helm-cli` | `npm install @mindburn/helm @mindburn/helm-anthropic @mindburn/helm-crewai-js @mindburn/helm-langchain @mindburn/helm-openai-agents @mindburn/helm-claude-code @mindburn/helm-semantic-kernel` |
+| **crates.io** | `helm-sdk` | `cargo add helm-sdk` |
+| **JitPack** (Java) | `com.github.Mindburn-Labs:helm-oss:v0.4.1-java` | See README Java install block |
+| **GitHub Pages** | Dashboard | https://try.mindburn.org (pending DNS CNAME) |
+| **Go** | `github.com/Mindburn-Labs/helm-oss/sdk/go` | `go get .../sdk/go@v0.4.0` |
+
+Maven Central publication is deferred pending namespace verification (requires DNS TXT challenge) and GPG key email verification; JitPack serves the Java SDK with equivalent consumer ergonomics in the meantime.
+
 ### Added — Truth-Gate + Packaging (Phase 0 + 1)
 - **Dashboard** at `dashboard/` — zero-backend, zero-telemetry EvidencePack viewer. Drop a `.tar` pack; parses TAR in-browser and verifies SHA-256 via Web Crypto. Hosted at `try.mindburn.org` via GitHub Pages.
 - **`helm shadow scan`** — static shadow-AI discovery CLI + package (`core/pkg/shadow/`). Detects agent SDK imports, MCP configs, hardcoded API keys. Distinguishes HELM-routed vs un-governed agent usage.

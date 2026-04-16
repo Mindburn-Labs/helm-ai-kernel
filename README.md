@@ -364,13 +364,13 @@ jobs:
 
 Generated from [api/openapi/helm.openapi.yaml](api/openapi/helm.openapi.yaml).
 
-| Language | Package | Version | Status | Path |
-|----------|---------|---------|--------|------|
-| TypeScript | `@mindburn/helm` | 0.3.0 | Runtime/client SDK | `sdk/ts/` |
-| TypeScript | `@mindburn/helm-cli` | 0.3.0 | Verifier CLI | `packages/mindburn-helm-cli/` |
-| Python | `helm-sdk` | 0.3.0 | In-repo | `sdk/python/` |
-| Go | `github.com/Mindburn-Labs/helm-oss/sdk/go` | 0.3.0 | In-repo | `sdk/go/` |
-| Rust | `helm-sdk` | 0.3.0 | Preview | `sdk/rust/` |
+| Language | Package | Version | Registry | Install |
+|----------|---------|---------|----------|---------|
+| TypeScript | `@mindburn/helm` + 7 adapters | 0.4.0 | [npm](https://www.npmjs.com/package/@mindburn/helm) | `npm install @mindburn/helm` |
+| Python | `helm-sdk` + 6 adapters | 0.4.0 | [PyPI](https://pypi.org/project/helm-sdk/) | `pip install helm-sdk` |
+| Go | `github.com/Mindburn-Labs/helm-oss/sdk/go` | 0.4.0 | In-repo | `go get github.com/Mindburn-Labs/helm-oss/sdk/go@v0.4.0` |
+| Rust | `helm-sdk` | 0.4.0 | [crates.io](https://crates.io/crates/helm-sdk) | `cargo add helm-sdk` |
+| Java | `com.github.Mindburn-Labs:helm-oss` | v0.4.1-java | [JitPack](https://jitpack.io/#Mindburn-Labs/helm-oss) | Add JitPack repo + `v0.4.1-java` dep (see below) |
 
 ```go
 c := helm.New("http://localhost:8080")
@@ -382,6 +382,25 @@ if apiErr, ok := err.(*helm.HelmApiError); ok {
     fmt.Println("Denied:", apiErr.ReasonCode) // DENY_TOOL_NOT_FOUND
 }
 ```
+
+Java install (Maven):
+
+```xml
+<repositories>
+  <repository>
+    <id>jitpack.io</id>
+    <url>https://jitpack.io</url>
+  </repository>
+</repositories>
+
+<dependency>
+  <groupId>com.github.Mindburn-Labs</groupId>
+  <artifactId>helm-oss</artifactId>
+  <version>v0.4.1-java</version>
+</dependency>
+```
+
+Gradle: `implementation("com.github.Mindburn-Labs:helm-oss:v0.4.1-java")` with `maven { url 'https://jitpack.io' }` in `repositories`.
 
 → [examples/](examples/) · [SDK docs](docs/sdks/00_INDEX.md)
 

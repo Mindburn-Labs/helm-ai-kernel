@@ -43,7 +43,7 @@ const apiVersion = "2022-11-28"
 
 // userAgent identifies HELM to GitHub's servers.
 // GitHub requires a non-empty User-Agent on all requests.
-const userAgent = "helm-oss/0.3.0 (+https://github.com/Mindburn-Labs/helm-oss)"
+const userAgent = "helm-oss/0.4.0 (+https://github.com/Mindburn-Labs/helm-oss)"
 
 // maxRetries bounds transient-failure retries. Non-retryable statuses
 // (4xx other than 429) fail immediately.

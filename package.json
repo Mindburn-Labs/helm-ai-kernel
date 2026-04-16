@@ -1,6 +1,6 @@
 {
   "name": "helm-oss",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Fail-closed execution firewall for AI agents",
   "directories": {

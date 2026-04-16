@@ -35,7 +35,7 @@ import (
 const slackAPIBase = "https://slack.com/api"
 
 // userAgent identifies HELM on requests to slack.com.
-const userAgent = "helm-oss/0.3.0 (+https://github.com/Mindburn-Labs/helm-oss)"
+const userAgent = "helm-oss/0.4.0 (+https://github.com/Mindburn-Labs/helm-oss)"
 
 // maxRetries bounds transient-failure retries for 5xx / 429.
 const maxRetries = 3

@@ -549,7 +549,7 @@ func TestOverheadReport(t *testing.T) {
 
 	// Write JSON report
 	report := map[string]any{
-		"helm_version": "0.3.0",
+		"helm_version": "0.4.0",
 		"timestamp":    time.Now().UTC().Format(time.RFC3339),
 		"go_version":   runtime.Version(),
 		"go_os":        runtime.GOOS,

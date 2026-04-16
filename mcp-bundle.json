@@ -1,7 +1,7 @@
 {
   "manifest_version": "1.0",
   "name": "helm-governance",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "HELM Execution Authority — fail-closed AI governance firewall with policy enforcement, Ed25519-signed receipts, and tamper-evident EvidencePack audit trail.",
   "author": {
     "name": "Mindburn Labs",
@@ -17,11 +17,20 @@
   "server": {
     "type": "binary",
     "command": "./helm",
-    "args": ["mcp", "serve", "--transport", "stdio"]
+    "args": [
+      "mcp",
+      "serve",
+      "--transport",
+      "stdio"
+    ]
   },
   "protocol": {
     "version": "2025-11-25",
-    "supported_versions": ["2025-11-25", "2025-06-18", "2025-03-26"]
+    "supported_versions": [
+      "2025-11-25",
+      "2025-06-18",
+      "2025-03-26"
+    ]
   },
   "capabilities": {
     "tools": {
@@ -36,18 +45,32 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "path": { "type": "string" }
+          "path": {
+            "type": "string"
+          }
         },
-        "required": ["path"]
+        "required": [
+          "path"
+        ]
       },
       "outputSchema": {
         "type": "object",
         "properties": {
-          "path": { "type": "string" },
-          "text": { "type": "string" },
-          "size_bytes": { "type": "integer" }
+          "path": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer"
+          }
         },
-        "required": ["path", "text", "size_bytes"]
+        "required": [
+          "path",
+          "text",
+          "size_bytes"
+        ]
       },
       "annotations": {
         "readOnlyHint": true,
@@ -61,19 +84,36 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "path": { "type": "string" },
-          "content": { "type": "string" }
+          "path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
         },
-        "required": ["path", "content"]
+        "required": [
+          "path",
+          "content"
+        ]
       },
       "outputSchema": {
         "type": "object",
         "properties": {
-          "path": { "type": "string" },
-          "bytes_written": { "type": "integer" },
-          "status": { "type": "string" }
+          "path": {
+            "type": "string"
+          },
+          "bytes_written": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          }
         },
-        "required": ["path", "bytes_written", "status"]
+        "required": [
+          "path",
+          "bytes_written",
+          "status"
+        ]
       },
       "annotations": {
         "destructiveHint": true,
@@ -95,7 +135,11 @@
       "delegation-scope-enforcement",
       "elicitation-support"
     ],
-    "verdicts": ["ALLOW", "DENY", "ESCALATE"]
+    "verdicts": [
+      "ALLOW",
+      "DENY",
+      "ESCALATE"
+    ]
   },
   "platform_overrides": {
     "win32": {

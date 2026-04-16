@@ -2,7 +2,7 @@
   "name": "helm-governance",
   "displayName": "HELM Governance",
   "description": "HELM AI Execution Firewall — Policy editing, ProofGraph visualization, receipt inspection, and compliance scoring for governed AI agents.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "mindburn-labs",
   "license": "Apache-2.0",
   "engines": {

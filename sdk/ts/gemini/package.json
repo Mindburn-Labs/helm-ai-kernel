@@ -1,6 +1,6 @@
 {
   "name": "@mindburn/helm-gemini",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "HELM governance adapter for Google Gemini — function calling governance",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -15,7 +15,7 @@
     "lint": "biome lint ."
   },
   "dependencies": {
-    "@mindburn/helm": "^0.3.0"
+    "@mindburn/helm": "^0.4.0"
   },
   "peerDependencies": {
     "@google/genai": ">=0.1.0"

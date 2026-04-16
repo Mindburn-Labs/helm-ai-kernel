@@ -35,7 +35,7 @@ import (
 const defaultBaseURL = "https://api.linear.app/graphql"
 
 // userAgent identifies HELM on requests to api.linear.app.
-const userAgent = "helm-oss/0.3.0 (+https://github.com/Mindburn-Labs/helm-oss)"
+const userAgent = "helm-oss/0.4.0 (+https://github.com/Mindburn-Labs/helm-oss)"
 
 // maxRetries bounds transient-failure retries.
 const maxRetries = 3

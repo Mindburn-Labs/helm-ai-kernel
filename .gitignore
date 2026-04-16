@@ -101,3 +101,7 @@ sdk/ts/src/*.d.ts
 # ─── SDK generator temp ──────────────────────────────────────────────────────
 .gen_tmp/
 helm.yaml
+
+# build artifacts
+*.tgz
+sdk/ts/*.tgz

@@ -21,12 +21,12 @@
     "format": "biome format --write ."
   },
   "dependencies": {
-    "@clack/prompts": "^0.10.0"
+    "@clack/prompts": "^1.2.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.1",
-    "@types/node": "^22.0.0",
-    "typescript": "^5.4.0",
+    "@types/node": "^25.6.0",
+    "typescript": "^6.0.3",
     "vitest": "^4.0.18"
   },
   "overrides": {

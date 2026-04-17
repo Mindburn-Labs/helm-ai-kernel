@@ -147,7 +147,7 @@ All HELM OTel attributes use the `helm.*` namespace:
 ```
 helm.decision.verdict        — ALLOW | DENY
 helm.decision.reason_code    — e.g., "PDP_DENY", "BUDGET_EXCEEDED"
-helm.decision.policy_ref     — e.g., "helm:v0.3.0"
+helm.decision.policy_ref     — e.g., "helm:v0.4.0"
 helm.decision.latency_ms     — Decision latency
 helm.effect.type             — E0-E4
 helm.effect.risk_tier        — LOW, MEDIUM, HIGH, CRITICAL

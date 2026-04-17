@@ -1,7 +1,7 @@
 # HELM vs OWASP Agentic Top 10 Coverage Matrix
 
 Generated: 2026-04-13
-HELM Version: 0.3.0
+HELM Version: 0.4.0
 Guardian Pipeline: 6-gate + output quarantine
 Formal Verification: TLA+ (`proofs/GuardianPipeline.tla`)
 

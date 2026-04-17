@@ -49,7 +49,7 @@ A `SessionAction` captures the minimum needed to reason about the path:
 
 ## How policies consume it
 
-### CEL policies (v0.3.0)
+### CEL policies (v0.4.0)
 
 CEL programs currently access session history through the `Context` map. Example — deny if the session has already exfiltrated a file and is now attempting a network call:
 

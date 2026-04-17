@@ -19,7 +19,7 @@ PROTECTED_DIRS=(
   core/pkg/verifier
   core/pkg/connectors/sandbox
   core/pkg/conformance
-  core/pkg/incubator/audit
+  core/pkg/audit
   core/pkg/integrations/receipts
   core/pkg/integrations/capgraph
   core/pkg/integrations/manifest

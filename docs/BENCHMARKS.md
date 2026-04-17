@@ -107,7 +107,7 @@ The claim is scoped: **75µs p99 on the governed allow hot path in the benchmark
 
 ```json
 {
-  "helm_version": "0.3.0",
+  "helm_version": "0.4.0",
   "go_version": "go1.24.0",
   "hot_path_p99_us": 75,
   "baseline_p99_us": 2,

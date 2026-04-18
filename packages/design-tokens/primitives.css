@@ -1,0 +1,555 @@
+/* ============================================================
+   @helm/design-tokens — Shared Component Primitives
+   ============================================================
+   Reusable low-level UI patterns consumed by all HELM apps.
+   These provide consistent interaction rules and visual rhythm
+   without enforcing layout or composition.
+   ============================================================ */
+
+/* ── Animations ── */
+
+@keyframes helm-fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes helm-slideInRight {
+    from {
+        transform: translateX(16px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes helm-slideInUp {
+    from {
+        transform: translateY(8px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes helm-slideInDown {
+    from {
+        transform: translateY(-8px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes helm-pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+}
+
+@keyframes helm-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.animate-fade-in {
+    animation: helm-fadeIn var(--duration-normal) var(--ease-out);
+}
+
+.animate-slide-right {
+    animation: helm-slideInRight var(--duration-normal) var(--ease-out);
+}
+
+.animate-slide-up {
+    animation: helm-slideInUp var(--duration-normal) var(--ease-out);
+}
+
+.animate-slide-down {
+    animation: helm-slideInDown var(--duration-normal) var(--ease-out);
+}
+
+.animate-pulse {
+    animation: helm-pulse 2s ease-in-out infinite;
+}
+
+/* ── Ghost Icon Button ──
+   32×32, used in headers & toolbars */
+.btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    transition: all var(--duration-fast) var(--ease-out);
+    flex-shrink: 0;
+}
+
+.btn-icon:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+}
+
+.btn-icon:active {
+    background: var(--color-bg-active);
+}
+
+.btn-icon:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* ── Small Action Button ──
+   Text + optional icon, used for inline actions */
+.btn-action {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-5);
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-sans);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+    white-space: nowrap;
+}
+
+.btn-action:hover {
+    background: var(--color-bg-hover);
+    border-color: var(--color-border-hover);
+    color: var(--color-text-primary);
+}
+
+.btn-action:active {
+    background: var(--color-bg-active);
+}
+
+.btn-action:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.btn-action--danger {
+    border-color: rgba(232, 84, 84, 0.3);
+    color: var(--color-status-error);
+}
+
+.btn-action--danger:hover {
+    background: rgba(232, 84, 84, 0.08);
+    border-color: rgba(232, 84, 84, 0.5);
+}
+
+.btn-action--primary {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.btn-action--primary:hover {
+    background: var(--color-accent-subtle);
+    color: var(--color-accent-hover);
+}
+
+.btn-action--success {
+    border-color: rgba(42, 174, 114, 0.4);
+    color: var(--color-status-active);
+}
+
+.btn-action--success:hover {
+    background: rgba(42, 174, 114, 0.08);
+}
+
+/* ── Standard Button ──
+   Full-width or inline primary/secondary action */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    min-height: 42px;
+    padding: var(--space-4) var(--space-8);
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+    border: 1px solid transparent;
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition:
+        transform var(--duration-instant) ease,
+        border-color var(--duration-fast) ease,
+        background var(--duration-fast) ease,
+        color var(--duration-fast) ease,
+        box-shadow var(--duration-fast) ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn-primary {
+    color: #111;
+    background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-strong) 100%);
+    box-shadow: 0 12px 28px rgba(96, 165, 250, 0.18);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, var(--color-accent-hover) 0%, var(--color-accent-strong) 100%);
+}
+
+.btn-secondary {
+    color: var(--color-text-primary);
+    background: var(--color-bg-surface-strong);
+    border-color: var(--color-border);
+}
+
+.btn-secondary:hover {
+    background: var(--color-bg-hover);
+    border-color: var(--color-border-hover);
+}
+
+.btn-ghost {
+    color: var(--color-text-secondary);
+    background: transparent;
+    border-color: transparent;
+}
+
+.btn-ghost:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-hover);
+}
+
+/* ── Badge ──
+   Inline status indicator */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 2px var(--space-4);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    border-radius: var(--radius-full);
+    line-height: 1.4;
+}
+
+.badge--draft {
+    background: rgba(138, 138, 136, 0.12);
+    color: var(--color-status-draft);
+    border: 1px dashed var(--color-border-draft);
+}
+
+.badge--active {
+    background: rgba(42, 174, 114, 0.12);
+    color: var(--color-status-active);
+}
+
+.badge--error {
+    background: rgba(232, 84, 84, 0.12);
+    color: var(--color-status-error);
+}
+
+.badge--warning {
+    background: rgba(224, 160, 64, 0.12);
+    color: var(--color-status-warning);
+}
+
+.badge--info {
+    background: rgba(78, 170, 220, 0.12);
+    color: var(--color-status-info);
+}
+
+/* ── Chip ──
+   Clickable filter / selector pill */
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-5);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    border-radius: var(--radius-full);
+    background: var(--color-bg-surface-strong);
+    border: 1px solid transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+}
+
+.chip:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--color-text-primary);
+}
+
+.chip--active {
+    background: var(--color-accent-subtle);
+    border-color: rgba(96, 165, 250, 0.25);
+    color: var(--color-accent);
+}
+
+.chip--canvas {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: var(--color-border-canvas);
+    color: var(--color-text-canvas-secondary);
+}
+
+.chip--canvas:hover {
+    background: rgba(0, 0, 0, 0.08);
+    color: var(--color-text-canvas);
+}
+
+/* ── Governance Ceremony Surfaces ── */
+.ceremony-panel {
+    background: var(--color-governance-bg);
+    border: 1px solid var(--color-governance-border);
+    border-radius: var(--radius-lg);
+}
+
+.ceremony-highlight {
+    background: var(--color-governance-ceremony);
+    border: 1px solid rgba(224, 160, 64, 0.2);
+    border-radius: var(--radius-md);
+    padding: var(--space-6) var(--space-8);
+}
+
+/* ── Hash Text ── */
+.hash-text {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-hash);
+    cursor: pointer;
+    user-select: all;
+    letter-spacing: -0.02em;
+}
+
+.hash-text:hover {
+    color: var(--color-accent);
+    text-decoration: underline;
+}
+
+/* ── Card ──
+   Glassmorphism card — shared across ops panels and portal */
+.card {
+    padding: var(--space-10);
+    border-radius: var(--radius-2xl);
+    border: 1px solid var(--color-border);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 42%),
+        rgba(255, 255, 255, 0.03);
+    color: var(--color-text-primary);
+    box-shadow: var(--shadow-elevated);
+}
+
+/* ── Surface Card ──
+   Standard content card used in forms and content areas */
+.surface-card {
+    padding: var(--space-12);
+    border-radius: var(--radius-3xl);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 40%),
+        var(--color-bg-surface);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-elevated);
+}
+
+/* ── Spinner ── */
+.spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: helm-spin 0.8s linear infinite;
+}
+
+/* ── Eyebrow / Kicker ──
+   Uppercase label used above headings */
+.eyebrow {
+    display: inline-flex;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-bold);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-wide);
+    color: var(--color-accent-strong);
+}
+
+/* ── Divider ── */
+.divider {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    margin: var(--space-12) 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-wide);
+}
+
+.divider::before,
+.divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--color-border);
+}
+
+/* ── Inline Alert ── */
+.inline-alert {
+    padding: var(--space-6) var(--space-8);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-8);
+    font-size: var(--font-size-md);
+}
+
+.inline-alert--error {
+    background: rgba(255, 107, 107, 0.1);
+    border: 1px solid rgba(255, 107, 107, 0.24);
+    color: #f5a89d;
+}
+
+.inline-alert--success {
+    background: rgba(61, 213, 152, 0.12);
+    border: 1px solid rgba(61, 213, 152, 0.24);
+    color: #8fae86;
+}
+
+.inline-alert--warning {
+    background: rgba(224, 160, 64, 0.1);
+    border: 1px solid rgba(224, 160, 64, 0.24);
+    color: #d4a24c;
+}
+
+.inline-alert--info {
+    background: rgba(90, 168, 212, 0.1);
+    border: 1px solid rgba(90, 168, 212, 0.24);
+    color: #8aa4c8;
+}
+
+/* ── Empty State ──
+   Used when a surface has no content */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-6);
+    min-height: 220px;
+    padding: var(--space-16);
+    text-align: center;
+    color: var(--color-text-muted);
+}
+
+.empty-state__icon {
+    opacity: 0.4;
+}
+
+.empty-state__title {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-secondary);
+}
+
+.empty-state__description {
+    font-size: var(--font-size-md);
+    max-width: 36ch;
+    line-height: var(--line-height-relaxed);
+}
+
+/* ── Skeleton ──
+   Loading placeholder animation */
+@keyframes helm-shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+.skeleton {
+    border-radius: var(--radius-md);
+    background: linear-gradient(90deg,
+            rgba(255, 255, 255, 0.04) 25%,
+            rgba(255, 255, 255, 0.08) 50%,
+            rgba(255, 255, 255, 0.04) 75%);
+    background-size: 200% 100%;
+    animation: helm-shimmer 1.5s infinite;
+}
+
+.skeleton--text {
+    height: 14px;
+    width: 100%;
+}
+
+.skeleton--title {
+    height: 20px;
+    width: 60%;
+}
+
+.skeleton--avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-full);
+}
+
+.skeleton--card {
+    height: 120px;
+    width: 100%;
+}
+
+/* ── Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+
+    .animate-fade-in,
+    .animate-slide-right,
+    .animate-slide-up,
+    .animate-slide-down,
+    .animate-pulse {
+        animation: none;
+    }
+
+    .skeleton {
+        animation: none;
+        background: rgba(255, 255, 255, 0.06);
+    }
+
+    .btn:hover,
+    .btn:active {
+        transform: none;
+    }
+}

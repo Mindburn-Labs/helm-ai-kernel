@@ -18,6 +18,7 @@ import (
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel/ui"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/memory"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/replay"
+	researchapi "github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/api"
 	trustregistry "github.com/Mindburn-Labs/helm-oss/core/pkg/trust/registry"
 	mamahttp "github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/http"
 )
@@ -354,6 +355,29 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	// --- MAMA HTTP Engine ---
 	mamaServer := mamahttp.NewServer(svc.MamaRegistry, svc.MamaMission)
 	mamaServer.RegisterRoutes(mux)
+
+	// --- Research Runtime (read plane + write plane when env-gated). ---
+	// Conductor and Publication are nil unless HELM_RESEARCH_ENABLED=1 +
+	// OPENROUTER_API_KEY are set; in that case the publish handler guards
+	// with a 503 response. See docs/ai/adr-researchruntime-cmd-helm-mount.md.
+	if svc.ResearchMissions != nil {
+		researchapi.MountResearchRuntime(mux, researchapi.Config{
+			Missions:     svc.ResearchMissions,
+			Tasks:        svc.ResearchTasks,
+			Sources:      svc.ResearchSources,
+			Drafts:       svc.ResearchDrafts,
+			Publications: svc.ResearchPublications,
+			Feed:         svc.ResearchFeed,
+			Overrides:    svc.ResearchOverrides,
+			Conductor:    svc.ResearchConductor,
+			Publication:  svc.ResearchPublication,
+		})
+		if svc.ResearchConductor != nil {
+			log.Println("[helm] routes: researchruntime API mounted (read + write plane)")
+		} else {
+			log.Println("[helm] routes: researchruntime API mounted (read plane only)")
+		}
+	}
 
 	// Suppress unused variable
 	_ = ctx

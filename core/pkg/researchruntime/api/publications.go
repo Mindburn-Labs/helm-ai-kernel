@@ -37,9 +37,17 @@ func (r *Router) getPublication(w http.ResponseWriter, req *http.Request) {
 func (r *Router) publishPublication(w http.ResponseWriter, req *http.Request) {
 	_ = req.PathValue("id")
 
+	// Fail-soft when mounted without a Publication service (read-plane
+	// deploys per adr-researchruntime-cmd-helm-mount.md). Return 503 so
+	// callers see a specific reason rather than a generic 500/nil-panic.
+	if r.cfg.Publication == nil {
+		writeError(w, http.StatusServiceUnavailable, "publication service not wired")
+		return
+	}
+
 	var body struct {
-		DraftID  string                          `json:"draft_id"`
-		Receipt  *researchruntime.PromotionReceipt `json:"promotion_receipt"`
+		DraftID string                            `json:"draft_id"`
+		Receipt *researchruntime.PromotionReceipt `json:"promotion_receipt"`
 	}
 	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())

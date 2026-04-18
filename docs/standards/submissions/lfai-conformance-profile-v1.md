@@ -108,7 +108,7 @@ Primary contact: conformance@mindburn.org · Alternate: research@mindburn.org
 
 ## Appendix — proof artifact inventory
 
-All artifacts are current in the HELM OSS repo as of 2026-04-15 commit tag `0.3.0`:
+All artifacts are current in the HELM OSS repo as of 2026-04-15 commit tag `0.4.0`:
 
 | Artifact | Path | License |
 |----------|------|---------|

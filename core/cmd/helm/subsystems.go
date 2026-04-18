@@ -14,13 +14,13 @@ import (
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
+	mamahttp "github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/http"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel/ui"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/memory"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/replay"
 	researchapi "github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/api"
 	trustregistry "github.com/Mindburn-Labs/helm-oss/core/pkg/trust/registry"
-	mamahttp "github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/http"
 )
 
 // RegisterSubsystemRoutes registers all subsystem API routes on the given mux.
@@ -100,6 +100,89 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 
 		// Delegate to the real upstream proxy handler
 		api.HandleOpenAIProxy(w, r)
+	})
+
+	// --- Guardian Evaluate (generic governance, not tied to chat) ---
+	// Accepts { principal, action, resource, context? } and runs the
+	// same guardian pipeline used by /v1/chat/completions. Emits the
+	// receipt headers on every response + a JSON body summarizing the
+	// decision. Returns 403 on DENY / ESCALATE, 200 on ALLOW.
+	//
+	// This is the endpoint HELM Pilot's HelmClient.evaluate() expects
+	// (gated on HELM_EVALUATE_ENABLED=1 on the client side).
+	mux.HandleFunc("/api/v1/guardian/evaluate", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		if svc.Guardian == nil {
+			api.WriteInternal(w, nil)
+			return
+		}
+
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			api.WriteBadRequest(w, "Failed to read request body")
+			return
+		}
+
+		var body struct {
+			Principal string                 `json:"principal"`
+			Action    string                 `json:"action"`
+			Resource  string                 `json:"resource"`
+			Context   map[string]interface{} `json:"context"`
+		}
+		if err := json.Unmarshal(bodyBytes, &body); err != nil {
+			api.WriteBadRequest(w, "Invalid JSON body")
+			return
+		}
+		if body.Action == "" || body.Resource == "" {
+			api.WriteBadRequest(w, "action and resource are required")
+			return
+		}
+
+		principal := body.Principal
+		if principal == "" {
+			principal = r.Header.Get("X-Helm-Principal")
+		}
+		if principal == "" {
+			principal = "anonymous"
+		}
+
+		req := guardian.DecisionRequest{
+			Principal: principal,
+			Action:    body.Action,
+			Resource:  body.Resource,
+			Context:   body.Context,
+		}
+		decision, err := svc.Guardian.EvaluateDecision(r.Context(), req)
+		if err != nil {
+			api.WriteInternal(w, err)
+			return
+		}
+
+		// Emit the same receipt-header set used by the chat completions
+		// path so the Pilot's parseReceiptHeaders works unchanged.
+		w.Header().Set("X-Helm-Decision-ID", decision.ID)
+		w.Header().Set("X-Helm-Verdict", decision.Verdict)
+		w.Header().Set("X-Helm-Policy-Version", decision.PolicyVersion)
+		if decision.PolicyDecisionHash != "" {
+			w.Header().Set("X-Helm-Decision-Hash", decision.PolicyDecisionHash)
+		}
+
+		if contracts.Verdict(decision.Verdict) != contracts.VerdictAllow {
+			api.WriteError(w, http.StatusForbidden, "Governance Blocked", decision.Reason)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"decisionId":    decision.ID,
+			"verdict":       decision.Verdict,
+			"policyVersion": decision.PolicyVersion,
+			"reason":        decision.Reason,
+		})
 	})
 
 	// --- Evidence Export ---
@@ -313,8 +396,8 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	mux.HandleFunc("/api/v1/governance/edge/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"mode":          svc.EdgeAssistant.Config.Mode,
-			"fallback":      svc.EdgeAssistant.Fallback.Strategy,
+			"mode":           svc.EdgeAssistant.Config.Mode,
+			"fallback":       svc.EdgeAssistant.Fallback.Strategy,
 			"max_latency_ms": svc.EdgeAssistant.Config.MaxLatencyMs,
 		})
 	})

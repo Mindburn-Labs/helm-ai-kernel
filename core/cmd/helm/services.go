@@ -27,8 +27,25 @@ import (
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/merkle"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/observability"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/pack"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/agents"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/agents/editor"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/agents/harvester"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/agents/planner"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/agents/publisher"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/agents/synthesizer"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/agents/verifier"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/agents/webscout"
+	researchruntime "github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/conductor"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/connectors/browser"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/connectors/publish"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/connectors/search"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/publication"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/sources"
+	researchstore "github.com/Mindburn-Labs/helm-oss/core/pkg/researchruntime/store"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/runtime/obligation"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/runtime/sandbox"
+	objstorefs "github.com/Mindburn-Labs/helm-oss/core/pkg/store/objstore/fs"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/simulation"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/command"
 	mamaruntime "github.com/Mindburn-Labs/helm-oss/core/pkg/experimental/mama/runtime"
@@ -83,6 +100,18 @@ type Services struct {
 	// --- MAMA Cognitive Runtime ---
 	MamaRegistry *command.Registry
 	MamaMission  *mamaruntime.MissionState
+
+	// --- Research Runtime (read + write plane). ---
+	ResearchMissions     researchstore.MissionStore
+	ResearchTasks        researchstore.TaskStore
+	ResearchSources      researchstore.SourceStore
+	ResearchDrafts       researchstore.DraftStore
+	ResearchPublications researchstore.PublicationStore
+	ResearchFeed         researchstore.FeedStore
+	ResearchOverrides    researchstore.OverrideStore
+	ResearchBlobs        researchstore.BlobStore
+	ResearchConductor    *conductor.Service
+	ResearchPublication  *publication.Service
 }
 
 // NewServices initializes all subsystems.
@@ -230,6 +259,82 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 		Agent: mamaruntime.AgentState{ActiveRoles: []string{"Explore", "WorldModel"}},
 	}
 	logger.Info("subsystem ready", "component", " MAMA Canonical Runtime initialized")
+
+	// --- 19. Research Runtime stores (always-on when db is available). ---
+	if db != nil {
+		s.ResearchMissions = researchstore.NewPostgresMissionStore(db)
+		s.ResearchTasks = researchstore.NewPostgresTaskStore(db)
+		s.ResearchSources = researchstore.NewPostgresSourceStore(db)
+		s.ResearchDrafts = researchstore.NewPostgresDraftStore(db)
+		s.ResearchPublications = researchstore.NewPostgresPublicationStore(db)
+		s.ResearchFeed = researchstore.NewPostgresFeedStore(db)
+		s.ResearchOverrides = researchstore.NewPostgresOverrideStore(db)
+		logger.Info("subsystem ready", "component", " Research Runtime stores initialized (read plane)")
+	} else {
+		logger.Info("subsystem skipped", "component", " Research Runtime stores (db handle is nil)")
+	}
+
+	// --- 20. Research Runtime write plane (conductor + publication). ---
+	// Env-gated: requires HELM_RESEARCH_ENABLED=1 + OPENROUTER_API_KEY.
+	// Without these, read-plane stores stay mounted but the conductor/publication
+	// services remain nil and the write handlers (publish) return 503.
+	if db != nil && os.Getenv("HELM_RESEARCH_ENABLED") == "1" {
+		openRouterKey := os.Getenv("OPENROUTER_API_KEY")
+		if openRouterKey == "" {
+			logger.Warn("Research Runtime write plane skipped — OPENROUTER_API_KEY unset")
+		} else {
+			dataDir := os.Getenv("HELM_RESEARCH_DATA_DIR")
+			if dataDir == "" {
+				dataDir = "data/research"
+			}
+			fsStore, fsErr := objstorefs.New(dataDir)
+			if fsErr != nil {
+				logger.Warn("Research Runtime write plane skipped — fs blob store init", "error", fsErr)
+			} else {
+				s.ResearchBlobs = researchstore.NewMinIOBlobStore(fsStore)
+
+				primaryModel := os.Getenv("HELM_RESEARCH_PRIMARY_MODEL")
+				if primaryModel == "" {
+					primaryModel = "anthropic/claude-sonnet-4.6"
+				}
+				searchModel := os.Getenv("HELM_RESEARCH_SEARCH_MODEL")
+				if searchModel == "" {
+					searchModel = "perplexity/llama-3.1-sonar-large-128k-online"
+				}
+				llm := agents.NewOpenRouterLLM(openRouterKey, primaryModel)
+				searchClient := search.NewOpenRouterClient(openRouterKey, searchModel)
+				fetcher := browser.NewFetcher(30, 10*1024*1024)
+				sourceRegistry := sources.NewRegistry()
+
+				registryPublisher := publish.NewRegistryPublisher(s.ResearchPublications, s.ResearchBlobs)
+
+				agentMap := map[researchruntime.WorkerRole]agents.Agent{
+					researchruntime.WorkerPlanner:         planner.New(llm),
+					researchruntime.WorkerWebScout:        webscout.New(searchClient, fetcher, sourceRegistry),
+					researchruntime.WorkerSourceHarvester: harvester.New(fetcher, s.ResearchBlobs),
+					researchruntime.WorkerFactVerifier:    verifier.New(llm),
+					researchruntime.WorkerSynthesizer:     synthesizer.New(llm),
+					researchruntime.WorkerEditor:          editor.New(llm),
+					researchruntime.WorkerPublisher:       publisher.New(registryPublisher),
+				}
+
+				s.ResearchConductor = conductor.New(conductor.Config{
+					Missions: s.ResearchMissions,
+					Tasks:    s.ResearchTasks,
+					Feed:     s.ResearchFeed,
+					Blobs:    s.ResearchBlobs,
+					Agents:   agentMap,
+				})
+				s.ResearchPublication = publication.New(
+					s.ResearchDrafts,
+					s.ResearchPublications,
+					s.ResearchFeed,
+					registryPublisher,
+				)
+				logger.Info("subsystem ready", "component", " Research Runtime write plane initialized (conductor + publication)")
+			}
+		}
+	}
 
 	logger.Info("subsystem ready", "component", " All subsystems initialized successfully")
 	return s, nil

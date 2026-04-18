@@ -1,0 +1,78 @@
+name: label-gate
+
+# Enforces that PRs touching protected paths or public wedge surface carry the
+# `needs-ultrareview` label before they can merge. Runs fast; no build steps.
+# See docs/ai/ultrareview-policy.md in the monorepo root.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute changed files
+        id: changed
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          files=$(git diff --name-only "$base" "$head")
+          printf 'files<<EOF\n%s\nEOF\n' "$files" >> "$GITHUB_OUTPUT"
+
+      - name: Detect protected-path touch
+        id: protected
+        env:
+          FILES: ${{ steps.changed.outputs.files }}
+        run: |
+          set -euo pipefail
+          touched_protected=false
+          while IFS= read -r f; do
+            [[ -z "$f" ]] && continue
+            case "$f" in
+              core/pkg/kernel/*|\
+              core/pkg/crypto/*|\
+              core/pkg/guardian/*|\
+              core/pkg/proofgraph/*|\
+              core/pkg/evidencepack/*|\
+              core/pkg/contracts/*|\
+              core/pkg/policy/*|\
+              core/pkg/authority/*|\
+              protocols/*|\
+              reference_packs/*|\
+              tests/conformance/*|\
+              fixtures/*|\
+              proofs/*|\
+              README.md|\
+              docs/index.md|\
+              docs/overview.md|\
+              docs/getting-started.md)
+                touched_protected=true
+                ;;
+            esac
+          done <<< "$FILES"
+          echo "touched=$touched_protected" >> "$GITHUB_OUTPUT"
+
+      - name: Require needs-ultrareview label
+        if: steps.protected.outputs.touched == 'true'
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels) }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$LABELS" | grep -q '"name": *"needs-ultrareview"'; then
+            echo "::error::This PR touches protected paths or public wedge surface."
+            echo "::error::Add the 'needs-ultrareview' label and run /ultrareview on the branch."
+            echo "::error::See docs/ai/ultrareview-policy.md in the monorepo root."
+            exit 1
+          fi
+          echo "needs-ultrareview label present — ok"

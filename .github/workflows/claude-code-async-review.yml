@@ -1,0 +1,50 @@
+name: Claude Code async review
+
+# Runs /review (or /ultrareview when the needs-ultrareview label is set) via
+# the Claude Code GitHub Action. Opus 4.7, effort=high.
+# See docs/ai/ultrareview-policy.md in the monorepo root.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve review mode
+        id: mode
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels) }}
+        run: |
+          set -euo pipefail
+          if printf '%s' "$LABELS" | grep -q '"name": *"needs-ultrareview"'; then
+            echo "command=/ultrareview" >> "$GITHUB_OUTPUT"
+          else
+            echo "command=/review" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run Claude Code review
+        uses: anthropics/claude-code-action@v1
+        with:
+          api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Invoke the HELM PR preflight workflow on this PR.
+
+            1. Run the project's `helm-pr-preflight` skill scoped to helm-oss/.
+            2. If the PR has the `needs-ultrareview` label, run `/ultrareview` (remote sandbox, parallel reviewer fleet) instead of `/review`.
+            3. Post the consolidated verdict as a PR comment. Block merge via a review-request-changes comment on any CRITICAL finding, failing test, or kernel-guardian escalation.
+
+            Mode: ${{ steps.mode.outputs.command }}
+          claude_args: "--model claude-opus-4-7 --effort high"

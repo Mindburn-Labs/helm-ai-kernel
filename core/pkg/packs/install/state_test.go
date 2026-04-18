@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
 )
 
 func TestMemoryStore_CRUD(t *testing.T) {
@@ -85,32 +83,32 @@ func TestMemoryStore_PutValidates(t *testing.T) {
 }
 
 func TestChannelClassification(t *testing.T) {
-	if !IsKnownChannel(contracts.PackChannelCore) {
+	if !IsKnownChannel(PackChannelCore) {
 		t.Error("core: IsKnownChannel = false")
 	}
-	if !IsKnownChannel(contracts.PackChannelCommunity) {
+	if !IsKnownChannel(PackChannelCommunity) {
 		t.Error("community: IsKnownChannel = false")
 	}
-	if !IsKnownChannel(contracts.PackChannelTeams) {
+	if !IsKnownChannel(PackChannelTeams) {
 		t.Error("teams: IsKnownChannel = false")
 	}
-	if !IsKnownChannel(contracts.PackChannelEnterprise) {
+	if !IsKnownChannel(PackChannelEnterprise) {
 		t.Error("enterprise: IsKnownChannel = false")
 	}
 	if IsKnownChannel("") {
 		t.Error("empty: IsKnownChannel = true")
 	}
 
-	if ok, reason := IsInstallableByOSS(contracts.PackChannelCore); !ok || reason != "" {
+	if ok, reason := IsInstallableByOSS(PackChannelCore); !ok || reason != "" {
 		t.Errorf("core eligibility = (%v,%q), want (true,\"\")", ok, reason)
 	}
-	if ok, _ := IsInstallableByOSS(contracts.PackChannelCommunity); !ok {
+	if ok, _ := IsInstallableByOSS(PackChannelCommunity); !ok {
 		t.Error("community: IsInstallableByOSS = false")
 	}
-	if ok, reason := IsInstallableByOSS(contracts.PackChannelTeams); ok || reason == "" {
+	if ok, reason := IsInstallableByOSS(PackChannelTeams); ok || reason == "" {
 		t.Errorf("teams eligibility = (%v,%q), want (false, non-empty)", ok, reason)
 	}
-	if ok, _ := IsInstallableByOSS(contracts.PackChannelEnterprise); ok {
+	if ok, _ := IsInstallableByOSS(PackChannelEnterprise); ok {
 		t.Error("enterprise: IsInstallableByOSS = true")
 	}
 }
@@ -130,7 +128,7 @@ func TestPlan_CoreChannel(t *testing.T) {
 func TestPlan_CommunityChannel(t *testing.T) {
 	runner := NewRunner(NewMemoryStore())
 	manifest := sampleManifest()
-	manifest.Channel = contracts.PackChannelCommunity
+	manifest.Channel = PackChannelCommunity
 	plan, err := runner.Plan(context.Background(), manifest.PackID, manifest, ActionInstall, Options{})
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -143,7 +141,7 @@ func TestPlan_CommunityChannel(t *testing.T) {
 func TestPlan_TeamsChannel(t *testing.T) {
 	runner := NewRunner(NewMemoryStore())
 	manifest := sampleManifest()
-	manifest.Channel = contracts.PackChannelTeams
+	manifest.Channel = PackChannelTeams
 	plan, err := runner.Plan(context.Background(), manifest.PackID, manifest, ActionInstall, Options{})
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -164,7 +162,7 @@ func TestPlan_TeamsChannel(t *testing.T) {
 func TestPlan_EnterpriseChannel(t *testing.T) {
 	runner := NewRunner(NewMemoryStore())
 	manifest := sampleManifest()
-	manifest.Channel = contracts.PackChannelEnterprise
+	manifest.Channel = PackChannelEnterprise
 	plan, err := runner.Plan(context.Background(), manifest.PackID, manifest, ActionInstall, Options{})
 	if err != nil {
 		t.Fatalf("Plan: %v", err)

@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
 )
 
 func TestVerify_ManifestHash(t *testing.T) {
@@ -30,7 +28,7 @@ func TestVerify_ManifestHash(t *testing.T) {
 
 func TestVerify_Signature(t *testing.T) {
 	manifest := sampleManifest()
-	manifest.Signatures = []contracts.PackSignature{
+	manifest.Signatures = []PackSignature{
 		{SignerID: "helm-core", Algorithm: "sha256", Signature: "redacted"},
 	}
 	data := canonicalManifestBytes(manifest)
@@ -53,13 +51,13 @@ func TestVerify_Signature(t *testing.T) {
 func TestVerify_MissingFields(t *testing.T) {
 	cases := []struct {
 		name    string
-		mutate  func(*contracts.PackManifestV2)
+		mutate  func(*PackManifestV2)
 		wantErr string
 	}{
-		{"missing pack_id", func(m *contracts.PackManifestV2) { m.PackID = "" }, "pack_id"},
-		{"missing name", func(m *contracts.PackManifestV2) { m.Name = "" }, "name"},
-		{"missing version", func(m *contracts.PackManifestV2) { m.Version = "" }, "version"},
-		{"missing channel", func(m *contracts.PackManifestV2) { m.Channel = "" }, "channel"},
+		{"missing pack_id", func(m *PackManifestV2) { m.PackID = "" }, "pack_id"},
+		{"missing name", func(m *PackManifestV2) { m.Name = "" }, "name"},
+		{"missing version", func(m *PackManifestV2) { m.Version = "" }, "version"},
+		{"missing channel", func(m *PackManifestV2) { m.Channel = "" }, "channel"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -99,7 +97,7 @@ secrets:
 	if manifest.PackID != "example.compliance/hipaa" {
 		t.Errorf("PackID = %q", manifest.PackID)
 	}
-	if manifest.Channel != contracts.PackChannelCore {
+	if manifest.Channel != PackChannelCore {
 		t.Errorf("Channel = %q, want core", manifest.Channel)
 	}
 	if len(manifest.ExtensionPoints) != 2 {
@@ -119,7 +117,7 @@ func TestParseManifest_JSON(t *testing.T) {
 	if manifest.PackID != "example.compliance/hipaa" {
 		t.Errorf("PackID = %q", manifest.PackID)
 	}
-	if manifest.Channel != contracts.PackChannelCore {
+	if manifest.Channel != PackChannelCore {
 		t.Errorf("Channel = %q, want core", manifest.Channel)
 	}
 }
@@ -130,7 +128,7 @@ func TestParseManifest_ChannelDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseManifest: %v", err)
 	}
-	if manifest.Channel != contracts.PackChannelCommunity {
+	if manifest.Channel != PackChannelCommunity {
 		t.Errorf("default Channel = %q, want community", manifest.Channel)
 	}
 }

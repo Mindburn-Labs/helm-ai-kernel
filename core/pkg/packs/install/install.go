@@ -14,8 +14,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
 )
 
 // Action identifiers for pack lifecycle operations.
@@ -48,8 +46,8 @@ type Options struct {
 type InstallResult struct {
 	Action        string
 	PackID        string
-	Plan          contracts.PackInstallPlan
-	InstalledPack *contracts.InstalledPack
+	Plan          PackInstallPlan
+	InstalledPack *InstalledPack
 	State         *State
 	Receipt       *Receipt
 }
@@ -66,7 +64,7 @@ func NewRunner(store Store) *Runner {
 
 // Plan returns the canonical install plan for (packID, manifest, action)
 // without mutating state.
-func (r *Runner) Plan(ctx context.Context, packID string, manifest contracts.PackManifestV2, action string, opts Options) (contracts.PackInstallPlan, error) {
+func (r *Runner) Plan(ctx context.Context, packID string, manifest PackManifestV2, action string, opts Options) (PackInstallPlan, error) {
 	_ = ctx
 	state, _ := r.store.Get(packID)
 	return buildPlan(packID, manifest, state, action, opts), nil
@@ -75,7 +73,7 @@ func (r *Runner) Plan(ctx context.Context, packID string, manifest contracts.Pac
 // Install applies the manifest (install or upgrade, chosen from existing
 // state) and returns the resulting InstallResult. Ineligible plans return
 // ErrIneligible with plan populated for caller diagnostics.
-func (r *Runner) Install(ctx context.Context, packID string, manifest contracts.PackManifestV2, opts Options) (*InstallResult, error) {
+func (r *Runner) Install(ctx context.Context, packID string, manifest PackManifestV2, opts Options) (*InstallResult, error) {
 	_ = ctx
 	state, _ := r.store.Get(packID)
 	action := ActionInstall
@@ -114,7 +112,7 @@ func (r *Runner) Install(ctx context.Context, packID string, manifest contracts.
 	}
 
 	result.State = state
-	result.InstalledPack = &contracts.InstalledPack{
+	result.InstalledPack = &InstalledPack{
 		PackID:      state.PackID,
 		Version:     state.Version,
 		Status:      state.Status,
@@ -165,10 +163,10 @@ func (r *Runner) Rollback(ctx context.Context, packID string) (*Receipt, error) 
 }
 
 // IsKnownChannel reports whether ch is one of the four declared channels.
-func IsKnownChannel(ch contracts.PackChannel) bool {
+func IsKnownChannel(ch PackChannel) bool {
 	switch ch {
-	case contracts.PackChannelCore, contracts.PackChannelCommunity,
-		contracts.PackChannelTeams, contracts.PackChannelEnterprise:
+	case PackChannelCore, PackChannelCommunity,
+		PackChannelTeams, PackChannelEnterprise:
 		return true
 	default:
 		return false
@@ -178,13 +176,13 @@ func IsKnownChannel(ch contracts.PackChannel) bool {
 // IsInstallableByOSS reports whether ch is within the OSS install boundary
 // and, if not, returns a short human-readable reason suitable for
 // IneligibleReasons.
-func IsInstallableByOSS(ch contracts.PackChannel) (bool, string) {
+func IsInstallableByOSS(ch PackChannel) (bool, string) {
 	switch ch {
-	case contracts.PackChannelCore, contracts.PackChannelCommunity:
+	case PackChannelCore, PackChannelCommunity:
 		return true, ""
-	case contracts.PackChannelTeams:
+	case PackChannelTeams:
 		return false, "channel teams requires the commercial control plane"
-	case contracts.PackChannelEnterprise:
+	case PackChannelEnterprise:
 		return false, "channel enterprise requires the commercial control plane"
 	default:
 		return false, fmt.Sprintf("unknown channel %q", string(ch))
@@ -192,7 +190,7 @@ func IsInstallableByOSS(ch contracts.PackChannel) (bool, string) {
 }
 
 // buildPlan is the deterministic plan builder used by Plan and Install.
-func buildPlan(packID string, manifest contracts.PackManifestV2, state *State, action string, opts Options) contracts.PackInstallPlan {
+func buildPlan(packID string, manifest PackManifestV2, state *State, action string, opts Options) PackInstallPlan {
 	reasons := make([]string, 0)
 	if ok, reason := IsInstallableByOSS(manifest.Channel); !ok {
 		reasons = append(reasons, reason)
@@ -214,7 +212,7 @@ func buildPlan(packID string, manifest contracts.PackManifestV2, state *State, a
 		requiresUpgrade = state.Version != "" && state.Version != manifest.Version
 	}
 
-	return contracts.PackInstallPlan{
+	return PackInstallPlan{
 		PackID:            packID,
 		Version:           manifest.Version,
 		Action:            action,

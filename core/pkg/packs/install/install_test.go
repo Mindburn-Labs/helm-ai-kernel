@@ -4,16 +4,14 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
 )
 
-func sampleManifest() contracts.PackManifestV2 {
-	return contracts.PackManifestV2{
+func sampleManifest() PackManifestV2 {
+	return PackManifestV2{
 		PackID:         "example.compliance/hipaa",
 		Name:           "HIPAA Guardrails",
 		Version:        "0.1.0",
-		Channel:        contracts.PackChannelCore,
+		Channel:        PackChannelCore,
 		MinimumEdition: "oss",
 	}
 }
@@ -136,7 +134,7 @@ func TestInstall_Uninstall(t *testing.T) {
 func TestInstall_MissingSecret(t *testing.T) {
 	runner := NewRunner(NewMemoryStore())
 	manifest := sampleManifest()
-	manifest.Secrets = []contracts.PackSecret{
+	manifest.Secrets = []PackSecret{
 		{Name: "EXAMPLE_TOKEN", Description: "redacted", Required: true},
 	}
 

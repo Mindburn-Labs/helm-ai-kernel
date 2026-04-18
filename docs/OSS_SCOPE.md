@@ -77,6 +77,23 @@ non-TCB supporting infrastructure:
 | `protocols/spec/`               | RFC-style protocol specification         | ✅ Active |
 | `protocols/conformance/v1/owasp/` | Machine-readable OWASP threat vectors  | ✅ Active |
 
+### Product Surfaces (local-first — boundary re-split in progress)
+
+The OSS boundary is expanding beyond the execution kernel to include the full
+local-first product surface: Studio shell, design tokens, Genesis Local
+ceremony engine, community pack install, and the evidence/dispute viewers.
+Migration is tracked by `/.claude/plans/dynamic-orbiting-crayon.md`; see
+`apps/helm-studio/MIGRATION_STATUS.md` for the concrete adaptations that
+divide the OSS and commercial Studio builds (main.tsx + vite.config.ts).
+
+| Surface                      | Purpose                                               | Status                 |
+| ---------------------------- | ----------------------------------------------------- | ---------------------- |
+| `apps/helm-studio/`          | Generic Studio shell + extension-contract foundation  | 🛠 Staged Phase 2a    |
+| `packages/design-tokens/`    | Mindburn DS v1.0 palette mirrored from `mindburn/`    | ✅ Active Phase 2b    |
+| `tools/dispute-viewer/`      | Offline HTML viewer for verify/conform reports        | ✅ Active Phase 3c    |
+| `core/pkg/genesis/ceremony/` | VGL state machine + in-memory store                   | ✅ Active Phase 3a    |
+| `core/pkg/packs/install/`    | Core + community pack Runner (Plan/Install/Rollback)  | ✅ Active Phase 4a    |
+
 ## Removed from TCB (Enterprise)
 
 The following packages were removed to minimize the attack surface:
@@ -137,14 +154,15 @@ OSS includes:
 
 OSS does not include:
 
-- Surface Design Studio (policy UI)
-- Policy rollout / staging / shadow enforcement
-- Certified connector program
-- Managed federation
-- Pack distribution and entitlements
-- Compliance intelligence workflows
-- Mission Control / Studio operations surfaces
-- Enterprise evidence retention / legal hold
-- Managed control plane and team operations
+- Hosted multi-tenant control plane (shared Genesis sessions, team workspaces)
+- Enterprise identity (SSO, SCIM, SAML, directory federation)
+- Legal hold, long-horizon retention, regulator-facing audit views
+- Org-scale rollout, staged/shadow policy deployment across fleets
+- Managed federation and vendor-mesh across organizations
+- Premium / certified pack ecosystem channels (teams, enterprise)
+- Billing, seat management, usage-based metering
 
-The invariant is simple: OSS must stay fully useful on its own. The commercial layer monetizes shared organizational control around the kernel, not artificial runtime crippleware.
+The invariant is simple: OSS ships a beautiful local-first product — kernel
+plus Studio shell plus Genesis Local plus community packs plus evidence /
+replay / dispute viewers. The commercial layer monetizes shared
+organizational control around that product, not artificial runtime crippleware.

@@ -1,0 +1,320 @@
+/* ============================================================
+   @helm/design-tokens — Canonical Token Surface
+   ============================================================
+   Single source of truth for spacing, radii, typography, elevation,
+   borders, semantic colors, motion, z-index, and layout dimensions.
+
+   Apps import this file and may override accent colors at the
+   app level via `:root` re-declarations.
+   ============================================================ */
+
+:root {
+    /* ── Spacing Scale ──
+     Use var(--space-*) for all margin, padding, and gap values.
+     Based on a 4px grid with calibrated stops. */
+    --space-0: 0px;
+    --space-1: 2px;
+    --space-2: 4px;
+    --space-3: 6px;
+    --space-4: 8px;
+    --space-5: 10px;
+    --space-6: 12px;
+    --space-8: 16px;
+    --space-10: 20px;
+    --space-12: 24px;
+    --space-16: 32px;
+    --space-20: 40px;
+    --space-24: 48px;
+    --space-32: 64px;
+    --space-40: 80px;
+
+    /* ── Radii ── */
+    --radius-xs: 4px;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-2xl: 22px;
+    --radius-3xl: 28px;
+    --radius-full: 9999px;
+
+    /* ── Typography — Families (Mindburn DS v1.0) ── */
+    --font-sans: 'Inter Tight', 'Inter', -apple-system, 'Helvetica Neue', sans-serif;
+    --font-display: 'Fraunces', 'Iowan Old Style', 'Tiempos Headline', Georgia, serif;
+    --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+
+    /* ── Typography — Scale ── */
+    --font-size-2xs: 0.625rem;
+    /* 10px */
+    --font-size-xs: 0.6875rem;
+    /* 11px */
+    --font-size-sm: 0.75rem;
+    /* 12px */
+    --font-size-base: 0.8125rem;
+    /* 13px */
+    --font-size-md: 0.875rem;
+    /* 14px */
+    --font-size-lg: 1rem;
+    /* 16px */
+    --font-size-xl: 1.25rem;
+    /* 20px */
+    --font-size-2xl: 1.5rem;
+    /* 24px */
+    --font-size-3xl: 1.85rem;
+    /* ~30px */
+    --font-size-4xl: 2.25rem;
+    /* 36px */
+
+    /* ── Typography — Weights ── */
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+
+    /* ── Typography — Line Heights ── */
+    --line-height-tight: 1.15;
+    --line-height-snug: 1.3;
+    --line-height-normal: 1.5;
+    --line-height-relaxed: 1.6;
+
+    /* ── Typography — Letter Spacing ── */
+    --letter-spacing-tight: -0.04em;
+    --letter-spacing-snug: -0.03em;
+    --letter-spacing-normal: 0;
+    --letter-spacing-wide: 0.08em;
+
+    /* ── Mindburn Design System v1.0 — Parchment / Graphite palette ──
+     Source of truth: mindburn/app/styles/design-system.css.
+     Hex values below mirror that file; changes must cross-apply.
+     Ember (#c63a22) is reserved for BLOCK / danger signals. */
+
+    /* Brand-constant ramps */
+    --ember-50: #fdecea;
+    --ember-100: #fbd6d0;
+    --ember-200: #f5a89d;
+    --ember-500: #c63a22;
+    --ember-600: #9d2a14;
+    --sage-50: #eef3ed;
+    --sage-300: #8fae86;
+    --sage-500: #4f7548;
+    --amber-50: #f6ecd6;
+    --amber-500: #a5761c;
+    --ink-blue-50: #e9edf3;
+    --ink-blue-500: #2e4a74;
+
+    /* ── Surfaces — Graphite (Default) ── */
+    --color-bg-primary: #13120f;
+    --color-bg-secondary: #1a1814;
+    --color-bg-tertiary: #201e19;
+    --color-bg-elevated: #272520;
+    --color-bg-hover: rgba(240, 234, 217, 0.05);
+    --color-bg-active: rgba(240, 234, 217, 0.08);
+    --color-bg-surface: rgba(240, 234, 217, 0.03);
+    --color-bg-surface-strong: rgba(240, 234, 217, 0.06);
+
+    /* ── Canvas (light-on-dark infinite canvases) — Parchment surface ── */
+    --color-bg-canvas: #f4efe6;
+    --color-bg-canvas-grid: #e4ddcc;
+    --color-bg-node: #faf6ed;
+    --color-text-canvas: #1a1814;
+    --color-text-canvas-secondary: #6b665b;
+
+    /* ── Text — Ink on Graphite ── */
+    --color-text-primary: #f0ead9;
+    --color-text-secondary: #c9c2b0;
+    --color-text-tertiary: #8f897a;
+    --color-text-muted: #8f897a;
+    --color-text-hash: #5c574c;
+
+    /* ── Accent — Ember (signal colour, reserved for BLOCK) ── */
+    --color-accent: #e86a51;
+    --color-accent-hover: var(--ember-200);
+    --color-accent-subtle: rgba(232, 106, 81, 0.12);
+    --color-accent-strong: #e86a51;
+
+    /* ── Legacy pair — Ink-Blue (trust) + Ember (evidence) ── */
+    --color-accent-1: #8aa4c8;
+    --color-accent-2: #e86a51;
+
+    /* ── Governance ── */
+    --color-governance-accent: var(--color-accent-1);
+    --color-governance-accent-hover: var(--ink-blue-500);
+    --color-governance-accent-subtle: rgba(138, 164, 200, 0.12);
+    --color-governance-bg: #162036;
+    --color-governance-border: rgba(138, 164, 200, 0.2);
+    --color-governance-ceremony: rgba(138, 164, 200, 0.06);
+
+    /* ── Status / Semantic (Sage / Amber / Ember / Ink-Blue) ── */
+    --color-status-active: var(--sage-300);
+    --color-status-warning: #d4a24c;
+    --color-status-error: #e86a51;
+    --color-status-info: #8aa4c8;
+    --color-status-draft: #8f897a;
+    --color-success: var(--sage-300);
+    --color-error: #e86a51;
+    --color-warning: #d4a24c;
+
+    /* ── Node Category Accents (mapped onto DS ramps) ── */
+    --color-node-org: #8aa4c8;
+    --color-node-identity: #8aa4c8;
+    --color-node-ai: var(--sage-300);
+    --color-node-infra: var(--sage-300);
+    --color-node-gov: #8aa4c8;
+    --color-node-meta: #d4a24c;
+
+    /* ── Borders ── */
+    --color-border: rgba(240, 234, 217, 0.08);
+    --color-border-hover: rgba(240, 234, 217, 0.14);
+    --color-border-strong: rgba(240, 234, 217, 0.2);
+    --color-border-canvas: rgba(26, 24, 20, 0.08);
+    --color-border-node: rgba(26, 24, 20, 0.06);
+    --color-border-draft: rgba(143, 137, 122, 0.4);
+
+    /* ── Shadows / Elevation ── */
+    --shadow-none: none;
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+    --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.18);
+    --shadow-2xl: 0 28px 80px rgba(0, 0, 0, 0.35);
+    --shadow-glow: none;
+    /* Semantic aliases */
+    --shadow-node: var(--shadow-sm);
+    --shadow-elevated: var(--shadow-md);
+    --shadow-panel: var(--shadow-lg);
+    --shadow-chip: 0 1px 4px rgba(0, 0, 0, 0.06);
+
+    /* ── Layout Dimensions ── */
+    --topbar-height: 48px;
+    --statusbar-height: 32px;
+    --toolrail-width: 44px;
+    --indexstrip-width: 240px;
+    --promptbar-height: 80px;
+    --panel-width: 420px;
+    --sidebar-width: 280px;
+    --cockpit-width: 360px;
+
+    /* ── Navigation ── */
+    --nav-width-expanded: 220px;
+    --nav-width-collapsed: 56px;
+    --context-lens-width: 320px;
+
+    /* ── Motion ── */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --duration-instant: 100ms;
+    --duration-fast: 150ms;
+    --duration-normal: 250ms;
+    --duration-slow: 350ms;
+    --duration-slower: 500ms;
+
+    /* ── Z-Index Scale ── */
+    --z-base: 0;
+    --z-canvas: 0;
+    --z-toolrail: 10;
+    --z-chips: 20;
+    --z-statusbar: 30;
+    --z-topbar: 40;
+    --z-panel: 50;
+    --z-dropdown: 55;
+    --z-overlay: 60;
+    --z-modal: 70;
+    --z-command-palette: 80;
+    --z-toast: 90;
+
+    /* ── Breakpoints (as reference — use JS constants for media queries) ── */
+    /* --bp-mobile: 390px;  */
+    /* --bp-tablet: 768px;  */
+    /* --bp-laptop: 1024px; */
+    /* --bp-desktop: 1280px; */
+    /* --bp-wide: 1440px;   */
+}
+
+/* ============================================================
+   Dark Theme — Canvas (matches shell in dark mode)
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --color-bg-canvas: #1a1814;
+        --color-bg-canvas-grid: #201e19;
+        --color-bg-node: #272520;
+        --color-text-canvas: #f0ead9;
+        --color-text-canvas-secondary: #c9c2b0;
+        --color-border-canvas: rgba(255, 255, 255, 0.06);
+        --color-border-node: rgba(255, 255, 255, 0.05);
+        --shadow-node: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.15);
+        --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.25);
+        --shadow-chip: 0 1px 4px rgba(0, 0, 0, 0.2);
+    }
+}
+
+[data-theme="dark"] {
+    --color-bg-canvas: #1a1814;
+    --color-bg-canvas-grid: #201e19;
+    --color-bg-node: #272520;
+    --color-text-canvas: #f0ead9;
+    --color-text-canvas-secondary: #c9c2b0;
+    --color-border-canvas: rgba(255, 255, 255, 0.06);
+    --color-border-node: rgba(255, 255, 255, 0.05);
+    --shadow-node: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.15);
+    --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.25);
+    --shadow-chip: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* ============================================================
+   Light Theme — Parchment
+   Mirrors mindburn/app/styles/design-system.css [data-theme="light"]
+   ============================================================ */
+[data-theme="light"] {
+    --color-bg-primary: #f4efe6;
+    --color-bg-secondary: #ebe5d8;
+    --color-bg-tertiary: #e4ddcc;
+    --color-bg-elevated: #faf6ed;
+    --color-bg-canvas: #faf6ed;
+    --color-bg-canvas-grid: #e4ddcc;
+    --color-bg-node: #ffffff;
+    --color-bg-hover: rgba(26, 24, 20, 0.03);
+    --color-bg-active: rgba(26, 24, 20, 0.05);
+    --color-bg-surface: rgba(26, 24, 20, 0.02);
+    --color-bg-surface-strong: rgba(26, 24, 20, 0.04);
+
+    --color-text-primary: #1a1814;
+    --color-text-secondary: #3d3a33;
+    --color-text-tertiary: #6b665b;
+    --color-text-canvas: #1a1814;
+    --color-text-canvas-secondary: #6b665b;
+    --color-text-hash: #968f80;
+
+    --color-accent: var(--ember-500);
+    --color-accent-hover: var(--ember-600);
+    --color-accent-subtle: rgba(198, 58, 34, 0.08);
+
+    --color-accent-1: var(--ink-blue-500);
+    --color-accent-2: var(--ember-500);
+
+    --color-governance-accent: var(--ink-blue-500);
+    --color-governance-accent-hover: #1f3558;
+    --color-governance-accent-subtle: rgba(46, 74, 116, 0.08);
+    --color-governance-bg: var(--ink-blue-50);
+    --color-governance-border: rgba(46, 74, 116, 0.15);
+    --color-governance-ceremony: rgba(46, 74, 116, 0.06);
+
+    --color-status-active: var(--sage-500);
+    --color-status-warning: var(--amber-500);
+    --color-status-error: var(--ember-500);
+    --color-status-info: var(--ink-blue-500);
+    --color-status-draft: #968f80;
+
+    --color-border: rgba(26, 24, 20, 0.08);
+    --color-border-hover: rgba(26, 24, 20, 0.14);
+    --color-border-canvas: rgba(26, 24, 20, 0.06);
+    --color-border-node: rgba(26, 24, 20, 0.04);
+    --color-border-draft: rgba(150, 143, 128, 0.3);
+
+    --shadow-node: 0 1px 3px rgba(26, 24, 20, 0.06), 0 1px 2px rgba(26, 24, 20, 0.04);
+    --shadow-elevated: 0 4px 12px rgba(26, 24, 20, 0.08);
+    --shadow-panel: 0 8px 32px rgba(26, 24, 20, 0.06);
+    --shadow-chip: 0 1px 4px rgba(26, 24, 20, 0.06);
+}

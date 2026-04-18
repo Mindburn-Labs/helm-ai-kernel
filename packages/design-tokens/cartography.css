@@ -1,0 +1,152 @@
+/* ── HELM Jurisdiction Cartography — Design Tokens ────────────
+   §7 of the HELM Visual Ontology.
+   Organization compilation in space. */
+
+:root {
+  /* ── Territory Type Colors ──────────────────────────────── */
+  --carto-country:        hsl(210 60% 50%);
+  --carto-country-subtle: hsl(210 60% 50% / 0.35);
+  --carto-state:          hsl(200 50% 55%);
+  --carto-state-subtle:   hsl(200 50% 55% / 0.30);
+  --carto-province:       hsl(190 45% 52%);
+  --carto-economic:       hsl(45 70% 55%);
+  --carto-economic-subtle: hsl(45 70% 55% / 0.35);
+  --carto-regulated:      hsl(0 65% 55%);
+  --carto-regulated-subtle: hsl(0 65% 55% / 0.30);
+  --carto-cloud:          hsl(260 55% 60%);
+  --carto-cloud-subtle:   hsl(260 55% 60% / 0.30);
+  --carto-airgap:         hsl(0 0% 40%);
+  --carto-airgap-subtle:  hsl(0 0% 40% / 0.35);
+  --carto-facility:       hsl(155 50% 50%);
+  --carto-facility-subtle: hsl(155 50% 50% / 0.30);
+  --carto-customer:       hsl(30 60% 55%);
+
+  /* ── Corridor Stroke Patterns ───────────────────────────── */
+  --carto-corridor-data:     hsl(210 70% 60%);
+  --carto-corridor-logistics: hsl(45 65% 55%);
+  --carto-corridor-payment:  hsl(140 55% 50%);
+  --carto-corridor-approval: hsl(280 50% 60%);
+  --carto-corridor-model:    hsl(340 55% 55%);
+  --carto-corridor-blocked:  hsl(0 70% 55%);
+  --carto-corridor-width:    2px;
+  --carto-corridor-dash:     6 4;
+  --carto-corridor-blocked-dash: 3 3;
+
+  /* ── Regulatory Pressure Heat Gradient ──────────────────── */
+  --carto-heat-0: hsl(210 40% 90%);   /* calm */
+  --carto-heat-1: hsl(180 50% 75%);   /* low */
+  --carto-heat-2: hsl(60 60% 65%);    /* moderate */
+  --carto-heat-3: hsl(35 70% 55%);    /* elevated */
+  --carto-heat-4: hsl(15 75% 50%);    /* high */
+  --carto-heat-5: hsl(0 80% 45%);     /* critical */
+
+  /* ── Deployment State Colors ────────────────────────────── */
+  --carto-deploy-live:     hsl(140 60% 45%);
+  --carto-deploy-canary:   hsl(45 70% 55%);
+  --carto-deploy-pending:  hsl(210 50% 60%);
+  --carto-deploy-blocked:  hsl(0 65% 50%);
+  --carto-deploy-divergent: hsl(280 55% 55%);
+  --carto-deploy-stale:    hsl(0 0% 55%);
+  --carto-deploy-rollback: hsl(310 50% 50%);
+
+  /* ── Map Mode Accents ───────────────────────────────────── */
+  --carto-mode-sovereignty:  hsl(210 60% 50%);
+  --carto-mode-policy:       hsl(270 50% 55%);
+  --carto-mode-residency:    hsl(180 55% 48%);
+  --carto-mode-integration:  hsl(35 65% 50%);
+  --carto-mode-regulatory:   hsl(0 60% 50%);
+  --carto-mode-deployment:   hsl(140 55% 45%);
+  --carto-mode-physical:     hsl(155 45% 50%);
+
+  /* ── Overlay Sheet Opacity ──────────────────────────────── */
+  --carto-overlay-alpha: 0.25;
+  --carto-overlay-border-alpha: 0.5;
+  --carto-overlay-hover-alpha: 0.4;
+
+  /* ── Zoom Level Breakpoints ─────────────────────────────── */
+  --carto-zoom-global-max: 3;
+  --carto-zoom-regional-min: 3;
+  --carto-zoom-regional-max: 8;
+  --carto-zoom-site-min: 8;
+
+  /* ── Map Chrome ─────────────────────────────────────────── */
+  --carto-bg: var(--color-bg-primary);
+  --carto-border: var(--color-border);
+  --carto-border-faint: hsl(210 20% 40% / 0.2);
+  --carto-text: var(--color-text-primary);
+  --carto-text-muted: var(--color-text-tertiary);
+  --carto-inspector-width: 360px;
+  --carto-rail-width: 230px;
+
+  /* ── Ocean & Graticule ───────────────────────────────────── */
+  --carto-ocean-center: hsl(215 45% 14%);
+  --carto-ocean-edge:   hsl(215 50% 10%);
+  --carto-graticule:    hsl(210 30% 35% / 0.25);
+  --carto-unregistered: hsl(210 15% 20% / 0.4);
+
+  /* ── Territory Markers ───────────────────────────────────── */
+  --carto-marker-fill:   hsl(210 60% 60%);
+  --carto-marker-stroke: hsl(210 30% 95% / 0.6);
+
+  /* ── Motion ─────────────────────────────────────────────── */
+  --carto-transition: 200ms ease;
+  --carto-zoom-transition: 400ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+/* ── Data Attributes ──────────────────────────────────────── */
+
+[data-territory-type="country"]       { fill: var(--carto-country-subtle); stroke: var(--carto-country); }
+[data-territory-type="state"]         { fill: var(--carto-state-subtle); stroke: var(--carto-state); }
+[data-territory-type="economic-zone"] { fill: var(--carto-economic-subtle); stroke: var(--carto-economic); }
+[data-territory-type="regulated-site"] { fill: var(--carto-regulated-subtle); stroke: var(--carto-regulated); }
+[data-territory-type="cloud-region"]  { fill: var(--carto-cloud-subtle); stroke: var(--carto-cloud); }
+[data-territory-type="air-gap"]       { fill: var(--carto-airgap-subtle); stroke: var(--carto-airgap); }
+[data-territory-type="facility"]      { fill: var(--carto-facility-subtle); stroke: var(--carto-facility); }
+
+[data-corridor-status="open"]       { stroke: var(--carto-corridor-data); }
+[data-corridor-status="restricted"] { stroke: var(--carto-corridor-data); stroke-dasharray: var(--carto-corridor-dash); }
+[data-corridor-status="blocked"]    { stroke: var(--carto-corridor-blocked); stroke-dasharray: var(--carto-corridor-blocked-dash); }
+
+[data-deploy="live"]      { fill: var(--carto-deploy-live); }
+[data-deploy="canary"]    { fill: var(--carto-deploy-canary); }
+[data-deploy="pending"]   { fill: var(--carto-deploy-pending); }
+[data-deploy="blocked"]   { fill: var(--carto-deploy-blocked); }
+[data-deploy="divergent"] { fill: var(--carto-deploy-divergent); }
+[data-deploy="stale"]     { fill: var(--carto-deploy-stale); }
+[data-deploy="rollback"]  { fill: var(--carto-deploy-rollback); }
+
+/* ── Keyframe Animations ──────────────────────────────────── */
+
+@keyframes cartoPulse {
+  0%, 100% { opacity: var(--carto-overlay-alpha); }
+  50%      { opacity: var(--carto-overlay-hover-alpha); }
+}
+
+@keyframes cartoCorridorFlow {
+  from { stroke-dashoffset: 20; }
+  to   { stroke-dashoffset: 0; }
+}
+
+@keyframes cartoRegionFadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Light Theme Overrides ────────────────────────────────── */
+
+[data-theme="light"] {
+  --carto-heat-0: hsl(210 30% 95%);
+  --carto-heat-1: hsl(180 40% 85%);
+  --carto-heat-2: hsl(55 50% 78%);
+  --carto-heat-3: hsl(35 60% 70%);
+  --carto-heat-4: hsl(15 65% 60%);
+  --carto-heat-5: hsl(0 70% 50%);
+
+  --carto-ocean-center: hsl(210 30% 92%);
+  --carto-ocean-edge:   hsl(210 25% 88%);
+  --carto-graticule:    hsl(210 20% 70% / 0.3);
+  --carto-unregistered: hsl(210 10% 85% / 0.6);
+  --carto-border-faint: hsl(210 15% 75% / 0.3);
+  --carto-marker-fill:   hsl(210 55% 50%);
+  --carto-marker-stroke: hsl(210 30% 30% / 0.4);
+}

@@ -1,0 +1,369 @@
+/* ============================================================
+   HELM Fabric — Visual Ontology Token Surface
+   ============================================================
+   Semantic tokens for the HELM Fabric visual operating language.
+   Six primitive families, five layers, six signature views.
+
+   Extends @helm/design-tokens/tokens.css — import AFTER base tokens.
+   ============================================================ */
+
+:root {
+
+  /* ────────────────────────────────────────────────────────────
+     §9 — Fabric Color Families
+     Color encodes operational truth, not decoration.
+     ──────────────────────────────────────────────────────────── */
+
+  /* ── Blue: compiled structure, attested, trusted runtime ── */
+  --fabric-blue:        var(--color-accent);
+  --fabric-blue-subtle: rgba(96, 165, 250, 0.10);
+  --fabric-blue-strong: #8aa4c8;
+
+  /* ── Green: healthy flow, conformance, safe execution ── */
+  --fabric-green:        var(--sage-500);
+  --fabric-green-subtle: rgba(61, 170, 114, 0.10);
+  --fabric-green-strong: var(--sage-300);
+
+  /* ── Amber: pending, bounded risk, attention, constrained ── */
+  --fabric-amber:        #d4a24c;
+  --fabric-amber-subtle: rgba(224, 160, 64, 0.10);
+  --fabric-amber-strong: #d4a24c;
+
+  /* ── Red: deny, freeze, divergence, breach, incident ── */
+  --fabric-red:        #e86a51;
+  --fabric-red-subtle: rgba(224, 84, 84, 0.10);
+  --fabric-red-strong: #e86a51;
+
+  /* ── Mutation: mutation, shadow, simulation, compile preview ── */
+  --fabric-mutation:        var(--sage-300);
+  --fabric-mutation-subtle: rgba(94, 234, 212, 0.10);
+  --fabric-mutation-strong: var(--sage-300);
+
+  /* ── Silver: proof density, attestation, replayability, lineage ── */
+  --fabric-silver:        #c9c2b0;
+  --fabric-silver-subtle: rgba(192, 192, 188, 0.08);
+  --fabric-silver-strong: #f0ead9;
+
+  /* ── Gray: dormant, archived, not currently live ── */
+  --fabric-gray:        var(--color-text-tertiary);
+  --fabric-gray-subtle: rgba(104, 104, 100, 0.10);
+  --fabric-gray-strong: #c9c2b0;
+
+
+  /* ────────────────────────────────────────────────────────────
+     §7 — State Color Mapping
+     Maps the 22-state vocabulary to Fabric colors.
+     ──────────────────────────────────────────────────────────── */
+
+  --fabric-state-dormant:            var(--fabric-gray);
+  --fabric-state-active:             var(--fabric-blue);
+  --fabric-state-constrained:        var(--fabric-amber);
+  --fabric-state-bounded:            var(--fabric-amber);
+  --fabric-state-queued:             var(--fabric-blue-subtle);
+  --fabric-state-pending:            var(--fabric-amber);
+  --fabric-state-degraded:           var(--fabric-red);
+  --fabric-state-divergent:          var(--fabric-red-strong);
+  --fabric-state-frozen:             var(--fabric-red);
+  --fabric-state-quarantined:        var(--fabric-red);
+  --fabric-state-mutating:           var(--fabric-mutation);
+  --fabric-state-simulated:          var(--fabric-mutation);
+  --fabric-state-shadow:             var(--fabric-mutation-subtle);
+  --fabric-state-recovering:         var(--fabric-green);
+  --fabric-state-attested:           var(--fabric-silver-strong);
+  --fabric-state-unproven:           var(--fabric-gray-subtle);
+
+  /* Physical-world states */
+  --fabric-state-safe-hold:          var(--fabric-amber-strong);
+  --fabric-state-emergency-stop:     var(--fabric-red-strong);
+  --fabric-state-hotl-routed:        var(--fabric-amber);
+  --fabric-state-sensor-uncertain:   var(--fabric-amber-subtle);
+  --fabric-state-lineage-stale:      var(--fabric-gray);
+  --fabric-state-deployment-blocked: var(--fabric-red);
+
+
+  /* ────────────────────────────────────────────────────────────
+     §10 — Anchor Geometry Tokens
+     Shape families per Anchor class.
+     ──────────────────────────────────────────────────────────── */
+
+  /* Rounded structural forms — units, teams, divisions */
+  --fabric-anchor-structural-radius: var(--radius-lg);
+  --fabric-anchor-structural-border: 1.5px solid var(--fabric-blue-subtle);
+
+  /* Capsule/lozenge — roles, principals */
+  --fabric-anchor-principal-radius: var(--radius-full);
+  --fabric-anchor-principal-border: 1.5px solid var(--fabric-blue);
+
+  /* Machine — systems, connectors, services */
+  --fabric-anchor-machine-radius: var(--radius-xs);
+  --fabric-anchor-machine-border: 1.5px solid var(--fabric-green-subtle);
+
+  /* Zone — sites, physical regions */
+  --fabric-anchor-zone-radius: var(--radius-xl);
+  --fabric-anchor-zone-border: 2px dashed var(--fabric-amber-subtle);
+
+  /* Ring/gate — approvals, ceremonies */
+  --fabric-anchor-gate-radius: var(--radius-full);
+  --fabric-anchor-gate-border: 2px solid var(--fabric-amber);
+
+  /* Shard — incidents, scars */
+  --fabric-anchor-scar-radius: var(--radius-xs);
+  --fabric-anchor-scar-border: 1.5px solid var(--fabric-red-subtle);
+
+
+  /* ────────────────────────────────────────────────────────────
+     §4.3 — Membrane Tokens
+     Bounded regions governed by shared constraint regimes.
+     ──────────────────────────────────────────────────────────── */
+
+  --fabric-membrane-jurisdiction-bg:  rgba(96, 165, 250, 0.04);
+  --fabric-membrane-jurisdiction-border: rgba(96, 165, 250, 0.18);
+
+  --fabric-membrane-policy-bg:  rgba(167, 139, 250, 0.04);
+  --fabric-membrane-policy-border: rgba(167, 139, 250, 0.18);
+
+  --fabric-membrane-budget-bg:  rgba(61, 170, 114, 0.04);
+  --fabric-membrane-budget-border: rgba(61, 170, 114, 0.18);
+
+  --fabric-membrane-sovereignty-bg:  rgba(224, 160, 64, 0.04);
+  --fabric-membrane-sovereignty-border: rgba(224, 160, 64, 0.18);
+
+  --fabric-membrane-safety-bg:  rgba(224, 84, 84, 0.04);
+  --fabric-membrane-safety-border: rgba(224, 84, 84, 0.18);
+
+  --fabric-membrane-trust-bg:  rgba(192, 192, 188, 0.04);
+  --fabric-membrane-trust-border: rgba(192, 192, 188, 0.18);
+
+  --fabric-membrane-site-bg:  rgba(224, 160, 64, 0.06);
+  --fabric-membrane-site-border: rgba(224, 160, 64, 0.22);
+
+
+  /* ────────────────────────────────────────────────────────────
+     §10.3 — Thread Stroke Tokens
+     Geometry per Thread class.
+     ──────────────────────────────────────────────────────────── */
+
+  --fabric-thread-authority-color:   var(--fabric-blue);
+  --fabric-thread-authority-width:   2px;
+  --fabric-thread-authority-dash:    none;
+
+  --fabric-thread-delegation-color:  #e86a51;
+  --fabric-thread-delegation-width:  1.5px;
+  --fabric-thread-delegation-dash:   none;
+
+  --fabric-thread-workflow-color:    var(--fabric-green);
+  --fabric-thread-workflow-width:    1.5px;
+  --fabric-thread-workflow-dash:     6 3;
+
+  --fabric-thread-budget-color:      var(--fabric-green-strong);
+  --fabric-thread-budget-width:      2px;
+  --fabric-thread-budget-dash:       8 4;
+
+  --fabric-thread-policy-color:      var(--fabric-mutation);
+  --fabric-thread-policy-width:      1.5px;
+  --fabric-thread-policy-dash:       4 2 1 2;
+
+  --fabric-thread-escalation-color:  var(--fabric-amber-strong);
+  --fabric-thread-escalation-width:  2px;
+  --fabric-thread-escalation-dash:   2 1 6 1;
+
+  --fabric-thread-deployment-color:  var(--fabric-green);
+  --fabric-thread-deployment-width:  1.5px;
+  --fabric-thread-deployment-dash:   none;
+
+  --fabric-thread-proof-color:       var(--fabric-silver);
+  --fabric-thread-proof-width:       1px;
+  --fabric-thread-proof-dash:        3 2;
+
+  --fabric-thread-handoff-color:     #e86a51;
+  --fabric-thread-handoff-width:     2px;
+  --fabric-thread-handoff-dash:      none;
+
+  --fabric-thread-system-color:      var(--color-accent-1);
+  --fabric-thread-system-width:      1.5px;
+  --fabric-thread-system-dash:       none;
+
+
+  /* ────────────────────────────────────────────────────────────
+     §8 — Motion Tokens
+     Motion semantics for the 7 Fabric motion families.
+     ──────────────────────────────────────────────────────────── */
+
+  /* Authority: sparse directional activation */
+  --fabric-motion-authority-duration:   600ms;
+  --fabric-motion-authority-easing:     cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Workflow: rhythmic sequential pulse */
+  --fabric-motion-workflow-duration:    800ms;
+  --fabric-motion-workflow-easing:      cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Approval: sharp checkpoint gate event */
+  --fabric-motion-approval-duration:    300ms;
+  --fabric-motion-approval-easing:      cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Deployment: version wave propagation */
+  --fabric-motion-deployment-duration:  1200ms;
+  --fabric-motion-deployment-easing:    cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Proof: trailing accumulation (slow bind) */
+  --fabric-motion-proof-duration:       2000ms;
+  --fabric-motion-proof-easing:         cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Phenotype: field-level pressure gradient */
+  --fabric-motion-phenotype-duration:   3000ms;
+  --fabric-motion-phenotype-easing:     linear;
+
+  /* Physical: site-local emergency response */
+  --fabric-motion-physical-duration:    200ms;
+  --fabric-motion-physical-easing:      cubic-bezier(0.34, 1.56, 0.64, 1);
+
+
+  /* ────────────────────────────────────────────────────────────
+     §9 — Texture Tokens
+     Semantic texture classes for layered rendering.
+     ──────────────────────────────────────────────────────────── */
+
+  --fabric-texture-law-pattern:       repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 4px,
+    rgba(167, 139, 250, 0.03) 4px,
+    rgba(167, 139, 250, 0.03) 5px
+  );
+
+  --fabric-texture-shadow-opacity:    0.45;
+  --fabric-texture-shadow-blur:       2px;
+  --fabric-texture-shadow-border:     1.5px dashed rgba(167, 139, 250, 0.3);
+
+  --fabric-texture-scar-pattern:      repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 3px,
+    rgba(224, 84, 84, 0.06) 3px,
+    rgba(224, 84, 84, 0.06) 4px
+  );
+
+  --fabric-texture-proof-density:     radial-gradient(
+    circle at center,
+    rgba(192, 192, 188, 0.15) 0%,
+    transparent 70%
+  );
+
+
+  /* ────────────────────────────────────────────────────────────
+     §5 — Layer Tokens
+     Active-layer accent for each of the five master layers.
+     ──────────────────────────────────────────────────────────── */
+
+  --fabric-layer-form-accent:        var(--fabric-blue);
+  --fabric-layer-power-accent:       #e86a51;
+  --fabric-layer-law-accent:         var(--fabric-mutation);
+  --fabric-layer-expression-accent:  var(--fabric-green);
+  --fabric-layer-proof-accent:       var(--fabric-silver-strong);
+}
+
+/* ============================================================
+   Light Theme Overrides
+   ============================================================ */
+[data-theme="light"] {
+  --fabric-blue:        var(--color-accent);
+  --fabric-blue-subtle: rgba(37, 99, 235, 0.08);
+  --fabric-blue-strong: var(--color-accent);
+
+  --fabric-green:        var(--sage-500);
+  --fabric-green-subtle: rgba(42, 138, 92, 0.08);
+  --fabric-green-strong: var(--sage-500);
+
+  --fabric-amber:        #a5761c;
+  --fabric-amber-subtle: rgba(200, 144, 48, 0.08);
+  --fabric-amber-strong: #a5761c;
+
+  --fabric-red:        #e86a51;
+  --fabric-red-subtle: rgba(204, 62, 62, 0.08);
+  --fabric-red-strong: #e86a51;
+
+  --fabric-mutation:        var(--sage-500);
+  --fabric-mutation-subtle: rgba(13, 148, 136, 0.08);
+  --fabric-mutation-strong: var(--color-accent-1);
+
+  --fabric-silver:        #c9c2b0;
+  --fabric-silver-subtle: rgba(148, 147, 142, 0.06);
+  --fabric-silver-strong: var(--color-text-tertiary);
+
+  --fabric-gray:        #c9c2b0;
+  --fabric-gray-subtle: rgba(148, 147, 142, 0.06);
+  --fabric-gray-strong: var(--color-text-tertiary);
+}
+
+
+/* ============================================================
+   §7 — State CSS Classes
+   Apply [data-fabric-state="..."] on any Fabric element.
+   ============================================================ */
+
+[data-fabric-state="dormant"]    { --fabric-state-color: var(--fabric-state-dormant);    opacity: 0.5; }
+[data-fabric-state="active"]     { --fabric-state-color: var(--fabric-state-active); }
+[data-fabric-state="constrained"]{ --fabric-state-color: var(--fabric-state-constrained); }
+[data-fabric-state="bounded"]    { --fabric-state-color: var(--fabric-state-bounded); }
+[data-fabric-state="queued"]     { --fabric-state-color: var(--fabric-state-queued);     opacity: 0.7; }
+[data-fabric-state="pending"]    { --fabric-state-color: var(--fabric-state-pending); }
+[data-fabric-state="degraded"]   { --fabric-state-color: var(--fabric-state-degraded); }
+[data-fabric-state="divergent"]  { --fabric-state-color: var(--fabric-state-divergent); }
+[data-fabric-state="frozen"]     { --fabric-state-color: var(--fabric-state-frozen);     opacity: 0.6; filter: saturate(0.3); }
+[data-fabric-state="quarantined"]{ --fabric-state-color: var(--fabric-state-quarantined); }
+[data-fabric-state="mutating"]   { --fabric-state-color: var(--fabric-state-mutating); }
+[data-fabric-state="simulated"]  { --fabric-state-color: var(--fabric-state-simulated);  opacity: var(--fabric-texture-shadow-opacity); }
+[data-fabric-state="shadow"]     { --fabric-state-color: var(--fabric-state-shadow);     opacity: var(--fabric-texture-shadow-opacity); border-style: dashed; }
+[data-fabric-state="recovering"] { --fabric-state-color: var(--fabric-state-recovering); }
+[data-fabric-state="attested"]   { --fabric-state-color: var(--fabric-state-attested); }
+[data-fabric-state="unproven"]   { --fabric-state-color: var(--fabric-state-unproven);   opacity: 0.65; }
+
+/* Physical-world states */
+[data-fabric-state="safe-hold"]         { --fabric-state-color: var(--fabric-state-safe-hold); }
+[data-fabric-state="emergency-stop"]    { --fabric-state-color: var(--fabric-state-emergency-stop); animation: fabric-emergency-pulse 0.5s ease infinite; }
+[data-fabric-state="hotl-routed"]       { --fabric-state-color: var(--fabric-state-hotl-routed); }
+[data-fabric-state="sensor-uncertain"]  { --fabric-state-color: var(--fabric-state-sensor-uncertain); opacity: 0.6; }
+[data-fabric-state="lineage-stale"]     { --fabric-state-color: var(--fabric-state-lineage-stale); filter: saturate(0.4); }
+[data-fabric-state="deployment-blocked"]{ --fabric-state-color: var(--fabric-state-deployment-blocked); }
+
+
+/* ============================================================
+   Fabric Keyframe Animations
+   ============================================================ */
+
+@keyframes fabric-authority-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+@keyframes fabric-workflow-pulse {
+  0%   { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -20; }
+}
+
+@keyframes fabric-approval-gate {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+@keyframes fabric-deployment-wave {
+  0%   { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -40; }
+}
+
+@keyframes fabric-proof-accrue {
+  0%   { opacity: 0.3; }
+  100% { opacity: 0.8; }
+}
+
+@keyframes fabric-emergency-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--fabric-red-subtle); }
+  50%      { box-shadow: 0 0 12px 4px var(--fabric-red-subtle); }
+}
+
+@keyframes fabric-phenotype-drift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}

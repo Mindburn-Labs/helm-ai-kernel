@@ -55,6 +55,10 @@ cd core && go test -run TestName ./pkg/...
 - MUST run `make codegen-check` whenever `protocols/proto/helm/**` changes. Drift is a CI failure.
 - MUST keep imports one-directional: `examples/** → core/pkg/**` and `tests/conformance/** → core/pkg/**`, never reverse.
 
+## Design system
+
+Mindburn DS v1.0 — Parchment / Graphite. Canonical tokens live in `mindburn/app/styles/design-system.css`. This repo mirrors them in `packages/design-tokens/tokens.css` (consumed by `apps/helm-studio/src/index.css`). Hardcoded hex outside the Ember / Sage / Amber / Ink-Blue ramps fails review. The mirror here must stay byte-equal to `helm/packages/design-tokens/tokens.css`; palette changes cross-apply to `mindburn` first, then flow inbound via `helm`'s `make sync-oss-kernel`.
+
 ## Subagents to prefer
 
 - `kernel-guardian` — any change under `core/pkg/{kernel,crypto,guardian,proofgraph,evidencepack,contracts}`

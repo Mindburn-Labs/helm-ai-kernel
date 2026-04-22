@@ -1,0 +1,191 @@
+// HELM Explain Schema — Reason, TooltipModel, and Explainability Layer
+//
+// This is the contract between the CPI VM and Evidence Mode UI.
+// The VM emits deterministic, localizable, actionable explanations.
+// UI renders from code + args, never from ad-hoc strings.
+//
+// ReasonCode format: LAYER.DOMAIN.CATEGORY.CAUSE[.SPEC]
+//   Layers:     CPI, PEP, AUTH, FACT, SCHEMA, EXEC
+//   Domains:    JURISDICTION, LICENSE, TAX, BANKING, TREASURY, DATA,
+//               IDENTITY, CONTRACT, TOOLS, RISK, SIM, MERGE, REPLAY
+//   Categories: MISSING_PRIMITIVE, FORBIDDEN, LIMIT_EXCEEDED,
+//               REQUIRES_TRANSFORMER, INVALID_SCOPE, NEEDS_APPROVAL,
+//               NEEDS_FACTS, CONFLICT, INVARIANT_BREACH,
+//               CONNECTOR_UNREADY, EFFECT_FAILED
+//
+// Stability: v1 additive-only. Codes are stable forever once shipped.
+syntax = "proto3";
+package helm.explain.v1;
+
+option go_package = "helm.mindburn.run/explain/v1;explainv1";
+
+// ── Shared Types ───────────────────────────────────────────────
+
+// Content hash reference (mirrors policy.v1.HashRef for package independence).
+message HashRef {
+  string algo = 1;
+  bytes digest = 2;
+}
+
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  INFO = 1;
+  WARN = 2;
+  // Denies or hard collisions.
+  BLOCK = 3;
+  // High-impact, irreversible risk.
+  CRITICAL = 4;
+}
+
+// Reference to a subject involved in a reason.
+message SubjectRef {
+  oneof subject {
+    string node_id = 1;
+    string edge_id = 2;
+    string queue_item_id = 3;
+    string approval_request_id = 4;
+    // Stable path, e.g. "treasury/max_daily_spend".
+    string policy_path = 5;
+    // Prompt slot, e.g. "system".
+    string prompt_slot = 6;
+  }
+}
+
+// Typed argument value for i18n template rendering.
+message ArgValue {
+  oneof v {
+    string s = 1;
+    int64 i64 = 2;
+    uint64 u64 = 3;
+    // Avoid for money — use decimal string in ArgValue.s instead.
+    double f64 = 4;
+    bytes b = 5;
+    HashRef hash = 6;
+  }
+}
+
+// ── Reason (structured ReasonCode payload) ─────────────────────
+
+message Reason {
+  // Canonical code string, e.g. "CPI.LICENSE.MISSING_PRIMITIVE.MICA".
+  // Uppercase A-Z, 0-9, underscore. Dot-separated. Stable forever.
+  string code = 1;
+  Severity severity = 2;
+  // Subjects involved in this reason.
+  repeated SubjectRef subjects = 3;
+  // Typed parameters for rendering i18n templates deterministically.
+  map<string, ArgValue> args = 4;
+
+  // ── Remediation linkage ──────────────────────────────────────
+  string witness_id = 5;
+  HashRef witness_hash = 6;
+  HashRef patch_set_hash = 7;
+  repeated string patch_ids = 8;
+  // External fact keys needed, e.g. "tax.withholding_rate.us_de".
+  repeated string fact_keys = 9;
+  string approval_request_id = 10;
+
+  reserved 100 to 199;
+}
+
+// ── i18n MessageRef ────────────────────────────────────────────
+
+// The VM emits message_key identifiers, not text.
+// UI owns the translation dictionary for each locale.
+message MessageRef {
+  // i18n key, e.g. "tooltip.mica_missing.title".
+  string key = 1;
+  // Typed args for template interpolation.
+  map<string, ArgValue> args = 2;
+}
+
+// ── Highlight (GPU node/edge visual hint) ──────────────────────
+
+enum HighlightStyle {
+  HIGHLIGHT_STYLE_UNSPECIFIED = 0;
+  OUTLINE = 1;
+  GLOW = 2;
+  PULSE = 3;
+  // Snapback emphasis.
+  SHAKE = 4;
+}
+
+message Highlight {
+  SubjectRef subject = 1;
+  HighlightStyle style = 2;
+}
+
+// ── ActionRef (one-click remediation) ──────────────────────────
+
+enum ActionKind {
+  ACTION_KIND_UNSPECIFIED = 0;
+  APPLY_PATCH = 1;
+  OPEN_POLICY_EDITOR = 2;
+  OPEN_PROMPT_EDITOR = 3;
+  REQUEST_APPROVAL = 4;
+  REQUEST_FACTS = 5;
+  VIEW_RECEIPT = 6;
+  ISOLATE_SUBGRAPH = 7;
+}
+
+message ActionRef {
+  ActionKind kind = 1;
+  // Display label (i18n key + args).
+  MessageRef label = 2;
+
+  // ── Execution linkage (populated by kind) ────────────────────
+  // APPLY_PATCH
+  string patch_id = 10;
+  HashRef patch_set_hash = 11;
+  // OPEN_POLICY_EDITOR
+  string policy_path = 12;
+  // OPEN_PROMPT_EDITOR
+  string prompt_slot = 13;
+  // REQUEST_APPROVAL
+  string approval_request_id = 14;
+  // REQUEST_FACTS
+  repeated string fact_keys = 15;
+  // VIEW_RECEIPT
+  string receipt_id = 16;
+  // ISOLATE_SUBGRAPH
+  string isolate_root_node_id = 17;
+
+  reserved 100 to 199;
+}
+
+// ── TooltipModelV1 ─────────────────────────────────────────────
+//
+// The compact explanation object emitted by the CPI VM.
+// Properties: small, deterministic, actionable, localizable.
+//
+// Canonical serialization rules:
+//   - reasons: sort by code, then subjects[0] ID
+//   - highlights: sort by subject ID
+//   - actions: sort by kind, then patch_id/policy_path
+//   - map keys: lexicographic ascending
+//   - No floats for money (use decimal string in args)
+
+message TooltipModelV1 {
+  // Stable within witness scope.
+  string tooltip_id = 1;
+  string witness_id = 2;
+
+  // Primary content (i18n keys + args).
+  MessageRef title = 3;
+  MessageRef body = 4;
+
+  Severity severity = 5;
+
+  // Structured reasons (1-3 typical, bounded).
+  repeated Reason reasons = 6;
+  // GPU visual hints for nodes/edges.
+  repeated Highlight highlights = 7;
+  // One-click remediation actions.
+  repeated ActionRef actions = 8;
+
+  // For replay and integrity verification.
+  HashRef policy_hash = 9;
+  HashRef cpi_hash = 10;
+
+  reserved 100 to 199;
+}

@@ -1,0 +1,13 @@
+* @Mindburn-Labs/helm-core
+
+/core/ @Mindburn-Labs/helm-core
+/protocols/ @Mindburn-Labs/helm-core
+/schemas/ @Mindburn-Labs/helm-core
+/api/openapi/ @Mindburn-Labs/helm-core
+/.github/ @Mindburn-Labs/helm-core
+/scripts/ @Mindburn-Labs/helm-core
+/packages/mindburn-helm-cli/ @Mindburn-Labs/helm-core
+
+/sdk/ @Mindburn-Labs/helm
+/dashboard/ @Mindburn-Labs/helm
+/deploy/helm-chart/ @Mindburn-Labs/helm-core

@@ -1,0 +1,55 @@
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: ca-pipeda
+  version: 1.0.0
+  description: Canada PIPEDA + Provincial Privacy Laws
+  jurisdiction: CA
+  regulations:
+    - PIPEDA (Personal Information Protection and Electronic Documents Act)
+    - Quebec Law 25 (Act respecting the protection of personal information in the private sector)
+    - AIDA (proposed Artificial Intelligence and Data Act)
+  tags: [canada, pipeda, opc, quebec]
+
+spec:
+  legal_regime: CA
+  data_residency: CA
+  applicable_regulations:
+    - id: PIPEDA
+      name: Personal Information Protection and Electronic Documents Act
+      authority: Office of the Privacy Commissioner of Canada
+    - id: QUEBEC_LAW25
+      name: Quebec Law 25
+      authority: Commission d'accès à l'information
+
+  policies:
+    - kind: DenyRule
+      name: deny-cross-border-transfer
+      match:
+        effect_type: data_export
+        conditions:
+          - field: context.comparable_protection
+            operator: empty
+      verdict: DENY
+      reason_code: DENY_CA_CROSS_BORDER
+      reason: "Comparable level of protection required for cross-border transfer under PIPEDA"
+
+    - kind: ApprovalGate
+      name: pia-required
+      match:
+        effect_type: data_process
+        conditions:
+          - field: params.processing_type
+            operator: in
+            values: [AUTOMATED_DECISION, PROFILING, BIOMETRIC]
+      verdict: ESCALATE
+      reason_code: TEMPORAL_INTERVENTION
+      reason: "Privacy Impact Assessment required for automated decision-making under Quebec Law 25"
+
+  deny_codes:
+    - code: DENY_CA_CROSS_BORDER
+      description: Cross-border transfer without comparable protection
+    - code: DENY_CA_CONSENT_REQUIRED
+      description: Knowledge and consent required
+    - code: DENY_CA_AUTOMATED_DECISION
+      description: Automated decision transparency required

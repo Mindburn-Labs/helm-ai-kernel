@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/receipts/runtime_adapter_receipt.v1.json",
+  "title": "Runtime Adapter Receipt",
+  "description": "Receipt for a tool call intercepted by a HELM runtime adapter.",
+  "type": "object",
+  "required": ["receipt_hash", "adapter_id", "input_hash", "output_hash", "completed_at"],
+  "properties": {
+    "receipt_hash": { "type": "string" },
+    "adapter_id": { "type": "string" },
+    "runtime_type": {
+      "type": "string",
+      "enum": ["mcp", "openclaw", "generic_http"]
+    },
+    "input_hash": { "type": "string" },
+    "output_hash": { "type": "string" },
+    "model_id": { "type": "string" },
+    "token_count": { "type": "integer", "minimum": 0 },
+    "verdict": {
+      "type": "string",
+      "enum": ["ALLOW", "DENY", "ESCALATE"]
+    },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "proofgraph_node": { "type": "string" }
+  }
+}

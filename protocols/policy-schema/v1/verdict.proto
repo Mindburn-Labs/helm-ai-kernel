@@ -1,0 +1,143 @@
+// HELM Policy Schema — CPI Verdict
+//
+// Returned by helm-policy-vm for every PlanIRDelta evaluation.
+// Contains structured payloads for ALLOW, DENY, and REQUIRE_APPROVAL.
+//
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.policy.v1;
+
+option go_package = "helm.mindburn.run/policy/v1;policyv1";
+
+import "google/protobuf/timestamp.proto";
+import "v1/foundations.proto";
+
+// ── CPI Verdict ────────────────────────────────────────────────
+
+message CpiVerdict {
+  // VM version + semantics hash.
+  bytes cpi_hash = 1;
+  // PolicyBundle that produced this verdict.
+  bytes policy_bundle_hash = 2;
+  // Hash of the evaluated PlanIRDelta.
+  bytes plan_ir_hash = 3;
+  // Proposal identifier for correlation.
+  string proposal_id = 4;
+  // Verdict discriminant.
+  VerdictKind kind = 5;
+
+  // Exactly one populated based on kind.
+  AllowPayload allow = 10;
+  DenyPayload deny = 11;
+  RequireApprovalPayload require_approval = 12;
+
+  google.protobuf.Timestamp evaluated_at = 15;
+
+  reserved 100 to 199;
+  reserved 900 to 999;
+}
+
+enum VerdictKind {
+  VERDICT_KIND_UNSPECIFIED = 0;
+  VERDICT_KIND_ALLOW = 1;
+  VERDICT_KIND_DENY = 2;
+  VERDICT_KIND_REQUIRE_APPROVAL = 3;
+}
+
+// ── Payloads ───────────────────────────────────────────────────
+
+message AllowPayload {
+  // Obligations that were satisfied for this action.
+  repeated string obligations_satisfied = 1;
+  // Predicted effect summary.
+  EffectDigest predicted_effects = 2;
+  // Receipt stub for commitment.
+  ReceiptStub receipt_stub = 3;
+
+  reserved 100 to 199;
+}
+
+message DenyPayload {
+  // Structured reason codes (LAYER.DOMAIN.CATEGORY.CAUSE.SPEC).
+  repeated ReasonCodeRef reason_codes = 1;
+  // Deterministic witness trace.
+  string witness_id = 2;
+
+  reserved 100 to 199;
+}
+
+message RequireApprovalPayload {
+  repeated ReasonCodeRef reason_codes = 1;
+  string witness_id = 2;
+  // Required signers to unblock.
+  repeated SignerSpec required_signatures = 3;
+  // Optional fact requests.
+  repeated FactRequest fact_requests = 4;
+
+  reserved 100 to 199;
+}
+
+// ── Supporting Types ───────────────────────────────────────────
+
+message EffectDigest {
+  // Effect class types, e.g. ["E3", "E4"].
+  repeated string effect_types = 1;
+  // Estimated cost in minor currency units (int64, never float).
+  int64 estimated_cost_cents = 2;
+  string currency = 3;
+
+  reserved 100 to 199;
+}
+
+message ReceiptStub {
+  string receipt_id = 1;
+  bytes commitment_hash = 2;
+  google.protobuf.Timestamp valid_until = 3;
+
+  reserved 100 to 199;
+}
+
+message SignerSpec {
+  string principal_id = 1;
+  // Required role for signing.
+  string role_id = 2;
+  // If true, any principal with this role suffices.
+  bool any_of_group = 3;
+
+  reserved 100 to 199;
+}
+
+// Lightweight reason code reference within a verdict.
+// Full Reason payload is in explain.proto.
+message ReasonCodeRef {
+  // Canonical code string, e.g. "CPI.LICENSE.MISSING_PRIMITIVE.MICA".
+  string code = 1;
+  // Severity level.
+  string severity = 2;
+
+  reserved 100 to 199;
+}
+
+// ── Facts ──────────────────────────────────────────────────────
+
+message FactRequest {
+  string fact_id = 1;
+  // Fact type, e.g. "license_validity", "kyc_status".
+  string fact_type = 2;
+  string target_node_id = 3;
+  string description = 4;
+  google.protobuf.Timestamp deadline = 5;
+
+  reserved 100 to 199;
+}
+
+message FactResponse {
+  string fact_id = 1;
+  // Canonical JSON value.
+  bytes value_canonical = 2;
+  string provider_principal_id = 3;
+  bytes signature = 4;
+  google.protobuf.Timestamp provided_at = 5;
+
+  reserved 100 to 199;
+}

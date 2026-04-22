@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_workshop_fs_read_v1.schema.json",
+  "title": "WorkshopFsReadInput",
+  "description": "Input schema for tool workshop.fs.read (WORKSHOP, READ_ONLY)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id"
+  ],
+  "properties": {
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    }
+  }
+}

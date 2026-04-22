@@ -1,0 +1,13 @@
+{
+  "$id": "helm://schemas/effect_digest/v1.json",
+  "type": "object",
+  "required": ["digest_id", "decision_id", "effect_type", "parameters_hash", "timestamp", "signature"],
+  "properties": {
+    "digest_id": { "type": "string" },
+    "decision_id": { "type": "string" },
+    "effect_type": { "type": "string" },
+    "parameters_hash": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "signature": { "type": "string" }
+  }
+}

@@ -1,0 +1,195 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://helm.org/schemas/tool-manifest/tool_manifest.v1.schema.json",
+    "title": "ToolManifest.v1",
+    "description": "Effect-typed tool manifest. Every tool describes not just its signature but the semantics of its effects. Per HELM Effect Taxonomy.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "tool_id",
+        "version",
+        "effects",
+        "reversibility",
+        "idempotency",
+        "blast_radius",
+        "risk_class",
+        "schema_pins"
+    ],
+    "properties": {
+        "tool_id": {
+            "type": "string",
+            "description": "Canonical tool identifier (e.g. infra.deploy, order.place)"
+        },
+        "version": {
+            "type": "string",
+            "description": "Semantic version of this tool"
+        },
+        "description": {
+            "type": "string",
+            "description": "Human-readable description"
+        },
+        "effects": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "string",
+                "description": "Effect type from canonical taxonomy"
+            },
+            "description": "Effect types this tool may produce"
+        },
+        "reversibility": {
+            "type": "string",
+            "enum": [
+                "reversible",
+                "compensatable",
+                "irreversible"
+            ],
+            "description": "Whether the effects can be undone"
+        },
+        "idempotency": {
+            "type": "object",
+            "required": [
+                "strategy"
+            ],
+            "properties": {
+                "strategy": {
+                    "type": "string",
+                    "enum": [
+                        "client_provided",
+                        "content_hash",
+                        "effect_id",
+                        "none"
+                    ],
+                    "description": "How idempotency is enforced"
+                },
+                "key_composition": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Fields used to compose the idempotency key"
+                },
+                "dedup_window_seconds": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Deduplication time window"
+                }
+            }
+        },
+        "blast_radius": {
+            "type": "object",
+            "description": "Blast radius dimensions",
+            "required": [
+                "scope"
+            ],
+            "properties": {
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "single_record",
+                        "dataset",
+                        "tenant",
+                        "region",
+                        "system_wide"
+                    ],
+                    "description": "Maximum scope of impact"
+                },
+                "max_tenants_affected": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_regions_affected": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_accounts_affected": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "required_preflight_checks": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "Preflight checks that MUST pass before this tool can execute"
+        },
+        "required_evidence_grade": {
+            "type": "string",
+            "enum": [
+                "E0",
+                "E1",
+                "E2",
+                "E3"
+            ],
+            "description": "Minimum evidence grade required (E0=compute-only, E1=read, E2=soft-write, E3=hard-write/critical)"
+        },
+        "risk_class": {
+            "type": "string",
+            "enum": [
+                "LOW",
+                "MEDIUM",
+                "HIGH",
+                "CRITICAL"
+            ],
+            "description": "Risk classification for policy hooks"
+        },
+        "two_phase_commit_required": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether this tool requires preflight+commit flow"
+        },
+        "policy_hooks": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "Named policy hooks that fire for this tool"
+        },
+        "schema_pins": {
+            "type": "object",
+            "description": "Input/output schema digests for drift detection",
+            "required": [
+                "input_schema_hash",
+                "output_schema_hash"
+            ],
+            "properties": {
+                "input_schema_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$",
+                    "description": "SHA-256 of the tool's input JSON Schema"
+                },
+                "output_schema_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$",
+                    "description": "SHA-256 of the tool's output JSON Schema"
+                }
+            }
+        },
+        "cost_envelope": {
+            "type": "object",
+            "properties": {
+                "max_latency_ms": {
+                    "type": "integer"
+                },
+                "max_cost_usd": {
+                    "type": "number"
+                },
+                "max_tokens": {
+                    "type": "integer"
+                },
+                "rate_limit_rps": {
+                    "type": "number"
+                }
+            }
+        },
+        "metadata": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "string"
+            },
+            "description": "Additional tool metadata"
+        }
+    }
+}

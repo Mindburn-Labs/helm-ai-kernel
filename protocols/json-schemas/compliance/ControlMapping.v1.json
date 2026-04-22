@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "helm://schemas/compliance/ControlMapping.v1.json",
+  "title": "ControlMapping.v1",
+  "description": "Mapping from technical implementation to compliance controls.",
+  "type": "object",
+  "required": ["mapping_id", "target_ref", "controls"],
+  "properties": {
+    "mapping_id": {
+      "type": "string"
+    },
+    "target_ref": {
+      "type": "string",
+      "description": "Reference to the code, pack, or resource being mapped"
+    },
+    "controls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["control_id", "status"],
+        "properties": {
+          "control_id": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["compliant", "non_compliant", "partial", "not_applicable"]
+          },
+          "justification": { "type": "string" },
+          "evidence_refs": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "last_verified": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "mapped_by": { "type": "string" },
+    "mapped_at": { "type": "string", "format": "date-time" }
+  }
+}

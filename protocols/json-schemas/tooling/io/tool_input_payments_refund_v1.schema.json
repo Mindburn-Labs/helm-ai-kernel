@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_payments_refund_v1.schema.json",
+  "title": "PaymentsRefundInput",
+  "description": "Input schema for tool payments.refund (KERNEL, IRREVERSIBLE_WRITE)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "connector_instance_id",
+    "idempotency_key",
+    "charge_id",
+    "amount"
+  ],
+  "properties": {
+    "amount": {
+      "description": "Monetary amount",
+      "type": "number"
+    },
+    "charge_id": {
+      "description": "Original charge identifier",
+      "type": "string"
+    },
+    "connector_instance_id": {
+      "description": "Bound connector instance (PAYMENTS_PROVIDER)",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "description": "Idempotency key derived from: charge_id, amount",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    }
+  }
+}

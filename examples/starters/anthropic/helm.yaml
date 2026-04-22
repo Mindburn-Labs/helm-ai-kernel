@@ -1,0 +1,16 @@
+version: "1"
+provider: anthropic
+
+governance:
+  mode: enforce
+  receipt_dir: ./evidence/receipts
+  proof_dir: ./evidence/proofs
+
+mcp:
+  transport: http
+  listen: ":8080"
+  auth_mode: none
+
+anthropic:
+  upstream: https://api.anthropic.com
+  model: claude-sonnet-4-20250514

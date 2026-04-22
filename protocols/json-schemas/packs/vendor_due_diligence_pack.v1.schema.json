@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/packs/vendor_due_diligence_pack.v1.schema.json",
+  "title": "VendorDueDiligencePack",
+  "description": "A proof of vendor compliance and security checks.",
+  "type": "object",
+  "required": [
+    "pack_id",
+    "pack_type",
+    "vendor_name",
+    "assessment_date",
+    "compliance_checks",
+    "attestation"
+  ],
+  "properties": {
+    "pack_id": { "type": "string" },
+    "pack_type": { "const": "VENDOR_DUE_DILIGENCE_PACK" },
+    "vendor_name": { "type": "string" },
+    "vendor_domain": { "type": "string" },
+    "assessment_date": { "type": "string", "format": "date-time" },
+    "assessor_id": { "type": "string" },
+    "compliance_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["standard", "status"],
+        "properties": {
+          "standard": { "type": "string", "enum": ["SOC2", "ISO27001", "GDPR", "CCPA", "HIPAA"] },
+          "status": { "type": "string", "enum": ["COMPLIANT", "NON_COMPLIANT", "NOT_APPLICABLE", "PENDING"] },
+          "evidence_url": { "type": "string" },
+          "expiration_date": { "type": "string", "format": "date" },
+          "receipt_ref": { "type": "string" }
+        }
+      }
+    },
+    "risk_score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "decision": { "type": "string", "enum": ["APPROVED", "REJECTED", "CONDITIONAL"] },
+    "attestation": {
+      "type": "object",
+      "required": ["pack_hash"],
+      "properties": {
+        "pack_hash": { "type": "string" },
+        "signature": { "type": "string" },
+        "generated_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

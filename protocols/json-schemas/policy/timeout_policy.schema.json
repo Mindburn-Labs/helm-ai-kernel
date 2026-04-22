@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/policy/timeout_policy.schema.json",
+  "title": "TimeoutPolicy",
+  "description": "Timeout policy configuration per Addendum 9.5.X - blocking states MUST have explicit timeouts",
+  "type": "object",
+  "required": ["policy_id", "state", "timeout_duration_ms", "timeout_action"],
+  "additionalProperties": false,
+  "properties": {
+    "policy_id": {
+      "type": "string",
+      "description": "Unique identifier for this timeout policy"
+    },
+    "state": {
+      "type": "string",
+      "enum": ["APPROVAL_REQUESTED", "OBLIGATIONS_PENDING", "EVIDENCE_PENDING", "CORROBORATION_PENDING"],
+      "description": "The blocking state this policy applies to"
+    },
+    "timeout_duration_ms": {
+      "type": "integer",
+      "minimum": 1000,
+      "description": "Timeout duration in milliseconds"
+    },
+    "timeout_action": {
+      "type": "string",
+      "enum": ["FAIL_CLOSED", "ESCALATE_TO_HUMAN", "REQUIRE_APPROVAL", "RETRY_WITH_BACKOFF"],
+      "description": "Action to take when timeout is reached"
+    },
+    "escalation_target": {
+      "type": "string",
+      "description": "Who to escalate to (required if timeout_action is ESCALATE_TO_HUMAN)"
+    },
+    "escalation_message_template": {
+      "type": "string",
+      "description": "Optional template for escalation notification"
+    }
+  }
+}

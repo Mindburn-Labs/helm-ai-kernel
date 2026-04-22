@@ -1,0 +1,139 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://helm.org/schemas/observations/observation_artifact.v1.schema.json",
+    "title": "ObservationArtifact.v1",
+    "description": "Grounded observation artifact for RPA/desktop/web agents. Parameters MUST reference an observation artifact — no raw coordinates without proof of binding.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "artifact_id",
+        "observation_type",
+        "content_hash",
+        "captured_at"
+    ],
+    "properties": {
+        "artifact_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique observation artifact identifier"
+        },
+        "observation_type": {
+            "type": "string",
+            "enum": [
+                "dom_snapshot",
+                "accessibility_tree",
+                "screenshot",
+                "api_response"
+            ],
+            "description": "Type of observation"
+        },
+        "content_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "description": "SHA-256 of the observation content"
+        },
+        "dom_snapshot_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "description": "Hash of DOM snapshot (if applicable)"
+        },
+        "accessibility_tree_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "description": "Hash of accessibility tree (if applicable)"
+        },
+        "screenshot_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "description": "Hash of screenshot (if applicable)"
+        },
+        "window_handle": {
+            "type": "string",
+            "description": "Window/tab handle identifier"
+        },
+        "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL at observation time (for web)"
+        },
+        "viewport": {
+            "type": "object",
+            "properties": {
+                "width": {
+                    "type": "integer"
+                },
+                "height": {
+                    "type": "integer"
+                },
+                "device_pixel_ratio": {
+                    "type": "number"
+                }
+            }
+        },
+        "captured_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Authority time when observation was captured"
+        },
+        "ttl_seconds": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "How long this observation is considered valid"
+        },
+        "grounded_selectors": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "selector_type",
+                    "selector_value",
+                    "element_hash"
+                ],
+                "properties": {
+                    "selector_type": {
+                        "type": "string",
+                        "enum": [
+                            "css",
+                            "xpath",
+                            "accessibility_id",
+                            "aria_label",
+                            "role+name"
+                        ],
+                        "description": "Type of stable selector"
+                    },
+                    "selector_value": {
+                        "type": "string",
+                        "description": "The selector string"
+                    },
+                    "element_hash": {
+                        "type": "string",
+                        "description": "Hash of the element this selector resolves to"
+                    },
+                    "derived_coordinates": {
+                        "type": "object",
+                        "description": "Coordinates derived from the selector resolution (not user-provided)",
+                        "properties": {
+                            "x": {
+                                "type": "integer"
+                            },
+                            "y": {
+                                "type": "integer"
+                            },
+                            "width": {
+                                "type": "integer"
+                            },
+                            "height": {
+                                "type": "integer"
+                            },
+                            "derivation_proof_hash": {
+                                "type": "string",
+                                "description": "Hash proving coordinates were derived from selector, not fabricated"
+                            }
+                        }
+                    }
+                }
+            },
+            "description": "Stable selectors with element binding proof"
+        }
+    }
+}

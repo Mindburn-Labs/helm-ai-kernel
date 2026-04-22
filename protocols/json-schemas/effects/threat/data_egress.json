@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/threat/data_egress.json",
+  "title": "Data Egress Effect",
+  "description": "Transmits data to an external endpoint. Primary exfiltration vector.",
+  "type": "object",
+  "required": ["effect_id", "destination"],
+  "properties": {
+    "effect_id": { "type": "string", "const": "DATA_EGRESS" },
+    "destination": { "type": "string" },
+    "protocol": { "type": "string", "enum": ["https", "http", "grpc", "ssh", "ftp", "smtp"] },
+    "payload_bytes": { "type": "integer", "minimum": 0 },
+    "data_classification": { "type": "string", "enum": ["public", "internal", "confidential", "restricted"] }
+  },
+  "additionalProperties": false,
+  "x-helm": { "category": "threat", "risk_class": "E4", "approval_level": "dual_control", "reversible": false }
+}

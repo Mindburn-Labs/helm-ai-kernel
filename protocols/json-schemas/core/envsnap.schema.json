@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/core/envsnap.schema.json",
+  "title": "EnvSnap",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["envsnap_id", "jurisdiction", "data_class", "action_class", "risk_context", "timestamp"],
+  "properties": {
+    "envsnap_id": { "type": "string", "format": "uuid" },
+    "jurisdiction": { "type": "string", "minLength": 1 },
+    "data_class": { "type": "string", "minLength": 1 },
+    "action_class": { "type": "string", "minLength": 1 },
+    "risk_context": { "type": "object" },
+    "uncertainty": { "type": "object" },
+    "timestamp": { "type": "string", "format": "date-time" }
+  }
+}

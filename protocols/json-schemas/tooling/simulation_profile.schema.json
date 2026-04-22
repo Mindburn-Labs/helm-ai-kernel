@@ -1,0 +1,54 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://helm.org/schemas/tooling/simulation_profile.schema.json",
+    "title": "SimulationProfile",
+    "description": "Configuration for dry-run/sandbox execution.",
+    "type": "object",
+    "properties": {
+        "profile_id": {
+            "type": "string"
+        },
+        "seed": {
+            "type": "string",
+            "description": "Random seed for deterministic replay."
+        },
+        "environment": {
+            "type": "object",
+            "description": "Mock environment variables and constants."
+        },
+        "time_compression_factor": {
+            "type": "number",
+            "default": 1.0,
+            "description": "Speed multiplier for simulation (e.g., 100x speed)."
+        },
+        "mocks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "connector_id": {
+                        "type": "string"
+                    },
+                    "behavior": {
+                        "type": "string",
+                        "enum": [
+                            "SUCCESS",
+                            "FAILURE",
+                            "LATENCY",
+                            "RANDOM"
+                        ]
+                    },
+                    "latency_ms": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "connector_id"
+                ]
+            }
+        }
+    },
+    "required": [
+        "profile_id"
+    ]
+}

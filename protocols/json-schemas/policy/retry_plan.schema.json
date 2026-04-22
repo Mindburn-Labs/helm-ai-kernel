@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/policy/retry_plan.schema.json",
+  "title": "RetryPlanRef",
+  "description": "Pre-committed retry schedule per Addendum 8.5.X - retry schedule MUST be committed before attempts",
+  "type": "object",
+  "required": ["retry_plan_id", "effect_id", "policy_id", "schedule", "max_attempts", "expires_at", "created_at"],
+  "additionalProperties": false,
+  "properties": {
+    "retry_plan_id": {
+      "type": "string",
+      "description": "Content-addressed ID of this retry plan"
+    },
+    "effect_id": {
+      "type": "string",
+      "description": "Effect this plan applies to"
+    },
+    "policy_id": {
+      "type": "string",
+      "description": "Backoff policy used to generate this schedule"
+    },
+    "schedule": {
+      "type": "array",
+      "description": "Pre-computed retry schedule",
+      "x-helm-array-kind": "ORDERED",
+      "items": {
+        "type": "object",
+        "required": ["attempt_index", "delay_ms", "scheduled_at"],
+        "additionalProperties": false,
+        "properties": {
+          "attempt_index": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Zero-indexed attempt number"
+          },
+          "delay_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Delay in milliseconds before this attempt"
+          },
+          "scheduled_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Scheduled execution time for this attempt"
+          }
+        }
+      }
+    },
+    "max_attempts": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum number of attempts allowed"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this retry plan expires"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this retry plan was created"
+    }
+  }
+}

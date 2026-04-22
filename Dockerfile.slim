@@ -1,0 +1,27 @@
+# Stage 1: Build
+FROM golang:1.24-alpine AS builder
+RUN apk add --no-cache git ca-certificates
+WORKDIR /src
+COPY core/go.mod core/go.sum ./core/
+RUN cd core && go mod download
+COPY core/ ./core/
+RUN cd core && CGO_ENABLED=0 go build -ldflags="-s -w" -o /helm ./cmd/helm/
+
+# Stage 2: Minimal runtime
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates tzdata && \
+    adduser -D -h /home/helm helm
+COPY --from=builder /helm /usr/local/bin/helm
+
+# Create data dir writable by helm user (for root.key, receipts, etc.)
+RUN mkdir -p /home/helm/data && chown helm:helm /home/helm/data
+
+USER helm
+WORKDIR /home/helm
+
+ENTRYPOINT ["helm"]
+CMD ["server"]
+
+LABEL org.opencontainers.image.source="https://github.com/Mindburn-Labs/helm-oss"
+LABEL org.opencontainers.image.description="HELM — Fail-closed execution authority for AI agents (slim)"
+LABEL org.opencontainers.image.licenses="Apache-2.0"

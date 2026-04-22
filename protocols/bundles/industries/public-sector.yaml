@@ -1,0 +1,16 @@
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: public-sector
+  version: 1.0.0
+  description: Public sector / FedRAMP pack
+  industry: public_sector
+  tags:
+  - fedramp
+  - government
+  - public-sector
+spec:
+  deny_codes:
+  - code: DENY_PUBSEC_AUTHORIZATION_BOUNDARY
+  - code: DENY_PUBSEC_CLEARANCE_REQUIRED
+  - code: DENY_PUBSEC_FIPS_REQUIRED

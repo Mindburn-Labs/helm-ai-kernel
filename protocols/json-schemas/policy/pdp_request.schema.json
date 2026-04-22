@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/policy/pdp_request.schema.json",
+  "title": "PDPRequest",
+  "description": "Policy Decision Point Request - Normative contract per Section 3.3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["request_id", "effect", "subject", "context", "obligations_context"],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this decision request"
+    },
+    "effect": {
+      "type": "object",
+      "description": "The effect being requested for authorization",
+      "required": ["effect_id", "effect_type", "effect_payload_hash", "idempotency_key"],
+      "additionalProperties": false,
+      "properties": {
+        "effect_id": {
+          "type": "string",
+          "description": "Unique identifier for this effect instance"
+        },
+        "effect_type": {
+          "type": "string",
+          "description": "Canonical effect type (e.g., DATA_WRITE, FUNDS_TRANSFER)",
+          "enum": [
+            "DATA_WRITE",
+            "FUNDS_TRANSFER",
+            "PERMISSION_CHANGE",
+            "DEPLOY",
+            "NOTIFY",
+            "MODULE_INSTALL"
+          ]
+        },
+        "effect_payload_hash": {
+          "type": "string",
+          "description": "SHA-256 hash of the canonicalized effect payload"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "description": "Client-provided key for effect deduplication"
+        }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "description": "The actor requesting the effect",
+      "required": ["actor_id", "actor_type", "auth_context"],
+      "additionalProperties": false,
+      "properties": {
+        "actor_id": {
+          "type": "string",
+          "description": "Unique identifier for the actor (human, agent, service)"
+        },
+        "actor_type": {
+          "type": "string",
+          "enum": ["human", "operator", "agent", "service"],
+          "description": "Classification of the actor"
+        },
+        "auth_context": {
+          "type": "object",
+          "description": "Authentication claims and roles",
+          "properties": {
+            "claims": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            },
+            "roles": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "session_id": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "description": "Execution context for the decision",
+      "required": ["mode_id", "jurisdiction", "environment_snapshot_hash", "phenotype_hash", "time"],
+      "additionalProperties": false,
+      "properties": {
+        "mode_id": {
+          "type": "string",
+          "description": "Current operating mode identifier"
+        },
+        "loop_id": {
+          "type": "string",
+          "description": "Control loop identifier (if applicable)"
+        },
+        "jurisdiction": {
+          "type": "string",
+          "description": "Legal/regulatory jurisdiction code"
+        },
+        "environment_snapshot_hash": {
+          "type": "string",
+          "description": "Hash of the environment profile"
+        },
+        "phenotype_hash": {
+          "type": "string",
+          "description": "Hash of the active governance policy"
+        },
+        "event_cursor": {
+          "type": "string",
+          "description": "Replay pointer into event log"
+        },
+        "time": {
+          "type": "object",
+          "description": "Time context for the decision",
+          "required": ["decision_time_source"],
+          "properties": {
+            "decision_time_source": {
+              "type": "string",
+              "enum": ["committed_at", "observed_at"],
+              "description": "Which timestamp field governs decision logic"
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        }
+      }
+    },
+    "obligations_context": {
+      "type": "object",
+      "description": "Pre-existing obligations that may affect the decision",
+      "properties": {
+        "required_approvals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "approval_type": { "type": "string" },
+              "threshold": { "type": "integer" }
+            }
+          }
+        },
+        "required_evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "evidence_type": { "type": "string" },
+              "issuer_constraint": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

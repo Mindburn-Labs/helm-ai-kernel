@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/send_email_effect.v1.json",
+  "title": "Send Email Effect",
+  "description": "Sends an email through a governed connector. External-facing, compensatable via recall.",
+  "type": "object",
+  "required": [
+    "effect_id",
+    "to",
+    "subject"
+  ],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "const": "SEND_EMAIL"
+    },
+    "to": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "body_hash": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "x-helm": {
+    "category": "business",
+    "risk_class": "E2",
+    "approval_level": "single_human",
+    "reversible": true
+  }
+}

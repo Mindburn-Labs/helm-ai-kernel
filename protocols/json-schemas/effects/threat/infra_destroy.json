@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/threat/infra_destroy.json",
+  "title": "Infrastructure Destroy Effect",
+  "description": "Destroys infrastructure resources (e.g., terraform destroy). Irreversible without backup.",
+  "type": "object",
+  "required": ["effect_id", "target_resource", "provider"],
+  "properties": {
+    "effect_id": { "type": "string", "const": "INFRA_DESTROY" },
+    "target_resource": { "type": "string" },
+    "provider": { "type": "string" },
+    "plan_hash": { "type": "string" },
+    "backup_verified": { "type": "boolean" }
+  },
+  "additionalProperties": false,
+  "x-helm": { "category": "threat", "risk_class": "E4", "approval_level": "dual_control", "reversible": false }
+}

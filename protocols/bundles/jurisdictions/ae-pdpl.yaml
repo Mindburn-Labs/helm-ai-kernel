@@ -1,0 +1,41 @@
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: ae-pdpl
+  version: 1.0.0
+  description: UAE Federal Data Protection Law (PDPL)
+  jurisdiction: AE
+  regulations:
+    - PDPL (Federal Decree-Law No. 45 of 2021)
+    - ADGM DPR (Abu Dhabi Global Market Data Protection Regulations)
+    - DIFC DP Law (Dubai International Financial Centre)
+  tags: [uae, pdpl, adgm, difc]
+
+spec:
+  legal_regime: AE
+  data_residency: AE
+  applicable_regulations:
+    - id: PDPL
+      name: UAE Personal Data Protection Law
+      version: "Decree-Law 45/2021"
+      authority: UAE Data Office
+
+  policies:
+    - kind: DenyRule
+      name: deny-cross-border-without-safeguards
+      match:
+        effect_type: data_export
+        conditions:
+          - field: context.adequate_safeguards
+            operator: empty
+      verdict: DENY
+      reason_code: DENY_AE_CROSS_BORDER
+      reason: "Cross-border transfer requires adequate safeguards under PDPL Art. 22"
+
+  deny_codes:
+    - code: DENY_AE_CROSS_BORDER
+      description: Cross-border transfer without safeguards
+    - code: DENY_AE_SENSITIVE_DATA
+      description: Sensitive data processing without explicit consent
+    - code: DENY_AE_DATA_BREACH
+      description: Breach notification obligation not met

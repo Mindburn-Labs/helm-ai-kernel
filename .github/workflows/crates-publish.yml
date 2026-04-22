@@ -1,0 +1,44 @@
+name: crates Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish. Must match VERSION.
+        required: true
+        type: string
+      dry_run:
+        description: Run cargo publish --dry-run only.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Version checks
+        working-directory: sdk/rust
+        run: |
+          FILE_VERSION=$(cat ../../VERSION)
+          REQUESTED="${{ github.event.inputs.version }}"
+          CARGO_VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
+          test "$REQUESTED" = "$FILE_VERSION"
+          test "$CARGO_VERSION" = "$FILE_VERSION"
+      - name: Build and test
+        working-directory: sdk/rust
+        run: cargo test
+      - name: Dry run
+        working-directory: sdk/rust
+        run: cargo publish --dry-run
+      - name: Publish
+        if: github.event.inputs.dry_run != 'true'
+        working-directory: sdk/rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_TOKEN }}
+        run: cargo publish

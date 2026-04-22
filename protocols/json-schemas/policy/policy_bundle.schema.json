@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/policy/policy_bundle.schema.json",
+  "title": "PolicyBundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["revision", "manifest", "created_at"],
+  "properties": {
+    "revision": { "type": "string", "minLength": 1 },
+    "manifest": { "type": "object" },
+    "signature": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

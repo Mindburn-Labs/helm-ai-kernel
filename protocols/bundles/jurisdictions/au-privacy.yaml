@@ -1,0 +1,58 @@
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: au-privacy
+  version: 1.0.0
+  description: Australia Privacy Act 1988 + NZ Privacy Act 2020
+  jurisdiction: AU/NZ
+  regulations:
+    - Privacy Act 1988 (AU)
+    - Australian Privacy Principles (APPs)
+    - Privacy Act 2020 (NZ)
+    - Information Privacy Principles (NZ IPPs)
+  tags: [australia, new-zealand, oaic, privacy]
+
+spec:
+  legal_regime: AU/NZ
+  data_residency: AU
+  applicable_regulations:
+    - id: AU_PRIVACY_ACT
+      name: Privacy Act 1988
+      authority: Office of the Australian Information Commissioner (OAIC)
+    - id: NZ_PRIVACY_ACT
+      name: Privacy Act 2020
+      authority: Office of the Privacy Commissioner (NZ)
+
+  policies:
+    - kind: DenyRule
+      name: deny-overseas-disclosure
+      match:
+        effect_type: data_export
+        conditions:
+          - field: context.enforceable_protections
+            operator: empty
+      verdict: DENY
+      reason_code: DENY_AU_OVERSEAS_DISCLOSURE
+      reason: "APP 8 requires enforceable protections before overseas disclosure"
+
+    - kind: DenyRule
+      name: deny-notifiable-breach
+      match:
+        effect_type: data_breach_response
+        conditions:
+          - field: context.notification_issued
+            operator: empty
+          - field: params.severity
+            operator: in
+            values: [ELIGIBLE, LIKELY_ELIGIBLE]
+      verdict: DENY
+      reason_code: DENY_AU_NOTIFIABLE_BREACH
+      reason: "Notifiable Data Breach scheme requires notification to OAIC"
+
+  deny_codes:
+    - code: DENY_AU_OVERSEAS_DISCLOSURE
+      description: Overseas disclosure without enforceable protections
+    - code: DENY_AU_NOTIFIABLE_BREACH
+      description: Notifiable breach without required notification
+    - code: DENY_NZ_INFORMATION_PRIVACY
+      description: IPP violation under NZ Privacy Act

@@ -1,0 +1,13 @@
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: logistics
+  version: 1.0.0
+  industry: logistics
+  tags:
+  - logistics
+  - supply-chain
+spec:
+  deny_codes:
+  - code: DENY_LOGISTICS_CUSTOMS_DATA
+  - code: DENY_LOGISTICS_HAZMAT

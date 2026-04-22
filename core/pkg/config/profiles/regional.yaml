@@ -1,0 +1,57 @@
+# Regional Profiles
+
+profiles:
+  us:
+    name: "United States"
+    ceremony:
+      min_timelock_ms: 2000
+      min_hold_ms: 1000
+      require_challenge: false
+      domain_separation: "helm:approval:v1:us"
+    data_residency: "us-east-1"
+    compliance:
+      - "SOC2"
+      - "NIST-800-53"
+    encryption: "AES-256-GCM"
+
+  eu:
+    name: "European Union"
+    ceremony:
+      min_timelock_ms: 5000
+      min_hold_ms: 3000
+      require_challenge: true
+      domain_separation: "helm:approval:v1:eu"
+    data_residency: "eu-west-1"
+    compliance:
+      - "GDPR"
+      - "SOC2"
+      - "ISO-27001"
+    encryption: "AES-256-GCM"
+    pii_handling: "strict"
+    right_to_erasure: true
+
+  ru:
+    name: "Russian Federation"
+    ceremony:
+      min_timelock_ms: 3000
+      min_hold_ms: 2000
+      require_challenge: false
+      domain_separation: "helm:approval:v1:ru"
+    data_residency: "ru-moscow-1"
+    compliance:
+      - "GOST-R-34.10"
+      - "152-FZ"
+    encryption: "GOST-28147-89"
+
+  cn:
+    name: "China"
+    ceremony:
+      min_timelock_ms: 3000
+      min_hold_ms: 2000
+      require_challenge: false
+      domain_separation: "helm:approval:v1:cn"
+    data_residency: "cn-beijing-1"
+    compliance:
+      - "GB/T-35273"
+      - "CSL"
+    encryption: "SM4"

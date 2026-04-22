@@ -1,0 +1,16 @@
+version: "1"
+provider: google
+
+governance:
+  mode: enforce
+  receipt_dir: ./evidence/receipts
+  proof_dir: ./evidence/proofs
+
+mcp:
+  transport: http
+  listen: ":8080"
+  auth_mode: none
+
+google:
+  upstream: https://generativelanguage.googleapis.com
+  model: gemini-2.0-flash

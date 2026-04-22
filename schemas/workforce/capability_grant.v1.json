@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/workforce/capability_grant.v1.json",
+  "title": "Capability Grant",
+  "description": "Grants a virtual employee access to specific connector tools.",
+  "type": "object",
+  "required": ["grant_id", "employee_id", "connector_id", "tool_names", "created_at"],
+  "properties": {
+    "grant_id": { "type": "string" },
+    "employee_id": { "type": "string" },
+    "connector_id": { "type": "string" },
+    "tool_names": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "effect_types": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "max_daily_actions": { "type": "integer", "minimum": 1 },
+    "max_budget_cents": { "type": "integer", "minimum": 0 },
+    "policy_hash": { "type": "string" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "granted_by": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

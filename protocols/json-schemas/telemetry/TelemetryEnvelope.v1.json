@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/telemetry/TelemetryEnvelope.v1.json",
+  "title": "TelemetryEnvelope",
+  "description": "Canonical wire format for pipeline telemetry events. Streamed over WebSocket and stored in per-run ring buffers for replay.",
+  "type": "object",
+  "required": ["v", "seq", "run_id", "type", "ts", "payload"],
+  "properties": {
+    "v": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Schema version for forward compatibility."
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Monotonic sequence number per TelemetryHub instance. Used for reconnect replay (since_seq)."
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Evaluation run identifier. Ties events to a specific orchestration run."
+    },
+    "type": {
+      "type": "string",
+      "enum": ["PreEval", "PostEval", "OnPass", "OnFail", "OnError", "Override"],
+      "description": "HookType that triggered this event."
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Server-side timestamp (ISO 8601)."
+    },
+    "reasoning_summary": {
+      "type": "array",
+      "description": "Lightweight reasoning projection. Full tree fetched on demand via REST.",
+      "items": {
+        "type": "object",
+        "required": ["step_id", "label", "decision"],
+        "properties": {
+          "step_id": { "type": "string" },
+          "label": { "type": "string" },
+          "decision": { "type": "string" },
+          "duration_ns": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "description": "EvalContext data. Schema defined separately."
+    }
+  },
+  "additionalProperties": false
+}

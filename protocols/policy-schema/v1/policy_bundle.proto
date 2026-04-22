@@ -1,0 +1,52 @@
+// HELM Policy Schema — PolicyBundle
+//
+// A signed, versioned, jurisdiction-scoped policy artifact.
+// Contains compiled bytecode for the custom VM ISA.
+// Client caches by hash, verifies signature. Kernel always recomputes.
+//
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.policy.v1;
+
+option go_package = "helm.mindburn.run/policy/v1;policyv1";
+
+import "google/protobuf/timestamp.proto";
+import "v1/foundations.proto";
+
+message PolicyBundle {
+  // SHA-256 of canonical form.
+  bytes policy_bundle_hash = 1;
+  // Required VM version hash (CPIHash).
+  bytes cpi_hash = 2;
+  // Jurisdiction scope this bundle applies to.
+  string jurisdiction_scope_id = 3;
+  // Adapter set references for cross-border transformers.
+  repeated string adapter_set_refs = 4;
+
+  // Compiled PolicyIR bytecode (custom ISA).
+  bytes bytecode = 10;
+  // Source syntax version, e.g. "cel-like/0.1".
+  string source_syntax_version = 11;
+
+  // Signature chain.
+  repeated BundleSignature signatures = 15;
+
+  google.protobuf.Timestamp compiled_at = 16;
+
+  // Schema version and capability negotiation.
+  SchemaEnvelope envelope = 17;
+
+  reserved 100 to 199;
+  reserved 900 to 999;
+}
+
+message BundleSignature {
+  string signer_id = 1;
+  bytes signature = 2;
+  // Algorithm, e.g. "ed25519".
+  string algorithm = 3;
+  string key_id = 4;
+  google.protobuf.Timestamp signed_at = 5;
+
+  reserved 100 to 199;
+}

@@ -1,0 +1,9 @@
+Contact: mailto:security@mindburn.org
+Contact: https://github.com/Mindburn-Labs/helm-oss/security/advisories/new
+Expires: 2027-04-15T00:00:00Z
+Encryption: https://mindburn.org/.well-known/security.asc
+Preferred-Languages: en
+Canonical: https://try.mindburn.org/.well-known/security.txt
+Policy: https://github.com/Mindburn-Labs/helm-oss/blob/main/SECURITY.md
+Hiring: https://mindburn.org/careers
+Acknowledgments: https://mindburn.org/trust/hall-of-fame

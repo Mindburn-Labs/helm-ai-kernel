@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/access/PrivilegedAccessRequest.v1.json",
+  "title": "PrivilegedAccessRequest",
+  "description": "Request for elevated privileges with justification and audit trail",
+  "type": "object",
+  "required": ["version", "request_id", "requester", "requested_tier", "justification"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "request_id": {
+      "type": "string",
+      "pattern": "^par-[a-z0-9-]+$"
+    },
+    "requester": {
+      "type": "object",
+      "required": ["identity_id", "email"],
+      "properties": {
+        "identity_id": {"type": "string"},
+        "email": {"type": "string", "format": "email"},
+        "name": {"type": "string"},
+        "current_tier": {"type": "string"}
+      }
+    },
+    "requested_tier": {
+      "type": "string",
+      "description": "Tier ID being requested"
+    },
+    "justification": {
+      "type": "object",
+      "required": ["reason", "category"],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 2048
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "incident_response",
+            "maintenance",
+            "debugging",
+            "compliance_audit",
+            "emergency",
+            "other"
+          ]
+        },
+        "incident_id": {
+          "type": "string",
+          "description": "Link to incident if applicable"
+        },
+        "ticket_id": {
+          "type": "string",
+          "description": "Link to support ticket if applicable"
+        }
+      }
+    },
+    "requested_duration_seconds": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 86400
+    },
+    "requested_scope": {
+      "type": "object",
+      "properties": {
+        "packs": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Specific pack IDs, or ['*'] for all"
+        },
+        "environments": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "actions": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "approved", "denied", "expired", "revoked"],
+      "default": "pending"
+    },
+    "approvals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "approver_id": {"type": "string"},
+          "approved_at": {"type": "string", "format": "date-time"},
+          "comment": {"type": "string"}
+        }
+      }
+    },
+    "denials": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "denier_id": {"type": "string"},
+          "denied_at": {"type": "string", "format": "date-time"},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/authority/authority_evaluation.v1.schema.json",
+  "title": "Authority Evaluation",
+  "description": "Canonical authority evaluation request and decision types for the HELM authority model.",
+  "type": "object",
+  "$defs": {
+    "EvaluationRequest": {
+      "type": "object",
+      "required": ["request_id", "principal_id", "principal_type", "effect_types", "policy_epoch", "timestamp"],
+      "properties": {
+        "request_id": { "type": "string" },
+        "principal_id": { "type": "string" },
+        "principal_type": { "type": "string" },
+        "effect_types": { "type": "array", "items": { "type": "string" } },
+        "policy_epoch": { "type": "string" },
+        "idempotency_key": { "type": "string" },
+        "context": { "type": "object", "additionalProperties": { "type": "string" } },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "EvaluationDecision": {
+      "type": "object",
+      "required": ["decision_id", "request_id", "result", "policy_epoch", "issued_at"],
+      "properties": {
+        "decision_id": { "type": "string" },
+        "request_id": { "type": "string" },
+        "result": { "type": "string", "enum": ["ALLOW", "DENY", "REQUIRE_APPROVAL", "REQUIRE_EVIDENCE", "DEFER"] },
+        "reason_codes": { "type": "array", "items": { "type": "string" } },
+        "policy_epoch": { "type": "string" },
+        "issued_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "content_hash": { "type": "string" }
+      }
+    }
+  }
+}

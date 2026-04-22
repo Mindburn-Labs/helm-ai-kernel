@@ -1,0 +1,9 @@
+template_id: "orgdna.arc.eval.v1"
+name: "ARC Blind Evaluation Substrate"
+roles:
+  - id: "role.executor"
+    permissions: [ "mutate" ]
+connectors:
+  - id: "helm.connector.arc"
+    version: "v1"
+default_policy: "profile.arc-blind-eval.v1"

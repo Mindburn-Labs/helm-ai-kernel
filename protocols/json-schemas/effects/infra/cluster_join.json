@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/cluster_join.json",
+  "title": "Cluster Join Effect",
+  "description": "Registers a new node to the HELM cluster",
+  "type": "object",
+  "required": ["effect_id", "node_ip", "node_role"],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "const": "infra.cluster.join"
+    },
+    "node_ip": {
+      "type": "string",
+      "format": "ipv4"
+    },
+    "node_role": {
+      "type": "string",
+      "enum": ["worker", "controller"]
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    }
+  },
+  "x-helm": {
+    "category": "cluster",
+    "risk_level": "high",
+    "requires_approval": true
+  }
+}

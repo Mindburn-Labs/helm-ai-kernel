@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/policy/backoff_policy.schema.json",
+  "title": "BackoffPolicy",
+  "description": "Backoff policy configuration per Addendum 8.5.X - retry delay MUST be deterministic",
+  "type": "object",
+  "required": ["policy_id", "base_ms", "max_ms", "max_jitter_ms", "max_attempts"],
+  "additionalProperties": false,
+  "properties": {
+    "policy_id": {
+      "type": "string",
+      "description": "Unique identifier for this backoff policy"
+    },
+    "base_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Base delay in milliseconds for exponential backoff"
+    },
+    "max_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Maximum delay in milliseconds (cap)"
+    },
+    "max_jitter_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Maximum jitter in milliseconds (deterministic, not wall-clock random)"
+    },
+    "max_attempts": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum number of retry attempts"
+    },
+    "exponential_base": {
+      "type": "integer",
+      "minimum": 2,
+      "default": 2,
+      "description": "Base for exponential backoff calculation (default 2)"
+    }
+  }
+}

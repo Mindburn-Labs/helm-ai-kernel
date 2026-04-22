@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/certification/module_attestation.schema.json",
+  "title": "ModuleAttestation",
+  "description": "Per Section 10 - Cryptographic attestation for certified modules",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["attestation_id", "module", "provenance", "certification", "signatures"],
+  "properties": {
+    "attestation_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this attestation"
+    },
+    "version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Attestation schema version"
+    },
+    
+    "module": {
+      "type": "object",
+      "description": "Module identity and content addressing",
+      "required": ["module_id", "artifact_hash", "manifest_hash"],
+      "additionalProperties": false,
+      "properties": {
+        "module_id": {
+          "type": "string",
+          "description": "Unique module identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable module name"
+        },
+        "version": {
+          "type": "string",
+          "description": "Semantic version"
+        },
+        "artifact_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "Content-addressed hash of module artifact"
+        },
+        "manifest_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "Hash of module manifest"
+        },
+        "source_repo": {
+          "type": "string",
+          "format": "uri",
+          "description": "Source repository URL"
+        },
+        "commit_hash": {
+          "type": "string",
+          "description": "Git commit hash for reproducibility"
+        }
+      }
+    },
+
+    "provenance": {
+      "type": "object",
+      "description": "Build provenance for reproducibility",
+      "required": ["builder_id", "build_timestamp", "build_config_hash"],
+      "properties": {
+        "builder_id": {
+          "type": "string",
+          "description": "Identity of build system"
+        },
+        "build_timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "build_config_hash": {
+          "type": "string",
+          "description": "Hash of build configuration"
+        },
+        "dependency_hashes": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Hashes of all dependencies"
+        },
+        "reproducible": {
+          "type": "boolean",
+          "description": "Whether build is reproducible"
+        },
+        "reproducibility_proof": {
+          "type": "string",
+          "description": "Link to reproducibility verification"
+        }
+      }
+    },
+
+    "certification": {
+      "type": "object",
+      "description": "Certification test results",
+      "required": ["schema_conformance", "determinism_tests", "permissions_declared"],
+      "properties": {
+        "schema_conformance": {
+          "type": "object",
+          "properties": {
+            "passed": { "type": "boolean" },
+            "tested_at": { "type": "string", "format": "date-time" },
+            "schemas_validated": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "determinism_tests": {
+          "type": "object",
+          "properties": {
+            "passed": { "type": "boolean" },
+            "tested_at": { "type": "string", "format": "date-time" },
+            "test_count": { "type": "integer" },
+            "seed_used": { "type": "string" }
+          }
+        },
+        "permissions_declared": {
+          "type": "object",
+          "properties": {
+            "effect_types": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Effect types this module may produce"
+            },
+            "required_capabilities": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "resource_limits": {
+              "type": "object",
+              "additionalProperties": { "type": "number" }
+            }
+          }
+        },
+        "security_audit": {
+          "type": "object",
+          "properties": {
+            "audited": { "type": "boolean" },
+            "auditor_id": { "type": "string" },
+            "audit_report_hash": { "type": "string" },
+            "audit_date": { "type": "string", "format": "date-time" }
+          }
+        }
+      }
+    },
+
+    "signatures": {
+      "type": "array",
+      "description": "Cryptographic signatures attesting to certification",
+      "items": {
+        "type": "object",
+        "required": ["signer_id", "signature", "signed_at"],
+        "properties": {
+          "signer_id": {
+            "type": "string",
+            "description": "Identity of the signer"
+          },
+          "signer_role": {
+            "type": "string",
+            "enum": ["builder", "auditor", "certifier", "operator"],
+            "description": "Role of the signer"
+          },
+          "signature": {
+            "type": "string",
+            "description": "Base64-encoded signature"
+          },
+          "algorithm": {
+            "type": "string",
+            "enum": ["ed25519", "ecdsa-p256", "rsa-sha256"],
+            "description": "Signing algorithm"
+          },
+          "signed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "public_key_id": {
+            "type": "string",
+            "description": "Reference to public key for verification"
+          }
+        }
+      }
+    },
+
+    "validity": {
+      "type": "object",
+      "description": "Attestation validity period",
+      "properties": {
+        "not_before": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "not_after": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "revocation_endpoint": {
+          "type": "string",
+          "format": "uri",
+          "description": "Endpoint to check revocation status"
+        }
+      }
+    },
+
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

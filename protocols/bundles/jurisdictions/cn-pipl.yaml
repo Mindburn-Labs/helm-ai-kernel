@@ -1,0 +1,56 @@
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: cn-pipl
+  version: 1.0.0
+  description: China Personal Information Protection Law
+  jurisdiction: CN
+  regulations:
+    - PIPL (Personal Information Protection Law)
+    - DSL (Data Security Law)
+    - CSL (Cybersecurity Law)
+  tags: [china, pipl, dsl, cac]
+
+spec:
+  legal_regime: CN
+  data_residency: CN
+  applicable_regulations:
+    - id: PIPL
+      name: Personal Information Protection Law
+      authority: Cyberspace Administration of China
+    - id: DSL
+      name: Data Security Law
+      authority: National People's Congress
+
+  policies:
+    - kind: DenyRule
+      name: deny-cross-border-data
+      match:
+        effect_type: data_export
+        conditions:
+          - field: params.destination_region
+            operator: not_equals
+            value: CN
+      verdict: DENY
+      reason_code: DENY_CN_CROSS_BORDER_DATA
+      reason: "Cross-border data transfer requires CAC assessment under PIPL Art. 38"
+
+    - kind: DenyRule
+      name: deny-critical-data-export
+      match:
+        effect_type: data_export
+        conditions:
+          - field: params.data_class
+            operator: in
+            values: [CRITICAL, IMPORTANT, CORE_NATIONAL]
+      verdict: DENY
+      reason_code: DENY_CN_CRITICAL_DATA
+      reason: "Critical data must remain within PRC under DSL"
+
+  deny_codes:
+    - code: DENY_CN_CROSS_BORDER_DATA
+      description: Cross-border transfer without CAC assessment
+    - code: DENY_CN_CRITICAL_DATA
+      description: Critical data export prohibited
+    - code: DENY_CN_CONSENT_REQUIRED
+      description: Separate consent required for sensitive PI

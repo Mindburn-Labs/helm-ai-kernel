@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_packs_bind_v1.schema.json",
+  "title": "PacksBindInput",
+  "description": "Input schema for tool packs.bind (KERNEL, REVERSIBLE_WRITE)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "idempotency_key",
+    "target_ref",
+    "pack_hash"
+  ],
+  "properties": {
+    "idempotency_key": {
+      "description": "Idempotency key derived from: target_ref, pack_hash",
+      "type": "string"
+    },
+    "pack_hash": {
+      "description": "Content-addressed reference",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    },
+    "target_ref": {
+      "description": "Content-addressed reference",
+      "type": "string"
+    }
+  }
+}

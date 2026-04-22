@@ -1,0 +1,36 @@
+{
+  "$id": "https://helm.mindburn.run/schemas/core/genesis_approval.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HELM Genesis Approval Request v1",
+  "description": "ORG_GENESIS_APPROVAL ceremony request with four-hash binding. Per ARCHITECTURE.md §3.",
+  "type": "object",
+  "required": ["binding", "challenge_hash", "timelock_duration", "approver_key_ids", "signatures", "submitted_at"],
+  "properties": {
+    "binding": {
+      "type": "object",
+      "required": ["governance_config_hash", "mirror_text_hash", "impact_report_hash", "p0_ceiling_hash"],
+      "properties": {
+        "governance_config_hash": { "type": "string", "description": "SHA-256 of JCS-canonicalized governance configuration" },
+        "mirror_text_hash": { "type": "string", "description": "SHA-256 of Deterministic Semantic Mirror" },
+        "impact_report_hash": { "type": "string", "description": "SHA-256 of configuration diff + confluence proof" },
+        "p0_ceiling_hash": { "type": "string", "description": "SHA-256 of active P0 ceiling set" }
+      }
+    },
+    "challenge_hash": { "type": "string", "description": "SHA-256 of concatenated binding hashes" },
+    "quorum": { "type": "integer", "minimum": 0, "default": 0 },
+    "timelock_duration": { "type": "string", "description": "Go duration string (e.g., '5s', '1m')" },
+    "rate_limit_window": { "type": "string" },
+    "emergency_override": { "type": "boolean", "default": false },
+    "approver_key_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "signatures": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "submitted_at": { "type": "string", "format": "date-time" }
+  }
+}

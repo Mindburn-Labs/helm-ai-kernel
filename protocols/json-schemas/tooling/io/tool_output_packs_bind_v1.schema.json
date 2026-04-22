@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_output_packs_bind_v1.schema.json",
+  "title": "PacksBindOutput",
+  "description": "Output schema for tool packs.bind",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "status",
+    "completed_at"
+  ],
+  "properties": {
+    "applied_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "completed_at": {
+      "description": "ISO 8601 completion timestamp",
+      "format": "date-time",
+      "type": "string"
+    },
+    "cost_units": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "error": {
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "latency_ms": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "output_hash": {
+      "description": "SHA-256 hash of the canonical output payload",
+      "type": "string"
+    },
+    "pack_hash": {
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Echoed request_id from input",
+      "format": "uuid",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "success",
+        "error",
+        "timeout",
+        "rate_limited"
+      ],
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "pack_id": "pci-dss-4-v1",
+  "label": "PCI DSS 4.0 Compliance",
+  "description": "Governs agent operations handling cardholder data (CHD) and sensitive authentication data (SAD). Enforces network security, access controls, encryption, and monitoring per PCI DSS v4.0.",
+  "version": 1,
+  "compliance_framework": "PCI_DSS_4",
+  "programs": [
+    {
+      "program_id": "prog-network-security",
+      "label": "Network Security Controls (Req 1-2)",
+      "status": "active",
+      "controls": [
+        { "control_id": "1.2.1", "description": "Network security controls restrict inbound/outbound traffic", "enforcement": "MANDATORY" },
+        { "control_id": "2.2.7", "description": "Non-console admin access encrypted with strong cryptography", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "deny", "condition": "data_class == CHD AND egress_protocol != https", "reason": "PCI 2.2.7: CHD must use encrypted transmission" },
+        { "action": "deny", "condition": "data_class == CHD AND egress_destination NOT IN cardholder_data_env", "reason": "PCI 1.2.1: CHD restricted to CDE" }
+      ]
+    },
+    {
+      "program_id": "prog-access-control",
+      "label": "Strong Access Control (Req 7-9)",
+      "status": "active",
+      "controls": [
+        { "control_id": "7.2.1", "description": "Access control system covering all system components", "enforcement": "MANDATORY" },
+        { "control_id": "8.3.1", "description": "All user access authenticated with strong mechanism", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "deny", "condition": "data_class IN [CHD, SAD] AND privilege_tier < ELEVATED", "reason": "PCI 7.2.1: CHD/SAD requires elevated privileges" },
+        { "action": "require_approval", "condition": "effect_type == EXECUTE_PAYMENT", "reason": "PCI 8.3.1: payment operations require strong authentication" }
+      ]
+    },
+    {
+      "program_id": "prog-monitoring",
+      "label": "Monitoring & Testing (Req 10-11)",
+      "status": "active",
+      "controls": [
+        { "control_id": "10.2.1", "description": "Audit logs capture all individual access to CHD", "enforcement": "MANDATORY" },
+        { "control_id": "10.4.1", "description": "Audit logs reviewed at least daily", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "audit", "condition": "data_class IN [CHD, SAD]", "reason": "PCI 10.2.1: all CHD/SAD access must be logged" }
+      ]
+    }
+  ],
+  "data_classes": ["CHD", "SAD", "PAN", "CVV", "PIN", "TRACK_DATA"],
+  "budget_constraints": {
+    "daily_limit_cents": 500000,
+    "risk_score_cap": 300
+  },
+  "evidence_requirements": {
+    "receipt_signing": "MANDATORY",
+    "proofgraph_enabled": true,
+    "evidence_pack_retention_days": 365,
+    "audit_chain_verification": true,
+    "quarterly_review_required": true
+  }
+}

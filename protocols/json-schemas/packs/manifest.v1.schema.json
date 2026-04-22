@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/packs/manifest.v1.schema.json",
+  "title": "PackManifest",
+  "description": "Definition of an installable HELM Pack.",
+  "type": "object",
+  "required": [
+    "pack_id",
+    "version",
+    "type",
+    "description",
+    "maintainer",
+    "capabilities"
+  ],
+  "properties": {
+    "pack_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["FACTORY", "CONNECTOR", "POLICY", "EVIDENCE", "COMPOSITE"]
+    },
+    "description": { "type": "string" },
+    "maintainer": { "type": "string" },
+    "license": { "type": "string" },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": { "type": "string" } 
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "factories": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/factory_ref" }
+        },
+        "connectors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/connector_ref" }
+        },
+        "policies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/policy_ref" }
+        }
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Output scopes this pack needs access to (e.g. 'effect:write', 'github:read')"
+      }
+    }
+  },
+  "$defs": {
+    "factory_ref": {
+      "type": "object",
+      "required": ["name", "entrypoint"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "entrypoint": { "type": "string" }
+      }
+    },
+    "connector_ref": {
+      "type": "object",
+      "required": ["name", "provider"],
+      "properties": {
+        "name": { "type": "string" },
+        "provider": { "type": "string" },
+        "scopes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "policy_ref": {
+      "type": "object",
+      "required": ["name", "path"],
+      "properties": {
+        "name": { "type": "string" },
+        "path": { "type": "string" },
+        "effect_type": { "type": "string" }
+      }
+    }
+  }
+}

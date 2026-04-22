@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for backlog markers in retained public files
+        run: |
+          set -euo pipefail
+          MARKER_A='TO''DO'
+          MARKER_B='FIX''ME'
+          MARKER_C='WI''P'
+          MARKER_D='coming ''soon'
+          TOKEN_PHASE='[Pp]''hase [0-9]'
+          TOKEN_PLAN_A='road''map'
+          TOKEN_PLAN_B='road''map item'
+          PATTERN="${MARKER_A}|${MARKER_B}|${MARKER_C}|${MARKER_D}|${TOKEN_PHASE}|${TOKEN_PLAN_B}|${TOKEN_PLAN_A}"
+          ! rg -n --hidden -S "$PATTERN" \
+            README.md docs .github core sdk dashboard deploy packages tests scripts \
+            --glob '!**/node_modules/**' \
+            --glob '!**/dist/**' \
+            --glob '!**/target/**' \
+            --glob '!core/pkg/buildguard/verify.go' \
+            --glob '!core/pkg/crypto/canonical_hardening_test.go'
+      - name: Check tracked file hygiene
+        run: |
+          set -euo pipefail
+          ! git ls-files | rg '\.(db|sqlite|log|tar|tar\.gz|zip|exe|dll|so|dylib)$'
+
+  kernel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Lint
+        run: make lint
+      - name: Build
+        run: make build
+      - name: Test
+        run: make test
+      - name: Crucible
+        run: make crucible
+
+  python-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test Python SDK
+        run: make test-sdk-py
+
+  ts-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test TypeScript SDK
+        run: make test-sdk-ts
+
+  js-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test JavaScript CLI
+        run: make test-cli
+      - name: Verify fixtures
+        run: make verify-fixtures
+
+  rust-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Test Rust SDK
+        run: make test-sdk-rust
+
+  java-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Test Java SDK
+        run: make test-sdk-java

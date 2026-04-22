@@ -1,0 +1,194 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "helm://schemas/policy/ErrorBudgetPolicy.v1.json",
+  "title": "ErrorBudgetPolicy.v1",
+  "description": "Policy for error budget enforcement, release gating, and incident automation.",
+  "type": "object",
+  "required": ["policy_id", "version", "name", "slo_refs", "enforcement"],
+  "properties": {
+    "policy_id": {
+      "type": "string",
+      "pattern": "^ebp-[a-zA-Z0-9-]+$"
+    },
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "slo_refs": {
+      "type": "array",
+      "description": "SLOs this policy applies to",
+      "items": { "type": "string" }
+    },
+    "enforcement": {
+      "$ref": "#/$defs/Enforcement"
+    },
+    "release_gating": {
+      "$ref": "#/$defs/ReleaseGating"
+    },
+    "incident_automation": {
+      "$ref": "#/$defs/IncidentAutomation"
+    },
+    "rollback_policy": {
+      "$ref": "#/$defs/RollbackPolicy"
+    },
+    "exemptions": {
+      "$ref": "#/$defs/Exemptions"
+    }
+  },
+  "$defs": {
+    "Enforcement": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "audit", "disabled"]
+        },
+        "budget_thresholds": {
+          "type": "object",
+          "properties": {
+            "freeze_releases_at_percentage": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "description": "Stop releases when budget consumed reaches this %"
+            },
+            "critical_alert_at_percentage": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "warning_at_percentage": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            }
+          }
+        }
+      }
+    },
+    "ReleaseGating": {
+      "type": "object",
+      "properties": {
+        "require_budget_available": {
+          "type": "boolean",
+          "description": "Block releases if error budget exhausted"
+        },
+        "min_budget_remaining_percentage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Minimum budget required to allow release"
+        },
+        "allow_emergency_release": {
+          "type": "boolean",
+          "description": "Allow releases with approval even if budget exhausted"
+        },
+        "emergency_approvers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "cooldown_after_incident_hours": {
+          "type": "integer",
+          "description": "Hours to wait after incident before allowing releases"
+        }
+      }
+    },
+    "IncidentAutomation": {
+      "type": "object",
+      "properties": {
+        "auto_create_incident": {
+          "type": "boolean",
+          "description": "Automatically create incident on SLO breach"
+        },
+        "incident_severity_mapping": {
+          "type": "object",
+          "properties": {
+            "budget_exhausted": { "type": "string", "enum": ["sev1", "sev2", "sev3", "sev4"] },
+            "fast_burn": { "type": "string", "enum": ["sev1", "sev2", "sev3", "sev4"] },
+            "slow_burn": { "type": "string", "enum": ["sev1", "sev2", "sev3", "sev4"] }
+          }
+        },
+        "notification_channels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "enum": ["slack", "pagerduty", "email", "webhook"] },
+              "target": { "type": "string" }
+            }
+          }
+        },
+        "runbook_url": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "RollbackPolicy": {
+      "type": "object",
+      "properties": {
+        "auto_rollback_enabled": {
+          "type": "boolean",
+          "description": "Automatically rollback on SLO breach"
+        },
+        "rollback_trigger_conditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "condition": { 
+                "type": "string", 
+                "enum": ["budget_burn_rate", "error_rate_spike", "latency_spike", "availability_drop"] 
+              },
+              "threshold": { "type": "number" },
+              "window": { "type": "string" }
+            }
+          }
+        },
+        "rollback_target": {
+          "type": "string",
+          "enum": ["previous_version", "last_known_good", "specific_version"]
+        },
+        "require_approval_for_rollback": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Exemptions": {
+      "type": "object",
+      "properties": {
+        "maintenance_windows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "start": { "type": "string", "format": "date-time" },
+              "end": { "type": "string", "format": "date-time" },
+              "reason": { "type": "string" }
+            }
+          }
+        },
+        "excluded_error_codes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Error codes not counted against budget"
+        },
+        "excluded_endpoints": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "$id": "https://mindburn.ai/schemas/connectors/arc/arc_bridge_request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ARC Bridge Request",
+  "type": "object",
+  "properties": {
+    "operation": {
+      "type": "string",
+      "enum": [
+        "open_session",
+        "session_step",
+        "read_observation",
+        "flush_state"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "operation",
+    "payload"
+  ]
+}

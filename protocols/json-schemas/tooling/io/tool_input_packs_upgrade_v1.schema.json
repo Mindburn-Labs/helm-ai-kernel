@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_packs_upgrade_v1.schema.json",
+  "title": "PacksUpgradeInput",
+  "description": "Input schema for tool packs.upgrade (KERNEL, REVERSIBLE_WRITE)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "idempotency_key",
+    "target_ref",
+    "from_pack_hash",
+    "to_pack_hash"
+  ],
+  "properties": {
+    "from_pack_hash": {
+      "description": "Content-addressed reference",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "description": "Idempotency key derived from: target_ref, from_pack_hash, to_pack_hash",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    },
+    "target_ref": {
+      "description": "Content-addressed reference",
+      "type": "string"
+    },
+    "to_pack_hash": {
+      "description": "Content-addressed reference",
+      "type": "string"
+    }
+  }
+}

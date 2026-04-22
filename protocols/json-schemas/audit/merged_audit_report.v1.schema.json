@@ -1,0 +1,237 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://helm.mindburn.run/schemas/audit/merged_audit_report.v1.schema.json",
+    "title": "HELM Merged Audit Report v1",
+    "description": "Unified final report combining mechanical (25 sections) + AI (7 missions) audit layers with completeness verification.",
+    "type": "object",
+    "required": [
+        "version",
+        "timestamp",
+        "git_sha",
+        "mechanical",
+        "ai",
+        "completeness",
+        "verdict",
+        "report_hash"
+    ],
+    "properties": {
+        "version": {
+            "type": "string",
+            "const": "2.0"
+        },
+        "timestamp": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "git_sha": {
+            "type": "string",
+            "minLength": 7
+        },
+        "mechanical": {
+            "type": "object",
+            "required": [
+                "sections",
+                "pass",
+                "fail",
+                "warn",
+                "skip",
+                "details"
+            ],
+            "properties": {
+                "sections": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "pass": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "fail": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "warn": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "skip": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "details": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "section",
+                            "status"
+                        ],
+                        "properties": {
+                            "section": {
+                                "type": "string"
+                            },
+                            "status": {
+                                "type": "string",
+                                "enum": [
+                                    "PASS",
+                                    "FAIL",
+                                    "WARN",
+                                    "SKIP"
+                                ]
+                            },
+                            "detail": {
+                                "type": "string"
+                            },
+                            "timestamp": {
+                                "type": "string"
+                            },
+                            "git_sha": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "ai": {
+            "type": "object",
+            "required": [
+                "model",
+                "missions",
+                "completed",
+                "findings",
+                "coverage_score"
+            ],
+            "properties": {
+                "model": {
+                    "type": "string"
+                },
+                "missions": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "completed": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "findings": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "mission_id",
+                            "id",
+                            "severity",
+                            "description"
+                        ],
+                        "properties": {
+                            "mission_id": {
+                                "type": "string"
+                            },
+                            "id": {
+                                "type": "string"
+                            },
+                            "severity": {
+                                "type": "string",
+                                "enum": [
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "critical"
+                                ]
+                            },
+                            "file": {
+                                "type": "string"
+                            },
+                            "line": {
+                                "type": "integer"
+                            },
+                            "description": {
+                                "type": "string"
+                            },
+                            "recommendation": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "coverage_score": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "mission_results": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "mission_id"
+                        ],
+                        "properties": {
+                            "mission_id": {
+                                "type": "string"
+                            },
+                            "severity": {
+                                "type": "string"
+                            },
+                            "findings": {
+                                "type": "array"
+                            },
+                            "coverage_score": {
+                                "type": "number"
+                            },
+                            "summary": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "completeness": {
+            "type": "object",
+            "required": [
+                "all_missions_ran",
+                "mission_chain_verified",
+                "total_required",
+                "total_completed"
+            ],
+            "properties": {
+                "all_missions_ran": {
+                    "type": "boolean"
+                },
+                "mission_chain_verified": {
+                    "type": "boolean"
+                },
+                "chain_head": {
+                    "type": "string"
+                },
+                "missing_missions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "total_required": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "total_completed": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "verdict": {
+            "type": "string",
+            "enum": [
+                "COMPLIANT",
+                "NOT_COMPLIANT"
+            ]
+        },
+        "report_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+    }
+}

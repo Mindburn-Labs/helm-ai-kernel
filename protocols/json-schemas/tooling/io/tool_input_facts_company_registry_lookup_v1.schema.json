@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_facts_company_registry_lookup_v1.schema.json",
+  "title": "FactsCompanyRegistry_lookupInput",
+  "description": "Input schema for tool facts.company.registry_lookup (KERNEL, READ_ONLY)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "country_code"
+  ],
+  "properties": {
+    "company_name": {
+      "type": "string"
+    },
+    "country_code": {
+      "maxLength": 2,
+      "minLength": 2,
+      "type": "string"
+    },
+    "registration_number": {
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    }
+  }
+}

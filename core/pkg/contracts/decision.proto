@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package contracts;
+
+option go_package = "./pkg/interlock/api";
+
+import "google/protobuf/timestamp.proto";
+
+enum Verdict {
+  VERDICT_UNSPECIFIED = 0;
+  VERDICT_ALLOW = 1;
+  VERDICT_DENY = 2;
+}
+
+message DecisionRecord {
+  string proposal_id = 1;
+  string step_id = 2;
+  string phenotype_hash = 3;
+  string state_cursor = 4;
+  string env_fingerprint = 5;
+  Verdict verdict = 6;
+  string reason = 7;
+  google.protobuf.Timestamp timestamp = 8;
+  bytes signature = 9;
+  string decision_hash = 10; // Canonical hash of the fields (excluding signature/decision_hash)
+}

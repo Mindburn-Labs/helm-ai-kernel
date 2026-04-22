@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/safety/guardian_switch_event.schema.json",
+  "title": "GuardianSwitchEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_type", "timestamp", "from_mode", "to_mode", "reason"],
+  "properties": {
+    "event_type": { "type": "string", "const": "guardian.switch" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "decision_id": { "type": "string", "format": "uuid" },
+    "from_mode": { "type": "string", "enum": ["base", "fallback"] },
+    "to_mode": { "type": "string", "enum": ["base", "fallback"] },
+    "reason": { "type": "string", "minLength": 1 }
+  }
+}

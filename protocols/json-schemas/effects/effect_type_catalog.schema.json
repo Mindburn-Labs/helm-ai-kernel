@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/effects/effect_type_catalog.schema.json",
+  "title": "EffectTypeCatalog",
+  "description": "Per Section 8 - Canonical effect types with idempotency rules",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "catalog_version",
+    "effect_types"
+  ],
+  "properties": {
+    "catalog_version": {
+      "type": "string",
+      "description": "Semantic version of this catalog"
+    },
+    "effect_types": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "type_id",
+          "name",
+          "idempotency",
+          "classification"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "type_id": {
+            "type": "string",
+            "enum": [
+              "DATA_READ",
+              "DATA_WRITE",
+              "DATA_DELETE",
+              "DATA_EXPORT",
+              "FUNDS_TRANSFER",
+              "PAYMENT_SEND",
+              "BILLING_CHANGE",
+              "PERMISSION_CHANGE",
+              "IAM_CHANGE",
+              "SECRET_READ",
+              "SECRET_WRITE",
+              "DEPLOY",
+              "DEPLOY_RELEASE",
+              "INFRA_CHANGE",
+              "NOTIFY",
+              "MESSAGING_BULK_SEND",
+              "CUSTOMER_OUTREACH",
+              "MODULE_INSTALL",
+              "CONFIG_CHANGE",
+              "AUDIT_LOG",
+              "EXTERNAL_API_CALL",
+              "CODE_EXEC",
+              "SHELL_EXEC",
+              "NETWORK_EXFIL"
+            ],
+            "description": "Canonical effect type identifier (per HELM-RFC-0002)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name"
+          },
+          "description": {
+            "type": "string"
+          },
+          "idempotency": {
+            "type": "object",
+            "required": [
+              "strategy",
+              "key_composition"
+            ],
+            "properties": {
+              "strategy": {
+                "type": "string",
+                "enum": [
+                  "client_provided",
+                  "content_hash",
+                  "effect_id",
+                  "none"
+                ],
+                "description": "How idempotency key is derived"
+              },
+              "key_composition": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Fields used to compose idempotency key"
+              },
+              "dedup_window_seconds": {
+                "type": "integer",
+                "description": "Time window for deduplication"
+              },
+              "on_duplicate": {
+                "type": "string",
+                "enum": [
+                  "reject",
+                  "return_existing",
+                  "log_and_skip"
+                ],
+                "description": "Action on duplicate detection"
+              }
+            }
+          },
+          "taxon": {
+            "type": "string",
+            "enum": [
+              "E0",
+              "E1",
+              "E2",
+              "E3",
+              "E4"
+            ],
+            "description": "Risk profile per L1 Policy (E0=Compute, E1=Read, E2=Soft, E3=Hard, E4=Critical)"
+          },
+          "classification": {
+            "type": "object",
+            "required": [
+              "reversibility",
+              "blast_radius",
+              "urgency"
+            ],
+            "properties": {
+              "reversibility": {
+                "type": "string",
+                "enum": [
+                  "reversible",
+                  "compensatable",
+                  "irreversible"
+                ],
+                "description": "Can this effect be undone?"
+              },
+              "blast_radius": {
+                "type": "string",
+                "enum": [
+                  "single_record",
+                  "dataset",
+                  "tenant",
+                  "region",
+                  "system_wide"
+                ],
+                "description": "Scope of impact (per HELM-RFC-0002)"
+              },
+              "urgency": {
+                "type": "string",
+                "enum": [
+                  "deferrable",
+                  "time_sensitive",
+                  "immediate"
+                ],
+                "description": "Timing constraints"
+              }
+            }
+          },
+          "default_approval_level": {
+            "type": "string",
+            "enum": [
+              "none",
+              "single_human",
+              "dual_control",
+              "quorum"
+            ],
+            "default": "none",
+            "description": "Default approval requirement"
+          },
+          "requires_evidence": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether evidence must be collected"
+          },
+          "compensation_required": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether compensation strategy must be defined"
+          },
+          "receipt_schema": {
+            "type": "string",
+            "description": "JSON Schema reference for effect receipt"
+          },
+          "preflight_required": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether preflight simulation is mandatory before execution (per HELM-RFC-0001)"
+          },
+          "two_phase_commit_required": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether two-phase commit (preflight + CommitToken) is mandatory (per HELM-RFC-0001)"
+          },
+          "min_evidence_grade": {
+            "type": "string",
+            "enum": [
+              "E0",
+              "E1",
+              "E2",
+              "E3"
+            ],
+            "description": "Minimum evidence grade required (E0=assertion, E1=receipted, E2=witnessed, E3=formally verified)"
+          },
+          "policy_hooks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Policy hooks invoked for this effect type (per HELM-RFC-0001)"
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "catalog_version": "1.0.0",
+      "effect_types": [
+        {
+          "type_id": "DATA_WRITE",
+          "name": "Data Write",
+          "description": "Writes data to persistent storage",
+          "taxon": "E3",
+          "idempotency": {
+            "strategy": "client_provided",
+            "key_composition": [
+              "target_table",
+              "record_id",
+              "operation"
+            ],
+            "dedup_window_seconds": 3600,
+            "on_duplicate": "return_existing"
+          },
+          "classification": {
+            "reversibility": "reversible",
+            "blast_radius": "single_record",
+            "urgency": "deferrable"
+          },
+          "default_approval_level": "none",
+          "requires_evidence": false,
+          "compensation_required": false
+        },
+        {
+          "type_id": "FUNDS_TRANSFER",
+          "name": "Funds Transfer",
+          "description": "Transfers monetary value between accounts",
+          "taxon": "E4",
+          "idempotency": {
+            "strategy": "client_provided",
+            "key_composition": [
+              "source_account",
+              "destination_account",
+              "amount",
+              "reference"
+            ],
+            "dedup_window_seconds": 86400,
+            "on_duplicate": "reject"
+          },
+          "classification": {
+            "reversibility": "compensatable",
+            "blast_radius": "single_record",
+            "urgency": "time_sensitive"
+          },
+          "default_approval_level": "single_human",
+          "requires_evidence": true,
+          "compensation_required": true
+        },
+        {
+          "type_id": "MODULE_INSTALL",
+          "name": "Module Install",
+          "description": "Installs or updates a module in the organism",
+          "taxon": "E4",
+          "idempotency": {
+            "strategy": "content_hash",
+            "key_composition": [
+              "module_hash",
+              "target_environment"
+            ],
+            "dedup_window_seconds": 0,
+            "on_duplicate": "return_existing"
+          },
+          "classification": {
+            "reversibility": "reversible",
+            "blast_radius": "system_wide",
+            "urgency": "deferrable"
+          },
+          "default_approval_level": "dual_control",
+          "requires_evidence": true,
+          "compensation_required": true
+        }
+      ]
+    }
+  ]
+}

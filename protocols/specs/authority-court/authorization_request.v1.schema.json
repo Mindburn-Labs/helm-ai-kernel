@@ -1,0 +1,141 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://helm.org/schemas/authority-court/authorization_request.v1.schema.json",
+    "title": "AuthorizationRequest.v1",
+    "description": "Authority Court Protocol — canonical request for execution authorization. Per HELM-RFC-0001.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "request_id",
+        "intent",
+        "tool_call_draft",
+        "effects",
+        "policy_epoch",
+        "idempotency_key",
+        "timestamp"
+    ],
+    "properties": {
+        "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for this authorization request"
+        },
+        "intent": {
+            "type": "object",
+            "description": "Structured intent describing the goal",
+            "required": [
+                "type",
+                "goal"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "description": "Intent type from canonical taxonomy (e.g. DEPLOY_RELEASE, TRADE_EXECUTION)"
+                },
+                "goal": {
+                    "type": "string",
+                    "maxLength": 10000,
+                    "description": "Natural language or structured description of the goal"
+                },
+                "priority": {
+                    "type": "string",
+                    "enum": [
+                        "low",
+                        "normal",
+                        "high",
+                        "critical"
+                    ],
+                    "default": "normal"
+                }
+            }
+        },
+        "tool_call_draft": {
+            "type": "object",
+            "description": "Draft tool invocation to be authorized",
+            "required": [
+                "tool_id",
+                "args_hash",
+                "input_schema_hash",
+                "output_schema_hash"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "tool_id": {
+                    "type": "string",
+                    "description": "Canonical tool identifier"
+                },
+                "tool_version": {
+                    "type": "string",
+                    "description": "Tool version for schema pinning"
+                },
+                "args_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$",
+                    "description": "SHA-256 hash of canonicalized (JCS) tool arguments"
+                },
+                "input_schema_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$",
+                    "description": "SHA-256 hash of tool input schema — schema pin"
+                },
+                "output_schema_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$",
+                    "description": "SHA-256 hash of tool output schema — schema pin"
+                }
+            }
+        },
+        "effects": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "string",
+                "description": "Effect type from canonical taxonomy"
+            },
+            "description": "Declared effect types this tool invocation may produce"
+        },
+        "context_capsules": {
+            "type": "array",
+            "items": {
+                "$ref": "https://helm.org/schemas/context-capsule/context_capsule.v1.schema.json"
+            },
+            "description": "Authenticated memory/context capsules used in decision"
+        },
+        "risk_profile_ref": {
+            "type": "string",
+            "description": "Reference to the risk profile governing this request"
+        },
+        "policy_epoch": {
+            "type": "string",
+            "description": "Policy epoch identifier — binds request to a specific policy version"
+        },
+        "idempotency_key": {
+            "type": "string",
+            "description": "Client-provided key for request deduplication"
+        },
+        "principal": {
+            "type": "object",
+            "description": "The actor requesting authorization",
+            "properties": {
+                "principal_id": {
+                    "type": "string"
+                },
+                "principal_type": {
+                    "type": "string",
+                    "enum": [
+                        "human",
+                        "agent",
+                        "service",
+                        "operator"
+                    ]
+                }
+            }
+        },
+        "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Request creation time (authority clock)"
+        }
+    }
+}

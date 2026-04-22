@@ -1,0 +1,101 @@
+// HELM Policy Schema — Rule Trace Witness
+//
+// Deterministic explanation produced by the VM. No SMT solver.
+// Witnesses are the "why" behind every denial — they make Evidence Mode
+// replayable across years without UI drift.
+//
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.policy.v1;
+
+option go_package = "helm.mindburn.run/policy/v1;policyv1";
+
+import "v1/foundations.proto";
+
+// ── RuleTraceWitness ───────────────────────────────────────────
+
+message RuleTraceWitness {
+  // PolicyBundle that was evaluated.
+  bytes policy_bundle_hash = 1;
+  // VM semantics hash.
+  bytes cpi_hash = 2;
+  // PlanIRDelta hash that was evaluated.
+  bytes plan_ir_hash = 3;
+
+  // Ordered evaluation chain (fail-fast: stops at first deny).
+  repeated RuleStep steps = 10;
+  // Primitives that the graph is missing.
+  repeated string missing_primitives = 11;
+  // Suggested patches that would fix the denial.
+  repeated PatchOp suggested_patches = 12;
+
+  reserved 100 to 199;
+  reserved 900 to 999;
+}
+
+// ── Rule Step ──────────────────────────────────────────────────
+
+message RuleStep {
+  // Rule identifier, e.g. "treasury.max_daily_spend".
+  string rule_id = 1;
+  RuleDecision decision = 2;
+  // Bound variables at evaluation time.
+  repeated RuleInput inputs = 3;
+  // Human-readable explanation for tooltips.
+  string explanation = 4;
+
+  reserved 100 to 199;
+}
+
+enum RuleDecision {
+  RULE_DECISION_UNSPECIFIED = 0;
+  RULE_DECISION_PASS = 1;
+  RULE_DECISION_FAIL = 2;
+  // Precondition not met — rule not applicable.
+  RULE_DECISION_SKIP = 3;
+}
+
+message RuleInput {
+  string key = 1;
+  oneof value {
+    string string_val = 2;
+    // Fixed-point cents for financial values.
+    int64 int_val = 3;
+    bool bool_val = 4;
+    // For hashes, canonical payloads.
+    bytes bytes_val = 5;
+  }
+}
+
+// ── Patch Operations ───────────────────────────────────────────
+//
+// v0 allowlist (RFC-0004 §A2):
+//   INSERT_NODE, ATTACH_PRIMITIVE, INSERT_TRANSFORMER,
+//   ADD_GATE, SET_VALVE, ADD_TAG, BIND_JURISDICTION
+//
+// v0 disallows: destructive deletes, removing gates/limits,
+// broad authority-expanding edits. "Fix" biases toward safer.
+
+message PatchOp {
+  PatchKind kind = 1;
+  string target_node_id = 2;
+  // Human-readable: "Insert GDPR shield transformer".
+  string description = 3;
+  // Suggested PlanIRDelta that would fix the denial (canonical bytes).
+  bytes suggested_delta_canonical = 4;
+
+  reserved 100 to 199;
+}
+
+enum PatchKind {
+  PATCH_KIND_UNSPECIFIED = 0;
+  PATCH_KIND_INSERT_NODE = 1;
+  PATCH_KIND_ATTACH_PRIMITIVE = 2;
+  PATCH_KIND_INSERT_TRANSFORMER = 3;
+  PATCH_KIND_ADD_GATE = 4;
+  PATCH_KIND_SET_VALVE = 5;
+  PATCH_KIND_ADD_TAG = 6;
+  PATCH_KIND_BIND_JURISDICTION = 7;
+  // Growth room.
+  reserved 8 to 15;
+}

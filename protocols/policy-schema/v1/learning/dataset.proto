@@ -1,0 +1,62 @@
+// HELM Learning System — Dataset Metadata
+//
+// Describes training and evaluation datasets derived from Trace Packs.
+// Every dataset build is receipted and content-addressed.
+//
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.policy.v1.learning;
+
+option go_package = "helm.mindburn.run/policy/v1/learning;learningv1";
+
+import "v1/learning/common.proto";
+
+// DatasetStatus tracks the lifecycle of a dataset build.
+enum DatasetStatus {
+  DATASET_STATUS_UNSPECIFIED = 0;
+  DATASET_STATUS_QUEUED = 1;
+  DATASET_STATUS_BUILDING = 2;
+  DATASET_STATUS_BUILT = 3;
+  DATASET_STATUS_FAILED = 4;
+}
+
+// DatasetBuildSpec defines the parameters for a dataset build job.
+message DatasetBuildSpec {
+  // Task IDs to include, e.g. "halo_ranker.v1", "fix_ranker.v1".
+  repeated string task_ids = 1;
+
+  // Tenant scoping. Empty means global (only if policy allows).
+  repeated string tenant_ids = 2;
+
+  TimeRange time_range = 3;
+
+  // Optional filters stored as canonical JSON hash.
+  HashRef filters_ref = 4;
+
+  // Source selection: "USER", "SELF_PLAY", or both.
+  repeated string sources = 5;
+}
+
+// DatasetArtifact references one output file of a dataset build.
+message DatasetArtifact {
+  // "train" | "eval" | "schema" | "report".
+  string kind = 1;
+  HashRef ref = 2;
+}
+
+// DatasetRecord is the metadata for a completed or in-progress dataset build.
+message DatasetRecord {
+  // Unique dataset identifier, e.g. "ds_<...>".
+  string dataset_id = 1;
+  DatasetStatus status = 2;
+
+  DatasetBuildSpec spec = 3;
+
+  int64 created_at_unix_ms = 4;
+  int64 completed_at_unix_ms = 5;
+
+  repeated DatasetArtifact artifacts = 6;
+
+  // Optional build report.
+  HashRef build_report_ref = 7;
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/research/publication_record.v1.json",
+  "title": "PublicationRecord",
+  "type": "object",
+  "required": ["publication_id", "mission_id", "state"],
+  "properties": {
+    "publication_id": { "type": "string" },
+    "mission_id": { "type": "string" },
+    "class": { "type": "string" },
+    "state": { "enum": ["DRAFT", "SCORED", "HELD", "ELIGIBLE", "PROMOTED", "PUBLISHED", "SUPERSEDED"] },
+    "title": { "type": "string" },
+    "slug": { "type": "string" },
+    "evidence_pack_hash": { "type": "string" },
+    "promotion_receipt": { "type": "string" },
+    "supersedes": { "type": ["string", "null"] },
+    "superseded_by": { "type": ["string", "null"] },
+    "published_at": { "type": ["string", "null"], "format": "date-time" },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

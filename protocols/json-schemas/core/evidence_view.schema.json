@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/core/evidence_view.schema.json",
+  "title": "EvidenceView",
+  "description": "Derived view of an EvidencePack per Addendum 12.X - for selective disclosure with cryptographic integrity",
+  "type": "object",
+  "required": ["view_id", "evidence_pack_hash", "view_policy_id", "disclosed", "sealed", "proofs", "view_hash", "created_at"],
+  "additionalProperties": false,
+  "properties": {
+    "view_id": {
+      "type": "string",
+      "description": "Unique identifier for this view"
+    },
+    "evidence_pack_hash": {
+      "type": "string",
+      "description": "Merkle root hash of the full EvidencePack"
+    },
+    "view_policy_id": {
+      "type": "string",
+      "description": "Policy that governed this view derivation"
+    },
+    "disclosed": {
+      "type": "object",
+      "description": "Map of JSON Pointer paths to disclosed values",
+      "additionalProperties": true
+    },
+    "sealed": {
+      "type": "array",
+      "description": "List of sealed (undisclosed) paths with commitments",
+      "x-helm-array-kind": "SET",
+      "x-helm-sort-key": ["/path"],
+      "items": {
+        "type": "object",
+        "required": ["path", "commitment"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "JSON Pointer path to the sealed field"
+          },
+          "commitment": {
+            "type": "string",
+            "description": "Hash commitment of the sealed value"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Reason for sealing (e.g., 'PII', 'CONFIDENTIAL')"
+          }
+        }
+      }
+    },
+    "proofs": {
+      "type": "array",
+      "description": "Merkle inclusion proofs for disclosed leaves",
+      "x-helm-array-kind": "SET",
+      "x-helm-sort-key": ["/leaf_path"],
+      "items": {
+        "$ref": "#/$defs/InclusionProof"
+      }
+    },
+    "view_hash": {
+      "type": "string",
+      "description": "Hash of this EvidenceView CSA"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this view was created"
+    }
+  },
+  "$defs": {
+    "InclusionProof": {
+      "type": "object",
+      "description": "Merkle tree inclusion proof",
+      "required": ["proof_id", "leaf_path", "leaf_hash", "merkle_root", "proof_path"],
+      "additionalProperties": false,
+      "properties": {
+        "proof_id": {
+          "type": "string",
+          "description": "Unique identifier for this proof"
+        },
+        "leaf_path": {
+          "type": "string",
+          "description": "JSON Pointer path of the leaf"
+        },
+        "leaf_hash": {
+          "type": "string",
+          "description": "Hash of the leaf"
+        },
+        "merkle_root": {
+          "type": "string",
+          "description": "Expected Merkle root hash"
+        },
+        "proof_path": {
+          "type": "array",
+          "description": "Sibling hashes from leaf to root",
+          "x-helm-array-kind": "ORDERED",
+          "items": {
+            "type": "object",
+            "required": ["side", "sibling_hash"],
+            "additionalProperties": false,
+            "properties": {
+              "side": {
+                "type": "string",
+                "enum": ["L", "R"],
+                "description": "L if sibling is on the left, R if on the right"
+              },
+              "sibling_hash": {
+                "type": "string",
+                "description": "Hash of the sibling node"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/threat/agent_identity_isolation.json",
+  "title": "Agent Identity Isolation Check Effect",
+  "description": "Validates agent credential isolation. Detects shared-secret or impersonation attempts.",
+  "type": "object",
+  "required": ["effect_id", "principal_id", "credential_hash"],
+  "properties": {
+    "effect_id": { "type": "string", "const": "AGENT_IDENTITY_ISOLATION" },
+    "principal_id": { "type": "string" },
+    "credential_hash": { "type": "string" },
+    "session_id": { "type": "string" }
+  },
+  "additionalProperties": false,
+  "x-helm": { "category": "threat", "risk_class": "E1", "approval_level": "none", "reversible": true }
+}

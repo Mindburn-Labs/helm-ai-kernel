@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/receipts/connector_effect_receipt.v1.json",
+  "title": "Connector Effect Receipt",
+  "description": "Receipt for an effect executed through a HELM connector.",
+  "type": "object",
+  "required": ["receipt_hash", "connector_id", "tool_name", "params_hash", "output_hash", "duration_ms", "completed_at"],
+  "properties": {
+    "receipt_hash": { "type": "string" },
+    "connector_id": { "type": "string" },
+    "tool_name": { "type": "string" },
+    "params_hash": { "type": "string" },
+    "output_hash": { "type": "string" },
+    "provenance_tag": { "type": "object" },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "proofgraph_node": { "type": "string" }
+  }
+}

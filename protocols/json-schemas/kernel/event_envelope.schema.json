@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/kernel/event_envelope.schema.json",
+  "title": "EventEnvelope",
+  "description": "Per Section 2.3 - Event with normative time semantics",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "event_type", "sequence_number", "observed_at", "received_at", "payload_hash"],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event identifier"
+    },
+    "event_type": {
+      "type": "string",
+      "description": "Type of event"
+    },
+    "sequence_number": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Monotonically increasing sequence for total order"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the event was first observed (e.g., LLM response timestamp)"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the kernel received the event"
+    },
+    "committed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the event was committed to the log"
+    },
+    "payload_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "Content-addressed hash of event payload"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Event payload (canonicalized JSON)"
+    },
+    "causation": {
+      "type": "object",
+      "description": "Causal chain tracking",
+      "properties": {
+        "parent_event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "correlation_id": {
+          "type": "string"
+        },
+        "causation_chain": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "entropy": {
+      "type": "object",
+      "description": "Per Section 2.4 - Seed and PRNG tracking",
+      "properties": {
+        "seed": {
+          "type": "string",
+          "description": "Seed value used for any randomness"
+        },
+        "prng_algorithm": {
+          "type": "string",
+          "enum": ["xorshift128+", "pcg64", "chacha20"],
+          "description": "Approved PRNG algorithm"
+        },
+        "loop_id": {
+          "type": "string",
+          "description": "Control loop scope for seed"
+        }
+      }
+    },
+    "encoding": {
+      "type": "object",
+      "description": "Canonical encoding metadata",
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": ["JCS", "CBOR"],
+          "default": "JCS",
+          "description": "Canonical encoding format"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

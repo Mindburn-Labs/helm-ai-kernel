@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/doc_registry/v1.json",
+  "title": "Documentation Registry",
+  "description": "Maps code files/packages to their documentation for drift detection",
+  "type": "object",
+  "required": ["version", "mappings"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "docs", "type"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Glob pattern for code files (e.g., 'core/pkg/kernel/**')"
+          },
+          "docs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Paths to documentation files that cover this code"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["specification", "reference", "tutorial", "api", "runbook"],
+            "description": "Type of documentation relationship"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low"],
+            "default": "medium",
+            "description": "How important it is to keep this doc in sync"
+          }
+        }
+      }
+    }
+  }
+}

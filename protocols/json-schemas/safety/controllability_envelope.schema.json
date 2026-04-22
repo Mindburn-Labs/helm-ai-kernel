@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/safety/controllability_envelope.schema.json",
+  "title": "ControllabilityEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["envelope_id", "envsnap_id", "allowed_effect_types", "approval_required_effect_types"],
+  "properties": {
+    "envelope_id": { "type": "string", "format": "uuid" },
+    "envsnap_id": { "type": "string", "format": "uuid" },
+    "allowed_effect_types": { "type": "array", "items": { "type": "string" } },
+    "approval_required_effect_types": { "type": "array", "items": { "type": "string" } }
+  }
+}

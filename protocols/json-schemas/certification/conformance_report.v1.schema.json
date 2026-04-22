@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/certification/conformance_report.v1.schema.json",
+  "title": "Conformance Report v1",
+  "description": "Cryptographically signed report attesting to standard conformance",
+  "type": "object",
+  "properties": {
+    "report_id": { "type": "string", "format": "uuid" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "git_revision": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "platform": { "type": "string" },
+    "standard": { "type": "string" },
+    "passed_suites": { "type": "array", "items": { "type": "string" } },
+    "failed_suites": { "type": "array", "items": { "type": "string" } },
+    "metadata": { "type": "object", "additionalProperties": { "type": "string" } },
+    "signature": { "type": "string", "contentEncoding": "base64" },
+    "signer_id": { "type": "string" }
+  },
+  "required": ["report_id", "timestamp", "git_revision", "platform", "standard", "passed_suites", "signature", "signer_id"]
+}

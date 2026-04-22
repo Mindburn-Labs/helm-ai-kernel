@@ -1,0 +1,54 @@
+{
+  "name": "@mindburn/helm-cli",
+  "version": "0.4.0",
+  "description": "HELM conformance verification CLI — one command, progressive disclosure, cryptographic proof",
+  "type": "module",
+  "bin": {
+    "mindburn-helm": "dist/bin.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && cp src/profiles.json dist/profiles.json",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome lint .",
+    "format": "biome format --write ."
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.2.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.1",
+    "@types/node": "^25.6.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.0.18"
+  },
+  "overrides": {
+    "rollup": "^4.59.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mindburn-Labs/helm-oss",
+    "directory": "packages/mindburn-helm-cli"
+  },
+  "keywords": [
+    "helm",
+    "ai",
+    "governance",
+    "conformance",
+    "verification",
+    "evidence",
+    "merkle",
+    "ed25519"
+  ]
+}

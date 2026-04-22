@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_facts_tax_vat_validate_v1.schema.json",
+  "title": "FactsTaxVat_validateInput",
+  "description": "Input schema for tool facts.tax.vat_validate (KERNEL, READ_ONLY)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "vat_number"
+  ],
+  "properties": {
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    },
+    "vat_number": {
+      "description": "EU VAT number to validate",
+      "type": "string"
+    }
+  }
+}

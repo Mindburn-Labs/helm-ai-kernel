@@ -1,0 +1,43 @@
+{
+  "$id": "https://mindburn.ai/schemas/receipts/arc_scorecard_receipt.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ARC Scorecard Receipt",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail",
+        "timeout"
+      ]
+    },
+    "cost_vector": {
+      "type": "object",
+      "properties": {
+        "steps": {
+          "type": "integer"
+        },
+        "compute_tokens": {
+          "type": "integer"
+        }
+      }
+    },
+    "signature": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "session_id",
+    "status",
+    "cost_vector",
+    "signature"
+  ]
+}

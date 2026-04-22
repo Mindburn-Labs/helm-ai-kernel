@@ -1,0 +1,154 @@
+:root {
+  --bg: #0e0f13;
+  --bg-card: #161820;
+  --fg: #e7e9ee;
+  --fg-dim: #9ea3b0;
+  --accent: #7cc4ff;
+  --accent-strong: #4da7ff;
+  --border: #2a2d38;
+  --ok: #7ed957;
+  --err: #ff6b6b;
+  --warn: #ffc266;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f8f9fb;
+    --bg-card: #ffffff;
+    --fg: #14161c;
+    --fg-dim: #5a6070;
+    --accent: #1f6feb;
+    --accent-strong: #0546b6;
+    --border: #d8dbe2;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 2rem;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  line-height: 1.5;
+  max-width: 960px;
+  margin-inline: auto;
+}
+
+header h1 { margin: 0 0 0.25rem; font-size: 1.75rem; }
+header .tagline { color: var(--fg-dim); margin-top: 0; }
+
+code { font-family: var(--mono); background: rgba(124, 196, 255, 0.08); padding: 0.1em 0.35em; border-radius: 3px; }
+
+.drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  margin: 1.5rem 0;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+.drop-zone.drag-over {
+  border-color: var(--accent);
+  background-color: rgba(124, 196, 255, 0.06);
+}
+.drop-zone p { margin: 0.5rem 0; }
+.drop-zone .small, footer .small, .small { color: var(--fg-dim); font-size: 0.85rem; }
+
+.button {
+  display: inline-block;
+  padding: 0.55rem 1.1rem;
+  background: var(--accent-strong);
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 120ms ease;
+}
+.button:hover { background: var(--accent); }
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  margin: 1rem 0;
+}
+.card h2 { margin-top: 0; font-size: 1.2rem; }
+
+.status {
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin: 1rem 0;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+}
+.status.ok  { background: rgba(126, 217, 87, 0.1); color: var(--ok); border: 1px solid var(--ok); }
+.status.err { background: rgba(255, 107, 107, 0.1); color: var(--err); border: 1px solid var(--err); }
+.status.working { background: rgba(124, 196, 255, 0.1); color: var(--accent); border: 1px solid var(--accent); }
+
+.hidden { display: none; }
+
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1rem; margin: 0; }
+dt { color: var(--fg-dim); font-size: 0.9rem; }
+dd { margin: 0; font-family: var(--mono); font-size: 0.9rem; word-break: break-all; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); }
+th { color: var(--fg-dim); font-weight: 600; }
+tr:last-child td { border-bottom: none; }
+
+.verdict { font-family: var(--mono); font-weight: 600; }
+.verdict.allow    { color: var(--ok); }
+.verdict.deny     { color: var(--err); }
+.verdict.escalate { color: var(--warn); }
+
+#verification-list { list-style: none; padding-left: 0; margin: 0; }
+#verification-list li {
+  padding: 0.35rem 0;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+#verification-list li .path { color: var(--fg-dim); overflow-wrap: anywhere; }
+#verification-list li .result.ok  { color: var(--ok); }
+#verification-list li .result.err { color: var(--err); }
+
+#proofgraph-tree details {
+  margin: 0.25rem 0;
+  padding: 0.25rem 0.5rem;
+  border-left: 2px solid var(--border);
+  padding-left: 0.75rem;
+}
+#proofgraph-tree summary {
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+#proofgraph-tree summary .ntype {
+  color: var(--accent);
+  font-weight: 600;
+}
+#proofgraph-tree pre {
+  font-size: 0.8rem;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.5rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+footer {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-size: 0.85rem;
+}
+footer a { color: var(--accent); }

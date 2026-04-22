@@ -1,0 +1,310 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/autonomy_envelope/v1.json",
+  "title": "AutonomyEnvelope",
+  "description": "Signed, versioned runtime boundary contract that bounds every autonomous run. Declares what the system may do without humans, under what jurisdictional and budgetary constraints, and what evidence must be produced.",
+  "type": "object",
+  "required": [
+    "envelope_id",
+    "version",
+    "format_version",
+    "jurisdiction_scope",
+    "data_handling",
+    "allowed_effects",
+    "budgets",
+    "required_evidence",
+    "escalation_policy",
+    "attestation"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "envelope_id": {
+      "type": "string",
+      "description": "Unique identifier for this envelope instance"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Semantic version of this envelope definition"
+    },
+    "format_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema format version"
+    },
+    "valid_from": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Envelope is valid from this timestamp (inclusive)"
+    },
+    "valid_until": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Envelope expires at this timestamp (exclusive)"
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "Tenant this envelope is scoped to"
+    },
+    "jurisdiction_scope": {
+      "$ref": "#/$defs/jurisdiction_constraint",
+      "description": "Where this run is legally allowed to operate"
+    },
+    "data_handling": {
+      "$ref": "#/$defs/data_handling_rules",
+      "description": "Data classification, residency, transfer, and redaction rules"
+    },
+    "allowed_effects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/effect_class_allowlist" },
+      "minItems": 1,
+      "description": "What the system may do without human intervention"
+    },
+    "budgets": {
+      "$ref": "#/$defs/envelope_budgets",
+      "description": "Economic and operational ceilings for this run"
+    },
+    "required_evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidence_requirement" },
+      "description": "What must be proven before/after execution per action class"
+    },
+    "escalation_policy": {
+      "$ref": "#/$defs/escalation_rules",
+      "description": "What becomes judgment-required and who can approve"
+    },
+    "attestation": {
+      "$ref": "#/$defs/envelope_attestation",
+      "description": "Cryptographic attestation binding this envelope"
+    }
+  },
+  "$defs": {
+    "jurisdiction_constraint": {
+      "type": "object",
+      "required": ["allowed_jurisdictions", "regulatory_mode"],
+      "additionalProperties": false,
+      "properties": {
+        "allowed_jurisdictions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "ISO jurisdiction codes where this run may operate"
+        },
+        "regulatory_mode": {
+          "type": "string",
+          "enum": ["strict", "permissive", "audit_only"],
+          "description": "How strictly compliance rules are enforced"
+        },
+        "data_residency_regions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Regions where data may reside"
+        },
+        "prohibited_jurisdictions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Jurisdictions explicitly denied"
+        }
+      }
+    },
+    "data_handling_rules": {
+      "type": "object",
+      "required": ["max_classification", "redaction_policy"],
+      "additionalProperties": false,
+      "properties": {
+        "max_classification": {
+          "type": "string",
+          "enum": ["public", "internal", "confidential", "restricted"],
+          "description": "Maximum data classification this run may handle autonomously"
+        },
+        "redaction_policy": {
+          "type": "string",
+          "enum": ["none", "pii_only", "strict"],
+          "description": "Redaction level applied to outputs and logs"
+        },
+        "transfer_constraints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from_region", "to_region", "allowed"],
+            "properties": {
+              "from_region": { "type": "string" },
+              "to_region": { "type": "string" },
+              "allowed": { "type": "boolean" },
+              "requires_encryption": { "type": "boolean" }
+            }
+          },
+          "description": "Cross-border data transfer rules"
+        }
+      }
+    },
+    "effect_class_allowlist": {
+      "type": "object",
+      "required": ["effect_class", "allowed"],
+      "additionalProperties": false,
+      "properties": {
+        "effect_class": {
+          "type": "string",
+          "enum": ["E0", "E1", "E2", "E3", "E4"],
+          "description": "Effect class per HELM capability system"
+        },
+        "allowed": {
+          "type": "boolean",
+          "description": "Whether this class is allowed autonomously"
+        },
+        "allowed_types": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Specific effect type IDs allowed within this class"
+        },
+        "max_per_run": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum number of effects of this class per run"
+        },
+        "requires_approval_above": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count threshold above which approval is required"
+        }
+      }
+    },
+    "envelope_budgets": {
+      "type": "object",
+      "required": ["cost_ceiling_cents", "time_ceiling_seconds", "tool_call_cap"],
+      "additionalProperties": false,
+      "properties": {
+        "cost_ceiling_cents": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum cost in cents for this run"
+        },
+        "time_ceiling_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum wall-clock time for this run"
+        },
+        "tool_call_cap": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum number of tool calls"
+        },
+        "rate_limits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["resource", "max_per_minute"],
+            "properties": {
+              "resource": { "type": "string" },
+              "max_per_minute": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "description": "Per-resource rate limits"
+        },
+        "blast_radius": {
+          "type": "string",
+          "enum": ["single_record", "dataset", "system_wide"],
+          "description": "Maximum allowed blast radius for any single effect"
+        },
+        "compute_units_cap": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum compute units (LLM tokens, GPU seconds, etc.)"
+        }
+      }
+    },
+    "evidence_requirement": {
+      "type": "object",
+      "required": ["action_class", "evidence_type", "when"],
+      "additionalProperties": false,
+      "properties": {
+        "action_class": {
+          "type": "string",
+          "description": "Effect class or type this requirement applies to"
+        },
+        "evidence_type": {
+          "type": "string",
+          "enum": ["receipt", "hash_proof", "dual_attestation", "external_verification", "replay_proof"],
+          "description": "Type of evidence required"
+        },
+        "when": {
+          "type": "string",
+          "enum": ["before", "after", "both"],
+          "description": "When evidence must be produced"
+        },
+        "issuer_constraint": {
+          "type": "string",
+          "description": "Constraint on who may produce the evidence"
+        }
+      }
+    },
+    "escalation_rules": {
+      "type": "object",
+      "required": ["default_mode"],
+      "additionalProperties": false,
+      "properties": {
+        "default_mode": {
+          "type": "string",
+          "enum": ["autonomous", "supervised", "manual"],
+          "description": "Default execution mode"
+        },
+        "escalation_triggers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["condition", "action"],
+            "properties": {
+              "condition": { "type": "string", "description": "CEL expression for when to escalate" },
+              "action": { "type": "string", "enum": ["require_approval", "pause_and_notify", "abort"], "description": "What to do when condition matches" },
+              "approvers": { "type": "array", "items": { "type": "string" }, "description": "Required approver roles or IDs" },
+              "quorum": { "type": "integer", "minimum": 1, "description": "Number of approvals needed" },
+              "timeout_seconds": { "type": "integer", "minimum": 0, "description": "Escalation timeout" }
+            }
+          },
+          "description": "Conditions that trigger judgment-required escalation"
+        },
+        "judgment_taxonomy": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["category", "classification"],
+            "properties": {
+              "category": { "type": "string", "description": "Action category name" },
+              "classification": { "type": "string", "enum": ["autonomous", "judgment_required"], "description": "Whether this category is autonomous or requires judgment" }
+            }
+          },
+          "description": "Classification of action categories into autonomous vs judgment-required"
+        }
+      }
+    },
+    "envelope_attestation": {
+      "type": "object",
+      "required": ["content_hash"],
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "type": "string",
+          "description": "SHA-256 hash of envelope content (excluding attestation)"
+        },
+        "signature": {
+          "type": "string",
+          "description": "Cryptographic signature of the content_hash"
+        },
+        "signer_id": {
+          "type": "string",
+          "description": "Identity of the envelope signer"
+        },
+        "signed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the envelope was signed"
+        },
+        "algorithm": {
+          "type": "string",
+          "enum": ["ED25519", "ECDSA-P256", "RSA-PSS-2048"],
+          "description": "Signature algorithm used"
+        }
+      }
+    }
+  }
+}

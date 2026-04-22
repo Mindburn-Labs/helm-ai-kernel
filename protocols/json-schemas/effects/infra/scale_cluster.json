@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/scale_cluster.json",
+  "title": "Scale Cluster Effect",
+  "description": "Scales the HELM cluster horizontally",
+  "type": "object",
+  "required": ["effect_id", "action"],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "const": "infra.cluster.scale"
+    },
+    "action": {
+      "type": "string",
+      "enum": ["scale_up", "scale_down"]
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 1
+    },
+    "node_size": {
+      "type": "string",
+      "default": "s-2vcpu-4gb"
+    },
+    "region": {
+      "type": "string",
+      "default": "nyc3"
+    }
+  },
+  "x-helm": {
+    "category": "cluster",
+    "risk_level": "high",
+    "requires_approval": true,
+    "cost_impact": "recurring"
+  }
+}

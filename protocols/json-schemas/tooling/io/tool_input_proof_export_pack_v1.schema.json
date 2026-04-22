@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_proof_export_pack_v1.schema.json",
+  "title": "ProofExport_packInput",
+  "description": "Input schema for tool proof.export_pack (KERNEL, REVERSIBLE_WRITE)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "idempotency_key",
+    "scope_ref",
+    "time_range"
+  ],
+  "properties": {
+    "idempotency_key": {
+      "description": "Idempotency key derived from: scope_ref, time_range",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    },
+    "scope_ref": {
+      "description": "Content-addressed reference",
+      "type": "string"
+    },
+    "time_range": {
+      "description": "Time range for the export",
+      "properties": {
+        "end": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "start": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "type": "object"
+    }
+  }
+}

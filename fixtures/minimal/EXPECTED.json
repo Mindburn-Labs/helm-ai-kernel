@@ -1,0 +1,17 @@
+{
+  "bundle_root": "daa3e17ccd06ebbf0e579f79314b514638879f0ece2926dfae00f55a7767f88e",
+  "merkle_root": "f63b50553834243bf75336d04314255ce5dafd33a97ca47a1bbb53d23606e28e",
+  "expected_verdict": "PASS",
+  "expected_gates": [
+    "G0",
+    "G1",
+    "G2",
+    "G2A",
+    "G3A",
+    "G5",
+    "G8",
+    "GX_ENVELOPE",
+    "GX_TENANT"
+  ],
+  "description": "Expected verification roots and outcomes for the minimal golden fixture."
+}

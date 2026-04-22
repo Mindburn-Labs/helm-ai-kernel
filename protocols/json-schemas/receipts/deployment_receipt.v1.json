@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.example.com/schemas/deployment_receipt.v1.json",
+  "title": "HELM Deployment Receipt",
+  "description": "EvidencePack-style receipt for production deployments",
+  "type": "object",
+  "required": [
+    "timestamp_utc",
+    "git_sha",
+    "images",
+    "canonical_truth_hashes",
+    "health_status",
+    "rollback_performed"
+  ],
+  "properties": {
+    "timestamp_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp of deployment completion"
+    },
+    "git_sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$",
+      "description": "Full git commit SHA"
+    },
+    "branch": {
+      "type": "string",
+      "description": "Git branch that was deployed"
+    },
+    "github_actor": {
+      "type": "string",
+      "description": "GitHub username that triggered the deployment"
+    },
+    "github_run_id": {
+      "type": "integer",
+      "description": "GitHub Actions run ID"
+    },
+    "images": {
+      "type": "object",
+      "description": "Map of service name to full image reference",
+      "properties": {
+        "helm-core": { "type": "string" },
+        "control-room": { "type": "string" }
+      },
+      "additionalProperties": { "type": "string" }
+    },
+    "digests": {
+      "type": "object",
+      "description": "Map of service name to image digest",
+      "additionalProperties": { "type": "string" }
+    },
+    "compose_render_hash": {
+      "type": "string",
+      "description": "SHA256 hash of the rendered docker-compose.yml"
+    },
+    "canonical_truth_hashes": {
+      "type": "object",
+      "description": "Hashes of canonical truth artifacts at deploy time",
+      "properties": {
+        "schemas_hash": { "type": "string" },
+        "orgdna_hash": { "type": "string" },
+        "policy_hash": { "type": "string" },
+        "migrations_hash": { "type": "string" }
+      },
+      "required": ["schemas_hash"]
+    },
+    "sbom_refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Paths or artifact IDs for SBOM files"
+    },
+    "provenance": {
+      "type": "object",
+      "description": "Build provenance metadata",
+      "properties": {
+        "builder_id": { "type": "string" },
+        "build_type": { "type": "string" },
+        "invocation_id": { "type": "string" }
+      }
+    },
+    "migration_status": {
+      "type": "string",
+      "enum": ["success", "skipped", "failed", "not_required"],
+      "description": "Status of database migrations"
+    },
+    "health_status": {
+      "type": "object",
+      "description": "Per-service health check results",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["healthy", "unhealthy", "unknown", "not_checked"]
+      }
+    },
+    "invariant_checks": {
+      "type": "object",
+      "description": "HELM-specific invariant validation results",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["pass", "fail", "skip"]
+      }
+    },
+    "deploy_host": {
+      "type": "string",
+      "description": "Target deployment host"
+    },
+    "deploy_duration_seconds": {
+      "type": "number",
+      "description": "Total deployment duration in seconds"
+    },
+    "rollback_performed": {
+      "type": "boolean",
+      "description": "Whether a rollback was triggered during this deployment"
+    },
+    "previous_sha": {
+      "type": "string",
+      "description": "SHA of the previous deployment (if any)"
+    }
+  }
+}

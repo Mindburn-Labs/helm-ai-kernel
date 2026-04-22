@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/work/action_proposal.v1.json",
+  "title": "Action Proposal",
+  "description": "A proposed action generated from signal analysis, pending governance.",
+  "type": "object",
+  "required": ["proposal_id", "workspace_id", "effect_type", "summary", "risk_class", "policy_verdict", "created_at"],
+  "properties": {
+    "proposal_id": { "type": "string" },
+    "workspace_id": { "type": "string" },
+    "effect_type": { "type": "string" },
+    "connector_id": { "type": "string" },
+    "tool_name": { "type": "string" },
+    "summary": { "type": "string" },
+    "risk_class": {
+      "type": "string",
+      "enum": ["R0", "R1", "R2", "R3"]
+    },
+    "policy_verdict": {
+      "type": "string",
+      "enum": ["ALLOW", "DENY", "ESCALATE", "HELD"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["PROPOSED", "APPROVED", "IN_PROGRESS", "COMPLETED", "REJECTED", "DEFERRED"],
+      "default": "PROPOSED"
+    },
+    "source_signal_id": { "type": "string" },
+    "source_cluster_id": { "type": "string" },
+    "program_id": { "type": "string" },
+    "person_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "draft_artifact_id": { "type": "string" },
+    "context_slice_id": { "type": "string" },
+    "approval_request_id": { "type": "string" },
+    "manager_employee_id": { "type": "string" },
+    "receipt_lineage": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "priority": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "params": { "type": "object" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

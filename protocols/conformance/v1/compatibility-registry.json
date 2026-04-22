@@ -1,0 +1,98 @@
+{
+  "registry_version": "1.0.0",
+  "spec_version": "1.0.0",
+  "updated_at": "2026-03-07T00:00:00Z",
+  "tiers": {
+    "compatible": "Passes core verdict vectors (Level 1-2). Self-certified.",
+    "verified": "Passes Level 4 conformance. CI-exercised. Artifacts published.",
+    "sovereign": "Verified + TLA+ invariant alignment + independent audit."
+  },
+  "runtimes": [
+    {
+      "name": "HELM Kernel (Go)",
+      "type": "reference",
+      "version": "1.0.0-alpha.1",
+      "tier": "sovereign",
+      "conformance_level": 4,
+      "vectors_passed": "8/8",
+      "last_verified": "2026-03-07",
+      "maintainer": "Mindburn Labs",
+      "repository": "https://github.com/Mindburn-Labs/helm-oss"
+    },
+    {
+      "name": "HELM Python SDK",
+      "type": "sdk",
+      "version": "0.4.0",
+      "tier": "verified",
+      "conformance_level": 4,
+      "vectors_passed": "8/8",
+      "last_verified": "2026-03-07",
+      "maintainer": "Mindburn Labs",
+      "repository": "https://github.com/Mindburn-Labs/helm-oss/tree/main/sdk/python"
+    },
+    {
+      "name": "HELM TypeScript SDK",
+      "type": "sdk",
+      "version": "0.4.0",
+      "tier": "verified",
+      "conformance_level": 4,
+      "vectors_passed": "8/8",
+      "last_verified": "2026-03-07",
+      "maintainer": "Mindburn Labs",
+      "repository": "https://github.com/Mindburn-Labs/helm-oss/tree/main/sdk/ts"
+    },
+    {
+      "name": "HELM Go SDK",
+      "type": "sdk",
+      "version": "0.4.0",
+      "tier": "verified",
+      "conformance_level": 4,
+      "vectors_passed": "8/8",
+      "last_verified": "2026-03-07",
+      "maintainer": "Mindburn Labs",
+      "repository": "https://github.com/Mindburn-Labs/helm-oss/tree/main/sdk/go"
+    },
+    {
+      "name": "HELM Rust SDK",
+      "type": "sdk",
+      "version": "0.1.0",
+      "tier": "compatible",
+      "conformance_level": 2,
+      "vectors_passed": "6/8",
+      "last_verified": "2026-03-07",
+      "maintainer": "Mindburn Labs",
+      "repository": "https://github.com/Mindburn-Labs/helm-oss/tree/main/sdk/rust"
+    },
+    {
+      "name": "HELM Java SDK",
+      "type": "sdk",
+      "version": "0.1.0",
+      "tier": "compatible",
+      "conformance_level": 2,
+      "vectors_passed": "6/8",
+      "last_verified": "2026-03-07",
+      "maintainer": "Mindburn Labs",
+      "repository": "https://github.com/Mindburn-Labs/helm-oss/tree/main/sdk/java"
+    }
+  ],
+  "sandbox_adapters": [
+    {
+      "name": "OpenSandbox",
+      "tier": "verified",
+      "status": "active",
+      "tests": "sdk/ts/src/adapters/sandbox/"
+    },
+    {
+      "name": "E2B",
+      "tier": "compatible",
+      "status": "active",
+      "tests": "sdk/ts/src/adapters/sandbox/"
+    },
+    {
+      "name": "Daytona",
+      "tier": "compatible",
+      "status": "active",
+      "tests": "sdk/ts/src/adapters/sandbox/"
+    }
+  ]
+}

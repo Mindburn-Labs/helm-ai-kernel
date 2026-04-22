@@ -1,0 +1,131 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "helm://schemas/core/ProvenanceEnvelope.v1.json",
+  "title": "ProvenanceEnvelope.v1",
+  "description": "Provenance-tagged context segment for indirect prompt injection defense. Each segment carries source type, trust level, and transform signature for instruction firewall enforcement.",
+  "type": "object",
+  "required": ["envelope_id", "version", "segments"],
+  "properties": {
+    "envelope_id": {
+      "type": "string",
+      "description": "Unique identifier for this provenance envelope",
+      "pattern": "^env-[a-f0-9]{32}$"
+    },
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "segments": {
+      "type": "array",
+      "description": "Ordered context segments with provenance metadata",
+      "items": {
+        "$ref": "#/$defs/ProvenanceSegment"
+      }
+    },
+    "firewall_policy_id": {
+      "type": "string",
+      "description": "Optional reference to the instruction firewall policy applied"
+    },
+    "transform_chain": {
+      "type": "array",
+      "description": "Transforms applied to this envelope",
+      "items": {
+        "$ref": "#/$defs/Transform"
+      }
+    },
+    "content_hash": {
+      "type": "string",
+      "description": "SHA256 hash of ordered segment contents for integrity verification"
+    }
+  },
+  "$defs": {
+    "ProvenanceSegment": {
+      "type": "object",
+      "required": ["segment_id", "source_type", "trust_level", "content"],
+      "properties": {
+        "segment_id": {
+          "type": "string",
+          "description": "Unique ID for this segment"
+        },
+        "source_type": {
+          "type": "string",
+          "enum": ["system", "user", "tool_output", "web", "file", "database", "model_output"],
+          "description": "Origin of this content segment"
+        },
+        "trust_level": {
+          "type": "string",
+          "enum": ["trusted", "semi_trusted", "untrusted", "adversarial"],
+          "description": "Trust classification for instruction firewall"
+        },
+        "content": {
+          "type": "string",
+          "description": "The actual content of this segment"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "source_uri": {
+              "type": "string",
+              "description": "URI of the content source (file path, URL, etc.)"
+            },
+            "tool_id": {
+              "type": "string",
+              "description": "If tool_output, the ID of the tool that produced this"
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "user_id": {
+              "type": "string",
+              "description": "If user-provided, the user identifier"
+            }
+          }
+        },
+        "transform_applied": {
+          "type": "string",
+          "enum": ["none", "spotlight", "quote", "escape", "redact", "tokenize"],
+          "description": "Transform applied to this segment for safety"
+        },
+        "injection_indicators": {
+          "type": "array",
+          "description": "Detected prompt injection patterns (if any)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pattern_id": { "type": "string" },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "position": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "Transform": {
+      "type": "object",
+      "required": ["transform_type", "applied_at"],
+      "properties": {
+        "transform_type": {
+          "type": "string",
+          "enum": ["spotlight", "quote", "escape", "redact", "tokenize", "filter"]
+        },
+        "applied_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "target_segments": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "signature": {
+          "type": "string",
+          "description": "Cryptographic signature of transform application"
+        }
+      }
+    }
+  }
+}

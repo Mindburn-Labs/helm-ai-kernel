@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/effects/create_calendar_event_effect.v1.json",
+  "title": "Create Calendar Event Effect",
+  "description": "Parameters for creating a calendar event through a governed connector.",
+  "type": "object",
+  "required": ["request_id", "connector_instance_id", "title", "start_time", "end_time"],
+  "properties": {
+    "request_id": { "type": "string" },
+    "connector_instance_id": { "type": "string" },
+    "idempotency_key": { "type": "string" },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "start_time": { "type": "string", "format": "date-time" },
+    "end_time": { "type": "string", "format": "date-time" },
+    "attendee_person_ids": { "type": "array", "items": { "type": "string" } },
+    "attendee_emails": { "type": "array", "items": { "type": "string", "format": "email" } },
+    "location": { "type": "string" },
+    "proposal_id": { "type": "string" },
+    "from_employee_id": { "type": "string" }
+  }
+}

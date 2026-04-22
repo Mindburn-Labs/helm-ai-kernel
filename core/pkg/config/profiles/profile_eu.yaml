@@ -1,0 +1,43 @@
+# EU Regional Profile
+# European Union (GDPR-compliant) regulatory and operational defaults
+name: "European Union"
+code: "eu"
+
+ceremony:
+  min_timelock_ms: 5000
+  min_hold_ms: 3000
+  require_challenge: true
+  domain_separation: "helm:approval:v1:eu"
+
+data_residency: "eu-west-1"
+
+compliance:
+  - "GDPR"
+  - "SOC2"
+  - "ISO-27001"
+
+encryption: "AES-256-GCM"
+pii_handling: "strict"
+right_to_erasure: true
+
+networking:
+  outbound_mode: "allowlist"
+  allowlist:
+    - "api.openai.com"
+    - "api.anthropic.com"
+    - "generativelanguage.googleapis.com"
+  island_mode: false
+
+crypto_policy:
+  allowed_algorithms:
+    - "AES-256-GCM"
+    - "Ed25519"
+    - "SHA-256"
+  key_rotation_days: 90
+  require_hsm: false
+
+retention:
+  max_days: 365
+  audit_log_days: 1825  # 5 years
+  pii_retention_days: 30
+  right_to_erasure: true

@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/policy/pdp_response.schema.json",
+  "title": "PDPResponse",
+  "description": "Policy Decision Point Response - Normative contract per Section 3.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision", "decision_id", "policy_version", "constraints", "trace"],
+  "properties": {
+    "decision": {
+      "type": "string",
+      "enum": ["ALLOW", "DENY", "ESCALATE"],
+      "description": "Canonical HELM policy decision outcome"
+    },
+    "decision_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this decision"
+    },
+    "policy_version": {
+      "type": "string",
+      "description": "Content-addressed policy bundle version hash"
+    },
+    "constraints": {
+      "type": "object",
+      "description": "Constraints applied to the allowed effect",
+      "properties": {
+        "envelope_constraints": {
+          "type": "object",
+          "description": "Effect type and limit allowlists",
+          "properties": {
+            "allowed_effect_types": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "limits": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "max_value": { "type": "number" },
+                  "max_count": { "type": "integer" },
+                  "window_seconds": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "required_approvals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "approval_type": { "type": "string" },
+              "approver_roles": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "threshold": { "type": "integer" }
+            }
+          }
+        },
+        "required_evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "evidence_type": { "type": "string" },
+              "issuer_allowlist": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "min_corroboration": { "type": "integer" }
+            }
+          }
+        },
+        "compensations_required": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "compensation_type": { "type": "string" },
+              "trigger_condition": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "description": "Evaluation trace for reproducibility",
+      "required": ["evaluation_graph_hash", "rules_fired", "inputs_hashes"],
+      "properties": {
+        "evaluation_graph_hash": {
+          "type": "string",
+          "description": "Hash of the policy evaluation DAG"
+        },
+        "rules_fired": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of policy rules that matched"
+        },
+        "inputs_hashes": {
+          "type": "object",
+          "description": "Hashes of all inputs to the decision",
+          "additionalProperties": { "type": "string" }
+        },
+        "engine_subtraces": {
+          "type": "array",
+          "description": "Sub-traces from individual policy engines (for multi-engine setups)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "engine_id": { "type": "string" },
+              "sub_decision": { "type": "string" },
+              "evidence_contributed": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Authority time when decision was issued"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Authority time when decision expires"
+    }
+  }
+}

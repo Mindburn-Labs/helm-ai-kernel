@@ -1,0 +1,105 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: helm
+
+before:
+  hooks:
+    - cd core && go mod tidy
+
+builds:
+  - id: helm
+    dir: core
+    main: ./cmd/helm/
+    binary: helm
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.Commit}}
+      - -X main.Date={{.Date}}
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: "helm-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+      - docs/QUICKSTART.md
+
+checksum:
+  name_template: "SHA256SUMS.txt"
+  algorithm: sha256
+
+sboms:
+  - artifacts: archive
+    cmd: syft
+    args: ["scan", "${artifact}", "--output", "spdx-json=${document}"]
+
+signs:
+  - cmd: cosign
+    args:
+      - "sign-blob"
+      - "--yes"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+    artifacts: checksum
+
+docker_signs:
+  - cmd: cosign
+    args:
+      - "sign"
+      - "--yes"
+      - "${artifact}"
+    artifacts: manifests
+
+brews:
+  - name: helm
+    repository:
+      owner: Mindburn-Labs
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/Mindburn-Labs/helm-oss"
+    description: "Fail-closed execution authority for AI agents"
+    license: "Apache-2.0"
+    install: |
+      bin.install "helm"
+    test: |
+      system "#{bin}/helm", "--help"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+release:
+  github:
+    owner: Mindburn-Labs
+    name: helm-oss
+  prerelease: auto
+  draft: false
+  extra_files:
+    - glob: "dist/helm.mcpb"
+    - glob: "dist/compatibility-matrix.*"
+    - glob: "dist/golden-evidencepack.tar"
+    - glob: "dist/golden-run-report.html"

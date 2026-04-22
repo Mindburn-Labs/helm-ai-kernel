@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/signals/signal_cluster.v1.json",
+  "title": "Signal Cluster",
+  "description": "A time-windowed grouping of related signals.",
+  "type": "object",
+  "required": ["cluster_id", "signal_ids", "primary_topic", "created_at"],
+  "properties": {
+    "cluster_id": { "type": "string" },
+    "signal_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "primary_topic": { "type": "string" },
+    "program_id": { "type": "string" },
+    "person_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "urgency": {
+      "type": "string",
+      "enum": ["low", "normal", "high", "critical"]
+    },
+    "summary_hash": { "type": "string" },
+    "action_hint": {
+      "type": "string",
+      "enum": ["none", "review", "act", "escalate"]
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

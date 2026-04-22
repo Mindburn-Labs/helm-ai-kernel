@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/orgdna/orggenome.v1.schema.json",
+  "title": "OrgGenome",
+  "description": "Declarative organizational genome — the single source of truth for structure, policies, modules, and governance rules.",
+  "type": "object",
+  "required": ["meta", "regulation", "phenotype_contract"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["genome_id", "name", "created_at"],
+      "properties": {
+        "genome_id": { "type": "string" },
+        "name": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "license": { "type": "string" }
+      }
+    },
+    "morphogenesis": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "when", "generate"],
+        "properties": {
+          "id": { "type": "string" },
+          "when": { "type": "string", "description": "CEL expression" },
+          "generate": { "type": "object" }
+        }
+      }
+    },
+    "regulation": { "$ref": "#/$defs/RegulationConfig" },
+    "phenotype_contract": {
+      "type": "object",
+      "properties": {
+        "must_produce": { "type": "array", "items": { "type": "string" } },
+        "determinism": {
+          "type": "object",
+          "properties": {
+            "requires_random_seed": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "primitives": { "$ref": "#/$defs/OrgPrimitives" },
+    "modules": { "type": "array", "items": { "$ref": "#/$defs/ModuleDeclaration" } },
+    "provenance": { "type": "object", "additionalProperties": { "type": "string" } }
+  },
+  "$defs": {
+    "RegulationConfig": {
+      "type": "object",
+      "properties": {
+        "essential_variables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "variable_id", "bounds"],
+            "properties": {
+              "name": { "type": "string" },
+              "variable_id": { "type": "string" },
+              "bounds": {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string" },
+                  "min": { "type": "number" },
+                  "max": { "type": "number" }
+                }
+              },
+              "current_value": { "type": "number" }
+            }
+          }
+        },
+        "control_loops": { "type": "array" },
+        "policy_set": { "type": "object" }
+      }
+    },
+    "OrgPrimitives": {
+      "type": "object",
+      "properties": {
+        "units": { "type": "array", "items": { "$ref": "#/$defs/OrgUnit" } },
+        "roles": { "type": "array", "items": { "$ref": "#/$defs/Role" } },
+        "principals": { "type": "array", "items": { "$ref": "#/$defs/Principal" } }
+      }
+    },
+    "OrgUnit": {
+      "type": "object",
+      "required": ["unit_id", "name", "type"],
+      "properties": {
+        "unit_id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["team", "division", "squad", "pod", "department"] },
+        "parent_id": { "type": "string" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/OrgUnit" } },
+        "assigned_roles": { "type": "array", "items": { "type": "string" } },
+        "policy_refs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "Role": {
+      "type": "object",
+      "required": ["role_id", "name"],
+      "properties": {
+        "role_id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "responsibilities": { "type": "array", "items": { "type": "string" } },
+        "delegation_allowed": { "type": "boolean" }
+      }
+    },
+    "Principal": {
+      "type": "object",
+      "required": ["principal_id", "type", "name"],
+      "properties": {
+        "principal_id": { "type": "string" },
+        "type": { "type": "string", "enum": ["human", "agent", "system"] },
+        "name": { "type": "string" },
+        "traits": { "type": "array", "items": { "type": "string" } },
+        "risk_score": { "type": "number" }
+      }
+    },
+    "ModuleDeclaration": {
+      "type": "object",
+      "required": ["type", "jurisdiction", "version"],
+      "properties": {
+        "type": { "type": "string" },
+        "jurisdiction": { "type": "string" },
+        "version": { "type": "string" },
+        "capabilities": { "type": "array", "items": { "type": "string" } },
+        "attestation": {
+          "type": "object",
+          "properties": {
+            "signer_id": { "type": "string" },
+            "signature": { "type": "string" },
+            "digest": { "type": "string" },
+            "issued_at": { "type": "string", "format": "date-time" }
+          }
+        }
+      }
+    }
+  }
+}

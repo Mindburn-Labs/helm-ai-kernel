@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/policy/policy_decision.schema.json",
+  "title": "PolicyDecision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision_id", "result"],
+  "properties": {
+    "decision_id": { "type": "string", "format": "uuid" },
+    "result": {},
+    "revision": { "type": "string" },
+    "metrics": { "type": "object" }
+  }
+}

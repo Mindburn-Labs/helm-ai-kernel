@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/comment_ticket_effect.v1.json",
+  "title": "Comment on Ticket Effect",
+  "description": "Adds a comment to a ticket or issue. May be customer-visible.",
+  "type": "object",
+  "required": [
+    "effect_id",
+    "ticket_id"
+  ],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "const": "COMMENT_TICKET"
+    },
+    "ticket_id": {
+      "type": "string"
+    },
+    "body_hash": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "x-helm": {
+    "category": "business",
+    "risk_class": "E1",
+    "approval_level": "",
+    "reversible": true
+  }
+}

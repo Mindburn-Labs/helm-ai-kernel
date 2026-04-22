@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/research/policy_bundle.v1.json",
+  "title": "ResearchPolicyBundle",
+  "type": "object",
+  "required": ["allowed_mission_types", "max_budget_usd", "minimum_editor_score"],
+  "properties": {
+    "allowed_mission_types": { "type": "array", "items": { "type": "string" } },
+    "allowed_agents": { "type": "array", "items": { "type": "string" } },
+    "allowed_models": { "type": "array", "items": { "type": "string" } },
+    "max_budget_usd": { "type": "number" },
+    "max_search_queries": { "type": "integer" },
+    "max_browser_fetches": { "type": "integer" },
+    "required_source_count": { "type": "integer" },
+    "minimum_primary_source_count": { "type": "integer" },
+    "minimum_editor_score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "require_human_override_conditions": { "type": "array", "items": { "type": "string" } },
+    "allowed_publication_targets": { "type": "array", "items": { "enum": ["internal_registry", "site_markdown", "newsletter"] } }
+  }
+}

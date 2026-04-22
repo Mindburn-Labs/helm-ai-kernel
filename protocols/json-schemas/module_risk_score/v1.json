@@ -1,0 +1,14 @@
+{
+  "$id": "helm://schemas/module_risk_score/v1.json",
+  "type": "object",
+  "required": ["module_id", "version", "score", "assessor_id", "timestamp"],
+  "properties": {
+    "module_id": { "type": "string" },
+    "version": { "type": "string" },
+    "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "risk_level": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+    "assessor_id": { "type": "string" },
+    "factors": { "type": "array", "items": { "type": "string" } },
+    "timestamp": { "type": "string", "format": "date-time" }
+  }
+}

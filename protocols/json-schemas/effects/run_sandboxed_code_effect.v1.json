@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/run_sandboxed_code_effect.v1.json",
+  "title": "Run Sandboxed Code Effect",
+  "description": "Executes code in a governed sandbox. Compensatable via sandbox reset.",
+  "type": "object",
+  "required": [
+    "effect_id",
+    "code_hash"
+  ],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "const": "RUN_SANDBOXED_CODE"
+    },
+    "code_hash": {
+      "type": "string"
+    },
+    "language": {
+      "type": "string"
+    },
+    "sandbox_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "x-helm": {
+    "category": "business",
+    "risk_class": "E1",
+    "approval_level": "",
+    "reversible": true
+  }
+}

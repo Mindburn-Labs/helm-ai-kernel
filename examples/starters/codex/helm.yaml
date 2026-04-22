@@ -1,0 +1,16 @@
+version: "1"
+provider: codex
+
+governance:
+  mode: enforce
+  receipt_dir: ./evidence/receipts
+  proof_dir: ./evidence/proofs
+
+mcp:
+  transport: http
+  listen: ":8080"
+  auth_mode: none
+
+codex:
+  upstream: https://api.openai.com/v1
+  model: codex-mini-latest

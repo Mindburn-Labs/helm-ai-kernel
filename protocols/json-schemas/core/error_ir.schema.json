@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/core/error_ir.schema.json",
+  "title": "ErrorIR",
+  "description": "Canonical Error IR per Addendum 8.5.X - RFC 9457 aligned with HELM extensions",
+  "type": "object",
+  "required": ["type", "title", "status", "helm"],
+  "additionalProperties": false,
+  "properties": {
+    "type": {
+      "type": "string",
+      "format": "uri",
+      "description": "URI reference identifying the problem type (RFC 9457)"
+    },
+    "title": {
+      "type": "string",
+      "description": "Short, human-readable summary of the problem type"
+    },
+    "status": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 599,
+      "description": "HTTP status code (or equivalent semantic status)"
+    },
+    "detail": {
+      "type": "string",
+      "description": "Human-readable explanation specific to this occurrence"
+    },
+    "instance": {
+      "type": "string",
+      "format": "uri-reference",
+      "description": "URI reference identifying this specific occurrence"
+    },
+    "helm": {
+      "type": "object",
+      "description": "HELM-specific error extensions",
+      "required": ["error_code", "namespace", "classification"],
+      "additionalProperties": false,
+      "properties": {
+        "error_code": {
+          "type": "string",
+          "pattern": "^HELM/(CORE|ADAPTER|PACK)/[A-Z0-9_/]+$",
+          "description": "Canonical HELM error code"
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Error namespace (CORE, ADAPTER/<id>, PACK/<id>)"
+        },
+        "classification": {
+          "type": "string",
+          "enum": ["RETRYABLE", "NON_RETRYABLE", "IDEMPOTENT_SAFE", "COMPENSATION_REQUIRED"],
+          "description": "Error classification for retry logic"
+        },
+        "canonical_cause_chain": {
+          "type": "array",
+          "description": "Chain of canonical causes",
+          "x-helm-array-kind": "ORDERED",
+          "items": {
+            "type": "object",
+            "required": ["error_code", "at"],
+            "additionalProperties": false,
+            "properties": {
+              "error_code": {
+                "type": "string",
+                "description": "Error code at this level in the chain"
+              },
+              "at": {
+                "type": "string",
+                "description": "JSON Pointer path to the error location"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

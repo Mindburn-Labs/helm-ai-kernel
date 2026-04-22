@@ -1,0 +1,157 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "helm://schemas/policy/DLPPolicy.v1.json",
+  "title": "DLPPolicy.v1",
+  "description": "Data Loss Prevention Policy defining sensitive data patterns, classifications, and enforcement actions for prompts and responses.",
+  "type": "object",
+  "required": ["policy_id", "version", "name", "rules"],
+  "properties": {
+    "policy_id": {
+      "type": "string",
+      "description": "Unique identifier for this DLP policy",
+      "pattern": "^dlp-[a-zA-Z0-9-]+$"
+    },
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable policy name"
+    },
+    "description": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "jurisdictions": {
+      "type": "array",
+      "description": "Jurisdictions this policy applies to (GDPR, CCPA, etc.)",
+      "items": {
+        "type": "string",
+        "enum": ["global", "eu_gdpr", "us_ccpa", "us_hipaa", "pci_dss", "sox", "custom"]
+      }
+    },
+    "rules": {
+      "type": "array",
+      "description": "Ordered list of DLP rules to apply",
+      "items": {
+        "$ref": "#/$defs/DLPRule"
+      }
+    },
+    "enforcement": {
+      "$ref": "#/$defs/EnforcementConfig"
+    },
+    "exemptions": {
+      "type": "array",
+      "description": "Contexts where DLP is relaxed",
+      "items": {
+        "$ref": "#/$defs/Exemption"
+      }
+    }
+  },
+  "$defs": {
+    "DLPRule": {
+      "type": "object",
+      "required": ["rule_id", "name", "data_class", "action"],
+      "properties": {
+        "rule_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Higher priority rules evaluated first"
+        },
+        "data_class": {
+          "type": "string",
+          "enum": ["pii", "phi", "pci", "secrets", "credentials", "proprietary", "restricted"],
+          "description": "Category of sensitive data"
+        },
+        "patterns": {
+          "type": "array",
+          "description": "Regex patterns to detect this data class",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pattern": { "type": "string" },
+              "name": { "type": "string" },
+              "confidence_threshold": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          }
+        },
+        "detectors": {
+          "type": "array",
+          "description": "Named detector modules to apply",
+          "items": {
+            "type": "string",
+            "enum": ["ssn", "credit_card", "email", "phone", "address", "dob", "passport", "api_key", "password", "token", "ip_address", "custom"]
+          }
+        },
+        "action": {
+          "type": "string",
+          "enum": ["block", "redact", "tokenize", "alert", "log"],
+          "description": "Action to take when pattern detected"
+        },
+        "redaction_style": {
+          "type": "string",
+          "enum": ["full", "partial", "mask_last_4", "hash", "placeholder"],
+          "description": "How to redact matched content"
+        },
+        "applies_to": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["prompt", "response", "tool_input", "tool_output", "all"]
+          },
+          "default": ["all"]
+        }
+      }
+    },
+    "EnforcementConfig": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "audit", "disabled"],
+          "default": "enforce"
+        },
+        "fail_action": {
+          "type": "string",
+          "enum": ["block", "redact", "alert"],
+          "description": "Action on policy violation"
+        },
+        "audit_all": {
+          "type": "boolean",
+          "default": true,
+          "description": "Log all scans, not just violations"
+        },
+        "max_violations_per_request": {
+          "type": "integer",
+          "description": "Maximum violations before blocking entire request"
+        }
+      }
+    },
+    "Exemption": {
+      "type": "object",
+      "properties": {
+        "exemption_id": { "type": "string" },
+        "reason": { "type": "string" },
+        "principal_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "approved_by": { "type": "string" }
+      }
+    }
+  }
+}

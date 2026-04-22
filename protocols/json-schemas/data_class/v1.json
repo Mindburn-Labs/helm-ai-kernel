@@ -1,0 +1,10 @@
+{
+  "$id": "helm://schemas/data_class/v1.json",
+  "type": "object",
+  "required": ["data_class_id", "description", "sensitivity_level"],
+  "properties": {
+    "data_class_id": { "type": "string" },
+    "description": { "type": "string" },
+    "sensitivity_level": { "type": "string", "enum": ["public", "internal", "confidential", "restricted"] }
+  }
+}

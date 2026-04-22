@@ -1,0 +1,11 @@
+template_id: "orgdna.arc.research.v1"
+name: "ARC Research Environment"
+roles:
+  - id: "role.explore"
+    permissions: [ "read" ]
+  - id: "role.executor"
+    permissions: [ "mutate" ]
+connectors:
+  - id: "helm.connector.arc"
+    version: "v1"
+default_policy: "profile.arc-research-local.v1"

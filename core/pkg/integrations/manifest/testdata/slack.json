@@ -1,0 +1,100 @@
+{
+  "api_version": "integrations.helm.mindburn.run/v1",
+  "provider": {
+    "id": "slack",
+    "name": "Slack",
+    "category": "communication",
+    "homepage": "https://slack.com",
+    "icon_url": "https://a.slack-edge.com/80588/marketing/img/meta/favicon-32.png"
+  },
+  "connector": {
+    "id": "slack-v1",
+    "version": "1.0.0",
+    "packaging": "builtin",
+    "artifact_digest": ""
+  },
+  "auth": {
+    "methods": [
+      {
+        "type": "oauth2",
+        "oauth_config": {
+          "authorization_url": "https://slack.com/oauth/v2/authorize",
+          "token_url": "https://slack.com/api/oauth.v2.access",
+          "scopes": ["chat:write", "channels:read", "users:read"]
+        }
+      }
+    ]
+  },
+  "capabilities": [
+    {
+      "urn": "cap://slack/send-message@1.0.0",
+      "name": "Send Message",
+      "description": "Post a message to a Slack channel",
+      "risk_class": "E1",
+      "idempotent": false,
+      "rollback": false
+    },
+    {
+      "urn": "cap://slack/list-channels@1.0.0",
+      "name": "List Channels",
+      "description": "List all channels in a Slack workspace",
+      "risk_class": "E0",
+      "idempotent": true,
+      "rollback": false
+    },
+    {
+      "urn": "cap://slack/list-users@1.0.0",
+      "name": "List Users",
+      "description": "List all users in a Slack workspace",
+      "risk_class": "E0",
+      "idempotent": true,
+      "rollback": false
+    }
+  ],
+  "runtime": {
+    "kind": "http",
+    "config": {
+      "base_url": "https://slack.com/api"
+    }
+  },
+  "policies_default": {
+    "max_requests_per_minute": 60,
+    "host_allowlist": ["slack.com"]
+  },
+  "evidence_default": {
+    "retention_days": 90
+  },
+  "tests": {
+    "smoke": [
+      {
+        "name": "auth_check",
+        "capability_urn": "cap://slack/list-channels@1.0.0",
+        "expect_status": 200,
+        "timeout_seconds": 10
+      }
+    ]
+  },
+  "ui": {
+    "category": "Communication",
+    "short_description": "Send messages, manage channels, and read conversations in Slack.",
+    "install_steps": [
+      {
+        "order": 1,
+        "action_type": "oauth_connect",
+        "title": "Connect Slack",
+        "description": "Authorize HELM to access your Slack workspace."
+      },
+      {
+        "order": 2,
+        "action_type": "scope_approval",
+        "title": "Approve Permissions",
+        "description": "Review and approve the requested Slack permissions."
+      }
+    ],
+    "permission_copy": {
+      "chat:write": "Send messages on your behalf",
+      "channels:read": "View channel information",
+      "users:read": "View user profiles"
+    }
+  }
+}

@@ -1,0 +1,86 @@
+// HELM Truth Registry Protocol Buffer Definitions
+//
+// Canonical IDL for versioned truth objects.
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.truth.v1;
+
+option go_package = "helm.mindburn.run/truth/v1;truthv1";
+
+import "google/protobuf/timestamp.proto";
+
+enum TruthType {
+  TRUTH_TYPE_UNSPECIFIED = 0;
+  TRUTH_TYPE_POLICY = 1;
+  TRUTH_TYPE_SCHEMA = 2;
+  TRUTH_TYPE_REGULATION = 3;
+  TRUTH_TYPE_ORG_GENOME = 4;
+  TRUTH_TYPE_PACK_ABI = 5;
+  TRUTH_TYPE_ATTESTATION = 6;
+}
+
+message VersionScope {
+  int32 major = 1;
+  int32 minor = 2;
+  int32 patch = 3;
+  string epoch = 4;
+  string label = 5;
+}
+
+message FreshnessInfo {
+  google.protobuf.Timestamp last_validated = 1;
+  google.protobuf.Timestamp valid_until = 2;
+  bool stale = 3;
+}
+
+message CompatibilityInfo {
+  bool breaking_change = 1;
+  string deprecated_since = 2;
+  string replaced_by = 3;
+  repeated string compatible_with = 4;
+}
+
+message ProvenanceInfo {
+  string author_id = 1;
+  string source_ref = 2;
+  string tool = 3;
+}
+
+message TruthObject {
+  string object_id = 1;
+  TruthType type = 2;
+  string name = 3;
+  VersionScope version = 4;
+  bytes content = 5;
+  string content_hash = 6;
+  FreshnessInfo freshness = 7;
+  CompatibilityInfo compatibility = 8;
+  ProvenanceInfo provenance = 9;
+  google.protobuf.Timestamp registered_at = 10;
+  string signature = 11;
+}
+
+message LineageEntry {
+  string entry_id = 1;
+  string object_id = 2;
+  string parent_id = 3;
+  string relation = 4;
+  string annotation = 5;
+  google.protobuf.Timestamp recorded_at = 6;
+  string recorded_by = 7;
+}
+
+service TruthRegistryService {
+  rpc Register(TruthObject) returns (TruthObject);
+  rpc Get(GetTruthRequest) returns (TruthObject);
+  rpc GetLatest(GetLatestTruthRequest) returns (TruthObject);
+}
+
+message GetTruthRequest {
+  string object_id = 1;
+}
+
+message GetLatestTruthRequest {
+  TruthType type = 1;
+  string name = 2;
+}

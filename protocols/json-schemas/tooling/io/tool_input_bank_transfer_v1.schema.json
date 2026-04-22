@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_bank_transfer_v1.schema.json",
+  "title": "BankTransferInput",
+  "description": "Input schema for tool bank.transfer (KERNEL, IRREVERSIBLE_WRITE)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "connector_instance_id",
+    "idempotency_key",
+    "amount",
+    "currency",
+    "from_account_ref",
+    "to_beneficiary_ref"
+  ],
+  "properties": {
+    "amount": {
+      "description": "Monetary amount",
+      "type": "number"
+    },
+    "connector_instance_id": {
+      "description": "Bound connector instance (BANK_PROVIDER)",
+      "type": "string"
+    },
+    "currency": {
+      "description": "ISO 4217 currency code",
+      "maxLength": 3,
+      "minLength": 3,
+      "type": "string"
+    },
+    "from_account_ref": {
+      "description": "Reference identifier",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "description": "Idempotency key derived from: amount, currency, from_account_ref, to_beneficiary_ref, idempotency_key",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    },
+    "to_beneficiary_ref": {
+      "description": "Reference identifier",
+      "type": "string"
+    }
+  }
+}

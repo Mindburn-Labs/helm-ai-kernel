@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/chaos_kill_node.json",
+  "title": "Chaos Kill Node Effect",
+  "description": "Simulates a node failure for chaos testing",
+  "type": "object",
+  "required": ["effect_id", "node_id"],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "const": "infra.chaos.kill_node"
+    },
+    "node_id": {
+      "type": "string"
+    },
+    "method": {
+      "type": "string",
+      "enum": ["graceful", "hard", "network_partition"],
+      "default": "graceful"
+    },
+    "duration_seconds": {
+      "type": "integer",
+      "minimum": 30,
+      "maximum": 3600,
+      "default": 300
+    }
+  },
+  "x-helm": {
+    "category": "chaos",
+    "risk_level": "critical",
+    "requires_approval": true,
+    "emergency_effect": true
+  }
+}

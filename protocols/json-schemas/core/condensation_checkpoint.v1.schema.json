@@ -1,0 +1,18 @@
+{
+  "$id": "https://helm.mindburn.run/schemas/core/condensation_checkpoint.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HELM Condensation Checkpoint v1",
+  "description": "Periodic Merkle checkpoint for proof condensation. Per ARCHITECTURE.md §5.2.",
+  "type": "object",
+  "required": ["checkpoint_id", "merkle_root", "receipt_count", "first_receipt_id", "last_receipt_id", "lamport_clock", "created_at", "signature"],
+  "properties": {
+    "checkpoint_id": { "type": "string" },
+    "merkle_root": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "receipt_count": { "type": "integer", "minimum": 1 },
+    "first_receipt_id": { "type": "string" },
+    "last_receipt_id": { "type": "string" },
+    "lamport_clock": { "type": "integer", "minimum": 0 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "signature": { "type": "string" }
+  }
+}

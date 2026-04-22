@@ -1,0 +1,250 @@
+{
+  "version": "1.0.0",
+  "codes": [
+    {
+      "code": "POLICY_VIOLATION",
+      "applies_to": ["DENY"],
+      "domain": "policy",
+      "description": "Effect violates an active policy rule",
+      "since": "1.0.0"
+    },
+    {
+      "code": "NO_POLICY_DEFINED",
+      "applies_to": ["DENY"],
+      "domain": "policy",
+      "description": "No policy covers this effect type",
+      "since": "1.0.0"
+    },
+    {
+      "code": "PRG_EVALUATION_ERROR",
+      "applies_to": ["DENY"],
+      "domain": "policy",
+      "description": "Policy Requirement Graph evaluation failed",
+      "since": "1.0.0"
+    },
+    {
+      "code": "SCHEMA_VIOLATION",
+      "applies_to": ["DENY"],
+      "domain": "policy",
+      "description": "Request does not conform to schema",
+      "since": "1.0.0"
+    },
+    {
+      "code": "PDP_DENY",
+      "applies_to": ["DENY"],
+      "domain": "pdp",
+      "description": "External PDP returned deny",
+      "since": "1.0.0"
+    },
+    {
+      "code": "PDP_ERROR",
+      "applies_to": ["DENY"],
+      "domain": "pdp",
+      "description": "PDP unavailable or returned error (fail-closed)",
+      "since": "1.0.0"
+    },
+    {
+      "code": "MISSING_REQUIREMENT",
+      "applies_to": ["DENY"],
+      "domain": "requirement",
+      "description": "Required precondition not satisfied",
+      "since": "1.0.0"
+    },
+    {
+      "code": "BUDGET_EXCEEDED",
+      "applies_to": ["DENY"],
+      "domain": "budget",
+      "description": "Operation exceeds allocated budget",
+      "since": "1.0.0"
+    },
+    {
+      "code": "BUDGET_ERROR",
+      "applies_to": ["DENY"],
+      "domain": "budget",
+      "description": "Budget system unavailable (fail-closed)",
+      "since": "1.0.0"
+    },
+    {
+      "code": "TEMPORAL_INTERVENTION",
+      "applies_to": ["ESCALATE"],
+      "domain": "temporal",
+      "description": "Time-based intervention triggered",
+      "since": "1.0.0"
+    },
+    {
+      "code": "TEMPORAL_THROTTLE",
+      "applies_to": ["ESCALATE"],
+      "domain": "temporal",
+      "description": "Rate limit or cooldown active",
+      "since": "1.0.0"
+    },
+    {
+      "code": "ENVELOPE_INVALID",
+      "applies_to": ["DENY"],
+      "domain": "envelope",
+      "description": "Effect envelope failed validation",
+      "since": "1.0.0"
+    },
+    {
+      "code": "PROVENANCE_FAILURE",
+      "applies_to": ["DENY"],
+      "domain": "envelope",
+      "description": "Provenance chain broken or unverifiable",
+      "since": "1.0.0"
+    },
+    {
+      "code": "VERIFICATION_FAILURE",
+      "applies_to": ["DENY"],
+      "domain": "envelope",
+      "description": "Cryptographic verification failed",
+      "since": "1.0.0"
+    },
+    {
+      "code": "SANDBOX_VIOLATION",
+      "applies_to": ["DENY"],
+      "domain": "isolation",
+      "description": "Effect exceeds sandbox boundary",
+      "since": "1.0.0"
+    },
+    {
+      "code": "TENANT_ISOLATION",
+      "applies_to": ["DENY"],
+      "domain": "isolation",
+      "description": "Cross-tenant access violation",
+      "since": "1.0.0"
+    },
+    {
+      "code": "JURISDICTION_VIOLATION",
+      "applies_to": ["DENY"],
+      "domain": "jurisdiction",
+      "description": "Effect violates jurisdictional constraint",
+      "since": "1.0.0"
+    },
+    {
+      "code": "SYSTEM_FROZEN",
+      "applies_to": ["DENY"],
+      "domain": "operations",
+      "description": "System is in global freeze state — all actions denied",
+      "since": "1.1.0"
+    },
+    {
+      "code": "CONTEXT_MISMATCH",
+      "applies_to": ["DENY"],
+      "domain": "environment",
+      "description": "Environment fingerprint does not match boot-time snapshot",
+      "since": "1.1.0"
+    },
+    {
+      "code": "DATA_EGRESS_BLOCKED",
+      "applies_to": ["DENY"],
+      "domain": "network",
+      "description": "Data transmission to unauthorized external endpoint blocked",
+      "since": "1.1.0"
+    },
+    {
+      "code": "IDENTITY_ISOLATION_VIOLATION",
+      "applies_to": ["DENY"],
+      "domain": "identity",
+      "description": "Agent credential reuse or impersonation detected",
+      "since": "1.1.0"
+    },
+    {
+      "code": "INSUFFICIENT_PRIVILEGE",
+      "applies_to": ["DENY"],
+      "domain": "privilege",
+      "description": "Agent privilege tier insufficient for requested effect type",
+      "since": "1.2.0"
+    },
+    {
+      "code": "APPROVAL_REQUIRED",
+      "applies_to": ["ESCALATE"],
+      "domain": "approval",
+      "description": "High-risk effect requires human approval before execution",
+      "since": "1.1.0"
+    },
+    {
+      "code": "APPROVAL_TIMEOUT",
+      "applies_to": ["DENY"],
+      "domain": "approval",
+      "description": "Human approval not received within timeout — action denied",
+      "since": "1.1.0"
+    },
+    {
+      "code": "DELEGATION_INVALID",
+      "applies_to": ["DENY"],
+      "domain": "delegation",
+      "description": "Delegation session is invalid, expired, revoked, or has a binding mismatch",
+      "since": "1.3.0"
+    },
+    {
+      "code": "DELEGATION_SCOPE_VIOLATION",
+      "applies_to": ["DENY"],
+      "domain": "delegation",
+      "description": "Delegate attempted an action outside the session's granted capabilities",
+      "since": "1.3.0"
+    },
+    {
+      "code": "AGENT_KILLED",
+      "applies_to": ["DENY"],
+      "domain": "agent_lifecycle",
+      "description": "Agent has been terminated via per-agent kill switch",
+      "since": "1.3.0"
+    },
+    {
+      "code": "TAINTED_INPUT_HIGH_RISK_DENY",
+      "applies_to": ["DENY"],
+      "domain": "threat",
+      "description": "High-risk effect denied due to tainted/untrusted input source",
+      "since": "1.2.0"
+    },
+    {
+      "code": "PROMPT_INJECTION_DETECTED",
+      "applies_to": ["DENY"],
+      "domain": "threat",
+      "description": "Prompt injection pattern detected in untrusted input",
+      "since": "1.2.0"
+    },
+    {
+      "code": "UNICODE_OBFUSCATION_DETECTED",
+      "applies_to": ["DENY"],
+      "domain": "threat",
+      "description": "Unicode obfuscation (zero-width chars, homoglyphs) detected",
+      "since": "1.2.0"
+    },
+    {
+      "code": "TAINTED_CREDENTIAL_ACCESS_DENY",
+      "applies_to": ["DENY"],
+      "domain": "threat",
+      "description": "Credential or token access attempted from tainted source",
+      "since": "1.2.0"
+    },
+    {
+      "code": "TAINTED_SOFTWARE_PUBLISH_DENY",
+      "applies_to": ["DENY"],
+      "domain": "threat",
+      "description": "Software publish or release attempted from tainted source",
+      "since": "1.2.0"
+    },
+    {
+      "code": "TAINTED_PRIVILEGED_INVOKE_DENY",
+      "applies_to": ["DENY"],
+      "domain": "threat",
+      "description": "Privileged agent invocation attempted from tainted source",
+      "since": "1.2.0"
+    },
+    {
+      "code": "TAINTED_DATA_EGRESS_DENY",
+      "applies_to": ["DENY"],
+      "domain": "threat",
+      "description": "Data egress or exfiltration attempted from tainted source",
+      "since": "1.2.0"
+    },
+    {
+      "code": "TAINTED_HIGH_RISK_ESCALATE",
+      "applies_to": ["ESCALATE"],
+      "domain": "threat",
+      "description": "High-risk effect from tainted source requires human approval",
+      "since": "1.2.0"
+    }
+  ]
+}

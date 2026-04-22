@@ -1,0 +1,107 @@
+# ─── Secrets (HARD LOCK) ──────────────────────────────────────────────────────
+.env
+.env.*
+*.env
+*.secrets*
+*.key
+*.pem
+*.p12
+.auth/
+
+# ─── Binaries ─────────────────────────────────────────────────────────────────
+/bin/
+/helm
+/helm-node
+/fas-score
+/fas-verify
+e2e.test
+*.exe
+*.dll
+*.so
+*.dylib
+
+# ─── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── AI Agent Config ──────────────────────────────────────────────────────────
+.codex/
+
+# ─── IDE ──────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ─── Go ───────────────────────────────────────────────────────────────────────
+vendor/
+go.work.sum
+*.test
+coverage.out
+coverage.html
+*.coverprofile
+*.pprof
+*.prof
+core/helm
+core/bootstrap
+core/firewall.out
+core/governance.out
+
+# ─── Local tooling ────────────────────────────────────────────────────────────
+mise.local.toml
+mise.*.local.*
+
+# ─── Internal docs (not for public OSS) ───────────────────────────────────────
+/HELM_Investment_Memo*.md
+/HELM_Unified_Canonical_Standard_FINAL*.md
+/titan-*.md
+/CONFORMANCE.md
+/TCB_POLICY.md
+
+# ─── Artifacts and evidence outputs ───────────────────────────────────────────
+artifacts/
+!artifacts/golden/
+!artifacts/golden/**
+reports/
+
+# ─── Temporary and logs ──────────────────────────────────────────────────────
+tmp/
+*.tmp
+*.log
+*.bak
+
+# ─── Data directory (Lite Mode DBs) ──────────────────────────────────────────
+data/
+deps.txt
+sbom.json
+sbom.spdx.json
+helm-receipts/
+
+# ─── Rust build artifacts ─────────────────────────────────────────────────────
+sdk/rust/target/
+
+# ─── Docker ───────────────────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ─── SDK build artifacts ─────────────────────────────────────────────────────
+node_modules/
+dist/
+*.tsbuildinfo
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+sdk/python/build/
+sdk/python/dist/
+sdk/java/target/
+sdk/ts/src/*.js
+sdk/ts/src/*.d.ts
+
+# ─── SDK generator temp ──────────────────────────────────────────────────────
+.gen_tmp/
+helm.yaml
+
+# build artifacts
+*.tgz
+sdk/ts/*.tgz

@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/emit_metric.json",
+  "title": "Emit Metric Effect",
+  "description": "Emits an infrastructure metric",
+  "type": "object",
+  "required": ["effect_id", "metric_name", "value"],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "const": "infra.metrics.emit"
+    },
+    "metric_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_\\.]+$"
+    },
+    "value": {
+      "type": "number"
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "x-helm": {
+    "category": "observability",
+    "risk_level": "low"
+  }
+}

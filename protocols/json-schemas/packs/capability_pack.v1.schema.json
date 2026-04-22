@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "title": "HELM Capability Pack",
+  "description": "Schema for HELM capability packs that extend the governance surface with domain-specific capabilities.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "const": "helm.mindburn.run/v1",
+      "description": "API version"
+    },
+    "kind": {
+      "type": "string",
+      "const": "CapabilityPack",
+      "description": "Resource kind"
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$",
+          "description": "Pack name (lowercase, alphanumeric, hyphens)"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+",
+          "description": "Semver version"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["observability", "security", "compliance", "integration", "testing", "deployment"],
+          "description": "Capability category"
+        },
+        "tags": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Searchable tags"
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["capabilities"],
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "type"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Capability name"
+              },
+              "type": {
+                "type": "string",
+                "enum": ["effect_type", "policy_rule", "evidence_collector", "report_generator", "audit_hook"],
+                "description": "Capability type"
+              },
+              "description": {
+                "type": "string"
+              },
+              "config_schema": {
+                "type": "object",
+                "description": "JSON Schema for capability configuration"
+              }
+            }
+          }
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "version"],
+            "properties": {
+              "name": {"type": "string"},
+              "version": {"type": "string"}
+            }
+          },
+          "description": "Other packs this depends on"
+        },
+        "conformance": {
+          "type": "object",
+          "properties": {
+            "minimum_level": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4,
+              "description": "Minimum conformance level required"
+            },
+            "required_invariants": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "TLA+ invariants this pack relies on"
+            }
+          }
+        }
+      }
+    }
+  }
+}

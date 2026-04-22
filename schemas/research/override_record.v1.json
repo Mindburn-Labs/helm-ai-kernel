@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/research/override_record.v1.json",
+  "title": "OverrideRecord",
+  "type": "object",
+  "required": ["id", "mission_id", "decision"],
+  "properties": {
+    "id": { "type": "string" },
+    "mission_id": { "type": "string" },
+    "artifact_id": { "type": "string" },
+    "reason_codes": { "type": "array", "items": { "type": "string" } },
+    "operator_id": { "type": "string" },
+    "decision": { "enum": ["pending", "approved", "denied"] },
+    "notes": { "type": ["string", "null"] },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

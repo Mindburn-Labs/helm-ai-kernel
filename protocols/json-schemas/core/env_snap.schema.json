@@ -1,0 +1,100 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://helm.org/schemas/core/env_snap.schema.json",
+    "title": "EnvSnap",
+    "description": "Environment snapshot for jurisdiction and context resolution. Captures the operational context at a point in time.",
+    "type": "object",
+    "required": [
+        "snap_id",
+        "timestamp",
+        "jurisdiction_id"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "snap_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for this environment snapshot."
+        },
+        "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When this snapshot was captured."
+        },
+        "jurisdiction_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Identifier for the applicable jurisdiction (e.g., 'US-CA', 'EU-GDPR', 'SG')."
+        },
+        "data_classes": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "Data classification levels present in current context (e.g., 'PII', 'PHI', 'financial')."
+        },
+        "action_classes": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "Action classifications relevant to context (e.g., 'payment', 'physical', 'legal')."
+        },
+        "risk_threshold": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Maximum acceptable risk score (0 = no risk, 1 = maximum risk)."
+        },
+        "available_connectors": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "List of connector IDs available in this environment."
+        },
+        "physical_context": {
+            "type": "object",
+            "description": "Physical environment context (for cyber-physical systems).",
+            "properties": {
+                "location": {
+                    "type": "string"
+                },
+                "equipment_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "safety_mode": {
+                    "type": "string",
+                    "enum": [
+                        "normal",
+                        "elevated",
+                        "critical",
+                        "lockout"
+                    ]
+                }
+            }
+        },
+        "temporal_context": {
+            "type": "object",
+            "description": "Time-related context.",
+            "properties": {
+                "timezone": {
+                    "type": "string"
+                },
+                "business_hours": {
+                    "type": "boolean"
+                },
+                "maintenance_window": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "metadata": {
+            "type": "object",
+            "description": "Additional context-specific metadata."
+        }
+    }
+}

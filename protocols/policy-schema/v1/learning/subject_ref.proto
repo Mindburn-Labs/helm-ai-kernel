@@ -1,0 +1,27 @@
+// HELM Learning System — Subject Reference
+//
+// Typed reference to any addressable element in the governance configuration graph.
+// Used by trace events to identify what was selected, proposed, or acted upon.
+//
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.policy.v1.learning;
+
+option go_package = "helm.mindburn.run/policy/v1/learning;learningv1";
+
+// SubjectKind classifies the graph element type.
+enum SubjectKind {
+  SUBJECT_KIND_UNSPECIFIED = 0;
+  SUBJECT_KIND_NODE = 1;
+  SUBJECT_KIND_EDGE = 2;
+  SUBJECT_KIND_QUEUE_ITEM = 3;
+  SUBJECT_KIND_RECEIPT = 4;
+  SUBJECT_KIND_WITNESS = 5;
+  SUBJECT_KIND_SCOPE = 6;
+}
+
+// SubjectRef is a typed pointer to a graph element.
+message SubjectRef {
+  SubjectKind kind = 1;
+  string id = 2;
+}

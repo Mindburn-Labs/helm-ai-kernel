@@ -1,0 +1,176 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "helm://schemas/certification/PackAttestationProfile.v1.json",
+  "title": "PackAttestationProfile.v1",
+  "description": "Attestation profile for HELM packs defining required certifications, trust levels, and admission requirements.",
+  "type": "object",
+  "required": ["profile_id", "version", "name", "admission_requirements"],
+  "properties": {
+    "profile_id": {
+      "type": "string",
+      "pattern": "^pap-[a-zA-Z0-9-]+$"
+    },
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "trust_tier": {
+      "type": "string",
+      "enum": ["community", "verified", "certified", "enterprise"],
+      "description": "Minimum trust tier required for packs"
+    },
+    "admission_requirements": {
+      "$ref": "#/$defs/AdmissionRequirements"
+    },
+    "signature_requirements": {
+      "$ref": "#/$defs/SignatureRequirements"
+    },
+    "provenance_requirements": {
+      "$ref": "#/$defs/ProvenanceRequirements" 
+    },
+    "certification_requirements": {
+      "$ref": "#/$defs/CertificationRequirements"
+    },
+    "enforcement": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "audit", "disabled"]
+        },
+        "fail_action": {
+          "type": "string",
+          "enum": ["block", "warn", "quarantine"]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "AdmissionRequirements": {
+      "type": "object",
+      "properties": {
+        "require_attestation": {
+          "type": "boolean",
+          "default": true,
+          "description": "Require valid attestation for pack admission"
+        },
+        "require_valid_signatures": {
+          "type": "boolean",
+          "default": true,
+          "description": "Require all signatures to be valid"
+        },
+        "minimum_signers": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Minimum number of required signers"
+        },
+        "required_signer_roles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["builder", "auditor", "certifier", "operator"]
+          }
+        },
+        "allowed_registries": {
+          "type": "array",
+          "description": "Allowed pack registries",
+          "items": { "type": "string" }
+        },
+        "denied_registries": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "max_attestation_age_hours": {
+          "type": "integer",
+          "description": "Maximum age of attestation in hours"
+        }
+      }
+    },
+    "SignatureRequirements": {
+      "type": "object", 
+      "properties": {
+        "allowed_algorithms": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["ed25519", "ecdsa-p256", "rsa-sha256"]
+          }
+        },
+        "trusted_signers": {
+          "type": "array",
+          "description": "List of trusted signer IDs",
+          "items": { "type": "string" }
+        },
+        "key_rotation_max_days": {
+          "type": "integer",
+          "description": "Maximum days since key rotation"
+        }
+      }
+    },
+    "ProvenanceRequirements": {
+      "type": "object",
+      "properties": {
+        "require_reproducible_build": {
+          "type": "boolean",
+          "description": "Require build to be reproducible"
+        },
+        "allowed_builders": {
+          "type": "array",
+          "description": "List of allowed builder IDs",
+          "items": { "type": "string" }
+        },
+        "require_source_repo": {
+          "type": "boolean",
+          "description": "Require source repository link"
+        },
+        "allowed_source_repos": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "require_dependency_hashes": {
+          "type": "boolean",
+          "description": "Require all dependency hashes"
+        }
+      }
+    },
+    "CertificationRequirements": {
+      "type": "object",
+      "properties": {
+        "require_schema_conformance": {
+          "type": "boolean",
+          "default": true
+        },
+        "require_determinism_tests": {
+          "type": "boolean",
+          "default": true
+        },
+        "require_security_audit": {
+          "type": "boolean"
+        },
+        "min_determinism_test_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_effect_types": {
+          "type": "integer",
+          "description": "Maximum number of effect types a pack can declare"
+        },
+        "denied_effect_types": {
+          "type": "array",
+          "description": "Effect types that are not allowed",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.org/schemas/channel_envelope.json",
+  "title": "Channel Envelope",
+  "description": "Canonical typed envelope for an inbound or outbound channel message, carrying routing metadata, trust classification, and optional cryptographic binding.",
+  "type": "object",
+  "required": ["envelope_id", "channel", "tenant_id", "session_id", "message_id"],
+  "properties": {
+    "envelope_id": {
+      "type": "string",
+      "description": "Unique identifier for this envelope."
+    },
+    "channel": {
+      "type": "string",
+      "enum": ["EMAIL", "SLACK", "TEAMS", "TELEGRAM", "WEBHOOK", "API", "INTERNAL"],
+      "description": "Channel transport type."
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "Tenant this envelope belongs to."
+    },
+    "session_id": {
+      "type": "string",
+      "description": "Session context for this message exchange."
+    },
+    "message_id": {
+      "type": "string",
+      "description": "External message identifier from the originating channel."
+    },
+    "thread_id": {
+      "type": "string",
+      "description": "Thread or conversation identifier, if applicable."
+    },
+    "sender_id": {
+      "type": "string",
+      "description": "Canonical sender identifier within HELM."
+    },
+    "sender_handle": {
+      "type": "string",
+      "description": "Display handle or address of the sender (e.g. email, username)."
+    },
+    "sender_trust": {
+      "type": "string",
+      "enum": ["FULL", "VERIFIED", "RESTRICTED", "UNTRUSTED"],
+      "description": "Trust classification of the sender."
+    },
+    "identity_binding_ref": {
+      "type": "string",
+      "description": "Reference to the identity binding record for the sender."
+    },
+    "received_at_unix_ms": {
+      "type": "integer",
+      "description": "Unix epoch timestamp in milliseconds when the message was received."
+    },
+    "text": {
+      "type": "string",
+      "description": "Plaintext body of the message."
+    },
+    "attachments": {
+      "type": "array",
+      "description": "List of attached artifacts.",
+      "items": {
+        "type": "object",
+        "required": ["artifact_id", "media_type"],
+        "properties": {
+          "artifact_id": { "type": "string" },
+          "media_type": { "type": "string" },
+          "filename": { "type": "string" },
+          "size_bytes": { "type": "integer", "minimum": 0 },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Freeform channel-specific metadata (e.g. Slack event type, MIME headers)."
+    },
+    "signature_ref": {
+      "type": "string",
+      "description": "Reference to the cryptographic signature over this envelope."
+    }
+  }
+}

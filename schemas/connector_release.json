@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.org/schemas/connector_release.json",
+  "title": "Connector Release",
+  "description": "A versioned, certified release of a HELM connector, capturing executor kind, schema bindings, sandbox policy, certification proof, and cryptographic identity.",
+  "type": "object",
+  "required": ["connector_id", "name", "version", "state", "executor_kind"],
+  "properties": {
+    "connector_id": {
+      "type": "string",
+      "description": "Unique identifier for this connector."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name of the connector."
+    },
+    "version": {
+      "type": "string",
+      "description": "Semver version string for this release."
+    },
+    "state": {
+      "type": "string",
+      "enum": ["candidate", "certified", "deprecated", "revoked"],
+      "description": "Lifecycle state of this connector release."
+    },
+    "executor_kind": {
+      "type": "string",
+      "enum": ["process", "container", "wasm", "native", "remote"],
+      "description": "Execution model used to run this connector."
+    },
+    "schema_refs": {
+      "type": "array",
+      "description": "References to JSON schema files that define this connector's input/output contracts.",
+      "items": { "type": "string" }
+    },
+    "sandbox_profile": {
+      "type": "string",
+      "description": "Reference to the sandbox policy profile applied during connector execution."
+    },
+    "drift_policy_ref": {
+      "type": "string",
+      "description": "Reference to the drift detection policy for this connector."
+    },
+    "certification_ref": {
+      "type": "string",
+      "description": "Reference to the certification receipt issued after conformance testing."
+    },
+    "binary_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "SHA-256 hash of the connector binary or container image digest."
+    },
+    "signature_ref": {
+      "type": "string",
+      "description": "Reference to the cryptographic signature over this release manifest."
+    }
+  }
+}

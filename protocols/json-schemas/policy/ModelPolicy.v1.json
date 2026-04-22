@@ -1,0 +1,206 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "helm://schemas/policy/ModelPolicy.v1.json",
+  "title": "ModelPolicy.v1",
+  "description": "Model Gateway Policy defining allowed models, budget ceilings, rate limits, and quality requirements for LLM usage.",
+  "type": "object",
+  "required": ["policy_id", "version", "name", "model_constraints"],
+  "properties": {
+    "policy_id": {
+      "type": "string",
+      "description": "Unique identifier for this model policy",
+      "pattern": "^mp-[a-zA-Z0-9-]+$"
+    },
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "model_constraints": {
+      "$ref": "#/$defs/ModelConstraints"
+    },
+    "budget_constraints": {
+      "$ref": "#/$defs/BudgetConstraints"
+    },
+    "rate_limits": {
+      "$ref": "#/$defs/RateLimits"
+    },
+    "quality_requirements": {
+      "$ref": "#/$defs/QualityRequirements"
+    },
+    "fallback_config": {
+      "$ref": "#/$defs/FallbackConfig"
+    },
+    "enforcement": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "audit", "disabled"]
+        },
+        "fail_action": {
+          "type": "string",
+          "enum": ["block", "fallback", "degrade", "alert"]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "ModelConstraints": {
+      "type": "object",
+      "properties": {
+        "allowed_providers": {
+          "type": "array",
+          "description": "Allowed model provider IDs",
+          "items": { "type": "string" }
+        },
+        "allowed_models": {
+          "type": "array",
+          "description": "Specific allowed model IDs (provider/model format)",
+          "items": { "type": "string" }
+        },
+        "denied_models": {
+          "type": "array",
+          "description": "Explicitly denied models",
+          "items": { "type": "string" }
+        },
+        "require_structured_output": {
+          "type": "boolean",
+          "description": "Only allow models supporting structured output"
+        },
+        "require_tool_use": {
+          "type": "boolean",
+          "description": "Only allow models supporting tool use"
+        },
+        "prefer_local": {
+          "type": "boolean",
+          "description": "Prefer local models over API models"
+        },
+        "max_context_tokens": {
+          "type": "integer",
+          "description": "Maximum context window allowed"
+        },
+        "max_output_tokens": {
+          "type": "integer",
+          "description": "Maximum output tokens allowed per request"
+        }
+      }
+    },
+    "BudgetConstraints": {
+      "type": "object",
+      "properties": {
+        "daily_budget_usd": {
+          "type": "number",
+          "description": "Maximum daily spend in USD"
+        },
+        "monthly_budget_usd": {
+          "type": "number",
+          "description": "Maximum monthly spend in USD"
+        },
+        "per_request_max_usd": {
+          "type": "number",
+          "description": "Maximum cost per individual request"
+        },
+        "budget_period_reset": {
+          "type": "string",
+          "enum": ["daily_utc", "weekly_utc", "monthly_utc"],
+          "description": "When budget counters reset"
+        },
+        "alert_threshold_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Alert when budget usage reaches this percentage"
+        },
+        "hard_stop_at_budget": {
+          "type": "boolean",
+          "default": true,
+          "description": "Stop all requests when budget exhausted"
+        }
+      }
+    },
+    "RateLimits": {
+      "type": "object",
+      "properties": {
+        "requests_per_minute": {
+          "type": "integer"
+        },
+        "requests_per_hour": {
+          "type": "integer"
+        },
+        "tokens_per_minute": {
+          "type": "integer"
+        },
+        "concurrent_requests": {
+          "type": "integer",
+          "description": "Maximum concurrent model invocations"
+        },
+        "burst_allowance": {
+          "type": "integer",
+          "description": "Allowed burst above rate limit"
+        }
+      }
+    },
+    "QualityRequirements": {
+      "type": "object",
+      "properties": {
+        "min_model_version": {
+          "type": "string",
+          "description": "Minimum model version required"
+        },
+        "require_deterministic_mode": {
+          "type": "boolean",
+          "description": "Require temperature 0 / deterministic sampling"
+        },
+        "require_content_filter": {
+          "type": "boolean",
+          "description": "Require content filtering on responses"
+        },
+        "require_citation": {
+          "type": "boolean",
+          "description": "Require citation/grounding when available"
+        },
+        "max_temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Maximum allowed temperature"
+        }
+      }
+    },
+    "FallbackConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "fallback_chain": {
+          "type": "array",
+          "description": "Ordered list of fallback model IDs",
+          "items": { "type": "string" }
+        },
+        "fallback_on": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["rate_limit", "budget_exceeded", "model_unavailable", "timeout", "error"]
+          }
+        },
+        "max_fallback_attempts": {
+          "type": "integer",
+          "default": 3
+        }
+      }
+    }
+  }
+}

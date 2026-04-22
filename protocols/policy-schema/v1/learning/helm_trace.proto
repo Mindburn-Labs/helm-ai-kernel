@@ -1,0 +1,349 @@
+// HELM Learning System — HelmTrace.v1
+//
+// The canonical Trace Pack schema. Every learning-relevant session event
+// is captured here: intent compilation, canvas interactions, proposal
+// lifecycle, obligations, signatures, tool calls, and memory accesses.
+//
+// A Trace Pack is content-addressed, immutable, and attachable as a
+// Proof artifact. Training datasets are derived from Trace Packs.
+//
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.policy.v1.learning;
+
+option go_package = "helm.mindburn.run/policy/v1/learning;learningv1";
+
+import "v1/learning/common.proto";
+import "v1/learning/subject_ref.proto";
+
+// ── Source and State Enums ─────────────────────────────────────
+
+// TraceSource identifies how this trace was produced.
+enum TraceSource {
+  TRACE_SOURCE_UNSPECIFIED = 0;
+  TRACE_SOURCE_USER = 1;
+  TRACE_SOURCE_SELF_PLAY = 2;
+  TRACE_SOURCE_REPLAY = 3;
+}
+
+// ProposalFinalState is the terminal state of a proposal.
+enum ProposalFinalState {
+  PROPOSAL_FINAL_STATE_UNSPECIFIED = 0;
+  PROPOSAL_FINAL_STATE_PROVEN = 1;
+  PROPOSAL_FINAL_STATE_BLOCKED = 2;
+  PROPOSAL_FINAL_STATE_QUEUED = 3;
+  PROPOSAL_FINAL_STATE_PENDING = 4;
+}
+
+// ObligationState tracks fact-gathering lifecycle.
+enum ObligationState {
+  OBLIGATION_STATE_UNSPECIFIED = 0;
+  OBLIGATION_STATE_REQUESTED = 1;
+  OBLIGATION_STATE_COLLECTED = 2;
+  OBLIGATION_STATE_VERIFIED = 3;
+  OBLIGATION_STATE_EXPIRED = 4;
+}
+
+// SignatureState tracks approval lifecycle.
+enum SignatureState {
+  SIGNATURE_STATE_UNSPECIFIED = 0;
+  SIGNATURE_STATE_REQUESTED = 1;
+  SIGNATURE_STATE_SIGNED = 2;
+  SIGNATURE_STATE_REJECTED = 3;
+  SIGNATURE_STATE_EXPIRED = 4;
+}
+
+// SideEffectClass classifies tool call reversibility.
+enum SideEffectClass {
+  SIDE_EFFECT_CLASS_UNSPECIFIED = 0;
+  SIDE_EFFECT_CLASS_READ_ONLY = 1;
+  SIDE_EFFECT_CLASS_REVERSIBLE_WRITE = 2;
+  SIDE_EFFECT_CLASS_IRREVERSIBLE_WRITE = 3;
+}
+
+// ToolCallStatus is the outcome of a tool invocation.
+enum ToolCallStatus {
+  TOOL_CALL_STATUS_UNSPECIFIED = 0;
+  TOOL_CALL_STATUS_ALLOWED = 1;
+  TOOL_CALL_STATUS_DENIED = 2;
+  TOOL_CALL_STATUS_APPROVAL_REQUIRED = 3;
+  TOOL_CALL_STATUS_NEEDS_FACTS = 4;
+  TOOL_CALL_STATUS_EXEC_FAILED = 5;
+  TOOL_CALL_STATUS_EXEC_SUCCEEDED = 6;
+}
+
+// ── Top-Level Trace Pack ───────────────────────────────────────
+
+// HelmTraceV1 is the canonical Trace Pack.
+// trace_version MUST equal "HelmTrace.v1".
+message HelmTraceV1 {
+  // Schema version. Must equal "HelmTrace.v1".
+  string trace_version = 1;
+  // UUIDv7 trace identifier.
+  string trace_id = 2;
+
+  TraceSource source = 3;
+
+  // Multi-tenant identifiers.
+  string tenant_id = 4;
+  string workspace_id = 5;
+
+  // Session context.
+  string session_id = 6;
+  string user_id = 7;
+  string role_id = 8;
+
+  // Execution context.
+  string branch_id = 9;
+  Env env = 10;
+
+  int64 started_at_unix_ms = 11;
+  int64 ended_at_unix_ms = 12;
+
+  IntentSection intent = 20;
+  CanvasSection canvas = 30;
+
+  repeated ProposalSection proposals = 40;
+  repeated ObligationSection obligations = 50;
+  repeated SignatureSection signatures = 60;
+
+  repeated ToolCallSection tool_calls = 70;
+  repeated MemorySection memory = 80;
+
+  SummaryMetrics summary_metrics = 90;
+
+  // Optional analytics tags (industry, jurisdiction, etc).
+  repeated KeyValue tags = 100;
+}
+
+// ── Intent Section ─────────────────────────────────────────────
+
+// IntentSection captures intent compilation lifecycle.
+message IntentSection {
+  // Redacted user intent input (content stored by hash only).
+  HashRef input_ref = 1;
+
+  // Typed Intent IR stored as content-addressed canonical JSON.
+  HashRef intent_ir_ref = 2;
+
+  repeated QAPair clarifying_questions = 3;
+
+  repeated BlueprintCandidate blueprints = 4;
+  // "FAST" | "BALANCED" | "GOVERNED".
+  string chosen_blueprint_kind = 5;
+}
+
+// QAPair is a clarifying question/answer exchange.
+message QAPair {
+  HashRef question_ref = 1;
+  HashRef answer_ref = 2;
+}
+
+// BlueprintCandidate is a compilation strategy option.
+message BlueprintCandidate {
+  // "FAST" | "BALANCED" | "GOVERNED".
+  string kind = 1;
+  // Governance configuration snapshot hash used for this blueprint.
+  string orggenome_hash = 2;
+}
+
+// ── Canvas Section ─────────────────────────────────────────────
+
+// CanvasSection captures all UI interaction telemetry.
+message CanvasSection {
+  // Ordered lens transitions: Chart/Flows/Proof/Sandbox.
+  repeated string lens_sequence = 1;
+  repeated SelectionEvent selection_events = 2;
+
+  HaloSection halo = 3;
+  CommandSection command = 4;
+
+  // Focus Lock open/close events.
+  repeated FocusEvent focus_events = 5;
+}
+
+// SelectionEvent records a canvas element selection.
+message SelectionEvent {
+  int64 t_unix_ms = 1;
+  SubjectRef subject_ref = 2;
+  // Active lens: Chart/Flows/Proof/Sandbox.
+  string lens = 3;
+}
+
+// HaloSection captures radial menu interactions.
+message HaloSection {
+  repeated HaloShown shown = 1;
+  repeated HaloChosen chosen = 2;
+}
+
+// HaloShown records which actions were presented.
+message HaloShown {
+  int64 t_unix_ms = 1;
+  SubjectRef subject_ref = 2;
+  string lens = 3;
+  // Action ids shown in the Halo menu.
+  repeated string actions = 4;
+}
+
+// HaloChosen records which action was selected.
+message HaloChosen {
+  int64 t_unix_ms = 1;
+  SubjectRef subject_ref = 2;
+  string lens = 3;
+  // Action id chosen.
+  string action = 4;
+}
+
+// CommandSection captures Command palette queries.
+message CommandSection {
+  repeated CommandQuery queries = 1;
+}
+
+// CommandQuery records a Command palette interaction.
+message CommandQuery {
+  int64 t_unix_ms = 1;
+  // Redacted query text (hash only).
+  HashRef query_ref = 2;
+  // Command selected from results.
+  string chosen_command_id = 3;
+}
+
+// FocusEvent records Focus Lock open/close.
+message FocusEvent {
+  int64 t_unix_ms = 1;
+  SubjectRef subject_ref = 2;
+  // "OPEN" | "CLOSE".
+  string event = 3;
+}
+
+// ── Proposal Section ───────────────────────────────────────────
+
+// ProposalSection captures a single proposal lifecycle.
+message ProposalSection {
+  string proposal_id = 1;
+  SubjectRef subject_ref = 2;
+
+  // PlanIR operations applied, e.g. ["MoveNodeDelta", "EditPolicyDelta"].
+  repeated string planir_ops = 3;
+
+  PrePose pre_pose = 4;
+  ProposalResult result = 5;
+  ProposalDurations durations_ms = 6;
+}
+
+// PrePose captures world state before a structural gesture.
+message PrePose {
+  double world_x = 1;
+  double world_y = 2;
+  // Structural context.
+  string parent_id = 3;
+  string order_key = 4;
+}
+
+// ProposalResult is the kernel's response to a proposal.
+message ProposalResult {
+  ProposalFinalState final_state = 1;
+
+  // Receipt summary identifiers.
+  string receipt_id = 2;
+  repeated string reason_codes = 3;
+  string witness_id = 4;
+  repeated string patch_ids = 5;
+
+  string approval_request_id = 6;
+  repeated string obligation_keys = 7;
+}
+
+// ProposalDurations captures timing for friction analysis.
+message ProposalDurations {
+  // Time from proposal submission to receipt.
+  int64 to_receipt_ms = 1;
+  // Time from proposal submission to Proven (0 if never proven).
+  int64 to_proven_ms = 2;
+}
+
+// ── Obligation Section ─────────────────────────────────────────
+
+// ObligationSection tracks fact-gathering requirements.
+message ObligationSection {
+  string obligation_id = 1;
+  SubjectRef scope_ref = 2;
+
+  repeated string reason_codes = 3;
+  repeated ObligationStateEvent state_timeline = 4;
+
+  // References to attached artifacts (content stored separately).
+  repeated HashRef attachments = 5;
+}
+
+// ObligationStateEvent is a state transition in the obligation lifecycle.
+message ObligationStateEvent {
+  int64 t_unix_ms = 1;
+  ObligationState state = 2;
+}
+
+// ── Signature Section ──────────────────────────────────────────
+
+// SignatureSection tracks approval request lifecycle.
+message SignatureSection {
+  string approval_request_id = 1;
+  repeated string required_roles = 2;
+  repeated SignatureStateEvent state_timeline = 3;
+}
+
+// SignatureStateEvent is a state transition in the approval lifecycle.
+message SignatureStateEvent {
+  int64 t_unix_ms = 1;
+  SignatureState state = 2;
+  // Role that performed this transition.
+  string signer_role = 3;
+}
+
+// ── Tool Call Section ──────────────────────────────────────────
+
+// ToolCallSection is a summary of a tool invocation (no raw payload).
+message ToolCallSection {
+  string tool_id = 1;
+  SideEffectClass side_effect_class = 2;
+  ToolCallStatus status = 3;
+
+  string receipt_id = 4;
+  repeated string reason_codes = 5;
+
+  int64 cost_units = 6;
+  int64 latency_ms = 7;
+}
+
+// ── Memory Section ─────────────────────────────────────────────
+
+// MemorySection is a summary of a memory access (no snippet content).
+message MemorySection {
+  // "MEM_READ" | "MEM_WRITE".
+  string kind = 1;
+  // "ALLOWED" | "DENIED" | "NEEDS_FACTS".
+  string status = 2;
+
+  string receipt_id = 3;
+
+  repeated string jurisdictions = 4;
+  repeated DataClass data_classes = 5;
+
+  int32 results_returned = 6;
+  int64 latency_ms = 7;
+}
+
+// ── Summary Metrics ────────────────────────────────────────────
+
+// SummaryMetrics captures aggregate outcomes for dashboards.
+message SummaryMetrics {
+  int64 time_to_first_proven_ms = 1;
+
+  int32 proposed_count = 2;
+  int32 proven_count = 3;
+
+  int32 blocked_count = 4;
+  int32 fix_success_count = 5;
+
+  int32 queued_count = 6;
+  int32 pending_count = 7;
+}

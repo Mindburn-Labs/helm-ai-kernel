@@ -1,0 +1,38 @@
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: jp-appi
+  version: 1.0.0
+  description: Japan Act on Protection of Personal Information
+  jurisdiction: JP
+  regulations:
+    - APPI (Act on Protection of Personal Information)
+  tags: [japan, appi, ppc]
+
+spec:
+  legal_regime: JP
+  data_residency: JP
+  applicable_regulations:
+    - id: APPI
+      name: Act on Protection of Personal Information
+      authority: Personal Information Protection Commission
+
+  policies:
+    - kind: DenyRule
+      name: deny-third-party-transfer
+      match:
+        effect_type: data_share
+        conditions:
+          - field: context.third_party_consent
+            operator: empty
+      verdict: DENY
+      reason_code: DENY_JP_THIRD_PARTY_CONSENT
+      reason: "Third-party transfer requires consent under APPI Art. 27"
+
+  deny_codes:
+    - code: DENY_JP_THIRD_PARTY_CONSENT
+      description: Consent required for third-party data transfer
+    - code: DENY_JP_SPECIAL_CARE
+      description: Special care required for sensitive data
+    - code: DENY_JP_CROSS_BORDER
+      description: Cross-border transfer restrictions

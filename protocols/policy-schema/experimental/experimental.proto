@@ -1,0 +1,13 @@
+// HELM Policy Schema — Experimental Namespace
+//
+// Messages in this directory can churn freely during v0.
+// They are NOT subject to buf breaking checks.
+// Once stabilized, move to v1/ and apply additive-only rules.
+//
+// Usage: import "experimental/..." in consuming code.
+syntax = "proto3";
+package helm.policy.experimental;
+
+option go_package = "helm.mindburn.run/policy/experimental;experimental";
+
+// Placeholder — experimental messages will be added here as needed.

@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/profiles/jurisdiction_profile.v1.schema.json",
+  "title": "JurisdictionProfile.v1",
+  "description": "Jurisdiction-specific obligations mapped to required organs/packs. Per Section 0.1 of the semantic constitution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profile_id", "jurisdiction_code", "obligations"],
+  "properties": {
+    "profile_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "jurisdiction_code": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$",
+      "description": "ISO 3166-1 alpha-2 country code"
+    },
+    "jurisdiction_name": {
+      "type": "string"
+    },
+    "effective_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "supersedes": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Previous profile this one supersedes"
+    },
+    "obligations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["obligation_id", "category", "required_capabilities"],
+        "properties": {
+          "obligation_id": { "type": "string" },
+          "category": {
+            "type": "string",
+            "enum": [
+              "data_protection",
+              "financial_reporting",
+              "tax_compliance",
+              "labor_law",
+              "consumer_protection",
+              "anti_money_laundering",
+              "licensing",
+              "environmental",
+              "accessibility",
+              "cybersecurity"
+            ]
+          },
+          "legal_reference": {
+            "type": "string",
+            "description": "Citation to the law/regulation"
+          },
+          "description": { "type": "string" },
+          "required_capabilities": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Capabilities needed to satisfy this obligation"
+          },
+          "suggested_packs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Pack IDs that satisfy this obligation"
+          },
+          "evidence_required": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Evidence classes that must be produced"
+          },
+          "enforcement": {
+            "type": "object",
+            "properties": {
+              "enforcer": { "type": "string" },
+              "penalty_class": {
+                "type": "string",
+                "enum": ["civil", "criminal", "administrative"]
+              },
+              "max_penalty_eur": { "type": "number" }
+            }
+          },
+          "applicability": {
+            "type": "object",
+            "properties": {
+              "industries": { "type": "array", "items": { "type": "string" } },
+              "revenue_threshold": { "type": "number" },
+              "employee_threshold": { "type": "integer" },
+              "data_subject_threshold": { "type": "integer" }
+            }
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low"]
+          }
+        }
+      }
+    },
+    "frameworks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "framework_id": { "type": "string" },
+          "name": { "type": "string" },
+          "version": { "type": "string" },
+          "control_mapping": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "description": "Map of framework control ID to obligation IDs"
+          }
+        }
+      },
+      "description": "Compliance frameworks applicable in this jurisdiction"
+    },
+    "content_hash": {
+      "type": "string"
+    }
+  }
+}

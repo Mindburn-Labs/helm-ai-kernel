@@ -1,0 +1,178 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://helm.org/schemas/context-capsule/context_capsule.v1.schema.json",
+    "title": "ContextCapsule.v1",
+    "description": "Authenticated memory/context capsule with provenance chain. No unauthenticated memory in authorization path. Per HELM-RFC-0001.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "capsule_id",
+        "provenance",
+        "freshness",
+        "scope",
+        "content_hash"
+    ],
+    "properties": {
+        "capsule_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique capsule identifier"
+        },
+        "provenance": {
+            "type": "object",
+            "description": "Full provenance chain for this memory",
+            "required": [
+                "source",
+                "connector"
+            ],
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "description": "Origin system (e.g. vector_db, document_store, api, user_input)"
+                },
+                "connector": {
+                    "type": "string",
+                    "description": "Connector/adapter that retrieved the data"
+                },
+                "author": {
+                    "type": "string",
+                    "description": "Original author or data owner"
+                },
+                "chain": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "stage": {
+                                "type": "string"
+                            },
+                            "actor": {
+                                "type": "string"
+                            },
+                            "timestamp": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "hash": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "description": "Ordered provenance chain — each stage that touched this data"
+                },
+                "signatures": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "signer_id": {
+                                "type": "string"
+                            },
+                            "algorithm": {
+                                "type": "string",
+                                "enum": [
+                                    "ed25519",
+                                    "ecdsa-p256"
+                                ]
+                            },
+                            "signature": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "description": "Cryptographic signatures from provenance chain participants"
+                }
+            }
+        },
+        "freshness": {
+            "type": "object",
+            "description": "Freshness constraints",
+            "required": [
+                "retrieved_at",
+                "ttl_seconds"
+            ],
+            "properties": {
+                "retrieved_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "When this data was retrieved"
+                },
+                "ttl_seconds": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Time to live in seconds"
+                },
+                "stale_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Computed: retrieved_at + ttl_seconds"
+                }
+            }
+        },
+        "scope": {
+            "type": "object",
+            "description": "Scope boundaries for this capsule",
+            "properties": {
+                "org_id": {
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "project_id": {
+                    "type": "string"
+                },
+                "environment": {
+                    "type": "string",
+                    "enum": [
+                        "production",
+                        "staging",
+                        "development",
+                        "test"
+                    ]
+                }
+            }
+        },
+        "policy_epoch_binding": {
+            "type": "string",
+            "description": "Policy epoch this capsule was validated against"
+        },
+        "retrieval_receipt": {
+            "type": "object",
+            "description": "Receipt proving how this data was retrieved",
+            "properties": {
+                "query_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$",
+                    "description": "Hash of the retrieval query"
+                },
+                "index_version": {
+                    "type": "string",
+                    "description": "Version of the index/store at retrieval time"
+                },
+                "result_count": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "receipt_hash": {
+                    "type": "string",
+                    "description": "Hash of the full retrieval receipt"
+                }
+            }
+        },
+        "content_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "description": "SHA-256 of the capsule content"
+        },
+        "content_type": {
+            "type": "string",
+            "description": "MIME type or structured type of the capsule content"
+        },
+        "content_size_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Size of the capsule content"
+        }
+    }
+}

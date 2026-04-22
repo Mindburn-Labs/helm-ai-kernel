@@ -1,0 +1,57 @@
+name: npm Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish. Must match VERSION.
+        required: true
+        type: string
+      dry_run:
+        description: Build and pack without publishing.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - path: sdk/ts
+            name: "@mindburn/helm"
+          - path: packages/mindburn-helm-cli
+            name: "@mindburn/helm-cli"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+      - name: Version checks
+        working-directory: ${{ matrix.package.path }}
+        run: |
+          FILE_VERSION=$(cat ../../VERSION 2>/dev/null || cat ../VERSION)
+          REQUESTED="${{ github.event.inputs.version }}"
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          test "$REQUESTED" = "$FILE_VERSION"
+          test "$PACKAGE_VERSION" = "$FILE_VERSION"
+      - name: Install, test, and build
+        working-directory: ${{ matrix.package.path }}
+        run: |
+          npm ci
+          if npm run | grep -q ' test'; then npm test -- --run; fi
+          if npm run | grep -q ' build'; then npm run build; fi
+          npm pack --dry-run
+      - name: Publish
+        if: github.event.inputs.dry_run != 'true'
+        working-directory: ${{ matrix.package.path }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance

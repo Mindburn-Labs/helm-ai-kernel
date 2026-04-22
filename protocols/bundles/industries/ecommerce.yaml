@@ -1,0 +1,14 @@
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: ecommerce
+  version: 1.0.0
+  industry: ecommerce
+  tags:
+  - ecommerce
+  - consumer
+  - pci
+spec:
+  deny_codes:
+  - code: DENY_ECOM_PRICING_MANIPULATION
+  - code: DENY_ECOM_CONSUMER_CONSENT

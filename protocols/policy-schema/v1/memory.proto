@@ -1,0 +1,314 @@
+// HELM Policy Schema — Memory Access Primitives
+//
+// 2-plane memory model: Plane A (Evidence, immutable) and Plane B
+// (Working/Knowledge, mutable, rebuildable). Every memory read/write is
+// scope-bound, budgeted, receipt-backed, and explainable.
+//
+// Memory classes: M0 Ephemeral, M1 Episodic, M2 Entity, M3 Semantic, M4 Procedural.
+//
+// Stability: v1 additive-only. No field removals. No renames.
+syntax = "proto3";
+package helm.memory.v1;
+
+option go_package = "helm.mindburn.run/memory/v1;memoryv1";
+
+import "google/protobuf/timestamp.proto";
+import "v1/foundations.proto";
+
+// ── Enums ──────────────────────────────────────────────────────
+
+// Memory class determines retention, access control, and UX behavior.
+enum MemoryClass {
+  MEMORY_CLASS_UNSPECIFIED = 0;
+  // Per-run scratch, never persisted by default.
+  M0_EPHEMERAL = 1;
+  // Run records, receipts, action chains (immutable refs into Plane A).
+  M1_EPISODIC = 2;
+  // Structured operational records (customers, invoices, contracts).
+  M2_ENTITY = 3;
+  // Embeddings over docs, policies, contracts, prior cases.
+  M3_SEMANTIC = 4;
+  // Prompt modules, tool policies, runbooks, guardrails (versioned).
+  M4_PROCEDURAL = 5;
+}
+
+// Data classification for access control and audit.
+enum DataClass {
+  DATA_CLASS_UNSPECIFIED = 0;
+  PUBLIC = 1;
+  INTERNAL = 2;
+  CONFIDENTIAL = 3;
+  PII = 4;
+  // Enterprise: PHI, PCI, etc. mapped here if needed.
+  REGULATED = 5;
+}
+
+// Query strategy for memory reads.
+enum MemoryQueryKind {
+  MEMORY_QUERY_KIND_UNSPECIFIED = 0;
+  // Text query resolved via embeddings.
+  SEMANTIC_TEXT = 1;
+  // Exact key lookup.
+  KEY_LOOKUP = 2;
+  // Entity ID + field projection.
+  ENTITY_LOOKUP = 3;
+  // Procedure module lookup (prompt, runbook, guardrail).
+  PROCEDURE_LOOKUP = 4;
+}
+
+// Type discriminator for retrieved memory items.
+enum MemoryItemKind {
+  MEMORY_ITEM_KIND_UNSPECIFIED = 0;
+  DOC_SNIPPET = 1;
+  RECEIPT_SUMMARY = 2;
+  ENTITY_RECORD = 3;
+  PROCEDURE_MODULE = 4;
+}
+
+// Write strategy.
+enum MemoryWriteMode {
+  MEMORY_WRITE_MODE_UNSPECIFIED = 0;
+  // Schema-validated upsert.
+  UPSERT = 1;
+  // Append-only (episodic logs).
+  APPEND = 2;
+}
+
+// Receipt kind for memory access audit.
+enum MemoryReceiptKind {
+  MEMORY_RECEIPT_KIND_UNSPECIFIED = 0;
+  MEM_READ = 1;
+  MEM_WRITE = 2;
+}
+
+// ── Common Primitives ──────────────────────────────────────────
+
+// Time window for recency constraints.
+message TimeWindow {
+  google.protobuf.Timestamp from = 1;
+  google.protobuf.Timestamp to = 2;
+
+  reserved 100 to 199;
+}
+
+// Scope filter constraining what can be retrieved.
+message ScopeFilter {
+  // Jurisdiction frame constraints (e.g. "EU", "ES", "US-CA").
+  repeated string jurisdiction_ids = 1;
+  // Canvas scope IDs (jurisdiction frame or cluster boundaries).
+  repeated string scope_ids = 2;
+  // Subgraph boundary roots (authorized slice).
+  repeated string root_node_ids = 3;
+  // Classification filter.
+  repeated DataClass data_classes = 4;
+  // Tags for docs/entities.
+  repeated string tags = 5;
+  // Recency constraints.
+  TimeWindow time_window = 6;
+  // Source kind toggles.
+  bool include_receipts = 7;
+  bool include_entities = 8;
+  bool include_docs = 9;
+  bool include_procedures = 10;
+
+  reserved 100 to 199;
+}
+
+// Hard caps on retrieval — user-tunable in the Agent IDE.
+message RetrievalBudget {
+  // Hard cap on number of results.
+  uint32 max_results = 1;
+  // Cap on total tokens returned to model.
+  uint32 max_tokens = 2;
+  // Retrieval deadline in milliseconds.
+  uint32 max_latency_ms = 3;
+  // Cap on raw payload size in bytes.
+  uint64 max_bytes = 4;
+  // Optional internal cost units per retrieval.
+  double max_cost_units = 5;
+
+  reserved 100 to 199;
+}
+
+// UX anchor for "why are you reading/writing memory?"
+message PurposeRef {
+  // Short label shown in Evidence Mode.
+  string purpose = 1;
+  // References the plan/intent that triggered this access.
+  string intent_id = 2;
+  // If this is part of investigating a receipt.
+  string receipt_id = 3;
+
+  reserved 100 to 199;
+}
+
+// ── Memory Read ────────────────────────────────────────────────
+
+// Query descriptor within a memory read.
+message MemoryQuery {
+  MemoryQueryKind kind = 1;
+  // For semantic text queries.
+  string query_text = 2;
+  // For exact key lookups.
+  string key = 3;
+  // For entity lookups.
+  string entity_id = 4;
+  // For M4 procedure lookups.
+  string procedure_id = 5;
+
+  reserved 100 to 199;
+}
+
+// Scoped, budgeted, justified memory read request.
+message MemoryReadRequest {
+  // UUIDv7 recommended (idempotent).
+  string request_id = 1;
+  helm.policy.v1.ActorRef actor = 2;
+  helm.policy.v1.BranchRef branch = 3;
+
+  MemoryClass memory_class = 4;
+  MemoryQuery query = 5;
+  ScopeFilter scope = 6;
+  RetrievalBudget budget = 7;
+  PurposeRef purpose = 8;
+
+  // Tie retrieval to a policy hash for explainability.
+  helm.policy.v1.HashRef policy_hash = 9;
+  helm.policy.v1.HashRef cpi_hash = 10;
+
+  reserved 100 to 199;
+}
+
+// Content-addressed reference to a retrieved memory item.
+message MemoryItemRef {
+  MemoryItemKind kind = 1;
+  // Content-addressed pointer, not raw content.
+  helm.policy.v1.HashRef content_hash = 2;
+  // Opaque locator: blob path, object key, etc.
+  string content_ref = 3;
+  // Display metadata.
+  string title = 4;
+  string subtitle = 5;
+  // Ranking score.
+  float score = 6;
+  repeated string tags = 7;
+  DataClass data_class = 8;
+  repeated string jurisdiction_ids = 9;
+  // Link to receipts and provenance.
+  string receipt_id = 10;
+  helm.policy.v1.HashRef payload_digest = 11;
+
+  reserved 100 to 199;
+}
+
+// Result of a memory read, with budget consumption stats.
+message MemoryReadResult {
+  string request_id = 1;
+  repeated MemoryItemRef items = 2;
+  // Budget consumption stats (for UI display).
+  uint32 results_returned = 3;
+  uint32 tokens_estimate = 4;
+  uint32 latency_ms = 5;
+  uint64 bytes_returned = 6;
+  // Deterministic denial/partial-satisfaction reasons.
+  repeated string reason_codes = 7;
+  string witness_id = 8;
+
+  reserved 100 to 199;
+}
+
+// ── Memory Write ───────────────────────────────────────────────
+
+// Schema identifier for typed records.
+message MemoryRecordSchema {
+  // Stable identifier (e.g. "entity.customer.v1").
+  string schema_id = 1;
+  uint32 schema_version = 2;
+
+  reserved 100 to 199;
+}
+
+// Retention and immutability policy for a memory record.
+message RetentionPolicy {
+  // Optional TTL in days.
+  uint32 ttl_days = 1;
+  // For M1/M4 snapshots if needed.
+  bool immutable = 2;
+
+  reserved 100 to 199;
+}
+
+// Typed, attributed, bounded memory write request.
+message MemoryWriteRequest {
+  string request_id = 1;
+  helm.policy.v1.ActorRef actor = 2;
+  helm.policy.v1.BranchRef branch = 3;
+
+  MemoryClass memory_class = 4;
+  MemoryWriteMode mode = 5;
+
+  // Target record.
+  string record_id = 6;
+  MemoryRecordSchema schema = 7;
+
+  // Content pointers.
+  helm.policy.v1.HashRef content_hash = 8;
+  // Blob locator (opaque).
+  string content_ref = 9;
+  DataClass data_class = 10;
+  repeated string jurisdiction_ids = 11;
+  repeated string tags = 12;
+
+  RetentionPolicy retention = 13;
+  PurposeRef purpose = 14;
+
+  helm.policy.v1.HashRef policy_hash = 15;
+  helm.policy.v1.HashRef cpi_hash = 16;
+
+  reserved 100 to 199;
+}
+
+// Result of a memory write with state hash for content-addressed entity state.
+message MemoryWriteResult {
+  string request_id = 1;
+  bool applied = 2;
+  repeated string reason_codes = 3;
+  string witness_id = 4;
+  // Hash of record state after write.
+  helm.policy.v1.HashRef new_state_hash = 5;
+  uint32 latency_ms = 6;
+
+  reserved 100 to 199;
+}
+
+// ── Memory Access Receipt ──────────────────────────────────────
+
+// Receipt summary used by Evidence Mode. Emitted for every MEM.READ / MEM.WRITE.
+message MemoryAccessReceiptSummary {
+  string receipt_id = 1;
+  MemoryReceiptKind kind = 2;
+
+  google.protobuf.Timestamp at = 3;
+  helm.policy.v1.ActorRef actor = 4;
+  helm.policy.v1.BranchRef branch = 5;
+
+  MemoryClass memory_class = 6;
+  DataClass highest_data_class = 7;
+
+  // Integrity pointers: canonical hash of request/result.
+  helm.policy.v1.HashRef request_hash = 8;
+  helm.policy.v1.HashRef result_hash = 9;
+
+  // Stats.
+  uint32 results_returned = 10;
+  uint32 latency_ms = 11;
+  uint32 tokens_estimate = 12;
+
+  // Explainability hooks.
+  repeated string reason_codes = 13;
+  string witness_id = 14;
+  helm.policy.v1.HashRef policy_hash = 15;
+  helm.policy.v1.HashRef cpi_hash = 16;
+
+  reserved 100 to 199;
+}

@@ -1,0 +1,39 @@
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: sg-pdpa
+  version: 1.0.0
+  description: Singapore Personal Data Protection Act
+  jurisdiction: SG
+  regulations:
+    - PDPA (Personal Data Protection Act 2012)
+  tags: [singapore, pdpa, pdpc]
+
+spec:
+  legal_regime: SG
+  data_residency: SG
+  applicable_regulations:
+    - id: PDPA
+      name: Personal Data Protection Act
+      version: "2012"
+      authority: Personal Data Protection Commission
+
+  policies:
+    - kind: DenyRule
+      name: deny-transfer-without-protection
+      match:
+        effect_type: data_export
+        conditions:
+          - field: context.transfer_agreement
+            operator: empty
+      verdict: DENY
+      reason_code: DENY_SG_TRANSFER_PROTECTION
+      reason: "Overseas transfer requires comparable protection standard under PDPA"
+
+  deny_codes:
+    - code: DENY_SG_TRANSFER_PROTECTION
+      description: Transfer without comparable protection standard
+    - code: DENY_SG_CONSENT_OBLIGATION
+      description: Consent required under PDPA
+    - code: DENY_SG_DO_NOT_CALL
+      description: Do Not Call registry violation

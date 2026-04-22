@@ -1,0 +1,90 @@
+// HELM Learning System — Model Registry
+//
+// Tracks trained model artifacts, evaluation gates, and deployment routing.
+// Models are task-scoped (halo_ranker.v1, fix_ranker.v1, etc) and
+// tenant-scoped (global, tenant:<id>, workspace:<id>).
+//
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.policy.v1.learning;
+
+option go_package = "helm.mindburn.run/policy/v1/learning;learningv1";
+
+import "v1/learning/common.proto";
+
+// ModelStatus tracks the lifecycle of a model artifact.
+enum ModelStatus {
+  MODEL_STATUS_UNSPECIFIED = 0;
+  MODEL_STATUS_TRAINING = 1;
+  MODEL_STATUS_EVAL_PENDING = 2;
+  MODEL_STATUS_READY = 3;
+  MODEL_STATUS_DEPLOYED = 4;
+  MODEL_STATUS_RETIRED = 5;
+  MODEL_STATUS_FAILED = 6;
+}
+
+// ModelEvalMetric is a named evaluation metric.
+message ModelEvalMetric {
+  // Metric name, e.g. "top1", "fix_success", "time_to_proven_delta_ms".
+  string name = 1;
+  double value = 2;
+}
+
+// ModelEvalReport references the evaluation report and its summary metrics.
+message ModelEvalReport {
+  HashRef report_ref = 1;
+  repeated ModelEvalMetric metrics = 2;
+}
+
+// ModelArtifact references the model binary and its configuration.
+message ModelArtifact {
+  // Model binary or adapter weights.
+  HashRef artifact_ref = 1;
+  // Canonical JSON describing task, hyperparameters, etc.
+  HashRef config_ref = 2;
+}
+
+// ModelRecord is the metadata for a trained model.
+message ModelRecord {
+  // Unique model identifier, e.g. "mdl_<...>".
+  string model_id = 1;
+  // Task this model serves, e.g. "halo_ranker.v1".
+  string task_id = 2;
+  // "global" | "tenant:<id>" | "workspace:<id>".
+  string tenant_scope = 3;
+  // Base model lineage identifier.
+  string base_model_id = 4;
+
+  // Dataset used for training.
+  string dataset_id = 5;
+
+  ModelStatus status = 6;
+
+  int64 created_at_unix_ms = 7;
+  int64 promoted_at_unix_ms = 8;
+
+  ModelArtifact artifact = 9;
+  ModelEvalReport eval = 10;
+}
+
+// DeploymentRecord tracks routing of a model to an environment.
+message DeploymentRecord {
+  // Unique deployment identifier, e.g. "dep_<...>".
+  string deployment_id = 1;
+  string task_id = 2;
+  // "global" | "tenant:<id>" | "workspace:<id>".
+  string tenant_scope = 3;
+
+  Env env = 4;
+
+  string model_id = 5;
+  // Traffic weight for weighted routing / shadow mode [0..1].
+  double routing_weight = 6;
+
+  int64 created_at_unix_ms = 7;
+  int64 enabled_at_unix_ms = 8;
+  int64 disabled_at_unix_ms = 9;
+
+  // "SHADOW" | "PRIMARY" | "DISABLED".
+  string status = 10;
+}

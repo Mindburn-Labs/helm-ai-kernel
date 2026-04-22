@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/core/approval_artifact.schema.json",
+  "title": "ApprovalArtifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["approval_id", "approver_id", "timestamp", "scope"],
+  "properties": {
+    "approval_id": { "type": "string", "format": "uuid" },
+    "approver_id": { "type": "string", "minLength": 1 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "scope": { "type": "object" },
+    "signature": { "type": "string" }
+  }
+}

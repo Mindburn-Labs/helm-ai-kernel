@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/work/action_bundle.v1.json",
+  "title": "Action Bundle",
+  "description": "Batched action proposals for batch approval/denial.",
+  "type": "object",
+  "required": ["bundle_id", "proposal_ids", "created_at"],
+  "properties": {
+    "bundle_id": { "type": "string" },
+    "proposal_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "batch_policy_verdict": { "type": "string" },
+    "batch_approval_id": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

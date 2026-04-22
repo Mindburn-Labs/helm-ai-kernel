@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/effects/screen_candidate_effect.v1.json",
+  "title": "Screen Candidate Effect",
+  "description": "Parameters for screening a recruiting candidate.",
+  "type": "object",
+  "required": ["request_id", "candidate_person_id", "job_id", "screen_type"],
+  "properties": {
+    "request_id": { "type": "string" },
+    "candidate_person_id": { "type": "string" },
+    "job_id": { "type": "string" },
+    "screen_type": {
+      "type": "string",
+      "enum": ["resume_review", "phone_screen", "technical_screen", "culture_fit"]
+    },
+    "criteria_hash": { "type": "string" },
+    "from_employee_id": { "type": "string" },
+    "proposal_id": { "type": "string" }
+  }
+}

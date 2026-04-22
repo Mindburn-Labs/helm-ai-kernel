@@ -1,0 +1,373 @@
+apiVersion: helm.mindburn.run/v1
+kind: BusinessPreset
+metadata:
+  name: engineering
+  version: 1.0.0
+  description: Software engineering team preset
+  business_function: engineering
+  tags: [engineering, development, ci-cd]
+
+spec:
+  governs:
+    - Code repository operations
+    - CI/CD pipeline executions
+    - Infrastructure provisioning
+    - Dependency management
+    - Secret access
+
+  policies:
+    - kind: DenyRule
+      name: deny-prod-deploy-no-review
+      match:
+        effect_type: deploy
+        conditions:
+          - field: params.target
+            operator: equals
+            value: production
+          - field: context.review_approved
+            operator: empty
+      verdict: DENY
+      reason_code: MISSING_REQUIREMENT
+      reason: "Production deployments require peer review approval"
+
+    - kind: ApprovalGate
+      name: approve-infra-changes
+      match:
+        effect_type: infrastructure_change
+        conditions:
+          - field: params.scope
+            operator: in
+            values: [PRODUCTION, STAGING]
+      verdict: ESCALATE
+      reason_code: TEMPORAL_INTERVENTION
+      reason: "Infrastructure changes to production/staging require approval"
+---
+apiVersion: helm.mindburn.run/v1
+kind: BusinessPreset
+metadata:
+  name: customer-support
+  version: 1.0.0
+  description: Customer support team preset
+  business_function: customer_support
+  tags: [support, customer-data, pii]
+
+spec:
+  governs:
+    - Customer PII access
+    - Ticket management
+    - Billing data access
+    - Communication channels
+
+  policies:
+    - kind: DenyRule
+      name: deny-bulk-pii-export
+      match:
+        effect_type: data_export
+        conditions:
+          - field: params.data_class
+            operator: in
+            values: [PII, CUSTOMER_DATA]
+          - field: params.record_count
+            operator: greater_than
+            value: 100
+      verdict: DENY
+      reason_code: POLICY_VIOLATION
+      reason: "Bulk PII export requires escalation to data protection team"
+---
+apiVersion: helm.mindburn.run/v1
+kind: BusinessPreset
+metadata:
+  name: finance-ops
+  version: 1.0.0
+  description: Finance operations team preset
+  business_function: finance
+  tags: [finance, accounting, treasury]
+
+spec:
+  governs:
+    - Financial transactions
+    - Invoice processing
+    - Payroll operations
+    - Budget management
+
+  policies:
+    - kind: ApprovalGate
+      name: approve-high-value-payment
+      match:
+        effect_type: financial_transfer
+        conditions:
+          - field: params.amount_cents
+            operator: greater_than
+            value: 500000
+      verdict: ESCALATE
+      reason_code: TEMPORAL_INTERVENTION
+      reason: "Payments over $5,000 require treasury approval"
+---
+apiVersion: helm.mindburn.run/v1
+kind: BusinessPreset
+metadata:
+  name: hr-people
+  version: 1.0.0
+  description: HR and People team preset
+  business_function: hr
+  tags: [hr, people, employee-data]
+
+spec:
+  governs:
+    - Employee personal data
+    - Compensation information
+    - Performance records
+    - Recruitment data
+
+  policies:
+    - kind: DenyRule
+      name: deny-employee-data-share
+      match:
+        effect_type: data_share
+        conditions:
+          - field: params.data_class
+            operator: in
+            values: [EMPLOYEE_DATA, COMPENSATION, PERFORMANCE]
+          - field: context.need_to_know
+            operator: empty
+      verdict: DENY
+      reason_code: POLICY_VIOLATION
+      reason: "Employee data requires need-to-know authorization"
+---
+apiVersion: helm.mindburn.run/v1
+kind: BusinessPreset
+metadata:
+  name: legal-compliance
+  version: 1.0.0
+  description: Legal and compliance team preset
+  business_function: legal
+  tags: [legal, compliance, regulatory]
+
+spec:
+  governs:
+    - Contract management
+    - Regulatory filings
+    - Legal hold operations
+    - Privilege-protected communications
+
+  policies:
+    - kind: DenyRule
+      name: deny-privilege-waiver
+      match:
+        effect_type: data_share
+        conditions:
+          - field: params.data_class
+            operator: equals
+            value: ATTORNEY_CLIENT_PRIVILEGE
+      verdict: DENY
+      reason_code: POLICY_VIOLATION
+      reason: "Attorney-client privileged materials cannot be shared without counsel approval"
+---
+apiVersion: helm.mindburn.run/v1
+kind: BusinessPreset
+metadata:
+  name: marketing
+  version: 1.0.0
+  description: Marketing team preset
+  business_function: marketing
+  tags: [marketing, analytics, campaigns]
+
+spec:
+  governs:
+    - Campaign analytics
+    - Customer segmentation
+    - Ad platform integrations
+    - Content publishing
+
+  policies:
+    - kind: DenyRule
+      name: deny-gdpr-email-no-consent
+      match:
+        effect_type: send_email
+        conditions:
+          - field: context.marketing_consent
+            operator: empty
+      verdict: DENY
+      reason_code: POLICY_VIOLATION
+      reason: "Marketing emails require prior consent under GDPR/CAN-SPAM"
+---
+apiVersion: helm.mindburn.run/v1
+kind: BusinessPreset
+metadata:
+  name: sales
+  version: 1.0.0
+  description: Sales team preset
+  business_function: sales
+  tags: [sales, crm, deals]
+
+spec:
+  governs:
+    - CRM data access
+    - Pricing and discounting
+    - Customer communications
+    - Revenue operations
+
+  policies:
+    - kind: ApprovalGate
+      name: approve-large-discount
+      match:
+        effect_type: pricing_override
+        conditions:
+          - field: params.discount_percent
+            operator: greater_than
+            value: 25
+      verdict: ESCALATE
+      reason_code: TEMPORAL_INTERVENTION
+      reason: "Discounts above 25% require sales leadership approval"
+---
+apiVersion: helm.mindburn.run/v1
+kind: BusinessPreset
+metadata:
+  name: data-science
+  version: 1.0.0
+  description: Data science and ML team preset
+  business_function: data_science
+  tags: [ml, ai, data-science, model-training]
+
+spec:
+  governs:
+    - Model training pipelines
+    - Dataset access
+    - Experiment tracking
+    - Model deployment
+
+  policies:
+    - kind: DenyRule
+      name: deny-pii-in-training
+      match:
+        effect_type: model_train
+        conditions:
+          - field: params.dataset_tags
+            operator: contains
+            value: PII
+          - field: context.anonymization_applied
+            operator: empty
+      verdict: DENY
+      reason_code: POLICY_VIOLATION
+      reason: "PII data must be anonymized before model training"
+---
+apiVersion: helm.mindburn.run/v1
+kind: BusinessPreset
+metadata:
+  name: security-ops
+  version: 1.0.0
+  description: Security operations team preset
+  business_function: security
+  tags: [security, soc, incident-response]
+
+spec:
+  governs:
+    - Incident response
+    - Vulnerability management
+    - Access reviews
+    - Threat intelligence
+
+  policies:
+    - kind: DenyRule
+      name: deny-vuln-disclosure-premature
+      match:
+        effect_type: data_share
+        conditions:
+          - field: params.data_class
+            operator: equals
+            value: VULNERABILITY
+          - field: context.disclosure_authorized
+            operator: empty
+      verdict: DENY
+      reason_code: POLICY_VIOLATION
+      reason: "Vulnerability details cannot be shared without authorized disclosure"
+---
+apiVersion: helm.mindburn.run/v1
+kind: BusinessPreset
+metadata:
+  name: product-management
+  version: 1.0.0
+  description: Product management team preset
+  business_function: product
+  tags: [product, planning, analytics]
+
+spec:
+  governs:
+    - Product planning data
+    - User analytics
+    - Feature experimentation
+    - Customer feedback
+
+  policies:
+    - kind: DenyRule
+      name: deny-product-plan-leak
+      match:
+        effect_type: data_share
+        conditions:
+          - field: params.data_class
+            operator: in
+            values: [ROADMAP, STRATEGY, UNRELEASED_FEATURE]
+          - field: context.external
+            operator: equals
+            value: true
+      verdict: DENY
+      reason_code: POLICY_VIOLATION
+      reason: "Unreleased product information cannot be shared externally"
+---
+apiVersion: helm.mindburn.run/v1
+kind: BusinessPreset
+metadata:
+  name: executive
+  version: 1.0.0
+  description: Executive leadership preset
+  business_function: executive
+  tags: [executive, c-suite, board]
+
+spec:
+  governs:
+    - Board communications
+    - M&A data
+    - Strategic decisions
+    - Investor relations
+
+  policies:
+    - kind: DenyRule
+      name: deny-mnpi-share
+      match:
+        effect_type: data_share
+        conditions:
+          - field: params.data_class
+            operator: in
+            values: [MNPI, MATERIAL_NONPUBLIC]
+      verdict: DENY
+      reason_code: POLICY_VIOLATION
+      reason: "Material nonpublic information subject to insider trading regulations"
+---
+apiVersion: helm.mindburn.run/v1
+kind: BusinessPreset
+metadata:
+  name: operations
+  version: 1.0.0
+  description: Operations and infrastructure team preset
+  business_function: operations
+  tags: [ops, infrastructure, sre]
+
+spec:
+  governs:
+    - Server provisioning
+    - Database administration
+    - Network configuration
+    - Disaster recovery
+
+  policies:
+    - kind: ApprovalGate
+      name: approve-production-db-change
+      match:
+        effect_type: database_migration
+        conditions:
+          - field: params.target
+            operator: equals
+            value: production
+      verdict: ESCALATE
+      reason_code: TEMPORAL_INTERVENTION
+      reason: "Production database migrations require change management approval"

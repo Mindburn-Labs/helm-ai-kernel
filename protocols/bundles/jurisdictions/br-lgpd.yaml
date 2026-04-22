@@ -1,0 +1,42 @@
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: br-lgpd
+  version: 1.0.0
+  description: Brazil Lei Geral de Proteção de Dados
+  jurisdiction: BR
+  regulations:
+    - LGPD (Lei No. 13.709/2018)
+  tags: [brazil, lgpd, anpd]
+
+spec:
+  legal_regime: BR
+  data_residency: BR
+  applicable_regulations:
+    - id: LGPD
+      name: Lei Geral de Proteção de Dados
+      version: "13.709/2018"
+      authority: ANPD (Autoridade Nacional de Proteção de Dados)
+
+  policies:
+    - kind: DenyRule
+      name: deny-international-transfer
+      match:
+        effect_type: data_export
+        conditions:
+          - field: params.destination_region
+            operator: not_in
+            values: [BR, adequacy_listed]
+          - field: context.standard_clauses
+            operator: empty
+      verdict: DENY
+      reason_code: DENY_BR_INTERNATIONAL_TRANSFER
+      reason: "International transfer requires adequacy decision or standard clauses under LGPD Art. 33"
+
+  deny_codes:
+    - code: DENY_BR_INTERNATIONAL_TRANSFER
+      description: International transfer without legal basis
+    - code: DENY_BR_CONSENT_REQUIRED
+      description: Consent required for processing
+    - code: DENY_BR_SENSITIVE_DATA
+      description: Sensitive data processing without specific consent

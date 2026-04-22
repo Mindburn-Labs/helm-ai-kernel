@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.org/schemas/schedule_spec.json",
+  "title": "Schedule Spec",
+  "description": "Specification for a governed recurring schedule that triggers HELM intent execution, including cron or rrule expressions, jitter, and retry policy.",
+  "type": "object",
+  "required": ["schedule_id", "tenant_id", "kind", "expression", "timezone"],
+  "properties": {
+    "schedule_id": {
+      "type": "string",
+      "description": "Unique identifier for this schedule."
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "Tenant this schedule belongs to."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["cron", "rrule"],
+      "description": "Schedule expression format: cron (POSIX cron syntax) or rrule (RFC 5545 RRULE)."
+    },
+    "expression": {
+      "type": "string",
+      "description": "Schedule expression string matching the declared kind."
+    },
+    "timezone": {
+      "type": "string",
+      "description": "IANA timezone name for expression evaluation (e.g. America/New_York, UTC)."
+    },
+    "catchup_policy": {
+      "type": "string",
+      "enum": ["skip", "run_once", "run_all"],
+      "description": "Policy for handling missed executions after downtime."
+    },
+    "max_concurrency": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum number of concurrent executions of this schedule."
+    },
+    "jitter_window_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Random jitter window in milliseconds applied to each trigger to spread load."
+    },
+    "retry": {
+      "type": "object",
+      "description": "Retry policy applied to failed executions.",
+      "properties": {
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum number of retry attempts (0 = no retries)."
+        },
+        "backoff_mode": {
+          "type": "string",
+          "enum": ["fixed", "linear", "exponential"],
+          "description": "Backoff strategy between retries."
+        },
+        "min_backoff_s": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Minimum backoff duration in seconds."
+        },
+        "max_backoff_s": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Maximum backoff duration in seconds."
+        }
+      }
+    },
+    "enabled": {
+      "type": "boolean",
+      "description": "Whether this schedule is currently active."
+    },
+    "intent_template_id": {
+      "type": "string",
+      "description": "Reference to the intent template that will be instantiated on each trigger."
+    }
+  }
+}

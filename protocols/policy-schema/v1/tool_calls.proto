@@ -1,0 +1,137 @@
+// HELM Policy Schema — Tool Call Execution Protocol
+//
+// Every tool call follows: preflight → PEP check → execute → receipt → project.
+// No hidden side effects. Requests and results are content-addressed.
+//
+// Stability: v1 additive-only. No field removals. No renames.
+syntax = "proto3";
+package helm.toolcalls.v1;
+
+option go_package = "helm.mindburn.run/toolcalls/v1;toolcallsv1";
+
+import "google/protobuf/timestamp.proto";
+import "v1/foundations.proto";
+
+// ── Enums ──────────────────────────────────────────────────────
+
+// Outcome status of a tool call.
+enum ToolCallStatus {
+  TOOL_CALL_STATUS_UNSPECIFIED = 0;
+  // Passed CPI + PEP, executed successfully.
+  ALLOWED = 1;
+  // Blocked by CPI/PEP.
+  DENIED = 2;
+  // Requires human approval before execution.
+  APPROVAL_REQUIRED = 3;
+  // Needs additional facts before policy can decide.
+  NEEDS_FACTS = 4;
+  // Allowed but execution failed.
+  EXEC_FAILED = 5;
+  // Allowed and execution succeeded.
+  EXEC_SUCCEEDED = 6;
+}
+
+// ── Tool Call Request ──────────────────────────────────────────
+
+// Spend/latency caps for a single tool call.
+message ToolCallBudget {
+  uint32 max_latency_ms = 1;
+  double max_cost_units = 2;
+
+  reserved 100 to 199;
+}
+
+// UX anchor for "why is this tool being called?"
+message PurposeRef {
+  string purpose = 1;
+  string intent_id = 2;
+  string receipt_id = 3;
+
+  reserved 100 to 199;
+}
+
+// Deterministic tool call request. Content-addressed inputs.
+message ToolCallRequest {
+  // UUIDv7 recommended.
+  string request_id = 1;
+  helm.policy.v1.ActorRef actor = 2;
+  helm.policy.v1.BranchRef branch = 3;
+
+  string tool_id = 4;
+  string connector_instance_id = 5;
+
+  // Input is content-addressed.
+  helm.policy.v1.HashRef input_hash = 6;
+  string input_ref = 7;
+
+  // Idempotency key for safe retries.
+  string idempotency_key = 8;
+
+  ToolCallBudget budget = 9;
+  PurposeRef purpose = 10;
+
+  helm.policy.v1.HashRef policy_hash = 11;
+  helm.policy.v1.HashRef cpi_hash = 12;
+
+  // Whether this is a sandbox/simulation call.
+  bool is_simulation = 13;
+
+  reserved 100 to 199;
+}
+
+// ── Tool Call Result ───────────────────────────────────────────
+
+// Deterministic result of a tool call.
+message ToolCallResult {
+  string request_id = 1;
+  ToolCallStatus status = 2;
+  uint32 latency_ms = 3;
+  double cost_units = 4;
+
+  // Execution outputs (content-addressed).
+  helm.policy.v1.HashRef output_hash = 5;
+  string output_ref = 6;
+
+  // Explainability.
+  repeated string reason_codes = 7;
+  string witness_id = 8;
+  string approval_request_id = 9;
+  repeated string fact_keys = 10;
+
+  helm.policy.v1.HashRef policy_hash = 11;
+  helm.policy.v1.HashRef cpi_hash = 12;
+
+  reserved 100 to 199;
+}
+
+// ── Tool Call Receipt ──────────────────────────────────────────
+
+// Receipt summary for the Tools trace panel and Evidence Mode.
+message ToolCallReceiptSummary {
+  string receipt_id = 1;
+  google.protobuf.Timestamp at = 2;
+
+  helm.policy.v1.ActorRef actor = 3;
+  helm.policy.v1.BranchRef branch = 4;
+
+  string tool_id = 5;
+  string connector_instance_id = 6;
+
+  ToolCallStatus status = 7;
+  uint32 latency_ms = 8;
+  double cost_units = 9;
+
+  helm.policy.v1.HashRef request_hash = 10;
+  helm.policy.v1.HashRef result_hash = 11;
+
+  repeated string reason_codes = 12;
+  string witness_id = 13;
+  string approval_request_id = 14;
+
+  helm.policy.v1.HashRef policy_hash = 15;
+  helm.policy.v1.HashRef cpi_hash = 16;
+
+  bool is_simulation = 17;
+
+  reserved 100 to 199;
+}

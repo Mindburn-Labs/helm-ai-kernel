@@ -1,0 +1,209 @@
+# HELM Conformance Profile v1 — machine-readable acceptance criteria.
+#
+# Consumed by:
+#   - tests/conformance/profile-v1/profile_test.go (in-tree reference run)
+#   - helm certification service (P5-03) when scoring external submissions
+#
+# Each check has:
+#   id            — stable identifier (do not rename between v1.x minor releases)
+#   axis          — 1..6 per the six-axis profile (see README.md)
+#   title         — human-readable one-liner
+#   verification  — { kind, target } where kind ∈ {go_test, shell, fixture, tla}
+#   references    — links into the repo that implement or prove the check
+#   required      — must-pass for v1 certification (default true)
+
+version: "v1.0.0"
+status: "draft"
+reference_impl: "github.com/Mindburn-Labs/helm-oss"
+last_updated: "2026-04-15"
+
+checks:
+
+  # ────────────────────────────────────────────────────────────
+  # Axis 1: Fail-closed firewall
+  # ────────────────────────────────────────────────────────────
+  firewall:
+    - id: firewall.empty_allowlist_denies
+      axis: 1
+      title: "Empty tool allowlist denies all tool calls"
+      verification:
+        kind: go_test
+        target: "./core/pkg/firewall/..."
+        match: "TestFirewall_EmptyAllowlistDenies|TestFirewall_UnknownToolDenied"
+      references:
+        - "core/pkg/firewall/firewall.go:57"
+      required: true
+
+    - id: firewall.nil_dispatcher_errors
+      axis: 1
+      title: "Nil dispatcher surfaces as fail-closed error, never silent pass"
+      verification:
+        kind: go_test
+        target: "./core/pkg/firewall/..."
+        match: "TestFirewall_NilDispatcher"
+      references:
+        - "core/pkg/firewall/firewall.go:72-74"
+      required: true
+
+    - id: firewall.schema_drift_denies
+      axis: 1
+      title: "JSON Schema drift in tool params is a hard deny"
+      verification:
+        kind: go_test
+        target: "./core/pkg/firewall/..."
+        match: "TestFirewall_SchemaDrift"
+      references:
+        - "core/pkg/firewall/firewall.go:62-68"
+      required: true
+
+  # ────────────────────────────────────────────────────────────
+  # Axis 2: Canonical receipts
+  # ────────────────────────────────────────────────────────────
+  receipts:
+    - id: receipts.jcs_canonical_manifest
+      axis: 2
+      title: "Manifest is JCS-canonical (RFC 8785); byte-identical across platforms"
+      verification:
+        kind: go_test
+        target: "./core/pkg/evidencepack/..."
+        match: "TestManifest_JCS|TestManifest_CanonicalBytes"
+      references:
+        - "core/pkg/evidencepack/manifest.go"
+      required: true
+
+    - id: receipts.sha256_chain
+      axis: 2
+      title: "Every blob is SHA-256 hashed; manifest lists each hash"
+      verification:
+        kind: go_test
+        target: "./core/pkg/evidencepack/..."
+        match: "TestVerifier_SHA256"
+      references:
+        - "core/pkg/evidencepack/verifier.go"
+      required: true
+
+    - id: receipts.ed25519_signed
+      axis: 2
+      title: "Receipts carry Ed25519 signatures; verification with published key succeeds"
+      verification:
+        kind: go_test
+        target: "./core/pkg/crypto/..."
+        match: "TestSigner_RoundTrip"
+      references:
+        - "core/pkg/crypto/signer.go"
+      required: true
+
+  # ────────────────────────────────────────────────────────────
+  # Axis 3: Causal ProofGraph
+  # ────────────────────────────────────────────────────────────
+  proofgraph:
+    - id: proofgraph.lamport_ordering
+      axis: 3
+      title: "Every node carries a Lamport-monotonic sequence number"
+      verification:
+        kind: go_test
+        target: "./core/pkg/proofgraph/..."
+        match: "TestGraph_LamportOrdering|TestGraph_Append"
+      references:
+        - "core/pkg/proofgraph/"
+      required: true
+
+    - id: proofgraph.parent_references
+      axis: 3
+      title: "Nodes carry parent_ids; DAG reconstructable from node set"
+      verification:
+        kind: go_test
+        target: "./core/pkg/proofgraph/..."
+        match: "TestGraph_Causal"
+      references:
+        - "core/pkg/proofgraph/"
+      required: true
+
+  # ────────────────────────────────────────────────────────────
+  # Axis 4: Delegation semantics
+  # ────────────────────────────────────────────────────────────
+  delegation:
+    - id: delegation.narrowing_only
+      axis: 4
+      title: "P2 overlay can narrow but never widen P1; P1 bounded by P0 ceilings"
+      verification:
+        kind: tla
+        target: "proofs/DelegationModel.tla"
+        invariant: "NarrowingOnly"
+      references:
+        - "proofs/DelegationModel.tla"
+        - "core/pkg/identity/delegation.go"
+      required: true
+
+    - id: delegation.continuous_aith
+      axis: 4
+      title: "AITH-style continuous delegation: time-bound, refreshable, revocable, scope-narrowing sub-delegation"
+      verification:
+        kind: go_test
+        target: "./core/pkg/identity/..."
+        match: "TestContinuousDelegation"
+      references:
+        - "core/pkg/identity/continuous_delegation.go"
+      required: true
+
+    - id: delegation.aip_scope_narrowing
+      axis: 4
+      title: "AIP delegation claims enforce scope narrowing at MCP gateway"
+      verification:
+        kind: go_test
+        target: "./core/pkg/mcp/..."
+        match: "TestAIP"
+      references:
+        - "core/pkg/mcp/aip.go"
+      required: true
+
+  # ────────────────────────────────────────────────────────────
+  # Axis 5: EvidencePack round-trip
+  # ────────────────────────────────────────────────────────────
+  evidencepack:
+    - id: evidencepack.export_verify_roundtrip
+      axis: 5
+      title: "helm export → helm verify round-trip returns PASS"
+      verification:
+        kind: shell
+        target: "tests/conformance/profile-v1/scripts/roundtrip.sh"
+      references:
+        - "core/cmd/helm/export_cmd.go"
+        - "core/cmd/helm/verify_cmd.go"
+      required: true
+
+    - id: evidencepack.tamper_detection
+      axis: 5
+      title: "One-byte tamper of a pack body causes verify to return FAIL"
+      verification:
+        kind: shell
+        target: "tests/conformance/profile-v1/scripts/tamper.sh"
+      references:
+        - "core/cmd/helm/verify_cmd.go"
+      required: true
+
+  # ────────────────────────────────────────────────────────────
+  # Axis 6: Deterministic replay
+  # ────────────────────────────────────────────────────────────
+  replay:
+    - id: replay.bit_identical_match
+      axis: 6
+      title: "helm replay reproduces every decision bit-identically; any divergence is an invariant breach"
+      verification:
+        kind: go_test
+        target: "./core/pkg/replay/..."
+        match: "TestReplay_Identity|TestEngine"
+      references:
+        - "core/pkg/replay/engine.go"
+        - "docs/research/replay.md"
+      required: true
+
+    - id: replay.divergence_detection
+      axis: 6
+      title: "Replay against a mutated policy bundle returns non-zero exit"
+      verification:
+        kind: shell
+        target: "tests/conformance/profile-v1/scripts/divergence.sh"
+      references:
+        - "core/cmd/helm/replay_cmd.go"
+      required: true

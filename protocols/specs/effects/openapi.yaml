@@ -1,0 +1,404 @@
+openapi: "3.1.0"
+info:
+  title: HELM EffectBoundary REST API
+  description: |
+    Language-neutral REST surface for the HELM EffectBoundary. This API provides
+    the same semantics as the gRPC EffectBoundaryService defined in
+    `protocols/proto/helm/kernel/v1/helm.proto`, but using JSON over HTTP for
+    non-gRPC consumers.
+  version: "1.0.0"
+  contact:
+    name: HELM Core Team
+    url: https://github.com/Mindburn-Labs/helm-oss
+  license:
+    name: Apache-2.0
+    url: https://github.com/Mindburn-Labs/helm-oss/blob/main/LICENSE
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+paths:
+  /v1/effects:
+    post:
+      operationId: submitEffect
+      summary: Submit an effect for governance evaluation
+      description: |
+        Submits an effect request to the HELM kernel for policy evaluation.
+        Returns a verdict (ALLOW/DENY/ESCALATE), a receipt, and if ALLOW,
+        an authorized execution intent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EffectRequest"
+      responses:
+        "200":
+          description: Effect evaluated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EffectResponse"
+        "400":
+          description: Invalid effect request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/effects/{effectId}/complete:
+    post:
+      operationId: completeEffect
+      summary: Report execution result and receive completion receipt
+      description: |
+        Reports the execution result for a previously approved effect and
+        receives a completion receipt with ProofGraph node.
+      parameters:
+        - name: effectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecutionResult"
+      responses:
+        "200":
+          description: Completion receipt issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompletionReceipt"
+        "404":
+          description: Effect not found
+
+  /v1/effects/{effectId}/lifecycle:
+    get:
+      operationId: getEffectLifecycle
+      summary: Query effect lifecycle state
+      parameters:
+        - name: effectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lifecycle state returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EffectLifecycle"
+        "404":
+          description: Effect not found
+
+  /v1/effects/idempotency/{key}:
+    get:
+      operationId: checkIdempotency
+      summary: Check if an effect with this idempotency key was already processed
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Idempotency check result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdempotencyResult"
+
+  /v1/pdp/evaluate:
+    post:
+      operationId: evaluatePolicy
+      summary: Evaluate policy against a PDP request
+      description: |
+        Direct PDP evaluation endpoint. Same semantics as the gRPC
+        PolicyDecisionPointService.Evaluate RPC.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PDPRequest"
+      responses:
+        "200":
+          description: Policy evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PDPResponse"
+
+components:
+  schemas:
+    Verdict:
+      type: string
+      enum: [ALLOW, DENY, ESCALATE]
+      description: Canonical HELM verdict
+
+    ReasonCode:
+      type: string
+      enum:
+        - POLICY_VIOLATION
+        - NO_POLICY_DEFINED
+        - PRG_EVALUATION_ERROR
+        - MISSING_REQUIREMENT
+        - PDP_DENY
+        - PDP_ERROR
+        - BUDGET_EXCEEDED
+        - BUDGET_ERROR
+        - ENVELOPE_INVALID
+        - SCHEMA_VIOLATION
+        - TEMPORAL_INTERVENTION
+        - TEMPORAL_THROTTLE
+        - SANDBOX_VIOLATION
+        - PROVENANCE_FAILURE
+        - VERIFICATION_FAILURE
+        - TENANT_ISOLATION
+        - JURISDICTION_VIOLATION
+      description: Reason code per reason-codes-v1 registry
+
+    Effect:
+      type: object
+      required: [effect_type, effect_id]
+      properties:
+        effect_type:
+          type: string
+          description: Effect type (e.g., DATA_WRITE, FUNDS_TRANSFER)
+        effect_id:
+          type: string
+          description: Unique effect identifier
+        params:
+          type: object
+          description: Effect parameters
+        budget_id:
+          type: string
+          description: Budget constraint identifier
+
+    EffectRequest:
+      type: object
+      required: [effect, principal]
+      properties:
+        effect:
+          $ref: "#/components/schemas/Effect"
+        principal:
+          type: string
+          description: Principal identifier (agent, human)
+        context:
+          type: object
+          additionalProperties:
+            type: string
+          description: Contextual metadata
+
+    EffectResponse:
+      type: object
+      required: [verdict]
+      properties:
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        reason_code:
+          $ref: "#/components/schemas/ReasonCode"
+        reason:
+          type: string
+          description: Human-readable reason
+        receipt:
+          $ref: "#/components/schemas/Receipt"
+        intent:
+          $ref: "#/components/schemas/AuthorizedExecutionIntent"
+
+    Receipt:
+      type: object
+      required: [receipt_version, receipt_id, verdict, lamport, timestamp]
+      properties:
+        receipt_version:
+          type: string
+          description: Receipt format version (e.g., "1.0")
+        receipt_id:
+          type: string
+          description: Content-addressed SHA-256 hash
+        decision_id:
+          type: string
+        effect_id:
+          type: string
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        principal:
+          type: string
+        tool:
+          type: string
+        action:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        lamport:
+          type: integer
+          format: int64
+          description: Monotonic Lamport clock
+        proofgraph_node:
+          type: string
+        signature:
+          type: string
+          description: Ed25519 signature, base64
+        signer_key_id:
+          type: string
+        payload_hash:
+          type: string
+        reason_code:
+          $ref: "#/components/schemas/ReasonCode"
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+
+    AuthorizedExecutionIntent:
+      type: object
+      properties:
+        intent_id:
+          type: string
+        decision_id:
+          type: string
+        effect_id:
+          type: string
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        signature:
+          type: string
+        signer_key_id:
+          type: string
+        principal:
+          type: string
+
+    ExecutionResult:
+      type: object
+      required: [intent_id, success]
+      properties:
+        intent_id:
+          type: string
+        success:
+          type: boolean
+        output:
+          type: string
+          description: Base64-encoded output
+        error_message:
+          type: string
+        completed_at:
+          type: string
+          format: date-time
+
+    CompletionReceipt:
+      type: object
+      properties:
+        receipt:
+          $ref: "#/components/schemas/Receipt"
+        proofgraph_node:
+          type: string
+
+    EffectLifecycle:
+      type: object
+      properties:
+        state:
+          type: string
+          enum: [SUBMITTED, APPROVED, DENIED, EXECUTING, COMPLETED, FAILED]
+        pdp_decision_id:
+          type: string
+        executed_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        evidence_pack_id:
+          type: string
+
+    IdempotencyResult:
+      type: object
+      properties:
+        exists:
+          type: boolean
+        existing_effect_id:
+          type: string
+
+    PDPRequest:
+      type: object
+      required: [effect]
+      properties:
+        effect:
+          $ref: "#/components/schemas/Effect"
+        subject:
+          $ref: "#/components/schemas/SubjectDescriptor"
+        context:
+          $ref: "#/components/schemas/ContextDescriptor"
+
+    SubjectDescriptor:
+      type: object
+      properties:
+        principal:
+          type: string
+        tenant:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+
+    ContextDescriptor:
+      type: object
+      properties:
+        jurisdiction:
+          type: string
+        environment:
+          type: string
+        time_window_start:
+          type: string
+          format: date-time
+        time_window_end:
+          type: string
+          format: date-time
+
+    PDPResponse:
+      type: object
+      properties:
+        allow:
+          type: boolean
+        reason_code:
+          $ref: "#/components/schemas/ReasonCode"
+        policy_ref:
+          type: string
+        decision_hash:
+          type: string
+        obligations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Obligation"
+
+    Obligation:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        description:
+          type: string
+        deadline:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        detail:
+          type: string

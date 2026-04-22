@@ -1,0 +1,15 @@
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: saas-b2b
+  version: 1.0.0
+  industry: saas
+  tags:
+  - saas
+  - b2b
+  - soc2
+spec:
+  deny_codes:
+  - code: DENY_SAAS_TENANT_ISOLATION
+  - code: DENY_SAAS_DATA_RETENTION
+  - code: DENY_SAAS_AVAILABILITY_SLA

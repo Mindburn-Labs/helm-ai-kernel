@@ -1,0 +1,15 @@
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: fintech-payments
+  version: 1.0.0
+  industry: fintech
+  tags:
+  - pci-dss
+  - payments
+  - fintech
+spec:
+  deny_codes:
+  - code: DENY_FINTECH_PCI_VIOLATION
+  - code: DENY_FINTECH_CARD_DATA_EXPOSURE
+  - code: DENY_FINTECH_KYC_REQUIRED

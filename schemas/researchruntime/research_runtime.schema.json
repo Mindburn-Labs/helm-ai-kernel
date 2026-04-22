@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mindburn.org/schemas/researchruntime/research_runtime.schema.json",
+  "title": "HELM Research Runtime",
+  "type": "object",
+  "$defs": {
+    "missionMode": {
+      "type": "string",
+      "enum": ["continuous_watch", "editorial_calendar", "on_demand"]
+    },
+    "missionClass": {
+      "type": "string",
+      "enum": [
+        "daily_brief",
+        "weekly_paper",
+        "benchmark_memo",
+        "threat_watch_note",
+        "strategic_memo",
+        "research_paper",
+        "revision_notice"
+      ]
+    },
+    "publicationState": {
+      "type": "string",
+      "enum": ["DRAFT", "SCORED", "HELD", "ELIGIBLE", "PROMOTED", "PUBLISHED", "SUPERSEDED"]
+    },
+    "workerRole": {
+      "type": "string",
+      "enum": [
+        "planner",
+        "web-scout",
+        "source-harvester",
+        "paper-scout",
+        "coder-analyst",
+        "fact-verifier",
+        "synthesizer",
+        "citation-builder",
+        "editor",
+        "publisher"
+      ]
+    },
+    "missionTrigger": {
+      "type": "object",
+      "required": ["type", "triggered_at"],
+      "properties": {
+        "type": { "type": "string", "enum": ["schedule", "watch", "manual", "revision", "policy"] },
+        "label": { "type": "string" },
+        "schedule": { "type": "string" },
+        "source_ref": { "type": "string" },
+        "reason": { "type": "string" },
+        "triggered_by": { "type": "string" },
+        "triggered_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "missionSpec": {
+      "type": "object",
+      "required": ["mission_id", "title", "thesis", "mode", "class", "publication_class", "trigger", "created_at"],
+      "properties": {
+        "mission_id": { "type": "string" },
+        "title": { "type": "string" },
+        "thesis": { "type": "string" },
+        "mode": { "$ref": "#/$defs/missionMode" },
+        "class": { "$ref": "#/$defs/missionClass" },
+        "publication_class": { "type": "string" },
+        "topics": { "type": "array", "items": { "type": "string" } },
+        "query_seeds": { "type": "array", "items": { "type": "string" } },
+        "named_domains": { "type": "array", "items": { "type": "string" } },
+        "keywords": { "type": "array", "items": { "type": "string" } },
+        "primary_model": { "type": "string" },
+        "verification_model": { "type": "string" },
+        "editor_model": { "type": "string" },
+        "max_budget_tokens": { "type": "integer" },
+        "max_budget_cents": { "type": "integer" },
+        "trigger": { "$ref": "#/$defs/missionTrigger" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "workNode": {
+      "type": "object",
+      "required": ["id", "role", "title", "purpose", "required"],
+      "properties": {
+        "id": { "type": "string" },
+        "role": { "$ref": "#/$defs/workerRole" },
+        "title": { "type": "string" },
+        "purpose": { "type": "string" },
+        "depends_on": { "type": "array", "items": { "type": "string" } },
+        "deadline_sec": { "type": "integer" },
+        "retry_class": { "type": "string" },
+        "required": { "type": "boolean" },
+        "publish_impact": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "workGraph": {
+      "type": "object",
+      "required": ["mission_id", "version", "nodes", "edges"],
+      "properties": {
+        "mission_id": { "type": "string" },
+        "version": { "type": "string" },
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/workNode" } },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from", "to", "kind"],
+            "properties": {
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "kind": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "sourceSnapshot": {
+      "type": "object",
+      "required": ["source_id", "mission_id", "url", "content_hash", "captured_at", "primary", "provenance_status"],
+      "properties": {
+        "source_id": { "type": "string" },
+        "mission_id": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "canonical_url": { "type": "string", "format": "uri" },
+        "title": { "type": "string" },
+        "content_hash": { "type": "string" },
+        "snapshot_hash": { "type": "string" },
+        "dom_manifest_hash": { "type": "string" },
+        "pdf_manifest_hash": { "type": "string" },
+        "captured_at": { "type": "string", "format": "date-time" },
+        "published_at": { "type": "string", "format": "date-time" },
+        "language": { "type": "string" },
+        "provider": { "type": "string" },
+        "freshness_score": { "type": "number" },
+        "primary": { "type": "boolean" },
+        "metadata": { "type": "object" },
+        "provenance_status": { "type": "string", "enum": ["discovered", "captured", "verified", "disputed", "drifted"] }
+      },
+      "additionalProperties": false
+    },
+    "promotionReceipt": {
+      "type": "object",
+      "required": [
+        "receipt_id",
+        "mission_id",
+        "publication_id",
+        "publication_state",
+        "evidence_pack_hash",
+        "fallback_used",
+        "policy_decision",
+        "manifest_hash",
+        "created_at"
+      ],
+      "properties": {
+        "receipt_id": { "type": "string" },
+        "mission_id": { "type": "string" },
+        "publication_id": { "type": "string" },
+        "publication_state": { "$ref": "#/$defs/publicationState" },
+        "evidence_pack_hash": { "type": "string" },
+        "requested_model": { "type": "string" },
+        "actual_model": { "type": "string" },
+        "fallback_used": { "type": "boolean" },
+        "policy_decision": { "type": "string" },
+        "reason_codes": { "type": "array", "items": { "type": "string" } },
+        "signer": { "type": "string" },
+        "manifest_hash": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "publicationRecord": {
+      "type": "object",
+      "required": ["publication_id", "mission_id", "class", "state", "title", "version"],
+      "properties": {
+        "publication_id": { "type": "string" },
+        "mission_id": { "type": "string" },
+        "class": { "type": "string" },
+        "state": { "$ref": "#/$defs/publicationState" },
+        "title": { "type": "string" },
+        "slug": { "type": "string" },
+        "thesis": { "type": "string" },
+        "abstract": { "type": "string" },
+        "body_hash": { "type": "string" },
+        "evidence_pack_hash": { "type": "string" },
+        "promotion_receipt": { "type": "string" },
+        "version": { "type": "integer" },
+        "supersedes": { "type": "string" },
+        "superseded_by": { "type": "string" },
+        "published_at": { "type": "string", "format": "date-time" },
+        "metadata": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

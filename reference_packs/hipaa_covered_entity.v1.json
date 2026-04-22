@@ -1,0 +1,65 @@
+{
+  "pack_id": "hipaa-covered-entity-v1",
+  "label": "HIPAA Covered Entity Compliance",
+  "description": "Governs agent operations handling Protected Health Information (PHI). Enforces access controls, minimum necessary standard, breach notification readiness, and BAA compliance per 45 CFR Parts 160 and 164.",
+  "version": 1,
+  "compliance_framework": "HIPAA",
+  "programs": [
+    {
+      "program_id": "prog-phi-access",
+      "label": "PHI Access Controls (164.312)",
+      "status": "active",
+      "controls": [
+        { "control_id": "164.312(a)(1)", "description": "Access control — unique user identification", "enforcement": "MANDATORY" },
+        { "control_id": "164.312(a)(2)(i)", "description": "Automatic logoff", "enforcement": "MANDATORY" },
+        { "control_id": "164.312(a)(2)(iv)", "description": "Encryption and decryption", "enforcement": "MANDATORY" },
+        { "control_id": "164.312(c)(1)", "description": "Integrity controls", "enforcement": "MANDATORY" },
+        { "control_id": "164.312(e)(1)", "description": "Transmission security", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "deny", "condition": "data_class == PHI AND privilege_tier < ELEVATED", "reason": "HIPAA 164.312(a): PHI access requires elevated privileges" },
+        { "action": "deny", "condition": "data_class == PHI AND egress_destination NOT IN approved_endpoints", "reason": "HIPAA 164.312(e): PHI transmission restricted to approved endpoints" },
+        { "action": "audit", "condition": "data_class == PHI", "reason": "HIPAA 164.312(b): all PHI access must be audited" }
+      ]
+    },
+    {
+      "program_id": "prog-minimum-necessary",
+      "label": "Minimum Necessary Standard (164.502(b))",
+      "status": "active",
+      "controls": [
+        { "control_id": "164.502(b)(1)", "description": "Limit PHI to minimum necessary for purpose", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "deny", "condition": "data_class == PHI AND access_purpose NOT IN [TREATMENT, PAYMENT, OPERATIONS]", "reason": "HIPAA 164.502(b): PHI access limited to TPO purposes" }
+      ]
+    },
+    {
+      "program_id": "prog-breach-notification",
+      "label": "Breach Notification (164.404-164.410)",
+      "status": "active",
+      "controls": [
+        { "control_id": "164.404(a)(1)", "description": "Individual notification within 60 days", "enforcement": "MANDATORY" },
+        { "control_id": "164.408", "description": "HHS notification", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "escalate", "condition": "threat_detected AND data_class == PHI", "reason": "HIPAA 164.404: potential PHI breach requires immediate escalation" }
+      ]
+    }
+  ],
+  "phi_categories": [
+    "NAME", "ADDRESS", "DATE_OF_BIRTH", "SSN", "PHONE", "EMAIL", "MRN",
+    "HEALTH_PLAN_ID", "ACCOUNT_NUMBER", "CERTIFICATE_LICENSE", "VEHICLE_ID",
+    "DEVICE_ID", "URL", "IP_ADDRESS", "BIOMETRIC", "PHOTO", "OTHER_UNIQUE"
+  ],
+  "budget_constraints": {
+    "daily_limit_cents": 50000,
+    "risk_score_cap": 300
+  },
+  "evidence_requirements": {
+    "receipt_signing": "MANDATORY",
+    "proofgraph_enabled": true,
+    "evidence_pack_retention_days": 2190,
+    "audit_chain_verification": true,
+    "phi_access_log_required": true
+  }
+}

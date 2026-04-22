@@ -3,45 +3,54 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
 
   - package-ecosystem: gomod
     directory: /core
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
 
   - package-ecosystem: gomod
     directory: /sdk/go
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
 
   - package-ecosystem: gomod
     directory: /tests/conformance
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
 
   - package-ecosystem: pip
     directory: /sdk/python
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
 
   - package-ecosystem: npm
     directory: /sdk/ts
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
 
   - package-ecosystem: npm
     directory: /packages/mindburn-helm-cli
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
 
   - package-ecosystem: cargo
     directory: /sdk/rust
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
 
   - package-ecosystem: maven
     directory: /sdk/java
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly

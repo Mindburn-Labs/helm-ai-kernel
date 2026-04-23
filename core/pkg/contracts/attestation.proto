@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package contracts;
+
+option go_package = "./pkg/interlock/api";
+
+import "google/protobuf/timestamp.proto";
+
+message Attestation {
+  string phenotype_hash = 1;
+  string tool_fingerprint = 2;
+  string action_class = 3;
+  string env_fingerprint = 4;
+  google.protobuf.Timestamp issued_at = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  string issuer_id = 7;
+  bytes signature = 8;
+  repeated string constraints = 9;
+}

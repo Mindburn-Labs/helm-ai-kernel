@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_bank_balance_read_v1.schema.json",
+  "title": "BankBalanceReadInput",
+  "description": "Input schema for tool bank.balance.read (KERNEL, READ_ONLY)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "connector_instance_id"
+  ],
+  "properties": {
+    "connector_instance_id": {
+      "description": "Bound connector instance (BANK_PROVIDER)",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    }
+  }
+}

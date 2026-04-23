@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "helm://schemas/policy/SLI.v1.json",
+  "title": "SLI.v1",
+  "description": "Service Level Indicator - metrics used to measure service reliability.",
+  "type": "object",
+  "required": ["sli_id", "version", "name", "metric_type", "measurement"],
+  "properties": {
+    "sli_id": {
+      "type": "string",
+      "pattern": "^sli-[a-zA-Z0-9-]+$"
+    },
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "metric_type": {
+      "type": "string",
+      "enum": ["availability", "latency", "throughput", "error_rate", "quality", "freshness", "correctness"],
+      "description": "Category of the SLI"
+    },
+    "measurement": {
+      "$ref": "#/$defs/Measurement"
+    },
+    "good_events": {
+      "$ref": "#/$defs/EventDefinition"
+    },
+    "total_events": {
+      "$ref": "#/$defs/EventDefinition"
+    },
+    "unit": {
+      "type": "string",
+      "description": "Unit of measurement (e.g., ms, %, requests)"
+    },
+    "aggregation_window": {
+      "type": "string",
+      "enum": ["1m", "5m", "15m", "1h", "6h", "24h", "7d", "30d"]
+    }
+  },
+  "$defs": {
+    "Measurement": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["prometheus", "opentelemetry", "custom", "synthetic"],
+          "description": "Source of metric data"
+        },
+        "query": {
+          "type": "string",
+          "description": "Query string for metric source (e.g., PromQL)"
+        },
+        "endpoint": {
+          "type": "string",
+          "format": "uri",
+          "description": "Endpoint to scrape metrics from"
+        },
+        "sampling_interval_seconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "EventDefinition": {
+      "type": "object",
+      "description": "Definition of what constitutes a good or total event",
+      "properties": {
+        "filter": {
+          "type": "string",
+          "description": "Filter expression for events"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": { "type": "string" },
+              "operator": { 
+                "type": "string", 
+                "enum": ["eq", "neq", "lt", "lte", "gt", "gte", "contains", "regex"] 
+              },
+              "value": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}

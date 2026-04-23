@@ -1,0 +1,265 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://helm.org/schemas/decision-record/decision_record.v1.schema.json",
+    "title": "DecisionRecord.v1",
+    "description": "Canonical, signed, replayable decision record. Per HELM-RFC-0001. Must be deterministic: same inputs → same canonical bytes → same hash.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "version",
+        "record_id",
+        "policy_epoch",
+        "intent",
+        "tool_call_draft",
+        "effects",
+        "counterfactuals_checked",
+        "invariants_passed",
+        "ceilings_snapshot",
+        "decision",
+        "commit_token_hash",
+        "created_at"
+    ],
+    "properties": {
+        "version": {
+            "type": "string",
+            "const": "DR.v1",
+            "description": "Decision Record version"
+        },
+        "record_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique record identifier"
+        },
+        "policy_epoch": {
+            "type": "string",
+            "description": "Policy epoch that governed this decision"
+        },
+        "intent": {
+            "type": "object",
+            "required": [
+                "type",
+                "goal"
+            ],
+            "properties": {
+                "type": {
+                    "type": "string"
+                },
+                "goal": {
+                    "type": "string"
+                }
+            }
+        },
+        "tool_call_draft": {
+            "type": "object",
+            "required": [
+                "tool_id",
+                "args_hash"
+            ],
+            "properties": {
+                "tool_id": {
+                    "type": "string"
+                },
+                "tool_version": {
+                    "type": "string"
+                },
+                "args_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                }
+            }
+        },
+        "effects": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "Declared effect types"
+        },
+        "counterfactuals_checked": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "Counterfactual checks that were performed (e.g. rollback_plan_exists, blast_radius_under_ceiling)"
+        },
+        "invariants_passed": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "Tool-specific invariants that passed (e.g. schema_pinned, idempotency_key_present)"
+        },
+        "ceilings_snapshot": {
+            "type": "object",
+            "description": "Ceilings at decision time",
+            "properties": {
+                "max_budget_usd": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "max_ops": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_regions": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_tenants": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_rate_per_minute": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_blast_radius": {
+                    "type": "string",
+                    "enum": [
+                        "single_record",
+                        "dataset",
+                        "tenant",
+                        "system_wide"
+                    ]
+                },
+                "custom": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number"
+                    }
+                }
+            }
+        },
+        "context_capsules": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "capsule_id",
+                    "provenance",
+                    "ttl"
+                ],
+                "properties": {
+                    "capsule_id": {
+                        "type": "string"
+                    },
+                    "provenance": {
+                        "type": "string"
+                    },
+                    "source": {
+                        "type": "string"
+                    },
+                    "scope": {
+                        "type": "string"
+                    },
+                    "ttl": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "retrieval_receipt_hash": {
+                        "type": "string"
+                    }
+                }
+            },
+            "description": "Context capsules used in this decision"
+        },
+        "decision": {
+            "type": "object",
+            "required": [
+                "result",
+                "reason_codes"
+            ],
+            "properties": {
+                "result": {
+                    "type": "string",
+                    "enum": [
+                        "ALLOW",
+                        "DENY",
+                        "REQUIRE_APPROVAL",
+                        "REQUIRE_EVIDENCE",
+                        "DEFER"
+                    ]
+                },
+                "reason_codes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "commit_token_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "description": "SHA-256 of the issued CommitToken (empty string hash if DENY)"
+        },
+        "preflight_result": {
+            "type": "object",
+            "description": "If preflight was performed",
+            "properties": {
+                "performed": {
+                    "type": "boolean"
+                },
+                "effect_estimate": {
+                    "type": "object",
+                    "properties": {
+                        "estimated_cost_usd": {
+                            "type": "number"
+                        },
+                        "estimated_blast_radius": {
+                            "type": "string"
+                        },
+                        "estimated_duration_ms": {
+                            "type": "integer"
+                        },
+                        "side_effects": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "simulation_hash": {
+                    "type": "string"
+                }
+            }
+        },
+        "signatures": {
+            "type": "object",
+            "description": "Cryptographic signatures for non-repudiation",
+            "required": [
+                "policy_root_sig",
+                "authority_sig"
+            ],
+            "properties": {
+                "policy_root_sig": {
+                    "type": "string",
+                    "description": "Signature from the policy root key"
+                },
+                "authority_sig": {
+                    "type": "string",
+                    "description": "Signature from the authority court instance"
+                },
+                "algorithm": {
+                    "type": "string",
+                    "enum": [
+                        "ed25519",
+                        "ecdsa-p256"
+                    ],
+                    "default": "ed25519"
+                }
+            }
+        },
+        "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Authority time when this record was created"
+        },
+        "content_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "description": "SHA-256 of JCS-canonicalized record (excluding this field and signatures)"
+        }
+    }
+}

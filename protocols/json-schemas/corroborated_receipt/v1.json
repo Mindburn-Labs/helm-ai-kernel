@@ -1,0 +1,12 @@
+{
+  "$id": "helm://schemas/corroborated_receipt/v1.json",
+  "type": "object",
+  "required": ["receipt_id", "corroborator_id", "status", "timestamp"],
+  "properties": {
+    "receipt_id": { "type": "string" },
+    "corroborator_id": { "type": "string" },
+    "status": { "type": "string", "enum": ["VERIFIED", "DISPUTED", "PENDING"] },
+    "validation_proof": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" }
+  }
+}

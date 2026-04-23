@@ -1,0 +1,5 @@
+# Core-specific ignores (root .gitignore handles global patterns)
+/bin/
+/helm
+/bootstrap
+quality-os

@@ -1,0 +1,41 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://helm.org/schemas/business/sla.schema.json",
+    "title": "SLA",
+    "description": "A Service Level Agreement constraint on duration or quality.",
+    "type": "object",
+    "properties": {
+        "sla_id": {
+            "type": "string",
+            "format": "uuid"
+        },
+        "target_id": {
+            "type": "string",
+            "description": "ID of the Obligation, Flow, or Activity this SLA applies to."
+        },
+        "max_duration_seconds": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "warning_threshold_seconds": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "escalation_policy_id": {
+            "type": "string"
+        },
+        "start_condition": {
+            "type": "string",
+            "description": "CEL expression defining when the clock starts."
+        },
+        "end_condition": {
+            "type": "string",
+            "description": "CEL expression defining when the clock stops."
+        }
+    },
+    "required": [
+        "sla_id",
+        "target_id",
+        "max_duration_seconds"
+    ]
+}

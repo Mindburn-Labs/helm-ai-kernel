@@ -1,0 +1,44 @@
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: healthcare-hipaa
+  version: 1.0.0
+  description: Healthcare industry pack (HIPAA)
+  industry: healthcare
+  tags:
+  - hipaa
+  - healthcare
+  - phi
+spec:
+  policies:
+  - kind: DenyRule
+    name: deny-phi-unencrypted
+    match:
+      effect_type: data_export
+      conditions:
+      - field: params.data_class
+        operator: in
+        values:
+        - PHI
+        - HEALTH_DATA
+      - field: params.encryption
+        operator: empty
+    verdict: DENY
+    reason_code: DENY_HEALTHCARE_PHI_UNENCRYPTED
+    reason: PHI must be encrypted in transit and at rest
+  - kind: ApprovalGate
+    name: patient-consent-required
+    match:
+      effect_type: data_share
+      conditions:
+      - field: params.data_class
+        operator: equals
+        value: PHI
+    verdict: ESCALATE
+    reason_code: DENY_HEALTHCARE_PATIENT_CONSENT
+    reason: Patient consent required for PHI sharing
+  deny_codes:
+  - code: DENY_HEALTHCARE_PHI_UNENCRYPTED
+  - code: DENY_HEALTHCARE_PATIENT_CONSENT
+  - code: DENY_HEALTHCARE_MINIMUM_NECESSARY
+  - code: DENY_HEALTHCARE_BAA_REQUIRED

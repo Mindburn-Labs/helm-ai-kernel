@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/kernel/effect_boundary.schema.json",
+  "title": "EffectBoundary",
+  "description": "Per Section 1.4 - Typed Effect syscall boundary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["effect_id", "effect_type", "submitted_at", "subject", "payload"],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique effect identifier"
+    },
+    "effect_type": {
+      "type": "string",
+      "enum": [
+        "DATA_WRITE",
+        "FUNDS_TRANSFER",
+        "PERMISSION_CHANGE",
+        "DEPLOY",
+        "NOTIFY",
+        "MODULE_INSTALL",
+        "CONFIG_CHANGE",
+        "AUDIT_LOG",
+        "EXTERNAL_API_CALL"
+      ],
+      "description": "Canonical effect type from catalog"
+    },
+    "submitted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When effect was submitted to kernel"
+    },
+    "subject": {
+      "type": "object",
+      "description": "Actor submitting the effect",
+      "required": ["subject_id", "subject_type"],
+      "properties": {
+        "subject_id": { "type": "string" },
+        "subject_type": {
+          "type": "string",
+          "enum": ["human", "module", "control_loop", "external_system"]
+        },
+        "session_id": { "type": "string" },
+        "attestation_ref": { "type": "string" }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "description": "Effect-specific payload",
+      "required": ["payload_hash"],
+      "properties": {
+        "payload_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "idempotency": {
+      "type": "object",
+      "description": "Idempotency enforcement",
+      "required": ["key"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Client-provided or derived idempotency key"
+        },
+        "key_derivation": {
+          "type": "string",
+          "enum": ["client_provided", "content_hash", "effect_id"]
+        },
+        "window_seconds": {
+          "type": "integer",
+          "description": "Deduplication window"
+        }
+      }
+    },
+    "pdp_request_ref": {
+      "type": "string",
+      "description": "Reference to PDP request for this effect"
+    },
+    "context": {
+      "type": "object",
+      "description": "Contextual information",
+      "properties": {
+        "mode_id": { "type": "string" },
+        "loop_id": { "type": "string" },
+        "phenotype_hash": { "type": "string" },
+        "environment_id": { "type": "string" }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "description": "Effect lifecycle tracking",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["pending", "approved", "denied", "executing", "completed", "failed", "compensated"]
+        },
+        "pdp_decision_id": { "type": "string" },
+        "executed_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": "string", "format": "date-time" },
+        "evidence_pack_id": { "type": "string" }
+      }
+    }
+  }
+}

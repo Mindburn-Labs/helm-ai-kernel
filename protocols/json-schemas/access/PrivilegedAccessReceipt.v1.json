@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/access/PrivilegedAccessReceipt.v1.json",
+  "title": "PrivilegedAccessReceipt",
+  "description": "Immutable receipt for privileged access grant with audit trail",
+  "type": "object",
+  "required": ["version", "receipt_id", "request_id", "grant", "attestation"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^prec-[a-z0-9-]+$"
+    },
+    "request_id": {
+      "type": "string",
+      "description": "Reference to the originating PrivilegedAccessRequest"
+    },
+    "grant": {
+      "type": "object",
+      "required": ["granted_tier", "granted_at", "expires_at", "granted_by"],
+      "properties": {
+        "granted_tier": {"type": "string"},
+        "granted_at": {"type": "string", "format": "date-time"},
+        "expires_at": {"type": "string", "format": "date-time"},
+        "granted_by": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Identity IDs of approvers"
+        },
+        "granted_scope": {
+          "type": "object",
+          "properties": {
+            "packs": {"type": "array", "items": {"type": "string"}},
+            "environments": {"type": "array", "items": {"type": "string"}},
+            "actions": {"type": "array", "items": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "grantee": {
+      "type": "object",
+      "required": ["identity_id"],
+      "properties": {
+        "identity_id": {"type": "string"},
+        "email": {"type": "string", "format": "email"},
+        "name": {"type": "string"}
+      }
+    },
+    "session": {
+      "type": "object",
+      "properties": {
+        "session_id": {"type": "string"},
+        "started_at": {"type": "string", "format": "date-time"},
+        "ended_at": {"type": "string", "format": "date-time"},
+        "termination_reason": {
+          "type": "string",
+          "enum": ["expired", "revoked", "completed", "error"]
+        }
+      }
+    },
+    "actions_taken": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {"type": "string"},
+          "target": {"type": "string"},
+          "timestamp": {"type": "string", "format": "date-time"},
+          "result": {"type": "string", "enum": ["success", "failure", "denied"]},
+          "details": {"type": "object"}
+        }
+      },
+      "description": "Log of actions performed during privileged session"
+    },
+    "revocation": {
+      "type": "object",
+      "properties": {
+        "revoked": {"type": "boolean"},
+        "revoked_at": {"type": "string", "format": "date-time"},
+        "revoked_by": {"type": "string"},
+        "reason": {"type": "string"}
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "required": ["hash", "algorithm"],
+      "properties": {
+        "hash": {
+          "type": "string",
+          "description": "SHA256 hash of receipt content"
+        },
+        "algorithm": {
+          "type": "string",
+          "const": "sha256"
+        },
+        "signature": {
+          "type": "string",
+          "description": "Cryptographic signature"
+        },
+        "signed_by": {
+          "type": "string",
+          "description": "Key ID used for signing"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/packs/pack_manifest.v1.schema.json",
+  "title": "PackManifest.v1",
+  "description": "Manifest for a HELM pack (organ). Defines capabilities, applicability, evidence contracts, and provenance. Per Section 4.1 of the semantic constitution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pack_id", "version", "capabilities", "evidence_contract", "provenance"],
+  "properties": {
+    "pack_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Unique identifier for this pack"
+    },
+    "pack_type": {
+      "type": "string",
+      "enum": ["factory", "connector", "policy", "evidence"],
+      "description": "Category of the pack"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?$",
+      "description": "Semantic version of this pack"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name"
+    },
+    "description": {
+      "type": "string",
+      "description": "What this pack does"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Capabilities this pack provides"
+    },
+    "applicability_constraints": {
+      "type": "object",
+      "description": "Constraints on where this pack can be used",
+      "properties": {
+        "jurisdictions": {
+          "type": "object",
+          "properties": {
+            "allowed": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[A-Z]{2}$" }
+            },
+            "prohibited": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[A-Z]{2}$" }
+            }
+          }
+        },
+        "industries": {
+          "type": "object",
+          "properties": {
+            "allowed": { "type": "array", "items": { "type": "string" } },
+            "prohibited": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "minimum_autonomy_level": {
+          "type": "string",
+          "enum": ["supervised", "semi_autonomous", "autonomous"]
+        },
+        "requires_capabilities": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Capabilities that must already exist in the org"
+        }
+      }
+    },
+    "evidence_contract": {
+      "type": "object",
+      "description": "What evidence this pack produces and requires",
+      "required": ["produces", "requires"],
+      "properties": {
+        "produces": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "evidence_class": { "type": "string" },
+              "format": { "type": "string" },
+              "retention_days": { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "evidence_class": { "type": "string" },
+              "source": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "tool_bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tool_id"],
+        "properties": {
+          "tool_id": { "type": "string" },
+          "tool_version_constraint": { "type": "string" },
+          "required": { "type": "boolean", "default": true }
+        }
+      },
+      "description": "External tools this pack binds to"
+    },
+    "pdp_hooks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "hook_type": {
+            "type": "string",
+            "enum": ["before_effect", "after_effect", "on_error"]
+          },
+          "effect_types": { "type": "array", "items": { "type": "string" } },
+          "policy_ref": { "type": "string" }
+        }
+      },
+      "description": "Policy decision point hooks"
+    },
+    "tests": {
+      "type": "object",
+      "description": "Test specifications for verification",
+      "properties": {
+        "unit_tests": {
+          "type": "object",
+          "properties": {
+            "count": { "type": "integer", "minimum": 0 },
+            "coverage_percent": { "type": "number", "minimum": 0, "maximum": 100 }
+          }
+        },
+        "integration_tests": {
+          "type": "object",
+          "properties": {
+            "count": { "type": "integer", "minimum": 0 },
+            "scenarios": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "replay_tests": {
+          "type": "object",
+          "properties": {
+            "golden_inputs_hash": { "type": "string" },
+            "expected_outputs_hash": { "type": "string" }
+          }
+        }
+      }
+    },
+    "signatures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["signer_id", "signature", "signed_at"],
+        "properties": {
+          "signer_id": { "type": "string" },
+          "signature": { "type": "string" },
+          "algorithm": { "type": "string", "default": "ed25519" },
+          "signed_at": { "type": "string", "format": "date-time" },
+          "key_id": { "type": "string" }
+        }
+      },
+      "description": "Cryptographic signatures attesting to pack validity"
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["source", "build"],
+      "properties": {
+        "source": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string", "format": "uri" },
+            "commit_hash": { "type": "string" },
+            "tag": { "type": "string" }
+          }
+        },
+        "build": {
+          "type": "object",
+          "properties": {
+            "builder_id": { "type": "string" },
+            "built_at": { "type": "string", "format": "date-time" },
+            "hermetic": { "type": "boolean" },
+            "reproducible_hash": { "type": "string" }
+          }
+        },
+        "sbom": {
+          "type": "object",
+          "properties": {
+            "format": { "type": "string", "enum": ["spdx", "cyclonedx"] },
+            "hash": { "type": "string" },
+            "uri": { "type": "string", "format": "uri" }
+          },
+          "description": "Software Bill of Materials"
+        },
+        "slsa_level": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4,
+          "description": "SLSA provenance level"
+        }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["staged", "verified", "signed", "active", "deprecated"]
+        },
+        "activation_date": { "type": "string", "format": "date-time" },
+        "deprecation_date": { "type": "string", "format": "date-time" },
+        "successor_pack_id": { "type": "string" }
+      }
+    },
+    "content_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of the canonical JSON representation"
+    }
+  }
+}

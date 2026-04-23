@@ -1,0 +1,14 @@
+{
+  "$id": "helm://schemas/effect_type_definition/v2.json",
+  "type": "object",
+  "required": ["type_id", "owner_role", "risk_score", "parameters_schema", "reversibility"],
+  "properties": {
+    "type_id": { "type": "string" },
+    "description": { "type": "string" },
+    "owner_role": { "type": "string" },
+    "risk_score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "parameters_schema": { "type": "object" },
+    "reversibility": { "type": "string", "enum": ["none", "compensating_action", "exact_undo"] },
+    "required_approvals": { "type": "array", "items": { "type": "string" } }
+  }
+}

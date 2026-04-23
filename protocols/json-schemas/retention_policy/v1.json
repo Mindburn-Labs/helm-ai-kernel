@@ -1,0 +1,32 @@
+{
+  "$id": "helm://schemas/retention_policy/v1.json",
+  "type": "object",
+  "required": [
+    "policy_id",
+    "tenant_id",
+    "data_class",
+    "jurisdiction",
+    "max_age_days",
+    "storage_locations_allowed",
+    "encryption_required",
+    "deletion_proof_required",
+    "created_at",
+    "signature"
+  ],
+  "properties": {
+    "policy_id": { "type": "string" },
+    "tenant_id": { "type": "string" },
+    "data_class": { "type": "string" },
+    "jurisdiction": { "type": "string" },
+    "max_age_days": { "type": "integer" },
+    "storage_locations_allowed": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["local_fs", "s3", "gcs", "azure", "on_prem_blob", "airgap_store"] }
+    },
+    "encryption_required": { "type": "boolean" },
+    "deletion_proof_required": { "type": "boolean" },
+    "legal_hold": { "type": "boolean" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "signature": { "type": "string" }
+  }
+}

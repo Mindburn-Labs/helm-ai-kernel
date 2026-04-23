@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/packs/incident_pack.v1.schema.json",
+  "title": "IncidentPack",
+  "description": "A proof of incident lifecycle, including detection, remediation, and verifiable recovery.",
+  "type": "object",
+  "required": [
+    "pack_id",
+    "pack_type",
+    "incident_id",
+    "timeline",
+    "attestation"
+  ],
+  "properties": {
+    "pack_id": { "type": "string" },
+    "pack_type": { "const": "INCIDENT_PACK" },
+    "incident_id": { "type": "string" },
+    "severity": { "type": "string" },
+    "summary": { "type": "string" },
+    "timeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["timestamp", "event_type", "description"],
+        "properties": {
+          "timestamp": { "type": "string", "format": "date-time" },
+          "event_type": { "type": "string", "enum": ["DETECTED", "ACKNOWLEDGED", "INVESTIGATING", "MITIGATING", "RESOLVED", "CLOSED"] },
+          "description": { "type": "string" },
+          "receipt_ref": { "type": "string" },
+          "actor_id": { "type": "string" }
+        }
+      }
+    },
+    "root_cause": { "type": "string" },
+    "remediation_evidence": {
+      "type": "object",
+      "properties": {
+        "fix_commit_sha": { "type": "string" },
+        "deploy_receipt_id": { "type": "string" }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "required": ["pack_hash"],
+      "properties": {
+        "pack_hash": { "type": "string" },
+        "signature": { "type": "string" },
+        "generated_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

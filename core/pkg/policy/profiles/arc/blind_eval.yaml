@@ -1,0 +1,12 @@
+profile_id: "profile.arc-blind-eval.v1"
+description: "Frozen Blind Evaluation Substrate"
+mutation_frozen: true
+registry:
+  allowed_actions:
+    - "helm.connector.arc.session.open.v1"
+    - "helm.connector.arc.session.step.v1"
+limits:
+  max_budget: 3
+contamination_rules:
+  allow_external_http: false
+  allow_file_system_writes: false

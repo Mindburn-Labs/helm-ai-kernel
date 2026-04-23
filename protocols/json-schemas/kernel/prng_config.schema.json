@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/kernel/prng_config.schema.json",
+  "title": "PRNGConfig",
+  "description": "Per Section 2.4 - Seed policy and PRNG configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["algorithm", "seed_derivation"],
+  "properties": {
+    "algorithm": {
+      "type": "string",
+      "enum": ["xorshift128+", "pcg64", "chacha20"],
+      "default": "chacha20",
+      "description": "Approved PRNG algorithm (MUST be deterministic)"
+    },
+    "seed_derivation": {
+      "type": "object",
+      "required": ["method"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["genesis_hash", "loop_scoped", "event_derived", "manual"],
+          "description": "How seed is derived"
+        },
+        "genesis_hash": {
+          "type": "string",
+          "description": "Hash of genesis block for genesis_hash method"
+        },
+        "loop_id": {
+          "type": "string",
+          "description": "Control loop ID for loop_scoped method"
+        },
+        "event_id": {
+          "type": "string",
+          "description": "Event ID for event_derived method"
+        },
+        "manual_seed": {
+          "type": "string",
+          "description": "Explicit seed for manual method (test/audit only)"
+        }
+      }
+    },
+    "scope_policy": {
+      "type": "object",
+      "description": "Seed scoping policy",
+      "properties": {
+        "per_control_loop": {
+          "type": "boolean",
+          "default": true,
+          "description": "Isolate seeds per control loop"
+        },
+        "per_task": {
+          "type": "boolean",
+          "default": false,
+          "description": "Isolate seeds per task"
+        },
+        "log_all_seeds": {
+          "type": "boolean",
+          "default": true,
+          "description": "Record all seeds in event log"
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "description": "Seed verification requirements",
+      "properties": {
+        "require_seed_proof": {
+          "type": "boolean",
+          "default": true,
+          "description": "Require cryptographic proof of seed derivation"
+        },
+        "allow_external_entropy": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow external entropy sources"
+        }
+      }
+    }
+  }
+}

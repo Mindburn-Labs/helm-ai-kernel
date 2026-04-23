@@ -1,0 +1,29 @@
+{
+  "$id": "helm://schemas/receipt/v2.json",
+  "type": "object",
+  "required": ["receipt_id", "decision_id", "effect_id", "status", "timestamp"],
+  "properties": {
+    "receipt_id": { "type": "string" },
+    "decision_id": { "type": "string" },
+    "effect_id": { "type": "string" },
+    "external_reference_id": { "type": "string" },
+    "status": { "type": "string", "enum": ["SUCCESS", "FAILURE", "UNKNOWN", ""] },
+    "blob_hash": { "type": "string" },
+    "output_hash": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "executor_id": { "type": "string" },
+    "metadata": { "type": "object" },
+    "merkle_root": { "type": "string" },
+    "witness_signatures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["witness_id", "signature"],
+        "properties": {
+          "witness_id": { "type": "string" },
+          "signature": { "type": "string" }
+        }
+      }
+    }
+  }
+}

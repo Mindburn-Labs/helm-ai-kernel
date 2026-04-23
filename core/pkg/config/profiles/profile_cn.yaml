@@ -1,0 +1,36 @@
+# CN Regional Profile
+# China regulatory and operational defaults
+name: "China"
+code: "cn"
+
+ceremony:
+  min_timelock_ms: 3000
+  min_hold_ms: 2000
+  require_challenge: false
+  domain_separation: "helm:approval:v1:cn"
+
+data_residency: "cn-beijing-1"
+
+compliance:
+  - "GB/T-35273"
+  - "CSL"
+
+encryption: "SM4"
+
+networking:
+  outbound_mode: "allowlist"
+  allowlist:
+    - "api.baidu.com"
+  island_mode: true  # Default island mode for CN
+
+crypto_policy:
+  allowed_algorithms:
+    - "SM4"
+    - "SM2"
+    - "SM3"
+  key_rotation_days: 365
+  require_national_crypto: true
+
+retention:
+  max_days: 1095  # 3 years per CSL
+  audit_log_days: 1095

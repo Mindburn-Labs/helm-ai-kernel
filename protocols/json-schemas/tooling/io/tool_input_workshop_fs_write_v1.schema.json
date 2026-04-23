@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_workshop_fs_write_v1.schema.json",
+  "title": "WorkshopFsWriteInput",
+  "description": "Input schema for tool workshop.fs.write (WORKSHOP, REVERSIBLE_WRITE)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "idempotency_key",
+    "path",
+    "bytes_ref_hash"
+  ],
+  "properties": {
+    "bytes_ref_hash": {
+      "description": "SHA-256 content hash",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "description": "Idempotency key derived from: path, bytes_ref_hash",
+      "type": "string"
+    },
+    "path": {
+      "description": "File path",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    }
+  }
+}

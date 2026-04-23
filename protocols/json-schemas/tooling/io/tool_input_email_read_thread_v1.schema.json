@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_email_read_thread_v1.schema.json",
+  "title": "EmailRead_threadInput",
+  "description": "Input schema for tool email.read_thread (KERNEL, READ_ONLY)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "connector_instance_id",
+    "thread_id"
+  ],
+  "properties": {
+    "connector_instance_id": {
+      "description": "Bound connector instance (EMAIL_PROVIDER)",
+      "type": "string"
+    },
+    "max_messages": {
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    },
+    "thread_id": {
+      "description": "Email thread identifier",
+      "type": "string"
+    }
+  }
+}

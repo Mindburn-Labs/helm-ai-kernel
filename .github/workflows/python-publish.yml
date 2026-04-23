@@ -1,0 +1,53 @@
+name: Python Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish. Must match VERSION.
+        required: true
+        type: string
+      dry_run:
+        description: Build without publishing.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Version checks
+        working-directory: sdk/python
+        run: |
+          FILE_VERSION=$(cat ../../VERSION)
+          REQUESTED="${{ github.event.inputs.version }}"
+          PACKAGE_VERSION=$(python - <<'PY'
+from pathlib import Path
+import tomllib
+data = tomllib.loads(Path("pyproject.toml").read_text())
+print(data["project"]["version"])
+PY
+)
+          test "$REQUESTED" = "$FILE_VERSION"
+          test "$PACKAGE_VERSION" = "$FILE_VERSION"
+      - name: Build and validate
+        working-directory: sdk/python
+        run: |
+          python -m pip install --upgrade build twine
+          python -m build
+          twine check dist/*
+      - name: Publish
+        if: github.event.inputs.dry_run != 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_TOKEN }}
+          packages-dir: sdk/python/dist/

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/core/envelope_ref.schema.json",
+  "title": "EnvelopeRef",
+  "description": "Reference to encrypted envelope per Addendum 8.X - for envelope encryption model",
+  "type": "object",
+  "required": ["key_id", "algorithm_id", "ciphertext_integrity"],
+  "additionalProperties": false,
+  "properties": {
+    "key_id": {
+      "type": "string",
+      "description": "Key used to encrypt the data encryption key (KEK reference)"
+    },
+    "algorithm_id": {
+      "type": "string",
+      "enum": ["AES-256-GCM", "ChaCha20-Poly1305"],
+      "description": "Encryption algorithm used"
+    },
+    "recipient_policy": {
+      "type": "string",
+      "description": "Policy defining who can decrypt this envelope"
+    },
+    "ciphertext_integrity": {
+      "type": "object",
+      "description": "Integrity metadata for the ciphertext",
+      "required": ["hash", "size_bytes"],
+      "additionalProperties": false,
+      "properties": {
+        "hash": {
+          "type": "string",
+          "description": "Hash of the ciphertext for integrity verification"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Size of the ciphertext in bytes"
+        },
+        "nonce": {
+          "type": "string",
+          "description": "Encryption nonce/IV used"
+        }
+      }
+    }
+  }
+}

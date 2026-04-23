@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/threat/protected_infra_structure.json",
+  "title": "Protected Infrastructure Mutation Effect",
+  "description": "Mutates protected infrastructure such as production database schemas or DNS records.",
+  "type": "object",
+  "required": ["effect_id", "resource_type", "target"],
+  "properties": {
+    "effect_id": { "type": "string", "const": "PROTECTED_INFRA_STRUCTURE" },
+    "resource_type": { "type": "string", "enum": ["database_schema", "load_balancer", "dns", "firewall_rule", "certificate"] },
+    "target": { "type": "string" },
+    "change_hash": { "type": "string" }
+  },
+  "additionalProperties": false,
+  "x-helm": { "category": "threat", "risk_class": "E3", "approval_level": "dual_control", "reversible": false }
+}

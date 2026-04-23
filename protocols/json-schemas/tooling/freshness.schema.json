@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/freshness/v1.json",
+  "title": "Document Freshness Metadata",
+  "description": "YAML frontmatter schema for tracking documentation freshness",
+  "type": "object",
+  "properties": {
+    "freshness": {
+      "type": "object",
+      "required": ["last_reviewed"],
+      "properties": {
+        "last_reviewed": {
+          "type": "string",
+          "format": "date",
+          "description": "ISO 8601 date of last human review (YYYY-MM-DD)"
+        },
+        "owner": {
+          "type": "string",
+          "description": "GitHub handle or team responsible for this doc"
+        },
+        "code_refs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Code files this doc describes (for change detection)"
+        },
+        "stale_after_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 365,
+          "default": 90,
+          "description": "Days until this doc is considered stale"
+        },
+        "auto_generated": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, doc is generated from code and drift is expected"
+        }
+      }
+    }
+  }
+}

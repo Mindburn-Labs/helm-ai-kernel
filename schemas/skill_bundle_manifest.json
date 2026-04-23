@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.org/schemas/skill_bundle_manifest.json",
+  "title": "Skill Bundle Manifest",
+  "description": "Canonical manifest for a governed HELM skill bundle, covering lifecycle state, risk classification, capability requirements, and policy references.",
+  "type": "object",
+  "required": ["id", "name", "version", "description", "entry_point"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for this skill bundle."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name of the skill."
+    },
+    "version": {
+      "type": "string",
+      "description": "Semver version string for this bundle."
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of what this skill does."
+    },
+    "entry_point": {
+      "type": "string",
+      "description": "Entry point path or symbol within the bundle."
+    },
+    "state": {
+      "type": "string",
+      "enum": ["candidate", "certified", "deprecated", "revoked"],
+      "description": "Lifecycle state of the skill bundle."
+    },
+    "self_mod_class": {
+      "type": "string",
+      "enum": ["C0", "C1", "C2", "C3"],
+      "description": "Self-modification class — C0 is read-only, C3 is full self-mutation."
+    },
+    "risk_class": {
+      "type": "string",
+      "description": "Risk classification label (e.g. LOW, MEDIUM, HIGH, CRITICAL)."
+    },
+    "sandbox_profile": {
+      "type": "string",
+      "description": "Reference to the sandbox policy profile applied during execution."
+    },
+    "capabilities": {
+      "type": "array",
+      "description": "List of capability identifiers required by this skill.",
+      "items": { "type": "string" }
+    },
+    "compatibility": {
+      "type": "object",
+      "description": "Runtime compatibility constraints.",
+      "properties": {
+        "runtime_spec_version": { "type": "string" },
+        "min_kernel_version": { "type": "string" },
+        "max_kernel_version": { "type": "string" },
+        "required_packs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "required_connectors": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "description": "Typed input parameter declarations.",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "schema_ref": { "type": "string" },
+          "trust_class": { "type": "string" },
+          "required": { "type": "boolean" },
+          "sensitive": { "type": "boolean" }
+        }
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "description": "Typed output parameter declarations.",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "schema_ref": { "type": "string" },
+          "trust_class": { "type": "string" },
+          "promotable": { "type": "boolean" },
+          "sensitive": { "type": "boolean" }
+        }
+      }
+    },
+    "policy_profile_ref": {
+      "type": "string",
+      "description": "Reference to the policy profile governing this skill."
+    },
+    "artifact_manifest_ref": {
+      "type": "string",
+      "description": "Reference to the artifact manifest for this bundle."
+    },
+    "sbom_ref": {
+      "type": "string",
+      "description": "Reference to the Software Bill of Materials for this bundle."
+    },
+    "bundle_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "SHA-256 content hash of the bundle archive."
+    },
+    "signature_ref": {
+      "type": "string",
+      "description": "Reference to the cryptographic signature over this manifest."
+    }
+  }
+}

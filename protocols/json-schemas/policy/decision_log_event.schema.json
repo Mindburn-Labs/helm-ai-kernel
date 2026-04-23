@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/policy/decision_log_event.schema.json",
+  "title": "DecisionLogEvent",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["labels", "decision_id", "input", "result", "timestamp"],
+  "properties": {
+    "labels": { "type": "object", "additionalProperties": { "type": "string" } },
+    "decision_id": { "type": "string", "format": "uuid" },
+    "revision": { "type": "string" },
+    "path": { "type": "string" },
+    "query": { "type": "string" },
+    "input": {},
+    "result": {},
+    "requested_by": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "metrics": { "type": "object" }
+  }
+}

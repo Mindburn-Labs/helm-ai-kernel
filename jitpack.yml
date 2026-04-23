@@ -1,0 +1,4 @@
+jdk:
+  - openjdk21
+install:
+  - mvn -f sdk/java/pom.xml install -DskipTests -Dgpg.skip -Dmaven.javadoc.skip=true -B -q

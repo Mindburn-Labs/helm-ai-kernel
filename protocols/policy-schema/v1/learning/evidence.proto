@@ -1,0 +1,45 @@
+// HELM Learning System — Evidence Events
+//
+// Append-only receipts for every learning pipeline action:
+// trace ingestion, dataset builds, model training, deployment, inference.
+// Links back to governance hashes for full provenance.
+//
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.policy.v1.learning;
+
+option go_package = "helm.mindburn.run/policy/v1/learning;learningv1";
+
+import "v1/learning/common.proto";
+
+// EvidenceKind classifies the pipeline event.
+enum EvidenceKind {
+  EVIDENCE_KIND_UNSPECIFIED = 0;
+  EVIDENCE_KIND_TRACE_INGESTED = 1;
+  EVIDENCE_KIND_DATASET_BUILT = 2;
+  EVIDENCE_KIND_MODEL_TRAINED = 3;
+  EVIDENCE_KIND_MODEL_DEPLOYED = 4;
+  EVIDENCE_KIND_INFERRED = 5;
+}
+
+// EvidenceEvent is an append-only receipt for a learning pipeline action.
+message EvidenceEvent {
+  // Unique event identifier, e.g. "ev_<...>".
+  string event_id = 1;
+  int64 at_unix_ms = 2;
+
+  EvidenceKind kind = 3;
+
+  string tenant_id = 4;
+  string workspace_id = 5;
+
+  // Content-addressed blob containing the full event payload.
+  HashRef payload_ref = 6;
+
+  // Governance linkage.
+  string policy_hash = 7;
+  string cpi_hash = 8;
+
+  repeated string reason_codes = 9;
+  string witness_id = 10;
+}

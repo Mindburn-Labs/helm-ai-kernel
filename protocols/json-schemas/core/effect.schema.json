@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/core/effect.schema.json",
+  "title": "Effect",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["effect_id", "effect_type", "params", "irreversible"],
+  "properties": {
+    "effect_id": { "type": "string", "format": "uuid" },
+    "effect_type": { "type": "string", "pattern": "^[a-z_]+\\.[a-z_]+$" },
+    "params": { "type": "object" },
+    "irreversible": { "type": "boolean" },
+    "idempotency_key": { "type": "string" },
+    "compensation": { "type": "object" }
+  }
+}

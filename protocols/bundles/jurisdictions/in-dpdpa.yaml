@@ -1,0 +1,56 @@
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: in-dpdpa
+  version: 1.0.0
+  description: India Digital Personal Data Protection Act 2023
+  jurisdiction: IN
+  regulations:
+    - DPDPA (Digital Personal Data Protection Act 2023)
+  tags: [india, dpdpa, meity]
+
+spec:
+  legal_regime: IN
+  data_residency: IN
+  applicable_regulations:
+    - id: DPDPA
+      name: Digital Personal Data Protection Act
+      version: "2023"
+      authority: Data Protection Board of India
+
+  policies:
+    - kind: DenyRule
+      name: deny-processing-without-consent
+      match:
+        effect_type: data_process
+        conditions:
+          - field: params.data_class
+            operator: in
+            values: [PERSONAL, SENSITIVE_PERSONAL]
+          - field: context.consent_notice
+            operator: empty
+      verdict: DENY
+      reason_code: DENY_IN_CONSENT_REQUIRED
+      reason: "Consent notice required before processing personal data under DPDPA"
+
+    - kind: DenyRule
+      name: deny-child-data
+      match:
+        effect_type: data_process
+        conditions:
+          - field: context.data_subject_age
+            operator: less_than
+            value: 18
+          - field: context.guardian_consent
+            operator: empty
+      verdict: DENY
+      reason_code: DENY_IN_CHILD_DATA
+      reason: "Guardian consent required for processing child data under DPDPA"
+
+  deny_codes:
+    - code: DENY_IN_CONSENT_REQUIRED
+      description: Consent notice not provided
+    - code: DENY_IN_CHILD_DATA
+      description: Guardian consent missing for child data
+    - code: DENY_IN_DATA_LOCALIZATION
+      description: Data localization requirement for sensitive data

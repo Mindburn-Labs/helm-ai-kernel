@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/deploy_release.json",
+  "title": "Deploy Release Effect",
+  "description": "Deploys a new release to the HELM cluster",
+  "type": "object",
+  "required": ["effect_id", "git_sha", "target_host"],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "const": "infra.helm.deploy_release"
+    },
+    "git_sha": {
+      "type": "string",
+      "description": "Git commit SHA to deploy",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "target_host": {
+      "type": "string",
+      "description": "Target host IP or hostname",
+      "format": "hostname"
+    },
+    "images": {
+      "type": "object",
+      "description": "Container images to deploy",
+      "properties": {
+        "helm_core": {"type": "string"},
+        "control_room": {"type": "string"}
+      }
+    },
+    "health_check_timeout_seconds": {
+      "type": "integer",
+      "default": 120,
+      "minimum": 30,
+      "maximum": 600
+    },
+    "auto_rollback": {
+      "type": "boolean",
+      "description": "Rollback on health check failure",
+      "default": true
+    }
+  },
+  "additionalProperties": false,
+  "x-helm": {
+    "category": "deployment",
+    "provider": "helm",
+    "risk_level": "high",
+    "requires_approval": false,
+    "cost_impact": "none",
+    "reversible": true,
+    "rollback_effect": "infra.helm.rollback_release"
+  }
+}

@@ -1,0 +1,146 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://helm.org/schemas/core/workflow_definition.schema.json",
+    "title": "WorkflowDefinition",
+    "description": "A workflow that can be executed by the HELM durable execution kernel.",
+    "type": "object",
+    "required": [
+        "workflow_id",
+        "version",
+        "steps"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "workflow_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for this workflow definition."
+        },
+        "version": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+            "description": "Semantic version of the workflow definition."
+        },
+        "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Human-readable name for the workflow."
+        },
+        "description": {
+            "type": "string",
+            "description": "Description of what this workflow does."
+        },
+        "steps": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "$ref": "#/$defs/WorkflowStep"
+            },
+            "description": "Ordered list of steps to execute."
+        },
+        "timeout": {
+            "type": "string",
+            "pattern": "^P.*$",
+            "description": "Maximum duration for the entire workflow (ISO 8601 duration)."
+        },
+        "metadata": {
+            "type": "object",
+            "description": "Additional metadata for the workflow."
+        }
+    },
+    "$defs": {
+        "WorkflowStep": {
+            "type": "object",
+            "required": [
+                "step_id",
+                "type"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "step_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Unique identifier for this step within the workflow."
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "effect",
+                        "decision",
+                        "wait",
+                        "parallel",
+                        "compensate"
+                    ],
+                    "description": "Type of step to execute."
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Human-readable name for the step."
+                },
+                "effect": {
+                    "$ref": "effect.schema.json",
+                    "description": "Effect to execute (for effect steps)."
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "CEL expression that must evaluate to true for step to execute."
+                },
+                "timeout": {
+                    "type": "string",
+                    "pattern": "^P.*$",
+                    "description": "Maximum duration for this step (ISO 8601 duration)."
+                },
+                "retry_policy": {
+                    "$ref": "#/$defs/RetryPolicy",
+                    "description": "Retry behavior for this step."
+                },
+                "on_failure": {
+                    "type": "string",
+                    "description": "Step ID to jump to on failure."
+                },
+                "parallel_steps": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Step IDs to execute in parallel (for parallel steps)."
+                }
+            }
+        },
+        "RetryPolicy": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "max_attempts": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 3,
+                    "description": "Maximum number of retry attempts."
+                },
+                "initial_interval": {
+                    "type": "string",
+                    "pattern": "^P.*$",
+                    "description": "Initial wait time before first retry (ISO 8601 duration)."
+                },
+                "max_interval": {
+                    "type": "string",
+                    "pattern": "^P.*$",
+                    "description": "Maximum wait time between retries (ISO 8601 duration)."
+                },
+                "backoff_multiplier": {
+                    "type": "number",
+                    "minimum": 1,
+                    "default": 2,
+                    "description": "Multiplier for exponential backoff."
+                },
+                "non_retryable_errors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Error types that should not trigger retries."
+                }
+            }
+        }
+    }
+}

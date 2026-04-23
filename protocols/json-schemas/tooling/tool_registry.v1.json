@@ -1,0 +1,1044 @@
+{
+  "registry_version": "tool_registry.v1",
+  "generated_at_unix_ms": 0,
+  "canonical_hash": "sha256:__FILL_AFTER_CANONICALIZATION__",
+  "ui_copy_namespace": "COPY.tooling",
+
+  "valves": [
+    {
+      "valve_id": "VALVE.COST.DAILY_MAX",
+      "unit_kind": "COST_UNITS",
+      "defaults_by_profile": {
+        "TEAMS": { "value": 5000 },
+        "ENTERPRISE": { "value": 20000 }
+      },
+      "ui": {
+        "label_key": "valves.cost_daily_max.label",
+        "description_key": "valves.cost_daily_max.description"
+      }
+    },
+    {
+      "valve_id": "VALVE.CALLS.PER_MINUTE",
+      "unit_kind": "COUNT",
+      "defaults_by_profile": {
+        "TEAMS": { "value": 120 },
+        "ENTERPRISE": { "value": 600 }
+      },
+      "ui": {
+        "label_key": "valves.calls_per_minute.label",
+        "description_key": "valves.calls_per_minute.description"
+      }
+    },
+    {
+      "valve_id": "VALVE.BYTES.DAILY_MAX",
+      "unit_kind": "BYTES",
+      "defaults_by_profile": {
+        "TEAMS": { "value": 1073741824 },
+        "ENTERPRISE": { "value": 10737418240 }
+      },
+      "ui": {
+        "label_key": "valves.bytes_daily_max.label",
+        "description_key": "valves.bytes_daily_max.description"
+      }
+    },
+    {
+      "valve_id": "VALVE.DATA.EGRESS.MAX_BYTES",
+      "unit_kind": "BYTES",
+      "defaults_by_profile": {
+        "TEAMS": { "value": 10485760 },
+        "ENTERPRISE": { "value": 52428800 }
+      },
+      "ui": {
+        "label_key": "valves.data_egress_max_bytes.label",
+        "description_key": "valves.data_egress_max_bytes.description"
+      }
+    },
+    {
+      "valve_id": "VALVE.EMAIL.SEND.DAILY_MAX",
+      "unit_kind": "COUNT",
+      "defaults_by_profile": {
+        "TEAMS": { "value": 50 },
+        "ENTERPRISE": { "value": 500 }
+      },
+      "ui": {
+        "label_key": "valves.email_send_daily_max.label",
+        "description_key": "valves.email_send_daily_max.description"
+      }
+    },
+    {
+      "valve_id": "VALVE.PAYMENTS.DAILY_MAX_AMOUNT",
+      "unit_kind": "MONEY",
+      "defaults_by_profile": {
+        "TEAMS": { "value": 200, "currency": "EUR" },
+        "ENTERPRISE": { "value": 5000, "currency": "EUR" }
+      },
+      "ui": {
+        "label_key": "valves.payments_daily_max_amount.label",
+        "description_key": "valves.payments_daily_max_amount.description"
+      }
+    },
+    {
+      "valve_id": "VALVE.BANK.TRANSFER.DAILY_MAX_AMOUNT",
+      "unit_kind": "MONEY",
+      "defaults_by_profile": {
+        "TEAMS": { "value": 0, "currency": "EUR" },
+        "ENTERPRISE": { "value": 10000, "currency": "EUR" }
+      },
+      "ui": {
+        "label_key": "valves.bank_transfer_daily_max_amount.label",
+        "description_key": "valves.bank_transfer_daily_max_amount.description"
+      }
+    }
+  ],
+
+  "gates": [
+    {
+      "gate_id": "GATE.IRREVERSIBLE",
+      "scope": "IRREVERSIBLE_WRITE",
+      "ui": {
+        "label_key": "gates.irreversible.label",
+        "description_key": "gates.irreversible.description"
+      }
+    },
+    {
+      "gate_id": "GATE.THRESHOLD_MONEY",
+      "scope": "MONEY_THRESHOLD",
+      "ui": {
+        "label_key": "gates.threshold_money.label",
+        "description_key": "gates.threshold_money.description"
+      }
+    },
+    {
+      "gate_id": "GATE.DATA_CLASS_PII",
+      "scope": "DATA_CLASS_PII",
+      "ui": {
+        "label_key": "gates.data_class_pii.label",
+        "description_key": "gates.data_class_pii.description"
+      }
+    },
+    {
+      "gate_id": "GATE.PACK_UPGRADE",
+      "scope": "PACK_UPGRADE",
+      "ui": {
+        "label_key": "gates.pack_upgrade.label",
+        "description_key": "gates.pack_upgrade.description"
+      }
+    },
+    {
+      "gate_id": "GATE.IDENTITY_ADMIN",
+      "scope": "IDENTITY_ADMIN",
+      "ui": {
+        "label_key": "gates.identity_admin.label",
+        "description_key": "gates.identity_admin.description"
+      }
+    },
+    {
+      "gate_id": "GATE.LEGAL_SIGNATURE",
+      "scope": "LEGAL_SIGNATURE",
+      "ui": {
+        "label_key": "gates.legal_signature.label",
+        "description_key": "gates.legal_signature.description"
+      }
+    }
+  ],
+
+  "packs": [
+    {
+      "pack_id": "pack.base.jurisdiction",
+      "kind": "JURISDICTION",
+      "channel": "BASE",
+      "provides_tools": []
+    },
+    {
+      "pack_id": "pack.base.connector",
+      "kind": "CONNECTOR",
+      "channel": "BASE",
+      "provides_tools": [
+        "email.send",
+        "email.read_thread",
+        "calendar.create_event",
+        "calendar.read_availability"
+      ]
+    },
+    {
+      "pack_id": "pack.base.operating",
+      "kind": "OPERATING",
+      "channel": "BASE",
+      "provides_tools": []
+    },
+    {
+      "pack_id": "pack.provider.gmail",
+      "kind": "CONNECTOR",
+      "channel": "PROVIDER",
+      "provides_tools": ["email.send", "email.read_thread"]
+    },
+    {
+      "pack_id": "pack.provider.google_calendar",
+      "kind": "CONNECTOR",
+      "channel": "PROVIDER",
+      "provides_tools": ["calendar.create_event", "calendar.read_availability"]
+    },
+    {
+      "pack_id": "pack.provider.stripe",
+      "kind": "CONNECTOR",
+      "channel": "PROVIDER",
+      "provides_tools": ["payments.charge", "payments.refund", "payments.subscription.create"]
+    },
+    {
+      "pack_id": "pack.provider.wise",
+      "kind": "CONNECTOR",
+      "channel": "PROVIDER",
+      "provides_tools": ["bank.transfer", "bank.balance.read"]
+    },
+    {
+      "pack_id": "pack.provider.docusign",
+      "kind": "CONNECTOR",
+      "channel": "PROVIDER",
+      "provides_tools": ["esign.send_for_signature", "esign.status.read"]
+    },
+    {
+      "pack_id": "pack.provider.cloudflare",
+      "kind": "CONNECTOR",
+      "channel": "PROVIDER",
+      "provides_tools": ["dns.record.upsert"]
+    },
+    {
+      "pack_id": "pack.facts.fx",
+      "kind": "OPERATING",
+      "channel": "PROVIDER",
+      "provides_tools": ["facts.fx.rate"]
+    },
+    {
+      "pack_id": "pack.facts.tax",
+      "kind": "OPERATING",
+      "channel": "PROVIDER",
+      "provides_tools": ["facts.tax.vat_validate"]
+    },
+    {
+      "pack_id": "pack.facts.registry",
+      "kind": "OPERATING",
+      "channel": "PROVIDER",
+      "provides_tools": ["facts.company.registry_lookup"]
+    }
+  ],
+
+  "global_rules": {
+    "default_valves": [
+      "VALVE.COST.DAILY_MAX",
+      "VALVE.CALLS.PER_MINUTE",
+      "VALVE.BYTES.DAILY_MAX"
+    ],
+    "require_idempotency_for_side_effects": [
+      "REVERSIBLE_WRITE",
+      "IRREVERSIBLE_WRITE"
+    ],
+    "gates_by_env_and_side_effect": [
+      {
+        "when": {
+          "env_in": ["STAGE", "PROD"],
+          "side_effect_class_in": ["IRREVERSIBLE_WRITE"]
+        },
+        "require_gates": ["GATE.IRREVERSIBLE"]
+      }
+    ],
+    "gates_by_data_class": [
+      {
+        "when": {
+          "data_class_in": ["PII", "REGULATED"],
+          "env_in": ["STAGE", "PROD"]
+        },
+        "require_gates": ["GATE.DATA_CLASS_PII"]
+      }
+    ],
+    "pack_upgrade_requires": ["GATE.PACK_UPGRADE"]
+  },
+
+  "tools": [
+    {
+      "tool_id": "workshop.fs.read",
+      "execution_zone": "WORKSHOP",
+      "side_effect_class": "READ_ONLY",
+      "schemas": {
+        "input_schema_id": "tool_input.workshop.fs.read.v1",
+        "output_schema_id": "tool_output.workshop.fs.read.v1"
+      },
+      "requires_connector": false,
+      "provided_by_pack_id": "pack.base.operating",
+      "idempotency": { "required": false, "key_fields": [] },
+      "constraints": {
+        "max_latency_ms": 5000,
+        "max_cost_units": 50,
+        "max_bytes": 10485760
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX", "VALVE.CALLS.PER_MINUTE"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["DEV", "STAGE", "PROD"] },
+            "deny": true
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.workshop_fs_read.label",
+        "description_key": "tools.workshop_fs_read.description"
+      }
+    },
+    {
+      "tool_id": "workshop.fs.write",
+      "execution_zone": "WORKSHOP",
+      "side_effect_class": "REVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.workshop.fs.write.v1",
+        "output_schema_id": "tool_output.workshop.fs.write.v1"
+      },
+      "requires_connector": false,
+      "provided_by_pack_id": "pack.base.operating",
+      "idempotency": { "required": true, "key_fields": ["path", "bytes_ref_hash"] },
+      "constraints": {
+        "max_latency_ms": 10000,
+        "max_cost_units": 100,
+        "max_bytes": 52428800
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX", "VALVE.CALLS.PER_MINUTE", "VALVE.BYTES.DAILY_MAX"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["DEV", "STAGE", "PROD"] },
+            "deny": true
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.workshop_fs_write.label",
+        "description_key": "tools.workshop_fs_write.description"
+      }
+    },
+    {
+      "tool_id": "workshop.exec",
+      "execution_zone": "WORKSHOP",
+      "side_effect_class": "REVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.workshop.exec.v1",
+        "output_schema_id": "tool_output.workshop.exec.v1"
+      },
+      "requires_connector": false,
+      "provided_by_pack_id": "pack.base.operating",
+      "idempotency": { "required": false, "key_fields": [] },
+      "constraints": {
+        "max_latency_ms": 600000,
+        "max_cost_units": 2000,
+        "max_bytes": 104857600
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX", "VALVE.CALLS.PER_MINUTE"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["DEV", "STAGE", "PROD"] },
+            "deny": true
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.workshop_exec.label",
+        "description_key": "tools.workshop_exec.description"
+      }
+    },
+    {
+      "tool_id": "proof.attach",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "REVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.proof.attach.v1",
+        "output_schema_id": "tool_output.proof.attach.v1"
+      },
+      "requires_connector": false,
+      "provided_by_pack_id": "pack.base.operating",
+      "idempotency": { "required": true, "key_fields": ["subject_ref", "artifact_ref_hash"] },
+      "constraints": {
+        "max_latency_ms": 15000,
+        "max_cost_units": 200,
+        "max_bytes": 52428800
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX", "VALVE.BYTES.DAILY_MAX"],
+        "gating_rules": []
+      },
+      "ui": {
+        "label_key": "tools.proof_attach.label",
+        "description_key": "tools.proof_attach.description"
+      }
+    },
+    {
+      "tool_id": "proof.export_pack",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "REVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.proof.export_pack.v1",
+        "output_schema_id": "tool_output.proof.export_pack.v1"
+      },
+      "requires_connector": false,
+      "provided_by_pack_id": "pack.base.operating",
+      "idempotency": { "required": true, "key_fields": ["scope_ref", "time_range"] },
+      "constraints": {
+        "max_latency_ms": 600000,
+        "max_cost_units": 5000,
+        "max_bytes": 1073741824
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX", "VALVE.BYTES.DAILY_MAX"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["STAGE", "PROD"] },
+            "require_gates": ["GATE.IRREVERSIBLE"]
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.proof_export_pack.label",
+        "description_key": "tools.proof_export_pack.description"
+      }
+    },
+    {
+      "tool_id": "packs.install",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "REVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.packs.install.v1",
+        "output_schema_id": "tool_output.packs.install.v1"
+      },
+      "requires_connector": false,
+      "provided_by_pack_id": "pack.base.operating",
+      "idempotency": { "required": true, "key_fields": ["pack_id", "version"] },
+      "constraints": {
+        "max_latency_ms": 600000,
+        "max_cost_units": 5000,
+        "max_bytes": 1073741824
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX", "VALVE.BYTES.DAILY_MAX"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["STAGE", "PROD"] },
+            "require_gates": ["GATE.PACK_UPGRADE"]
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.packs_install.label",
+        "description_key": "tools.packs_install.description"
+      }
+    },
+    {
+      "tool_id": "packs.bind",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "REVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.packs.bind.v1",
+        "output_schema_id": "tool_output.packs.bind.v1"
+      },
+      "requires_connector": false,
+      "provided_by_pack_id": "pack.base.operating",
+      "idempotency": { "required": true, "key_fields": ["target_ref", "pack_hash"] },
+      "constraints": {
+        "max_latency_ms": 60000,
+        "max_cost_units": 500,
+        "max_bytes": 10485760
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["STAGE", "PROD"] },
+            "require_gates": ["GATE.PACK_UPGRADE"]
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.packs_bind.label",
+        "description_key": "tools.packs_bind.description"
+      }
+    },
+    {
+      "tool_id": "packs.upgrade",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "REVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.packs.upgrade.v1",
+        "output_schema_id": "tool_output.packs.upgrade.v1"
+      },
+      "requires_connector": false,
+      "provided_by_pack_id": "pack.base.operating",
+      "idempotency": { "required": true, "key_fields": ["target_ref", "from_pack_hash", "to_pack_hash"] },
+      "constraints": {
+        "max_latency_ms": 600000,
+        "max_cost_units": 5000,
+        "max_bytes": 1073741824
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["STAGE", "PROD"] },
+            "require_gates": ["GATE.PACK_UPGRADE"]
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.packs_upgrade.label",
+        "description_key": "tools.packs_upgrade.description"
+      }
+    },
+    {
+      "tool_id": "http.request",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "READ_ONLY",
+      "schemas": {
+        "input_schema_id": "tool_input.http.request.v1",
+        "output_schema_id": "tool_output.http.request.v1"
+      },
+      "requires_connector": false,
+      "provided_by_pack_id": "pack.base.operating",
+      "idempotency": { "required": false, "key_fields": [] },
+      "constraints": {
+        "max_latency_ms": 15000,
+        "max_cost_units": 200,
+        "max_bytes": 10485760
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX", "VALVE.DATA.EGRESS.MAX_BYTES"],
+        "gating_rules": [
+          {
+            "when": {
+              "http_method_in": ["POST", "PUT", "PATCH", "DELETE"],
+              "env_in": ["STAGE", "PROD"]
+            },
+            "require_gates": ["GATE.IRREVERSIBLE"]
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.http_request.label",
+        "description_key": "tools.http_request.description"
+      }
+    },
+    {
+      "tool_id": "email.send",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "REVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.email.send.v1",
+        "output_schema_id": "tool_output.email.send.v1"
+      },
+      "requires_connector": true,
+      "connector_kinds": ["EMAIL_PROVIDER"],
+      "provided_by_pack_id": "pack.base.connector",
+      "idempotency": { "required": true, "key_fields": ["to", "subject", "body_ref_hash"] },
+      "constraints": {
+        "max_latency_ms": 20000,
+        "max_cost_units": 200,
+        "max_bytes": 10485760
+      },
+      "defaults": {
+        "valves": ["VALVE.EMAIL.SEND.DAILY_MAX", "VALVE.COST.DAILY_MAX"],
+        "gating_rules": [
+          {
+            "when": {
+              "env_in": ["STAGE", "PROD"],
+              "data_class_in": ["PII", "REGULATED"]
+            },
+            "require_gates": ["GATE.DATA_CLASS_PII"]
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.email_send.label",
+        "description_key": "tools.email_send.description"
+      }
+    },
+    {
+      "tool_id": "email.read_thread",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "READ_ONLY",
+      "schemas": {
+        "input_schema_id": "tool_input.email.read_thread.v1",
+        "output_schema_id": "tool_output.email.read_thread.v1"
+      },
+      "requires_connector": true,
+      "connector_kinds": ["EMAIL_PROVIDER"],
+      "provided_by_pack_id": "pack.base.connector",
+      "idempotency": { "required": false, "key_fields": [] },
+      "constraints": {
+        "max_latency_ms": 20000,
+        "max_cost_units": 200,
+        "max_bytes": 10485760
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX", "VALVE.BYTES.DAILY_MAX"],
+        "gating_rules": []
+      },
+      "ui": {
+        "label_key": "tools.email_read_thread.label",
+        "description_key": "tools.email_read_thread.description"
+      }
+    },
+    {
+      "tool_id": "calendar.create_event",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "REVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.calendar.create_event.v1",
+        "output_schema_id": "tool_output.calendar.create_event.v1"
+      },
+      "requires_connector": true,
+      "connector_kinds": ["CALENDAR_PROVIDER"],
+      "provided_by_pack_id": "pack.base.connector",
+      "idempotency": { "required": true, "key_fields": ["start", "end", "attendees"] },
+      "constraints": {
+        "max_latency_ms": 20000,
+        "max_cost_units": 200,
+        "max_bytes": 1048576
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX"],
+        "gating_rules": []
+      },
+      "ui": {
+        "label_key": "tools.calendar_create_event.label",
+        "description_key": "tools.calendar_create_event.description"
+      }
+    },
+    {
+      "tool_id": "calendar.read_availability",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "READ_ONLY",
+      "schemas": {
+        "input_schema_id": "tool_input.calendar.read_availability.v1",
+        "output_schema_id": "tool_output.calendar.read_availability.v1"
+      },
+      "requires_connector": true,
+      "connector_kinds": ["CALENDAR_PROVIDER"],
+      "provided_by_pack_id": "pack.base.connector",
+      "idempotency": { "required": false, "key_fields": [] },
+      "constraints": {
+        "max_latency_ms": 20000,
+        "max_cost_units": 200,
+        "max_bytes": 1048576
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX"],
+        "gating_rules": []
+      },
+      "ui": {
+        "label_key": "tools.calendar_read_availability.label",
+        "description_key": "tools.calendar_read_availability.description"
+      }
+    },
+    {
+      "tool_id": "identity.provision_user",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "IRREVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.identity.provision_user.v1",
+        "output_schema_id": "tool_output.identity.provision_user.v1"
+      },
+      "requires_connector": true,
+      "connector_kinds": ["IDENTITY_PROVIDER"],
+      "provided_by_pack_id": "pack.base.operating",
+      "idempotency": { "required": true, "key_fields": ["user", "role", "scope"] },
+      "constraints": {
+        "max_latency_ms": 60000,
+        "max_cost_units": 1000,
+        "max_bytes": 1048576
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["STAGE", "PROD"] },
+            "require_gates": ["GATE.IRREVERSIBLE", "GATE.IDENTITY_ADMIN"]
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.identity_provision_user.label",
+        "description_key": "tools.identity_provision_user.description"
+      }
+    },
+    {
+      "tool_id": "payments.charge",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "IRREVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.payments.charge.v1",
+        "output_schema_id": "tool_output.payments.charge.v1"
+      },
+      "requires_connector": true,
+      "connector_kinds": ["PAYMENTS_PROVIDER"],
+      "provided_by_pack_id": "pack.provider.stripe",
+      "idempotency": { "required": true, "key_fields": ["amount", "currency", "customer_ref", "idempotency_key"] },
+      "constraints": {
+        "max_latency_ms": 60000,
+        "max_cost_units": 2000,
+        "max_bytes": 1048576
+      },
+      "defaults": {
+        "valves": ["VALVE.PAYMENTS.DAILY_MAX_AMOUNT", "VALVE.COST.DAILY_MAX"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["STAGE", "PROD"] },
+            "require_gates": ["GATE.IRREVERSIBLE", "GATE.THRESHOLD_MONEY"]
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.payments_charge.label",
+        "description_key": "tools.payments_charge.description"
+      }
+    },
+    {
+      "tool_id": "payments.refund",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "IRREVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.payments.refund.v1",
+        "output_schema_id": "tool_output.payments.refund.v1"
+      },
+      "requires_connector": true,
+      "connector_kinds": ["PAYMENTS_PROVIDER"],
+      "provided_by_pack_id": "pack.provider.stripe",
+      "idempotency": { "required": true, "key_fields": ["charge_id", "amount"] },
+      "constraints": {
+        "max_latency_ms": 60000,
+        "max_cost_units": 2000,
+        "max_bytes": 1048576
+      },
+      "defaults": {
+        "valves": ["VALVE.PAYMENTS.DAILY_MAX_AMOUNT", "VALVE.COST.DAILY_MAX"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["STAGE", "PROD"] },
+            "require_gates": ["GATE.IRREVERSIBLE", "GATE.THRESHOLD_MONEY"]
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.payments_refund.label",
+        "description_key": "tools.payments_refund.description"
+      }
+    },
+    {
+      "tool_id": "payments.subscription.create",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "IRREVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.payments.subscription.create.v1",
+        "output_schema_id": "tool_output.payments.subscription.create.v1"
+      },
+      "requires_connector": true,
+      "connector_kinds": ["PAYMENTS_PROVIDER"],
+      "provided_by_pack_id": "pack.provider.stripe",
+      "idempotency": { "required": true, "key_fields": ["customer_ref", "plan_ref", "idempotency_key"] },
+      "constraints": {
+        "max_latency_ms": 60000,
+        "max_cost_units": 2000,
+        "max_bytes": 1048576
+      },
+      "defaults": {
+        "valves": ["VALVE.PAYMENTS.DAILY_MAX_AMOUNT", "VALVE.COST.DAILY_MAX"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["STAGE", "PROD"] },
+            "require_gates": ["GATE.IRREVERSIBLE"]
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.payments_subscription_create.label",
+        "description_key": "tools.payments_subscription_create.description"
+      }
+    },
+    {
+      "tool_id": "bank.transfer",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "IRREVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.bank.transfer.v1",
+        "output_schema_id": "tool_output.bank.transfer.v1"
+      },
+      "requires_connector": true,
+      "connector_kinds": ["BANK_PROVIDER"],
+      "provided_by_pack_id": "pack.provider.wise",
+      "idempotency": { "required": true, "key_fields": ["amount", "currency", "from_account_ref", "to_beneficiary_ref", "idempotency_key"] },
+      "constraints": {
+        "max_latency_ms": 120000,
+        "max_cost_units": 5000,
+        "max_bytes": 1048576
+      },
+      "defaults": {
+        "valves": ["VALVE.BANK.TRANSFER.DAILY_MAX_AMOUNT", "VALVE.COST.DAILY_MAX"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["STAGE", "PROD"] },
+            "require_gates": ["GATE.IRREVERSIBLE", "GATE.THRESHOLD_MONEY"]
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.bank_transfer.label",
+        "description_key": "tools.bank_transfer.description"
+      }
+    },
+    {
+      "tool_id": "bank.balance.read",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "READ_ONLY",
+      "schemas": {
+        "input_schema_id": "tool_input.bank.balance.read.v1",
+        "output_schema_id": "tool_output.bank.balance.read.v1"
+      },
+      "requires_connector": true,
+      "connector_kinds": ["BANK_PROVIDER"],
+      "provided_by_pack_id": "pack.provider.wise",
+      "idempotency": { "required": false, "key_fields": [] },
+      "constraints": {
+        "max_latency_ms": 60000,
+        "max_cost_units": 500,
+        "max_bytes": 1048576
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX"],
+        "gating_rules": []
+      },
+      "ui": {
+        "label_key": "tools.bank_balance_read.label",
+        "description_key": "tools.bank_balance_read.description"
+      }
+    },
+    {
+      "tool_id": "esign.send_for_signature",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "IRREVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.esign.send_for_signature.v1",
+        "output_schema_id": "tool_output.esign.send_for_signature.v1"
+      },
+      "requires_connector": true,
+      "connector_kinds": ["ESIGN_PROVIDER"],
+      "provided_by_pack_id": "pack.provider.docusign",
+      "idempotency": { "required": true, "key_fields": ["doc_ref_hash", "signers", "idempotency_key"] },
+      "constraints": {
+        "max_latency_ms": 120000,
+        "max_cost_units": 5000,
+        "max_bytes": 52428800
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["STAGE", "PROD"] },
+            "require_gates": ["GATE.IRREVERSIBLE", "GATE.LEGAL_SIGNATURE"]
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.esign_send_for_signature.label",
+        "description_key": "tools.esign_send_for_signature.description"
+      }
+    },
+    {
+      "tool_id": "esign.status.read",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "READ_ONLY",
+      "schemas": {
+        "input_schema_id": "tool_input.esign.status.read.v1",
+        "output_schema_id": "tool_output.esign.status.read.v1"
+      },
+      "requires_connector": true,
+      "connector_kinds": ["ESIGN_PROVIDER"],
+      "provided_by_pack_id": "pack.provider.docusign",
+      "idempotency": { "required": false, "key_fields": [] },
+      "constraints": {
+        "max_latency_ms": 60000,
+        "max_cost_units": 500,
+        "max_bytes": 1048576
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX"],
+        "gating_rules": []
+      },
+      "ui": {
+        "label_key": "tools.esign_status_read.label",
+        "description_key": "tools.esign_status_read.description"
+      }
+    },
+    {
+      "tool_id": "dns.record.upsert",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "IRREVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.dns.record.upsert.v1",
+        "output_schema_id": "tool_output.dns.record.upsert.v1"
+      },
+      "requires_connector": true,
+      "connector_kinds": ["DNS_PROVIDER"],
+      "provided_by_pack_id": "pack.provider.cloudflare",
+      "idempotency": { "required": true, "key_fields": ["zone", "record_name", "record_type", "record_value"] },
+      "constraints": {
+        "max_latency_ms": 60000,
+        "max_cost_units": 2000,
+        "max_bytes": 1048576
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["STAGE", "PROD"] },
+            "require_gates": ["GATE.IRREVERSIBLE"]
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.dns_record_upsert.label",
+        "description_key": "tools.dns_record_upsert.description"
+      }
+    },
+    {
+      "tool_id": "domain.register",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "IRREVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.domain.register.v1",
+        "output_schema_id": "tool_output.domain.register.v1"
+      },
+      "requires_connector": true,
+      "connector_kinds": ["DOMAIN_REGISTRAR"],
+      "provided_by_pack_id": "pack.base.operating",
+      "idempotency": { "required": true, "key_fields": ["domain", "idempotency_key"] },
+      "constraints": {
+        "max_latency_ms": 120000,
+        "max_cost_units": 5000,
+        "max_bytes": 1048576
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["DEV", "STAGE", "PROD"] },
+            "require_gates": ["GATE.IRREVERSIBLE"]
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.domain_register.label",
+        "description_key": "tools.domain_register.description"
+      }
+    },
+    {
+      "tool_id": "cloud.deploy",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "IRREVERSIBLE_WRITE",
+      "schemas": {
+        "input_schema_id": "tool_input.cloud.deploy.v1",
+        "output_schema_id": "tool_output.cloud.deploy.v1"
+      },
+      "requires_connector": true,
+      "connector_kinds": ["CLOUD_PROVIDER"],
+      "provided_by_pack_id": "pack.base.operating",
+      "idempotency": { "required": true, "key_fields": ["repo_ref_hash", "env", "idempotency_key"] },
+      "constraints": {
+        "max_latency_ms": 900000,
+        "max_cost_units": 20000,
+        "max_bytes": 104857600
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX"],
+        "gating_rules": [
+          {
+            "when": { "env_in": ["STAGE", "PROD"] },
+            "require_gates": ["GATE.IRREVERSIBLE"]
+          }
+        ]
+      },
+      "ui": {
+        "label_key": "tools.cloud_deploy.label",
+        "description_key": "tools.cloud_deploy.description"
+      }
+    },
+    {
+      "tool_id": "facts.fx.rate",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "READ_ONLY",
+      "schemas": {
+        "input_schema_id": "tool_input.facts.fx.rate.v1",
+        "output_schema_id": "tool_output.facts.fx.rate.v1"
+      },
+      "requires_connector": false,
+      "provided_by_pack_id": "pack.facts.fx",
+      "idempotency": { "required": false, "key_fields": [] },
+      "constraints": {
+        "max_latency_ms": 15000,
+        "max_cost_units": 200,
+        "max_bytes": 1048576
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX", "VALVE.DATA.EGRESS.MAX_BYTES"],
+        "gating_rules": []
+      },
+      "ui": {
+        "label_key": "tools.facts_fx_rate.label",
+        "description_key": "tools.facts_fx_rate.description"
+      }
+    },
+    {
+      "tool_id": "facts.tax.vat_validate",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "READ_ONLY",
+      "schemas": {
+        "input_schema_id": "tool_input.facts.tax.vat_validate.v1",
+        "output_schema_id": "tool_output.facts.tax.vat_validate.v1"
+      },
+      "requires_connector": false,
+      "provided_by_pack_id": "pack.facts.tax",
+      "idempotency": { "required": false, "key_fields": [] },
+      "constraints": {
+        "max_latency_ms": 15000,
+        "max_cost_units": 200,
+        "max_bytes": 1048576
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX", "VALVE.DATA.EGRESS.MAX_BYTES"],
+        "gating_rules": []
+      },
+      "ui": {
+        "label_key": "tools.facts_tax_vat_validate.label",
+        "description_key": "tools.facts_tax_vat_validate.description"
+      }
+    },
+    {
+      "tool_id": "facts.company.registry_lookup",
+      "execution_zone": "KERNEL",
+      "side_effect_class": "READ_ONLY",
+      "schemas": {
+        "input_schema_id": "tool_input.facts.company.registry_lookup.v1",
+        "output_schema_id": "tool_output.facts.company.registry_lookup.v1"
+      },
+      "requires_connector": false,
+      "provided_by_pack_id": "pack.facts.registry",
+      "idempotency": { "required": false, "key_fields": [] },
+      "constraints": {
+        "max_latency_ms": 30000,
+        "max_cost_units": 500,
+        "max_bytes": 5242880
+      },
+      "defaults": {
+        "valves": ["VALVE.COST.DAILY_MAX", "VALVE.DATA.EGRESS.MAX_BYTES"],
+        "gating_rules": []
+      },
+      "ui": {
+        "label_key": "tools.facts_company_registry_lookup.label",
+        "description_key": "tools.facts_company_registry_lookup.description"
+      }
+    }
+  ]
+}

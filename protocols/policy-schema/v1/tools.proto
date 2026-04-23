@@ -1,0 +1,117 @@
+// HELM Policy Schema — Tool Registry and Connector Instances
+//
+// Every tool is described like an API: typed schemas, side-effect class,
+// idempotency requirements, cost model hooks. Connector instances bind
+// tools to environments with permissions and spend caps.
+//
+// Stability: v1 additive-only. No field removals. No renames.
+syntax = "proto3";
+package helm.tools.v1;
+
+option go_package = "helm.mindburn.run/tools/v1;toolsv1";
+
+import "v1/foundations.proto";
+
+// ── Enums ──────────────────────────────────────────────────────
+
+// Side-effect classification for approval gating.
+enum SideEffectClass {
+  SIDE_EFFECT_CLASS_UNSPECIFIED = 0;
+  READ_ONLY = 1;
+  REVERSIBLE_WRITE = 2;
+  IRREVERSIBLE_WRITE = 3;
+}
+
+// Environment binding for connector instances.
+enum Environment {
+  ENV_UNSPECIFIED = 0;
+  DEV = 1;
+  STAGE = 2;
+  PROD = 3;
+}
+
+// ── Tool Registry ──────────────────────────────────────────────
+
+// Typed schema reference for tool inputs/outputs.
+message JsonSchemaRef {
+  // Schema identifier (e.g. "tool.input.v1").
+  string schema_id = 1;
+  uint32 schema_version = 2;
+  helm.policy.v1.HashRef schema_hash = 3;
+
+  reserved 100 to 199;
+}
+
+// Cost model for budgets and forecasting.
+message ToolCostModel {
+  double cost_per_call_units = 1;
+  double cost_per_kb_units = 2;
+
+  reserved 100 to 199;
+}
+
+// Registry entry for a tool. Describes the tool like a standard library API.
+message ToolDescriptor {
+  // Hierarchical tool identifier (e.g. "payments.stripe.charge").
+  string tool_id = 1;
+  // Semantic version (e.g. "1.0.0").
+  string version = 2;
+  SideEffectClass side_effect = 3;
+  JsonSchemaRef input_schema = 4;
+  JsonSchemaRef output_schema = 5;
+  // Execution guarantees.
+  bool requires_idempotency_key = 6;
+  uint32 timeout_ms = 7;
+  uint32 max_retries = 8;
+  ToolCostModel cost_model = 9;
+  // Governance defaults (policy is still authoritative).
+  repeated string default_required_roles = 10;
+
+  reserved 100 to 199;
+}
+
+// ── Connector Instances (on canvas) ────────────────────────────
+
+// Opaque reference to a secret (never raw secrets in the graph).
+message SecretRef {
+  string secret_id = 1;
+  // Optional vault provider name.
+  string provider = 2;
+
+  reserved 100 to 199;
+}
+
+// Fine-grained allowlist/denylist of tool operations.
+message ConnectorPermissions {
+  repeated string allowed_tool_ids = 1;
+  // Safety denylist, still enforced by policy.
+  repeated string denied_tool_ids = 2;
+
+  reserved 100 to 199;
+}
+
+// Hard caps shown as valves in the UI.
+message ConnectorCaps {
+  double max_daily_cost_units = 1;
+  uint32 max_calls_per_minute = 2;
+  uint64 max_bytes_per_day = 3;
+
+  reserved 100 to 199;
+}
+
+// On-canvas tool connector node: instantiated tool with environment binding.
+message ToolConnectorInstance {
+  // On-canvas node ID or mapped ID.
+  string connector_instance_id = 1;
+  string display_name = 2;
+  // Tool family (e.g. "stripe", "wise", "gmail").
+  string tool_family = 3;
+  Environment env = 4;
+  SecretRef secret = 5;
+  ConnectorPermissions permissions = 6;
+  ConnectorCaps caps = 7;
+  // Where this connector is legal to operate.
+  repeated string jurisdiction_ids = 8;
+
+  reserved 100 to 199;
+}

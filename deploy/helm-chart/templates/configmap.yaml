@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "helm-firewall.fullname" . }}-config
+  labels:
+    {{- include "helm-firewall.labels" . | nindent 4 }}
+data:
+  helm.yaml: |
+    region: {{ .Values.helm.region | quote }}
+    signing:
+      algorithm: {{ .Values.helm.signing.algorithm | quote }}
+    storage:
+      type: {{ .Values.helm.storage.type | quote }}
+      {{- if eq .Values.helm.storage.type "sqlite" }}
+      sqlite:
+        path: {{ .Values.helm.storage.sqlite.path | quote }}
+      {{- end }}
+    proxy:
+      enabled: {{ .Values.helm.proxy.enabled }}
+      {{- if .Values.helm.proxy.enabled }}
+      upstream: {{ .Values.helm.proxy.upstream | quote }}
+      {{- end }}
+    metrics:
+      enabled: {{ .Values.helm.metrics.enabled }}

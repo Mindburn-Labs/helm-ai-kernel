@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/threat/env_recreate.json",
+  "title": "Environment Recreate Effect",
+  "description": "Recreates or replaces an execution environment. May invalidate context fingerprints.",
+  "type": "object",
+  "required": ["effect_id", "environment_id"],
+  "properties": {
+    "effect_id": { "type": "string", "const": "ENV_RECREATE" },
+    "environment_id": { "type": "string" },
+    "previous_fingerprint": { "type": "string" },
+    "new_fingerprint": { "type": "string" }
+  },
+  "additionalProperties": false,
+  "x-helm": { "category": "threat", "risk_class": "E3", "approval_level": "single_human", "reversible": false }
+}

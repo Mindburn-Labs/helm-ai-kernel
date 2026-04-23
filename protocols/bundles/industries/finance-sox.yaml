@@ -1,0 +1,51 @@
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: finance-sox
+  version: 1.0.0
+  description: Finance industry pack (SOX, AML, Basel)
+  industry: finance
+  tags:
+  - sox
+  - aml
+  - finance
+  - banking
+spec:
+  policies:
+  - kind: DenyRule
+    name: deny-segregation-violation
+    match:
+      effect_type: financial_approval
+      conditions:
+      - field: context.approver
+        operator: equals_field
+        value: context.requester
+    verdict: DENY
+    reason_code: DENY_FINANCE_SOD_VIOLATION
+    reason: Segregation of duties violation
+  - kind: ApprovalGate
+    name: large-transaction-approval
+    match:
+      effect_type: financial_transfer
+      conditions:
+      - field: params.amount_cents
+        operator: greater_than
+        value: 1000000
+    verdict: ESCALATE
+    reason_code: TEMPORAL_INTERVENTION
+    reason: Transactions over $10,000 require approval
+  - kind: DenyRule
+    name: aml-check-required
+    match:
+      effect_type: financial_transfer
+      conditions:
+      - field: context.aml_check
+        operator: empty
+    verdict: DENY
+    reason_code: DENY_FINANCE_AML_CHECK_REQUIRED
+    reason: AML check required before transfer
+  deny_codes:
+  - code: DENY_FINANCE_SOD_VIOLATION
+  - code: DENY_FINANCE_AML_CHECK_REQUIRED
+  - code: DENY_FINANCE_UNAUTHORIZED_TRADING
+  - code: DENY_FINANCE_LIMIT_EXCEEDED

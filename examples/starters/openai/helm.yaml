@@ -1,0 +1,18 @@
+version: "1"
+provider: openai
+
+governance:
+  mode: enforce
+  receipt_dir: ./evidence/receipts
+  proof_dir: ./evidence/proofs
+
+mcp:
+  transport: http
+  listen: ":8080"
+  auth_mode: none
+
+openai:
+  # HELM acts as a base-URL proxy. Point your OpenAI SDK at HELM
+  # and HELM forwards governed calls to the real OpenAI endpoint.
+  upstream: https://api.openai.com/v1
+  model: gpt-4o

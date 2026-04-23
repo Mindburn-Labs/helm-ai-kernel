@@ -1,0 +1,213 @@
+// HELM Focus Schema — Evidence Mode Overlay Contract
+//
+// Provides a bounded, focused read-model for DOM Microscope (LOD 3).
+// No full event stream required — just a point-in-time projection
+// plus a narrow subscription channel for the focused agent.
+//
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.focus.v1;
+
+option go_package = "helm.mindburn.run/focus/v1;focusv1";
+
+import "google/protobuf/timestamp.proto";
+
+// ── Focus Cursor ───────────────────────────────────────────────
+// Opaque cursor for incremental updates and reconnection.
+
+message FocusCursor {
+  bytes cursor = 1;
+}
+
+// ── Focus Snapshot Request ─────────────────────────────────────
+
+message FocusRequest {
+  string agent_node_id = 1;
+  // 0 or 1 recommended.
+  uint32 neighbor_depth = 2;
+  // Max recent receipts to include (e.g. 200).
+  uint32 max_receipts = 3;
+  // Max blocked queue items to include (e.g. 200).
+  uint32 max_queue_items = 4;
+  bool include_neighbors = 5;
+  bool include_edges = 6;
+}
+
+// ── Focus Snapshot Response ────────────────────────────────────
+
+message FocusSnapshot {
+  FocusCursor cursor = 1;
+
+  NodeStub agent = 2;
+  AgentRuntimeState runtime = 3;
+  PolicyMeta policy = 4;
+  repeated PromptMeta prompts = 5;
+
+  repeated QueueItem queue = 6;
+  repeated ReceiptSummary receipts = 7;
+  // WitnessSummary.tooltip_model_canonical is canonical TooltipModelV1 bytes.
+  repeated WitnessSummary witnesses = 8;
+
+  repeated NodeStub neighbors = 9;
+  repeated EdgeStub edges = 10;
+}
+
+// ── Subscription (narrow, bounded) ─────────────────────────────
+
+message FocusSubscribe {
+  string agent_node_id = 1;
+  FocusCursor from = 2;
+}
+
+message FocusEvent {
+  FocusCursor cursor = 1;
+
+  oneof ev {
+    AgentRuntimeState runtime_update = 10;
+    ReceiptSummary receipt_appended = 11;
+    QueueItem queue_item_upsert = 12;
+    WitnessSummary witness_upsert = 13;
+    PolicyMeta policy_update = 14;
+    PromptMeta prompt_update = 15;
+  }
+}
+
+// ── On-Demand Fetch (rarely called, can be slow) ───────────────
+
+message FetchReceiptDetailRequest {
+  string receipt_id = 1;
+}
+
+message ReceiptDetail {
+  string receipt_id = 1;
+  bytes receipt_hash = 2;
+  // May be large.
+  bytes payload_canonical = 3;
+  // May be large, can be chunked.
+  bytes logs_utf8 = 4;
+  // Full rule trace if needed.
+  bytes full_witness = 5;
+}
+
+message FetchPromptContentRequest {
+  bytes content_hash = 1;
+}
+
+message PromptContent {
+  bytes content_hash = 1;
+  bytes content_utf8 = 2;
+}
+
+// ── Supporting Types ───────────────────────────────────────────
+
+message NodeStub {
+  string node_id = 1;
+  // e.g. "agent", "treasury", "pep".
+  string node_type = 2;
+  string display_name = 3;
+  bytes glyph_id = 4;
+}
+
+message EdgeStub {
+  string edge_id = 1;
+  string from_node_id = 2;
+  string to_node_id = 3;
+  // e.g. "capital", "data", "authority".
+  string edge_type = 4;
+}
+
+enum AgentRunState {
+  AGENT_RUN_STATE_UNSPECIFIED = 0;
+  IDLE = 1;
+  EXECUTING = 2;
+  BLOCKED = 3;
+  DEGRADED = 4;
+  OFFLINE = 5;
+}
+
+message AgentRuntimeState {
+  AgentRunState state = 1;
+  uint32 queue_depth = 2;
+  // Domain-specific throughput unit.
+  float throughput = 3;
+  float error_rate = 4;
+  uint64 last_event_unix_ms = 5;
+}
+
+message PromptMeta {
+  string slot = 1;
+  bytes content_hash = 2;
+  uint32 bytes_len = 3;
+  string mime = 4;
+}
+
+message PolicyMeta {
+  bytes policy_hash = 1;
+  bytes policy_bundle_hash = 2;
+  bytes cpi_hash = 3;
+}
+
+enum ReceiptKind {
+  RECEIPT_KIND_UNSPECIFIED = 0;
+  INTENT_ACCEPTED = 1;
+  INTENT_DENIED = 2;
+  APPROVAL_REQUIRED = 3;
+  APPROVAL_GRANTED = 4;
+  EFFECT_APPLIED = 5;
+}
+
+message ReceiptSummary {
+  string receipt_id = 1;
+  bytes receipt_hash = 2;
+  uint64 unix_ms = 3;
+  ReceiptKind kind = 4;
+  // Enough to explain without full payload.
+  repeated string reason_codes = 5;
+  // Present for deny or approval-required.
+  string witness_id = 6;
+  bytes policy_hash = 7;
+  bytes cpi_hash = 8;
+  // Payload pointer, fetched only on demand.
+  bytes payload_digest = 9;
+  // Blob locator (opaque).
+  string payload_ref = 10;
+  string log_ref = 11;
+}
+
+enum QueueItemStatus {
+  QUEUE_ITEM_STATUS_UNSPECIFIED = 0;
+  QUEUED = 1;
+  RESOLVED = 2;
+  EXPIRED = 3;
+}
+
+message ApprovalRequirement {
+  string approval_request_id = 1;
+  bytes request_hash = 2;
+  // Minimal for UI display.
+  repeated string required_roles = 3;
+}
+
+message QueueItem {
+  string queue_item_id = 1;
+  QueueItemStatus status = 2;
+  uint64 created_unix_ms = 3;
+  // Why it is blocked.
+  repeated string reason_codes = 4;
+  string witness_id = 5;
+  // How to resolve.
+  ApprovalRequirement approval = 6;
+  repeated string fact_requests = 7;
+}
+
+message WitnessSummary {
+  string witness_id = 1;
+  bytes witness_hash = 2;
+  repeated string reason_codes = 3;
+  // Suggested patch identifiers for ApplyWitnessPatchDelta.
+  bytes patch_set_hash = 4;
+  repeated string patch_ids = 5;
+  // Canonical-encoded TooltipModelV1 from helm.explain.v1.
+  // Small, deterministic — makes Evidence Mode instant at deep zoom.
+  bytes tooltip_model_canonical = 6;
+}

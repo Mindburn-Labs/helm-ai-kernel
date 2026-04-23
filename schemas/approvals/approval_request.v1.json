@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/approvals/approval_request.v1.json",
+  "title": "Approval Request",
+  "description": "Request for human approval of a proposed action.",
+  "type": "object",
+  "required": ["request_id", "workspace_id", "proposal_id", "approval_level", "status", "created_at", "expires_at"],
+  "properties": {
+    "request_id": { "type": "string" },
+    "workspace_id": { "type": "string" },
+    "proposal_id": { "type": "string" },
+    "approval_level": {
+      "type": "string",
+      "enum": ["SINGLE_HUMAN", "MULTI_HUMAN", "POLICY_ONLY"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "approved", "denied", "expired"]
+    },
+    "required_approver_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "min_hold_seconds": { "type": "integer", "minimum": 0 },
+    "timelock_seconds": { "type": "integer", "minimum": 0 },
+    "risk_class": { "type": "string" },
+    "effect_class": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" }
+  }
+}

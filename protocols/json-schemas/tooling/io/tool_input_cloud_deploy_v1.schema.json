@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_cloud_deploy_v1.schema.json",
+  "title": "CloudDeployInput",
+  "description": "Input schema for tool cloud.deploy (KERNEL, IRREVERSIBLE_WRITE)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "connector_instance_id",
+    "idempotency_key",
+    "repo_ref_hash",
+    "env",
+    "service_name"
+  ],
+  "properties": {
+    "connector_instance_id": {
+      "description": "Bound connector instance (CLOUD_PROVIDER)",
+      "type": "string"
+    },
+    "env": {
+      "description": "Target environment",
+      "enum": [
+        "SANDBOX",
+        "DEV",
+        "STAGE",
+        "PROD"
+      ],
+      "type": "string"
+    },
+    "idempotency_key": {
+      "description": "Idempotency key derived from: repo_ref_hash, env, idempotency_key",
+      "type": "string"
+    },
+    "region": {
+      "description": "Deployment region",
+      "type": "string"
+    },
+    "repo_ref_hash": {
+      "description": "Content-addressed reference",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    },
+    "service_name": {
+      "description": "Target service name",
+      "type": "string"
+    }
+  }
+}

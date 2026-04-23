@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_esign_status_read_v1.schema.json",
+  "title": "EsignStatusReadInput",
+  "description": "Input schema for tool esign.status.read (KERNEL, READ_ONLY)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "connector_instance_id"
+  ],
+  "properties": {
+    "connector_instance_id": {
+      "description": "Bound connector instance (ESIGN_PROVIDER)",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    }
+  }
+}

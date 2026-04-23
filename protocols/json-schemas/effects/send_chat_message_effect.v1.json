@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/send_chat_message_effect.v1.json",
+  "title": "Send Chat Message Effect",
+  "description": "Sends a chat message (Slack, Teams, etc.). Reversible via deletion.",
+  "type": "object",
+  "required": [
+    "effect_id",
+    "channel_id"
+  ],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "const": "SEND_CHAT_MESSAGE"
+    },
+    "channel_id": {
+      "type": "string"
+    },
+    "body_hash": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "x-helm": {
+    "category": "business",
+    "risk_class": "E1",
+    "approval_level": "",
+    "reversible": true
+  }
+}

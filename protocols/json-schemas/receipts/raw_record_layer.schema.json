@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/receipts/raw_record_layer.schema.json",
+  "title": "RawRecordLayer",
+  "description": "Per Section 2.1 - Forensic raw record layer for receipts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["record_id", "blob_hash", "captured_at", "source"],
+  "properties": {
+    "record_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this raw record"
+    },
+    "blob_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "Content-addressed hash of the raw blob"
+    },
+    "blob_uri": {
+      "type": "string",
+      "format": "uri",
+      "description": "URI to retrieve the raw blob from content-addressed storage"
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when raw record was captured"
+    },
+    "source": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["llm_response", "external_api", "user_input", "system_event"],
+          "description": "Type of raw record source"
+        },
+        "provider_id": {
+          "type": "string",
+          "description": "Provider identifier for LLM responses"
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "Endpoint for external API calls"
+        },
+        "session_id": {
+          "type": "string",
+          "description": "Session context"
+        }
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "description": "Redaction metadata if payload was redacted",
+      "properties": {
+        "redacted": {
+          "type": "boolean",
+          "default": false
+        },
+        "redacted_fields": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "commitment_hash": {
+          "type": "string",
+          "description": "Cryptographic commitment to original content"
+        }
+      }
+    },
+    "size_bytes": {
+      "type": "integer",
+      "description": "Size of the raw blob in bytes"
+    },
+    "content_type": {
+      "type": "string",
+      "description": "MIME type of the blob"
+    }
+  }
+}

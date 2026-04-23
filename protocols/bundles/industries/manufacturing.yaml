@@ -1,0 +1,14 @@
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: manufacturing
+  version: 1.0.0
+  industry: manufacturing
+  tags:
+  - manufacturing
+  - ot
+  - scada
+spec:
+  deny_codes:
+  - code: DENY_MFG_OT_BOUNDARY
+  - code: DENY_MFG_SAFETY_SYSTEM

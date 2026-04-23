@@ -1,0 +1,190 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://helm.org/schemas/authority-court/authorization_decision.v1.schema.json",
+    "title": "AuthorizationDecision.v1",
+    "description": "Authority Court Protocol — canonical authorization decision. Per HELM-RFC-0001.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "decision_id",
+        "request_id",
+        "result",
+        "reason_codes",
+        "policy_epoch",
+        "issued_at",
+        "expires_at"
+    ],
+    "properties": {
+        "decision_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for this decision"
+        },
+        "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Binds to the originating AuthorizationRequest"
+        },
+        "result": {
+            "type": "string",
+            "enum": [
+                "ALLOW",
+                "DENY",
+                "REQUIRE_APPROVAL",
+                "REQUIRE_EVIDENCE",
+                "DEFER"
+            ],
+            "description": "Authorization outcome"
+        },
+        "reason_codes": {
+            "type": "array",
+            "items": {
+                "type": "string",
+                "enum": [
+                    "OK_POLICY",
+                    "OK_PREFLIGHT",
+                    "OK_CEILINGS",
+                    "DENY_SCHEMA_DRIFT",
+                    "DENY_CEILING_EXCEEDED",
+                    "DENY_COUNTERFACTUAL_FAIL",
+                    "DENY_INVARIANT_FAIL",
+                    "DENY_PREFLIGHT_FAIL",
+                    "DENY_UNAUTHENTICATED_MEMORY",
+                    "DENY_POLICY_EPOCH_EXPIRED",
+                    "DENY_EFFECT_NOT_TYPED",
+                    "REQUIRE_APPROVAL",
+                    "REQUIRE_EVIDENCE"
+                ]
+            },
+            "description": "Machine-readable reason codes explaining the decision"
+        },
+        "ceilings_snapshot": {
+            "type": "object",
+            "description": "Budget, rate, and scope ceilings at decision time",
+            "properties": {
+                "max_budget_usd": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "max_ops": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_regions": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_tenants": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_rate_per_minute": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_blast_radius": {
+                    "type": "string",
+                    "enum": [
+                        "single_record",
+                        "dataset",
+                        "tenant",
+                        "system_wide"
+                    ]
+                },
+                "custom": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number"
+                    },
+                    "description": "Domain-specific ceilings"
+                }
+            }
+        },
+        "commit_token": {
+            "type": "object",
+            "description": "If result=ALLOW: single-use token authorizing execution",
+            "required": [
+                "token_hash",
+                "bound_draft_hash",
+                "bound_ceilings_hash",
+                "bound_epoch",
+                "expires_at"
+            ],
+            "properties": {
+                "token_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$",
+                    "description": "SHA-256 hash of the opaque token"
+                },
+                "bound_draft_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$",
+                    "description": "Hash of the tool_call_draft this token authorizes"
+                },
+                "bound_ceilings_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$",
+                    "description": "Hash of the ceilings_snapshot at decision time"
+                },
+                "bound_epoch": {
+                    "type": "string",
+                    "description": "Policy epoch this token is valid for"
+                },
+                "bound_idempotency_key": {
+                    "type": "string",
+                    "description": "Idempotency key from the original request"
+                },
+                "expires_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Token expiration (authority clock)"
+                }
+            }
+        },
+        "policy_epoch": {
+            "type": "string",
+            "description": "Policy epoch used for this decision"
+        },
+        "evaluation_trace": {
+            "type": "object",
+            "description": "Evaluation provenance for reproducibility",
+            "properties": {
+                "evaluation_graph_hash": {
+                    "type": "string",
+                    "description": "Hash of the evaluation DAG"
+                },
+                "pipeline_stages_passed": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Ordered list of pipeline stages that passed"
+                },
+                "rules_fired": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Policy rules that matched"
+                },
+                "inputs_hashes": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "description": "Hashes of all evaluation inputs"
+                }
+            }
+        },
+        "issued_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Authority time when decision was issued"
+        },
+        "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Authority time when this decision expires"
+        }
+    }
+}

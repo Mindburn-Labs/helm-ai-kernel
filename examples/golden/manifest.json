@@ -1,0 +1,11 @@
+{
+  "session_id": "golden-starter-20260305",
+  "template": "starter",
+  "provider": "mock",
+  "receipts": 12,
+  "exported_at": "2026-03-05T00:00:00Z",
+  "final_hash": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+  "lamport": 12,
+  "features": ["skill_lifecycle", "maintenance_loop", "approval_gate", "sandbox_exec", "deny_path"],
+  "description": "Golden EvidencePack fixture for HELM v0.2.0 demo organization. Use for verify demos and conformance testing."
+}

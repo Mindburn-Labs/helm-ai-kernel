@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/verification/proof_pack.v1.schema.json",
+  "title": "Proof Pack v1",
+  "description": "Artifact containing verification evidence (TLA+ check results, invariant proofs)",
+  "type": "object",
+  "properties": {
+    "pack_id": { "type": "string", "description": "Unique UUID" },
+    "target_revision": { "type": "string", "description": "Git commit SHA verified" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "enum": ["GovernanceEngine", "ModuleLifecycle", "TenantIsolation", "ReplayEquivalence", "Liveness"] },
+          "file_hash": { "type": "string", "description": "SHA256 of the .tla file" },
+          "tool": { "type": "string", "enum": ["apalache", "tlc", "lean4"] },
+          "passed": { "type": "boolean" },
+          "checked_invariants": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "states_explored": { "type": "integer" },
+              "duration_ms": { "type": "integer" }
+            }
+          }
+        },
+        "required": ["name", "file_hash", "tool", "passed"]
+      }
+    },
+    "signature": { "type": "string", "description": "Signature of the verifier pipeline" }
+  },
+  "required": ["pack_id", "target_revision", "timestamp", "models"]
+}

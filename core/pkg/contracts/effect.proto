@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package contracts;
+
+option go_package = "./pkg/interlock/api";
+
+import "google/protobuf/timestamp.proto";
+import "pkg/contracts/decision.proto";
+import "pkg/contracts/attestation.proto";
+
+service EffectInterlock {
+  rpc ExecuteEffect(EffectRequest) returns (EffectResult);
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+message EffectRequest {
+  string proposal_id = 1;
+  string step_id = 2;
+  string action_class = 3;
+  string tool_name = 4;
+  bytes params_json = 5; // Canonical JSON bytes
+  DecisionRecord decision_record = 6;
+  Attestation attestation = 7;
+  string tool_fingerprint = 8;
+  string idempotency_key = 9;
+}
+
+message EffectResult {
+  Receipt receipt = 1;
+  repeated ArtifactRef artifacts = 2;
+  bytes normalized_output_json = 3;
+  string error_class = 4;
+}
+
+message Receipt {
+  string id = 1;
+  string tool_fingerprint = 2;
+  string external_id = 3; // e.g., Stripe ID
+  string evidence_hash = 4;
+  google.protobuf.Timestamp oracle_tick = 5;
+  map<string, string> meta = 6;
+}
+
+message ArtifactRef {
+  string hash = 1;
+  int64 size = 2;
+  string dataclass = 3; // PUBLIC, INTERNAL, SENSITIVE
+  string manifest_hash = 4;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  bool ok = 1;
+  string version = 2;
+}

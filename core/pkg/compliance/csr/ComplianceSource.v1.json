@@ -1,0 +1,173 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "helm://schemas/compliance/ComplianceSource.v1.json",
+  "title": "ComplianceSource",
+  "description": "Canonical compliance data source definition for the HELM Compliance Source Registry (CSR).",
+  "type": "object",
+  "required": [
+    "source_id", "name", "description", "class", "source_type",
+    "jurisdiction", "bindingness", "fetch_method", "endpoint_url",
+    "auth_type", "trust", "update_cadence", "ttl", "change_detection",
+    "evidence_rules", "provenance"
+  ],
+  "properties": {
+    "source_id": {
+      "type": "string",
+      "description": "Globally unique identifier (e.g., 'eu-eurlex', 'us-ofac-sdn')",
+      "pattern": "^[a-z0-9][a-z0-9-]+$"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name"
+    },
+    "description": {
+      "type": "string",
+      "description": "What this source provides"
+    },
+    "class": {
+      "type": "string",
+      "enum": [
+        "LAW", "PRIVACY", "AI_GOVERNANCE", "SANCTIONS_AML",
+        "SECURITY_CONTROLS", "RESILIENCE", "IDENTITY_TRUST",
+        "SUPPLY_CHAIN", "CERTIFICATION", "ENTITY_REGISTRY"
+      ],
+      "description": "Compliance domain from the 10-class taxonomy"
+    },
+    "source_type": {
+      "type": "string",
+      "description": "Sub-type within class (e.g., 'gazette', 'sanctions_list', 'standard')"
+    },
+    "jurisdiction": {
+      "type": "string",
+      "description": "ISO 3166-1 alpha-2 jurisdiction code or special codes (EU, GLOBAL)"
+    },
+    "bindingness": {
+      "type": "string",
+      "enum": ["LAW", "REGULATION", "GUIDANCE", "STANDARD", "ADVISORY"],
+      "description": "Legal authority level of the source content"
+    },
+    "fetch_method": {
+      "type": "string",
+      "enum": ["REST_API", "RSS_FEED", "HTML_SCRAPE", "STRUCTURED_DOWNLOAD", "MANUAL_IMPORT", "PORTAL_EXPORT"],
+      "description": "How to retrieve data from this source"
+    },
+    "endpoint_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Base URL for the source endpoint"
+    },
+    "auth_type": {
+      "type": "string",
+      "enum": ["NONE", "API_KEY", "OAUTH2", "MUTUAL_TLS"],
+      "description": "Authentication method required"
+    },
+    "rate_limit_rps": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Maximum requests per second"
+    },
+    "fetch_policy": {
+      "type": "object",
+      "description": "Detailed fetch contract governing retrieval behavior",
+      "properties": {
+        "domains_allowlist": { "type": "array", "items": { "type": "string" } },
+        "max_bytes_per_fetch": { "type": "integer" },
+        "timeout_per_fetch": { "type": "string", "description": "Duration string (e.g., '30s')" },
+        "user_agent": { "type": "string" },
+        "robots_policy": { "type": "string", "enum": ["respect", "ignore", "custom"] },
+        "rate_limit_rps": { "type": "integer" },
+        "cache_policy": { "type": "string", "enum": ["always", "etag", "ttl", "none"] },
+        "accept_formats": { "type": "array", "items": { "type": "string" } },
+        "retry_policy": {
+          "type": "object",
+          "properties": {
+            "max_retries": { "type": "integer" },
+            "initial_delay": { "type": "string" },
+            "max_delay": { "type": "string" },
+            "backoff_factor": { "type": "number" }
+          }
+        }
+      }
+    },
+    "trust": {
+      "type": "object",
+      "description": "Trust and integrity verification configuration",
+      "properties": {
+        "signature_check": { "type": "boolean" },
+        "hash_chain_policy": { "type": "string" },
+        "timestamp_policy": { "type": "string" },
+        "trust_anchor": { "type": "string" },
+        "revocation_check": { "type": "boolean" }
+      }
+    },
+    "normalization": {
+      "type": "object",
+      "description": "How raw source data maps to canonical schema",
+      "properties": {
+        "obligation_schema": { "type": "string" },
+        "mapping_rules": { "type": "object" }
+      }
+    },
+    "norm_profile": {
+      "type": "object",
+      "description": "Full normalization profile from contracts",
+      "properties": {
+        "target_schema": { "type": "string" },
+        "field_mappings": { "type": "object" },
+        "validation_rules": { "type": "array", "items": { "type": "string" } },
+        "default_values": { "type": "object" }
+      }
+    },
+    "update_cadence": {
+      "type": "string",
+      "description": "How often the source is updated",
+      "examples": ["realtime", "daily", "weekly", "monthly"]
+    },
+    "ttl": {
+      "type": "string",
+      "description": "Duration string for max staleness (e.g., '24h', '168h')"
+    },
+    "change_detection": {
+      "type": "string",
+      "enum": ["hash", "etag", "last-modified", "sequence"],
+      "description": "Primary change detection strategy"
+    },
+    "change_detector": {
+      "type": "object",
+      "description": "Full change detection contract",
+      "properties": {
+        "strategy": { "type": "string" },
+        "hash_algorithm": { "type": "string" },
+        "diff_mode": { "type": "string", "enum": ["full", "incremental"] }
+      }
+    },
+    "rollback_plan": {
+      "type": "string",
+      "description": "How to revert to a prior version"
+    },
+    "evidence_rules": {
+      "type": "object",
+      "description": "Rules for evidence emission from this source",
+      "properties": {
+        "emit_source_version": { "type": "boolean" },
+        "emit_content_hash": { "type": "boolean" },
+        "emit_retrieval_time": { "type": "boolean" },
+        "emit_signature_proof": { "type": "boolean" },
+        "emit_amendments_chain": { "type": "boolean" }
+      }
+    },
+    "provenance": {
+      "type": "string",
+      "description": "Authoritative provenance statement"
+    },
+    "last_updated": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

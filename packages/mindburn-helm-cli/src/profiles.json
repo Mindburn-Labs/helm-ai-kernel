@@ -1,0 +1,249 @@
+{
+    "version": "1.0.0",
+    "levels": {
+        "L1": {
+            "profile": "SMB",
+            "gates": [
+                "G0",
+                "G1",
+                "G2A"
+            ],
+            "description": "Minimal — deterministic bytes, ProofGraph, EvidencePack"
+        },
+        "L2": {
+            "profile": "CORE",
+            "gates": [
+                "G0",
+                "G1",
+                "G2",
+                "G2A",
+                "G3A",
+                "G5",
+                "G8",
+                "GX_ENVELOPE",
+                "GX_TENANT"
+            ],
+            "description": "Recommended — budget, HITL, replay, tenant, envelope"
+        },
+        "L3": {
+            "profile": "L3",
+            "gates": [
+                "G0",
+                "G1",
+                "G2",
+                "G2A",
+                "G3",
+                "G3A",
+                "G4",
+                "G5",
+                "G6",
+                "G7",
+                "G8",
+                "G9",
+                "G11",
+                "G12",
+                "G13",
+                "G14",
+                "G15",
+                "GX_ENVELOPE",
+                "GX_TENANT"
+            ],
+            "description": "Higher assurance — L2 + HSM, bundle integrity, proof condensation"
+        }
+    },
+    "profiles": {
+        "SMB": {
+            "id": "SMB",
+            "description": "Minimum autonomy runtime safety for startups and small businesses",
+            "required_gates": [
+                "G0",
+                "G1",
+                "G2",
+                "G3",
+                "G3A",
+                "G5",
+                "G7",
+                "G8",
+                "GX_ENVELOPE"
+            ]
+        },
+        "CORE": {
+            "id": "CORE",
+            "description": "Baseline enterprise autonomy — minimum 'autonomy runtime safety' bar",
+            "required_gates": [
+                "G0",
+                "G1",
+                "G2",
+                "G2A",
+                "G3",
+                "G3A",
+                "G5",
+                "G6",
+                "G7",
+                "G8",
+                "G12",
+                "GX_ENVELOPE"
+            ]
+        },
+        "ENTERPRISE": {
+            "id": "ENTERPRISE",
+            "description": "CORE plus operability, identity hardening, and tenant isolation",
+            "inherits": "CORE",
+            "required_gates": [
+                "G0",
+                "G1",
+                "G2",
+                "G2A",
+                "G3",
+                "G3A",
+                "G4",
+                "G5",
+                "G6",
+                "G7",
+                "G8",
+                "G9",
+                "G11",
+                "G12",
+                "GX_ENVELOPE",
+                "GX_TENANT"
+            ]
+        },
+        "L3": {
+            "id": "L3",
+            "description": "ENTERPRISE plus HSM key management, bundle integrity, and proof condensation",
+            "inherits": "ENTERPRISE",
+            "required_gates": [
+                "G0",
+                "G1",
+                "G2",
+                "G2A",
+                "G3",
+                "G3A",
+                "G4",
+                "G5",
+                "G6",
+                "G7",
+                "G8",
+                "G9",
+                "G11",
+                "G12",
+                "G13",
+                "G14",
+                "G15",
+                "GX_ENVELOPE",
+                "GX_TENANT"
+            ]
+        },
+        "REGULATED_FINANCE": {
+            "id": "REGULATED_FINANCE",
+            "description": "L3 plus strict replay, audit, and jurisdiction enforcement",
+            "inherits": "L3",
+            "required_gates": [
+                "G0",
+                "G1",
+                "G2",
+                "G2A",
+                "G3",
+                "G3A",
+                "G4",
+                "G5",
+                "G6",
+                "G7",
+                "G8",
+                "G9",
+                "G11",
+                "G12",
+                "G13",
+                "G14",
+                "G15",
+                "GX_ENVELOPE",
+                "GX_TENANT"
+            ],
+            "overrides": {
+                "replay_bit_identical": true,
+                "schema_first_hard_fail": true
+            }
+        },
+        "REGULATED_HEALTH": {
+            "id": "REGULATED_HEALTH",
+            "description": "L3 plus strict privacy, retention, and tape residency",
+            "inherits": "L3",
+            "required_gates": [
+                "G0",
+                "G1",
+                "G2",
+                "G2A",
+                "G3",
+                "G3A",
+                "G4",
+                "G5",
+                "G6",
+                "G7",
+                "G8",
+                "G9",
+                "G11",
+                "G12",
+                "G13",
+                "G14",
+                "G15",
+                "GX_ENVELOPE",
+                "GX_TENANT"
+            ],
+            "overrides": {
+                "privacy_erasure_strict": true,
+                "retention_policy_required": true,
+                "tape_residency_enforced": true
+            }
+        },
+        "AGENTIC_WEB_ROUTER": {
+            "id": "AGENTIC_WEB_ROUTER",
+            "description": "L3 plus proof routing and semantic quarantine",
+            "inherits": "L3",
+            "required_gates": [
+                "G0",
+                "G1",
+                "G2",
+                "G2A",
+                "G3",
+                "G3A",
+                "G4",
+                "G5",
+                "G6",
+                "G7",
+                "G8",
+                "G9",
+                "G11",
+                "G12",
+                "G13",
+                "G14",
+                "G15",
+                "GX_ENVELOPE",
+                "GX_TENANT"
+            ],
+            "overrides": {
+                "proof_capsule_routing": true
+            }
+        }
+    },
+    "gate_names": {
+        "G0": "Deterministic Bytes",
+        "G1": "ProofGraph Completeness",
+        "G2": "Receipt Integrity",
+        "G2A": "EvidencePack Structure",
+        "G3": "Policy Enforcement",
+        "G3A": "HITL Gate",
+        "G4": "Secure Bootstrapping",
+        "G5": "Budget Enforcement",
+        "G6": "Session Isolation",
+        "G7": "Error Handling",
+        "G8": "Replay Verification",
+        "G9": "Audit Trail",
+        "G11": "Operational Safety",
+        "G12": "Schema Validation",
+        "G13": "HSM Key Management",
+        "G14": "Bundle Integrity",
+        "G15": "Proof Condensation",
+        "GX_ENVELOPE": "Envelope Integrity",
+        "GX_TENANT": "Tenant Isolation"
+    }
+}

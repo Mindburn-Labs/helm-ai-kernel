@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/send_alert.json",
+  "title": "Send Alert Effect",
+  "description": "Sends an infrastructure alert",
+  "type": "object",
+  "required": ["effect_id", "severity", "message"],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "const": "infra.alerts.send"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["info", "warning", "critical"]
+    },
+    "message": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "runbook_url": {
+      "type": "string",
+      "format": "uri"
+    }
+  },
+  "x-helm": {
+    "category": "observability",
+    "risk_level": "low"
+  }
+}

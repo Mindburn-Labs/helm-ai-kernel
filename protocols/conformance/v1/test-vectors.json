@@ -1,0 +1,1038 @@
+{
+  "test_suite": "helm-conformance-v1",
+  "version": "1.1.0",
+  "description": "Conformance test vectors for HELM governance implementations — covers all 16 reason codes, edge cases, multi-jurisdiction, pack composition, concurrent effects, and negative testing",
+  "vectors": [
+    {
+      "id": "ALLOW-001",
+      "description": "Basic allow verdict for a legitimate file read",
+      "input": {
+        "effect": {"effect_type": "file_read", "effect_id": "eff-001", "params": {"path": "/data/report.csv"}},
+        "principal": "agent:analyst",
+        "context": {"environment": "production"}
+      },
+      "expected": {
+        "verdict": "ALLOW",
+        "reason_code": null,
+        "receipt_present": true,
+        "intent_present": true
+      }
+    },
+    {
+      "id": "ALLOW-002",
+      "description": "Allow verdict for API call within budget",
+      "input": {
+        "effect": {"effect_type": "api_call", "effect_id": "eff-a002", "params": {"url": "https://api.openai.com/v1/chat/completions", "estimated_cost_cents": 5}, "budget_id": "budget-healthy"},
+        "principal": "agent:assistant",
+        "context": {"budget_remaining_cents": 10000}
+      },
+      "expected": {
+        "verdict": "ALLOW",
+        "reason_code": null,
+        "receipt_present": true,
+        "intent_present": true
+      }
+    },
+    {
+      "id": "ALLOW-003",
+      "description": "Allow verdict for sandbox execution with valid constraints",
+      "input": {
+        "effect": {"effect_type": "exec", "effect_id": "eff-a003", "params": {"command": "echo hello", "sandbox": "wasi", "gas_limit": 1000000}},
+        "principal": "agent:runner",
+        "context": {}
+      },
+      "expected": {
+        "verdict": "ALLOW",
+        "reason_code": null,
+        "receipt_present": true,
+        "intent_present": true
+      }
+    },
+    {
+      "id": "ALLOW-004",
+      "description": "Allow verdict with active jurisdiction pack — EU GDPR compliant intra-EU transfer",
+      "input": {
+        "effect": {"effect_type": "data_export", "effect_id": "eff-a004", "params": {"destination": "eu-west-1", "data_class": "personal"}},
+        "principal": "agent:exporter",
+        "context": {"jurisdiction": "EU"}
+      },
+      "expected": {
+        "verdict": "ALLOW",
+        "reason_code": null,
+        "receipt_present": true,
+        "intent_present": true,
+        "active_packs": ["eu-gdpr"]
+      }
+    },
+    {
+      "id": "ALLOW-005",
+      "description": "Allow verdict with multiple active packs — jurisdiction + industry",
+      "input": {
+        "effect": {"effect_type": "api_call", "effect_id": "eff-a005", "params": {"url": "https://internal.service/patient-lookup"}},
+        "principal": "agent:medical",
+        "context": {"jurisdiction": "US", "industry": "healthcare"}
+      },
+      "expected": {
+        "verdict": "ALLOW",
+        "reason_code": null,
+        "receipt_present": true,
+        "intent_present": true,
+        "active_packs": ["us-state-ccpa", "healthcare"]
+      }
+    },
+
+    {
+      "id": "DENY-001",
+      "description": "Deny due to policy violation — writing to system directory",
+      "input": {
+        "effect": {"effect_type": "file_write", "effect_id": "eff-002", "params": {"path": "/etc/passwd"}},
+        "principal": "agent:assistant",
+        "context": {}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "POLICY_VIOLATION",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-002",
+      "description": "Deny due to budget exceeded",
+      "input": {
+        "effect": {"effect_type": "api_call", "effect_id": "eff-003", "params": {"url": "https://api.openai.com/v1/chat/completions"}, "budget_id": "budget-001"},
+        "principal": "agent:spender",
+        "context": {"budget_remaining_cents": 0}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "BUDGET_EXCEEDED",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-003",
+      "description": "Deny due to missing requirement",
+      "input": {
+        "effect": {"effect_type": "deploy", "effect_id": "eff-004", "params": {"target": "production"}},
+        "principal": "agent:deployer",
+        "context": {}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "MISSING_REQUIREMENT",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-004",
+      "description": "Deny due to sandbox violation — dangerous command",
+      "input": {
+        "effect": {"effect_type": "exec", "effect_id": "eff-005", "params": {"command": "rm -rf /"}},
+        "principal": "agent:runner",
+        "context": {}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "SANDBOX_VIOLATION",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-005",
+      "description": "Deny — no policy defined for unknown effect type",
+      "input": {
+        "effect": {"effect_type": "quantum_compute", "effect_id": "eff-d005", "params": {"qubits": 128}},
+        "principal": "agent:researcher",
+        "context": {}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "NO_POLICY_DEFINED",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-006",
+      "description": "Deny — Policy Requirement Graph evaluation error (malformed rule)",
+      "input": {
+        "effect": {"effect_type": "api_call", "effect_id": "eff-d006", "params": {}},
+        "principal": "agent:caller",
+        "context": {"force_prg_error": true}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "PRG_EVALUATION_ERROR",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-007",
+      "description": "Deny — schema violation on request body",
+      "input": {
+        "effect": {"effect_type": "api_call", "effect_id": "eff-d007", "params": {"url": 12345}},
+        "principal": "agent:caller",
+        "context": {}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "SCHEMA_VIOLATION",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-008",
+      "description": "Deny — budget system unavailable (fail-closed)",
+      "input": {
+        "effect": {"effect_type": "api_call", "effect_id": "eff-d008", "params": {"url": "https://api.example.com"}, "budget_id": "budget-unreachable"},
+        "principal": "agent:spender",
+        "context": {}
+      },
+      "budget_behavior": "error",
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "BUDGET_ERROR",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-009",
+      "description": "Deny — invalid effect envelope (missing required fields)",
+      "input": {
+        "effect": {"effect_type": "", "effect_id": "", "params": null},
+        "principal": "",
+        "context": {}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "ENVELOPE_INVALID",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-010",
+      "description": "Deny — provenance chain broken (parent hash mismatch)",
+      "input": {
+        "effect": {"effect_type": "file_write", "effect_id": "eff-d010", "params": {"path": "/tmp/test.txt"}},
+        "principal": "agent:writer",
+        "context": {"claimed_parent_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "PROVENANCE_FAILURE",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-011",
+      "description": "Deny — cryptographic verification failed (invalid signature)",
+      "input": {
+        "effect": {"effect_type": "bundle_install", "effect_id": "eff-d011", "params": {"bundle_hash": "sha256:abc123", "signature": "invalid-signature-bytes"}},
+        "principal": "agent:installer",
+        "context": {}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "VERIFICATION_FAILURE",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-012",
+      "description": "Deny — tenant isolation violation (cross-tenant data access)",
+      "input": {
+        "effect": {"effect_type": "data_read", "effect_id": "eff-d012", "params": {"tenant_id": "tenant-B", "resource": "/tenants/tenant-B/secrets"}},
+        "principal": "agent:reader",
+        "context": {"caller_tenant_id": "tenant-A"}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "TENANT_ISOLATION",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-013",
+      "description": "Deny — schema violation on output response (output PEP)",
+      "input": {
+        "effect": {"effect_type": "api_call", "effect_id": "eff-d013", "params": {"url": "https://api.example.com/v1/data"}},
+        "principal": "agent:caller",
+        "context": {"output_schema_id": "schema-strict-001"}
+      },
+      "output_override": {"unexpected_field": "leaked_data"},
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "SCHEMA_VIOLATION",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-014",
+      "description": "Deny — sandbox gas exhaustion (WASI compute budget exceeded)",
+      "input": {
+        "effect": {"effect_type": "exec", "effect_id": "eff-d014", "params": {"command": "while true; do echo x; done", "sandbox": "wasi", "gas_limit": 100}},
+        "principal": "agent:runner",
+        "context": {}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "SANDBOX_VIOLATION",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-015",
+      "description": "Deny — sandbox memory limit exceeded",
+      "input": {
+        "effect": {"effect_type": "exec", "effect_id": "eff-d015", "params": {"command": "malloc_bomb", "sandbox": "wasi", "memory_limit_mb": 16}},
+        "principal": "agent:runner",
+        "context": {}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "SANDBOX_VIOLATION",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-016",
+      "description": "Deny — sandbox timeout exceeded",
+      "input": {
+        "effect": {"effect_type": "exec", "effect_id": "eff-d016", "params": {"command": "sleep 3600", "sandbox": "wasi", "timeout_ms": 5000}},
+        "principal": "agent:runner",
+        "context": {}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "SANDBOX_VIOLATION",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-PDP-001",
+      "description": "Deny from external PDP returning explicit deny",
+      "input": {
+        "effect": {"effect_type": "data_export", "effect_id": "eff-007", "params": {"format": "csv", "destination": "external"}},
+        "principal": "agent:exporter",
+        "context": {"jurisdiction": "EU"}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "PDP_DENY",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-PDP-002",
+      "description": "Deny — PDP returns malformed response (fail-closed)",
+      "input": {
+        "effect": {"effect_type": "api_call", "effect_id": "eff-pdp002", "params": {}},
+        "principal": "agent:caller",
+        "context": {}
+      },
+      "pdp_behavior": "malformed_response",
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "PDP_ERROR",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-FAILCLOSED-001",
+      "description": "Deny due to PDP being unreachable — fail-closed invariant",
+      "input": {
+        "effect": {"effect_type": "api_call", "effect_id": "eff-008", "params": {}},
+        "principal": "agent:caller",
+        "context": {}
+      },
+      "pdp_behavior": "unreachable",
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "PDP_ERROR",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "DENY-FAILCLOSED-002",
+      "description": "Deny due to PDP timeout — fail-closed invariant",
+      "input": {
+        "effect": {"effect_type": "file_write", "effect_id": "eff-fc002", "params": {"path": "/tmp/output.txt"}},
+        "principal": "agent:writer",
+        "context": {}
+      },
+      "pdp_behavior": "timeout",
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "PDP_ERROR",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+
+    {
+      "id": "ESCALATE-001",
+      "description": "Escalate due to temporal intervention — high-value financial transfer",
+      "input": {
+        "effect": {"effect_type": "financial_transfer", "effect_id": "eff-006", "params": {"amount_cents": 100000, "currency": "USD"}},
+        "principal": "agent:finance",
+        "context": {}
+      },
+      "expected": {
+        "verdict": "ESCALATE",
+        "reason_code": "TEMPORAL_INTERVENTION",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "ESCALATE-002",
+      "description": "Escalate due to rate throttling — too many API calls in window",
+      "input": {
+        "effect": {"effect_type": "api_call", "effect_id": "eff-e002", "params": {"url": "https://api.example.com"}},
+        "principal": "agent:rapid-caller",
+        "context": {"calls_in_window": 100, "window_seconds": 60, "max_calls_per_window": 10}
+      },
+      "expected": {
+        "verdict": "ESCALATE",
+        "reason_code": "TEMPORAL_THROTTLE",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "ESCALATE-003",
+      "description": "Escalate — destructive operation requires human approval (ceremony)",
+      "input": {
+        "effect": {"effect_type": "database_delete", "effect_id": "eff-e003", "params": {"table": "users", "where": "active=false"}},
+        "principal": "agent:admin",
+        "context": {"requires_ceremony": true}
+      },
+      "expected": {
+        "verdict": "ESCALATE",
+        "reason_code": "TEMPORAL_INTERVENTION",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+
+    {
+      "id": "JURISDICTION-001",
+      "description": "EU GDPR jurisdiction deny — cross-border personal data transfer to US",
+      "input": {
+        "effect": {"effect_type": "data_export", "effect_id": "eff-j001", "params": {"destination": "us-east-1", "data_class": "personal"}},
+        "principal": "agent:exporter",
+        "context": {"jurisdiction": "EU"}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "JURISDICTION_VIOLATION",
+        "receipt_present": true,
+        "active_packs": ["eu-gdpr"]
+      }
+    },
+    {
+      "id": "JURISDICTION-002",
+      "description": "Japan APPI jurisdiction deny — personal data export without consent",
+      "input": {
+        "effect": {"effect_type": "data_export", "effect_id": "eff-j002", "params": {"destination": "external", "data_class": "personal", "consent": false}},
+        "principal": "agent:exporter",
+        "context": {"jurisdiction": "JP"}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "JURISDICTION_VIOLATION",
+        "receipt_present": true,
+        "active_packs": ["jp-appi"]
+      }
+    },
+    {
+      "id": "JURISDICTION-003",
+      "description": "China PIPL jurisdiction deny — data leaving mainland",
+      "input": {
+        "effect": {"effect_type": "data_export", "effect_id": "eff-j003", "params": {"destination": "us-west-2", "data_class": "personal"}},
+        "principal": "agent:exporter",
+        "context": {"jurisdiction": "CN"}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "JURISDICTION_VIOLATION",
+        "receipt_present": true,
+        "active_packs": ["cn-pipl"]
+      }
+    },
+    {
+      "id": "JURISDICTION-004",
+      "description": "Brazil LGPD jurisdiction deny — processing sensitive data without basis",
+      "input": {
+        "effect": {"effect_type": "data_process", "effect_id": "eff-j004", "params": {"data_class": "sensitive", "legal_basis": null}},
+        "principal": "agent:processor",
+        "context": {"jurisdiction": "BR"}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "JURISDICTION_VIOLATION",
+        "receipt_present": true,
+        "active_packs": ["br-lgpd"]
+      }
+    },
+    {
+      "id": "JURISDICTION-005",
+      "description": "South Korea PIPA jurisdiction deny — excessive data collection",
+      "input": {
+        "effect": {"effect_type": "data_collect", "effect_id": "eff-j005", "params": {"fields": ["name", "ssn", "biometric", "medical"], "purpose": "marketing"}},
+        "principal": "agent:collector",
+        "context": {"jurisdiction": "KR"}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "JURISDICTION_VIOLATION",
+        "receipt_present": true,
+        "active_packs": ["kr-pipa"]
+      }
+    },
+    {
+      "id": "JURISDICTION-006",
+      "description": "India DPDPA jurisdiction deny — minor data processing without guardian consent",
+      "input": {
+        "effect": {"effect_type": "data_process", "effect_id": "eff-j006", "params": {"subject_age": 14, "guardian_consent": false}},
+        "principal": "agent:processor",
+        "context": {"jurisdiction": "IN"}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "JURISDICTION_VIOLATION",
+        "receipt_present": true,
+        "active_packs": ["in-dpdpa"]
+      }
+    },
+    {
+      "id": "JURISDICTION-MULTI-001",
+      "description": "Multi-jurisdiction: EU+US — strictest rule wins (GDPR denies cross-border transfer)",
+      "input": {
+        "effect": {"effect_type": "data_export", "effect_id": "eff-jm001", "params": {"destination": "us-east-1", "data_class": "personal"}},
+        "principal": "agent:global-exporter",
+        "context": {"jurisdictions": ["EU", "US"]}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "JURISDICTION_VIOLATION",
+        "receipt_present": true,
+        "active_packs": ["eu-gdpr", "us-state-ccpa"]
+      }
+    },
+    {
+      "id": "JURISDICTION-MULTI-002",
+      "description": "Multi-jurisdiction: JP+SG — both allow intra-APAC transfer",
+      "input": {
+        "effect": {"effect_type": "data_export", "effect_id": "eff-jm002", "params": {"destination": "ap-southeast-1", "data_class": "general"}},
+        "principal": "agent:exporter",
+        "context": {"jurisdictions": ["JP", "SG"]}
+      },
+      "expected": {
+        "verdict": "ALLOW",
+        "reason_code": null,
+        "receipt_present": true,
+        "active_packs": ["jp-appi", "sg-pdpa"]
+      }
+    },
+
+    {
+      "id": "INDUSTRY-001",
+      "description": "Healthcare industry pack deny — PHI export without HIPAA authorization",
+      "input": {
+        "effect": {"effect_type": "data_export", "effect_id": "eff-i001", "params": {"data_class": "phi", "authorization": null}},
+        "principal": "agent:medical",
+        "context": {"industry": "healthcare"}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "POLICY_VIOLATION",
+        "receipt_present": true,
+        "active_packs": ["healthcare"]
+      }
+    },
+    {
+      "id": "INDUSTRY-002",
+      "description": "Finance industry pack deny — trade execution outside hours",
+      "input": {
+        "effect": {"effect_type": "trade_execute", "effect_id": "eff-i002", "params": {"symbol": "AAPL", "quantity": 1000}},
+        "principal": "agent:trader",
+        "context": {"industry": "finance", "market_hours": false}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "POLICY_VIOLATION",
+        "receipt_present": true,
+        "active_packs": ["finance"]
+      }
+    },
+    {
+      "id": "INDUSTRY-003",
+      "description": "Legal industry pack escalate — document with privilege classification",
+      "input": {
+        "effect": {"effect_type": "document_share", "effect_id": "eff-i003", "params": {"doc_id": "doc-privileged-001", "classification": "attorney-client"}},
+        "principal": "agent:legal-assistant",
+        "context": {"industry": "legal"}
+      },
+      "expected": {
+        "verdict": "ESCALATE",
+        "reason_code": "TEMPORAL_INTERVENTION",
+        "receipt_present": true,
+        "active_packs": ["legal"]
+      }
+    },
+
+    {
+      "id": "COMPOSITION-001",
+      "description": "Pack composition — jurisdiction + industry + business preset all active",
+      "input": {
+        "effect": {"effect_type": "api_call", "effect_id": "eff-c001", "params": {"url": "https://api.stripe.com/v1/charges"}},
+        "principal": "agent:payment",
+        "context": {"jurisdiction": "EU", "industry": "finance", "business_preset": "enterprise"}
+      },
+      "expected": {
+        "verdict": "ALLOW",
+        "reason_code": null,
+        "receipt_present": true,
+        "active_packs": ["eu-gdpr", "finance", "enterprise"]
+      }
+    },
+    {
+      "id": "COMPOSITION-002",
+      "description": "Pack composition conflict — industry allows but jurisdiction denies (strictest wins)",
+      "input": {
+        "effect": {"effect_type": "data_export", "effect_id": "eff-c002", "params": {"destination": "external", "data_class": "personal"}},
+        "principal": "agent:analyst",
+        "context": {"jurisdiction": "EU", "industry": "education"}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "JURISDICTION_VIOLATION",
+        "receipt_present": true,
+        "active_packs": ["eu-gdpr", "education"]
+      }
+    },
+
+    {
+      "id": "CONCURRENT-001",
+      "description": "Concurrent effects — two simultaneous file writes to different paths (both allowed)",
+      "input": {
+        "effects": [
+          {"effect_type": "file_write", "effect_id": "eff-conc-001a", "params": {"path": "/tmp/a.txt"}},
+          {"effect_type": "file_write", "effect_id": "eff-conc-001b", "params": {"path": "/tmp/b.txt"}}
+        ],
+        "principal": "agent:writer",
+        "context": {}
+      },
+      "expected": {
+        "verdicts": ["ALLOW", "ALLOW"],
+        "receipts_present": true,
+        "lamport_strictly_increasing": true
+      }
+    },
+    {
+      "id": "CONCURRENT-002",
+      "description": "Concurrent effects — one allowed, one denied (independent evaluation)",
+      "input": {
+        "effects": [
+          {"effect_type": "file_read", "effect_id": "eff-conc-002a", "params": {"path": "/data/safe.csv"}},
+          {"effect_type": "file_write", "effect_id": "eff-conc-002b", "params": {"path": "/etc/shadow"}}
+        ],
+        "principal": "agent:mixed",
+        "context": {}
+      },
+      "expected": {
+        "verdicts": ["ALLOW", "DENY"],
+        "reason_codes": [null, "POLICY_VIOLATION"],
+        "receipts_present": true,
+        "lamport_strictly_increasing": true
+      }
+    },
+    {
+      "id": "CONCURRENT-003",
+      "description": "Concurrent effects — budget atomicity (second call exceeds after first consumes)",
+      "input": {
+        "effects": [
+          {"effect_type": "api_call", "effect_id": "eff-conc-003a", "params": {"estimated_cost_cents": 99}, "budget_id": "budget-tight"},
+          {"effect_type": "api_call", "effect_id": "eff-conc-003b", "params": {"estimated_cost_cents": 2}, "budget_id": "budget-tight"}
+        ],
+        "principal": "agent:spender",
+        "context": {"budget_remaining_cents": 100}
+      },
+      "expected": {
+        "verdicts": ["ALLOW", "DENY"],
+        "reason_codes": [null, "BUDGET_EXCEEDED"],
+        "receipts_present": true
+      }
+    },
+
+    {
+      "id": "EDGE-001",
+      "description": "Edge case — empty params object (should still produce receipt)",
+      "input": {
+        "effect": {"effect_type": "noop", "effect_id": "eff-edge001", "params": {}},
+        "principal": "agent:tester",
+        "context": {}
+      },
+      "expected": {
+        "receipt_present": true
+      }
+    },
+    {
+      "id": "EDGE-002",
+      "description": "Edge case — extremely long effect_id (256 chars)",
+      "input": {
+        "effect": {"effect_type": "file_read", "effect_id": "eff-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "params": {"path": "/data/test.csv"}},
+        "principal": "agent:tester",
+        "context": {}
+      },
+      "expected": {
+        "receipt_present": true,
+        "verdict": "ALLOW"
+      }
+    },
+    {
+      "id": "EDGE-003",
+      "description": "Edge case — Unicode characters in params",
+      "input": {
+        "effect": {"effect_type": "file_read", "effect_id": "eff-edge003", "params": {"path": "/data/报告.csv"}},
+        "principal": "agent:international",
+        "context": {}
+      },
+      "expected": {
+        "verdict": "ALLOW",
+        "receipt_present": true
+      }
+    },
+    {
+      "id": "EDGE-004",
+      "description": "Edge case — null context (must not NPE)",
+      "input": {
+        "effect": {"effect_type": "file_read", "effect_id": "eff-edge004", "params": {"path": "/tmp/test.txt"}},
+        "principal": "agent:tester",
+        "context": null
+      },
+      "expected": {
+        "receipt_present": true
+      }
+    },
+    {
+      "id": "EDGE-005",
+      "description": "Edge case — principal with special characters",
+      "input": {
+        "effect": {"effect_type": "file_read", "effect_id": "eff-edge005", "params": {"path": "/data/test.csv"}},
+        "principal": "agent:user@domain.com/instance-1",
+        "context": {}
+      },
+      "expected": {
+        "receipt_present": true,
+        "verdict": "ALLOW"
+      }
+    },
+
+    {
+      "id": "REPLAY-001",
+      "description": "Replay verification — applying same receipt sequence produces identical ProofGraph",
+      "input": {
+        "replay_from": "session-001",
+        "expected_receipts": 5
+      },
+      "expected": {
+        "proofgraph_hash_matches": true,
+        "receipt_count": 5,
+        "lamport_final": 5
+      }
+    },
+    {
+      "id": "REPLAY-002",
+      "description": "Replay verification — tampered receipt detected during replay",
+      "input": {
+        "replay_from": "session-tampered",
+        "tampered_receipt_index": 2
+      },
+      "expected": {
+        "replay_fails": true,
+        "failure_reason": "hash_mismatch",
+        "failure_at_receipt": 2
+      }
+    }
+  ],
+  "receipt_invariants": {
+    "description": "Properties that MUST hold for every generated receipt",
+    "rules": [
+      "receipt.receipt_id is non-empty and unique across the session",
+      "receipt.verdict is one of: ALLOW, DENY, ESCALATE",
+      "receipt.timestamp is monotonically increasing within a session",
+      "receipt.timestamp is ISO 8601 / RFC 3339 format",
+      "receipt.signature is a valid Ed25519 or ECDSA signature over the receipt payload",
+      "receipt.payload_hash is SHA-256 of the JCS-canonicalized JSON payload",
+      "receipt.reason_code is null for ALLOW, or a registered code from reason-codes-v1.json",
+      "receipt.lamport is a positive integer, strictly increasing within a ProofGraph",
+      "receipt.effect_id matches the submitted effect's effect_id",
+      "receipt.principal matches the submitted principal",
+      "receipt must be produced even for DENY verdicts (fail-closed observability)"
+    ]
+  },
+  "hash_chain_vectors": [
+    {
+      "id": "CHAIN-001",
+      "description": "Three-node ProofGraph chain with monotonic Lamport clock",
+      "nodes": [
+        {"kind": "ATTESTATION", "lamport": 1, "payload": "{\"verdict\":\"ALLOW\"}", "parents": []},
+        {"kind": "INTENT", "lamport": 2, "payload": "{\"intent_id\":\"i1\"}", "parents": ["node-0-hash"]},
+        {"kind": "EFFECT", "lamport": 3, "payload": "{\"result\":\"ok\"}", "parents": ["node-1-hash"]}
+      ],
+      "invariants": [
+        "Each node hash includes parent hashes",
+        "Lamport values are strictly increasing",
+        "Removing any node breaks the chain verification"
+      ]
+    },
+    {
+      "id": "CHAIN-002",
+      "description": "Forked ProofGraph — two independent branches from same root",
+      "nodes": [
+        {"kind": "ATTESTATION", "lamport": 1, "payload": "{\"verdict\":\"ALLOW\"}", "parents": []},
+        {"kind": "INTENT", "lamport": 2, "payload": "{\"intent_id\":\"fork-a\"}", "parents": ["node-0-hash"]},
+        {"kind": "INTENT", "lamport": 3, "payload": "{\"intent_id\":\"fork-b\"}", "parents": ["node-0-hash"]},
+        {"kind": "MERGE", "lamport": 4, "payload": "{\"merged\":true}", "parents": ["node-1-hash", "node-2-hash"]}
+      ],
+      "invariants": [
+        "Forked branches have independent Lamport sequences",
+        "Merge node references both branch tips as parents",
+        "Global Lamport ordering is maintained"
+      ]
+    },
+    {
+      "id": "CHAIN-003",
+      "description": "Single-node degenerate chain — genesis only",
+      "nodes": [
+        {"kind": "ATTESTATION", "lamport": 1, "payload": "{\"verdict\":\"ALLOW\"}", "parents": []}
+      ],
+      "invariants": [
+        "Single-node chain is valid",
+        "Node has no parents",
+        "Verification succeeds trivially"
+      ]
+    }
+  ],
+  "golden_receipts": [
+    {
+      "id": "GOLDEN-RECEIPT-001",
+      "description": "Golden receipt for ALLOW verdict — offline verification reference",
+      "receipt": {
+        "receipt_version": "1.0",
+        "receipt_id": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decision_id": "dec-golden-001",
+        "effect_id": "eff-golden-001",
+        "verdict": "ALLOW",
+        "reason_code": null,
+        "principal": "agent:test-principal",
+        "tool": "file_read",
+        "action": "read /data/test.csv",
+        "timestamp": "2026-01-01T00:00:00Z",
+        "lamport": 1,
+        "proofgraph_node": "pgnode-golden-001",
+        "payload_hash": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "metadata": {"environment": "test", "spec_version": "1.0.0"}
+      },
+      "verification_steps": [
+        "Recompute receipt_id from all fields except receipt_id itself",
+        "Verify receipt_id matches SHA-256 of JCS-canonical JSON",
+        "Verify verdict is a canonical enum value (ALLOW|DENY|ESCALATE)",
+        "Verify lamport is a positive integer",
+        "Verify timestamp is RFC 3339",
+        "Verify reason_code is null for ALLOW verdict"
+      ]
+    },
+    {
+      "id": "GOLDEN-RECEIPT-002",
+      "description": "Golden receipt for DENY verdict — offline verification reference",
+      "receipt": {
+        "receipt_version": "1.0",
+        "receipt_id": "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e",
+        "decision_id": "dec-golden-002",
+        "effect_id": "eff-golden-002",
+        "verdict": "DENY",
+        "reason_code": "POLICY_VIOLATION",
+        "principal": "agent:test-attacker",
+        "tool": "file_write",
+        "action": "write /etc/passwd",
+        "timestamp": "2026-01-01T00:00:01Z",
+        "lamport": 2,
+        "proofgraph_node": "pgnode-golden-002",
+        "payload_hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+        "metadata": {"environment": "test", "spec_version": "1.0.0"}
+      },
+      "verification_steps": [
+        "Verify verdict is DENY",
+        "Verify reason_code is a registered code from reason-codes-v1.json",
+        "Verify receipt is signed (DENY must still produce signed receipt)",
+        "Verify lamport is strictly greater than previous receipt"
+      ]
+    },
+    {
+      "id": "GOLDEN-RECEIPT-003",
+      "description": "Golden receipt for ESCALATE verdict — offline verification reference",
+      "receipt": {
+        "receipt_version": "1.0",
+        "receipt_id": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+        "decision_id": "dec-golden-003",
+        "effect_id": "eff-golden-003",
+        "verdict": "ESCALATE",
+        "reason_code": "TEMPORAL_INTERVENTION",
+        "principal": "agent:test-finance",
+        "tool": "financial_transfer",
+        "action": "transfer $1000",
+        "timestamp": "2026-01-01T00:00:02Z",
+        "lamport": 3,
+        "proofgraph_node": "pgnode-golden-003",
+        "payload_hash": "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592",
+        "metadata": {"environment": "test", "spec_version": "1.0.0"}
+      },
+      "verification_steps": [
+        "Verify verdict is ESCALATE",
+        "Verify reason_code is a registered ESCALATE code",
+        "Verify receipt is signed",
+        "Verify lamport ordering"
+      ]
+    }
+  ],
+  "lifecycle_fixtures": [
+    {
+      "id": "LIFECYCLE-001",
+      "description": "Happy path: SUBMITTED → APPROVED → EXECUTING → COMPLETED",
+      "transitions": [
+        {"from": null, "to": "SUBMITTED", "trigger": "Submit(effect)"},
+        {"from": "SUBMITTED", "to": "APPROVED", "trigger": "PDP returns ALLOW"},
+        {"from": "APPROVED", "to": "EXECUTING", "trigger": "Execute(effectId)"},
+        {"from": "EXECUTING", "to": "COMPLETED", "trigger": "Complete(effectId, evidencePackId)"}
+      ]
+    },
+    {
+      "id": "LIFECYCLE-002",
+      "description": "Deny path: SUBMITTED → DENIED",
+      "transitions": [
+        {"from": null, "to": "SUBMITTED", "trigger": "Submit(effect)"},
+        {"from": "SUBMITTED", "to": "DENIED", "trigger": "PDP returns DENY"}
+      ]
+    },
+    {
+      "id": "LIFECYCLE-003",
+      "description": "Escalation path: SUBMITTED → ESCALATED → APPROVED or DENIED",
+      "transitions": [
+        {"from": null, "to": "SUBMITTED", "trigger": "Submit(effect)"},
+        {"from": "SUBMITTED", "to": "ESCALATED", "trigger": "PDP returns ESCALATE"},
+        {"from": "ESCALATED", "to": "APPROVED", "trigger": "Human approves"},
+        {"from": "ESCALATED", "to": "DENIED", "trigger": "Human denies or timeout"}
+      ]
+    },
+    {
+      "id": "LIFECYCLE-004",
+      "description": "Execution failure: SUBMITTED → APPROVED → EXECUTING → FAILED",
+      "transitions": [
+        {"from": null, "to": "SUBMITTED", "trigger": "Submit(effect)"},
+        {"from": "SUBMITTED", "to": "APPROVED", "trigger": "PDP returns ALLOW"},
+        {"from": "APPROVED", "to": "EXECUTING", "trigger": "Execute(effectId)"},
+        {"from": "EXECUTING", "to": "FAILED", "trigger": "Execution throws error"}
+      ]
+    },
+    {
+      "id": "LIFECYCLE-005",
+      "description": "Timeout during escalation: SUBMITTED → ESCALATED → DENIED (timeout)",
+      "transitions": [
+        {"from": null, "to": "SUBMITTED", "trigger": "Submit(effect)"},
+        {"from": "SUBMITTED", "to": "ESCALATED", "trigger": "PDP returns ESCALATE"},
+        {"from": "ESCALATED", "to": "DENIED", "trigger": "Ceremony timeout expires"}
+      ]
+    }
+  ],
+  "jurisdiction_fixtures": [
+    {
+      "id": "JURISDICTION-001",
+      "description": "EU GDPR — deny cross-border personal data export",
+      "input": {
+        "effect": {"effect_type": "data_export", "effect_id": "eff-j001", "params": {"destination": "us-east-1", "data_class": "personal"}},
+        "principal": "agent:exporter",
+        "context": {"jurisdiction": "EU"}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "JURISDICTION_VIOLATION",
+        "receipt_present": true,
+        "active_packs": ["eu-gdpr"]
+      }
+    },
+    {
+      "id": "JURISDICTION-002",
+      "description": "UK DPA — deny processing without lawful basis",
+      "input": {
+        "effect": {"effect_type": "data_process", "effect_id": "eff-j-uk001", "params": {"data_class": "personal", "lawful_basis": null}},
+        "principal": "agent:processor",
+        "context": {"jurisdiction": "UK"}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "JURISDICTION_VIOLATION",
+        "receipt_present": true,
+        "active_packs": ["uk-dpa"]
+      }
+    },
+    {
+      "id": "JURISDICTION-003",
+      "description": "Australia Privacy Act — deny excessive data retention",
+      "input": {
+        "effect": {"effect_type": "data_retain", "effect_id": "eff-j-au001", "params": {"retention_days": 3650, "max_allowed_days": 365}},
+        "principal": "agent:archivist",
+        "context": {"jurisdiction": "AU"}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "JURISDICTION_VIOLATION",
+        "receipt_present": true,
+        "active_packs": ["au-privacy"]
+      }
+    }
+  ],
+  "evidence_bundle_fixture": {
+    "id": "EVIDENCE-001",
+    "description": "Minimal valid EvidencePack structure",
+    "required_fields": [
+      "schema_version",
+      "session_id",
+      "receipts",
+      "decisions",
+      "active_bundles",
+      "created_at"
+    ],
+    "sample": {
+      "schema_version": "1.0.0",
+      "session_id": "ses-golden-001",
+      "receipts": ["urn:helm:receipt:e3b0c44298fc1c..."],
+      "decisions": ["urn:helm:decision:dec-golden-001"],
+      "active_bundles": [
+        {"name": "corporate-baseline", "version": "1.0.0", "content_hash": "sha256:abc123"}
+      ],
+      "created_at": "2026-01-01T00:00:00Z",
+      "spec_version": "1.0.0"
+    }
+  }
+}

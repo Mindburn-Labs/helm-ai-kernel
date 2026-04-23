@@ -1,0 +1,367 @@
+// HELM Policy Schema — PlanIRDelta Envelope and Operations
+//
+// Every canvas action is expressed as a deterministic PlanIRDelta.
+// The envelope carries concurrency controls (BaseRef, RebasePolicy)
+// and exactly one delta operation via oneof.
+//
+// 14 operations: 10 graph + EditPrompt + EditPolicy + ApplyWitnessPatch + ApproveException
+//
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.policy.v1;
+
+option go_package = "helm.mindburn.run/policy/v1;policyv1";
+
+import "google/protobuf/timestamp.proto";
+import "v1/foundations.proto";
+
+// ── PlanIRDelta Envelope ───────────────────────────────────────
+
+message PlanIRDeltaEnvelope {
+  OpRef op = 1;
+  ActorRef actor = 2;
+  BranchRef branch = 3;
+  BaseRef base = 4;
+  RebasePolicy rebase = 5;
+  google.protobuf.Timestamp created_at = 6;
+
+  oneof delta {
+    // Graph operations (RFC-0001)
+    AddNode         add_node = 10;
+    RemoveNode      remove_node = 11;
+    MoveNode        move_node = 12;
+    AddEdge         add_edge = 13;
+    RemoveEdge      remove_edge = 14;
+    SetValve        set_valve = 15;
+    AttachPrimitive attach_primitive = 16;
+    UpdateParams    update_params = 17;
+    ForkBranch      fork_branch = 18;
+    MergeDecision   merge_decision = 19;
+    // Domain operations
+    EditPromptDelta        edit_prompt = 20;
+    EditPolicyDelta        edit_policy = 21;
+    ApplyWitnessPatchDelta apply_witness_patch = 22;
+    ApproveExceptionDelta  approve_exception = 23;
+  }
+
+  reserved 100 to 199;
+}
+
+// ── Graph Operations ───────────────────────────────────────────
+
+message AddNode {
+  string node_id = 1;
+  NodeType node_type = 2;
+  string parent_scope_id = 3;
+  // Canonical JSON of node configuration.
+  bytes params_canonical = 4;
+
+  reserved 100 to 199;
+}
+
+message RemoveNode {
+  string node_id = 1;
+
+  reserved 100 to 199;
+}
+
+message MoveNode {
+  // Node to move.
+  string node_id = 1;
+  // Target scope (scope change = recompile).
+  string target_scope_id = 2;
+
+  reserved 100 to 199;
+}
+
+message AddEdge {
+  string edge_id = 1;
+  string source_node_id = 2;
+  string target_node_id = 3;
+  EdgeType edge_type = 4;
+  // Optional constraint payload (canonical JSON).
+  bytes constraint_canonical = 5;
+
+  reserved 100 to 199;
+}
+
+message RemoveEdge {
+  string edge_id = 1;
+
+  reserved 100 to 199;
+}
+
+message SetValve {
+  string edge_id = 1;
+  // Updated flow constraint (canonical JSON).
+  bytes constraint_canonical = 2;
+
+  reserved 100 to 199;
+}
+
+message AttachPrimitive {
+  string node_id = 1;
+  string primitive_type = 2;
+  // Primitive configuration (canonical JSON).
+  bytes config_canonical = 3;
+
+  reserved 100 to 199;
+}
+
+message UpdateParams {
+  string node_id = 1;
+  // JSON Merge Patch (RFC 7396).
+  bytes patch_canonical = 2;
+
+  reserved 100 to 199;
+}
+
+message ForkBranch {
+  string source_branch_id = 1;
+  string new_branch_name = 2;
+
+  reserved 100 to 199;
+}
+
+message MergeDecision {
+  string branch_id = 1;
+  MergeStrategy strategy = 2;
+
+  reserved 100 to 199;
+}
+
+// ── EditPrompt ─────────────────────────────────────────────────
+
+// Targeting: instance, class, archetype, or jurisdiction variant.
+message AgentTargetRef {
+  oneof target {
+    string agent_node_id = 1;
+    string agent_class_id = 2;
+    string swarm_archetype_id = 3;
+    string jurisdiction_variant_id = 4;
+  }
+}
+
+// Prompt slot within an agent (system, planner, executor, critic, tool_policy).
+message PromptSlotRef {
+  string slot = 1;
+}
+
+// Reference to a content-addressed prompt blob.
+// UI uploads to blob store; delta references by hash.
+message PromptBlobRef {
+  HashRef content_hash = 1;
+  // MIME type: "text/plain" or "text/markdown".
+  string mime = 2;
+  uint32 bytes_len = 3;
+}
+
+enum PromptApplyMode {
+  PROMPT_APPLY_UNSPECIFIED = 0;
+  // Replace entire slot with blob content.
+  PROMPT_REPLACE = 1;
+  // Apply structured patch (future).
+  PROMPT_PATCH = 2;
+}
+
+message EditPromptDelta {
+  AgentTargetRef target = 1;
+  PromptSlotRef slot = 2;
+  PromptApplyMode mode = 3;
+  PromptBlobRef blob = 4;
+  // Searchable tags, e.g. "sales", "eu", "micarisk".
+  repeated string tags = 5;
+  // Short human-visible commit message.
+  string summary = 6;
+
+  reserved 100 to 199;
+}
+
+// ── EditPolicy ─────────────────────────────────────────────────
+
+message PolicyBlobRef {
+  HashRef content_hash = 1;
+  // "application/helm-policy+json" or "text/helm-policy".
+  string mime = 2;
+  uint32 bytes_len = 3;
+}
+
+enum PolicyEditMode {
+  POLICY_EDIT_UNSPECIFIED = 0;
+  // UI-generated structured operations (safer, minimal).
+  POLICY_STRUCT_OPS = 1;
+  // Full blob replace (advanced editor).
+  POLICY_BLOB_REPLACE = 2;
+}
+
+// Stable path syntax for policy navigation, e.g. "budgets/treasury/max_daily_spend".
+message PolicyPath {
+  string path = 1;
+}
+
+enum StructPolicyOpType {
+  STRUCT_POLICY_OP_UNSPECIFIED = 0;
+  SET_VALUE = 1;
+  ADD_ITEM = 2;
+  REMOVE_ITEM = 3;
+  ENABLE_RULE = 4;
+  DISABLE_RULE = 5;
+}
+
+message StructPolicyOp {
+  StructPolicyOpType type = 1;
+  PolicyPath path = 2;
+  // Canonical scalar or object (deterministic JSON bytes).
+  bytes value_canonical = 3;
+}
+
+message StructPolicyOps {
+  repeated StructPolicyOp ops = 1;
+}
+
+message EditPolicyDelta {
+  AgentTargetRef target = 1;
+  PolicyEditMode mode = 2;
+
+  oneof edit {
+    PolicyBlobRef blob_replace = 10;
+    StructPolicyOps struct_ops = 11;
+  }
+
+  string summary = 20;
+
+  reserved 100 to 199;
+}
+
+// ── ApplyWitnessPatch ──────────────────────────────────────────
+//
+// Invariants (RFC-0004 §A):
+//   A1: Patch valid only for exact base (all hashes verified)
+//   A2: Sub-ops are structured, never string templates
+//   A3: Created IDs are deterministic: SHA256(patch_set_hash + patch_id + subject_id + salt)
+//   A4: Default ATOMIC; BEST_EFFORT only for declared-independent op_groups
+//   A5: Parameters typed, canonicalized, bounded
+//   A6: Patch application re-runs CPI (patch = validation)
+//   A7: Receipts link back to witness_id + patch_set_hash
+
+message WitnessRef {
+  string witness_id = 1;
+  HashRef witness_hash = 2;
+  HashRef patch_set_hash = 3;
+}
+
+message PatchRef {
+  string patch_id = 1;
+}
+
+enum PatchApplyPolicy {
+  PATCH_APPLY_UNSPECIFIED = 0;
+  // All sub-ops succeed or none apply (default).
+  PATCH_APPLY_ATOMIC = 1;
+  // Apply independent op_groups; allowed only when no shared subjects.
+  PATCH_APPLY_BEST_EFFORT = 2;
+}
+
+message ApplyWitnessPatchDelta {
+  WitnessRef witness = 1;
+  // Selected patches from CPI suggestions.
+  repeated PatchRef patches = 2;
+  PatchApplyPolicy apply_policy = 3;
+  // Optional typed parameters (enum/scalar only, included in digest).
+  map<string, bytes> parameters_canonical = 4;
+
+  string summary = 10;
+
+  reserved 100 to 199;
+}
+
+// ── ApproveException ───────────────────────────────────────────
+
+message ApprovalRequestRef {
+  string approval_request_id = 1;
+  // Hash of the exact blocked effect payload.
+  HashRef request_hash = 2;
+  // Policy that generated this requirement.
+  HashRef policy_hash = 3;
+  // VM semantics hash at time of denial.
+  HashRef cpi_hash = 4;
+}
+
+enum ApprovalScope {
+  APPROVAL_SCOPE_UNSPECIFIED = 0;
+  // Approve this exact effect only.
+  APPROVAL_SINGLE_EFFECT = 1;
+  // Approve a class of effects (rare, risky).
+  APPROVAL_ACTION_CLASS = 2;
+  // Approve for a time window.
+  APPROVAL_TIMEBOXED = 3;
+}
+
+message CryptoSignature {
+  // Signature scheme, e.g. "ed25519".
+  string scheme = 1;
+  bytes public_key = 2;
+  bytes sig = 3;
+}
+
+message ApproveExceptionDelta {
+  ApprovalRequestRef request = 1;
+  ApprovalScope scope = 2;
+
+  // Timebox parameters (for APPROVAL_TIMEBOXED).
+  uint64 valid_from_unix_ms = 10;
+  uint64 valid_to_unix_ms = 11;
+
+  // Signer attests to exact request_hash.
+  CryptoSignature signature = 20;
+
+  string summary = 30;
+
+  reserved 100 to 199;
+}
+
+// ── Enums ──────────────────────────────────────────────────────
+
+enum NodeType {
+  NODE_TYPE_UNSPECIFIED = 0;
+  NODE_TYPE_ORGUNIT = 1;
+  NODE_TYPE_PRINCIPAL = 2;
+  NODE_TYPE_ROLE = 3;
+  NODE_TYPE_ENTITY = 4;
+  NODE_TYPE_POLICY = 5;
+  NODE_TYPE_BUDGET = 6;
+  NODE_TYPE_GATE = 7;
+  NODE_TYPE_LICENSE = 8;
+  NODE_TYPE_TOOL = 9;
+  NODE_TYPE_CORRIDOR = 10;
+  NODE_TYPE_MEMBRANE = 11;
+  NODE_TYPE_TRANSFORMER = 12;
+  // Growth room for structural nodes.
+  reserved 13 to 31;
+}
+
+enum EdgeType {
+  EDGE_TYPE_UNSPECIFIED = 0;
+  EDGE_TYPE_CONTAINS = 1;
+  EDGE_TYPE_SCOPED_TO = 2;
+  EDGE_TYPE_ASSUMES_ROLE = 3;
+  EDGE_TYPE_ASSIGNED_TO = 4;
+  EDGE_TYPE_REPORTS_TO = 5;
+  EDGE_TYPE_SEPARATION_OF_DUTIES = 6;
+  EDGE_TYPE_FUNDED_BY = 7;
+  EDGE_TYPE_CONSTRAINED_BY = 8;
+  EDGE_TYPE_CAN_USE = 9;
+  EDGE_TYPE_GOVERNED_BY = 10;
+  EDGE_TYPE_GATED_BY = 11;
+  EDGE_TYPE_TRANSFORMS_VIA = 12;
+  EDGE_TYPE_BRIDGES = 13;
+  // Growth room for edge types.
+  reserved 14 to 31;
+}
+
+enum MergeStrategy {
+  MERGE_STRATEGY_UNSPECIFIED = 0;
+  MERGE_STRATEGY_FAST_FORWARD = 1;
+  MERGE_STRATEGY_THREE_WAY = 2;
+  MERGE_STRATEGY_REBASE = 3;
+}

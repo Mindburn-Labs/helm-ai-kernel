@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HELM Control Room</title>
+    <style>
+        :root { --bg: #0a0a0f; --surface: #12121a; --border: #1e1e2a; --text: #e0e0e8; --accent: #6366f1; --green: #22c55e; --red: #ef4444; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+        header h1 { font-size: 18px; font-weight: 600; }
+        header .badge { background: var(--accent); color: white; font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; padding: 24px; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+        .card h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; color: #888; margin-bottom: 12px; }
+        .card .value { font-size: 32px; font-weight: 700; }
+        .card .label { font-size: 12px; color: #666; margin-top: 4px; }
+        .status-ok { color: var(--green); }
+        .status-err { color: var(--red); }
+        #status { font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>⎈ HELM Control Room</h1>
+        <span class="badge">v0.1</span>
+        <span id="status">connecting...</span>
+    </header>
+    <div class="grid">
+        <div class="card">
+            <h2>Receipts</h2>
+            <div class="value" id="receipt-count">—</div>
+            <div class="label">Total tool call receipts</div>
+        </div>
+        <div class="card">
+            <h2>ProofGraph</h2>
+            <div class="value" id="pg-count">—</div>
+            <div class="label">DAG nodes</div>
+        </div>
+        <div class="card">
+            <h2>Budget</h2>
+            <div class="value" id="budget-used">—</div>
+            <div class="label">Daily / Monthly usage</div>
+        </div>
+        <div class="card">
+            <h2>System</h2>
+            <div class="value status-ok" id="health">—</div>
+            <div class="label">Health check status</div>
+        </div>
+    </div>
+    <script>
+        async function poll() {
+            try {
+                const h = await fetch('/api/health').then(r => r.json());
+                document.getElementById('health').textContent = h.status === 'ok' ? '✓ OK' : '✗ ERR';
+                document.getElementById('health').className = h.status === 'ok' ? 'value status-ok' : 'value status-err';
+                document.getElementById('status').textContent = 'connected';
+            } catch { document.getElementById('status').textContent = 'disconnected'; }
+            try {
+                const r = await fetch('/api/receipts').then(r => r.json());
+                document.getElementById('receipt-count').textContent = r.receipts?.length ?? 0;
+            } catch {}
+            try {
+                const pg = await fetch('/api/proofgraph').then(r => r.json());
+                document.getElementById('pg-count').textContent = pg.nodes?.length ?? 0;
+            } catch {}
+            try {
+                const b = await fetch('/api/budget').then(r => r.json());
+                document.getElementById('budget-used').textContent = `${b.daily_used}¢ / ${b.monthly_used}¢`;
+            } catch {}
+        }
+        poll();
+        setInterval(poll, 5000);
+    </script>
+</body>
+</html>

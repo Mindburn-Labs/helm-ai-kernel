@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/receipts/tool_invocation_receipt.v1.schema.json",
+  "title": "ToolInvocationReceipt.v1",
+  "description": "Mandatory receipt for every external tool invocation. Per Section 0.1 of the semantic constitution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["receipt_id", "invoked_at", "tool_id", "tool_fingerprint", "input_hash", "output_hash", "status"],
+  "properties": {
+    "receipt_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "effect_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The effect that triggered this tool invocation"
+    },
+    "invoked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "latency_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tool_id": {
+      "type": "string",
+      "description": "Tool identifier from ToolRegistry"
+    },
+    "tool_version": {
+      "type": "string"
+    },
+    "tool_fingerprint": {
+      "type": "string",
+      "description": "SHA-256 fingerprint of the ToolDescriptor at invocation time"
+    },
+    "tool_endpoint": {
+      "type": "string",
+      "format": "uri",
+      "description": "Endpoint used (may be redacted)"
+    },
+    "input_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of the canonical input"
+    },
+    "output_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of the raw output"
+    },
+    "output_evidence_pointer": {
+      "type": "string",
+      "format": "uri",
+      "description": "Content-addressed pointer to stored output (not inline)"
+    },
+    "external_state_snapshot": {
+      "type": "object",
+      "description": "Snapshot of external state at invocation time",
+      "properties": {
+        "snapshot_hash": { "type": "string" },
+        "snapshot_uri": { "type": "string", "format": "uri" }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "error", "timeout", "rate_limited", "unauthorized"]
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "retryable": { "type": "boolean" }
+      }
+    },
+    "idempotency_key": {
+      "type": "string",
+      "description": "Key for idempotent operations"
+    },
+    "retry_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "cost": {
+      "type": "object",
+      "properties": {
+        "units": { "type": "number" },
+        "currency": { "type": "string" }
+      }
+    },
+    "determinism_verified": {
+      "type": "boolean",
+      "description": "True if tool output was verified to be deterministic"
+    },
+    "content_hash": {
+      "type": "string"
+    }
+  }
+}

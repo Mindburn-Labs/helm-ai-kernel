@@ -1,0 +1,14 @@
+{
+  "$id": "helm://schemas/module_provenance/v1.json",
+  "type": "object",
+  "required": ["module_id", "version", "commit_hash", "builder_id", "timestamp"],
+  "properties": {
+    "module_id": { "type": "string" },
+    "version": { "type": "string" },
+    "commit_hash": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "builder_id": { "type": "string" },
+    "reviewer_id": { "type": "string" },
+    "source_url": { "type": "string", "format": "uri" },
+    "timestamp": { "type": "string", "format": "date-time" }
+  }
+}

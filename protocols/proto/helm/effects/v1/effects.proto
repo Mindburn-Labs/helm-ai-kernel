@@ -1,0 +1,73 @@
+// HELM Effects Gateway Protocol Buffer Definitions
+//
+// Canonical IDL for EffectPermit and Gateway contract types.
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.effects.v1;
+
+option go_package = "helm.mindburn.run/effects/v1;effectsv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+enum EffectType {
+  EFFECT_TYPE_UNSPECIFIED = 0;
+  EFFECT_TYPE_READ = 1;
+  EFFECT_TYPE_WRITE = 2;
+  EFFECT_TYPE_DELETE = 3;
+  EFFECT_TYPE_EXECUTE = 4;
+  EFFECT_TYPE_NETWORK = 5;
+  EFFECT_TYPE_FINANCE = 6;
+}
+
+message EffectScope {
+  string allowed_action = 1;
+  repeated string allowed_params = 2;
+  repeated string deny_patterns = 3;
+}
+
+message EffectPermit {
+  string permit_id = 1;
+  string intent_hash = 2;
+  string verdict_hash = 3;
+  string plan_hash = 4;
+  string policy_hash = 5;
+  EffectType effect_type = 6;
+  string connector_id = 7;
+  EffectScope scope = 8;
+  string resource_ref = 9;
+  google.protobuf.Timestamp expires_at = 10;
+  bool single_use = 11;
+  string nonce = 12;
+  google.protobuf.Timestamp issued_at = 13;
+  string issuer_id = 14;
+  string signature = 15;
+}
+
+message GatewayEffectRequest {
+  string request_id = 1;
+  EffectType effect_type = 2;
+  string connector_id = 3;
+  string tool_name = 4;
+  bytes params = 5;  // JSON-encoded
+  string resource_ref = 6;
+  string plan_hash = 7;
+  string policy_hash = 8;
+  string verdict_hash = 9;
+  google.protobuf.Timestamp requested_at = 10;
+}
+
+message GatewayEffectOutcome {
+  string request_id = 1;
+  string permit_id = 2;
+  bool success = 3;
+  bytes output = 4;
+  string error = 5;
+  string output_hash = 6;
+  google.protobuf.Duration duration = 7;
+  google.protobuf.Timestamp completed_at = 8;
+}
+
+service EffectsGatewayService {
+  rpc Execute(GatewayEffectRequest) returns (GatewayEffectOutcome);
+}

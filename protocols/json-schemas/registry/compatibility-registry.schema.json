@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Mindburn-Labs/helm-oss/schemas/compatibility-registry.schema.json",
+  "title": "HELM Compatibility Registry",
+  "description": "Machine-readable compatibility matrix for HELM sandbox providers and orchestrator adapters. Published with each release.",
+  "type": "object",
+  "required": ["schema_version", "helm_version", "generated_at", "entries"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1",
+      "description": "Schema version for forward compatibility"
+    },
+    "helm_version": {
+      "type": "string",
+      "description": "HELM release version, e.g. 0.2.0",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z0-9.]+)?$"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp of generation"
+    },
+    "entries": {
+      "type": "array",
+      "description": "Provider/adapter compatibility results",
+      "items": {
+        "type": "object",
+        "required": ["name", "type", "tier", "pass"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Provider or adapter name, e.g. 'opensandbox', 'openai-agents-python'"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["sandbox", "orchestrator", "sdk"],
+            "description": "Category of the entry"
+          },
+          "tier": {
+            "type": "string",
+            "enum": ["compatible", "conformant", "verified"],
+            "description": "Conformance tier achieved"
+          },
+          "pass": {
+            "type": "boolean",
+            "description": "Whether all tests passed at this tier"
+          },
+          "version": {
+            "type": "string",
+            "description": "Version of the provider/adapter tested"
+          },
+          "known_limitations": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Known issues or unsupported features at this tier"
+          },
+          "sample_receipt_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of a sample receipt from the test run"
+          },
+          "tested_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When this specific entry was last tested"
+          }
+        }
+      }
+    }
+  }
+}

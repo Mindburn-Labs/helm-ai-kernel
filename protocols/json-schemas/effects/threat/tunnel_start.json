@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/threat/tunnel_start.json",
+  "title": "Tunnel Start Effect",
+  "description": "Establishes a network tunnel (SSH, VPN, reverse proxy). Enables persistent covert channels.",
+  "type": "object",
+  "required": ["effect_id", "destination", "protocol"],
+  "properties": {
+    "effect_id": { "type": "string", "const": "TUNNEL_START" },
+    "destination": { "type": "string" },
+    "protocol": { "type": "string", "enum": ["ssh", "vpn", "wireguard", "reverse_proxy"] },
+    "port": { "type": "integer" },
+    "ttl_seconds": { "type": "integer" }
+  },
+  "additionalProperties": false,
+  "x-helm": { "category": "threat", "risk_class": "E3", "approval_level": "single_human", "reversible": true }
+}

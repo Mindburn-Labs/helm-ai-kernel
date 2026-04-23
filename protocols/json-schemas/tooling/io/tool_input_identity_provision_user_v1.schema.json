@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_identity_provision_user_v1.schema.json",
+  "title": "IdentityProvision_userInput",
+  "description": "Input schema for tool identity.provision_user (KERNEL, IRREVERSIBLE_WRITE)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "connector_instance_id",
+    "idempotency_key",
+    "user",
+    "role",
+    "scope"
+  ],
+  "properties": {
+    "connector_instance_id": {
+      "description": "Bound connector instance (IDENTITY_PROVIDER)",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "description": "Idempotency key derived from: user, role, scope",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    },
+    "role": {
+      "description": "Role identifier",
+      "type": "string"
+    },
+    "scope": {
+      "description": "Authorization scope",
+      "type": "string"
+    },
+    "user": {
+      "description": "User identifier",
+      "type": "string"
+    }
+  }
+}

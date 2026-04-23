@@ -1,0 +1,58 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://helm.org/schemas/business/escalation_policy.schema.json",
+    "title": "EscalationPolicy",
+    "description": "Rules for reactions to SLA breaches or risks.",
+    "type": "object",
+    "properties": {
+        "policy_id": {
+            "type": "string"
+        },
+        "rules": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "trigger": {
+                        "type": "string",
+                        "enum": [
+                            "SLA_BREACH",
+                            "SLA_WARNING",
+                            "TASK_STALLED",
+                            "RISK_THRESHOLD"
+                        ]
+                    },
+                    "condition": {
+                        "type": "string",
+                        "description": "Optional CEL expression for fine-grained filtering."
+                    },
+                    "action": {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string"
+                            },
+                            "target": {
+                                "type": "string"
+                            },
+                            "parameters": {
+                                "type": "object"
+                            }
+                        },
+                        "required": [
+                            "type"
+                        ]
+                    }
+                },
+                "required": [
+                    "trigger",
+                    "action"
+                ]
+            }
+        }
+    },
+    "required": [
+        "policy_id",
+        "rules"
+    ]
+}

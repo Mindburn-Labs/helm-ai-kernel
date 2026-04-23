@@ -1,0 +1,96 @@
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: eu-gdpr
+  version: 1.0.0
+  description: European Union GDPR jurisdiction pack
+  jurisdiction: EU
+  regulations:
+    - GDPR (Regulation 2016/679)
+    - ePrivacy Directive (2002/58/EC)
+    - AI Act (Regulation 2024/1689)
+  tags: [gdpr, eu, privacy, ai-act]
+
+spec:
+  legal_regime: EU
+  data_residency: EU/EEA
+  applicable_regulations:
+    - id: GDPR
+      name: General Data Protection Regulation
+      version: "2016/679"
+      authority: European Data Protection Board
+    - id: EU_AI_ACT
+      name: EU Artificial Intelligence Act
+      version: "2024/1689"
+      authority: European Commission
+
+  policies:
+    - kind: DenyRule
+      name: deny-cross-border-transfer
+      description: Deny data transfers outside EU/EEA without adequacy
+      match:
+        effect_type: data_export
+        conditions:
+          - field: params.destination_region
+            operator: not_in
+            values: [EU, EEA, CH, adequacy_listed]
+      verdict: DENY
+      reason_code: DENY_GDPR_CROSS_BORDER_TRANSFER
+      reason: "Data transfer to non-adequate jurisdiction requires SCCs or BCRs"
+
+    - kind: DenyRule
+      name: deny-pii-without-consent
+      description: Deny PII processing without lawful basis
+      match:
+        effect_type: data_process
+        conditions:
+          - field: params.data_class
+            operator: in
+            values: [PII, SPECIAL_CATEGORY]
+          - field: context.lawful_basis
+            operator: empty
+      verdict: DENY
+      reason_code: DENY_GDPR_NO_LAWFUL_BASIS
+      reason: "Processing personal data requires a lawful basis under Art. 6 GDPR"
+
+    - kind: DenyRule
+      name: deny-erasure-blocked
+      description: Deny blocking right to erasure requests
+      match:
+        effect_type: data_retention
+        conditions:
+          - field: context.erasure_requested
+            operator: equals
+            value: true
+          - field: context.retention_exemption
+            operator: empty
+      verdict: DENY
+      reason_code: DENY_GDPR_RIGHT_TO_ERASURE
+      reason: "Right to erasure (Art. 17) not honored"
+
+    - kind: ApprovalGate
+      name: high-risk-ai-approval
+      description: Require approval for high-risk AI system operations
+      match:
+        effect_type: ai_inference
+        conditions:
+          - field: params.risk_level
+            operator: in
+            values: [HIGH, UNACCEPTABLE]
+      verdict: ESCALATE
+      reason_code: TEMPORAL_INTERVENTION
+      reason: "High-risk AI operations require human oversight per EU AI Act"
+
+  deny_codes:
+    - code: DENY_GDPR_CROSS_BORDER_TRANSFER
+      description: Data transfer to non-adequate jurisdiction
+    - code: DENY_GDPR_NO_LAWFUL_BASIS
+      description: No lawful basis for personal data processing
+    - code: DENY_GDPR_RIGHT_TO_ERASURE
+      description: Blocking right to erasure request
+    - code: DENY_GDPR_CONSENT_WITHDRAWN
+      description: Consent has been withdrawn
+    - code: DENY_GDPR_DPIA_REQUIRED
+      description: Data Protection Impact Assessment required
+    - code: DENY_EU_AI_ACT_UNACCEPTABLE_RISK
+      description: AI system classified as unacceptable risk

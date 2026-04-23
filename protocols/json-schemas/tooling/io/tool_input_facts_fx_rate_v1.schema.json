@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_facts_fx_rate_v1.schema.json",
+  "title": "FactsFxRateInput",
+  "description": "Input schema for tool facts.fx.rate (KERNEL, READ_ONLY)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "from_currency",
+    "to_currency"
+  ],
+  "properties": {
+    "from_currency": {
+      "maxLength": 3,
+      "minLength": 3,
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    },
+    "to_currency": {
+      "maxLength": 3,
+      "minLength": 3,
+      "type": "string"
+    }
+  }
+}

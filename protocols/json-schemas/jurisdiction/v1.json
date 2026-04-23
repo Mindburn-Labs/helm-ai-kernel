@@ -1,0 +1,25 @@
+{
+  "$id": "helm://schemas/jurisdiction/v1.json",
+  "type": "object",
+  "required": ["jurisdiction_id", "region", "legal_framework", "overlays"],
+  "properties": {
+    "jurisdiction_id": { "type": "string" },
+    "region": { "type": "string" },
+    "legal_framework": { "type": "string" },
+    "overlays": {
+      "type": "object",
+      "required": ["tax", "labor", "data_privacy"],
+      "properties": {
+        "tax": { "type": "string", "description": "Reference to tax policy version" },
+        "labor": { "type": "string", "description": "Reference to labor compliance version" },
+        "data_privacy": { "type": "string", "description": "Reference to data privacy rules version" },
+        "banking": { "type": "string", "description": "Optional banking compliance rules" }
+      }
+    },
+    "verifiers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of required verifiers for this jurisdiction"
+    }
+  }
+}

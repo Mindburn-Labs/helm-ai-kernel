@@ -1,0 +1,13 @@
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: education-ferpa
+  version: 1.0.0
+  industry: education
+  tags:
+  - ferpa
+  - education
+spec:
+  deny_codes:
+  - code: DENY_EDU_STUDENT_RECORDS
+  - code: DENY_EDU_PARENTAL_CONSENT

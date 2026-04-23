@@ -1,0 +1,121 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://mindburn.org/schemas/helm-cli/v1",
+    "title": "HELM CLI Verification Output",
+    "description": "JSON Schema for the output of `npx @mindburn/helm` verification command. Exit code 0 = verified, non-zero = failure.",
+    "oneOf": [
+        {
+            "$ref": "#/$defs/SuccessResult"
+        },
+        {
+            "$ref": "#/$defs/FailureResult"
+        }
+    ],
+    "$defs": {
+        "SuccessResult": {
+            "type": "object",
+            "required": [
+                "verified",
+                "conformanceLevel",
+                "receiptsChecked",
+                "bundleRootHash",
+                "timestamp"
+            ],
+            "properties": {
+                "verified": {
+                    "type": "boolean",
+                    "const": true,
+                    "description": "Always true for successful verification."
+                },
+                "conformanceLevel": {
+                    "type": "string",
+                    "enum": [
+                        "L0",
+                        "L1",
+                        "L2",
+                        "L3"
+                    ],
+                    "description": "Highest conformance level achieved."
+                },
+                "receiptsChecked": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Number of receipts verified in the proof chain."
+                },
+                "bundleRootHash": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "description": "SHA-256 root hash of the verified evidence bundle."
+                },
+                "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "ISO 8601 timestamp of the verification."
+                },
+                "version": {
+                    "type": "string",
+                    "description": "HELM version verified (e.g., '1.2.0')."
+                },
+                "evidencePackId": {
+                    "type": "string",
+                    "description": "ID of the evidence pack that was verified."
+                },
+                "reportPath": {
+                    "type": "string",
+                    "description": "Local path to the generated verification report."
+                }
+            },
+            "additionalProperties": false
+        },
+        "FailureResult": {
+            "type": "object",
+            "required": [
+                "verified",
+                "reason",
+                "timestamp"
+            ],
+            "properties": {
+                "verified": {
+                    "type": "boolean",
+                    "const": false,
+                    "description": "Always false for failed verification."
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Human-readable failure reason."
+                },
+                "errorCode": {
+                    "type": "string",
+                    "enum": [
+                        "ATTESTATION_NOT_FOUND",
+                        "SIGNATURE_INVALID",
+                        "HASH_MISMATCH",
+                        "RECEIPT_CHAIN_BROKEN",
+                        "NETWORK_ERROR",
+                        "UNKNOWN"
+                    ],
+                    "description": "Machine-readable error classification."
+                },
+                "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "ISO 8601 timestamp of the failed verification."
+                },
+                "partialResult": {
+                    "type": "object",
+                    "properties": {
+                        "receiptsChecked": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "lastValidReceipt": {
+                            "type": "string"
+                        }
+                    },
+                    "description": "Partial progress before failure, if available."
+                }
+            },
+            "additionalProperties": false
+        }
+    }
+}

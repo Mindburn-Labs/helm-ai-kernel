@@ -1,0 +1,40 @@
+# ⚠️  DEVELOPMENT ONLY — Do not use these credentials in production.
+# For production deployments, use a .env file or external secret manager.
+# See docs/QUICKSTART.md for configuration guidance.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: helm
+      POSTGRES_USER: helm
+      POSTGRES_PASSWORD: helm-dev-password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U helm"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  helm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgres://helm:helm-dev-password@postgres:5432/helm?sslmode=disable"
+      HELM_REGION: "us"
+      HELM_ENABLE_OPENAI_PROXY: "1"
+      HELM_DEMO_MODE: "1"
+      EVIDENCE_SIGNING_KEY: "helm-evidence-dev"
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+
+volumes:
+  pgdata:

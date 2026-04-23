@@ -1,0 +1,17 @@
+{
+  "description": "HELM OSS release signing keys — Ed25519 public keys for verifying release attestations",
+  "keys": [
+    {
+      "key_id": "helm-oss-ed25519-2026",
+      "algorithm": "Ed25519",
+      "public_key": "MCowBQYDK2VwAyEAkIAW3Lrk1Onpg9c/HZmYhUKVaxsoGXi6VN833wz0XGY=",
+      "created_at": "2026-01-01T00:00:00Z",
+      "expires_at": "2027-01-01T00:00:00Z",
+      "status": "active",
+      "usage": "release-attestation-signing"
+    }
+  ],
+  "attestation_pattern": "helm-{version}.attestation.json",
+  "signature_pattern": "helm-{version}.attestation.sig",
+  "source_repo": "Mindburn-Labs/helm-oss"
+}

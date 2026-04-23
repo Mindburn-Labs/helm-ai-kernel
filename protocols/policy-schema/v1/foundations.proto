@@ -1,0 +1,85 @@
+// HELM Policy Schema — Shared Foundations
+//
+// Canonical identity, concurrency, and hashing primitives used by all
+// policy-schema messages. These types are the atoms of determinism.
+//
+// Stability: v1 additive-only. No field removals. No renames.
+syntax = "proto3";
+package helm.policy.v1;
+
+option go_package = "helm.mindburn.run/policy/v1;policyv1";
+
+// HashRef is a typed content hash. Used for canonical digests of
+// governance configuration snapshots, PolicyBundles, CPI semantics, and receipts.
+message HashRef {
+  // Hash algorithm identifier, e.g. "sha256".
+  string algo = 1;
+  // Raw hash bytes (32 bytes for SHA-256).
+  bytes digest = 2;
+
+  reserved 100 to 199;
+}
+
+// OpRef provides idempotency for every PlanIRDelta.
+// UUIDv7 recommended for op_id (time-ordered, collision-safe).
+message OpRef {
+  // Unique operation identifier. Retries with the same op_id are idempotent.
+  string op_id = 1;
+
+  reserved 100 to 199;
+}
+
+// ActorRef identifies the principal that authored a delta.
+message ActorRef {
+  // Stable user or agent identity.
+  string actor_id = 1;
+  // UI session identifier (for conflict resolution).
+  string session_id = 2;
+  // Optional device identifier.
+  string device_id = 3;
+
+  reserved 100 to 199;
+}
+
+// BranchRef identifies the branch a delta targets.
+message BranchRef {
+  // Branch identifier ("main" or sandbox branch id).
+  string branch_id = 1;
+  // Optional ProofGraph head hash for stricter gating.
+  HashRef head_proofgraph = 2;
+
+  reserved 100 to 199;
+}
+
+// BaseRef binds a delta to an exact base state.
+// Kernel MUST reject if hashes don't match (unless RebasePolicy allows).
+message BaseRef {
+  // Exact governance configuration snapshot hash this delta was authored against.
+  HashRef org_genome_snapshot = 1;
+  // Active jurisdiction PolicyBundle hash.
+  HashRef policy_bundle = 2;
+  // VM semantics hash (CPIHash).
+  HashRef cpi_hash = 3;
+
+  reserved 100 to 199;
+}
+
+// RebasePolicy controls optimistic concurrency behavior.
+enum RebasePolicy {
+  // Unspecified defaults to REBASE_STRICT.
+  REBASE_POLICY_UNSPECIFIED = 0;
+  // Must match base exactly — reject on any drift.
+  REBASE_STRICT = 1;
+  // Kernel may attempt deterministic rebase if base diverged.
+  REBASE_TRY = 2;
+}
+
+// SchemaEnvelope wraps every top-level message with version and capability info.
+message SchemaEnvelope {
+  // Semantic version of this schema, e.g. "0.1.0".
+  string schema_version = 1;
+  // Feature flags this message uses (for capability negotiation).
+  repeated string capabilities = 2;
+
+  reserved 100 to 199;
+}

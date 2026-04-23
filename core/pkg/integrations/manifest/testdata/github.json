@@ -1,0 +1,195 @@
+{
+  "api_version": "integrations.helm.mindburn.run/v1",
+  "provider": {
+    "id": "github",
+    "name": "GitHub",
+    "category": "developer_tools",
+    "homepage": "https://github.com",
+    "icon_url": "https://github.githubassets.com/favicons/favicon.svg"
+  },
+  "connector": {
+    "id": "github-v1",
+    "version": "1.0.0",
+    "packaging": "builtin",
+    "artifact_digest": "sha256:fixture"
+  },
+  "auth": {
+    "methods": [
+      {
+        "type": "oauth2",
+        "pkce_supported": true,
+        "token_method": "post_body",
+        "oauth_config": {
+          "authorization_url": "https://github.com/login/oauth/authorize",
+          "token_url": "https://github.com/login/oauth/access_token",
+          "user_info_url": "https://api.github.com/user",
+          "scopes": ["repo", "read:org", "read:user"],
+          "accept_header": "application/json",
+          "token_response_style": "json"
+        }
+      }
+    ],
+    "scopes": ["repo", "read:org", "read:user"]
+  },
+  "capabilities": [
+    {
+      "urn": "cap://github/list-repos@1.0.0",
+      "name": "List Repositories",
+      "description": "List repositories accessible to the authenticated user.",
+      "risk_class": "E0",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "visibility": { "type": "string", "enum": ["all", "public", "private"] },
+          "sort": { "type": "string", "enum": ["created", "updated", "pushed", "full_name"] }
+        }
+      },
+      "output_schema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "integer" },
+            "full_name": { "type": "string" },
+            "private": { "type": "boolean" },
+            "html_url": { "type": "string" }
+          },
+          "required": ["id", "full_name"]
+        }
+      },
+      "idempotent": true,
+      "rollback": false
+    },
+    {
+      "urn": "cap://github/create-issue@1.0.0",
+      "name": "Create Issue",
+      "description": "Create a new issue in a GitHub repository.",
+      "risk_class": "E1",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "owner": { "type": "string" },
+          "repo": { "type": "string" },
+          "title": { "type": "string" },
+          "body": { "type": "string" },
+          "labels": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["owner", "repo", "title"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "number": { "type": "integer" },
+          "html_url": { "type": "string" },
+          "state": { "type": "string" }
+        },
+        "required": ["id", "number", "html_url"]
+      },
+      "idempotent": false,
+      "rollback": false
+    },
+    {
+      "urn": "cap://github/search-code@1.0.0",
+      "name": "Search Code",
+      "description": "Search for code across all GitHub repositories.",
+      "risk_class": "E0",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "q": { "type": "string" },
+          "sort": { "type": "string", "enum": ["indexed"] },
+          "order": { "type": "string", "enum": ["asc", "desc"] },
+          "per_page": { "type": "integer", "maximum": 100 }
+        },
+        "required": ["q"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "total_count": { "type": "integer" },
+          "items": { "type": "array" }
+        },
+        "required": ["total_count", "items"]
+      },
+      "idempotent": true,
+      "rollback": false
+    }
+  ],
+  "runtime": {
+    "kind": "http",
+    "config": {
+      "base_url": "https://api.github.com",
+      "default_headers": {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+      }
+    }
+  },
+  "policies_default": {
+    "max_requests_per_minute": 30,
+    "host_allowlist": ["api.github.com", "github.com", "uploads.github.com"],
+    "data_class_restriction": []
+  },
+  "evidence_default": {
+    "retention_days": 90,
+    "redaction_rules": ["authorization"]
+  },
+  "tests": {
+    "smoke": [
+      {
+        "name": "authenticated_user",
+        "capability_urn": "cap://github/list-repos@1.0.0",
+        "input": { "visibility": "all" },
+        "expect_status": 200,
+        "timeout_seconds": 10
+      }
+    ],
+    "contract": [
+      {
+        "name": "create_issue_schema",
+        "capability_urn": "cap://github/create-issue@1.0.0",
+        "input": { "owner": "test-org", "repo": "test-repo", "title": "Contract test" },
+        "expect_status": 201,
+        "timeout_seconds": 15
+      }
+    ],
+    "drift": [
+      {
+        "name": "search_code_drift",
+        "capability_urn": "cap://github/search-code@1.0.0",
+        "input": { "q": "helm" },
+        "expect_status": 200,
+        "timeout_seconds": 10
+      }
+    ]
+  },
+  "ui": {
+    "category": "Developer Tools",
+    "icon_url": "https://github.githubassets.com/favicons/favicon.svg",
+    "short_description": "Connect to GitHub for repository management, issue tracking, and code search.",
+    "long_description": "Integrate HELM with GitHub to manage repositories, create and track issues, search code, and automate developer workflows. Requires a GitHub account with appropriate permissions.",
+    "install_steps": [
+      {
+        "order": 1,
+        "action_type": "oauth_connect",
+        "title": "Connect your GitHub account",
+        "description": "Sign in with GitHub and authorize HELM to access your repositories."
+      },
+      {
+        "order": 2,
+        "action_type": "scope_approval",
+        "title": "Review permissions",
+        "description": "Review the permissions HELM will request from your GitHub account."
+      }
+    ],
+    "permission_copy": {
+      "repo": "Full access to your repositories (read and write code, issues, pull requests)",
+      "read:org": "Read your organization memberships",
+      "read:user": "Read your profile information"
+    },
+    "warnings": [
+      "The 'repo' scope grants full read and write access to all repositories you can access."
+    ]
+  }
+}

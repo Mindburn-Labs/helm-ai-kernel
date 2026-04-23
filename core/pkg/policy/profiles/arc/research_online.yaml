@@ -1,0 +1,12 @@
+profile_id: "profile.arc-research-online.v1"
+description: "Research Harness Policy allowing external LLM loops"
+mutation_frozen: false
+registry:
+  allowed_actions:
+    - "helm.connector.arc.session.open.v1"
+    - "helm.connector.arc.session.step.v1"
+limits:
+  max_budget: 1000
+contamination_rules:
+  allow_external_http: true
+  allow_file_system_writes: false

@@ -1,0 +1,183 @@
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: finance-sox
+  version: 1.0.0
+  description: Finance industry pack (SOX, AML, Basel)
+  industry: finance
+  tags: [sox, aml, finance, banking]
+
+spec:
+  policies:
+    - kind: DenyRule
+      name: deny-segregation-violation
+      match:
+        effect_type: financial_approval
+        conditions:
+          - field: context.approver
+            operator: equals_field
+            value: context.requester
+      verdict: DENY
+      reason_code: DENY_FINANCE_SOD_VIOLATION
+      reason: "Segregation of duties violation"
+
+    - kind: ApprovalGate
+      name: large-transaction-approval
+      match:
+        effect_type: financial_transfer
+        conditions:
+          - field: params.amount_cents
+            operator: greater_than
+            value: 1000000
+      verdict: ESCALATE
+      reason_code: TEMPORAL_INTERVENTION
+      reason: "Transactions over $10,000 require approval"
+
+    - kind: DenyRule
+      name: aml-check-required
+      match:
+        effect_type: financial_transfer
+        conditions:
+          - field: context.aml_check
+            operator: empty
+      verdict: DENY
+      reason_code: DENY_FINANCE_AML_CHECK_REQUIRED
+      reason: "AML check required before transfer"
+
+  deny_codes:
+    - code: DENY_FINANCE_SOD_VIOLATION
+    - code: DENY_FINANCE_AML_CHECK_REQUIRED
+    - code: DENY_FINANCE_UNAUTHORIZED_TRADING
+    - code: DENY_FINANCE_LIMIT_EXCEEDED
+---
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: healthcare-hipaa
+  version: 1.0.0
+  description: Healthcare industry pack (HIPAA)
+  industry: healthcare
+  tags: [hipaa, healthcare, phi]
+
+spec:
+  policies:
+    - kind: DenyRule
+      name: deny-phi-unencrypted
+      match:
+        effect_type: data_export
+        conditions:
+          - field: params.data_class
+            operator: in
+            values: [PHI, HEALTH_DATA]
+          - field: params.encryption
+            operator: empty
+      verdict: DENY
+      reason_code: DENY_HEALTHCARE_PHI_UNENCRYPTED
+      reason: "PHI must be encrypted in transit and at rest"
+
+    - kind: ApprovalGate
+      name: patient-consent-required
+      match:
+        effect_type: data_share
+        conditions:
+          - field: params.data_class
+            operator: equals
+            value: PHI
+      verdict: ESCALATE
+      reason_code: DENY_HEALTHCARE_PATIENT_CONSENT
+      reason: "Patient consent required for PHI sharing"
+
+  deny_codes:
+    - code: DENY_HEALTHCARE_PHI_UNENCRYPTED
+    - code: DENY_HEALTHCARE_PATIENT_CONSENT
+    - code: DENY_HEALTHCARE_MINIMUM_NECESSARY
+    - code: DENY_HEALTHCARE_BAA_REQUIRED
+---
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: public-sector
+  version: 1.0.0
+  description: Public sector / FedRAMP pack
+  industry: public_sector
+  tags: [fedramp, government, public-sector]
+
+spec:
+  deny_codes:
+    - code: DENY_PUBSEC_AUTHORIZATION_BOUNDARY
+    - code: DENY_PUBSEC_CLEARANCE_REQUIRED
+    - code: DENY_PUBSEC_FIPS_REQUIRED
+---
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: education-ferpa
+  version: 1.0.0
+  industry: education
+  tags: [ferpa, education]
+spec:
+  deny_codes:
+    - code: DENY_EDU_STUDENT_RECORDS
+    - code: DENY_EDU_PARENTAL_CONSENT
+---
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: saas-b2b
+  version: 1.0.0
+  industry: saas
+  tags: [saas, b2b, soc2]
+spec:
+  deny_codes:
+    - code: DENY_SAAS_TENANT_ISOLATION
+    - code: DENY_SAAS_DATA_RETENTION
+    - code: DENY_SAAS_AVAILABILITY_SLA
+---
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: fintech-payments
+  version: 1.0.0
+  industry: fintech
+  tags: [pci-dss, payments, fintech]
+spec:
+  deny_codes:
+    - code: DENY_FINTECH_PCI_VIOLATION
+    - code: DENY_FINTECH_CARD_DATA_EXPOSURE
+    - code: DENY_FINTECH_KYC_REQUIRED
+---
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: ecommerce
+  version: 1.0.0
+  industry: ecommerce
+  tags: [ecommerce, consumer, pci]
+spec:
+  deny_codes:
+    - code: DENY_ECOM_PRICING_MANIPULATION
+    - code: DENY_ECOM_CONSUMER_CONSENT
+---
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: manufacturing
+  version: 1.0.0
+  industry: manufacturing
+  tags: [manufacturing, ot, scada]
+spec:
+  deny_codes:
+    - code: DENY_MFG_OT_BOUNDARY
+    - code: DENY_MFG_SAFETY_SYSTEM
+---
+apiVersion: helm.mindburn.run/v1
+kind: IndustryPack
+metadata:
+  name: logistics
+  version: 1.0.0
+  industry: logistics
+  tags: [logistics, supply-chain]
+spec:
+  deny_codes:
+    - code: DENY_LOGISTICS_CUSTOMS_DATA
+    - code: DENY_LOGISTICS_HAZMAT

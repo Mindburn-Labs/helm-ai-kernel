@@ -1,0 +1,36 @@
+# RU Regional Profile
+# Russian Federation regulatory and operational defaults
+name: "Russian Federation"
+code: "ru"
+
+ceremony:
+  min_timelock_ms: 3000
+  min_hold_ms: 2000
+  require_challenge: false
+  domain_separation: "helm:approval:v1:ru"
+
+data_residency: "ru-moscow-1"
+
+compliance:
+  - "GOST-R-34.10"
+  - "152-FZ"
+
+encryption: "GOST-28147-89"
+
+networking:
+  outbound_mode: "allowlist"
+  allowlist:
+    - "api.sber.ru"
+  island_mode: true  # Default island mode for RU
+
+crypto_policy:
+  allowed_algorithms:
+    - "GOST-28147-89"
+    - "GOST-R-34.10-2012"
+    - "Streebog-256"
+  key_rotation_days: 365
+  require_national_crypto: true
+
+retention:
+  max_days: 1825  # 5 years per 152-FZ
+  audit_log_days: 1825

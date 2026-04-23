@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_domain_register_v1.schema.json",
+  "title": "DomainRegisterInput",
+  "description": "Input schema for tool domain.register (KERNEL, IRREVERSIBLE_WRITE)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "connector_instance_id",
+    "idempotency_key",
+    "domain"
+  ],
+  "properties": {
+    "connector_instance_id": {
+      "description": "Bound connector instance (DOMAIN_REGISTRAR)",
+      "type": "string"
+    },
+    "domain": {
+      "description": "Domain name",
+      "format": "hostname",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "description": "Idempotency key derived from: domain, idempotency_key",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    }
+  }
+}

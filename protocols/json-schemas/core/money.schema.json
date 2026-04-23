@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/core/money.schema.json",
+  "title": "Money",
+  "description": "Canonical money representation per CSNF v1 Addendum 6.5 - Money MUST NOT be represented as float or decimal string",
+  "type": "object",
+  "required": ["amount_minor", "currency", "scale"],
+  "additionalProperties": false,
+  "properties": {
+    "amount_minor": {
+      "type": "integer",
+      "description": "Amount in minor units (cents, pence, etc.) as signed 64-bit integer"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "ISO 4217 currency code (e.g., 'USD', 'EUR', 'GBP')"
+    },
+    "scale": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18,
+      "description": "Decimal places implied by amount_minor"
+    }
+  },
+  "examples": [
+    {
+      "description": "$123.45 USD",
+      "value": {
+        "amount_minor": 12345,
+        "currency": "USD",
+        "scale": 2
+      }
+    },
+    {
+      "description": "€1,000.00 EUR",
+      "value": {
+        "amount_minor": 100000,
+        "currency": "EUR",
+        "scale": 2
+      }
+    },
+    {
+      "description": "0.00000001 BTC (1 satoshi)",
+      "value": {
+        "amount_minor": 1,
+        "currency": "BTC",
+        "scale": 8
+      }
+    }
+  ]
+}

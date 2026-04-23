@@ -1,0 +1,31 @@
+{
+  "$id": "https://mindburn.ai/schemas/receipts/arc_tool_receipt.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ARC Tool Receipt",
+  "type": "object",
+  "properties": {
+    "action_urn": {
+      "type": "string"
+    },
+    "input_hash": {
+      "type": "string"
+    },
+    "output_hash": {
+      "type": "string"
+    },
+    "world_state_drift": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "action_urn",
+    "input_hash",
+    "output_hash",
+    "world_state_drift",
+    "timestamp"
+  ]
+}

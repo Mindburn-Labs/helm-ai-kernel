@@ -1,0 +1,12 @@
+{
+  "receipt_id": "rcpt-golden-allow-001",
+  "timestamp": "2026-03-05T00:00:01Z",
+  "principal": "Engineer",
+  "action": "SANDBOX_EXEC",
+  "tool": "build_project",
+  "verdict": "ALLOW",
+  "reason_code": "PREFLIGHT_PASS",
+  "hash": "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3",
+  "lamport_clock": 5,
+  "prev_hash": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+}

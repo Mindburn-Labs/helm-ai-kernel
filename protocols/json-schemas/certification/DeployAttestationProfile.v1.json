@@ -1,0 +1,209 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "helm://schemas/certification/DeployAttestationProfile.v1.json",
+  "title": "DeployAttestationProfile.v1",
+  "description": "Attestation profile for deployments defining environment requirements, approval chains, and rollout policies.",
+  "type": "object",
+  "required": ["profile_id", "version", "name", "environment_requirements"],
+  "properties": {
+    "profile_id": {
+      "type": "string",
+      "pattern": "^dap-[a-zA-Z0-9-]+$"
+    },
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "environments": {
+      "type": "array",
+      "description": "Environments this profile applies to",
+      "items": {
+        "type": "string",
+        "enum": ["development", "staging", "canary", "production"]
+      }
+    },
+    "environment_requirements": {
+      "$ref": "#/$defs/EnvironmentRequirements"
+    },
+    "approval_chain": {
+      "$ref": "#/$defs/ApprovalChain"
+    },
+    "rollout_policy": {
+      "$ref": "#/$defs/RolloutPolicy"
+    },
+    "pre_deploy_checks": {
+      "$ref": "#/$defs/PreDeployChecks"
+    },
+    "enforcement": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "audit", "disabled"]
+        },
+        "fail_action": {
+          "type": "string",
+          "enum": ["block", "rollback", "alert"]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "EnvironmentRequirements": {
+      "type": "object",
+      "properties": {
+        "require_pack_attestation": {
+          "type": "boolean",
+          "default": true,
+          "description": "Require pack attestation before deploy"
+        },
+        "require_prior_environment": {
+          "type": "string",
+          "enum": ["none", "development", "staging", "canary"],
+          "description": "Require successful deploy to prior environment"
+        },
+        "min_soak_time_hours": {
+          "type": "integer",
+          "description": "Minimum time in prior environment before promotion"
+        },
+        "require_health_check": {
+          "type": "boolean",
+          "default": true
+        },
+        "require_smoke_tests": {
+          "type": "boolean"
+        },
+        "require_error_budget_available": {
+          "type": "boolean",
+          "description": "Block deploy if error budget exhausted"
+        }
+      }
+    },
+    "ApprovalChain": {
+      "type": "object",
+      "properties": {
+        "required_approvers": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of approvals required"
+        },
+        "approver_roles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["developer", "lead", "sre", "security", "executive"]
+          }
+        },
+        "auto_approve_conditions": {
+          "type": "array",
+          "description": "Conditions for auto-approval",
+          "items": {
+            "type": "object",
+            "properties": {
+              "condition": {
+                "type": "string",
+                "enum": ["canary_success", "small_change", "rollback", "hotfix"]
+              },
+              "max_change_size": {
+                "type": "integer",
+                "description": "Max lines changed for small_change condition"
+              }
+            }
+          }
+        },
+        "approval_timeout_hours": {
+          "type": "integer",
+          "description": "Hours before approval request expires"
+        },
+        "require_deploy_window": {
+          "type": "boolean",
+          "description": "Restrict deploys to specific windows"
+        },
+        "deploy_windows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "day_of_week": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "start_hour_utc": { "type": "integer" },
+              "end_hour_utc": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "RolloutPolicy": {
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["immediate", "canary", "blue_green", "rolling", "staged"]
+        },
+        "canary_config": {
+          "type": "object",
+          "properties": {
+            "initial_percentage": { "type": "number", "minimum": 0, "maximum": 100 },
+            "increment_percentage": { "type": "number" },
+            "increment_interval_minutes": { "type": "integer" },
+            "success_threshold": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "auto_rollback": {
+          "type": "boolean",
+          "default": true
+        },
+        "rollback_triggers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["error_rate", "latency", "health_check", "slo_breach", "manual"]
+          }
+        },
+        "max_rollout_duration_minutes": {
+          "type": "integer"
+        }
+      }
+    },
+    "PreDeployChecks": {
+      "type": "object",
+      "properties": {
+        "require_fas_100": {
+          "type": "boolean",
+          "description": "Require FAS-100 score"
+        },
+        "min_fas_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "require_integration_tests": {
+          "type": "boolean"
+        },
+        "require_security_scan": {
+          "type": "boolean"
+        },
+        "require_dependency_audit": {
+          "type": "boolean"
+        },
+        "blocked_on_cve_severity": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low", "none"],
+          "description": "Block on CVEs at or above this severity"
+        }
+      }
+    }
+  }
+}

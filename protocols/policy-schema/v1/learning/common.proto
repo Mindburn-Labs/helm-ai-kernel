@@ -1,0 +1,61 @@
+// HELM Learning System — Shared Primitives
+//
+// Content-addressed hash references, data classification, and time utilities
+// used across all learning-system messages.
+//
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.policy.v1.learning;
+
+option go_package = "helm.mindburn.run/policy/v1/learning;learningv1";
+
+// Env identifies the execution environment.
+enum Env {
+  ENV_UNSPECIFIED = 0;
+  ENV_SANDBOX = 1;
+  ENV_DEV = 2;
+  ENV_STAGE = 3;
+  ENV_PROD = 4;
+}
+
+// DataClass classifies content sensitivity for redaction and retention.
+enum DataClass {
+  DATA_CLASS_UNSPECIFIED = 0;
+  DATA_CLASS_PUBLIC = 1;
+  DATA_CLASS_INTERNAL = 2;
+  DATA_CLASS_CONFIDENTIAL = 3;
+  DATA_CLASS_PII = 4;
+  DATA_CLASS_REGULATED = 5;
+}
+
+// HashRef is a content-addressed reference with sensitivity metadata.
+// Unlike foundations.HashRef (algo + raw digest bytes), this carries
+// storage-oriented metadata needed for learning pipeline provenance.
+message HashRef {
+  // Content-addressed hash string, e.g. "sha256:<64-hex>".
+  string hash = 1;
+
+  // Optional byte length of referenced content.
+  int64 bytes_len = 2;
+
+  // MIME type of referenced content.
+  string mime = 3;
+
+  // Sensitivity classification.
+  DataClass data_class = 4;
+
+  // True when content has been redacted or sanitized.
+  bool redacted = 5;
+}
+
+// KeyValue is a generic tag pair for analytics dimensions.
+message KeyValue {
+  string key = 1;
+  string value = 2;
+}
+
+// TimeRange is a half-open interval [start, end).
+message TimeRange {
+  int64 start_unix_ms = 1;
+  int64 end_unix_ms = 2;
+}

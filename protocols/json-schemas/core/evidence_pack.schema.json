@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/core/evidence_pack.schema.json",
+  "title": "EvidencePack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pack_id",
+    "format_version",
+    "created_at",
+    "identity",
+    "policy",
+    "effect",
+    "context",
+    "execution",
+    "receipts",
+    "reconciliation",
+    "attestation"
+  ],
+  "properties": {
+    "pack_id": { "type": "string" },
+    "format_version": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "identity": { "$ref": "#/$defs/identity" },
+    "policy": { "$ref": "#/$defs/policy" },
+    "effect": { "$ref": "#/$defs/effect" },
+    "context": { "$ref": "#/$defs/context" },
+    "execution": { "$ref": "#/$defs/execution" },
+    "receipts": { "$ref": "#/$defs/receipts" },
+    "reconciliation": { "$ref": "#/$defs/reconciliation" },
+    "attestation": { "$ref": "#/$defs/attestation" }
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor_id", "actor_type"],
+      "properties": {
+        "actor_id": { "type": "string" },
+        "actor_type": { "type": "string" },
+        "session_id": { "type": "string" },
+        "delegation_chain": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision_id", "policy_version", "rules_fired", "evaluation_graph_hash"],
+      "properties": {
+        "decision_id": { "type": "string" },
+        "policy_version": { "type": "string" },
+        "rules_fired": { "type": "array", "items": { "type": "string" } },
+        "evaluation_graph_hash": { "type": "string" }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effect_id", "effect_type", "effect_payload_hash"],
+      "properties": {
+        "effect_id": { "type": "string" },
+        "effect_type": { "type": "string" },
+        "effect_payload_hash": { "type": "string" },
+        "idempotency_key": { "type": "string" },
+        "classification": { "type": "string" }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode_id": { "type": "string" },
+        "loop_id": { "type": "string" },
+        "jurisdiction": { "type": "string" },
+        "phenotype_hash": { "type": "string" },
+        "orchestration_run_id": { "type": "string" },
+        "phase_id": { "type": "string" },
+        "checkpoint_ref": { "type": "string" },
+        "critique_ref": { "type": "string" },
+        "heuristic_trace_id": { "type": "string" }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["execution_id", "status", "retry_count", "started_at"],
+      "properties": {
+        "execution_id": { "type": "string" },
+        "status": { "type": "string" },
+        "result_hash": { "type": "string" },
+        "retry_count": { "type": "integer" },
+        "started_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": "string", "format": "date-time" },
+        "duration_ms": { "type": "integer" },
+        "failure_reason": { "type": "string" }
+      }
+    },
+    "receipts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pal_receipts": { "type": "array", "items": { "$ref": "#/$defs/pal_receipt" } },
+        "external_receipts": { "type": "array", "items": { "$ref": "#/$defs/external_receipt" } }
+      }
+    },
+    "reconciliation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reconciliation_id": { "type": "string" },
+        "outbox_id": { "type": "string" },
+        "compensation_ref": { "type": "string" },
+        "denied_attempts": { "type": "array", "items": { "$ref": "#/$defs/denied_attempt" } },
+        "failed_attempts": { "type": "array", "items": { "$ref": "#/$defs/failed_attempt" } }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pack_hash"],
+      "properties": {
+        "pack_hash": { "type": "string" },
+        "signature": { "type": "string" },
+        "signer_id": { "type": "string" },
+        "kernel_version": { "type": "string" }
+      }
+    },
+    "pal_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt_id", "provider_id", "input_hash", "output_hash", "completed_at"],
+      "properties": {
+        "receipt_id": { "type": "string" },
+        "provider_id": { "type": "string" },
+        "model_id": { "type": "string" },
+        "input_hash": { "type": "string" },
+        "output_hash": { "type": "string" },
+        "tokens_in": { "type": "integer" },
+        "tokens_out": { "type": "integer" },
+        "completed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "external_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt_id", "system_name", "request_hash", "response_hash", "completed_at"],
+      "properties": {
+        "receipt_id": { "type": "string" },
+        "external_id": { "type": "string" },
+        "system_name": { "type": "string" },
+        "request_hash": { "type": "string" },
+        "response_hash": { "type": "string" },
+        "http_status": { "type": "integer" },
+        "completed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "denied_attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempt_id", "decision_id", "reason", "occurred_at"],
+      "properties": {
+        "attempt_id": { "type": "string" },
+        "decision_id": { "type": "string" },
+        "reason": { "type": "string" },
+        "occurred_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "failed_attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempt_id", "reason", "retry_number", "occurred_at"],
+      "properties": {
+        "attempt_id": { "type": "string" },
+        "reason": { "type": "string" },
+        "retry_number": { "type": "integer" },
+        "occurred_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

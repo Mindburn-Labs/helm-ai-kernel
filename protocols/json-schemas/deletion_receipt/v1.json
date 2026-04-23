@@ -1,0 +1,17 @@
+{
+  "$id": "helm://schemas/deletion_receipt/v1.json",
+  "type": "object",
+  "required": ["receipt_id", "tenant_id", "artifact_hash", "deleted_at", "method", "signature"],
+  "properties": {
+    "receipt_id": { "type": "string" },
+    "tenant_id": { "type": "string" },
+    "artifact_hash": { "type": "string" },
+    "deleted_at": { "type": "string", "format": "date-time" },
+    "method": { "type": "string", "enum": ["wipe", "crypto_shred", "provider_delete", "airgap_purge"] },
+    "corroborations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "signature": { "type": "string" }
+  }
+}

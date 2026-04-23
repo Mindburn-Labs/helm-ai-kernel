@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/profiles/industry_profile.v1.schema.json",
+  "title": "IndustryProfile.v1",
+  "description": "Industry-specific obligations mapped to required organs/packs. Per Section 0.1 of the semantic constitution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profile_id", "industry_code", "obligations"],
+  "properties": {
+    "profile_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "industry_code": {
+      "type": "string",
+      "description": "NAICS code or industry identifier"
+    },
+    "industry_name": {
+      "type": "string"
+    },
+    "parent_industry": {
+      "type": "string",
+      "description": "Parent NAICS code for hierarchical lookup"
+    },
+    "effective_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "obligations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["obligation_id", "category", "required_capabilities"],
+        "properties": {
+          "obligation_id": { "type": "string" },
+          "category": {
+            "type": "string",
+            "enum": [
+              "regulatory_compliance",
+              "safety_standards",
+              "quality_management",
+              "professional_licensing",
+              "supply_chain_requirements",
+              "industry_certification",
+              "reporting_standards",
+              "insurance_requirements"
+            ]
+          },
+          "standard_reference": {
+            "type": "string",
+            "description": "Reference to industry standard (ISO, etc.)"
+          },
+          "description": { "type": "string" },
+          "required_capabilities": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "suggested_packs": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "evidence_required": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "certifications": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "certification_id": { "type": "string" },
+                "name": { "type": "string" },
+                "issuer": { "type": "string" },
+                "renewal_period_months": { "type": "integer" }
+              }
+            }
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low"]
+          }
+        }
+      }
+    },
+    "typical_tools": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Tool IDs commonly used in this industry"
+    },
+    "risk_profile": {
+      "type": "object",
+      "properties": {
+        "inherent_risk_level": {
+          "type": "string",
+          "enum": ["low", "moderate", "high", "critical"]
+        },
+        "regulatory_scrutiny": {
+          "type": "string",
+          "enum": ["minimal", "moderate", "heavy", "extreme"]
+        },
+        "typical_liability_exposure": {
+          "type": "string",
+          "enum": ["limited", "moderate", "significant", "unlimited"]
+        }
+      }
+    },
+    "content_hash": {
+      "type": "string"
+    }
+  }
+}

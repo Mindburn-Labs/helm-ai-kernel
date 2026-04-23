@@ -1,0 +1,23 @@
+{
+  "$id": "helm://schemas/backpressure_policy/v1.json",
+  "type": "object",
+  "required": ["policy_id", "scope", "limits"],
+  "properties": {
+    "policy_id": { "type": "string" },
+    "scope": { "type": "string", "enum": ["GLOBAL", "TENANT", "ACTOR"] },
+    "limits": {
+      "type": "object",
+      "required": ["rpm", "tpm"],
+      "properties": {
+        "rpm": { "type": "integer", "description": "Requests Per Minute" },
+        "tpm": { "type": "integer", "description": "Tokens Per Minute" },
+        "burst": { "type": "integer" }
+      }
+    },
+    "attenuation_strategy": {
+      "type": "string",
+      "enum": ["REJECT", "QUEUE", "ATTENUATE_MODE"],
+      "default": "REJECT"
+    }
+  }
+}

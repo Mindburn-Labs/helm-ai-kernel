@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.org/schemas/knowledge_claim.json",
+  "title": "Knowledge Claim",
+  "description": "A governed knowledge claim submitted to a HELM knowledge store, with dual-source provenance requirements and a multi-step promotion workflow.",
+  "type": "object",
+  "required": ["claim_id", "tenant_id", "store_class", "title", "body"],
+  "properties": {
+    "claim_id": {
+      "type": "string",
+      "description": "Unique identifier for this knowledge claim."
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "Tenant this claim belongs to."
+    },
+    "store_class": {
+      "type": "string",
+      "enum": ["lks", "cks"],
+      "description": "Knowledge store class: lks (long-term knowledge store) or cks (contextual knowledge store)."
+    },
+    "title": {
+      "type": "string",
+      "description": "Short descriptive title for this claim."
+    },
+    "body": {
+      "type": "string",
+      "description": "Full text content of the knowledge claim."
+    },
+    "source_artifact_ids": {
+      "type": "array",
+      "description": "Artifact identifiers that serve as sources for this claim.",
+      "items": { "type": "string" }
+    },
+    "source_hashes": {
+      "type": "array",
+      "description": "SHA-256 content hashes of source materials, for tamper detection.",
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      }
+    },
+    "provenance_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Normalized provenance confidence score (0.0 = unverified, 1.0 = fully verified)."
+    },
+    "promotion_req": {
+      "type": "object",
+      "description": "Promotion requirements that must be satisfied before this claim can be promoted.",
+      "properties": {
+        "dual_source_required": {
+          "type": "boolean",
+          "description": "Whether two independent sources are required for promotion."
+        },
+        "min_signer_count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Minimum number of signers required to approve promotion."
+        },
+        "approval_profile_ref": {
+          "type": "string",
+          "description": "Reference to the approval profile governing the promotion ceremony."
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "approved", "rejected"],
+      "description": "Current promotion status of this claim."
+    }
+  }
+}

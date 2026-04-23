@@ -1,0 +1,189 @@
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: uk-dpa
+  version: 1.0.0
+  description: United Kingdom data protection jurisdiction pack
+  jurisdiction: UK
+  regulations:
+    - UK GDPR (retained EU law)
+    - Data Protection Act 2018
+    - UK AI Regulation (principles-based)
+  tags: [uk, dpa, privacy]
+
+spec:
+  legal_regime: UK
+  data_residency: UK
+  policies:
+    - kind: DenyRule
+      name: deny-uk-cross-border
+      description: Deny transfers without UK adequacy or safeguards
+      match:
+        effect_type: data_export
+        conditions:
+          - field: params.destination_region
+            operator: not_in
+            values: [UK, EEA, uk_adequacy_listed]
+      verdict: DENY
+      reason_code: DENY_UK_DPA_CROSS_BORDER
+      reason: "Transfer requires UK adequacy decision or appropriate safeguards"
+  deny_codes:
+    - code: DENY_UK_DPA_CROSS_BORDER
+      description: UK cross-border data transfer without safeguards
+    - code: DENY_UK_DPA_NO_LAWFUL_BASIS
+      description: No lawful basis under UK GDPR
+---
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: china-pipl
+  version: 1.0.0
+  description: China PIPL jurisdiction pack
+  jurisdiction: CN
+  regulations:
+    - PIPL (Personal Information Protection Law)
+    - DSL (Data Security Law)
+    - CSL (Cybersecurity Law)
+  tags: [china, pipl, dsl]
+
+spec:
+  legal_regime: CN
+  data_residency: CN
+  policies:
+    - kind: DenyRule
+      name: deny-pipl-cross-border
+      description: Deny cross-border data transfer without security assessment
+      match:
+        effect_type: data_export
+        conditions:
+          - field: params.destination_region
+            operator: not_equals
+            value: CN
+          - field: context.security_assessment
+            operator: empty
+      verdict: DENY
+      reason_code: DENY_PIPL_CROSS_BORDER_TRANSFER
+      reason: "Cross-border transfer requires CAC security assessment under PIPL Art. 38"
+  deny_codes:
+    - code: DENY_PIPL_CROSS_BORDER_TRANSFER
+      description: Cross-border data transfer without security assessment
+    - code: DENY_PIPL_CONSENT_REQUIRED
+      description: Separate consent required for sensitive PI
+    - code: DENY_DSL_CRITICAL_DATA
+      description: Critical data processing requires security review
+---
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: japan-appi
+  version: 1.0.0
+  description: Japan APPI jurisdiction pack
+  jurisdiction: JP
+  regulations:
+    - APPI (Act on Protection of Personal Information)
+  tags: [japan, appi, privacy]
+
+spec:
+  legal_regime: JP
+  data_residency: JP
+  policies:
+    - kind: DenyRule
+      name: deny-appi-cross-border
+      match:
+        effect_type: data_export
+        conditions:
+          - field: params.destination_region
+            operator: not_in
+            values: [JP, appi_recognized]
+          - field: context.consent_for_transfer
+            operator: empty
+      verdict: DENY
+      reason_code: DENY_APPI_CROSS_BORDER_TRANSFER
+      reason: "Cross-border transfer requires consent or recognized jurisdiction under APPI"
+  deny_codes:
+    - code: DENY_APPI_CROSS_BORDER_TRANSFER
+      description: Cross-border transfer without consent or recognized jurisdiction
+---
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: singapore-pdpa
+  version: 1.0.0
+  jurisdiction: SG
+  regulations: [PDPA]
+spec:
+  legal_regime: SG
+  deny_codes:
+    - code: DENY_PDPA_CONSENT_REQUIRED
+      description: Consent required under PDPA
+    - code: DENY_PDPA_ACCESS_CORRECTION
+      description: Access and correction obligations not met
+---
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: india-dpdpa
+  version: 1.0.0
+  jurisdiction: IN
+  regulations: [DPDPA 2023]
+spec:
+  legal_regime: IN
+  deny_codes:
+    - code: DENY_DPDPA_CONSENT_REQUIRED
+      description: Consent required under DPDPA
+    - code: DENY_DPDPA_CROSS_BORDER
+      description: Transfer to restricted jurisdiction
+---
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: uae-pdpl
+  version: 1.0.0
+  jurisdiction: AE
+  regulations: [PDPL, ADGM DPR, DIFC DPL]
+spec:
+  legal_regime: AE
+  deny_codes:
+    - code: DENY_PDPL_CONSENT_REQUIRED
+      description: Consent required under UAE PDPL
+---
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: brazil-lgpd
+  version: 1.0.0
+  jurisdiction: BR
+  regulations: [LGPD]
+spec:
+  legal_regime: BR
+  deny_codes:
+    - code: DENY_LGPD_CONSENT_REQUIRED
+      description: Consent or legal basis required under LGPD
+    - code: DENY_LGPD_CROSS_BORDER
+      description: Cross-border transfer without adequacy
+---
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: canada-pipeda
+  version: 1.0.0
+  jurisdiction: CA
+  regulations: [PIPEDA, Quebec Law 25]
+spec:
+  legal_regime: CA
+  deny_codes:
+    - code: DENY_PIPEDA_CONSENT_REQUIRED
+      description: Consent required under PIPEDA
+---
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: australia-nz
+  version: 1.0.0
+  jurisdiction: AU
+  regulations: [Privacy Act 1988, APPs, NZ Privacy Act 2020]
+spec:
+  legal_regime: AU
+  deny_codes:
+    - code: DENY_APPs_CROSS_BORDER
+      description: APP 8 cross-border disclosure violation

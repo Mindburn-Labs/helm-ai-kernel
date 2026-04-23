@@ -1,0 +1,37 @@
+# US Regional Profile
+# United States regulatory and operational defaults
+name: "United States"
+code: "us"
+
+ceremony:
+  min_timelock_ms: 2000
+  min_hold_ms: 1000
+  require_challenge: false
+  domain_separation: "helm:approval:v1:us"
+
+data_residency: "us-east-1"
+
+compliance:
+  - "SOC2"
+  - "NIST-800-53"
+
+encryption: "AES-256-GCM"
+
+networking:
+  outbound_mode: "allowlist"
+  allowlist:
+    - "api.openai.com"
+    - "api.anthropic.com"
+    - "generativelanguage.googleapis.com"
+  island_mode: false
+
+crypto_policy:
+  allowed_algorithms:
+    - "AES-256-GCM"
+    - "Ed25519"
+    - "SHA-256"
+  key_rotation_days: 90
+
+retention:
+  max_days: 365
+  audit_log_days: 2555  # 7 years for SOC2

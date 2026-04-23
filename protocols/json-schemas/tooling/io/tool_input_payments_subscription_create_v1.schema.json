@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_payments_subscription_create_v1.schema.json",
+  "title": "PaymentsSubscriptionCreateInput",
+  "description": "Input schema for tool payments.subscription.create (KERNEL, IRREVERSIBLE_WRITE)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "connector_instance_id",
+    "idempotency_key",
+    "customer_ref",
+    "plan_ref"
+  ],
+  "properties": {
+    "connector_instance_id": {
+      "description": "Bound connector instance (PAYMENTS_PROVIDER)",
+      "type": "string"
+    },
+    "customer_ref": {
+      "description": "Reference identifier",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "description": "Idempotency key derived from: customer_ref, plan_ref, idempotency_key",
+      "type": "string"
+    },
+    "plan_ref": {
+      "description": "Subscription plan reference",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_calendar_read_availability_v1.schema.json",
+  "title": "CalendarRead_availabilityInput",
+  "description": "Input schema for tool calendar.read_availability (KERNEL, READ_ONLY)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "connector_instance_id",
+    "user_ids",
+    "time_range"
+  ],
+  "properties": {
+    "connector_instance_id": {
+      "description": "Bound connector instance (CALENDAR_PROVIDER)",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    },
+    "time_range": {
+      "description": "Time range for the export",
+      "properties": {
+        "end": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "start": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "type": "object"
+    },
+    "user_ids": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  }
+}

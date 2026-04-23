@@ -1,0 +1,18 @@
+version: v2
+modules:
+  - path: v1
+    name: buf.build/helm/policy
+lint:
+  use:
+    - STANDARD
+    - COMMENTS
+  except:
+    - COMMENT_FIELD
+  enum_zero_value_suffix: _UNSPECIFIED
+breaking:
+  use:
+    - WIRE
+    - WIRE_JSON
+  # Enforce additive-only in v1/ — no field removals, no renames
+  # experimental/ is excluded from breaking checks
+  except: []

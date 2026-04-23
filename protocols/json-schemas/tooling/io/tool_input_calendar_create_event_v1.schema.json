@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_calendar_create_event_v1.schema.json",
+  "title": "CalendarCreate_eventInput",
+  "description": "Input schema for tool calendar.create_event (KERNEL, REVERSIBLE_WRITE)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "connector_instance_id",
+    "idempotency_key",
+    "start",
+    "end",
+    "attendees"
+  ],
+  "properties": {
+    "attendees": {
+      "description": "List of attendee emails",
+      "items": {
+        "format": "email",
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "connector_instance_id": {
+      "description": "Bound connector instance (CALENDAR_PROVIDER)",
+      "type": "string"
+    },
+    "end": {
+      "description": "ISO 8601 datetime",
+      "format": "date-time",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "description": "Idempotency key derived from: start, end, attendees",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    },
+    "start": {
+      "description": "ISO 8601 datetime",
+      "format": "date-time",
+      "type": "string"
+    }
+  }
+}

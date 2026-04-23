@@ -1,0 +1,67 @@
+{
+  "$id": "helm://schemas/actor_context/v2.json",
+  "type": "object",
+  "required": [
+    "tenant_id",
+    "org_id",
+    "workspace_id",
+    "role_id",
+    "environment",
+    "jurisdiction",
+    "data_classes_allowed",
+    "approval_authority_scope",
+    "identity",
+    "session_id",
+    "request_id"
+  ],
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "description": "Stable identifier for the tenant."
+    },
+    "org_id": {
+      "type": "string"
+    },
+    "workspace_id": {
+      "type": "string"
+    },
+    "role_id": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "string",
+      "enum": ["dev", "stage", "prod"]
+    },
+    "jurisdiction": {
+      "type": "string",
+      "description": "Matches Jurisdiction term."
+    },
+    "data_classes_allowed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "approval_authority_scope": {
+      "type": "object",
+      "description": "Which ApprovalGates the actor can satisfy."
+    },
+    "identity": {
+      "type": "object",
+      "required": ["subject", "issuer", "auth_time", "auth_strength"],
+      "properties": {
+        "subject": { "type": "string" },
+        "issuer": { "type": "string" },
+        "auth_time": { "type": "string", "format": "date-time" },
+        "auth_strength": { "type": "string" }
+      }
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

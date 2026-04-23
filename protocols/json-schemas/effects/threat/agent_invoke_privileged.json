@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/threat/agent_invoke_privileged.json",
+  "title": "Agent Invoke Privileged Effect",
+  "description": "Agent invokes a privileged operation requiring elevated principal strength.",
+  "type": "object",
+  "required": ["effect_id", "principal_id", "operation"],
+  "properties": {
+    "effect_id": { "type": "string", "const": "AGENT_INVOKE_PRIVILEGED" },
+    "principal_id": { "type": "string" },
+    "operation": { "type": "string" },
+    "delegation_chain": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false,
+  "x-helm": { "category": "threat", "risk_class": "E3", "approval_level": "single_human", "reversible": true }
+}

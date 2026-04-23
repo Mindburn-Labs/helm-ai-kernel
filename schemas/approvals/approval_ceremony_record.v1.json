@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/approvals/approval_ceremony_record.v1.json",
+  "title": "Approval Ceremony Record",
+  "description": "Immutable record of a complete approval ceremony outcome.",
+  "type": "object",
+  "required": ["ceremony_id", "request_id", "decisions", "final_outcome", "completed_at"],
+  "properties": {
+    "ceremony_id": { "type": "string" },
+    "request_id": { "type": "string" },
+    "decisions": {
+      "type": "array",
+      "items": { "$ref": "approval_decision.v1.json" }
+    },
+    "final_outcome": {
+      "type": "string",
+      "enum": ["APPROVED", "DENIED", "TIMED_OUT"]
+    },
+    "quorum_met": { "type": "boolean" },
+    "receipt_hash": { "type": "string" },
+    "evidence_pack_hash": { "type": "string" },
+    "completed_at": { "type": "string", "format": "date-time" }
+  }
+}

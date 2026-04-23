@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_workshop_exec_v1.schema.json",
+  "title": "WorkshopExecInput",
+  "description": "Input schema for tool workshop.exec (WORKSHOP, REVERSIBLE_WRITE)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "command"
+  ],
+  "properties": {
+    "args": {
+      "description": "Command arguments",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "command": {
+      "description": "Command to execute",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    },
+    "timeout_ms": {
+      "maximum": 600000,
+      "minimum": 0,
+      "type": "integer"
+    }
+  }
+}

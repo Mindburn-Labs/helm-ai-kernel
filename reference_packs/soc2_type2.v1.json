@@ -1,0 +1,60 @@
+{
+  "pack_id": "soc2-type2-v1",
+  "label": "SOC 2 Type II Compliance",
+  "description": "Governs agent operations for SOC 2 Type II compliance. Enforces access controls, change management, audit logging, and incident response aligned with Trust Services Criteria (TSC).",
+  "version": 1,
+  "compliance_framework": "SOC2_TYPE_II",
+  "programs": [
+    {
+      "program_id": "prog-access-control",
+      "label": "Logical Access Controls (CC6)",
+      "status": "active",
+      "controls": [
+        { "control_id": "CC6.1", "description": "Logical access security software and infrastructure", "enforcement": "MANDATORY" },
+        { "control_id": "CC6.2", "description": "New access requires authorization", "enforcement": "MANDATORY" },
+        { "control_id": "CC6.3", "description": "Access removal upon change of role", "enforcement": "MANDATORY" },
+        { "control_id": "CC6.6", "description": "Restrict access to sensitive data", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "deny", "condition": "privilege_tier < STANDARD AND effect_type != READ", "reason": "SOC2 CC6.1: restricted agents cannot perform write operations" },
+        { "action": "require_approval", "condition": "effect_type == CI_CREDENTIAL_ACCESS", "reason": "SOC2 CC6.2: credential access requires authorization" }
+      ]
+    },
+    {
+      "program_id": "prog-change-management",
+      "label": "Change Management (CC8)",
+      "status": "active",
+      "controls": [
+        { "control_id": "CC8.1", "description": "Changes authorized, designed, developed, tested, approved, and implemented", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "deny", "condition": "effect_type == SOFTWARE_PUBLISH AND trust_score < 0.7", "reason": "SOC2 CC8.1: untrusted agents cannot publish software" },
+        { "action": "require_approval", "condition": "effect_type == INFRA_DESTROY", "reason": "SOC2 CC8.1: infrastructure changes require approval" }
+      ]
+    },
+    {
+      "program_id": "prog-monitoring",
+      "label": "Monitoring (CC7)",
+      "status": "active",
+      "controls": [
+        { "control_id": "CC7.1", "description": "Detect and respond to security incidents", "enforcement": "MANDATORY" },
+        { "control_id": "CC7.2", "description": "Monitor system components for anomalies", "enforcement": "MANDATORY" }
+      ],
+      "policy_rules": [
+        { "action": "audit", "condition": "true", "reason": "SOC2 CC7.1: all agent actions must be logged" },
+        { "action": "escalate", "condition": "temporal_response_level >= INTERRUPT", "reason": "SOC2 CC7.2: anomalous behavior escalated" }
+      ]
+    }
+  ],
+  "budget_constraints": {
+    "daily_limit_cents": 100000,
+    "monthly_limit_cents": 2000000,
+    "risk_score_cap": 500
+  },
+  "evidence_requirements": {
+    "receipt_signing": "MANDATORY",
+    "proofgraph_enabled": true,
+    "evidence_pack_retention_days": 365,
+    "audit_chain_verification": true
+  }
+}

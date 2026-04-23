@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/reason-codes/v1",
+  "title": "HELM Reason Code Registry v1",
+  "description": "Machine-readable registry of HELM governance reason codes",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "codes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ReasonCodeEntry"
+      }
+    }
+  },
+  "required": ["version", "codes"],
+  "$defs": {
+    "ReasonCodeEntry": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]+$",
+          "description": "SCREAMING_SNAKE_CASE reason code identifier"
+        },
+        "applies_to": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["DENY", "ESCALATE"]
+          },
+          "minItems": 1,
+          "description": "Verdict types this code may accompany"
+        },
+        "domain": {
+          "type": "string",
+          "enum": [
+            "policy",
+            "pdp",
+            "requirement",
+            "budget",
+            "temporal",
+            "envelope",
+            "isolation",
+            "jurisdiction",
+            "industry",
+            "custom"
+          ],
+          "description": "Functional domain of this reason code"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description"
+        },
+        "jurisdiction": {
+          "type": "string",
+          "description": "Jurisdiction this code is specific to (for extension codes)"
+        },
+        "industry": {
+          "type": "string",
+          "description": "Industry this code is specific to (for extension codes)"
+        },
+        "since": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Registry version that introduced this code"
+        }
+      },
+      "required": ["code", "applies_to", "domain", "description", "since"]
+    },
+    "Verdict": {
+      "type": "string",
+      "enum": ["ALLOW", "DENY", "ESCALATE"],
+      "description": "Canonical HELM verdict types"
+    }
+  }
+}

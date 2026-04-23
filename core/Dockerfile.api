@@ -1,0 +1,47 @@
+# Dockerfile for HELM Core API
+# Optimized for production API serving (no UI embedded)
+
+# Stage 1: Builder
+# SC-004: Base images pinned by digest for supply chain integrity
+FROM golang:1.24-alpine@sha256:8bee1901f1e530bfb4a7850aa7a479d17ae3a18beb6e09064ed54cfd245b7191 AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache git make
+
+# Copy dependency definitions
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the application
+ENV CGO_ENABLED=0
+ENV GOOS=linux
+ENV GOARCH=amd64
+RUN go build -ldflags="-s -w" -trimpath -o /app/bin/helm ./core/cmd/helm
+
+# Stage 2: Runtime
+FROM alpine:3.21@sha256:c3f8e73fdb79deaebaa2037150150191b9dcbfba68b4a46d70103204c53f4709
+
+WORKDIR /app
+
+# Create non-root user
+RUN addgroup -S helm && adduser -S helm -G helm
+
+# Copy binary
+COPY --from=builder /app/bin/helm /app/helm
+COPY --from=builder /app/packs /app/packs
+
+# Set ownership
+RUN chown -R helm:helm /app
+
+# Switch to non-root user
+USER helm
+
+# Expose API port
+EXPOSE 8080
+
+ENTRYPOINT ["/app/helm"]

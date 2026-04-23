@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/packs/access_review_pack.v1.schema.json",
+  "title": "AccessReviewPack",
+  "description": "A proof of access review, validating user permissions against policy at a specific point in time.",
+  "type": "object",
+  "required": [
+    "pack_id",
+    "pack_type",
+    "scope",
+    "reviewed_at",
+    "reviews",
+    "attestation"
+  ],
+  "properties": {
+    "pack_id": { "type": "string" },
+    "pack_type": { "const": "ACCESS_REVIEW_PACK" },
+    "scope": { "type": "string" },
+    "reviewed_at": { "type": "string", "format": "date-time" },
+    "reviewer_id": { "type": "string" },
+    "reviews": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["subject_id", "resource", "permission", "decision"],
+        "properties": {
+          "subject_id": { "type": "string" },
+          "resource": { "type": "string" },
+          "permission": { "type": "string" },
+          "decision": { "type": "string", "enum": ["APPROVED", "REVOKED", "FLAGGED"] },
+          "justification": { "type": "string" },
+          "receipt_ref": { "type": "string" }
+        }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "required": ["pack_hash"],
+      "properties": {
+        "pack_hash": { "type": "string" },
+        "signature": { "type": "string" },
+        "generated_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

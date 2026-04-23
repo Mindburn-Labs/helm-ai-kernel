@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/visual_evidence.v1.schema.json",
+  "title": "Visual Evidence v1",
+  "description": "Multimodal evidence binding a visual state to an action",
+  "type": "object",
+  "properties": {
+    "screenshot_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "dom_snapshot_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "url": { "type": "string", "format": "uri" },
+    "vpp_timestamp": { "type": "integer", "minimum": 0 },
+    "action_id": { "type": "string", "format": "uuid" },
+    "metadata": { "type": "object", "additionalProperties": { "type": "string" } }
+  },
+  "required": ["screenshot_hash", "dom_snapshot_hash", "url", "vpp_timestamp", "action_id"]
+}

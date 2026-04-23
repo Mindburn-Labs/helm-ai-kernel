@@ -1,0 +1,70 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://helm.org/schemas/business/obligation.schema.json",
+    "title": "Obligation",
+    "description": "A stateful commitment or agreement (contract, deal, case) with a lifecycle.",
+    "type": "object",
+    "properties": {
+        "obligation_id": {
+            "type": "string",
+            "format": "uuid"
+        },
+        "title": {
+            "type": "string"
+        },
+        "description": {
+            "type": "string"
+        },
+        "status": {
+            "type": "string",
+            "enum": [
+                "PENDING",
+                "ACTIVE",
+                "FULFILLED",
+                "BREACHED",
+                "CANCELLED"
+            ]
+        },
+        "parties": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "role": {
+                        "type": "string"
+                    },
+                    "identity": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "role",
+                    "identity"
+                ]
+            }
+        },
+        "governing_policies": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "List of PolicyBundle IDs that govern this obligation."
+        },
+        "created_at": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "updated_at": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "metadata": {
+            "type": "object"
+        }
+    },
+    "required": [
+        "obligation_id",
+        "status",
+        "created_at"
+    ]
+}

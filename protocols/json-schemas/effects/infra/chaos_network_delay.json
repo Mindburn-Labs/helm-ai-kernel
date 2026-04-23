@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/chaos_network_delay.json",
+  "title": "Chaos Network Delay Effect",
+  "description": "Injects network latency for chaos testing",
+  "type": "object",
+  "required": ["effect_id", "target", "delay_ms"],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "const": "infra.chaos.network_delay"
+    },
+    "target": {
+      "type": "string",
+      "description": "Target node or service"
+    },
+    "delay_ms": {
+      "type": "integer",
+      "minimum": 10,
+      "maximum": 10000
+    },
+    "jitter_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "duration_seconds": {
+      "type": "integer",
+      "minimum": 30,
+      "maximum": 3600,
+      "default": 300
+    }
+  },
+  "x-helm": {
+    "category": "chaos",
+    "risk_level": "high",
+    "requires_approval": true
+  }
+}

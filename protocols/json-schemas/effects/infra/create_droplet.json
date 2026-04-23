@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/infra/create_droplet.json",
+  "title": "Create Droplet Effect",
+  "description": "Provisions a new DigitalOcean droplet for HELM workloads",
+  "type": "object",
+  "required": ["effect_id", "name", "region", "size"],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "const": "infra.do.create_droplet"
+    },
+    "name": {
+      "type": "string",
+      "description": "Droplet name",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "region": {
+      "type": "string",
+      "description": "DigitalOcean region",
+      "enum": ["nyc1", "nyc3", "sfo3", "ams3", "lon1", "fra1", "tor1", "blr1", "sgp1", "syd1"]
+    },
+    "size": {
+      "type": "string",
+      "description": "Droplet size slug",
+      "enum": ["s-1vcpu-1gb", "s-1vcpu-2gb", "s-2vcpu-4gb", "s-4vcpu-8gb", "s-8vcpu-16gb"]
+    },
+    "image": {
+      "type": "string",
+      "description": "Base image",
+      "default": "docker-20-04"
+    },
+    "ssh_keys": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "SSH key fingerprints"
+    },
+    "tags": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Droplet tags"
+    },
+    "user_data": {
+      "type": "string",
+      "description": "Cloud-init script"
+    }
+  },
+  "additionalProperties": false,
+  "x-helm": {
+    "category": "infrastructure",
+    "provider": "digitalocean",
+    "risk_level": "high",
+    "requires_approval": true,
+    "cost_impact": "recurring",
+    "reversible": true,
+    "rollback_effect": "infra.do.destroy_droplet"
+  }
+}

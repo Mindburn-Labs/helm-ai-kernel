@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/intent/intent_ticket.v1.schema.json",
+  "title": "IntentTicket.v1",
+  "description": "Canonical intent representation for the 'intent → working business' compiler. Per Section 0.1 of the semantic constitution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ticket_id", "intent", "created_at", "principal"],
+  "properties": {
+    "ticket_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this intent ticket"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for forward compatibility"
+    },
+    "intent": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50000,
+      "description": "Natural language description of the business intent"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this intent ticket was created"
+    },
+    "principal": {
+      "type": "object",
+      "description": "The entity submitting this intent",
+      "required": ["principal_id", "principal_type"],
+      "properties": {
+        "principal_id": { "type": "string" },
+        "principal_type": {
+          "type": "string",
+          "enum": ["individual", "organization", "agent"]
+        },
+        "verified_identity": { "type": "boolean", "default": false }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "description": "Hard constraints for the business compilation",
+      "properties": {
+        "budget": {
+          "type": "object",
+          "properties": {
+            "max_monthly_spend": { "type": "number", "minimum": 0 },
+            "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+            "hard_cap": { "type": "boolean", "default": true }
+          }
+        },
+        "timeline": {
+          "type": "object",
+          "properties": {
+            "target_launch": { "type": "string", "format": "date" },
+            "deadline": { "type": "string", "format": "date" },
+            "phases_allowed": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "risk_tolerance": {
+          "type": "string",
+          "enum": ["conservative", "moderate", "aggressive"],
+          "default": "moderate"
+        },
+        "autonomy_level": {
+          "type": "string",
+          "enum": ["supervised", "semi_autonomous", "autonomous"],
+          "default": "supervised",
+          "description": "How much autonomy the system has after launch"
+        }
+      }
+    },
+    "jurisdiction": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$",
+      "description": "ISO 3166-1 alpha-2 country code for primary jurisdiction"
+    },
+    "additional_jurisdictions": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Z]{2}$" },
+      "description": "Additional jurisdictions the business will operate in"
+    },
+    "industry": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "NAICS codes or industry identifiers"
+    },
+    "assets": {
+      "type": "object",
+      "description": "Available resources and access the principal can provide",
+      "properties": {
+        "existing_domains": {
+          "type": "array",
+          "items": { "type": "string", "format": "hostname" }
+        },
+        "payment_providers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "social_accounts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "platform": { "type": "string" },
+              "handle": { "type": "string" }
+            }
+          }
+        },
+        "existing_customers": { "type": "integer", "minimum": 0 },
+        "inventory_systems": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "prohibitions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Explicit actions or strategies that are forbidden"
+    },
+    "sovereignty_preferences": {
+      "type": "object",
+      "description": "Principal's preferences for sovereignty checkpoints",
+      "properties": {
+        "require_approval_for": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "funds_transfer",
+              "contract_signing",
+              "personnel_change",
+              "product_launch",
+              "price_change",
+              "legal_action",
+              "public_statement"
+            ]
+          }
+        },
+        "notification_email": { "type": "string", "format": "email" },
+        "escalation_timeout_hours": { "type": "integer", "minimum": 1, "default": 24 }
+      }
+    },
+    "content_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of the canonical JSON representation (excluding this field)"
+    }
+  }
+}

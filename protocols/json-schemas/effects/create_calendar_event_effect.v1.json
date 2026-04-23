@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.run/schemas/effects/create_calendar_event_effect.v1.json",
+  "title": "Create Calendar Event Effect",
+  "description": "Creates a calendar event. Reversible via cancellation.",
+  "type": "object",
+  "required": [
+    "effect_id",
+    "title",
+    "start_time"
+  ],
+  "properties": {
+    "effect_id": {
+      "type": "string",
+      "const": "CREATE_CAL_EVENT"
+    },
+    "title": {
+      "type": "string"
+    },
+    "start_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "end_time": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false,
+  "x-helm": {
+    "category": "business",
+    "risk_class": "E1",
+    "approval_level": "",
+    "reversible": true
+  }
+}

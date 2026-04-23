@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/tooling/io/tool_input_packs_install_v1.schema.json",
+  "title": "PacksInstallInput",
+  "description": "Input schema for tool packs.install (KERNEL, REVERSIBLE_WRITE)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "idempotency_key",
+    "pack_id",
+    "version"
+  ],
+  "properties": {
+    "idempotency_key": {
+      "description": "Idempotency key derived from: pack_id, version",
+      "type": "string"
+    },
+    "pack_id": {
+      "description": "Pack identifier",
+      "type": "string"
+    },
+    "request_id": {
+      "description": "Unique request identifier for tracing",
+      "format": "uuid",
+      "type": "string"
+    },
+    "version": {
+      "description": "Semantic version string",
+      "type": "string"
+    }
+  }
+}

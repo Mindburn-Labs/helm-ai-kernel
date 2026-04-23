@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/packs/change_pack.v1.schema.json",
+  "title": "ChangePack",
+  "description": "A proof of authorized change, linking intent (issue/ticket), code (commit), approval (review), and verification (CI).",
+  "type": "object",
+  "required": [
+    "pack_id",
+    "pack_type",
+    "target_system",
+    "change_context",
+    "evidence_refs",
+    "attestation"
+  ],
+  "properties": {
+    "pack_id": { "type": "string" },
+    "pack_type": { "const": "CHANGE_PACK" },
+    "target_system": { "type": "string" },
+    "change_context": {
+      "type": "object",
+      "required": ["repo", "commit_sha", "branch"],
+      "properties": {
+        "repo": { "type": "string" },
+        "commit_sha": { "type": "string" },
+        "branch": { "type": "string" },
+        "tag": { "type": "string" },
+        "ticket_id": { "type": "string" }
+      }
+    },
+    "evidence_refs": {
+      "type": "object",
+      "required": ["approval_receipt_id", "build_receipt_id"],
+      "properties": {
+        "approval_receipt_id": { "type": "string" },
+        "build_receipt_id": { "type": "string" },
+        "deployment_receipt_id": { "type": "string" },
+        "security_scan_receipt_id": { "type": "string" }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "required": ["pack_hash", "signer_id"],
+      "properties": {
+        "pack_hash": { "type": "string" },
+        "signature": { "type": "string" },
+        "signer_id": { "type": "string" },
+        "generated_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

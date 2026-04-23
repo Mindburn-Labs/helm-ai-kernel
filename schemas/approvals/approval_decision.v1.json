@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/approvals/approval_decision.v1.json",
+  "title": "Approval Decision",
+  "description": "A single approver's decision on an approval request.",
+  "type": "object",
+  "required": ["decision_id", "request_id", "decision", "approver_id", "decided_at"],
+  "properties": {
+    "decision_id": { "type": "string" },
+    "request_id": { "type": "string" },
+    "decision": {
+      "type": "string",
+      "enum": ["APPROVE", "DENY", "DEFER"]
+    },
+    "approver_id": { "type": "string" },
+    "reason": { "type": "string" },
+    "edits": {
+      "type": "object",
+      "description": "Parameter overrides applied by the approver."
+    },
+    "signature": { "type": "string" },
+    "decided_at": { "type": "string", "format": "date-time" }
+  }
+}

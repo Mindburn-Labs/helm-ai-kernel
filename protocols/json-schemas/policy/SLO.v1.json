@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "helm://schemas/policy/SLO.v1.json",
+  "title": "SLO.v1",
+  "description": "Service Level Objective - reliability targets with error budgets.",
+  "type": "object",
+  "required": ["slo_id", "version", "name", "sli_ref", "target", "window"],
+  "properties": {
+    "slo_id": {
+      "type": "string",
+      "pattern": "^slo-[a-zA-Z0-9-]+$"
+    },
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "service": {
+      "type": "string",
+      "description": "Service this SLO applies to"
+    },
+    "sli_ref": {
+      "type": "string",
+      "description": "Reference to the SLI this SLO is based on"
+    },
+    "target": {
+      "$ref": "#/$defs/Target"
+    },
+    "window": {
+      "$ref": "#/$defs/Window"
+    },
+    "error_budget": {
+      "$ref": "#/$defs/ErrorBudget"
+    },
+    "alerting": {
+      "$ref": "#/$defs/Alerting"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "owner": { "type": "string" },
+        "tier": { 
+          "type": "string", 
+          "enum": ["tier1", "tier2", "tier3", "tier4"] 
+        },
+        "tags": { 
+          "type": "array", 
+          "items": { "type": "string" } 
+        }
+      }
+    }
+  },
+  "$defs": {
+    "Target": {
+      "type": "object",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Target percentage (e.g., 99.9 for 99.9% availability)"
+        },
+        "comparator": {
+          "type": "string",
+          "enum": ["gte", "lte", "gt", "lt"],
+          "default": "gte"
+        },
+        "threshold_ms": {
+          "type": "number",
+          "description": "For latency SLOs, the threshold in milliseconds"
+        }
+      }
+    },
+    "Window": {
+      "type": "object",
+      "required": ["type", "duration"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["rolling", "calendar"],
+          "description": "Rolling (e.g., last 30 days) or calendar (e.g., this month)"
+        },
+        "duration": {
+          "type": "string",
+          "enum": ["7d", "14d", "28d", "30d", "90d"],
+          "description": "Window duration"
+        }
+      }
+    },
+    "ErrorBudget": {
+      "type": "object",
+      "properties": {
+        "initial_budget_minutes": {
+          "type": "number",
+          "description": "Initial error budget in minutes (calculated from target)"
+        },
+        "consumed_percentage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Current consumption percentage"
+        },
+        "burn_rate_threshold": {
+          "type": "number",
+          "description": "Burn rate that triggers alerts"
+        }
+      }
+    },
+    "Alerting": {
+      "type": "object",
+      "properties": {
+        "fast_burn": {
+          "type": "object",
+          "properties": {
+            "burn_rate": { "type": "number" },
+            "window": { "type": "string" },
+            "severity": { "type": "string", "enum": ["critical", "warning", "info"] }
+          }
+        },
+        "slow_burn": {
+          "type": "object",
+          "properties": {
+            "burn_rate": { "type": "number" },
+            "window": { "type": "string" },
+            "severity": { "type": "string", "enum": ["critical", "warning", "info"] }
+          }
+        },
+        "budget_exhaustion_warning_percentage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Warn when this percentage of budget is consumed"
+        }
+      }
+    }
+  }
+}

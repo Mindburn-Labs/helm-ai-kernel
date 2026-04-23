@@ -1,0 +1,175 @@
+// HELM Kernel Protocol Buffer Service Definitions
+//
+// Canonical IDL for the core HELM types that cross language boundaries.
+// These are the wire-format definitions for Receipt, DecisionRecord,
+// AuthorizedExecutionIntent, PDP, and EffectBoundary.
+//
+// Stability: v1 additive-only.
+syntax = "proto3";
+package helm.kernel.v1;
+
+option go_package = "helm.mindburn.run/kernel/v1;kernelv1";
+
+import "google/protobuf/timestamp.proto";
+
+// ── Verdict ────────────────────────────────────────────────────
+
+enum Verdict {
+  VERDICT_UNSPECIFIED = 0;
+  VERDICT_ALLOW = 1;
+  VERDICT_DENY = 2;
+  VERDICT_ESCALATE = 3;
+}
+
+enum ReasonCode {
+  REASON_CODE_UNSPECIFIED = 0;
+  REASON_CODE_POLICY_VIOLATION = 1;
+  REASON_CODE_NO_POLICY_DEFINED = 2;
+  REASON_CODE_PRG_EVALUATION_ERROR = 3;
+  REASON_CODE_MISSING_REQUIREMENT = 4;
+  REASON_CODE_PDP_DENY = 5;
+  REASON_CODE_PDP_ERROR = 6;
+  REASON_CODE_BUDGET_EXCEEDED = 7;
+  REASON_CODE_BUDGET_ERROR = 8;
+  REASON_CODE_ENVELOPE_INVALID = 9;
+  REASON_CODE_SCHEMA_VIOLATION = 10;
+  REASON_CODE_TEMPORAL_INTERVENTION = 11;
+  REASON_CODE_TEMPORAL_THROTTLE = 12;
+  REASON_CODE_SANDBOX_VIOLATION = 13;
+  REASON_CODE_PROVENANCE_FAILURE = 14;
+  REASON_CODE_VERIFICATION_FAILURE = 15;
+  REASON_CODE_TENANT_ISOLATION = 16;
+  REASON_CODE_JURISDICTION_VIOLATION = 17;
+}
+
+// ── Core Types ─────────────────────────────────────────────────
+
+message Effect {
+  string effect_type = 1;
+  string effect_id = 2;
+  bytes params = 3;   // JSON-encoded parameters
+  string budget_id = 4;
+}
+
+message DecisionRecord {
+  string id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  Verdict verdict = 3;
+  string reason = 4;
+  ReasonCode reason_code = 5;
+  string effect_digest = 6;
+  string requirement_set_hash = 7;
+  string signature = 8;
+  string signer_key_id = 9;
+  string policy_ref = 10;
+  string policy_decision_hash = 11;
+  bytes input_context = 12;
+}
+
+message AuthorizedExecutionIntent {
+  string intent_id = 1;
+  string decision_id = 2;
+  string effect_id = 3;
+  google.protobuf.Timestamp issued_at = 4;
+  google.protobuf.Timestamp expires_at = 5;
+  string signature = 6;
+  string signer_key_id = 7;
+  string principal = 8;
+}
+
+message Receipt {
+  string receipt_version = 1;
+  string receipt_id = 2;
+  string decision_id = 3;
+  string effect_id = 4;
+  Verdict verdict = 5;
+  string principal = 6;
+  string tool = 7;
+  string action = 8;
+  google.protobuf.Timestamp timestamp = 9;
+  uint64 lamport = 10;
+  string proofgraph_node = 11;
+  string signature = 12;
+  string signer_key_id = 13;
+  string payload_hash = 14;
+  ReasonCode reason_code = 15;
+  map<string, string> metadata = 16;
+}
+
+// ── PDP Service ────────────────────────────────────────────────
+
+message PDPRequest {
+  Effect effect = 1;
+  SubjectDescriptor subject = 2;
+  ContextDescriptor context = 3;
+}
+
+message SubjectDescriptor {
+  string principal = 1;
+  string tenant = 2;
+  repeated string roles = 3;
+}
+
+message ContextDescriptor {
+  string jurisdiction = 1;
+  string environment = 2;
+  google.protobuf.Timestamp time_window_start = 3;
+  google.protobuf.Timestamp time_window_end = 4;
+}
+
+message PDPResponse {
+  bool allow = 1;
+  ReasonCode reason_code = 2;
+  string policy_ref = 3;
+  string decision_hash = 4;
+  repeated Obligation obligations = 5;
+}
+
+message Obligation {
+  string id = 1;
+  string type = 2;
+  string description = 3;
+  google.protobuf.Timestamp deadline = 4;
+}
+
+service PolicyDecisionPointService {
+  rpc Evaluate(PDPRequest) returns (PDPResponse);
+}
+
+// ── EffectBoundary Service ─────────────────────────────────────
+
+message EffectRequest {
+  Effect effect = 1;
+  string principal = 2;
+  map<string, string> context = 3;
+}
+
+message EffectResponse {
+  Verdict verdict = 1;
+  ReasonCode reason_code = 2;
+  string reason = 3;
+  Receipt receipt = 4;
+  AuthorizedExecutionIntent intent = 5;
+}
+
+message ExecutionResult {
+  string intent_id = 1;
+  bool success = 2;
+  bytes output = 3;
+  string error_message = 4;
+  google.protobuf.Timestamp completed_at = 5;
+}
+
+message CompletionReceipt {
+  Receipt receipt = 1;
+  string proofgraph_node = 2;
+}
+
+service EffectBoundaryService {
+  // Submit submits an effect for governance evaluation.
+  // Returns a verdict, receipt, and (if ALLOW) an authorized execution intent.
+  rpc Submit(EffectRequest) returns (EffectResponse);
+
+  // Complete reports the execution result and receives a completion receipt.
+  rpc Complete(ExecutionResult) returns (CompletionReceipt);
+}

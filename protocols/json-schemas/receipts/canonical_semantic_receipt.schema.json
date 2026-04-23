@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/receipts/canonical_semantic_receipt.schema.json",
+  "title": "CanonicalSemanticReceiptLayer",
+  "description": "Per Section 2.1 - Canonical semantic receipt layer",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["receipt_id", "raw_record_id", "semantic_type", "extracted_at", "content"],
+  "properties": {
+    "receipt_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this semantic receipt"
+    },
+    "raw_record_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Reference to the underlying RawRecordLayer"
+    },
+    "semantic_type": {
+      "type": "string",
+      "enum": [
+        "tool_call",
+        "text_response",
+        "structured_output",
+        "function_result",
+        "error",
+        "approval_decision"
+      ],
+      "description": "Type of semantic content"
+    },
+    "extracted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When semantic content was extracted"
+    },
+    "content": {
+      "type": "object",
+      "description": "Semantic content (varies by type)",
+      "properties": {
+        "tool_calls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "tool_id": { "type": "string" },
+              "tool_name": { "type": "string" },
+              "arguments_hash": { "type": "string" },
+              "arguments": { "type": "object" },
+              "external_state_snapshot_hash": {
+                "type": "string",
+                "description": "Hash of the external system state at the time of the call (WoW requirement)"
+              }
+            }
+          }
+        },
+        "text": { "type": "string" },
+        "structured_data": { "type": "object" },
+        "error_code": { "type": "string" },
+        "error_message": { "type": "string" }
+      }
+    },
+    "determinism_markers": {
+      "type": "object",
+      "description": "Markers for determinism verification",
+      "properties": {
+        "content_hash": {
+          "type": "string",
+          "description": "Hash of canonical semantic content"
+        },
+        "reducer_version": {
+          "type": "string",
+          "description": "Version of reducer that produced this"
+        },
+        "sort_key": {
+          "type": "string",
+          "description": "Stable sort key for ordering"
+        }
+      }
+    },
+    "pal_receipt": {
+      "type": "object",
+      "description": "PAL capability usage record",
+      "properties": {
+        "provider_id": { "type": "string" },
+        "capability_used": { "type": "string" },
+        "fallback_triggered": { "type": "boolean" },
+        "latency_ms": { "type": "integer" }
+      }
+    }
+  }
+}

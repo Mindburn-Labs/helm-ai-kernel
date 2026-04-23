@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/policy/policy_input_bundle.v1.schema.json",
+  "title": "PolicyInputBundle.v1",
+  "description": "Normalized policy decision point input bundle. Per Section 1.3 - canonical bundle for PDP evaluation with deterministic hashing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "effect_type",
+    "principal",
+    "target",
+    "payload"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Unique idempotency anchor for this policy evaluation request"
+    },
+    "effect_type": {
+      "type": "string",
+      "enum": [
+        "DATA_WRITE",
+        "FUNDS_TRANSFER",
+        "PERMISSION_CHANGE",
+        "DEPLOY",
+        "NOTIFY",
+        "MODULE_INSTALL",
+        "CONFIG_CHANGE",
+        "AUDIT_LOG",
+        "EXTERNAL_API_CALL"
+      ],
+      "description": "Canonical effect type from EffectTypeCatalog"
+    },
+    "principal": {
+      "type": "string",
+      "description": "Actor identity making the request (user, service, system)"
+    },
+    "target": {
+      "type": "string",
+      "description": "Resource path or identifier being affected"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Normalized, sorted payload data for the effect",
+      "additionalProperties": true
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref_type", "hash"],
+        "properties": {
+          "ref_type": {
+            "type": "string",
+            "enum": ["model_receipt", "tool_receipt", "approval", "external_proof"]
+          },
+          "hash": {
+            "type": "string",
+            "description": "SHA-256 hash of referenced evidence"
+          },
+          "uri": {
+            "type": "string",
+            "description": "Optional URI to retrieve full evidence"
+          }
+        }
+      },
+      "description": "Pointers to supporting evidence (receipts, approvals)"
+    },
+    "timestamp_evidence": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 timestamp when evidence was bound (immutable once set)"
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "jurisdiction": {
+          "type": "string",
+          "description": "Jurisdiction code (ISO 3166-1 alpha-2)"
+        },
+        "industry": {
+          "type": "string",
+          "description": "Industry code from profile"
+        },
+        "risk_level": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical"]
+        },
+        "autonomy_level": {
+          "type": "string",
+          "enum": ["supervised", "monitored", "autonomous"]
+        }
+      },
+      "description": "Contextual metadata for policy evaluation"
+    },
+    "normalization_version": {
+      "type": "string",
+      "default": "1.0.0",
+      "description": "Version of normalization rules applied"
+    }
+  },
+  "examples": [
+    {
+      "request_id": "req-2026-01-31-001",
+      "effect_type": "FUNDS_TRANSFER",
+      "principal": "service:payment-processor",
+      "target": "/accounts/merchant-123/balance",
+      "payload": {
+        "amount": 100.00,
+        "currency": "USD",
+        "destination": "bank:DE89370400440532013000"
+      },
+      "evidence_refs": [
+        {
+          "ref_type": "approval",
+          "hash": "a1b2c3d4e5f6..."
+        }
+      ],
+      "timestamp_evidence": "2026-01-31T20:00:00Z",
+      "context": {
+        "jurisdiction": "DE",
+        "industry": "fintech",
+        "risk_level": "high",
+        "autonomy_level": "supervised"
+      },
+      "normalization_version": "1.0.0"
+    }
+  ]
+}

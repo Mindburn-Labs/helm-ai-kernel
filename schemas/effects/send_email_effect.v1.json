@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/effects/send_email_effect.v1.json",
+  "title": "Send Email Effect",
+  "description": "Parameters for sending an email through a governed connector.",
+  "type": "object",
+  "required": ["request_id", "connector_instance_id", "to", "subject", "body_hash"],
+  "properties": {
+    "request_id": { "type": "string" },
+    "connector_instance_id": { "type": "string" },
+    "idempotency_key": { "type": "string" },
+    "from_employee_id": { "type": "string" },
+    "proposal_id": { "type": "string" },
+    "draft_artifact_id": { "type": "string" },
+    "to": { "type": "array", "items": { "type": "string", "format": "email" }, "minItems": 1 },
+    "cc": { "type": "array", "items": { "type": "string", "format": "email" } },
+    "bcc": { "type": "array", "items": { "type": "string", "format": "email" } },
+    "subject": { "type": "string" },
+    "body_hash": { "type": "string" },
+    "thread_id": { "type": "string" },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "filename": { "type": "string" },
+          "mime_type": { "type": "string" },
+          "hash": { "type": "string" },
+          "size_bytes": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

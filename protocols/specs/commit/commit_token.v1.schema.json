@@ -1,0 +1,83 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://helm.org/schemas/commit/commit_token.v1.schema.json",
+    "title": "CommitToken.v1",
+    "description": "Single-use execution authorization token. Bound to draft+ceilings+epoch+TTL. Per HELM-RFC-0001.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "token_id",
+        "token_hash",
+        "bound_draft_hash",
+        "bound_ceilings_hash",
+        "bound_epoch",
+        "bound_idempotency_key",
+        "issued_at",
+        "expires_at",
+        "consumed"
+    ],
+    "properties": {
+        "token_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique token identifier"
+        },
+        "token_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "description": "SHA-256 of the opaque token material"
+        },
+        "bound_draft_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "description": "Hash of the tool_call_draft this token authorizes"
+        },
+        "bound_ceilings_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "description": "Hash of the ceilings_snapshot at decision time"
+        },
+        "bound_epoch": {
+            "type": "string",
+            "description": "Policy epoch this token is valid for"
+        },
+        "bound_idempotency_key": {
+            "type": "string",
+            "description": "Idempotency key — prevents replay"
+        },
+        "bound_decision_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The AuthorizationDecision that issued this token"
+        },
+        "preflight_required": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether preflight must be called before commit"
+        },
+        "issued_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Authority time when token was issued"
+        },
+        "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Authority time when token expires"
+        },
+        "consumed": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether this token has been consumed (single-use enforcement)"
+        },
+        "consumed_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Authority time when token was consumed"
+        },
+        "signature": {
+            "type": "string",
+            "description": "Authority Court signature over the token binding fields"
+        }
+    }
+}

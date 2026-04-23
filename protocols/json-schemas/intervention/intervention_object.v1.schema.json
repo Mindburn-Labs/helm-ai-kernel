@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/intervention/intervention_object.v1.schema.json",
+  "title": "Intervention Object",
+  "description": "A request for human intervention in a HELM-governed execution.",
+  "type": "object",
+  "required": ["intervention_id", "execution_id", "reason", "state", "created_at"],
+  "properties": {
+    "intervention_id": { "type": "string" },
+    "execution_id": { "type": "string" },
+    "principal_id": { "type": "string" },
+    "reason": { "type": "string", "enum": ["POLICY_DENY", "APPROVAL_NEEDED", "EVIDENCE_GAP", "RISK_THRESHOLD", "MANUAL_TRIGGER", "BUDGET_EXCEEDED"] },
+    "state": { "type": "string", "enum": ["PENDING", "ACTIVE", "RESOLVED", "EXPIRED", "CANCELED"] },
+    "description": { "type": "string" },
+    "effect_types": { "type": "array", "items": { "type": "string" } },
+    "policy_epoch": { "type": "string" },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "target_resources": { "type": "array", "items": { "type": "string" } },
+        "target_actions": { "type": "array", "items": { "type": "string" } },
+        "max_budget": { "type": "number" },
+        "jurisdiction": { "type": "string" }
+      }
+    },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["option_id", "label", "type"],
+        "properties": {
+          "option_id": { "type": "string" },
+          "label": { "type": "string" },
+          "description": { "type": "string" },
+          "type": { "type": "string", "enum": ["APPROVE", "DENY", "MODIFY", "ESCALATE"] }
+        }
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "content_hash": { "type": "string" }
+  }
+}

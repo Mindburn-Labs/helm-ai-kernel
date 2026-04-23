@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://helm.mindburn.org/schemas/artifact_manifest.json",
+  "title": "Artifact Manifest",
+  "description": "Canonical manifest for a governed HELM artifact, recording content identity, provenance chain, and policy binding.",
+  "type": "object",
+  "required": ["artifact_id", "tenant_id", "namespace", "path", "media_type", "content_hash"],
+  "properties": {
+    "artifact_id": {
+      "type": "string",
+      "description": "Unique identifier for this artifact."
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "Tenant this artifact belongs to."
+    },
+    "namespace": {
+      "type": "string",
+      "enum": ["skill", "knowledge", "channel", "research", "evidence", "system"],
+      "description": "Logical namespace classifying the artifact's origin domain."
+    },
+    "path": {
+      "type": "string",
+      "description": "Storage path or logical address of the artifact."
+    },
+    "media_type": {
+      "type": "string",
+      "description": "MIME type of the artifact content (e.g. application/json, text/plain)."
+    },
+    "content_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "SHA-256 content hash of the artifact bytes."
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Size of the artifact in bytes."
+    },
+    "payload_class": {
+      "type": "string",
+      "description": "Sensitivity classification of the artifact payload (e.g. PUBLIC, INTERNAL, CONFIDENTIAL)."
+    },
+    "created_by": {
+      "type": "string",
+      "description": "Identifier of the actor (virtual employee, skill, or system) that created this artifact."
+    },
+    "source_envelope_id": {
+      "type": "string",
+      "description": "Reference to the channel envelope that originated this artifact, if applicable."
+    },
+    "parent_artifact_ids": {
+      "type": "array",
+      "description": "Identifiers of parent artifacts from which this artifact was derived.",
+      "items": { "type": "string" }
+    },
+    "provenance_ref": {
+      "type": "string",
+      "description": "Reference to the provenance record (e.g. proof graph node) for this artifact."
+    },
+    "policy_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "SHA-256 hash of the policy bundle in effect when this artifact was created."
+    }
+  }
+}

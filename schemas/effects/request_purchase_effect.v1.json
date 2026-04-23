@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/effects/request_purchase_effect.v1.json",
+  "title": "Request Purchase Effect",
+  "description": "Parameters for requesting a procurement purchase.",
+  "type": "object",
+  "required": ["request_id", "item_description", "amount_cents", "currency"],
+  "properties": {
+    "request_id": { "type": "string" },
+    "vendor_person_id": { "type": "string" },
+    "item_description": { "type": "string" },
+    "amount_cents": { "type": "integer", "minimum": 1 },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "budget_envelope_id": { "type": "string" },
+    "justification_hash": { "type": "string" },
+    "from_employee_id": { "type": "string" },
+    "proposal_id": { "type": "string" }
+  }
+}

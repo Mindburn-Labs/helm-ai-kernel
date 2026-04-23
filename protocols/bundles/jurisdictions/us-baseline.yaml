@@ -1,0 +1,87 @@
+apiVersion: helm.mindburn.run/v1
+kind: JurisdictionPack
+metadata:
+  name: us-baseline
+  version: 1.0.0
+  description: United States baseline jurisdiction pack
+  jurisdiction: US
+  regulations:
+    - CCPA/CPRA (California)
+    - HIPAA (healthcare)
+    - SOX (public companies)
+    - GLBA (financial)
+    - FERPA (education)
+    - FedRAMP (federal)
+  tags: [us, ccpa, hipaa, sox, federal]
+
+spec:
+  legal_regime: US
+  data_residency: US
+  state_overlays:
+    - state: CA
+      regulation: CCPA/CPRA
+    - state: NY
+      regulation: NYDFS_CYBERSECURITY
+    - state: CO
+      regulation: CPA
+    - state: VA
+      regulation: VCDPA
+
+  policies:
+    - kind: DenyRule
+      name: deny-phi-exposure
+      description: Deny unauthorized PHI exposure (HIPAA)
+      match:
+        effect_type: data_process
+        conditions:
+          - field: params.data_class
+            operator: in
+            values: [PHI, HEALTH_DATA]
+          - field: context.hipaa_authorization
+            operator: empty
+      verdict: DENY
+      reason_code: DENY_HIPAA_PHI_EXPOSURE
+      reason: "Protected Health Information requires HIPAA authorization"
+
+    - kind: DenyRule
+      name: deny-sox-separation
+      description: Enforce segregation of duties (SOX)
+      match:
+        effect_type: financial_approval
+        conditions:
+          - field: context.approver
+            operator: equals_field
+            value: context.requester
+      verdict: DENY
+      reason_code: DENY_SOX_SEGREGATION_OF_DUTIES
+      reason: "SOX requires segregation of duties — approver cannot be requester"
+
+    - kind: DenyRule
+      name: deny-ccpa-sale
+      description: Deny selling personal information (CCPA opt-out)
+      match:
+        effect_type: data_share
+        conditions:
+          - field: params.purpose
+            operator: equals
+            value: sale
+          - field: context.ccpa_opt_out
+            operator: equals
+            value: true
+      verdict: DENY
+      reason_code: DENY_CCPA_DO_NOT_SELL
+      reason: "Consumer has exercised CCPA Do Not Sell right"
+
+  deny_codes:
+    - code: DENY_HIPAA_PHI_EXPOSURE
+      description: Unauthorized exposure of Protected Health Information
+    - code: DENY_SOX_SEGREGATION_OF_DUTIES
+      description: SOX segregation of duties violation
+    - code: DENY_CCPA_DO_NOT_SELL
+      description: CCPA Do Not Sell right exercised
+    - code: DENY_GLBA_FINANCIAL_PRIVACY
+      description: GLBA financial privacy violation
+    - code: DENY_FERPA_STUDENT_RECORDS
+      description: FERPA student records protection violation
+    - code: DENY_FEDRAMP_AUTHORIZATION
+      description: FedRAMP authorization boundary violation

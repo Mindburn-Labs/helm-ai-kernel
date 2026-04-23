@@ -1,0 +1,60 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://helm.org/schemas/business/human_task.schema.json",
+    "title": "HumanTask",
+    "description": "An Activity designated for human execution.",
+    "type": "object",
+    "properties": {
+        "task_id": {
+            "type": "string",
+            "format": "uuid"
+        },
+        "title": {
+            "type": "string"
+        },
+        "instructions": {
+            "type": "string"
+        },
+        "assignee": {
+            "type": "object",
+            "properties": {
+                "user_id": {
+                    "type": "string"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "role_id": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false
+        },
+        "status": {
+            "type": "string",
+            "enum": [
+                "ASSIGNED",
+                "CLAIMED",
+                "SUBMITTED",
+                "APPROVED",
+                "REJECTED"
+            ]
+        },
+        "required_evidence": {
+            "type": "array",
+            "items": {
+                "type": "string",
+                "description": "Code or Type of evidence required (e.g., 'PHOTO', 'SIGNATURE')."
+            }
+        },
+        "due_at": {
+            "type": "string",
+            "format": "date-time"
+        }
+    },
+    "required": [
+        "task_id",
+        "status",
+        "assignee"
+    ]
+}

@@ -1,0 +1,41 @@
+name: Maven Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish. Must match VERSION.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Version checks
+        working-directory: sdk/java
+        run: |
+          FILE_VERSION=$(cat ../../VERSION)
+          REQUESTED="${{ github.event.inputs.version }}"
+          POM_VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\([^<]*\)<\/version>.*/\1/')
+          test "$REQUESTED" = "$FILE_VERSION"
+          test "$POM_VERSION" = "$FILE_VERSION"
+      - name: Build
+        working-directory: sdk/java
+        run: mvn -q test package
+      - name: Publish
+        working-directory: sdk/java
+        env:
+          MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+          MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: mvn --batch-mode deploy

@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "repo": "helm-oss",
+  "display_name": "HELM OSS",
+  "docs_origin": {
+    "canonical_host": "docs.mindburn.org",
+    "source_repo": "Mindburn-Labs/helm-oss",
+    "source_root": "docs/"
+  },
+  "documents": [
+    {
+      "slug": "helm-oss",
+      "title": "HELM Documentation",
+      "section": "overview",
+      "source_path": "docs/index.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/quickstart",
+      "title": "Quickstart",
+      "section": "start-here",
+      "source_path": "docs/QUICKSTART.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/architecture",
+      "title": "Architecture",
+      "section": "start-here",
+      "source_path": "docs/ARCHITECTURE.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/conformance",
+      "title": "Conformance",
+      "section": "start-here",
+      "source_path": "docs/CONFORMANCE.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/verification",
+      "title": "Verification",
+      "section": "start-here",
+      "source_path": "docs/VERIFICATION.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/compatibility",
+      "title": "Compatibility",
+      "section": "start-here",
+      "source_path": "docs/COMPATIBILITY.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/publishing",
+      "title": "Publishing",
+      "section": "start-here",
+      "source_path": "docs/PUBLISHING.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/execution-security-model",
+      "title": "Execution Security Model",
+      "section": "interfaces",
+      "source_path": "docs/EXECUTION_SECURITY_MODEL.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/owasp-mcp-threat-mapping",
+      "title": "OWASP MCP Threat Mapping",
+      "section": "interfaces",
+      "source_path": "docs/OWASP_MCP_THREAT_MAPPING.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/sdks",
+      "title": "SDK Index",
+      "section": "interfaces",
+      "source_path": "docs/sdks/00_INDEX.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/benchmarks",
+      "title": "Benchmarks",
+      "section": "supporting-material",
+      "source_path": "docs/BENCHMARKS.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/troubleshooting",
+      "title": "Troubleshooting",
+      "section": "supporting-material",
+      "source_path": "docs/TROUBLESHOOTING.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/integrations/openai-compatible-proxy",
+      "title": "OpenAI-Compatible Proxy Integration",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/openai_baseurl.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/integrations/mcp",
+      "title": "MCP Integration",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/mcp.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/security/owasp-agentic-top10-mapping",
+      "title": "OWASP Agentic Top 10 Mapping",
+      "section": "security",
+      "source_path": "docs/security/owasp-agentic-top10-coverage.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    }
+  ]
+}

@@ -254,11 +254,11 @@ Each layer protects against failures in the other two.
 | Document | Relevance |
 | :--- | :--- |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System-level model, VPL, TCB |
-| [SECURITY_MODEL.md](SECURITY_MODEL.md) | Execution pipeline, crypto chain |
-| [THREAT_MODEL.md](THREAT_MODEL.md) | Adversary classes and defenses |
+| [core/pkg/receipts](../core/pkg/receipts/) | Execution pipeline and receipt chain implementation |
+| [OWASP_MCP_THREAT_MAPPING.md](OWASP_MCP_THREAT_MAPPING.md) | Adversary classes and defenses |
 | [OWASP_MCP_THREAT_MAPPING.md](OWASP_MCP_THREAT_MAPPING.md) | OWASP MCP alignment |
-| [CAPABILITY_MANIFESTS.md](CAPABILITY_MANIFESTS.md) | Layer A configuration primitives |
-| [TCB_POLICY.md](TCB_POLICY.md) | TCB boundary rules |
+| [core/pkg/manifest](../core/pkg/manifest/) | Layer A configuration primitives |
+| [core/pkg/trust/registry](../core/pkg/trust/registry/) | TCB boundary and trust-registry rules |
 | [CONFORMANCE.md](CONFORMANCE.md) | Gate definitions, levels |
 
 _Canonical revision: 2026-03-21 · HELM UCS v1.2_

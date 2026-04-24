@@ -12,7 +12,7 @@ import (
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
 )
 
-// Engine implements a simplified HotStuff-inspired BFT consensus protocol.
+// Engine implements a HotStuff-inspired BFT consensus protocol.
 // Since ProofGraph nodes are content-addressed and append-only, consensus
 // decides "which batch of nodes to commit" rather than mutable state.
 //

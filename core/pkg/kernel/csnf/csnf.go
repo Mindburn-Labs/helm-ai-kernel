@@ -30,9 +30,6 @@ func Canonicalize(artifact interface{}) (interface{}, error) {
 				return nil, err
 			}
 
-			// Null stripping rule: if value is nil, omit it?
-			// Spec says: "CSNF canonicalization MUST remove any null value for fields not marked nullable."
-			// For MVP, we assume rigid adherence and strip all nulls for simplicity unless schema awareness is added.
 			if canV == nil {
 				continue
 			}

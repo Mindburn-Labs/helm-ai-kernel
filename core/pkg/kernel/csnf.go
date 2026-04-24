@@ -219,7 +219,6 @@ func (t *CSNFTransformer) extractSortKey(elem any, sortKey string) (any, error) 
 		}
 	}
 
-	// Parse JSON pointer (simplified - handles /key format)
 	path := strings.TrimPrefix(sortKey, "/")
 	parts := strings.Split(path, "/")
 

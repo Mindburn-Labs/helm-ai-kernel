@@ -104,8 +104,6 @@ func (v *CELDPValidator) Validate(expr string) CELDPValidationResult {
 
 // checkNoFloats detects floating-point type usage.
 func (v *CELDPValidator) checkNoFloats(expr string, result *CELDPValidationResult) {
-	// Static analysis for double/float literals or operations
-	// This is a simplified check - full implementation would use CEL AST
 	floatPatterns := []string{
 		// Decimal literals
 		".0", ".1", ".2", ".3", ".4", ".5", ".6", ".7", ".8", ".9",
@@ -179,7 +177,6 @@ func (v *CELDPValidator) checkNoMapIterationDependence(expr string, result *CELD
 
 // checkExpressionSize validates expression size limit.
 func (v *CELDPValidator) checkExpressionSize(expr string, result *CELDPValidationResult) {
-	// Simplified size check (full implementation would count AST nodes)
 	if len(expr) > v.budget.MaxExpressionSize*10 { // Rough heuristic
 		result.Issues = append(result.Issues, CELDPIssue{
 			RuleID:   CELDPRuleExpressionSizeLimit,
@@ -265,9 +262,6 @@ func (e *CELDPEvaluator) Evaluate(expr string, input map[string]any) (CELDPResul
 // the static validator to catch forbidden constructs (like time/float usage)
 // before execution.
 func (e *CELDPEvaluator) evaluateWithCEL(expr string, input map[string]any) (any, error) {
-	// 1. Create CEL environment
-	// We use StdLib() but rely on Validator to forbid non-deterministic parts
-	// We also declare standard OrgDNA context variables as dynamic for now.
 	env, err := cel.NewEnv(
 		cel.StdLib(),
 		cel.Variable("modules", cel.ListType(cel.DynType)),

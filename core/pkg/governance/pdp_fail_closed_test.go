@@ -6,13 +6,11 @@ import (
 )
 
 func TestEvaluate_FailClosed_ContextTimeout(t *testing.T) {
-	// 1. Setup PDP (Mocked or Real)
 	pdp, err := NewCELPolicyDecisionPoint("sha256:dummy", nil)
 	if err != nil {
 		t.Fatalf("Failed to create PDP: %v", err)
 	}
 
-	// 2. Create Context that is ALREADY canceled
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
@@ -21,20 +19,8 @@ func TestEvaluate_FailClosed_ContextTimeout(t *testing.T) {
 		Effect:    EffectDescriptor{EffectType: "DATA_WRITE"},
 	}
 
-	// 3. Evaluate -> Wait, implementation might not check context immediately if logic is fast
-	// But strictly, a robust system *should* respect context.
-	// For Band 3, we want to ensure *if* operations hang, we have a mechanism.
-	// Since CEL is local CPU bound, it might finish before context check.
-	// Let's rely on the design that Evaluate() is synchronous for now.
-	// However, if we HAD external lookups (like verifying evidence), this matches.
-
-	// 3. Evaluate -> Should handle canceled context
-	// In a real implementation, this should return error or DENY.
-	// We just want to ensure it doesn't panic and returns a valid response object or error.
 	resp, err := pdp.Evaluate(ctx, req)
 
-	// If it returns an error, we consider that a pass (system failed safely)
-	// If it returns a response, it MUST be DENY.
 	if err == nil {
 		if resp.Decision != DecisionDeny {
 			t.Errorf("Expected DENY for canceled context, got %s", resp.Decision)

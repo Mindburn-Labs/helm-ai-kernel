@@ -23,12 +23,6 @@ func NewPostgresTrustStore(db *sql.DB) *PostgresTrustStore {
 // --- TrustStore (TUF Metadata) ---
 
 func (s *PostgresTrustStore) Load() (*TUFMetadata, error) {
-	// For simplicity, we assume we store the whole bundle or individual roles.
-	// Let's assume we store individual roles and reconstruct.
-	// Or we can just store the whole metadata object if it's small enough?
-	// The `TUFMetadata` struct has Root, Timestamp, Snapshot, Targets.
-	// Let's reuse the table structure: role_name -> json_data.
-
 	meta := &TUFMetadata{}
 
 	roles := []string{"root", "timestamp", "snapshot", "targets"}

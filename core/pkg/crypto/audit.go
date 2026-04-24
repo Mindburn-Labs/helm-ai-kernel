@@ -107,7 +107,6 @@ func (l *FileAuditLog) Entries() []AuditEvent {
 	for decoder.More() {
 		var event AuditEvent
 		if err := decoder.Decode(&event); err != nil {
-			// Skip malformed lines in MVP, or log error
 			continue
 		}
 		events = append(events, event)

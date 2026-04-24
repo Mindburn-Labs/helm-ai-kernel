@@ -85,7 +85,12 @@ func (v *JWKSValidator) Validate(tokenString string) (*jwt.RegisteredClaims, err
 		jwt.WithIssuedAt(),
 	)
 
-	claims := &jwt.RegisteredClaims{}
+	type jwksClaims struct {
+		Scope string `json:"scope"`
+		jwt.RegisteredClaims
+	}
+
+	claims := &jwksClaims{}
 	token, err := parser.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, &JWKSValidationError{
@@ -136,29 +141,17 @@ func (v *JWKSValidator) Validate(tokenString string) (*jwt.RegisteredClaims, err
 
 	// Validate scopes if configured.
 	if len(v.config.Scopes) > 0 {
-		if err := v.validateScopes(tokenString); err != nil {
+		if err := v.validateScopeString(claims.Scope); err != nil {
 			return nil, err
 		}
 	}
 
-	return claims, nil
+	return &claims.RegisteredClaims, nil
 }
 
-func (v *JWKSValidator) validateScopes(tokenString string) error {
-	// Parse without validation to read custom claims.
-	parser := jwt.NewParser(jwt.WithoutClaimsValidation())
-	type scopeClaims struct {
-		Scope string `json:"scope"`
-		jwt.RegisteredClaims
-	}
-	sc := &scopeClaims{}
-	_, _, err := parser.ParseUnverified(tokenString, sc)
-	if err != nil {
-		return &JWKSValidationError{Kind: JWKSErrMalformedToken, Message: "cannot parse scope claims"}
-	}
-
+func (v *JWKSValidator) validateScopeString(scope string) error {
 	presentScopes := make(map[string]bool)
-	for _, s := range strings.Fields(sc.Scope) {
+	for _, s := range strings.Fields(scope) {
 		presentScopes[s] = true
 	}
 

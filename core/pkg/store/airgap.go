@@ -28,12 +28,9 @@ func NewAirgapStore(storageDir string) (*AirgapStore, error) {
 		cache:    make(map[string][]byte),
 	}
 
-	// Load existing data
-	//nolint:staticcheck // suppressed
 	if err := store.load(); err != nil {
-		// If load fails, we log but continue with empty cache (unless permission error)
-		// For now just return empty, assuming fresh start or benign error
-	} //nolint:staticcheck // Validated empty branch
+		return nil, fmt.Errorf("failed to load airgap store: %w", err)
+	}
 	return store, nil
 }
 

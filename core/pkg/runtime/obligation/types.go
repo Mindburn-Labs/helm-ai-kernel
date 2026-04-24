@@ -17,7 +17,7 @@ const (
 // Schema: schemas/business/obligation.schema.json
 type Obligation struct {
 	ID            string           `json:"id"`
-	GoalSpec      string           `json:"goal_spec"` // Simplified for now
+	GoalSpec      string           `json:"goal_spec"`
 	Status        ObligationStatus `json:"status"`
 	LeaseHolder   string           `json:"lease_holder,omitempty"`
 	LeaseExpiry   time.Time        `json:"lease_expiry,omitempty"`

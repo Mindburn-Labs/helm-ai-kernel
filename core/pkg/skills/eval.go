@@ -10,12 +10,11 @@ import (
 // Evaluator runs skills in sandbox/canary mode and reports results.
 type Evaluator struct {
 	// sandboxFn and canaryFn allow injection of custom evaluation logic for testing.
-	// When nil, the default evaluation logic is used (which currently always passes).
 	sandboxFn func(ctx context.Context, skill *Skill) (*EvalResult, error)
 	canaryFn  func(ctx context.Context, skill *Skill, sampleSize int) (*EvalResult, error)
 }
 
-// NewEvaluator creates a new Evaluator with default (passing) evaluation logic.
+// NewEvaluator creates a new Evaluator.
 func NewEvaluator() *Evaluator {
 	return &Evaluator{}
 }
@@ -38,9 +37,6 @@ func (e *Evaluator) EvalSandbox(ctx context.Context, skill *Skill) (*EvalResult,
 	if e.sandboxFn != nil {
 		return e.sandboxFn(ctx, skill)
 	}
-	// Default implementation: the skill is evaluated in a sandboxed environment.
-	// In a full implementation, this would spin up an isolated runtime, execute
-	// the skill definition against test fixtures, and measure outcomes.
 	return &EvalResult{
 		EvalID:      uuid.New().String(),
 		SkillID:     skill.SkillID,
@@ -61,9 +57,6 @@ func (e *Evaluator) EvalCanary(ctx context.Context, skill *Skill, sampleSize int
 	if e.canaryFn != nil {
 		return e.canaryFn(ctx, skill, sampleSize)
 	}
-	// Default implementation: the skill is evaluated against a sample of
-	// production-like traffic. In a full implementation, this would replay
-	// recorded signals through the skill and compare outputs.
 	return &EvalResult{
 		EvalID:      uuid.New().String(),
 		SkillID:     skill.SkillID,

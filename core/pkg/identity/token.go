@@ -19,7 +19,6 @@ type IdentityClaims struct {
 }
 
 // TokenManager handles token generation and validation.
-// TokenManager handles token generation and validation.
 type TokenManager struct {
 	keySet KeySet
 }
@@ -50,13 +49,11 @@ func (tm *TokenManager) GenerateToken(p Principal, duration time.Duration) (stri
 		claims.Scopes = agent.Scopes
 	}
 
-	// Use KeySet for signing (RSA)
 	return tm.keySet.Sign(context.Background(), claims)
 }
 
 // ValidateToken parses and validates a JWT string.
 func (tm *TokenManager) ValidateToken(tokenString string) (*IdentityClaims, error) {
-	// Parse with KeyFunc from KeySet (handles kid lookup)
 	token, err := jwt.ParseWithClaims(tokenString, &IdentityClaims{}, tm.keySet.KeyFunc())
 
 	if err != nil {

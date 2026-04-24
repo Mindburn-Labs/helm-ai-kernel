@@ -11,7 +11,7 @@ import (
 
 // ── Receipt fixtures ─────────────────────────────────────────
 
-// receiptEntry is a simplified receipt for chain verification.
+// receiptEntry is the receipt fixture used for chain verification.
 type receiptEntry struct {
 	Hash     string
 	PrevHash string
@@ -38,7 +38,7 @@ func sampleReceiptChain() []receiptEntry {
 
 // ── Trust event fixtures ─────────────────────────────────────
 
-// trustEventEntry is a simplified trust event for chain verification.
+// trustEventEntry is the trust event fixture used for chain verification.
 type trustEventEntry struct {
 	Hash     string
 	PrevHash string
@@ -71,7 +71,7 @@ type evidencePackEntry struct {
 	Hash string
 }
 
-// evidencePack is a simplified evidence pack for manifest verification.
+// evidencePack is the fixture evidence pack used for manifest verification.
 type evidencePack struct {
 	ManifestHash string
 	Entries      []evidencePackEntry

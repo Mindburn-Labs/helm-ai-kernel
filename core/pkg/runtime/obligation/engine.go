@@ -70,8 +70,6 @@ func (s *MemoryStore) AtomicLease(workerID string, duration time.Duration) (*Obl
 			o.LeaseExpiry = time.Now().Add(duration)
 			o.UpdatedAt = time.Now()
 
-			// Return a copy to avoid pointer races outside lock?
-			// For MVP, returning pointer is acceptable if we respect ownership.
 			return o, nil
 		}
 	}

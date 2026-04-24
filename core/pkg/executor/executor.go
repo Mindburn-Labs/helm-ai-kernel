@@ -164,8 +164,6 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 		}
 	}
 
-	// 6. Canonicalize Output (ArtifactProtocol)
-	// Detect probable schema ID (simple heuristic for now)
 	schemaID := "application/json"
 	if _, ok := result.(string); ok {
 		schemaID = "text/plain"

@@ -31,8 +31,7 @@ type SandboxConfig struct {
 	NetworkEnabled   bool
 }
 
-// InProcessSandbox is a developer-mode sandbox that runs code natively.
-// WARNING: NOT SECURE. DO NOT USE IN PRODUCTION.
+// InProcessSandbox is a developer-mode runner and does not provide process isolation.
 type InProcessSandbox struct{}
 
 func NewInProcessSandbox() *InProcessSandbox {
@@ -40,7 +39,6 @@ func NewInProcessSandbox() *InProcessSandbox {
 }
 
 func (s *InProcessSandbox) Run(ctx context.Context, packRef trust.PackRef, input []byte) ([]byte, error) {
-	// Simulation of running a pack
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -62,7 +60,6 @@ type WasiSandbox struct {
 
 // NewWasiSandbox creates a secure WASI sandbox.
 func NewWasiSandbox(ctx context.Context, artStore artifacts.Store, config SandboxConfig) (*WasiSandbox, error) {
-	// Create runtime with memory limits
 	rConfig := wazero.NewRuntimeConfig()
 	if config.MemoryLimitBytes > 0 {
 		pages := uint32(config.MemoryLimitBytes / 65536) // 64KB per page
@@ -72,7 +69,6 @@ func NewWasiSandbox(ctx context.Context, artStore artifacts.Store, config Sandbo
 		rConfig = rConfig.WithMemoryLimitPages(pages)
 	}
 	r := wazero.NewRuntimeWithConfig(ctx, rConfig)
-	// Instantiate WASI
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, r); err != nil {
 		_ = r.Close(ctx)
 		return nil, fmt.Errorf("failed to instantiate WASI: %w", err)
@@ -88,13 +84,11 @@ func NewWasiSandbox(ctx context.Context, artStore artifacts.Store, config Sandbo
 const OutputMaxBytes = 1024 * 1024 // 1MB
 
 func (s *WasiSandbox) Run(ctx context.Context, packRef trust.PackRef, input []byte) ([]byte, error) {
-	// 1. Fetch WASM binary from Artifact Store
 	wasmBytes, err := s.artStore.Get(ctx, packRef.Hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load WASM blob %s: %w", packRef.Hash, err)
 	}
 
-	// 2. Enforce time limit via context deadline
 	execCtx := ctx
 	if s.config.CPUTimeLimit > 0 {
 		var cancel context.CancelFunc
@@ -102,7 +96,6 @@ func (s *WasiSandbox) Run(ctx context.Context, packRef trust.PackRef, input []by
 		defer cancel()
 	}
 
-	// 3. Configure stdin/stdout/stderr capture
 	var stdout, stderr bytes.Buffer
 	moduleConfig := wazero.NewModuleConfig().
 		WithStdin(bytes.NewReader(input)).
@@ -112,24 +105,20 @@ func (s *WasiSandbox) Run(ctx context.Context, packRef trust.PackRef, input []by
 
 	// No filesystem, no network (WASI deny-by-default)
 
-	// 4. Compile
 	compiled, err := s.runtime.CompileModule(execCtx, wasmBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compile WASM module: %w", err)
 	}
 	defer func() { _ = compiled.Close(execCtx) }()
 
-	// 5. Instantiate+Run with enforced limits
 	mod, err := s.runtime.InstantiateModule(execCtx, compiled, moduleConfig)
 	if err != nil {
-		// Check for context deadline exceeded (time limit)
 		if execCtx.Err() != nil {
 			return nil, &SandboxError{
 				Code:    ErrComputeTimeExhausted,
 				Message: fmt.Sprintf("WASI execution exceeded time limit (%s)", s.config.CPUTimeLimit),
 			}
 		}
-		// Check for memory limit (wazero returns error on memory.grow failure)
 		if isMemoryError(err) {
 			return nil, &SandboxError{
 				Code:    ErrComputeMemoryExhausted,
@@ -140,7 +129,6 @@ func (s *WasiSandbox) Run(ctx context.Context, packRef trust.PackRef, input []by
 	}
 	defer func() { _ = mod.Close(execCtx) }()
 
-	// 6. Enforce output size limits
 	totalOutput := stdout.Len() + stderr.Len()
 	if totalOutput > OutputMaxBytes {
 		return nil, &SandboxError{

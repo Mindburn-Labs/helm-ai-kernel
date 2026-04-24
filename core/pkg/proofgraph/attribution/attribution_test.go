@@ -61,27 +61,6 @@ func TestAttributor_SingleAgent(t *testing.T) {
 func TestAttributor_TwoAgentsEqualContribution(t *testing.T) {
 	a := New()
 
-	// Two agents at the same depth: each gets one node.
-	// Build a chain: agent-a (depth 1) -> agent-b (depth 0, failure node).
-	// Actually, to get equal weighting, we need two agents at the same depth
-	// relative to the failure. Let's use a 2-node chain:
-	// agent-a at depth 1, agent-b at depth 0.
-	// Weight: agent-b = 1/(0+1)=1.0, agent-a = 1/(1+1)=0.5.
-	// That's not equal. For equal contribution, build two separate ancestors
-	// at the same depth. But the graph is linear, so let's test a simple
-	// alternating pattern instead.
-	//
-	// For true "equal" test: 2-node chain, both same agent.
-	// Or: test a 2-node chain with different agents and verify the ratio.
-
-	// Chain: agent-a (depth 2) -> agent-b (depth 1) -> agent-a (depth 0)
-	// agent-a weight: 1/(0+1) + 1/(2+1) = 1.0 + 0.333 = 1.333
-	// agent-b weight: 1/(1+1) = 0.5
-	// Total = 1.833
-	// agent-a score = 1.333/1.833 ≈ 0.727
-	// agent-b score = 0.5/1.833 ≈ 0.273
-
-	// Let's make a symmetric chain instead:
 	// agent-a (depth 1) -> agent-b (depth 0)
 	g, failureID := buildLinearChain(
 		[]string{"agent-a", "agent-b"},

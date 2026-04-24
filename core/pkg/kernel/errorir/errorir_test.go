@@ -29,8 +29,28 @@ func TestNewErrorIR(t *testing.T) {
 	if e.HELM.Classification != ClassificationNonRetryable {
 		t.Errorf("expected classification %s, got %s", ClassificationNonRetryable, e.HELM.Classification)
 	}
+	if e.HELM.Namespace != "CORE" {
+		t.Errorf("expected namespace CORE, got %s", e.HELM.Namespace)
+	}
 	if !strings.HasPrefix(e.Type, "https://helm.org/errors/") {
 		t.Errorf("expected type URI prefix, got %s", e.Type)
+	}
+}
+
+func TestNamespaceFromErrorCode(t *testing.T) {
+	tests := map[string]string{
+		"HELM/CORE/VALIDATION/SCHEMA_MISMATCH":    "CORE",
+		"HELM/ADAPTER/slack/DELIVERY_FAILED":      "ADAPTER/slack",
+		"HELM/ADAPTER/openai/RATE_LIMIT":          "ADAPTER/openai",
+		"INVALID/CORE/VALIDATION/SCHEMA_MISMATCH": "UNKNOWN",
+		"HELM":                             "UNKNOWN",
+		"HELM//VALIDATION/SCHEMA_MISMATCH": "UNKNOWN",
+	}
+
+	for code, want := range tests {
+		if got := namespaceFromErrorCode(code); got != want {
+			t.Fatalf("namespaceFromErrorCode(%q) = %q, want %q", code, got, want)
+		}
 	}
 }
 

@@ -46,7 +46,6 @@ func TestPolicyEngine_Evaluation(t *testing.T) {
 	assert.Equal(t, "DENY", dec.Verdict)
 	assert.Contains(t, dec.Reason, "not found")
 
-	// 5. Global Eval (Default Deny for now)
 	dec, err = pe.Evaluate(context.Background(), "", reqAllowed)
 	require.NoError(t, err)
 	assert.Equal(t, "DENY", dec.Verdict)

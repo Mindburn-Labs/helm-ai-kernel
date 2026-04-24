@@ -26,8 +26,6 @@ const (
 )
 
 // EvaluationRequest is the canonical input to the authority evaluation pipeline.
-// Any authority evaluator (Guardian, Authority Court, or future implementations)
-// must accept this contract.
 type EvaluationRequest struct {
 	RequestID      string            `json:"request_id"`
 	PrincipalID    string            `json:"principal_id"`

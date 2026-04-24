@@ -117,10 +117,6 @@ func (rl *GlobalRateLimiter) Middleware(next http.Handler) http.Handler {
 
 		limiter := rl.getVisitor(ip)
 		if !limiter.Allow() {
-			// RFC 7807 Error Response
-			// Calculate retry after if possible, but standard Allow() doesn't give duration.
-			// Reserve() does.
-			// MVP: just fail with generic message.
 			WriteTooManyRequests(w, 5) // Suggest 5 seconds backoff
 			return
 		}
@@ -132,21 +128,8 @@ func (rl *GlobalRateLimiter) Middleware(next http.Handler) http.Handler {
 // WithContextRateLimit enforces rate limits based on context values (e.g. TenantID).
 // This requires the context to be populated previously (e.g. by auth middleware).
 func WithContextRateLimit(next http.Handler, limitPerTenant int) http.Handler {
-	// Simple map for tenant limiters
-	// Note: In distributed system, use Redis (available in go.mod).
-	// For MVP, localized map (future implementation).
-
+	_ = limitPerTenant
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract TenantID from context (assuming auth middleware put it there)
-		// Or from request via helper if context is not standardized yet
-		// Let's assume standard key or helper exists.
-		// core/pkg/auth/context.go defined GetTenantID
-		// But we are in `api` package, don't want circular dependency if `auth` imports `api`?
-		// `api` seems low level. `auth` imports `api`? No, `auth` probably independent.
-		// But checking `core/pkg/auth` earlier showed it imports standard libs.
-
-		// For now, let's stick to IP limiting as the primary M14 solution.
-		// Tenant limiting is advanced.
 		next.ServeHTTP(w, r)
 	})
 }

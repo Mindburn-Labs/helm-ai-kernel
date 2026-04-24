@@ -11,9 +11,7 @@ import (
 	"sync"
 )
 
-// BlobStore defines the contract for Content-Addressed Storage (CAS).
-// Ideally this interface would be in `pkg/contracts` or `internal/kernel`,
-// but sticking to `effector` for now as it's the primary consumer.
+// BlobStore defines the content-addressed storage contract used by capabilities.
 type BlobStore interface {
 	// Store persists data and returns its content hash (SHA-256).
 	Store(ctx context.Context, data []byte) (string, error)
@@ -40,7 +38,6 @@ func (s *FileBlobStore) Store(ctx context.Context, data []byte) (string, error) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// 1. Compute Hash
 	h := sha256.New()
 	//nolint:wrapcheck // io.Writer Write error
 	if _, err := h.Write(data); err != nil {
@@ -50,11 +47,8 @@ func (s *FileBlobStore) Store(ctx context.Context, data []byte) (string, error) 
 	hashStr := hex.EncodeToString(hashBytes) // e.g., "a3f5..."
 	prefixedHash := "sha256:" + hashStr
 
-	// 2. Determine Path (sharding could be added here, e.g. ab/cd/...)
 	path := filepath.Join(s.baseDir, hashStr+".blob")
 
-	// 3. Atomic Write (idempotent: if exists, it's the same content)
-	// For simplicity, we just overwrite or check existence.
 	if _, err := os.Stat(path); err == nil {
 		return prefixedHash, nil // Already exists
 	}

@@ -121,8 +121,6 @@ func (pe *PolicyEngine) Evaluate(ctx context.Context, policyID string, req contr
 		return decision, nil
 	}
 
-	// 2. Global Evaluation (if no specific policy requested, check all? Or deny?)
-	// For MVP, we deny if no policy specified.
 	decision.Reason = "No specific policy requested"
 	return decision, nil
 }

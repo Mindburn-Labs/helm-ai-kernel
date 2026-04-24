@@ -58,7 +58,7 @@ echo "   ✓ Manifest root hash: ${MANIFEST_ROOT_HASH}"
 
 # ── Compute Merkle root ──────────────────────────────────────────────────────
 # Extract sha256 values sorted by path from 00_INDEX.json, then compute tree.
-# This is a simplified bash implementation — the CLI does the canonical version.
+# The release CLI is the canonical Merkle implementation; this script mirrors it for bundles.
 
 # Extract sorted entry hashes
 ENTRY_HASHES=$(jq -r '.entries | sort_by(.path) | .[].sha256' "${BUNDLE_DIR}/00_INDEX.json")

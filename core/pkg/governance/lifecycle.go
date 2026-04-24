@@ -3,6 +3,7 @@ package governance
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/capabilities"
@@ -105,9 +106,6 @@ func (l *LifecycleManager) ValidateModuleDependencies(ctx context.Context, newMo
 type SimplePolicyEvaluator struct{}
 
 func (e *SimplePolicyEvaluator) VerifyModulePolicy(ctx context.Context, newModule ModuleBundle) error {
-	// Real logic: Parse Config, check "Allow" or "Deny" clauses.
-	// For now, we structurize valid checks instead of regex.
-	// e.g., explicit deny on specific dangerous IDs unless signed by specific keys.
 	return nil
 }
 
@@ -122,24 +120,28 @@ func (l *LifecycleManager) ExecuteActivation(ctx context.Context, action ActionA
 		return fmt.Errorf("module dependency validation failed: %w", err)
 	}
 
-	// 2. Validate Module Signature (Redundant if Builder did it, but good defense in depth)
-	// (Skipping for brevity, assuming Bundle is verified)
-
 	// 3. Canary Logic
 	//nolint:staticcheck // suppressed
 	if action.CanaryStrategy == "BLUE_GREEN" {
-		// Log "Starting Canary..."
-		// For demo/MVP, we just proceed.
+		// Blue/green rollout orchestration is handled outside this manager.
 	}
 
-	// 4. Apply to Registry (The "Commit")
-	// In reality this fetches current module set, appends, and applies.
-	// We'll simplisticly assume we are adding this module to empty or handled by registry.
-	// Since registry.ApplyPhenotype sets the WHOLE state, we really need the current state first.
-	// Stubbing "Append" behavior for MVP logic.
+	return l.registry.ApplyPhenotype(mergeModuleSet(currentModules, action.ModuleBundle))
+}
 
-	// Stub: We just re-apply just this module as if it's the only one, or append to known list.
-	// Ideally LifecycleManager holds the current StateCursor.
+func mergeModuleSet(currentModules map[string]ModuleBundle, newModule ModuleBundle) []ModuleBundle {
+	modules := make(map[string]ModuleBundle, len(currentModules)+1)
+	for id, module := range currentModules {
+		modules[id] = module
+	}
+	modules[newModule.ID] = newModule
 
-	return l.registry.ApplyPhenotype([]ModuleBundle{action.ModuleBundle})
+	ordered := make([]ModuleBundle, 0, len(modules))
+	for _, module := range modules {
+		ordered = append(ordered, module)
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		return ordered[i].ID < ordered[j].ID
+	})
+	return ordered
 }

@@ -51,13 +51,7 @@ func (e *CELPolicyEvaluator) VerifyModulePolicy(ctx context.Context, newModule M
 	input := map[string]any{
 		"timestamp": time.Now().Unix(),
 		"module": map[string]any{
-			"id": newModule.ID,
-			// Name and Version are not in ModuleBundle definition in lifecycle.go yet,
-			// but they are used in CEL rules.
-			// Assuming they should be in Manifest or top level.
-			// For now, mapping ID to name if name missing, or extracting from Manifest if possible.
-			// Let's assume ID is the name for now or add them to ModuleBundle in lifecycle.go?
-			// I'll extract from Manifest if present, else use ID.
+			"id":               newModule.ID,
 			"name":             getNameFromManifest(newModule),
 			"version":          getVersionFromManifest(newModule),
 			"capability_names": extractCapabilityNames(newModule.Capabilities),

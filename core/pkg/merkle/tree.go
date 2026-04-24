@@ -36,27 +36,11 @@ func BuildMerkleTree(data map[string]interface{}) (*MerkleTree, error) {
 	for i, path := range paths {
 		value := data[path]
 
-		// Canonicalize and Hash (CSNF)
-		// Spec says: CanonicalBytes(CSA_subobject)
-		// csnf.Hash returns string hash. csnf.Canonicalize returns interface{}.
-		// We need bytes of canonical form.
-		// csnf package only exposes Canonicalize and Hash.
-		// Let's assume we can get bytes via csnf.Hash implementation logic (marshal canonical).
-		// But csnf.Hash does internal marshal.
-		// We should probably add CanonicalBytes to csnf package or replicate logic.
-		// For now, let's use csnf.Hash(val) and rely on that?
-		// No, leaf calculation is: "helm:evidence:leaf:v1\0" || path || "\0" || CanonicalBytes(val)
-		// Validation uses SHA256(leaf_bytes).
-		// So we need the bytes.
-		// I will implement a helper here to get canonical bytes using csnf.Canonicalize + json.Marshal.
-
 		can, err := csnf.Canonicalize(value)
 		if err != nil {
 			return nil, err
 		}
 
-		// Use standard json marshal on canonical object (simulating JCS)
-		// Since we stripped forbidden types, stdlib marshal is close to JCS (sorted keys).
 		canBytes, err := json.Marshal(can)
 		if err != nil {
 			return nil, err
@@ -72,7 +56,7 @@ func BuildMerkleTree(data map[string]interface{}) (*MerkleTree, error) {
 
 	// 3. Build tree bottom-up
 	if len(leaves) == 0 {
-		return &MerkleTree{Root: ""}, nil // Or specific empty root? Spec doesn't say.
+		return &MerkleTree{Root: ""}, nil
 	}
 
 	tree := &MerkleTree{Leaves: leaves}
@@ -84,7 +68,6 @@ func BuildMerkleTree(data map[string]interface{}) (*MerkleTree, error) {
 	}
 
 	tree.Root = currentLevel[0]
-	// Store root level too? Spec implies Nodes stores levels.
 	tree.Nodes = append(tree.Nodes, currentLevel)
 
 	return tree, nil

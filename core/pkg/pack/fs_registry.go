@@ -31,14 +31,8 @@ func NewFSRegistry(rootDir string) *FSRegistry {
 	}
 }
 
-// GetPack retrieves a pack by ID.
-// For now, it returns the latest version if version is not specified in ID (simplification),
-// or we can require ID to be PackID only and use ListVersions.
-// Actually, registry.GetPack usually takes an ID. Let's assume ID is just the name for now, or ID.
-// Planned enhancement: support exact-match lookup.
+// GetPack retrieves the latest version for a pack ID.
 func (r *FSRegistry) GetPack(ctx context.Context, id string) (*Pack, error) {
-	// Limitation: specific version lookup needs a specific method or ID format.
-	// We'll scan for the latest version of the packID.
 	versions, err := r.ListVersions(ctx, id)
 	if err != nil {
 		return nil, err
@@ -47,7 +41,6 @@ func (r *FSRegistry) GetPack(ctx context.Context, id string) (*Pack, error) {
 		return nil, fmt.Errorf("pack not found: %s", id)
 	}
 
-	// Pick latest (ListVersions should perform sort, but let's do it here to be safe or just pick last)
 	latest := versions[len(versions)-1]
 	return r.loadPack(id, latest.Version)
 }
@@ -154,14 +147,8 @@ func (r *FSRegistry) loadPack(name, version string) (*Pack, error) {
 		return nil, fmt.Errorf("invalid manifest for %s@%s: %w", name, version, err)
 	}
 
-	// Compute content hash of the directory
 	contentHash, err := r.computeContentHash(filepath.Join(r.rootDir, name, version))
 	if err != nil {
-		// Fallback or error? For audit strictness, we should log error but maybe not fail load if we want to debug.
-		// But spec says we must return valid pack.
-		// If verification fails later, that's fine.
-		// For now, let's return the computed hash.
-		// If it fails, we return error.
 		return nil, fmt.Errorf("failed to compute content hash: %w", err)
 	}
 
@@ -185,8 +172,6 @@ func (r *FSRegistry) computeContentHash(path string) (string, error) {
 		if info.IsDir() {
 			return nil
 		}
-		// Ignore hidden files or metadata that shouldn't be part of the hash?
-		// For now, hash everything except maybe .DS_Store
 		if strings.HasSuffix(filePath, ".DS_Store") {
 			return nil
 		}

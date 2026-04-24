@@ -1,5 +1,7 @@
 package errorir
 
+import "strings"
+
 // ErrorIR represents the canonical error format per Addendum 8.5.X.
 type ErrorIR struct {
 	Type     string      `json:"type"`
@@ -45,26 +47,28 @@ const (
 	CodeCELDPError                = "HELM/CORE/CEL_DP/EVALUATION_ERROR"
 )
 
-// Helper to create a new ErrorIR
+// NewErrorIR creates a canonical error value.
 func NewErrorIR(code, title, detail string, status int, classification string) ErrorIR {
-	// Derive namespace from code
-	// Code pattern: HELM/NAMESPACE/.../CODE
-	// Simple heuristic: first two components are HELM/NAMESPACE
-	// Spec: HELM/CORE/* -> CORE
-	// HELM/ADAPTER/ID/* -> ADAPTER/ID
-	// We can implement full parsing if needed, but for now simplistic.
-	namespace := "UNKNOWN"
-	// ... logic to extract namespace ...
-
 	return ErrorIR{
-		Type:   "https://helm.org/errors/" + code, // Dummy URI construction
+		Type:   "https://helm.org/errors/" + code,
 		Title:  title,
 		Status: status,
 		Detail: detail,
 		HELM: HELMDetails{
 			ErrorCode:      code,
-			Namespace:      namespace,
+			Namespace:      namespaceFromErrorCode(code),
 			Classification: classification,
 		},
 	}
+}
+
+func namespaceFromErrorCode(code string) string {
+	parts := strings.Split(code, "/")
+	if len(parts) < 2 || parts[0] != "HELM" || parts[1] == "" {
+		return "UNKNOWN"
+	}
+	if parts[1] == "ADAPTER" && len(parts) >= 3 && parts[2] != "" {
+		return parts[1] + "/" + parts[2]
+	}
+	return parts[1]
 }

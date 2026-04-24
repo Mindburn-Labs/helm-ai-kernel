@@ -50,16 +50,10 @@ func (k *KeyRing) RevokeKey(keyID string) {
 	delete(k.signers, keyID)
 }
 
-// SignDecision signs with the LATEST added key (implied active).
-// For proving rotation, checking verification is more important.
+// SignDecision signs with the active key, selected deterministically.
 func (k *KeyRing) SignDecision(d *contracts.DecisionRecord) error {
 	k.mu.RLock()
 	defer k.mu.RUnlock()
-	// Just pick one for now, or last added.
-	// In this proof, we usually sign with the specific Ed25519Signer instance,
-	// and use KeyRing ONLY for verification in the Executor.
-	// Deterministic selection: pick the lexicographically last key
-	// (assuming it is the latest/active key).
 	var keys []string
 	for k := range k.signers {
 		keys = append(keys, k)

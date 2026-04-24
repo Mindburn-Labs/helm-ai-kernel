@@ -64,10 +64,6 @@ func (l *AuditLog) Append(actor, action, target, details string) (*AuditEntry, e
 		PreviousHash: prevHash,
 	}
 
-	// Compute hash of the entry
-	// We need to exclude the Hash field itself from the computation, obviously.
-	// But since the struct has it, we should be careful.
-	// Let's create a temporary strict representation for hashing.
 	hash, err := computeEntryHash(&entry)
 	if err != nil {
 		return nil, err

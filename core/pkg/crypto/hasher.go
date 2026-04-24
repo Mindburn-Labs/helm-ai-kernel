@@ -11,8 +11,7 @@ type Hasher interface {
 	Hash(v interface{}) (string, error)
 }
 
-// CanonicalHasher implements RFC 8785 (JCS) inspired canonicalization.
-// For MVP, we use standard library json.Marshal which sorts map keys by default.
+// CanonicalHasher implements deterministic artifact hashing.
 type CanonicalHasher struct{}
 
 func NewCanonicalHasher() *CanonicalHasher {
@@ -20,9 +19,6 @@ func NewCanonicalHasher() *CanonicalHasher {
 }
 
 func (h *CanonicalHasher) Hash(v interface{}) (string, error) {
-	// json.Marshal produces canonical JSON (keys sorted) for maps.
-	// This is sufficient for MVP determinism if structs are stable.
-	// Use CanonicalMarshal for JCS compliance (no HTML escaping, sorted keys)
 	bytes, err := CanonicalMarshal(v)
 	if err != nil {
 		return "", fmt.Errorf("canonical serialization failed: %w", err)

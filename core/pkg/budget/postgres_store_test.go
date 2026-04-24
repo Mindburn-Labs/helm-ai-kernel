@@ -2,6 +2,7 @@ package budget
 
 import (
 	"context"
+	"database/sql"
 	"regexp"
 	"testing"
 	"time"
@@ -34,17 +35,15 @@ func TestPostgresStorage_Get(t *testing.T) {
 	assert.Equal(t, "tenant-1", b.TenantID)
 	assert.Equal(t, int64(100), b.DailyUsed)
 
-	// 2. Not Found case
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT tenant_id, daily_limit, monthly_limit, daily_used, monthly_used, last_updated FROM budgets WHERE tenant_id = $1")).
 		WithArgs("tenant-2").
-		WillReturnError(sqlmock.ErrCancelled) // Simulate no rows via Empty result set logic (actually sql.ErrNoRows comes from Scan of empty result)
-	// Properly verify "no rows" logic:
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT tenant_id")).
-		WithArgs("tenant-2").
-		WillReturnRows(sqlmock.NewRows([]string{}))
+		WillReturnError(sql.ErrNoRows)
 
-	// Wait, the implementation uses QueryRow.Scan which returns sql.ErrNoRows if empty.
-	// sqlmock handles this. Let's retry exact expectation.
+	b, err = store.Get(ctx, "tenant-2")
+	assert.NoError(t, err)
+	assert.Nil(t, b)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestPostgresStorage_Set(t *testing.T) {

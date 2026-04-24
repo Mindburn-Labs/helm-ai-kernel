@@ -407,14 +407,10 @@ func (v *Verifier) verifyIntegrity(ctx context.Context, pack *ResolvedPack, opts
 		}
 	}
 
-	// 4. Dependencies Check (Implicitly required for reliability)
-	// We'll run it but only fail if requested, or always enabled?
-	// Existing logic implies it was unused, but we should use it.
+	// Dependency integrity is part of the default verification result.
 	depRes := v.verifyDependencies(ctx, *pack)
 	results.Checks = append(results.Checks, depRes)
 	if !depRes.Passed {
-		// Dependencies failure should probably fail validation?
-		// Assuming yes for now if we want "integrity" implies complete package
 		passed = false
 	}
 

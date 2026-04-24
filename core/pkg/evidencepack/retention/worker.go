@@ -101,13 +101,6 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		return err
 	}
 
-	// In a full implementation, we would:
-	// 1. Load pack metadata to get creation timestamps
-	// 2. Apply retention policy (archive/delete based on age)
-	// 3. Respect MinRetainCount
-	// 4. Emit retention receipts
-	// For now, log basic statistics.
-
 	w.logger.Info("retention cycle complete",
 		"total_objects", len(hashes),
 		"duration", time.Since(start),

@@ -91,7 +91,6 @@ func canonicalizeArray(arr []interface{}) ([]interface{}, error) {
 }
 
 // PolicyInputBundle represents a normalized firewall policy input.
-// This is a simplified version for tooling package independence.
 type PolicyInputBundle struct {
 	RequestID       string                 `json:"request_id"`
 	EffectType      string                 `json:"effect_type"`

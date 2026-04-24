@@ -78,11 +78,7 @@ type Edge struct {
 
 // Lineage tracks provenance.
 type Lineage struct {
-	// Ref "LineageMarks.v1.json" - simplified here strictly for structural match
-	// If schema defines it as object, we use map or specific struct if known.
-	// Schema says "$ref": "LineageMarks.v1.json". We assume object.
 	RootCause string `json:"root_cause,omitempty"`
-	// Add other fields as needed based on LineageMarks schema
 }
 
 // Parallelism defines execution concurrency.

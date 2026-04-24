@@ -2,18 +2,24 @@ package identity
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"encoding/base64"
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestOIDCProvider_DiscoveryAndLogin(t *testing.T) {
-	// Mock OIDC Provider
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/.well-known/openid-configuration" {
-			json.NewEncoder(w).Encode(map[string]string{
+			_ = json.NewEncoder(w).Encode(map[string]string{
 				"authorization_endpoint": "http://" + r.Host + "/auth",
 				"token_endpoint":         "http://" + r.Host + "/token",
 				"jwks_uri":               "http://" + r.Host + "/keys",
@@ -30,7 +36,6 @@ func TestOIDCProvider_DiscoveryAndLogin(t *testing.T) {
 
 	p := NewOIDCProvider(ts.URL, "client-id", "client-secret", "http://localhost/callback")
 
-	// Test InitiateLogin (trigger discovery)
 	loginURL, err := p.InitiateLogin(context.Background(), "some-state")
 	if err != nil {
 		t.Fatalf("InitiateLogin failed: %v", err)
@@ -44,70 +49,129 @@ func TestOIDCProvider_DiscoveryAndLogin(t *testing.T) {
 	}
 }
 
-func TestOIDCProvider_Callback(t *testing.T) {
-	// Mock OIDC Provider
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/.well-known/openid-configuration" {
-			json.NewEncoder(w).Encode(map[string]string{
-				"authorization_endpoint": "http://" + r.Host + "/auth",
-				"token_endpoint":         "http://" + r.Host + "/token",
+func TestOIDCProvider_CallbackVerifiesSignedIDToken(t *testing.T) {
+	signingKey := newOIDCTestKey(t)
+	ts := newOIDCTestServer(t, signingKey, func(issuer string) (string, error) {
+		return signedOIDCTestToken(signingKey, "test-key", issuer, "client-id")
+	})
+	defer ts.Close()
+
+	p := NewOIDCProvider(ts.URL, "client-id", "client-secret", "http://localhost/callback")
+
+	got, err := p.Callback(context.Background(), "auth-code")
+	if err != nil {
+		t.Fatalf("Callback failed: %v", err)
+	}
+	if got.Subject != "user-123" {
+		t.Fatalf("Subject = %q, want user-123", got.Subject)
+	}
+	if got.Email != "test@example.com" {
+		t.Fatalf("Email = %q, want test@example.com", got.Email)
+	}
+	if got.Issuer != ts.URL {
+		t.Fatalf("Issuer = %q, want %q", got.Issuer, ts.URL)
+	}
+}
+
+func TestOIDCProvider_CallbackRejectsInvalidIDTokenSignature(t *testing.T) {
+	trustedKey := newOIDCTestKey(t)
+	untrustedKey := newOIDCTestKey(t)
+	ts := newOIDCTestServer(t, trustedKey, func(issuer string) (string, error) {
+		return signedOIDCTestToken(untrustedKey, "test-key", issuer, "client-id")
+	})
+	defer ts.Close()
+
+	p := NewOIDCProvider(ts.URL, "client-id", "client-secret", "http://localhost/callback")
+
+	_, err := p.Callback(context.Background(), "auth-code")
+	if err == nil {
+		t.Fatal("expected invalid id_token signature error")
+	}
+	if !strings.Contains(err.Error(), "invalid id_token") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func newOIDCTestServer(t *testing.T, signingKey *rsa.PrivateKey, issueToken func(issuer string) (string, error)) *httptest.Server {
+	t.Helper()
+
+	var ts *httptest.Server
+	ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/openid-configuration":
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"authorization_endpoint": ts.URL + "/auth",
+				"token_endpoint":         ts.URL + "/token",
+				"jwks_uri":               ts.URL + "/keys",
 			})
-			return
-		}
-		if r.URL.Path == "/token" {
+		case "/keys":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"keys": []map[string]string{oidcTestJWK(signingKey, "test-key")},
+			})
+		case "/token":
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if r.Form.Get("grant_type") != "authorization_code" || r.Form.Get("code") != "auth-code" {
+				http.Error(w, "unexpected token request form", http.StatusBadRequest)
+				return
+			}
+			idToken, err := issueToken(ts.URL)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
-
-			// Mock JWT construction
-			// header := "eyJhbGciOiJub25lIn0" // {"alg":"none"}
-			// payloadMap := map[string]interface{}{
-			// 	"sub":   "user-123",
-			// 	"iss":   "http://" + r.Host, // Dynamic issuer
-			// 	"email": "test@example.com",
-			// }
-
-			// Manually construct a simple token component
-			// "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1c2VyLTEyMyIsImlzcyI6IklTU1VFUl9VQVIiLCJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20ifQ."
-			// We need dynamic issuer.
-
-			// For this test, we just return a garbage token that MIGHT parse if we are lucky or just verify code exchange structure.
-			// Since our implementation parses unverified, it needs 3 parts.
-
-			// Let's rely on the previous test for flow and this one for simple code exchange success.
-			// To avoid parsing error in implementation, we need a valid JWT structure.
-			// But we don't have a signer here easily.
-
-			// Returning a hardcoded structure.
-			// {"sub":"user-123", "iss": "http://127.0.0.1:RANDOM", ...}
-			// We can't really predict the port.
-			// So the validation `iss != p.IssuerURL` will fail in the implementation unless we bypass it or mock correctly.
-
-			// SKIP the token response body for now to just pass the HTTP check,
-			// or return error.
-
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"access_token": "acc-123",
-				"id_token":     "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1c2VyLTEyMyJ9.", // Valid JWT structure (alg:none), mismatch issuer though.
+				"id_token":     idToken,
 				"token_type":   "Bearer",
 				"expires_in":   3600,
 			})
-			return
+		default:
+			http.NotFound(w, r)
 		}
 	}))
-	defer ts.Close()
 
-	// We expect callback to fail on issuer validation because we can't easily sign/construct JWT with dynamic port in this simple test
-	// without importing a signer.
-	p := NewOIDCProvider(ts.URL, "client-id", "client-secret", "http://localhost/callback")
+	return ts
+}
 
-	// Trigger callback
-	_, err := p.Callback(context.Background(), "auth-code")
+func newOIDCTestKey(t *testing.T) *rsa.PrivateKey {
+	t.Helper()
 
-	// We expect an error, but it should be about issuer mismatch or token parsing, not HTTP failure.
-	if err == nil {
-		t.Error("expected error due to mock token issuer mismatch, got nil")
-	} else if !strings.Contains(err.Error(), "invalid issuer") && !strings.Contains(err.Error(), "failed to parse") {
-		// If it failed for other reasons (like discovery), that's also interesting.
-		// Accept "invalid issuer" as success for this test step (proving code exchange happened and token was parsed).
-		t.Fatalf("unexpected error: %v", err)
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("rsa.GenerateKey failed: %v", err)
 	}
+	return key
+}
+
+func signedOIDCTestToken(key *rsa.PrivateKey, kid, issuer, audience string) (string, error) {
+	claims := jwt.MapClaims{
+		"sub":   "user-123",
+		"iss":   issuer,
+		"aud":   audience,
+		"email": "test@example.com",
+		"exp":   time.Now().Add(time.Hour).Unix(),
+		"iat":   time.Now().Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	token.Header["kid"] = kid
+	return token.SignedString(key)
+}
+
+func oidcTestJWK(key *rsa.PrivateKey, kid string) map[string]string {
+	return map[string]string{
+		"kty": "RSA",
+		"use": "sig",
+		"kid": kid,
+		"alg": "RS256",
+		"n":   encodeJWKInt(key.PublicKey.N),
+		"e":   encodeJWKInt(big.NewInt(int64(key.PublicKey.E))),
+	}
+}
+
+func encodeJWKInt(n *big.Int) string {
+	return base64.RawURLEncoding.EncodeToString(n.Bytes())
 }

@@ -90,7 +90,7 @@ func (r *GatewayRouter) Execute(ctx context.Context, req ExecContext) (*ExecResu
 		Content:        fmt.Sprintf("LIG Normalized Execution: Simulated output for %s", req.Prompt),
 		GatewayID:      "lig-local-node-01",
 		RuntimeType:    r.activeProfile.Provider,
-		RuntimeVersion: "1.0.0",          // Extracted dynamically in full implementation
+		RuntimeVersion: "1.0.0",
 		ModelHash:      "sha256-pending", // Exact hash snapshot prevents substitution attacks
 		Duration:       time.Since(start),
 	}, nil

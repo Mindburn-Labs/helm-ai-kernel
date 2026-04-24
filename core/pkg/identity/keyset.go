@@ -20,7 +20,7 @@ type KeySet interface {
 	KeyFunc() jwt.Keyfunc
 }
 
-// InMemoryKeySet holds keys in memory. MVP implementation.
+// InMemoryKeySet holds active signing keys in memory.
 type InMemoryKeySet struct {
 	mu         sync.RWMutex
 	currentKID string
@@ -31,7 +31,6 @@ func NewInMemoryKeySet() (*InMemoryKeySet, error) {
 	ks := &InMemoryKeySet{
 		keys: make(map[string]ed25519.PrivateKey),
 	}
-	// Rotation: Generate initial key
 	if err := ks.Rotate(); err != nil {
 		return nil, err
 	}
@@ -42,7 +41,6 @@ func (ks *InMemoryKeySet) Rotate() error {
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 
-	// Generate new Ed25519 key
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return fmt.Errorf("failed to generate key: %w", err)
@@ -52,10 +50,7 @@ func (ks *InMemoryKeySet) Rotate() error {
 	ks.keys[kid] = privateKey
 	ks.currentKID = kid
 
-	// Ensure map doesn't grow indefinitely (simple eviction)
 	if len(ks.keys) > 10 {
-		// MVP: clear oldest keys. Real impl would use expiration.
-		// For now simple map size limit
 		for k := range ks.keys {
 			if k != kid {
 				delete(ks.keys, k)

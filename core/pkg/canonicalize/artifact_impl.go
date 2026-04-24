@@ -63,7 +63,5 @@ func generatePreview(data []byte) string {
 	if len(data) <= maxPreviewLen {
 		return string(data)
 	}
-	// Simple truncation for now. In production, might want context-aware logic
-	// (e.g. valid JSON prefix) but raw byte truncation is deterministic.
 	return string(data[:maxPreviewLen]) + "..."
 }

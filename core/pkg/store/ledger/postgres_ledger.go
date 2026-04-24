@@ -59,11 +59,7 @@ func (l *PostgresLedger) Init(ctx context.Context) error {
 }
 
 func (l *PostgresLedger) Create(ctx context.Context, obl Obligation) error {
-	// 1. Get Previous Hash (Serialization for MVP)
-	// For high throughput, we'd use a separate atomic counter or log table.
-	// Here we just grab the last one.
 	var lastHash string
-	// Order by created_at desc to find tail.
 	err := l.db.QueryRowContext(ctx, "SELECT hash FROM obligations ORDER BY created_at DESC LIMIT 1").Scan(&lastHash)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
@@ -97,17 +93,10 @@ func sha256Sum(b []byte) []byte {
 func (l *PostgresLedger) Get(ctx context.Context, id string) (Obligation, error) {
 	// We can explicitly check tenant_id if passed in ctx, but usually Get(id) implies id is unique globally or we trust caller.
 	// However, if RLS is on and we set 'app.current_tenant', it filters auto.
-	// For now, we assume global uniqueness or we explicitly select tenant_id too.
 	query := `SELECT id, idempotency_key, intent, state, created_at, updated_at, hash, previous_hash, metadata, tenant_id FROM obligations WHERE id = $1`
 	row := l.db.QueryRowContext(ctx, query, id)
 
 	var obl Obligation
-	// use sql.NullString for optionals if needed, but here we scan directly.
-	// If metadata is NULL, Scan might fail if we don't use *string or NullString.
-	// We defined schema as `metadata TEXT`, it implies nullable?
-	// In Create/Update we inserted string(metaJSON). If empty, likely empty string "" or "null".
-	// Let's use *string for nullable fields to be safe.
-	// Let's use *string for nullable fields to be safe.
 	var hash, prevHash, metadata, tenantID sql.NullString
 
 	err := row.Scan(&obl.ID, &obl.IdempotencyKey, &obl.Intent, &obl.State, &obl.CreatedAt, &obl.UpdatedAt, &hash, &prevHash, &metadata, &tenantID)

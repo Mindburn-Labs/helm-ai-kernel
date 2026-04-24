@@ -5,9 +5,6 @@ import "fmt"
 // ConnectorManifest defines which external systems are allowed for each data class.
 type ConnectorManifest struct {
 	// AllowedClasses maps a ConnectorID to the maximum allowed DataClass.
-	// Actually, inverted is easier: Map DataClass to allowed Connectors?
-	// Or Map Connector to AllowedClasses.
-	// Let's go with: Map ConnectorID -> MaxAllowedClass (Hierarchy: Public < Internal < Confidential < Restricted)
 	ConnectorPolicies map[string]DataClass
 }
 

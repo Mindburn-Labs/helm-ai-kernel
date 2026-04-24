@@ -194,8 +194,6 @@ func isHigherSensitivity(newClass, oldClass governance.DataClass) bool {
 		governance.DataClassConfidential: 2,
 		governance.DataClassRestricted:   3,
 	}
-	// Default empty oldClass to Public (0) if not set, but DataClass zero value is "" which isn't in map.
-	// Let's assume empty "" is 0.
 	return rank[newClass] > rank[oldClass]
 }
 

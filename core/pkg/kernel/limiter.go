@@ -79,7 +79,6 @@ func EvaluateBackpressure(ctx context.Context, store LimiterStore, actorID strin
 	return nil
 }
 
-// InMemoryLimiterStore for testing/MVP
 // InMemoryLimiterStore for testing/single-instance deployments.
 type InMemoryLimiterStore struct {
 	mu      sync.Mutex

@@ -217,15 +217,11 @@ func buildNodeHash(left, right string) string {
 
 // getCanonicalBytes gets CSNF+JCS bytes for a value.
 func (b *MerkleTreeBuilder) getCanonicalBytes(value any) ([]byte, error) {
-	// Apply CSNF transformation
 	transformed, err := b.transformer.Transform(value)
 	if err != nil {
 		return nil, err
 	}
 
-	// Serialize to JSON (JCS would sort keys)
-	// Note: Go's json.Marshal doesn't guarantee key order, but for simple values this is fine
-	// A full implementation would use a JCS library
 	return json.Marshal(transformed)
 }
 

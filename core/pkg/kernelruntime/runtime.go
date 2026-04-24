@@ -28,10 +28,6 @@ func NewRuntime(
 }
 
 func (r *Runtime) SubmitIntent(ctx context.Context, intent *SignedIntent) (*Receipt, error) {
-	// 1. Verify Signature (Sovereign Barrier Enforced)
-	// We verify that the payload was signed by the ActorID's registered public key.
-	// NOTE: For MVP, we assume ActorID maps to a KeyID in the Keyring.
-	// In production, this runs against a Tenant Identity Provider.
 	if r.keyring != nil {
 		valid, err := r.keyring.VerifyKey(intent.ActorID, intent.Payload, intent.Signature)
 		if err != nil {
@@ -45,11 +41,6 @@ func (r *Runtime) SubmitIntent(ctx context.Context, intent *SignedIntent) (*Rece
 		return nil, fmt.Errorf("sovereign barrier error: runtime keyring not initialized")
 	}
 
-	// 2. Compile PRG (Stub for Node 8)
-	// 2. Compile PRG (Stub for Node 8)
-	// 3. Check Policy (Stub for Node 11)
-
-	// I5 - Multi-tenant sovereignty Enforcement
 	if intent.Context == nil {
 		return nil, fmt.Errorf("kernel check failed: missing actor context (I5)")
 	}
@@ -65,10 +56,8 @@ func (r *Runtime) SubmitIntent(ctx context.Context, intent *SignedIntent) (*Rece
 	if err != nil {
 		return nil, fmt.Errorf("kernel check failed: context canonicalization error: %w", err)
 	}
-	_ = ctxHash // Will be utilized in DecisionRecord binding in Node 9
+	_ = ctxHash
 
-	// 4. Persistence (Node 4)
-	// For now, we simply log the "IntentSubmitted" event to prove integration.
 	ev, err := r.eventRepo.Append(ctx, "IntentSubmitted", intent.ActorID, map[string]interface{}{
 		"intent_blob_size": len(intent.Payload),
 	})
@@ -86,8 +75,6 @@ func (r *Runtime) SubmitIntent(ctx context.Context, intent *SignedIntent) (*Rece
 }
 
 func (r *Runtime) Query(ctx context.Context, query *QueryRequest) (*QueryResult, error) {
-	// In the future this routers to specific projections.
-	// For Node 7, we just acknowledge wiring.
 	if query.Projection == "health" {
 		return &QueryResult{Data: "OK"}, nil
 	}

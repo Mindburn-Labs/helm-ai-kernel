@@ -1,5 +1,5 @@
 // Package consensus implements Byzantine-fault-tolerant consensus for ProofGraph
-// node batches. It uses a simplified HotStuff-inspired two-phase voting protocol
+// node batches. It uses a HotStuff-inspired two-phase voting protocol
 // (PRE_VOTE -> PRE_COMMIT -> COMMIT) to agree on which batches of content-addressed
 // ProofGraph nodes should be committed. Since ProofGraph nodes are append-only and
 // content-addressed, consensus reduces to agreeing on batch membership rather than

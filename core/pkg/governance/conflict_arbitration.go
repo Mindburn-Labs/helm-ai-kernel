@@ -68,6 +68,8 @@ func Arbitrate(inputs []ArbitrationInput, strategy ArbitrationStrategy) *Conflic
 		return arbitratePriority(inputs)
 	case StrategySpecific:
 		return arbitrateSpecific(inputs)
+	case StrategyEscalate:
+		return arbitrateEscalate(inputs)
 	default:
 		return arbitrateStrictest(inputs) // fail to strictest
 	}
@@ -146,6 +148,28 @@ func arbitrateSpecific(inputs []ArbitrationInput) *ConflictRecord {
 		Resolution: winner.Decision,
 		Strategy:   StrategySpecific,
 		Reason:     "most specific scope prevails",
+		ResolvedAt: time.Now().UTC(),
+	}
+}
+
+func arbitrateEscalate(inputs []ArbitrationInput) *ConflictRecord {
+	sorted := append([]ArbitrationInput(nil), inputs...)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].Priority != sorted[j].Priority {
+			return sorted[i].Priority > sorted[j].Priority
+		}
+		return sorted[i].RuleID < sorted[j].RuleID
+	})
+
+	return &ConflictRecord{
+		Type:       ConflictPolicyOverlap,
+		RuleAID:    sorted[0].RuleID,
+		RuleBID:    sorted[len(sorted)-1].RuleID,
+		DecisionA:  sorted[0].Decision,
+		DecisionB:  sorted[len(sorted)-1].Decision,
+		Resolution: string(StrategyEscalate),
+		Strategy:   StrategyEscalate,
+		Reason:     "conflicting rules require human escalation",
 		ResolvedAt: time.Now().UTC(),
 	}
 }

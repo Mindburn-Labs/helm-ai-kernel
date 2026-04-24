@@ -2,6 +2,7 @@ package capabilities
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 )
 
 // StdioMCPClient talks to an MCP server via stdio.
-// MVP: Simplified JSON-RPC logic.
 type StdioMCPClient struct {
 	Command string
 	Args    []string
@@ -31,29 +31,29 @@ type mcpRequest struct {
 }
 
 func (s *StdioMCPClient) Call(tool string, params map[string]any) error {
-	// 1. Prepare Request
 	req := mcpRequest{
 		JSONRPC: "2.0",
 		Method:  "tools/call",
 		Params:  map[string]any{"name": tool, "arguments": params},
 		ID:      1,
 	}
-	reqBytes, _ := json.Marshal(req) //nolint:errcheck // JSON marshal error ignored for simplicity
+	reqBytes, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("marshal MCP request: %w", err)
+	}
 
-	// 2. Exec Process (One-shot for MVP)
-	// In production, this would be a long-running process with a proper transport.
+	var stdin bytes.Buffer
+	if _, err := fmt.Fprintf(&stdin, "Content-Length: %d\r\n\r\n", len(reqBytes)); err != nil {
+		return fmt.Errorf("format MCP request header: %w", err)
+	}
+	if _, err := stdin.Write(reqBytes); err != nil {
+		return fmt.Errorf("write MCP request body: %w", err)
+	}
+
 	//nolint:gosec // G204: Command args are controlled by internal caller
 	cmd := exec.CommandContext(context.Background(), s.Command, s.Args...)
+	cmd.Stdin = &stdin
 
-	// stdin
-	stdin, _ := cmd.StdinPipe() //nolint:errcheck // Pipe error ignored for demo
-	go func() {
-		defer func() { _ = stdin.Close() }()                                   //nolint:errcheck // best-effort close
-		_, _ = fmt.Fprintf(stdin, "Content-Length: %d\r\n\r\n", len(reqBytes)) //nolint:errcheck // best-effort write
-		_, _ = stdin.Write(reqBytes)                                           //nolint:errcheck // best-effort write
-	}()
-
-	// stdout
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("mcp error: %w, output: %s", err, out)

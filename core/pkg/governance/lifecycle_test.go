@@ -42,21 +42,10 @@ func TestValidateModuleDependencies_CycleDetection(t *testing.T) {
 	// Expect policy check
 	mockPE.On("VerifyModulePolicy", mock.Anything, mock.Anything).Return(nil)
 
-	// 1. Valid case
 	newModule := ModuleBundle{ID: "D", Dependencies: []string{"A"}}
 	err := lm.ValidateModuleDependencies(context.Background(), newModule, currentModules)
 	assert.NoError(t, err)
 
-	// 2. Cycle case: D depends on A, A->B->C. If C depends on D, cycle.
-	// But we are adding D.
-	// Let's make C depend on D in the "current" modules? No, C is already there.
-	// Let's add E that depends on A. A depends on B. B depends on E (cycle).
-	// Current: A->B
-	// New: B->A (cycle if we add B again? No keys are unique).
-
-	// Cycle: A->B, B->A.
-	// Existing: A->B.
-	// New: B (update) -> A.
 	currentModules2 := map[string]ModuleBundle{
 		"A": {ID: "A", Dependencies: []string{"B"}},
 	}
@@ -72,18 +61,19 @@ func TestExecuteActivation(t *testing.T) {
 	mockPE := &MockPolicyEvaluator{}
 	lm := NewLifecycleManager(mockReg, mockPE)
 
+	existingModule := ModuleBundle{ID: "ExistingMod", Dependencies: []string{}}
 	newModule := ModuleBundle{ID: "NewMod", Dependencies: []string{}}
 	action := ActionActivateModule{ModuleBundle: newModule}
 
 	mockPE.On("VerifyModulePolicy", mock.Anything, newModule).Return(nil)
-	mockReg.On("ApplyPhenotype", []ModuleBundle{newModule}).Return(nil)
+	mockReg.On("ApplyPhenotype", []ModuleBundle{existingModule, newModule}).Return(nil)
 
-	// 1. Pass
 	decision := &contracts.DecisionRecord{Verdict: string(contracts.VerdictAllow)}
-	err := lm.ExecuteActivation(context.Background(), action, decision, map[string]ModuleBundle{})
+	err := lm.ExecuteActivation(context.Background(), action, decision, map[string]ModuleBundle{
+		existingModule.ID: existingModule,
+	})
 	assert.NoError(t, err)
 
-	// 2. Fail Decision
 	decisionFail := &contracts.DecisionRecord{Verdict: string(contracts.VerdictDeny), Reason: "No"}
 	err = lm.ExecuteActivation(context.Background(), action, decisionFail, map[string]ModuleBundle{})
 	assert.Error(t, err)
@@ -91,4 +81,18 @@ func TestExecuteActivation(t *testing.T) {
 
 	mockReg.AssertExpectations(t)
 	mockPE.AssertExpectations(t)
+}
+
+func TestMergeModuleSet_ReplacesExistingModuleDeterministically(t *testing.T) {
+	current := map[string]ModuleBundle{
+		"b": {ID: "b", Policy: "old"},
+		"a": {ID: "a", Policy: "keep"},
+	}
+
+	merged := mergeModuleSet(current, ModuleBundle{ID: "b", Policy: "new"})
+
+	assert.Equal(t, []ModuleBundle{
+		{ID: "a", Policy: "keep"},
+		{ID: "b", Policy: "new"},
+	}, merged)
 }

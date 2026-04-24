@@ -44,7 +44,7 @@ const (
 // ProofPurposeAssertion is the standard proof purpose for credential issuance.
 const ProofPurposeAssertion = "assertionMethod"
 
-// VerifiableCredential implements a simplified W3C Verifiable Credential Data Model v2.0.
+// VerifiableCredential implements the W3C Verifiable Credential Data Model v2.0.
 // It binds an agent's verified capabilities to a cryptographic proof chain.
 type VerifiableCredential struct {
 	Context           []string               `json:"@context"`

@@ -85,10 +85,8 @@ func (g *GXSDKDrift) Run(ctx *conform.RunContext) *conform.GateResult {
 			}
 		}
 		result.Metrics.Counts["sdk_version_markers"] = markerCount
-		// Soft warning — don't fail if markers missing, just note
 		if markerCount < sdkCount {
 			result.Reasons = append(result.Reasons, "SDK_VERSION_MARKER_MISSING")
-			// This is a warning, not a failure for now
 		}
 	}
 

@@ -271,20 +271,15 @@ func (g *Guardian) SetDelegationStore(ds identity.DelegationStore) {
 
 // SignDecision checks requirements and signs only if met
 func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, evidenceHashes []string, intervention *contracts.InterventionMetadata) error {
-	// 1. Gather Artifacts
 	artifacts := make([]*pkg_artifact.ArtifactEnvelope, 0, len(evidenceHashes))
 	for _, hash := range evidenceHashes {
 		env, err := g.registry.GetArtifact(ctx, hash)
 		if err != nil {
 			return fmt.Errorf("failed to retrieve evidence %s: %w", hash, err)
 		}
-		// In a real system, we'd verify validity here (registry.VerifyArtifact)
-		// but assuming GetArtifact returns valid structure.
 		artifacts = append(artifacts, env)
 	}
 
-	// 2. Determine Action ID
-	// Prefer tool_name for tool execution, otherwise use Effect Type
 	var actionID string
 	if toolName, ok := effect.Params["tool_name"].(string); ok && toolName != "" {
 		actionID = toolName
@@ -292,7 +287,7 @@ func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.Decisio
 		actionID = effect.EffectType
 	}
 
-	// 3. Handle Temporal Intervention (Priority over PRG)
+	// Temporal intervention has priority over PRG validation.
 	if intervention != nil && intervention.Type != contracts.InterventionNone {
 		decision.Intervention = intervention
 		// If interrupting or quarantining, strict verdict override
@@ -310,17 +305,10 @@ func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.Decisio
 	if g.tracker != nil {
 		// Attempt to resolve Budget ID from params
 		if budgetID, ok := effect.Params["budget_id"].(string); ok && budgetID != "" {
-			// FUTURE: Replace flat cost with CostEstimator based on EffectType/Params
 			cost := BudgetCost{Requests: 1}
 
-			// Check and Consume
-			// Note: For strict correctness, we should Check here, then Consume ONLY if PRG passes.
-			// However, preventing DoS via PRG computation (which is cheap compared to execution) implies early check.
-			// Let's Check first.
 			allowed, err := g.tracker.Check(budgetID, cost)
 			if err != nil {
-				// If checking fails (e.g. invalid budget ID), fail closed? Or open if just missing?
-				// Fail closed for security.
 				decision.Verdict = string(contracts.VerdictDeny)
 				decision.ReasonCode = string(contracts.ReasonBudgetError)
 				decision.Reason = fmt.Sprintf("Budget Error: %v", err)
@@ -333,9 +321,6 @@ func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.Decisio
 				return g.signer.SignDecision(decision)
 			}
 
-			// If allowed, we reserve/consume.
-			// In this synchronous MVP, we consume now.
-			// Ideally rollback if PRG fails, but for requests counters it's fine.
 			if consumeErr := g.tracker.Consume(budgetID, cost); consumeErr != nil {
 				// Log but don't fail — the Check already passed.
 				slog.Warn("guardian: budget consume failed", "budget_id", budgetID, "error", consumeErr)

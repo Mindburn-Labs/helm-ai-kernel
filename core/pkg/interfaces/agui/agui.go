@@ -146,8 +146,6 @@ func (k *AGUIKernel) RequestRender(ctx context.Context, req RenderRequest) (*Ren
 			return nil, fmt.Errorf("schema validation failed: %w", err)
 		}
 	case ProtocolSandbox:
-		// Sandbox components require explicit trust/context check.
-		// For MVP, we check a simplified trust level.
 		if def.TrustLevel < 50 {
 			return nil, fmt.Errorf("insufficient trust for sandbox execution: %d < 50", def.TrustLevel)
 		}
@@ -161,7 +159,7 @@ func (k *AGUIKernel) RequestRender(ctx context.Context, req RenderRequest) (*Ren
 		RenderID:    fmt.Sprintf("rnd-%d", time.Now().UnixNano()),
 		ComponentID: req.ComponentID,
 		Protocol:    def.Protocol,
-		IssuedAt:    issuedAt, // Should use authority clock
+		IssuedAt:    issuedAt,
 	}
 	sigPayload := fmt.Sprintf("%s|%s|%s|%s", rcpt.RenderID, rcpt.ComponentID, rcpt.Protocol, rcpt.IssuedAt.Format(time.RFC3339Nano))
 	sig, err := k.signer.Sign([]byte(sigPayload))

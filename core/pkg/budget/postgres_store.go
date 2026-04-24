@@ -51,16 +51,10 @@ func (s *PostgresStorage) Set(ctx context.Context, b *Budget) error {
 }
 
 func (s *PostgresStorage) Limits(ctx context.Context, tenantID string) (int64, int64, error) {
-	// For MVP, we fetch limits from the DB row itself if it exists, or fall back to defaults.
-	// But `Limits` method in interface implies "What are the allowed limits for this tenant?".
-	// If row exists, use those. If not, maybe use a `tenant_configs` table?
-	// For now, let's just query the row. If not found, return default hardcoded limits (as MVP).
-
 	row := s.db.QueryRowContext(ctx, "SELECT daily_limit, monthly_limit FROM budgets WHERE tenant_id = $1", tenantID)
 	var daily, monthly int64
 	err := row.Scan(&daily, &monthly)
 	if err == sql.ErrNoRows {
-		// New tenant with no record yet -> Default limits
 		return 1000, 50000, nil
 	}
 	if err != nil {

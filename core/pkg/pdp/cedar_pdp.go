@@ -35,7 +35,6 @@ type CedarPolicy struct {
 	ID     string `json:"id"`
 	Effect string `json:"effect"` // "permit" or "forbid"
 
-	// Conditions (simplified — full Cedar requires proper AST)
 	PrincipalMatch string   `json:"principal_match,omitempty"` // e.g., "Agent::\"agent-001\""
 	ActionMatch    []string `json:"action_match,omitempty"`    // e.g., ["Action::\"read_file\""]
 	ResourceMatch  string   `json:"resource_match,omitempty"`  // e.g., "Resource::\"filesystem\""

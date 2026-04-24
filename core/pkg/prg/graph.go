@@ -141,7 +141,6 @@ func check(rs RequirementSet, artifacts []*pkg_artifact.ArtifactEnvelope) bool {
 	leafResults := []bool{}
 	for _, req := range rs.Requirements {
 		has := false
-		// Simple Artifact Type check for now (Node 3 style)
 		if req.ArtifactType != "" {
 			for _, art := range artifacts {
 				if art.Type == req.ArtifactType {

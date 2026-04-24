@@ -296,7 +296,7 @@ func TestEvaluate_C2_FailHigherChecks(t *testing.T) {
 		t.Fatalf("Evaluate: %v", err)
 	}
 	if result.Passed {
-		t.Error("C2 evaluation should fail with default fake (capability_audit and above not implemented)")
+		t.Error("C2 evaluation should fail when capability_audit and higher checks are absent")
 	}
 }
 

@@ -3,6 +3,8 @@ package governance
 import (
 	"strings"
 	"testing"
+
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/capabilities"
 )
 
 // ─── 1: CEL validator rejects now() ───────────────────────────
@@ -235,17 +237,16 @@ func TestExt_ArbitrateSingleInput(t *testing.T) {
 	}
 }
 
-// ─── 22: Arbitrate ESCALATE strategy falls through to strictest ─
+// ─── 22: Arbitrate ESCALATE strategy requires human escalation ─
 
-func TestExt_ArbitrateEscalateFallsToStrictest(t *testing.T) {
+func TestExt_ArbitrateEscalate(t *testing.T) {
 	inputs := []ArbitrationInput{
 		{RuleID: "r1", Decision: "ALLOW"},
 		{RuleID: "r2", Decision: "DENY"},
 	}
-	// StrategyEscalate is not implemented — falls to default (strictest)
 	result := Arbitrate(inputs, StrategyEscalate)
-	if result.Resolution != "DENY" {
-		t.Fatalf("expected DENY (strictest fallback), got %s", result.Resolution)
+	if result.Resolution != "ESCALATE" {
+		t.Fatalf("expected ESCALATE, got %s", result.Resolution)
 	}
 }
 
@@ -262,14 +263,33 @@ func TestExt_CELMultipleBannedFunctions(t *testing.T) {
 // ─── 24: DecisionEngine Evaluate rejects E4 action ───────────
 
 func TestExt_DecisionEngineRejectsE4(t *testing.T) {
-	de, err := NewDecisionEngine(nil)
+	catalog := capabilities.NewToolCatalog()
+	catalog.Add(capabilities.Capability{ID: "dangerous", EffectClass: "E4"})
+
+	de, err := NewDecisionEngine(catalog)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = de.Evaluate(nil, "intent-1", []byte(`{"action":"dangerous"}`))
-	// Unknown action defaults to E3 without allowlist → policy violation
 	if err == nil {
-		t.Fatal("expected error for unknown E3 action not in allowlist")
+		t.Fatal("expected approval-required error for E4 action")
+	}
+	if !strings.Contains(err.Error(), "approval required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExt_DecisionEngineRejectsEmptyAction(t *testing.T) {
+	de, err := NewDecisionEngine(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = de.Evaluate(nil, "intent-1", []byte(`{"action":""}`))
+	if err == nil {
+		t.Fatal("expected malformed payload error")
+	}
+	if !strings.Contains(err.Error(), "action is required") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

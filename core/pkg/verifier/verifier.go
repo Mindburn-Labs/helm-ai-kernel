@@ -108,7 +108,6 @@ func checkStructure(bundlePath string) CheckResult {
 		return CheckResult{Name: "structure", Pass: false, Reason: fmt.Sprintf("path not found: %v", err)}
 	}
 	if !info.IsDir() {
-		// Could be a tar.gz — for now we only support directories
 		return CheckResult{Name: "structure", Pass: false, Reason: "bundle must be a directory (tar.gz extraction not yet supported in library)"}
 	}
 

@@ -3,6 +3,7 @@ package authz
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -66,37 +67,12 @@ func (e *Engine) checkRecursive(object, relation, subject string, visited map[st
 	}
 	visited[visitKey] = true
 
-	// 3. Indirect / Expansion (simplified)
-	// Iterate through all tuples to find:
-	// a) Group membership: (object#relation@group:G) AND (group:G#member@subject)
-	// b) Relation rewrite: (object#owner@subject) IMPLIES (object#viewer@subject)
-
+	// Expand group subject sets by recursively checking group membership.
 	for _, t := range e.tuples {
-		// Matching Object?
 		if t.Object != object {
 			continue
 		}
-
-		// Rewrite: if I am checking for 'viewer', maybe 'owner' also grants it?
-		// (This requires a schema, for MVP we hardcode specific implicits or stick to direct graph traversal)
-		// For MVP: We only support direct group expansion.
-
-		// If t.Relation == relation
 		if t.Relation == relation {
-			// Check if t.Subject is a SubjectSet (e.g. group:admins#member)
-			// If t.Subject matches the requested subject, we would have found it in step 1.
-			// So t.Subject is likely an intermediate group.
-			// Recursively check if 'subject' is a member of 't.Subject'.
-
-			// If t.Subject is "group:admins", we check if subject has relation "member" on "group:admins"
-			// But t.Subject format in Zanzibar is typically "group:admins#member"
-
-			// Parse t.Subject
-			// If it's a simple user ID, it didn't match step 1, so it's a diff user.
-			// If it's a set...
-			// Let's support simple groups: subject = "group:x".
-			// Recursively check: Check("group:x", "member", subject)
-
 			if isGroup(t.Subject) {
 				isMember, _ := e.checkRecursive(t.Subject, "member", subject, visited)
 				if isMember {
@@ -114,6 +90,5 @@ func (e *Engine) tupleKey(t RelationTuple) string {
 }
 
 func isGroup(subject string) bool {
-	// Simple heuristic for MVP
-	return len(subject) > 6 && subject[:6] == "group:"
+	return strings.HasPrefix(subject, "group:")
 }

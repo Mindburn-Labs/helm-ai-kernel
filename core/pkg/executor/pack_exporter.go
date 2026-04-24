@@ -119,13 +119,11 @@ func (e *packExporter) ExportVendorDueDiligencePack(ctx context.Context, input *
 // It strips the attestation hash/signature fields before hashing to avoid circular references.
 // Note: It uses core/pkg/canonicalize to ensure strict JCS compliance and large integer safety.
 func (e *packExporter) computePackHash(data interface{}) (string, error) {
-	// 1. Marshal to intermediate JSON (to handle struct tags)
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
 		return "", err
 	}
 
-	// 2. Unmarshal into generic map, using UseNumber to preserve integers > 2^53
 	var flatMap map[string]interface{}
 	decoder := json.NewDecoder(bytes.NewReader(jsonBytes))
 	decoder.UseNumber() // CRITICAL for Lamport clocks
@@ -133,24 +131,15 @@ func (e *packExporter) computePackHash(data interface{}) (string, error) {
 		return "", err
 	}
 
-	// 3. Remove attestation.pack_hash and attestation.signature before hashing.
 	if attestation, ok := flatMap["attestation"].(map[string]interface{}); ok {
 		delete(attestation, "pack_hash")
 		delete(attestation, "signature")
 	}
-
-	// 4. Use canonicalize.JCS helper, which handles the map->canonical bytes conversion
-	// recursive marshalling (including json.Number support) is handled by JCS() internally
-	// assuming we passed the correct types.
-	// Wait, canonicalize.JCS handles structs by default.
-	// But we have modified the map. So we pass the map to JCS.
-	// The map contains json.Number (from UseNumber). canonicalize.JCS supports json.Number.
 
 	canonicalBytes, err := canonicalize.JCS(flatMap)
 	if err != nil {
 		return "", err
 	}
 
-	// 5. Hash
 	return fmt.Sprintf("sha256:%s", canonicalize.HashBytes(canonicalBytes)), nil
 }

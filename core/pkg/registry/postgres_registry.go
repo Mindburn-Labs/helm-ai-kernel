@@ -78,9 +78,6 @@ func (r *PostgresRegistry) Register(bundle *manifest.Bundle) error {
 }
 
 func (r *PostgresRegistry) Unregister(name string) error {
-	// Only removes from rollouts? Or deletes all versions?
-	// The interface is vague. Assuming delete all versions for now, or just the rollouts.
-	// InMemoryRegistry removed it from the map.
 	ctx := context.Background()
 	_, err := r.db.ExecContext(ctx, "DELETE FROM registry_bundles WHERE name = $1", name)
 	if err != nil {

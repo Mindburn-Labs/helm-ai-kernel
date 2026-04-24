@@ -21,7 +21,7 @@ import (
 
 // ── Threat Scanner Fixtures (LLM01, LLM06) ─────────────────────────────
 
-// owaspThreatScanResult is a simplified threat scan result for conformance testing.
+// owaspThreatScanResult is a threat scan fixture for conformance testing.
 type owaspThreatScanResult struct {
 	FindingCount int
 	MaxSeverity  string
@@ -58,7 +58,7 @@ type owaspThreatFinding struct {
 	RuleID   string
 }
 
-// owaspThreatScanner is a simplified threat scanner for conformance tests.
+// owaspThreatScanner is a threat scanner fixture for conformance tests.
 // It replicates the detection logic from core/pkg/threatscan/scanner.go
 // at the contract level without requiring full scanner initialization.
 type owaspThreatScanner struct {
@@ -239,7 +239,7 @@ func decodeFullwidth(s string) string {
 
 // ── Firewall Fixtures (LLM02, LLM07, LLM10) ────────────────────────────
 
-// owaspFirewall is a simplified policy firewall for conformance testing.
+// owaspFirewall is a policy firewall fixture for conformance testing.
 type owaspFirewall struct {
 	allowedTools map[string]bool
 	schemas      map[string]string // tool -> JSON Schema
@@ -281,10 +281,7 @@ func (f *owaspFirewall) CallTool(toolName string, params map[string]any) (any, e
 }
 
 func (f *owaspFirewall) validateParams(tool, schema string, params map[string]any) error {
-	// Simplified schema validation: check required fields from schema.
-	// In production this uses jsonschema.Validate; here we check the basics.
 	if strings.Contains(schema, `"required"`) {
-		// Extract required fields (simplified parser for test fixtures)
 		required := extractRequiredFields(schema)
 		for _, field := range required {
 			if _, ok := params[field]; !ok {
@@ -295,7 +292,7 @@ func (f *owaspFirewall) validateParams(tool, schema string, params map[string]an
 	return nil
 }
 
-// extractRequiredFields does a simplified extraction of required fields from JSON Schema.
+// extractRequiredFields extracts required field names from fixture JSON Schema.
 func extractRequiredFields(schema string) []string {
 	// Find "required": ["field1", "field2"] pattern
 	idx := strings.Index(schema, `"required"`)
@@ -329,7 +326,7 @@ type owaspEgressDecision struct {
 	ReasonCode string
 }
 
-// owaspEgressChecker is a simplified egress checker for conformance testing.
+// owaspEgressChecker is an egress checker fixture for conformance testing.
 type owaspEgressChecker struct {
 	allowedDomains map[string]bool
 	allowedProtos  map[string]bool
@@ -382,12 +379,12 @@ func (ec *owaspEgressChecker) CheckEgress(domain, protocol string, payloadBytes 
 
 // ── Budget Gate Fixtures (LLM04) ────────────────────────────────────────
 
-// owaspBudgetCost is a simplified budget cost.
+// owaspBudgetCost is a budget cost fixture.
 type owaspBudgetCost struct {
 	Requests int64
 }
 
-// owaspBudgetGate is a simplified budget enforcement gate for conformance testing.
+// owaspBudgetGate is a budget enforcement fixture for conformance testing.
 type owaspBudgetGate struct {
 	mu       sync.Mutex
 	limit    int64
@@ -473,7 +470,7 @@ func (c *owaspEffectCatalog) Lookup(typeID string) *owaspEffectEntry {
 
 // ── Effect Permit Fixtures (LLM08) ──────────────────────────────────────
 
-// owaspEffectPermit is a simplified effect permit for conformance testing.
+// owaspEffectPermit is an effect permit fixture for conformance testing.
 type owaspEffectPermit struct {
 	PermitID    string
 	ConnectorID string
@@ -503,7 +500,7 @@ func newOWASPEffectPermit(connectorID, action, effectClass string) *owaspEffectP
 
 // ── Delegation Manager Fixtures (LLM08) ─────────────────────────────────
 
-// owaspDelegationRequest is a simplified delegation request.
+// owaspDelegationRequest is a delegation request fixture.
 type owaspDelegationRequest struct {
 	DelegatorID   string
 	DelegateeID   string
@@ -512,7 +509,7 @@ type owaspDelegationRequest struct {
 	TTL           time.Duration
 }
 
-// owaspDelegationGrant is a simplified delegation grant.
+// owaspDelegationGrant is a delegation grant fixture.
 type owaspDelegationGrant struct {
 	GrantID       string
 	DelegatorID   string

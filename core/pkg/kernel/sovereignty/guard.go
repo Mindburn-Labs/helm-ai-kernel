@@ -85,12 +85,11 @@ func (g *SovereigntyGuard) Authorize(decision *DecisionRecord) (*AuthorizedExecu
 	return intent, nil
 }
 
-// VerifyReceipt checks if a receipt is valid content-wise (simplified).
+// VerifyReceipt checks whether a receipt has a terminal execution status.
 func (g *SovereigntyGuard) VerifyReceipt(receipt *Receipt) bool {
 	if receipt == nil {
 		return false
 	}
-	// In a real system, verify the timestamp, content hash, and chain of custody.
 	return receipt.Status == "SUCCESS" || receipt.Status == "FAILURE"
 }
 

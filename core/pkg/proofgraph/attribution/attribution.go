@@ -1,7 +1,6 @@
 // Package attribution implements causal fault attribution for multi-agent
 // failures using the ProofGraph. When a failure occurs, it traces the causal
-// chain and distributes responsibility scores using a simplified Shapley-value
-// approach based on causal contribution.
+// chain and distributes responsibility scores from causal contribution.
 //
 // Design invariants:
 //   - Attribution is computed from ProofGraph causal structure

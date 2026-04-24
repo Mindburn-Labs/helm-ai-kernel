@@ -18,7 +18,7 @@ type KeyProvider interface {
 	PublicKey() ed25519.PublicKey
 }
 
-// MemoryKeyProvider is an in-memory implementation for development/demo.
+// MemoryKeyProvider is an in-memory implementation of KeyProvider.
 type MemoryKeyProvider struct {
 	pub  ed25519.PublicKey
 	priv ed25519.PrivateKey
@@ -47,8 +47,6 @@ type Keyring struct {
 
 func NewKeyring(p KeyProvider) *Keyring {
 	if p == nil {
-		// Fallback for seamless init? Or Enforce?
-		// For safety, let's create a memory one if nil, but warn.
 		p, _ = NewMemoryKeyProvider()
 	}
 	return &Keyring{provider: p}

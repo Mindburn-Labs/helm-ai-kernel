@@ -35,7 +35,6 @@ func TestMerkleTree(t *testing.T) {
 	// Level 1: [Hash(H1,H2), Hash(H3,H3)] -> N1, N2
 	// Level 2: [Hash(N1,N2)] -> Root
 
-	// Let's verify proof manually for /c (L3)
 	// Sibling of L3 is L3 itself (Right).
 	// Parent is N2.
 	// Sibling of N2 is N1 (Left).

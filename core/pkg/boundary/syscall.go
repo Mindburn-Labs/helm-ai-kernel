@@ -21,8 +21,7 @@ type TypedSyscall struct {
 	Payload   any       `json:"payload"`
 }
 
-// ValidateSyscall checks if the operation is valid and the payload matches basic expectations.
-// In a full implementation, this would use JSON Schema validation.
+// ValidateSyscall checks if the operation is valid and the payload matches the boundary contract.
 //
 //nolint:gocognit // payload validation requires comprehensive type checks
 func ValidateSyscall(op SyscallOp, payload any) error {

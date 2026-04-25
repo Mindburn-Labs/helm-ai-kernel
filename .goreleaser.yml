@@ -71,7 +71,7 @@ docker_signs:
 brews:
   - name: helm
     repository:
-      owner: Mindburn-Labs
+      owner: mindburn
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula

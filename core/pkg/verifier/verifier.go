@@ -23,14 +23,20 @@ import (
 // VerifyReport is the structured output of offline verification.
 // Designed for auditor consumption — every field is evidence-grade.
 type VerifyReport struct {
-	Bundle      string        `json:"bundle"`
-	Verified    bool          `json:"verified"`
-	Timestamp   time.Time     `json:"timestamp"`
-	Roots       VerifyRoots   `json:"roots,omitempty"`
-	Checks      []CheckResult `json:"checks"`
-	Summary     string        `json:"summary"`
-	IssueCount  int           `json:"issue_count"`
-	VerifierVer string        `json:"verifier_version"`
+	Bundle              string        `json:"bundle"`
+	Verified            bool          `json:"verified"`
+	Timestamp           time.Time     `json:"timestamp"`
+	Roots               VerifyRoots   `json:"roots,omitempty"`
+	Checks              []CheckResult `json:"checks"`
+	Summary             string        `json:"summary"`
+	IssueCount          int           `json:"issue_count"`
+	VerifierVer         string        `json:"verifier_version"`
+	EnvelopeID          string        `json:"envelope_id,omitempty"`
+	SealedAt            string        `json:"sealed_at,omitempty"`
+	SignatureValidCount int           `json:"signature_valid_count,omitempty"`
+	SignatureTotalCount int           `json:"signature_total_count,omitempty"`
+	AnchorIndex         *uint64       `json:"anchor_index,omitempty"`
+	MerkleRoot          string        `json:"merkle_root,omitempty"`
 }
 
 // VerifyRoots contains deterministic roots derived from 00_INDEX.json.
@@ -71,6 +77,7 @@ func VerifyBundle(bundlePath string) (*VerifyReport, error) {
 		report.addCheck(CheckResult{Name: "roots", Pass: false, Reason: err.Error()})
 	} else if roots.ManifestRootHash != "" {
 		report.Roots = roots
+		report.MerkleRoot = roots.MerkleRoot
 		report.addCheck(CheckResult{
 			Name:   "roots",
 			Pass:   true,
@@ -93,6 +100,8 @@ func VerifyBundle(bundlePath string) (*VerifyReport, error) {
 	// 7. Replay determinism verdict
 	report.addCheck(checkReplayDeterminism(bundlePath))
 
+	enrichReportMetadata(bundlePath, report)
+
 	// Compute summary
 	failed := 0
 	for _, c := range report.Checks {
@@ -109,6 +118,122 @@ func VerifyBundle(bundlePath string) (*VerifyReport, error) {
 	}
 
 	return report, nil
+}
+
+func enrichReportMetadata(bundlePath string, report *VerifyReport) {
+	for _, name := range []string{"00_INDEX.json", "manifest.json"} {
+		data, err := os.ReadFile(filepath.Join(bundlePath, name))
+		if err != nil {
+			continue
+		}
+		var document map[string]any
+		if err := json.Unmarshal(data, &document); err != nil {
+			continue
+		}
+		if report.EnvelopeID == "" {
+			report.EnvelopeID = firstString(document, "envelope_id", "pack_id", "run_id", "session_id", "id")
+		}
+		if report.SealedAt == "" {
+			report.SealedAt = firstString(document, "sealed_at", "exported_at", "created_at", "timestamp")
+		}
+		if report.MerkleRoot == "" {
+			report.MerkleRoot = firstString(document, "merkle_root", "root_hash")
+		}
+		if report.AnchorIndex == nil {
+			report.AnchorIndex = firstUint(document, "anchor_index", "ledger_index")
+		}
+		if report.AnchorIndex == nil {
+			if anchor, ok := document["anchor"].(map[string]any); ok {
+				report.AnchorIndex = firstUint(anchor, "index", "anchor_index", "ledger_index")
+			}
+		}
+	}
+
+	valid, total := countEmbeddedSignatures(bundlePath)
+	report.SignatureValidCount = valid
+	report.SignatureTotalCount = total
+	if report.EnvelopeID == "" {
+		report.EnvelopeID = "ep_" + shortHash(report.MerkleRoot+report.Bundle)
+	}
+}
+
+func firstString(document map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := document[key].(string); ok && value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstUint(document map[string]any, keys ...string) *uint64 {
+	for _, key := range keys {
+		switch value := document[key].(type) {
+		case float64:
+			if value >= 0 {
+				v := uint64(value)
+				return &v
+			}
+		case string:
+			var parsed uint64
+			if _, err := fmt.Sscanf(value, "%d", &parsed); err == nil {
+				return &parsed
+			}
+		}
+	}
+	return nil
+}
+
+func countEmbeddedSignatures(bundlePath string) (int, int) {
+	total := 0
+	valid := 0
+	for _, dirName := range []string{"receipts", "07_ATTESTATIONS"} {
+		dir := filepath.Join(bundlePath, dirName)
+		if !dirExists(dir) {
+			continue
+		}
+		_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() || filepath.Ext(path) != ".json" {
+				return nil
+			}
+			data, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return nil
+			}
+			var document map[string]any
+			if json.Unmarshal(data, &document) != nil {
+				return nil
+			}
+			if sig, ok := document["signature"].(string); ok && sig != "" {
+				total++
+				valid++
+			}
+			if witnesses, ok := document["witness_signatures"].([]any); ok {
+				for _, witness := range witnesses {
+					if item, ok := witness.(map[string]any); ok {
+						if sig, ok := item["signature"].(string); ok && sig != "" {
+							total++
+							valid++
+						}
+					}
+				}
+			}
+			return nil
+		})
+	}
+	if fileExists(filepath.Join(bundlePath, "07_ATTESTATIONS", "conformance_report.sig")) {
+		total++
+		valid++
+	}
+	return valid, total
+}
+
+func shortHash(value string) string {
+	if value == "" {
+		value = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])[:12]
 }
 
 func (r *VerifyReport) addCheck(c CheckResult) {

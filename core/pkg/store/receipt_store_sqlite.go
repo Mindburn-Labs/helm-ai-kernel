@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
@@ -40,15 +41,49 @@ func (s *SQLiteReceiptStore) migrate() error {
 		signature TEXT,
 		merkle_root TEXT,
 		prev_hash TEXT NOT NULL DEFAULT '',
-		lamport_clock INTEGER NOT NULL DEFAULT 0
+		lamport_clock INTEGER NOT NULL DEFAULT 0,
+		args_hash TEXT NOT NULL DEFAULT ''
 	);`
-	_, err := s.db.ExecContext(context.Background(), query)
+	if _, err := s.db.ExecContext(context.Background(), query); err != nil {
+		return err
+	}
+	return s.ensureColumn("args_hash", "TEXT NOT NULL DEFAULT ''")
+}
+
+func (s *SQLiteReceiptStore) ensureColumn(name, definition string) error {
+	rows, err := s.db.QueryContext(context.Background(), `PRAGMA table_info(receipts)`)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var (
+			cid        int
+			columnName string
+			columnType string
+			notNull    int
+			defaultVal sql.NullString
+			pk         int
+		)
+		if err := rows.Scan(&cid, &columnName, &columnType, &notNull, &defaultVal, &pk); err != nil {
+			return err
+		}
+		if strings.EqualFold(columnName, name) {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	_, err = s.db.ExecContext(context.Background(), fmt.Sprintf("ALTER TABLE receipts ADD COLUMN %s %s", name, definition))
 	return err
 }
 
 func (s *SQLiteReceiptStore) Get(ctx context.Context, decisionID string) (*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root
+        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash
         FROM receipts
         WHERE decision_id = ?
     `
@@ -57,7 +92,7 @@ func (s *SQLiteReceiptStore) Get(ctx context.Context, decisionID string) (*contr
 
 func (s *SQLiteReceiptStore) GetByReceiptID(ctx context.Context, receiptID string) (*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root
+        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash
         FROM receipts
         WHERE receipt_id = ?
     `
@@ -66,7 +101,7 @@ func (s *SQLiteReceiptStore) GetByReceiptID(ctx context.Context, receiptID strin
 
 func (s *SQLiteReceiptStore) List(ctx context.Context, limit int) ([]*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root
+        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash
         FROM receipts
         ORDER BY timestamp DESC
         LIMIT ?
@@ -91,16 +126,44 @@ func (s *SQLiteReceiptStore) List(ctx context.Context, limit int) ([]*contracts.
 	return receipts, nil
 }
 
+func (s *SQLiteReceiptStore) ListByAgent(ctx context.Context, agentID string, since uint64, limit int) ([]*contracts.Receipt, error) {
+	query := `
+        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash
+        FROM receipts
+        WHERE executor_id = ? AND lamport_clock > ?
+        ORDER BY lamport_clock ASC, timestamp ASC
+        LIMIT ?
+    `
+	rows, err := s.db.QueryContext(ctx, query, agentID, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var receipts []*contracts.Receipt
+	for rows.Next() {
+		r, err := scanReceiptRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		receipts = append(receipts, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return receipts, nil
+}
+
 func (s *SQLiteReceiptStore) Store(ctx context.Context, r *contracts.Receipt) error {
 	query := `INSERT INTO receipts (
-		receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	metaJSON, _ := json.Marshal(r.Metadata)
 	timestamp := r.Timestamp.UTC().Format(time.RFC3339Nano)
 
 	_, err := s.db.ExecContext(ctx, query,
-		r.ReceiptID, r.DecisionID, r.EffectID, r.ExternalReferenceID, r.Status, r.BlobHash, r.OutputHash, timestamp, r.ExecutorID, string(metaJSON), r.Signature, r.MerkleRoot, r.PrevHash, r.LamportClock,
+		r.ReceiptID, r.DecisionID, r.EffectID, r.ExternalReferenceID, r.Status, r.BlobHash, r.OutputHash, timestamp, r.ExecutorID, string(metaJSON), r.Signature, r.MerkleRoot, r.PrevHash, r.LamportClock, r.ArgsHash,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert receipt: %w", err)
@@ -111,7 +174,7 @@ func (s *SQLiteReceiptStore) Store(ctx context.Context, r *contracts.Receipt) er
 // GetLastForSession returns the most recent receipt for a session for causal DAG chaining.
 func (s *SQLiteReceiptStore) GetLastForSession(ctx context.Context, sessionID string) (*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root
+        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash
         FROM receipts
         WHERE executor_id = ?
         ORDER BY lamport_clock DESC
@@ -142,8 +205,11 @@ func (s *SQLiteReceiptStore) queryOne(ctx context.Context, query string, arg any
 		metaJSON   sql.NullString
 		signature  sql.NullString
 		merkleRoot sql.NullString
+		prevHash   sql.NullString
+		lamport    uint64
+		argsHash   sql.NullString
 	)
-	err := row.Scan(&receiptID, &decisionID, &effectID, &externalID, &status, &blobHash, &outputHash, &timestamp, &executorID, &metaJSON, &signature, &merkleRoot)
+	err := row.Scan(&receiptID, &decisionID, &effectID, &externalID, &status, &blobHash, &outputHash, &timestamp, &executorID, &metaJSON, &signature, &merkleRoot, &prevHash, &lamport, &argsHash)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("receipt not found")
@@ -170,6 +236,9 @@ func (s *SQLiteReceiptStore) queryOne(ctx context.Context, query string, arg any
 		Metadata:            meta,
 		Signature:           signature.String,
 		MerkleRoot:          merkleRoot.String,
+		PrevHash:            prevHash.String,
+		LamportClock:        lamport,
+		ArgsHash:            argsHash.String,
 	}, nil
 }
 
@@ -187,8 +256,11 @@ func scanReceiptRow(rows *sql.Rows) (*contracts.Receipt, error) {
 		metaJSON   sql.NullString
 		signature  sql.NullString
 		merkleRoot sql.NullString
+		prevHash   sql.NullString
+		lamport    uint64
+		argsHash   sql.NullString
 	)
-	if err := rows.Scan(&receiptID, &decisionID, &effectID, &externalID, &status, &blobHash, &outputHash, &timestamp, &executorID, &metaJSON, &signature, &merkleRoot); err != nil {
+	if err := rows.Scan(&receiptID, &decisionID, &effectID, &externalID, &status, &blobHash, &outputHash, &timestamp, &executorID, &metaJSON, &signature, &merkleRoot, &prevHash, &lamport, &argsHash); err != nil {
 		return nil, err
 	}
 	parsedTime := parseTime(timestamp)
@@ -211,6 +283,9 @@ func scanReceiptRow(rows *sql.Rows) (*contracts.Receipt, error) {
 		Metadata:            meta,
 		Signature:           signature.String,
 		MerkleRoot:          merkleRoot.String,
+		PrevHash:            prevHash.String,
+		LamportClock:        lamport,
+		ArgsHash:            argsHash.String,
 	}, nil
 }
 

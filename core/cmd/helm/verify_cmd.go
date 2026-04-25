@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"crypto/ed25519"
 	"encoding/hex"
@@ -9,9 +10,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/conform"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/verifier"
@@ -35,18 +38,34 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		bundle      string
 		jsonOutput  bool
 		jsonOutFile string
+		online      bool
+		ledgerURL   string
 	)
 
-	cmd.StringVar(&bundle, "bundle", "", "Path to EvidencePack directory (REQUIRED)")
+	cmd.StringVar(&bundle, "bundle", "", "Path to EvidencePack directory or archive")
 	cmd.BoolVar(&jsonOutput, "json", false, "Output results as JSON to stdout")
 	cmd.StringVar(&jsonOutFile, "json-out", "", "Write structured audit report to file (auditor mode)")
+	cmd.BoolVar(&online, "online", false, "Verify pack metadata against the public proof ledger after offline checks pass")
+	cmd.StringVar(&ledgerURL, "ledger-url", "", "Public proof verification URL")
 
-	if err := cmd.Parse(args); err != nil {
+	normalizedArgs, normalizeErr := normalizeVerifyArgs(args)
+	if normalizeErr != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", normalizeErr)
+		return 2
+	}
+	if err := cmd.Parse(normalizedArgs); err != nil {
 		return 2
 	}
 
+	if bundle == "" && cmd.NArg() > 0 {
+		bundle = cmd.Arg(0)
+	}
+	if cmd.NArg() > 1 {
+		_, _ = fmt.Fprintf(stderr, "Error: unexpected argument: %s\n", cmd.Arg(1))
+		return 2
+	}
 	if bundle == "" {
-		_, _ = fmt.Fprintln(stderr, "Error: --bundle is required")
+		_, _ = fmt.Fprintln(stderr, "Error: evidence pack path is required")
 		return 2
 	}
 
@@ -137,6 +156,38 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
+	if online && report.Verified {
+		proof, proofErr := verifyOnlineProof(report, ledgerURL)
+		if proofErr != nil {
+			report.Checks = append(report.Checks, verifier.CheckResult{
+				Name:   "online_proof",
+				Pass:   false,
+				Reason: proofErr.Error(),
+			})
+			report.Verified = false
+		} else if !proof.Verified {
+			reason := proof.Error
+			if reason == "" {
+				reason = "public proof API did not verify this pack"
+			}
+			report.Checks = append(report.Checks, verifier.CheckResult{
+				Name:   "online_proof",
+				Pass:   false,
+				Reason: reason,
+			})
+			report.Verified = false
+		} else {
+			report.Checks = append(report.Checks, verifier.CheckResult{
+				Name:   "online_proof",
+				Pass:   true,
+				Detail: "public proof API verified pack metadata",
+			})
+			mergeOnlineProof(report, proof)
+		}
+	}
+
+	finalizeVerifyReport(report)
+
 	// Write auditor JSON report to file if requested
 	if jsonOutFile != "" {
 		data, _ := json.MarshalIndent(report, "", "  ")
@@ -153,11 +204,9 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stdout, string(data))
 	} else {
 		if report.Verified {
-			_, _ = fmt.Fprintf(stdout, "✅ EvidencePack verification PASSED\n")
-			_, _ = fmt.Fprintf(stdout, "Bundle: %s\n", bundle)
-			_, _ = fmt.Fprintf(stdout, "Checks: %s\n", report.Summary)
+			printCompactVerifyReport(stdout, report)
 		} else {
-			_, _ = fmt.Fprintf(stdout, "❌ EvidencePack verification FAILED\n")
+			_, _ = fmt.Fprintf(stdout, "FAILED · envelope %s\n", displayEnvelopeID(report))
 			_, _ = fmt.Fprintf(stdout, "Bundle: %s\n", bundle)
 			for _, c := range report.Checks {
 				if !c.Pass {
@@ -247,6 +296,145 @@ func hasConformanceSignature(root string) bool {
 	return err == nil
 }
 
+func normalizeVerifyArgs(args []string) ([]string, error) {
+	var flags []string
+	var positional []string
+	valueFlags := map[string]bool{
+		"--bundle":     true,
+		"-bundle":      true,
+		"--json-out":   true,
+		"-json-out":    true,
+		"--ledger-url": true,
+		"-ledger-url":  true,
+	}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "-") {
+			flags = append(flags, arg)
+			if strings.Contains(arg, "=") {
+				continue
+			}
+			if valueFlags[arg] {
+				if i+1 >= len(args) {
+					return nil, fmt.Errorf("%s requires a value", arg)
+				}
+				i++
+				flags = append(flags, args[i])
+			}
+			continue
+		}
+		positional = append(positional, arg)
+	}
+	return append(flags, positional...), nil
+}
+
+type onlineProofResponse struct {
+	Verified            bool    `json:"verified"`
+	EnvelopeID          string  `json:"envelope_id,omitempty"`
+	SealedAt            string  `json:"sealed_at,omitempty"`
+	SignatureValidCount int     `json:"signature_valid_count,omitempty"`
+	SignatureTotalCount int     `json:"signature_total_count,omitempty"`
+	AnchorIndex         *uint64 `json:"anchor_index,omitempty"`
+	MerkleRoot          string  `json:"merkle_root,omitempty"`
+	Error               string  `json:"error,omitempty"`
+}
+
+func verifyOnlineProof(report *verifier.VerifyReport, ledgerURL string) (*onlineProofResponse, error) {
+	if ledgerURL == "" {
+		ledgerURL = os.Getenv("HELM_LEDGER_URL")
+	}
+	if ledgerURL == "" {
+		ledgerURL = "https://mindburn.org/api/proof/verify"
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"envelope_id": report.EnvelopeID,
+		"sealed_at":   report.SealedAt,
+		"merkle_root": report.MerkleRoot,
+		"anchor_index": func() any {
+			if report.AnchorIndex == nil {
+				return nil
+			}
+			return *report.AnchorIndex
+		}(),
+		"offline_verified": report.Verified,
+	})
+	if err != nil {
+		return nil, err
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(ledgerURL, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("public proof API unavailable: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return nil, fmt.Errorf("public proof API returned %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+	var proof onlineProofResponse
+	if err := json.NewDecoder(resp.Body).Decode(&proof); err != nil {
+		return nil, fmt.Errorf("invalid public proof response: %w", err)
+	}
+	return &proof, nil
+}
+
+func mergeOnlineProof(report *verifier.VerifyReport, proof *onlineProofResponse) {
+	if proof.EnvelopeID != "" {
+		report.EnvelopeID = proof.EnvelopeID
+	}
+	if proof.SealedAt != "" {
+		report.SealedAt = proof.SealedAt
+	}
+	if proof.MerkleRoot != "" {
+		report.MerkleRoot = proof.MerkleRoot
+	}
+	if proof.SignatureTotalCount > 0 {
+		report.SignatureTotalCount = proof.SignatureTotalCount
+		report.SignatureValidCount = proof.SignatureValidCount
+	}
+	if proof.AnchorIndex != nil {
+		report.AnchorIndex = proof.AnchorIndex
+	}
+}
+
+func printCompactVerifyReport(stdout io.Writer, report *verifier.VerifyReport) {
+	anchor := "offline"
+	if report.AnchorIndex != nil {
+		anchor = fmt.Sprintf("#%d", *report.AnchorIndex)
+	}
+	sealed := report.SealedAt
+	if sealed == "" {
+		sealed = "unknown"
+	}
+	_, _ = fmt.Fprintf(stdout, "envelope %s · sig %d/%d · anchor %s\n", displayEnvelopeID(report), report.SignatureValidCount, report.SignatureTotalCount, anchor)
+	_, _ = fmt.Fprintf(stdout, "VERIFIED · sealed %s\n", sealed)
+}
+
+func displayEnvelopeID(report *verifier.VerifyReport) string {
+	if report.EnvelopeID != "" {
+		return report.EnvelopeID
+	}
+	return "unknown"
+}
+
+func finalizeVerifyReport(report *verifier.VerifyReport) {
+	failed := 0
+	for _, check := range report.Checks {
+		if !check.Pass {
+			failed++
+		}
+	}
+	report.IssueCount = failed
+	if failed > 0 {
+		report.Verified = false
+		report.Summary = fmt.Sprintf("FAIL: %d/%d checks failed", failed, len(report.Checks))
+		return
+	}
+	report.Verified = true
+	report.Summary = fmt.Sprintf("PASS: %d/%d checks passed", len(report.Checks), len(report.Checks))
+}
+
 func init() {
-	Register(Subcommand{Name: "verify", Aliases: []string{}, Usage: "Verify EvidencePack bundle (--bundle, --json)", RunFn: runVerifyCmd})
+	Register(Subcommand{Name: "verify", Aliases: []string{}, Usage: "Verify EvidencePack bundle ([path] --bundle, --json, --online)", RunFn: runVerifyCmd})
 }

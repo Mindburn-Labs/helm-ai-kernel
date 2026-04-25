@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
@@ -35,6 +37,18 @@ func main() {
 // startServer is a variable to allow mocking in tests
 var startServer = runServer
 
+type serverOptions struct {
+	Mode       string
+	BindAddr   string
+	Port       int
+	DataDir    string
+	SQLitePath string
+	PolicyPath string
+	JSON       bool
+	Stdout     io.Writer
+	Stderr     io.Writer
+}
+
 // Run is the entrypoint for testing
 func Run(args []string, stdout, stderr io.Writer) int {
 	if len(args) < 2 {
@@ -51,8 +65,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	// Handle specific global commands that don't fit the registry pattern
 	switch args[1] {
 	case "server", "serve":
-		startServer()
-		return 0
+		return runServerCommand(args[1], args[2:], stdout, stderr)
 
 	case "trust":
 		if len(args) < 3 {
@@ -109,20 +122,41 @@ const (
 
 //nolint:gocognit,gocyclo
 func runServer() {
-	fmt.Fprintf(os.Stdout, "%sHELM Kernel starting...%s\n", ColorBold+ColorBlue, ColorReset)
+	runServerWithOptions(serverOptions{Mode: "server", Stdout: os.Stdout, Stderr: os.Stderr})
+}
+
+//nolint:gocognit,gocyclo
+func runServerWithOptions(opts serverOptions) {
+	if opts.Stdout == nil {
+		opts.Stdout = os.Stdout
+	}
+	if opts.Stderr == nil {
+		opts.Stderr = os.Stderr
+	}
+	fmt.Fprintf(opts.Stdout, "%sHELM Kernel starting...%s\n", ColorBold+ColorBlue, ColorReset)
 	ctx := context.Background()
 	logger := slog.Default()
+	dataDir := opts.DataDir
+	if dataDir == "" {
+		dataDir = "data"
+	}
 
 	var (
-		db  *sql.DB
-		err error
+		db           *sql.DB
+		receiptStore store.ReceiptStore
+		err          error
 	)
 
 	// 0.2 Connect to Database (Infrastructure)
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		fmt.Fprintf(os.Stdout, "ℹ️  DATABASE_URL not set. Falling back to %sLite Mode%s (SQLite).\n", ColorBold+ColorCyan, ColorReset)
-		db, _, _, err = setupLiteMode(ctx)
+		fmt.Fprintf(opts.Stdout, "ℹ️  DATABASE_URL not set. Falling back to %sLite Mode%s (SQLite).\n", ColorBold+ColorCyan, ColorReset)
+		if opts.SQLitePath != "" {
+			db, _, receiptStore, err = setupLiteModeWithDBPath(ctx, opts.SQLitePath)
+			dataDir = filepath.Dir(opts.SQLitePath)
+		} else {
+			db, _, receiptStore, err = setupLiteModeWithDataDir(ctx, dataDir)
+		}
 		if err != nil {
 			log.Fatalf("Failed to setup Lite Mode: %v", err)
 		}
@@ -146,18 +180,18 @@ func runServer() {
 		if err := ps.Init(ctx); err != nil {
 			log.Fatalf("Failed to init receipt store: %v", err)
 		}
-		_ = ps // Receipt store is managed via Services layer
+		receiptStore = ps
 	}
 
 	// 1. Initialize Kernel Layers
 
 	// Signing Authority
-	signer, err := loadOrGenerateSigner()
+	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
 	if err != nil {
 		log.Fatalf("Failed to init signer: %v", err)
 	}
 	verifier, _ := crypto.NewEd25519Verifier(signer.PublicKeyBytes())
-	fmt.Fprintf(os.Stdout, "🔑 Trust Root: %s%s%s\n", ColorBold+ColorGreen, signer.PublicKey(), ColorReset)
+	fmt.Fprintf(opts.Stdout, "🔑 Trust Root: %s%s%s\n", ColorBold+ColorGreen, signer.PublicKey(), ColorReset)
 
 	// 2. Registry
 	reg := registry.NewPostgresRegistry(db)
@@ -169,7 +203,7 @@ func runServer() {
 	// Pack verification is handled via the CLI subcommands (pack verify, etc.)
 
 	// Artifact Store
-	artStore, _ := artifacts.NewFileStore("data/artifacts")
+	artStore, _ := artifacts.NewFileStore(filepath.Join(dataDir, "artifacts"))
 	artRegistry := artifacts.NewRegistry(artStore, verifier)
 
 	// === SUBSYSTEM WIRING ===
@@ -199,6 +233,7 @@ func runServer() {
 	var extraRoutes func(*http.ServeMux)
 	if services != nil {
 		services.Guardian = guard
+		services.ReceiptStore = receiptStore
 		extraRoutes = func(mux *http.ServeMux) {
 			RegisterSubsystemRoutes(mux, services)
 		}
@@ -207,12 +242,18 @@ func runServer() {
 	// Start API Server
 	// SEC: Default to localhost to prevent accidental network exposure (OpenClaw vector).
 	// Set HELM_BIND_ADDR=0.0.0.0 to listen on all interfaces when intentionally exposing.
-	bindAddr := "127.0.0.1"
-	if envBind := os.Getenv("HELM_BIND_ADDR"); envBind != "" {
+	bindAddr := opts.BindAddr
+	if bindAddr == "" {
+		bindAddr = "127.0.0.1"
+	}
+	if envBind := os.Getenv("HELM_BIND_ADDR"); envBind != "" && opts.BindAddr == "" {
 		bindAddr = envBind
 	}
-	port := 8080
-	if envPort := os.Getenv("HELM_PORT"); envPort != "" {
+	port := opts.Port
+	if port == 0 {
+		port = 8080
+	}
+	if envPort := os.Getenv("HELM_PORT"); envPort != "" && opts.Port == 0 {
 		if p, err := strconv.Atoi(envPort); err == nil {
 			port = p
 		}
@@ -272,7 +313,19 @@ func runServer() {
 		}
 	}()
 
-	log.Printf("[helm] ready: http://%s:%d", bindAddr, port)
+	if opts.JSON {
+		_ = json.NewEncoder(opts.Stdout).Encode(map[string]any{
+			"name":   "helm-edge-local",
+			"addr":   bindAddr,
+			"port":   port,
+			"ready":  true,
+			"policy": opts.PolicyPath,
+		})
+	} else if opts.Mode == "serve" {
+		fmt.Fprintf(opts.Stdout, "helm-edge-local · listening :%d · ready\n", port)
+	} else {
+		log.Printf("[helm] ready: http://%s:%d", bindAddr, port)
+	}
 	log.Println("[helm] press ctrl+c to stop")
 
 	// Graceful Shutdown

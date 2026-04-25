@@ -19,12 +19,24 @@ import (
 )
 
 func setupLiteMode(ctx context.Context) (*sql.DB, ledger.Ledger, store.ReceiptStore, error) {
-	dataDir := "data"
-	if err := os.MkdirAll(dataDir, 0750); err != nil {
+	return setupLiteModeWithDataDir(ctx, "data")
+}
+
+func setupLiteModeWithDataDir(ctx context.Context, dataDir string) (*sql.DB, ledger.Ledger, store.ReceiptStore, error) {
+	if dataDir == "" {
+		dataDir = "data"
+	}
+	return setupLiteModeWithDBPath(ctx, filepath.Join(dataDir, "helm.db"))
+}
+
+func setupLiteModeWithDBPath(ctx context.Context, dbPath string) (*sql.DB, ledger.Ledger, store.ReceiptStore, error) {
+	if dbPath == "" {
+		dbPath = filepath.Join("data", "helm.db")
+	}
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0750); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create data dir: %w", err)
 	}
 
-	dbPath := filepath.Join(dataDir, "helm.db")
 	log.Printf("[helm] lite mode: using sqlite at %s", dbPath)
 
 	db, err := sql.Open("sqlite", dbPath)
@@ -48,7 +60,17 @@ func setupLiteMode(ctx context.Context) (*sql.DB, ledger.Ledger, store.ReceiptSt
 }
 
 func loadOrGenerateSigner() (crypto.Signer, error) {
-	keyPath := "data/root.key"
+	return loadOrGenerateSignerWithDataDir("data")
+}
+
+func loadOrGenerateSignerWithDataDir(dataDir string) (crypto.Signer, error) {
+	if dataDir == "" {
+		dataDir = "data"
+	}
+	if err := os.MkdirAll(dataDir, 0750); err != nil {
+		return nil, fmt.Errorf("failed to create data dir: %w", err)
+	}
+	keyPath := filepath.Join(dataDir, "root.key")
 	if _, err := os.Stat(keyPath); err == nil {
 		// Load existing key
 		keyHex, err := os.ReadFile(keyPath)
@@ -84,7 +106,7 @@ func loadOrGenerateSigner() (crypto.Signer, error) {
 		return nil, fmt.Errorf("failed to save root.key: %w", err)
 	}
 
-	pubPath := "data/root.pub"
+	pubPath := filepath.Join(dataDir, "root.pub")
 	if err := os.WriteFile(pubPath, []byte(hex.EncodeToString(pub)), 0644); err != nil {
 		log.Printf("⚠️  failed to save root.pub: %v", err)
 	}

@@ -160,6 +160,68 @@ func TestSQLiteReceiptList(t *testing.T) {
 	}
 }
 
+func TestSQLiteReceiptRoundTripsChainFieldsAndAgentFilter(t *testing.T) {
+	store, cleanup := newTestSQLiteStore(t)
+	defer cleanup()
+	ctx := context.Background()
+	receipts := []*contracts.Receipt{
+		{
+			ReceiptID:    "r-agent-1",
+			DecisionID:   "d-agent-1",
+			EffectID:     "e",
+			Status:       "OK",
+			Timestamp:    time.Now().Add(-time.Second),
+			ExecutorID:   "agent.titan.exec",
+			PrevHash:     "prev-0",
+			LamportClock: 1,
+			ArgsHash:     "args-1",
+			BlobHash:     "blob-1",
+		},
+		{
+			ReceiptID:    "r-agent-2",
+			DecisionID:   "d-agent-2",
+			EffectID:     "e",
+			Status:       "OK",
+			Timestamp:    time.Now(),
+			ExecutorID:   "agent.titan.exec",
+			PrevHash:     "prev-1",
+			LamportClock: 2,
+			ArgsHash:     "args-2",
+			BlobHash:     "blob-2",
+		},
+		{
+			ReceiptID:    "r-other",
+			DecisionID:   "d-other",
+			EffectID:     "e",
+			Status:       "OK",
+			Timestamp:    time.Now(),
+			ExecutorID:   "agent.other",
+			LamportClock: 3,
+		},
+	}
+	for _, receipt := range receipts {
+		if err := store.Store(ctx, receipt); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := store.GetByReceiptID(ctx, "r-agent-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PrevHash != "prev-1" || got.LamportClock != 2 || got.ArgsHash != "args-2" || got.BlobHash != "blob-2" {
+		t.Fatalf("chain fields did not round-trip: %+v", got)
+	}
+
+	filtered, err := store.ListByAgent(ctx, "agent.titan.exec", 1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(filtered) != 1 || filtered[0].ReceiptID != "r-agent-2" {
+		t.Fatalf("unexpected agent filter result: %+v", filtered)
+	}
+}
+
 func TestSQLiteReceiptNotFound(t *testing.T) {
 	store, cleanup := newTestSQLiteStore(t)
 	defer cleanup()

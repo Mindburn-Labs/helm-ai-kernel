@@ -7,6 +7,10 @@
     "doc": "docs",
     "example": "examples"
   },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "test": "make test-all"
   },

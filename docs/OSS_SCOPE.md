@@ -1,0 +1,164 @@
+---
+title: OSS_SCOPE
+---
+
+# HELM OSS Scope
+
+> **Canonical architecture**: see [ARCHITECTURE.md](ARCHITECTURE.md) for the
+> normative trust boundary model and TCB definition. For the canonical
+> 8-package TCB inventory, see [TCB_POLICY.md](TCB_POLICY.md).
+
+HELM OSS is the **open execution kernel** of the HELM stack.
+
+It exists to keep the deterministic boundary small, portable, and independently trustworthy. The commercial HELM layers must extend this kernel, not replace it.
+
+## Kernel TCB (Trusted Computing Base)
+
+The canonical TCB is bounded to **8 packages** — the minimal trusted core.
+See [TCB_POLICY.md](TCB_POLICY.md) for the authoritative package list,
+expansion criteria, and CI enforcement details.
+
+## Active OSS Packages
+
+The following packages are part of the OSS kernel, including both TCB and
+non-TCB supporting infrastructure:
+
+### TCB Packages
+
+| Package            | Purpose                                                       | Status    |
+| ------------------ | ------------------------------------------------------------- | --------- |
+| `contracts/`       | Canonical data structures (Decision, Effect, Receipt, Intent) | ✅ Active |
+| `crypto/`          | Ed25519 signing, JCS canonicalization                         | ✅ Active |
+| `guardian/`        | Policy Enforcement Point (PEP), PRG enforcement               | ✅ Active |
+| `executor/`        | SafeExecutor with receipt generation                          | ✅ Active |
+| `proofgraph/`      | Cryptographic ProofGraph DAG                                  | ✅ Active |
+| `trust/registry/`  | Event-sourced trust registry                                  | ✅ Active |
+| `runtime/sandbox/` | WASI sandbox (wazero, deny-by-default)                        | ✅ Active |
+| `receipts/`        | Receipt policy enforcement (fail-closed)                      | ✅ Active |
+
+### Supporting Infrastructure (Non-TCB)
+
+| Package                | Purpose                                    | Status    |
+| ---------------------- | ------------------------------------------ | --------- |
+| `canonicalize/`        | RFC 8785 JCS implementation                | ✅ Active |
+| `manifest/`            | Tool args/output validation (PEP boundary) | ✅ Active |
+| `agent/adapter.go`     | KernelBridge choke point                   | ✅ Active |
+| `runtime/budget/`      | Compute budget enforcement                 | ✅ Active |
+| `escalation/ceremony/` | RFC-005 Approval Ceremony                  | ✅ Active |
+| `genesis/ceremony/`    | VGL six-phase Genesis ceremony state machine | ✅ Active |
+| `evidence/`            | Evidence pack export/verify                | ✅ Active |
+| `replay/`              | Replay engine for verification             | ✅ Active |
+| `mcp/`                 | Tool catalog + MCP gateway                 | ✅ Active |
+| `kernel/`              | Rate limiting, backpressure                | ✅ Active |
+| `a2a/`                 | Agent-to-Agent trust protocol              | ✅ Active |
+| `otel/`                | OpenTelemetry governance telemetry         | ✅ Active |
+| `identity/did/`        | W3C DID-based agent identity               | ✅ Active |
+| `crypto/hybrid/`       | Hybrid Ed25519 + ML-DSA-65 dual signing    | ✅ Active |
+| `crypto/zkproof/`      | Zero-knowledge compliance proofs           | ✅ Active |
+| `memory/`              | Memory integrity, trust, poisoning defense | ✅ Active |
+| `threatscan/ensemble/` | Quorum-based multi-engine threat scanning  | ✅ Active |
+| `evidencepack/summary/`| Constant-size cryptographic evidence summaries | ✅ Active |
+| `skillfortify/`        | Runtime tool/skill integrity verification  | ✅ Active |
+| `provenance/`          | Supply chain provenance with signed attestations | ✅ Active |
+| `budget/cost/`         | Cost attribution and pre-execution estimation | ✅ Active |
+| `delegation/aip/`      | Agent Interaction Protocol, continuous delegation | ✅ Active |
+| `replay/comparison/`   | Side-by-side replay comparison for drift detection | ✅ Active |
+| `a2a/federation/`      | Federated trust across organizations       | ✅ Active |
+| `mcptox/`              | MCP tool toxicity scanner (rug-pull, typosquatting) | ✅ Active |
+| `effects/reversibility/` | Reversibility engine for effect compensation | ✅ Active |
+| `observability/slo_engine/` | SLO-driven governance actions          | ✅ Active |
+| `otel/cloudevents/`    | CloudEvents SIEM export                    | ✅ Active |
+| `connectors/ddipe/`    | DDIPE document scanning for governance extraction | ✅ Active |
+
+### Deployment Infrastructure
+
+| Package                         | Purpose                                  | Status    |
+| ------------------------------- | ---------------------------------------- | --------- |
+| `deploy/helm-operator/`         | K8s CRDs (PolicyBundle, GuardianSidecar) | ✅ Active |
+| `protocols/spec/`               | RFC-style protocol specification         | ✅ Active |
+| `protocols/conformance/v1/owasp/` | Machine-readable OWASP threat vectors  | ✅ Active |
+
+### Product Surfaces (local-first — boundary re-split in progress)
+
+The OSS boundary is expanding to include the complete local-first/single-operator HELM product — so the free wedge is a *lovable* product, not a CLI-only kernel. See `/.claude/plans/dynamic-orbiting-crayon.md` for the phased plan (approved 2026-04-16) and the repo-level `apps/helm-studio/MIGRATION_STATUS.md` for adaptation status.
+
+| Surface                       | Purpose                                                                     | Status               |
+| ----------------------------- | --------------------------------------------------------------------------- | -------------------- |
+| `apps/helm-studio/`           | React + Vite operator shell with `src/ext/` extension contracts             | 🛠 Staged (Phase 2a) |
+| `packages/design-tokens/`     | `@helm/design-tokens` — shared CSS tokens, primitives, reset, cartography   | 🛠 Staged (Phase 2b) |
+| `tools/dispute-viewer/`       | Standalone HTML evidence/dispute viewer                                     | ✅ Active (Phase 3c) |
+| `core/pkg/genesis/ceremony/`  | 6-phase VGL ceremony state machine (single-operator local mode)             | ✅ Active (Phase 3a) |
+| `core/pkg/packs/install/`     | Pack install runtime (verify / plan / install / uninstall / rollback / chained receipt) for the core and community channels | ✅ Active (Phase 4a) |
+
+`🛠 Staged` means source files are present but adaptation steps are still required before standalone build (see each surface's MIGRATION_STATUS). The commercial `helm/` repo continues to mirror OSS via `tools/oss.lock` pinning + SHA256 `protected.manifest`.
+
+## Removed from TCB (Enterprise)
+
+The following packages were removed to minimize the attack surface:
+
+| Package                    | Reason                        |
+| -------------------------- | ----------------------------- |
+| `access/`                  | Enterprise access control     |
+| `ingestion/`               | Brain subsystem data pipeline |
+| `verification/refinement/` | Enterprise verification       |
+| `cockpit/`                 | UI dashboard                  |
+| `ops/`                     | Operations tooling            |
+| `multiregion/`             | Multi-region orchestration    |
+| `hierarchy/`               | Enterprise hierarchy          |
+| `heuristic/`               | Heuristic analysis            |
+| `perimeter/`               | Network perimeter             |
+
+## First-Class Execution Surfaces
+
+### MCP Interceptor
+
+The MCP gateway (`core/pkg/mcp/`) is a **first-class governed surface**,
+not an adapter. It provides:
+
+- Tool discovery with governance metadata (`/mcp/v1/capabilities`)
+- Governed tool execution with signed receipts (`/mcp/v1/execute`)
+- Schema validation against pinned tool contracts
+- Full ProofGraph integration — MCP calls produce the same receipt chain
+  as OpenAI proxy calls
+
+### OpenAI-Compatible Proxy
+
+The governed proxy (`/v1/chat/completions`) intercepts OpenAI-compatible
+tool calls and routes them through the PEP boundary.
+
+### Bounded-Surface Primitives
+
+The OSS kernel includes configurable surface containment primitives
+(see [CAPABILITY_MANIFESTS.md](CAPABILITY_MANIFESTS.md)):
+
+- Domain-scoped tool bundles
+- Explicit capability manifests
+- Read-only / write-limited / side-effect-class profiles
+- Connector allowlists
+- Destination scoping
+- Filesystem/network deny-by-default (WASI)
+- Sandbox profile requirement per tool class
+
+## Boundary Truth
+
+OSS includes:
+
+- **Surface containment** — capability manifests, tool bundles, sandbox profiles
+- **Dispatch enforcement** — fail-closed PEP, policy evaluation, budget gates
+- **Verifiable receipts** — signed receipts, ProofGraph, replay
+- **MCP interceptor** — first-class governed MCP surface
+- **OpenAI proxy** — governed proxy for OpenAI-compatible SDKs
+- Adapters and integration surfaces
+
+OSS does not include (commercial overlays only):
+
+- Hosted multi-tenant control plane (tenancy, workspaces, shared operator sessions)
+- Enterprise identity and admin (SCIM, SSO/SAML/OIDC, directory sync)
+- Legal hold, long-term hosted retention, regulator-facing workflows
+- Org-scale rollout / staging / shadow enforcement on live production traffic
+- Managed federation and hosted trust registries
+- Premium pack channels (teams, enterprise) and entitlement engine
+- Certified connector program as a hosted service (OSS ships the connector SDK + community verification harness)
+- Billing, seat management, usage metering
+
+The invariant is simple: OSS must stay *fully useful on its own* as a beautiful local-first product — kernel plus Studio shell plus Genesis Local plus community packs plus evidence/replay/dispute viewers. The commercial layer monetizes shared organizational control around the kernel, not artificial runtime crippleware. Surface Design Studio, pack install, and proof UX all live in OSS as the free wedge. Mindburn-specific products (Titan trading, research-lab, premium signals, people-ops, programs, workforce) live as private modules in the commercial repo and plug into OSS Studio via the `src/ext/` extension contracts.

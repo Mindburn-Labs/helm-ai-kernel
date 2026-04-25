@@ -1,0 +1,22 @@
+{
+  "name": "@helm/design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./tokens.css": "./tokens.css",
+    "./primitives.css": "./primitives.css",
+    "./reset.css": "./reset.css",
+    "./fabric.css": "./fabric.css",
+    "./cartography.css": "./cartography.css"
+  },
+  "files": [
+    "*.css",
+    "*.ts"
+  ],
+  "sideEffects": [
+    "*.css"
+  ]
+}

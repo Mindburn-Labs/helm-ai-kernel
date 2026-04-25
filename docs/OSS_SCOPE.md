@@ -45,6 +45,7 @@ non-TCB supporting infrastructure:
 | `agent/adapter.go`     | KernelBridge choke point                   | ✅ Active |
 | `runtime/budget/`      | Compute budget enforcement                 | ✅ Active |
 | `escalation/ceremony/` | RFC-005 Approval Ceremony                  | ✅ Active |
+| `genesis/ceremony/`    | VGL six-phase Genesis ceremony state machine | ✅ Active |
 | `evidence/`            | Evidence pack export/verify                | ✅ Active |
 | `replay/`              | Replay engine for verification             | ✅ Active |
 | `mcp/`                 | Tool catalog + MCP gateway                 | ✅ Active |
@@ -76,6 +77,20 @@ non-TCB supporting infrastructure:
 | `deploy/helm-operator/`         | K8s CRDs (PolicyBundle, GuardianSidecar) | ✅ Active |
 | `protocols/spec/`               | RFC-style protocol specification         | ✅ Active |
 | `protocols/conformance/v1/owasp/` | Machine-readable OWASP threat vectors  | ✅ Active |
+
+### Product Surfaces (local-first — boundary re-split in progress)
+
+The OSS boundary is expanding to include the complete local-first/single-operator HELM product — so the free wedge is a *lovable* product, not a CLI-only kernel. See `/.claude/plans/dynamic-orbiting-crayon.md` for the phased plan (approved 2026-04-16) and the repo-level `apps/helm-studio/MIGRATION_STATUS.md` for adaptation status.
+
+| Surface                       | Purpose                                                                     | Status               |
+| ----------------------------- | --------------------------------------------------------------------------- | -------------------- |
+| `apps/helm-studio/`           | React + Vite operator shell with `src/ext/` extension contracts             | 🛠 Staged (Phase 2a) |
+| `packages/design-tokens/`     | `@helm/design-tokens` — shared CSS tokens, primitives, reset, cartography   | 🛠 Staged (Phase 2b) |
+| `tools/dispute-viewer/`       | Standalone HTML evidence/dispute viewer                                     | ✅ Active (Phase 3c) |
+| `core/pkg/genesis/ceremony/`  | 6-phase VGL ceremony state machine (single-operator local mode)             | ✅ Active (Phase 3a) |
+| `core/pkg/packs/install/`     | Pack install runtime (verify / plan / install / uninstall / rollback / chained receipt) for the core and community channels | ✅ Active (Phase 4a) |
+
+`🛠 Staged` means source files are present but adaptation steps are still required before standalone build (see each surface's MIGRATION_STATUS). The commercial `helm/` repo continues to mirror OSS via `tools/oss.lock` pinning + SHA256 `protected.manifest`.
 
 ## Removed from TCB (Enterprise)
 
@@ -135,16 +150,15 @@ OSS includes:
 - **OpenAI proxy** — governed proxy for OpenAI-compatible SDKs
 - Adapters and integration surfaces
 
-OSS does not include:
+OSS does not include (commercial overlays only):
 
-- Surface Design Studio (policy UI)
-- Policy rollout / staging / shadow enforcement
-- Certified connector program
-- Managed federation
-- Pack distribution and entitlements
-- Compliance intelligence workflows
-- Mission Control / Studio operations surfaces
-- Enterprise evidence retention / legal hold
-- Managed control plane and team operations
+- Hosted multi-tenant control plane (tenancy, workspaces, shared operator sessions)
+- Enterprise identity and admin (SCIM, SSO/SAML/OIDC, directory sync)
+- Legal hold, long-term hosted retention, regulator-facing workflows
+- Org-scale rollout / staging / shadow enforcement on live production traffic
+- Managed federation and hosted trust registries
+- Premium pack channels (teams, enterprise) and entitlement engine
+- Certified connector program as a hosted service (OSS ships the connector SDK + community verification harness)
+- Billing, seat management, usage metering
 
-The invariant is simple: OSS must stay fully useful on its own. The commercial layer monetizes shared organizational control around the kernel, not artificial runtime crippleware.
+The invariant is simple: OSS must stay *fully useful on its own* as a beautiful local-first product — kernel plus Studio shell plus Genesis Local plus community packs plus evidence/replay/dispute viewers. The commercial layer monetizes shared organizational control around the kernel, not artificial runtime crippleware. Surface Design Studio, pack install, and proof UX all live in OSS as the free wedge. Mindburn-specific products (Titan trading, research-lab, premium signals, people-ops, programs, workforce) live as private modules in the commercial repo and plug into OSS Studio via the `src/ext/` extension contracts.

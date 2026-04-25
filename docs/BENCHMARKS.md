@@ -101,6 +101,16 @@ cd core && go test -bench=. -benchmem ./benchmarks/
 
 The claim is scoped: **75µs p99 on the governed allow hot path in the benchmark harness.** Do not generalize to all deployment topologies without additional measurement.
 
+## Test-case count (referenced by pitch decks)
+
+As of 2026-04-18, `helm-oss/core` ships **8,930 Go test cases**, counted via:
+
+```bash
+cd core && go test -list '.*' ./... 2>&1 | grep -c '^Test'
+```
+
+This is the number the Mindburn Labs pitch decks cite under "tests" (see `docs/ai/deck-facts.md` row `h3` in the monorepo). Rerun the command above to refresh. Any deck edit claiming a different number must update this doc and the ledger in the same pass.
+
 ## Machine-readable output
 
 `benchmarks/results/latest.json` contains structured results:

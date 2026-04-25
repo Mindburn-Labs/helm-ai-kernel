@@ -1,0 +1,420 @@
+{
+  "pack_id": "titan-hedge-fund-v1",
+  "label": "Titan AI-Native Hedge Fund Governance",
+  "description": "Comprehensive P0/P1/P2 bundle governing every Titan capability: trade execution, research promotion, factor/model/policy lifecycle, learned allocator and execution policy, ML-instrumented risk, LLM/tool calls, data access, and evidence export. Supersedes titan-trading-v1 in scope (which stays valid for pure trade-execution gating). Consumed by HelmIntentGate (titan-brain), helm_pep (titan-execution-rs), titan-model-registry, titan-allocator, titan-risk-ml, and every LLM call routed via HELM MCP.",
+  "version": 1,
+  "supersedes": [],
+  "extends": ["titan-trading-v1"],
+  "capability_classes": [
+    "titan.trade_execute",
+    "titan.research_propose",
+    "titan.strategy_promote",
+    "titan.committee_verdict",
+    "titan.kill_switch",
+    "titan.factor_promote",
+    "titan.model_change",
+    "titan.policy_change",
+    "titan.data_source_activate",
+    "titan.allocator_update",
+    "titan.execution_policy_update",
+    "titan.impact_model_update",
+    "titan.risk_model_update",
+    "titan.stress_scenario_run",
+    "titan.regime_classifier_update",
+    "titan.llm_call",
+    "titan.embedding_call",
+    "titan.tool_invoke",
+    "titan.feature_read",
+    "titan.market_data_stream",
+    "titan.evidence_export"
+  ],
+  "programs": [
+    {
+      "program_id": "prog-polymarket-live",
+      "label": "Polymarket Live Trading",
+      "status": "active",
+      "signal_filters": [{ "class": "TRADE_INTENT", "venue": "polymarket" }]
+    },
+    {
+      "program_id": "prog-crypto-perps-paper",
+      "label": "Crypto Perps (Paper Only Until Phase 3 Exit)",
+      "status": "paper-only",
+      "signal_filters": [{ "class": "TRADE_INTENT", "venue_category": "crypto_perp", "mode": "paper" }]
+    },
+    {
+      "program_id": "prog-equities-paper",
+      "label": "Equities Paper Trading",
+      "status": "paper-only",
+      "signal_filters": [{ "class": "TRADE_INTENT", "venue_category": "equities", "mode": "paper" }]
+    },
+    {
+      "program_id": "prog-research-forward",
+      "label": "Forward Research Organ",
+      "status": "active",
+      "signal_filters": [{ "class": "RESEARCH_PROPOSAL", "organ": "adversarial-court" }]
+    },
+    {
+      "program_id": "prog-factor-promotion",
+      "label": "Factor Registry Promotion",
+      "status": "active",
+      "signal_filters": [{ "class": "FACTOR_PROMOTE" }]
+    },
+    {
+      "program_id": "prog-model-deployment",
+      "label": "Model Registry Deployment",
+      "status": "active",
+      "signal_filters": [{ "class": "MODEL_CHANGE" }]
+    },
+    {
+      "program_id": "prog-llm-capability",
+      "label": "LLM + Tool Capability Calls",
+      "status": "active",
+      "signal_filters": [{ "class": "LLM_CALL" }]
+    }
+  ],
+  "policy_layers": {
+    "p0_ceilings": {
+      "description": "Absolute limits — never exceeded regardless of strategy, operator override, or overlay. Breaching a P0 rule is a fail-closed DENY and triggers the Guardian Freeze gate.",
+      "rules": [
+        {
+          "rule_id": "p0-max-aum-governed-usd",
+          "description": "Maximum total AUM governed under this pack (sum of prop capital + shadow + paper notionals)",
+          "cel_expression": "state.governed_aum_usd <= 2000000.0",
+          "parameters": { "max_aum_usd": 2000000.0 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p0-max-daily-exposure-usd",
+          "description": "Maximum total USD exposure across all live venues in a 24h rolling window",
+          "cel_expression": "state.cumulative_daily_exposure_usd <= 10000.0",
+          "parameters": { "max_daily_exposure_usd": 10000.0 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p0-max-single-position-usd",
+          "description": "Maximum single-position notional across all venues",
+          "cel_expression": "intent.size_usd <= 500.0",
+          "parameters": { "max_single_position_usd": 500.0 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p0-max-leverage-multiple",
+          "description": "Maximum notional leverage vs equity, per account",
+          "cel_expression": "state.leverage_multiple <= 3.0",
+          "parameters": { "max_leverage": 3.0 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p0-prohibited-venues",
+          "description": "Block trades on venues not approved under this pack",
+          "cel_expression": "intent.venue_id in ['polymarket', 'bybit_perp', 'binance_usdm', 'alpaca_paper']",
+          "parameters": { "approved_venues": ["polymarket", "bybit_perp", "binance_usdm", "alpaca_paper"] },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p0-prohibited-markets",
+          "description": "Block prohibited market categories (sanctioned entities, restricted election markets)",
+          "cel_expression": "!(intent.market_category in ['US_ELECTION_2026', 'SANCTIONS_ENTITY', 'RESTRICTED_JURISDICTION'])",
+          "parameters": { "prohibited_categories": ["US_ELECTION_2026", "SANCTIONS_ENTITY", "RESTRICTED_JURISDICTION"] },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p0-max-open-positions",
+          "description": "Maximum number of concurrent open positions",
+          "cel_expression": "state.open_position_count <= 50",
+          "parameters": { "max_open_positions": 50 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p0-equities-paper-only",
+          "description": "Equities trading is PAPER-only until Phase 3 Rust broker adapters ship",
+          "cel_expression": "intent.venue_category != 'equities' || intent.mode == 'paper'",
+          "parameters": { "equities_live_enabled": false },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p0-derivatives-paper-only",
+          "description": "Options/derivatives trading is PAPER-only until Deep Hedging layer ships (plan P4-T05)",
+          "cel_expression": "intent.instrument_kind != 'option' || intent.mode == 'paper'",
+          "parameters": { "derivatives_live_enabled": false },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p0-evidence-pack-mandatory",
+          "description": "Every non-trivial capability must emit an EvidencePack; absence is a DENY",
+          "cel_expression": "intent.evidence_pack_sha != ''",
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p0-helm-reachable",
+          "description": "Kernel must reply. Absence of a kernel response is fail-closed DENY.",
+          "cel_expression": "state.kernel_reachable == true",
+          "on_violation": "DENY"
+        }
+      ]
+    },
+    "p1_operational_rules": {
+      "description": "Signed governance rules — compiled to WASM/CEL bytecode, updated via policy-bundle rotation (itself a titan.policy_change capability). Can only be tightened by P2 overlays, never loosened.",
+      "rules": [
+        {
+          "rule_id": "p1-daily-drawdown-limit",
+          "description": "Halt all trading if daily PnL drops below threshold",
+          "capability_classes": ["titan.trade_execute"],
+          "cel_expression": "state.daily_pnl_usd >= -500.0",
+          "parameters": { "max_daily_drawdown_usd": -500.0 },
+          "on_violation": "DENY",
+          "circuit_breaker": { "cooldown_minutes": 60, "auto_reset": true, "emits_freeze": true }
+        },
+        {
+          "rule_id": "p1-consecutive-loss-breaker",
+          "description": "Pause trading after N consecutive losing trades",
+          "capability_classes": ["titan.trade_execute"],
+          "cel_expression": "state.consecutive_losses <= 5",
+          "parameters": { "max_consecutive_losses": 5 },
+          "on_violation": "DENY",
+          "circuit_breaker": { "cooldown_minutes": 30, "auto_reset": true }
+        },
+        {
+          "rule_id": "p1-min-edge-threshold-bps",
+          "description": "Reject trades with expected edge below minimum after transaction-cost adjustment",
+          "capability_classes": ["titan.trade_execute"],
+          "cel_expression": "intent.expected_edge_bps >= 50 && intent.expected_edge_net_of_cost_bps >= 10",
+          "parameters": { "min_edge_bps": 50, "min_edge_net_bps": 10 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p1-venue-concentration-limit",
+          "description": "No more than 60% of governed AUM on any single venue",
+          "capability_classes": ["titan.trade_execute"],
+          "cel_expression": "state.venue_exposure_pct(intent.venue_id) <= 0.60",
+          "parameters": { "max_venue_concentration_pct": 0.60 },
+          "on_violation": "REQUIRE_APPROVAL"
+        },
+        {
+          "rule_id": "p1-slippage-guard-bps",
+          "description": "Reject if estimated slippage exceeds threshold for the position size",
+          "capability_classes": ["titan.trade_execute"],
+          "cel_expression": "intent.estimated_slippage_bps <= 200",
+          "parameters": { "max_slippage_bps": 200 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p1-pyusd-depeg-guard-bps",
+          "description": "Halt Polymarket trading if PYUSD deviates from USDC beyond threshold",
+          "capability_classes": ["titan.trade_execute"],
+          "cel_expression": "state.pyusd_usdc_deviation_bps <= 100",
+          "parameters": { "max_depeg_bps": 100 },
+          "on_violation": "DENY",
+          "circuit_breaker": { "cooldown_minutes": 120, "auto_reset": false }
+        },
+        {
+          "rule_id": "p1-research-propose-pbo-threshold",
+          "description": "Research proposals must have Probability of Backtest Overfitting (PBO) below threshold before promotion",
+          "capability_classes": ["titan.research_propose", "titan.strategy_promote", "titan.factor_promote", "titan.model_change"],
+          "cel_expression": "evidence.pbo <= 0.30",
+          "parameters": { "max_pbo": 0.30 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p1-deflated-sharpe-threshold",
+          "description": "Promoted strategies and models must show positive deflated Sharpe ratio (selection-bias-corrected)",
+          "capability_classes": ["titan.strategy_promote", "titan.factor_promote", "titan.model_change"],
+          "cel_expression": "evidence.deflated_sharpe > 0.0",
+          "parameters": { "min_deflated_sharpe": 0.0 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p1-cpcv-mandatory",
+          "description": "Factor/model promotion requires a Combinatorial Purged Cross-Validation report with embargo",
+          "capability_classes": ["titan.factor_promote", "titan.model_change", "titan.allocator_update", "titan.execution_policy_update"],
+          "cel_expression": "evidence.cpcv_report_sha != '' && evidence.cpcv_embargo_days >= 1",
+          "parameters": { "min_cpcv_embargo_days": 1 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p1-model-evidence-pack-complete",
+          "description": "Model changes require a full EvidencePack (lineage, hyperparams, metrics, bundle SHA, code SHA)",
+          "capability_classes": ["titan.model_change", "titan.allocator_update", "titan.execution_policy_update", "titan.impact_model_update", "titan.risk_model_update", "titan.regime_classifier_update"],
+          "cel_expression": "evidence.lineage_sha != '' && evidence.hyperparams_sha != '' && evidence.training_data_sha != '' && evidence.code_sha != '' && evidence.policy_bundle_sha == context.policy_bundle_sha",
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p1-llm-capability-envelope-required",
+          "description": "Every LLM call must carry a CapabilityEnvelope (organ, session, spend cap, retention)",
+          "capability_classes": ["titan.llm_call", "titan.embedding_call", "titan.tool_invoke"],
+          "cel_expression": "has(intent.capability_envelope.organ_id) && has(intent.capability_envelope.session_id) && intent.capability_envelope.spend_cap_usd > 0.0",
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p1-llm-session-spend-cap-usd",
+          "description": "Per-session LLM spend cap; hard ceiling above organ-level P2 overlays",
+          "capability_classes": ["titan.llm_call", "titan.embedding_call", "titan.tool_invoke"],
+          "cel_expression": "state.session_llm_spend_usd(intent.capability_envelope.session_id) + intent.estimated_cost_usd <= 100.0",
+          "parameters": { "max_session_llm_spend_usd": 100.0 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p1-llm-daily-spend-cap-usd",
+          "description": "Global daily LLM spend cap (all organs combined)",
+          "capability_classes": ["titan.llm_call", "titan.embedding_call", "titan.tool_invoke"],
+          "cel_expression": "state.daily_llm_spend_usd + intent.estimated_cost_usd <= 1000.0",
+          "parameters": { "max_daily_llm_spend_usd": 1000.0 },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p1-data-source-activation-provenance",
+          "description": "Every new data source must declare provenance + retention + jurisdiction before activation",
+          "capability_classes": ["titan.data_source_activate"],
+          "cel_expression": "has(intent.provenance_manifest_sha) && intent.retention_days >= 30 && has(intent.jurisdiction_hint)",
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p1-feature-read-audit",
+          "description": "Feature-store reads against protected features must be audit-logged",
+          "capability_classes": ["titan.feature_read"],
+          "cel_expression": "intent.feature_class != 'PROTECTED' || intent.audit_token != ''",
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p1-kill-switch-authority",
+          "description": "Only Guardian Freeze or operator-signed kill instructions can trigger a global halt",
+          "capability_classes": ["titan.kill_switch"],
+          "cel_expression": "intent.source in ['guardian.freeze', 'operator.signed']",
+          "parameters": { "authorized_sources": ["guardian.freeze", "operator.signed"] },
+          "on_violation": "DENY"
+        },
+        {
+          "rule_id": "p1-research-live-capital-threshold",
+          "description": "Live trades above threshold require a passing research-court verdict AND a risk-ml anomaly-free window",
+          "capability_classes": ["titan.trade_execute"],
+          "cel_expression": "intent.mode != 'live' || intent.size_usd <= 50.0 || (has(intent.research_verdict) && intent.research_verdict == 'APPROVED' && state.risk_ml_anomaly_window_clear == true)",
+          "on_violation": "REQUIRE_APPROVAL"
+        },
+        {
+          "rule_id": "p1-drift-triggered-rollback",
+          "description": "On drift detection above threshold, affected model is automatically rolled back to prior registered SHA",
+          "capability_classes": ["titan.model_change", "titan.allocator_update", "titan.execution_policy_update", "titan.impact_model_update", "titan.risk_model_update"],
+          "cel_expression": "state.drift_score(intent.model_id) < 0.30",
+          "parameters": { "max_drift_score": 0.30 },
+          "on_violation": "AUTO_ROLLBACK",
+          "circuit_breaker": { "cooldown_minutes": 15, "auto_reset": false }
+        }
+      ]
+    },
+    "p2_overlays": {
+      "description": "Per-session narrowing — operator or organ-specific overrides that can only tighten, never loosen P0/P1.",
+      "rules": [
+        {
+          "rule_id": "p2-paper-mode-bypass",
+          "description": "Paper trades bypass P1 drawdown/loss breakers but respect all P0 ceilings and all signal-quality P1 rules",
+          "cel_expression": "intent.mode == 'paper'",
+          "effect": "SKIP_P1",
+          "scope": ["p1-daily-drawdown-limit", "p1-consecutive-loss-breaker"]
+        },
+        {
+          "rule_id": "p2-shadow-mode-dry-run",
+          "description": "Shadow mode evaluates all P1 but does not emit an EffectPermit to execution",
+          "cel_expression": "intent.mode == 'shadow'",
+          "effect": "DRY_RUN"
+        },
+        {
+          "rule_id": "p2-organ-spend-cap-research-court",
+          "description": "Adversarial research court organ hard spend cap per research run",
+          "cel_expression": "intent.capability_envelope.organ_id == 'adversarial-court'",
+          "effect": "TIGHTEN",
+          "scope": ["p1-llm-session-spend-cap-usd"],
+          "override_parameters": { "max_session_llm_spend_usd": 25.0 }
+        },
+        {
+          "rule_id": "p2-organ-spend-cap-titancore",
+          "description": "TitanCore cognitive runtime organ per-session spend cap",
+          "cel_expression": "intent.capability_envelope.organ_id == 'titan-core'",
+          "effect": "TIGHTEN",
+          "scope": ["p1-llm-session-spend-cap-usd"],
+          "override_parameters": { "max_session_llm_spend_usd": 50.0 }
+        },
+        {
+          "rule_id": "p2-connector-rate-limit-polymarket",
+          "description": "Polymarket connector global rate limit",
+          "cel_expression": "intent.venue_id == 'polymarket'",
+          "effect": "RATE_LIMIT",
+          "parameters": { "max_requests_per_minute": 60 }
+        },
+        {
+          "rule_id": "p2-research-propose-require-committee",
+          "description": "Research proposals that would promote to live capital require an additional committee verdict",
+          "cel_expression": "intent.class == 'RESEARCH_PROPOSAL' && intent.target_mode == 'live'",
+          "effect": "TIGHTEN",
+          "override_effect": "REQUIRE_APPROVAL"
+        },
+        {
+          "rule_id": "p2-model-change-high-risk-require-approval",
+          "description": "Model changes that affect live-trading paths require human approval regardless of PBO/DSR",
+          "cel_expression": "intent.class == 'MODEL_CHANGE' && (intent.target_model_kind == 'pricing-ensemble' || intent.target_model_kind == 'allocator' || intent.target_model_kind == 'execution-policy') && intent.target_mode == 'live'",
+          "effect": "TIGHTEN",
+          "override_effect": "REQUIRE_APPROVAL"
+        }
+      ]
+    }
+  },
+  "evidence_requirements": {
+    "receipt_signing": "MANDATORY",
+    "proofgraph_enabled": true,
+    "proofgraph_required_nodes": ["INTENT", "ATTESTATION", "EFFECT", "TRUST_EVENT", "CHECKPOINT"],
+    "evidence_pack_retention_days": 3650,
+    "audit_chain_verification": true,
+    "jcs_canonicalization": true,
+    "ed25519_signatures_only": true
+  },
+  "budget_constraints": {
+    "daily_llm_spend_cap_usd": 1000.0,
+    "session_llm_spend_cap_usd": 100.0,
+    "daily_exposure_cap_usd": 10000.0,
+    "governed_aum_cap_usd": 2000000.0
+  },
+  "adversarial_harness_requirements": {
+    "tradetrap_perturbations": "MANDATORY",
+    "finsaber_cross_section": "MANDATORY",
+    "agent_market_arena_benchmark": "MANDATORY",
+    "minimum_red_team_frequency_days": 7
+  },
+  "validation_requirements": {
+    "cpcv_required_for": ["titan.factor_promote", "titan.strategy_promote", "titan.model_change", "titan.allocator_update", "titan.execution_policy_update"],
+    "pbo_maximum": 0.30,
+    "deflated_sharpe_minimum": 0.0,
+    "embargo_days_minimum": 1,
+    "walk_forward_required": true,
+    "regime_split_required": true,
+    "capacity_curve_required": true,
+    "transaction_cost_sensitivity_required": true
+  },
+  "metadata": {
+    "created_at": "2026-04-18T00:00:00Z",
+    "created_by": "ai-native-programme-phase-0",
+    "applicable_to": [
+      "titan-brain",
+      "titan-execution-rs",
+      "titan-ai-quant",
+      "titan-allocator",
+      "titan-risk-ml",
+      "titan-model-registry",
+      "titan-validation",
+      "titan-feature-store",
+      "titan-altdata-intake",
+      "titan-proofd"
+    ],
+    "helm_protocol_version": "2025-11-25",
+    "anchor_documents": [
+      "titan/docs/ai-native-exit-criteria.md",
+      "titan/docs/ai/titan-helm-mapping.md"
+    ],
+    "supersession_notes": "Extends titan-trading-v1 scope from pure trade-execution gating to the full AI-native capability surface. titan-trading-v1 remains valid for legacy clients until Phase 4 exit; titan-hedge-fund-v1 is authoritative for all new AI-native work."
+  },
+  "signing": {
+    "status": "draft",
+    "signature": null,
+    "signer_key_id": null,
+    "signed_at": null,
+    "note": "This bundle must be signed by the operator key before production use. Signing produces the canonical SHA that gets pinned in titan/packages/shared/config/helm_policy_bundle.sha."
+  }
+}

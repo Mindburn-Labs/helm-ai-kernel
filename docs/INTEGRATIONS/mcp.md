@@ -2,6 +2,12 @@
 
 HELM retains an MCP surface for governed tool access.
 
+The local boundary quickstart remains the entry point:
+
+```bash
+helm serve --policy ./release.high_risk.v3.toml
+```
+
 ## Run the Server
 
 ```bash
@@ -21,3 +27,9 @@ HELM retains an MCP surface for governed tool access.
 ```
 
 Use `./bin/helm mcp print-config --client <name>` for text configuration snippets where supported by the CLI.
+
+MCP activity that emits receipts can be inspected with:
+
+```bash
+helm receipts tail --agent agent.titan.exec
+```

@@ -60,6 +60,7 @@ func printUsage(out io.Writer) {
 
 	fmt.Fprintln(out, "\nGlobal Commands:")
 	fmt.Fprintln(out, "  server              Start the HELM Guardian API and proxy services")
+	fmt.Fprintln(out, "  serve               Start a local HELM boundary from --policy")
 	fmt.Fprintln(out, "  health              Check local HELM server health")
 	fmt.Fprintln(out, "  version             Print version and schema information")
 	fmt.Fprintln(out, "  help                Show this help message")

@@ -29,6 +29,7 @@ import (
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/pack"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/runtime/obligation"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/runtime/sandbox"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/store"
 )
 
 // Services holds all initialized subsystems for the HELM runtime.
@@ -51,7 +52,8 @@ type Services struct {
 	Obligation       *obligation.ObligationEngine
 
 	// --- Evidence ---
-	Evidence *evidence.DefaultExporter
+	Evidence     *evidence.DefaultExporter
+	ReceiptStore store.ReceiptStore
 
 	// --- Cross-cutting ---
 	KernelRT *kernelruntime.Server

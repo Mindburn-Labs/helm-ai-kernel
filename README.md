@@ -11,24 +11,25 @@ This repository is intentionally scoped to the OSS kernel:
 
 ## Quick Start
 
-Build from source:
+```bash
+brew install mindburn/tap/helm
+helm serve --policy ./release.high_risk.v3.toml
+helm verify evidence-pack.tar
+helm receipts tail --agent agent.titan.exec
+```
+
+`helm serve --policy` starts the local boundary on `127.0.0.1:7714` by default and stores receipts durably in SQLite unless `DATABASE_URL` is set. `helm verify evidence-pack.tar` runs offline by default. Add `--online` to check embedded pack metadata against the configured public proof API.
+
+Build from source remains supported:
 
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-oss.git
 cd helm-oss
 make build
+./bin/helm serve --policy ./release.high_risk.v3.toml
 ```
 
-Run the local proof loop:
-
-```bash
-./bin/helm onboard --yes
-./bin/helm demo organization --template starter --provider mock
-./bin/helm export --evidence ./data/evidence --out evidence.tar
-./bin/helm verify --bundle evidence.tar
-```
-
-Run the retained validation targets:
+Run the retained validation targets before publishing changes:
 
 ```bash
 make test

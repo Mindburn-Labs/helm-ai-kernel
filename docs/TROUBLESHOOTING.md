@@ -16,11 +16,13 @@ The adapter cannot reach the HELM server.
 
 ```bash
 # Check HELM is running
-curl http://localhost:8080/healthz
+curl http://127.0.0.1:7714/healthz
 
 # Check the URL in your adapter config
-export HELM_URL=http://localhost:8080
+export HELM_URL=http://127.0.0.1:7714
 ```
+
+`helm server` still defaults to `127.0.0.1:8080`. The public quickstart uses `helm serve --policy ./release.high_risk.v3.toml`, which defaults to `127.0.0.1:7714`.
 
 ### `401 Unauthorized` from proxy
 
@@ -106,7 +108,27 @@ EvidencePack requires deterministic tar with epoch mtime:
 helm export --evidence ./data/evidence --out evidence.tar
 
 # Verify
-helm verify --bundle evidence.tar
+helm verify evidence.tar
+```
+
+### `helm verify --online` fails but offline verification passes
+
+`--online` requires a reachable public proof API and matching ledger metadata in the pack.
+
+```bash
+export HELM_LEDGER_URL=https://mindburn.org/api/proof/verify
+helm verify evidence.tar --online
+```
+
+If the pack has no public anchor, use offline verification or regenerate the pack from a release asset with public proof metadata.
+
+### `helm receipts tail` does not print events
+
+Confirm the local boundary is running and that receipts are being emitted for the same agent id:
+
+```bash
+helm serve --policy ./release.high_risk.v3.toml
+helm receipts tail --agent agent.titan.exec --server http://127.0.0.1:7714
 ```
 
 ---

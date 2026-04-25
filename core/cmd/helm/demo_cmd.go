@@ -474,7 +474,7 @@ func runDemoScenario(kind string, args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "%s║%s  📊 Report:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorBold, reportPath, ColorReset, ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s║%s  📦 Evidence: %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorBold, outDir+"/", ColorReset, ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s║%s  🔍 Verify:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, "helm export --evidence "+outDir+" --out e.tar", ColorReset, ColorCyan, ColorReset)
-	fmt.Fprintf(stdout, "%s║%s              %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, "helm verify --bundle e.tar", ColorReset, ColorCyan, ColorReset)
+	fmt.Fprintf(stdout, "%s║%s              %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, "helm verify e.tar", ColorReset, ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s║%s  🔄 Switch:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, "helm demo organization --provider opensandbox", ColorReset, ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", ColorCyan, ColorReset)
 

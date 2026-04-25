@@ -3,7 +3,9 @@
 
 # Stage 1: Builder
 # SC-004: Base images pinned by digest for supply chain integrity
-FROM golang:1.24-alpine@sha256:8bee1901f1e530bfb4a7850aa7a479d17ae3a18beb6e09064ed54cfd245b7191 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine@sha256:5caaf1cca9dc351e13deafbc3879fd4754801acba8653fa9540cea125d01a71f AS builder
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /app
 
@@ -19,8 +21,8 @@ COPY . .
 
 # Build the application
 ENV CGO_ENABLED=0
-ENV GOOS=linux
-ENV GOARCH=amd64
+ENV GOOS=${TARGETOS:-linux}
+ENV GOARCH=${TARGETARCH:-amd64}
 RUN go build -ldflags="-s -w" -trimpath -o /app/bin/helm ./core/cmd/helm
 
 # Stage 2: Runtime

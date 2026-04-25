@@ -84,6 +84,19 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 			if decision.PolicyDecisionHash != "" {
 				w.Header().Set("X-Helm-Decision-Hash", decision.PolicyDecisionHash)
 			}
+			agentID := r.Header.Get("X-Helm-Agent")
+			if agentID == "" {
+				agentID = r.Header.Get("X-Agent-ID")
+			}
+			if agentID == "" {
+				agentID = req.Principal
+			}
+			persistDecisionReceipt(r.Context(), svc, decision, agentID, bodyBytes, map[string]any{
+				"source":   "openai.proxy",
+				"action":   req.Action,
+				"resource": req.Resource,
+				"reason":   decision.Reason,
+			})
 
 			if contracts.Verdict(decision.Verdict) != contracts.VerdictAllow {
 				api.WriteError(w, http.StatusForbidden, "Governance Blocked", decision.Reason)
@@ -151,6 +164,9 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 			"version": displayVersion(),
 		})
 	})
+
+	// --- Durable receipt API ---
+	registerReceiptRoutes(mux, svc)
 
 	// --- Obligation ---
 	mux.HandleFunc("/api/v1/obligation/create", func(w http.ResponseWriter, r *http.Request) {

@@ -11,7 +11,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 func init() {
@@ -520,16 +519,14 @@ func checkDiskSpace(verbose bool) CheckResult {
 		absTarget = target
 	}
 
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(absTarget, &stat); err != nil {
+	available, err := availableDiskBytes(absTarget)
+	if err != nil {
 		r.Status = statusWarn
 		r.Message = "Unable to determine disk space"
 		r.Detail = err.Error()
 		return r
 	}
 
-	// Available bytes for unprivileged users.
-	available := stat.Bavail * uint64(stat.Bsize)
 	const oneGB = uint64(1 << 30)
 
 	availableStr := formatBytesUint64(available)

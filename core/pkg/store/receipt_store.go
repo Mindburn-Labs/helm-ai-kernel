@@ -14,6 +14,7 @@ type ReceiptStore interface {
 	Get(ctx context.Context, decisionID string) (*contracts.Receipt, error)
 	GetByReceiptID(ctx context.Context, receiptID string) (*contracts.Receipt, error)
 	List(ctx context.Context, limit int) ([]*contracts.Receipt, error)
+	ListByAgent(ctx context.Context, agentID string, since uint64, limit int) ([]*contracts.Receipt, error)
 	Store(ctx context.Context, receipt *contracts.Receipt) error
 	// GetLastForSession returns the most recent receipt for a given session (for causal DAG chaining).
 	GetLastForSession(ctx context.Context, sessionID string) (*contracts.Receipt, error)
@@ -66,6 +67,28 @@ func (s *PostgresReceiptStore) GetByReceiptID(ctx context.Context, receiptID str
 func (s *PostgresReceiptStore) List(ctx context.Context, limit int) ([]*contracts.Receipt, error) {
 	query := `SELECT ` + receiptColumns + ` FROM receipts ORDER BY timestamp DESC LIMIT $1`
 	rows, err := s.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var receipts []*contracts.Receipt
+	for rows.Next() {
+		r, err := scanReceipt(rows)
+		if err != nil {
+			return nil, err
+		}
+		receipts = append(receipts, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return receipts, nil
+}
+
+func (s *PostgresReceiptStore) ListByAgent(ctx context.Context, agentID string, since uint64, limit int) ([]*contracts.Receipt, error) {
+	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE executor_id = $1 AND lamport_clock > $2 ORDER BY lamport_clock ASC, timestamp ASC LIMIT $3`
+	rows, err := s.db.QueryContext(ctx, query, agentID, since, limit)
 	if err != nil {
 		return nil, err
 	}

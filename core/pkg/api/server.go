@@ -66,7 +66,9 @@ type EvaluateRequest struct {
 // EvaluateResponse is the JSON response sent back to SDKs.
 type EvaluateResponse struct {
 	Allow        bool   `json:"allow"`
+	Verdict      string `json:"verdict"`
 	ReceiptID    string `json:"receipt_id"`
+	DecisionID   string `json:"decision_id"`
 	DecisionHash string `json:"decision_hash"`
 	ReasonCode   string `json:"reason_code"`
 	PolicyRef    string `json:"policy_ref"`
@@ -95,6 +97,7 @@ func NewServer(cfg ServerConfig) *Server {
 
 func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/evaluate", s.handleEvaluate)
+	s.mux.HandleFunc("/api/v1/guardian/evaluate", s.handleEvaluate)
 	s.mux.HandleFunc("/api/v1/receipts/", s.handleReceipts)
 	s.mux.HandleFunc("/api/v1/verify/", s.handleVerify)
 	s.mux.HandleFunc("/api/v1/health", s.handleHealth)
@@ -188,12 +191,17 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	if decResp.Allow {
 		status = "ALLOW"
 	}
+	decisionID := fmt.Sprintf("dec-%d", lamport)
+	policyRef := decResp.PolicyRef
+	if policyRef == "" {
+		policyRef = "default"
+	}
 
 	sig := sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%s:%d", receiptID, status, prevHash, lamport)))
 
 	receipt := &Receipt{
 		ReceiptID:    receiptID,
-		DecisionID:   fmt.Sprintf("dec-%d", lamport),
+		DecisionID:   decisionID,
 		EffectID:     req.Tool,
 		Status:       status,
 		Timestamp:    time.Now().UTC().Format(time.RFC3339),
@@ -209,12 +217,20 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	s.sessions[req.SessionID] = append(s.sessions[req.SessionID], receiptID)
 	s.mu.Unlock()
 
+	w.Header().Set("X-Helm-Decision-ID", decisionID)
+	w.Header().Set("X-Helm-Verdict", status)
+	w.Header().Set("X-Helm-Policy-Version", policyRef)
+	w.Header().Set("X-Helm-Decision-Hash", decResp.DecisionHash)
+	w.Header().Set("X-Helm-Receipt-ID", receiptID)
+
 	writeJSON(w, http.StatusOK, EvaluateResponse{
 		Allow:        decResp.Allow,
+		Verdict:      status,
 		ReceiptID:    receiptID,
+		DecisionID:   decisionID,
 		DecisionHash: decResp.DecisionHash,
 		ReasonCode:   decResp.ReasonCode,
-		PolicyRef:    decResp.PolicyRef,
+		PolicyRef:    policyRef,
 		LamportClock: lamport,
 	})
 }

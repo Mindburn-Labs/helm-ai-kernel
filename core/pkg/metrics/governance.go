@@ -1,7 +1,4 @@
-// Package metrics provides a Prometheus-compatible metrics endpoint
-// for the HELM Dashboard to consume.
-//
-// Exposes governance metrics over /metrics for real-time dashboard wiring.
+// Package metrics provides a Prometheus-compatible metrics endpoint.
 package metrics
 
 import (
@@ -140,7 +137,6 @@ func (m *GovernanceMetrics) Snapshot() MetricsSnapshot {
 }
 
 // Handler returns an http.HandlerFunc that serves metrics as JSON.
-// Dashboard fetches from this endpoint.
 // SEC: Wildcard CORS removed. Callers should use the auth.CORSMiddleware
 // on the parent mux to set appropriate origin policies.
 func (m *GovernanceMetrics) Handler() http.HandlerFunc {

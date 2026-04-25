@@ -27,8 +27,6 @@ jobs:
         package:
           - path: sdk/ts
             name: "@mindburn/helm"
-          - path: packages/mindburn-helm-cli
-            name: "@mindburn/helm-cli"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

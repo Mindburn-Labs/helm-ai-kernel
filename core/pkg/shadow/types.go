@@ -4,8 +4,7 @@
 // HELM.
 //
 // Scope: STATIC scanning only (file contents + filenames). Runtime discovery
-// (process tables, network connections) is out of scope for OSS and belongs
-// to the commercial helm/ Studio surface.
+// (process tables, network connections) is out of scope for OSS.
 //
 // Design invariants:
 //   - Zero network calls during scan.

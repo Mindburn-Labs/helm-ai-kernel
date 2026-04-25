@@ -437,13 +437,10 @@ func runDemoScenario(kind string, args []string, stdout, stderr io.Writer) int {
 	}
 
 	fmt.Fprintf(stdout, "  📦 %d receipts → %s/\n", len(receipts), outDir)
-	if err := generateProofReport(receipts, outDir, template, provider, time.Now().UTC()); err != nil {
-		fmt.Fprintf(stderr, "Warning: could not generate HTML report: %v\n", err)
-	} else {
-		fmt.Fprintf(stdout, "  📊 Proof Report → %s/run-report.html\n", outDir)
-	}
 	if err := generateProofReportJSON(receipts, outDir, template, provider); err != nil {
 		fmt.Fprintf(stderr, "Warning: could not generate JSON report: %v\n", err)
+	} else {
+		fmt.Fprintf(stdout, "  📊 Run Report → %s/run-report.json\n", outDir)
 	}
 
 	fmt.Fprintf(stdout, "\n%sVerifying EvidencePack...%s\n", ColorBold, ColorReset)
@@ -470,7 +467,7 @@ func runDemoScenario(kind string, args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "\n%s🎉 Demo complete.%s Evidence at %s/\n", ColorBold+ColorGreen, ColorReset, outDir)
 	fmt.Fprintf(stdout, "%s   Bound scope:%s org=%s scope=%s mode=%s\n", ColorGray, ColorReset, cfg.organizationID, cfg.scopeID, mode)
 
-	reportPath := filepath.Join(outDir, "run-report.html")
+	reportPath := filepath.Join(outDir, "run-report.json")
 	fmt.Fprintf(stdout, "\n%s╔════════════════════════════════════════════════════════════╗%s\n", ColorBold+ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s║  HELM Demo Complete                                        ║%s\n", ColorBold+ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s╠════════════════════════════════════════════════════════════╣%s\n", ColorCyan, ColorReset)

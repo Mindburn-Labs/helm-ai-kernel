@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"runtime"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/guardian"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel/ui"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/memory"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/replay"
 	trustregistry "github.com/Mindburn-Labs/helm-oss/core/pkg/trust/registry"
@@ -224,15 +222,6 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	mux.Handle("/api/v1/trust/keys/add", auth.RequireAdminAuth(trustKeys.HandleAddKey))
 	mux.Handle("/api/v1/trust/keys/revoke", auth.RequireAdminAuth(trustKeys.HandleRevokeKey))
 
-	// --- OSS Local Read Surface ---
-	ossLocal := api.NewOSSLocalHandler(api.OSSLocalConfig{
-		EvidenceDir: os.Getenv("HELM_OSS_EVIDENCE_DIR"),
-		ReceiptsDir: os.Getenv("HELM_OSS_RECEIPTS_DIR"),
-		Version:     displayVersion(),
-		BuildTime:   displayBuildTime(),
-	})
-	ossLocal.Register(mux)
-
 	// --- MCP Gateway ---
 	mcpGateway, err := newLocalMCPGateway()
 	if err != nil {
@@ -334,13 +323,6 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	mux.HandleFunc("/api/v1/compatibility", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(svc.CompatMatrix)
-	})
-
-	// --- Control Surfaces ---
-	mux.HandleFunc("/api/v1/surfaces", func(w http.ResponseWriter, r *http.Request) {
-		surfaces := ui.AllSurfaces()
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"surfaces": surfaces, "count": len(surfaces)})
 	})
 
 	// Suppress unused variable

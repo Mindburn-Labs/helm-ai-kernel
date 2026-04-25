@@ -14,7 +14,6 @@ This page describes the retained OSS compatibility surface, not every historical
 | OpenAI-compatible proxy | Supported |
 | MCP server and bundle generation | Supported |
 | Evidence export and offline verification | Supported |
-| Dashboard bundle viewer | Supported |
 | Go SDK | Supported |
 | Python SDK | Supported |
 | TypeScript SDK | Supported |
@@ -30,8 +29,8 @@ The retained CI verifies:
 - TypeScript SDK tests
 - Rust SDK build and test
 - Java SDK build
-- package-level CLI tests in `packages/mindburn-helm-cli`
+- fixture root verification through the Go verifier
 
 ## Deployment Surface
 
-The repository keeps a Helm chart under `deploy/helm-chart/` for Kubernetes-based deployment and a local static viewer under `dashboard/`. Other hosted demo deployment material has been removed from the OSS surface.
+The repository keeps a Helm chart under `deploy/helm-chart/` for Kubernetes-based deployment. Interactive clients, static viewers, Node CLI wrappers, and generated browser-rendered reports are outside the retained OSS compatibility surface.

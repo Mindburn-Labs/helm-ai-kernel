@@ -334,7 +334,7 @@ message MemorySection {
 
 // ── Summary Metrics ────────────────────────────────────────────
 
-// SummaryMetrics captures aggregate outcomes for dashboards.
+// SummaryMetrics captures aggregate outcomes for operators and auditors.
 message SummaryMetrics {
   int64 time_to_first_proven_ms = 1;
 

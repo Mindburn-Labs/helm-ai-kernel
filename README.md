@@ -7,7 +7,6 @@ This repository is intentionally scoped to the OSS kernel:
 - `core/` contains the Go kernel, CLI, HTTP API, proxy, evidence export, and verification logic.
 - `protocols/`, `schemas/`, and `api/openapi/` define the wire contracts and generated SDK inputs.
 - `sdk/` ships maintained public SDKs for Go, Python, TypeScript, Rust, and Java.
-- `dashboard/` is a static local viewer for evidence bundles.
 - `examples/` contains a small set of runnable integration examples.
 
 ## Quick Start
@@ -54,9 +53,8 @@ The retained public surfaces in this repository are:
 - MCP server and bundle generation commands
 - Evidence export and verification commands
 - Public SDKs in `sdk/go`, `sdk/python`, `sdk/ts`, `sdk/rust`, and `sdk/java`
-- Static evidence viewer in `dashboard/`
 
-This repository does not ship hosted control-plane features, private operational tooling, or product UIs outside the evidence viewer.
+This repository does not ship hosted control-plane features, private operational tooling, browser UI, static UI, embedded UI, or HTML report surfaces.
 
 ## SDKs
 
@@ -80,7 +78,6 @@ The HTTP client/types layer is generated from [`api/openapi/helm.openapi.yaml`](
 | `schemas/` | JSON schemas used by the kernel and verification flows |
 | `tests/conformance/` | Conformance profile, checklist, and verification tests |
 | `reference_packs/` | Example policy/reference bundles used by tests and examples |
-| `dashboard/` | Local static evidence-bundle viewer |
 | `deploy/helm-chart/` | Helm chart for running the kernel in Kubernetes |
 
 ## Documentation
@@ -96,10 +93,6 @@ Public OSS docs are sourced from this repository and canonically published throu
 - [SDK Index](docs/sdks/00_INDEX.md)
 - [Security Model](docs/EXECUTION_SECURITY_MODEL.md)
 - [OWASP Mapping](docs/OWASP_MCP_THREAT_MAPPING.md)
-
-## Viewer
-
-The viewer in `dashboard/` is a local diagnostic surface. It parses an evidence bundle in the browser and renders the manifest, decisions, and proof graph. It is not the authoritative verifier; use `helm verify` for cryptographic verification.
 
 ## License
 

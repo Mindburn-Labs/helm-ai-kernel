@@ -1,6 +1,6 @@
 // api.go provides HTTP handlers for real-time compliance scoring.
 // These handlers expose the ComplianceScorer over REST for continuous
-// auditing, SIEM integration, and dashboard consumption.
+// auditing, SIEM integration, and operator tooling.
 //
 // Routes:
 //

@@ -573,13 +573,18 @@ func TestClosing_FreezeController_WithClock(t *testing.T) {
 }
 
 func TestClosing_FreezeController_ReceiptContentHash(t *testing.T) {
-	fc := NewFreezeController()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	fc := NewFreezeController().WithClock(func() time.Time {
+		ts := now
+		now = now.Add(time.Second)
+		return ts
+	})
 	r1, _ := fc.Freeze("a")
 	fc.Unfreeze("a")
 	r2, _ := fc.Freeze("a")
 	t.Run("different_freeze_different_hash", func(t *testing.T) {
 		if r1.ContentHash == r2.ContentHash {
-			t.Fatal("hashes should differ due to different timestamps")
+			t.Fatal("hashes should differ due to different receipt timestamps")
 		}
 	})
 	t.Run("hash_nonempty", func(t *testing.T) {

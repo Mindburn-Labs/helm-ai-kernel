@@ -57,32 +57,52 @@ MANIFEST_ROOT_HASH=$(shasum -a 256 "${BUNDLE_DIR}/00_INDEX.json" | awk '{print $
 echo "   ✓ Manifest root hash: ${MANIFEST_ROOT_HASH}"
 
 # ── Compute Merkle root ──────────────────────────────────────────────────────
-# Extract sha256 values sorted by path from 00_INDEX.json, then compute tree.
-# The release CLI is the canonical Merkle implementation; this script mirrors it for bundles.
+# Hash entries sorted by path using the EvidencePack Merkle domain separators.
 
-# Extract sorted entry hashes
-ENTRY_HASHES=$(jq -r '.entries | sort_by(.path) | .[].sha256' "${BUNDLE_DIR}/00_INDEX.json")
+MERKLE_ROOT=$(python3 - "${BUNDLE_DIR}/00_INDEX.json" <<'PY'
+import hashlib
+import json
+import sys
 
-# Compute Merkle root using Node.js crypto (reuse the CLI for correctness)
-MERKLE_ROOT=$(node -e "
-const { computeMerkleRoot } = await import('./packages/mindburn-helm-cli/dist/crypto.js');
-const entries = $(jq -c '.entries' "${BUNDLE_DIR}/00_INDEX.json");
-console.log(computeMerkleRoot(entries));
-" 2>/dev/null || echo "COMPUTE_FAILED")
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    index = json.load(f)
 
-if [ "${MERKLE_ROOT}" = "COMPUTE_FAILED" ]; then
-    # Fallback: use single hash of concatenated entry hashes
-    MERKLE_ROOT=$(echo -n "${ENTRY_HASHES}" | tr '\n' ' ' | shasum -a 256 | awk '{print $1}')
-    echo "   ⚠ Merkle root (fallback): ${MERKLE_ROOT}"
-else
-    echo "   ✓ Merkle root: ${MERKLE_ROOT}"
-fi
+leaves = []
+for entry in sorted(index.get("entries", []), key=lambda item: item.get("path", "")):
+    leaves.append(hashlib.sha256(b"\x00" + bytes.fromhex(entry["sha256"])).digest())
+
+if not leaves:
+    print(hashlib.sha256(b"").hexdigest())
+    raise SystemExit(0)
+
+while len(leaves) > 1:
+    next_level = []
+    for i in range(0, len(leaves), 2):
+        left = leaves[i]
+        right = leaves[i + 1] if i + 1 < len(leaves) else left
+        next_level.append(hashlib.sha256(b"\x01" + left + right).digest())
+    leaves = next_level
+
+print(leaves[0].hex())
+PY
+)
+echo "   ✓ Merkle root: ${MERKLE_ROOT}"
 
 # ── Build attestation JSON ────────────────────────────────────────────────────
 
 CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-PROFILES_VERSION=$(jq -r '.version // "1.0.0"' packages/mindburn-helm-cli/src/profiles.json 2>/dev/null || echo "1.0.0")
-PROFILES_SHA256=$(shasum -a 256 packages/mindburn-helm-cli/src/profiles.json 2>/dev/null | awk '{print $1}' || echo "")
+PROFILE_CHECKLIST="tests/conformance/profile-v1/checklist.yaml"
+PROFILES_VERSION=$(python3 - "${PROFILE_CHECKLIST}" <<'PY'
+import re
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    text = f.read()
+match = re.search(r'^version:\s*"?([^"\n]+)"?', text, re.MULTILINE)
+print(match.group(1) if match else "v1.0.0")
+PY
+)
+PROFILES_SHA256=$(shasum -a 256 "${PROFILE_CHECKLIST}" | awk '{print $1}')
 KEYS_KEY_ID="helm-oss-v1"
 
 cat > "${OUTPUT_DIR}/${ATTESTATION_NAME}" <<EOF

@@ -33,7 +33,7 @@ jobs:
           TOKEN_PLAN_B='road''map item'
           PATTERN="${MARKER_A}|${MARKER_B}|${MARKER_C}|${MARKER_D}|${TOKEN_PHASE}|${TOKEN_PLAN_B}|${TOKEN_PLAN_A}"
           ! rg -n --hidden -S "$PATTERN" \
-            README.md docs .github core sdk dashboard deploy packages tests scripts \
+            README.md docs .github core sdk deploy tests scripts \
             --glob '!**/node_modules/**' \
             --glob '!**/dist/**' \
             --glob '!**/target/**' \
@@ -57,6 +57,8 @@ jobs:
         run: make build
       - name: Test
         run: make test
+      - name: Verify fixtures
+        run: make verify-fixtures
       - name: Crucible
         run: make crucible
 
@@ -79,18 +81,6 @@ jobs:
           node-version: "22"
       - name: Test TypeScript SDK
         run: make test-sdk-ts
-
-  js-cli:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Test JavaScript CLI
-        run: make test-cli
-      - name: Verify fixtures
-        run: make verify-fixtures
 
   rust-sdk:
     runs-on: ubuntu-latest

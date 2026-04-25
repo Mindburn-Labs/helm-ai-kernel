@@ -52,7 +52,7 @@ func runReportCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&since, "since", "", "Start time (RFC3339)")
 	cmd.StringVar(&until, "until", "", "End time (RFC3339)")
 	cmd.StringVar(&outputPath, "output", "", "Output file path (default: stdout)")
-	cmd.StringVar(&format, "format", "text", "Output format: text, json, html")
+	cmd.StringVar(&format, "format", "text", "Output format: text, json")
 	cmd.BoolVar(&jsonOutput, "json", false, "Output as JSON (shorthand for --format json)")
 
 	if err := cmd.Parse(args); err != nil {
@@ -61,6 +61,10 @@ func runReportCmd(args []string, stdout, stderr io.Writer) int {
 
 	if jsonOutput {
 		format = "json"
+	}
+	if format != "text" && format != "json" {
+		fmt.Fprintf(stderr, "Error: unsupported report format %q; supported formats: text, json\n", format)
+		return 2
 	}
 
 	// Resolve database path.
@@ -121,9 +125,7 @@ func runReportCmd(args []string, stdout, stderr io.Writer) int {
 	case "json":
 		data, _ := json.MarshalIndent(report, "", "  ")
 		fmt.Fprintln(w, string(data))
-	case "html":
-		writeHTMLReport(w, report)
-	default:
+	case "text":
 		writeTextReport(w, report)
 	}
 
@@ -353,71 +355,6 @@ func writeTextReport(w io.Writer, r *ComplianceReport) {
 	}
 
 	fmt.Fprintln(w)
-}
-
-func writeHTMLReport(w io.Writer, r *ComplianceReport) {
-	fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>%s</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 800px; margin: 2em auto; padding: 0 1em; color: #1a1a2e; background: #f8f9fa; }
-    h1 { color: #16213e; border-bottom: 3px solid #0f3460; padding-bottom: .5em; }
-    .card { background: #fff; border-radius: 8px; padding: 1.5em; margin: 1em 0; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
-    .metric { display: inline-block; text-align: center; margin: 0 2em 1em 0; }
-    .metric .value { font-size: 2em; font-weight: 700; color: #0f3460; }
-    .metric .label { font-size: .85em; color: #666; }
-    .status-met { color: #27ae60; font-weight: 600; }
-    .status-not { color: #e74c3c; font-weight: 600; }
-    table { width: 100%%; border-collapse: collapse; }
-    th, td { padding: .75em; text-align: left; border-bottom: 1px solid #eee; }
-    th { background: #f1f3f5; font-weight: 600; }
-    .verified { color: #27ae60; font-weight: 700; font-size: 1.2em; }
-    .failed { color: #e74c3c; font-weight: 700; font-size: 1.2em; }
-    footer { margin-top: 2em; text-align: center; color: #888; font-size: .85em; }
-  </style>
-</head>
-<body>
-  <h1>%s</h1>
-  <p>Generated: %s by %s</p>
-
-  <div class="card">
-    <h2>Summary</h2>
-    <div class="metric"><div class="value">%d</div><div class="label">Total Actions</div></div>
-    <div class="metric"><div class="value">%d</div><div class="label">Allowed</div></div>
-    <div class="metric"><div class="value">%d</div><div class="label">Denied</div></div>
-    <div class="metric"><div class="value">%.1f%%</div><div class="label">Deny Rate</div></div>
-  </div>
-
-  <div class="card">
-    <h2>Chain Integrity</h2>
-`, r.Title, r.Title, r.GeneratedAt.Format(time.RFC3339), r.GeneratedBy,
-		r.Summary.TotalActions, r.Summary.AllowedActions, r.Summary.DeniedActions, r.Summary.DenyRate*100)
-
-	if r.ChainIntegrity.Verified {
-		fmt.Fprintf(w, `    <p class="verified">✅ VERIFIED</p>`+"\n")
-	} else {
-		fmt.Fprintf(w, `    <p class="failed">❌ FAILED (%d gaps)</p>`+"\n", r.ChainIntegrity.Gaps)
-	}
-	if r.ChainIntegrity.MerkleRoot != "" {
-		fmt.Fprintf(w, "    <p>Merkle Root: <code>%s</code></p>\n", r.ChainIntegrity.MerkleRoot)
-	}
-	fmt.Fprintf(w, "  </div>\n\n")
-
-	if len(r.Requirements) > 0 {
-		fmt.Fprintf(w, "  <div class=\"card\">\n    <h2>Requirement Mapping</h2>\n    <table>\n      <tr><th>Requirement</th><th>Description</th><th>Status</th><th>Evidence</th></tr>\n")
-		for _, req := range r.Requirements {
-			cls := "status-met"
-			if strings.Contains(req.Status, "NOT") {
-				cls = "status-not"
-			}
-			fmt.Fprintf(w, "      <tr><td>%s</td><td>%s</td><td class=\"%s\">%s</td><td>%s</td></tr>\n", req.Requirement, req.Description, cls, req.Status, req.Evidence)
-		}
-		fmt.Fprintf(w, "    </table>\n  </div>\n\n")
-	}
-
-	fmt.Fprintf(w, "  <footer>HELM evidence report</footer>\n</body>\n</html>\n")
 }
 
 // ── Time Filtering (reuse pattern from rollup_cmd.go) ──────────────────────

@@ -10,6 +10,6 @@
 //   - HandoffContract: Terms for delegating execution between principals
 //
 // Invariant: Every intervention MUST produce a signed receipt.
-// The commercial HELM Platform extends this with live dashboards, escalation
-// chains, and multi-stakeholder approval workflows.
+// The commercial HELM Platform extends this with escalation chains and
+// multi-stakeholder approval workflows.
 package intervention

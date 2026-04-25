@@ -239,6 +239,37 @@ func TestVerifyBundle_JSONOutput(t *testing.T) {
 	}
 }
 
+func TestVerifyBundle_GoldenFixtureRoots(t *testing.T) {
+	fixtureDir := filepath.Join("..", "..", "..", "fixtures", "minimal")
+	expectedPath := filepath.Join(fixtureDir, "EXPECTED.json")
+
+	var expected struct {
+		BundleRoot string `json:"bundle_root"`
+		MerkleRoot string `json:"merkle_root"`
+	}
+	expectedData, err := os.ReadFile(expectedPath)
+	if err != nil {
+		t.Fatalf("read expected roots: %v", err)
+	}
+	if err := json.Unmarshal(expectedData, &expected); err != nil {
+		t.Fatalf("parse expected roots: %v", err)
+	}
+
+	report, err := VerifyBundle(fixtureDir)
+	if err != nil {
+		t.Fatalf("verify bundle: %v", err)
+	}
+	if report.Roots.ManifestRootHash != expected.BundleRoot {
+		t.Fatalf("manifest root mismatch: expected %s, got %s", expected.BundleRoot, report.Roots.ManifestRootHash)
+	}
+	if report.Roots.MerkleRoot != expected.MerkleRoot {
+		t.Fatalf("merkle root mismatch: expected %s, got %s", expected.MerkleRoot, report.Roots.MerkleRoot)
+	}
+	if report.Roots.EntryCount != 2 {
+		t.Fatalf("entry count mismatch: expected 2, got %d", report.Roots.EntryCount)
+	}
+}
+
 func writeJSON(t *testing.T, path string, v any) {
 	t.Helper()
 	data, err := json.MarshalIndent(v, "", "  ")

@@ -11,7 +11,6 @@ The repository retains packaging metadata for the kernel binaries, container ima
 | Surface | Package Identity |
 | --- | --- |
 | TypeScript SDK | `@mindburn/helm` |
-| JavaScript CLI | `@mindburn/helm-cli` |
 | Python SDK | `helm-sdk` |
 | Rust SDK | `helm-sdk` |
 | Java SDK | `com.github.Mindburn-Labs:helm-sdk` |

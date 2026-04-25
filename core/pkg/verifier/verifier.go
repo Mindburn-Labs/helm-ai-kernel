@@ -26,10 +26,18 @@ type VerifyReport struct {
 	Bundle      string        `json:"bundle"`
 	Verified    bool          `json:"verified"`
 	Timestamp   time.Time     `json:"timestamp"`
+	Roots       VerifyRoots   `json:"roots,omitempty"`
 	Checks      []CheckResult `json:"checks"`
 	Summary     string        `json:"summary"`
 	IssueCount  int           `json:"issue_count"`
 	VerifierVer string        `json:"verifier_version"`
+}
+
+// VerifyRoots contains deterministic roots derived from 00_INDEX.json.
+type VerifyRoots struct {
+	ManifestRootHash string `json:"manifest_root_hash,omitempty"`
+	MerkleRoot       string `json:"merkle_root,omitempty"`
+	EntryCount       int    `json:"entry_count,omitempty"`
 }
 
 // CheckResult represents a single verification check.
@@ -58,6 +66,17 @@ func VerifyBundle(bundlePath string) (*VerifyReport, error) {
 
 	// 2. Index integrity
 	report.addCheck(checkIndex(bundlePath))
+	roots, err := computeIndexRoots(bundlePath)
+	if err != nil {
+		report.addCheck(CheckResult{Name: "roots", Pass: false, Reason: err.Error()})
+	} else if roots.ManifestRootHash != "" {
+		report.Roots = roots
+		report.addCheck(CheckResult{
+			Name:   "roots",
+			Pass:   true,
+			Detail: fmt.Sprintf("%d indexed entries; manifest_root_hash=%s; merkle_root=%s", roots.EntryCount, roots.ManifestRootHash, roots.MerkleRoot),
+		})
+	}
 
 	// 3. File hash integrity
 	report.addChecks(checkFileHashes(bundlePath))
@@ -150,6 +169,77 @@ func checkIndex(bundlePath string) CheckResult {
 		return CheckResult{Name: "index_integrity", Pass: false, Reason: fmt.Sprintf("invalid index JSON: %v", err)}
 	}
 	return CheckResult{Name: "index_integrity", Pass: true, Detail: "00_INDEX.json valid"}
+}
+
+type indexEntry struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+}
+
+type indexFile struct {
+	Entries []indexEntry `json:"entries"`
+}
+
+func computeIndexRoots(bundlePath string) (VerifyRoots, error) {
+	indexPath := filepath.Join(bundlePath, "00_INDEX.json")
+	if !fileExists(indexPath) {
+		return VerifyRoots{}, nil
+	}
+
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		return VerifyRoots{}, fmt.Errorf("cannot read index for roots: %w", err)
+	}
+
+	var index indexFile
+	if err := json.Unmarshal(data, &index); err != nil {
+		return VerifyRoots{}, fmt.Errorf("invalid index JSON for roots: %w", err)
+	}
+
+	sort.Slice(index.Entries, func(i, j int) bool {
+		return index.Entries[i].Path < index.Entries[j].Path
+	})
+
+	leaves := make([][]byte, 0, len(index.Entries))
+	for _, entry := range index.Entries {
+		digest, err := hex.DecodeString(entry.SHA256)
+		if err != nil {
+			return VerifyRoots{}, fmt.Errorf("invalid sha256 for %s: %w", entry.Path, err)
+		}
+		leafInput := append([]byte{0x00}, digest...)
+		leaf := sha256.Sum256(leafInput)
+		leaves = append(leaves, leaf[:])
+	}
+
+	return VerifyRoots{
+		ManifestRootHash: sha256Hex(data),
+		MerkleRoot:       merkleRootHex(leaves),
+		EntryCount:       len(index.Entries),
+	}, nil
+}
+
+func merkleRootHex(leaves [][]byte) string {
+	if len(leaves) == 0 {
+		return sha256Hex(nil)
+	}
+	for len(leaves) > 1 {
+		next := make([][]byte, 0, (len(leaves)+1)/2)
+		for i := 0; i < len(leaves); i += 2 {
+			left := leaves[i]
+			right := left
+			if i+1 < len(leaves) {
+				right = leaves[i+1]
+			}
+			input := make([]byte, 0, 1+len(left)+len(right))
+			input = append(input, 0x01)
+			input = append(input, left...)
+			input = append(input, right...)
+			parent := sha256.Sum256(input)
+			next = append(next, parent[:])
+		}
+		leaves = next
+	}
+	return hex.EncodeToString(leaves[0])
 }
 
 func checkFileHashes(bundlePath string) []CheckResult {

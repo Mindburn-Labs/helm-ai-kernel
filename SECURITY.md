@@ -5,7 +5,7 @@
 Do not open public issues for security-sensitive reports.
 
 - Contact: `security@mindburn.org`
-- Scope: this repository, its release artifacts, the retained SDK packages, and the static viewer in `dashboard/`
+- Scope: this repository, its release artifacts, and the retained SDK packages
 
 Include a clear reproduction path, affected version, and impact summary.
 

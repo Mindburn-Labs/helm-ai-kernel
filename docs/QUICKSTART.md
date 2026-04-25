@@ -44,16 +44,14 @@ The mock provider path is the lowest-friction way to exercise the policy, receip
 ./bin/helm verify --bundle evidence.tar
 ```
 
-## 6. Open the Viewer
+## 6. Inspect Machine-Readable Output
 
-Serve the static viewer locally:
+Use JSON output for automation and auditor handoff:
 
 ```bash
-cd dashboard
-python3 -m http.server 8000
+./bin/helm verify --bundle evidence.tar --json
+cat ./data/evidence/run-report.json
 ```
-
-Then open `http://localhost:8000/` and drop the exported bundle into the page.
 
 ## 7. Run the Validation Targets
 

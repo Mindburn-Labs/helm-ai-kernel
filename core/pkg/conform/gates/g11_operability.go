@@ -56,15 +56,15 @@ func (g *G11Operability) Run(ctx *conform.RunContext) *conform.GateResult {
 		result.Reasons = append(result.Reasons, "SLO_DEFINITIONS_MISSING")
 	}
 
-	// 2. Check dashboard snapshot
+	// 2. Check operator status snapshot
 	reportsDir := filepath.Join(ctx.EvidenceDir, "12_REPORTS")
-	dashFiles, _ := filepath.Glob(filepath.Join(reportsDir, "ops_dashboard_snapshot.*"))
-	if len(dashFiles) > 0 {
-		result.Metrics.Counts["dashboard_snapshots"] = len(dashFiles)
-		result.EvidencePaths = append(result.EvidencePaths, "12_REPORTS/ops_dashboard_snapshot.*")
+	statusFiles, _ := filepath.Glob(filepath.Join(reportsDir, "ops_status_snapshot.*"))
+	if len(statusFiles) > 0 {
+		result.Metrics.Counts["ops_status_snapshots"] = len(statusFiles)
+		result.EvidencePaths = append(result.EvidencePaths, "12_REPORTS/ops_status_snapshot.*")
 	} else {
 		result.Pass = false
-		result.Reasons = append(result.Reasons, "DASHBOARD_MISSING")
+		result.Reasons = append(result.Reasons, "OPS_STATUS_SNAPSHOT_MISSING")
 	}
 
 	// 3. Check runbooks

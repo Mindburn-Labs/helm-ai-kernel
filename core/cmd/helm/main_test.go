@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,6 +24,29 @@ func TestRun_Help(t *testing.T) {
 
 	assert.Equal(t, 0, exitCode)
 	assert.Contains(t, stdout.String(), "helm <command> [options]")
+}
+
+func TestRun_HelpOmitsRemovedUICommands(t *testing.T) {
+	args := []string{"helm", "--help"}
+	var stdout, stderr bytes.Buffer
+
+	originalRunServer := startServer
+	defer func() { startServer = originalRunServer }()
+	startServer = func() {}
+
+	exitCode := Run(args, &stdout, &stderr)
+
+	assert.Equal(t, 0, exitCode)
+	help := stdout.String()
+	removedCommands := []string{
+		"control" + "-" + "room",
+		"dash" + "board",
+		"explor" + "er",
+		"simula" + "tor",
+	}
+	for _, removed := range removedCommands {
+		assert.False(t, strings.Contains(help, removed), "help should not list removed UI command %q", removed)
+	}
 }
 
 // TestRun_Unknown verifies that unknown commands output warning and default to server.

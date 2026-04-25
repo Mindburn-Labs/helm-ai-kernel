@@ -1,4 +1,4 @@
-.PHONY: build test test-race test-sdk-ts test-sdk-py test-sdk-rust test-sdk-java test-cli verify-fixtures verify-presentation test-all bench bench-report lint crucible proxy docker docker-up sbom provenance onboard demo-cli mcp-pack mcp-install release-binaries release-all verify-boundary codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check clean
+.PHONY: build test test-race test-sdk-ts test-sdk-py test-sdk-rust test-sdk-java verify-fixtures verify-presentation test-all bench bench-report lint crucible proxy docker docker-up sbom provenance onboard demo-cli mcp-pack mcp-install release-binaries release-all verify-boundary codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check clean
 
 VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.4.0)
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -26,16 +26,13 @@ test-sdk-rust:
 test-sdk-java:
 	cd sdk/java && mvn -q test
 
-test-cli:
-	cd packages/mindburn-helm-cli && npm ci && npm test -- --run && npm run build
-
-verify-fixtures: test-cli
-	node scripts/verify-fixture-roots.mjs
+verify-fixtures:
+	cd core && go test ./pkg/verifier -run TestVerifyBundle_GoldenFixtureRoots -count=1
 
 verify-presentation:
 	bash tools/verify-presentation.sh
 
-test-all: test test-sdk-py test-sdk-ts test-sdk-rust test-sdk-java test-cli verify-fixtures
+test-all: test test-sdk-py test-sdk-ts test-sdk-rust test-sdk-java verify-fixtures
 
 bench:
 	cd core && go test -bench=. -benchmem -count=3 ./pkg/crypto/ ./pkg/store/ ./pkg/guardian/ ./benchmarks/
@@ -116,7 +113,8 @@ codegen-python:
 
 codegen-ts:
 	@mkdir -p sdk/ts/src/generated
-	protoc --plugin=./node_modules/.bin/protoc-gen-ts_proto \
+	cd sdk/ts && npm ci
+	protoc --plugin=./sdk/ts/node_modules/.bin/protoc-gen-ts_proto \
 		--ts_proto_out=sdk/ts/src/generated \
 		--ts_proto_opt=outputServices=grpc-js \
 		-I$(PROTO_DIR) $(PROTO_FILES)

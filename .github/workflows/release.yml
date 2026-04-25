@@ -32,7 +32,6 @@ jobs:
           make test
           make test-sdk-py
           make test-sdk-ts
-          make test-cli
           make verify-fixtures
 
   binaries:

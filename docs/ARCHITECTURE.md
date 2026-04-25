@@ -49,7 +49,7 @@ Public contracts are kept in:
 
 The SDK HTTP client/types layer is generated from the OpenAPI contract. Protobuf message bindings are generated from `protocols/proto/` where a language SDK ships them. The protocol and schema directories document the retained on-disk and over-the-wire shapes the kernel uses.
 
-## 5. SDKs and Viewer
+## 5. SDKs
 
 The public client surface is:
 
@@ -58,9 +58,8 @@ The public client surface is:
 - TypeScript SDK in `sdk/ts`
 - Rust SDK in `sdk/rust`
 - Java SDK in `sdk/java`
-- local static viewer in `dashboard/`
 
-The viewer is intentionally read-only and local. It helps inspect bundles but does not replace `helm verify`.
+No bundled interactive client, embedded presentation layer, static viewer, or generated browser-rendered report is shipped from this repository. Future product clients should integrate through the CLI JSON output, OpenAPI contract, SDKs, evidence bundles, and conformance reports.
 
 ## Directory Layout
 
@@ -71,9 +70,8 @@ The viewer is intentionally read-only and local. It helps inspect bundles but do
 | `protocols/` | Protocol sources and specifications |
 | `schemas/` | JSON schemas for receipts, work, connectors, and related contracts |
 | `tests/conformance/` | Conformance profile and verification suite |
-| `dashboard/` | Static viewer for evidence bundles |
 | `deploy/helm-chart/` | Kubernetes deployment chart |
 
 ## Non-Goals of the OSS Repo
 
-This repository does not present a hosted SaaS control plane, a broad product UI surface, or private operational material. The OSS shape is a kernel, its contracts, its SDKs, and a local viewer.
+This repository does not present a hosted SaaS control plane, a product UI surface, a bundled viewer, or private operational material. The OSS shape is a kernel, its CLI, its contracts, and its SDKs.

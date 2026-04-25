@@ -183,7 +183,6 @@ func runDevCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "   Config:   %s\n", config)
 		fmt.Fprintf(stdout, "   Verbose:  %v\n\n", verbose)
 		fmt.Fprintln(stdout, "   MCP endpoint: http://localhost:"+fmt.Sprintf("%d", port)+"/mcp")
-		fmt.Fprintln(stdout, "   Dashboard:    http://localhost:"+fmt.Sprintf("%d", port+1)+"/")
 		fmt.Fprintln(stdout)
 	}
 

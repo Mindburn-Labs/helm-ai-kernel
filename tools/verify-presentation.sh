@@ -7,7 +7,7 @@ cd "$ROOT"
 PATTERN='PLACEHOLDER|PlaceholderKey|ErrNotImplemented|simulated output|sha256-pending|viral adoption wedge|Verifiable AI Governance|Models propose|TODO|FIXME|WIP|coming soon|scaffold-only|placeholder public key'
 
 rg -n --hidden -S "$PATTERN" \
-  README.md CONTRIBUTING.md install.sh api core dashboard deploy docs examples packages protocols scripts tests \
+  README.md CONTRIBUTING.md install.sh api core deploy docs examples protocols scripts tests \
   --glob '!**/node_modules/**' \
   --glob '!**/dist/**' \
   --glob '!**/target/**' \

@@ -10,4 +10,4 @@ The generated HTTP client/types layer in `sdk/` is derived from this file. Proto
 - health and version endpoints
 - evidence export and verification endpoints
 - proof-graph and conformance endpoints
-- retained OSS-local viewer endpoints
+- MCP and kernel approval endpoints

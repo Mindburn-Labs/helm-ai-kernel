@@ -83,7 +83,7 @@ func TestDemoModeReceiptField(t *testing.T) {
 	}
 }
 
-// TestDemoProofReportGenerated verifies HTML + JSON reports are generated.
+// TestDemoRunReportGenerated verifies JSON reports are generated without a UI artifact.
 func TestDemoProofReportGenerated(t *testing.T) {
 	dir := t.TempDir()
 	os.Chdir(dir)
@@ -94,27 +94,33 @@ func TestDemoProofReportGenerated(t *testing.T) {
 		t.Fatalf("demo failed with code %d", code)
 	}
 
-	htmlPath := filepath.Join(dir, "data", "evidence", "run-report.html")
+	htmlPath := filepath.Join(dir, "data", "evidence", "run-report."+"html")
 	jsonPath := filepath.Join(dir, "data", "evidence", "run-report.json")
 
-	if _, err := os.Stat(htmlPath); os.IsNotExist(err) {
-		t.Error("run-report.html not generated")
-	} else {
-		data, _ := os.ReadFile(htmlPath)
-		html := string(data)
-		if !strings.Contains(html, "HELM Proof Report") {
-			t.Error("HTML report missing expected title")
-		}
-		if !strings.Contains(html, "Causal chain") && !strings.Contains(html, "Causal Chain") {
-			t.Error("HTML report missing verification section")
-		}
-		if !strings.Contains(html, "demo") {
-			t.Error("HTML report missing demo mode indicator")
-		}
+	if _, err := os.Stat(htmlPath); !os.IsNotExist(err) {
+		t.Error("HTML report should not be generated")
 	}
 
 	if _, err := os.Stat(jsonPath); os.IsNotExist(err) {
 		t.Error("run-report.json not generated")
+	}
+	data, err := os.ReadFile(jsonPath)
+	if err != nil {
+		t.Fatalf("read run-report.json: %v", err)
+	}
+	var report map[string]any
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("run-report.json is not valid JSON: %v", err)
+	}
+	summary, ok := report["summary"].(map[string]any)
+	if !ok {
+		t.Fatalf("run-report.json missing summary")
+	}
+	if summary["chain_verified"] != true {
+		t.Error("run-report.json should report chain_verified=true")
+	}
+	if summary["deny_path_tested"] != true {
+		t.Error("run-report.json should report deny_path_tested=true")
 	}
 }
 

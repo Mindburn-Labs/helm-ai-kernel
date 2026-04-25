@@ -25,7 +25,6 @@ var forbiddenFragments = []string{
 	"ingestion",
 	"verification/refinement",
 	"pkg/access",
-	"controlroom",
 	"apps/",
 }
 

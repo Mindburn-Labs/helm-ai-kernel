@@ -27,8 +27,6 @@ tags:
     description: Modern MCP transport (streamable HTTP / JSON-RPC)
   - name: proofgraph
     description: ProofGraph DAG access
-  - name: oss-local
-    description: Read-only local attach surface for HELM Studio OSS mode
   - name: evidence
     description: EvidencePack export and verification
   - name: conformance
@@ -323,93 +321,6 @@ paths:
                 $ref: '#/components/schemas/Receipt'
         '404':
           $ref: '#/components/responses/HelmError'
-
-  # ── OSS Local Attach Surface ───────────────────────
-  /api/v1/oss-local/summary:
-    get:
-      operationId: getOSSLocalSummary
-      tags: [oss-local]
-      summary: Get local runtime summary for Studio OSS mode
-      responses:
-        '200':
-          description: Local runtime summary
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OSSLocalSummaryResponse'
-
-  /api/v1/oss-local/decision-timeline:
-    get:
-      operationId: getOSSLocalDecisionTimeline
-      tags: [oss-local]
-      summary: Get recent local decisions and receipts
-      parameters:
-        - name: limit
-          in: query
-          schema: { type: integer, default: 50, minimum: 1 }
-      responses:
-        '200':
-          description: Local decision timeline
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OSSLocalTimelineResponse'
-
-  /api/v1/oss-local/receipts:
-    get:
-      operationId: getOSSLocalReceipts
-      tags: [oss-local]
-      summary: Alias for the local decision timeline
-      parameters:
-        - name: limit
-          in: query
-          schema: { type: integer, default: 50, minimum: 1 }
-      responses:
-        '200':
-          description: Local receipts
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OSSLocalTimelineResponse'
-
-  /api/v1/oss-local/replay-report:
-    get:
-      operationId: getOSSLocalReplayReport
-      tags: [oss-local]
-      summary: Get the latest local replay report projection
-      responses:
-        '200':
-          description: Local replay report
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OSSLocalReplayReport'
-
-  /api/v1/oss-local/proofgraph:
-    get:
-      operationId: getOSSLocalProofgraph
-      tags: [oss-local]
-      summary: Get a local proofgraph projection
-      responses:
-        '200':
-          description: Local proofgraph payload
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OSSLocalProofgraphResponse'
-
-  /api/v1/oss-local/capabilities:
-    get:
-      operationId: getOSSLocalCapabilities
-      tags: [oss-local]
-      summary: Get Studio OSS mode capabilities and auth status
-      responses:
-        '200':
-          description: Local attach capabilities
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OSSLocalCapabilitiesResponse'
 
   # ── EvidencePack ────────────────────────────────────
   /api/v1/evidence/export:
@@ -882,169 +793,6 @@ components:
           items: { type: string }
         resource_documentation: { type: string }
 
-    OSSLocalRunSummary:
-      type: object
-      properties:
-        total: { type: integer }
-        lamport_final: { type: integer }
-        root_hash: { type: string }
-        chain_verified: { type: boolean }
-        lamport_monotonic: { type: boolean }
-        deny_path_tested: { type: boolean }
-        is_demo: { type: boolean }
-
-    OSSLocalDecision:
-      type: object
-      required: [id, source, timestamp]
-      properties:
-        id: { type: string }
-        source: { type: string }
-        timestamp: { type: string, format: date-time }
-        principal: { type: string }
-        action: { type: string }
-        tool: { type: string }
-        verdict: { type: string }
-        status: { type: string }
-        reason_code: { type: string }
-        hash: { type: string }
-        prev_hash: { type: string }
-        lamport_clock: { type: integer }
-
-    OSSLocalRuntimeStatus:
-      type: object
-      properties:
-        status: { type: string }
-        version: { type: string }
-        build_time: { type: string }
-
-    OSSLocalPathsView:
-      type: object
-      properties:
-        evidence_dir: { type: string }
-        receipts_dir: { type: string }
-        run_report_json: { type: string }
-        run_report_html: { type: string }
-        proofgraph: { type: string }
-
-    OSSLocalReportMeta:
-      type: object
-      properties:
-        template: { type: string }
-        provider: { type: string }
-        generated_at: { type: string, format: date-time }
-        summary:
-          $ref: '#/components/schemas/OSSLocalRunSummary'
-
-    OSSLocalStats:
-      type: object
-      properties:
-        receipt_count: { type: integer }
-        allow_count: { type: integer }
-        deny_count: { type: integer }
-        pending_count: { type: integer }
-        proofgraph_nodes: { type: integer }
-        last_receipt_id: { type: string }
-        last_reason_code: { type: string }
-
-    OSSLocalSummaryResponse:
-      type: object
-      required: [mode, connected, generated_at, runtime, paths, stats]
-      properties:
-        mode:
-          type: string
-          enum: [oss_local]
-        connected: { type: boolean }
-        generated_at: { type: string, format: date-time }
-        runtime:
-          $ref: '#/components/schemas/OSSLocalRuntimeStatus'
-        paths:
-          $ref: '#/components/schemas/OSSLocalPathsView'
-        latest_report:
-          $ref: '#/components/schemas/OSSLocalReportMeta'
-        stats:
-          $ref: '#/components/schemas/OSSLocalStats'
-
-    OSSLocalTimelineResponse:
-      type: object
-      required: [decisions, total]
-      properties:
-        decisions:
-          type: array
-          items:
-            $ref: '#/components/schemas/OSSLocalDecision'
-        total: { type: integer }
-        source: { type: string }
-
-    OSSLocalReplayReport:
-      type: object
-      required: [summary, receipts]
-      properties:
-        version: { type: string }
-        schema_version: { type: string }
-        generated_at: { type: string, format: date-time }
-        template: { type: string }
-        provider: { type: string }
-        summary:
-          $ref: '#/components/schemas/OSSLocalRunSummary'
-        receipts:
-          type: array
-          items:
-            $ref: '#/components/schemas/OSSLocalDecision'
-
-    OSSLocalProofgraphResponse:
-      type: object
-      description: Local proofgraph payload. When the file is unavailable, `status` is `unavailable` and `nodes` is empty.
-      properties:
-        nodes:
-          type: array
-          items:
-            type: object
-            additionalProperties: true
-        path: { type: string }
-        status: { type: string }
-        message: { type: string }
-      additionalProperties: true
-
-    OSSLocalCapabilitiesMCP:
-      type: object
-      properties:
-        stdio: { type: boolean }
-        http: { type: boolean }
-        auth_modes:
-          type: object
-          additionalProperties: { type: boolean }
-
-    OSSLocalCapabilitiesProxy:
-      type: object
-      properties:
-        receipts_endpoint: { type: boolean }
-        proofgraph_endpoint: { type: boolean }
-
-    OSSLocalCapabilitiesFeatures:
-      type: object
-      properties:
-        import_run_report: { type: boolean }
-        offline_verify: { type: boolean }
-        proof_report: { type: boolean }
-        pack_registry: { type: boolean }
-        workspace_collaboration: { type: boolean }
-
-    OSSLocalCapabilitiesResponse:
-      type: object
-      required: [studio_mode, read_only, http_api, mcp, proxy, features]
-      properties:
-        studio_mode:
-          type: string
-          enum: [oss_local]
-        read_only: { type: boolean }
-        http_api: { type: boolean }
-        mcp:
-          $ref: '#/components/schemas/OSSLocalCapabilitiesMCP'
-        proxy:
-          $ref: '#/components/schemas/OSSLocalCapabilitiesProxy'
-        features:
-          $ref: '#/components/schemas/OSSLocalCapabilitiesFeatures'
-
     ExportRequest:
       type: object
       properties:
@@ -1068,6 +816,12 @@ components:
             signatures: { type: string, enum: [PASS, FAIL] }
             causal_chain: { type: string, enum: [PASS, FAIL] }
             policy_compliance: { type: string, enum: [PASS, FAIL] }
+        roots:
+          type: object
+          properties:
+            manifest_root_hash: { type: string }
+            merkle_root: { type: string }
+            entry_count: { type: integer }
         errors:
           type: array
           items: { type: string }

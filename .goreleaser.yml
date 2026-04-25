@@ -102,4 +102,3 @@ release:
     - glob: "dist/helm.mcpb"
     - glob: "dist/compatibility-matrix.*"
     - glob: "dist/golden-evidencepack.tar"
-    - glob: "dist/golden-run-report.html"

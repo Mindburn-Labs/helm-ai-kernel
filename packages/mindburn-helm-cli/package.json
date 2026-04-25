@@ -27,7 +27,7 @@
     "@biomejs/biome": "^2.4.1",
     "@types/node": "^25.6.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.5"
   },
   "overrides": {
     "rollup": "^4.59.0"

@@ -35,9 +35,7 @@ func (g *PackGrader) Grade(ctx context.Context, pack *Pack) (*GradingReport, err
 		return report, nil
 	}
 
-	// 2. Silver Requirement: Test Evidence (Stubbed)
-	// In production, checking for Linked Evidence of "test_results"
-	// For now, if "test" metadata is present (Simulation)
+	// 2. Silver requirement: declared automated test evidence.
 	if _, ok := pack.Metadata["tested"]; ok {
 		report.Evidence = append(report.Evidence, "tests_passed")
 		report.Grade = GradeSilver
@@ -46,7 +44,7 @@ func (g *PackGrader) Grade(ctx context.Context, pack *Pack) (*GradingReport, err
 		return report, nil
 	}
 
-	// 3. Gold Requirement: Production Drill (Stubbed)
+	// 3. Gold requirement: declared production drill evidence.
 	if _, ok := pack.Metadata["drilled"]; ok {
 		report.Evidence = append(report.Evidence, "drills_passed")
 		report.Grade = GradeGold

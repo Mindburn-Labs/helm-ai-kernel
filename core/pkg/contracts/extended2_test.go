@@ -282,12 +282,12 @@ func TestExt2_KnownModelProvidersNonEmpty(t *testing.T) {
 
 func TestExt2_KnownModelProvidersByIDLookup(t *testing.T) {
 	byID := KnownModelProvidersByID()
-	p, ok := byID["anthropic:claude-opus-4-6"]
+	p, ok := byID["example:frontier-reasoning"]
 	if !ok {
-		t.Fatal("expected claude-opus-4-6 in catalog")
+		t.Fatal("expected frontier reasoning example in catalog")
 	}
 	if !p.Active {
-		t.Fatal("claude-opus-4-6 should be active")
+		t.Fatal("frontier reasoning example should be active")
 	}
 }
 

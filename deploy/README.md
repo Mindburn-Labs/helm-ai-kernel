@@ -14,4 +14,4 @@ Review `values.yaml` before use in a real environment.
 
 ## Scope
 
-Hosted demo deployment material, operator scaffolding, and monitoring bundles that were not part of the tight OSS kernel surface have been removed from this repository.
+Hosted demo deployment material, operator templates, and monitoring bundles that were not part of the tight OSS kernel surface have been removed from this repository.

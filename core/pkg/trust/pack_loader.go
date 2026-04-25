@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 )
@@ -71,8 +72,14 @@ type QuarantineOverride struct {
 
 // IsValid checks if the override is still valid.
 func (o *QuarantineOverride) IsValid() bool {
-	// Placeholder - would check expiration and signature validity
-	return o != nil && len(o.Signatures) > 0
+	if o == nil || o.PublisherKeyID == "" || o.Reason == "" || len(o.AuthorizedBy) == 0 || len(o.Signatures) == 0 {
+		return false
+	}
+	expiresAt, err := time.Parse(time.RFC3339, o.ExpiresAt)
+	if err != nil {
+		return false
+	}
+	return time.Now().UTC().Before(expiresAt)
 }
 
 // RollbackOverride allows explicit version downgrades.

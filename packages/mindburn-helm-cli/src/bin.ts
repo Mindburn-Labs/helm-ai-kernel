@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ─── HELM CLI v3 Entrypoint ──────────────────────────────────────────────────
-// npx @mindburn/helm — one command, progressive disclosure, cryptographic proof.
+// npx @mindburn/helm: local evidence bundle verification.
 //
 // Usage:
 //   npx @mindburn/helm                              # Interactive flow
@@ -35,7 +35,7 @@ function getVersion(): string {
 // ─── Help ────────────────────────────────────────────────────────────────────
 
 const HELP = `
-  ${"\x1b[1m"}HELM${"\x1b[0m"} — Verifiable AI Governance
+  ${"\x1b[1m"}HELM${"\x1b[0m"} Evidence Verification
 
   ${"\x1b[2m"}Usage:${"\x1b[0m"}
     npx @mindburn/helm                     Interactive verification flow
@@ -49,6 +49,8 @@ const HELP = `
     --depth 0-3      Output verbosity (default: 1)
     --report PATH    Generate single-file HTML evidence report
     --allow-unsigned Allow unsigned local bundles (default: false)
+    --trusted-public-key PATH
+                     PEM Ed25519 public key for signature verification
     --no-cache       Skip cache for downloads
     --cache-dir DIR  Custom cache directory (default: ~/.helm/cache)
     --help           Show this help
@@ -80,6 +82,7 @@ function parseOptions(): CLIOptions {
             depth: { type: "string", default: "1" },
             report: { type: "string" },
             "allow-unsigned": { type: "boolean", default: false },
+            "trusted-public-key": { type: "string" },
             "no-cache": { type: "boolean", default: false },
             "cache-dir": { type: "string" },
             help: { type: "boolean", short: "h", default: false },
@@ -109,6 +112,7 @@ function parseOptions(): CLIOptions {
         depth,
         report: values.report,
         allowUnsigned: values["allow-unsigned"] ?? false,
+        trustedPublicKeyPath: values["trusted-public-key"],
         noCache: values["no-cache"] ?? false,
         cacheDir: values["cache-dir"],
         help: values.help ?? false,
@@ -141,6 +145,7 @@ async function main(): Promise<never> {
     const exitCode = await runInteractive({
         noCache: opts.noCache,
         cacheDir: opts.cacheDir,
+        trustedPublicKeyPath: opts.trustedPublicKeyPath,
     });
     process.exit(exitCode);
 }
@@ -162,7 +167,10 @@ async function runNonInteractive(opts: CLIOptions): Promise<number> {
 
     let result;
     try {
-        result = await verifyBundle(bundlePath, level);
+        result = await verifyBundle(bundlePath, level, {
+            allowUnsigned: opts.allowUnsigned,
+            trustedPublicKeyPath: opts.trustedPublicKeyPath,
+        });
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         process.stderr.write(`Error: ${msg}\n`);

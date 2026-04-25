@@ -86,8 +86,10 @@ export function renderResult(result: VerificationResult, depth: number): void {
             pass: result.signature.pass,
             label: "Signature",
             detail: result.signature.pass
-                ? result.signature.signerID
-                    ? `signed by ${result.signature.signerID}`
+                ? result.signature.verified
+                    ? `verified by ${result.signature.trustedKeyID ?? result.signature.signerID}`
+                    : result.signature.signerID
+                    ? `hash-bound by ${result.signature.signerID}; ${result.signature.reason ?? "trusted key not configured"}`
                     : `conformance_report.sig valid`
                 : result.signature.reason ?? "failed",
         },

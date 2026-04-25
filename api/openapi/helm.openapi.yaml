@@ -20,7 +20,7 @@ servers:
 
 tags:
   - name: proxy
-    description: OpenAI-compatible proxy (viral adoption wedge)
+    description: OpenAI-compatible proxy endpoints
   - name: approval
     description: RFC-005 approval ceremonies
   - name: mcp

@@ -5,7 +5,15 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 
-import { computeManifestRootHash, computeMerkleRoot, sha256Hex } from "./crypto.js";
+import {
+    canonicalJSON,
+    computeManifestRootHash,
+    computeMerkleRoot,
+    loadTrustedPublicKey,
+    sha256Hex,
+    sha256Raw,
+    verifyEd25519,
+} from "./crypto.js";
 import { LEVELS, gateName } from "./gates.js";
 import type {
     AttestationCheck,
@@ -47,10 +55,10 @@ const MANDATORY_DIRS = [
 export async function verifyBundle(
     bundlePath: string,
     level: ConformanceLevel,
-    opts?: { allowUnsigned?: boolean },
+    opts?: { allowUnsigned?: boolean; trustedPublicKeyPath?: string },
 ): Promise<VerificationResult> {
     const start = performance.now();
-    const allowUnsigned = opts?.allowUnsigned ?? true; // default true for backward compat
+    const allowUnsigned = opts?.allowUnsigned ?? true; // default true for backward compatibility
 
     // 1. Structure
     const structure = await checkStructure(bundlePath);
@@ -70,15 +78,21 @@ export async function verifyBundle(
 
     // 5. Signature
     const scoreData = await readFileSafe(join(bundlePath, "01_SCORE.json"));
-    const signature = await checkSignature(bundlePath, indexData, scoreData);
+    const signature = await checkSignature(bundlePath, indexData, scoreData, opts?.trustedPublicKeyPath);
 
     // 6. Gates
     const gates = checkGates(scoreData, level);
 
     // 7. Attestation
-    const hasAttestation = signature.signerID !== undefined;
-    const attestation: AttestationCheck = hasAttestation
-        ? { pass: true, verified: true, reason: `signed by ${signature.signerID}` }
+    const hasSignature = signature.signerID !== undefined;
+    const attestation: AttestationCheck = hasSignature
+        ? {
+              pass: signature.verified === true || allowUnsigned,
+              verified: signature.verified === true,
+              reason: signature.verified === true
+                  ? `signed by ${signature.signerID}`
+                  : signature.reason ?? "trusted_key_not_configured",
+          }
         : {
               pass: allowUnsigned,
               verified: false,
@@ -195,6 +209,7 @@ async function checkSignature(
     bundlePath: string,
     indexData: Buffer | null,
     scoreData: Buffer | null,
+    trustedPublicKeyPath?: string,
 ): Promise<SignatureCheck> {
     const sigPath = join(bundlePath, "07_ATTESTATIONS", "conformance_report.sig");
     const sigData = await readFileSafe(sigPath);
@@ -226,19 +241,42 @@ async function checkSignature(
         }
     }
 
-    // NOTE: Ed25519 signature verification requires the signer's public key.
-    // When no public key is available, we verify hash bindings (index, score)
-    // but cannot perform cryptographic signature verification.
-    // Full Ed25519 verification is performed when a public key is provided
-    // via the --public-key flag or a trust registry.
     if (sig.signature && sig.signature.length > 0) {
-        // Signature present — hash bindings verified above.
-        // Cryptographic verification requires a public key supplied by the caller.
+        const trustedKey = loadTrustedPublicKey(trustedPublicKeyPath);
+        if (!trustedKey) {
+            return {
+                pass: true,
+                signerID: sig.signer_id,
+                signedAt: sig.signed_at,
+                verified: false,
+                reason: "trusted_key_not_configured",
+            };
+        }
+
+        const payload = canonicalJSON({
+            index_hash: sig.index_hash,
+            policy_hash: sig.policy_hash,
+            schema_bundle_hash: sig.schema_bundle_hash,
+            score_hash: sig.score_hash,
+        });
+        const result = verifyEd25519(sha256Raw(Buffer.from(payload, "utf-8")), sig.signature, trustedKey);
+        if (!result.verified) {
+            return {
+                pass: false,
+                signerID: sig.signer_id,
+                signedAt: sig.signed_at,
+                verified: false,
+                trustedKeyID: result.keyId,
+                reason: result.reason ?? "Ed25519 signature verification failed",
+            };
+        }
+
         return {
             pass: true,
             signerID: sig.signer_id,
             signedAt: sig.signed_at,
-            reason: "hash bindings verified; Ed25519 signature present but public key not provided for cryptographic verification",
+            verified: true,
+            trustedKeyID: result.keyId,
         };
     }
 
@@ -246,6 +284,7 @@ async function checkSignature(
         pass: true,
         signerID: sig.signer_id,
         signedAt: sig.signed_at,
+        verified: false,
     };
 }
 

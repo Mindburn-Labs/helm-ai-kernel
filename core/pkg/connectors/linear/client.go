@@ -15,8 +15,6 @@
 //   - linear.get_issue    → query     issue
 //   - linear.list_issues  → query     issues
 //   - linear.add_comment  → mutation commentCreate
-//
-// Roadmap: P2-03 (real connector set: GitHub + Slack + Linear).
 package linear
 
 import (

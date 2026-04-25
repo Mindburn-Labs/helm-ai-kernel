@@ -37,7 +37,7 @@ func runOnboardCmd(args []string, stdout, stderr io.Writer) int {
 
 	// Banner
 	fmt.Fprintf(stdout, "\n%s🚀 HELM Onboard%s\n", ColorBold+ColorBlue, ColorReset)
-	fmt.Fprintf(stdout, "%s   Models propose. The kernel disposes.%s\n\n", ColorGray, ColorReset)
+	fmt.Fprintf(stdout, "%s   Local fail-closed execution controls.%s\n\n", ColorGray, ColorReset)
 
 	// Step 1: Create data directory
 	fmt.Fprintf(stdout, "%s[1/4]%s Creating data directory...  ", ColorBold, ColorReset)

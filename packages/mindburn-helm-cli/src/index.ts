@@ -8,8 +8,8 @@ export {
     sha256Raw,
     verifyEd25519,
     verifyAttestationSignature,
+    loadTrustedPublicKey,
     canonicalJSON,
-    PINNED_PUBLIC_KEYS,
 } from "./crypto.js";
 
 export { verifyBundle } from "./verify.js";

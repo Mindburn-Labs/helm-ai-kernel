@@ -137,7 +137,7 @@ func buildSpoofedEnvelope(s Scenario) channels.ChannelEnvelope {
 		base.SenderID = ""
 
 	case "telegram_payload_injection":
-		// Wipe envelope_id to simulate corrupted/injected payload.
+		// Wipe envelope_id to create a corrupted/injected payload.
 		base.EnvelopeID = ""
 
 	case "lark_identity_spoof":

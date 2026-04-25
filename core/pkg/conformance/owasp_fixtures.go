@@ -802,11 +802,11 @@ type owaspModelAccessReceipt struct {
 // sampleModelAccessReceiptChain returns a 5-entry receipt chain for model access auditing.
 func sampleModelAccessReceiptChain() []owaspModelAccessReceipt {
 	models := []string{
-		"anthropic:claude-opus-4-6",
-		"openai:gpt-5.4",
-		"anthropic:claude-sonnet-4-6",
-		"openai:gpt-4o",
-		"anthropic:claude-haiku-4-5",
+		"example:frontier-reasoning",
+		"example:vision-tool",
+		"example:local-open-weight",
+		"example:frontier-reasoning",
+		"example:vision-tool",
 	}
 	chain := make([]owaspModelAccessReceipt, 5)
 	prevHash := ""
@@ -839,19 +839,19 @@ type owaspModelEntry struct {
 func newOWASPModelCatalog() []owaspModelEntry {
 	return []owaspModelEntry{
 		{
-			ProviderID: "anthropic:claude-opus-4-6", Name: "Claude Opus 4.6",
+			ProviderID: "example:frontier-reasoning", Name: "Example Frontier Reasoning Model",
 			Capabilities: []string{"TEXT", "CODE", "VISION", "REASONING"},
 			Regions:      []string{"US", "EU"}, RiskTier: "LOW",
 		},
 		{
-			ProviderID: "openai:gpt-5.4", Name: "GPT-5.4",
+			ProviderID: "example:vision-tool", Name: "Example Vision Tool Model",
 			Capabilities: []string{"TEXT", "CODE", "VISION", "REASONING", "TOOL_USE"},
 			Regions:      []string{"US", "EU", "APAC"}, RiskTier: "LOW",
 		},
 		{
-			ProviderID: "google:gemini-3-pro", Name: "Gemini 3 Pro",
+			ProviderID: "example:local-open-weight", Name: "Example Local Open Weight Model",
 			Capabilities: []string{"TEXT", "CODE", "VISION"},
-			Regions:      []string{"US", "EU"}, RiskTier: "LOW",
+			Regions:      []string{"LOCAL"}, RiskTier: "MEDIUM",
 		},
 	}
 }

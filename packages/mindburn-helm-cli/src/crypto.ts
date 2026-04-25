@@ -1,28 +1,14 @@
 // ─── HELM Cryptographic Primitives ───────────────────────────────────────────
 // Ed25519 signature verification, Merkle tree, manifest root hash.
-// Zero native deps — uses Node crypto stdlib.
+// Zero native deps: uses Node crypto stdlib.
 
 import { createHash, verify as cryptoVerify } from "node:crypto";
+import { readFileSync } from "node:fs";
 
-// ─── Pinned Public Keys ─────────────────────────────────────────────────────
-// Key rotation: new keys are appended, old keys remain for back-compat.
-// The CLI selects the latest key by default for newly signed attestations.
-// Verification tries all keys in order until one matches.
-
-export const PINNED_PUBLIC_KEYS: readonly { id: string; key: string; since: string }[] = [
-    {
-        id: "helm-release-2026-v1",
-        // Ed25519 public key in PEM format.
-        // Generated via: openssl genpkey -algorithm Ed25519 -out private.pem
-        //                openssl pkey -in private.pem -pubout -out public.pem
-        key: [
-            "-----BEGIN PUBLIC KEY-----",
-            "MCowBQYDK2VwAyEAPlaceholderKeyForGenerationDuringFirstRelease00=",
-            "-----END PUBLIC KEY-----",
-        ].join("\n"),
-        since: "2026-02-21",
-    },
-];
+export interface TrustedPublicKey {
+    id: string;
+    pem: string;
+}
 
 // ─── Manifest Root Hash ─────────────────────────────────────────────────────
 
@@ -84,28 +70,41 @@ export function computeMerkleRoot(
 // ─── Ed25519 Signature Verification ──────────────────────────────────────────
 
 /**
- * Verify an Ed25519 signature over data using pinned public keys.
- * @returns true if any pinned key verifies the signature.
+ * Load an Ed25519 public key from an explicit path or HELM_TRUSTED_PUBLIC_KEY_PATH.
+ * No repository-bundled key is trusted by default.
+ */
+export function loadTrustedPublicKey(path?: string): TrustedPublicKey | null {
+    const resolvedPath = path ?? process.env.HELM_TRUSTED_PUBLIC_KEY_PATH;
+    if (!resolvedPath) return null;
+
+    const pem = readFileSync(resolvedPath, "utf-8");
+    return {
+        id: resolvedPath,
+        pem,
+    };
+}
+
+/**
+ * Verify an Ed25519 signature over data using one explicit trusted key.
  */
 export function verifyEd25519(
     data: Buffer,
     signatureBase64: string,
-): { verified: boolean; keyId?: string } {
-    const signature = Buffer.from(signatureBase64, "base64");
-
-    for (const pinnedKey of PINNED_PUBLIC_KEYS) {
-        try {
-            const valid = cryptoVerify(null, data, pinnedKey.key, signature);
-            if (valid) {
-                return { verified: true, keyId: pinnedKey.id };
-            }
-        } catch {
-            // Key format mismatch or algorithm issue — try next key
-            continue;
-        }
+    trustedKey: TrustedPublicKey,
+): { verified: boolean; keyId?: string; reason?: string } {
+    try {
+        const signature = Buffer.from(signatureBase64, "base64");
+        const valid = cryptoVerify(null, data, trustedKey.pem, signature);
+        return valid
+            ? { verified: true, keyId: trustedKey.id }
+            : { verified: false, keyId: trustedKey.id, reason: "signature_mismatch" };
+    } catch (err) {
+        return {
+            verified: false,
+            keyId: trustedKey.id,
+            reason: err instanceof Error ? err.message : String(err),
+        };
     }
-
-    return { verified: false };
 }
 
 /**
@@ -116,9 +115,10 @@ export function verifyEd25519(
 export function verifyAttestationSignature(
     attestationJson: string,
     signatureBase64: string,
-): { verified: boolean; keyId?: string } {
+    trustedKey: TrustedPublicKey,
+): { verified: boolean; keyId?: string; reason?: string } {
     const data = sha256Raw(Buffer.from(attestationJson, "utf-8"));
-    return verifyEd25519(data, signatureBase64);
+    return verifyEd25519(data, signatureBase64, trustedKey);
 }
 
 // ─── Hash Utilities ──────────────────────────────────────────────────────────

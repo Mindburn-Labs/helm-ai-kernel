@@ -115,7 +115,7 @@ func validateToolCallArgs(argsStr string) (string, bool) {
 	return result.ArgsHash, true
 }
 
-// runProxyCmd implements `helm proxy` — the 1-line integration wedge.
+// runProxyCmd implements `helm proxy`.
 //
 // Usage:
 //

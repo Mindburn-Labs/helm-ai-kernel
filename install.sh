@@ -17,7 +17,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 echo -e "${BOLD}HELM Installer${NC}"
-echo -e "${BLUE}Models propose. The kernel disposes.${NC}"
+echo -e "${BLUE}Fail-closed execution controls for AI agents.${NC}"
 echo ""
 
 # 1. Detect OS & Arch

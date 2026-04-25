@@ -1,6 +1,9 @@
 package retry
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"time"
 )
 
@@ -49,14 +52,32 @@ func GenerateRetryPlan(params BackoffParams, policy BackoffPolicy, now time.Time
 		}
 	}
 
-	// Create Plan Object (ID generation omitted for brevity/external handling)
+	planID := deterministicRetryPlanID(params, policy, schedule)
 	return &RetryPlanRef{
-		RetryPlanID: "plan_" + params.EffectID, // Placeholder ID logic
+		RetryPlanID: planID,
 		EffectID:    params.EffectID,
 		PolicyID:    policy.PolicyID,
 		Schedule:    schedule,
 		MaxAttempts: policy.MaxAttempts,
 		CreatedAt:   now,
-		ExpiresAt:   currentScheduledTime.Add(1 * time.Hour), // Arbitrary expiration buffer
+		ExpiresAt:   currentScheduledTime.Add(time.Duration(policy.MaxMs+policy.MaxJitterMs) * time.Millisecond),
 	}, nil
+}
+
+func deterministicRetryPlanID(params BackoffParams, policy BackoffPolicy, schedule []RetrySchedule) string {
+	h := sha256.New()
+	_, _ = fmt.Fprintf(h, "%s:%s:%s:%s:%d:%d:%d:%d",
+		params.PolicyID,
+		params.AdapterID,
+		params.EffectID,
+		params.EnvSnapHash,
+		policy.BaseMs,
+		policy.MaxMs,
+		policy.MaxJitterMs,
+		policy.MaxAttempts,
+	)
+	for _, item := range schedule {
+		_, _ = fmt.Fprintf(h, ":%d:%d:%s", item.AttemptIndex, item.DelayMs, item.ScheduledAt.UTC().Format(time.RFC3339Nano))
+	}
+	return "retry-" + hex.EncodeToString(h.Sum(nil))[:24]
 }

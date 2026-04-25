@@ -21,8 +21,9 @@ import { renderHtmlReport } from "./report.js";
 export async function runInteractive(options: {
     noCache?: boolean;
     cacheDir?: string;
+    trustedPublicKeyPath?: string;
 }): Promise<number> {
-    p.intro("HELM — Verifiable AI Governance");
+    p.intro("HELM Evidence Verification");
 
     // ─── Step 1: Artifact Source ──────────────────────────────────────────
 
@@ -86,6 +87,7 @@ export async function runInteractive(options: {
                 signatureUrl: release.signatureUrl,
                 noCache: options.noCache,
                 cacheDir: options.cacheDir,
+                trustedPublicKeyPath: options.trustedPublicKeyPath,
                 onProgress: (progress) => {
                     if (progress.phase === "downloading" && progress.totalBytes) {
                         const pct = Math.round(
@@ -140,7 +142,9 @@ export async function runInteractive(options: {
 
     let result: VerificationResult;
     try {
-        result = await verifyBundle(bundlePath, level);
+        result = await verifyBundle(bundlePath, level, {
+            trustedPublicKeyPath: options.trustedPublicKeyPath,
+        });
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         spin.stop(`Verification error: ${msg}`);

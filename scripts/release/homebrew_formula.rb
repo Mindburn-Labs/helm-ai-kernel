@@ -1,45 +1,84 @@
+#!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Homebrew formula for HELM — Execution Authority for AI Agents
-# Install: brew install mindburn-labs/tap/helm
-#
-# To update after a release:
-#   1. Update `url` and `sha256` for each platform
-#   2. Submit to mindburn-labs/homebrew-tap
+require "optparse"
 
-class Helm < Formula
-  desc "Execution Authority for AI agents — governed tool execution with cryptographic receipts"
-  homepage "https://github.com/Mindburn-Labs/helm-oss"
-  version "0.9.0"
-  license "Apache-2.0"
+ARCHES = {
+  "darwin-arm64" => "helm-darwin-arm64",
+  "darwin-amd64" => "helm-darwin-amd64",
+  "linux-arm64" => "helm-linux-arm64",
+  "linux-amd64" => "helm-linux-amd64"
+}.freeze
 
-  on_macos do
-    if Hardware::CPU.arm?
-      url "https://github.com/Mindburn-Labs/helm-oss/releases/download/v#{version}/helm-darwin-arm64"
-      sha256 "PLACEHOLDER_SHA256_DARWIN_ARM64"
-    else
-      url "https://github.com/Mindburn-Labs/helm-oss/releases/download/v#{version}/helm-darwin-amd64"
-      sha256 "PLACEHOLDER_SHA256_DARWIN_AMD64"
-    end
-  end
+options = {
+  repo: "Mindburn-Labs/helm-oss",
+  checksums: File.expand_path("../../bin/SHA256SUMS.txt", __dir__)
+}
 
-  on_linux do
-    if Hardware::CPU.arm?
-      url "https://github.com/Mindburn-Labs/helm-oss/releases/download/v#{version}/helm-linux-arm64"
-      sha256 "PLACEHOLDER_SHA256_LINUX_ARM64"
-    else
-      url "https://github.com/Mindburn-Labs/helm-oss/releases/download/v#{version}/helm-linux-amd64"
-      sha256 "PLACEHOLDER_SHA256_LINUX_AMD64"
-    end
-  end
+OptionParser.new do |opts|
+  opts.banner = "Usage: homebrew_formula.rb --version VERSION [--checksums PATH] [--repo OWNER/REPO]"
+  opts.on("--version VERSION", "Release version, with or without leading v") { |v| options[:version] = v }
+  opts.on("--checksums PATH", "Path to SHA256SUMS.txt from make release-binaries") { |p| options[:checksums] = p }
+  opts.on("--repo OWNER/REPO", "GitHub repository path") { |r| options[:repo] = r }
+end.parse!
 
-  def install
-    binary = Dir["helm-*"].first || "helm"
-    bin.install binary => "helm"
-  end
+abort "missing --version" if options[:version].to_s.strip.empty?
+abort "missing checksum file: #{options[:checksums]}" unless File.file?(options[:checksums])
 
-  test do
-    assert_match "HELM Kernel", shell_output("#{bin}/helm --help")
-    assert_match "onboard", shell_output("#{bin}/helm --help")
-  end
+version = options[:version].sub(/\Av/, "")
+tag = "v#{version}"
+
+checksums = {}
+File.readlines(options[:checksums], chomp: true).each do |line|
+  digest, file = line.split(/\s+/, 2)
+  next if digest.to_s.empty? || file.to_s.empty?
+
+  checksums[File.basename(file)] = digest
 end
+
+missing = ARCHES.values.reject { |artifact| checksums[artifact]&.match?(/\A[0-9a-f]{64}\z/i) }
+abort "missing SHA256 entries for: #{missing.join(", ")}" unless missing.empty?
+
+def asset_url(repo, tag, artifact)
+  "https://github.com/#{repo}/releases/download/#{tag}/#{artifact}"
+end
+
+puts <<~RUBY
+  # frozen_string_literal: true
+
+  class Helm < Formula
+    desc "Fail-closed execution firewall for AI agents"
+    homepage "https://github.com/#{options[:repo]}"
+    version "#{version}"
+    license "Apache-2.0"
+
+    on_macos do
+      if Hardware::CPU.arm?
+        url "#{asset_url(options[:repo], tag, ARCHES["darwin-arm64"])}"
+        sha256 "#{checksums[ARCHES["darwin-arm64"]]}"
+      else
+        url "#{asset_url(options[:repo], tag, ARCHES["darwin-amd64"])}"
+        sha256 "#{checksums[ARCHES["darwin-amd64"]]}"
+      end
+    end
+
+    on_linux do
+      if Hardware::CPU.arm?
+        url "#{asset_url(options[:repo], tag, ARCHES["linux-arm64"])}"
+        sha256 "#{checksums[ARCHES["linux-arm64"]]}"
+      else
+        url "#{asset_url(options[:repo], tag, ARCHES["linux-amd64"])}"
+        sha256 "#{checksums[ARCHES["linux-amd64"]]}"
+      end
+    end
+
+    def install
+      binary = Dir["helm-*"].first || "helm"
+      bin.install binary => "helm"
+    end
+
+    test do
+      assert_match version.to_s, shell_output("\#{bin}/helm version 2>&1")
+    end
+  end
+RUBY

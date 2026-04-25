@@ -15,6 +15,7 @@ export interface CLIOptions {
     report?: string;
     noCache: boolean;
     cacheDir?: string;
+    trustedPublicKeyPath?: string;
     allowUnsigned: boolean;
     help: boolean;
     version: boolean;
@@ -126,6 +127,8 @@ export interface HashChainCheck {
 export interface SignatureCheck {
     pass: boolean;
     signerID?: string;
+    verified?: boolean;
+    trustedKeyID?: string;
     signedAt?: string;
     reason?: string;
 }

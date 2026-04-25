@@ -10,11 +10,17 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   hygiene:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Presentation hygiene
+        run: make verify-presentation
       - name: Check for unfinished markers in retained public files
         run: |
           set -euo pipefail

@@ -28,9 +28,9 @@ func NewAssembler(ledger ledger.Ledger, mem store.VectorStore, emb store.Embedde
 func (a *Assembler) Assemble(ctx context.Context, activeObligationID string) (string, error) {
 	var sb strings.Builder
 
-	// 1. System Identity
-	sb.WriteString("You are the HELM Kernel, an autonomous operating system.\n")
-	sb.WriteString("Your goal is to fulfill obligations safely.\n\n")
+	// 1. System identity
+	sb.WriteString("You are the HELM Kernel, a governed execution component.\n")
+	sb.WriteString("Fulfill obligations only within the active policy boundary.\n\n")
 
 	// 2. Active Context
 	if activeObligationID != "" {

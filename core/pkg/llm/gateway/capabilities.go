@@ -11,7 +11,6 @@ const (
 )
 
 // Capabilities defines the normalized, explicitly verified feature set of a local provider.
-// This prevents wild deviations in capabilities from polluting HELM logic.
 type Capabilities struct {
 	SupportsStreaming bool `json:"supports_streaming"`
 	SupportsJSONMode  bool `json:"supports_json_mode"`
@@ -20,23 +19,25 @@ type Capabilities struct {
 	MaxContextWindow  int  `json:"max_context_window"`
 }
 
-// Profile represents a deterministic blessed profile bound to a provider.
+// Profile represents a deterministic provider binding.
 type Profile struct {
 	ID           string       `json:"id"`
 	Provider     ProviderType `json:"provider"`
+	BaseURL      string       `json:"base_url"`
 	ModelName    string       `json:"model_name"`
+	ModelHash    string       `json:"model_hash,omitempty"`
 	Capabilities Capabilities `json:"capabilities"`
 }
 
-// GetBlessedProfiles returns the canonical list of permitted local models.
-// Restricting local execution to deterministic Blessed Profiles prevents
-// non-canonical "hype" models from polluting receipt truth.
+// GetBlessedProfiles returns provider profiles. Callers must bind a concrete
+// model name and model hash before executing inference.
 func GetBlessedProfiles() []Profile {
 	return []Profile{
 		{
-			ID:        "local/qwen-3.5-27b-reasoning-q4",
+			ID:        "local/ollama",
 			Provider:  ProviderOllama,
-			ModelName: "qwen:27b-v3.5-q4_K_M",
+			BaseURL:   "http://localhost:11434",
+			ModelName: "local-model",
 			Capabilities: Capabilities{
 				SupportsStreaming: true,
 				SupportsJSONMode:  true,
@@ -45,30 +46,33 @@ func GetBlessedProfiles() []Profile {
 			},
 		},
 		{
-			ID:        "local/llama-3-70b-instruct-q4",
+			ID:        "local/llamacpp",
 			Provider:  ProviderLlamaCPP,
-			ModelName: "Meta-Llama-3-70B-Instruct.Q4_K_M.gguf",
+			BaseURL:   "http://localhost:8080",
+			ModelName: "local-model",
+			Capabilities: Capabilities{
+				SupportsStreaming: true,
+				SupportsJSONMode:  true,
+				MaxContextWindow:  8192,
+			},
+		},
+		{
+			ID:        "local/vllm",
+			Provider:  ProviderVLLM,
+			BaseURL:   "http://localhost:8000",
+			ModelName: "local-model",
 			Capabilities: Capabilities{
 				SupportsStreaming: true,
 				SupportsJSONMode:  true,
 				SupportsTools:     true,
-				MaxContextWindow:  8192,
+				MaxContextWindow:  32768,
 			},
 		},
 		{
-			ID:        "local/embedding/bge-m3",
-			Provider:  ProviderOllama,
-			ModelName: "bge-m3:latest",
-			Capabilities: Capabilities{
-				SupportsStreaming: false,
-				SupportsTools:     false,
-				MaxContextWindow:  8192,
-			},
-		},
-		{
-			ID:        "local/mixtral-8x7b-vLLM",
-			Provider:  ProviderVLLM,
-			ModelName: "mistralai/Mixtral-8x7B-Instruct-v0.1",
+			ID:        "local/lmstudio",
+			Provider:  ProviderLMStudio,
+			BaseURL:   "http://localhost:1234",
+			ModelName: "local-model",
 			Capabilities: Capabilities{
 				SupportsStreaming: true,
 				SupportsJSONMode:  true,

@@ -6,6 +6,7 @@ package kernel
 import (
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"golang.org/x/text/unicode/norm"
@@ -167,12 +168,18 @@ func ValidateCSNFStrict(v any, schema *CSNFSchema) CSNFValidationResult {
 
 func validateCSNFStrictInternal(v any, path string, schema *CSNFSchema, issues *[]CSNFIssue) {
 	if v == nil {
-		// Null is only valid if schema permits
-		//nolint:staticcheck // suppressed
-		if schema != nil {
-			// Would need to look up path in schema
-			// For now, allow nulls (schema validation is best-effort)
-		} //nolint:staticcheck // Placeholder for schema validation
+		if schema == nil {
+			return
+		}
+		field, ok := schemaFieldForPath(schema, path)
+		if ok && !field.Nullable {
+			*issues = append(*issues, CSNFIssue{
+				Path:     path,
+				Code:     "CSNF_NULL_NOT_ALLOWED",
+				Message:  fmt.Sprintf("null is not allowed for non-nullable field %q", path),
+				Severity: "error",
+			})
+		}
 		return
 	}
 
@@ -217,6 +224,26 @@ func validateCSNFStrictInternal(v any, path string, schema *CSNFSchema, issues *
 			})
 		}
 	}
+}
+
+func schemaFieldForPath(schema *CSNFSchema, path string) (CSNFSchemaField, bool) {
+	if schema == nil || path == "" {
+		return CSNFSchemaField{}, false
+	}
+	normalized := strings.TrimPrefix(path, "/")
+	if field, ok := schema.Fields[normalized]; ok {
+		return field, true
+	}
+
+	lastSegment := normalized
+	if idx := strings.LastIndex(lastSegment, "/"); idx >= 0 {
+		lastSegment = lastSegment[idx+1:]
+	}
+	if idx := strings.Index(lastSegment, "["); idx >= 0 {
+		lastSegment = lastSegment[:idx]
+	}
+	field, ok := schema.Fields[lastSegment]
+	return field, ok
 }
 
 // IsNFCNormalized checks if a string is already NFC normalized.

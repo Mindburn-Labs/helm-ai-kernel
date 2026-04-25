@@ -15,7 +15,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 
-import { computeManifestRootHash, sha256Hex, verifyAttestationSignature } from "./crypto.js";
+import { computeManifestRootHash, loadTrustedPublicKey, sha256Hex, verifyAttestationSignature } from "./crypto.js";
 import type { Attestation } from "./types.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -135,6 +135,7 @@ export async function downloadBundle(
     options: {
         attestationUrl?: string | null;
         signatureUrl?: string | null;
+        trustedPublicKeyPath?: string;
         noCache?: boolean;
         cacheDir?: string;
         onProgress?: (progress: DownloadProgress) => void;
@@ -177,10 +178,11 @@ export async function downloadBundle(
         const attestation = await fetchAttestation(
             options.attestationUrl,
             options.signatureUrl ?? null,
+            options.trustedPublicKeyPath,
             tarballHash,
         );
 
-        if (!attestation.verified) {
+        if (!attestation.pass) {
             throw new Error(`Attestation verification failed: ${attestation.reason}`);
         }
     }
@@ -233,12 +235,13 @@ export async function downloadBundle(
 async function fetchAttestation(
     attestationUrl: string,
     signatureUrl: string | null,
+    trustedPublicKeyPath: string | undefined,
     expectedAssetSha256: string,
-): Promise<{ verified: boolean; reason?: string; attestation?: Attestation }> {
+): Promise<{ pass: boolean; verified: boolean; reason?: string; attestation?: Attestation }> {
     try {
         const response = await fetch(attestationUrl, { redirect: "follow" });
         if (!response.ok) {
-            return { verified: false, reason: `attestation fetch failed: HTTP ${response.status}` };
+            return { pass: false, verified: false, reason: `attestation fetch failed: HTTP ${response.status}` };
         }
 
         const attestationJson = await response.text();
@@ -247,27 +250,36 @@ async function fetchAttestation(
         // Check asset hash
         if (attestation.asset_sha256 !== expectedAssetSha256) {
             return {
+                pass: false,
                 verified: false,
                 reason: `asset sha256 mismatch: expected ${attestation.asset_sha256.substring(0, 16)}…, got ${expectedAssetSha256.substring(0, 16)}…`,
             };
         }
 
-        // Verify signature if available
-        if (signatureUrl) {
-            const sigResponse = await fetch(signatureUrl, { redirect: "follow" });
-            if (sigResponse.ok) {
-                const signatureBase64 = (await sigResponse.text()).trim();
-                const result = verifyAttestationSignature(attestationJson, signatureBase64);
-
-                if (!result.verified) {
-                    return { verified: false, reason: "Ed25519 signature verification failed" };
-                }
-            }
+        if (!signatureUrl) {
+            return { pass: false, verified: false, reason: "attestation_signature_missing", attestation };
         }
 
-        return { verified: true, attestation };
+        const sigResponse = await fetch(signatureUrl, { redirect: "follow" });
+        if (!sigResponse.ok) {
+            return { pass: false, verified: false, reason: `signature fetch failed: HTTP ${sigResponse.status}`, attestation };
+        }
+
+        const signatureBase64 = (await sigResponse.text()).trim();
+        const trustedKey = loadTrustedPublicKey(trustedPublicKeyPath);
+        if (!trustedKey) {
+            return { pass: false, verified: false, reason: "trusted_key_not_configured", attestation };
+        }
+
+        const result = verifyAttestationSignature(attestationJson, signatureBase64, trustedKey);
+        if (!result.verified) {
+            return { pass: false, verified: false, reason: result.reason ?? "Ed25519 signature verification failed" };
+        }
+
+        return { pass: true, verified: true, attestation };
     } catch (err) {
         return {
+            pass: false,
             verified: false,
             reason: `attestation verification error: ${err instanceof Error ? err.message : String(err)}`,
         };

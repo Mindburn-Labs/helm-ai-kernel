@@ -2,6 +2,7 @@ package trust
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 )
@@ -197,6 +198,9 @@ func TestPackLoader_checkPublisherStatus(t *testing.T) {
 		overrides: map[string]*QuarantineOverride{
 			"revoked-with-override": {
 				PublisherKeyID: "revoked-with-override",
+				Reason:         "incident response validation",
+				AuthorizedBy:   []string{"security-lead"},
+				ExpiresAt:      time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
 				Signatures:     []string{"sig1"},
 			},
 		},
@@ -258,6 +262,9 @@ func TestQuarantineOverride_IsValid(t *testing.T) {
 	t.Run("valid with signatures", func(t *testing.T) {
 		o := &QuarantineOverride{
 			PublisherKeyID: "key1",
+			Reason:         "incident response validation",
+			AuthorizedBy:   []string{"security-lead"},
+			ExpiresAt:      time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
 			Signatures:     []string{"sig1", "sig2"},
 		}
 		if !o.IsValid() {

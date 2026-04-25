@@ -10,8 +10,12 @@ import (
 	"strings"
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/effectgraph"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/intentcompiler"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/prg"
+	"gopkg.in/yaml.v3"
 )
 
 func init() {
@@ -28,7 +32,7 @@ func init() {
 // Subcommands:
 //
 //	compile  — Compile task descriptions into a PlanSpec DAG
-//	evaluate — Evaluate a PlanSpec DAG against policy (mock evaluator)
+//	evaluate — Evaluate a PlanSpec DAG against policy
 func runPlanCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		_, _ = fmt.Fprintln(stderr, "Usage: helm plan <compile|evaluate> [options]")
@@ -138,21 +142,24 @@ func runPlanCompile(args []string, stdout, stderr io.Writer) int {
 
 // runPlanEvaluate implements `helm plan evaluate`.
 //
-// Reads a PlanSpec JSON and evaluates it through a mock policy evaluator.
-// In production, this would use the real Guardian via GuardianAdapter.
+// Reads a PlanSpec JSON and evaluates it through Guardian-backed policy.
 func runPlanEvaluate(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("plan evaluate", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 
 	var (
 		planFile   string
+		policyFile string
 		outputFile string
 		actor      string
+		dryRun     bool
 	)
 
 	cmd.StringVar(&planFile, "plan", "", "PlanSpec JSON file (REQUIRED)")
+	cmd.StringVar(&policyFile, "policy", "", "Policy file for Guardian evaluation (REQUIRED unless --dry-run)")
 	cmd.StringVar(&outputFile, "output", "", "Output file (default: stdout)")
 	cmd.StringVar(&actor, "actor", "operator", "Principal ID")
+	cmd.BoolVar(&dryRun, "dry-run", false, "Use explicit allow-all dry-run evaluator")
 
 	if err := cmd.Parse(args); err != nil {
 		return 2
@@ -160,6 +167,14 @@ func runPlanEvaluate(args []string, stdout, stderr io.Writer) int {
 
 	if planFile == "" {
 		_, _ = fmt.Fprintln(stderr, "Error: --plan is required")
+		return 2
+	}
+	if !dryRun && policyFile == "" {
+		_, _ = fmt.Fprintln(stderr, "Error: --policy is required unless --dry-run is set")
+		return 2
+	}
+	if dryRun && policyFile != "" {
+		_, _ = fmt.Fprintln(stderr, "Error: --policy and --dry-run are mutually exclusive")
 		return 2
 	}
 
@@ -176,8 +191,25 @@ func runPlanEvaluate(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	// Evaluate using allow-all policy (real Guardian wiring requires server context).
-	evaluator := effectgraph.NewGraphEvaluator(&allowAllPolicy{})
+	var policy effectgraph.PolicyEvaluator
+	if dryRun {
+		policy = &allowAllPolicy{}
+	} else {
+		rules, loadErr := loadPlanPolicy(policyFile, &plan)
+		if loadErr != nil {
+			_, _ = fmt.Fprintf(stderr, "Error loading policy: %v\n", loadErr)
+			return 2
+		}
+		signer, signerErr := helmcrypto.NewEd25519Signer("plan-evaluate")
+		if signerErr != nil {
+			_, _ = fmt.Fprintf(stderr, "Error creating Guardian signer: %v\n", signerErr)
+			return 1
+		}
+		guard := guardian.NewGuardian(signer, rules, nil)
+		policy = effectgraph.NewGuardianAdapter(guard)
+	}
+
+	evaluator := effectgraph.NewGraphEvaluator(policy)
 	result, err := evaluator.Evaluate(context.Background(), &effectgraph.EvaluationRequest{
 		Plan:  &plan,
 		Actor: actor,
@@ -215,6 +247,100 @@ func runPlanEvaluate(args []string, stdout, stderr io.Writer) int {
 	}
 
 	return 0
+}
+
+type planPolicyFile struct {
+	Rules      map[string]prg.RequirementSet `json:"rules" yaml:"rules"`
+	Default    *prg.RequirementSet           `json:"default" yaml:"default"`
+	Expression string                        `json:"expression" yaml:"expression"`
+}
+
+func loadPlanPolicy(path string, plan *contracts.PlanSpec) (*prg.Graph, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	graph := prg.NewGraph()
+	var pf planPolicyFile
+	if err := yaml.Unmarshal(data, &pf); err != nil {
+		if looksStructuredPlanPolicy(strings.TrimSpace(string(data))) {
+			return nil, fmt.Errorf("parse policy: %w", err)
+		}
+		pf.Expression = strings.TrimSpace(string(data))
+	}
+
+	for action, rule := range pf.Rules {
+		addNormalizedRule(graph, action, rule)
+	}
+
+	if pf.Default != nil {
+		for _, effectType := range planEffectTypes(plan) {
+			if _, exists := graph.Rules[effectType]; !exists {
+				addNormalizedRule(graph, effectType, *pf.Default)
+			}
+		}
+	}
+
+	expression := strings.TrimSpace(pf.Expression)
+	if len(graph.Rules) == 0 && expression == "" {
+		expression = strings.TrimSpace(string(data))
+	}
+	if expression != "" {
+		for _, effectType := range planEffectTypes(plan) {
+			if _, exists := graph.Rules[effectType]; !exists {
+				addNormalizedRule(graph, effectType, prg.RequirementSet{
+					ID:    "plan-policy-" + effectType,
+					Logic: prg.AND,
+					Requirements: []prg.Requirement{{
+						ID:          "expression",
+						Description: "plan evaluation policy expression",
+						Expression:  expression,
+					}},
+				})
+			}
+		}
+	}
+
+	if len(graph.Rules) == 0 {
+		return nil, fmt.Errorf("policy file must define rules, default, or expression")
+	}
+
+	return graph, nil
+}
+
+func looksStructuredPlanPolicy(raw string) bool {
+	return strings.HasPrefix(raw, "{") ||
+		strings.HasPrefix(raw, "[") ||
+		strings.HasPrefix(raw, "rules:") ||
+		strings.HasPrefix(raw, "default:") ||
+		strings.HasPrefix(raw, "expression:")
+}
+
+func addNormalizedRule(graph *prg.Graph, action string, rule prg.RequirementSet) {
+	if rule.ID == "" {
+		rule.ID = "plan-policy-" + action
+	}
+	if rule.Logic == "" {
+		rule.Logic = prg.AND
+	}
+	_ = graph.AddRule(action, rule)
+}
+
+func planEffectTypes(plan *contracts.PlanSpec) []string {
+	seen := map[string]bool{}
+	var out []string
+	if plan == nil || plan.DAG == nil {
+		return out
+	}
+	for _, step := range plan.DAG.Nodes {
+		if step.EffectType == "" || seen[step.EffectType] {
+			continue
+		}
+		seen[step.EffectType] = true
+		out = append(out, step.EffectType)
+	}
+	return out
 }
 
 // allowAllPolicy is a simple policy evaluator that allows everything.

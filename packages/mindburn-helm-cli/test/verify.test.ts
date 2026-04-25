@@ -1,14 +1,15 @@
 // ─── HELM v3 Verification Tests ──────────────────────────────────────────────
 // Golden tests: synthetic §3.1 bundles, hash chain, tamper detection, gates.
 
-import { createHash } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { createHash, generateKeyPairSync, sign, type KeyObject } from "node:crypto";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 import { verifyBundle } from "../src/verify.js";
 import { LEVELS } from "../src/gates.js";
+import { canonicalJSON, sha256Raw } from "../src/crypto.js";
 import type {
     ConformanceReport,
     IndexManifest,
@@ -106,6 +107,19 @@ function createBundle(root: string, opts?: { failGates?: string[] }): void {
     writeFileSync(join(root, "07_ATTESTATIONS/conformance_report.sig"), JSON.stringify(sig, null, 2));
 }
 
+function signBundle(root: string, privateKey: KeyObject): void {
+    const sigPath = join(root, "07_ATTESTATIONS/conformance_report.sig");
+    const sig = JSON.parse(readFileSync(sigPath, "utf-8")) as ReportSig;
+    const payload = canonicalJSON({
+        index_hash: sig.index_hash,
+        policy_hash: sig.policy_hash,
+        schema_bundle_hash: sig.schema_bundle_hash,
+        score_hash: sig.score_hash,
+    });
+    sig.signature = sign(null, sha256Raw(Buffer.from(payload, "utf-8")), privateKey).toString("base64");
+    writeFileSync(sigPath, JSON.stringify(sig, null, 2));
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("verifyBundle", () => {
@@ -113,10 +127,23 @@ describe("verifyBundle", () => {
     const valid = join(root, "valid");
     const broken = join(root, "broken");
     const failing = join(root, "failing");
+    const signed = join(root, "signed");
+    const signedBad = join(root, "signed-bad");
+    const publicKeyPath = join(root, "trusted-public.pem");
+    const wrongPublicKeyPath = join(root, "wrong-public.pem");
 
     beforeAll(() => {
+        const keypair = generateKeyPairSync("ed25519");
+        const wrongKeypair = generateKeyPairSync("ed25519");
+
         createBundle(valid);
         createBundle(failing, { failGates: ["G0", "G1"] });
+        createBundle(signed);
+        createBundle(signedBad);
+        signBundle(signed, keypair.privateKey);
+        signBundle(signedBad, keypair.privateKey);
+        writeFileSync(publicKeyPath, keypair.publicKey.export({ type: "spki", format: "pem" }));
+        writeFileSync(wrongPublicKeyPath, wrongKeypair.publicKey.export({ type: "spki", format: "pem" }));
 
         // Broken bundle — missing dirs, minimal index
         mkdirSync(broken, { recursive: true });
@@ -177,6 +204,25 @@ describe("verifyBundle", () => {
         const r = await verifyBundle(valid, "L2");
         expect(r.signature.pass).toBe(true);
         expect(r.signature.signerID).toBe("test-fixture");
+        expect(r.signature.verified).toBe(false);
+        expect(r.signature.reason).toBe("trusted_key_not_configured");
+    });
+
+    it("verifies signature with explicit trusted public key", async () => {
+        const r = await verifyBundle(signed, "L2", { trustedPublicKeyPath: publicKeyPath });
+        expect(r.signature.pass).toBe(true);
+        expect(r.signature.verified).toBe(true);
+        expect(r.attestation.verified).toBe(true);
+    });
+
+    it("rejects signature with wrong trusted public key", async () => {
+        const r = await verifyBundle(signedBad, "L2", {
+            allowUnsigned: false,
+            trustedPublicKeyPath: wrongPublicKeyPath,
+        });
+        expect(r.signature.pass).toBe(false);
+        expect(r.signature.verified).toBe(false);
+        expect(r.verdict).toBe("FAIL");
     });
 
     // ─── Gates ──────────────────────────────────────────

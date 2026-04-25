@@ -2,6 +2,8 @@ package rir
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -16,9 +18,8 @@ type SourceArtifact struct {
 	ContentHash string    `json:"content_hash,omitempty"`
 	IngestedAt  time.Time `json:"ingested_at,omitempty"`
 }
-type Extractor struct {
-	// Future: LLM Gateway dependency for semantic extraction
-}
+
+type Extractor struct{}
 
 func NewExtractor() *Extractor {
 	return &Extractor{}
@@ -37,7 +38,7 @@ func (e *Extractor) ExtractFromArtifact(ctx context.Context, artifact *SourceArt
 	rootNode := Node{
 		ID:      uuid.New().String(),
 		Type:    NodeTypeGroup,
-		Title:   "Regulation Root", // In reality, derived from artifact
+		Title:   "Regulation Root",
 		Content: "Extracted from " + artifact.SourceID,
 	}
 
@@ -46,19 +47,20 @@ func (e *Extractor) ExtractFromArtifact(ctx context.Context, artifact *SourceArt
 
 	// Create a SourceLink
 	links := make(map[string]SourceLink)
+	segmentHash := artifactSegmentHash(artifact)
 	link := SourceLink{
 		NodeID:           rootNode.ID,
 		SourceArtifactID: artifact.ArtifactID,
 		StartOffset:      0,
-		EndOffset:        100, // Dummy
-		SegmentHash:      "dummy-hash",
+		EndOffset:        len(artifact.SourceID),
+		SegmentHash:      segmentHash,
 	}
 	links[rootNode.ID] = link
 
 	bundle := &RIRBundle{
 		BundleID:    bundleID,
-		Scope:       artifact.SourceID, // Simple mapping
-		Version:     "0.0.1",
+		Scope:       artifact.SourceID,
+		Version:     "1.0.0",
 		RootNodeID:  rootNode.ID,
 		Nodes:       nodes,
 		SourceLinks: links,
@@ -73,4 +75,14 @@ func (e *Extractor) ExtractFromArtifact(ctx context.Context, artifact *SourceArt
 	bundle.ContentHash = hash
 
 	return bundle, nil
+}
+
+func artifactSegmentHash(artifact *SourceArtifact) string {
+	hash := sha256.New()
+	_, _ = hash.Write([]byte(artifact.ArtifactID))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(artifact.SourceID))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(artifact.ContentHash))
+	return "sha256:" + hex.EncodeToString(hash.Sum(nil))
 }

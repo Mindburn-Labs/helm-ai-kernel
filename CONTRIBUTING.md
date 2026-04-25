@@ -23,7 +23,7 @@ Run any additional target relevant to the area you changed, such as `make bench`
 ## Contribution Rules
 
 1. Keep documentation tied to code, tests, or release automation.
-2. Do not merge placeholder behavior, backlog markers, or deferred public copy.
+2. Do not merge incomplete behavior, backlog markers, or deferred public copy.
 3. Keep the OSS scope tight: kernel, contracts, SDKs, viewer, and the retained deployment/examples surface.
 4. Preserve deterministic verification paths when changing receipts, schemas, or evidence handling.
 

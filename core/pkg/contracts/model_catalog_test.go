@@ -34,21 +34,18 @@ func TestKnownModelProviders_AllHaveRequiredFields(t *testing.T) {
 	}
 }
 
-func TestKnownModelProviders_FrontierModelsPresent(t *testing.T) {
+func TestKnownModelProviders_StableExampleModelsPresent(t *testing.T) {
 	byID := KnownModelProvidersByID()
 
 	required := []string{
-		"openai:gpt-5.4",
-		"google:gemini-3-pro",
-		"anthropic:claude-opus-4-6",
-		"anthropic:claude-sonnet-4-6",
-		"ibm:granite-4.0-3b-vision",
-		"qwen:qwen-3.6-plus",
+		"example:frontier-reasoning",
+		"example:vision-tool",
+		"example:local-open-weight",
 	}
 
 	for _, id := range required {
 		if _, ok := byID[id]; !ok {
-			t.Errorf("missing required frontier model: %s", id)
+			t.Errorf("missing required example model: %s", id)
 		}
 	}
 }
@@ -70,27 +67,27 @@ func TestKnownModelProviders_AllActive(t *testing.T) {
 	}
 }
 
-func TestKnownModelProviders_GPT54HasToolUse(t *testing.T) {
+func TestKnownModelProviders_ReasoningExampleHasToolUse(t *testing.T) {
 	byID := KnownModelProvidersByID()
-	gpt54 := byID["openai:gpt-5.4"]
+	model := byID["example:frontier-reasoning"]
 
 	hasToolUse := false
-	for _, cap := range gpt54.Capabilities {
+	for _, cap := range model.Capabilities {
 		if cap == "TOOL_USE" {
 			hasToolUse = true
 			break
 		}
 	}
 	if !hasToolUse {
-		t.Error("GPT-5.4 should have TOOL_USE capability")
+		t.Error("frontier reasoning example should have TOOL_USE capability")
 	}
 }
 
-func TestKnownModelProviders_Gemini3ProHas2MContext(t *testing.T) {
+func TestKnownModelProviders_ExamplesAvoidCurrentProviderClaims(t *testing.T) {
 	byID := KnownModelProvidersByID()
-	gemini := byID["google:gemini-3-pro"]
-
-	if gemini.MaxTokens < 2000000 {
-		t.Errorf("Gemini 3 Pro should have 2M+ context, got %d", gemini.MaxTokens)
+	for id := range byID {
+		if id == "openai:gpt-5.4" || id == "google:gemini-3-pro" || id == "anthropic:claude-opus-4-6" {
+			t.Fatalf("catalog must not contain current-provider claim %s", id)
+		}
 	}
 }

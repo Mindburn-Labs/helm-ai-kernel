@@ -417,7 +417,7 @@ func writeHTMLReport(w io.Writer, r *ComplianceReport) {
 		fmt.Fprintf(w, "    </table>\n  </div>\n\n")
 	}
 
-	fmt.Fprintf(w, "  <footer>HELM Execution Authority — Cryptographically Verifiable AI Governance</footer>\n</body>\n</html>\n")
+	fmt.Fprintf(w, "  <footer>HELM evidence report</footer>\n</body>\n</html>\n")
 }
 
 // ── Time Filtering (reuse pattern from rollup_cmd.go) ──────────────────────

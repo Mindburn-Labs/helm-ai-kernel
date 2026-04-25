@@ -13,8 +13,6 @@
 //   - slack.read_channel  → conversations.history
 //   - slack.list_channels → conversations.list
 //   - slack.update_message→ chat.update
-//
-// Roadmap: P2-02 (real connector set: GitHub + Slack + Linear).
 package slack
 
 import (

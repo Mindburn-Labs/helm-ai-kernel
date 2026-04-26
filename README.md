@@ -12,7 +12,7 @@ This repository is intentionally scoped to the OSS kernel:
 ## Quick Start
 
 ```bash
-brew install mindburn/tap/helm
+brew install mindburnlabs/tap/helm
 helm serve --policy ./release.high_risk.v3.toml
 helm verify evidence-pack.tar
 helm receipts tail --agent agent.titan.exec

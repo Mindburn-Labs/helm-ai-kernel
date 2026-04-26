@@ -9,7 +9,7 @@ This walkthrough uses the public HELM OSS path: install the CLI, start a local b
 ## 1. Install
 
 ```bash
-brew install mindburn/tap/helm
+brew install mindburnlabs/tap/helm
 ```
 
 Source install and Docker remain supported, but Homebrew is the primary public install path.

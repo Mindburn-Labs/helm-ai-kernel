@@ -10,7 +10,7 @@ The repository retains packaging metadata for the kernel binaries, container ima
 
 | Surface | Package Identity |
 | --- | --- |
-| CLI/Homebrew | `mindburn/tap/helm` |
+| CLI/Homebrew | `mindburnlabs/tap/helm` |
 | TypeScript SDK | `@mindburn/helm` |
 | Python SDK | `helm-sdk` |
 | Rust SDK | `helm-sdk` |

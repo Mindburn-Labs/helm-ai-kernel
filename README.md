@@ -1,5 +1,12 @@
 # HELM
 
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Mindburn-Labs/helm-oss/badge)](https://scorecard.dev/viewer/?uri=github.com/Mindburn-Labs/helm-oss)
+[![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF-Best%20Practices-informational)](BEST_PRACTICES.md)
+[![Cosign verified](https://img.shields.io/badge/cosign-verified-success)](docs/VERIFICATION.md)
+[![SLSA Level 3](https://img.shields.io/badge/SLSA-Level%203-blue)](docs/PUBLISHING.md)
+[![SBOM CycloneDX](https://img.shields.io/badge/SBOM-CycloneDX%201.5-orange)](docs/PUBLISHING.md)
+
 HELM is an open-source execution kernel for governed AI tool calling. It sits on the execution boundary, applies fail-closed policy checks before dispatch, records signed receipts for allow and deny decisions, and exports evidence bundles that can be verified offline.
 
 This repository is intentionally scoped to the OSS kernel:

@@ -27,11 +27,18 @@ import (
 	helmcrypto "github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/manifest"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/observability"
+	helmotel "github.com/Mindburn-Labs/helm-oss/core/pkg/otel"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/proofgraph"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/tracing"
 )
 
 // proxyReceipt is the governance receipt attached to every proxied request.
+//
+// Fields in the gen_ai.* family follow the OTel GenAI semantic conventions
+// (see core/pkg/observability/genai_attrs.go). gen_ai.tool.call.id mirrors
+// the helm correlation_id so OTel traces and helm receipts cross-reference 1:1.
 type proxyReceipt struct {
 	ReceiptID        string   `json:"receipt_id"`
 	Timestamp        string   `json:"timestamp"`
@@ -50,6 +57,22 @@ type proxyReceipt struct {
 	LamportClock     uint64   `json:"lamport_clock"`
 	PrevHash         string   `json:"prev_hash"`
 	Signature        string   `json:"signature,omitempty"`
+
+	// helm-specific governance correlation. Equals gen_ai.tool.call.id below.
+	CorrelationID string `json:"correlation_id,omitempty"`
+
+	// OTel GenAI semconv mirrors. Persisted alongside the receipt so the
+	// receipt is self-contained for replay/audit even without the OTel trace.
+	GenAISystem        string `json:"gen_ai_system,omitempty"`
+	GenAIRequestModel  string `json:"gen_ai_request_model,omitempty"`
+	GenAIOperationName string `json:"gen_ai_operation_name,omitempty"`
+	GenAIToolCallID    string `json:"gen_ai_tool_call_id,omitempty"`
+	GenAIInputTokens   int64  `json:"gen_ai_input_tokens,omitempty"`
+	GenAIOutputTokens  int64  `json:"gen_ai_output_tokens,omitempty"`
+	GenAIFinishReason  string `json:"gen_ai_finish_reason,omitempty"`
+
+	// W3C traceparent header recorded with the receipt for trace ↔ receipt joins.
+	Traceparent string `json:"traceparent,omitempty"`
 }
 
 // receiptStore persists receipts to a JSONL file for auditability.
@@ -92,6 +115,111 @@ func (s *receiptStore) Append(rcpt *proxyReceipt) error {
 
 func (s *receiptStore) Close() error {
 	return s.file.Close()
+}
+
+// proxyCtxKey is a unique context key type to stash per-request governance state
+// from Director through to ModifyResponse without collisions with other packages.
+type proxyCtxKey struct{ name string }
+
+var (
+	ctxKeyCorrelationID = proxyCtxKey{"correlation_id"}
+	ctxKeyRequestModel  = proxyCtxKey{"request_model"}
+	ctxKeyTraceparent   = proxyCtxKey{"traceparent"}
+)
+
+// inferGenAISystem maps a configured upstream URL to the OTel GenAI system
+// vocabulary. Falls back to the empty string when the host is unrecognized;
+// downstream tracing will simply omit the gen_ai.system attribute.
+func inferGenAISystem(upstreamURL *url.URL) string {
+	host := strings.ToLower(upstreamURL.Host)
+	switch {
+	case strings.Contains(host, "openai.azure.com"):
+		return observability.GenAISystemAzureOpenAI
+	case strings.Contains(host, "openai.com"):
+		return observability.GenAISystemOpenAI
+	case strings.Contains(host, "anthropic.com"):
+		return observability.GenAISystemAnthropic
+	case strings.Contains(host, "bedrock"):
+		return observability.GenAISystemBedrock
+	case strings.Contains(host, "googleapis.com") || strings.Contains(host, "generativelanguage"):
+		return observability.GenAISystemGemini
+	default:
+		return ""
+	}
+}
+
+// extractRequestModel pulls the "model" field from a JSON request body,
+// covering OpenAI (chat/completions, responses), Anthropic (/v1/messages),
+// and Bedrock InvokeModel-style payloads. Returns "" when the body is not
+// JSON or the field is absent — callers must tolerate that.
+func extractRequestModel(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	var top map[string]any
+	if err := json.Unmarshal(body, &top); err != nil {
+		return ""
+	}
+	if m, ok := top["model"].(string); ok && m != "" {
+		return m
+	}
+	// Bedrock InvokeModel embeds the body inside "body" as a JSON-encoded string.
+	if inner, ok := top["body"].(string); ok {
+		var nested map[string]any
+		if err := json.Unmarshal([]byte(inner), &nested); err == nil {
+			if m, ok := nested["model"].(string); ok && m != "" {
+				return m
+			}
+		}
+	}
+	return ""
+}
+
+// extractGenAIUsage pulls token-count + finish_reason fields from a JSON
+// response. OpenAI: usage.prompt_tokens / usage.completion_tokens / choices[0].finish_reason.
+// Anthropic: usage.input_tokens / usage.output_tokens / stop_reason.
+// Bedrock: model-dependent — handled best-effort via the OpenAI/Anthropic shapes.
+func extractGenAIUsage(body []byte) (inputTokens, outputTokens int64, finishReason string) {
+	if len(body) == 0 {
+		return 0, 0, ""
+	}
+	var top map[string]any
+	if err := json.Unmarshal(body, &top); err != nil {
+		return 0, 0, ""
+	}
+	if usage, ok := top["usage"].(map[string]any); ok {
+		inputTokens = pickInt64(usage, "prompt_tokens", "input_tokens")
+		outputTokens = pickInt64(usage, "completion_tokens", "output_tokens")
+	}
+	// OpenAI finish_reason on first choice
+	if choices, ok := top["choices"].([]any); ok && len(choices) > 0 {
+		if c0, ok := choices[0].(map[string]any); ok {
+			if fr, ok := c0["finish_reason"].(string); ok {
+				finishReason = fr
+			}
+		}
+	}
+	// Anthropic stop_reason at the top level
+	if finishReason == "" {
+		if sr, ok := top["stop_reason"].(string); ok {
+			finishReason = sr
+		}
+	}
+	return inputTokens, outputTokens, finishReason
+}
+
+func pickInt64(m map[string]any, keys ...string) int64 {
+	for _, k := range keys {
+		switch v := m[k].(type) {
+		case float64:
+			return int64(v)
+		case int64:
+			return v
+		case int:
+			return int64(v)
+		}
+	}
+	return 0
 }
 
 // validateToolCallArgs performs PEP validation: validates tool arguments
@@ -245,12 +373,61 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 
 	kb := bridge.NewKernelBridge(g, prgGraph, pg, budgetEnforcer, tenantID)
 
+	// Governance tracer — attaches OTel GenAI spans to every request.
+	// NoopTracer when no OTLP endpoint is configured; the GovernanceTracer
+	// itself decides whether to wire a real exporter.
+	otelTracer := helmotel.NoopTracer()
+	if endpoint := os.Getenv("HELM_OTLP_ENDPOINT"); endpoint != "" {
+		if rt, otelErr := helmotel.NewGovernanceTracer(helmotel.Config{
+			ServiceName: "helm-proxy",
+			Endpoint:    endpoint,
+			Insecure:    os.Getenv("HELM_OTLP_INSECURE") == "1",
+		}); otelErr == nil {
+			otelTracer = rt
+			defer func() { _ = otelTracer.Shutdown(context.Background()) }()
+		} else {
+			log.Printf("[WARN] OTLP exporter setup failed, falling back to noop: %v", otelErr)
+		}
+	}
+
+	genAISystem := inferGenAISystem(upstreamURL)
+
 	var lamport uint64
 	var iterationCount int64
 	sessionStart := time.Now()
 
 	proxy := &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
+			// Buffer + restore request body so we can extract the request model
+			// and pass it through to ModifyResponse via the request context.
+			var bodyBytes []byte
+			if req.Body != nil {
+				if b, readErr := io.ReadAll(req.Body); readErr == nil {
+					bodyBytes = b
+					req.Body = io.NopCloser(bytes.NewReader(b))
+					req.ContentLength = int64(len(b))
+				}
+			}
+			requestModel := extractRequestModel(bodyBytes)
+
+			// helm correlation_id — also used as gen_ai.tool.call.id so OTel traces
+			// and helm receipts cross-reference 1:1.
+			corr := tracing.NewCorrelationID()
+			ctx := tracing.WithCorrelationID(req.Context(), corr)
+			ctx = context.WithValue(ctx, ctxKeyCorrelationID, string(corr))
+			ctx = context.WithValue(ctx, ctxKeyRequestModel, requestModel)
+
+			// Inject W3C traceparent so the upstream provider's traces (if any)
+			// link back into our governance trace tree.
+			helmotel.InjectTraceparent(ctx, req.Header)
+			tracing.InjectHTTPHeaders(ctx, req.Header)
+			ctx = context.WithValue(ctx, ctxKeyTraceparent, req.Header.Get("traceparent"))
+
+			// Set advisory header so upstreams that look for it can echo the id.
+			req.Header.Set("X-Helm-Correlation-ID", string(corr))
+
+			*req = *req.WithContext(ctx)
+
 			req.URL.Scheme = upstreamURL.Scheme
 			req.URL.Host = upstreamURL.Host
 			origPath := req.URL.Path
@@ -295,6 +472,15 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			}
 
 			clock := atomic.AddUint64(&lamport, 1)
+
+			// Pull per-request governance state stashed by Director.
+			reqCtx := resp.Request.Context()
+			correlationID, _ := reqCtx.Value(ctxKeyCorrelationID).(string)
+			requestModel, _ := reqCtx.Value(ctxKeyRequestModel).(string)
+			traceparent, _ := reqCtx.Value(ctxKeyTraceparent).(string)
+
+			// Extract OTel GenAI usage from response body.
+			inputTokens, outputTokens, finishReason := extractGenAIUsage(body)
 
 			// Hash output
 			outHash := sha256.Sum256(body)
@@ -394,8 +580,57 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 				}
 			}
 
+			// Choose the response-side model when available; the request side
+			// (sent in the proxy body) is captured separately so we can record
+			// both for routing audit (e.g. Azure deployment vs concrete model).
+			responseModel := model
+			if responseModel == "" {
+				responseModel = requestModel
+			}
+
+			// Pick a representative tool name for the OTel GenAI span. When no
+			// tool call is present, fall back to the operation kind.
+			var spanToolName string
+			if len(toolNames) > 0 {
+				spanToolName = toolNames[0]
+			}
+			operationName := observability.GenAIOperationChat
+			if toolCallCount > 0 {
+				operationName = observability.GenAIOperationToolCall
+			}
+
+			// Decide a verdict label for the OTel span.
+			verdict := "ALLOW"
+			if status == "DENIED" || status == "PEP_VALIDATION_FAILED" ||
+				status == "GOVERNANCE_ERROR" || status == "PROXY_ITERATION_LIMIT" ||
+				status == "PROXY_WALLCLOCK_LIMIT" {
+				verdict = "DENY"
+			}
+
 			// Build receipt
 			rcptID := fmt.Sprintf("rcpt-proxy-%d-%d", time.Now().UnixNano(), clock)
+
+			// Emit OTel GenAI tool_call span. gen_ai.tool.call.id == helm
+			// correlation_id so traces and receipts cross-reference 1:1.
+			otelTracer.TraceGenAIToolCall(reqCtx, helmotel.GenAIToolCallEvent{
+				System:        genAISystem,
+				RequestModel:  requestModel,
+				ResponseModel: responseModel,
+				OperationName: operationName,
+				ToolName:      spanToolName,
+				ToolCallID:    correlationID,
+				InputTokens:   inputTokens,
+				OutputTokens:  outputTokens,
+				FinishReason:  finishReason,
+				Verdict:       verdict,
+				ReasonCode:    reasonCode,
+				PolicyID:      decisionID,
+				ProofNodeID:   pgNodeID,
+				CorrelationID: correlationID,
+				ReceiptID:     rcptID,
+				TenantID:      tenantID,
+			})
+
 			rcpt := &proxyReceipt{
 				ReceiptID:        rcptID,
 				Timestamp:        time.Now().UTC().Format(time.RFC3339Nano),
@@ -411,6 +646,17 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 				DecisionID:       decisionID,
 				ProofGraphNodeID: pgNodeID,
 				LamportClock:     clock,
+
+				// gen_ai.tool.call.id == helm correlation_id (single source of truth).
+				CorrelationID:      correlationID,
+				GenAISystem:        genAISystem,
+				GenAIRequestModel:  requestModel,
+				GenAIOperationName: operationName,
+				GenAIToolCallID:    correlationID,
+				GenAIInputTokens:   inputTokens,
+				GenAIOutputTokens:  outputTokens,
+				GenAIFinishReason:  finishReason,
+				Traceparent:        traceparent,
 			}
 
 			// Sign receipt if signer available
@@ -435,6 +681,12 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			resp.Header.Set("X-Helm-Output-Hash", rcpt.OutputHash)
 			resp.Header.Set("X-Helm-Lamport-Clock", fmt.Sprintf("%d", rcpt.LamportClock))
 			resp.Header.Set("X-Helm-Status", rcpt.Status)
+			if correlationID != "" {
+				resp.Header.Set("X-Helm-Correlation-ID", correlationID)
+			}
+			if traceparent != "" {
+				resp.Header.Set("traceparent", traceparent)
+			}
 			if rcpt.ReasonCode != "" {
 				resp.Header.Set("X-Helm-Reason-Code", rcpt.ReasonCode)
 			}

@@ -28,3 +28,35 @@ The repository keeps:
 - offline evidence verification in the `helm verify` command
 
 For release-process details, see [RELEASE.md](RELEASE.md).
+
+## Reproducible Builds
+
+Release binaries are built reproducibly. Run `make release-binaries-reproducible`
+locally to build deterministic binaries pinned to `SOURCE_DATE_EPOCH`,
+`-trimpath`, and a sealed build id. The release pipeline runs the
+`reproducibility-check` job in `.github/workflows/release.yml`, which
+performs the build twice on independent runners and diffs the SHA-256
+set. A release tag does not publish artifacts unless that diff is empty.
+
+## Cosign Signing Roots
+
+Release artifacts are signed via cosign keyless OIDC. The trust roots are:
+
+- **Sigstore Fulcio** — the certificate authority that issues the
+  short-lived signing certificate for the GitHub Actions workflow
+  identity.
+- **Sigstore Rekor** — the public transparency log that records every
+  signing event.
+
+The signing identity is the GitHub Actions workflow itself
+(`https://github.com/Mindburn-Labs/helm-oss/.github/workflows/release.yml@refs/tags/v*`).
+Verification commands and the recovery path are documented in
+[docs/VERIFICATION.md](docs/VERIFICATION.md).
+
+## Continuous Fuzzing
+
+Continuous fuzzing is configured for upstream OSS-Fuzz under the
+[`oss-fuzz/`](oss-fuzz/) directory. ClusterFuzz issues against helm-oss
+are tracked publicly through the OSS-Fuzz issue tracker; the project
+maintainer set is the auto-CC for new findings via the `auto_ccs` field
+in `oss-fuzz/project.yaml`.

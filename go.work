@@ -2,5 +2,6 @@ go 1.25.0
 
 use (
 	./core
+	./examples/otel-genai
 	./tests/conformance
 )

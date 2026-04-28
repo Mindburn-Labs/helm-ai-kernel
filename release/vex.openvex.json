@@ -1,0 +1,10 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://mindburn.org/vex/helm-oss/baseline",
+  "author": "Mindburn-Labs Release Bot <release@mindburn.org>",
+  "role": "Project Maintainer",
+  "timestamp": "2026-04-28T00:00:00Z",
+  "version": 1,
+  "tooling": "helm-oss/scripts/release/generate_vex.sh",
+  "statements": []
+}

@@ -35,11 +35,13 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.SetOutput(stderr)
 
 	var (
-		bundle      string
-		jsonOutput  bool
-		jsonOutFile string
-		online      bool
-		ledgerURL   string
+		bundle           string
+		jsonOutput       bool
+		jsonOutFile      string
+		online           bool
+		ledgerURL        string
+		requireEIDAS     bool
+		eidasMaxAgeHours int
 	)
 
 	cmd.StringVar(&bundle, "bundle", "", "Path to EvidencePack directory or archive")
@@ -47,6 +49,8 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&jsonOutFile, "json-out", "", "Write structured audit report to file (auditor mode)")
 	cmd.BoolVar(&online, "online", false, "Verify pack metadata against the public proof ledger after offline checks pass")
 	cmd.StringVar(&ledgerURL, "ledger-url", "", "Public proof verification URL")
+	cmd.BoolVar(&requireEIDAS, "require-eidas", false, "Require every receipt to carry an eIDAS-qualified RFC 3161 anchor (Workstream G)")
+	cmd.IntVar(&eidasMaxAgeHours, "eidas-max-age-hours", 24, "Maximum age in hours of an anchor's integrated_time before --require-eidas treats it as stale")
 
 	normalizedArgs, normalizeErr := normalizeVerifyArgs(args)
 	if normalizeErr != nil {
@@ -153,6 +157,16 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 				Reason: fmt.Sprintf("signature: %v", sigErr),
 			})
 			report.Verified = false
+		}
+	}
+
+	if requireEIDAS {
+		eidasResults := checkEIDASAnchors(verifyTarget, time.Duration(eidasMaxAgeHours)*time.Hour)
+		report.Checks = append(report.Checks, eidasResults...)
+		for _, r := range eidasResults {
+			if !r.Pass {
+				report.Verified = false
+			}
 		}
 	}
 
@@ -300,12 +314,14 @@ func normalizeVerifyArgs(args []string) ([]string, error) {
 	var flags []string
 	var positional []string
 	valueFlags := map[string]bool{
-		"--bundle":     true,
-		"-bundle":      true,
-		"--json-out":   true,
-		"-json-out":    true,
-		"--ledger-url": true,
-		"-ledger-url":  true,
+		"--bundle":              true,
+		"-bundle":               true,
+		"--json-out":            true,
+		"-json-out":             true,
+		"--ledger-url":          true,
+		"-ledger-url":           true,
+		"--eidas-max-age-hours": true,
+		"-eidas-max-age-hours":  true,
 	}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -435,6 +451,120 @@ func finalizeVerifyReport(report *verifier.VerifyReport) {
 	report.Summary = fmt.Sprintf("PASS: %d/%d checks passed", len(report.Checks), len(report.Checks))
 }
 
+// checkEIDASAnchors verifies that every receipt in the bundle carries an
+// eIDAS-qualified RFC 3161 anchor (backend == "eidas-qtsp") and that the
+// integrated_time of each anchor is fresher than maxAge.
+//
+// Anchor receipts are looked up under <bundle>/02_PROOFGRAPH/anchors/*.json
+// and as embedded shapes inside <bundle>/00_INDEX.json (key "anchor"). The
+// receipt JSON shape mirrors anchor.AnchorReceipt: {backend, log_id,
+// log_index, integrated_time, signature, request:{...}}.
+func checkEIDASAnchors(bundleRoot string, maxAge time.Duration) []verifier.CheckResult {
+	const eidasBackend = "eidas-qtsp"
+
+	results := make([]verifier.CheckResult, 0, 4)
+
+	// Inventory candidate anchors from disk.
+	anchorsDir := filepath.Join(bundleRoot, "02_PROOFGRAPH", "anchors")
+	entries, _ := os.ReadDir(anchorsDir)
+
+	type anchorMeta struct {
+		Path           string
+		Backend        string
+		IntegratedTime time.Time
+	}
+	var anchors []anchorMeta
+
+	for _, ent := range entries {
+		if ent.IsDir() || !strings.HasSuffix(ent.Name(), ".json") {
+			continue
+		}
+		path := filepath.Join(anchorsDir, ent.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			results = append(results, verifier.CheckResult{
+				Name:   "eidas:read_anchor",
+				Pass:   false,
+				Reason: fmt.Sprintf("cannot read %s: %v", path, err),
+			})
+			continue
+		}
+		var doc map[string]any
+		if err := json.Unmarshal(data, &doc); err != nil {
+			results = append(results, verifier.CheckResult{
+				Name:   "eidas:parse_anchor",
+				Pass:   false,
+				Reason: fmt.Sprintf("cannot parse %s: %v", path, err),
+			})
+			continue
+		}
+		backend, _ := doc["backend"].(string)
+		ts, _ := doc["integrated_time"].(string)
+		parsed, _ := time.Parse(time.RFC3339, ts)
+		anchors = append(anchors, anchorMeta{Path: path, Backend: backend, IntegratedTime: parsed})
+	}
+
+	// Also check 00_INDEX.json's embedded anchor field, when present.
+	if data, err := os.ReadFile(filepath.Join(bundleRoot, "00_INDEX.json")); err == nil {
+		var doc map[string]any
+		if json.Unmarshal(data, &doc) == nil {
+			if a, ok := doc["anchor"].(map[string]any); ok {
+				backend, _ := a["backend"].(string)
+				ts, _ := a["integrated_time"].(string)
+				parsed, _ := time.Parse(time.RFC3339, ts)
+				anchors = append(anchors, anchorMeta{Path: "00_INDEX.json#anchor", Backend: backend, IntegratedTime: parsed})
+			}
+		}
+	}
+
+	if len(anchors) == 0 {
+		results = append(results, verifier.CheckResult{
+			Name:   "eidas:require",
+			Pass:   false,
+			Reason: "no anchor receipts found under 02_PROOFGRAPH/anchors/ or 00_INDEX.json#anchor; --require-eidas needs at least one eIDAS-qualified anchor",
+		})
+		return results
+	}
+
+	now := time.Now().UTC()
+	hasEIDAS := false
+	for _, a := range anchors {
+		if a.Backend != eidasBackend {
+			results = append(results, verifier.CheckResult{
+				Name:   "eidas:anchor_backend",
+				Pass:   false,
+				Reason: fmt.Sprintf("anchor %s has backend %q, not %q", a.Path, a.Backend, eidasBackend),
+			})
+			continue
+		}
+		hasEIDAS = true
+		if maxAge > 0 && !a.IntegratedTime.IsZero() && now.Sub(a.IntegratedTime) > maxAge {
+			results = append(results, verifier.CheckResult{
+				Name: "eidas:anchor_freshness",
+				Pass: false,
+				Reason: fmt.Sprintf("anchor %s integrated_time %s is older than --eidas-max-age-hours window of %s",
+					a.Path, a.IntegratedTime.Format(time.RFC3339), maxAge),
+			})
+			continue
+		}
+		results = append(results, verifier.CheckResult{
+			Name:   "eidas:anchor_qualified",
+			Pass:   true,
+			Detail: fmt.Sprintf("%s carries eIDAS-qualified anchor at %s", a.Path, a.IntegratedTime.Format(time.RFC3339)),
+		})
+	}
+
+	if !hasEIDAS {
+		results = append(results, verifier.CheckResult{
+			Name:   "eidas:require",
+			Pass:   false,
+			Reason: "no anchor with backend=eidas-qtsp found",
+		})
+	}
+
+	return results
+}
+
 func init() {
-	Register(Subcommand{Name: "verify", Aliases: []string{}, Usage: "Verify EvidencePack bundle ([path] --bundle, --json, --online)", RunFn: runVerifyCmd})
+	Register(Subcommand{Name: "verify", Aliases: []string{}, Usage: "Verify EvidencePack bundle ([path] --bundle, --json, --online, --require-eidas)", RunFn: runVerifyCmd})
 }

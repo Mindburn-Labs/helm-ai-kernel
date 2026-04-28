@@ -41,3 +41,31 @@ The retained workflow set under `.github/workflows/` covers:
 Release assets must include binaries, `SHA256SUMS.txt`, SBOM, MCP bundle, release attestation, and a golden anchored EvidencePack.
 
 If a package or channel is not represented in the retained workflow set, it should not be described as a supported public publication channel in repository documentation.
+
+## Verification
+
+Every release publishes the following verification artifacts alongside the
+binaries: `*.cosign.bundle` (one per signed artifact), `*.openvex.json`,
+`sbom.json`, and `SHA256SUMS.txt`.
+
+Verify a downloaded binary blob:
+
+```bash
+cosign verify-blob \
+  --bundle helm-linux-amd64.cosign.bundle \
+  --certificate-identity-regexp "https://github.com/Mindburn-Labs/helm-oss" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  helm-linux-amd64
+```
+
+Verify a published container image:
+
+```bash
+cosign verify \
+  --certificate-identity-regexp "Mindburn-Labs/helm-oss" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/mindburn-labs/helm-oss:<version>
+```
+
+The same recipe is documented in `docs/VERIFICATION.md` and is exercised
+end-to-end by `scripts/release/verify_cosign.sh` (called via `make verify-cosign`).

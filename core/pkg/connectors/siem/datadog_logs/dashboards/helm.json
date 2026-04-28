@@ -1,0 +1,122 @@
+{
+  "title": "HELM Governance",
+  "description": "helm-oss governance verdicts and GenAI tool-calls — sourced from the Datadog Logs exporter.",
+  "layout_type": "ordered",
+  "is_read_only": false,
+  "template_variables": [
+    {"name": "env", "prefix": "env", "default": "*"}
+  ],
+  "widgets": [
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Verdicts per minute",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "name": "allow",
+                "data_source": "logs",
+                "search": {"query": "service:helm-governance @verdict:ALLOW $env"},
+                "compute": {"aggregation": "count"},
+                "indexes": ["*"],
+                "group_by": []
+              },
+              {
+                "name": "deny",
+                "data_source": "logs",
+                "search": {"query": "service:helm-governance @verdict:DENY $env"},
+                "compute": {"aggregation": "count"},
+                "indexes": ["*"],
+                "group_by": []
+              },
+              {
+                "name": "escalate",
+                "data_source": "logs",
+                "search": {"query": "service:helm-governance @verdict:ESCALATE $env"},
+                "compute": {"aggregation": "count"},
+                "indexes": ["*"],
+                "group_by": []
+              }
+            ],
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "toplist",
+        "title": "Top denied tools",
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "name": "denials",
+                "data_source": "logs",
+                "search": {"query": "service:helm-governance @verdict:DENY $env"},
+                "compute": {"aggregation": "count"},
+                "indexes": ["*"],
+                "group_by": [
+                  {"facet": "@gen_ai.tool.name", "limit": 10, "sort": {"order": "desc", "aggregation": "count"}}
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Decision latency p50 (ms)",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "name": "p50",
+                "data_source": "logs",
+                "search": {"query": "service:helm-governance $env"},
+                "compute": {"aggregation": "percentile", "metric": "@duration_ns", "interval": 60000},
+                "indexes": ["*"],
+                "group_by": []
+              }
+            ],
+            "formulas": [
+              {"formula": "p50 / 1000000", "alias": "p50 ms"}
+            ],
+            "display_type": "line"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "query_table",
+        "title": "Recent denials",
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "name": "denials",
+                "data_source": "logs",
+                "search": {"query": "service:helm-governance @verdict:DENY $env"},
+                "compute": {"aggregation": "count"},
+                "indexes": ["*"],
+                "group_by": [
+                  {"facet": "@correlation_id", "limit": 50, "sort": {"order": "desc", "aggregation": "count"}},
+                  {"facet": "@helm.policy_id", "limit": 50, "sort": {"order": "desc", "aggregation": "count"}},
+                  {"facet": "@gen_ai.tool.name", "limit": 50, "sort": {"order": "desc", "aggregation": "count"}}
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

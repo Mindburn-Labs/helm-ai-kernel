@@ -1,0 +1,66 @@
+name: Lean Proofs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "proofs/**"
+      - ".github/workflows/lean.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "proofs/**"
+      - ".github/workflows/lean.yml"
+  workflow_dispatch: {}
+
+permissions: read-all
+
+# Workstream F / F3 — Phase 3 of the helm-oss 100% SOTA execution plan.
+# Builds the EffectPermitSoundness Lean proof on every push/PR that
+# touches the proofs tree. Failure here blocks merge to main and gates
+# the release tag (the release workflow polls this job's conclusion).
+
+jobs:
+  lake-build:
+    name: lake build (EffectPermitSoundness)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install elan + Lean toolchain
+        run: |
+          set -euo pipefail
+          curl -sSfL \
+            https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            -o elan-init.sh
+          # -y: non-interactive; --default-toolchain none lets the
+          # lean-toolchain file in proofs/Lean pin the version on first
+          # `lake` invocation, so a single source of truth controls the
+          # version across local + CI.
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Show toolchain
+        working-directory: proofs/Lean
+        run: |
+          set -euo pipefail
+          elan --version
+          lean --version
+          lake --version
+
+      - name: lake build
+        working-directory: proofs/Lean
+        run: lake build
+
+      - name: Upload .olean artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lean-olean-${{ github.sha }}
+          path: |
+            proofs/Lean/.lake/build/lib/**/*.olean
+          if-no-files-found: warn
+          retention-days: 14

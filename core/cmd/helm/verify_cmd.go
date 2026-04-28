@@ -42,6 +42,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		ledgerURL        string
 		requireEIDAS     bool
 		eidasMaxAgeHours int
+		requireTEE       string
 	)
 
 	cmd.StringVar(&bundle, "bundle", "", "Path to EvidencePack directory or archive")
@@ -49,8 +50,9 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&jsonOutFile, "json-out", "", "Write structured audit report to file (auditor mode)")
 	cmd.BoolVar(&online, "online", false, "Verify pack metadata against the public proof ledger after offline checks pass")
 	cmd.StringVar(&ledgerURL, "ledger-url", "", "Public proof verification URL")
-	cmd.BoolVar(&requireEIDAS, "require-eidas", false, "Require every receipt to carry an eIDAS-qualified RFC 3161 anchor (Workstream G)")
+	cmd.BoolVar(&requireEIDAS, "require-eidas", false, "Require every receipt to carry an eIDAS-qualified RFC 3161 anchor")
 	cmd.IntVar(&eidasMaxAgeHours, "eidas-max-age-hours", 24, "Maximum age in hours of an anchor's integrated_time before --require-eidas treats it as stale")
+	cmd.StringVar(&requireTEE, "require-tee", "", "Require every receipt to carry a TEE attestation; one of sevsnp|tdx|nitro|any (empty = no requirement)")
 
 	normalizedArgs, normalizeErr := normalizeVerifyArgs(args)
 	if normalizeErr != nil {
@@ -164,6 +166,16 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		eidasResults := checkEIDASAnchors(verifyTarget, time.Duration(eidasMaxAgeHours)*time.Hour)
 		report.Checks = append(report.Checks, eidasResults...)
 		for _, r := range eidasResults {
+			if !r.Pass {
+				report.Verified = false
+			}
+		}
+	}
+
+	if requireTEE != "" {
+		teeResults := checkTEEAttestations(verifyTarget, requireTEE)
+		report.Checks = append(report.Checks, teeResults...)
+		for _, r := range teeResults {
 			if !r.Pass {
 				report.Verified = false
 			}
@@ -565,6 +577,98 @@ func checkEIDASAnchors(bundleRoot string, maxAge time.Duration) []verifier.Check
 	return results
 }
 
+// checkTEEAttestations enforces --require-tee on a verified bundle. The
+// `platform` argument selects the strictness:
+//
+//   - sevsnp | tdx | nitro: every receipt must carry a tee_attestation
+//     whose platform field matches.
+//   - any: every receipt must carry some tee_attestation regardless of
+//     platform; useful for multi-platform fleets.
+//
+// helm-oss receipts grow a `tee_attestation` field as the kernel-side
+// receipt extension lands (Workstream A3). Until each receipt actually
+// carries one, this check fails closed - which is the right default for a
+// flag named `--require-`.
+func checkTEEAttestations(bundleRoot string, platform string) []verifier.CheckResult {
+	platform = strings.ToLower(strings.TrimSpace(platform))
+	switch platform {
+	case "sevsnp", "tdx", "nitro", "any":
+	default:
+		return []verifier.CheckResult{{
+			Name:   "tee:platform",
+			Pass:   false,
+			Reason: fmt.Sprintf("unknown --require-tee value %q (want sevsnp|tdx|nitro|any)", platform),
+		}}
+	}
+
+	receiptsDir := filepath.Join(bundleRoot, "receipts")
+	entries, _ := os.ReadDir(receiptsDir)
+
+	var results []verifier.CheckResult
+	receiptsSeen := 0
+	receiptsWithTEE := 0
+	receiptsWrongPlatform := 0
+
+	for _, ent := range entries {
+		if ent.IsDir() || !strings.HasSuffix(ent.Name(), ".json") {
+			continue
+		}
+		path := filepath.Join(receiptsDir, ent.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			results = append(results, verifier.CheckResult{
+				Name:   "tee:read_receipt",
+				Pass:   false,
+				Reason: fmt.Sprintf("cannot read %s: %v", path, err),
+			})
+			continue
+		}
+		var doc map[string]any
+		if err := json.Unmarshal(data, &doc); err != nil {
+			continue
+		}
+		receiptsSeen++
+
+		att, ok := doc["tee_attestation"].(map[string]any)
+		if !ok {
+			results = append(results, verifier.CheckResult{
+				Name:   "tee:receipt_attested",
+				Pass:   false,
+				Reason: fmt.Sprintf("%s missing tee_attestation field; --require-tee=%s demands it on every receipt", ent.Name(), platform),
+			})
+			continue
+		}
+		receiptsWithTEE++
+
+		gotPlatform, _ := att["platform"].(string)
+		if platform != "any" && !strings.EqualFold(gotPlatform, platform) {
+			receiptsWrongPlatform++
+			results = append(results, verifier.CheckResult{
+				Name:   "tee:platform_match",
+				Pass:   false,
+				Reason: fmt.Sprintf("%s has tee_attestation.platform=%q; --require-tee=%s requires %s", ent.Name(), gotPlatform, platform, platform),
+			})
+			continue
+		}
+
+		results = append(results, verifier.CheckResult{
+			Name:   "tee:receipt_attested",
+			Pass:   true,
+			Detail: fmt.Sprintf("%s carries tee_attestation platform=%s", ent.Name(), gotPlatform),
+		})
+	}
+
+	if receiptsSeen == 0 {
+		results = append(results, verifier.CheckResult{
+			Name:   "tee:require",
+			Pass:   false,
+			Reason: fmt.Sprintf("no receipts found under %s; --require-tee=%s needs at least one TEE-attested receipt", receiptsDir, platform),
+		})
+	}
+
+	return results
+}
+
 func init() {
-	Register(Subcommand{Name: "verify", Aliases: []string{}, Usage: "Verify EvidencePack bundle ([path] --bundle, --json, --online, --require-eidas)", RunFn: runVerifyCmd})
+	Register(Subcommand{Name: "verify", Aliases: []string{}, Usage: "Verify EvidencePack bundle ([path] --bundle, --json, --online, --require-eidas, --require-tee)", RunFn: runVerifyCmd})
 }

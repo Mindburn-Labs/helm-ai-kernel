@@ -1,0 +1,21 @@
+# Persistent per-CVE VEX decisions for helm-oss.
+#
+# Consumed by scripts/release/generate_vex.sh during the release workflow.
+# Each entry overrides the default "under_investigation" disposition for the
+# matching CVE id when emitting release/vex/v<version>.openvex.json.
+#
+# Schema:
+#   policies:
+#     - cve_id: <CVE-YYYY-NNNNN>
+#       status: not_affected | fixed | affected | under_investigation
+#       justification: <OpenVEX justification token; required when status=not_affected>
+#       statement: <free-form explanation that ships in the published VEX>
+#
+# Justification tokens (per OpenVEX 0.2.0):
+#   component_not_present
+#   vulnerable_code_not_present
+#   vulnerable_code_not_in_execute_path
+#   vulnerable_code_cannot_be_controlled_by_adversary
+#   inline_mitigations_already_exist
+
+policies: []

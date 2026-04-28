@@ -1,0 +1,17 @@
+// Example HELM CEL policy: anyone may view; only admins may delete.
+//
+// Logical rule expressed identically in:
+//   examples/policies/rego/example.rego
+//   examples/policies/cedar/example.cedar
+//
+// CEL evaluates as a single boolean expression returning the verdict
+// envelope. helm-oss surfaces request fields as the top-level `request`
+// variable.
+
+request.action == "view"
+  ? {"verdict": "ALLOW", "reason": "view is universally permitted"}
+  : (
+      request.action == "delete" && ("admin" in request.principal.roles)
+        ? {"verdict": "ALLOW", "reason": "admin may delete"}
+        : {"verdict": "DENY", "reason": "default deny"}
+    )

@@ -1,0 +1,11 @@
+homepage: https://github.com/Mindburn-Labs/helm-oss
+language: go
+primary_contact: security@mindburn.org
+auto_ccs:
+  - security@mindburn.org
+sanitizers:
+  - address
+  - undefined
+fuzzing_engines:
+  - libfuzzer
+main_repo: https://github.com/Mindburn-Labs/helm-oss

@@ -78,6 +78,9 @@
     "evidence_pack_retention_days": 3650,
     "audit_chain_verification": true,
     "aibom_required": true,
-    "conformity_assessment": true
+    "conformity_assessment": true,
+    "qtsp_required": true,
+    "qtsp_anchor_type": "RFC3161_EIDAS",
+    "qtsp_lotl_freshness_hours": 24
   }
 }

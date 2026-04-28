@@ -1,0 +1,25 @@
+{
+  "_comment": "HELM-restricted OPA capabilities. Built-ins listed under 'denied_builtins' are explicitly forbidden in HELM Rego policy bundles to preserve deterministic, replayable evaluation. The set is enforced by compiler.go which strips these entries from the default ast.CapabilitiesForThisVersion() builtin list before compiling. Adding a builtin here without code-level enforcement is a no-op; this file documents the policy contract.",
+  "denied_builtins": [
+    "http.send",
+    "net.lookup_ip_addr",
+    "time.now_ns",
+    "time.date",
+    "time.clock",
+    "time.weekday",
+    "rand.intn",
+    "crypto.x509.parse_certificates",
+    "crypto.x509.parse_certificate_request",
+    "crypto.x509.parse_keypair",
+    "crypto.x509.parse_rsa_private_key",
+    "opa.runtime",
+    "trace"
+  ],
+  "allow_net": [],
+  "future_keywords": [
+    "in",
+    "every",
+    "if",
+    "contains"
+  ]
+}

@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TrustServiceStatusList>
+  <SchemeInformation>
+    <SchemeOperatorName>
+      <Name xml:lang="en">European Commission - DG CNECT (test fixture)</Name>
+      <Name xml:lang="fr">Commission européenne - DG CNECT (fixture de test)</Name>
+    </SchemeOperatorName>
+    <PointersToOtherTSL>
+      <OtherTSLPointer>
+        <TSLLocation>https://www.skidsolutions.eu/repositoorium/TSL/trusted-test-tsl-eu.xml</TSLLocation>
+        <AdditionalInformation>
+          <OtherInformation>
+            <SchemeTerritory>EE</SchemeTerritory>
+          </OtherInformation>
+        </AdditionalInformation>
+      </OtherTSLPointer>
+      <OtherTSLPointer>
+        <TSLLocation>https://www.bundesnetzagentur.de/test-tsl-de.xml</TSLLocation>
+        <AdditionalInformation>
+          <OtherInformation>
+            <SchemeTerritory>DE</SchemeTerritory>
+          </OtherInformation>
+        </AdditionalInformation>
+      </OtherTSLPointer>
+      <OtherTSLPointer>
+        <TSLLocation>https://example.fr/test-tsl-fr.xml</TSLLocation>
+        <AdditionalInformation>
+          <OtherInformation>
+            <SchemeTerritory>FR</SchemeTerritory>
+          </OtherInformation>
+        </AdditionalInformation>
+      </OtherTSLPointer>
+    </PointersToOtherTSL>
+  </SchemeInformation>
+  <TrustServiceProviderList>
+    <TrustServiceProvider>
+      <TSPInformation>
+        <SchemeTerritory>EE</SchemeTerritory>
+        <TSPName>
+          <Name xml:lang="en">SK ID Solutions AS (test fixture)</Name>
+        </TSPName>
+      </TSPInformation>
+      <TSPServices>
+        <TSPService>
+          <ServiceInformation>
+            <ServiceTypeIdentifier>http://uri.etsi.org/TrstSvc/Svctype/TSA/QTST</ServiceTypeIdentifier>
+            <ServiceName>
+              <Name xml:lang="en">SK Qualified Timestamping Service (test)</Name>
+            </ServiceName>
+            <ServiceStatus>http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted</ServiceStatus>
+            <ServiceDigitalIdentity>
+              <DigitalId>
+                <X509SubjectName>CN=SK QTSA Test Root, O=SK ID Solutions, C=EE</X509SubjectName>
+                <X509CertificateSHA256>aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa</X509CertificateSHA256>
+              </DigitalId>
+            </ServiceDigitalIdentity>
+          </ServiceInformation>
+        </TSPService>
+        <TSPService>
+          <ServiceInformation>
+            <ServiceTypeIdentifier>http://uri.etsi.org/TrstSvc/Svctype/TSA/QTST</ServiceTypeIdentifier>
+            <ServiceName>
+              <Name xml:lang="en">SK Qualified Timestamping Service (test, secondary)</Name>
+            </ServiceName>
+            <ServiceStatus>http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted</ServiceStatus>
+            <ServiceDigitalIdentity>
+              <DigitalId>
+                <X509SubjectName>CN=SK QTSA Test Secondary, O=SK ID Solutions, C=EE</X509SubjectName>
+                <X509CertificateSHA256>BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB</X509CertificateSHA256>
+              </DigitalId>
+            </ServiceDigitalIdentity>
+          </ServiceInformation>
+        </TSPService>
+      </TSPServices>
+    </TrustServiceProvider>
+    <TrustServiceProvider>
+      <TSPInformation>
+        <SchemeTerritory>DE</SchemeTerritory>
+        <TSPName>
+          <Name xml:lang="en">D-Trust GmbH (test fixture)</Name>
+        </TSPName>
+      </TSPInformation>
+      <TSPServices>
+        <TSPService>
+          <ServiceInformation>
+            <ServiceTypeIdentifier>http://uri.etsi.org/TrstSvc/Svctype/TSA/QTST</ServiceTypeIdentifier>
+            <ServiceName>
+              <Name xml:lang="en">D-Trust Qualified Timestamping (test)</Name>
+            </ServiceName>
+            <ServiceStatus>http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted</ServiceStatus>
+            <ServiceDigitalIdentity>
+              <DigitalId>
+                <X509SubjectName>CN=D-Trust QTSA Test Root, O=D-Trust GmbH, C=DE</X509SubjectName>
+                <X509CertificateSHA256>cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc</X509CertificateSHA256>
+              </DigitalId>
+            </ServiceDigitalIdentity>
+          </ServiceInformation>
+        </TSPService>
+        <TSPService>
+          <ServiceInformation>
+            <ServiceTypeIdentifier>http://uri.etsi.org/TrstSvc/Svctype/TSA/QTST</ServiceTypeIdentifier>
+            <ServiceName>
+              <Name xml:lang="en">D-Trust Withdrawn Service (test, ignored)</Name>
+            </ServiceName>
+            <ServiceStatus>http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/withdrawn</ServiceStatus>
+            <ServiceDigitalIdentity>
+              <DigitalId>
+                <X509SubjectName>CN=D-Trust QTSA Withdrawn, O=D-Trust GmbH, C=DE</X509SubjectName>
+                <X509CertificateSHA256>dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd</X509CertificateSHA256>
+              </DigitalId>
+            </ServiceDigitalIdentity>
+          </ServiceInformation>
+        </TSPService>
+      </TSPServices>
+    </TrustServiceProvider>
+  </TrustServiceProviderList>
+</TrustServiceStatusList>

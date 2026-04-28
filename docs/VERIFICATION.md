@@ -35,6 +35,52 @@ helm export --evidence ./data/evidence --out evidence.tar
 helm verify evidence.tar
 ```
 
+## Cosign Artifact Verification
+
+Every release artifact is signed via cosign keyless OIDC. Verify a
+downloaded binary blob with the bundled signature:
+
+```bash
+cosign verify-blob \
+  --bundle helm-linux-amd64.cosign.bundle \
+  --certificate-identity-regexp "https://github.com/Mindburn-Labs/helm-oss" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  helm-linux-amd64
+```
+
+Verify the published container image:
+
+```bash
+cosign verify \
+  --certificate-identity-regexp "Mindburn-Labs/helm-oss" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/mindburn-labs/helm-oss:<version>
+```
+
+Verify every artifact in a downloaded release directory in one command:
+
+```bash
+make verify-cosign DIR=./downloaded-release/
+```
+
+`make verify-cosign` walks the directory, finds every `*.cosign.bundle`,
+runs `cosign verify-blob` against the matching artifact, and exits
+non-zero on any failure.
+
+### VEX Consumption
+
+Each release ships an OpenVEX 0.2.0 document at
+`release/vex/v<version>.openvex.json` next to the SBOM. Filter your
+SBOM scanner output through the published VEX statements:
+
+```bash
+vexctl filter --vex release/vex/v<version>.openvex.json sbom.json
+```
+
+CVEs marked `not_affected` in the VEX are removed from the scan output;
+`under_investigation` and `affected` entries pass through unchanged so
+the scanner can still surface them.
+
 ## Run the Maintained Validation Targets
 
 ```bash

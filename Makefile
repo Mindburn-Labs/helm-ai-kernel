@@ -1,4 +1,4 @@
-.PHONY: build test test-race test-sdk-ts test-sdk-py test-sdk-rust test-sdk-java verify-fixtures verify-presentation test-all bench bench-report lint crucible proxy docker docker-up sbom provenance onboard demo-cli mcp-pack mcp-install release-binaries release-all verify-boundary codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check clean
+.PHONY: build test test-race test-sdk-ts test-sdk-py test-sdk-rust test-sdk-java verify-fixtures verify-presentation test-all bench bench-report lint crucible proxy docker docker-up sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check clean
 
 VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.4.0)
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -92,6 +92,36 @@ release-binaries:
 	cd bin && shasum -a 256 helm-* > SHA256SUMS.txt
 
 release-all: release-binaries sbom mcp-pack
+
+# --- Reproducibility & Cosign & VEX (Workstream E) -----------------------
+# SOURCE_DATE_EPOCH defaults to the HEAD commit timestamp so local devs and
+# CI produce byte-identical artifacts when invoked at the same revision.
+SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date -u +%s)
+REPRO_BUILD_TIME := $(shell { date -u -r $(SOURCE_DATE_EPOCH) +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$(SOURCE_DATE_EPOCH)" +%Y-%m-%dT%H:%M:%SZ; })
+REPRO_LDFLAGS := -s -w -buildid= -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(REPRO_BUILD_TIME)
+REPRO_GOFLAGS := -trimpath -buildvcs=false
+
+release-binaries-reproducible:
+	@mkdir -p bin
+	@echo "Reproducible build: SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) BUILD_TIME=$(REPRO_BUILD_TIME)"
+	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-linux-amd64       ./cmd/helm/
+	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-linux-arm64       ./cmd/helm/
+	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-darwin-amd64      ./cmd/helm/
+	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-darwin-arm64      ./cmd/helm/
+	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-windows-amd64.exe ./cmd/helm/
+	cd bin && shasum -a 256 helm-* > SHA256SUMS.txt
+
+# Generate OpenVEX statements for every CVE listed in the current SBOM.
+vex:
+	@bash scripts/release/generate_vex.sh
+
+# Verify the cosign signature of a local artifact tree (smoke / docs example).
+verify-cosign:
+	@bash scripts/release/verify_cosign.sh
+
+# Pin the latest benchmark report to a per-release file under benchmarks/results/.
+bench-pin:
+	@bash scripts/release/pin_benchmarks.sh "$(VERSION)"
 
 PROTO_DIR := protocols/proto
 PROTO_FILES := $(shell find $(PROTO_DIR) -name '*.proto' 2>/dev/null)

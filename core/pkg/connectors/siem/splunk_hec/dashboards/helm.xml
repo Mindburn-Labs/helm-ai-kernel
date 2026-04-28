@@ -1,0 +1,64 @@
+<dashboard version="1.1" theme="dark">
+  <label>HELM Governance — Splunk</label>
+  <description>helm-oss governance verdicts, GenAI tool-calls, and decision latency from the Splunk HEC exporter.</description>
+  <row>
+    <panel>
+      <title>Verdict counts (last 24h)</title>
+      <chart>
+        <search>
+          <query>index=* sourcetype=helm:governance event.type=helm.governance | timechart span=15m count by verdict</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Top denied tools</title>
+      <chart>
+        <search>
+          <query>index=* sourcetype=helm:governance verdict=DENY | top limit=10 attributes.gen_ai.tool.name</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Decision latency p50/p95/p99 (ms)</title>
+      <chart>
+        <search>
+          <query>index=* sourcetype=helm:governance event.type=helm.governance | eval latency_ms = duration_ns / 1000000 | timechart span=5m perc50(latency_ms) perc95(latency_ms) perc99(latency_ms)</query>
+          <earliest>-1h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">line</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Token usage by model</title>
+      <chart>
+        <search>
+          <query>index=* sourcetype=helm:governance | stats sum(attributes.gen_ai.usage.input_tokens) as input_tokens sum(attributes.gen_ai.usage.output_tokens) as output_tokens by attributes.gen_ai.request.model</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Recent denials</title>
+      <table>
+        <search>
+          <query>index=* sourcetype=helm:governance verdict=DENY | sort -_time | head 50 | table _time correlation_id helm.policy_id helm.reason_code attributes.gen_ai.tool.name</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+      </table>
+    </panel>
+  </row>
+</dashboard>

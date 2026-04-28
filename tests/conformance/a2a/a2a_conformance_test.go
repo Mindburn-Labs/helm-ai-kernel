@@ -1387,3 +1387,62 @@ func TestA2AConformance_Auth_AuthMethodConstants(t *testing.T) {
 		seen[m] = true
 	}
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 7. DID-Qualified Agent Identifiers (Workstream D)
+// ══════════════════════════════════════════════════════════════════════════════
+
+const (
+	// Two minimally-valid did:key identifiers used for the DID-shape tests.
+	didOrigin = "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH"
+	didTarget = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
+)
+
+func TestA2AConformance_DID_AcceptsDIDQualifiedEnvelope(t *testing.T) {
+	env := validEnvelope()
+	env.OriginAgentID = didOrigin
+	env.TargetAgentID = didTarget
+	a2a.SignEnvelope(env, "key-origin-001", "ed25519", didOrigin)
+
+	require.NoError(t, a2a.CanonicalizeDIDFields(env, nil))
+	originKind, targetKind := a2a.EnvelopeIdentifierKind(env)
+	assert.Equal(t, "did", originKind)
+	assert.Equal(t, "did", targetKind)
+	assert.True(t, a2a.IsDID(env.OriginAgentID))
+	assert.True(t, a2a.IsDID(env.TargetAgentID))
+}
+
+func TestA2AConformance_DID_AcceptsLegacyOpaqueEnvelope(t *testing.T) {
+	env := validEnvelope() // legacy IDs by default
+	require.NoError(t, a2a.CanonicalizeDIDFields(env, nil))
+	originKind, targetKind := a2a.EnvelopeIdentifierKind(env)
+	assert.Equal(t, "legacy", originKind)
+	assert.Equal(t, "legacy", targetKind)
+	assert.False(t, a2a.IsDID(env.OriginAgentID))
+}
+
+func TestA2AConformance_DID_RejectsMalformedDID(t *testing.T) {
+	env := validEnvelope()
+	env.OriginAgentID = "did:" // missing method and identifier
+	err := a2a.CanonicalizeDIDFields(env, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "malformed DID")
+}
+
+func TestA2AConformance_DID_RejectsEmptyOrigin(t *testing.T) {
+	env := validEnvelope()
+	env.OriginAgentID = ""
+	err := a2a.CanonicalizeDIDFields(env, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "origin_agent_id")
+}
+
+func TestA2AConformance_DID_MixedDIDAndLegacyAccepted(t *testing.T) {
+	env := validEnvelope()
+	env.OriginAgentID = didOrigin
+	// Target stays legacy.
+	require.NoError(t, a2a.CanonicalizeDIDFields(env, nil))
+	originKind, targetKind := a2a.EnvelopeIdentifierKind(env)
+	assert.Equal(t, "did", originKind)
+	assert.Equal(t, "legacy", targetKind)
+}

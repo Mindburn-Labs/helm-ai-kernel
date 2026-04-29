@@ -23,6 +23,7 @@ The retained examples are small, runnable entry points for the OSS kernel and SD
 | Path | Purpose |
 | --- | --- |
 | `mcp_client/` | simple MCP invocation flow |
+| `openclaw/` | browser split-compute runtime-adapter contract |
 | `receipt_verification/` | bundle/receipt verification examples |
 | `golden/` | small static reference artifacts |
 | `starters/` | starter layouts for supported provider entry points |

@@ -119,6 +119,13 @@
       "section": "compliance",
       "source_path": "docs/compliance/nist-ai-agent-critical-infrastructure.md",
       "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/compliance/nist-ai-rmf-iso-42001-crosswalk",
+      "title": "NIST AI RMF to ISO 42001 Crosswalk",
+      "section": "compliance",
+      "source_path": "docs/compliance/nist-ai-rmf-iso-42001-crosswalk.md",
+      "docs_origin_hint": "docs.mindburn.org"
     }
   ]
 }

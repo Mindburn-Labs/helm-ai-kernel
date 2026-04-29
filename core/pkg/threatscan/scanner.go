@@ -55,6 +55,7 @@ func New(opts ...Option) *Scanner {
 	for _, opt := range opts {
 		opt(s)
 	}
+	s.rules = append(s.rules, promptArmorRules()...)
 	s.rules = append(s.rules, promptInjectionRules()...)
 	s.rules = append(s.rules, commandExecutionRules()...)
 	s.rules = append(s.rules, credentialExposureRules()...)

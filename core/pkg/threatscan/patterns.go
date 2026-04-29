@@ -141,7 +141,40 @@ func commandExecutionRules() []Rule {
 			},
 			Notes: "Detected command-execution bait pattern (install-and-run, pipe-to-shell, destructive commands)",
 		},
+		{
+			ID:       "CMD_EXEC_NATIVE_TOOL_FLAG_INJECTION",
+			Class:    contracts.ThreatClassCommandExecution,
+			Severity: contracts.ThreatSeverityHigh,
+			Match:    nativeToolFlagInjectionSpans,
+			Notes:    "Detected native-tool flag injection that can convert search parameters into command execution",
+		},
 	}
+}
+
+func nativeToolFlagInjectionSpans(input, normalized string) []contracts.MatchedSpan {
+	if !strings.Contains(normalized, "find_by_name") && !strings.Contains(normalized, "find by name") {
+		return nil
+	}
+
+	execFlagPatterns := []string{
+		"-x ",
+		"-x\t",
+		"-x\n",
+		"-x=",
+		"-x;",
+		"--exec ",
+		"--exec=",
+		"--exec-batch",
+		"exec-batch",
+	}
+	spans := anyMatch(input, normalized, execFlagPatterns)
+	if len(spans) > 0 {
+		return spans
+	}
+	if strings.Contains(normalized, "-x") {
+		return caseInsensitiveContains(input, "-X")
+	}
+	return nil
 }
 
 // ────────────────────────────────────────────────────────────────

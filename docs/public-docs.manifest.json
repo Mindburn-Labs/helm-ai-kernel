@@ -112,6 +112,13 @@
       "section": "security",
       "source_path": "docs/security/owasp-agentic-top10-coverage.md",
       "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/compliance/nist-ai-agent-critical-infrastructure",
+      "title": "NIST AI Agent Critical Infrastructure Alignment",
+      "section": "compliance",
+      "source_path": "docs/compliance/nist-ai-agent-critical-infrastructure.md",
+      "docs_origin_hint": "docs.mindburn.org"
     }
   ]
 }

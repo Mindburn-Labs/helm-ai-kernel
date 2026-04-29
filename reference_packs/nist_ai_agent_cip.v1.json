@@ -1,0 +1,219 @@
+{
+  "pack_id": "nist-ai-agent-cip-v1",
+  "label": "NIST AI Agent Critical Infrastructure Profile",
+  "description": "Early HELM alignment pack for the NIST AI Agent Standards Initiative and NIST AI RMF Trustworthy AI in Critical Infrastructure profile concept note. This pack is intentionally labeled as a concept-note alignment until NIST publishes a finalized AI agent critical-infrastructure profile.",
+  "version": 1,
+  "compliance_framework": "NIST_AI_AGENT_CIP",
+  "status": "concept-note-alignment",
+  "source_documents": [
+    {
+      "source_id": "nist-ai-agent-standards-initiative",
+      "title": "NIST AI Agent Standards Initiative",
+      "url": "https://www.nist.gov/artificial-intelligence/ai-agent-standards-initiative",
+      "published": "2026-02-17",
+      "updated": "2026-04-20"
+    },
+    {
+      "source_id": "nist-ai-rmf-critical-infrastructure-concept-note",
+      "title": "Concept Note: AI RMF Profile on Trustworthy AI in Critical Infrastructure",
+      "url": "https://www.nist.gov/programs-projects/concept-note-ai-rmf-profile-trustworthy-ai-critical-infrastructure",
+      "published": "2026-04-06",
+      "updated": "2026-04-08"
+    },
+    {
+      "source_id": "nist-nccoe-agent-identity-authorization",
+      "title": "Software and AI Agent Identity and Authorization",
+      "url": "https://www.nccoe.nist.gov/projects/software-and-ai-agent-identity-and-authorization",
+      "published": "2026-02-05",
+      "status": "reviewing-comments"
+    }
+  ],
+  "programs": [
+    {
+      "program_id": "prog-agent-identity-authorization",
+      "label": "Agent Identity and Authorization",
+      "status": "active",
+      "nist_basis": [
+        "AI Agent Standards Initiative pillar: investing in agent authentication and identity infrastructure",
+        "NCCoE Software and AI Agent Identity and Authorization concept paper"
+      ],
+      "controls": [
+        {
+          "control_id": "AIAGENT-ID-1",
+          "description": "Every agent action binds to a non-human principal identity and session context",
+          "helm_surface": "Guardian.DecisionRequest principal, delegation session validation, machine identity schemas",
+          "enforcement": "MANDATORY"
+        },
+        {
+          "control_id": "AIAGENT-AUTHZ-1",
+          "description": "Agent access and action authority is checked before each side-effecting tool call",
+          "helm_surface": "Guardian pre-PDP gates, PRG requirements, effect envelope validation",
+          "enforcement": "MANDATORY"
+        },
+        {
+          "control_id": "AIAGENT-NR-1",
+          "description": "Agent decisions are signed for auditing and non-repudiation",
+          "helm_surface": "Ed25519-signed DecisionRecord and AuthorizedExecutionIntent",
+          "enforcement": "MANDATORY"
+        }
+      ],
+      "policy_rules": [
+        {
+          "action": "deny",
+          "condition": "agent_identity_missing == true OR principal == ''",
+          "reason": "NIST agent identity: autonomous action requires a bound software or AI agent identity"
+        },
+        {
+          "action": "deny",
+          "condition": "delegated_authority_required == true AND delegation_validated != true",
+          "reason": "NIST agent authorization: delegated action must be scoped and validated before execution"
+        },
+        {
+          "action": "audit",
+          "condition": "true",
+          "reason": "NIST agent identity: all autonomous actions require audit and non-repudiation evidence"
+        }
+      ]
+    },
+    {
+      "program_id": "prog-critical-infrastructure-risk",
+      "label": "Critical Infrastructure AI Risk Management",
+      "status": "active",
+      "nist_basis": [
+        "AI RMF functions: Govern, Map, Measure, Manage",
+        "AI RMF Critical Infrastructure concept note: communicate trustworthiness requirements across AI and CI lifecycles"
+      ],
+      "controls": [
+        {
+          "control_id": "AI-RMF-CI-GOV-1",
+          "description": "Critical-infrastructure deployment context is declared before autonomous execution",
+          "helm_surface": "reference pack metadata, jurisdiction/profile loaders, policy input bundle",
+          "enforcement": "MANDATORY"
+        },
+        {
+          "control_id": "AI-RMF-CI-MAP-1",
+          "description": "Effects are classified by side-effect class and critical-infrastructure blast radius",
+          "helm_surface": "effect type catalog, risk class policy, p0/p1/p2 ceilings",
+          "enforcement": "MANDATORY"
+        },
+        {
+          "control_id": "AI-RMF-CI-MEASURE-1",
+          "description": "Runtime decisions emit measurements sufficient for review and incident reconstruction",
+          "helm_surface": "DecisionRecord, receipt chain, evidence pack, ProofGraph",
+          "enforcement": "MANDATORY"
+        },
+        {
+          "control_id": "AI-RMF-CI-MANAGE-1",
+          "description": "High-impact autonomous changes fail closed or require explicit human approval",
+          "helm_surface": "Guardian freeze, privilege tier, temporal intervention, approval artifacts",
+          "enforcement": "MANDATORY"
+        }
+      ],
+      "policy_rules": [
+        {
+          "action": "require_approval",
+          "condition": "critical_infrastructure == true AND risk_level >= HIGH",
+          "reason": "NIST AI RMF CI: high-impact CI actions require explicit oversight"
+        },
+        {
+          "action": "deny",
+          "condition": "critical_infrastructure == true AND effect_type IN [INFRA_DESTROY, TUNNEL_START, CI_CREDENTIAL_ACCESS] AND approval_ref == ''",
+          "reason": "NIST AI RMF CI: destructive or credential effects fail closed without approval evidence"
+        }
+      ]
+    },
+    {
+      "program_id": "prog-secure-interoperable-protocols",
+      "label": "Secure and Interoperable Agent Protocols",
+      "status": "active",
+      "nist_basis": [
+        "AI Agent Standards Initiative pillar: fostering community-led protocols",
+        "AI Agent Standards Initiative pillar: facilitating industry-led standards"
+      ],
+      "controls": [
+        {
+          "control_id": "AIAGENT-PROTO-1",
+          "description": "Tool and connector access is mediated through explicit manifests and scoped capabilities",
+          "helm_surface": "connector registry, capability manifests, MCP integration, tool schemas",
+          "enforcement": "MANDATORY"
+        },
+        {
+          "control_id": "AIAGENT-PROTO-2",
+          "description": "Cross-agent and agent-to-tool calls carry portable policy and evidence references",
+          "helm_surface": "policy bundles, DecisionRecord IDs, evidence pack exports",
+          "enforcement": "MANDATORY"
+        }
+      ],
+      "policy_rules": [
+        {
+          "action": "deny",
+          "condition": "connector_manifest_missing == true",
+          "reason": "NIST agent protocol security: unmanaged connectors are outside the governed protocol surface"
+        },
+        {
+          "action": "audit",
+          "condition": "tool_call == true",
+          "reason": "NIST agent protocol security: tool calls require portable policy and evidence references"
+        }
+      ]
+    },
+    {
+      "program_id": "prog-supply-chain-assurance",
+      "label": "AI and Critical Infrastructure Supply Chain Assurance",
+      "status": "active",
+      "nist_basis": [
+        "AI RMF Critical Infrastructure concept note: trustworthiness across AI and CI lifecycles and supply chains"
+      ],
+      "controls": [
+        {
+          "control_id": "AI-RMF-CI-SC-1",
+          "description": "Model, connector, and policy artifacts are versioned and evidence-bound",
+          "helm_surface": "policy content hashes, capability pack manifest, AI-BOM and evidence pack retention",
+          "enforcement": "MANDATORY"
+        },
+        {
+          "control_id": "AI-RMF-CI-SC-2",
+          "description": "Public or vendor-supplied components have provenance evidence before activation",
+          "helm_surface": "pack verifier, module provenance, registry compatibility checks",
+          "enforcement": "MANDATORY"
+        }
+      ],
+      "policy_rules": [
+        {
+          "action": "deny",
+          "condition": "aibom_missing == true AND critical_infrastructure == true",
+          "reason": "NIST AI RMF CI: critical-infrastructure AI requires lifecycle and supply-chain documentation"
+        },
+        {
+          "action": "deny",
+          "condition": "policy_content_hash == ''",
+          "reason": "NIST AI RMF CI: policy state must be content-addressed for supply-chain assurance"
+        }
+      ]
+    }
+  ],
+  "critical_infrastructure_domains": [
+    "communications",
+    "energy",
+    "financial_services",
+    "healthcare",
+    "manufacturing",
+    "transportation",
+    "water_wastewater"
+  ],
+  "evidence_requirements": {
+    "receipt_signing": "MANDATORY",
+    "decision_record_required": true,
+    "authorized_execution_intent_required": true,
+    "proofgraph_enabled": true,
+    "policy_content_hash_required": true,
+    "evidence_pack_retention_days": 2555,
+    "agent_identity_required": true,
+    "delegation_scope_required": true,
+    "aibom_required_for_critical_infrastructure": true
+  },
+  "budget_constraints": {
+    "daily_limit_cents": 250000,
+    "risk_score_cap": 300
+  }
+}

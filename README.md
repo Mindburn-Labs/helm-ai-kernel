@@ -101,6 +101,7 @@ Public OSS docs are sourced from this repository and canonically published throu
 - [SDK Index](docs/sdks/00_INDEX.md)
 - [Security Model](docs/EXECUTION_SECURITY_MODEL.md)
 - [OWASP Mapping](docs/OWASP_MCP_THREAT_MAPPING.md)
+- [NIST AI Agent Critical Infrastructure Alignment](docs/compliance/nist-ai-agent-critical-infrastructure.md)
 
 ## License
 

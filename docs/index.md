@@ -22,6 +22,10 @@ This documentation set covers only the retained OSS surface of the repository.
 - [OWASP Threat Mapping](OWASP_MCP_THREAT_MAPPING.md)
 - [SDK Index](sdks/00_INDEX.md)
 
+## Compliance
+
+- [NIST AI Agent Critical Infrastructure Alignment](compliance/nist-ai-agent-critical-infrastructure.md)
+
 ## Supporting Material
 
 - [Benchmarks](BENCHMARKS.md)

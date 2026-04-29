@@ -42,6 +42,31 @@ try {
 }
 ```
 
+## Agent Framework Adapters
+
+The TypeScript SDK includes lightweight adapter helpers for LangGraph, CrewAI, OpenAI Agents SDK, PydanticAI, and LlamaIndex tool-call events. These helpers normalize each framework event into a HELM governance request and submit it through `chatCompletionsWithReceipt`, preserving the kernel receipt returned in `X-Helm-*` headers.
+
+```ts
+import { HelmClient, createAgentFrameworkAdapter, fromOpenAIAgentsToolCall } from "@mindburn/helm";
+
+const helm = new HelmClient({ baseUrl: "http://localhost:8080" });
+const adapter = createAgentFrameworkAdapter(helm, { model: "helm-governance" });
+
+const result = await adapter.submit(
+  fromOpenAIAgentsToolCall({
+    id: "call_123",
+    function: {
+      name: "crm.update_customer",
+      arguments: '{"customer_id":"cus_123","tier":"enterprise"}',
+    },
+  }),
+);
+
+console.log(result.governance.receiptId);
+```
+
+The helpers do not add Microsoft Agent Governance Toolkit as a dependency and do not claim Microsoft certification. They cover the same framework families so HELM can sit behind AGT or another orchestrator as the receipt-bearing enforcement boundary.
+
 ## Release Notes
 
 `0.4.0` is the cleaned OSS kernel baseline with the retained OpenAPI client surface and protobuf message bindings.

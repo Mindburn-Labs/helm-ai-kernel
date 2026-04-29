@@ -33,3 +33,4 @@ This documentation set covers only the retained OSS surface of the repository.
 - [Troubleshooting](TROUBLESHOOTING.md)
 - [OpenAI-Compatible Proxy](INTEGRATIONS/openai_baseurl.md)
 - [MCP Surface](INTEGRATIONS/mcp.md)
+- [Microsoft Agent Governance Toolkit Coexistence](INTEGRATIONS/microsoft_agent_governance_toolkit.md)

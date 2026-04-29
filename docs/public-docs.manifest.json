@@ -107,6 +107,13 @@
       "docs_origin_hint": "docs.mindburn.org"
     },
     {
+      "slug": "helm-oss/integrations/microsoft-agent-governance-toolkit",
+      "title": "Microsoft Agent Governance Toolkit Coexistence",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/microsoft_agent_governance_toolkit.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
       "slug": "helm-oss/security/owasp-agentic-top10-mapping",
       "title": "OWASP Agentic Top 10 Mapping",
       "section": "security",

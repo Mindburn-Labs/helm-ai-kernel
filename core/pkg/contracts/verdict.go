@@ -54,6 +54,7 @@ const (
 	// ── Temporal Reasons ───────────────────────────────────
 	ReasonTemporalIntervene ReasonCode = "TEMPORAL_INTERVENTION"
 	ReasonTemporalThrottle  ReasonCode = "TEMPORAL_THROTTLE"
+	ReasonSessionRiskDeny   ReasonCode = "SESSION_RISK_MEMORY_DENY"
 
 	// ── Security Reasons ───────────────────────────────────
 	ReasonSandboxViolation ReasonCode = "SANDBOX_VIOLATION"
@@ -117,6 +118,7 @@ func CoreReasonCodes() []ReasonCode {
 		ReasonSchemaViolation,
 		ReasonTemporalIntervene,
 		ReasonTemporalThrottle,
+		ReasonSessionRiskDeny,
 		ReasonSandboxViolation,
 		ReasonProvenance,
 		ReasonVerification,

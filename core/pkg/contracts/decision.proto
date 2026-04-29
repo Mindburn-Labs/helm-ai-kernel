@@ -23,4 +23,7 @@ message DecisionRecord {
   google.protobuf.Timestamp timestamp = 8;
   bytes signature = 9;
   string decision_hash = 10; // Canonical hash of the fields (excluding signature/decision_hash)
+  double trajectory_risk_score = 11;
+  string session_centroid_hash = 12;
+  int32 risk_accumulation_window = 13;
 }

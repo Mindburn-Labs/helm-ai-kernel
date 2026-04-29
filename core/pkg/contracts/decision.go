@@ -43,6 +43,10 @@ type DecisionRecord struct {
 	Reason         string         `json:"reason"`                  // Human-readable explanation
 	ReasonCode     string         `json:"reason_code,omitempty"`   // Machine-readable registry code
 	InputContext   map[string]any `json:"input_context,omitempty"` // For explainability
+	// Session Risk Memory fields bind trajectory-level authorization state to the signed decision.
+	TrajectoryRiskScore    float64 `json:"trajectory_risk_score,omitempty"`
+	SessionCentroidHash    string  `json:"session_centroid_hash,omitempty"`
+	RiskAccumulationWindow int     `json:"risk_accumulation_window,omitempty"`
 	// RequirementSetHash links this decision to the specific Proof Requirement Graph rules satisfied.
 	RequirementSetHash string    `json:"requirement_set_hash,omitempty"`
 	Signature          string    `json:"signature"`

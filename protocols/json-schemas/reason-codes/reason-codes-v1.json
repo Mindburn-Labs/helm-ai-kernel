@@ -79,6 +79,13 @@
       "since": "1.0.0"
     },
     {
+      "code": "SESSION_RISK_MEMORY_DENY",
+      "applies_to": ["DENY"],
+      "domain": "temporal",
+      "description": "Session trajectory risk exceeded the deterministic authorization threshold",
+      "since": "1.0.0"
+    },
+    {
       "code": "ENVELOPE_INVALID",
       "applies_to": ["DENY"],
       "domain": "envelope",

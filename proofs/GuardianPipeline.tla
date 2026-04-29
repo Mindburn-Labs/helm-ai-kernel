@@ -14,15 +14,19 @@ VARIABLES
     gateState,       \* Function: Gate -> {"PASS", "DENY", "ERROR", "PENDING"}
     pipelineVerdict, \* "PENDING" | "ALLOW" | "DENY"
     actionCount,     \* Number of actions processed
-    frozen           \* Boolean: system freeze state
+    frozen,          \* Boolean: system freeze state
+    taintSet,        \* Set of ClawGuard-style taint labels on current effect
+    egressRequested  \* Boolean: current effect attempts outbound egress
 
-vars == <<gateState, pipelineVerdict, actionCount, frozen>>
+vars == <<gateState, pipelineVerdict, actionCount, frozen, taintSet, egressRequested>>
 
 TypeInvariant ==
     /\ gateState \in [Gates -> {"PASS", "DENY", "ERROR", "PENDING"}]
     /\ pipelineVerdict \in {"PENDING", "ALLOW", "DENY"}
     /\ actionCount \in 0..MaxActions
     /\ frozen \in BOOLEAN
+    /\ taintSet \subseteq {"PII", "CREDENTIAL", "SECRET", "TOOL_OUTPUT", "USER_INPUT", "EXTERNAL"}
+    /\ egressRequested \in BOOLEAN
 
 \* ─── INVARIANTS (Safety Properties) ──────────────────────────────────────
 
@@ -42,6 +46,12 @@ AllowRequiresUnanimity ==
 FreezeOverride ==
     frozen => pipelineVerdict # "ALLOW"
 
+\* I6: ClawGuard taint safety — sensitive taint may not leave trust boundary
+SensitiveTaint == {"PII", "CREDENTIAL", "SECRET"}
+
+TaintSafeEgress ==
+    (egressRequested /\ (taintSet \cap SensitiveTaint # {})) => pipelineVerdict # "ALLOW"
+
 \* I5: Monotonic Denial — Once DENY, never becomes ALLOW in same action
 \* (Enforced by sequential gate evaluation — not expressible as state invariant
 \*  without history, but AllowRequiresUnanimity subsumes this)
@@ -53,6 +63,8 @@ Init ==
     /\ pipelineVerdict = "PENDING"
     /\ actionCount = 0
     /\ frozen = FALSE
+    /\ taintSet = {}
+    /\ egressRequested = FALSE
 
 \* ─── ACTIONS ────────────────────────────────────────────────────────────
 
@@ -61,36 +73,58 @@ GatePass(g) ==
     /\ gateState[g] = "PENDING"
     /\ ~frozen
     /\ gateState' = [gateState EXCEPT ![g] = "PASS"]
-    /\ UNCHANGED <<pipelineVerdict, actionCount, frozen>>
+    /\ UNCHANGED <<pipelineVerdict, actionCount, frozen, taintSet, egressRequested>>
 
 \* A gate evaluates to DENY
 GateDeny(g) ==
     /\ gateState[g] = "PENDING"
     /\ gateState' = [gateState EXCEPT ![g] = "DENY"]
     /\ pipelineVerdict' = "DENY"  \* Immediately deny (short-circuit)
-    /\ UNCHANGED <<actionCount, frozen>>
+    /\ UNCHANGED <<actionCount, frozen, taintSet, egressRequested>>
 
 \* A gate encounters an error (fail-closed → DENY)
 GateError(g) ==
     /\ gateState[g] = "PENDING"
     /\ gateState' = [gateState EXCEPT ![g] = "ERROR"]
     /\ pipelineVerdict' = "DENY"  \* Fail-closed
-    /\ UNCHANGED <<actionCount, frozen>>
+    /\ UNCHANGED <<actionCount, frozen, taintSet, egressRequested>>
+
+\* Mark current effect as carrying tainted data before execution.
+MarkTaint(t) ==
+    /\ pipelineVerdict = "PENDING"
+    /\ t \in {"PII", "CREDENTIAL", "SECRET", "TOOL_OUTPUT", "USER_INPUT", "EXTERNAL"}
+    /\ taintSet' = taintSet \cup {t}
+    /\ UNCHANGED <<gateState, pipelineVerdict, actionCount, frozen, egressRequested>>
+
+\* Current effect attempts outbound egress.
+RequestEgress ==
+    /\ pipelineVerdict = "PENDING"
+    /\ egressRequested' = TRUE
+    /\ UNCHANGED <<gateState, pipelineVerdict, actionCount, frozen, taintSet>>
+
+\* Sensitive taint plus egress denies before ALLOW can be reached.
+TaintEgressDeny ==
+    /\ pipelineVerdict = "PENDING"
+    /\ egressRequested
+    /\ taintSet \cap SensitiveTaint # {}
+    /\ pipelineVerdict' = "DENY"
+    /\ UNCHANGED <<gateState, actionCount, frozen, taintSet, egressRequested>>
 
 \* All gates passed → verdict is ALLOW
 PipelineAllow ==
     /\ \A g \in Gates : gateState[g] = "PASS"
     /\ pipelineVerdict = "PENDING"
     /\ ~frozen
+    /\ ~(egressRequested /\ (taintSet \cap SensitiveTaint # {}))
     /\ pipelineVerdict' = "ALLOW"
-    /\ UNCHANGED <<gateState, actionCount, frozen>>
+    /\ UNCHANGED <<gateState, actionCount, frozen, taintSet, egressRequested>>
 
 \* System freeze activated
 ActivateFreeze ==
     /\ ~frozen
     /\ frozen' = TRUE
     /\ pipelineVerdict' = "DENY"
-    /\ UNCHANGED <<gateState, actionCount>>
+    /\ UNCHANGED <<gateState, actionCount, taintSet, egressRequested>>
 
 \* Reset pipeline for next action
 ResetPipeline ==
@@ -99,6 +133,8 @@ ResetPipeline ==
     /\ gateState' = [g \in Gates |-> "PENDING"]
     /\ pipelineVerdict' = "PENDING"
     /\ actionCount' = actionCount + 1
+    /\ taintSet' = {}
+    /\ egressRequested' = FALSE
     /\ UNCHANGED <<frozen>>
 
 \* Terminal state: no more actions possible (valid halt)
@@ -113,6 +149,9 @@ Next ==
     \/ \E g \in Gates : GatePass(g)
     \/ \E g \in Gates : GateDeny(g)
     \/ \E g \in Gates : GateError(g)
+    \/ \E t \in {"PII", "CREDENTIAL", "SECRET", "TOOL_OUTPUT", "USER_INPUT", "EXTERNAL"} : MarkTaint(t)
+    \/ RequestEgress
+    \/ TaintEgressDeny
     \/ PipelineAllow
     \/ ActivateFreeze
     \/ ResetPipeline
@@ -130,6 +169,7 @@ Safety ==
     /\ DefaultDeny
     /\ AllowRequiresUnanimity
     /\ FreezeOverride
+    /\ TaintSafeEgress
 
 \* Liveness: Eventually, the pipeline reaches a verdict
 \* (Only under fairness assumptions — not checked by default)

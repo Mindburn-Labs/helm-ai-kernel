@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"strings"
 	"time"
 
 	pkg_artifact "github.com/Mindburn-Labs/helm-oss/core/pkg/artifacts"
@@ -353,6 +355,7 @@ func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.Decisio
 		"effect":    effectMap,
 		"artifacts": artifacts,
 		"timestamp": g.clock.Now().Unix(),
+		"taint":     contracts.NormalizeTaintLabels(effect.Taint),
 	}
 
 	valid, err := g.pe.EvaluateRequirementSet(rule, input)
@@ -422,6 +425,7 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 		ExpiresAt:        now.Add(5 * time.Minute),
 		Signer:           "kernel",
 		AllowedTool:      allowedTool,
+		Taint:            contracts.NormalizeTaintLabels(effect.Taint),
 	}
 
 	// 4. Sign Intent
@@ -610,6 +614,32 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 	}
 
 	// ── End egress gate ──
+
+	taintLabels := contracts.TaintLabelsFromContext(req.Context)
+	if len(taintLabels) > 0 {
+		if req.Context == nil {
+			req.Context = make(map[string]interface{})
+		}
+		req.Context["taint"] = taintLabels
+	}
+	if taintTrackingEnabled() && taintedEgressDenied(req.Context, taintLabels) {
+		now := g.clock.Now()
+		decision := &contracts.DecisionRecord{
+			ID:         newDecisionID(),
+			Timestamp:  now,
+			Verdict:    string(contracts.VerdictDeny),
+			Reason:     "TAINTED_DATA_EGRESS_DENY: sensitive taint cannot leave the trust boundary without explicit approval",
+			ReasonCode: string(contracts.ReasonTaintedEgressDeny),
+			InputContext: map[string]any{
+				"taint": taintLabels,
+			},
+		}
+		if signErr := g.signer.SignDecision(decision); signErr != nil {
+			return nil, fmt.Errorf("failed to sign tainted-egress decision: %w", signErr)
+		}
+		g.recordBehavioralEvent(req.Principal, trust.EventEgressBlocked, "tainted egress blocked")
+		return decision, nil
+	}
 
 	// Gate 4: Threat signal scan — scan untrusted textual inputs
 	var scanResult *contracts.ThreatScanResult
@@ -888,6 +918,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		EffectID:   fmt.Sprintf("eff-%d", g.clock.Now().UnixNano()),
 		EffectType: req.Action, // e.g. "EXECUTE_TOOL"
 		Params:     req.Context,
+		Taint:      contracts.TaintLabelsFromContext(req.Context),
 	}
 	// Add tool name to params if not present but resource is tool
 	if req.Action == "EXECUTE_TOOL" {
@@ -1063,6 +1094,25 @@ func responseToIntervention(level ResponseLevel) contracts.InterventionType {
 	default:
 		return contracts.InterventionNone
 	}
+}
+
+func taintTrackingEnabled() bool {
+	v := strings.TrimSpace(os.Getenv("HELM_TAINT_TRACKING"))
+	return v == "1" || strings.EqualFold(v, "true")
+}
+
+func taintedEgressDenied(ctx map[string]interface{}, labels []string) bool {
+	if len(labels) == 0 || ctx == nil {
+		return false
+	}
+	if approved, ok := ctx["allow_tainted_egress"].(bool); ok && approved {
+		return false
+	}
+	destination, _ := ctx["destination"].(string)
+	if strings.TrimSpace(destination) == "" {
+		return false
+	}
+	return contracts.TaintContainsAny(labels, contracts.TaintPII, contracts.TaintCredential, contracts.TaintSecret)
 }
 
 func toMap(v any) (map[string]interface{}, error) {

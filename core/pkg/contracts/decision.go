@@ -130,4 +130,5 @@ type AuthorizedExecutionIntent struct {
 	Signature        string    `json:"signature"`      // Sig of the Intent
 	SignatureType    string    `json:"signature_type"` // Algorithm binding (e.g. "ed25519:key-id")
 	AllowedTool      string    `json:"allowed_tool"`   // Constraint
+	Taint            []string  `json:"taint,omitempty"`
 }

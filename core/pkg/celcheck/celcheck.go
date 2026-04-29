@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/policycel"
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/ext"
 )
@@ -38,7 +39,7 @@ func ValidateFile(path string) ValidationResult {
 	}
 
 	// Standard HELM CEL environment with common variables.
-	env, err := cel.NewEnv(
+	opts := []cel.EnvOption{
 		cel.Variable("request", cel.MapType(cel.StringType, cel.DynType)),
 		cel.Variable("args", cel.MapType(cel.StringType, cel.DynType)),
 		cel.Variable("context", cel.MapType(cel.StringType, cel.DynType)),
@@ -57,7 +58,9 @@ func ValidateFile(path string) ValidationResult {
 		cel.Variable("origin_agent", cel.StringType),
 		cel.Variable("timestamp", cel.StringType),
 		ext.Strings(),
-	)
+	}
+	opts = append(opts, policycel.TaintEnvOptions()...)
+	env, err := cel.NewEnv(opts...)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("env error: %v", err))
 		return result
@@ -82,7 +85,7 @@ func ValidateFile(path string) ValidationResult {
 	}
 
 	// Join all code lines into one expression.
-	expr := strings.Join(codeLines, " ")
+	expr := policycel.RewritePolicyPackTaintContains(strings.Join(codeLines, " "))
 	result.Rules = countClauses(expr)
 
 	ast, iss := env.Parse(expr)

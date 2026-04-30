@@ -300,6 +300,15 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if !hasAllOAuthScopes(r.Context(), tool.RequiredScopes) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
+			Error:      fmt.Sprintf("tool %q requires OAuth scopes: %s", req.Method, strings.Join(tool.RequiredScopes, ", ")),
+			ReasonCode: "MCP.OAUTH.INSUFFICIENT_SCOPE",
+		})
+		return
+	}
 
 	// 1. Validate and canonicalize args via PEP boundary
 	var argsHash string
@@ -323,9 +332,14 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 	if g.exec != nil {
 		// Build execution request with delegation context from headers.
 		execReq := ToolExecutionRequest{
-			ToolName:  req.Method,
-			Arguments: req.Params,
-			SessionID: fmt.Sprintf("mcp-http-%s-%p", r.RemoteAddr, r),
+			ToolName:       req.Method,
+			Arguments:      req.Params,
+			SessionID:      fmt.Sprintf("mcp-http-%s-%p", r.RemoteAddr, r),
+			RequiredScopes: append([]string(nil), tool.RequiredScopes...),
+		}
+		if auth, ok := OAuthAuthorizationFromContext(r.Context()); ok {
+			execReq.OAuthScopes = append([]string(nil), auth.Scopes...)
+			execReq.OAuthResources = append([]string(nil), auth.Resources...)
 		}
 		if delegationID := r.Header.Get("X-HELM-Delegation-Session-ID"); delegationID != "" {
 			execReq.DelegationSessionID = delegationID
@@ -501,18 +515,28 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 		if err := json.Unmarshal(params, &req); err != nil {
 			return writeError(-32602, "invalid tools/call params")
 		}
-		if _, ok := findToolRef(g.catalog, req.Name); !ok {
+		tool, ok := findToolRef(g.catalog, req.Name)
+		if !ok {
 			return writeError(-32602, fmt.Sprintf("tool %q not found", req.Name))
+		}
+		if !hasAllOAuthScopes(ctx, tool.RequiredScopes) {
+			return writeError(-32001, fmt.Sprintf("tool %q requires OAuth scopes: %s", req.Name, strings.Join(tool.RequiredScopes, ", ")))
 		}
 		if g.exec == nil {
 			return writeError(-32603, "tool executor is not configured")
 		}
 
-		execResp, err := g.exec(ctx, ToolExecutionRequest{
-			ToolName:  req.Name,
-			Arguments: req.Arguments,
-			SessionID: "mcp-http-jsonrpc",
-		})
+		execReq := ToolExecutionRequest{
+			ToolName:       req.Name,
+			Arguments:      req.Arguments,
+			SessionID:      "mcp-http-jsonrpc",
+			RequiredScopes: append([]string(nil), tool.RequiredScopes...),
+		}
+		if auth, ok := OAuthAuthorizationFromContext(ctx); ok {
+			execReq.OAuthScopes = append([]string(nil), auth.Scopes...)
+			execReq.OAuthResources = append([]string(nil), auth.Resources...)
+		}
+		execResp, err := g.exec(ctx, execReq)
 		if err != nil {
 			return writeError(-32603, err.Error())
 		}

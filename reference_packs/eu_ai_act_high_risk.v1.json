@@ -78,6 +78,8 @@
     "evidence_pack_retention_days": 3650,
     "audit_chain_verification": true,
     "aibom_required": true,
+    "oauth_resource_binding": true,
+    "tool_scope_enforcement": true,
     "conformity_assessment": true,
     "qtsp_required": true,
     "qtsp_anchor_type": "RFC3161_EIDAS",

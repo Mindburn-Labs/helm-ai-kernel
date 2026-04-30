@@ -25,6 +25,7 @@ const (
 	JWKSErrInvalidAudience  JWKSValidationErrorKind = "invalid_audience"
 	JWKSErrInvalidSignature JWKSValidationErrorKind = "invalid_signature"
 	JWKSErrMissingScope     JWKSValidationErrorKind = "insufficient_scope"
+	JWKSErrInvalidResource  JWKSValidationErrorKind = "invalid_resource"
 	JWKSErrKeyNotFound      JWKSValidationErrorKind = "key_not_found"
 	JWKSErrMalformedToken   JWKSValidationErrorKind = "malformed_token"
 	JWKSErrFetchFailed      JWKSValidationErrorKind = "jwks_fetch_failed"
@@ -45,7 +46,22 @@ type JWKSConfig struct {
 	JWKSURL  string   // HELM_OAUTH_JWKS_URL — JWKS endpoint
 	Issuer   string   // HELM_OAUTH_ISSUER — expected iss claim
 	Audience string   // HELM_OAUTH_AUDIENCE — expected aud claim
+	Resource string   // HELM_OAUTH_RESOURCE — expected RFC 8707 resource indicator
 	Scopes   []string // HELM_OAUTH_SCOPES — required scopes
+}
+
+// OAuthTokenClaims contains validated token claims needed by MCP authorization.
+type OAuthTokenClaims struct {
+	RegisteredClaims jwt.RegisteredClaims
+	Scopes           []string
+	Resources        []string
+}
+
+type jwksClaims struct {
+	Scope     string   `json:"scope"`
+	Resource  string   `json:"resource"`
+	Resources []string `json:"resources"`
+	jwt.RegisteredClaims
 }
 
 // JWKSValidator validates bearer tokens against a JWKS endpoint.
@@ -74,6 +90,16 @@ func NewJWKSValidator(config JWKSConfig) *JWKSValidator {
 // Validate parses and validates a bearer token string.
 // Returns the parsed claims on success, or a typed JWKSValidationError on failure.
 func (v *JWKSValidator) Validate(tokenString string) (*jwt.RegisteredClaims, error) {
+	claims, err := v.ValidateAuthorization(tokenString)
+	if err != nil {
+		return nil, err
+	}
+	return &claims.RegisteredClaims, nil
+}
+
+// ValidateAuthorization parses and validates a bearer token string and returns
+// normalized OAuth metadata used by MCP scope and resource policy.
+func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenClaims, error) {
 	if err := v.refreshKeysIfNeeded(); err != nil {
 		return nil, err
 	}
@@ -84,11 +110,6 @@ func (v *JWKSValidator) Validate(tokenString string) (*jwt.RegisteredClaims, err
 		jwt.WithExpirationRequired(),
 		jwt.WithIssuedAt(),
 	)
-
-	type jwksClaims struct {
-		Scope string `json:"scope"`
-		jwt.RegisteredClaims
-	}
 
 	claims := &jwksClaims{}
 	token, err := parser.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
@@ -146,7 +167,52 @@ func (v *JWKSValidator) Validate(tokenString string) (*jwt.RegisteredClaims, err
 		}
 	}
 
-	return &claims.RegisteredClaims, nil
+	resources := claims.resourceIndicators()
+	if v.config.Resource != "" && !containsString(resources, v.config.Resource) {
+		return nil, &JWKSValidationError{
+			Kind:    JWKSErrInvalidResource,
+			Message: fmt.Sprintf("missing required resource indicator: %s", v.config.Resource),
+		}
+	}
+
+	return &OAuthTokenClaims{
+		RegisteredClaims: claims.RegisteredClaims,
+		Scopes:           strings.Fields(claims.Scope),
+		Resources:        resources,
+	}, nil
+}
+
+func (c *jwksClaims) resourceIndicators() []string {
+	seen := make(map[string]struct{})
+	var resources []string
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		if _, ok := seen[value]; ok {
+			return
+		}
+		seen[value] = struct{}{}
+		resources = append(resources, value)
+	}
+	for _, audience := range c.Audience {
+		add(audience)
+	}
+	add(c.Resource)
+	for _, resource := range c.Resources {
+		add(resource)
+	}
+	return resources
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func (v *JWKSValidator) validateScopeString(scope string) error {

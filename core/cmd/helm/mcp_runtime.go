@@ -452,6 +452,10 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 	case "oauth":
 		jwksURL := os.Getenv("HELM_OAUTH_JWKS_URL")
 		metadataURL := strings.TrimRight(baseURL, "/") + "/.well-known/oauth-protected-resource/mcp"
+		resource := strings.TrimSpace(os.Getenv("HELM_OAUTH_RESOURCE"))
+		if resource == "" {
+			resource = strings.TrimRight(baseURL, "/") + "/mcp"
+		}
 
 		if jwksURL != "" {
 			// Production JWKS/OIDC validation.
@@ -460,19 +464,13 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 			if issuer == "" || audience == "" {
 				return nil, fmt.Errorf("HELM_OAUTH_ISSUER and HELM_OAUTH_AUDIENCE must be set when HELM_OAUTH_JWKS_URL is configured")
 			}
-			var scopes []string
-			if configured := strings.TrimSpace(os.Getenv("HELM_OAUTH_SCOPES")); configured != "" {
-				for _, s := range strings.FieldsFunc(configured, func(r rune) bool { return r == ',' || r == ' ' }) {
-					if trimmed := strings.TrimSpace(s); trimmed != "" {
-						scopes = append(scopes, trimmed)
-					}
-				}
-			}
+			scopes := parseMCPEnvList(os.Getenv("HELM_OAUTH_SCOPES"))
 
 			validator := mcppkg.NewJWKSValidator(mcppkg.JWKSConfig{
 				JWKSURL:  jwksURL,
 				Issuer:   issuer,
 				Audience: audience,
+				Resource: resource,
 				Scopes:   scopes,
 			})
 
@@ -483,14 +481,14 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 				}
 				authz := r.Header.Get("Authorization")
 				if !strings.HasPrefix(authz, "Bearer ") {
-					w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="helm-mcp", resource_metadata="%s"`, metadataURL))
+					w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="helm-mcp", resource_metadata="%s", resource="%s"`, metadataURL, resource))
 					http.Error(w, "missing bearer token", http.StatusUnauthorized)
 					return
 				}
 				tokenStr := strings.TrimSpace(strings.TrimPrefix(authz, "Bearer "))
-				_, err := validator.Validate(tokenStr)
+				claims, err := validator.ValidateAuthorization(tokenStr)
 				if err != nil {
-					challenge := fmt.Sprintf(`Bearer realm="helm-mcp", resource_metadata="%s"`, metadataURL)
+					challenge := fmt.Sprintf(`Bearer realm="helm-mcp", resource_metadata="%s", resource="%s"`, metadataURL, resource)
 					if validErr, ok := err.(*mcppkg.JWKSValidationError); ok && validErr.Kind == mcppkg.JWKSErrMissingScope {
 						challenge += fmt.Sprintf(`, error="insufficient_scope", error_description="%s"`, validErr.Message)
 					}
@@ -498,7 +496,11 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 					http.Error(w, err.Error(), http.StatusUnauthorized)
 					return
 				}
-				next.ServeHTTP(w, r)
+				ctx := mcppkg.WithOAuthAuthorization(r.Context(), mcppkg.OAuthAuthorization{
+					Scopes:    claims.Scopes,
+					Resources: claims.Resources,
+				})
+				next.ServeHTTP(w, r.WithContext(ctx))
 			}), nil
 		}
 
@@ -516,13 +518,27 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 			authz := r.Header.Get("Authorization")
 			provided := strings.TrimSpace(strings.TrimPrefix(authz, "Bearer "))
 			if !strings.HasPrefix(authz, "Bearer ") || provided != expectedToken {
-				w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="helm-mcp", resource_metadata="%s"`, metadataURL))
+				w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="helm-mcp", resource_metadata="%s", resource="%s"`, metadataURL, resource))
 				http.Error(w, "missing or invalid OAuth bearer token", http.StatusUnauthorized)
 				return
 			}
-			next.ServeHTTP(w, r)
+			ctx := mcppkg.WithOAuthAuthorization(r.Context(), mcppkg.OAuthAuthorization{
+				Scopes:    parseMCPEnvList(os.Getenv("HELM_OAUTH_SCOPES")),
+				Resources: []string{resource},
+			})
+			next.ServeHTTP(w, r.WithContext(ctx))
 		}), nil
 	default:
 		return nil, fmt.Errorf("unknown auth mode %q", authMode)
 	}
+}
+
+func parseMCPEnvList(raw string) []string {
+	var values []string
+	for _, value := range strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == ' ' }) {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			values = append(values, trimmed)
+		}
+	}
+	return values
 }

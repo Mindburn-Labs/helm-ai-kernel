@@ -131,19 +131,19 @@ func (e *Exporter) Shutdown(ctx context.Context) error {
 func translate(s sdktrace.ReadOnlySpan, cfg Config) hecEvent {
 	attrs := attrMap(s.Attributes())
 	event := map[string]any{
-		"event.type":      "helm.governance",
-		"name":            s.Name(),
-		"trace_id":        s.SpanContext().TraceID().String(),
-		"span_id":         s.SpanContext().SpanID().String(),
-		"start_time":      s.StartTime().UTC().Format(time.RFC3339Nano),
-		"end_time":        s.EndTime().UTC().Format(time.RFC3339Nano),
-		"duration_ns":     s.EndTime().Sub(s.StartTime()).Nanoseconds(),
-		"attributes":      attrs,
-		"gen_ai":          subset(attrs, "gen_ai."),
-		"helm":            subset(attrs, "helm."),
-		"verdict":         attrs[observability.HelmVerdict],
-		"correlation_id":  attrs[observability.HelmCorrelationID],
-		"tool_call_id":    attrs[observability.GenAIToolCallID],
+		"event.type":     "helm.governance",
+		"name":           s.Name(),
+		"trace_id":       s.SpanContext().TraceID().String(),
+		"span_id":        s.SpanContext().SpanID().String(),
+		"start_time":     s.StartTime().UTC().Format(time.RFC3339Nano),
+		"end_time":       s.EndTime().UTC().Format(time.RFC3339Nano),
+		"duration_ns":    s.EndTime().Sub(s.StartTime()).Nanoseconds(),
+		"attributes":     attrs,
+		"gen_ai":         subset(attrs, "gen_ai."),
+		"helm":           subset(attrs, "helm."),
+		"verdict":        attrs[observability.HelmVerdict],
+		"correlation_id": attrs[observability.HelmCorrelationID],
+		"tool_call_id":   attrs[observability.GenAIToolCallID],
 	}
 	when := s.EndTime()
 	if when.IsZero() {

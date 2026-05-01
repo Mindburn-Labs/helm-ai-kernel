@@ -22,6 +22,13 @@ This documentation set covers only the retained OSS surface of the repository.
 - [OWASP Threat Mapping](OWASP_MCP_THREAT_MAPPING.md)
 - [SDK Index](sdks/00_INDEX.md)
 
+## Design System
+
+- [Core Architecture](design-system/architecture.md)
+- [Core Theming](design-system/theming.md)
+- [Accessibility](design-system/accessibility.md)
+- [Primitive Coverage](design-system/primitive-coverage.md)
+
 ## Compliance
 
 - [EU AI Act High-Risk Pack](compliance/eu-ai-act-high-risk-pack.md)

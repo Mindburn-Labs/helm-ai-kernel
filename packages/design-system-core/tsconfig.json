@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "../../node_modules/.tmp/tsconfig.core.tsbuildinfo",
+    "noEmit": true
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.stories.tsx"]
+}
+

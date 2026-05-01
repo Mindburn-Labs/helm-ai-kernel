@@ -1,0 +1,98 @@
+{
+  "name": "@helm/design-system-core",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Core HELM-compatible design-system tokens, primitives, layouts, data, forms, feedback, and inspection components.",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "design-system",
+    "react",
+    "typescript",
+    "tokens",
+    "accessibility"
+  ],
+  "sideEffects": [
+    "*.css",
+    "**/*.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./components": {
+      "types": "./dist/components/index.d.ts",
+      "import": "./dist/components/index.js"
+    },
+    "./components/core": {
+      "types": "./dist/components/core.d.ts",
+      "import": "./dist/components/core.js"
+    },
+    "./components/data": {
+      "types": "./dist/components/data.d.ts",
+      "import": "./dist/components/data.js"
+    },
+    "./components/feedback": {
+      "types": "./dist/components/feedback.d.ts",
+      "import": "./dist/components/feedback.js"
+    },
+    "./components/forms": {
+      "types": "./dist/components/forms.d.ts",
+      "import": "./dist/components/forms.js"
+    },
+    "./components/inspect": {
+      "types": "./dist/components/inspect.d.ts",
+      "import": "./dist/components/inspect.js"
+    },
+    "./components/layout": {
+      "types": "./dist/components/layout.d.ts",
+      "import": "./dist/components/layout.js"
+    },
+    "./components/primitives": {
+      "types": "./dist/components/primitives.d.ts",
+      "import": "./dist/components/primitives.js"
+    },
+    "./components/status": {
+      "types": "./dist/components/status.d.ts",
+      "import": "./dist/components/status.js"
+    },
+    "./primitives/catalog": {
+      "types": "./dist/primitives/catalog.d.ts",
+      "import": "./dist/primitives/catalog.js"
+    },
+    "./state": {
+      "types": "./dist/state/index.d.ts",
+      "import": "./dist/state/index.js"
+    },
+    "./tokens": {
+      "types": "./dist/tokens/index.d.ts",
+      "import": "./dist/tokens/index.js"
+    },
+    "./styles.css": "./dist/styles.css",
+    "./tokens.json": "./dist/tokens/tokens.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && tsx ../../scripts/fix-esm-imports.ts dist && tsx ../../scripts/copy-package-assets.ts core",
+    "typecheck": "tsc -p tsconfig.json --pretty false",
+    "test": "vitest run --config vitest.config.ts",
+    "pack:dry": "npm pack --dry-run"
+  },
+  "dependencies": {
+    "lucide-react": "^0.561.0",
+    "shiki": "^4.0.2"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

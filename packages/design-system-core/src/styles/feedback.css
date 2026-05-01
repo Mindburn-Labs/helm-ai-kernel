@@ -1,0 +1,104 @@
+.banner {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) max-content;
+  gap: var(--helm-space-6);
+  align-items: start;
+  padding: var(--helm-space-6);
+  background: var(--helm-bg-surface);
+  border: 1px solid var(--helm-border-default);
+  border-radius: var(--helm-radius-panel);
+}
+
+.banner strong,
+.banner p {
+  margin: 0;
+}
+
+.banner p {
+  margin-top: var(--helm-space-2);
+  color: var(--helm-text-secondary);
+}
+
+.skeleton-block {
+  display: grid;
+  gap: var(--helm-space-4);
+}
+
+.skeleton-block span {
+  min-height: 34px;
+  border-radius: var(--helm-radius-md);
+  background: linear-gradient(90deg, var(--helm-bg-inset), var(--helm-bg-selected-row), var(--helm-bg-inset));
+  background-size: 220% 100%;
+  animation: skeleton-scan 1.4s var(--helm-ease) infinite;
+}
+
+.timeline-kit {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--helm-space-4);
+}
+
+.timeline-kit li {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) max-content;
+  gap: var(--helm-space-6);
+  align-items: center;
+  padding: var(--helm-space-5) var(--helm-space-6);
+  background: var(--helm-bg-surface);
+  border: 1px solid var(--helm-border-default);
+  border-radius: var(--helm-radius-md);
+}
+
+.timeline-kit li > span {
+  color: var(--helm-text-muted);
+  font-family: var(--helm-font-mono);
+  font-size: var(--helm-font-meta);
+}
+
+.timeline-kit strong,
+.timeline-kit p {
+  margin: 0;
+}
+
+.timeline-kit p {
+  color: var(--helm-text-secondary);
+}
+
+.audit-trail {
+  display: grid;
+  gap: var(--helm-space-4);
+}
+
+.audit-trail > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: var(--helm-space-5);
+  align-items: center;
+  padding: var(--helm-space-5);
+  background: var(--helm-bg-surface);
+  border: 1px solid var(--helm-border-default);
+  border-radius: var(--helm-radius-md);
+}
+
+.audit-trail span {
+  color: var(--helm-text-secondary);
+}
+
+.audit-trail code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 767px) {
+  .banner,
+  .timeline-kit li,
+  .audit-trail > div {
+    grid-template-columns: 1fr;
+  }
+}

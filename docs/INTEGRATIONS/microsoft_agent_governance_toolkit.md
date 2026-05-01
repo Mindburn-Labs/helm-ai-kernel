@@ -56,7 +56,8 @@ For OpenAI-compatible stacks, prefer routing through the HELM proxy base URL whe
 
 This is compatibility coverage, not Microsoft certification. The helpers do not import AGT packages, do not modify AGT policies, and do not validate AGT evidence files. They give HELM a typed bridge for the same framework families so AGT and HELM can coexist without duplicating framework-specific glue in every customer project.
 
-Primary sources verified on 2026-04-29:
+Primary sources verified on 2026-04-30:
 
 - Microsoft Open Source Blog: <https://opensource.microsoft.com/blog/2026/04/02/introducing-the-agent-governance-toolkit-open-source-runtime-security-for-ai-agents/>
 - Microsoft AGT repository: <https://github.com/microsoft/agent-governance-toolkit>
+- Microsoft AGT releases: <https://github.com/microsoft/agent-governance-toolkit/releases>

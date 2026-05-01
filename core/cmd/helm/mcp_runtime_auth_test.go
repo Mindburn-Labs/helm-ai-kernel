@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	mcppkg "github.com/Mindburn-Labs/helm-oss/core/pkg/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,10 +46,15 @@ func TestWrapMCPAuth_OAuthChallengesWithoutBearer(t *testing.T) {
 
 func TestWrapMCPAuth_OAuthAllowsValidBearer(t *testing.T) {
 	t.Setenv("HELM_OAUTH_BEARER_TOKEN", "testtoken")
+	t.Setenv("HELM_OAUTH_SCOPES", "mcp:tool:read,mcp:tool:write")
 
 	called := false
 	handler, err := wrapMCPAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
+		auth, ok := mcppkg.OAuthAuthorizationFromContext(r.Context())
+		require.True(t, ok)
+		assert.Equal(t, []string{"mcp:tool:read", "mcp:tool:write"}, auth.Scopes)
+		assert.Equal(t, []string{"http://localhost:9194/mcp"}, auth.Resources)
 		w.WriteHeader(http.StatusNoContent)
 	}), "oauth", "http://localhost:9194")
 	require.NoError(t, err)

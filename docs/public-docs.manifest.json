@@ -114,6 +114,20 @@
       "docs_origin_hint": "docs.mindburn.org"
     },
     {
+      "slug": "helm-oss/strategy/mcp-governance-competitive-radar-2026-04",
+      "title": "MCP Governance Competitive Radar - April 2026",
+      "section": "strategy",
+      "source_path": "docs/strategy/mcp-governance-competitive-radar-2026-04.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/strategy/policy-research-watchlist-2026-04",
+      "title": "Policy Research Watchlist - April 2026",
+      "section": "strategy",
+      "source_path": "docs/strategy/policy-research-watchlist-2026-04.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
       "slug": "helm-oss/security/owasp-agentic-top10-mapping",
       "title": "OWASP Agentic Top 10 Mapping",
       "section": "security",
@@ -121,10 +135,24 @@
       "docs_origin_hint": "docs.mindburn.org"
     },
     {
+      "slug": "helm-oss/security/prompt-injection-watchlist-2026-04",
+      "title": "Prompt Injection Watchlist - April 2026",
+      "section": "security",
+      "source_path": "docs/security/prompt-injection-watchlist-2026-04.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
       "slug": "helm-oss/compliance/nist-ai-agent-critical-infrastructure",
       "title": "NIST AI Agent Critical Infrastructure Alignment",
       "section": "compliance",
       "source_path": "docs/compliance/nist-ai-agent-critical-infrastructure.md",
+      "docs_origin_hint": "docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/compliance/eu-ai-act-high-risk-pack",
+      "title": "EU AI Act High-Risk Pack",
+      "section": "compliance",
+      "source_path": "docs/compliance/eu-ai-act-high-risk-pack.md",
       "docs_origin_hint": "docs.mindburn.org"
     },
     {

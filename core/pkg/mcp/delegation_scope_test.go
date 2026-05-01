@@ -88,6 +88,30 @@ func TestDelegationScope_ContextForwarded(t *testing.T) {
 	assert.Equal(t, "/tmp/test.txt", capturedCtx["path"])
 }
 
+func TestOAuthScopeContext_ForwardedToGuardian(t *testing.T) {
+	var capturedCtx map[string]interface{}
+	eval := &capturingEvaluator{
+		verdict: guardian.VerdictAllow,
+		capture: func(req guardian.DecisionRequest) {
+			capturedCtx = req.Context
+		},
+	}
+	fw := NewGovernanceFirewall(eval, nil)
+
+	err := fw.InterceptToolExecution(context.Background(), ToolExecutionRequest{
+		ToolName:       "file_read",
+		SessionID:      "sess-oauth",
+		RequiredScopes: []string{"mcp:tool:file_read"},
+		OAuthScopes:    []string{"mcp:tools", "mcp:tool:file_read"},
+		OAuthResources: []string{"https://gateway.example/mcp"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, capturedCtx)
+	assert.Equal(t, []string{"mcp:tool:file_read"}, capturedCtx["mcp_required_scopes"])
+	assert.Equal(t, []string{"mcp:tools", "mcp:tool:file_read"}, capturedCtx["oauth_scopes"])
+	assert.Equal(t, []string{"https://gateway.example/mcp"}, capturedCtx["oauth_resources"])
+}
+
 // TestDelegationScope_CapabilitiesFiltered verifies that the /mcp/v1/capabilities
 // endpoint filters tools when delegation headers are present.
 func TestDelegationScope_CapabilitiesFiltered(t *testing.T) {

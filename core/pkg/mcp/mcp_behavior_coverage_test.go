@@ -8,6 +8,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/guardian"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // ---- Protocol version tests ----
@@ -605,6 +606,30 @@ func TestJWKSValidationError_ErrorString(t *testing.T) {
 	s := e.Error()
 	if s != "expired_token: token expired at X" {
 		t.Fatalf("unexpected error string: %s", s)
+	}
+}
+
+func TestJWKSClaimsResourceIndicatorsDeduplicateSources(t *testing.T) {
+	claims := &jwksClaims{
+		Resource:  "https://gateway.example/mcp",
+		Resources: []string{"https://gateway.example/mcp", "https://gateway.example/mcp/v2"},
+		RegisteredClaims: jwt.RegisteredClaims{
+			Audience: jwt.ClaimStrings{"https://gateway.example/mcp", "https://other.example/api"},
+		},
+	}
+
+	resources := claims.resourceIndicators()
+	if len(resources) != 3 {
+		t.Fatalf("expected three deduplicated resource indicators, got %v", resources)
+	}
+	for _, expected := range []string{
+		"https://gateway.example/mcp",
+		"https://other.example/api",
+		"https://gateway.example/mcp/v2",
+	} {
+		if !containsString(resources, expected) {
+			t.Fatalf("expected %s in resource indicators %v", expected, resources)
+		}
 	}
 }
 

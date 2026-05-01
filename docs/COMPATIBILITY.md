@@ -12,7 +12,7 @@ This page describes the retained OSS compatibility surface, not every historical
 | --- | --- |
 | Go kernel and CLI | Supported |
 | OpenAI-compatible proxy | Supported |
-| MCP server and bundle generation | Supported |
+| MCP server, OAuth resource/scope enforcement, and bundle generation | Supported |
 | Evidence export and offline verification | Supported |
 | Go SDK | Supported |
 | Python SDK | Supported |
@@ -46,3 +46,7 @@ The retained CI verifies:
 ## Deployment Surface
 
 The repository keeps a Helm chart under `deploy/helm-chart/` for Kubernetes-based deployment. Interactive clients, static viewers, Node CLI wrappers, and generated browser-rendered reports are outside the retained OSS compatibility surface.
+
+## MCP 2026 Radar Notes
+
+The original Linear radar item pointed at `https://modelcontextprotocol.io/roadmap`; as of April 30, 2026 that URL returns a 404 and the current source is [MCP Roadmap](https://modelcontextprotocol.io/development/roadmap). The current roadmap frames enterprise-managed auth, gateway/proxy authorization propagation, and finer-grained least-privilege scopes as active enterprise/security directions, while RFC 8707 remains the normative OAuth source for resource indicators. HELM OSS implements this as an additive auth and metadata layer; protocol versions and existing tool schemas remain backward compatible.

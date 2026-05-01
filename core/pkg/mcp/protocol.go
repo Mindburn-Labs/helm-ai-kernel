@@ -55,6 +55,9 @@ func ToolDescriptorPayload(tool ToolRef) map[string]any {
 	if annotations := toolAnnotationsPayload(tool.Annotations); len(annotations) > 0 {
 		payload["annotations"] = annotations
 	}
+	if len(tool.RequiredScopes) > 0 {
+		payload["requiredScopes"] = append([]string(nil), tool.RequiredScopes...)
+	}
 	return payload
 }
 

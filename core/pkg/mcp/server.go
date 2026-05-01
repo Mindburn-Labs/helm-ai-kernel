@@ -21,6 +21,12 @@ type ToolExecutionRequest struct {
 	DelegationSessionID    string   `json:"delegation_session_id,omitempty"`
 	DelegationVerifier     string   `json:"delegation_verifier,omitempty"`
 	DelegationAllowedTools []string `json:"delegation_allowed_tools,omitempty"`
+
+	// OAuth-aware fields are populated by the MCP gateway after bearer-token
+	// validation so Guardian decisions can retain the scope/resource evidence.
+	RequiredScopes []string `json:"required_scopes,omitempty"`
+	OAuthScopes    []string `json:"oauth_scopes,omitempty"`
+	OAuthResources []string `json:"oauth_resources,omitempty"`
 }
 
 // ToolExecutionResponse represents the result of a tool execution.
@@ -81,6 +87,15 @@ func (f *GovernanceFirewall) InterceptToolExecution(ctx context.Context, req Too
 	if req.DelegationSessionID != "" {
 		decisionCtx["delegation_session_id"] = req.DelegationSessionID
 		decisionCtx["delegation_verifier"] = req.DelegationVerifier
+	}
+	if len(req.RequiredScopes) > 0 {
+		decisionCtx["mcp_required_scopes"] = append([]string(nil), req.RequiredScopes...)
+	}
+	if len(req.OAuthScopes) > 0 {
+		decisionCtx["oauth_scopes"] = append([]string(nil), req.OAuthScopes...)
+	}
+	if len(req.OAuthResources) > 0 {
+		decisionCtx["oauth_resources"] = append([]string(nil), req.OAuthResources...)
 	}
 
 	decision, err := f.evaluator.EvaluateDecision(ctx, guardian.DecisionRequest{

@@ -17,13 +17,14 @@ type Catalog interface {
 
 // ToolRef represents a tool reference for catalog search and definition.
 type ToolRef struct {
-	Name         string           `json:"name"`
-	Title        string           `json:"title,omitempty"`
-	Description  string           `json:"description"`
-	ServerID     string           `json:"server_id,omitempty"`
-	Schema       any              `json:"schema,omitempty"` // Legacy input schema alias for /mcp/v1/*
-	OutputSchema any              `json:"output_schema,omitempty"`
-	Annotations  *ToolAnnotations `json:"annotations,omitempty"`
+	Name           string           `json:"name"`
+	Title          string           `json:"title,omitempty"`
+	Description    string           `json:"description"`
+	ServerID       string           `json:"server_id,omitempty"`
+	Schema         any              `json:"schema,omitempty"` // Legacy input schema alias for /mcp/v1/*
+	OutputSchema   any              `json:"output_schema,omitempty"`
+	Annotations    *ToolAnnotations `json:"annotations,omitempty"`
+	RequiredScopes []string         `json:"required_scopes,omitempty"`
 }
 
 // Validate checks that a ToolRef has a non-empty Name.

@@ -92,6 +92,30 @@ func TestGateway_ToolsListIncludesStructuredToolMetadata(t *testing.T) {
 	assert.Equal(t, true, annotations["idempotentHint"])
 }
 
+func TestGateway_ToolsListIncludesRequiredScopes(t *testing.T) {
+	mux := newScopedProtocolTestMux(t, nil)
+
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      20,
+		"method":  "tools/list",
+	}, map[string]string{
+		"MCP-Protocol-Version": LatestProtocolVersion,
+	})
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	result := payload["result"].(map[string]any)
+	tools := result["tools"].([]any)
+	require.Len(t, tools, 1)
+
+	tool := tools[0].(map[string]any)
+	assert.Equal(t, "scoped_tool", tool["name"])
+	assert.Equal(t, []any{"mcp:tool:scoped"}, tool["requiredScopes"])
+}
+
 func TestGateway_ToolsCallReturnsStructuredContent(t *testing.T) {
 	exec := func(_ context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
 		structured := map[string]any{
@@ -139,6 +163,64 @@ func TestGateway_ToolsCallReturnsStructuredContent(t *testing.T) {
 	assert.Contains(t, textItem["text"], "\"path\": \"/tmp/demo.txt\"")
 }
 
+func TestGateway_ToolsCallRejectsMissingRequiredOAuthScope(t *testing.T) {
+	exec := func(_ context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
+		return ToolExecutionResponse{Content: "ok"}, nil
+	}
+	mux := newScopedProtocolTestMux(t, exec)
+
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      21,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": "scoped_tool",
+		},
+	}, map[string]string{
+		"MCP-Protocol-Version": LatestProtocolVersion,
+	})
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	errPayload := payload["error"].(map[string]any)
+	assert.Equal(t, float64(-32001), errPayload["code"])
+	assert.Contains(t, errPayload["message"], "mcp:tool:scoped")
+}
+
+func TestGateway_RESTExecuteEnforcesRequiredOAuthScope(t *testing.T) {
+	exec := func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
+		assert.Equal(t, "scoped_tool", req.ToolName)
+		assert.Equal(t, []string{"mcp:tool:scoped"}, req.RequiredScopes)
+		assert.Equal(t, []string{"mcp:tool:scoped"}, req.OAuthScopes)
+		assert.Equal(t, []string{"http://localhost/mcp"}, req.OAuthResources)
+		return ToolExecutionResponse{Content: "ok"}, nil
+	}
+	mux := newScopedProtocolTestMux(t, exec)
+
+	body, err := json.Marshal(MCPToolCallRequest{Method: "scoped_tool"})
+	require.NoError(t, err)
+
+	missingReq := httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, missingReq)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Contains(t, rec.Body.String(), "MCP.OAUTH.INSUFFICIENT_SCOPE")
+
+	allowedReq := httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body))
+	allowedReq = allowedReq.WithContext(WithOAuthAuthorization(allowedReq.Context(), OAuthAuthorization{
+		Scopes:    []string{"mcp:tool:scoped"},
+		Resources: []string{"http://localhost/mcp"},
+	}))
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, allowedReq)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "ok")
+}
+
 func TestGateway_UnsupportedProtocolVersionRejected(t *testing.T) {
 	mux := newProtocolTestMux(t, GatewayConfig{}, nil)
 
@@ -182,6 +264,27 @@ func newProtocolTestMux(t *testing.T, cfg GatewayConfig, exec ToolExecutor) *htt
 	catalog.RegisterCommonTools()
 
 	gw := NewGateway(catalog, cfg)
+	if exec != nil {
+		WithExecutor(exec)(gw)
+	}
+
+	mux := http.NewServeMux()
+	gw.RegisterRoutes(mux)
+	return mux
+}
+
+func newScopedProtocolTestMux(t *testing.T, exec ToolExecutor) *http.ServeMux {
+	t.Helper()
+
+	catalog := NewInMemoryCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name:           "scoped_tool",
+		Description:    "requires a delegated MCP OAuth scope",
+		Schema:         map[string]any{"type": "object"},
+		RequiredScopes: []string{"mcp:tool:scoped"},
+	}))
+
+	gw := NewGateway(catalog, GatewayConfig{})
 	if exec != nil {
 		WithExecutor(exec)(gw)
 	}

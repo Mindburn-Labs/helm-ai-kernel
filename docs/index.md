@@ -24,6 +24,7 @@ This documentation set covers only the retained OSS surface of the repository.
 
 ## Compliance
 
+- [EU AI Act High-Risk Pack](compliance/eu-ai-act-high-risk-pack.md)
 - [NIST AI Agent Critical Infrastructure Alignment](compliance/nist-ai-agent-critical-infrastructure.md)
 - [NIST AI RMF to ISO 42001 Crosswalk](compliance/nist-ai-rmf-iso-42001-crosswalk.md)
 
@@ -34,3 +35,5 @@ This documentation set covers only the retained OSS surface of the repository.
 - [OpenAI-Compatible Proxy](INTEGRATIONS/openai_baseurl.md)
 - [MCP Surface](INTEGRATIONS/mcp.md)
 - [Microsoft Agent Governance Toolkit Coexistence](INTEGRATIONS/microsoft_agent_governance_toolkit.md)
+- [MCP Governance Competitive Radar](strategy/mcp-governance-competitive-radar-2026-04.md)
+- [Policy Research Watchlist](strategy/policy-research-watchlist-2026-04.md)

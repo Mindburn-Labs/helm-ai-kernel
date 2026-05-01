@@ -8,7 +8,8 @@
 // governance namespace preserved verbatim.
 //
 // Reference: ECS — https://www.elastic.co/guide/en/ecs/current/
-//            Bulk API — https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html
+//
+//	Bulk API — https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html
 package elastic_ecs
 
 import (

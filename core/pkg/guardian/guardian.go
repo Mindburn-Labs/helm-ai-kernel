@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"strings"
 	"time"
 
 	pkg_artifact "github.com/Mindburn-Labs/helm-oss/core/pkg/artifacts"
@@ -134,6 +136,11 @@ func WithPrivilegeResolver(r PrivilegeResolver) GuardianOption {
 // WithClock injects a deterministic or authority clock.
 func WithClock(c Clock) GuardianOption { return func(g *Guardian) { g.clock = c } }
 
+// WithSessionRiskMemory injects the deterministic session trajectory gate.
+func WithSessionRiskMemory(srm *SessionRiskMemory) GuardianOption {
+	return func(g *Guardian) { g.sessionRiskMemory = srm }
+}
+
 // Guardian enforces the Proof Requirement Graph (PRG)
 type Guardian struct {
 	signer            crypto.Signer
@@ -156,6 +163,7 @@ type Guardian struct {
 	delegationStore   identity.DelegationStore     // Delegation session store (§Gate 5)
 	behavioralScorer  *trust.BehavioralTrustScorer // Dynamic behavioral trust scorer (MIN-82)
 	privilegeResolver PrivilegeResolver            // Privilege tier resolver
+	sessionRiskMemory *SessionRiskMemory           // Deterministic trajectory authorization gate
 	otel              *OTelInstrumentation         // Optional OTel tracing & metrics
 }
 
@@ -269,6 +277,12 @@ func (g *Guardian) SetDelegationStore(ds identity.DelegationStore) {
 	g.delegationStore = ds
 }
 
+// SetSessionRiskMemory injects the deterministic session trajectory gate.
+// Deprecated: Use WithSessionRiskMemory GuardianOption in NewGuardian instead.
+func (g *Guardian) SetSessionRiskMemory(srm *SessionRiskMemory) {
+	g.sessionRiskMemory = srm
+}
+
 // SignDecision checks requirements and signs only if met
 func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, evidenceHashes []string, intervention *contracts.InterventionMetadata) error {
 	artifacts := make([]*pkg_artifact.ArtifactEnvelope, 0, len(evidenceHashes))
@@ -353,6 +367,7 @@ func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.Decisio
 		"effect":    effectMap,
 		"artifacts": artifacts,
 		"timestamp": g.clock.Now().Unix(),
+		"taint":     contracts.NormalizeTaintLabels(effect.Taint),
 	}
 
 	valid, err := g.pe.EvaluateRequirementSet(rule, input)
@@ -422,6 +437,7 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 		ExpiresAt:        now.Add(5 * time.Minute),
 		Signer:           "kernel",
 		AllowedTool:      allowedTool,
+		Taint:            contracts.NormalizeTaintLabels(effect.Taint),
 	}
 
 	// 4. Sign Intent
@@ -610,6 +626,32 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 	}
 
 	// ── End egress gate ──
+
+	taintLabels := contracts.TaintLabelsFromContext(req.Context)
+	if len(taintLabels) > 0 {
+		if req.Context == nil {
+			req.Context = make(map[string]interface{})
+		}
+		req.Context["taint"] = taintLabels
+	}
+	if taintTrackingEnabled() && taintedEgressDenied(req.Context, taintLabels) {
+		now := g.clock.Now()
+		decision := &contracts.DecisionRecord{
+			ID:         newDecisionID(),
+			Timestamp:  now,
+			Verdict:    string(contracts.VerdictDeny),
+			Reason:     "TAINTED_DATA_EGRESS_DENY: sensitive taint cannot leave the trust boundary without explicit approval",
+			ReasonCode: string(contracts.ReasonTaintedEgressDeny),
+			InputContext: map[string]any{
+				"taint": taintLabels,
+			},
+		}
+		if signErr := g.signer.SignDecision(decision); signErr != nil {
+			return nil, fmt.Errorf("failed to sign tainted-egress decision: %w", signErr)
+		}
+		g.recordBehavioralEvent(req.Principal, trust.EventEgressBlocked, "tainted egress blocked")
+		return decision, nil
+	}
 
 	// Gate 4: Threat signal scan — scan untrusted textual inputs
 	var scanResult *contracts.ThreatScanResult
@@ -816,6 +858,44 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		req.Context["session_deny_count"] = denyCount
 	}
 
+	var sessionRiskSnapshot *SessionRiskSnapshot
+	if g.sessionRiskMemory != nil {
+		snapshot := g.sessionRiskMemory.Evaluate(sessionRiskSessionID(req), req.SessionHistory, req)
+		sessionRiskSnapshot = &snapshot
+		if req.Context == nil {
+			req.Context = make(map[string]interface{})
+		}
+		attachSessionRiskContext(req.Context, snapshot)
+		span.SetAttributes(
+			attribute.Float64("session_risk.score", snapshot.TrajectoryRiskScore),
+			attribute.String("session_risk.centroid_hash", snapshot.SessionCentroidHash),
+			attribute.Int("session_risk.window", snapshot.RiskAccumulationWindow),
+		)
+		if g.sessionRiskMemory.ShouldDeny(snapshot) {
+			now := g.clock.Now()
+			decision := &contracts.DecisionRecord{
+				ID:                     newDecisionID(),
+				Timestamp:              now,
+				Verdict:                string(contracts.VerdictDeny),
+				Reason:                 fmt.Sprintf("%s: trajectory risk %.4f over %d actions", contracts.ReasonSessionRiskDeny, snapshot.TrajectoryRiskScore, snapshot.RiskAccumulationWindow),
+				ReasonCode:             string(contracts.ReasonSessionRiskDeny),
+				InputContext:           req.Context,
+				TrajectoryRiskScore:    snapshot.TrajectoryRiskScore,
+				SessionCentroidHash:    snapshot.SessionCentroidHash,
+				RiskAccumulationWindow: snapshot.RiskAccumulationWindow,
+			}
+			if signErr := g.signer.SignDecision(decision); signErr != nil {
+				return nil, fmt.Errorf("failed to sign session-risk decision: %w", signErr)
+			}
+			if g.auditLog != nil {
+				decisionBytes, _ := canonicalize.JCS(decision)
+				_, _ = g.auditLog.Append("guardian", "SESSION_RISK_DENY", decision.ID, string(decisionBytes))
+			}
+			g.recordBehavioralEvent(req.Principal, trust.EventPolicyViolate, "session risk memory denied")
+			return decision, nil
+		}
+	}
+
 	// ── Behavioral trust score enrichment ──
 	// Inject trust_score (float64) and trust_tier (string) into context
 	// so CEL policies can reference them (e.g., input["trust_score"] > 0.6).
@@ -888,6 +968,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		EffectID:   fmt.Sprintf("eff-%d", g.clock.Now().UnixNano()),
 		EffectType: req.Action, // e.g. "EXECUTE_TOOL"
 		Params:     req.Context,
+		Taint:      contracts.TaintLabelsFromContext(req.Context),
 	}
 	// Add tool name to params if not present but resource is tool
 	if req.Action == "EXECUTE_TOOL" {
@@ -926,6 +1007,11 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		InputContext:   req.Context,
 		EnvFingerprint: envFP,
 		PolicyVersion:  policyVersion,
+	}
+	if sessionRiskSnapshot != nil {
+		decision.TrajectoryRiskScore = sessionRiskSnapshot.TrajectoryRiskScore
+		decision.SessionCentroidHash = sessionRiskSnapshot.SessionCentroidHash
+		decision.RiskAccumulationWindow = sessionRiskSnapshot.RiskAccumulationWindow
 	}
 
 	// Attach threat scan results to decision context if available
@@ -1063,6 +1149,43 @@ func responseToIntervention(level ResponseLevel) contracts.InterventionType {
 	default:
 		return contracts.InterventionNone
 	}
+}
+
+func taintTrackingEnabled() bool {
+	v := strings.TrimSpace(os.Getenv("HELM_TAINT_TRACKING"))
+	return v == "1" || strings.EqualFold(v, "true")
+}
+
+func taintedEgressDenied(ctx map[string]interface{}, labels []string) bool {
+	if len(labels) == 0 || ctx == nil {
+		return false
+	}
+	if approved, ok := ctx["allow_tainted_egress"].(bool); ok && approved {
+		return false
+	}
+	destination, _ := ctx["destination"].(string)
+	if strings.TrimSpace(destination) == "" {
+		return false
+	}
+	return contracts.TaintContainsAny(labels, contracts.TaintPII, contracts.TaintCredential, contracts.TaintSecret)
+}
+
+func sessionRiskSessionID(req DecisionRequest) string {
+	if req.Context != nil {
+		if sid, ok := req.Context["session_id"].(string); ok && strings.TrimSpace(sid) != "" {
+			return sid
+		}
+		if sid, ok := req.Context["delegation_session_id"].(string); ok && strings.TrimSpace(sid) != "" {
+			return sid
+		}
+	}
+	return req.Principal
+}
+
+func attachSessionRiskContext(ctx map[string]interface{}, snapshot SessionRiskSnapshot) {
+	ctx["trajectory_risk_score"] = snapshot.TrajectoryRiskScore
+	ctx["session_centroid_hash"] = snapshot.SessionCentroidHash
+	ctx["risk_accumulation_window"] = snapshot.RiskAccumulationWindow
 }
 
 func toMap(v any) (map[string]interface{}, error) {

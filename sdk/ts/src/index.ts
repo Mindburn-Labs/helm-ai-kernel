@@ -1,5 +1,37 @@
-export { HelmClient, HelmApiError } from './client.js';
-export type { HelmClientConfig, ReasonCode, HelmError, GovernanceMetadata, ChatCompletionWithReceipt } from './client.js';
+export { HelmClient, HelmApiError } from "./client.js";
+export type {
+  HelmClientConfig,
+  ReasonCode,
+  HelmError,
+  GovernanceMetadata,
+  ChatCompletionWithReceipt,
+} from "./client.js";
+export {
+  agentFrameworkAdapters,
+  buildGovernedToolRequest,
+  createAgentFrameworkAdapter,
+  fromCrewAITask,
+  fromLangGraphToolCall,
+  fromLlamaIndexToolCall,
+  fromOpenAIAgentsToolCall,
+  fromPydanticAIToolCall,
+  submitGovernedToolIntent,
+  toOpenAIFunctionTool,
+} from "./adapters/agent-frameworks.js";
+export type {
+  AgentFramework,
+  AgentFrameworkAction,
+  AgentFrameworkAdapterMetadata,
+  CrewAITaskCall,
+  FrameworkAdapterDefaults,
+  FrameworkAdapterOptions,
+  GovernedFrameworkResult,
+  HelmGovernanceClient,
+  LangGraphToolCall,
+  LlamaIndexToolCall,
+  OpenAIAgentsToolCall,
+  PydanticAIToolCall,
+} from "./adapters/agent-frameworks.js";
 export type {
   ChatCompletionRequest,
   ChatCompletionResponse,
@@ -11,4 +43,4 @@ export type {
   ConformanceResult,
   VersionInfo,
   ExportRequest,
-} from './types.gen.js';
+} from "./types.gen.js";

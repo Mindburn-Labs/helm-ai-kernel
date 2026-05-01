@@ -64,10 +64,11 @@ representation is the `ReasonCode` enum in `protocols/proto/helm/kernel/v1/helm.
 
 ### 4.5 Temporal Codes
 
-| Code                    | Applies To | Description                       |
-| ----------------------- | ---------- | --------------------------------- |
-| `TEMPORAL_INTERVENTION` | ESCALATE   | Time-based intervention triggered |
-| `TEMPORAL_THROTTLE`     | ESCALATE   | Rate limit or cooldown active     |
+| Code                       | Applies To | Description                                                           |
+| -------------------------- | ---------- | --------------------------------------------------------------------- |
+| `TEMPORAL_INTERVENTION`    | ESCALATE   | Time-based intervention triggered                                     |
+| `TEMPORAL_THROTTLE`        | ESCALATE   | Rate limit or cooldown active                                         |
+| `SESSION_RISK_MEMORY_DENY` | DENY       | Session trajectory risk exceeded the deterministic authorization gate |
 
 ### 4.6 Envelope and Provenance Codes
 

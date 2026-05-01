@@ -4,11 +4,46 @@
   "description": "Governs agent operations under an AI Management System (AIMS) aligned with ISO/IEC 42001:2023. Enforces responsible AI governance, risk management, performance monitoring, and continuous improvement.",
   "version": 1,
   "compliance_framework": "ISO_42001",
+  "status": "dual-framework-alignment",
+  "source_documents": [
+    {
+      "source_id": "nist-ai-rmf-crosswalks",
+      "title": "Crosswalks to the NIST Artificial Intelligence Risk Management Framework (AI RMF 1.0)",
+      "url": "https://www.nist.gov/itl/ai-risk-management-framework/crosswalks-nist-artificial-intelligence-risk-management-framework",
+      "updated": "2024-12-17"
+    },
+    {
+      "source_id": "nist-ai-rmf-to-iso-42001-crosswalk",
+      "title": "NIST AI RMF to ISO/IEC FDIS 42001 AI Management system Crosswalk",
+      "url": "https://airc.nist.gov/docs/NIST_AI_RMF_to_ISO_IEC_42001_Crosswalk.pdf",
+      "status": "published-crosswalk"
+    },
+    {
+      "source_id": "iso-iec-42001-2023",
+      "title": "ISO/IEC 42001:2023 Information technology - Artificial intelligence - Management system",
+      "url": "https://www.iso.org/standard/42001",
+      "published": "2023-12"
+    }
+  ],
   "programs": [
     {
       "program_id": "prog-leadership",
       "label": "Leadership & Planning (Clause 5-6)",
       "status": "active",
+      "nist_ai_rmf_crosswalk": [
+        {
+          "function": "Govern",
+          "categories": ["GOVERN 1.1", "GOVERN 1.2", "GOVERN 2.1", "GOVERN 2.3"],
+          "iso_42001_refs": ["5.1", "5.2", "5.3", "6.1", "6.2", "9.3"],
+          "helm_evidence": ["policy content hash", "decision owner", "management review interval", "approval trace"]
+        },
+        {
+          "function": "Map",
+          "categories": ["MAP 1.4", "MAP 1.5"],
+          "iso_42001_refs": ["4.1", "6.1.1", "6.2"],
+          "helm_evidence": ["risk context", "workspace objective", "risk score cap"]
+        }
+      ],
       "controls": [
         { "control_id": "5.1", "description": "Top management demonstrates leadership and commitment to AIMS", "enforcement": "MANDATORY" },
         { "control_id": "6.1", "description": "Actions to address risks and opportunities", "enforcement": "MANDATORY" },
@@ -22,6 +57,20 @@
       "program_id": "prog-operational-control",
       "label": "Operational Planning & Control (Clause 8)",
       "status": "active",
+      "nist_ai_rmf_crosswalk": [
+        {
+          "function": "Govern",
+          "categories": ["GOVERN 1.3", "GOVERN 1.4", "GOVERN 3.2", "GOVERN 4.3"],
+          "iso_42001_refs": ["6.1.2", "6.1.3", "8.2", "8.3", "8.4", "B.6.2.4", "B.6.2.7"],
+          "helm_evidence": ["policy simulation", "risk treatment verdict", "AI-BOM presence", "receipt chain"]
+        },
+        {
+          "function": "Map",
+          "categories": ["MAP 1.1", "MAP 1.6", "MAP 3.5"],
+          "iso_42001_refs": ["6.1.4", "8.2", "8.3", "B.5.2", "B.5.3", "B.6.2.2"],
+          "helm_evidence": ["effect classification", "intended-use context", "human oversight requirement"]
+        }
+      ],
       "controls": [
         { "control_id": "8.1", "description": "Operational planning and control", "enforcement": "MANDATORY" },
         { "control_id": "8.2", "description": "AI risk assessment", "enforcement": "MANDATORY" },
@@ -37,6 +86,20 @@
       "program_id": "prog-performance-evaluation",
       "label": "Performance Evaluation (Clause 9)",
       "status": "active",
+      "nist_ai_rmf_crosswalk": [
+        {
+          "function": "Measure",
+          "categories": ["MEASURE 1.1", "MEASURE 2.1", "MEASURE 2.5", "MEASURE 4.2"],
+          "iso_42001_refs": ["9.1", "9.2", "9.3", "B.6.2.6"],
+          "helm_evidence": ["decision record", "evidence pack", "policy replay result", "audit chain verification"]
+        },
+        {
+          "function": "Govern",
+          "categories": ["GOVERN 1.5", "GOVERN 2.1"],
+          "iso_42001_refs": ["5.3", "7.1", "7.2", "7.3", "7.4", "9.1"],
+          "helm_evidence": ["responsibility metadata", "monitoring interval", "management review trace"]
+        }
+      ],
       "controls": [
         { "control_id": "9.1", "description": "Monitoring, measurement, analysis and evaluation", "enforcement": "MANDATORY" },
         { "control_id": "9.2", "description": "Internal audit", "enforcement": "MANDATORY" },
@@ -50,6 +113,14 @@
       "program_id": "prog-improvement",
       "label": "Improvement (Clause 10)",
       "status": "active",
+      "nist_ai_rmf_crosswalk": [
+        {
+          "function": "Manage",
+          "categories": ["MANAGE 1.1", "MANAGE 1.4", "MANAGE 2.2", "MANAGE 2.3"],
+          "iso_42001_refs": ["10.1", "10.2", "6.1.1", "6.1.2", "6.1.3", "B.6.2.6"],
+          "helm_evidence": ["compliance score", "nonconformity escalation", "corrective action reference", "policy activation history"]
+        }
+      ],
       "controls": [
         { "control_id": "10.1", "description": "Nonconformity and corrective action", "enforcement": "MANDATORY" },
         { "control_id": "10.2", "description": "Continual improvement", "enforcement": "MANDATORY" }
@@ -66,6 +137,16 @@
     "B.8 Information for interested parties", "B.9 Use of AI systems",
     "B.10 Third-party relationships"
   ],
+  "dual_framework_alignment": {
+    "primary_pack": "ISO/IEC 42001:2023 AIMS controls",
+    "secondary_crosswalk": "NIST AI RMF 1.0 functions and categories",
+    "operator_statement": "Use this pack to collect one runtime evidence set that can support ISO 42001 AI management system audit readiness and NIST AI RMF risk-management reporting.",
+    "limitations": [
+      "NIST AI RMF is voluntary and not a certification scheme.",
+      "ISO/IEC 42001 certification requires an accredited external audit; this pack provides technical evidence only.",
+      "Mappings are control-alignment aids and do not replace legal, auditor, or certification-body review."
+    ]
+  },
   "budget_constraints": {
     "daily_limit_cents": 200000,
     "risk_score_cap": 500

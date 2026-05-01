@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -84,6 +85,7 @@ func (s *SyncManager) flush(ctx context.Context) error {
 
 // MemoryAnchorSink is an in-memory anchor sink for testing.
 type MemoryAnchorSink struct {
+	mu       sync.Mutex
 	anchored []EdgeDecision
 }
 
@@ -94,6 +96,9 @@ func NewMemoryAnchorSink() *MemoryAnchorSink {
 
 // Anchor stores decisions in memory and returns generated anchor IDs.
 func (m *MemoryAnchorSink) Anchor(_ context.Context, decisions []EdgeDecision) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	ids := make([]string, len(decisions))
 	for i, d := range decisions {
 		data, _ := json.Marshal(d)
@@ -107,5 +112,10 @@ func (m *MemoryAnchorSink) Anchor(_ context.Context, decisions []EdgeDecision) (
 
 // Anchored returns all anchored decisions.
 func (m *MemoryAnchorSink) Anchored() []EdgeDecision {
-	return m.anchored
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := make([]EdgeDecision, len(m.anchored))
+	copy(out, m.anchored)
+	return out
 }

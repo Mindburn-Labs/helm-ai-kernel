@@ -94,5 +94,47 @@
       "status": "active",
       "tests": "sdk/ts/src/adapters/sandbox/"
     }
+  ],
+  "framework_adapters": [
+    {
+      "name": "LangGraph",
+      "tier": "compatible",
+      "status": "active",
+      "runtime": "HELM TypeScript SDK",
+      "adapter": "sdk/ts/src/adapters/agent-frameworks.ts",
+      "tests": "sdk/ts/src/adapters/agent-frameworks.test.ts"
+    },
+    {
+      "name": "CrewAI",
+      "tier": "compatible",
+      "status": "active",
+      "runtime": "HELM TypeScript SDK",
+      "adapter": "sdk/ts/src/adapters/agent-frameworks.ts",
+      "tests": "sdk/ts/src/adapters/agent-frameworks.test.ts"
+    },
+    {
+      "name": "OpenAI Agents SDK",
+      "tier": "compatible",
+      "status": "active",
+      "runtime": "HELM TypeScript SDK",
+      "adapter": "sdk/ts/src/adapters/agent-frameworks.ts",
+      "tests": "sdk/ts/src/adapters/agent-frameworks.test.ts"
+    },
+    {
+      "name": "PydanticAI",
+      "tier": "compatible",
+      "status": "active",
+      "runtime": "HELM TypeScript SDK",
+      "adapter": "sdk/ts/src/adapters/agent-frameworks.ts",
+      "tests": "sdk/ts/src/adapters/agent-frameworks.test.ts"
+    },
+    {
+      "name": "LlamaIndex",
+      "tier": "compatible",
+      "status": "active",
+      "runtime": "HELM TypeScript SDK",
+      "adapter": "sdk/ts/src/adapters/agent-frameworks.ts",
+      "tests": "sdk/ts/src/adapters/agent-frameworks.test.ts"
+    }
   ]
 }

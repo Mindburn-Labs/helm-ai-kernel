@@ -89,6 +89,24 @@ func TestExt_EgressBlockedDenies(t *testing.T) {
 	}
 }
 
+func TestExt_TaintedEgressDeniesWhenFlagEnabled(t *testing.T) {
+	t.Setenv("HELM_TAINT_TRACKING", "1")
+	g := newMinimalGuardian()
+	req := DecisionRequest{
+		Principal: "a",
+		Action:    "EXECUTE_TOOL",
+		Resource:  "browser.fetch",
+		Context: map[string]interface{}{
+			"destination": "https://external.example/upload",
+			"taint":       []string{contracts.TaintPII},
+		},
+	}
+	dec, _ := g.EvaluateDecision(context.Background(), req)
+	if dec.ReasonCode != string(contracts.ReasonTaintedEgressDeny) {
+		t.Fatalf("expected %s, got %s", contracts.ReasonTaintedEgressDeny, dec.ReasonCode)
+	}
+}
+
 // ─── 6: EvaluateDecision with no policy → NO_POLICY_DEFINED ──
 
 func TestExt_NoPolicyDefined(t *testing.T) {
@@ -300,6 +318,25 @@ func TestExt_IssueIntentRejectsEscalate(t *testing.T) {
 	_, err := g.IssueExecutionIntent(context.Background(), dec, &contracts.Effect{EffectID: "e1", EffectType: "T"})
 	if err == nil {
 		t.Fatal("expected error for escalated decision")
+	}
+}
+
+func TestExt_IssueIntentPropagatesTaint(t *testing.T) {
+	g := newMinimalGuardian()
+	dec := &contracts.DecisionRecord{ID: "dec-taint", Verdict: string(contracts.VerdictAllow), Signature: "sig"}
+	effect := &contracts.Effect{
+		EffectID:   "e-taint",
+		EffectType: "tool_call",
+		Params:     map[string]any{"tool_name": "safe_tool"},
+		Taint:      []string{"PII", contracts.TaintCredential},
+	}
+	intent, err := g.IssueExecutionIntent(context.Background(), dec, effect)
+	if err != nil {
+		t.Fatalf("IssueExecutionIntent failed: %v", err)
+	}
+	if !contracts.TaintContains(intent.Taint, contracts.TaintPII) ||
+		!contracts.TaintContains(intent.Taint, contracts.TaintCredential) {
+		t.Fatalf("expected normalized taint on intent, got %v", intent.Taint)
 	}
 }
 

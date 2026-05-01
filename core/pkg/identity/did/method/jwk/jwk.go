@@ -1,7 +1,8 @@
 // Package jwk implements the did:jwk DID method driver.
 //
 // did:jwk encodes a JSON Web Key directly in the DID identifier:
-//   did:jwk:<base64url(JWK)>
+//
+//	did:jwk:<base64url(JWK)>
 //
 // Resolution is offline: the driver decodes the base64url payload and
 // constructs the DID Document from the JWK. Only Ed25519 keys (kty=OKP,

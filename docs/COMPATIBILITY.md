@@ -20,6 +20,18 @@ This page describes the retained OSS compatibility surface, not every historical
 | Rust SDK | Supported |
 | Java SDK | Supported |
 
+## Framework Adapter Helpers
+
+The TypeScript SDK ships compatibility helpers for normalizing tool-call events from common agent frameworks into HELM governance requests:
+
+| Framework | Status | Test Surface |
+| --- | --- | --- |
+| LangGraph | Compatible | `sdk/ts/src/adapters/agent-frameworks.test.ts` |
+| CrewAI | Compatible | `sdk/ts/src/adapters/agent-frameworks.test.ts` |
+| OpenAI Agents SDK | Compatible | `sdk/ts/src/adapters/agent-frameworks.test.ts` |
+| PydanticAI | Compatible | `sdk/ts/src/adapters/agent-frameworks.test.ts` |
+| LlamaIndex | Compatible | `sdk/ts/src/adapters/agent-frameworks.test.ts` |
+
 ## Source Build Expectations
 
 The retained CI verifies:

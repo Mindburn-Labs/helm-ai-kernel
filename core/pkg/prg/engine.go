@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	pkg_artifact "github.com/Mindburn-Labs/helm-oss/core/pkg/artifacts"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/policycel"
 	"github.com/google/cel-go/cel"
 )
 
@@ -18,9 +19,11 @@ type PolicyEngine struct {
 func NewPolicyEngine() (*PolicyEngine, error) {
 	// Define standard environment variables for policies
 	// We expose a single "input" map for maximum flexibility (Node 8 pattern)
-	env, err := cel.NewEnv(
+	opts := []cel.EnvOption{
 		cel.Variable("input", cel.MapType(cel.StringType, cel.DynType)),
-	)
+	}
+	opts = append(opts, policycel.TaintEnvOptions()...)
+	env, err := cel.NewEnv(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CEL env: %w", err)
 	}
@@ -31,6 +34,8 @@ func NewPolicyEngine() (*PolicyEngine, error) {
 }
 
 func (pe *PolicyEngine) Evaluate(expression string, input map[string]interface{}) (bool, error) {
+	expression = policycel.RewritePRGTaintContains(expression)
+
 	// 1. Check Cache
 	pe.mu.RLock()
 	prg, hit := pe.prgCache[expression]
@@ -92,12 +97,13 @@ func (pe *PolicyEngine) EvaluateRequirementSet(rs RequirementSet, input map[stri
 
 func (pe *PolicyEngine) evaluateLeaves(reqs []Requirement, input map[string]interface{}) ([]bool, error) {
 	results := make([]bool, 0, len(reqs))
-	activation := map[string]interface{}{"input": input}
+	activation := map[string]interface{}{"input": input, "taint": input["taint"]}
 
 	for _, req := range reqs {
 		// If CEL expression exists, it takes precedence
 		if req.Expression != "" {
-			ast, issues := pe.env.Compile(req.Expression)
+			expression := policycel.RewritePRGTaintContains(req.Expression)
+			ast, issues := pe.env.Compile(expression)
 			if issues != nil && issues.Err() != nil {
 				return nil, fmt.Errorf("compile error in req %s: %w", req.ID, issues.Err())
 			}

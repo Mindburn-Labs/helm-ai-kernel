@@ -471,6 +471,22 @@ func TestEvaluateRequirementSet_CELWithInput(t *testing.T) {
 	}
 }
 
+func TestEvaluateRequirementSet_TaintContainsHelper(t *testing.T) {
+	pe, _ := NewPolicyEngine()
+	rs := RequirementSet{
+		Requirements: []Requirement{
+			{ID: "r1", Expression: `taint_contains("pii")`},
+		},
+	}
+	result, err := pe.EvaluateRequirementSet(rs, map[string]interface{}{"taint": []string{"pii", "tool_output"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result {
+		t.Fatal("expected taint_contains helper to match pii")
+	}
+}
+
 // --- EvaluateRequirementSet: compile error propagation ---
 
 func TestEvaluateRequirementSet_CompileError(t *testing.T) {

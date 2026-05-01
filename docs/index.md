@@ -22,9 +22,15 @@ This documentation set covers only the retained OSS surface of the repository.
 - [OWASP Threat Mapping](OWASP_MCP_THREAT_MAPPING.md)
 - [SDK Index](sdks/00_INDEX.md)
 
+## Compliance
+
+- [NIST AI Agent Critical Infrastructure Alignment](compliance/nist-ai-agent-critical-infrastructure.md)
+- [NIST AI RMF to ISO 42001 Crosswalk](compliance/nist-ai-rmf-iso-42001-crosswalk.md)
+
 ## Supporting Material
 
 - [Benchmarks](BENCHMARKS.md)
 - [Troubleshooting](TROUBLESHOOTING.md)
 - [OpenAI-Compatible Proxy](INTEGRATIONS/openai_baseurl.md)
 - [MCP Surface](INTEGRATIONS/mcp.md)
+- [Microsoft Agent Governance Toolkit Coexistence](INTEGRATIONS/microsoft_agent_governance_toolkit.md)

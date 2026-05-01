@@ -60,6 +60,7 @@ type Effect struct {
 	Irreversible   bool           `json:"irreversible,omitempty"`
 	ArgsHash       string         `json:"args_hash,omitempty"`   // SHA-256 of JCS-canonicalized args
 	OutputHash     string         `json:"output_hash,omitempty"` // SHA-256 of JCS-canonicalized output
+	Taint          []string       `json:"taint,omitempty"`       // ClawGuard-style taint labels bound to this effect
 }
 
 // Result represents the outcome of an effect execution.

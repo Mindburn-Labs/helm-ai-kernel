@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/cybernetics/control_loop.schema.json",
+  "title": "ControlLoop",
+  "description": "Homeostatic loop that senses an essential variable and proposes governed corrections.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["loop_id"],
+  "properties": {
+    "loop_id": { "type": "string", "minLength": 1 },
+    "type": { "type": "string", "enum": ["pid", "hysteresis", "mpc", "policy", "custom"] },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": { "type": "number" }
+    },
+    "input": { "type": "string" },
+    "output": { "type": "string" },
+    "expression": { "type": "string" },
+    "tick_interval_ms": { "type": "integer", "minimum": 1 },
+    "mode_constraints": { "type": "array", "items": { "type": "string" } }
+  }
+}

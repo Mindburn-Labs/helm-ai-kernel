@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/orgdna/module.schema.json",
+  "title": "ModuleDeclaration",
+  "description": "OrgDNA module declaration activated during compilation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "jurisdiction", "version"],
+  "properties": {
+    "type": { "type": "string", "minLength": 1 },
+    "jurisdiction": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "minLength": 1 },
+    "capabilities": { "type": "array", "items": { "type": "string" } },
+    "attestation": { "$ref": "../certification/module_attestation.schema.json" }
+  }
+}

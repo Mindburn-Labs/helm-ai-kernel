@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/orgdna/environment_profile.schema.json",
+  "title": "EnvironmentProfile",
+  "description": "Environment bindings supplied to OrgVM compilation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profile_id", "bindings"],
+  "properties": {
+    "profile_id": { "type": "string", "minLength": 1 },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

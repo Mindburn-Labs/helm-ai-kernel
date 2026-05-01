@@ -108,14 +108,25 @@
 
 ### Organization & Governance (`orgdna/`, `profiles/`, `jurisdiction/`)
 
-| Schema                                         | Conformance | Status    | Description          |
-| ---------------------------------------------- | ----------- | --------- | -------------------- |
-| `orgdna/entity.schema.json`                    | L2          | normative | Organization entity  |
-| `orgdna/module.schema.json`                    | L2          | normative | Organization module  |
-| `orgdna/orggenome.schema.json`                 | L2          | normative | Organization genome  |
-| `jurisdiction/v1.json`                         | L1          | normative | Jurisdiction binding |
-| `profiles/industry_profile.v1.schema.json`     | L2          | normative | Industry profile     |
-| `profiles/jurisdiction_profile.v1.schema.json` | L2          | normative | Jurisdiction profile |
+| Schema                                         | Conformance | Status    | Description                   |
+| ---------------------------------------------- | ----------- | --------- | ----------------------------- |
+| `orgdna/orggenome.v1.schema.json`              | L2          | normative | Organization genome           |
+| `orgdna/orgphenotype.schema.json`              | L2          | normative | Compiled organization runtime |
+| `orgdna/module.schema.json`                    | L2          | normative | Organization module           |
+| `orgdna/environment_profile.schema.json`       | L2          | normative | Environment bindings          |
+| `morphogenesis/confluence_strategy.schema.json` | L2         | normative | Morphogenesis confluence      |
+| `jurisdiction/v1.json`                         | L1          | normative | Jurisdiction binding          |
+| `profiles/industry_profile.v1.schema.json`     | L2          | normative | Industry profile              |
+| `profiles/jurisdiction_profile.v1.schema.json` | L2          | normative | Jurisdiction profile          |
+
+### Cybernetics (`cybernetics/`)
+
+| Schema                                      | Conformance | Status    | Description                     |
+| ------------------------------------------- | ----------- | --------- | ------------------------------- |
+| `essential_variable.schema.json`            | L2          | normative | Bounded viability variable      |
+| `control_loop.schema.json`                  | L2          | normative | Homeostatic control loop        |
+| `mode.schema.json`                          | L2          | normative | Regulation operating mode       |
+| `regulation_graph.schema.json`              | L2          | normative | Governed regulation state graph |
 
 ### Safety & Security (`safety/`, `perimeter/`)
 

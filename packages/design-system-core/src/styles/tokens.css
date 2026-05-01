@@ -1,0 +1,417 @@
+:root {
+  color-scheme: dark;
+  --helm-bg-root: #07090c;
+  --helm-bg-surface: #0b0f14;
+  --helm-bg-elevated: #11161d;
+  --helm-bg-inset: #060809;
+  --helm-bg-terminal: #04060a;
+  --helm-bg-critical-surface: #131923;
+  --helm-bg-selected-row: #161d27;
+  --helm-bg-live-row: rgba(117, 180, 255, 0.05);
+  --helm-bg-overlay: rgba(4, 6, 10, 0.78);
+  --helm-shadow-raised: 0 8px 20px rgba(0, 0, 0, 0.16);
+  --helm-shadow-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  --helm-shadow-toast: 0 10px 24px rgba(0, 0, 0, 0.18);
+
+  --helm-border-subtle: #161b23;
+  --helm-border-default: #1f2630;
+  --helm-border-strong: #2a323e;
+  --helm-border-focus: #75b4ff;
+  --helm-border-boundary: #4d7ccb;
+  --helm-border-receipt: #334257;
+
+  --helm-text-primary: #e6ecf2;
+  --helm-text-secondary: #a8b3c2;
+  --helm-text-muted: #8b97a7;
+  --helm-text-disabled: #7a8595;
+  --helm-text-inverse: #07090c;
+  --helm-text-code-muted: #a0abba;
+  --helm-text-table-primary: var(--helm-text-primary);
+  --helm-text-table-secondary: var(--helm-text-secondary);
+
+  --helm-verdict-allow: #3fb984;
+  --helm-verdict-allow-bg: rgba(63, 185, 132, 0.11);
+  --helm-verdict-deny: #e5484d;
+  --helm-verdict-deny-bg: rgba(229, 72, 77, 0.11);
+  --helm-verdict-escalate: #f5a524;
+  --helm-verdict-escalate-bg: rgba(245, 165, 36, 0.12);
+  --helm-verdict-pending: #a5afbd;
+  --helm-verdict-pending-bg: rgba(165, 175, 189, 0.09);
+  --helm-verdict-failed: #e5484d;
+  --helm-proof-hash: #75b4ff;
+  --helm-proof-bg: rgba(117, 180, 255, 0.1);
+  --helm-proof-signature: #9c7cff;
+  --helm-proof-evidence: #7fe3c2;
+  --helm-proof-verified: #3fb984;
+
+  --helm-risk-low: #5a9d7f;
+  --helm-risk-medium: #c9a24a;
+  --helm-risk-high: #d97043;
+  --helm-risk-critical: #e5484d;
+  --helm-env-local: #8a94a6;
+  --helm-env-dev: #5e8fe8;
+  --helm-env-staging: #c9a24a;
+  --helm-env-production: #e5484d;
+  --helm-env-enterprise: #9c7cff;
+
+  --helm-rail-w: 3px;
+  --helm-rail-w-card: 4px;
+  --helm-rail-w-hero: 6px;
+  --helm-rail-allow: var(--helm-verdict-allow);
+  --helm-rail-deny: var(--helm-verdict-deny);
+  --helm-rail-escalate: var(--helm-verdict-escalate);
+  --helm-rail-verified: var(--helm-proof-hash);
+  --helm-rail-pending: var(--helm-verdict-pending);
+  --helm-rail-failed: var(--helm-verdict-failed);
+  --helm-rail-historical: var(--helm-border-strong);
+  --helm-rail-selected: var(--helm-proof-hash);
+  --helm-rail-live: var(--helm-proof-hash);
+
+  --helm-radius-xs: 2px;
+  --helm-radius-sm: 3px;
+  --helm-radius-md: 4px;
+  --helm-radius-panel: 6px;
+  --helm-radius-pill: 999px;
+
+  --helm-font-sans: "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --helm-font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --helm-font-body: 13px;
+  --helm-font-table: 12px;
+  --helm-font-meta: 12px;
+  --helm-font-code: 12px;
+  --helm-font-panel-title: 14px;
+  --helm-font-page-title: 22px;
+
+  --helm-space-1: 2px;
+  --helm-space-2: 4px;
+  --helm-space-3: 6px;
+  --helm-space-4: 8px;
+  --helm-space-5: 10px;
+  --helm-space-6: 12px;
+  --helm-space-8: 16px;
+  --helm-space-10: 20px;
+  --helm-space-12: 24px;
+  --helm-space-16: 32px;
+
+  --helm-sidebar-w: 248px;
+  --helm-topbar-h: 52px;
+
+  /* Motion. `--helm-ease` is the canonical curve (kept for back-compat).
+     Named easings let downstream code request a specific shape without
+     hardcoding cubic-beziers throughout the system. */
+  --helm-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --helm-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --helm-ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
+  --helm-ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+  --helm-ease-spring-stiff: cubic-bezier(0.5, -0.1, 0.1, 1.6);
+
+  --helm-dur: 160ms;
+
+  --helm-dur-instant: 80ms;
+  --helm-dur-fast: 140ms;
+  --helm-dur-base: 200ms;
+  --helm-dur-slow: 320ms;
+  --helm-dur-skeleton: 1400ms;
+
+  --helm-focus-ring-w: 2px;
+  --helm-focus-ring-offset: 2px;
+  --helm-min-touch-target: 44px;
+
+  --helm-z-base: 0;
+  --helm-z-sticky: 10;
+  --helm-z-topbar: 20;
+  --helm-z-sidebar: 25;
+  --helm-z-drawer-backdrop: 40;
+  --helm-z-drawer: 41;
+  --helm-z-modal: 50;
+  --helm-z-toast: 60;
+  --helm-z-palette-backdrop: 70;
+  --helm-z-palette: 71;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --helm-bg-root: #eceef1;
+  --helm-bg-surface: #f4f6f8;
+  --helm-bg-elevated: #ffffff;
+  --helm-bg-inset: #eef1f5;
+  --helm-bg-terminal: #0e1218;
+  --helm-bg-critical-surface: #f0f4fa;
+  --helm-bg-selected-row: #e6ebf2;
+  --helm-bg-live-row: rgba(46, 91, 183, 0.06);
+  --helm-bg-overlay: rgba(20, 24, 32, 0.34);
+  --helm-shadow-raised: 0 8px 20px rgba(20, 24, 32, 0.12);
+  --helm-shadow-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  --helm-shadow-toast: 0 10px 24px rgba(20, 24, 32, 0.16);
+  --helm-border-subtle: #e3e7ed;
+  --helm-border-default: #d5dbe4;
+  --helm-border-strong: #aeb8c7;
+  --helm-border-focus: #2e5bb7;
+  --helm-border-boundary: #2e5bb7;
+  --helm-border-receipt: #b6c3d4;
+  --helm-text-primary: #14181f;
+  --helm-text-secondary: #495566;
+  --helm-text-muted: #647082;
+  --helm-text-disabled: #5e6877;
+  --helm-text-inverse: #ffffff;
+  --helm-text-code-muted: #4d5868;
+  --helm-verdict-allow: #1f8a5f;
+  --helm-verdict-allow-bg: rgba(31, 138, 95, 0.09);
+  --helm-verdict-deny: #c42828;
+  --helm-verdict-deny-bg: rgba(196, 40, 40, 0.08);
+  --helm-verdict-escalate: #9b6a05;
+  --helm-verdict-escalate-bg: rgba(155, 106, 5, 0.09);
+  --helm-verdict-pending: #5e6877;
+  --helm-verdict-pending-bg: rgba(94, 104, 119, 0.09);
+  --helm-verdict-failed: #c42828;
+  --helm-proof-hash: #2e5bb7;
+  --helm-proof-bg: rgba(46, 91, 183, 0.09);
+  --helm-proof-signature: #6f52c7;
+  --helm-proof-evidence: #0f7a5c;
+  --helm-proof-verified: #1f8a5f;
+  --helm-risk-low: #2e7a52;
+  --helm-risk-medium: #92670a;
+  --helm-risk-high: #b54716;
+  --helm-risk-critical: #c42828;
+  --helm-env-local: #4d5868;
+  --helm-env-dev: #2e5bb7;
+  --helm-env-staging: #92670a;
+  --helm-env-production: #c42828;
+  --helm-env-enterprise: #6f52c7;
+}
+
+[data-density="comfortable"] {
+  --helm-font-body: 14px;
+  --helm-font-table: 13px;
+  --helm-font-meta: 12.5px;
+  --helm-font-code: 12.5px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --helm-bg-root: #eceef1;
+    --helm-bg-surface: #f4f6f8;
+    --helm-bg-elevated: #ffffff;
+    --helm-bg-inset: #eef1f5;
+    --helm-bg-terminal: #0e1218;
+    --helm-bg-critical-surface: #f0f4fa;
+    --helm-bg-selected-row: #e6ebf2;
+    --helm-bg-live-row: rgba(46, 91, 183, 0.06);
+    --helm-bg-overlay: rgba(20, 24, 32, 0.34);
+    --helm-shadow-raised: 0 8px 20px rgba(20, 24, 32, 0.12);
+    --helm-shadow-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+    --helm-shadow-toast: 0 10px 24px rgba(20, 24, 32, 0.16);
+    --helm-border-subtle: #e3e7ed;
+    --helm-border-default: #d5dbe4;
+    --helm-border-strong: #aeb8c7;
+    --helm-border-focus: #2e5bb7;
+    --helm-border-boundary: #2e5bb7;
+    --helm-border-receipt: #b6c3d4;
+    --helm-text-primary: #14181f;
+    --helm-text-secondary: #495566;
+    --helm-text-muted: #647082;
+    --helm-text-disabled: #5e6877;
+    --helm-text-inverse: #ffffff;
+    --helm-text-code-muted: #4d5868;
+    --helm-verdict-allow: #1f8a5f;
+    --helm-verdict-allow-bg: rgba(31, 138, 95, 0.09);
+    --helm-verdict-deny: #c42828;
+    --helm-verdict-deny-bg: rgba(196, 40, 40, 0.08);
+    --helm-verdict-escalate: #9b6a05;
+    --helm-verdict-escalate-bg: rgba(155, 106, 5, 0.09);
+    --helm-verdict-pending: #5e6877;
+    --helm-verdict-pending-bg: rgba(94, 104, 119, 0.09);
+    --helm-verdict-failed: #c42828;
+    --helm-proof-hash: #2e5bb7;
+    --helm-proof-bg: rgba(46, 91, 183, 0.09);
+    --helm-proof-signature: #6f52c7;
+    --helm-proof-evidence: #0f7a5c;
+    --helm-proof-verified: #1f8a5f;
+    --helm-risk-low: #2e7a52;
+    --helm-risk-medium: #92670a;
+    --helm-risk-high: #b54716;
+    --helm-risk-critical: #c42828;
+    --helm-env-local: #4d5868;
+    --helm-env-dev: #2e5bb7;
+    --helm-env-staging: #92670a;
+    --helm-env-production: #c42828;
+    --helm-env-enterprise: #6f52c7;
+  }
+}
+
+/* High-contrast preference: tighten border + focus contrast and push text
+   toward primary so muted/secondary text isn't the WCAG floor. */
+@media (prefers-contrast: more) {
+  :root,
+  [data-theme="light"] {
+    --helm-border-subtle: var(--helm-border-default);
+    --helm-border-default: var(--helm-border-strong);
+    --helm-text-muted: var(--helm-text-secondary);
+    --helm-text-secondary: var(--helm-text-primary);
+    --helm-text-disabled: var(--helm-text-muted);
+  }
+  :root {
+    --helm-border-strong: #ffffff;
+    --helm-border-focus: #ffffff;
+  }
+  [data-theme="light"] {
+    --helm-border-strong: #000000;
+    --helm-border-focus: #000000;
+  }
+}
+
+/* Reduced-transparency preference: replace overlay rgba / glass tints
+   with solid surfaces so backdrop-filter effects don't strand users
+   who have requested less translucency. */
+@media (prefers-reduced-transparency: reduce) {
+  :root,
+  [data-theme="light"] {
+    --helm-bg-overlay: var(--helm-bg-inset);
+    --helm-bg-live-row: var(--helm-bg-selected-row);
+    --helm-verdict-allow-bg: var(--helm-bg-elevated);
+    --helm-verdict-deny-bg: var(--helm-bg-elevated);
+    --helm-verdict-escalate-bg: var(--helm-bg-elevated);
+    --helm-verdict-pending-bg: var(--helm-bg-elevated);
+    --helm-proof-bg: var(--helm-bg-elevated);
+  }
+}
+
+/* ── Raw OKLCH ramps (additive layer) ──────────────────────────────────
+ *
+ * Perceptually-uniform color ramps in OKLCH so consumers building
+ * extensions (badges, charts, custom surfaces) have a calibrated
+ * palette to draw from instead of inventing hex values.
+ *
+ * The semantic layer (`--helm-bg-*`, `--helm-text-*`, `--helm-verdict-*`)
+ * still uses hand-picked hex values today — this raw layer is additive,
+ * not a refactor. Migration to source-from-raw is tracked in ROADMAP.md.
+ */
+:root {
+  /* Neutral — chromatic gray with slight cool tilt to match dark theme. */
+  --helm-color-neutral-50:  oklch(0.985 0.003 247);
+  --helm-color-neutral-100: oklch(0.965 0.005 247);
+  --helm-color-neutral-200: oklch(0.925 0.007 247);
+  --helm-color-neutral-300: oklch(0.880 0.009 247);
+  --helm-color-neutral-400: oklch(0.770 0.011 247);
+  --helm-color-neutral-500: oklch(0.620 0.013 247);
+  --helm-color-neutral-600: oklch(0.500 0.015 247);
+  --helm-color-neutral-700: oklch(0.395 0.015 247);
+  --helm-color-neutral-800: oklch(0.290 0.014 247);
+  --helm-color-neutral-900: oklch(0.205 0.012 247);
+  --helm-color-neutral-950: oklch(0.130 0.010 247);
+
+  /* Blue — proof, link, info. */
+  --helm-color-blue-50:  oklch(0.965 0.020 250);
+  --helm-color-blue-100: oklch(0.930 0.045 250);
+  --helm-color-blue-200: oklch(0.870 0.080 250);
+  --helm-color-blue-300: oklch(0.800 0.115 250);
+  --helm-color-blue-400: oklch(0.720 0.150 250);
+  --helm-color-blue-500: oklch(0.640 0.175 250);
+  --helm-color-blue-600: oklch(0.560 0.185 250);
+  --helm-color-blue-700: oklch(0.475 0.180 250);
+  --helm-color-blue-800: oklch(0.395 0.160 250);
+  --helm-color-blue-900: oklch(0.310 0.130 250);
+  --helm-color-blue-950: oklch(0.230 0.090 250);
+
+  /* Green — verdict-allow, verification-verified. */
+  --helm-color-green-50:  oklch(0.970 0.025 155);
+  --helm-color-green-100: oklch(0.935 0.060 155);
+  --helm-color-green-200: oklch(0.880 0.110 155);
+  --helm-color-green-300: oklch(0.800 0.150 155);
+  --helm-color-green-400: oklch(0.720 0.175 155);
+  --helm-color-green-500: oklch(0.645 0.190 155);
+  --helm-color-green-600: oklch(0.555 0.180 155);
+  --helm-color-green-700: oklch(0.470 0.160 155);
+  --helm-color-green-800: oklch(0.385 0.135 155);
+  --helm-color-green-900: oklch(0.305 0.105 155);
+  --helm-color-green-950: oklch(0.220 0.075 155);
+
+  /* Red — verdict-deny, risk-critical, destructive. */
+  --helm-color-red-50:  oklch(0.965 0.025 25);
+  --helm-color-red-100: oklch(0.930 0.060 25);
+  --helm-color-red-200: oklch(0.875 0.115 25);
+  --helm-color-red-300: oklch(0.795 0.165 25);
+  --helm-color-red-400: oklch(0.715 0.205 25);
+  --helm-color-red-500: oklch(0.635 0.225 25);
+  --helm-color-red-600: oklch(0.555 0.215 25);
+  --helm-color-red-700: oklch(0.470 0.190 25);
+  --helm-color-red-800: oklch(0.385 0.160 25);
+  --helm-color-red-900: oklch(0.305 0.130 25);
+  --helm-color-red-950: oklch(0.220 0.090 25);
+
+  /* Amber — verdict-escalate, risk-medium, warning. */
+  --helm-color-amber-50:  oklch(0.975 0.025 75);
+  --helm-color-amber-100: oklch(0.945 0.055 75);
+  --helm-color-amber-200: oklch(0.895 0.105 75);
+  --helm-color-amber-300: oklch(0.825 0.150 75);
+  --helm-color-amber-400: oklch(0.755 0.180 75);
+  --helm-color-amber-500: oklch(0.680 0.190 75);
+  --helm-color-amber-600: oklch(0.595 0.180 75);
+  --helm-color-amber-700: oklch(0.510 0.160 75);
+  --helm-color-amber-800: oklch(0.420 0.135 75);
+  --helm-color-amber-900: oklch(0.335 0.105 75);
+  --helm-color-amber-950: oklch(0.245 0.075 75);
+
+  /* Violet — env-enterprise, proof-signature. */
+  --helm-color-violet-50:  oklch(0.970 0.020 295);
+  --helm-color-violet-100: oklch(0.940 0.045 295);
+  --helm-color-violet-200: oklch(0.880 0.090 295);
+  --helm-color-violet-300: oklch(0.810 0.135 295);
+  --helm-color-violet-400: oklch(0.730 0.170 295);
+  --helm-color-violet-500: oklch(0.650 0.185 295);
+  --helm-color-violet-600: oklch(0.565 0.180 295);
+  --helm-color-violet-700: oklch(0.480 0.165 295);
+  --helm-color-violet-800: oklch(0.395 0.140 295);
+  --helm-color-violet-900: oklch(0.310 0.110 295);
+  --helm-color-violet-950: oklch(0.225 0.080 295);
+
+  /* Teal — proof-evidence, secondary accent. */
+  --helm-color-teal-50:  oklch(0.970 0.022 195);
+  --helm-color-teal-100: oklch(0.935 0.055 195);
+  --helm-color-teal-200: oklch(0.880 0.105 195);
+  --helm-color-teal-300: oklch(0.805 0.140 195);
+  --helm-color-teal-400: oklch(0.725 0.150 195);
+  --helm-color-teal-500: oklch(0.645 0.150 195);
+  --helm-color-teal-600: oklch(0.555 0.140 195);
+  --helm-color-teal-700: oklch(0.470 0.125 195);
+  --helm-color-teal-800: oklch(0.385 0.105 195);
+  --helm-color-teal-900: oklch(0.305 0.085 195);
+  --helm-color-teal-950: oklch(0.220 0.060 195);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --helm-dur: 1ms;
+    --helm-dur-instant: 1ms;
+    --helm-dur-fast: 1ms;
+    --helm-dur-base: 1ms;
+    --helm-dur-slow: 1ms;
+    --helm-dur-skeleton: 1ms;
+  }
+}
+
+@media (forced-colors: active) {
+  :root,
+  [data-theme="light"] {
+    --helm-border-subtle: CanvasText;
+    --helm-border-default: CanvasText;
+    --helm-border-strong: CanvasText;
+    --helm-border-focus: Highlight;
+    --helm-border-boundary: CanvasText;
+    --helm-border-receipt: CanvasText;
+    --helm-text-primary: CanvasText;
+    --helm-text-secondary: CanvasText;
+    --helm-text-muted: CanvasText;
+    --helm-text-disabled: GrayText;
+    --helm-text-code-muted: CanvasText;
+    --helm-bg-root: Canvas;
+    --helm-bg-surface: Canvas;
+    --helm-bg-elevated: Canvas;
+    --helm-bg-inset: Canvas;
+    --helm-shadow-raised: none;
+    --helm-shadow-inset-highlight: none;
+    --helm-shadow-toast: none;
+  }
+}

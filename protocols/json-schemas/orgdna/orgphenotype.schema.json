@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/orgdna/orgphenotype.schema.json",
+  "title": "OrgPhenotype",
+  "description": "Compiled runtime artifact emitted by OrgVM.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["metadata", "regulation_config", "active_phenotype_hash"],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["genome_id", "source_hash", "compiled_at", "schema_version"],
+      "properties": {
+        "genome_id": { "type": "string" },
+        "source_hash": { "type": "string" },
+        "compiled_at": { "type": "string", "format": "date-time" },
+        "schema_version": { "type": "string" }
+      }
+    },
+    "org_graph": { "type": "object" },
+    "primitives": { "type": "object" },
+    "active_modules": { "type": "array", "items": { "$ref": "module.schema.json" } },
+    "active_capabilities": { "type": "array", "items": { "type": "string" } },
+    "regulation_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "essential_variables": {
+          "type": "array",
+          "items": { "$ref": "../cybernetics/essential_variable.schema.json" }
+        },
+        "control_loops": {
+          "type": "array",
+          "items": { "$ref": "../cybernetics/control_loop.schema.json" }
+        },
+        "regulation_graph": { "$ref": "../cybernetics/regulation_graph.schema.json" },
+        "policy_set": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "environment": { "$ref": "environment_profile.schema.json" },
+    "factories": { "type": "array", "items": { "type": "object" } },
+    "active_phenotype_hash": { "type": "string", "minLength": 1 },
+    "receipt": { "type": "object" },
+    "morph_timeline": { "type": "array", "items": { "type": "object" } },
+    "contract_violations": { "type": "array", "items": { "type": "object" } },
+    "organelle_config": { "type": "object" },
+    "lifecycle_config": { "type": "object" },
+    "enterprise_config": { "type": "object" }
+  }
+}

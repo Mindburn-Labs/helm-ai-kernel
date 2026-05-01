@@ -1,0 +1,259 @@
+.form-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--helm-space-6);
+}
+
+.form-field {
+  min-width: 0;
+  display: grid;
+  gap: var(--helm-space-3);
+}
+
+.form-field > span,
+.choice-field,
+.toggle-field {
+  color: var(--helm-text-secondary);
+}
+
+.form-field > span {
+  font-weight: 650;
+}
+
+.form-field small,
+.form-field strong[role="alert"] {
+  color: var(--helm-text-muted);
+  font-size: var(--helm-font-meta);
+}
+
+.form-field strong[role="alert"] {
+  color: var(--helm-verdict-deny);
+}
+
+.text-input,
+.textarea-input,
+.select-input {
+  min-width: 0;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 var(--helm-space-5);
+  color: var(--helm-text-primary);
+  background: var(--helm-bg-inset);
+  border: 1px solid var(--helm-border-default);
+  border-radius: var(--helm-radius-md);
+}
+
+.textarea-input {
+  min-height: 96px;
+  padding-top: var(--helm-space-4);
+  padding-bottom: var(--helm-space-4);
+  resize: vertical;
+}
+
+.form-field.has-error .text-input,
+.form-field.has-error .textarea-input,
+.form-field.has-error .select-input {
+  border-color: var(--helm-verdict-deny);
+}
+
+.choice-field,
+.toggle-field {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: var(--helm-space-5);
+}
+
+.choice-field input,
+.toggle-field input {
+  accent-color: var(--helm-proof-hash);
+}
+
+.toggle-field {
+  justify-content: space-between;
+}
+
+.toggle-field input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggle-field i {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: var(--helm-radius-pill);
+  background: var(--helm-bg-inset);
+  border: 1px solid var(--helm-border-default);
+}
+
+.toggle-field i::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 2px;
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--helm-text-muted);
+  transition: transform var(--helm-dur) var(--helm-ease), background var(--helm-dur) var(--helm-ease);
+}
+
+.toggle-field input:checked + i::after {
+  transform: translateX(16px);
+  background: var(--helm-proof-hash);
+}
+
+[dir="rtl"] .toggle-field input:checked + i::after {
+  /* Flip the knob travel direction so the leading→trailing motion
+     mirrors the writing flow under RTL. */
+  transform: translateX(-16px);
+}
+
+/* ── NumberInput ───────────────────────────────────────────────────────── */
+
+.number-input {
+  display: inline-grid;
+  align-items: center;
+  grid-template-columns: auto auto 1fr auto auto;
+  gap: 0;
+  border: 1px solid var(--helm-border-default);
+  border-radius: var(--helm-radius-md);
+  background: var(--helm-bg-elevated);
+  padding-inline: 0;
+}
+
+.number-input:focus-within {
+  border-color: var(--helm-border-focus);
+}
+
+.form-field.has-error .number-input {
+  border-color: var(--helm-verdict-deny);
+}
+
+.number-input-input {
+  /* Inherit from .text-input but strip its border so the wrapper owns it. */
+  border: none;
+  background: transparent;
+  padding-inline: var(--helm-space-5);
+  min-width: 0;
+}
+
+.number-input-input:focus-visible {
+  /* Defer to :focus-within on the wrapper. */
+  box-shadow: none;
+}
+
+.number-input-affix {
+  padding-inline: var(--helm-space-4);
+  color: var(--helm-text-muted);
+  font-family: var(--helm-font-mono);
+  font-size: var(--helm-font-meta);
+  user-select: none;
+}
+
+.number-input-affix--prefix {
+  border-inline-end: 1px solid var(--helm-border-subtle);
+}
+
+.number-input-affix--suffix {
+  border-inline-start: 1px solid var(--helm-border-subtle);
+}
+
+.number-input-steppers {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 0;
+  border-inline-start: 1px solid var(--helm-border-subtle);
+}
+
+.number-input--steppers-leading .number-input-steppers {
+  border-inline-start: none;
+  border-inline-end: 1px solid var(--helm-border-subtle);
+  order: -1;
+}
+
+.number-input-stepper {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--helm-text-muted);
+  font: inherit;
+  cursor: pointer;
+  padding-inline: var(--helm-space-5);
+  min-width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.number-input-stepper:hover:not(:disabled) {
+  color: var(--helm-text-primary);
+  background: var(--helm-bg-selected-row);
+}
+
+.number-input-stepper:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.number-input-stepper--up {
+  border-bottom: 1px solid var(--helm-border-subtle);
+}
+
+/* ── Form summary ──────────────────────────────────────────────────────── */
+
+.form-summary {
+  display: grid;
+  gap: var(--helm-space-4);
+  padding: var(--helm-space-6) var(--helm-space-8);
+  border: 1px solid var(--helm-verdict-deny);
+  border-inline-start: var(--helm-rail-w-card, 3px) solid var(--helm-verdict-deny);
+  border-radius: var(--helm-radius-md);
+  background: var(--helm-verdict-deny-bg, transparent);
+  color: var(--helm-text-primary);
+}
+
+.form-summary strong {
+  font-family: var(--helm-font-mono);
+  font-size: var(--helm-font-meta);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--helm-verdict-deny);
+}
+
+.form-summary ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--helm-space-3);
+}
+
+.form-summary li {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  gap: var(--helm-space-5);
+  align-items: baseline;
+  color: var(--helm-text-secondary);
+  font-size: var(--helm-font-meta);
+}
+
+.form-summary-field {
+  font-family: var(--helm-font-mono);
+  color: var(--helm-text-muted);
+}
+
+.form-summary-message {
+  color: var(--helm-text-primary);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

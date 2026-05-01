@@ -1,0 +1,101 @@
+{
+  "scopeName": "source.cel",
+  "name": "CEL",
+  "fileTypes": ["cel"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#builtins" },
+    { "include": "#operators" },
+    { "include": "#identifiers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.cel",
+          "begin": "//",
+          "end": "$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.cel",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [{ "name": "constant.character.escape.cel", "match": "\\\\." }]
+        },
+        {
+          "name": "string.quoted.single.cel",
+          "begin": "'",
+          "end": "'",
+          "patterns": [{ "name": "constant.character.escape.cel", "match": "\\\\." }]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.cel",
+          "match": "\\b(\\d+\\.\\d+(?:[eE][+-]?\\d+)?|\\d+(?:[eE][+-]?\\d+)?|0x[0-9a-fA-F]+)\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "constant.language.cel",
+          "match": "\\b(true|false|null)\\b"
+        },
+        {
+          "name": "keyword.operator.cel",
+          "match": "\\b(in|as|has)\\b"
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "support.function.cel",
+          "match": "\\b(matches|startsWith|endsWith|contains|size|type|int|string|bytes|bool|double|dyn|timestamp|duration)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.logical.cel",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.comparison.cel",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.arithmetic.cel",
+          "match": "[+\\-*/%]"
+        },
+        {
+          "name": "keyword.operator.ternary.cel",
+          "match": "\\?|:"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "constant.other.cel",
+          "match": "\\b[A-Z][A-Z0-9_]*\\b"
+        },
+        {
+          "name": "variable.other.cel",
+          "match": "\\b[a-z_][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    }
+  }
+}

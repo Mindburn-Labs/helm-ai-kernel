@@ -53,7 +53,7 @@ Roadmap: extend to overlay-trigger primitives (Dialog, Popover, Menu).
 
 ## References
 
-- [packages/core/src/components/slot.tsx](../../packages/core/src/components/slot.tsx)
+- [packages/design-system-core/src/components/slot.tsx](../../../packages/design-system-core/src/components/slot.tsx)
 - [Radix UI Slot](https://www.radix-ui.com/primitives/docs/utilities/slot)
 - Stories demonstrating the pattern in
-  [primitives.stories.tsx](../../packages/core/src/components/primitives.stories.tsx).
+  [primitives.stories.tsx](../../../packages/design-system-core/src/components/primitives.stories.tsx).

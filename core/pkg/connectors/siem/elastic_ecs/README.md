@@ -77,6 +77,6 @@ event.dataset : "helm.governance" and labels.verdict : "DENY" and labels.correla
 
 ## See also
 
-- [`docs/architecture/otel-genai.md`](../../../../../docs/architecture/otel-genai.md)
-  — GenAI semconv attribute table and SIEM-pack matrix.
+- [`examples/otel-genai/README.md`](../../../../../examples/otel-genai/README.md)
+  — GenAI semconv example and telemetry contract.
 - [`exporter.go`](exporter.go) — wire-shape source.

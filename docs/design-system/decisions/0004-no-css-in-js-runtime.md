@@ -58,7 +58,7 @@ rest. This keeps theme switching free of re-render churn.
 
 ## References
 
-- [packages/core/src/styles/](../../packages/core/src/styles)
-- [packages/core/src/styles.css](../../packages/core/src/styles.css) — barrel
-- [packages/core/src/tokens/index.ts](../../packages/core/src/tokens/index.ts) → `approvedDynamicInlineStyles`
+- [packages/design-system-core/src/styles/](../../../packages/design-system-core/src/styles)
+- [packages/design-system-core/src/styles.css](../../../packages/design-system-core/src/styles.css) — barrel
+- [packages/design-system-core/src/tokens/index.ts](../../../packages/design-system-core/src/tokens/index.ts) → `approvedDynamicInlineStyles`
 - [docs/theming.md](../theming.md) — runtime theme switching

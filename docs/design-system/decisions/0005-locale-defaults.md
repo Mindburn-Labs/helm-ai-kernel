@@ -62,7 +62,7 @@ component code — the Intl helpers' return types are compatible.
 
 ## References
 
-- [packages/core/src/components/i18n.tsx](../../packages/core/src/components/i18n.tsx)
-- [packages/core/src/components/i18n.test.tsx](../../packages/core/src/components/i18n.test.tsx)
-- [packages/core/src/components/i18n.stories.tsx](../../packages/core/src/components/i18n.stories.tsx)
+- [packages/design-system-core/src/components/i18n.tsx](../../../packages/design-system-core/src/components/i18n.tsx)
+- [packages/design-system-core/src/components/i18n.test.tsx](../../../packages/design-system-core/src/components/i18n.test.tsx)
+- [packages/design-system-core/src/components/i18n.stories.tsx](../../../packages/design-system-core/src/components/i18n.stories.tsx)
 - [docs/accessibility.md](../accessibility.md) — RTL + logical CSS

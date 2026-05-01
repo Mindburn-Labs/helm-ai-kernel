@@ -46,8 +46,7 @@ parity is proven (see ROADMAP "Later" lane).
 
 ## References
 
-- [packages/core/src/styles/tokens.css](../../packages/core/src/styles/tokens.css)
-- [packages/core/src/tokens/index.ts](../../packages/core/src/tokens/index.ts)
-- [packages/core/src/tokens/index.test.ts](../../packages/core/src/tokens/index.test.ts) — parity test
-- [scripts/generate-tokens.ts](../../scripts/generate-tokens.ts) — `--check` mode for CI
-- [scripts/generate-contrast-table.ts](../../scripts/generate-contrast-table.ts) — WCAG gate
+- [packages/design-system-core/src/styles/tokens.css](../../../packages/design-system-core/src/styles/tokens.css)
+- [packages/design-system-core/src/tokens/index.ts](../../../packages/design-system-core/src/tokens/index.ts)
+- [packages/design-system-core/src/tokens/index.test.ts](../../../packages/design-system-core/src/tokens/index.test.ts) — parity test
+- Token generation and contrast-table scripts live in the commercial `helm` workspace.

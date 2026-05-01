@@ -6,7 +6,7 @@ title: OSS_SCOPE
 
 > **Canonical architecture**: see [ARCHITECTURE.md](ARCHITECTURE.md) for the
 > normative trust boundary model and TCB definition. For the canonical
-> 8-package TCB inventory, see [TCB_POLICY.md](TCB_POLICY.md).
+> 8-package TCB inventory, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 HELM OSS is the **open execution kernel** of the HELM stack.
 
@@ -15,7 +15,7 @@ It exists to keep the deterministic boundary small, portable, and independently 
 ## Kernel TCB (Trusted Computing Base)
 
 The canonical TCB is bounded to **8 packages** — the minimal trusted core.
-See [TCB_POLICY.md](TCB_POLICY.md) for the authoritative package list,
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the authoritative package list,
 expansion criteria, and CI enforcement details.
 
 ## Active OSS Packages
@@ -119,7 +119,7 @@ tool calls and routes them through the PEP boundary.
 ### Bounded-Surface Primitives
 
 The OSS kernel includes configurable surface containment primitives
-(see [CAPABILITY_MANIFESTS.md](CAPABILITY_MANIFESTS.md)):
+(see [EXECUTION_SECURITY_MODEL.md](EXECUTION_SECURITY_MODEL.md)):
 
 - Domain-scoped tool bundles
 - Explicit capability manifests

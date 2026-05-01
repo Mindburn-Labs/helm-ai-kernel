@@ -54,6 +54,6 @@ apps/
 
 ## References
 
-- [packages/](../../packages)
-- [apps/](../../apps)
-- Root [package.json](../../package.json) → `"workspaces"` field.
+- [packages/design-system-core/](../../../packages/design-system-core)
+- Commercial apps live in `helm/apps/` outside the OSS repository.
+- Package [package.json](../../../packages/design-system-core/package.json) → package exports and scripts.

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/morphogenesis/confluence_strategy.schema.json",
+  "title": "ConfluenceStrategy",
+  "description": "Deterministic conflict-resolution strategy for OrgVM morphogenesis.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["strategy"],
+  "properties": {
+    "strategy": {
+      "type": "string",
+      "enum": ["positional_last_write_wins", "content_addressed_union", "named_reject_on_conflict"]
+    },
+    "max_reorderings_to_test": { "type": "integer", "minimum": 1, "default": 100 },
+    "require_confluence_proof": { "type": "boolean", "default": true },
+    "tie_breaker": { "type": "string", "enum": ["content_hash", "sequence_number_then_hash"] }
+  }
+}

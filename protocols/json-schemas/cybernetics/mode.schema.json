@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/cybernetics/mode.schema.json",
+  "title": "RegulationMode",
+  "description": "Operating mode with active constraints and transition policy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mode_id"],
+  "properties": {
+    "mode_id": { "type": "string", "minLength": 1 },
+    "label": { "type": "string" },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "active_control_loops": { "type": "array", "items": { "type": "string" } },
+    "allowed_transitions": { "type": "array", "items": { "type": "string" } }
+  }
+}

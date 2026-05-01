@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/cybernetics/regulation_graph.schema.json",
+  "title": "RegulationGraph",
+  "description": "Finite state machine of operating modes and governed transitions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["initial_mode_id", "modes"],
+  "properties": {
+    "initial_mode_id": { "type": "string", "minLength": 1 },
+    "modes": {
+      "type": "array",
+      "items": { "$ref": "mode.schema.json" }
+    },
+    "transitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to"],
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "guard": { "type": "string" },
+          "approval_required": { "type": "boolean", "default": false }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/cybernetics/essential_variable.schema.json",
+  "title": "EssentialVariable",
+  "description": "Observable state dimension that must remain within explicit bounds for organizational viability.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "variable_id", "bounds"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "variable_id": { "type": "string", "minLength": 1 },
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["numeric_range", "boolean", "enum"] },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "allowed_values": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "current_value": { "type": "number" },
+    "unit": { "type": "string" },
+    "sample_interval_ms": { "type": "integer", "minimum": 1 }
+  }
+}

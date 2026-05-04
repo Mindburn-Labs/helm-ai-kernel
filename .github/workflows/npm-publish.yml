@@ -56,9 +56,11 @@ jobs:
         run: |
           npm ci
           if npm run | grep -q ' typecheck'; then npm run typecheck; fi
-          if [ -n '${{ matrix.package.test_command }}' ]; then ${{ matrix.package.test_command }}; fi
+          TEST_COMMAND='${{ matrix.package.test_command }}'
+          if [ -n "$TEST_COMMAND" ]; then eval "$TEST_COMMAND"; fi
           if npm run | grep -q ' build'; then npm run build; fi
-          if [ -n '${{ matrix.package.smoke_command }}' ]; then ${{ matrix.package.smoke_command }}; fi
+          SMOKE_COMMAND='${{ matrix.package.smoke_command }}'
+          if [ -n "$SMOKE_COMMAND" ]; then eval "$SMOKE_COMMAND"; fi
           npm pack --dry-run
       - name: Publish
         if: github.event.inputs.dry_run != 'true'

@@ -31,7 +31,8 @@ Java).
 
 ## Sponsor
 
-CNCF TOC liaison: TBD.
+CNCF TOC liaison: known gap owned by governance; update this field when a
+named liaison confirms sponsorship.
 
 ## Problem Statement
 
@@ -139,5 +140,5 @@ without depending on the helm-oss codebase.
 | Security policy published | Done (`SECURITY.md`) |
 | OpenSSF Best Practices submission | In progress (`BEST_PRACTICES.md`) |
 | OSS-Fuzz upstream PR | In progress (`oss-fuzz/`) |
-| TOC sponsor identified | TBD |
-| Sandbox proposal filed | TBD |
+| TOC sponsor identified | Known gap; governance owner |
+| Sandbox proposal filed | Known gap; governance owner |

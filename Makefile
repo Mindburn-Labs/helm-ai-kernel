@@ -1,4 +1,4 @@
-.PHONY: build test test-race test-sdk-ts test-sdk-py test-sdk-rust test-sdk-java verify-fixtures verify-presentation test-all bench bench-report lint crucible proxy docker docker-up sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check clean
+.PHONY: build test test-race test-sdk-ts test-sdk-py test-sdk-rust test-sdk-java verify-fixtures verify-presentation test-all bench bench-report lint crucible proxy docker docker-up sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check clean docs-coverage docs-truth
 
 VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.4.0)
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -40,7 +40,7 @@ bench:
 bench-report:
 	cd core && go test -v -run TestOverheadReport -count=1 ./benchmarks/
 
-lint:
+lint: docs-coverage docs-truth
 	cd core && go vet ./...
 	cd core && test -z "$$(gofmt -l .)" || (echo "Run gofmt -w ." && exit 1)
 
@@ -165,3 +165,11 @@ verify-boundary:
 
 clean:
 	rm -rf bin/ dist/ sbom.json deps.txt helm-mcp-plugin/ benchmarks/results/*.json
+
+.PHONY: docs-coverage docs-truth
+
+docs-coverage:
+	python3 scripts/check_documentation_coverage.py
+
+docs-truth:
+	python3 scripts/check_documentation_truth.py

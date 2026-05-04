@@ -3,7 +3,7 @@
 This document maps the OpenSSF Best Practices Badge gold-tier criteria
 (<https://www.bestpractices.dev/criteria/2>) to evidence in this repository.
 Each criterion lists the file, CI workflow, or policy that satisfies it. Items
-not yet satisfied are marked `TODO` with a tracking-issue placeholder.
+not yet satisfied are listed as known gaps with an owner and tracking issue.
 
 helm-oss already holds passing-tier and silver-tier criteria via the
 underlying CI hygiene; this file enumerates the gold-tier delta.
@@ -80,19 +80,19 @@ underlying CI hygiene; this file enumerates the gold-tier delta.
 - **Two-factor authentication for committers** — enforced organization-wide;
   documented in `GOVERNANCE.md`.
 - **Roles documented** — `MAINTAINERS.md` and `GOVERNANCE.md`.
-- **Project has at least two unaffiliated maintainers** — `TODO` (tracking
-  issue: cncf-sandbox-application). The current committer set is being
-  extended through the CNCF Sandbox process described in
-  `docs/governance/cncf-application.md`.
+- **Project has at least two unaffiliated maintainers** — known gap owned by
+  governance, tracked through `cncf-sandbox-application`. The current
+  committer set is being extended through the CNCF Sandbox process described
+  in `docs/governance/cncf-application.md`.
 - **Successor / continuity plan** — covered by the CNCF Sandbox application.
 
 ## Open Items
 
 | Criterion | Status | Tracking |
 | --- | --- | --- |
-| Two-or-more unaffiliated maintainers | TODO | issue: maintainer-onboarding |
-| Bug bounty programme | TODO | issue: oss-fuzz-bounty-link |
-| External cryptographic review | TODO | issue: external-crypto-review |
+| Two-or-more unaffiliated maintainers | Known gap | issue: maintainer-onboarding |
+| Bug bounty programme | Known gap | issue: oss-fuzz-bounty-link |
+| External cryptographic review | Known gap | issue: external-crypto-review |
 
 The OSS-Fuzz integration in `oss-fuzz/` and the Scorecard workflow in
 `.github/workflows/scorecard.yml` together close the previously-open

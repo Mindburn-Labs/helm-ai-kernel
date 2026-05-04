@@ -60,7 +60,8 @@ mise.*.local.*
 /TCB_POLICY.md
 
 # ─── Artifacts and evidence outputs ───────────────────────────────────────────
-artifacts/
+artifacts/*
+!artifacts/README.md
 !artifacts/golden/
 !artifacts/golden/**
 reports/

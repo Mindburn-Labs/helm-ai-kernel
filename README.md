@@ -90,7 +90,7 @@ The HTTP client/types layer is generated from [`api/openapi/helm.openapi.yaml`](
 
 ## Documentation
 
-Public OSS docs are sourced from this repository and canonically published through `docs.mindburn.org`. The owned docs set for sync is declared in `docs/public-docs.manifest.json`.
+Public OSS docs are sourced from this repository and canonically published through `helm.docs.mindburn.org`. The owned docs set for sync is declared in `docs/public-docs.manifest.json`.
 
 - [Quickstart](docs/QUICKSTART.md)
 - [Architecture](docs/ARCHITECTURE.md)

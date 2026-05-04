@@ -3,164 +3,178 @@
   "repo": "helm-oss",
   "display_name": "HELM OSS",
   "docs_origin": {
-    "canonical_host": "docs.mindburn.org",
+    "canonical_host": "helm.docs.mindburn.org",
     "source_repo": "Mindburn-Labs/helm-oss",
     "source_root": "docs/"
   },
   "documents": [
     {
+      "slug": "oss",
+      "title": "HELM OSS",
+      "section": "oss",
+      "source_path": "docs/index.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/oss"
+    },
+    {
       "slug": "helm-oss",
       "title": "HELM Documentation",
       "section": "overview",
       "source_path": "docs/index.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/quickstart",
       "title": "Quickstart",
       "section": "start-here",
       "source_path": "docs/QUICKSTART.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/architecture",
       "title": "Architecture",
       "section": "start-here",
       "source_path": "docs/ARCHITECTURE.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/conformance",
       "title": "Conformance",
       "section": "start-here",
       "source_path": "docs/CONFORMANCE.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/verification",
       "title": "Verification",
       "section": "start-here",
       "source_path": "docs/VERIFICATION.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/compatibility",
       "title": "Compatibility",
       "section": "start-here",
       "source_path": "docs/COMPATIBILITY.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/publishing",
       "title": "Publishing",
       "section": "start-here",
       "source_path": "docs/PUBLISHING.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/changelog",
+      "title": "HELM OSS Changelog",
+      "section": "oss",
+      "source_path": "CHANGELOG.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/changelog"
     },
     {
       "slug": "helm-oss/execution-security-model",
       "title": "Execution Security Model",
       "section": "interfaces",
       "source_path": "docs/EXECUTION_SECURITY_MODEL.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/owasp-mcp-threat-mapping",
       "title": "OWASP MCP Threat Mapping",
       "section": "interfaces",
       "source_path": "docs/OWASP_MCP_THREAT_MAPPING.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/sdks",
       "title": "SDK Index",
       "section": "interfaces",
       "source_path": "docs/sdks/00_INDEX.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/benchmarks",
       "title": "Benchmarks",
       "section": "supporting-material",
       "source_path": "docs/BENCHMARKS.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/troubleshooting",
       "title": "Troubleshooting",
       "section": "supporting-material",
       "source_path": "docs/TROUBLESHOOTING.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/integrations/openai-compatible-proxy",
       "title": "OpenAI-Compatible Proxy Integration",
       "section": "integrations",
       "source_path": "docs/INTEGRATIONS/openai_baseurl.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/integrations/mcp",
       "title": "MCP Integration",
       "section": "integrations",
       "source_path": "docs/INTEGRATIONS/mcp.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/integrations/microsoft-agent-governance-toolkit",
       "title": "Microsoft Agent Governance Toolkit Coexistence",
       "section": "integrations",
       "source_path": "docs/INTEGRATIONS/microsoft_agent_governance_toolkit.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/strategy/mcp-governance-competitive-radar-2026-04",
       "title": "MCP Governance Competitive Radar - April 2026",
       "section": "strategy",
       "source_path": "docs/strategy/mcp-governance-competitive-radar-2026-04.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/strategy/policy-research-watchlist-2026-04",
       "title": "Policy Research Watchlist - April 2026",
       "section": "strategy",
       "source_path": "docs/strategy/policy-research-watchlist-2026-04.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/security/owasp-agentic-top10-mapping",
       "title": "OWASP Agentic Top 10 Mapping",
       "section": "security",
       "source_path": "docs/security/owasp-agentic-top10-coverage.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/security/prompt-injection-watchlist-2026-04",
       "title": "Prompt Injection Watchlist - April 2026",
       "section": "security",
       "source_path": "docs/security/prompt-injection-watchlist-2026-04.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/compliance/nist-ai-agent-critical-infrastructure",
       "title": "NIST AI Agent Critical Infrastructure Alignment",
       "section": "compliance",
       "source_path": "docs/compliance/nist-ai-agent-critical-infrastructure.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/compliance/eu-ai-act-high-risk-pack",
       "title": "EU AI Act High-Risk Pack",
       "section": "compliance",
       "source_path": "docs/compliance/eu-ai-act-high-risk-pack.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
       "slug": "helm-oss/compliance/nist-ai-rmf-iso-42001-crosswalk",
       "title": "NIST AI RMF to ISO 42001 Crosswalk",
       "section": "compliance",
       "source_path": "docs/compliance/nist-ai-rmf-iso-42001-crosswalk.md",
-      "docs_origin_hint": "docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org"
     }
   ]
 }

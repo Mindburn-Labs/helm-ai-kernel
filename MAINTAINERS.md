@@ -8,9 +8,7 @@ maintainer-addition or maintainer-removal rule documented there.
 
 | Name | GitHub | Affiliation | Areas |
 | --- | --- | --- | --- |
-| TBD | @TBD | Mindburn-Labs | kernel, crypto |
-| TBD | @TBD | Mindburn-Labs | proofgraph, anchors |
-| TBD | @TBD | Mindburn-Labs | SDKs, conformance |
+| Mindburn Labs core team | @Mindburn-Labs | Mindburn-Labs | kernel, crypto, proofgraph, anchors, SDKs, conformance |
 
 ## Reviewers
 
@@ -18,7 +16,13 @@ Reviewers may approve PRs in their listed area but cannot merge.
 
 | Name | GitHub | Affiliation | Areas |
 | --- | --- | --- | --- |
-| TBD | @TBD | Mindburn-Labs | docs, release |
+| Mindburn Labs core team | @Mindburn-Labs | Mindburn-Labs | docs, release |
+
+## Known Gaps
+
+The public individual maintainer roster and two-or-more unaffiliated
+maintainer criterion remain governance-owned known gaps tracked in
+`BEST_PRACTICES.md` and `docs/governance/cncf-application.md`.
 
 ## Emeritus
 

@@ -27,6 +27,14 @@ jobs:
         package:
           - path: sdk/ts
             name: "@mindburn/helm"
+            version_policy: root
+            test_command: "npm test -- --run"
+            smoke_command: ""
+          - path: packages/design-system-core
+            name: "@helm/design-system-core"
+            version_policy: package
+            test_command: "npm test"
+            smoke_command: "npm run smoke"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,14 +47,18 @@ jobs:
           FILE_VERSION=$(cat ../../VERSION 2>/dev/null || cat ../VERSION)
           REQUESTED="${{ github.event.inputs.version }}"
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          test "$REQUESTED" = "$FILE_VERSION"
-          test "$PACKAGE_VERSION" = "$FILE_VERSION"
+          if [ "${{ matrix.package.version_policy }}" = "root" ]; then
+            test "$REQUESTED" = "$FILE_VERSION"
+          fi
+          test "$PACKAGE_VERSION" = "$REQUESTED"
       - name: Install, test, and build
         working-directory: ${{ matrix.package.path }}
         run: |
           npm ci
-          if npm run | grep -q ' test'; then npm test -- --run; fi
+          if npm run | grep -q ' typecheck'; then npm run typecheck; fi
+          if [ -n '${{ matrix.package.test_command }}' ]; then ${{ matrix.package.test_command }}; fi
           if npm run | grep -q ' build'; then npm run build; fi
+          if [ -n '${{ matrix.package.smoke_command }}' ]; then ${{ matrix.package.smoke_command }}; fi
           npm pack --dry-run
       - name: Publish
         if: github.event.inputs.dry_run != 'true'

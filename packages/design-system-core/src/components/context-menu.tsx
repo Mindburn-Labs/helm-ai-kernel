@@ -7,6 +7,7 @@ import {
   useState,
   type KeyboardEvent,
   type MouseEvent,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import type { MenuItem } from "./primitives";
@@ -109,6 +110,11 @@ export function ContextMenu({ items, children, onOpenChange, disabled, className
     };
   }, [open, items, activeIndex, setOpen]);
 
+  const menuStyle = {
+    "--helm-context-menu-x": `${position.x}px`,
+    "--helm-context-menu-y": `${position.y}px`,
+  } as CSSProperties;
+
   return (
     <div
       className={["context-menu-region", className].filter(Boolean).join(" ")}
@@ -121,7 +127,7 @@ export function ContextMenu({ items, children, onOpenChange, disabled, className
           ref={menuRef}
           role="menu"
           className="context-menu-popup"
-          style={{ position: "fixed", insetBlockStart: position.y, insetInlineStart: position.x, zIndex: 1000 }}
+          style={menuStyle}
           aria-orientation="vertical"
         >
           {items.map((item, index) => (

@@ -23,8 +23,8 @@ describe("ContextMenu", () => {
     fireEvent.contextMenu(screen.getByTestId("region"), { clientX: 150, clientY: 80 });
     const menu = screen.getByRole("menu") as HTMLElement;
     expect(menu).toBeInTheDocument();
-    expect(menu.style.insetInlineStart).toBe("150px");
-    expect(menu.style.insetBlockStart).toBe("80px");
+    expect(menu.style.getPropertyValue("--helm-context-menu-x")).toBe("150px");
+    expect(menu.style.getPropertyValue("--helm-context-menu-y")).toBe("80px");
     expect(screen.getAllByRole("menuitem")).toHaveLength(4);
   });
 

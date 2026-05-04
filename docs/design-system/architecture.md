@@ -1,12 +1,9 @@
 # Architecture
 
-HELM is split into public packages and consuming apps.
+HELM OSS ships one frontend package: `packages/design-system-core`.
 
-- `packages/core` owns generic tokens, state semantics, reusable primitives, layout, tables, forms, feedback, inspection views, and CSS.
-- `packages/helm` owns HELM-specific products: decisions, approvals, receipts, evidence, replay, assistant contracts, route blueprints, policy utilities, fixtures, and readiness gates.
-- `packages/next` owns small Next.js App Router helpers.
-- `apps/workbench` documents and exercises the full system.
-- `apps/next-starter` is the app handoff baseline for real website development.
+`@helm/design-system-core` owns generic tokens, state semantics, React primitives, layout, tables, forms, feedback, inspection views, providers, and static CSS. It is an OSS-safe UI contract for downstream product clients, not a browser product surface inside this repository.
 
-Consumers must import from package roots only. Deep imports from `src`, `packages/*`, or app internals fail the quality gate.
+Commercial HELM applications may mirror or consume this package, but `helm-oss` does not contain `@helm/design-system-helm`, `@helm/design-system-next`, a workbench app, or a Next starter.
 
+Consumers must import from published package entrypoints only. Deep imports from `src`, `dist` internals, or relative workspace paths are unsupported and covered by the package smoke test.

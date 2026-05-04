@@ -40,6 +40,7 @@ export const designTokenSource = {
     sidebar: 25,
     drawerBackdrop: 40,
     drawer: 41,
+    contextMenu: 45,
     modal: 50,
     toast: 60,
     paletteBackdrop: 70,
@@ -71,6 +72,6 @@ export const designTokenSource = {
     "runtime measurement CSS variable",
     "virtualization spacer height",
     "container query inline-size measurement",
+    "context menu viewport coordinates",
   ],
 } as const;
-

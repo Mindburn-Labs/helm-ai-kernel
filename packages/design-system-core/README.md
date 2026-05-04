@@ -29,9 +29,25 @@ export function Example() {
 
 - `@helm/design-system-core`
 - `@helm/design-system-core/components`
+- `@helm/design-system-core/components/announce`
+- `@helm/design-system-core/components/context-menu`
+- `@helm/design-system-core/components/core`
+- `@helm/design-system-core/components/data`
+- `@helm/design-system-core/components/data-table`
+- `@helm/design-system-core/components/datepicker`
+- `@helm/design-system-core/components/feedback`
+- `@helm/design-system-core/components/form-extensions`
 - `@helm/design-system-core/components/primitives`
 - `@helm/design-system-core/components/forms`
+- `@helm/design-system-core/components/hover-card`
+- `@helm/design-system-core/components/i18n`
+- `@helm/design-system-core/components/inspect`
+- `@helm/design-system-core/components/layout`
+- `@helm/design-system-core/components/menubar`
+- `@helm/design-system-core/components/slot`
 - `@helm/design-system-core/components/status`
+- `@helm/design-system-core/components/telemetry`
+- `@helm/design-system-core/components/theme-provider`
 - `@helm/design-system-core/state`
 - `@helm/design-system-core/tokens`
 - `@helm/design-system-core/primitives/catalog`
@@ -39,3 +55,14 @@ export function Example() {
 - `@helm/design-system-core/tokens.json`
 
 Only these entry points are supported. Do not import from `src` or package internals.
+
+## Verify
+
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run build
+npm run smoke
+npm run pack:dry
+```

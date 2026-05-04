@@ -80,7 +80,7 @@ non-TCB supporting infrastructure:
 
 ### Product Surfaces
 
-The OSS boundary is intentionally CLI/API/SDK-first. This repository does not ship a browser UI, static viewer, embedded UI, design system, Node CLI wrapper, or generated HTML report surface. Future product clients should be built against the clean OpenAPI, SDK, evidence-bundle, conformance-report, and CLI JSON contracts.
+The OSS boundary is intentionally CLI/API/SDK-first. This repository does not ship a browser UI, static viewer, embedded UI, Node CLI wrapper, or generated HTML report surface. It does ship `@helm/design-system-core` as a reusable React/token package for downstream product clients; that package is not itself a product UI or report surface. Future product clients should be built against the clean OpenAPI, SDK, evidence-bundle, conformance-report, CLI JSON contracts, and the public design-system-core entrypoints where React UI is needed.
 
 ## Removed from TCB (Enterprise)
 

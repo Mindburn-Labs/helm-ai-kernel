@@ -1,7 +1,7 @@
 # Contrast table
 
-Auto-generated from `packages/core/src/styles/tokens.css`.
-Run `npm run tokens:contrast` to refresh; `npm run tokens:contrast -- --check` in CI to gate.
+Derived from `packages/design-system-core/src/styles/tokens.css`.
+Refresh this table when token color values change, and keep token parity covered by `cd packages/design-system-core && npm test`.
 
 Floor: 4.5:1 for body text (WCAG 1.4.3 AA), 3.0:1 for large/UI text and
 non-text contrast (WCAG 1.4.11). Verdict / proof colors checked against

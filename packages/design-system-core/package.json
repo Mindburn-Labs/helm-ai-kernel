@@ -38,13 +38,37 @@
       "types": "./dist/components/data.d.ts",
       "import": "./dist/components/data.js"
     },
+    "./components/data-table": {
+      "types": "./dist/components/data-table.d.ts",
+      "import": "./dist/components/data-table.js"
+    },
+    "./components/datepicker": {
+      "types": "./dist/components/datepicker.d.ts",
+      "import": "./dist/components/datepicker.js"
+    },
     "./components/feedback": {
       "types": "./dist/components/feedback.d.ts",
       "import": "./dist/components/feedback.js"
     },
+    "./components/form-extensions": {
+      "types": "./dist/components/form-extensions.d.ts",
+      "import": "./dist/components/form-extensions.js"
+    },
     "./components/forms": {
       "types": "./dist/components/forms.d.ts",
       "import": "./dist/components/forms.js"
+    },
+    "./components/context-menu": {
+      "types": "./dist/components/context-menu.d.ts",
+      "import": "./dist/components/context-menu.js"
+    },
+    "./components/hover-card": {
+      "types": "./dist/components/hover-card.d.ts",
+      "import": "./dist/components/hover-card.js"
+    },
+    "./components/i18n": {
+      "types": "./dist/components/i18n.d.ts",
+      "import": "./dist/components/i18n.js"
     },
     "./components/inspect": {
       "types": "./dist/components/inspect.d.ts",
@@ -54,13 +78,33 @@
       "types": "./dist/components/layout.d.ts",
       "import": "./dist/components/layout.js"
     },
+    "./components/menubar": {
+      "types": "./dist/components/menubar.d.ts",
+      "import": "./dist/components/menubar.js"
+    },
     "./components/primitives": {
       "types": "./dist/components/primitives.d.ts",
       "import": "./dist/components/primitives.js"
     },
+    "./components/slot": {
+      "types": "./dist/components/slot.d.ts",
+      "import": "./dist/components/slot.js"
+    },
     "./components/status": {
       "types": "./dist/components/status.d.ts",
       "import": "./dist/components/status.js"
+    },
+    "./components/theme-provider": {
+      "types": "./dist/components/theme-provider.d.ts",
+      "import": "./dist/components/theme-provider.js"
+    },
+    "./components/announce": {
+      "types": "./dist/components/announce.d.ts",
+      "import": "./dist/components/announce.js"
+    },
+    "./components/telemetry": {
+      "types": "./dist/components/telemetry.d.ts",
+      "import": "./dist/components/telemetry.js"
     },
     "./primitives/catalog": {
       "types": "./dist/primitives/catalog.d.ts",
@@ -82,14 +126,29 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && tsx ../../scripts/fix-esm-imports.ts dist && tsx ../../scripts/copy-package-assets.ts core",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && node ./scripts/fix-esm-imports.mjs dist && node ./scripts/copy-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --pretty false",
     "test": "vitest run --config vitest.config.ts",
-    "pack:dry": "npm pack --dry-run"
+    "pack:dry": "npm pack --dry-run",
+    "smoke": "node ./scripts/smoke-package.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.561.0",
     "shiki": "^4.0.2"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "jsdom": "^27.3.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "typescript": "^6.0.3",
+    "vite": "^7.2.6",
+    "vitest": "^4.0.18"
   },
   "peerDependencies": {
     "react": "^19.0.0",

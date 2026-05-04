@@ -6,8 +6,8 @@
     "emitDeclarationOnly": false,
     "outDir": "dist",
     "rootDir": "src",
-    "tsBuildInfoFile": "../../node_modules/.tmp/tsconfig.core.build.tsbuildinfo"
+    "types": ["vite/client"],
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.core.build.tsbuildinfo"
   },
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test"]
+  "exclude": ["dist", "src/**/*.test.ts", "src/**/*.test.tsx", "src/**/*.stories.tsx", "src/test"]
 }
-

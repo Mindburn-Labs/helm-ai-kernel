@@ -77,6 +77,7 @@ describe("token parity (CSS ↔ TS)", () => {
     expect(readInt("helm-z-sidebar")).toBe(zIndex.sidebar);
     expect(readInt("helm-z-drawer-backdrop")).toBe(zIndex.drawerBackdrop);
     expect(readInt("helm-z-drawer")).toBe(zIndex.drawer);
+    expect(readInt("helm-z-context-menu")).toBe(zIndex.contextMenu);
     expect(readInt("helm-z-modal")).toBe(zIndex.modal);
     expect(readInt("helm-z-toast")).toBe(zIndex.toast);
     expect(readInt("helm-z-palette-backdrop")).toBe(zIndex.paletteBackdrop);

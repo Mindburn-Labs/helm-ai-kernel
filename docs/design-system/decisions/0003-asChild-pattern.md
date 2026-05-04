@@ -24,7 +24,7 @@ Use the **`asChild` pattern**, copied from Radix UI:
 
 - Each composable primitive accepts `asChild?: boolean`.
 - When true, the primitive renders via the internal `Slot` component
-  (`packages/core/src/components/slot.tsx`) which `cloneElement`s the
+  (`packages/design-system-core/src/components/slot.tsx`) which `cloneElement`s the
   single child, merging:
   - `className` (concatenated, primitive's own classes prepended).
   - Refs (via `mergeRefs`).
@@ -35,8 +35,7 @@ Use the **`asChild` pattern**, copied from Radix UI:
 - The Slot, `mergeRefs`, `composeHandlers`, `mergeProps` helpers are all
   exported from the package root for consumer composition.
 
-Currently shipped: `Button`, `IconButton`, `Badge`, `Tooltip`, `Panel`.
-Roadmap: extend to overlay-trigger primitives (Dialog, Popover, Menu).
+Currently shipped: `Button`, `IconButton`, `Badge`, `Tooltip`, `Panel`, and the exported `Slot` helpers.
 
 ## Consequences
 

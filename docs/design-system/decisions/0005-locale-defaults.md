@@ -24,7 +24,7 @@ curve that isn't justified for a design-system package.
 
 ## Decision
 
-Ship a **lightweight `I18nProvider`** in `packages/core` that:
+Ship a **lightweight `I18nProvider`** in `packages/design-system-core` that:
 
 - Stores the active **locale** (BCP-47 string) and a derived
   **direction** (`"ltr"` | `"rtl"`).

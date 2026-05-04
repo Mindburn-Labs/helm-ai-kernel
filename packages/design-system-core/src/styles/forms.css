@@ -252,8 +252,98 @@
   overflow-wrap: anywhere;
 }
 
+.file-field {
+  min-width: 0;
+  display: grid;
+  gap: var(--helm-space-4);
+}
+
+.file-field-dropzone {
+  min-width: 0;
+  min-height: 96px;
+  display: grid;
+  place-items: center;
+  gap: var(--helm-space-3);
+  padding: var(--helm-space-8);
+  border: 1px dashed var(--helm-border-default);
+  border-radius: var(--helm-radius-md);
+  background: var(--helm-bg-inset);
+  color: var(--helm-text-secondary);
+  cursor: pointer;
+  text-align: center;
+}
+
+.file-field[data-dragging] .file-field-dropzone,
+.file-field-dropzone:focus-within {
+  border-color: var(--helm-border-focus);
+  background: var(--helm-bg-selected-row);
+}
+
+.file-field-placeholder {
+  color: var(--helm-text-primary);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.file-field-hint {
+  max-inline-size: 52ch;
+  color: var(--helm-text-muted);
+  font-size: var(--helm-font-meta);
+  overflow-wrap: anywhere;
+}
+
+.file-field-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.file-field-list {
+  display: grid;
+  gap: var(--helm-space-3);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.file-field-list-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--helm-space-5);
+  padding: var(--helm-space-4) var(--helm-space-5);
+  border: 1px solid var(--helm-border-default);
+  border-radius: var(--helm-radius-md);
+  background: var(--helm-bg-surface);
+}
+
+.file-field-name {
+  min-width: 0;
+  color: var(--helm-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-field-size {
+  color: var(--helm-text-muted);
+  font-family: var(--helm-font-mono);
+  font-size: var(--helm-font-meta);
+  white-space: nowrap;
+}
+
 @media (max-width: 767px) {
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .file-field-list-item {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 }

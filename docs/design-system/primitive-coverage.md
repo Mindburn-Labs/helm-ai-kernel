@@ -27,7 +27,7 @@ import { primitiveCoverage, primitiveCoverageSummary } from "@helm/design-system
 - Every icon-only action requires an accessible name.
 - Every overlay has an explicit close path and a labelled content region.
 - Every form primitive supports controlled and uncontrolled use where practical.
-- Every table or collection must avoid horizontal overflow at the viewport matrix in `scripts/verify-workbench.ts`.
+- Every table or collection must avoid horizontal overflow at the consumer app's supported viewport matrix.
 - Color is never the only state channel; text and accessible labels carry the meaning.
 - HELM product surfaces must compose core primitives instead of forking private UI.
 

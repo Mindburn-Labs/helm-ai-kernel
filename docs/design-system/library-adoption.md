@@ -1,49 +1,43 @@
 # Library Adoption
 
-This repo ships publishable packages, not only a workbench SPA. Treat `apps/workbench` as documentation and `apps/next-starter` as a consumer fixture.
+This repo ships `@helm/design-system-core` as the OSS frontend contract. It does not ship a browser app, workbench, Next starter, or HELM product-specific design-system package.
 
 ## Install
 
 ```bash
-npm install @helm/design-system-core @helm/design-system-helm @helm/design-system-next react react-dom
+npm install @helm/design-system-core react react-dom
 ```
 
 ## Required CSS
 
 ```tsx
 import "@helm/design-system-core/styles.css";
-import "@helm/design-system-helm/styles.css";
 ```
 
-Import core CSS before HELM CSS. Core owns tokens and primitive styles. HELM owns product-specific route, policy, assistant, and proof surfaces.
+Core CSS owns tokens, primitive styles, providers, forms, layout, data, feedback, and inspection components.
 
 ## Supported Entrypoints
 
 Use package roots for convenience:
 
 ```tsx
-import { Button, Dialog, FormField, TextInput } from "@helm/design-system-core";
-import { DashboardComposition, routeBlueprints } from "@helm/design-system-helm";
-import { helmHtmlAttributes } from "@helm/design-system-next";
+import { Button, DataTable, Dialog, FormField, TextInput } from "@helm/design-system-core";
 ```
 
 Use subpaths when bundle boundaries matter:
 
 ```tsx
+import { DatePicker } from "@helm/design-system-core/components/datepicker";
 import { Accordion, MenuButton, Popover } from "@helm/design-system-core/components/primitives";
 import { primitiveCoverage } from "@helm/design-system-core/primitives/catalog";
-import { MockAssistantAdapter, type AssistantAdapter } from "@helm/design-system-helm/assistant";
-import { routeBlueprints } from "@helm/design-system-helm/routes";
 ```
 
-Never import from `packages/*/src`, `dist` internals, or relative workspace paths. The package smoke test typechecks these public entrypoints.
+Never import from `packages/design-system-core/src`, `dist` internals, or relative workspace paths. The package smoke test typechecks public entrypoints, CSS imports, and token JSON imports.
 
 ## Composition Rules
 
-- Build product routes from core primitives first, then add HELM semantics where the domain requires proof, policy, assistant, or route-specific behavior.
+- Build product routes from core primitives first, then add product semantics in the consuming application.
 - Keep state vocabulary from `@helm/design-system-core/state`; do not invent one-off visual states.
-- Keep assistant infrastructure behind `AssistantAdapter`; the mock adapter is demo-only.
-- Keep mutating assistant tool calls gated by preview, confirmation, policy result, and audit receipt.
 - Keep tokens as the only source of color, spacing, typography, motion, density, and theme values.
 
 ## Consumer Verification
@@ -51,7 +45,13 @@ Never import from `packages/*/src`, `dist` internals, or relative workspace path
 Before publishing or handing to an outside engineer, run:
 
 ```bash
-npm run verify
+cd packages/design-system-core
+npm ci
+npm run typecheck
+npm test
+npm run build
+npm run smoke
+npm run pack:dry
 ```
 
-The package smoke step runs `npm pack --dry-run`, validates metadata and README inclusion, imports built packages at runtime, and typechecks a temporary consumer using CSS imports and public subpaths.
+The package smoke step packs the built package, validates all exported tarball targets, imports built packages at runtime, and typechecks a temporary consumer using CSS imports, token JSON, root imports, and public subpaths.

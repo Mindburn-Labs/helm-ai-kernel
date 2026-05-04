@@ -28,13 +28,13 @@ The tradeoffs:
 
 ## Decision
 
-Ship **static, hand-authored CSS** in `packages/core/src/styles/*.css`,
+Ship **static, hand-authored CSS** in `packages/design-system-core/src/styles/*.css`,
 bundled into a single `dist/styles.css` plus per-component CSS imports
 when consumers need to opt out of the monolith. **No runtime CSS-in-JS
 library is a dependency or a peer dependency.** `style={…}` inline
 objects are permitted only for genuinely dynamic values
-(see `tokens/index.ts:approvedDynamicInlineStyles`); a forthcoming
-ESLint rule (Phase 9.B) will enforce this.
+(see `tokens/index.ts:approvedDynamicInlineStyles`); package contract
+tests enforce current approved cases.
 
 Theme switching uses **CSS custom properties** keyed off `[data-theme]`
 on `<html>`. The `ThemeProvider` writes the attribute; CSS does the
@@ -51,10 +51,10 @@ rest. This keeps theme switching free of re-render churn.
   is a CSS edit; no JS rebuild.
 - **−** No "pseudo-state styles co-located with component" — pseudo
   classes live in CSS files, not the React component file.
-  Mitigated by per-primitive CSS organization (Phase 9.C extraction
-  splits `components.css` into `components/{name}.css` files).
-- **−** Class names are global. Mitigated by a `.helm-*` prefix on
-  every public class.
+  Mitigated by keeping primitive styles grouped and covered by package
+  contract tests.
+- **−** Class names are global. Mitigated by package contract tests
+  that ensure component class names have shipped CSS selectors.
 
 ## References
 

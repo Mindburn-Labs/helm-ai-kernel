@@ -1,4 +1,4 @@
-# 0001 — npm-workspaces monorepo layout
+# 0001 — OSS design-system package layout
 
 ## Status
 
@@ -6,54 +6,29 @@ Accepted — 2026-04-29.
 
 ## Context
 
-The HELM design-system grew from a single `src/` package to multiple
-related artefacts: a portable core layer (tokens + primitives), a
-HELM-product layer (assistant + policy + handoff), a Next.js helper
-layer, a workbench app, a docs site, and a starter app. Shipping each
-as a separate repo would have multiplied release overhead, made
-cross-cutting refactors painful, and broken the contrast / a11y / size
-gates that depend on a single source of truth. Shipping everything as
-a single non-workspaced repo would have made the public packages hard
-to consume independently.
+The OSS repository needs to expose the reusable HELM design-system core without pulling in commercial product apps or private HELM-specific route packages. The package must be independently buildable, testable, packable, and consumable from this checkout.
 
 ## Decision
 
-Use **npm workspaces** with the following structure:
+Use a **package-local npm package** with this structure:
 
 ```
 packages/
-  core/      → @helm/design-system-core   (tokens, primitives, layouts)
-  helm/      → @helm/design-system-helm   (assistant, policy, handoff)
-  next/      → @helm/design-system-next   (Next.js App-Router helpers)
-apps/
-  workbench/ → @helm/workbench            (Vite SPA, integration surface)
-  docs/      → @helm/docs                 (Ladle stories site)
-  next-starter/ → @helm/next-starter      (consumer reference)
+  design-system-core/ → @helm/design-system-core
 ```
 
-- Each `packages/*` ships as a published npm package with its own
-  `exports` map.
-- Each `apps/*` is a private workspace consumer that imports the
-  packages by name (no relative cross-tree imports).
-- The root holds shared devDeps (eslint, vitest, vite, playwright,
-  size-limit) and the verify chain.
+- The package owns its `package.json`, `package-lock.json`, TypeScript config, test config, build scripts, smoke checks, and publishable `exports` map.
+- No OSS app imports from package internals because no OSS browser app is shipped.
+- Commercial apps may consume the published package or mirror it, but they are outside this repository.
 
 ## Consequences
 
-- **+ Cross-cutting changes** (token rename, semantic state shift)
-  land in one PR, with all consumers green-tested in the same CI run.
-- **+ Independent releases** are still possible via Changesets — each
-  package version-bumps independently.
-- **+ Tree-shake-friendly** — consumers depend on the package they
-  need, not the monorepo.
-- **−** Workspaces introduce npm bookkeeping (package-lock at root,
-  hoisting). Lockfile churn on dependency changes is wider than a
-  single-package repo.
-- **−** Some tooling (TypeScript project refs, ESLint flat config)
-  needs explicit workspace-aware setup.
+- **+ Self-contained OSS verification** — contributors can run the package checks without a root Node workspace.
+- **+ Publishable artifact** — `npm pack --dry-run` reflects the real package contents and public entrypoints.
+- **+ Clear boundary** — commercial-only helpers, workbench apps, and product route packages are not implied by OSS docs.
+- **−** Commercial consumers need their own browser-level integration and visual checks.
 
 ## References
 
 - [packages/design-system-core/](../../../packages/design-system-core)
-- Commercial apps live in `helm/apps/` outside the OSS repository.
 - Package [package.json](../../../packages/design-system-core/package.json) → package exports and scripts.

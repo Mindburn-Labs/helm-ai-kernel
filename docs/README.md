@@ -1,20 +1,41 @@
-# Docs
+# HELM OSS Docs
 
-## Purpose
+This tree is the canonical public documentation source for HELM OSS. Public protocol, schema, SDK, conformance, verification, and design-system-core material starts here before it is mirrored into commercial HELM surfaces.
 
-Active documentation-system surface for the `helm-oss` project.
+## Start
 
-## Canonical Interface
+- [Documentation index](index.md)
+- [Quickstart](QUICKSTART.md)
+- [Architecture](ARCHITECTURE.md)
 
-- Source path: `docs`
-- Surface type: `documentation-system`
-- Package/source identity: `docs`
-- Coverage record: `docs/documentation-coverage.csv`
+## How-To
 
-## Local Commands
+- [Conformance](CONFORMANCE.md)
+- [Verification](VERIFICATION.md)
+- [Publishing](PUBLISHING.md)
+- [Troubleshooting](TROUBLESHOOTING.md)
 
-- `make docs-coverage` from the repository root verifies coverage for this surface.
+## Reference
 
-## Documentation Contract
+- [Compatibility](COMPATIBILITY.md)
+- [Execution security model](EXECUTION_SECURITY_MODEL.md)
+- [SDK index](sdks/00_INDEX.md)
+- [OpenAPI contract](../api/openapi/README.md)
 
-This README is the canonical maintainer reference for this active documentation-system surface. Keep it aligned with the source path above and update `docs/documentation-coverage.csv` when ownership, interfaces, validation, or lifecycle status changes.
+## Explanation
+
+- [OSS scope](OSS_SCOPE.md)
+- [OWASP MCP threat mapping](OWASP_MCP_THREAT_MAPPING.md)
+- [Architecture rationale: cognitive firewall](architecture/cognitive-firewall.md)
+
+## Security And Compliance
+
+- [Prompt-injection watchlist](security/prompt-injection-watchlist-2026-04.md)
+- [EU AI Act high-risk pack](compliance/eu-ai-act-high-risk-pack.md)
+
+## Documentation Gates
+
+- `make docs-coverage`
+- `make docs-truth`
+
+Update [documentation-coverage.csv](documentation-coverage.csv) whenever an active source surface, protocol, schema, SDK, public manifest entry, or docs ownership boundary changes.

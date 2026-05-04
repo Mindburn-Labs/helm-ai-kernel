@@ -1,0 +1,37 @@
+{
+  "name": "@helm/console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Self-hostable HELM OSS Console frontend.",
+  "scripts": {
+    "generate:api": "openapi-typescript ../../api/openapi/helm.openapi.yaml -o src/api/schema.ts",
+    "dev": "vite --host 127.0.0.1",
+    "typecheck": "tsc -p tsconfig.json --pretty false",
+    "test": "vitest run --environment jsdom --testTimeout 20000",
+    "build": "npm run generate:api && tsc -p tsconfig.json --pretty false && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "smoke": "node ./scripts/smoke-dist.mjs"
+  },
+  "dependencies": {
+    "@helm/design-system-core": "file:../../packages/design-system-core",
+    "lucide-react": "^0.561.0",
+    "openapi-fetch": "^0.15.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "shiki": "^4.0.2"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "jsdom": "^27.3.0",
+    "openapi-typescript": "^7.10.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.6",
+    "vitest": "^4.0.18"
+  }
+}

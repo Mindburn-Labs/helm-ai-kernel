@@ -44,6 +44,8 @@ type serverOptions struct {
 	DataDir    string
 	SQLitePath string
 	PolicyPath string
+	Console    bool
+	ConsoleDir string
 	JSON       bool
 	Stdout     io.Writer
 	Stderr     io.Writer
@@ -236,6 +238,7 @@ func runServerWithOptions(opts serverOptions) {
 		services.ReceiptStore = receiptStore
 		extraRoutes = func(mux *http.ServeMux) {
 			RegisterSubsystemRoutes(mux, services)
+			RegisterConsoleRoutes(mux, services, opts)
 		}
 	}
 
@@ -262,6 +265,7 @@ func runServerWithOptions(opts serverOptions) {
 	if extraRoutes != nil {
 		extraRoutes(mux)
 	}
+	RegisterConsoleStaticRoutes(mux, opts)
 	server := &http.Server{
 		Addr: fmt.Sprintf("%s:%d", bindAddr, port),
 		Handler: helmauth.SecurityHeaders(

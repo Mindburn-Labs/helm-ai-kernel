@@ -1,4 +1,4 @@
-.PHONY: build test test-race test-sdk-ts test-design-system test-sdk-py test-sdk-rust test-sdk-java verify-fixtures verify-presentation test-all bench bench-report lint crucible proxy docker docker-up sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check clean docs-coverage docs-truth
+.PHONY: build test test-race test-sdk-ts test-design-system build-console test-console test-platform test-sdk-py test-sdk-rust test-sdk-java verify-fixtures verify-presentation test-all bench bench-report lint crucible proxy docker docker-up sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check clean docs-coverage docs-truth
 
 VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.4.0)
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -20,6 +20,14 @@ test-sdk-ts:
 test-design-system:
 	cd packages/design-system-core && npm ci && npm run typecheck && npm test && npm run build && npm run smoke && npm run pack:dry
 
+build-console:
+	cd packages/design-system-core && npm ci && npm run build
+	cd apps/console && npm ci && npm run build && npm run smoke
+
+test-console:
+	cd packages/design-system-core && npm ci && npm run build
+	cd apps/console && npm ci && npm run generate:api && npm run typecheck && npm test && npm run build && npm run smoke
+
 test-sdk-py:
 	cd sdk/python && python -m pip install -q '.[dev]' && pytest -v --tb=short
 
@@ -35,7 +43,9 @@ verify-fixtures:
 verify-presentation:
 	bash tools/verify-presentation.sh
 
-test-all: test test-sdk-py test-sdk-ts test-design-system test-sdk-rust test-sdk-java verify-fixtures
+test-all: test test-sdk-py test-sdk-ts test-design-system test-console test-sdk-rust test-sdk-java verify-fixtures
+
+test-platform: test test-design-system test-console verify-fixtures docs-coverage docs-truth
 
 bench:
 	cd core && go test -bench=. -benchmem -count=3 ./pkg/crypto/ ./pkg/store/ ./pkg/guardian/ ./benchmarks/
@@ -53,7 +63,7 @@ crucible: build
 proxy: build
 	./bin/helm proxy --upstream https://api.openai.com/v1
 
-docker:
+docker: build-console
 	docker build -t ghcr.io/mindburn-labs/helm-oss:local .
 
 docker-up:
@@ -167,7 +177,7 @@ verify-boundary:
 	bash tools/verify-boundary.sh
 
 clean:
-	rm -rf bin/ dist/ sbom.json deps.txt helm-mcp-plugin/ benchmarks/results/*.json
+	rm -rf bin/ dist/ apps/console/dist/ sbom.json deps.txt helm-mcp-plugin/ benchmarks/results/*.json
 
 .PHONY: docs-coverage docs-truth
 

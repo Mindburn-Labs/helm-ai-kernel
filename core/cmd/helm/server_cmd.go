@@ -26,6 +26,8 @@ func runServerCommand(name string, args []string, stdout, stderr io.Writer) int 
 	cmd.StringVar(&opts.BindAddr, "addr", "", "Bind address")
 	cmd.IntVar(&opts.Port, "port", 0, "Listen port")
 	cmd.StringVar(&opts.DataDir, "data-dir", "", "Data directory for local SQLite state and keys")
+	cmd.BoolVar(&opts.Console, "console", false, "Serve the HELM OSS Console frontend")
+	cmd.StringVar(&opts.ConsoleDir, "console-dir", "", "Directory containing the built HELM Console assets")
 	cmd.BoolVar(&opts.JSON, "json", false, "Print startup status as JSON")
 
 	if err := cmd.Parse(args); err != nil {

@@ -113,7 +113,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     if (this.props.fallback) return this.props.fallback(error, this.reset);
     return (
       <div className="error-boundary" role="alert" aria-live="assertive">
-        <h2>Something failed in the workbench.</h2>
+        <h2>Something failed in the console.</h2>
         <p className="error-boundary-message">{error.message || "Unknown error"}</p>
         <button type="button" className="helm-button helm-button--secondary helm-button--md" onClick={this.reset}>
           Reset

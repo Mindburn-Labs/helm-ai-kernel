@@ -33,6 +33,8 @@ tags:
     description: Conformance testing
   - name: system
     description: Health and version
+  - name: console
+    description: HELM OSS Console platform state
 
 x-helm-reason-codes:
   description: Deterministic reason codes returned by the kernel
@@ -144,6 +146,132 @@ paths:
         '400':
           $ref: '#/components/responses/HelmError'
         '403':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/evaluate:
+    post:
+      operationId: evaluateDecision
+      tags: [console]
+      summary: Evaluate a governed intent and emit a receipt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Guardian decision record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionRecord'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '500':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/receipts:
+    get:
+      operationId: listReceipts
+      tags: [console]
+      summary: List durable receipts
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100, maximum: 1000 }
+        - name: since
+          in: query
+          schema: { type: string }
+        - name: agent
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Receipt list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptListResponse'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '503':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/receipts/{receipt_id}:
+    get:
+      operationId: getConsoleReceipt
+      tags: [console]
+      summary: Get a receipt by ID
+      parameters:
+        - name: receipt_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Receipt detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Receipt'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/console/bootstrap:
+    get:
+      operationId: getConsoleBootstrap
+      tags: [console]
+      summary: Read HELM OSS Console bootstrap state
+      description: |
+        Consolidated read-only platform state used by the OSS Console shell.
+        Values are derived from kernel services and local configuration.
+      responses:
+        '200':
+          description: Console bootstrap state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsoleBootstrap'
+
+  /api/v1/console/surfaces:
+    get:
+      operationId: listConsoleSurfaces
+      tags: [console]
+      summary: List Console surfaces and their backing source contracts
+      responses:
+        '200':
+          description: Console surface catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  surfaces:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ConsoleSurfaceRef'
+
+  /api/v1/console/surfaces/{surface_id}:
+    get:
+      operationId: getConsoleSurface
+      tags: [console]
+      summary: Read a wired Console surface state
+      parameters:
+        - name: surface_id
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [overview, agents, actions, approvals, policies, audit, developer, settings]
+      responses:
+        '200':
+          description: Console surface state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsoleSurfaceState'
+        '404':
           $ref: '#/components/responses/HelmError'
 
   /api/v1/trust/keys/add:
@@ -705,9 +833,7 @@ components:
         receipt_id: { type: string }
         decision_id: { type: string }
         effect_id: { type: string }
-        status:
-          type: string
-          enum: [APPROVED, DENIED, PENDING]
+        status: { type: string }
         reason_code: { type: string }
         output_hash: { type: string }
         blob_hash: { type: string }
@@ -716,6 +842,117 @@ components:
         signature: { type: string }
         timestamp: { type: string, format: date-time }
         principal: { type: string }
+        executor_id: { type: string }
+        args_hash: { type: string }
+        metadata:
+          type: object
+          additionalProperties: true
+
+    ReceiptListResponse:
+      type: object
+      properties:
+        receipts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Receipt'
+        count: { type: integer }
+
+    DecisionRequest:
+      type: object
+      required: [action, resource]
+      properties:
+        principal: { type: string }
+        action: { type: string }
+        resource: { type: string }
+        context:
+          type: object
+          additionalProperties: true
+
+    DecisionRecord:
+      type: object
+      properties:
+        id: { type: string }
+        action: { type: string }
+        resource: { type: string }
+        verdict: { type: string }
+        reason: { type: string }
+        policy_version: { type: string }
+        policy_decision_hash: { type: string }
+        signature: { type: string }
+
+    ConsoleBootstrap:
+      type: object
+      required: [version, workspace, health, counts, receipts, conformance, mcp]
+      properties:
+        version:
+          $ref: '#/components/schemas/VersionInfo'
+        workspace:
+          type: object
+          required: [organization, project, environment, mode]
+          properties:
+            organization: { type: string }
+            project: { type: string }
+            environment: { type: string }
+            mode: { type: string }
+        health:
+          type: object
+          required: [kernel, policy, store, conformance]
+          properties:
+            kernel: { type: string }
+            policy: { type: string }
+            store: { type: string }
+            conformance: { type: string }
+        counts:
+          type: object
+          required: [receipts, pending_approvals, open_incidents, mcp_tools]
+          properties:
+            receipts: { type: integer }
+            pending_approvals: { type: integer }
+            open_incidents: { type: integer }
+            mcp_tools: { type: integer }
+        receipts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Receipt'
+        conformance:
+          type: object
+          required: [level, status]
+          properties:
+            level: { type: string }
+            status: { type: string }
+            report_id: { type: string }
+        mcp:
+          type: object
+          required: [authorization, scopes]
+          properties:
+            authorization: { type: string }
+            scopes:
+              type: array
+              items: { type: string }
+
+    ConsoleSurfaceRef:
+      type: object
+      required: [id, source]
+      properties:
+        id: { type: string }
+        source: { type: string }
+
+    ConsoleSurfaceState:
+      type: object
+      required: [id, status, source, generated_at]
+      properties:
+        id: { type: string }
+        status: { type: string }
+        source: { type: string }
+        generated_at: { type: string, format: date-time }
+        summary:
+          type: object
+          additionalProperties: true
+        records:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
 
     Session:
       type: object

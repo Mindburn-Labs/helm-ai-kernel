@@ -92,6 +92,16 @@ jobs:
       - name: Test design-system-core
         run: make test-design-system
 
+  console:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test HELM OSS Console
+        run: make test-console
+
   rust-sdk:
     runs-on: ubuntu-latest
     steps:

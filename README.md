@@ -12,6 +12,8 @@ HELM is an open-source execution kernel for governed AI tool calling. It sits on
 This repository is intentionally scoped to the OSS kernel:
 
 - `core/` contains the Go kernel, CLI, HTTP API, proxy, evidence export, and verification logic.
+- `apps/console/` contains the single self-hostable HELM OSS Console frontend.
+- `packages/design-system-core/` contains the public React/token design-system package used by the Console.
 - `protocols/`, `schemas/`, and `api/openapi/` define the wire contracts and generated SDK inputs.
 - `sdk/` ships maintained public SDKs for Go, Python, TypeScript, Rust, and Java.
 - `examples/` contains a small set of runnable integration examples.
@@ -21,6 +23,7 @@ This repository is intentionally scoped to the OSS kernel:
 ```bash
 brew install mindburnlabs/tap/helm
 helm serve --policy ./release.high_risk.v3.toml
+helm serve --policy ./release.high_risk.v3.toml --console
 helm verify evidence-pack.tar
 helm receipts tail --agent agent.titan.exec
 ```
@@ -40,6 +43,8 @@ Run the retained validation targets before publishing changes:
 
 ```bash
 make test
+make test-console
+make test-platform
 make test-all
 make crucible
 ```
@@ -57,12 +62,14 @@ Then point your client at `http://localhost:8080/v1`.
 The retained public surfaces in this repository are:
 
 - Go CLI and kernel API in `core/`
+- Self-hostable HELM OSS Console in `apps/console`
+- Public design-system package in `packages/design-system-core`
 - OpenAI-compatible proxy surface
 - MCP server and bundle generation commands
 - Evidence export and verification commands
 - Public SDKs in `sdk/go`, `sdk/python`, `sdk/ts`, `sdk/rust`, and `sdk/java`
 
-This repository does not ship hosted control-plane features, private operational tooling, browser UI, static UI, embedded UI, or HTML report surfaces.
+This repository ships exactly one browser UI: the self-hostable OSS Console. It does not ship the managed Mindburn hosted service, billing, private operational tooling, proprietary connector programs, or generated HTML report surfaces.
 
 ## SDKs
 
@@ -81,6 +88,8 @@ The HTTP client/types layer is generated from [`api/openapi/helm.openapi.yaml`](
 | Path | Purpose |
 | --- | --- |
 | `core/` | Go implementation of the kernel, CLI, HTTP API, proxy, and verification paths |
+| `apps/console/` | Self-hostable HELM OSS Console frontend |
+| `packages/design-system-core/` | Public HELM React/token design-system package |
 | `api/openapi/` | OpenAPI contract used by the generated SDKs |
 | `protocols/` | Protocol specifications and schema sources |
 | `schemas/` | JSON schemas used by the kernel and verification flows |
@@ -93,6 +102,7 @@ The HTTP client/types layer is generated from [`api/openapi/helm.openapi.yaml`](
 Public OSS docs are sourced from this repository and canonically published through `helm.docs.mindburn.org`. The owned docs set for sync is declared in `docs/public-docs.manifest.json`.
 
 - [Quickstart](docs/QUICKSTART.md)
+- [Console](docs/CONSOLE.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Conformance](docs/CONFORMANCE.md)
 - [Verification](docs/VERIFICATION.md)

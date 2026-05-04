@@ -18,8 +18,11 @@ RUN CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-amd64}" go bui
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1
 
 COPY --from=builder /helm /usr/local/bin/helm
+COPY apps/console/dist/ /usr/share/helm/console/
 
 EXPOSE 8080
+
+ENV HELM_CONSOLE_DIR=/usr/share/helm/console
 
 USER nonroot:nonroot
 

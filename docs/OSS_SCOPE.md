@@ -8,7 +8,7 @@ title: OSS_SCOPE
 > normative trust boundary model and TCB definition. For the canonical
 > 8-package TCB inventory, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-HELM OSS is the **open execution kernel** of the HELM stack.
+HELM OSS is the **open execution kernel and self-hostable Console** of the HELM stack.
 
 It exists to keep the deterministic boundary small, portable, and independently trustworthy. The commercial HELM layers must extend this kernel, not replace it.
 
@@ -80,7 +80,9 @@ non-TCB supporting infrastructure:
 
 ### Product Surfaces
 
-The OSS boundary is intentionally CLI/API/SDK-first. This repository does not ship a browser UI, static viewer, embedded UI, Node CLI wrapper, or generated HTML report surface. It does ship `@helm/design-system-core` as a reusable React/token package for downstream product clients; that package is not itself a product UI or report surface. Future product clients should be built against the clean OpenAPI, SDK, evidence-bundle, conformance-report, CLI JSON contracts, and the public design-system-core entrypoints where React UI is needed.
+The OSS boundary ships exactly one browser UI: `apps/console`, the HELM OSS Console. It is a self-hostable operator surface over the local kernel and uses `@helm/design-system-core` for all product UI primitives and styling. The repository does not ship a second browser UI, a static report viewer, a Node CLI wrapper, a Next starter, or generated HTML report surface.
+
+`@helm/design-system-core` remains a reusable React/token package. The Console consumes it through public package entrypoints so package integrity, app fidelity, and OSS boundary truth are tested together.
 
 ## Removed from TCB (Enterprise)
 
@@ -138,11 +140,12 @@ OSS includes:
 - **Verifiable receipts** — signed receipts, ProofGraph, replay
 - **MCP interceptor** — first-class governed MCP surface
 - **OpenAI proxy** — governed proxy for OpenAI-compatible SDKs
+- **HELM OSS Console** — one self-hostable browser UI for command, receipts, policy, MCP, evidence, replay, ProofGraph, conformance, trust, incidents, audit, developer, and settings workflows
 - Adapters and integration surfaces
 
 OSS does not include (commercial overlays only):
 
-- Hosted multi-tenant control plane (tenancy, workspaces, shared operator sessions)
+- Managed hosted control plane operations
 - Enterprise identity and admin (SCIM, SSO/SAML/OIDC, directory sync)
 - Legal hold, long-term hosted retention, regulator-facing workflows
 - Org-scale rollout / staging / shadow enforcement on live production traffic
@@ -151,4 +154,4 @@ OSS does not include (commercial overlays only):
 - Certified connector program as a hosted service (OSS ships the connector SDK + community verification harness)
 - Billing, seat management, usage metering
 
-The invariant is simple: OSS must stay fully useful on its own as a developer-first execution kernel: Go CLI, HTTP/API contracts, SDKs, evidence export, offline verification, replay, conformance, and release artifacts. Mindburn-specific products and product UI live outside this repository and integrate through those public contracts.
+The invariant is simple: OSS must stay fully useful on its own as a developer-first execution kernel and self-hostable Console: Go CLI, HTTP/API contracts, SDKs, evidence export, offline verification, replay, conformance, Console assets, and release artifacts. Mindburn-specific managed-service operations live outside this repository and integrate through those public contracts.

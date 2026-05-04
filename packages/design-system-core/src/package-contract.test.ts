@@ -63,4 +63,9 @@ describe("package integration contract", () => {
     expect(css).toContain("z-index: var(--helm-z-context-menu)");
     expect(approvedDynamicInlineStyles).toContain("context menu viewport coordinates");
   });
+
+  it("public primitives use Console language, not removed workbench copy", () => {
+    const source = read("src/components/core.tsx");
+    expect(source.toLowerCase()).not.toContain("workbench");
+  });
 });

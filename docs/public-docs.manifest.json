@@ -23,6 +23,20 @@
       "docs_origin_hint": "helm.docs.mindburn.org"
     },
     {
+      "slug": "helm-oss/console",
+      "title": "HELM OSS Console",
+      "section": "start-here",
+      "source_path": "docs/CONSOLE.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/console"
+    },
+    {
+      "slug": "helm-oss/developer-journey",
+      "title": "Developer Journey",
+      "section": "start-here",
+      "source_path": "docs/DEVELOPER_JOURNEY.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/developer-journey"
+    },
+    {
       "slug": "helm-oss/architecture",
       "title": "Architecture",
       "section": "start-here",

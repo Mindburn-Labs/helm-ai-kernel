@@ -16,13 +16,6 @@
       "docs_origin_hint": "helm.docs.mindburn.org/oss"
     },
     {
-      "slug": "helm-oss",
-      "title": "HELM Documentation",
-      "section": "overview",
-      "source_path": "docs/index.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
-    },
-    {
       "slug": "helm-oss/quickstart",
       "title": "Quickstart",
       "section": "start-here",

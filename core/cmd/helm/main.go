@@ -381,7 +381,14 @@ func init() {
 }
 
 func runHealthCmd(out, errOut io.Writer) int {
-	resp, err := http.Get("http://localhost:8081/healthz")
+	healthPort := 8081
+	if envHP := os.Getenv("HELM_HEALTH_PORT"); envHP != "" {
+		if p, parseErr := strconv.Atoi(envHP); parseErr == nil {
+			healthPort = p
+		}
+	}
+
+	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/healthz", healthPort))
 	if err != nil {
 		fmt.Fprintf(errOut, "Health check failed: %v\n", err)
 		return 1

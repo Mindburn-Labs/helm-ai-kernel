@@ -67,7 +67,7 @@ func TestRun_Unknown(t *testing.T) {
 
 // TestRun_Health_Fail verifies availability of the health subcommand logic.
 func TestRun_Health_Fail(t *testing.T) {
-	t.Setenv("HEALTH_PORT", "9999")
+	t.Setenv("HELM_HEALTH_PORT", "9999")
 
 	args := []string{"helm", "health"}
 	var stdout, stderr bytes.Buffer

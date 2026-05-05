@@ -50,6 +50,7 @@ flowchart LR
 | `helm conform` | Run conformance gates and list negative boundary vectors. | [`conform.go`](../../core/cmd/helm/conform.go), [`core/pkg/conformance`](../../core/pkg/conformance) |
 | `helm mcp` | Serve, package, scan, quarantine, approve, and authorize MCP surfaces. | [`mcp_cmd.go`](../../core/cmd/helm/mcp_cmd.go), [`mcp_boundary_cmd.go`](../../core/cmd/helm/mcp_boundary_cmd.go), [`mcp_runtime.go`](../../core/cmd/helm/mcp_runtime.go) |
 | `helm boundary` | Inspect execution-boundary status, capabilities, records, verification, and checkpoints. | [`boundary_surface_cmd.go`](../../core/cmd/helm/boundary_surface_cmd.go), [`core/pkg/boundary`](../../core/pkg/boundary) |
+| `helm identity` | Inspect OSS agent identities. | [`boundary_surface_cmd.go`](../../core/cmd/helm/boundary_surface_cmd.go), [`core/pkg/identity`](../../core/pkg/identity) |
 | `helm sandbox` | Run governed sandbox execution and inspect sandbox grants. | [`sandbox_cmd.go`](../../core/cmd/helm/sandbox_cmd.go), [`sandbox_inspect_cmd.go`](../../core/cmd/helm/sandbox_inspect_cmd.go) |
 | `helm authz`, `helm approvals`, `helm budget` | Inspect ReBAC snapshots, approval ceremonies, and budget ceilings. | [`boundary_surface_cmd.go`](../../core/cmd/helm/boundary_surface_cmd.go), [`core/pkg/contracts`](../../core/pkg/contracts) |
 | `helm telemetry`, `helm coexistence`, `helm integrate` | Emit non-authoritative telemetry, coexistence, and pre-dispatch integration scaffolds. | [`boundary_surface_cmd.go`](../../core/cmd/helm/boundary_surface_cmd.go) |
@@ -58,16 +59,20 @@ flowchart LR
 | `helm replay`, `helm report`, `helm certify`, `helm rollup` | Replay evidence, report compliance, certify packs, and build receipt rollups. | [`replay_cmd.go`](../../core/cmd/helm/replay_cmd.go), [`report_cmd.go`](../../core/cmd/helm/report_cmd.go), [`certify_cmd.go`](../../core/cmd/helm/certify_cmd.go), [`rollup_cmd.go`](../../core/cmd/helm/rollup_cmd.go) |
 | `helm freeze`, `helm unfreeze`, `helm incident`, `helm brief`, `helm risk-summary` | Operate local safety, incident, brief, and risk surfaces. | [`freeze_cmd.go`](../../core/cmd/helm/freeze_cmd.go), [`incident_cmd.go`](../../core/cmd/helm/incident_cmd.go), [`risk_cmd.go`](../../core/cmd/helm/risk_cmd.go) |
 | `helm trust`, `helm threat`, `helm shadow`, `helm did`, `helm tee`, `helm local` | Inspect trust roots, threats, shadow-AI patterns, identifiers, TEE attestations, and local provider profiles. | [`trust_cmd.go`](../../core/cmd/helm/trust_cmd.go), [`threat_cmd.go`](../../core/cmd/helm/threat_cmd.go), [`shadow_cmd.go`](../../core/cmd/helm/shadow_cmd.go), [`did_cmd.go`](../../core/cmd/helm/did_cmd.go), [`tee_cmd.go`](../../core/cmd/helm/tee_cmd.go), [`local_cmd.go`](../../core/cmd/helm/local_cmd.go) |
+| `helm health`, `helm version`, `helm help` | Global utility commands for local health checks, version reporting, and usage output. | [`main.go`](../../core/cmd/helm/main.go), [`registry.go`](../../core/cmd/helm/registry.go) |
 
 Auxiliary binaries under `core/cmd/bootstrap`, `core/cmd/channel_gateway`, `core/cmd/pack_verify`, `core/cmd/skill_lint`, and `core/cmd/skill_pack` are source-owned helpers. They are not top-level `helm` subcommands unless wired through `core/cmd/helm`.
+
+This table documents registered top-level `helm` command families and global utility commands. Aliases are documented in source and should be exposed here only when public examples rely on them.
 
 ## Key Flag Contracts
 
 | Command | Contract |
 | --- | --- |
 | `helm serve --policy <path>` | `--policy` is required. Optional flags are `--addr`, `--port`, `--data-dir`, `--console`, `--console-dir`, and `--json`. If the policy does not override bind or port, `serve` uses `127.0.0.1:7714`. |
-| `helm server` | Starts without `--policy` and defaults to `127.0.0.1:8080` unless flags, env, or config override it. |
+| `helm server` | Starts without `--policy` and defaults to `127.0.0.1:8080` unless flags, env, or config override it. `HELM_BIND_ADDR` overrides the bind address when no explicit flag is set. `HELM_PORT` overrides the API port when no explicit flag is set. The separate health server uses `HELM_HEALTH_PORT` and defaults to `8081`. |
 | `helm proxy` | Defaults to `--upstream https://api.openai.com/v1`, `--port 9090`, and `--receipts-dir ./helm-receipts`. `--websocket` is explicitly unsupported in the OSS proxy runtime. |
+| `helm health` | Checks `http://localhost:$HELM_HEALTH_PORT/healthz`; if `HELM_HEALTH_PORT` is unset, it checks `http://localhost:8081/healthz`. |
 | `helm receipts tail` | Requires `--agent <id>`. `--server` defaults from `HELM_URL` or `http://127.0.0.1:7714`. |
 | `helm bundle build` | Takes the policy source as the positional argument: `helm bundle build [--language=cel|rego|cedar] [--entities=path] <source>`. There is no `--policy` flag for this subcommand. |
 | `helm bundle verify` | Requires `--file <bundle.yaml>` and `--hash <expected-hash>`. |

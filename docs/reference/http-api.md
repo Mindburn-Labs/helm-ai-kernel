@@ -46,7 +46,7 @@ The OpenAPI security blocks describe the external contract. `route_auth.go` is t
 
 | Family | Methods and paths | Source truth |
 | --- | --- | --- |
-| Health and version | `GET /healthz`, `GET /version`, `GET /api/v1/version` | [`subsystems.go`](../../core/cmd/helm/subsystems.go), [`route_registry.go`](../../core/cmd/helm/route_registry.go) |
+| Health and version | `GET /healthz`, `GET /version`, `GET /api/v1/version` | [`subsystems.go`](../../core/cmd/helm/subsystems.go), [`route_registry.go`](../../core/cmd/helm/route_registry.go), [`main.go`](../../core/cmd/helm/main.go) |
 | OpenAI-compatible boundary | `POST /v1/chat/completions` | [`subsystems.go`](../../core/cmd/helm/subsystems.go), [`core/pkg/api/openai_proxy.go`](../../core/pkg/api/openai_proxy.go), [`proxy_cmd.go`](../../core/cmd/helm/proxy_cmd.go) |
 | Kernel approval and evaluation | `POST /api/v1/kernel/approve`, `POST /api/v1/evaluate` | [`core/pkg/api/approve_handler.go`](../../core/pkg/api/approve_handler.go), [`route_registry.go`](../../core/cmd/helm/route_registry.go) |
 | Receipts | `GET /api/v1/receipts`, `GET /api/v1/receipts/tail`, `GET /api/v1/receipts/{receipt_id}` | [`receipt_routes.go`](../../core/cmd/helm/receipt_routes.go) |
@@ -57,12 +57,14 @@ The OpenAPI security blocks describe the external contract. `route_auth.go` is t
 | MCP runtime | `GET|POST /mcp`, `GET /.well-known/oauth-protected-resource/mcp`, `GET /mcp/v1/capabilities`, `POST /mcp/v1/execute` | [`mcp_runtime.go`](../../core/cmd/helm/mcp_runtime.go), [`mcp_cmd.go`](../../core/cmd/helm/mcp_cmd.go) |
 | MCP registry and authorization | `GET|POST /api/v1/mcp/registry`, `GET /api/v1/mcp/registry/{server_id}`, `POST /api/v1/mcp/registry/{server_id}/approve`, `POST /api/v1/mcp/registry/{server_id}/revoke`, `POST /api/v1/mcp/scan`, `GET /api/v1/mcp/auth-profiles`, `PUT /api/v1/mcp/auth-profiles/{profile_id}`, `POST /api/v1/mcp/authorize-call` | [`contract_routes.go`](../../core/cmd/helm/contract_routes.go), [`mcp_boundary_cmd.go`](../../core/cmd/helm/mcp_boundary_cmd.go) |
 | Sandbox | `GET /api/v1/sandbox/profiles`, `GET|POST /api/v1/sandbox/grants`, `GET /api/v1/sandbox/grants/{grant_id}`, `POST /api/v1/sandbox/grants/{grant_id}/verify`, `POST /api/v1/sandbox/preflight`, `GET /api/v1/sandbox/grants/inspect` | [`contract_routes.go`](../../core/cmd/helm/contract_routes.go), [`sandbox_cmd.go`](../../core/cmd/helm/sandbox_cmd.go) |
-| Identity and authz | `GET /api/v1/identity/agents`, `GET /api/v1/authz/health`, `GET|POST /api/v1/authz/check`, `GET /api/v1/authz/snapshots`, `GET /api/v1/authz/snapshots/{snapshot_id}` | [`contract_routes.go`](../../core/cmd/helm/contract_routes.go), [`subsystems.go`](../../core/cmd/helm/subsystems.go), [`core/pkg/authz`](../../core/pkg/authz) |
+| Identity and authz | `GET /api/v1/identity/agents`, `GET /api/v1/authz/health`, `POST /api/v1/authz/check`, `GET /api/v1/authz/snapshots`, `GET /api/v1/authz/snapshots/{snapshot_id}` | [`contract_routes.go`](../../core/cmd/helm/contract_routes.go), [`subsystems.go`](../../core/cmd/helm/subsystems.go), [`core/pkg/authz`](../../core/pkg/authz) |
 | Approvals and budgets | `GET|POST /api/v1/approvals`, `POST /api/v1/approvals/{approval_id}/{action}`, `GET /api/v1/budgets`, `PUT /api/v1/budgets/{budget_id}` | [`contract_routes.go`](../../core/cmd/helm/contract_routes.go), [`boundary_surface_cmd.go`](../../core/cmd/helm/boundary_surface_cmd.go) |
 | Console bootstrap | `GET /api/v1/console/bootstrap`, `GET /api/v1/console/surfaces`, `GET /api/v1/console/surfaces/{surface_id}` | [`console_routes.go`](../../core/cmd/helm/console_routes.go) |
 | Telemetry and coexistence | `GET /api/v1/telemetry/otel/config`, `POST /api/v1/telemetry/export`, `GET /api/v1/coexistence/capabilities` | [`contract_routes.go`](../../core/cmd/helm/contract_routes.go), [`boundary_surface_cmd.go`](../../core/cmd/helm/boundary_surface_cmd.go) |
 
-Implementation-only routes in `RuntimeRouteSpecs` are not public contract promises. Public documentation should cite routes with `ContractStatus: public` or the OpenAPI document.
+Implementation-only routes in `RuntimeRouteSpecs` are not public contract promises. For example, `GET /api/v1/authz/check` is an implementation route; the public contract for authorization evaluation is `POST /api/v1/authz/check` in OpenAPI.
+
+`helm server` runs API routes on `HELM_PORT` or `8080` by default. Its health server is separate and uses `HELM_HEALTH_PORT` or `8081` by default; `helm serve` keeps the local policy boundary default at `127.0.0.1:7714`.
 
 ## Request And Response Notes
 

@@ -99,6 +99,10 @@ pytest -v --tb=short
 
 Minimal client:
 
+This client targets `helm server`, whose API default is `http://localhost:8080`.
+For the local policy-boundary path started with `helm serve --policy <file>`, set
+the base URL to `http://localhost:7714` unless you passed a custom `--port`.
+
 ```python
 from helm_sdk import HelmApiError, HelmClient, ChatCompletionRequest, ChatMessage
 
@@ -136,6 +140,10 @@ npm run build
 ```
 
 Minimal client:
+
+This client targets `helm server`, whose API default is `http://localhost:8080`.
+For `helm serve`, use `http://localhost:7714`; for `helm proxy`, use the
+OpenAI-compatible proxy default `http://localhost:9090/v1`.
 
 ```ts
 import { HelmApiError, HelmClient } from "@mindburn/helm";

@@ -33,7 +33,7 @@
         "release.high_risk.v3.toml"
       ],
       "owner_doc_path": "README.md",
-      "public_doc_slugs": ["oss", "helm-oss/source-map", "helm-oss/security/release-security"],
+      "public_doc_slugs": ["oss", "helm-oss/source-map", "helm-oss/security/release-security", "helm-oss/changelog"],
       "rationale": "Top-level tracked files define install, release, contribution, governance, and security behavior without masking runtime trees behind a repository-wide wildcard.",
       "validation_commands": ["make docs-coverage", "make docs-truth"]
     },
@@ -291,7 +291,28 @@
       "classification": "public-hub",
       "source_patterns": ["docs/**"],
       "owner_doc_path": "docs/README.md",
-      "public_doc_slugs": ["oss", "helm-oss/source-map", "coverage"],
+      "public_doc_slugs": [
+        "oss",
+        "helm-oss/source-map",
+        "helm-oss/quickstart",
+        "helm-oss/compatibility",
+        "helm-oss/owasp-mcp-threat-mapping",
+        "helm-oss/integrations/microsoft-agent-governance-toolkit",
+        "helm-oss/strategy/mcp-governance-competitive-radar-2026-04",
+        "helm-oss/strategy/policy-research-watchlist-2026-04",
+        "helm-oss/security/owasp-agentic-top10-mapping",
+        "helm-oss/security/prompt-injection-watchlist-2026-04",
+        "helm-oss/compliance/nist-ai-agent-critical-infrastructure",
+        "helm-oss/compliance/eu-ai-act-high-risk-pack",
+        "helm-oss/compliance/nist-ai-rmf-iso-42001-crosswalk",
+        "helm-oss/oss-scope",
+        "helm-oss/architecture/cognitive-firewall",
+        "helm-oss/architecture/eidas-qtsp",
+        "helm-oss/architecture/policy-languages",
+        "helm-oss/security/clawguard-taint-tracking",
+        "helm-oss/security/session-risk-memory",
+        "helm-oss/governance/cncf-application"
+      ],
       "rationale": "Docs files are source material for the public site and are checked through manifest, LLM, search, and source-inventory gates.",
       "validation_commands": ["make docs-coverage", "make docs-truth"]
     }

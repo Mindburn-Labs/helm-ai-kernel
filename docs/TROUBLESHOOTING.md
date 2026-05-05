@@ -77,6 +77,8 @@ export HELM_URL=http://127.0.0.1:7714
 ```
 
 `helm server` still defaults to `127.0.0.1:8080`. The public quickstart uses `helm serve --policy ./release.high_risk.v3.toml`, which defaults to `127.0.0.1:7714`.
+The separate `helm server` health endpoint uses `HELM_HEALTH_PORT` or `8081`;
+`helm health` checks that health endpoint, not the main API port.
 
 ### `401 Unauthorized` from proxy
 

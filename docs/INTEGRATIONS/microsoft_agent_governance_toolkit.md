@@ -69,6 +69,9 @@ Each helper normalizes a native tool-call event into an OpenAI-compatible HELM r
 ```ts
 import { HelmClient, createAgentFrameworkAdapter, fromLangGraphToolCall } from "@mindburn/helm";
 
+// This example targets `helm server` on its default API port. Use
+// http://localhost:7714 for `helm serve` or http://localhost:9090/v1 for the
+// OpenAI-compatible proxy path.
 const helm = new HelmClient({ baseUrl: "http://localhost:8080" });
 const adapter = createAgentFrameworkAdapter(helm, {
   model: "helm-governance",

@@ -63,7 +63,7 @@ lint: docs-coverage docs-truth
 proto-lint:
 	buf lint protocols/policy-schema
 
-BUF_AGAINST ?= .git#branch=main,subdir=protocols/policy-schema
+BUF_AGAINST ?= .git\#branch=main,subdir=protocols/policy-schema
 proto-breaking:
 	buf breaking protocols/policy-schema --against "$(BUF_AGAINST)"
 

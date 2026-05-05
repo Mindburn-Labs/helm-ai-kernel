@@ -13,7 +13,7 @@ require (
 	github.com/cedar-policy/cedar-go v1.6.0
 	github.com/cloudflare/circl v1.6.3
 	github.com/consensys/gnark v0.14.0
-	github.com/consensys/gnark-crypto v0.19.0
+	github.com/consensys/gnark-crypto v0.19.2
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/cel-go v0.28.0

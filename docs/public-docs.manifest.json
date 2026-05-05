@@ -13,301 +13,387 @@
       "title": "HELM OSS",
       "section": "oss",
       "source_path": "docs/index.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/oss"
+      "docs_origin_hint": "helm.docs.mindburn.org/oss",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/quickstart",
       "title": "Quickstart",
       "section": "start-here",
       "source_path": "docs/QUICKSTART.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/console",
       "title": "HELM OSS Console",
       "section": "start-here",
       "source_path": "docs/CONSOLE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/console"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/console",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/developer-journey",
       "title": "Developer Journey",
       "section": "start-here",
       "source_path": "docs/DEVELOPER_JOURNEY.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/developer-journey"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/developer-journey",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/architecture",
       "title": "Architecture",
       "section": "start-here",
       "source_path": "docs/ARCHITECTURE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/conformance",
       "title": "Conformance",
       "section": "start-here",
       "source_path": "docs/CONFORMANCE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/verification",
       "title": "Verification",
       "section": "start-here",
       "source_path": "docs/VERIFICATION.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/compatibility",
       "title": "Compatibility",
       "section": "start-here",
       "source_path": "docs/COMPATIBILITY.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/publishing",
       "title": "Publishing",
       "section": "start-here",
       "source_path": "docs/PUBLISHING.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/changelog",
       "title": "HELM OSS Changelog",
       "section": "oss",
       "source_path": "CHANGELOG.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/changelog"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/changelog",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/execution-security-model",
       "title": "Execution Security Model",
       "section": "interfaces",
       "source_path": "docs/EXECUTION_SECURITY_MODEL.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/owasp-mcp-threat-mapping",
       "title": "OWASP MCP Threat Mapping",
       "section": "interfaces",
       "source_path": "docs/OWASP_MCP_THREAT_MAPPING.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/sdks",
       "title": "SDK Index",
       "section": "interfaces",
       "source_path": "docs/sdks/00_INDEX.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/benchmarks",
       "title": "Benchmarks",
       "section": "supporting-material",
       "source_path": "docs/BENCHMARKS.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/troubleshooting",
       "title": "Troubleshooting",
       "section": "supporting-material",
       "source_path": "docs/TROUBLESHOOTING.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/integrations/openai-compatible-proxy",
       "title": "OpenAI-Compatible Proxy Integration",
       "section": "integrations",
       "source_path": "docs/INTEGRATIONS/openai_baseurl.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/integrations/mcp",
       "title": "MCP Integration",
       "section": "integrations",
       "source_path": "docs/INTEGRATIONS/mcp.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/integrations/microsoft-agent-governance-toolkit",
       "title": "Microsoft Agent Governance Toolkit Coexistence",
       "section": "integrations",
       "source_path": "docs/INTEGRATIONS/microsoft_agent_governance_toolkit.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/strategy/mcp-governance-competitive-radar-2026-04",
       "title": "MCP Governance Competitive Radar - April 2026",
       "section": "strategy",
       "source_path": "docs/strategy/mcp-governance-competitive-radar-2026-04.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/strategy/policy-research-watchlist-2026-04",
       "title": "Policy Research Watchlist - April 2026",
       "section": "strategy",
       "source_path": "docs/strategy/policy-research-watchlist-2026-04.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/security/owasp-agentic-top10-mapping",
       "title": "OWASP Agentic Top 10 Mapping",
       "section": "security",
       "source_path": "docs/security/owasp-agentic-top10-coverage.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/security/prompt-injection-watchlist-2026-04",
       "title": "Prompt Injection Watchlist - April 2026",
       "section": "security",
       "source_path": "docs/security/prompt-injection-watchlist-2026-04.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/compliance/nist-ai-agent-critical-infrastructure",
       "title": "NIST AI Agent Critical Infrastructure Alignment",
       "section": "compliance",
       "source_path": "docs/compliance/nist-ai-agent-critical-infrastructure.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/compliance/eu-ai-act-high-risk-pack",
       "title": "EU AI Act High-Risk Pack",
       "section": "compliance",
       "source_path": "docs/compliance/eu-ai-act-high-risk-pack.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/compliance/nist-ai-rmf-iso-42001-crosswalk",
       "title": "NIST AI RMF to ISO 42001 Crosswalk",
       "section": "compliance",
       "source_path": "docs/compliance/nist-ai-rmf-iso-42001-crosswalk.md",
-      "docs_origin_hint": "helm.docs.mindburn.org"
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/source-map",
       "title": "Developer Surface Map",
       "section": "oss",
       "source_path": "docs/DEVELOPER_SURFACE_MAP.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/source-map"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/source-map",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/oss-scope",
       "title": "OSS Scope",
       "section": "oss",
       "source_path": "docs/OSS_SCOPE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/oss-scope"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/oss-scope",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/deployment-and-examples",
       "title": "Deployment and Examples",
       "section": "deployment",
       "source_path": "docs/DEPLOYMENT_AND_EXAMPLES.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/deployment-and-examples"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/deployment-and-examples",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/examples",
       "title": "HELM OSS Examples Matrix",
       "section": "deployment",
       "source_path": "docs/EXAMPLES.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/examples"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/examples",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/deployment/kubernetes",
       "title": "Kubernetes Deployment",
       "section": "deployment",
       "source_path": "docs/KUBERNETES_DEPLOYMENT.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/deployment/kubernetes"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/deployment/kubernetes",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/reference/cli",
       "title": "HELM OSS CLI Reference",
       "section": "reference",
       "source_path": "docs/reference/cli.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/reference/cli"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/reference/cli",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/reference/http-api",
       "title": "HELM OSS HTTP API Reference",
       "section": "reference",
       "source_path": "docs/reference/http-api.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/reference/http-api"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/reference/http-api",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/reference/execution-boundary",
       "title": "Execution Boundary Reference",
       "section": "reference",
       "source_path": "docs/reference/execution-boundary.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/reference/execution-boundary"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/reference/execution-boundary",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/reference/json-schemas",
       "title": "HELM OSS JSON Schema Reference",
       "section": "reference",
       "source_path": "docs/reference/json-schemas.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/reference/json-schemas"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/reference/json-schemas",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/reference/protocols-and-schemas",
       "title": "Protocols and Schemas",
       "section": "reference",
       "source_path": "docs/REFERENCE_PROTOCOLS.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/reference/protocols-and-schemas"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/reference/protocols-and-schemas",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/architecture/cognitive-firewall",
       "title": "Cognitive Firewall Pattern",
       "section": "architecture",
       "source_path": "docs/architecture/cognitive-firewall.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/architecture/cognitive-firewall"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/architecture/cognitive-firewall",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/architecture/eidas-qtsp",
       "title": "eIDAS QTSP Anchoring",
       "section": "architecture",
       "source_path": "docs/architecture/eidas-qtsp.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/architecture/eidas-qtsp"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/architecture/eidas-qtsp",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/architecture/policy-languages",
       "title": "Policy Languages",
       "section": "architecture",
       "source_path": "docs/architecture/policy-languages.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/architecture/policy-languages"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/architecture/policy-languages",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/security/clawguard-taint-tracking",
       "title": "ClawGuard Taint Tracking",
       "section": "security",
       "source_path": "docs/security/clawguard-taint-tracking.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/security/clawguard-taint-tracking"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/security/clawguard-taint-tracking",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/security/session-risk-memory",
       "title": "Session Risk Memory",
       "section": "security",
       "source_path": "docs/security/session-risk-memory.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/security/session-risk-memory"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/security/session-risk-memory",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/security/release-security",
       "title": "Release and Security Evidence",
       "section": "security",
       "source_path": "docs/RELEASE_SECURITY.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/security/release-security"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/security/release-security",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/governance/cncf-application",
       "title": "CNCF Application Evidence",
       "section": "governance",
       "source_path": "docs/governance/cncf-application.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/governance/cncf-application"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/governance/cncf-application",
+      "access": "public",
+      "sensitivity": "public"
     },
     {
       "slug": "helm-oss/design-system",
       "title": "HELM OSS Design System Surface",
       "section": "interfaces",
       "source_path": "docs/DESIGN_SYSTEM.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/design-system"
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/design-system",
+      "access": "public",
+      "sensitivity": "public"
     }
   ]
 }

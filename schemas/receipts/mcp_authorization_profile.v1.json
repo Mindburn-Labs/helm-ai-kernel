@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.dev/schemas/receipts/mcp_authorization_profile.v1.json",
+  "title": "HELM MCPAuthorizationProfile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profile_id", "resource"],
+  "properties": {
+    "profile_id": { "type": "string", "minLength": 1 },
+    "resource": { "type": "string", "minLength": 1 },
+    "authorization_servers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "scopes_supported": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "required_scopes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "protocol_versions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "tool_scope_hash": { "type": "string" },
+    "profile_hash": { "type": "string" }
+  }
+}

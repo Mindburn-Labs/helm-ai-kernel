@@ -28,7 +28,7 @@ func BenchmarkGuardian_EvaluateDecision(b *testing.B) {
 	g := benchGuardian(b)
 	req := DecisionRequest{
 		Principal: "bench-principal",
-		Action:    "execute",
+		Action:    "EXECUTE_TOOL",
 		Resource:  "safe-tool",
 		Context:   map[string]interface{}{"key": "value"},
 	}

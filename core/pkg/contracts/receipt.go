@@ -20,7 +20,7 @@ type Receipt struct {
 	WitnessSignatures []WitnessSignature `json:"witness_signatures,omitempty"`
 
 	// V3: Causal chain – ProofGraph DAG
-	PrevHash     string `json:"prev_hash"`           // SHA-256 of the previous receipt's signature (causal link)
+	PrevHash     string `json:"prev_hash"`           // SHA-256 of the previous canonical signed receipt envelope
 	LamportClock uint64 `json:"lamport_clock"`       // Monotonic logical clock per session
 	ArgsHash     string `json:"args_hash,omitempty"` // SHA-256 of JCS-canonicalized tool args bound at the PEP boundary
 

@@ -180,6 +180,22 @@ func TestRateLimiter_TrustProxy_XRealIP(t *testing.T) {
 	}
 }
 
+func TestRateLimiter_DefaultIgnoresProxyHeaders(t *testing.T) {
+	rl := &GlobalRateLimiter{
+		visitors: make(map[string]*visitor),
+		config:   rateLimitConfig{rps: 100, burst: 100},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Real-IP", "1.2.3.4")
+	req.Header.Set("X-Forwarded-For", "5.6.7.8")
+	req.RemoteAddr = "10.0.0.1:9999"
+
+	ip := rl.clientIP(req)
+	if ip != "10.0.0.1" {
+		t.Errorf("expected remote address 10.0.0.1 when proxy headers are not trusted, got %s", ip)
+	}
+}
+
 func TestRateLimiter_TrustProxy_XFF(t *testing.T) {
 	rl := &GlobalRateLimiter{
 		visitors:   make(map[string]*visitor),

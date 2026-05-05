@@ -1,8 +1,50 @@
 ---
 title: Microsoft Agent Governance Toolkit Coexistence
+last_reviewed: 2026-05-05
 ---
 
 # Microsoft Agent Governance Toolkit Coexistence
+
+## Audience
+
+Use this page when you need the public `helm-oss/integrations/microsoft-agent-governance-toolkit` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
+
+## Outcome
+
+After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
+
+## Source Truth
+
+- Public route: `helm-oss/integrations/microsoft-agent-governance-toolkit`
+- Source document: `helm-oss/docs/INTEGRATIONS/microsoft_agent_governance_toolkit.md`
+- Public manifest: `helm-oss/docs/public-docs.manifest.json`
+- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
+
+Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
+| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
+| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
+
+## Diagram
+
+This scheme maps the main sections of Microsoft Agent Governance Toolkit Coexistence in reading order.
+
+```mermaid
+flowchart LR
+  Page["Microsoft Agent Governance Toolkit Coexistence"]
+  A["TypeScript SDK Coverage"]
+  B["Deployment Pattern"]
+  C["Limits"]
+  Page --> A
+  A --> B
+  B --> C
+```
 
 Microsoft announced Agent Governance Toolkit (AGT) on 2026-04-02 as an open-source runtime governance layer for autonomous AI agents. The announcement and repository position AGT around deterministic action policy, zero-trust identity, sandboxing, SRE controls, and framework integrations across LangGraph, CrewAI, OpenAI Agents SDK, PydanticAI, LlamaIndex, and adjacent agent stacks.
 

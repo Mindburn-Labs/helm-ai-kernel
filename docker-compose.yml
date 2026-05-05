@@ -3,38 +3,37 @@
 # See docs/QUICKSTART.md for configuration guidance.
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: helm
-      POSTGRES_USER: helm
-      POSTGRES_PASSWORD: helm-dev-password
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U helm"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   helm:
     build:
       context: .
       dockerfile: Dockerfile
-    depends_on:
-      postgres:
-        condition: service_healthy
+    command:
+      - serve
+      - --policy
+      - /etc/helm/release.high_risk.v3.toml
+      - --addr
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --data-dir
+      - /var/lib/helm
+      - --console
+      - --console-dir
+      - /usr/share/helm/console
     environment:
-      DATABASE_URL: "postgres://helm:helm-dev-password@postgres:5432/helm?sslmode=disable"
       HELM_REGION: "us"
       HELM_ENABLE_OPENAI_PROXY: "1"
-      HELM_DEMO_MODE: "1"
       EVIDENCE_SIGNING_KEY: "helm-evidence-dev"
     ports:
       - "8080:8080"
       - "8081:8081"
+    volumes:
+      - helmdata:/var/lib/helm
+    healthcheck:
+      test: ["CMD", "helm", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
 
 volumes:
-  pgdata:
+  helmdata:

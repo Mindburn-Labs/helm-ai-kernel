@@ -11,6 +11,10 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+    - port: {{ .Values.service.healthPort }}
+      targetPort: health
+      protocol: TCP
+      name: health
     {{- if .Values.helm.metrics.enabled }}
     - port: {{ .Values.service.metricsPort }}
       targetPort: metrics

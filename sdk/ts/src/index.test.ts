@@ -219,6 +219,74 @@ describe('HelmClient', () => {
     });
   });
 
+  describe('execution boundary surfaces', () => {
+    it('creates evidence envelope manifests', async () => {
+      fetchSpy.mockResolvedValue(jsonResponse({
+        manifest_id: 'env1',
+        envelope: 'dsse',
+        native_evidence_hash: 'sha256:native',
+        native_authority: true,
+        created_at: '2026-05-05T00:00:00Z',
+      }));
+      const client = new HelmClient({ baseUrl: 'http://h' });
+      const result = await client.createEvidenceEnvelopeManifest({
+        manifest_id: 'env1',
+        envelope: 'dsse',
+        native_evidence_hash: 'sha256:native',
+      });
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'http://h/api/v1/evidence/envelopes',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(result.native_authority).toBe(true);
+    });
+
+    it('lists negative conformance vectors', async () => {
+      fetchSpy.mockResolvedValue(jsonResponse([{ id: 'pdp-outage', category: 'policy' }]));
+      const client = new HelmClient({ baseUrl: 'http://h' });
+      const result = await client.listNegativeConformanceVectors();
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'http://h/api/v1/conformance/negative',
+        expect.objectContaining({ method: 'GET' }),
+      );
+      expect(result[0].id).toBe('pdp-outage');
+    });
+
+    it('manages MCP quarantine records', async () => {
+      fetchSpy.mockResolvedValue(jsonResponse({
+        server_id: 'mcp1',
+        risk: 'high',
+        state: 'quarantined',
+        discovered_at: '2026-05-05T00:00:00Z',
+      }));
+      const client = new HelmClient({ baseUrl: 'http://h' });
+      const result = await client.discoverMcpServer({ server_id: 'mcp1', risk: 'high' });
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'http://h/api/v1/mcp/registry',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(result.state).toBe('quarantined');
+    });
+
+    it('inspects sandbox grants with query parameters', async () => {
+      fetchSpy.mockResolvedValue(jsonResponse({
+        grant_id: 'grant1',
+        runtime: 'wazero',
+        profile: 'deny-default',
+        env: { mode: 'deny-all' },
+        network: { mode: 'deny-all' },
+        declared_at: '2026-05-05T00:00:00Z',
+      }));
+      const client = new HelmClient({ baseUrl: 'http://h' });
+      const result = await client.inspectSandboxGrants('wazero', 'deny-default', 'epoch1');
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'http://h/api/v1/sandbox/grants/inspect?runtime=wazero&profile=deny-default&policy_epoch=epoch1',
+        expect.objectContaining({ method: 'GET' }),
+      );
+      expect(result.grant_id).toBe('grant1');
+    });
+  });
+
   // ── System ──────────────────────────────────────────
   describe('health', () => {
     it('GETs /healthz', async () => {

@@ -117,6 +117,17 @@ func TestExt_NoPolicyDefined(t *testing.T) {
 	}
 }
 
+func TestExt_NilPolicyGraphFailsClosedWithoutPanic(t *testing.T) {
+	g := NewGuardian(&testSigner{}, nil, pkg_artifact.NewRegistry(newTestStore(), nil))
+	dec, err := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x", Resource: "unknown_tool"})
+	if err != nil {
+		t.Fatalf("evaluate with nil policy graph: %v", err)
+	}
+	if dec.Verdict != string(contracts.VerdictDeny) {
+		t.Fatalf("expected DENY, got %s", dec.Verdict)
+	}
+}
+
 // ─── 7: Concurrent EvaluateDecision — no panics ──────────────
 
 func TestExt_ConcurrentEvaluateDecisionNoPanics(t *testing.T) {

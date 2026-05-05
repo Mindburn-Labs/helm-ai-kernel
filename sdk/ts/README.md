@@ -67,6 +67,10 @@ console.log(result.governance.receiptId);
 
 The helpers do not add Microsoft Agent Governance Toolkit as a dependency and do not claim Microsoft certification. They cover the same framework families so HELM can sit behind AGT or another orchestrator as the receipt-bearing enforcement boundary.
 
+## Execution Boundary Methods
+
+The client also exposes typed methods for proof-bearing boundary operations: `createEvidenceEnvelopeManifest`, `listNegativeConformanceVectors`, `listMcpRegistry`, `discoverMcpServer`, `approveMcpServer`, and `inspectSandboxGrants`. These methods keep external envelopes, MCP quarantine decisions, and sandbox grants attached to HELM-native receipts and EvidencePacks.
+
 ## Release Notes
 
 `0.4.0` is the cleaned OSS kernel baseline with the retained OpenAPI client surface and protobuf message bindings.

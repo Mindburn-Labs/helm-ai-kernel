@@ -1,8 +1,35 @@
 ---
 title: CNCF Sandbox Application
+last_reviewed: 2026-05-05
 ---
 
 # helm-oss CNCF Sandbox Application
+
+## Audience
+
+Use this page when you need the public `helm-oss/governance/cncf-application` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
+
+## Outcome
+
+After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
+
+## Source Truth
+
+- Public route: `helm-oss/governance/cncf-application`
+- Source document: `helm-oss/docs/governance/cncf-application.md`
+- Public manifest: `helm-oss/docs/public-docs.manifest.json`
+- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
+
+Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
+| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
+| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
 
 This document is the canonical narrative used to file helm-oss for CNCF
 Sandbox admission. It is intentionally short and references the project's
@@ -23,9 +50,11 @@ transparency logs (Sigstore Rekor and RFC 3161 TSA), and exports evidence
 packs that any third party can verify offline with the bundled `helm verify`
 CLI.
 
-The kernel is small (a few hundred KB binary), pure Go, and ships with a
-production-aligned CycloneDX SBOM, an OpenVEX document, and reproducible
-builds. The repository contains the kernel, its CLI, the OpenAI-compatible
+The kernel is small (a few hundred KB binary), pure Go, and ships with
+production-aligned SBOM material, release attestation, and reproducible
+builds. OpenVEX policy source is retained in the repository and should only be
+described as a published release asset when attached to a GitHub release. The
+repository contains the kernel, its CLI, the OpenAI-compatible
 proxy, the MCP server, and five public SDKs (Go, Python, TypeScript, Rust,
 Java).
 
@@ -67,9 +96,9 @@ infrastructure they will run on the execution path.
   no runtime configuration drift.
 - **Observability**: OpenTelemetry tracing, Prometheus metrics, and
   structured logs by default.
-- **Open standards**: CycloneDX SBOM, OpenVEX, Sigstore Rekor, RFC 3161,
-  TUF, SLSA, OpenSSF Scorecard, Verifiable Credentials, ML-DSA-65 PQC
-  signatures.
+- **Open standards**: CycloneDX SBOM material, release attestation, optional
+  OpenVEX release assets, Sigstore Rekor, RFC 3161, TUF, SLSA, OpenSSF
+  Scorecard, Verifiable Credentials, ML-DSA-65 PQC signatures.
 - **Vendor-neutral identity**: planned W3C DID resolver and IATP-shaped
   agent handshake.
 
@@ -101,13 +130,15 @@ Conduct is the Contributor Covenant 2.1, with reports routed to
 ## Security
 
 Security policy is in `SECURITY.md`. Vulnerability reports go to
-`security@mindburn.org`. Releases are cosign-signed (keyless via Fulcio +
-Rekor), built reproducibly (verified by the `reproducibility-check` job in
-`.github/workflows/release.yml`), and shipped with a per-release SBOM and
-OpenVEX document. Continuous fuzzing is configured for upstream OSS-Fuzz
-under `oss-fuzz/`. The OpenSSF Scorecard runs weekly via
-`.github/workflows/scorecard.yml`. The OpenSSF Best Practices gold-tier
-mapping is in `BEST_PRACTICES.md`.
+`security@mindburn.org`. Releases are built reproducibly (verified by the
+`reproducibility-check` job in `.github/workflows/release.yml`) and shipped with
+checksums, SBOM material, and release attestation. Cosign bundle and OpenVEX
+verification apply when those files are attached to the GitHub release; the
+current public `v0.4.0` release published on 2026-04-25 does not attach
+`*.cosign.bundle` or `*.openvex.json` assets. Continuous fuzzing is configured
+for upstream OSS-Fuzz under `oss-fuzz/`. The OpenSSF Scorecard runs weekly via
+`.github/workflows/scorecard.yml`. The OpenSSF Best Practices gold-tier mapping
+is in `BEST_PRACTICES.md`.
 
 ## Forward Plan
 
@@ -142,3 +173,14 @@ without depending on the helm-oss codebase.
 | OSS-Fuzz upstream PR | In progress (`oss-fuzz/`) |
 | TOC sponsor identified | Known gap; governance owner |
 | Sandbox proposal filed | Known gap; governance owner |
+
+## Diagram
+
+```mermaid
+flowchart LR
+  scope["OSS scope"] --> governance["Governance evidence"]
+  governance --> security["Security policy"]
+  security --> release["Release process"]
+  release --> best["OpenSSF mapping"]
+  best --> cncf["CNCF application packet"]
+```

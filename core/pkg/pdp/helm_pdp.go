@@ -52,15 +52,17 @@ func (h *HelmPDP) Evaluate(ctx context.Context, req *DecisionRequest) (*Decision
 	default:
 	}
 
-	allowed := true
-	reasonCode := ""
+	allowed := false
+	reasonCode := string(contracts.ReasonPDPDeny)
 
 	if h.rules != nil {
 		if v, exists := h.rules[req.Resource]; exists {
 			allowed = v
-			if !allowed {
-				reasonCode = string(contracts.ReasonPDPDeny)
-			}
+		} else if v, exists := h.rules[req.Action]; exists {
+			allowed = v
+		}
+		if allowed {
+			reasonCode = ""
 		}
 	}
 

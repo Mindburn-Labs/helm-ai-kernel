@@ -41,6 +41,78 @@ path = "./data/receipts.db"
 	}
 }
 
+func TestLoadServePolicyRuntimeCompilesReferencePackActions(t *testing.T) {
+	dir := t.TempDir()
+	refDir := filepath.Join(dir, "reference_packs")
+	if err := os.MkdirAll(refDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(refDir, "runtime.json"), []byte(`{
+  "pack_id": "runtime-pack",
+  "version": 1,
+  "runtime_actions": [
+    {"action": "EXECUTE_TOOL", "expression": "true", "description": "allow test tool execution"}
+  ]
+}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	policyPath := filepath.Join(dir, "policy.toml")
+	if err := os.WriteFile(policyPath, []byte(`
+name = "runtime"
+profile = "test"
+reference_pack = "./reference_packs/runtime.json"
+
+[server]
+bind = "127.0.0.1"
+port = 7714
+
+[receipts]
+store = "sqlite"
+path = "./data/receipts.db"
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	runtime, err := loadServePolicyRuntime(policyPath)
+	if err != nil {
+		t.Fatalf("load runtime: %v", err)
+	}
+	if runtime.ReferencePack.PackID != "runtime-pack" {
+		t.Fatalf("pack id = %q", runtime.ReferencePack.PackID)
+	}
+	rule, ok := runtime.Graph.Rules["EXECUTE_TOOL"]
+	if !ok {
+		t.Fatalf("expected EXECUTE_TOOL rule")
+	}
+	if len(rule.Requirements) != 1 || rule.Requirements[0].Expression != "true" {
+		t.Fatalf("unexpected rule: %+v", rule)
+	}
+}
+
+func TestLoadServePolicyRuntimeRequiresValidReferencePack(t *testing.T) {
+	dir := t.TempDir()
+	policyPath := filepath.Join(dir, "policy.toml")
+	if err := os.WriteFile(policyPath, []byte(`
+name = "runtime"
+profile = "test"
+reference_pack = "./missing.json"
+
+[server]
+bind = "127.0.0.1"
+port = 7714
+
+[receipts]
+store = "sqlite"
+path = "./data/receipts.db"
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := loadServePolicyRuntime(policyPath); err == nil {
+		t.Fatal("expected missing reference pack error")
+	}
+}
+
 func TestRunServerCommandServeRequiresPolicy(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runServerCommand("serve", nil, &stdout, &stderr)

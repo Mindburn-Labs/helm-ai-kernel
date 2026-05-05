@@ -123,4 +123,25 @@ public class HelmClientTest {
         TypesGen.VerificationResult result = mapper.readValue(json, TypesGen.VerificationResult.class);
         assertNotNull(result.getVerdict());
     }
+
+    @Test
+    @DisplayName("Execution boundary SDK types serialize")
+    void testExecutionBoundaryTypesSerialize() throws Exception {
+        HelmClient.EvidenceEnvelopeExportRequest envelope = new HelmClient.EvidenceEnvelopeExportRequest();
+        envelope.manifest_id = "env1";
+        envelope.envelope = "dsse";
+        envelope.native_evidence_hash = "sha256:native";
+        assertTrue(mapper.writeValueAsString(envelope).contains("native_evidence_hash"));
+
+        HelmClient.MCPRegistryDiscoverRequest discover = new HelmClient.MCPRegistryDiscoverRequest();
+        discover.server_id = "mcp1";
+        discover.risk = "high";
+        assertTrue(mapper.writeValueAsString(discover).contains("server_id"));
+
+        HelmClient.SandboxGrant grant = mapper.readValue(
+            "{\"grant_id\":\"grant1\",\"runtime\":\"wazero\",\"profile\":\"deny-default\",\"declared_at\":\"2026-05-05T00:00:00Z\"}",
+            HelmClient.SandboxGrant.class
+        );
+        assertEquals("grant1", grant.grant_id);
+    }
 }

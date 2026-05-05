@@ -1,8 +1,54 @@
 ---
 title: Benchmarks
+last_reviewed: 2026-05-05
 ---
 
 # Benchmarks
+
+## Audience
+
+Use this page when you need the public `helm-oss/benchmarks` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
+
+## Outcome
+
+After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
+
+## Source Truth
+
+- Public route: `helm-oss/benchmarks`
+- Source document: `helm-oss/docs/BENCHMARKS.md`
+- Public manifest: `helm-oss/docs/public-docs.manifest.json`
+- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
+
+Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
+| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
+| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
+
+## Diagram
+
+This scheme maps the main sections of Benchmarks in reading order.
+
+```mermaid
+flowchart LR
+  Page["Benchmarks"]
+  A["Targets"]
+  B["What the Harness Covers"]
+  C["Output"]
+  D["Test-case count (referenced by pitch decks)"]
+  E["Machine-readable output"]
+  Page --> A
+  A --> B
+  B --> C
+  C --> D
+  D --> E
+```
 
 The benchmark harness measures retained kernel paths locally. This page documents how to run the harness, not a frozen set of numbers.
 

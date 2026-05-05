@@ -1,8 +1,25 @@
 ---
 title: Quickstart
+last_reviewed: 2026-05-05
 ---
 
 # Quickstart
+
+## Audience
+
+Use this page when you need the public `helm-oss/quickstart` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
+
+## Outcome
+
+After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
+| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
+| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
 
 ## Diagram
 
@@ -49,11 +66,12 @@ This page is backed by:
 ### macOS
 
 ```bash
-brew install mindburnlabs/tap/helm
+brew install mindburn/tap/helm
 helm --version
 ```
 
-Use Homebrew for the published macOS CLI path. Use `make build` when editing HELM OSS itself.
+Use Homebrew for the published macOS CLI path in the `v0.4.0` GitHub release
+notes. Use `make build` when editing HELM OSS itself.
 
 ### Linux
 

@@ -1,10 +1,66 @@
 ---
 title: Verification
+last_reviewed: 2026-05-05
 ---
 
 # Verification
 
-The verification path is local-first. `helm verify <evidence-pack.tar|dir>` performs offline checks by default; `--online` is optional and only runs after offline checks pass.
+## Audience
+
+Use this page when you need the public `helm-oss/verification` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
+
+## Outcome
+
+After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
+
+## Source Truth
+
+- Public route: `helm-oss/verification`
+- Source document: `helm-oss/docs/VERIFICATION.md`
+- Public manifest: `helm-oss/docs/public-docs.manifest.json`
+- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
+
+Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
+| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
+| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
+
+## Diagram
+
+This scheme maps the main sections of Verification in reading order.
+
+```mermaid
+flowchart LR
+  Page["Verification"]
+  A["Offline Verification"]
+  B["Online Proof Check"]
+  C["Export and Verify"]
+  D["Release Asset Verification"]
+  F["Optional Cosign / VEX Verification"]
+  E["Run the Maintained Validation Targets"]
+  Page --> A
+  A --> B
+  B --> C
+  C --> D
+  D --> F
+  F --> E
+```
+
+The verification path is local-first. `helm verify <evidence-pack.tar|dir>`
+performs offline checks by default; `--online` is optional and only runs after
+offline checks pass.
+
+Current public release: `v0.4.0`, published on 2026-04-25 at
+<https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.4.0>. The release
+page attaches platform binaries, `SHA256SUMS.txt`, `sbom.json`,
+`release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`,
+`helm.mcpb`, and `helm.rb`.
 
 ## Offline Verification
 
@@ -35,10 +91,37 @@ helm export --evidence ./data/evidence --out evidence.tar
 helm verify evidence.tar
 ```
 
-## Cosign Artifact Verification
+## Release Asset Verification
 
-Every release artifact is signed via cosign keyless OIDC. Verify a
-downloaded binary blob with the bundled signature:
+Download the binary and `SHA256SUMS.txt` from the same GitHub release, then
+check the digest before executing the binary:
+
+```bash
+shasum -a 256 -c SHA256SUMS.txt --ignore-missing
+```
+
+Inspect the release attestation and SBOM:
+
+```bash
+jq . release-attestation.json
+jq . sbom.json
+```
+
+Verify the bundled offline evidence pack:
+
+```bash
+helm verify evidence-pack.tar
+```
+
+For `v0.4.0`, the included evidence pack verifies offline and reports
+`anchor offline`; online proof anchoring depends on the Titan proof deployment
+and public proof credentials.
+
+## Cosign Artifact Verification When Bundles Are Attached
+
+Cosign verification requires a matching `*.cosign.bundle` file attached to the
+release. When a release includes those files, verify a downloaded binary blob
+with the bundled signature:
 
 ```bash
 cosign verify-blob \
@@ -48,7 +131,7 @@ cosign verify-blob \
   helm-linux-amd64
 ```
 
-Verify the published container image:
+Verify the published container image when one is published for the release:
 
 ```bash
 cosign verify \
@@ -57,21 +140,24 @@ cosign verify \
   ghcr.io/mindburn-labs/helm-oss:<version>
 ```
 
-Verify every artifact in a downloaded release directory in one command:
+Verify every artifact in a downloaded release directory in one command when the
+directory contains matching `*.cosign.bundle` files:
 
 ```bash
 make verify-cosign DIR=./downloaded-release/
 ```
 
-`make verify-cosign` walks the directory, finds every `*.cosign.bundle`,
-runs `cosign verify-blob` against the matching artifact, and exits
-non-zero on any failure.
+`make verify-cosign` walks the directory, finds every `*.cosign.bundle`, runs
+`cosign verify-blob` against the matching artifact, and exits non-zero on any
+failure. If the release has no bundle assets, use checksum, SBOM,
+release-attestation, offline evidence-pack, and reproducible-build verification
+instead.
 
-### VEX Consumption
+### VEX Consumption When A VEX File Is Attached
 
-Each release ships an OpenVEX 0.2.0 document at
-`release/vex/v<version>.openvex.json` next to the SBOM. Filter your
-SBOM scanner output through the published VEX statements:
+The repository retains OpenVEX policy source under `release/vex/`. When a
+release attaches an OpenVEX file next to the SBOM, filter scanner output
+through the published VEX statements:
 
 ```bash
 vexctl filter --vex release/vex/v<version>.openvex.json sbom.json

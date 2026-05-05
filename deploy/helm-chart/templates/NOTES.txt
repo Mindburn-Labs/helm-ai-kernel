@@ -24,16 +24,17 @@ HELM Firewall has been deployed.
 {{- end }}
 
 2. Verify health:
-  curl http://127.0.0.1:{{ .Values.service.port }}/health
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "helm-firewall.fullname" . }} {{ .Values.service.healthPort }}:{{ .Values.service.healthPort }}
+  curl http://127.0.0.1:{{ .Values.service.healthPort }}/health
 
 3. Storage backend: {{ .Values.helm.storage.type }}
-{{- if eq .Values.helm.storage.type "sqlite" }}
+{{- if .Values.persistence.enabled }}
    Data persisted to PVC: {{ include "helm-firewall.pvcName" . }}
 {{- end }}
 
 4. Signing algorithm: {{ .Values.helm.signing.algorithm }}
-{{- if not .Values.helm.signing.existingSecret }}
-   WARNING: Using chart-managed signing secret. For production, provide your own:
+{{- if and (not .Values.helm.signing.existingSecret) (not .Values.helm.signing.key) }}
+   WARNING: Using chart-managed development signing secret. For production, provide your own:
      --set helm.signing.existingSecret=my-signing-secret
 {{- end }}
 

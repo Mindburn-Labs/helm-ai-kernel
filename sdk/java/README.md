@@ -46,6 +46,10 @@ class Example {
 }
 ```
 
+## Execution Boundary Methods
+
+`HelmClient` exposes typed methods for `createEvidenceEnvelopeManifest`, `listNegativeConformanceVectors`, `listMcpRegistry`, `discoverMcpServer`, `approveMcpServer`, `listSandboxBackendProfiles`, and `inspectSandboxGrant`. These methods mirror the public OpenAPI execution-boundary routes without making external evidence envelopes authoritative.
+
 ## Release Notes
 
 `0.4.0` is the cleaned OSS kernel baseline with the retained OpenAPI client surface and protobuf message bindings.

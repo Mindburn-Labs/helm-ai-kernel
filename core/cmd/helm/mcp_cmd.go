@@ -24,7 +24,7 @@ import (
 //	2 = config error
 func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm mcp <serve|install|pack|print-config|scan> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm mcp <serve|install|pack|print-config|scan|wrap|approve> [flags]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Subcommands:")
 		fmt.Fprintln(stderr, "  serve         Start the HELM MCP server (stdio or remote HTTP)")
@@ -32,6 +32,8 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "  pack          Generate a .mcpb bundle for desktop clients")
 		fmt.Fprintln(stderr, "  print-config  Print MCP config for a specific client")
 		fmt.Fprintln(stderr, "  scan          Static scan of an MCP tool catalog for DDIPE / typosquat / suspicious patterns")
+		fmt.Fprintln(stderr, "  wrap          Emit a clean-room execution-firewall wrapper profile for an upstream MCP server")
+		fmt.Fprintln(stderr, "  approve       Create a receipt-backed MCP server approval record")
 		return 2
 	}
 
@@ -46,8 +48,12 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 		return runMCPPrintConfig(args[1:], stdout, stderr)
 	case "scan":
 		return runMCPScan(args[1:], stdout, stderr)
+	case "wrap":
+		return runMCPWrap(args[1:], stdout, stderr)
+	case "approve":
+		return runMCPApprove(args[1:], stdout, stderr)
 	case "--help", "-h":
-		fmt.Fprintln(stdout, "Usage: helm mcp <serve|install|pack|print-config|scan> [flags]")
+		fmt.Fprintln(stdout, "Usage: helm mcp <serve|install|pack|print-config|scan|wrap|approve> [flags]")
 		fmt.Fprintln(stdout, "")
 		fmt.Fprintln(stdout, "Subcommands:")
 		fmt.Fprintln(stdout, "  serve         Start the HELM MCP server (stdio or remote HTTP)")
@@ -55,6 +61,8 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "  pack          Generate a .mcpb bundle for desktop clients")
 		fmt.Fprintln(stdout, "  print-config  Print MCP config for a specific client")
 		fmt.Fprintln(stdout, "  scan          Static scan of an MCP tool catalog for DDIPE / typosquat / suspicious patterns")
+		fmt.Fprintln(stdout, "  wrap          Emit a clean-room execution-firewall wrapper profile for an upstream MCP server")
+		fmt.Fprintln(stdout, "  approve       Create a receipt-backed MCP server approval record")
 		return 0
 	default:
 		fmt.Fprintf(stderr, "Unknown mcp subcommand: %s\n", args[0])

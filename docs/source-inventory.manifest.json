@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "product": "HELM OSS",
+  "repo": "helm-oss",
+  "docs_site": "helm",
+  "inventory": [
+    {
+      "id": "project-root-config-release",
+      "label": "Project root, release configuration, governance, and security policy files",
+      "classification": "public-hub",
+      "source_patterns": ["*"],
+      "owner_doc_path": "README.md",
+      "public_doc_slugs": ["oss", "helm-oss/source-map", "helm-oss/security/release-security"],
+      "rationale": "Top-level project files define install, release, contribution, governance, and security behavior that external developers need through the OSS landing, source map, and release-security pages.",
+      "validation_commands": ["make docs-coverage", "make docs-truth"]
+    },
+    {
+      "id": "ci-scripts-tools",
+      "label": "CI workflows, local scripts, boundary manifests, and tooling",
+      "classification": "public-hub",
+      "source_patterns": [".github/**", "scripts/**", "tools/**"],
+      "owner_doc_path": ".github/README.md",
+      "public_doc_slugs": ["helm-oss/source-map", "helm-oss/security/release-security"],
+      "rationale": "CI and tooling are externally relevant as validation gates and release evidence, but individual workflow files remain source-owned.",
+      "validation_commands": ["make docs-coverage", "make docs-truth"]
+    },
+    {
+      "id": "api-protocols-schemas",
+      "label": "OpenAPI, protocol bundles, JSON schemas, policy schemas, and reference packs",
+      "classification": "public-hub",
+      "source_patterns": ["api/**", "protocols/**", "schemas/**", "reference_packs/**"],
+      "owner_doc_path": "protocols/README.md",
+      "public_doc_slugs": ["helm-oss/reference/protocols-and-schemas", "helm-oss/conformance", "reference"],
+      "rationale": "Protocol and schema truth must be public and agent-readable, with detailed source ownership kept in protocol README files.",
+      "validation_commands": ["make docs-coverage", "make docs-truth"]
+    },
+    {
+      "id": "runtime-cli-kernel",
+      "label": "Core CLI commands, runtime kernel, verifier, receipts, policy, MCP, sandbox, and execution boundary packages",
+      "classification": "public-hub",
+      "source_patterns": ["core/**"],
+      "owner_doc_path": "core/README.md",
+      "public_doc_slugs": [
+        "helm-oss/developer-journey",
+        "helm-oss/architecture",
+        "helm-oss/verification",
+        "helm-oss/execution-security-model",
+        "helm-oss/troubleshooting"
+      ],
+      "rationale": "The runtime is the primary OSS developer surface and must be discoverable through journey, architecture, verification, security, and troubleshooting docs.",
+      "validation_commands": ["make build", "make test", "make docs-truth"]
+    },
+    {
+      "id": "console-and-design-system",
+      "label": "HELM OSS Console application and shared UI packages",
+      "classification": "public-hub",
+      "source_patterns": ["apps/**", "packages/**"],
+      "owner_doc_path": "apps/console/README.md",
+      "public_doc_slugs": ["helm-oss/console", "helm-oss/design-system", "helm-oss/source-map"],
+      "rationale": "The console and UI packages are public OSS surfaces, with browser-level details owned near the app code.",
+      "validation_commands": ["make docs-coverage", "make docs-truth"]
+    },
+    {
+      "id": "examples-deploy-sdk",
+      "label": "Examples, SDKs, Docker, Docker Compose, and Kubernetes Helm chart deployment",
+      "classification": "public-hub",
+      "source_patterns": ["examples/**", "deploy/**", "Dockerfile", "Dockerfile.slim", "docker-compose.yml", "sdk/**"],
+      "owner_doc_path": "examples/README.md",
+      "public_doc_slugs": [
+        "helm-oss/developer-journey",
+        "helm-oss/deployment-and-examples",
+        "helm-oss/sdks",
+        "helm-oss/integrations/openai-compatible-proxy",
+        "helm-oss/integrations/mcp"
+      ],
+      "rationale": "Developers need install, SDK, framework, and deployment paths from the public docs, with examples and package docs as executable proof.",
+      "validation_commands": ["make test-sdk-py", "make test-sdk-ts", "make test-sdk-rust", "make test-sdk-java"]
+    },
+    {
+      "id": "conformance-fixtures-evidence",
+      "label": "Conformance tests, fixtures, golden artifacts, proofs, benchmarks, and release evidence",
+      "classification": "public-hub",
+      "source_patterns": ["tests/**", "fixtures/**", "artifacts/**", "proofs/**", "benchmarks/**", "release/**", "data/**", "oss-fuzz/**"],
+      "owner_doc_path": "tests/conformance/README.md",
+      "public_doc_slugs": [
+        "helm-oss/conformance",
+        "helm-oss/verification",
+        "helm-oss/benchmarks",
+        "helm-oss/publishing",
+        "helm-oss/security/release-security"
+      ],
+      "rationale": "Evidence and conformance material is public proof material; generated artifacts are linked through verification and publishing docs rather than duplicated.",
+      "validation_commands": ["make verify-fixtures", "make release-binaries-reproducible"]
+    },
+    {
+      "id": "public-docs-and-research",
+      "label": "Public docs, compliance notes, architecture notes, strategy notes, and generated docs ledgers",
+      "classification": "public-hub",
+      "source_patterns": ["docs/**"],
+      "owner_doc_path": "docs/README.md",
+      "public_doc_slugs": ["oss", "helm-oss/source-map", "coverage"],
+      "rationale": "Docs files are source material for the public site and are checked through manifest, LLM, search, and source-inventory gates.",
+      "validation_commands": ["make docs-coverage", "make docs-truth"]
+    }
+  ]
+}

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	helmcrypto "github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/guardian"
 	mcppkg "github.com/Mindburn-Labs/helm-oss/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/prg"
@@ -40,25 +41,23 @@ type mcpRPCError struct {
 }
 
 func newLocalMCPRuntime() (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
-	catalog := mcppkg.NewInMemoryCatalog()
-	catalog.RegisterCommonTools()
-
 	signer, err := loadOrGenerateSigner()
 	if err != nil {
 		return nil, nil, err
 	}
+	return newLocalMCPRuntimeWithSigner(signer)
+}
 
-	rules := prg.NewGraph()
-	for _, toolName := range []string{"file_read", "file_write"} {
-		if addErr := rules.AddRule(toolName, prg.RequirementSet{
-			ID:    "mcp-" + toolName,
-			Logic: prg.AND,
-		}); addErr != nil {
-			return nil, nil, fmt.Errorf("register policy for %s: %w", toolName, addErr)
-		}
+func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+	if signer == nil {
+		return nil, nil, fmt.Errorf("mcp signer is required")
 	}
-
-	guard := guardian.NewGuardian(signer, rules, nil)
+	catalog := mcppkg.NewInMemoryCatalog()
+	catalog.RegisterCommonTools()
+	// The local MCP catalog is discoverable by default, but execution must not
+	// inherit an implicit allow policy. Until serve policy wiring is plumbed into
+	// this gateway, an empty graph keeps MCP execution fail-closed.
+	guard := guardian.NewGuardian(signer, prg.NewGraph(), nil)
 	firewall := mcppkg.NewGovernanceFirewall(guard, catalog)
 
 	return catalog, mcppkg.ToolExecutor(firewall.WrapToolHandler(runLocalMCPTool)), nil
@@ -70,6 +69,15 @@ func newLocalMCPGateway() (*mcppkg.Gateway, error) {
 
 func newConfiguredLocalMCPGateway(cfg mcppkg.GatewayConfig) (*mcppkg.Gateway, error) {
 	catalog, executor, err := newLocalMCPRuntime()
+	if err != nil {
+		return nil, err
+	}
+
+	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithExecutor(executor)), nil
+}
+
+func newConfiguredLocalMCPGatewayWithSigner(cfg mcppkg.GatewayConfig, signer helmcrypto.Signer) (*mcppkg.Gateway, error) {
+	catalog, executor, err := newLocalMCPRuntimeWithSigner(signer)
 	if err != nil {
 		return nil, err
 	}

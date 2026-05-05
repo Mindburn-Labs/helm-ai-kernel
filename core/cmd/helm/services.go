@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/api"
@@ -52,8 +53,9 @@ type Services struct {
 	Obligation       *obligation.ObligationEngine
 
 	// --- Evidence ---
-	Evidence     *evidence.DefaultExporter
-	ReceiptStore store.ReceiptStore
+	Evidence      *evidence.DefaultExporter
+	ReceiptStore  store.ReceiptStore
+	ReceiptSigner helmcrypto.Signer
 
 	// --- Cross-cutting ---
 	KernelRT *kernelruntime.Server
@@ -162,9 +164,11 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	logger.Info("subsystem ready", "component", " Obligation Engine initialized")
 
 	// --- 10. Evidence ---
-	evidenceKey := os.Getenv("EVIDENCE_SIGNING_KEY")
-	if evidenceKey == "" {
-		evidenceKey = "helm-evidence-bundle"
+	evidenceKey, defaultedEvidenceKey, err := evidenceSigningSeedFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	if defaultedEvidenceKey {
 		logger.Warn("EVIDENCE_SIGNING_KEY not set — using default seed (not safe for production)")
 	}
 	evidenceSigner, err := helmcrypto.NewEd25519Signer(evidenceKey)
@@ -213,4 +217,15 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 
 	logger.Info("subsystem ready", "component", " All subsystems initialized successfully")
 	return s, nil
+}
+
+func evidenceSigningSeedFromEnv() (string, bool, error) {
+	seed := strings.TrimSpace(os.Getenv("EVIDENCE_SIGNING_KEY"))
+	if seed != "" {
+		return seed, false, nil
+	}
+	if envBool("HELM_PRODUCTION") {
+		return "", false, fmt.Errorf("production mode requires EVIDENCE_SIGNING_KEY")
+	}
+	return "helm-evidence-bundle", true, nil
 }

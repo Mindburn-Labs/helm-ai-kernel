@@ -116,7 +116,7 @@ func BenchmarkHotPath_Allow(b *testing.B) {
 		// 1. Guardian evaluates
 		decision, err := h.guardian.EvaluateDecision(ctx, guardian.DecisionRequest{
 			Principal: "bench-agent",
-			Action:    "execute",
+			Action:    "EXECUTE_TOOL",
 			Resource:  "safe-tool",
 			Context:   map[string]interface{}{"key": "value"},
 		})
@@ -163,7 +163,7 @@ func BenchmarkHotPath_Allow_Parallel(b *testing.B) {
 		for pb.Next() {
 			decision, err := h.guardian.EvaluateDecision(ctx, guardian.DecisionRequest{
 				Principal: "bench-agent",
-				Action:    "execute",
+				Action:    "EXECUTE_TOOL",
 				Resource:  "safe-tool",
 				Context:   map[string]interface{}{"key": "value"},
 			})
@@ -201,7 +201,7 @@ func BenchmarkHotPath_Deny(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		decision, err := h.guardian.EvaluateDecision(context.Background(), guardian.DecisionRequest{
 			Principal: "bench-agent",
-			Action:    "execute",
+			Action:    "EXECUTE_TOOL",
 			Resource:  "undeclared-tool",
 			Context:   map[string]interface{}{"key": "value"},
 		})
@@ -227,7 +227,7 @@ func BenchmarkGuardian_EvalOnly(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = h.guardian.EvaluateDecision(context.Background(), guardian.DecisionRequest{
 			Principal: "bench-agent",
-			Action:    "execute",
+			Action:    "EXECUTE_TOOL",
 			Resource:  "safe-tool",
 			Context:   map[string]interface{}{"key": "value"},
 		})
@@ -387,7 +387,7 @@ func TestOverheadReport(t *testing.T) {
 			ctx := context.Background()
 			start := time.Now()
 			decision, _ := h.guardian.EvaluateDecision(ctx, guardian.DecisionRequest{
-				Principal: "agent", Action: "execute", Resource: "safe-tool",
+				Principal: "agent", Action: "EXECUTE_TOOL", Resource: "safe-tool",
 				Context: map[string]interface{}{"key": "value"},
 			})
 			receipt := &contracts.Receipt{
@@ -405,7 +405,7 @@ func TestOverheadReport(t *testing.T) {
 			// This is correct: deny decisions are fail-closed at the Guardian boundary.
 			start := time.Now()
 			_, _ = h.guardian.EvaluateDecision(context.Background(), guardian.DecisionRequest{
-				Principal: "agent", Action: "execute", Resource: "undeclared-tool",
+				Principal: "agent", Action: "EXECUTE_TOOL", Resource: "undeclared-tool",
 				Context: map[string]interface{}{"key": "value"},
 			})
 			return time.Since(start)

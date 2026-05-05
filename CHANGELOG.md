@@ -1,4 +1,50 @@
+---
+title: HELM OSS Changelog
+last_reviewed: 2026-05-05
+---
+
 # Changelog
+
+## Audience
+
+Use this page when you need the public `helm-oss/changelog` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
+
+## Outcome
+
+After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
+
+## Source Truth
+
+- Public route: `helm-oss/changelog`
+- Source document: `helm-oss/CHANGELOG.md`
+- Public manifest: `helm-oss/docs/public-docs.manifest.json`
+- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
+
+Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
+| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
+| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
+
+## Diagram
+
+This scheme maps the main sections of HELM OSS Changelog in reading order.
+
+```mermaid
+flowchart LR
+  Page["HELM OSS Changelog"]
+  A["[Unreleased]"]
+  B["[0.4.0] - 2026-04-25"]
+  C["Validation"]
+  Page --> A
+  A --> B
+  B --> C
+```
 
 All notable changes to the retained HELM OSS surface are documented here. Public entries focus on developer-visible interfaces, compatibility, verification, SDKs, and security-relevant documentation.
 
@@ -10,9 +56,18 @@ All notable changes to the retained HELM OSS surface are documented here. Public
 - Normalized the retained OSS surface around the kernel, contracts, SDKs, static viewer, examples, deployment material, and verification artifacts that remain in the repository.
 - Removed stale workflows, hosted-demo collateral, internal planning material, tracked binaries, and generated repository junk from the public documentation path.
 
-## [0.4.0] - 2026-04-15
+## [0.4.0] - 2026-04-25
 
-- Shipped the current OSS kernel baseline.
-- Published the generated SDK set.
-- Added the static evidence-bundle viewer.
-- Kept verification and conformance material public so downstream users can reason about receipt and evidence behavior without hosted services.
+- Published the public quickstart release at
+  <https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.4.0>.
+- Shipped `helm serve --policy` TOML policy support and local receipt APIs.
+- Shipped positional `helm verify <pack>` with optional `--online`.
+- Shipped `helm receipts tail` for SSE receipt streaming.
+- Published the `release.high_risk.v3.toml` sample policy and an
+  offline-verifiable `evidence-pack.tar` fixture.
+- Published platform binaries for Darwin, Linux, and Windows, plus
+  `SHA256SUMS.txt`, `sbom.json`, `helm.mcpb`, `helm.rb`, and
+  `release-attestation.json`.
+- Documented that the included `evidence-pack.tar` verifies offline and reports
+  `anchor offline`; public proof anchoring depends on the Titan proof deployment
+  and public proof credentials.

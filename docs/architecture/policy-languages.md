@@ -1,8 +1,35 @@
 ---
 title: Policy Languages — CEL, Rego, Cedar
+last_reviewed: 2026-05-05
 ---
 
 # Policy Languages — CEL, Rego, Cedar
+
+## Audience
+
+Use this page when you need the public `helm-oss/architecture/policy-languages` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
+
+## Outcome
+
+After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
+
+## Source Truth
+
+- Public route: `helm-oss/architecture/policy-languages`
+- Source document: `helm-oss/docs/architecture/policy-languages.md`
+- Public manifest: `helm-oss/docs/public-docs.manifest.json`
+- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
+
+Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
+| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
+| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
 
 helm-oss accepts policy sources written in three languages and routes
 them through one enforcement boundary. The kernel never branches on
@@ -127,3 +154,16 @@ The `helm bundle build` subcommand auto-detects from file extension when
 - [`core/pkg/policybundles/registry.go`](../../core/pkg/policybundles/registry.go) — language dispatch
 - [Conformance Profile v1](../CONFORMANCE.md) — required behavior across implementations
 - [Verification](../VERIFICATION.md) — verifying a built bundle's hash
+
+## Diagram
+
+```mermaid
+flowchart LR
+  input["Canonical policy input"] --> cel["CEL"]
+  input --> rego["Rego"]
+  input --> cedar["Cedar"]
+  cel --> decision["Normalized decision"]
+  rego --> decision
+  cedar --> decision
+  decision --> receipt["Signed receipt"]
+```

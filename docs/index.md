@@ -1,3 +1,8 @@
+---
+title: HELM OSS
+last_reviewed: 2026-05-05
+---
+
 # HELM OSS Developer Portal
 
 HELM OSS is the open execution boundary for governed AI tool use. It gives developers a local kernel, policy bundle loader, OpenAI-compatible proxy path, MCP integration, receipts, evidence packs, and offline verification without requiring a hosted control plane.
@@ -11,6 +16,7 @@ This page is for open-source developers, platform teams, security reviewers, and
 After this page you should know which public HELM OSS surface to use:
 
 - quickstart for a local boundary;
+- developer journey for end-to-end install, runtime, SDK, deployment, and verification coverage;
 - architecture for the trust and execution model;
 - CLI and SDKs for integration;
 - MCP and OpenAI-compatible proxy for agent frameworks;
@@ -36,6 +42,7 @@ flowchart LR
 This portal is assembled from source-owned docs:
 
 - `docs/QUICKSTART.md`
+- `docs/DEVELOPER_JOURNEY.md`
 - `docs/ARCHITECTURE.md`
 - `docs/CONFORMANCE.md`
 - `docs/VERIFICATION.md`
@@ -50,13 +57,14 @@ The code, command output, and verification artifacts override marketing language
 ## Start Here
 
 1. Run the quickstart: [Quickstart](QUICKSTART.md).
-2. Read the execution model: [Architecture](ARCHITECTURE.md).
-3. Pick an integration:
+2. Use the complete source-backed path: [Developer Journey](DEVELOPER_JOURNEY.md).
+3. Read the execution model: [Architecture](ARCHITECTURE.md).
+4. Pick an integration:
    - [OpenAI-compatible proxy](INTEGRATIONS/openai_baseurl.md)
    - [MCP integration](INTEGRATIONS/mcp.md)
    - [SDK index](sdks/00_INDEX.md)
-4. Verify an output: [Verification](VERIFICATION.md).
-5. Add conformance checks: [Conformance](CONFORMANCE.md).
+5. Verify an output: [Verification](VERIFICATION.md).
+6. Add conformance checks: [Conformance](CONFORMANCE.md).
 
 ## Interfaces
 

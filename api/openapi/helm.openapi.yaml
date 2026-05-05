@@ -31,6 +31,8 @@ tags:
     description: EvidencePack export and verification
   - name: conformance
     description: Conformance testing
+  - name: sandbox
+    description: Sandbox grant inspection and execution-boundary authority records
   - name: system
     description: Health and version
   - name: console
@@ -176,6 +178,8 @@ paths:
       operationId: listReceipts
       tags: [console]
       summary: List durable receipts
+      security:
+        - AdminBearerAuth: []
       parameters:
         - name: limit
           in: query
@@ -195,6 +199,39 @@ paths:
                 $ref: '#/components/schemas/ReceiptListResponse'
         '400':
           $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '503':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/receipts/tail:
+    get:
+      operationId: tailReceipts
+      tags: [console]
+      summary: Tail durable receipts as server-sent events
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100, maximum: 1000 }
+        - name: since
+          in: query
+          schema: { type: string }
+        - name: agent
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Server-sent receipt events
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
         '503':
           $ref: '#/components/responses/HelmError'
 
@@ -203,6 +240,8 @@ paths:
       operationId: getConsoleReceipt
       tags: [console]
       summary: Get a receipt by ID
+      security:
+        - AdminBearerAuth: []
       parameters:
         - name: receipt_id
           in: path
@@ -217,12 +256,16 @@ paths:
                 $ref: '#/components/schemas/Receipt'
         '404':
           $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
 
   /api/v1/console/bootstrap:
     get:
       operationId: getConsoleBootstrap
       tags: [console]
       summary: Read HELM OSS Console bootstrap state
+      security:
+        - AdminBearerAuth: []
       description: |
         Consolidated read-only platform state used by the OSS Console shell.
         Values are derived from kernel services and local configuration.
@@ -233,12 +276,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConsoleBootstrap'
+        '401':
+          $ref: '#/components/responses/HelmError'
 
   /api/v1/console/surfaces:
     get:
       operationId: listConsoleSurfaces
       tags: [console]
       summary: List Console surfaces and their backing source contracts
+      security:
+        - AdminBearerAuth: []
       responses:
         '200':
           description: Console surface catalog
@@ -251,19 +298,23 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/ConsoleSurfaceRef'
+        '401':
+          $ref: '#/components/responses/HelmError'
 
   /api/v1/console/surfaces/{surface_id}:
     get:
       operationId: getConsoleSurface
       tags: [console]
       summary: Read a wired Console surface state
+      security:
+        - AdminBearerAuth: []
       parameters:
         - name: surface_id
           in: path
           required: true
           schema:
             type: string
-            enum: [overview, agents, actions, approvals, policies, audit, developer, settings]
+            enum: [overview, agents, actions, approvals, policies, replay, audit, developer, settings]
       responses:
         '200':
           description: Console surface state
@@ -273,12 +324,16 @@ paths:
                 $ref: '#/components/schemas/ConsoleSurfaceState'
         '404':
           $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
 
   /api/v1/trust/keys/add:
     post:
       operationId: addTrustKey
       tags: [system]
       summary: Add a trusted signing key
+      security:
+        - AdminBearerAuth: []
       requestBody:
         required: true
         content:
@@ -298,12 +353,16 @@ paths:
                   key_id: { type: string }
         '400':
           $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
 
   /api/v1/trust/keys/revoke:
     post:
       operationId: revokeTrustKey
       tags: [system]
       summary: Revoke a trusted signing key
+      security:
+        - AdminBearerAuth: []
       requestBody:
         required: true
         content:
@@ -322,6 +381,8 @@ paths:
                   tenant_id: { type: string }
                   key_id: { type: string }
         '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
           $ref: '#/components/responses/HelmError'
 
   # ── MCP Remote Transport ───────────────────────────
@@ -391,6 +452,8 @@ paths:
       operationId: listSessions
       tags: [proofgraph]
       summary: List ProofGraph sessions
+      security:
+        - AdminBearerAuth: []
       parameters:
         - name: limit
           in: query
@@ -407,12 +470,16 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/HelmError'
 
   /api/v1/proofgraph/sessions/{session_id}/receipts:
     get:
       operationId: getSessionReceipts
       tags: [proofgraph]
       summary: Get receipts for a specific session
+      security:
+        - AdminBearerAuth: []
       parameters:
         - name: session_id
           in: path
@@ -429,12 +496,16 @@ paths:
                   $ref: '#/components/schemas/Receipt'
         '404':
           $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
 
   /api/v1/proofgraph/receipts/{receipt_hash}:
     get:
       operationId: getReceipt
       tags: [proofgraph]
       summary: Get a single receipt by hash
+      security:
+        - AdminBearerAuth: []
       parameters:
         - name: receipt_hash
           in: path
@@ -449,6 +520,8 @@ paths:
                 $ref: '#/components/schemas/Receipt'
         '404':
           $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
 
   # ── EvidencePack ────────────────────────────────────
   /api/v1/evidence/export:
@@ -456,6 +529,8 @@ paths:
       operationId: exportEvidence
       tags: [evidence]
       summary: Export an EvidencePack
+      security:
+        - AdminBearerAuth: []
       description: |
         Exports a deterministic .tar.gz containing all receipts, ProofGraph nodes, and metadata.
         Same content always produces same SHA-256.
@@ -476,6 +551,8 @@ paths:
                 type: string
                 format: binary
         '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
           $ref: '#/components/responses/HelmError'
 
   /api/v1/evidence/verify:
@@ -514,6 +591,42 @@ paths:
         '400':
           $ref: '#/components/responses/HelmError'
 
+  /api/v1/evidence/envelopes:
+    post:
+      operationId: createEvidenceEnvelopeManifest
+      tags: [evidence]
+      summary: Build a non-authoritative evidence export envelope manifest
+      security:
+        - AdminBearerAuth: []
+      description: |
+        Creates a HELM-native manifest for optional DSSE, JWS, in-toto, SLSA,
+        Sigstore, SCITT, or COSE export wrappers. Native EvidencePack roots
+        remain the authority; export envelopes are compatibility wrappers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvidenceEnvelopeExportRequest'
+            example:
+              manifest_id: "env_abc123"
+              envelope: "dsse"
+              native_evidence_hash: "sha256:7f83b1..."
+              subject: "session:sess_abc123"
+      responses:
+        '200':
+          description: Evidence envelope export manifest
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceEnvelopeManifest'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
+
   /api/v1/replay/verify:
     post:
       operationId: replayVerify
@@ -545,6 +658,8 @@ paths:
       operationId: runConformance
       tags: [conformance]
       summary: Run conformance tests
+      security:
+        - AdminBearerAuth: []
       requestBody:
         required: true
         content:
@@ -573,12 +688,16 @@ paths:
                   wasi_sandbox: "PASS"
         '400':
           $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
 
   /api/v1/conformance/reports/{report_id}:
     get:
       operationId: getConformanceReport
       tags: [conformance]
       summary: Get a conformance report by ID
+      security:
+        - AdminBearerAuth: []
       parameters:
         - name: report_id
           in: path
@@ -593,8 +712,116 @@ paths:
                 $ref: '#/components/schemas/ConformanceResult'
         '404':
           $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/conformance/negative:
+    get:
+      operationId: listNegativeConformanceVectors
+      tags: [conformance]
+      summary: List fail-closed negative conformance vectors
+      description: |
+        Returns the clean-room negative execution-boundary gates used to verify
+        policy-not-ready, stale policy, PDP outage, direct bypass, schema drift,
+        malformed arguments, missing credentials, sandbox overgrant, blocked
+        egress, and deny receipt emission behavior.
+      responses:
+        '200':
+          description: Negative conformance vector list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NegativeBoundaryVector'
 
   # ── MCP Gateway ────────────────────────────────────
+  /api/v1/mcp/registry:
+    get:
+      operationId: listMcpRegistry
+      tags: [mcp]
+      summary: List quarantined and approved MCP servers
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: MCP server quarantine records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MCPQuarantineRecord'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
+    post:
+      operationId: discoverMcpServer
+      tags: [mcp]
+      summary: Register a newly discovered MCP server as quarantined
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPRegistryDiscoverRequest'
+            example:
+              server_id: "mcp-local-files"
+              name: "local files"
+              transport: "stdio"
+              endpoint: "stdio://local-files"
+              tool_names: ["read_file", "write_file"]
+              risk: "high"
+              reason: "new tool bundle requires approval"
+      responses:
+        '202':
+          description: Quarantined MCP server record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPQuarantineRecord'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/mcp/registry/approve:
+    post:
+      operationId: approveMcpServer
+      tags: [mcp]
+      summary: Approve a quarantined MCP server using an approval receipt
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPRegistryApprovalRequest'
+            example:
+              server_id: "mcp-local-files"
+              approver_id: "user:security-admin"
+              approval_receipt_id: "rcpt_approval_123"
+              reason: "reviewed tool bundle and schema pins"
+      responses:
+        '200':
+          description: Approved MCP server record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPQuarantineRecord'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
+
   /mcp/v1/capabilities:
     get:
       operationId: listMCPCapabilities
@@ -637,6 +864,45 @@ paths:
         '404':
           $ref: '#/components/responses/HelmError'
 
+  # ── Sandbox Grants ─────────────────────────────────
+  /api/v1/sandbox/grants/inspect:
+    get:
+      operationId: inspectSandboxGrants
+      tags: [sandbox]
+      summary: Inspect sandbox backend profiles or a sealed sandbox grant
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: runtime
+          in: query
+          schema: { type: string }
+          description: Runtime name. Omit to list built-in backend profiles.
+        - name: profile
+          in: query
+          schema: { type: string }
+          description: Optional sandbox profile identifier.
+        - name: policy_epoch
+          in: query
+          schema: { type: string }
+          description: Policy epoch to bind into the generated grant.
+      responses:
+        '200':
+          description: Backend profile list or sealed sandbox grant
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/SandboxBackendProfile'
+                  - $ref: '#/components/schemas/SandboxGrant'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
+
   # ── System ──────────────────────────────────────────
   /healthz:
     get:
@@ -673,6 +939,15 @@ paths:
                 go_version: "go1.24.0"
 
 components:
+  securitySchemes:
+    AdminBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: HELM_ADMIN_API_KEY
+      description: |
+        Self-hosted OSS admin bearer key. Set HELM_ADMIN_API_KEY on the server
+        and send Authorization: Bearer <key> for protected runtime APIs.
+
   # ── Schemas ─────────────────────────────────────────
   schemas:
     HelmError:
@@ -856,6 +1131,8 @@ components:
           items:
             $ref: '#/components/schemas/Receipt'
         count: { type: integer }
+        next_cursor: { type: string }
+        has_more: { type: boolean }
 
     DecisionRequest:
       type: object
@@ -1030,6 +1307,57 @@ components:
           items: { type: string }
         resource_documentation: { type: string }
 
+    MCPRegistryDiscoverRequest:
+      type: object
+      required: [server_id]
+      properties:
+        server_id: { type: string }
+        name: { type: string }
+        transport: { type: string }
+        endpoint: { type: string }
+        tool_names:
+          type: array
+          items: { type: string }
+        risk:
+          type: string
+          enum: [unknown, low, medium, high, critical]
+          default: unknown
+        reason: { type: string }
+
+    MCPRegistryApprovalRequest:
+      type: object
+      required: [server_id, approver_id, approval_receipt_id]
+      properties:
+        server_id: { type: string }
+        approver_id: { type: string }
+        approval_receipt_id: { type: string }
+        reason: { type: string }
+
+    MCPQuarantineRecord:
+      type: object
+      required: [server_id, risk, state, discovered_at]
+      properties:
+        server_id: { type: string }
+        name: { type: string }
+        transport: { type: string }
+        endpoint: { type: string }
+        tool_names:
+          type: array
+          items: { type: string }
+        risk:
+          type: string
+          enum: [unknown, low, medium, high, critical]
+        state:
+          type: string
+          enum: [discovered, quarantined, approved, revoked, expired]
+        discovered_at: { type: string, format: date-time }
+        approved_at: { type: string, format: date-time }
+        approved_by: { type: string }
+        approval_receipt_id: { type: string }
+        revoked_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        reason: { type: string }
+
     ExportRequest:
       type: object
       properties:
@@ -1063,6 +1391,43 @@ components:
           type: array
           items: { type: string }
 
+    EvidenceEnvelopeExportRequest:
+      type: object
+      required: [manifest_id, envelope, native_evidence_hash]
+      properties:
+        manifest_id:
+          type: string
+        envelope:
+          type: string
+          enum: [dsse, jws, in-toto, slsa, sigstore, scitt, cose]
+        native_evidence_hash:
+          type: string
+          description: HELM-native EvidencePack root hash.
+        subject:
+          type: string
+        experimental:
+          type: boolean
+          default: false
+          description: Must be true for experimental SCITT or COSE exports.
+
+    EvidenceEnvelopeManifest:
+      type: object
+      required: [manifest_id, envelope, native_evidence_hash, native_authority, created_at]
+      properties:
+        manifest_id: { type: string }
+        envelope:
+          type: string
+          enum: [dsse, jws, in-toto, slsa, sigstore, scitt, cose]
+        native_evidence_hash: { type: string }
+        native_authority:
+          type: boolean
+          const: true
+        subject: { type: string }
+        statement_hash: { type: string }
+        experimental: { type: boolean }
+        created_at: { type: string, format: date-time }
+        manifest_hash: { type: string }
+
     ConformanceRequest:
       type: object
       required: [level]
@@ -1085,6 +1450,23 @@ components:
         details:
           type: object
           additionalProperties: { type: string }
+
+    NegativeBoundaryVector:
+      type: object
+      required: [id, category, trigger, expected_verdict, expected_reason_code, must_emit_receipt, must_not_dispatch]
+      properties:
+        id: { type: string }
+        category: { type: string }
+        trigger: { type: string }
+        expected_verdict:
+          type: string
+          enum: [ALLOW, DENY, ESCALATE]
+        expected_reason_code: { type: string }
+        must_emit_receipt: { type: boolean }
+        must_not_dispatch: { type: boolean }
+        must_bind_evidence:
+          type: array
+          items: { type: string }
 
     VersionInfo:
       type: object
@@ -1138,6 +1520,92 @@ components:
         args_hash: { type: string }
         proofgraph_node: { type: string }
         receipt_id: { type: string }
+
+    SandboxBackendProfile:
+      type: object
+      required: [name, kind, runtime, hosted, deny_network_by_default, native_isolation]
+      properties:
+        name: { type: string }
+        kind:
+          type: string
+          enum: [wasi-wazero, wasi-wasmtime, native-nsjail, native-gvisor, native-firecracker, hosted-adapter]
+        runtime: { type: string }
+        hosted: { type: boolean }
+        deny_network_by_default: { type: boolean }
+        native_isolation: { type: boolean }
+        experimental: { type: boolean }
+
+    FilesystemPreopen:
+      type: object
+      required: [path, mode]
+      properties:
+        path: { type: string }
+        mode:
+          type: string
+          enum: [ro, rw]
+        content_hash: { type: string }
+
+    EnvExposurePolicy:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [deny-all, allowlist, redacted]
+        names:
+          type: array
+          items: { type: string }
+        names_hash: { type: string }
+        redacted: { type: boolean }
+
+    NetworkGrant:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [deny-all, allowlist]
+        destinations:
+          type: array
+          items: { type: string }
+        cidrs:
+          type: array
+          items: { type: string }
+
+    SandboxGrantLimits:
+      type: object
+      properties:
+        memory_bytes: { type: integer, format: int64 }
+        cpu_time:
+          type: integer
+          format: int64
+          description: Go duration in nanoseconds.
+        output_bytes: { type: integer, format: int64 }
+        open_files: { type: integer }
+
+    SandboxGrant:
+      type: object
+      required: [grant_id, runtime, profile, env, network, declared_at]
+      properties:
+        grant_id: { type: string }
+        runtime: { type: string }
+        runtime_version: { type: string }
+        profile: { type: string }
+        image_digest: { type: string }
+        template_digest: { type: string }
+        filesystem_preopens:
+          type: array
+          items:
+            $ref: '#/components/schemas/FilesystemPreopen'
+        env:
+          $ref: '#/components/schemas/EnvExposurePolicy'
+        network:
+          $ref: '#/components/schemas/NetworkGrant'
+        limits:
+          $ref: '#/components/schemas/SandboxGrantLimits'
+        declared_at: { type: string, format: date-time }
+        policy_epoch: { type: string }
+        grant_hash: { type: string }
 
     # ── PDP / EffectBoundary Wire Types ────────────────
     Effect:

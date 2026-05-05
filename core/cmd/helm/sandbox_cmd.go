@@ -20,11 +20,12 @@ import (
 //	2 = config error
 func runSandboxCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm sandbox <exec|conform> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm sandbox <exec|conform|inspect> [flags]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Subcommands:")
 		fmt.Fprintln(stderr, "  exec      Execute a command in a governed sandbox")
 		fmt.Fprintln(stderr, "  conform   Run sandbox conformance checks")
+		fmt.Fprintln(stderr, "  inspect   Inspect sandbox backend profiles or sealed grant posture")
 		return 2
 	}
 
@@ -33,12 +34,15 @@ func runSandboxCmd(args []string, stdout, stderr io.Writer) int {
 		return runSandboxExec(args[1:], stdout, stderr)
 	case "conform":
 		return runSandboxConform(args[1:], stdout, stderr)
+	case "inspect":
+		return runSandboxInspect(args[1:], stdout, stderr)
 	case "--help", "-h":
-		fmt.Fprintln(stdout, "Usage: helm sandbox <exec|conform> [flags]")
+		fmt.Fprintln(stdout, "Usage: helm sandbox <exec|conform|inspect> [flags]")
 		fmt.Fprintln(stdout, "")
 		fmt.Fprintln(stdout, "Subcommands:")
 		fmt.Fprintln(stdout, "  exec      Execute a command in a governed sandbox")
 		fmt.Fprintln(stdout, "  conform   Run sandbox conformance checks")
+		fmt.Fprintln(stdout, "  inspect   Inspect sandbox backend profiles or sealed grant posture")
 		return 0
 	default:
 		fmt.Fprintf(stderr, "Unknown sandbox subcommand: %s\n", args[0])

@@ -70,7 +70,7 @@ type consoleMCPInfo struct {
 // the OSS Console. The handler is read-only and derives state from kernel
 // services; it does not create demonstration data.
 func RegisterConsoleRoutes(mux *http.ServeMux, svc *Services, opts serverOptions) {
-	mux.HandleFunc("/api/v1/console/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/console/bootstrap", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -125,9 +125,9 @@ func RegisterConsoleRoutes(mux *http.ServeMux, svc *Services, opts serverOptions
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(response)
-	})
+	}))
 
-	mux.HandleFunc("/api/v1/console/surfaces", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/console/surfaces", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -136,9 +136,9 @@ func RegisterConsoleRoutes(mux *http.ServeMux, svc *Services, opts serverOptions
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"surfaces": consoleSurfaceCatalog(),
 		})
-	})
+	}))
 
-	mux.HandleFunc("/api/v1/console/surfaces/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/console/surfaces/", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -155,7 +155,7 @@ func RegisterConsoleRoutes(mux *http.ServeMux, svc *Services, opts serverOptions
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(state)
-	})
+	}))
 }
 
 func consoleSurfaceCatalog() []map[string]string {
@@ -168,7 +168,7 @@ func consoleSurfaceCatalog() []map[string]string {
 		{"id": "connectors", "source": "/mcp/v1/capabilities"},
 		{"id": "receipts", "source": "/api/v1/receipts"},
 		{"id": "evidence", "source": "/api/v1/evidence/soc2"},
-		{"id": "replay", "source": "/api/v1/replay/timeline"},
+		{"id": "replay", "source": "/api/v1/replay/verify"},
 		{"id": "audit", "source": "/api/v1/console/surfaces/audit"},
 		{"id": "developer", "source": "/api/v1/console/surfaces/developer"},
 		{"id": "settings", "source": "/api/v1/console/surfaces/settings"},
@@ -217,6 +217,16 @@ func buildConsoleSurfaceState(ctx context.Context, svc *Services, opts serverOpt
 			"store":       statusFromStore(svc),
 		}
 		base["records"] = policyRecords(opts)
+	case "replay":
+		base["status"] = statusFromStore(svc)
+		base["source"] = "/api/v1/replay/verify"
+		base["summary"] = map[string]any{
+			"verifier":        "evidence bundle replay verifier",
+			"receipt_count":   len(receipts),
+			"storage_status":  statusFromStore(svc),
+			"verification_io": "operator-provided evidence bundle",
+		}
+		base["records"] = replayConsoleRecords(receipts)
 	case "audit":
 		base["status"] = statusFromStore(svc)
 		base["source"] = "/api/v1/receipts"
@@ -367,6 +377,20 @@ func receiptAuditRecords(receipts []*contracts.Receipt) []map[string]any {
 			"status":      receipt.Status,
 			"receipt_id":  receipt.ReceiptID,
 			"decision_id": receipt.DecisionID,
+		})
+	}
+	return records
+}
+
+func replayConsoleRecords(receipts []*contracts.Receipt) []map[string]any {
+	records := make([]map[string]any, 0, len(receipts))
+	for _, receipt := range receipts {
+		records = append(records, map[string]any{
+			"receipt_id":    receipt.ReceiptID,
+			"executor_id":   receipt.ExecutorID,
+			"lamport_clock": receipt.LamportClock,
+			"prev_hash":     receipt.PrevHash,
+			"signature":     receipt.Signature != "",
 		})
 	}
 	return records

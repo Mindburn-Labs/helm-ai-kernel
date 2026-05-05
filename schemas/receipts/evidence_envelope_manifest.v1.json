@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.dev/schemas/receipts/evidence_envelope_manifest.v1.json",
+  "title": "HELM EvidenceEnvelopeManifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifest_id", "envelope", "native_evidence_hash", "native_authority", "created_at"],
+  "properties": {
+    "manifest_id": { "type": "string", "minLength": 1 },
+    "envelope": {
+      "type": "string",
+      "enum": ["dsse", "jws", "in-toto", "slsa", "sigstore", "scitt", "cose"]
+    },
+    "native_evidence_hash": { "type": "string", "minLength": 1 },
+    "native_authority": { "type": "boolean", "const": true },
+    "subject": { "type": "string" },
+    "statement_hash": { "type": "string" },
+    "experimental": { "type": "boolean" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "manifest_hash": { "type": "string" }
+  }
+}

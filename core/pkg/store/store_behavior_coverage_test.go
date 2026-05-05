@@ -220,6 +220,115 @@ func TestSQLiteReceiptRoundTripsChainFieldsAndAgentFilter(t *testing.T) {
 	if len(filtered) != 1 || filtered[0].ReceiptID != "r-agent-2" {
 		t.Fatalf("unexpected agent filter result: %+v", filtered)
 	}
+
+	allSince, err := store.ListSince(ctx, 1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(allSince) != 2 || allSince[0].ReceiptID != "r-agent-2" || allSince[1].ReceiptID != "r-other" {
+		t.Fatalf("unexpected cursor result: %+v", allSince)
+	}
+}
+
+func TestSQLiteReceiptRejectsDuplicateExecutorLamport(t *testing.T) {
+	store, cleanup := newTestSQLiteStore(t)
+	defer cleanup()
+	ctx := context.Background()
+	first := &contracts.Receipt{
+		ReceiptID:    "r-dup-1",
+		DecisionID:   "d-dup-1",
+		EffectID:     "e",
+		Status:       "OK",
+		Timestamp:    time.Now(),
+		ExecutorID:   "agent.dup",
+		LamportClock: 9,
+	}
+	second := &contracts.Receipt{
+		ReceiptID:    "r-dup-2",
+		DecisionID:   "d-dup-2",
+		EffectID:     "e",
+		Status:       "OK",
+		Timestamp:    time.Now().Add(time.Second),
+		ExecutorID:   "agent.dup",
+		LamportClock: 9,
+	}
+	if err := store.Store(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Store(ctx, second); err == nil {
+		t.Fatal("expected duplicate executor/lamport receipt to fail")
+	}
+}
+
+func TestSQLiteReceiptAppendCausalAssignsChainInsideStore(t *testing.T) {
+	store, cleanup := newTestSQLiteStore(t)
+	defer cleanup()
+	ctx := context.Background()
+	first := func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		return &contracts.Receipt{
+			ReceiptID:    "r-causal-1",
+			DecisionID:   "d-causal-1",
+			EffectID:     "e",
+			Status:       "OK",
+			Timestamp:    time.Unix(1700000000, 0).UTC(),
+			ExecutorID:   "agent.causal",
+			PrevHash:     prevHash,
+			LamportClock: lamport,
+			Signature:    "sig-1",
+		}, nil
+	}
+	if err := store.AppendCausal(ctx, "agent.causal", first); err != nil {
+		t.Fatal(err)
+	}
+
+	var seenPrevious *contracts.Receipt
+	second := func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		seenPrevious = previous
+		return &contracts.Receipt{
+			ReceiptID:    "r-causal-2",
+			DecisionID:   "d-causal-2",
+			EffectID:     "e",
+			Status:       "OK",
+			Timestamp:    time.Unix(1700000001, 0).UTC(),
+			ExecutorID:   "agent.causal",
+			PrevHash:     prevHash,
+			LamportClock: lamport,
+			Signature:    "sig-2",
+		}, nil
+	}
+	if err := store.AppendCausal(ctx, "agent.causal", second); err != nil {
+		t.Fatal(err)
+	}
+	if seenPrevious == nil || seenPrevious.ReceiptID != "r-causal-1" {
+		t.Fatalf("builder did not receive previous receipt: %+v", seenPrevious)
+	}
+	got, err := store.GetByReceiptID(ctx, "r-causal-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedPrevHash, err := contracts.ReceiptChainHash(seenPrevious)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LamportClock != 2 || got.PrevHash != expectedPrevHash {
+		t.Fatalf("causal fields = lamport %d prev %q, want 2 %q", got.LamportClock, got.PrevHash, expectedPrevHash)
+	}
+}
+
+func TestSQLiteReceiptRejectsUnmarshalableMetadata(t *testing.T) {
+	store, cleanup := newTestSQLiteStore(t)
+	defer cleanup()
+	err := store.Store(context.Background(), &contracts.Receipt{
+		ReceiptID:  "r-bad-meta",
+		DecisionID: "d-bad-meta",
+		EffectID:   "e",
+		Status:     "OK",
+		Timestamp:  time.Now(),
+		Metadata:   map[string]any{"bad": func() {}},
+	})
+	if err == nil {
+		t.Fatal("expected metadata marshal failure")
+	}
 }
 
 func TestSQLiteReceiptNotFound(t *testing.T) {

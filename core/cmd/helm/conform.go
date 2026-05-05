@@ -13,6 +13,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/conform"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/conform/gates"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/conformance"
 )
 
 // runConform implements `helm conform` per §2.1.
@@ -23,6 +24,10 @@ import (
 //	1 = any gate failed
 //	2 = runtime error
 func runConform(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "negative" {
+		return runConformNegative(args[1:], stdout, stderr)
+	}
+
 	cmd := flag.NewFlagSet("conform", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 
@@ -178,6 +183,36 @@ func runConform(args []string, stdout, stderr io.Writer) int {
 
 	if !report.Pass {
 		return 1
+	}
+	return 0
+}
+
+func runConformNegative(args []string, stdout, stderr io.Writer) int {
+	cmd := flag.NewFlagSet("conform negative", flag.ContinueOnError)
+	cmd.SetOutput(stderr)
+
+	var jsonOutput bool
+	cmd.BoolVar(&jsonOutput, "json", false, "Output negative execution-boundary vectors as JSON")
+	if err := cmd.Parse(args); err != nil {
+		return 2
+	}
+
+	vectors := conformance.DefaultNegativeBoundaryVectors()
+	if jsonOutput {
+		data, _ := json.MarshalIndent(vectors, "", "  ")
+		_, _ = fmt.Fprintln(stdout, string(data))
+		return 0
+	}
+
+	_, _ = fmt.Fprintln(stdout, "HELM Negative Execution-Boundary Vectors")
+	for _, vector := range vectors {
+		_, _ = fmt.Fprintf(stdout, "  %s  verdict=%s reason=%s receipt=%t dispatch=%t\n",
+			vector.ID,
+			vector.ExpectedVerdict,
+			vector.ExpectedReasonCode,
+			vector.MustEmitReceipt,
+			!vector.MustNotDispatch,
+		)
 	}
 	return 0
 }

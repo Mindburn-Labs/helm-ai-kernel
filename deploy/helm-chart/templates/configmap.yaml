@@ -1,24 +1,58 @@
+{{- if not .Values.helm.policy.configMap -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "helm-firewall.fullname" . }}-config
+  name: {{ include "helm-firewall.policyConfigMapName" . }}
   labels:
     {{- include "helm-firewall.labels" . | nindent 4 }}
 data:
+  {{ .Values.helm.policy.fileName }}: |
+    name = {{ .Values.helm.policy.name | quote }}
+    profile = {{ .Values.helm.policy.profile | quote }}
+    reference_pack = {{ .Values.helm.policy.referencePack | quote }}
+
+    [server]
+    bind = {{ .Values.helm.bindAddr | quote }}
+    port = {{ .Values.service.port }}
+
+    [receipts]
+    store = {{ .Values.helm.storage.type | quote }}
+    {{ if eq .Values.helm.storage.type "sqlite" }}
+    path = {{ .Values.helm.storage.sqlite.path | quote }}
+    {{ else }}
+    path = {{ printf "%s/helm.db" (.Values.helm.dataDir | trimSuffix "/") | quote }}
+    {{ end }}
+
+    [receipts.signing]
+    algorithm = {{ .Values.helm.signing.algorithm | quote }}
+    key_path = {{ printf "%s/root.key" (.Values.helm.dataDir | trimSuffix "/") | quote }}
+
+  {{ .Values.helm.policy.referencePackFileName }}: |
+    {
+      "pack_id": {{ .Values.helm.policy.referencePackID | quote }},
+      "label": {{ .Values.helm.policy.referencePackLabel | quote }},
+      "version": 1,
+      "runtime_actions": []
+    }
+
   helm.yaml: |
     region: {{ .Values.helm.region | quote }}
+    bind_addr: {{ .Values.helm.bindAddr | quote }}
+    data_dir: {{ .Values.helm.dataDir | quote }}
     signing:
       algorithm: {{ .Values.helm.signing.algorithm | quote }}
+      key_path: {{ printf "%s/root.key" (.Values.helm.dataDir | trimSuffix "/") | quote }}
     storage:
       type: {{ .Values.helm.storage.type | quote }}
-      {{- if eq .Values.helm.storage.type "sqlite" }}
+      {{ if eq .Values.helm.storage.type "sqlite" }}
       sqlite:
         path: {{ .Values.helm.storage.sqlite.path | quote }}
-      {{- end }}
+      {{ end }}
     proxy:
       enabled: {{ .Values.helm.proxy.enabled }}
-      {{- if .Values.helm.proxy.enabled }}
+      {{ if .Values.helm.proxy.enabled }}
       upstream: {{ .Values.helm.proxy.upstream | quote }}
-      {{- end }}
+      {{ end }}
     metrics:
       enabled: {{ .Values.helm.metrics.enabled }}
+{{- end }}

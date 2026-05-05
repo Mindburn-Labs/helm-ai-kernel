@@ -1,8 +1,52 @@
 ---
 title: Publishing
+last_reviewed: 2026-05-05
 ---
 
 # Publishing
+
+## Audience
+
+Use this page when you need the public `helm-oss/publishing` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
+
+## Outcome
+
+After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
+
+## Source Truth
+
+- Public route: `helm-oss/publishing`
+- Source document: `helm-oss/docs/PUBLISHING.md`
+- Public manifest: `helm-oss/docs/public-docs.manifest.json`
+- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
+
+Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
+| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
+| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
+
+## Diagram
+
+This scheme maps the main sections of Publishing in reading order.
+
+```mermaid
+flowchart LR
+  Page["Publishing"]
+  A["Package Identities"]
+  B["Release Inputs"]
+  C["Release Automation"]
+  D["Verification"]
+  Page --> A
+  A --> B
+  B --> C
+  C --> D
+```
 
 The repository retains packaging metadata for the kernel binaries, container image, and the public SDKs.
 
@@ -10,7 +54,7 @@ The repository retains packaging metadata for the kernel binaries, container ima
 
 | Surface | Package Identity |
 | --- | --- |
-| CLI/Homebrew | `mindburnlabs/tap/helm` |
+| CLI/Homebrew | `mindburn/tap/helm` |
 | TypeScript SDK | `@mindburn/helm` |
 | Python SDK | `helm-sdk` |
 | Rust SDK | `helm-sdk` |
@@ -26,7 +70,10 @@ Before tagging a release:
 3. run `make build`, `make test`, `make test-all`, `make crucible`
 4. run `make release-binaries`, `make sbom`, and `make mcp-pack`
 5. verify that SDK package versions match `VERSION`
-6. verify `helm verify evidence-pack.tar` and `helm verify evidence-pack.tar --online` against the public proof API for the release pack
+6. verify `helm verify evidence-pack.tar`; run
+   `helm verify evidence-pack.tar --online` only when the public proof endpoint
+   and credentials for that release are available
+7. run `make release-binaries-reproducible` when validating that release binaries are reproducible from the checked-in source and pinned build metadata
 
 ## Release Automation
 
@@ -38,15 +85,38 @@ The retained workflow set under `.github/workflows/` covers:
 - GHCR image publication for `latest`, version tag, and slim tag
 - manual publication workflows for npm, PyPI, crates.io, and Maven-compatible distribution
 
-Release assets must include binaries, `SHA256SUMS.txt`, SBOM, MCP bundle, release attestation, and a golden anchored EvidencePack.
+Current public GitHub release: `v0.4.0`, published on 2026-04-25 at
+<https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.4.0>.
+
+Its attached assets are:
+
+- `helm-darwin-amd64`
+- `helm-darwin-arm64`
+- `helm-linux-amd64`
+- `helm-linux-arm64`
+- `helm-windows-amd64.exe`
+- `SHA256SUMS.txt`
+- `sbom.json`
+- `release-attestation.json`
+- `evidence-pack.tar`
+- `release.high_risk.v3.toml`
+- `helm.mcpb`
+- `helm.rb`
+
+Do not document an asset as published unless it appears on the GitHub release
+or is produced by a retained workflow and attached to that release.
 
 If a package or channel is not represented in the retained workflow set, it should not be described as a supported public publication channel in repository documentation.
 
 ## Verification
 
-Every release publishes the following verification artifacts alongside the
-binaries: `*.cosign.bundle` (one per signed artifact), `*.openvex.json`,
-`sbom.json`, and `SHA256SUMS.txt`.
+Every public release must include enough material to verify what was downloaded.
+For `v0.4.0`, use `SHA256SUMS.txt`, `sbom.json`,
+`release-attestation.json`, the platform binary assets, and the offline
+`evidence-pack.tar`.
+
+Cosign bundle verification applies only when `*.cosign.bundle` files are
+attached to the release.
 
 Verify a downloaded binary blob:
 
@@ -58,7 +128,8 @@ cosign verify-blob \
   helm-linux-amd64
 ```
 
-Verify a published container image:
+Verify a published container image when a container image has been published
+for the release:
 
 ```bash
 cosign verify \
@@ -67,5 +138,6 @@ cosign verify \
   ghcr.io/mindburn-labs/helm-oss:<version>
 ```
 
-The same recipe is documented in `docs/VERIFICATION.md` and is exercised
-end-to-end by `scripts/release/verify_cosign.sh` (called via `make verify-cosign`).
+The same recipe is documented in `docs/VERIFICATION.md`. The local helper
+`scripts/release/verify_cosign.sh` is called via `make verify-cosign`, but it
+requires matching `*.cosign.bundle` files in the downloaded release directory.

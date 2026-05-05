@@ -40,7 +40,8 @@ set. A release tag does not publish artifacts unless that diff is empty.
 
 ## Cosign Signing Roots
 
-Release artifacts are signed via cosign keyless OIDC. The trust roots are:
+Release artifacts can be verified with cosign keyless OIDC when the GitHub
+release attaches matching `*.cosign.bundle` files. The trust roots are:
 
 - **Sigstore Fulcio** — the certificate authority that issues the
   short-lived signing certificate for the GitHub Actions workflow
@@ -52,6 +53,11 @@ The signing identity is the GitHub Actions workflow itself
 (`https://github.com/Mindburn-Labs/helm-oss/.github/workflows/release.yml@refs/tags/v*`).
 Verification commands and the recovery path are documented in
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
+
+The current public GitHub release, `v0.4.0` published on 2026-04-25, does not
+attach `*.cosign.bundle` files. For that release, use `SHA256SUMS.txt`,
+`sbom.json`, `release-attestation.json`, offline `evidence-pack.tar`
+verification, and reproducible-build validation.
 
 ## Continuous Fuzzing
 

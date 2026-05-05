@@ -184,7 +184,7 @@ body {
   color: var(--helm-text-secondary);
 }
 
-.env-button,
+.env-chip,
 .density-toggle button {
   height: 28px;
   display: inline-flex;
@@ -278,6 +278,59 @@ body {
   min-width: 0;
   overflow: auto;
   padding: var(--helm-space-12);
+}
+
+.access-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(320px, 0.44fr);
+  gap: var(--helm-space-6);
+  align-items: center;
+  margin-bottom: var(--helm-space-8);
+  border: 1px solid var(--helm-verdict-deny);
+  border-radius: var(--helm-radius-panel);
+  background: var(--helm-bg-elevated);
+  color: var(--helm-text-secondary);
+  padding: var(--helm-space-7);
+}
+
+.access-banner h2 {
+  margin: 0 0 var(--helm-space-2);
+  color: var(--helm-text-primary);
+  font-size: 13px;
+}
+
+.access-banner p {
+  margin: 0;
+  color: var(--helm-text-muted);
+  font-size: 12px;
+}
+
+.access-form {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) auto auto;
+  gap: var(--helm-space-4);
+  align-items: end;
+}
+
+.access-form label {
+  display: grid;
+  gap: var(--helm-space-2);
+  color: var(--helm-text-muted);
+  font-family: var(--helm-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.access-form input {
+  height: 30px;
+  border: 1px solid var(--helm-border-default);
+  border-radius: var(--helm-radius-sm);
+  background: var(--helm-bg-terminal);
+  color: var(--helm-text-primary);
+  padding-inline: var(--helm-space-5);
+  font-family: var(--helm-font-mono);
+  font-size: 12px;
+  text-transform: none;
 }
 
 .page-grid {
@@ -588,13 +641,13 @@ body {
   text-transform: uppercase;
 }
 
-.receipt-table tr {
-  cursor: pointer;
-}
-
-.receipt-table tbody tr:hover,
 .receipt-table tbody tr.is-selected {
   background: var(--helm-bg-selected-row);
+}
+
+.receipt-table .helm-button {
+  min-height: 24px;
+  padding-inline: var(--helm-space-3);
 }
 
 .receipt-table code {
@@ -758,6 +811,8 @@ body {
 
   .console-topbar,
   .intent-composer,
+  .access-banner,
+  .access-form,
   .lifecycle-rail,
   .surface-summary,
   .ops-strip {

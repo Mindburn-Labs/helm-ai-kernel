@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.dev/schemas/receipts/execution_boundary_record.v1.json",
+  "title": "HELM ExecutionBoundaryRecord v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["record_id", "verdict", "policy_epoch", "created_at"],
+  "properties": {
+    "record_id": { "type": "string", "minLength": 1 },
+    "verdict": { "type": "string", "enum": ["ALLOW", "DENY", "ESCALATE"] },
+    "reason_code": { "type": "string" },
+    "tool_name": { "type": "string" },
+    "args_hash": { "type": "string" },
+    "policy_epoch": { "type": "string", "minLength": 1 },
+    "mcp_server_id": { "type": "string" },
+    "oauth_resource": { "type": "string" },
+    "oauth_scopes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "sandbox_grant_hash": { "type": "string" },
+    "authz_snapshot_hash": { "type": "string" },
+    "receipt_id": { "type": "string" },
+    "approval_receipt_id": { "type": "string" },
+    "direct_dispatch_seen": { "type": "boolean" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "record_hash": { "type": "string" }
+  }
+}

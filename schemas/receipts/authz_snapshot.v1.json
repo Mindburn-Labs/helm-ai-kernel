@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.dev/schemas/receipts/authz_snapshot.v1.json",
+  "title": "HELM AuthzSnapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "snapshot_id",
+    "resolver",
+    "model_id",
+    "relationship_hash",
+    "subject",
+    "object",
+    "relation",
+    "decision",
+    "checked_at"
+  ],
+  "properties": {
+    "snapshot_id": { "type": "string", "minLength": 1 },
+    "resolver": { "type": "string", "minLength": 1 },
+    "model_id": { "type": "string", "minLength": 1 },
+    "relationship_hash": { "type": "string", "minLength": 1 },
+    "snapshot_token": { "type": "string" },
+    "subject": { "type": "string", "minLength": 1 },
+    "object": { "type": "string", "minLength": 1 },
+    "relation": { "type": "string", "minLength": 1 },
+    "decision": { "type": "boolean" },
+    "stale": { "type": "boolean" },
+    "model_mismatch": { "type": "boolean" },
+    "checked_at": { "type": "string", "format": "date-time" },
+    "snapshot_hash": { "type": "string" }
+  }
+}

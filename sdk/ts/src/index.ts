@@ -3,8 +3,16 @@ export type {
   HelmClientConfig,
   ReasonCode,
   HelmError,
+  EvidenceEnvelopeExportRequest,
+  EvidenceEnvelopeManifest,
   GovernanceMetadata,
   ChatCompletionWithReceipt,
+  McpQuarantineRecord,
+  McpRegistryApprovalRequest,
+  McpRegistryDiscoverRequest,
+  NegativeBoundaryVector,
+  SandboxBackendProfile,
+  SandboxGrant,
 } from "./client.js";
 export {
   agentFrameworkAdapters,

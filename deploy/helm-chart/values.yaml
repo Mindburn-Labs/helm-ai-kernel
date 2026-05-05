@@ -40,6 +40,7 @@ securityContext:
 service:
   type: ClusterIP
   port: 8080
+  healthPort: 8081
   metricsPort: 9090
 
 ingress:
@@ -68,6 +69,15 @@ resources:
 
 # HELM-specific configuration
 helm:
+  # Bind address used inside the pod. Kubernetes Services require 0.0.0.0.
+  bindAddr: "0.0.0.0"
+
+  # Durable runtime directory for SQLite state, receipts, artifacts, and root keys.
+  dataDir: "/data"
+
+  # Production mode refuses to auto-generate a root signing key at startup.
+  production: false
+
   # Proxy mode: forward to upstream LLM provider
   proxy:
     enabled: true
@@ -82,10 +92,10 @@ helm:
   # Signing key configuration
   signing:
     algorithm: "ed25519"  # or "ml-dsa-65"
-    # Key value (used only if existingSecret is not set)
+    # Ed25519 root key seed as 64 lowercase hex chars (used only if existingSecret is not set)
     key: ""
     # Use an existing Kubernetes secret for the signing key
-    # The secret must contain a key named "signing-key"
+    # The secret must contain a key named "signing-key" with a 64-char hex seed.
     existingSecret: ""
 
   # Storage backend
@@ -115,10 +125,19 @@ helm:
 
   # Policy configuration
   policy:
-    # Name of a ConfigMap containing policy files to mount
+    # Name of an existing ConfigMap containing the serve policy file.
+    # Leave empty to use the chart-generated policy.
     configMap: ""
+    mountPath: "/etc/helm/policy"
+    fileName: "serve-policy.toml"
+    name: "helm-chart"
+    profile: "kubernetes"
+    referencePack: "./reference-pack.json"
+    referencePackFileName: "reference-pack.json"
+    referencePackID: "helm-chart-reference-pack"
+    referencePackLabel: "HELM chart default fail-closed reference pack"
 
-# Persistent storage (used when storage.type=sqlite)
+# Persistent storage for HELM dataDir and SQLite state.
 persistence:
   enabled: true
   storageClass: ""
@@ -133,7 +152,7 @@ probes:
   liveness:
     httpGet:
       path: /health
-      port: http
+      port: health
     initialDelaySeconds: 10
     periodSeconds: 15
     timeoutSeconds: 5
@@ -141,7 +160,7 @@ probes:
   readiness:
     httpGet:
       path: /health
-      port: http
+      port: health
     initialDelaySeconds: 5
     periodSeconds: 10
     timeoutSeconds: 3

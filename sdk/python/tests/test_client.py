@@ -16,8 +16,11 @@ from helm_sdk import (
     ChatCompletionRequest,
     ChatMessage,
     ConformanceRequest,
+    EvidenceEnvelopeExportRequest,
     HelmApiError,
     HelmClient,
+    MCPRegistryApprovalRequest,
+    MCPRegistryDiscoverRequest,
     Receipt,
     VerificationChecks,
     VerificationResult,
@@ -256,3 +259,97 @@ class TestGeneratedTypes:
         )
         assert vr.verdict == "PASS"
         assert len(vr.errors) == 0
+
+
+# ── Execution Boundary Surfaces ─────────────────────────
+
+class TestExecutionBoundarySurfaces:
+    @patch("helm_sdk.client.httpx.Client")
+    def test_create_evidence_envelope_manifest(self, mock_client_cls: MagicMock) -> None:
+        mock_client = mock_client_cls.return_value
+        mock_client.post.return_value = mock_response(200, {
+            "manifest_id": "env1",
+            "envelope": "dsse",
+            "native_evidence_hash": "sha256:native",
+            "native_authority": True,
+            "created_at": "2026-05-05T00:00:00Z",
+        })
+
+        client = HelmClient(base_url="http://h")
+        result = client.create_evidence_envelope_manifest(
+            EvidenceEnvelopeExportRequest(
+                manifest_id="env1",
+                envelope="dsse",
+                native_evidence_hash="sha256:native",
+            )
+        )
+
+        mock_client.post.assert_called_once()
+        assert mock_client.post.call_args[0][0] == "/api/v1/evidence/envelopes"
+        assert result.native_authority is True
+
+    @patch("helm_sdk.client.httpx.Client")
+    def test_list_negative_conformance_vectors(self, mock_client_cls: MagicMock) -> None:
+        mock_client = mock_client_cls.return_value
+        mock_client.get.return_value = mock_response(200, [{
+            "id": "pdp-outage",
+            "category": "policy",
+            "trigger": "PDP unavailable",
+            "expected_verdict": "DENY",
+            "expected_reason_code": "PDP_ERROR",
+            "must_emit_receipt": True,
+            "must_not_dispatch": True,
+        }])
+
+        client = HelmClient(base_url="http://h")
+        result = client.list_negative_conformance_vectors()
+
+        mock_client.get.assert_called_once_with("/api/v1/conformance/negative")
+        assert result[0].id == "pdp-outage"
+
+    @patch("helm_sdk.client.httpx.Client")
+    def test_mcp_registry_methods(self, mock_client_cls: MagicMock) -> None:
+        mock_client = mock_client_cls.return_value
+        record = {
+            "server_id": "mcp1",
+            "risk": "high",
+            "state": "quarantined",
+            "discovered_at": "2026-05-05T00:00:00Z",
+        }
+        mock_client.post.return_value = mock_response(200, record)
+
+        client = HelmClient(base_url="http://h")
+        discovered = client.discover_mcp_server(MCPRegistryDiscoverRequest(server_id="mcp1", risk="high"))
+        assert discovered.state == "quarantined"
+
+        mock_client.post.return_value = mock_response(200, {**record, "state": "approved"})
+        approved = client.approve_mcp_server(
+            MCPRegistryApprovalRequest(
+                server_id="mcp1",
+                approver_id="user1",
+                approval_receipt_id="rcpt1",
+            )
+        )
+        assert approved.state == "approved"
+
+    @patch("helm_sdk.client.httpx.Client")
+    def test_inspect_sandbox_grants(self, mock_client_cls: MagicMock) -> None:
+        mock_client = mock_client_cls.return_value
+        mock_client.get.return_value = mock_response(200, {
+            "grant_id": "grant1",
+            "runtime": "wazero",
+            "profile": "deny-default",
+            "env": {"mode": "deny-all"},
+            "network": {"mode": "deny-all"},
+            "declared_at": "2026-05-05T00:00:00Z",
+        })
+
+        client = HelmClient(base_url="http://h")
+        result = client.inspect_sandbox_grants("wazero", "deny-default", "epoch1")
+
+        mock_client.get.assert_called_once_with(
+            "/api/v1/sandbox/grants/inspect",
+            params={"runtime": "wazero", "profile": "deny-default", "policy_epoch": "epoch1"},
+        )
+        assert not isinstance(result, list)
+        assert result.grant_id == "grant1"

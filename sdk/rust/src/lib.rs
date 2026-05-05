@@ -2,6 +2,7 @@
 //! Minimal deps: reqwest + serde.
 
 use reqwest::blocking::Client;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 pub mod client;
@@ -47,6 +48,152 @@ impl std::fmt::Display for HelmApiError {
 }
 
 impl std::error::Error for HelmApiError {}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EvidenceEnvelopeExportRequest {
+    pub manifest_id: String,
+    pub envelope: String,
+    pub native_evidence_hash: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub experimental: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EvidenceEnvelopeManifest {
+    pub manifest_id: String,
+    pub envelope: String,
+    pub native_evidence_hash: String,
+    pub native_authority: bool,
+    pub created_at: String,
+    #[serde(default)]
+    pub subject: Option<String>,
+    #[serde(default)]
+    pub statement_hash: Option<String>,
+    #[serde(default)]
+    pub experimental: bool,
+    #[serde(default)]
+    pub manifest_hash: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NegativeBoundaryVector {
+    pub id: String,
+    pub category: String,
+    pub trigger: String,
+    pub expected_verdict: String,
+    pub expected_reason_code: String,
+    pub must_emit_receipt: bool,
+    pub must_not_dispatch: bool,
+    #[serde(default)]
+    pub must_bind_evidence: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct McpRegistryDiscoverRequest {
+    pub server_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tool_names: Vec<String>,
+    #[serde(default = "default_mcp_risk")]
+    pub risk: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+fn default_mcp_risk() -> String {
+    "unknown".to_string()
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct McpRegistryApprovalRequest {
+    pub server_id: String,
+    pub approver_id: String,
+    pub approval_receipt_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct McpQuarantineRecord {
+    pub server_id: String,
+    pub risk: String,
+    pub state: String,
+    pub discovered_at: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub transport: Option<String>,
+    #[serde(default)]
+    pub endpoint: Option<String>,
+    #[serde(default)]
+    pub tool_names: Vec<String>,
+    #[serde(default)]
+    pub approved_at: Option<String>,
+    #[serde(default)]
+    pub approved_by: Option<String>,
+    #[serde(default)]
+    pub approval_receipt_id: Option<String>,
+    #[serde(default)]
+    pub revoked_at: Option<String>,
+    #[serde(default)]
+    pub expires_at: Option<String>,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SandboxBackendProfile {
+    pub name: String,
+    pub kind: String,
+    pub runtime: String,
+    pub hosted: bool,
+    pub deny_network_by_default: bool,
+    pub native_isolation: bool,
+    #[serde(default)]
+    pub experimental: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SandboxGrant {
+    pub grant_id: String,
+    pub runtime: String,
+    pub profile: String,
+    pub env: serde_json::Value,
+    pub network: serde_json::Value,
+    pub declared_at: String,
+    #[serde(default)]
+    pub runtime_version: Option<String>,
+    #[serde(default)]
+    pub image_digest: Option<String>,
+    #[serde(default)]
+    pub template_digest: Option<String>,
+    #[serde(default)]
+    pub filesystem_preopens: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub limits: Option<serde_json::Value>,
+    #[serde(default)]
+    pub policy_epoch: Option<String>,
+    #[serde(default)]
+    pub grant_hash: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SandboxGrantInspection {
+    Profiles(Vec<SandboxBackendProfile>),
+    Grant(SandboxGrant),
+}
 
 /// Typed client for the HELM kernel API.
 pub struct HelmClient {
@@ -256,6 +403,29 @@ impl HelmClient {
         })
     }
 
+    /// POST /api/v1/evidence/envelopes
+    pub fn create_evidence_envelope_manifest(
+        &self,
+        req: &EvidenceEnvelopeExportRequest,
+    ) -> Result<EvidenceEnvelopeManifest, HelmApiError> {
+        let resp = self
+            .client
+            .post(self.url("/api/v1/evidence/envelopes"))
+            .json(req)
+            .send()
+            .map_err(|e| HelmApiError {
+                status: 0,
+                message: e.to_string(),
+                reason_code: ReasonCode::ErrorInternal,
+            })?;
+        let resp = self.check(resp)?;
+        resp.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
+    }
+
     /// GET /api/v1/proofgraph/receipts/{hash}
     pub fn get_receipt(&self, receipt_hash: &str) -> Result<Receipt, HelmApiError> {
         let resp = self
@@ -326,6 +496,127 @@ impl HelmClient {
         })
     }
 
+    /// GET /api/v1/conformance/negative
+    pub fn list_negative_conformance_vectors(
+        &self,
+    ) -> Result<Vec<NegativeBoundaryVector>, HelmApiError> {
+        let resp = self
+            .client
+            .get(self.url("/api/v1/conformance/negative"))
+            .send()
+            .map_err(|e| HelmApiError {
+                status: 0,
+                message: e.to_string(),
+                reason_code: ReasonCode::ErrorInternal,
+            })?;
+        let resp = self.check(resp)?;
+        resp.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
+    }
+
+    /// GET /api/v1/mcp/registry
+    pub fn list_mcp_registry(&self) -> Result<Vec<McpQuarantineRecord>, HelmApiError> {
+        let resp = self
+            .client
+            .get(self.url("/api/v1/mcp/registry"))
+            .send()
+            .map_err(|e| HelmApiError {
+                status: 0,
+                message: e.to_string(),
+                reason_code: ReasonCode::ErrorInternal,
+            })?;
+        let resp = self.check(resp)?;
+        resp.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
+    }
+
+    /// POST /api/v1/mcp/registry
+    pub fn discover_mcp_server(
+        &self,
+        req: &McpRegistryDiscoverRequest,
+    ) -> Result<McpQuarantineRecord, HelmApiError> {
+        let resp = self
+            .client
+            .post(self.url("/api/v1/mcp/registry"))
+            .json(req)
+            .send()
+            .map_err(|e| HelmApiError {
+                status: 0,
+                message: e.to_string(),
+                reason_code: ReasonCode::ErrorInternal,
+            })?;
+        let resp = self.check(resp)?;
+        resp.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
+    }
+
+    /// POST /api/v1/mcp/registry/approve
+    pub fn approve_mcp_server(
+        &self,
+        req: &McpRegistryApprovalRequest,
+    ) -> Result<McpQuarantineRecord, HelmApiError> {
+        let resp = self
+            .client
+            .post(self.url("/api/v1/mcp/registry/approve"))
+            .json(req)
+            .send()
+            .map_err(|e| HelmApiError {
+                status: 0,
+                message: e.to_string(),
+                reason_code: ReasonCode::ErrorInternal,
+            })?;
+        let resp = self.check(resp)?;
+        resp.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
+    }
+
+    /// GET /api/v1/sandbox/grants/inspect
+    pub fn inspect_sandbox_grants(
+        &self,
+        runtime: Option<&str>,
+        profile: Option<&str>,
+        policy_epoch: Option<&str>,
+    ) -> Result<SandboxGrantInspection, HelmApiError> {
+        let mut path = "/api/v1/sandbox/grants/inspect".to_string();
+        let mut params = Vec::new();
+        if let Some(runtime) = runtime {
+            params.push(format!("runtime={}", encode_query(runtime)));
+        }
+        if let Some(profile) = profile {
+            params.push(format!("profile={}", encode_query(profile)));
+        }
+        if let Some(policy_epoch) = policy_epoch {
+            params.push(format!("policy_epoch={}", encode_query(policy_epoch)));
+        }
+        if !params.is_empty() {
+            path.push('?');
+            path.push_str(&params.join("&"));
+        }
+        let resp = self.client.get(self.url(&path)).send().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })?;
+        let resp = self.check(resp)?;
+        resp.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
+    }
+
     /// GET /healthz
     pub fn health(&self) -> Result<serde_json::Value, HelmApiError> {
         let resp = self
@@ -365,6 +656,18 @@ impl HelmClient {
     }
 }
 
+fn encode_query(value: &str) -> String {
+    value
+        .bytes()
+        .flat_map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                vec![b as char]
+            }
+            _ => format!("%{b:02X}").chars().collect(),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -379,5 +682,30 @@ mod tests {
         let code = ReasonCode::DenyToolNotFound;
         let json = serde_json::to_string(&code).unwrap();
         assert_eq!(json, "\"DENY_TOOL_NOT_FOUND\"");
+    }
+
+    #[test]
+    fn test_execution_boundary_types_serde() {
+        let req = EvidenceEnvelopeExportRequest {
+            manifest_id: "env1".to_string(),
+            envelope: "dsse".to_string(),
+            native_evidence_hash: "sha256:native".to_string(),
+            subject: None,
+            experimental: false,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("native_evidence_hash"));
+
+        let record: McpQuarantineRecord = serde_json::from_str(
+            r#"{"server_id":"mcp1","risk":"high","state":"quarantined","discovered_at":"2026-05-05T00:00:00Z"}"#,
+        )
+        .unwrap();
+        assert_eq!(record.server_id, "mcp1");
+
+        let grant: SandboxGrant = serde_json::from_str(
+            r#"{"grant_id":"grant1","runtime":"wazero","profile":"deny-default","env":{"mode":"deny-all"},"network":{"mode":"deny-all"},"declared_at":"2026-05-05T00:00:00Z"}"#,
+        )
+        .unwrap();
+        assert_eq!(grant.grant_id, "grant1");
     }
 }

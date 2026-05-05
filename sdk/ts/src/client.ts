@@ -17,6 +17,97 @@ import type {
 
 export type { ReasonCode, HelmError };
 
+export interface EvidenceEnvelopeExportRequest {
+  manifest_id: string;
+  envelope: 'dsse' | 'jws' | 'in-toto' | 'slsa' | 'sigstore' | 'scitt' | 'cose';
+  native_evidence_hash: string;
+  subject?: string;
+  experimental?: boolean;
+}
+
+export interface EvidenceEnvelopeManifest {
+  manifest_id: string;
+  envelope: string;
+  native_evidence_hash: string;
+  native_authority: true;
+  subject?: string;
+  statement_hash?: string;
+  experimental?: boolean;
+  created_at: string;
+  manifest_hash?: string;
+}
+
+export interface NegativeBoundaryVector {
+  id: string;
+  category: string;
+  trigger: string;
+  expected_verdict: 'ALLOW' | 'DENY' | 'ESCALATE';
+  expected_reason_code: string;
+  must_emit_receipt: boolean;
+  must_not_dispatch: boolean;
+  must_bind_evidence?: string[];
+}
+
+export interface McpRegistryDiscoverRequest {
+  server_id: string;
+  name?: string;
+  transport?: string;
+  endpoint?: string;
+  tool_names?: string[];
+  risk?: 'unknown' | 'low' | 'medium' | 'high' | 'critical';
+  reason?: string;
+}
+
+export interface McpRegistryApprovalRequest {
+  server_id: string;
+  approver_id: string;
+  approval_receipt_id: string;
+  reason?: string;
+}
+
+export interface McpQuarantineRecord {
+  server_id: string;
+  name?: string;
+  transport?: string;
+  endpoint?: string;
+  tool_names?: string[];
+  risk: 'unknown' | 'low' | 'medium' | 'high' | 'critical';
+  state: 'discovered' | 'quarantined' | 'approved' | 'revoked' | 'expired';
+  discovered_at: string;
+  approved_at?: string;
+  approved_by?: string;
+  approval_receipt_id?: string;
+  revoked_at?: string;
+  expires_at?: string;
+  reason?: string;
+}
+
+export interface SandboxBackendProfile {
+  name: string;
+  kind: 'wasi-wazero' | 'wasi-wasmtime' | 'native-nsjail' | 'native-gvisor' | 'native-firecracker' | 'hosted-adapter';
+  runtime: string;
+  hosted: boolean;
+  deny_network_by_default: boolean;
+  native_isolation: boolean;
+  experimental?: boolean;
+}
+
+export interface SandboxGrant {
+  grant_id: string;
+  runtime: string;
+  runtime_version?: string;
+  profile: string;
+  image_digest?: string;
+  template_digest?: string;
+  filesystem_preopens?: Array<{ path: string; mode: 'ro' | 'rw'; content_hash?: string }>;
+  env: { mode: 'deny-all' | 'allowlist' | 'redacted'; names?: string[]; names_hash?: string; redacted?: boolean };
+  network: { mode: 'deny-all' | 'allowlist'; destinations?: string[]; cidrs?: string[] };
+  limits?: { memory_bytes?: number; cpu_time?: number; output_bytes?: number; open_files?: number };
+  declared_at: string;
+  policy_epoch?: string;
+  grant_hash?: string;
+}
+
 /** Governance metadata extracted from X-Helm-* response headers. */
 export interface GovernanceMetadata {
   receiptId: string;
@@ -206,6 +297,10 @@ export class HelmClient {
     }
   }
 
+  async createEvidenceEnvelopeManifest(req: EvidenceEnvelopeExportRequest): Promise<EvidenceEnvelopeManifest> {
+    return this.request<EvidenceEnvelopeManifest>('POST', '/api/v1/evidence/envelopes', req);
+  }
+
   // ── Conformance ──────────────────────────────────
   async conformanceRun(req: ConformanceRequest): Promise<ConformanceResult> {
     return this.request<ConformanceResult>('POST', '/api/v1/conformance/run', req);
@@ -213,6 +308,38 @@ export class HelmClient {
 
   async getConformanceReport(reportId: string): Promise<ConformanceResult> {
     return this.request<ConformanceResult>('GET', `/api/v1/conformance/reports/${reportId}`);
+  }
+
+  async listNegativeConformanceVectors(): Promise<NegativeBoundaryVector[]> {
+    return this.request<NegativeBoundaryVector[]>('GET', '/api/v1/conformance/negative');
+  }
+
+  // ── MCP Registry ─────────────────────────────────
+  async listMcpRegistry(): Promise<McpQuarantineRecord[]> {
+    return this.request<McpQuarantineRecord[]>('GET', '/api/v1/mcp/registry');
+  }
+
+  async discoverMcpServer(req: McpRegistryDiscoverRequest): Promise<McpQuarantineRecord> {
+    return this.request<McpQuarantineRecord>('POST', '/api/v1/mcp/registry', req);
+  }
+
+  async approveMcpServer(req: McpRegistryApprovalRequest): Promise<McpQuarantineRecord> {
+    return this.request<McpQuarantineRecord>('POST', '/api/v1/mcp/registry/approve', req);
+  }
+
+  // ── Sandbox ──────────────────────────────────────
+  async inspectSandboxGrants(): Promise<SandboxBackendProfile[]>;
+  async inspectSandboxGrants(runtime: string, profile?: string, policyEpoch?: string): Promise<SandboxGrant>;
+  async inspectSandboxGrants(runtime?: string, profile?: string, policyEpoch?: string): Promise<SandboxBackendProfile[] | SandboxGrant> {
+    const params = new URLSearchParams();
+    if (runtime) params.set('runtime', runtime);
+    if (profile) params.set('profile', profile);
+    if (policyEpoch) params.set('policy_epoch', policyEpoch);
+    const query = params.toString();
+    return this.request<SandboxBackendProfile[] | SandboxGrant>(
+      'GET',
+      `/api/v1/sandbox/grants/inspect${query ? `?${query}` : ''}`,
+    );
   }
 
   // ── System ───────────────────────────────────────

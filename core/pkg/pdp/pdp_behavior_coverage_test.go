@@ -160,19 +160,27 @@ func TestOpaPDP_CustomTimeout(t *testing.T) {
 	}
 }
 
-func TestHelmPDP_UnknownResourceAllows(t *testing.T) {
+func TestHelmPDP_UnknownResourceDenies(t *testing.T) {
 	p := NewHelmPDP("v1", map[string]bool{"known": true})
 	resp, _ := p.Evaluate(context.Background(), &DecisionRequest{Resource: "unknown"})
-	if !resp.Allow {
-		t.Fatal("unknown resource should be allowed when no rule matches")
+	if resp.Allow {
+		t.Fatal("unknown resource should be denied when no rule matches")
 	}
 }
 
-func TestHelmPDP_NilRulesAllows(t *testing.T) {
+func TestHelmPDP_NilRulesDenies(t *testing.T) {
 	p := NewHelmPDP("v1", nil)
 	resp, _ := p.Evaluate(context.Background(), &DecisionRequest{Resource: "anything"})
+	if resp.Allow {
+		t.Fatal("nil rules should deny all resources")
+	}
+}
+
+func TestHelmPDP_ActionRuleFallback(t *testing.T) {
+	p := NewHelmPDP("v1", map[string]bool{"EXECUTE_TOOL": true})
+	resp, _ := p.Evaluate(context.Background(), &DecisionRequest{Action: "EXECUTE_TOOL", Resource: "tool.local"})
 	if !resp.Allow {
-		t.Fatal("nil rules should allow all resources")
+		t.Fatal("action rule should allow when no resource rule matches")
 	}
 }
 

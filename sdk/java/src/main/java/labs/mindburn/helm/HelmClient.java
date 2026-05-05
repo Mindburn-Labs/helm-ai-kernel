@@ -6,10 +6,13 @@ import labs.mindburn.helm.TypesGen.*;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -45,6 +48,97 @@ public class HelmClient {
             this.status = status;
             this.reasonCode = reasonCode;
         }
+    }
+
+    public static class EvidenceEnvelopeExportRequest {
+        public String manifest_id;
+        public String envelope;
+        public String native_evidence_hash;
+        public String subject;
+        public boolean experimental;
+    }
+
+    public static class EvidenceEnvelopeManifest {
+        public String manifest_id;
+        public String envelope;
+        public String native_evidence_hash;
+        public boolean native_authority;
+        public String subject;
+        public String statement_hash;
+        public boolean experimental;
+        public String created_at;
+        public String manifest_hash;
+    }
+
+    public static class NegativeBoundaryVector {
+        public String id;
+        public String category;
+        public String trigger;
+        public String expected_verdict;
+        public String expected_reason_code;
+        public boolean must_emit_receipt;
+        public boolean must_not_dispatch;
+        public List<String> must_bind_evidence;
+    }
+
+    public static class MCPRegistryDiscoverRequest {
+        public String server_id;
+        public String name;
+        public String transport;
+        public String endpoint;
+        public List<String> tool_names;
+        public String risk;
+        public String reason;
+    }
+
+    public static class MCPRegistryApprovalRequest {
+        public String server_id;
+        public String approver_id;
+        public String approval_receipt_id;
+        public String reason;
+    }
+
+    public static class MCPQuarantineRecord {
+        public String server_id;
+        public String name;
+        public String transport;
+        public String endpoint;
+        public List<String> tool_names;
+        public String risk;
+        public String state;
+        public String discovered_at;
+        public String approved_at;
+        public String approved_by;
+        public String approval_receipt_id;
+        public String revoked_at;
+        public String expires_at;
+        public String reason;
+    }
+
+    public static class SandboxBackendProfile {
+        public String name;
+        public String kind;
+        public String runtime;
+        public boolean hosted;
+        public boolean deny_network_by_default;
+        public boolean native_isolation;
+        public boolean experimental;
+    }
+
+    public static class SandboxGrant {
+        public String grant_id;
+        public String runtime;
+        public String runtime_version;
+        public String profile;
+        public String image_digest;
+        public String template_digest;
+        public List<java.util.Map<String, Object>> filesystem_preopens;
+        public java.util.Map<String, Object> env;
+        public java.util.Map<String, Object> network;
+        public java.util.Map<String, Object> limits;
+        public String declared_at;
+        public String policy_epoch;
+        public String grant_hash;
     }
 
     private HttpRequest.Builder req(String method, String path) {
@@ -174,6 +268,14 @@ public class HelmClient {
         return send(r, VerificationResult.class);
     }
 
+    /** POST /api/v1/evidence/envelopes */
+    public EvidenceEnvelopeManifest createEvidenceEnvelopeManifest(EvidenceEnvelopeExportRequest req) {
+        HttpRequest r = this.req("POST", "/api/v1/evidence/envelopes")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
+                .build();
+        return send(r, EvidenceEnvelopeManifest.class);
+    }
+
     /** POST /api/v1/conformance/run */
     public ConformanceResult conformanceRun(ConformanceRequest req) {
         HttpRequest r = this.req("POST", "/api/v1/conformance/run")
@@ -187,6 +289,65 @@ public class HelmClient {
         HttpRequest r = req("GET", "/api/v1/conformance/reports/" + reportId)
                 .GET().build();
         return send(r, ConformanceResult.class);
+    }
+
+    /** GET /api/v1/conformance/negative */
+    public List<NegativeBoundaryVector> listNegativeConformanceVectors() {
+        HttpRequest r = req("GET", "/api/v1/conformance/negative")
+                .GET().build();
+        return sendList(r, new TypeToken<List<NegativeBoundaryVector>>() {
+        });
+    }
+
+    /** GET /api/v1/mcp/registry */
+    public List<MCPQuarantineRecord> listMcpRegistry() {
+        HttpRequest r = req("GET", "/api/v1/mcp/registry")
+                .GET().build();
+        return sendList(r, new TypeToken<List<MCPQuarantineRecord>>() {
+        });
+    }
+
+    /** POST /api/v1/mcp/registry */
+    public MCPQuarantineRecord discoverMcpServer(MCPRegistryDiscoverRequest req) {
+        HttpRequest r = this.req("POST", "/api/v1/mcp/registry")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
+                .build();
+        return send(r, MCPQuarantineRecord.class);
+    }
+
+    /** POST /api/v1/mcp/registry/approve */
+    public MCPQuarantineRecord approveMcpServer(MCPRegistryApprovalRequest req) {
+        HttpRequest r = this.req("POST", "/api/v1/mcp/registry/approve")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
+                .build();
+        return send(r, MCPQuarantineRecord.class);
+    }
+
+    /** GET /api/v1/sandbox/grants/inspect without a runtime lists backend profiles. */
+    public List<SandboxBackendProfile> listSandboxBackendProfiles() {
+        HttpRequest r = req("GET", "/api/v1/sandbox/grants/inspect")
+                .GET().build();
+        return sendList(r, new TypeToken<List<SandboxBackendProfile>>() {
+        });
+    }
+
+    /** GET /api/v1/sandbox/grants/inspect with runtime returns a sealed grant. */
+    public SandboxGrant inspectSandboxGrant(String runtime, String profile, String policyEpoch) {
+        ArrayList<String> params = new ArrayList<>();
+        params.add("runtime=" + encode(runtime));
+        if (profile != null && !profile.isEmpty()) {
+            params.add("profile=" + encode(profile));
+        }
+        if (policyEpoch != null && !policyEpoch.isEmpty()) {
+            params.add("policy_epoch=" + encode(policyEpoch));
+        }
+        HttpRequest r = req("GET", "/api/v1/sandbox/grants/inspect?" + String.join("&", params))
+                .GET().build();
+        return send(r, SandboxGrant.class);
+    }
+
+    private static String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
     /** GET /healthz */

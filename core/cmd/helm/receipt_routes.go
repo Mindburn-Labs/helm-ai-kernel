@@ -39,17 +39,20 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteInternal(w, err)
 			return
 		}
-		persistDecisionReceipt(r.Context(), svc, decision, req.Principal, []byte(req.Action+":"+req.Resource), map[string]any{
+		if err := persistDecisionReceipt(r.Context(), svc, decision, req.Principal, []byte(req.Action+":"+req.Resource), map[string]any{
 			"source":   "api.evaluate",
 			"action":   req.Action,
 			"resource": req.Resource,
 			"reason":   decision.Reason,
-		})
+		}); err != nil {
+			api.WriteInternal(w, err)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(decision)
 	})
 
-	mux.HandleFunc("/api/v1/receipts/tail", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/receipts/tail", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -100,9 +103,9 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			case <-ticker.C:
 			}
 		}
-	})
+	}))
 
-	mux.HandleFunc("/api/v1/receipts", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/receipts", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -117,16 +120,26 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteBadRequest(w, "Invalid since cursor")
 			return
 		}
-		receipts, err := listReceiptsForCursor(r.Context(), svc, r.URL.Query().Get("agent"), since, limit)
+		receipts, err := listReceiptsForCursor(r.Context(), svc, r.URL.Query().Get("agent"), since, limit+1)
 		if err != nil {
 			api.WriteInternal(w, err)
 			return
 		}
+		hasMore := len(receipts) > limit
+		if hasMore {
+			receipts = receipts[:limit]
+		}
+		nextCursor := nextReceiptCursor(receipts)
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"receipts": receipts, "count": len(receipts)})
-	})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"receipts":    receipts,
+			"count":       len(receipts),
+			"next_cursor": nextCursor,
+			"has_more":    hasMore,
+		})
+	}))
 
-	mux.HandleFunc("/api/v1/receipts/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/receipts/", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -147,27 +160,14 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(receipt)
-	})
+	}))
 }
 
 func listReceiptsForCursor(ctx context.Context, svc *Services, agent string, since uint64, limit int) ([]*contracts.Receipt, error) {
 	if agent != "" {
 		return svc.ReceiptStore.ListByAgent(ctx, agent, since, limit)
 	}
-	receipts, err := svc.ReceiptStore.List(ctx, limit)
-	if err != nil {
-		return nil, err
-	}
-	if since == 0 {
-		return receipts, nil
-	}
-	filtered := receipts[:0]
-	for _, receipt := range receipts {
-		if receipt.LamportClock > since {
-			filtered = append(filtered, receipt)
-		}
-	}
-	return filtered, nil
+	return svc.ReceiptStore.ListSince(ctx, since, limit)
 }
 
 func parseReceiptCursor(raw string) (uint64, error) {
@@ -176,6 +176,19 @@ func parseReceiptCursor(raw string) (uint64, error) {
 		return 0, nil
 	}
 	return strconv.ParseUint(raw, 10, 64)
+}
+
+func nextReceiptCursor(receipts []*contracts.Receipt) string {
+	var cursor uint64
+	for _, receipt := range receipts {
+		if receipt.LamportClock > cursor {
+			cursor = receipt.LamportClock
+		}
+	}
+	if cursor == 0 {
+		return ""
+	}
+	return fmt.Sprintf("lamport:%d", cursor)
 }
 
 func parseLimit(raw string, fallback, max int) int {
@@ -194,20 +207,13 @@ func parseLimit(raw string, fallback, max int) int {
 	return limit
 }
 
-func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contracts.DecisionRecord, agentID string, body []byte, metadata map[string]any) {
+func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contracts.DecisionRecord, agentID string, body []byte, metadata map[string]any) error {
 	if svc == nil || svc.ReceiptStore == nil || decision == nil {
-		return
+		return fmt.Errorf("receipt persistence unavailable")
 	}
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" {
 		agentID = "anonymous"
-	}
-	last, _ := svc.ReceiptStore.GetLastForSession(ctx, agentID)
-	lamport := uint64(1)
-	prevHash := ""
-	if last != nil {
-		lamport = last.LamportClock + 1
-		prevHash = receiptLinkHash(last)
 	}
 	argsHash := sha256HexBytes(body)
 	receiptID := "rcpt_" + decision.ID
@@ -217,27 +223,42 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 			effectID = action
 		}
 	}
-	receipt := &contracts.Receipt{
-		ReceiptID:    receiptID,
-		DecisionID:   decision.ID,
-		EffectID:     effectID,
-		Status:       decision.Verdict,
-		BlobHash:     argsHash,
-		OutputHash:   decision.PolicyDecisionHash,
-		Timestamp:    time.Now().UTC(),
-		ExecutorID:   agentID,
-		Metadata:     metadata,
-		Signature:    decision.Signature,
-		PrevHash:     prevHash,
-		LamportClock: lamport,
-		ArgsHash:     argsHash,
+	timestamp := decision.Timestamp.UTC()
+	if timestamp.IsZero() {
+		timestamp = time.Now().UTC()
 	}
-	_ = svc.ReceiptStore.Store(ctx, receipt)
+	if svc.ReceiptSigner == nil {
+		return fmt.Errorf("receipt signer unavailable")
+	}
+	err := svc.ReceiptStore.AppendCausal(ctx, agentID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		receipt := &contracts.Receipt{
+			ReceiptID:    receiptID,
+			DecisionID:   decision.ID,
+			EffectID:     effectID,
+			Status:       decision.Verdict,
+			BlobHash:     argsHash,
+			OutputHash:   decision.PolicyDecisionHash,
+			Timestamp:    timestamp,
+			ExecutorID:   agentID,
+			Metadata:     metadata,
+			PrevHash:     prevHash,
+			LamportClock: lamport,
+			ArgsHash:     argsHash,
+		}
+		if err := svc.ReceiptSigner.SignReceipt(receipt); err != nil {
+			return nil, fmt.Errorf("sign receipt %s: %w", receiptID, err)
+		}
+		return receipt, nil
+	})
+	if err != nil {
+		return fmt.Errorf("store receipt %s: %w", receiptID, err)
+	}
+	return nil
 }
 
 func receiptLinkHash(receipt *contracts.Receipt) string {
-	if receipt.Signature != "" {
-		return sha256HexBytes([]byte(receipt.Signature))
+	if hash, err := contracts.ReceiptChainHash(receipt); err == nil {
+		return hash
 	}
 	if receipt.MerkleRoot != "" {
 		return sha256HexBytes([]byte(receipt.MerkleRoot))

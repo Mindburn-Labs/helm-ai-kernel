@@ -7,15 +7,17 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/guardian"
+	mcppkg "github.com/Mindburn-Labs/helm-oss/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/memory"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/replay"
 	trustregistry "github.com/Mindburn-Labs/helm-oss/core/pkg/trust/registry"
 )
 
@@ -112,7 +114,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	})
 
 	// --- Evidence Export ---
-	mux.HandleFunc("/api/v1/evidence/soc2", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/evidence/soc2", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		bundle, err := svc.Evidence.ExportSOC2(r.Context(), "trace-"+time.Now().Format("20060102"), nil)
 		if err != nil {
 			api.WriteInternal(w, err)
@@ -120,35 +122,35 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(bundle)
-	})
+	}))
 
 	// --- Merkle Root ---
-	mux.HandleFunc("/api/v1/merkle/root", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/merkle/root", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		root := "uninitialized"
 		if svc.MerkleTree != nil {
 			root = svc.MerkleTree.Root
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"root": root})
-	})
+	}))
 
 	// --- Budget ---
-	mux.HandleFunc("/api/v1/budget/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/budget/status", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"enforcer": "postgres",
 			"status":   "active",
 		})
-	})
+	}))
 
 	// --- Authz ---
-	mux.HandleFunc("/api/v1/authz/check", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/authz/check", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"engine": "rebac",
 			"status": "active",
 		})
-	})
+	}))
 
 	// --- Version ---
 	versionHandler := func(w http.ResponseWriter, r *http.Request) {
@@ -167,6 +169,9 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 
 	// --- Durable receipt API ---
 	registerReceiptRoutes(mux, svc)
+	approveHandler := api.NewApproveHandler(csvEnv("HELM_APPROVER_PUBLIC_KEYS"))
+	mux.HandleFunc("/api/v1/kernel/approve", approveHandler.HandleApprove)
+	registerContractRoutes(mux, svc)
 
 	// --- Obligation ---
 	mux.HandleFunc("/api/v1/obligation/create", func(w http.ResponseWriter, r *http.Request) {
@@ -239,7 +244,15 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	mux.Handle("/api/v1/trust/keys/revoke", auth.RequireAdminAuth(trustKeys.HandleRevokeKey))
 
 	// --- MCP Gateway ---
-	mcpGateway, err := newLocalMCPGateway()
+	var (
+		mcpGateway *mcppkg.Gateway
+		err        error
+	)
+	if svc.ReceiptSigner != nil {
+		mcpGateway, err = newConfiguredLocalMCPGatewayWithSigner(mcppkg.GatewayConfig{}, svc.ReceiptSigner)
+	} else {
+		mcpGateway, err = newLocalMCPGateway()
+	}
 	if err != nil {
 		log.Printf("[helm] routes: MCP gateway unavailable: %v", err)
 	} else {
@@ -322,19 +335,6 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 		})
 	})
 
-	// --- Replay Visualizer ---
-	mux.HandleFunc("/api/v1/replay/timeline", func(w http.ResponseWriter, r *http.Request) {
-		// Build timeline from receipt store (empty if no receipts)
-		timeline, err := replay.BuildTimeline("live-"+time.Now().Format("20060102-150405"), nil)
-		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"status": "empty", "message": err.Error()})
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(timeline)
-	})
-
 	// --- Compatibility Matrix ---
 	mux.HandleFunc("/api/v1/compatibility", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -345,4 +345,20 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	_ = ctx
 
 	log.Println("[helm] routes: All subsystem routes registered")
+}
+
+func csvEnv(key string) []string {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		value := strings.TrimSpace(part)
+		if value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
 }

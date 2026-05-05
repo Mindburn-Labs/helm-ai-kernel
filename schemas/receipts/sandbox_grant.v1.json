@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.dev/schemas/receipts/sandbox_grant.v1.json",
+  "title": "HELM SandboxGrant v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["grant_id", "runtime", "profile", "env", "network", "declared_at"],
+  "properties": {
+    "grant_id": { "type": "string", "minLength": 1 },
+    "runtime": { "type": "string", "minLength": 1 },
+    "runtime_version": { "type": "string" },
+    "profile": { "type": "string", "minLength": 1 },
+    "image_digest": { "type": "string" },
+    "template_digest": { "type": "string" },
+    "filesystem_preopens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "mode"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "mode": { "type": "string", "enum": ["ro", "rw"] },
+          "content_hash": { "type": "string" }
+        }
+      }
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["deny-all", "allowlist", "redacted"] },
+        "names": { "type": "array", "items": { "type": "string" } },
+        "names_hash": { "type": "string" },
+        "redacted": { "type": "boolean" }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["deny-all", "allowlist"] },
+        "destinations": { "type": "array", "items": { "type": "string" } },
+        "cidrs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "memory_bytes": { "type": "integer", "minimum": 0 },
+        "cpu_time": { "type": "integer", "minimum": 0 },
+        "output_bytes": { "type": "integer", "minimum": 0 },
+        "open_files": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "declared_at": { "type": "string", "format": "date-time" },
+    "policy_epoch": { "type": "string" },
+    "grant_hash": { "type": "string" }
+  }
+}

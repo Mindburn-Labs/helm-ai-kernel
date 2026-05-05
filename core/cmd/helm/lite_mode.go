@@ -87,8 +87,8 @@ func loadOrGenerateSignerWithDataDir(dataDir string) (crypto.Signer, error) {
 	}
 
 	// Generate new persistent key if not in production
-	if os.Getenv("HELM_PRODUCTION") == "1" {
-		return nil, fmt.Errorf("production mode requires data/root.key to exist")
+	if envBool("HELM_PRODUCTION") {
+		return nil, fmt.Errorf("production mode requires root signing key to exist at %s", keyPath)
 	}
 
 	log.Printf("[helm] trust: generating new persistent root key at %s", keyPath)

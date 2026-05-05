@@ -36,17 +36,34 @@ spec:
           image: {{ include "helm-firewall.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
-            - server
+            - serve
+            - --policy
+            - {{ include "helm-firewall.policyPath" . | quote }}
+            - --addr
+            - {{ .Values.helm.bindAddr | quote }}
+            - --port
+            - {{ .Values.service.port | quote }}
+            - --data-dir
+            - {{ .Values.helm.dataDir | quote }}
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ .Values.service.healthPort }}
               protocol: TCP
             {{- if .Values.helm.metrics.enabled }}
             - name: metrics
-              containerPort: 9090
+              containerPort: {{ .Values.service.metricsPort }}
               protocol: TCP
             {{- end }}
           env:
+            - name: HELM_HEALTH_PORT
+              value: {{ .Values.service.healthPort | quote }}
+            - name: HELM_PRODUCTION
+              value: {{ ternary "1" "0" .Values.helm.production | quote }}
+            - name: PORT
+              value: {{ .Values.service.port | quote }}
             - name: HELM_REGION
               value: {{ .Values.helm.region | quote }}
             {{- if .Values.helm.proxy.enabled }}
@@ -97,28 +114,34 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
-            {{- if and (eq .Values.helm.storage.type "sqlite") .Values.persistence.enabled }}
             - name: data
-              mountPath: /data
-            {{- end }}
-            {{- if .Values.helm.policy.configMap }}
-            - name: policy
-              mountPath: /etc/helm/policy
+              mountPath: {{ .Values.helm.dataDir }}
+            - name: signing-key
+              mountPath: {{ printf "%s/root.key" (.Values.helm.dataDir | trimSuffix "/") }}
+              subPath: root.key
               readOnly: true
-            {{- end }}
+            - name: policy
+              mountPath: {{ .Values.helm.policy.mountPath }}
+              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
-        {{- if and (eq .Values.helm.storage.type "sqlite") .Values.persistence.enabled }}
         - name: data
+          {{ if .Values.persistence.enabled }}
           persistentVolumeClaim:
             claimName: {{ include "helm-firewall.pvcName" . }}
-        {{- end }}
-        {{- if .Values.helm.policy.configMap }}
+          {{ else }}
+          emptyDir: {}
+          {{ end }}
+        - name: signing-key
+          secret:
+            secretName: {{ include "helm-firewall.signingSecretName" . }}
+            items:
+              - key: signing-key
+                path: root.key
         - name: policy
           configMap:
-            name: {{ .Values.helm.policy.configMap }}
-        {{- end }}
+            name: {{ include "helm-firewall.policyConfigMapName" . }}
         - name: tmp
           emptyDir: {}
       {{- with .Values.nodeSelector }}

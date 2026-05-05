@@ -21,6 +21,7 @@ import (
 	helmauth "github.com/Mindburn-Labs/helm-oss/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/guardian"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/pdp"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/registry"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/store"
@@ -214,19 +215,28 @@ func runServerWithOptions(opts serverOptions) {
 		log.Printf("Services init (non-fatal, degraded mode): %v", svcErr)
 	}
 
-	// 2.5 PRG & Guardian
+	// 2.5 PRG & Guardian. The serve policy is authoritative when provided.
+	// No implicit allow rule is installed; an empty or action-less policy graph
+	// fails closed at evaluation time with NO_POLICY_DEFINED.
 	ruleGraph := prg.NewGraph()
-	// Bootstrap a minimal allow rule so governed chat inference is usable out of the box.
-	// Production deployments should replace this with a loaded policy bundle.
-	if err := ruleGraph.AddRule("LLM_INFERENCE", prg.RequirementSet{
-		ID:    "bootstrap-llm-inference",
-		Logic: prg.AND,
-	}); err != nil {
-		log.Fatalf("Failed to add bootstrap PRG rule: %v", err)
+	var runtimePolicy *servePolicyRuntime
+	if opts.PolicyPath != "" {
+		runtimePolicy, err = loadServePolicyRuntime(opts.PolicyPath)
+		if err != nil {
+			log.Fatalf("Failed to load serve policy runtime: %v", err)
+		}
+		ruleGraph = runtimePolicy.Graph
+		log.Printf("[helm] policy: loaded %s reference_pack=%s actions=%d", runtimePolicy.Policy.Name, runtimePolicy.ReferencePack.PackID, len(ruleGraph.Rules))
+	} else {
+		log.Printf("[helm] policy: no serve policy provided; kernel starts with an empty fail-closed rule graph")
 	}
 
 	// Guardian
-	guard := guardian.NewGuardian(signer, ruleGraph, artRegistry)
+	guardianOpts := []guardian.GuardianOption{}
+	if runtimePolicy != nil {
+		guardianOpts = append(guardianOpts, guardian.WithPDP(pdp.NewHelmPDP(runtimePolicy.Policy.Name, runtimePolicy.AllowMap())))
+	}
+	guard := guardian.NewGuardian(signer, ruleGraph, artRegistry, guardianOpts...)
 
 	// Executor and MCP catalog are managed via the Services layer
 	// (see services.go and subsystems.go for route wiring)
@@ -236,6 +246,7 @@ func runServerWithOptions(opts serverOptions) {
 	if services != nil {
 		services.Guardian = guard
 		services.ReceiptStore = receiptStore
+		services.ReceiptSigner = signer
 		extraRoutes = func(mux *http.ServeMux) {
 			RegisterSubsystemRoutes(mux, services)
 			RegisterConsoleRoutes(mux, services, opts)
@@ -266,11 +277,15 @@ func runServerWithOptions(opts serverOptions) {
 		extraRoutes(mux)
 	}
 	RegisterConsoleStaticRoutes(mux, opts)
+	rateLimiter := helmapi.NewGlobalRateLimiter(60, 120)
+	if envBool("HELM_TRUST_PROXY_HEADERS") {
+		rateLimiter = rateLimiter.WithTrustProxy(true)
+	}
 	server := &http.Server{
 		Addr: fmt.Sprintf("%s:%d", bindAddr, port),
 		Handler: helmauth.SecurityHeaders(
 			helmauth.CORSMiddleware(nil)(
-				helmapi.NewGlobalRateLimiter(60, 120).WithTrustProxy(true).Middleware(mux),
+				rateLimiter.Middleware(mux),
 			),
 		),
 		ReadHeaderTimeout: 15 * time.Second,
@@ -347,6 +362,11 @@ func runServerWithOptions(opts serverOptions) {
 		log.Printf("[helm] health server shutdown error: %v", err)
 	}
 	log.Println("[helm] shutdown complete")
+}
+
+func envBool(key string) bool {
+	value := os.Getenv(key)
+	return value == "1" || value == "true" || value == "TRUE" || value == "yes" || value == "YES"
 }
 
 func init() {

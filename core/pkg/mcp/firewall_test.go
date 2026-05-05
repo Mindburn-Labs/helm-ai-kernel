@@ -10,24 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockEvaluator implements PolicyEvaluator for testing.
-type mockEvaluator struct {
-	verdict string
-	reason  string
-	err     error
-}
-
-func (m *mockEvaluator) EvaluateDecision(_ context.Context, _ guardian.DecisionRequest) (*contracts.DecisionRecord, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return &contracts.DecisionRecord{
-		ID:      "test-decision",
-		Verdict: m.verdict,
-		Reason:  m.reason,
-	}, nil
-}
-
 func TestGovernanceFirewall_Intercept_Allow(t *testing.T) {
 	eval := &mockEvaluator{verdict: guardian.VerdictAllow}
 	fw := NewGovernanceFirewall(eval, nil)
@@ -128,18 +110,6 @@ func TestGovernanceFirewall_Intercept_Pending(t *testing.T) {
 	assert.Contains(t, err.Error(), "governance requires approval")
 }
 
-type smartMockEvaluator struct {
-	decisions map[string]string // ToolName -> Verdict
-}
-
-func (m *smartMockEvaluator) EvaluateDecision(_ context.Context, req guardian.DecisionRequest) (*contracts.DecisionRecord, error) {
-	v, ok := m.decisions[req.Resource]
-	if !ok {
-		v = string(contracts.VerdictAllow)
-	}
-	return &contracts.DecisionRecord{Verdict: v}, nil
-}
-
 func TestGovernanceFirewall_InterceptPlan(t *testing.T) {
 	eval := &smartMockEvaluator{
 		decisions: map[string]string{
@@ -150,7 +120,6 @@ func TestGovernanceFirewall_InterceptPlan(t *testing.T) {
 	}
 	fw := NewGovernanceFirewall(eval, nil)
 
-	// Scenario 1: All Pass
 	planPass := ToolExecutionPlan{
 		PlanID: "plan-1",
 		Steps: []ToolExecutionRequest{
@@ -163,12 +132,11 @@ func TestGovernanceFirewall_InterceptPlan(t *testing.T) {
 	assert.Equal(t, string(contracts.VerdictAllow), decision.Status)
 	assert.Len(t, decision.Decisions, 2)
 
-	// Scenario 2: One Fail blocks everything
 	planFail := ToolExecutionPlan{
 		PlanID: "plan-2",
 		Steps: []ToolExecutionRequest{
 			{ToolName: "tool-pass"},
-			{ToolName: "tool-fail"}, // This should fail the plan
+			{ToolName: "tool-fail"},
 			{ToolName: "tool-pending"},
 		},
 	}
@@ -176,7 +144,6 @@ func TestGovernanceFirewall_InterceptPlan(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, string(contracts.VerdictDeny), decision.Status)
 
-	// Scenario 3: Pending triggers pending status (if no fail)
 	planPending := ToolExecutionPlan{
 		PlanID: "plan-3",
 		Steps: []ToolExecutionRequest{

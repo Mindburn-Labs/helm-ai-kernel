@@ -1,8 +1,50 @@
 ---
 title: Policy Research Watchlist - April 2026
+last_reviewed: 2026-05-05
 ---
 
 # Policy Research Watchlist - April 2026
+
+## Audience
+
+Use this page when you need the public `helm-oss/strategy/policy-research-watchlist-2026-04` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
+
+## Outcome
+
+After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
+
+## Source Truth
+
+- Public route: `helm-oss/strategy/policy-research-watchlist-2026-04`
+- Source document: `helm-oss/docs/strategy/policy-research-watchlist-2026-04.md`
+- Public manifest: `helm-oss/docs/public-docs.manifest.json`
+- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
+
+Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
+| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
+| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
+
+## Diagram
+
+This scheme maps the main sections of Policy Research Watchlist - April 2026 in reading order.
+
+```mermaid
+flowchart LR
+  Page["Policy Research Watchlist - April 2026"]
+  A["Verified Sources"]
+  B["Adoption Criteria"]
+  C["Validation"]
+  Page --> A
+  A --> B
+  B --> C
+```
 
 This page records source verification and implementation decisions for April 2026 HELM OSS research radar items. Research items close when the source is verified and a clear adopt, watch, or no-go decision is recorded.
 

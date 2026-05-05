@@ -1,0 +1,34 @@
+{
+  "matrix_id": "helm-clean-room-boundary-2026-05-05",
+  "vectors": [
+    {
+      "id": "allow-read-approved-scoped-pinned",
+      "expected_verdict": "ALLOW",
+      "preconditions": ["server approved", "scope present", "schema hash matches"]
+    },
+    {
+      "id": "deny-quarantined-server",
+      "expected_verdict": "DENY",
+      "expected_reason": "APPROVAL_REQUIRED",
+      "preconditions": ["server discovered", "server not approved"]
+    },
+    {
+      "id": "deny-tool-list-call-mismatch",
+      "expected_verdict": "DENY",
+      "expected_reason": "SCHEMA_VIOLATION",
+      "preconditions": ["tool absent from filtered list"]
+    },
+    {
+      "id": "deny-schema-drift",
+      "expected_verdict": "DENY",
+      "expected_reason": "SCHEMA_VIOLATION",
+      "preconditions": ["pinned schema hash differs from live tool schema hash"]
+    },
+    {
+      "id": "deny-sandbox-egress",
+      "expected_verdict": "DENY",
+      "expected_reason": "DATA_EGRESS_BLOCKED",
+      "preconditions": ["sandbox grant has deny-all network", "execution attempts outbound connection"]
+    }
+  ]
+}

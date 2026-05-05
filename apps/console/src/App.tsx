@@ -6,15 +6,11 @@ import {
   Archive,
   Boxes,
   Braces,
-  CheckCircle2,
-  ChevronDown,
-  Clock3,
   Command as CommandIcon,
   Database,
   FileArchive,
   FileCheck2,
   FileKey2,
-  Filter,
   GitBranch,
   KeyRound,
   ListChecks,
@@ -23,16 +19,14 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
-  Server,
   Settings,
   ShieldCheck,
-  SlidersHorizontal,
   Terminal,
   UserRound,
   Workflow,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import {
   Badge,
   Button,
@@ -44,6 +38,7 @@ import {
   ThemeProvider,
   VerdictBadge,
   VerificationStatus,
+  useTheme,
   type HelmSemanticState,
   type RiskState,
   type VerdictState,
@@ -51,15 +46,21 @@ import {
 } from "@helm/design-system-core";
 import {
   evaluateIntent,
+  hasConsoleAdminKey,
+  isUnauthorizedError,
   loadBootstrap,
   loadConsoleSurface,
   loadEndpoint,
   loadReceipts,
+  replayVerifyCurrentEvidence,
+  setConsoleAdminKey,
   watchReceipts,
   type ConsoleBootstrap,
   type ConsoleSurfaceState,
   type Receipt,
 } from "./api/client";
+
+const DesignSystemErrorBoundary = ErrorBoundary as unknown as ComponentType<{ readonly children: ReactNode }>;
 
 const NAV_GROUPS = [
   {
@@ -92,10 +93,11 @@ const LIFECYCLE = ["Intent", "Policy", "Decision", "Receipt", "Evidence"] as con
 const ENDPOINT_SURFACES: Record<string, string> = {
   connectors: "/mcp/v1/capabilities",
   evidence: "/api/v1/evidence/soc2",
-  replay: "/api/v1/replay/timeline",
 };
 
-const CONSOLE_SURFACES = new Set(["overview", "agents", "actions", "approvals", "policies", "audit", "developer", "settings"]);
+const CONSOLE_SURFACES = new Set(["overview", "agents", "actions", "approvals", "policies", "replay", "audit", "developer", "settings"]);
+type ConsoleAccessState = "unknown" | "authorized" | "unauthorized";
+type ReceiptStreamState = "connecting" | "live" | "disconnected" | "unauthorized";
 
 function normalizeVerdict(value: string | undefined): VerdictState {
   switch ((value ?? "").toLowerCase()) {
@@ -123,8 +125,50 @@ function normalizeRisk(receipt: Receipt | undefined): RiskState {
 
 function verificationState(receipt: Receipt | null | undefined): VerificationState {
   if (!receipt) return "pending";
-  if (receipt.signature || receipt.output_hash || receipt.blob_hash) return "verified";
+  const metadata = receipt.metadata;
+  const explicitState = normalizeVerificationState(metadata?.verification_status ?? metadata?.verification_state);
+  if (explicitState) return explicitState;
+
+  const verification = metadata?.verification;
+  if (isRecord(verification)) {
+    return normalizeVerificationState(verification.verdict ?? verification.status ?? verification.state) ?? "pending";
+  }
+
   return "pending";
+}
+
+function normalizeVerificationState(value: unknown): VerificationState | null {
+  const normalized = String(value ?? "").toLowerCase();
+  switch (normalized) {
+    case "pass":
+    case "passed":
+    case "verified":
+    case "valid":
+      return "verified";
+    case "fail":
+    case "failed":
+    case "invalid":
+      return "failed";
+    case "pending":
+    case "checking":
+      return "pending";
+    case "exported":
+      return "exported";
+    case "expired":
+      return "expired";
+    case "unavailable":
+      return "unavailable";
+    default:
+      return null;
+  }
+}
+
+function signatureSummary(receipt: Receipt | null): string {
+  if (!receipt?.signature) return "not emitted";
+  const state = verificationState(receipt);
+  if (state === "verified") return "verified";
+  if (state === "failed") return "verification failed";
+  return "present; verification pending";
 }
 
 function shortHash(value: string | undefined): string {
@@ -159,11 +203,12 @@ function mergeReceipts(current: readonly Receipt[], next: readonly Receipt[]): r
   return [...map.values()].sort((a, b) => (b.lamport_clock ?? 0) - (a.lamport_clock ?? 0)).slice(0, 200);
 }
 
-function useConsoleData() {
+function useConsoleData(authRevision: number) {
   const [bootstrap, setBootstrap] = useState<ConsoleBootstrap | null>(null);
   const [receipts, setReceipts] = useState<readonly Receipt[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [streamState, setStreamState] = useState<"connecting" | "live" | "disconnected">("connecting");
+  const [streamState, setStreamState] = useState<ReceiptStreamState>("connecting");
+  const [accessState, setAccessState] = useState<ConsoleAccessState>("unknown");
   const [refreshing, setRefreshing] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -173,10 +218,18 @@ function useConsoleData() {
       const [boot, receiptRows] = await Promise.all([loadBootstrap(), loadReceipts(100)]);
       setBootstrap(boot);
       setReceipts(mergeReceipts(boot.receipts, receiptRows));
+      setAccessState("authorized");
       setStreamState("live");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Console data failed to load");
-      setStreamState("disconnected");
+      if (isUnauthorizedError(err)) {
+        setAccessState("unauthorized");
+        setError("Protected Console APIs require HELM_ADMIN_API_KEY and a matching session key.");
+        setStreamState("unauthorized");
+      } else {
+        setAccessState("unknown");
+        setError(err instanceof Error ? err.message : "Console data failed to load");
+        setStreamState("disconnected");
+      }
     } finally {
       setRefreshing(false);
     }
@@ -184,26 +237,36 @@ function useConsoleData() {
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+  }, [authRevision, refresh]);
 
   useEffect(() => {
+    if (accessState === "unauthorized" && !hasConsoleAdminKey()) {
+      setStreamState("unauthorized");
+      return undefined;
+    }
     const stop = watchReceipts(
       (receipt) => {
         setStreamState("live");
         setReceipts((current) => mergeReceipts(current, [receipt]));
       },
       (err) => {
+        if (isUnauthorizedError(err)) {
+          setAccessState("unauthorized");
+          setError("Receipt streaming requires a valid Console session key.");
+          setStreamState("unauthorized");
+          return;
+        }
         setError(err.message);
         setStreamState("disconnected");
       },
     );
     return stop;
-  }, []);
+  }, [accessState, authRevision]);
 
-  return { bootstrap, receipts, error, streamState, refreshing, refresh, setReceipts };
+  return { bootstrap, receipts, error, streamState, accessState, refreshing, refresh, setReceipts };
 }
 
-function useSurfaceState(active: string) {
+function useSurfaceState(active: string, authRevision: number) {
   const [state, setState] = useState<ConsoleSurfaceState | null>(null);
   const [endpointState, setEndpointState] = useState<{ readonly status: number; readonly ok: boolean; readonly data: unknown } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -244,7 +307,7 @@ function useSurfaceState(active: string) {
     return () => {
       cancelled = true;
     };
-  }, [active]);
+  }, [active, authRevision]);
 
   return { state, endpointState, loading, error };
 }
@@ -254,9 +317,9 @@ export function App() {
     <ThemeProvider defaultPreference="dark" defaultDensity="compact">
       <I18nProvider defaultLocale="en-US">
         <TelemetryProvider sink={() => undefined}>
-          <ErrorBoundary>
+          <DesignSystemErrorBoundary>
             <ConsoleApp />
-          </ErrorBoundary>
+          </DesignSystemErrorBoundary>
         </TelemetryProvider>
       </I18nProvider>
     </ThemeProvider>
@@ -264,7 +327,8 @@ export function App() {
 }
 
 function ConsoleApp() {
-  const { bootstrap, receipts, error, streamState, refreshing, refresh, setReceipts } = useConsoleData();
+  const [authRevision, setAuthRevision] = useState(0);
+  const { bootstrap, receipts, error, streamState, accessState, refreshing, refresh, setReceipts } = useConsoleData(authRevision);
   const [active, setActive] = useState("command");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -273,7 +337,10 @@ function ConsoleApp() {
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [replayStatus, setReplayStatus] = useState("not checked");
-  const surface = useSurfaceState(active);
+  const surface = useSurfaceState(active, authRevision);
+  const authChanged = useCallback(() => {
+    setAuthRevision((value) => value + 1);
+  }, []);
 
   const filteredReceipts = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -326,10 +393,9 @@ function ConsoleApp() {
   const runReplayProbe = async () => {
     setReplayStatus("checking");
     try {
-      const response = await fetch("/api/v1/replay/timeline");
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const payload = await response.json() as { status?: string; session_id?: string };
-      setReplayStatus(payload.status ?? payload.session_id ?? "timeline ready");
+      const payload = await replayVerifyCurrentEvidence(selectedReceipt?.executor_id ?? "");
+      const replayCheck = payload.checks?.replay ?? payload.checks?.causal_chain;
+      setReplayStatus(payload.verdict ?? replayCheck ?? "verified");
     } catch (err) {
       setReplayStatus(err instanceof Error ? err.message : "replay unavailable");
     }
@@ -341,6 +407,7 @@ function ConsoleApp() {
       <main className="console-main">
         <Topbar bootstrap={bootstrap} active={active} streamState={streamState} query={query} onQueryChange={setQuery} />
         <section className="console-page" aria-label="HELM Console workspace">
+          <AccessBanner accessState={accessState} error={error} onAuthChanged={authChanged} />
           <div className="page-grid">
             <ConsoleIntro active={active} bootstrap={bootstrap} />
             {active === "command" ? (
@@ -389,6 +456,69 @@ function ConsoleApp() {
         </section>
       </main>
     </div>
+  );
+}
+
+function AccessBanner({
+  accessState,
+  error,
+  onAuthChanged,
+}: {
+  readonly accessState: ConsoleAccessState;
+  readonly error: string | null;
+  readonly onAuthChanged: () => void;
+}) {
+  const [token, setToken] = useState("");
+  const configured = hasConsoleAdminKey();
+
+  if (accessState !== "unauthorized") return null;
+
+  const saveToken = () => {
+    setConsoleAdminKey(token);
+    setToken("");
+    onAuthChanged();
+  };
+  const clearToken = () => {
+    setConsoleAdminKey("");
+    setToken("");
+    onAuthChanged();
+  };
+
+  return (
+    <section className="access-banner" aria-labelledby="console-access-title" role="alert">
+      <KeyRound size={16} aria-hidden="true" />
+      <div>
+        <h2 id="console-access-title">Console access required</h2>
+        <p id="console-access-detail">
+          {error ?? "Protected Console APIs require an admin bearer key."} Set a session key that matches HELM_ADMIN_API_KEY on this runtime.
+        </p>
+      </div>
+      <form
+        className="access-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          saveToken();
+        }}
+      >
+        <label>
+          <span>admin key</span>
+          <input
+            type="password"
+            value={token}
+            autoComplete="current-password"
+            aria-describedby="console-access-detail"
+            placeholder={configured ? "session key configured" : "paste session key"}
+            onChange={(event) => setToken(event.target.value)}
+          />
+        </label>
+        <Button type="submit" variant="proof" size="sm" disabled={token.trim() === ""}>
+          Use key
+        </Button>
+        <Button type="button" variant="secondary" size="sm" disabled={!configured} onClick={clearToken}>
+          Clear
+        </Button>
+      </form>
+    </section>
   );
 }
 
@@ -460,6 +590,9 @@ function Topbar({
   readonly query: string;
   readonly onQueryChange: (value: string) => void;
 }) {
+  const theme = useTheme();
+  const density = theme?.density ?? "compact";
+
   return (
     <header className="console-topbar">
       <div className="breadcrumbs">
@@ -467,11 +600,10 @@ function Topbar({
         <span>/</span>
         <strong>{surfaceTitle(active)}</strong>
       </div>
-      <button type="button" className="env-button">
+      <span className="env-chip" aria-label="Workspace environment">
         <Database size={13} aria-hidden="true" />
         {bootstrap?.workspace.organization ?? "local"} · {bootstrap?.workspace.environment ?? "pending"}
-        <ChevronDown size={13} aria-hidden="true" />
-      </button>
+      </span>
       <div className="search-field">
         <Search size={13} aria-hidden="true" />
         <input
@@ -480,7 +612,6 @@ function Topbar({
           placeholder="Search receipts, agents, policies..."
           aria-label="Search receipts, agents, policies"
         />
-        <kbd>⌘K</kbd>
       </div>
       <div className="health-chips" aria-label="Kernel health">
         <HealthChip label="kernel" state={bootstrap?.health.kernel ?? "loading"} />
@@ -488,10 +619,26 @@ function Topbar({
         <HealthChip label="store" state={bootstrap?.health.store ?? "loading"} />
         <HealthChip label="stream" state={streamState} />
       </div>
-      <div className="density-toggle" aria-label="Density">
+      <div className="density-toggle" role="group" aria-label="Density">
         <span>density</span>
-        <button type="button" className="is-active">Compact</button>
-        <button type="button">Comfortable</button>
+        <button
+          type="button"
+          className={density === "compact" ? "is-active" : ""}
+          aria-pressed={density === "compact"}
+          disabled={!theme}
+          onClick={() => theme?.setDensity("compact")}
+        >
+          Compact
+        </button>
+        <button
+          type="button"
+          className={density === "comfortable" ? "is-active" : ""}
+          aria-pressed={density === "comfortable"}
+          disabled={!theme}
+          onClick={() => theme?.setDensity("comfortable")}
+        >
+          Comfortable
+        </button>
       </div>
     </header>
   );
@@ -649,16 +796,13 @@ function ReceiptStream({
           <h2 id="receipt-stream-title">Receipt stream</h2>
         </div>
         <div className="panel-actions">
-          <Button variant="ghost" size="sm" leading={<Filter size={13} />}>
-            Filters
-          </Button>
           <Button variant="secondary" size="sm" leading={<RefreshCw size={13} />} disabled={refreshing} onClick={onRefresh}>
             Refresh
           </Button>
         </div>
       </div>
       <div className="receipt-table-wrap">
-        <table className="receipt-table">
+        <table className="receipt-table" aria-label="Receipt stream">
           <thead>
             <tr>
               <th>timestamp</th>
@@ -682,15 +826,29 @@ function ReceiptStream({
               receipts.map((receipt) => {
                 const id = receipt.receipt_id ?? null;
                 const selected = id !== null && id === selectedId;
+                const rowClassName = [
+                  selected ? "is-selected" : "",
+                ].filter(Boolean).join(" ");
                 return (
-                  <tr key={id ?? `${receipt.decision_id}-${receipt.lamport_clock}`} className={selected ? "is-selected" : ""} onClick={() => onSelect(id)}>
+                  <tr
+                    key={id ?? `${receipt.decision_id}-${receipt.lamport_clock}`}
+                    className={rowClassName}
+                  >
                     <td>{formatTime(receipt.timestamp)}</td>
                     <td>{receipt.executor_id ?? "anonymous"}</td>
                     <td>{receiptAction(receipt)}</td>
                     <td>{receiptResource(receipt)}</td>
                     <td><VerdictBadge state={normalizeVerdict(receipt.status)} /></td>
                     <td><Badge state={normalizeRisk(receipt)} tone="risk" label={normalizeRisk(receipt)} /></td>
-                    <td><code>{shortHash(receipt.receipt_id)}</code></td>
+                    <td>
+                      {id ? (
+                        <Button variant="ghost" size="sm" aria-label={`Select receipt ${shortHash(receipt.receipt_id)}`} onClick={() => onSelect(id)}>
+                          <code>{shortHash(receipt.receipt_id)}</code>
+                        </Button>
+                      ) : (
+                        <code>{shortHash(receipt.receipt_id)}</code>
+                      )}
+                    </td>
                     <td><VerificationStatus state={verificationState(receipt)} /></td>
                   </tr>
                 );
@@ -932,7 +1090,7 @@ function Inspector({
         </div>
         <div>
           <dt>signature</dt>
-          <dd>{receipt?.signature ? "sig ok" : "pending"}</dd>
+          <dd>{signatureSummary(receipt)}</dd>
         </div>
         <div>
           <dt>replay diff</dt>
@@ -944,9 +1102,6 @@ function Inspector({
         </div>
       </dl>
       <div className="inspector-actions">
-        <Button variant="approve" size="sm" disabled={!receipt} leading={<CheckCircle2 size={13} />}>
-          Approve
-        </Button>
         <Button variant="secondary" size="sm" disabled={!receipt} leading={<RotateCcw size={13} />} onClick={onReplay}>
           Replay
         </Button>
@@ -954,6 +1109,18 @@ function Inspector({
           <a href="/api/v1/evidence/soc2" target="_blank" rel="noreferrer">
             <FileArchive size={13} aria-hidden="true" />
             Export evidence
+          </a>
+        </Button>
+        <Button variant="secondary" size="sm" asChild>
+          <a href="/api/v1/conformance/negative" target="_blank" rel="noreferrer">
+            <ListChecks size={13} aria-hidden="true" />
+            Negative gates
+          </a>
+        </Button>
+        <Button variant="secondary" size="sm" asChild>
+          <a href="/api/v1/sandbox/grants/inspect" target="_blank" rel="noreferrer">
+            <ShieldCheck size={13} aria-hidden="true" />
+            Sandbox grants
           </a>
         </Button>
       </div>
@@ -971,11 +1138,25 @@ function OperationsStrip({ bootstrap, receipt }: { readonly bootstrap: ConsoleBo
       state: (bootstrap?.counts.pending_approvals ? "escalate" : "verified") as HelmSemanticState,
     },
     {
-      title: "MCP risk",
+      title: "MCP quarantine",
       icon: ShieldCheck,
       value: bootstrap?.mcp.authorization ?? "unknown",
-      detail: bootstrap?.mcp.scopes.join(" · ") || "scopes not configured",
+      detail: bootstrap?.mcp.scopes.join(" · ") || "approval required",
       state: "verified" as HelmSemanticState,
+    },
+    {
+      title: "Sandbox grants",
+      icon: LockKeyhole,
+      value: "deny-all",
+      detail: "filesystem · env · network",
+      state: "verified" as HelmSemanticState,
+    },
+    {
+      title: "Evidence export",
+      icon: FileArchive,
+      value: "native",
+      detail: "DSSE · JWS",
+      state: "pending" as HelmSemanticState,
     },
     {
       title: "Conformance",

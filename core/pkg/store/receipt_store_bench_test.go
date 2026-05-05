@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,11 +16,13 @@ import (
 
 func benchSQLiteStore(tb testing.TB) (*SQLiteReceiptStore, func()) {
 	tb.Helper()
-	db, err := sql.Open("sqlite", ":memory:")
+	db, err := sql.Open("sqlite", filepath.Join(tb.TempDir(), "bench-receipts.db"))
 	if err != nil {
 		tb.Fatal(err)
 	}
+	db.SetMaxOpenConns(1)
 	// WAL mode for concurrent benchmark realism
+	_, _ = db.Exec("PRAGMA busy_timeout=5000")
 	_, _ = db.Exec("PRAGMA journal_mode=WAL")
 	_, _ = db.Exec("PRAGMA synchronous=NORMAL")
 
@@ -66,19 +70,20 @@ func BenchmarkSQLiteReceiptStore_Append(b *testing.B) {
 func BenchmarkSQLiteReceiptStore_AppendParallel(b *testing.B) {
 	store, cleanup := benchSQLiteStore(b)
 	defer cleanup()
+	var seq atomic.Uint64
 
 	b.ResetTimer()
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		ctx := context.Background()
-		i := 0
 		for pb.Next() {
-			r := benchReceipt(b.N + i)
-			r.ReceiptID = fmt.Sprintf("rcpt-par-%d-%d", time.Now().UnixNano(), i)
+			i := seq.Add(1)
+			r := benchReceipt(int(i))
+			r.ReceiptID = fmt.Sprintf("rcpt-par-%d", i)
+			r.DecisionID = fmt.Sprintf("dec-par-%d", i)
 			if err := store.Store(ctx, r); err != nil {
 				b.Fatal(err)
 			}
-			i++
 		}
 	})
 }

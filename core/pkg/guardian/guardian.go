@@ -174,6 +174,9 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 	if prgErr != nil {
 		slog.Warn("[guardian] PRG policy engine init failed", "error", prgErr)
 	}
+	if ruleGraph == nil {
+		ruleGraph = prg.NewGraph()
+	}
 
 	g := &Guardian{
 		signer:   signer,

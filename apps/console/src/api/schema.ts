@@ -82,6 +82,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/receipts/tail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tail durable receipts as server-sent events */
+        get: operations["tailReceipts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/receipts/{receipt_id}": {
         parameters: {
             query?: never;
@@ -324,6 +341,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/evidence/envelopes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Build a non-authoritative evidence export envelope manifest
+         * @description Creates a HELM-native manifest for optional DSSE, JWS, in-toto, SLSA,
+         *     Sigstore, SCITT, or COSE export wrappers. Native EvidencePack roots
+         *     remain the authority; export envelopes are compatibility wrappers.
+         */
+        post: operations["createEvidenceEnvelopeManifest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/replay/verify": {
         parameters: {
             query?: never;
@@ -375,6 +414,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conformance/negative": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List fail-closed negative conformance vectors
+         * @description Returns the clean-room negative execution-boundary gates used to verify
+         *     policy-not-ready, stale policy, PDP outage, direct bypass, schema drift,
+         *     malformed arguments, missing credentials, sandbox overgrant, blocked
+         *     egress, and deny receipt emission behavior.
+         */
+        get: operations["listNegativeConformanceVectors"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mcp/registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List quarantined and approved MCP servers */
+        get: operations["listMcpRegistry"];
+        put?: never;
+        /** Register a newly discovered MCP server as quarantined */
+        post: operations["discoverMcpServer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mcp/registry/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a quarantined MCP server using an approval receipt */
+        post: operations["approveMcpServer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/mcp/v1/capabilities": {
         parameters: {
             query?: never;
@@ -403,6 +500,23 @@ export interface paths {
         put?: never;
         /** Execute a governed MCP tool call */
         post: operations["executeMCPTool"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sandbox/grants/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect sandbox backend profiles or a sealed sandbox grant */
+        get: operations["inspectSandboxGrants"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -559,6 +673,8 @@ export interface components {
         ReceiptListResponse: {
             receipts?: components["schemas"]["Receipt"][];
             count?: number;
+            next_cursor?: string;
+            has_more?: boolean;
         };
         DecisionRequest: {
             principal?: string;
@@ -673,6 +789,47 @@ export interface components {
             bearer_methods_supported?: string[];
             resource_documentation?: string;
         };
+        MCPRegistryDiscoverRequest: {
+            server_id: string;
+            name?: string;
+            transport?: string;
+            endpoint?: string;
+            tool_names?: string[];
+            /**
+             * @default unknown
+             * @enum {string}
+             */
+            risk: "unknown" | "low" | "medium" | "high" | "critical";
+            reason?: string;
+        };
+        MCPRegistryApprovalRequest: {
+            server_id: string;
+            approver_id: string;
+            approval_receipt_id: string;
+            reason?: string;
+        };
+        MCPQuarantineRecord: {
+            server_id: string;
+            name?: string;
+            transport?: string;
+            endpoint?: string;
+            tool_names?: string[];
+            /** @enum {string} */
+            risk: "unknown" | "low" | "medium" | "high" | "critical";
+            /** @enum {string} */
+            state: "discovered" | "quarantined" | "approved" | "revoked" | "expired";
+            /** Format: date-time */
+            discovered_at: string;
+            /** Format: date-time */
+            approved_at?: string;
+            approved_by?: string;
+            approval_receipt_id?: string;
+            /** Format: date-time */
+            revoked_at?: string;
+            /** Format: date-time */
+            expires_at?: string;
+            reason?: string;
+        };
         ExportRequest: {
             /** @description Session to export (omit for all) */
             session_id?: string;
@@ -700,6 +857,33 @@ export interface components {
             };
             errors?: string[];
         };
+        EvidenceEnvelopeExportRequest: {
+            manifest_id: string;
+            /** @enum {string} */
+            envelope: "dsse" | "jws" | "in-toto" | "slsa" | "sigstore" | "scitt" | "cose";
+            /** @description HELM-native EvidencePack root hash. */
+            native_evidence_hash: string;
+            subject?: string;
+            /**
+             * @description Must be true for experimental SCITT or COSE exports.
+             * @default false
+             */
+            experimental: boolean;
+        };
+        EvidenceEnvelopeManifest: {
+            manifest_id: string;
+            /** @enum {string} */
+            envelope: "dsse" | "jws" | "in-toto" | "slsa" | "sigstore" | "scitt" | "cose";
+            native_evidence_hash: string;
+            /** @constant */
+            native_authority: true;
+            subject?: string;
+            statement_hash?: string;
+            experimental?: boolean;
+            /** Format: date-time */
+            created_at: string;
+            manifest_hash?: string;
+        };
         ConformanceRequest: {
             /** @enum {string} */
             level: "L1" | "L2";
@@ -716,6 +900,17 @@ export interface components {
             details?: {
                 [key: string]: string;
             };
+        };
+        NegativeBoundaryVector: {
+            id: string;
+            category: string;
+            trigger: string;
+            /** @enum {string} */
+            expected_verdict: "ALLOW" | "DENY" | "ESCALATE";
+            expected_reason_code: string;
+            must_emit_receipt: boolean;
+            must_not_dispatch: boolean;
+            must_bind_evidence?: string[];
         };
         VersionInfo: {
             version?: string;
@@ -753,6 +948,63 @@ export interface components {
             args_hash?: string;
             proofgraph_node?: string;
             receipt_id?: string;
+        };
+        SandboxBackendProfile: {
+            name: string;
+            /** @enum {string} */
+            kind: "wasi-wazero" | "wasi-wasmtime" | "native-nsjail" | "native-gvisor" | "native-firecracker" | "hosted-adapter";
+            runtime: string;
+            hosted: boolean;
+            deny_network_by_default: boolean;
+            native_isolation: boolean;
+            experimental?: boolean;
+        };
+        FilesystemPreopen: {
+            path: string;
+            /** @enum {string} */
+            mode: "ro" | "rw";
+            content_hash?: string;
+        };
+        EnvExposurePolicy: {
+            /** @enum {string} */
+            mode: "deny-all" | "allowlist" | "redacted";
+            names?: string[];
+            names_hash?: string;
+            redacted?: boolean;
+        };
+        NetworkGrant: {
+            /** @enum {string} */
+            mode: "deny-all" | "allowlist";
+            destinations?: string[];
+            cidrs?: string[];
+        };
+        SandboxGrantLimits: {
+            /** Format: int64 */
+            memory_bytes?: number;
+            /**
+             * Format: int64
+             * @description Go duration in nanoseconds.
+             */
+            cpu_time?: number;
+            /** Format: int64 */
+            output_bytes?: number;
+            open_files?: number;
+        };
+        SandboxGrant: {
+            grant_id: string;
+            runtime: string;
+            runtime_version?: string;
+            profile: string;
+            image_digest?: string;
+            template_digest?: string;
+            filesystem_preopens?: components["schemas"]["FilesystemPreopen"][];
+            env: components["schemas"]["EnvExposurePolicy"];
+            network: components["schemas"]["NetworkGrant"];
+            limits?: components["schemas"]["SandboxGrantLimits"];
+            /** Format: date-time */
+            declared_at: string;
+            policy_epoch?: string;
+            grant_hash?: string;
         };
         /** @description An effect submitted for governance evaluation */
         Effect: {
@@ -988,6 +1240,34 @@ export interface operations {
                 };
             };
             400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+            503: components["responses"]["HelmError"];
+        };
+    };
+    tailReceipts: {
+        parameters: {
+            query?: {
+                limit?: number;
+                since?: string;
+                agent?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Server-sent receipt events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
             503: components["responses"]["HelmError"];
         };
     };
@@ -1011,6 +1291,7 @@ export interface operations {
                     "application/json": components["schemas"]["Receipt"];
                 };
             };
+            401: components["responses"]["HelmError"];
             404: components["responses"]["HelmError"];
         };
     };
@@ -1032,6 +1313,7 @@ export interface operations {
                     "application/json": components["schemas"]["ConsoleBootstrap"];
                 };
             };
+            401: components["responses"]["HelmError"];
         };
     };
     listConsoleSurfaces: {
@@ -1054,6 +1336,7 @@ export interface operations {
                     };
                 };
             };
+            401: components["responses"]["HelmError"];
         };
     };
     getConsoleSurface: {
@@ -1061,7 +1344,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                surface_id: "overview" | "agents" | "actions" | "approvals" | "policies" | "audit" | "developer" | "settings";
+                surface_id: "overview" | "agents" | "actions" | "approvals" | "policies" | "replay" | "audit" | "developer" | "settings";
             };
             cookie?: never;
         };
@@ -1076,6 +1359,7 @@ export interface operations {
                     "application/json": components["schemas"]["ConsoleSurfaceState"];
                 };
             };
+            401: components["responses"]["HelmError"];
             404: components["responses"]["HelmError"];
         };
     };
@@ -1106,6 +1390,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
         };
     };
     revokeTrustKey: {
@@ -1135,6 +1420,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
         };
     };
     getMCPTransport: {
@@ -1239,6 +1525,7 @@ export interface operations {
                     "application/json": components["schemas"]["Session"][];
                 };
             };
+            401: components["responses"]["HelmError"];
         };
     };
     getSessionReceipts: {
@@ -1261,6 +1548,7 @@ export interface operations {
                     "application/json": components["schemas"]["Receipt"][];
                 };
             };
+            401: components["responses"]["HelmError"];
             404: components["responses"]["HelmError"];
         };
     };
@@ -1284,6 +1572,7 @@ export interface operations {
                     "application/json": components["schemas"]["Receipt"];
                 };
             };
+            401: components["responses"]["HelmError"];
             404: components["responses"]["HelmError"];
         };
     };
@@ -1316,6 +1605,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
         };
     };
     verifyEvidence: {
@@ -1358,6 +1648,41 @@ export interface operations {
                 };
             };
             400: components["responses"]["HelmError"];
+        };
+    };
+    createEvidenceEnvelopeManifest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "manifest_id": "env_abc123",
+                 *       "envelope": "dsse",
+                 *       "native_evidence_hash": "sha256:7f83b1...",
+                 *       "subject": "session:sess_abc123"
+                 *     }
+                 */
+                "application/json": components["schemas"]["EvidenceEnvelopeExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Evidence envelope export manifest */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceEnvelopeManifest"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+            403: components["responses"]["HelmError"];
         };
     };
     replayVerify: {
@@ -1431,6 +1756,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
         };
     };
     getConformanceReport: {
@@ -1453,7 +1779,126 @@ export interface operations {
                     "application/json": components["schemas"]["ConformanceResult"];
                 };
             };
+            401: components["responses"]["HelmError"];
             404: components["responses"]["HelmError"];
+        };
+    };
+    listNegativeConformanceVectors: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Negative conformance vector list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NegativeBoundaryVector"][];
+                };
+            };
+        };
+    };
+    listMcpRegistry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description MCP server quarantine records */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPQuarantineRecord"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+            403: components["responses"]["HelmError"];
+        };
+    };
+    discoverMcpServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "server_id": "mcp-local-files",
+                 *       "name": "local files",
+                 *       "transport": "stdio",
+                 *       "endpoint": "stdio://local-files",
+                 *       "tool_names": [
+                 *         "read_file",
+                 *         "write_file"
+                 *       ],
+                 *       "risk": "high",
+                 *       "reason": "new tool bundle requires approval"
+                 *     }
+                 */
+                "application/json": components["schemas"]["MCPRegistryDiscoverRequest"];
+            };
+        };
+        responses: {
+            /** @description Quarantined MCP server record */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPQuarantineRecord"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+            403: components["responses"]["HelmError"];
+        };
+    };
+    approveMcpServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "server_id": "mcp-local-files",
+                 *       "approver_id": "user:security-admin",
+                 *       "approval_receipt_id": "rcpt_approval_123",
+                 *       "reason": "reviewed tool bundle and schema pins"
+                 *     }
+                 */
+                "application/json": components["schemas"]["MCPRegistryApprovalRequest"];
+            };
+        };
+        responses: {
+            /** @description Approved MCP server record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPQuarantineRecord"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+            403: components["responses"]["HelmError"];
         };
     };
     listMCPCapabilities: {
@@ -1509,6 +1954,36 @@ export interface operations {
             400: components["responses"]["HelmError"];
             403: components["responses"]["HelmError"];
             404: components["responses"]["HelmError"];
+        };
+    };
+    inspectSandboxGrants: {
+        parameters: {
+            query?: {
+                /** @description Runtime name. Omit to list built-in backend profiles. */
+                runtime?: string;
+                /** @description Optional sandbox profile identifier. */
+                profile?: string;
+                /** @description Policy epoch to bind into the generated grant. */
+                policy_epoch?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backend profile list or sealed sandbox grant */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxBackendProfile"][] | components["schemas"]["SandboxGrant"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+            403: components["responses"]["HelmError"];
         };
     };
     healthCheck: {

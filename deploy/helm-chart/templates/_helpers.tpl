@@ -82,6 +82,24 @@ Return the signing key secret name
 {{- end }}
 
 {{/*
+Return the policy ConfigMap name
+*/}}
+{{- define "helm-firewall.policyConfigMapName" -}}
+{{- if .Values.helm.policy.configMap }}
+{{- .Values.helm.policy.configMap }}
+{{- else }}
+{{- printf "%s-config" (include "helm-firewall.fullname" .) }}
+{{- end }}
+{{- end }}
+
+{{/*
+Return the serve policy path inside the container
+*/}}
+{{- define "helm-firewall.policyPath" -}}
+{{- printf "%s/%s" (.Values.helm.policy.mountPath | trimSuffix "/") .Values.helm.policy.fileName }}
+{{- end }}
+
+{{/*
 Return the database URL.
 If an existing secret is provided, return empty (handled via secretKeyRef in deployment).
 Otherwise, construct from individual values.

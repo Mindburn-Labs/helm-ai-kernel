@@ -13,7 +13,7 @@ Version truth is the repository `VERSION` file (`0.4.0` for this reset). Go cons
 ## Local Test
 
 ```bash
-go test ./...
+GOWORK=off go test ./client
 ```
 
 ## Generated Sources
@@ -65,7 +65,14 @@ func main() {
 | `GetReceipts(sessionID)` | `GET /api/v1/proofgraph/sessions/{id}/receipts` |
 | `ExportEvidence(sessionID)` | `POST /api/v1/evidence/export` |
 | `VerifyEvidence(bundle)` | `POST /api/v1/evidence/verify` |
+| `CreateEvidenceEnvelopeManifest(req)` | `POST /api/v1/evidence/envelopes` |
 | `ConformanceRun(req)` | `POST /api/v1/conformance/run` |
+| `ListNegativeConformanceVectors()` | `GET /api/v1/conformance/negative` |
+| `ListMCPRegistry()` | `GET /api/v1/mcp/registry` |
+| `DiscoverMCPServer(req)` | `POST /api/v1/mcp/registry` |
+| `ApproveMCPServer(req)` | `POST /api/v1/mcp/registry/approve` |
+| `ListSandboxBackendProfiles()` | `GET /api/v1/sandbox/grants/inspect` |
+| `InspectSandboxGrant(runtime, profile, policyEpoch)` | `GET /api/v1/sandbox/grants/inspect` |
 | `Health()` | `GET /healthz` |
 | `Version()` | `GET /version` |
 

@@ -129,7 +129,8 @@ func (c *HelmClient) GetReceipts(sessionID string) ([]Receipt, error) {
 
 // ExportEvidence calls POST /api/v1/evidence/export and returns raw bytes.
 func (c *HelmClient) ExportEvidence(sessionID string) ([]byte, error) {
-	body, _ := json.Marshal(ExportRequest{SessionID: sessionID, Format: "tar.gz"})
+	format := "tar.gz"
+	body, _ := json.Marshal(ExportRequest{SessionId: &sessionID, Format: &format})
 	req, err := http.NewRequest("POST", c.BaseURL+"/api/v1/evidence/export", bytes.NewReader(body))
 	if err != nil {
 		return nil, err

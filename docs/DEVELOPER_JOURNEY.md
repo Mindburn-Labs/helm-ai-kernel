@@ -1,5 +1,6 @@
 ---
 title: Developer Journey
+last_reviewed: 2026-05-05
 ---
 
 # Developer Journey
@@ -42,7 +43,8 @@ After this page you should be able to:
 - choose a supported SDK or framework adapter path;
 - run conformance and docs-truth gates;
 - deploy with Docker Compose or the Kubernetes Helm chart;
-- verify release artifacts, checksums, SBOM, Cosign bundles, and reproducible binaries.
+- verify release artifacts, checksums, SBOM, release attestation, optional
+  Cosign bundles when attached, and reproducible binaries.
 
 ## Source Truth
 
@@ -78,7 +80,7 @@ make docs-truth
 Use Homebrew when you want the published CLI path:
 
 ```bash
-brew install mindburnlabs/tap/helm
+brew install mindburn/tap/helm
 helm --version
 ```
 
@@ -384,6 +386,12 @@ Source truth: `Makefile` and `.github/workflows/`.
 
 ## Conformance And Release Gates
 
+Current public release: `v0.4.0`, published on 2026-04-25 at
+<https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.4.0>. Its public
+assets are platform binaries for Darwin, Linux, and Windows, `SHA256SUMS.txt`,
+`sbom.json`, `release-attestation.json`, `evidence-pack.tar`,
+`release.high_risk.v3.toml`, `helm.mcpb`, and `helm.rb`.
+
 Run conformance:
 
 ```bash
@@ -399,7 +407,11 @@ make verify-fixtures
 make release-binaries-reproducible
 ```
 
-Release artifact verification is documented in `docs/PUBLISHING.md` and `docs/VERIFICATION.md`. Release assets must cover checksums, SBOM, VEX where applicable, Cosign verification, provenance, and reproducible binaries.
+Release artifact verification is documented in `docs/PUBLISHING.md` and
+`docs/VERIFICATION.md`. For `v0.4.0`, verify checksums, SBOM,
+release-attestation metadata, the offline evidence pack, and reproducible
+binaries. Cosign bundles and OpenVEX files are only documented as verification
+paths when those files are attached to a release.
 
 ## Troubleshooting
 

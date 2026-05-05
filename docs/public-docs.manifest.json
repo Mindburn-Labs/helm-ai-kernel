@@ -182,6 +182,90 @@
       "section": "compliance",
       "source_path": "docs/compliance/nist-ai-rmf-iso-42001-crosswalk.md",
       "docs_origin_hint": "helm.docs.mindburn.org"
+    },
+    {
+      "slug": "helm-oss/source-map",
+      "title": "Developer Surface Map",
+      "section": "oss",
+      "source_path": "docs/DEVELOPER_SURFACE_MAP.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/source-map"
+    },
+    {
+      "slug": "helm-oss/oss-scope",
+      "title": "OSS Scope",
+      "section": "oss",
+      "source_path": "docs/OSS_SCOPE.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/oss-scope"
+    },
+    {
+      "slug": "helm-oss/deployment-and-examples",
+      "title": "Deployment and Examples",
+      "section": "deployment",
+      "source_path": "docs/DEPLOYMENT_AND_EXAMPLES.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/deployment-and-examples"
+    },
+    {
+      "slug": "helm-oss/reference/protocols-and-schemas",
+      "title": "Protocols and Schemas",
+      "section": "reference",
+      "source_path": "docs/REFERENCE_PROTOCOLS.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/reference/protocols-and-schemas"
+    },
+    {
+      "slug": "helm-oss/architecture/cognitive-firewall",
+      "title": "Cognitive Firewall Pattern",
+      "section": "architecture",
+      "source_path": "docs/architecture/cognitive-firewall.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/architecture/cognitive-firewall"
+    },
+    {
+      "slug": "helm-oss/architecture/eidas-qtsp",
+      "title": "eIDAS QTSP Anchoring",
+      "section": "architecture",
+      "source_path": "docs/architecture/eidas-qtsp.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/architecture/eidas-qtsp"
+    },
+    {
+      "slug": "helm-oss/architecture/policy-languages",
+      "title": "Policy Languages",
+      "section": "architecture",
+      "source_path": "docs/architecture/policy-languages.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/architecture/policy-languages"
+    },
+    {
+      "slug": "helm-oss/security/clawguard-taint-tracking",
+      "title": "ClawGuard Taint Tracking",
+      "section": "security",
+      "source_path": "docs/security/clawguard-taint-tracking.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/security/clawguard-taint-tracking"
+    },
+    {
+      "slug": "helm-oss/security/session-risk-memory",
+      "title": "Session Risk Memory",
+      "section": "security",
+      "source_path": "docs/security/session-risk-memory.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/security/session-risk-memory"
+    },
+    {
+      "slug": "helm-oss/security/release-security",
+      "title": "Release and Security Evidence",
+      "section": "security",
+      "source_path": "docs/RELEASE_SECURITY.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/security/release-security"
+    },
+    {
+      "slug": "helm-oss/governance/cncf-application",
+      "title": "CNCF Application Evidence",
+      "section": "governance",
+      "source_path": "docs/governance/cncf-application.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/governance/cncf-application"
+    },
+    {
+      "slug": "helm-oss/design-system",
+      "title": "HELM OSS Design System Surface",
+      "section": "interfaces",
+      "source_path": "docs/DESIGN_SYSTEM.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/design-system"
     }
   ]
 }

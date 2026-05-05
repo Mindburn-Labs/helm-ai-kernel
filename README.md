@@ -24,6 +24,9 @@ This repository is intentionally scoped to the OSS kernel:
 brew install mindburn/tap/helm
 helm serve --policy ./release.high_risk.v3.toml
 helm serve --policy ./release.high_risk.v3.toml --console
+helm boundary status
+helm mcp wrap --server-id local-tools --upstream-command "node server.js"
+helm sandbox preflight --runtime wazero
 helm verify evidence-pack.tar
 helm receipts tail --agent agent.titan.exec
 ```
@@ -65,8 +68,10 @@ The retained public surfaces in this repository are:
 - Self-hostable HELM OSS Console in `apps/console`
 - Public design-system package in `packages/design-system-core`
 - OpenAI-compatible proxy surface
-- MCP server and bundle generation commands
-- Evidence export and verification commands
+- MCP server, wrapper, quarantine, OAuth profile, and call authorization commands
+- Boundary record, checkpoint, approval, budget, and authz snapshot commands
+- Sandbox grant, preflight, and verification commands
+- Evidence export, envelope, replay, and offline verification commands
 - Public SDKs in `sdk/go`, `sdk/python`, `sdk/ts`, `sdk/rust`, and `sdk/java`
 
 This repository ships exactly one browser UI: the self-hostable OSS Console. It does not ship the managed Mindburn hosted service, billing, private operational tooling, proprietary connector programs, or generated HTML report surfaces.

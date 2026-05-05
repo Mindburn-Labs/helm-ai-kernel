@@ -5,11 +5,18 @@ import type {
 } from "../types.gen.js";
 
 export type AgentFramework =
+  | "langchain"
   | "langgraph"
+  | "autogen"
   | "crewai"
   | "openai-agents"
+  | "semantic-kernel"
   | "pydantic-ai"
-  | "llamaindex";
+  | "llamaindex"
+  | "litellm"
+  | "n8n"
+  | "zapier-webhook"
+  | "raw-mcp";
 
 export interface AgentFrameworkAdapterMetadata {
   framework: AgentFramework;
@@ -20,8 +27,20 @@ export interface AgentFrameworkAdapterMetadata {
 
 export const agentFrameworkAdapters: AgentFrameworkAdapterMetadata[] = [
   {
+    framework: "langchain",
+    displayName: "LangChain",
+    status: "compatible",
+    source: "TypeScript SDK",
+  },
+  {
     framework: "langgraph",
     displayName: "LangGraph",
+    status: "compatible",
+    source: "TypeScript SDK",
+  },
+  {
+    framework: "autogen",
+    displayName: "AutoGen",
     status: "compatible",
     source: "TypeScript SDK",
   },
@@ -38,6 +57,12 @@ export const agentFrameworkAdapters: AgentFrameworkAdapterMetadata[] = [
     source: "TypeScript SDK",
   },
   {
+    framework: "semantic-kernel",
+    displayName: "Semantic Kernel",
+    status: "compatible",
+    source: "TypeScript SDK",
+  },
+  {
     framework: "pydantic-ai",
     displayName: "PydanticAI",
     status: "compatible",
@@ -46,6 +71,30 @@ export const agentFrameworkAdapters: AgentFrameworkAdapterMetadata[] = [
   {
     framework: "llamaindex",
     displayName: "LlamaIndex",
+    status: "compatible",
+    source: "TypeScript SDK",
+  },
+  {
+    framework: "litellm",
+    displayName: "LiteLLM",
+    status: "compatible",
+    source: "TypeScript SDK",
+  },
+  {
+    framework: "n8n",
+    displayName: "n8n",
+    status: "compatible",
+    source: "TypeScript SDK",
+  },
+  {
+    framework: "zapier-webhook",
+    displayName: "Zapier-style webhook",
+    status: "compatible",
+    source: "TypeScript SDK",
+  },
+  {
+    framework: "raw-mcp",
+    displayName: "Raw MCP client",
     status: "compatible",
     source: "TypeScript SDK",
   },
@@ -95,6 +144,10 @@ export interface LangGraphToolCall {
   metadata?: Record<string, unknown>;
 }
 
+export interface LangChainToolCall extends LangGraphToolCall {
+  runId?: string;
+}
+
 export interface CrewAITaskCall {
   id?: string;
   task?: string;
@@ -115,6 +168,26 @@ export interface OpenAIAgentsToolCall {
     name?: string;
     arguments?: unknown;
   };
+  metadata?: Record<string, unknown>;
+}
+
+export interface AutoGenToolCall {
+  id?: string;
+  name?: string;
+  tool?: string;
+  arguments?: unknown;
+  args?: unknown;
+  agent?: string;
+  conversationId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SemanticKernelFunctionCall {
+  id?: string;
+  functionName?: string;
+  pluginName?: string;
+  arguments?: unknown;
+  args?: unknown;
   metadata?: Record<string, unknown>;
 }
 
@@ -140,6 +213,40 @@ export interface LlamaIndexToolCall {
   metadata?: Record<string, unknown>;
 }
 
+export interface LiteLLMToolCall extends OpenAIAgentsToolCall {
+  model?: string;
+}
+
+export interface N8NNodeExecution {
+  id?: string;
+  node?: string;
+  name?: string;
+  parameters?: unknown;
+  input?: unknown;
+  workflowId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ZapierWebhookCall {
+  id?: string;
+  zapId?: string;
+  action?: string;
+  tool?: string;
+  payload?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RawMCPToolCall {
+  id?: string;
+  serverId?: string;
+  name?: string;
+  toolName?: string;
+  arguments?: unknown;
+  args?: unknown;
+  scopes?: string[];
+  metadata?: Record<string, unknown>;
+}
+
 const DEFAULT_POLICY_PROMPT =
   "Evaluate whether this agent framework tool call may execute through HELM policy. Return a normal chat completion and rely on HELM response headers for the governance receipt.";
 
@@ -152,6 +259,21 @@ export function fromLangGraphToolCall(
     call.args ?? call.arguments,
     {
       toolCallId: call.id,
+      metadata: call.metadata,
+    },
+  );
+}
+
+export function fromLangChainToolCall(
+  call: LangChainToolCall,
+): AgentFrameworkAction {
+  return frameworkAction(
+    "langchain",
+    call.name ?? call.tool,
+    call.args ?? call.arguments,
+    {
+      toolCallId: call.id,
+      runId: call.runId,
       metadata: call.metadata,
     },
   );
@@ -183,6 +305,33 @@ export function fromOpenAIAgentsToolCall(
   );
 }
 
+export function fromAutoGenToolCall(call: AutoGenToolCall): AgentFrameworkAction {
+  return frameworkAction(
+    "autogen",
+    call.name ?? call.tool,
+    call.arguments ?? call.args,
+    {
+      toolCallId: call.id,
+      agentId: call.agent,
+      runId: call.conversationId,
+      metadata: call.metadata,
+    },
+  );
+}
+
+export function fromSemanticKernelFunctionCall(
+  call: SemanticKernelFunctionCall,
+): AgentFrameworkAction {
+  const toolName =
+    call.pluginName && call.functionName
+      ? `${call.pluginName}.${call.functionName}`
+      : call.functionName;
+  return frameworkAction("semantic-kernel", toolName, call.arguments ?? call.args, {
+    toolCallId: call.id,
+    metadata: call.metadata,
+  });
+}
+
 export function fromPydanticAIToolCall(
   call: PydanticAIToolCall,
 ): AgentFrameworkAction {
@@ -209,6 +358,56 @@ export function fromLlamaIndexToolCall(
       toolCallId: call.id,
       agentId: call.agent,
       metadata: call.metadata,
+    },
+  );
+}
+
+export function fromLiteLLMToolCall(call: LiteLLMToolCall): AgentFrameworkAction {
+  const action = fromOpenAIAgentsToolCall(call);
+  return {
+    ...action,
+    framework: "litellm",
+    metadata: { model: call.model, ...action.metadata },
+  };
+}
+
+export function fromN8NNodeExecution(call: N8NNodeExecution): AgentFrameworkAction {
+  return frameworkAction(
+    "n8n",
+    call.node ?? call.name,
+    call.parameters ?? call.input,
+    {
+      toolCallId: call.id,
+      runId: call.workflowId,
+      metadata: call.metadata,
+    },
+  );
+}
+
+export function fromZapierWebhookCall(
+  call: ZapierWebhookCall,
+): AgentFrameworkAction {
+  return frameworkAction(
+    "zapier-webhook",
+    call.action ?? call.tool,
+    call.payload,
+    {
+      toolCallId: call.id,
+      runId: call.zapId,
+      metadata: call.metadata,
+    },
+  );
+}
+
+export function fromRawMCPToolCall(call: RawMCPToolCall): AgentFrameworkAction {
+  return frameworkAction(
+    "raw-mcp",
+    call.toolName ?? call.name,
+    call.arguments ?? call.args,
+    {
+      toolCallId: call.id,
+      agentId: call.serverId,
+      metadata: { scopes: call.scopes, ...call.metadata },
     },
   );
 }

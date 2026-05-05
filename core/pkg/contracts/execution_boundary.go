@@ -115,6 +115,8 @@ type EvidenceEnvelopeManifest struct {
 	NativeAuthority    bool      `json:"native_authority"`
 	Subject            string    `json:"subject,omitempty"`
 	StatementHash      string    `json:"statement_hash,omitempty"`
+	PayloadType        string    `json:"payload_type,omitempty"`
+	PayloadHash        string    `json:"payload_hash,omitempty"`
 	Experimental       bool      `json:"experimental,omitempty"`
 	CreatedAt          time.Time `json:"created_at"`
 	ManifestHash       string    `json:"manifest_hash,omitempty"`

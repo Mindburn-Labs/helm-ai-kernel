@@ -241,6 +241,72 @@ describe('HelmClient', () => {
       expect(result.native_authority).toBe(true);
     });
 
+    it('retrieves envelope payloads and verifies checkpoints', async () => {
+      fetchSpy
+        .mockResolvedValueOnce(jsonResponse({
+          manifest_id: 'env1',
+          payload_hash: 'sha256:payload',
+          payload: { payloadType: 'application/vnd.dsse+json' },
+        }))
+        .mockResolvedValueOnce(jsonResponse({
+          checkpoint_id: 'cp1',
+          verdict: 'PASS',
+          checks: { checkpoint_hash: 'PASS' },
+        }));
+      const client = new HelmClient({ baseUrl: 'http://h' });
+
+      const payload = await client.getEvidenceEnvelopePayload('env1');
+      const checkpoint = await client.verifyBoundaryCheckpoint('cp1');
+
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        1,
+        'http://h/api/v1/evidence/envelopes/env1/payload',
+        expect.objectContaining({ method: 'GET' }),
+      );
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        2,
+        'http://h/api/v1/boundary/checkpoints/cp1/verify',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(payload.payload_hash).toBe('sha256:payload');
+      expect(checkpoint.verdict).toBe('PASS');
+    });
+
+    it('creates and asserts approval WebAuthn ceremonies', async () => {
+      fetchSpy
+        .mockResolvedValueOnce(jsonResponse({
+          challenge_id: 'ch1',
+          approval_id: 'ap1',
+          challenge_hash: 'sha256:challenge',
+        }))
+        .mockResolvedValueOnce(jsonResponse({
+          approval_id: 'ap1',
+          state: 'approved',
+          auth_method: 'passkey',
+        }));
+      const client = new HelmClient({ baseUrl: 'http://h' });
+
+      const challenge = await client.createApprovalWebAuthnChallenge('ap1', { actor: 'user:alice' });
+      const assertion = await client.assertApprovalWebAuthnChallenge('ap1', {
+        challenge_id: 'ch1',
+        assertion: 'signed-client-data',
+        actor: 'user:alice',
+      });
+
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        1,
+        'http://h/api/v1/approvals/ap1/webauthn/challenge',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        2,
+        'http://h/api/v1/approvals/ap1/webauthn/assert',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(challenge.challenge_id).toBe('ch1');
+      expect(assertion.state).toBe('approved');
+    });
+
     it('lists negative conformance vectors', async () => {
       fetchSpy.mockResolvedValue(jsonResponse([{ id: 'pdp-outage', category: 'policy' }]));
       const client = new HelmClient({ baseUrl: 'http://h' });

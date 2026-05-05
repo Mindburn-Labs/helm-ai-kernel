@@ -55,6 +55,7 @@ assets visible on GitHub are Darwin/Linux/Windows binaries, `SHA256SUMS.txt`,
 
 ```bash
 make release-binaries-reproducible
+make release-smoke
 make verify-cosign
 make verify-fixtures
 make docs-coverage docs-truth
@@ -87,4 +88,5 @@ only for releases that attach those files.
 | Signature verification fails | Confirm the release actually includes `*.cosign.bundle` files, then check the expected workflow identity and Rekor entry documented in `SECURITY.md`. |
 | Reproducible build hashes differ | Confirm `SOURCE_DATE_EPOCH`, `-trimpath`, and build-id settings match the release workflow. |
 | VEX status is unclear | Inspect `release/vex/policies.yaml`; only rely on a release VEX file when it is attached to the GitHub release. |
+| Kubernetes Helm validation runs the HELM OSS CLI | Set `KUBE_HELM_CMD` to a Kubernetes Helm v3 binary or run `make helm-chart-smoke`, which uses a pinned containerized Helm runner when needed. |
 | A security issue needs disclosure | Use `security@mindburn.org`; do not open a public issue. |

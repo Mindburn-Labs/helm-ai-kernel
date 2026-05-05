@@ -1,21 +1,37 @@
-# Sdk
-<!-- docs-generated: surface-readme -->
+# SDK Tooling
 
-## Purpose
+`scripts/sdk` owns SDK type regeneration from the retained OpenAPI contract.
 
-Active tooling surface for the `helm-oss` project.
+## Generator
 
-## Canonical Interface
+```bash
+bash scripts/sdk/gen.sh
+```
 
-- Source path: `scripts/sdk`
-- Surface type: `tooling`
-- Package/source identity: `sdk`
-- Coverage record: `docs/documentation-coverage.csv`
+The script uses Docker image `openapitools/openapi-generator-cli:v7.4.0` and
+reads `api/openapi/helm.openapi.yaml`.
 
-## Local Commands
+## Outputs
 
-- `make docs-coverage` from the repository root verifies coverage for this surface.
+| Output | Source |
+| --- | --- |
+| `sdk/ts/src/types.gen.ts` | OpenAPI models |
+| `sdk/python/helm_sdk/types_gen.py` | OpenAPI models |
+| `sdk/go/client/types_gen.go` | OpenAPI models |
+| `sdk/rust/src/types_gen.rs` | OpenAPI models |
+| `sdk/java/src/main/java/labs/mindburn/helm/TypesGen.java` | OpenAPI models |
 
-## Documentation Contract
+Protobuf bindings are owned by the `make codegen-*` targets in `Makefile`, not
+by this script.
 
-Generated surface README. This file is a local ownership and validation contract, not the primary docs information architecture entry point. It covers the active tooling surface. Keep it aligned with the source path above and update `docs/documentation-coverage.csv` when ownership, interfaces, validation, or lifecycle status changes.
+## Validation
+
+```bash
+make codegen-check
+make test-sdk-go-standalone
+make test-sdk-py
+make test-sdk-ts
+make test-sdk-rust
+make test-sdk-java
+make docs-coverage docs-truth
+```

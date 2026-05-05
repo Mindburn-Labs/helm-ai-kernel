@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -48,6 +49,7 @@ type Services struct {
 
 	// --- Kernel & Execution ---
 	BoundaryEnforcer *boundary.PerimeterEnforcer
+	BoundarySurfaces *boundary.SurfaceRegistry
 	MerkleTree       *merkle.MerkleTree
 	Sandbox          sandbox.Sandbox
 	Obligation       *obligation.ObligationEngine
@@ -150,6 +152,16 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	} else {
 		s.BoundaryEnforcer = perimEnforcer
 	}
+	surfaces, surfaceErr := boundary.NewSQLSurfaceRegistry(ctx, db, time.Now)
+	if surfaceErr != nil {
+		logger.Warn("Boundary surface registry persistence disabled", "error", surfaceErr)
+		surfaces, surfaceErr = boundary.NewFileBackedSurfaceRegistry(defaultBoundaryRegistryPath(), time.Now)
+		if surfaceErr != nil {
+			logger.Warn("Boundary surface file fallback disabled", "error", surfaceErr)
+			surfaces = boundary.NewSurfaceRegistry(time.Now)
+		}
+	}
+	s.BoundarySurfaces = surfaces
 	logger.Info("subsystem ready", "component", " Boundary Perimeter Enforcer initialized")
 
 	// --- 8. Merkle ---
@@ -217,6 +229,17 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 
 	logger.Info("subsystem ready", "component", " All subsystems initialized successfully")
 	return s, nil
+}
+
+func defaultBoundaryRegistryPath() string {
+	if path := strings.TrimSpace(os.Getenv("HELM_BOUNDARY_REGISTRY_PATH")); path != "" {
+		return path
+	}
+	dataDir := strings.TrimSpace(os.Getenv("HELM_DATA_DIR"))
+	if dataDir == "" {
+		dataDir = "data"
+	}
+	return filepath.Join(dataDir, "boundary", "surfaces.json")
 }
 
 func evidenceSigningSeedFromEnv() (string, bool, error) {

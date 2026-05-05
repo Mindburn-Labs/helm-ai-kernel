@@ -10,19 +10,12 @@ Shows HELM integration with the OpenAI-compatible TypeScript SDK / native fetch.
 ## Run
 
 ```bash
+cd examples/ts_openai_baseurl
 npx tsx main.ts
 ```
 
 ## Expected Output
 
-```
-=== Chat Completions ===
-Denied: DENY_TOOL_NOT_FOUND - Tool not found
-
-=== Evidence ===
-Exported: 1234 bytes
-Verification: PASS
-
-=== Conformance ===
-Verdict: PASS Gates: 12 Failed: 0
-```
+The example prints sections for chat completions, evidence export and
+verification, conformance, and health. The exact verdict, reason code, byte
+count, and gate count depend on the policy and HELM server you run locally.

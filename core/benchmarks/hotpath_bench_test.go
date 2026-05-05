@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -511,6 +512,15 @@ func TestOverheadReport(t *testing.T) {
 			t.Logf("Ratio (allow/base):   %8.1fx", allow.P99Us/baseline.P99Us)
 		}
 		t.Logf("Overhead < 5ms:       %v", overheadP99 < 5000)
+		threshold := 25000.0
+		if raw := os.Getenv("HELM_BENCH_P99_OVERHEAD_US"); raw != "" {
+			if parsed, err := strconv.ParseFloat(raw, 64); err == nil && parsed > 0 {
+				threshold = parsed
+			}
+		}
+		if overheadP99 >= threshold {
+			t.Fatalf("boundary hot-path p99 overhead %.1fµs exceeds threshold %.1fµs", overheadP99, threshold)
+		}
 	}
 
 	// Measure CEL throughput (concurrent ops/sec)
@@ -558,10 +568,18 @@ func TestOverheadReport(t *testing.T) {
 		"scenarios":    results,
 	}
 	if len(results) >= 2 {
+		threshold := 25000.0
+		if raw := os.Getenv("HELM_BENCH_P99_OVERHEAD_US"); raw != "" {
+			if parsed, err := strconv.ParseFloat(raw, 64); err == nil && parsed > 0 {
+				threshold = parsed
+			}
+		}
 		report["hot_path_p99_us"] = results[1].P99Us
 		report["baseline_p99_us"] = results[0].P99Us
 		report["overhead_p99_us"] = results[1].P99Us - results[0].P99Us
 		report["overhead_under_5ms"] = (results[1].P99Us - results[0].P99Us) < 5000
+		report["p99_gate_us"] = threshold
+		report["p99_gate_pass"] = (results[1].P99Us - results[0].P99Us) < threshold
 	}
 
 	// Competitive comparison: isolated component benchmarks vs Microsoft Agent Governance Toolkit

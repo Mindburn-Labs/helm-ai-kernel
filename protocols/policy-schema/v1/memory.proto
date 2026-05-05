@@ -13,7 +13,7 @@ package helm.memory.v1;
 option go_package = "helm.mindburn.run/memory/v1;memoryv1";
 
 import "google/protobuf/timestamp.proto";
-import "v1/foundations.proto";
+import "foundations.proto";
 
 // ── Enums ──────────────────────────────────────────────────────
 

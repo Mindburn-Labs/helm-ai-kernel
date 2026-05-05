@@ -116,6 +116,10 @@ func runMCPApprove(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
+	if _, err := newLocalSurfaceRegistry().PutMCPServer(record); err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
 
 	if jsonOutput {
 		enc := json.NewEncoder(stdout)

@@ -10,7 +10,7 @@ package helm.toolcalls.v1;
 option go_package = "helm.mindburn.run/toolcalls/v1;toolcallsv1";
 
 import "google/protobuf/timestamp.proto";
-import "v1/foundations.proto";
+import "foundations.proto";
 
 // ── Enums ──────────────────────────────────────────────────────
 

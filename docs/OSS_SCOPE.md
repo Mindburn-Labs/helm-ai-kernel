@@ -7,8 +7,6 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Use this page when you need the public `helm-oss/oss-scope` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
-
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
@@ -80,22 +78,27 @@ non-TCB supporting infrastructure:
 | `a2a/`                 | Agent-to-Agent trust protocol              | ✅ Active |
 | `otel/`                | OpenTelemetry governance telemetry         | ✅ Active |
 | `identity/did/`        | W3C DID-based agent identity               | ✅ Active |
-| `crypto/hybrid/`       | Hybrid Ed25519 + ML-DSA-65 dual signing    | ✅ Active |
-| `crypto/zkproof/`      | Zero-knowledge compliance proofs           | ✅ Active |
-| `memory/`              | Memory integrity, trust, poisoning defense | ✅ Active |
-| `threatscan/ensemble/` | Quorum-based multi-engine threat scanning  | ✅ Active |
-| `evidencepack/summary/`| Constant-size cryptographic evidence summaries | ✅ Active |
-| `skillfortify/`        | Runtime tool/skill integrity verification  | ✅ Active |
-| `provenance/`          | Supply chain provenance with signed attestations | ✅ Active |
-| `budget/cost/`         | Cost attribution and pre-execution estimation | ✅ Active |
-| `delegation/aip/`      | Agent Interaction Protocol, continuous delegation | ✅ Active |
-| `replay/comparison/`   | Side-by-side replay comparison for drift detection | ✅ Active |
-| `a2a/federation/`      | Federated trust across organizations       | ✅ Active |
-| `mcptox/`              | MCP tool toxicity scanner (rug-pull, typosquatting) | ✅ Active |
-| `effects/reversibility/` | Reversibility engine for effect compensation | ✅ Active |
-| `observability/slo_engine/` | SLO-driven governance actions          | ✅ Active |
-| `otel/cloudevents/`    | CloudEvents SIEM export                    | ✅ Active |
-| `connectors/ddipe/`    | DDIPE document scanning for governance extraction | ✅ Active |
+
+### Frontier / Spec-Only Surfaces
+
+The following names appear in strategy, standard, or roadmap material but are not active source paths in this OSS repository as of the v1.3 convergence pass. They MUST NOT be documented as shipped packages until source, tests, and conformance vectors exist under the matching path:
+
+- `crypto/hybrid/`
+- `crypto/zkproof/`
+- `memory/`
+- `threatscan/ensemble/`
+- `evidencepack/summary/`
+- `skillfortify/`
+- `provenance/`
+- `budget/cost/`
+- `delegation/aip/`
+- `replay/comparison/`
+- `a2a/federation/`
+- `mcptox/`
+- `effects/reversibility/`
+- `observability/slo_engine/`
+- `otel/cloudevents/`
+- `connectors/ddipe/`
 
 ### Deployment Infrastructure
 

@@ -16,8 +16,10 @@ helm mcp serve --transport http
 ## What's Included
 
 | File | Purpose |
-|------|---------|
+| --- | --- |
 | `helm.yaml` | HELM config for Google ADK/A2A |
-| `.env.example` | Required environment variables |
 | `first-governed-call.sh` | Runnable governed tool call demo |
 | `ci-smoke.sh` | CI-compatible smoke test |
+
+The `ci-smoke.sh` script validates generated project files from
+`helm init google`; it does not require a real Google API key.

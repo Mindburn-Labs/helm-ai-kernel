@@ -7,18 +7,19 @@ Shows HELM integration with the Java SDK.
 - HELM running at `http://localhost:8080` (`docker compose up -d`)
 - Java 17+
 
-## Run
+## Source Example
+
+`Main.java` is a small integration source file that uses
+`labs.mindburn.helm.HelmClient`. This directory does not carry its own Maven
+project; use it as source material for a JVM service or run the SDK package
+gate below.
 
 ```bash
-javac -cp ../../sdk/java/target/classes Main.java
-java -cp .:../../sdk/java/target/classes Main
+make test-sdk-java
 ```
-
-Or use the SDK JAR directly after `mvn package` in `sdk/java/`.
 
 ## Expected Output
 
-```
-Chat Completions: Denied: DENY_TOOL_NOT_FOUND
-Conformance: PASS (12 gates)
-```
+The example prints chat-completion, conformance, and health sections. The exact
+verdict, reason code, and gate count depend on the policy and HELM server you
+run locally.

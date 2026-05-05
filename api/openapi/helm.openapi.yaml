@@ -31,8 +31,14 @@ tags:
     description: EvidencePack export and verification
   - name: conformance
     description: Conformance testing
+  - name: boundary
+    description: Proof-bearing execution-boundary records and checkpoints
   - name: sandbox
     description: Sandbox grant inspection and execution-boundary authority records
+  - name: identity
+    description: Agent identity, authorization snapshots, approvals, and budgets
+  - name: telemetry
+    description: Non-authoritative telemetry and coexistence manifests
   - name: system
     description: Health and version
   - name: console
@@ -446,6 +452,174 @@ paths:
         '404':
           description: OAuth mode is not enabled
 
+  # ── Execution Boundary ─────────────────────────────
+  /api/v1/boundary/status:
+    get:
+      operationId: getBoundaryStatus
+      tags: [boundary]
+      summary: Read execution-boundary health and authority status
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Boundary status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoundaryStatus'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/boundary/capabilities:
+    get:
+      operationId: listBoundaryCapabilities
+      tags: [boundary]
+      summary: List proof-bearing boundary capabilities
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Capability summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BoundaryCapabilitySummary'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/boundary/records:
+    get:
+      operationId: listBoundaryRecords
+      tags: [boundary]
+      summary: Search execution-boundary records
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - { name: verdict, in: query, schema: { type: string } }
+        - { name: reason_code, in: query, schema: { type: string } }
+        - { name: tool_name, in: query, schema: { type: string } }
+        - { name: mcp_server_id, in: query, schema: { type: string } }
+        - { name: policy_epoch, in: query, schema: { type: string } }
+        - { name: receipt_id, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 1000 } }
+      responses:
+        '200':
+          description: Boundary record list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExecutionBoundaryRecord'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/boundary/records/{record_id}:
+    get:
+      operationId: getBoundaryRecord
+      tags: [boundary]
+      summary: Get an execution-boundary record
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: record_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Boundary record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionBoundaryRecord'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/boundary/records/{record_id}/verify:
+    post:
+      operationId: verifyBoundaryRecord
+      tags: [boundary]
+      summary: Verify a boundary record hash and receipt linkage
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: record_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Boundary record verification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoundaryRecordVerification'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/boundary/checkpoints:
+    get:
+      operationId: listBoundaryCheckpoints
+      tags: [boundary]
+      summary: List tamper-evident boundary checkpoints
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Boundary checkpoints
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BoundaryCheckpoint'
+        '401':
+          $ref: '#/components/responses/HelmError'
+    post:
+      operationId: createBoundaryCheckpoint
+      tags: [boundary]
+      summary: Create a new boundary checkpoint
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '201':
+          description: Boundary checkpoint
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoundaryCheckpoint'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/boundary/checkpoints/{checkpoint_id}/verify:
+    post:
+      operationId: verifyBoundaryCheckpoint
+      tags: [boundary]
+      summary: Verify a boundary checkpoint and inclusion proof
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: checkpoint_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Boundary checkpoint verification
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
   # ── ProofGraph ──────────────────────────────────────
   /api/v1/proofgraph/sessions:
     get:
@@ -592,6 +766,23 @@ paths:
           $ref: '#/components/responses/HelmError'
 
   /api/v1/evidence/envelopes:
+    get:
+      operationId: listEvidenceEnvelopeManifests
+      tags: [evidence]
+      summary: List evidence envelope manifests
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Evidence envelope manifests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EvidenceEnvelopeManifest'
+        '401':
+          $ref: '#/components/responses/HelmError'
     post:
       operationId: createEvidenceEnvelopeManifest
       tags: [evidence]
@@ -625,6 +816,78 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
         '403':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/evidence/envelopes/{manifest_id}:
+    get:
+      operationId: getEvidenceEnvelopeManifest
+      tags: [evidence]
+      summary: Get an evidence envelope manifest
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: manifest_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Evidence envelope manifest
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceEnvelopeManifest'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/evidence/envelopes/{manifest_id}/payload:
+    get:
+      operationId: getEvidenceEnvelopePayload
+      tags: [evidence]
+      summary: Get the concrete non-authoritative evidence envelope payload
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: manifest_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Evidence envelope payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/evidence/envelopes/{manifest_id}/verify:
+    post:
+      operationId: verifyEvidenceEnvelopeManifest
+      tags: [evidence]
+      summary: Verify an evidence envelope manifest against its HELM root
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: manifest_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Evidence envelope verification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceEnvelopeVerification'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
           $ref: '#/components/responses/HelmError'
 
   /api/v1/replay/verify:
@@ -714,6 +977,40 @@ paths:
           $ref: '#/components/responses/HelmError'
         '401':
           $ref: '#/components/responses/HelmError'
+
+  /api/v1/conformance/reports:
+    get:
+      operationId: listConformanceReports
+      tags: [conformance]
+      summary: List conformance reports
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Conformance reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConformanceResult'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/conformance/vectors:
+    get:
+      operationId: listConformanceVectors
+      tags: [conformance]
+      summary: List conformance vectors across all public levels
+      responses:
+        '200':
+          description: Conformance vector list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NegativeBoundaryVector'
 
   /api/v1/conformance/negative:
     get:
@@ -822,6 +1119,193 @@ paths:
         '403':
           $ref: '#/components/responses/HelmError'
 
+  /api/v1/mcp/registry/{server_id}:
+    get:
+      operationId: getMcpRegistryRecord
+      tags: [mcp]
+      summary: Get an MCP server quarantine record
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: server_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: MCP server quarantine record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPQuarantineRecord'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/mcp/registry/{server_id}/approve:
+    post:
+      operationId: approveMcpRegistryRecord
+      tags: [mcp]
+      summary: Approve an MCP server by path id
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: server_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPRegistryApprovalRequest'
+      responses:
+        '200':
+          description: Approved MCP server record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPQuarantineRecord'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/mcp/registry/{server_id}/revoke:
+    post:
+      operationId: revokeMcpRegistryRecord
+      tags: [mcp]
+      summary: Revoke an MCP server approval
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: server_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Revoked MCP server record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPQuarantineRecord'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/mcp/scan:
+    post:
+      operationId: scanMcpServer
+      tags: [mcp]
+      summary: Scan and quarantine an MCP server or tool bundle
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPScanRequest'
+      responses:
+        '202':
+          description: MCP scan result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPScanResult'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/mcp/auth-profiles:
+    get:
+      operationId: listMcpAuthProfiles
+      tags: [mcp]
+      summary: List MCP OAuth authorization profiles
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: MCP authorization profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MCPAuthorizationProfile'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/mcp/auth-profiles/{profile_id}:
+    put:
+      operationId: putMcpAuthProfile
+      tags: [mcp]
+      summary: Create or replace an MCP OAuth authorization profile
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: profile_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPAuthorizationProfile'
+      responses:
+        '200':
+          description: MCP authorization profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPAuthorizationProfile'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/mcp/authorize-call:
+    post:
+      operationId: authorizeMcpCall
+      tags: [mcp]
+      summary: Authorize an MCP tools/call before upstream dispatch
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPAuthorizeCallRequest'
+      responses:
+        '200':
+          description: Allowed boundary record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionBoundaryRecord'
+        '403':
+          description: Denied boundary record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionBoundaryRecord'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
   /mcp/v1/capabilities:
     get:
       operationId: listMCPCapabilities
@@ -865,6 +1349,142 @@ paths:
           $ref: '#/components/responses/HelmError'
 
   # ── Sandbox Grants ─────────────────────────────────
+  /api/v1/sandbox/profiles:
+    get:
+      operationId: listSandboxProfiles
+      tags: [sandbox]
+      summary: List built-in sandbox backend profiles
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Sandbox backend profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SandboxBackendProfile'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/sandbox/grants:
+    get:
+      operationId: listSandboxGrants
+      tags: [sandbox]
+      summary: List sealed sandbox grants
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Sandbox grants
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SandboxGrant'
+        '401':
+          $ref: '#/components/responses/HelmError'
+    post:
+      operationId: createSandboxGrant
+      tags: [sandbox]
+      summary: Create a sealed sandbox grant
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                runtime: { type: string }
+                profile: { type: string }
+                image_digest: { type: string }
+                policy_epoch: { type: string }
+      responses:
+        '201':
+          description: Sandbox grant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxGrant'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/sandbox/grants/{grant_id}:
+    get:
+      operationId: getSandboxGrant
+      tags: [sandbox]
+      summary: Get a sealed sandbox grant
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: grant_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sandbox grant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxGrant'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/sandbox/grants/{grant_id}/verify:
+    post:
+      operationId: verifySandboxGrant
+      tags: [sandbox]
+      summary: Verify a sealed sandbox grant before execution
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: grant_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sandbox preflight result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxPreflightResult'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/sandbox/preflight:
+    post:
+      operationId: preflightSandboxGrant
+      tags: [sandbox]
+      summary: Preflight a sandbox grant and deny overgrant before execution
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SandboxPreflightRequest'
+      responses:
+        '200':
+          description: Sandbox preflight result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxPreflightResult'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
   /api/v1/sandbox/grants/inspect:
     get:
       operationId: inspectSandboxGrants
@@ -901,6 +1521,363 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
         '403':
+          $ref: '#/components/responses/HelmError'
+
+  # ── Identity, Authorization, Approvals ─────────────
+  /api/v1/identity/agents:
+    get:
+      operationId: listAgentIdentities
+      tags: [identity]
+      summary: List non-human identity profiles known to the boundary
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Agent identity profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AgentIdentityProfile'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/authz/health:
+    get:
+      operationId: getAuthzHealth
+      tags: [identity]
+      summary: Read ReBAC/PDP health
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Authorization health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthzHealth'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/authz/check:
+    post:
+      operationId: checkAuthz
+      tags: [identity]
+      summary: Evaluate authorization and seal a relationship snapshot
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Authorization snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthzSnapshot'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/authz/snapshots:
+    get:
+      operationId: listAuthzSnapshots
+      tags: [identity]
+      summary: List sealed authorization snapshots
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Authorization snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuthzSnapshot'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/authz/snapshots/{snapshot_id}:
+    get:
+      operationId: getAuthzSnapshot
+      tags: [identity]
+      summary: Get a sealed authorization snapshot
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: snapshot_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Authorization snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthzSnapshot'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/approvals:
+    get:
+      operationId: listApprovalCeremonies
+      tags: [identity]
+      summary: List approval ceremonies
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Approval ceremonies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalCeremony'
+        '401':
+          $ref: '#/components/responses/HelmError'
+    post:
+      operationId: createApprovalCeremony
+      tags: [identity]
+      summary: Create an approval ceremony
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalCeremony'
+      responses:
+        '201':
+          description: Approval ceremony
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalCeremony'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/approvals/{approval_id}/webauthn/challenge:
+    post:
+      operationId: createApprovalWebAuthnChallenge
+      tags: [identity]
+      summary: Create a passkey/WebAuthn approval challenge
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: approval_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                method: { type: string, default: passkey }
+                ttl_ms: { type: integer }
+      responses:
+        '201':
+          description: Approval WebAuthn challenge
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/approvals/{approval_id}/webauthn/assert:
+    post:
+      operationId: assertApprovalWebAuthnChallenge
+      tags: [identity]
+      summary: Assert a passkey/WebAuthn approval challenge
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: approval_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge_id, actor, assertion]
+              properties:
+                challenge_id: { type: string }
+                actor: { type: string }
+                assertion: { type: string }
+                receipt_id: { type: string }
+                reason: { type: string }
+      responses:
+        '200':
+          description: Approval ceremony
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalCeremony'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/approvals/{approval_id}/{action}:
+    post:
+      operationId: transitionApprovalCeremony
+      tags: [identity]
+      summary: Approve, deny, or revoke an approval ceremony
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: approval_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: action
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [approve, deny, revoke]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actor: { type: string }
+                receipt_id: { type: string }
+                reason: { type: string }
+      responses:
+        '200':
+          description: Approval ceremony
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalCeremony'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/budgets:
+    get:
+      operationId: listBudgetCeilings
+      tags: [identity]
+      summary: List budget and velocity ceilings
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Budget ceilings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BudgetCeiling'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/budgets/{budget_id}:
+    put:
+      operationId: putBudgetCeiling
+      tags: [identity]
+      summary: Create or replace a budget ceiling
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: budget_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BudgetCeiling'
+      responses:
+        '200':
+          description: Budget ceiling
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetCeiling'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  # ── Telemetry and Coexistence ──────────────────────
+  /api/v1/coexistence/capabilities:
+    get:
+      operationId: getCoexistenceCapabilities
+      tags: [telemetry]
+      summary: Read scanner/gateway coexistence capability manifest
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Coexistence capability manifest
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoexistenceCapabilityManifest'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/telemetry/otel/config:
+    get:
+      operationId: getTelemetryOTelConfig
+      tags: [telemetry]
+      summary: Read non-authoritative OTel GenAI export configuration
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: OTel export configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryOTelConfig'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/telemetry/export:
+    post:
+      operationId: exportTelemetry
+      tags: [telemetry]
+      summary: Export a non-authoritative telemetry event
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryExportRequest'
+      responses:
+        '202':
+          description: Telemetry export result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryExportResult'
+        '401':
           $ref: '#/components/responses/HelmError'
 
   # ── System ──────────────────────────────────────────
@@ -1606,6 +2583,318 @@ components:
         declared_at: { type: string, format: date-time }
         policy_epoch: { type: string }
         grant_hash: { type: string }
+
+    BoundaryStatus:
+      type: object
+      properties:
+        version: { type: string }
+        status: { type: string }
+        receipt_store_ready: { type: boolean }
+        signer_ready: { type: boolean }
+        open_approvals: { type: integer }
+        quarantined_mcp_servers: { type: integer }
+        last_checkpoint_id: { type: string }
+        checked_at: { type: string, format: date-time }
+
+    BoundaryCapabilitySummary:
+      type: object
+      properties:
+        capability_id: { type: string }
+        category: { type: string }
+        status: { type: string }
+        authority: { type: string }
+        public_routes:
+          type: array
+          items: { type: string }
+        cli_commands:
+          type: array
+          items: { type: string }
+        receipt_bindings:
+          type: array
+          items: { type: string }
+        conformance_level: { type: string }
+
+    ExecutionBoundaryRecord:
+      type: object
+      properties:
+        record_id: { type: string }
+        verdict:
+          type: string
+          enum: [ALLOW, DENY, ESCALATE]
+        reason_code: { type: string }
+        tool_name: { type: string }
+        args_hash: { type: string }
+        policy_epoch: { type: string }
+        mcp_server_id: { type: string }
+        oauth_resource: { type: string }
+        oauth_scopes:
+          type: array
+          items: { type: string }
+        sandbox_grant_hash: { type: string }
+        authz_snapshot_hash: { type: string }
+        approval_receipt_id: { type: string }
+        receipt_id: { type: string }
+        record_hash: { type: string }
+        created_at: { type: string, format: date-time }
+
+    BoundaryRecordVerification:
+      type: object
+      properties:
+        record_id: { type: string }
+        record_hash: { type: string }
+        receipt_id: { type: string }
+        verified: { type: boolean }
+        errors:
+          type: array
+          items: { type: string }
+        checked_at: { type: string, format: date-time }
+
+    BoundaryCheckpoint:
+      type: object
+      properties:
+        checkpoint_id: { type: string }
+        sequence: { type: integer, format: int64 }
+        previous_checkpoint_hash: { type: string }
+        receipt_count: { type: integer }
+        record_count: { type: integer }
+        root_hash: { type: string }
+        checkpoint_hash: { type: string }
+        created_at: { type: string, format: date-time }
+
+    EvidenceEnvelopeVerification:
+      type: object
+      properties:
+        manifest_id: { type: string }
+        manifest_hash: { type: string }
+        native_evidence_hash: { type: string }
+        verified: { type: boolean }
+        authoritative: { type: boolean }
+        errors:
+          type: array
+          items: { type: string }
+        checked_at: { type: string, format: date-time }
+
+    MCPScanRequest:
+      type: object
+      required: [server_id]
+      properties:
+        server_id: { type: string }
+        name: { type: string }
+        transport: { type: string }
+        endpoint: { type: string }
+        tool_names:
+          type: array
+          items: { type: string }
+        manifest:
+          type: object
+          additionalProperties: true
+
+    MCPScanResult:
+      type: object
+      properties:
+        server_id: { type: string }
+        risk: { type: string }
+        state: { type: string }
+        tool_count: { type: integer }
+        findings:
+          type: array
+          items: { type: string }
+        recommended_action: { type: string }
+        quarantine_record_id: { type: string }
+        requires_approval: { type: boolean }
+        schema_pin_required: { type: boolean }
+        authorization_needed: { type: boolean }
+        scanned_at: { type: string, format: date-time }
+
+    MCPAuthorizationProfile:
+      type: object
+      properties:
+        profile_id: { type: string }
+        protocol_version: { type: string }
+        resource: { type: string }
+        authorization_servers:
+          type: array
+          items: { type: string }
+        scopes_supported:
+          type: array
+          items: { type: string }
+        tool_scopes:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+        required_audience: { type: string }
+        stale_after: { type: string, format: date-time }
+        profile_hash: { type: string }
+
+    MCPAuthorizeCallRequest:
+      type: object
+      required: [server_id, tool_name]
+      properties:
+        server_id: { type: string }
+        tool_name: { type: string }
+        args_hash: { type: string }
+        granted_scopes:
+          type: array
+          items: { type: string }
+        pinned_schema_hash: { type: string }
+        oauth_resource: { type: string }
+        receipt_id: { type: string }
+
+    SandboxPreflightRequest:
+      type: object
+      properties:
+        runtime: { type: string }
+        profile: { type: string }
+        image_digest: { type: string }
+        policy_epoch: { type: string }
+        requested_grant:
+          $ref: '#/components/schemas/SandboxGrant'
+        expected_grant_hash: { type: string }
+
+    SandboxPreflightResult:
+      type: object
+      properties:
+        verdict:
+          type: string
+          enum: [ALLOW, DENY, ESCALATE]
+        reason_code: { type: string }
+        grant_id: { type: string }
+        grant_hash: { type: string }
+        dispatch_ready: { type: boolean }
+        findings:
+          type: array
+          items: { type: string }
+        checked_at: { type: string, format: date-time }
+
+    AuthzSnapshot:
+      type: object
+      properties:
+        snapshot_id: { type: string }
+        model_id: { type: string }
+        relationship_hash: { type: string }
+        tuple_count: { type: integer }
+        resolver: { type: string }
+        stale: { type: boolean }
+        snapshot_token: { type: string }
+        checked_at: { type: string, format: date-time }
+        snapshot_hash: { type: string }
+
+    AuthzHealth:
+      type: object
+      properties:
+        status: { type: string }
+        resolver: { type: string }
+        model_id: { type: string }
+        relationship_hash: { type: string }
+        checked_at: { type: string, format: date-time }
+
+    ApprovalCeremony:
+      type: object
+      properties:
+        approval_id: { type: string }
+        subject: { type: string }
+        action: { type: string }
+        state:
+          type: string
+          enum: [pending, approved, denied, revoked, expired]
+        requested_by: { type: string }
+        approvers:
+          type: array
+          items: { type: string }
+        quorum: { type: integer }
+        timelock_until: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        break_glass: { type: boolean }
+        reason: { type: string }
+        receipt_id: { type: string }
+        ceremony_hash: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    AgentIdentityProfile:
+      type: object
+      properties:
+        agent_id: { type: string }
+        identity_type: { type: string }
+        subject: { type: string }
+        issuer: { type: string }
+        jwks_uri: { type: string }
+        spiffe_id: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        anonymous_dev_mode: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    BudgetCeiling:
+      type: object
+      properties:
+        budget_id: { type: string }
+        subject: { type: string }
+        window: { type: string }
+        max_tool_calls: { type: integer }
+        max_spend_minor: { type: integer, format: int64 }
+        max_egress_bytes: { type: integer, format: int64 }
+        max_write_ops: { type: integer }
+        approval_required_after: { type: integer }
+        policy_epoch: { type: string }
+
+    CoexistenceCapabilityManifest:
+      type: object
+      properties:
+        manifest_id: { type: string }
+        authority: { type: string }
+        boundary_role: { type: string }
+        supported_inputs:
+          type: array
+          items: { type: string }
+        export_surfaces:
+          type: array
+          items: { type: string }
+        receipt_bindings:
+          type: array
+          items: { type: string }
+        generated_at: { type: string, format: date-time }
+
+    TelemetryOTelConfig:
+      type: object
+      properties:
+        service_name: { type: string }
+        signal_type: { type: string }
+        authoritative: { type: boolean }
+        span_attributes:
+          type: object
+          additionalProperties: { type: string }
+        exported_signals:
+          type: array
+          items: { type: string }
+
+    TelemetryExportRequest:
+      type: object
+      properties:
+        format: { type: string }
+        receipt_id: { type: string }
+        record_hash: { type: string }
+        policy_epoch: { type: string }
+        verdict: { type: string }
+        reason_code: { type: string }
+        sandbox_grant_hash: { type: string }
+        authz_snapshot_hash: { type: string }
+        attributes:
+          type: object
+          additionalProperties: { type: string }
+
+    TelemetryExportResult:
+      type: object
+      properties:
+        export_id: { type: string }
+        format: { type: string }
+        authoritative: { type: boolean }
+        attributes:
+          type: object
+          additionalProperties: { type: string }
+        exported_at: { type: string, format: date-time }
 
     # ── PDP / EffectBoundary Wire Types ────────────────
     Effect:

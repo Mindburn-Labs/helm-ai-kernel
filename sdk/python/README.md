@@ -1,4 +1,4 @@
-# HELM SDK — Python
+# HELM SDK - Python
 
 Typed Python client for the retained HELM kernel API.
 
@@ -8,7 +8,7 @@ Typed Python client for the retained HELM kernel API.
 pip install helm-sdk
 ```
 
-Published package version is `0.4.0` and is declared in `pyproject.toml`.
+Package metadata declares version `0.4.0` in `pyproject.toml`.
 
 ## Local Development
 
@@ -19,7 +19,9 @@ pytest -v --tb=short
 
 ## Generated Sources
 
-`helm_sdk/types_gen.py` is generated from `api/openapi/helm.openapi.yaml`. The Python SDK does not currently ship generated protobuf bindings.
+`helm_sdk/types_gen.py` is generated from `api/openapi/helm.openapi.yaml`.
+Generated protobuf modules live under `helm_sdk/generated/` when codegen has
+been run.
 
 ## Usage
 
@@ -42,7 +44,14 @@ except HelmApiError as err:
 
 ## Execution Boundary Methods
 
-The client includes typed helpers for the May 2026 execution-boundary surfaces: `create_evidence_envelope_manifest`, `list_negative_conformance_vectors`, `list_mcp_registry`, `discover_mcp_server`, `approve_mcp_server`, and `inspect_sandbox_grants`. External evidence envelopes remain compatibility wrappers; HELM-native EvidencePack roots stay authoritative.
+The client includes helpers for the May 2026 execution-boundary surfaces:
+evidence envelope manifests, boundary records and checkpoints, conformance
+vectors, MCP quarantine and authorization profiles, sandbox profiles and
+grants, authz snapshots, approvals, budgets, telemetry export, and coexistence
+capabilities.
+
+External evidence envelopes remain compatibility wrappers; HELM-native
+EvidencePack roots stay authoritative.
 
 ## Release Notes
 

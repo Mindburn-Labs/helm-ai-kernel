@@ -72,16 +72,24 @@ const NAV_GROUPS = [
       { id: "actions", label: "Actions", icon: Workflow },
       { id: "approvals", label: "Approvals", icon: FileCheck2 },
       { id: "policies", label: "Policies", icon: FileKey2 },
+      { id: "boundary", label: "Boundary", icon: ShieldCheck },
+      { id: "mcp", label: "MCP", icon: GitBranch },
+      { id: "sandbox", label: "Sandbox", icon: LockKeyhole },
+      { id: "authz", label: "Authz", icon: KeyRound },
+      { id: "budgets", label: "Budgets", icon: Database },
       { id: "connectors", label: "Connectors", icon: GitBranch },
       { id: "receipts", label: "Receipts", icon: Archive },
       { id: "evidence", label: "Evidence", icon: FileArchive },
       { id: "replay", label: "Replay", icon: RotateCcw },
+      { id: "conformance", label: "Conformance", icon: ListChecks },
       { id: "audit", label: "Audit", icon: Braces },
     ],
   },
   {
     title: "System",
     items: [
+      { id: "telemetry", label: "Telemetry", icon: Activity },
+      { id: "coexistence", label: "Coexistence", icon: Workflow },
       { id: "developer", label: "Developer", icon: Terminal },
       { id: "settings", label: "Settings", icon: Settings },
     ],
@@ -91,11 +99,21 @@ const NAV_GROUPS = [
 const LIFECYCLE = ["Intent", "Policy", "Decision", "Receipt", "Evidence"] as const;
 
 const ENDPOINT_SURFACES: Record<string, string> = {
+  agents: "/api/v1/identity/agents",
+  approvals: "/api/v1/approvals",
+  boundary: "/api/v1/boundary/records",
+  mcp: "/api/v1/mcp/registry",
+  sandbox: "/api/v1/sandbox/grants",
+  authz: "/api/v1/authz/snapshots",
+  budgets: "/api/v1/budgets",
   connectors: "/mcp/v1/capabilities",
-  evidence: "/api/v1/evidence/soc2",
+  evidence: "/api/v1/evidence/envelopes",
+  conformance: "/api/v1/conformance/reports",
+  telemetry: "/api/v1/telemetry/otel/config",
+  coexistence: "/api/v1/coexistence/capabilities",
 };
 
-const CONSOLE_SURFACES = new Set(["overview", "agents", "actions", "approvals", "policies", "replay", "audit", "developer", "settings"]);
+const CONSOLE_SURFACES = new Set(["overview", "actions", "policies", "replay", "audit", "developer", "settings"]);
 type ConsoleAccessState = "unknown" | "authorized" | "unauthorized";
 type ReceiptStreamState = "connecting" | "live" | "disconnected" | "unauthorized";
 
@@ -532,10 +550,17 @@ function Sidebar({
   readonly onActiveChange: (id: string) => void;
 }) {
   const countById: Record<string, number | undefined> = {
+    agents: counts?.mcp_tools,
     approvals: counts?.pending_approvals,
+    boundary: counts?.receipts,
+    mcp: counts?.mcp_tools,
+    sandbox: counts?.receipts,
+    authz: counts?.receipts,
+    budgets: counts?.pending_approvals,
     receipts: counts?.receipts,
     evidence: counts?.receipts,
     connectors: counts?.mcp_tools,
+    conformance: counts?.receipts,
   };
 
   return (
@@ -918,10 +943,18 @@ function surfaceTitle(active: string): string {
     actions: "Actions from receipts",
     approvals: "Approval queue",
     policies: "Policy runtime",
+    boundary: "Boundary records",
+    mcp: "MCP quarantine",
+    sandbox: "Sandbox grants",
+    authz: "Authorization snapshots",
+    budgets: "Budget ceilings",
     connectors: "MCP capabilities",
-    evidence: "Evidence export",
+    evidence: "Evidence envelopes",
     replay: "Replay timeline",
+    conformance: "Conformance reports",
     audit: "Audit from receipts",
+    telemetry: "Telemetry exports",
+    coexistence: "Coexistence manifest",
     developer: "Developer contracts",
     settings: "Runtime settings",
   };
@@ -940,6 +973,14 @@ function SurfaceSummary({ label, value }: { readonly label: string; readonly val
 function summaryFromEndpoint(active: string, endpoint: { readonly status: number; readonly ok: boolean; readonly data: unknown } | null): Record<string, unknown> | null {
   if (!endpoint) return null;
   if (!endpoint.ok) return { http_status: endpoint.status };
+  if (Array.isArray(endpoint.data)) {
+    const first = endpoint.data.find(isRecord);
+    return {
+      http_status: endpoint.status,
+      records: endpoint.data.length,
+      sample_keys: first ? Object.keys(first).slice(0, 8) : [],
+    };
+  }
   if (active === "connectors" && isRecord(endpoint.data)) {
     return {
       server_name: endpoint.data.server_name,
@@ -957,13 +998,39 @@ function summaryFromEndpoint(active: string, endpoint: { readonly status: number
   if (active === "replay" && isRecord(endpoint.data)) {
     return endpoint.data;
   }
+  if (isRecord(endpoint.data)) {
+    return {
+      http_status: endpoint.status,
+      keys: Object.keys(endpoint.data).length,
+      status: endpoint.data.status ?? endpoint.data.verdict ?? endpoint.data.authority ?? endpoint.data.boundary_role,
+    };
+  }
   return { http_status: endpoint.status };
 }
 
 function recordsFromEndpoint(active: string, data: unknown): readonly Record<string, unknown>[] {
+  if (Array.isArray(data)) return data.filter(isRecord);
   if (!isRecord(data)) return [];
   if (active === "connectors" && Array.isArray(data.tools)) {
     return data.tools.filter(isRecord);
+  }
+  const collectionKeys = [
+    "records",
+    "receipts",
+    "capabilities",
+    "tools",
+    "reports",
+    "snapshots",
+    "approvals",
+    "grants",
+    "budgets",
+    "events",
+    "nodes",
+    "items",
+  ];
+  for (const key of collectionKeys) {
+    const value = data[key];
+    if (Array.isArray(value)) return value.filter(isRecord);
   }
   if (active === "evidence") {
     return Object.entries(data).map(([key, value]) => ({ key, value: formatCellValue(value) }));

@@ -1,21 +1,29 @@
-# Starters
-<!-- docs-generated: surface-readme -->
+# Provider Starters
 
-## Purpose
+These are example-only starter layouts. They show the HELM config shape and CI
+smoke commands for provider profiles; they do not certify provider SDKs or
+claim full framework ownership.
 
-Active example surface for the `helm-oss` project.
+## Starter Matrix
 
-## Canonical Interface
+| Starter | Config | Smoke command |
+| --- | --- | --- |
+| Anthropic | `anthropic/helm.yaml` | `bash examples/starters/anthropic/ci-smoke.sh` |
+| Codex | `codex/helm.yaml` | `bash examples/starters/codex/ci-smoke.sh` |
+| Google ADK / A2A | `google/helm.yaml` | `bash examples/starters/google/ci-smoke.sh` |
+| OpenAI | `openai/helm.yaml` | `bash examples/starters/openai/ci-smoke.sh` |
 
-- Source path: `examples/starters`
-- Surface type: `example`
-- Package/source identity: `starters`
-- Coverage record: `docs/documentation-coverage.csv`
+## Validation
 
-## Local Commands
+Build the local binary first, then run the smoke scripts:
 
-- `make docs-coverage` from the repository root verifies coverage for this surface.
+```bash
+make build
+bash examples/starters/anthropic/ci-smoke.sh
+bash examples/starters/codex/ci-smoke.sh
+bash examples/starters/google/ci-smoke.sh
+bash examples/starters/openai/ci-smoke.sh
+```
 
-## Documentation Contract
-
-Generated surface README. This file is a local ownership and validation contract, not the primary docs information architecture entry point. It covers the active example surface. Keep it aligned with the source path above and update `docs/documentation-coverage.csv` when ownership, interfaces, validation, or lifecycle status changes.
+The smoke scripts check that `helm init <profile>` creates `helm.yaml` and
+`.env` in a temporary project and that `helm doctor` can inspect it.

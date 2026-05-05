@@ -7,24 +7,23 @@ Shows HELM integration with the Go SDK.
 - HELM running at `http://localhost:8080` (`docker compose up -d`)
 - Go 1.25+
 
-## Run
+## Source Example
 
-```bash
-go run main.go
-```
+`main.go` is a small integration source file that imports
+`github.com/Mindburn-Labs/helm-oss/sdk/go/client`. This directory does not
+carry its own `go.mod`; use it as source material for a service module or run
+the SDK package gate below.
 
 ## Expected Output
 
-```
-=== Chat Completions ===
-Denied: DENY_TOOL_NOT_FOUND — Tool not found
+The example prints sections for chat completions, evidence export,
+conformance, and health. The exact verdict, reason code, byte count, and
+version depend on the policy and HELM server you run locally.
 
-=== Evidence ===
-Exported: 1234 bytes
+## Validation
 
-=== Conformance ===
-Verdict: PASS Gates: 12 Failed: 0
+The Go SDK package is validated from the repository root with:
 
-=== Health ===
-Status: map[status:ok version:0.1.0]
+```bash
+make test-sdk-go-standalone
 ```

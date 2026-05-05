@@ -7,8 +7,6 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Use this page when you need the public `helm-oss/architecture` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
-
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
@@ -61,8 +59,9 @@ The policy boundary evaluates requests before tool dispatch. In the OSS kernel t
 - policy evaluation
 - deterministic allow or deny decisions
 - receipt generation for the decision outcome
+- boundary records, checkpoints, approval ceremonies, MCP quarantine state, authz snapshots, sandbox grants, and evidence envelope manifests
 
-The core implementation lives under `core/pkg/guardian/`, `core/pkg/manifest/`, `core/pkg/policy/`, and related contract packages.
+The core implementation lives under `core/pkg/guardian/`, `core/pkg/manifest/`, `core/pkg/policy/`, `core/pkg/boundary/`, and related contract packages. `helm serve` stores the boundary surface snapshot in the runtime database; local CLI-only workflows use the same contracts through the file-backed boundary registry.
 
 ## 2. Execution and Proxy Surface
 
@@ -71,8 +70,9 @@ The kernel exposes:
 - a Go CLI in `core/cmd/helm`
 - an HTTP API and OpenAI-compatible proxy surface
 - an MCP server surface for governed tool access
+- route-backed Console workspaces for boundary records, MCP registry/auth profiles, sandbox grants, approvals, budgets, conformance, evidence envelopes, telemetry exports, and coexistence manifests
 
-The proxy path is the easiest way to insert HELM into an existing client without changing application control flow.
+The proxy path is the easiest way to insert HELM into an existing client without changing application control flow. Framework adapters and coexistence manifests must call HELM before dispatch; passive tracing is non-authoritative.
 
 ## 3. Receipts and Evidence
 
@@ -82,6 +82,7 @@ Every retained proof surface is built around durable, verifiable records:
 - proof graph data structures
 - exported evidence bundles
 - offline verification
+- tamper-evident boundary checkpoints and optional DSSE, JWS, in-toto, SLSA, and Sigstore envelope wrappers over HELM-native roots
 
 The export and verify paths are implemented in `core/pkg/evidence*`, `core/pkg/proofgraph/`, `core/pkg/replay/`, and supporting crypto packages.
 
@@ -105,7 +106,7 @@ The public client surface is:
 - Rust SDK in `sdk/rust`
 - Java SDK in `sdk/java`
 
-No bundled interactive client, embedded presentation layer, static viewer, or generated browser-rendered report is shipped from this repository. Future product clients should integrate through the CLI JSON output, OpenAPI contract, SDKs, evidence bundles, and conformance reports.
+The repository ships one bundled interactive client: `apps/console`, the HELM OSS Console. It is a self-hostable operator surface over the kernel contracts, CLI/API JSON output, SDKs, evidence bundles, and conformance reports. No second browser UI, hosted SaaS control plane, static viewer, Node CLI wrapper, or generated browser-rendered report is shipped from this repository.
 
 ## Directory Layout
 
@@ -120,4 +121,4 @@ No bundled interactive client, embedded presentation layer, static viewer, or ge
 
 ## Non-Goals of the OSS Repo
 
-This repository does not present a hosted SaaS control plane, a product UI surface, a bundled viewer, or private operational material. The OSS shape is a kernel, its CLI, its contracts, and its SDKs.
+This repository does not present a hosted SaaS control plane, a second product UI surface, a bundled viewer, or private operational material. The OSS shape is a kernel, its CLI, its contracts, its SDKs, and the self-hostable `apps/console` operator surface.

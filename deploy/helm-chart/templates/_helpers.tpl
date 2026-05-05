@@ -82,6 +82,17 @@ Return the signing key secret name
 {{- end }}
 
 {{/*
+Return the runtime auth secret name
+*/}}
+{{- define "helm-firewall.authSecretName" -}}
+{{- if .Values.helm.auth.existingSecret }}
+{{- .Values.helm.auth.existingSecret }}
+{{- else }}
+{{- printf "%s-auth" (include "helm-firewall.fullname" .) }}
+{{- end }}
+{{- end }}
+
+{{/*
 Return the policy ConfigMap name
 */}}
 {{- define "helm-firewall.policyConfigMapName" -}}

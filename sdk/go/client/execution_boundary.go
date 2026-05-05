@@ -21,6 +21,8 @@ type EvidenceEnvelopeManifest struct {
 	NativeAuthority    bool      `json:"native_authority"`
 	Subject            string    `json:"subject,omitempty"`
 	StatementHash      string    `json:"statement_hash,omitempty"`
+	PayloadType        string    `json:"payload_type,omitempty"`
+	PayloadHash        string    `json:"payload_hash,omitempty"`
 	Experimental       bool      `json:"experimental,omitempty"`
 	CreatedAt          time.Time `json:"created_at"`
 	ManifestHash       string    `json:"manifest_hash,omitempty"`
@@ -98,15 +100,129 @@ type SandboxGrant struct {
 	Metadata           map[string]interface{} `json:"metadata,omitempty"`
 }
 
+type SurfaceRecord map[string]any
+type BoundaryStatus map[string]any
+type BoundaryCapabilitySummary map[string]any
+type ExecutionBoundaryRecord map[string]any
+type BoundaryRecordVerification map[string]any
+type BoundaryCheckpoint map[string]any
+type EvidenceEnvelopeVerification map[string]any
+type EvidenceEnvelopePayload map[string]any
+type MCPAuthorizationProfile map[string]any
+type MCPScanRequest map[string]any
+type MCPScanResult map[string]any
+type MCPAuthorizeCallRequest map[string]any
+type SandboxPreflightRequest map[string]any
+type SandboxPreflightResult map[string]any
+type AuthzSnapshot map[string]any
+type ApprovalCeremony map[string]any
+type ApprovalWebAuthnChallenge map[string]any
+type ApprovalWebAuthnAssertion map[string]any
+type BudgetCeiling map[string]any
+type AgentIdentityProfile map[string]any
+type AuthzHealth map[string]any
+type TelemetryOTelConfig map[string]any
+type TelemetryExportRequest map[string]any
+type TelemetryExportResult map[string]any
+type CoexistenceCapabilityManifest map[string]any
+
 func (c *HelmClient) CreateEvidenceEnvelopeManifest(req EvidenceEnvelopeExportRequest) (*EvidenceEnvelopeManifest, error) {
 	var out EvidenceEnvelopeManifest
 	err := c.do("POST", "/api/v1/evidence/envelopes", req, &out)
 	return &out, err
 }
 
+func (c *HelmClient) ListEvidenceEnvelopeManifests() ([]EvidenceEnvelopeManifest, error) {
+	var out []EvidenceEnvelopeManifest
+	err := c.do("GET", "/api/v1/evidence/envelopes", nil, &out)
+	return out, err
+}
+
+func (c *HelmClient) GetEvidenceEnvelopeManifest(manifestID string) (*EvidenceEnvelopeManifest, error) {
+	var out EvidenceEnvelopeManifest
+	err := c.do("GET", "/api/v1/evidence/envelopes/"+url.PathEscape(manifestID), nil, &out)
+	return &out, err
+}
+
+func (c *HelmClient) VerifyEvidenceEnvelopeManifest(manifestID string) (*EvidenceEnvelopeVerification, error) {
+	var out EvidenceEnvelopeVerification
+	err := c.do("POST", "/api/v1/evidence/envelopes/"+url.PathEscape(manifestID)+"/verify", nil, &out)
+	return &out, err
+}
+
+func (c *HelmClient) GetEvidenceEnvelopePayload(manifestID string) (*EvidenceEnvelopePayload, error) {
+	var out EvidenceEnvelopePayload
+	err := c.do("GET", "/api/v1/evidence/envelopes/"+url.PathEscape(manifestID)+"/payload", nil, &out)
+	return &out, err
+}
+
+func (c *HelmClient) GetBoundaryStatus() (*BoundaryStatus, error) {
+	var out BoundaryStatus
+	err := c.do("GET", "/api/v1/boundary/status", nil, &out)
+	return &out, err
+}
+
+func (c *HelmClient) ListBoundaryCapabilities() ([]BoundaryCapabilitySummary, error) {
+	var out []BoundaryCapabilitySummary
+	err := c.do("GET", "/api/v1/boundary/capabilities", nil, &out)
+	return out, err
+}
+
+func (c *HelmClient) ListBoundaryRecords(query url.Values) ([]ExecutionBoundaryRecord, error) {
+	path := "/api/v1/boundary/records"
+	if query != nil && query.Encode() != "" {
+		path += "?" + query.Encode()
+	}
+	var out []ExecutionBoundaryRecord
+	err := c.do("GET", path, nil, &out)
+	return out, err
+}
+
+func (c *HelmClient) GetBoundaryRecord(recordID string) (*ExecutionBoundaryRecord, error) {
+	var out ExecutionBoundaryRecord
+	err := c.do("GET", "/api/v1/boundary/records/"+url.PathEscape(recordID), nil, &out)
+	return &out, err
+}
+
+func (c *HelmClient) VerifyBoundaryRecord(recordID string) (*BoundaryRecordVerification, error) {
+	var out BoundaryRecordVerification
+	err := c.do("POST", "/api/v1/boundary/records/"+url.PathEscape(recordID)+"/verify", nil, &out)
+	return &out, err
+}
+
+func (c *HelmClient) ListBoundaryCheckpoints() ([]BoundaryCheckpoint, error) {
+	var out []BoundaryCheckpoint
+	err := c.do("GET", "/api/v1/boundary/checkpoints", nil, &out)
+	return out, err
+}
+
+func (c *HelmClient) CreateBoundaryCheckpoint() (*BoundaryCheckpoint, error) {
+	var out BoundaryCheckpoint
+	err := c.do("POST", "/api/v1/boundary/checkpoints", nil, &out)
+	return &out, err
+}
+
+func (c *HelmClient) VerifyBoundaryCheckpoint(checkpointID string) (*SurfaceRecord, error) {
+	var out SurfaceRecord
+	err := c.do("POST", "/api/v1/boundary/checkpoints/"+url.PathEscape(checkpointID)+"/verify", nil, &out)
+	return &out, err
+}
+
 func (c *HelmClient) ListNegativeConformanceVectors() ([]NegativeBoundaryVector, error) {
 	var out []NegativeBoundaryVector
 	err := c.do("GET", "/api/v1/conformance/negative", nil, &out)
+	return out, err
+}
+
+func (c *HelmClient) ListConformanceReports() ([]ConformanceResult, error) {
+	var out []ConformanceResult
+	err := c.do("GET", "/api/v1/conformance/reports", nil, &out)
+	return out, err
+}
+
+func (c *HelmClient) ListConformanceVectors() ([]NegativeBoundaryVector, error) {
+	var out []NegativeBoundaryVector
+	err := c.do("GET", "/api/v1/conformance/vectors", nil, &out)
 	return out, err
 }
 
@@ -128,10 +244,88 @@ func (c *HelmClient) ApproveMCPServer(req MCPRegistryApprovalRequest) (*MCPQuara
 	return &out, err
 }
 
+func (c *HelmClient) GetMCPRegistryRecord(serverID string) (*MCPQuarantineRecord, error) {
+	var out MCPQuarantineRecord
+	err := c.do("GET", "/api/v1/mcp/registry/"+url.PathEscape(serverID), nil, &out)
+	return &out, err
+}
+
+func (c *HelmClient) ApproveMCPRegistryRecord(serverID string, req MCPRegistryApprovalRequest) (*MCPQuarantineRecord, error) {
+	var out MCPQuarantineRecord
+	err := c.do("POST", "/api/v1/mcp/registry/"+url.PathEscape(serverID)+"/approve", req, &out)
+	return &out, err
+}
+
+func (c *HelmClient) RevokeMCPRegistryRecord(serverID, reason string) (*MCPQuarantineRecord, error) {
+	var out MCPQuarantineRecord
+	err := c.do("POST", "/api/v1/mcp/registry/"+url.PathEscape(serverID)+"/revoke", map[string]string{"reason": reason}, &out)
+	return &out, err
+}
+
+func (c *HelmClient) ScanMCPServer(req MCPScanRequest) (*MCPScanResult, error) {
+	var out MCPScanResult
+	err := c.do("POST", "/api/v1/mcp/scan", req, &out)
+	return &out, err
+}
+
+func (c *HelmClient) ListMCPAuthProfiles() ([]MCPAuthorizationProfile, error) {
+	var out []MCPAuthorizationProfile
+	err := c.do("GET", "/api/v1/mcp/auth-profiles", nil, &out)
+	return out, err
+}
+
+func (c *HelmClient) PutMCPAuthProfile(profileID string, profile MCPAuthorizationProfile) (*MCPAuthorizationProfile, error) {
+	var out MCPAuthorizationProfile
+	err := c.do("PUT", "/api/v1/mcp/auth-profiles/"+url.PathEscape(profileID), profile, &out)
+	return &out, err
+}
+
+func (c *HelmClient) AuthorizeMCPCall(req MCPAuthorizeCallRequest) (*ExecutionBoundaryRecord, error) {
+	var out ExecutionBoundaryRecord
+	err := c.do("POST", "/api/v1/mcp/authorize-call", req, &out)
+	return &out, err
+}
+
 func (c *HelmClient) ListSandboxBackendProfiles() ([]SandboxBackendProfile, error) {
 	var out []SandboxBackendProfile
 	err := c.do("GET", "/api/v1/sandbox/grants/inspect", nil, &out)
 	return out, err
+}
+
+func (c *HelmClient) ListSandboxProfiles() ([]SandboxBackendProfile, error) {
+	var out []SandboxBackendProfile
+	err := c.do("GET", "/api/v1/sandbox/profiles", nil, &out)
+	return out, err
+}
+
+func (c *HelmClient) ListSandboxGrants() ([]SandboxGrant, error) {
+	var out []SandboxGrant
+	err := c.do("GET", "/api/v1/sandbox/grants", nil, &out)
+	return out, err
+}
+
+func (c *HelmClient) CreateSandboxGrant(req SurfaceRecord) (*SandboxGrant, error) {
+	var out SandboxGrant
+	err := c.do("POST", "/api/v1/sandbox/grants", req, &out)
+	return &out, err
+}
+
+func (c *HelmClient) GetSandboxGrant(grantID string) (*SandboxGrant, error) {
+	var out SandboxGrant
+	err := c.do("GET", "/api/v1/sandbox/grants/"+url.PathEscape(grantID), nil, &out)
+	return &out, err
+}
+
+func (c *HelmClient) VerifySandboxGrant(grantID string) (*SandboxPreflightResult, error) {
+	var out SandboxPreflightResult
+	err := c.do("POST", "/api/v1/sandbox/grants/"+url.PathEscape(grantID)+"/verify", nil, &out)
+	return &out, err
+}
+
+func (c *HelmClient) PreflightSandboxGrant(req SandboxPreflightRequest) (*SandboxPreflightResult, error) {
+	var out SandboxPreflightResult
+	err := c.do("POST", "/api/v1/sandbox/preflight", req, &out)
+	return &out, err
 }
 
 func (c *HelmClient) InspectSandboxGrant(runtimeName, profile, policyEpoch string) (*SandboxGrant, error) {
@@ -145,5 +339,95 @@ func (c *HelmClient) InspectSandboxGrant(runtimeName, profile, policyEpoch strin
 	}
 	var out SandboxGrant
 	err := c.do("GET", fmt.Sprintf("/api/v1/sandbox/grants/inspect?%s", q.Encode()), nil, &out)
+	return &out, err
+}
+
+func (c *HelmClient) ListAgentIdentities() ([]AgentIdentityProfile, error) {
+	var out []AgentIdentityProfile
+	err := c.do("GET", "/api/v1/identity/agents", nil, &out)
+	return out, err
+}
+
+func (c *HelmClient) GetAuthzHealth() (*AuthzHealth, error) {
+	var out AuthzHealth
+	err := c.do("GET", "/api/v1/authz/health", nil, &out)
+	return &out, err
+}
+
+func (c *HelmClient) CheckAuthz(req SurfaceRecord) (*AuthzSnapshot, error) {
+	var out AuthzSnapshot
+	err := c.do("POST", "/api/v1/authz/check", req, &out)
+	return &out, err
+}
+
+func (c *HelmClient) ListAuthzSnapshots() ([]AuthzSnapshot, error) {
+	var out []AuthzSnapshot
+	err := c.do("GET", "/api/v1/authz/snapshots", nil, &out)
+	return out, err
+}
+
+func (c *HelmClient) GetAuthzSnapshot(snapshotID string) (*AuthzSnapshot, error) {
+	var out AuthzSnapshot
+	err := c.do("GET", "/api/v1/authz/snapshots/"+url.PathEscape(snapshotID), nil, &out)
+	return &out, err
+}
+
+func (c *HelmClient) ListApprovalCeremonies() ([]ApprovalCeremony, error) {
+	var out []ApprovalCeremony
+	err := c.do("GET", "/api/v1/approvals", nil, &out)
+	return out, err
+}
+
+func (c *HelmClient) CreateApprovalCeremony(req ApprovalCeremony) (*ApprovalCeremony, error) {
+	var out ApprovalCeremony
+	err := c.do("POST", "/api/v1/approvals", req, &out)
+	return &out, err
+}
+
+func (c *HelmClient) TransitionApprovalCeremony(approvalID, action string, req SurfaceRecord) (*ApprovalCeremony, error) {
+	var out ApprovalCeremony
+	err := c.do("POST", "/api/v1/approvals/"+url.PathEscape(approvalID)+"/"+url.PathEscape(action), req, &out)
+	return &out, err
+}
+
+func (c *HelmClient) CreateApprovalWebAuthnChallenge(approvalID string, req SurfaceRecord) (*ApprovalWebAuthnChallenge, error) {
+	var out ApprovalWebAuthnChallenge
+	err := c.do("POST", "/api/v1/approvals/"+url.PathEscape(approvalID)+"/webauthn/challenge", req, &out)
+	return &out, err
+}
+
+func (c *HelmClient) AssertApprovalWebAuthnChallenge(approvalID string, req ApprovalWebAuthnAssertion) (*ApprovalCeremony, error) {
+	var out ApprovalCeremony
+	err := c.do("POST", "/api/v1/approvals/"+url.PathEscape(approvalID)+"/webauthn/assert", req, &out)
+	return &out, err
+}
+
+func (c *HelmClient) ListBudgetCeilings() ([]BudgetCeiling, error) {
+	var out []BudgetCeiling
+	err := c.do("GET", "/api/v1/budgets", nil, &out)
+	return out, err
+}
+
+func (c *HelmClient) PutBudgetCeiling(budgetID string, req BudgetCeiling) (*BudgetCeiling, error) {
+	var out BudgetCeiling
+	err := c.do("PUT", "/api/v1/budgets/"+url.PathEscape(budgetID), req, &out)
+	return &out, err
+}
+
+func (c *HelmClient) GetCoexistenceCapabilities() (*CoexistenceCapabilityManifest, error) {
+	var out CoexistenceCapabilityManifest
+	err := c.do("GET", "/api/v1/coexistence/capabilities", nil, &out)
+	return &out, err
+}
+
+func (c *HelmClient) GetTelemetryOTelConfig() (*TelemetryOTelConfig, error) {
+	var out TelemetryOTelConfig
+	err := c.do("GET", "/api/v1/telemetry/otel/config", nil, &out)
+	return &out, err
+}
+
+func (c *HelmClient) ExportTelemetry(req TelemetryExportRequest) (*TelemetryExportResult, error) {
+	var out TelemetryExportResult
+	err := c.do("POST", "/api/v1/telemetry/export", req, &out)
 	return &out, err
 }

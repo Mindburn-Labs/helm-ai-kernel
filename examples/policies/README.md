@@ -1,21 +1,29 @@
-# Policies
-<!-- docs-generated: surface-readme -->
+# Policy Examples
 
-## Purpose
+This directory contains the retained CEL, Rego, and Cedar example policy files
+used by the public compatibility docs.
 
-Active example surface for the `helm-oss` project.
+## Files
 
-## Canonical Interface
+| Path | Purpose |
+| --- | --- |
+| `cel/example.cel` | CEL allow/deny example. |
+| `rego/example.rego` | Rego allow/deny example. |
+| `cedar/example.cedar` | Cedar allow/deny example. |
+| `cedar/entities.json` | Cedar entity context for the example policy. |
 
-- Source path: `examples/policies`
-- Surface type: `example`
-- Package/source identity: `policies`
-- Coverage record: `docs/documentation-coverage.csv`
+## Build Examples
 
-## Local Commands
+```bash
+make build
+./bin/helm bundle build --language cel examples/policies/cel/example.cel
+./bin/helm bundle build --language rego examples/policies/rego/example.rego
+./bin/helm bundle build --language cedar --entities examples/policies/cedar/entities.json examples/policies/cedar/example.cedar
+```
 
-- `make docs-coverage` from the repository root verifies coverage for this surface.
+`helm bundle build` accepts the policy source as the positional argument.
+`--policy` belongs to `helm serve` and is intentionally not accepted by this
+subcommand.
 
-## Documentation Contract
-
-Generated surface README. This file is a local ownership and validation contract, not the primary docs information architecture entry point. It covers the active example surface. Keep it aligned with the source path above and update `docs/documentation-coverage.csv` when ownership, interfaces, validation, or lifecycle status changes.
+Policy-language behavior is documented in
+`docs/architecture/policy-languages.md`.

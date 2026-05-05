@@ -14,6 +14,13 @@ import (
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/api"
 )
 
+const (
+	// AdminAPIKeyEnv is the environment variable used by standalone OSS admin authentication.
+	AdminAPIKeyEnv = "HELM_ADMIN_API_KEY"
+
+	systemAdminPrincipalID = "system-admin"
+)
+
 // AdminAPIKeyMiddleware creates middleware that validates requests against a
 // pre-shared API key from the HELM_ADMIN_API_KEY environment variable.
 //
@@ -28,41 +35,14 @@ import (
 //
 //	protectedHandler := auth.AdminAPIKeyMiddleware()(myHandler)
 func AdminAPIKeyMiddleware() func(http.Handler) http.Handler {
-	adminKey := os.Getenv("HELM_ADMIN_API_KEY")
+	adminKey := os.Getenv(AdminAPIKeyEnv)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Fail-closed: no key configured means no access
-			if adminKey == "" {
-				api.WriteUnauthorized(w, "Admin API key not configured (set HELM_ADMIN_API_KEY)")
+			principal, detail, ok := AdminPrincipalFromRequest(r, adminKey)
+			if !ok {
+				api.WriteUnauthorized(w, detail)
 				return
-			}
-
-			// Extract Bearer token
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				api.WriteUnauthorized(w, "Missing Authorization header")
-				return
-			}
-
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) != 2 || parts[0] != "Bearer" {
-				api.WriteUnauthorized(w, "Invalid Authorization header format (expected 'Bearer <key>')")
-				return
-			}
-			token := parts[1]
-
-			// Constant-time comparison to prevent timing attacks
-			if subtle.ConstantTimeCompare([]byte(token), []byte(adminKey)) != 1 {
-				api.WriteUnauthorized(w, "Invalid API key")
-				return
-			}
-
-			// Inject admin principal into context
-			principal := &BasePrincipal{
-				ID:       "system-admin",
-				TenantID: "system",
-				Roles:    []string{"admin"},
 			}
 			ctx := WithPrincipal(r.Context(), principal)
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -74,4 +54,44 @@ func AdminAPIKeyMiddleware() func(http.Handler) http.Handler {
 // Convenience helper for wrapping individual handler functions.
 func RequireAdminAuth(handler http.HandlerFunc) http.Handler {
 	return AdminAPIKeyMiddleware()(http.HandlerFunc(handler))
+}
+
+// BearerToken extracts a case-sensitive Bearer token from an Authorization header.
+func BearerToken(r *http.Request) (string, string, bool) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return "", "Missing Authorization header", false
+	}
+
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || parts[0] != "Bearer" {
+		return "", "Invalid Authorization header format (expected 'Bearer <key>')", false
+	}
+	if strings.TrimSpace(parts[1]) == "" {
+		return "", "Missing bearer token", false
+	}
+	return parts[1], "", true
+}
+
+// AdminPrincipalFromRequest validates the configured admin key and returns the
+// standalone system admin principal. An empty configured key fails closed.
+func AdminPrincipalFromRequest(r *http.Request, adminKey string) (*BasePrincipal, string, bool) {
+	if adminKey == "" {
+		return nil, "Admin API key not configured (set HELM_ADMIN_API_KEY)", false
+	}
+
+	token, detail, ok := BearerToken(r)
+	if !ok {
+		return nil, detail, false
+	}
+
+	if subtle.ConstantTimeCompare([]byte(token), []byte(adminKey)) != 1 {
+		return nil, "Invalid API key", false
+	}
+
+	return &BasePrincipal{
+		ID:       systemAdminPrincipalID,
+		TenantID: "system",
+		Roles:    []string{"admin"},
+	}, "", true
 }

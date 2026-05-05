@@ -57,10 +57,16 @@ jobs:
         run: make build
       - name: Test
         run: make test
+      - name: Command tests
+        run: go test ./core/cmd/helm -count=1
       - name: Verify fixtures
         run: make verify-fixtures
+      - name: Boundary registry drift
+        run: make verify-boundary
       - name: Crucible
         run: make crucible
+      - name: Benchmark report
+        run: make bench-report
 
   python-sdk:
     runs-on: ubuntu-latest
@@ -120,3 +126,72 @@ jobs:
           java-version: "21"
       - name: Test Java SDK
         run: make test-sdk-java
+
+  contract-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: arduino/setup-protoc@v3
+      - name: Install codegen tools
+        run: |
+          python -m pip install grpcio-tools
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+      - name: Verify generated contracts
+        run: make codegen-check
+
+  deployment-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Docker, Compose, and chart smoke
+        run: |
+          make docker-smoke
+          make compose-smoke
+          make helm-chart-smoke
+
+  kind-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: helm-oss-smoke
+      - name: kind install smoke
+        run: make kind-smoke
+
+  release-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - name: Reproducibility, SBOM, and VEX smoke
+        run: make release-smoke

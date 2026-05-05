@@ -3,9 +3,23 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "helm-boundary-surfaces-test-*")
+	if err == nil {
+		_ = os.Setenv("HELM_BOUNDARY_REGISTRY_PATH", filepath.Join(dir, "surfaces.json"))
+	}
+	code := m.Run()
+	if err == nil {
+		_ = os.RemoveAll(dir)
+	}
+	os.Exit(code)
+}
 
 func TestRunConformNegativeJSON(t *testing.T) {
 	var stdout, stderr bytes.Buffer
@@ -117,5 +131,87 @@ func TestRunEvidenceExportBlocksExperimentalWithoutFlag(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "experimental") {
 		t.Fatalf("stderr did not mention experimental gate: %s", stderr.String())
+	}
+}
+
+func TestRunBoundaryStatusJSON(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runBoundarySurfaceCmd([]string{"status", "--json"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d stderr=%s", code, stderr.String())
+	}
+	var status map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
+		t.Fatalf("parse json: %v\n%s", err, stdout.String())
+	}
+	if status["mcp_firewall"] != "enabled" {
+		t.Fatalf("mcp firewall = %v", status["mcp_firewall"])
+	}
+}
+
+func TestRunMCPAuthorizeCallDenyJSON(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runMCPAuthorizeCall([]string{
+		"--server-id", "srv-1",
+		"--tool-name", "file_read",
+		"--json",
+	}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d stderr=%s", code, stderr.String())
+	}
+	var record map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &record); err != nil {
+		t.Fatalf("parse json: %v\n%s", err, stdout.String())
+	}
+	if record["verdict"] != "DENY" {
+		t.Fatalf("verdict = %v", record["verdict"])
+	}
+	if record["record_hash"] == "" {
+		t.Fatal("record_hash missing")
+	}
+}
+
+func TestRunSandboxPreflightJSON(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runSandboxPreflightSurface([]string{"--runtime", "wazero", "--json"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d stderr=%s", code, stderr.String())
+	}
+	var result map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("parse json: %v\n%s", err, stdout.String())
+	}
+	if result["verdict"] != "DENY" {
+		t.Fatalf("verdict = %v", result["verdict"])
+	}
+}
+
+func TestRunAuthzCheckJSON(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runAuthzSurfaceCmd([]string{"check", "--subject", "agent:a", "--object", "tool:b", "--relation", "can_call", "--json"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d stderr=%s", code, stderr.String())
+	}
+	var snapshot map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &snapshot); err != nil {
+		t.Fatalf("parse json: %v\n%s", err, stdout.String())
+	}
+	if snapshot["snapshot_hash"] == "" {
+		t.Fatal("snapshot_hash missing")
+	}
+}
+
+func TestRunIntegrateScaffoldJSON(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runIntegrateSurfaceCmd([]string{"scaffold", "--framework", "langgraph", "--json"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d stderr=%s", code, stderr.String())
+	}
+	var scaffold map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &scaffold); err != nil {
+		t.Fatalf("parse json: %v\n%s", err, stdout.String())
+	}
+	if scaffold["mode"] != "pre-dispatch-required" {
+		t.Fatalf("mode = %v", scaffold["mode"])
 	}
 }

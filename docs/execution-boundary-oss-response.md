@@ -4,12 +4,21 @@ HELM OSS is implemented as the proof-bearing execution boundary for agent action
 
 ## Implemented OSS Surfaces
 
-- Negative conformance vectors: `helm conform negative --json` and `GET /api/v1/conformance/negative`.
-- MCP quarantine and approval records: `helm mcp approve` plus `GET|POST /api/v1/mcp/registry` and `POST /api/v1/mcp/registry/approve`.
-- MCP execution firewall primitives: list-time scope filtering, call-time authorization, schema pinning, quarantine checks, and sealed `ExecutionBoundaryRecord` allow/deny outputs.
-- Sandbox grant evidence: `SandboxGrant` contracts, JSON schemas, `helm sandbox inspect`, and `GET /api/v1/sandbox/grants/inspect`.
-- ReBAC snapshot evidence: deterministic relationship tuple hashing and sealed `AuthzSnapshot` records.
-- Evidence export wrappers: `helm evidence export --envelope`, `POST /api/v1/evidence/envelopes`, and `EvidenceEnvelopeManifest` records for DSSE/JWS first, with SCITT/COSE behind explicit experimental enablement.
+- Boundary kernel: `helm boundary status|capabilities|records|get|verify|checkpoint` and `/api/v1/boundary/status`, `/api/v1/boundary/capabilities`, `/api/v1/boundary/records`, `/api/v1/boundary/checkpoints`.
+- Negative conformance vectors: `helm conform negative --json`, `helm conform vectors --json`, `GET /api/v1/conformance/negative`, and `GET /api/v1/conformance/vectors`.
+- MCP quarantine and approval records: `helm mcp scan|wrap|list|get|approve|revoke`, `GET|POST /api/v1/mcp/registry`, `POST /api/v1/mcp/registry/{server_id}/approve`, and `POST /api/v1/mcp/registry/{server_id}/revoke`.
+- MCP execution firewall primitives: `helm mcp auth-profile list|put|verify`, `helm mcp authorize-call`, `GET|PUT /api/v1/mcp/auth-profiles`, `POST /api/v1/mcp/authorize-call`, and the MCP protected-resource metadata route.
+- Identity and ReBAC snapshot evidence: `helm identity agents`, `helm authz health|check|snapshots|get`, `/api/v1/identity/agents`, `/api/v1/authz/health`, `/api/v1/authz/check`, and `/api/v1/authz/snapshots`.
+- Approval, timelock-ready, and budget surfaces: `helm approvals list|create|approve|deny|revoke`, `helm budget list|set|verify`, `/api/v1/approvals`, and `/api/v1/budgets`.
+- Sandbox grant evidence: `helm sandbox profiles|grant|list|get|verify|preflight|inspect`, `/api/v1/sandbox/profiles`, `/api/v1/sandbox/grants`, and `/api/v1/sandbox/preflight`.
+- Evidence export wrappers: `helm evidence export --envelope`, `helm evidence envelope list|create|get|verify`, `/api/v1/evidence/envelopes`, `/api/v1/evidence/export`, `/api/v1/evidence/verify`, and `/api/v1/replay/verify`.
+- Non-authoritative telemetry and coexistence: `helm telemetry otel-config`, `helm coexistence manifest`, `helm integrate scaffold --framework <name>`, `/api/v1/telemetry/otel/config`, `/api/v1/telemetry/export`, and `/api/v1/coexistence/capabilities`.
+- Public SDK coverage: Go, Python, TypeScript, Rust, and Java expose the new route families as typed or structured clients.
+- Console coverage: the OSS Console shows route-backed boundary, MCP, sandbox, authz, approvals, budgets, evidence, conformance, telemetry, and coexistence workspaces without private-only state.
+
+## Durable State
+
+`helm serve` stores boundary surface state in the runtime database through the `boundary_surface_snapshots` table. Lite Mode uses the existing SQLite database; Postgres deployments use the same table contract. Standalone CLI commands use `HELM_BOUNDARY_REGISTRY_PATH` or `HELM_DATA_DIR/boundary/surfaces.json` so local records, approvals, checkpoints, envelopes, and budget changes survive separate CLI invocations.
 
 ## Boundary Rule
 
@@ -32,7 +41,13 @@ External envelope formats are export wrappers over HELM-native EvidencePack root
 Targeted verification for this boundary slice:
 
 ```sh
-cd core && go test ./pkg/contracts ./pkg/mcp ./pkg/authz ./pkg/evidence ./pkg/conformance ./pkg/runtime/sandbox ./cmd/helm
+go test ./core/pkg/contracts ./core/pkg/boundary ./core/cmd/helm
+cd tests/conformance && go test ./...
+cd sdk/go && GOWORK=off CGO_ENABLED=0 go test ./client
+cd sdk/python && python -m pytest -q
+cd sdk/ts && npm test
+cd sdk/rust && cargo test
+cd sdk/java && mvn test -q
 ```
 
 Console verification:

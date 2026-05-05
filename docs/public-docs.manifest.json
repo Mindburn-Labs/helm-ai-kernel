@@ -205,6 +205,48 @@
       "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/deployment-and-examples"
     },
     {
+      "slug": "helm-oss/examples",
+      "title": "HELM OSS Examples Matrix",
+      "section": "deployment",
+      "source_path": "docs/EXAMPLES.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/examples"
+    },
+    {
+      "slug": "helm-oss/deployment/kubernetes",
+      "title": "Kubernetes Deployment",
+      "section": "deployment",
+      "source_path": "docs/KUBERNETES_DEPLOYMENT.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/deployment/kubernetes"
+    },
+    {
+      "slug": "helm-oss/reference/cli",
+      "title": "HELM OSS CLI Reference",
+      "section": "reference",
+      "source_path": "docs/reference/cli.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/reference/cli"
+    },
+    {
+      "slug": "helm-oss/reference/http-api",
+      "title": "HELM OSS HTTP API Reference",
+      "section": "reference",
+      "source_path": "docs/reference/http-api.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/reference/http-api"
+    },
+    {
+      "slug": "helm-oss/reference/execution-boundary",
+      "title": "Execution Boundary Reference",
+      "section": "reference",
+      "source_path": "docs/reference/execution-boundary.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/reference/execution-boundary"
+    },
+    {
+      "slug": "helm-oss/reference/json-schemas",
+      "title": "HELM OSS JSON Schema Reference",
+      "section": "reference",
+      "source_path": "docs/reference/json-schemas.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/reference/json-schemas"
+    },
+    {
       "slug": "helm-oss/reference/protocols-and-schemas",
       "title": "Protocols and Schemas",
       "section": "reference",

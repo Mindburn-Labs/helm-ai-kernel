@@ -7,8 +7,6 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Use this page when you need the public `helm-oss/benchmarks` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
-
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.

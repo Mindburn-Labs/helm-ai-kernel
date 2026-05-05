@@ -81,6 +81,8 @@ const client = createClient<paths>({
 });
 
 const CONSOLE_ADMIN_KEY_STORAGE = "helm.console.admin_api_key";
+const CONSOLE_TENANT_ID_STORAGE = "helm.console.tenant_id";
+const DEFAULT_CONSOLE_TENANT_ID = "default";
 
 export class ConsoleApiError extends Error {
   readonly status: number;
@@ -122,6 +124,22 @@ export function hasConsoleAdminKey(): boolean {
   return getConsoleAdminKey() !== "";
 }
 
+export function getConsoleTenantID(): string {
+  const tenantID = sessionStore()?.getItem(CONSOLE_TENANT_ID_STORAGE)?.trim() ?? "";
+  return tenantID || DEFAULT_CONSOLE_TENANT_ID;
+}
+
+export function setConsoleTenantID(value: string): void {
+  const store = sessionStore();
+  if (!store) return;
+  const tenantID = value.trim();
+  if (tenantID) {
+    store.setItem(CONSOLE_TENANT_ID_STORAGE, tenantID);
+  } else {
+    store.removeItem(CONSOLE_TENANT_ID_STORAGE);
+  }
+}
+
 export function isUnauthorizedError(error: unknown): boolean {
   if (error instanceof ConsoleApiError) return error.status === 401 || error.status === 403;
   if (typeof error === "object" && error !== null && "status" in error) {
@@ -133,7 +151,7 @@ export function isUnauthorizedError(error: unknown): boolean {
 
 function authHeaders(): Record<string, string> {
   const token = getConsoleAdminKey();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return token ? { Authorization: `Bearer ${token}`, "X-Helm-Tenant-ID": getConsoleTenantID() } : {};
 }
 
 function errorDetail(error: unknown, fallbackMessage: string): string {

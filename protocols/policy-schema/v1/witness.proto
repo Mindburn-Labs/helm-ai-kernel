@@ -10,7 +10,7 @@ package helm.policy.v1;
 
 option go_package = "helm.mindburn.run/policy/v1;policyv1";
 
-import "v1/foundations.proto";
+import "foundations.proto";
 
 // ── RuleTraceWitness ───────────────────────────────────────────
 

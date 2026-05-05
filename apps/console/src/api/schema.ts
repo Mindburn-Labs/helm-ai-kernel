@@ -248,6 +248,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/boundary/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read execution-boundary health and authority status */
+        get: operations["getBoundaryStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/boundary/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List proof-bearing boundary capabilities */
+        get: operations["listBoundaryCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/boundary/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search execution-boundary records */
+        get: operations["listBoundaryRecords"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/boundary/records/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an execution-boundary record */
+        get: operations["getBoundaryRecord"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/boundary/records/{record_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify a boundary record hash and receipt linkage */
+        post: operations["verifyBoundaryRecord"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/boundary/checkpoints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List tamper-evident boundary checkpoints */
+        get: operations["listBoundaryCheckpoints"];
+        put?: never;
+        /** Create a new boundary checkpoint */
+        post: operations["createBoundaryCheckpoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/boundary/checkpoints/{checkpoint_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify a boundary checkpoint and inclusion proof */
+        post: operations["verifyBoundaryCheckpoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/proofgraph/sessions": {
         parameters: {
             query?: never;
@@ -348,7 +468,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List evidence envelope manifests */
+        get: operations["listEvidenceEnvelopeManifests"];
         put?: never;
         /**
          * Build a non-authoritative evidence export envelope manifest
@@ -357,6 +478,57 @@ export interface paths {
          *     remain the authority; export envelopes are compatibility wrappers.
          */
         post: operations["createEvidenceEnvelopeManifest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/evidence/envelopes/{manifest_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an evidence envelope manifest */
+        get: operations["getEvidenceEnvelopeManifest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/evidence/envelopes/{manifest_id}/payload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the concrete non-authoritative evidence envelope payload */
+        get: operations["getEvidenceEnvelopePayload"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/evidence/envelopes/{manifest_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify an evidence envelope manifest against its HELM root */
+        post: operations["verifyEvidenceEnvelopeManifest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -406,6 +578,40 @@ export interface paths {
         };
         /** Get a conformance report by ID */
         get: operations["getConformanceReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conformance/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List conformance reports */
+        get: operations["listConformanceReports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conformance/vectors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List conformance vectors across all public levels */
+        get: operations["listConformanceVectors"];
         put?: never;
         post?: never;
         delete?: never;
@@ -472,6 +678,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/mcp/registry/{server_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an MCP server quarantine record */
+        get: operations["getMcpRegistryRecord"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mcp/registry/{server_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve an MCP server by path id */
+        post: operations["approveMcpRegistryRecord"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mcp/registry/{server_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke an MCP server approval */
+        post: operations["revokeMcpRegistryRecord"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mcp/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scan and quarantine an MCP server or tool bundle */
+        post: operations["scanMcpServer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mcp/auth-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List MCP OAuth authorization profiles */
+        get: operations["listMcpAuthProfiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mcp/auth-profiles/{profile_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Create or replace an MCP OAuth authorization profile */
+        put: operations["putMcpAuthProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mcp/authorize-call": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Authorize an MCP tools/call before upstream dispatch */
+        post: operations["authorizeMcpCall"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/mcp/v1/capabilities": {
         parameters: {
             query?: never;
@@ -506,6 +831,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sandbox/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List built-in sandbox backend profiles */
+        get: operations["listSandboxProfiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sandbox/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List sealed sandbox grants */
+        get: operations["listSandboxGrants"];
+        put?: never;
+        /** Create a sealed sandbox grant */
+        post: operations["createSandboxGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sandbox/grants/{grant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a sealed sandbox grant */
+        get: operations["getSandboxGrant"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sandbox/grants/{grant_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify a sealed sandbox grant before execution */
+        post: operations["verifySandboxGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sandbox/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preflight a sandbox grant and deny overgrant before execution */
+        post: operations["preflightSandboxGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sandbox/grants/inspect": {
         parameters: {
             query?: never;
@@ -517,6 +928,245 @@ export interface paths {
         get: operations["inspectSandboxGrants"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List non-human identity profiles known to the boundary */
+        get: operations["listAgentIdentities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/authz/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read ReBAC/PDP health */
+        get: operations["getAuthzHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/authz/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Evaluate authorization and seal a relationship snapshot */
+        post: operations["checkAuthz"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/authz/snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List sealed authorization snapshots */
+        get: operations["listAuthzSnapshots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/authz/snapshots/{snapshot_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a sealed authorization snapshot */
+        get: operations["getAuthzSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List approval ceremonies */
+        get: operations["listApprovalCeremonies"];
+        put?: never;
+        /** Create an approval ceremony */
+        post: operations["createApprovalCeremony"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/approvals/{approval_id}/webauthn/challenge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a passkey/WebAuthn approval challenge */
+        post: operations["createApprovalWebAuthnChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/approvals/{approval_id}/webauthn/assert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Assert a passkey/WebAuthn approval challenge */
+        post: operations["assertApprovalWebAuthnChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/approvals/{approval_id}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve, deny, or revoke an approval ceremony */
+        post: operations["transitionApprovalCeremony"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/budgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List budget and velocity ceilings */
+        get: operations["listBudgetCeilings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/budgets/{budget_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Create or replace a budget ceiling */
+        put: operations["putBudgetCeiling"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/coexistence/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read scanner/gateway coexistence capability manifest */
+        get: operations["getCoexistenceCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/otel/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read non-authoritative OTel GenAI export configuration */
+        get: operations["getTelemetryOTelConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export a non-authoritative telemetry event */
+        post: operations["exportTelemetry"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1005,6 +1655,252 @@ export interface components {
             declared_at: string;
             policy_epoch?: string;
             grant_hash?: string;
+        };
+        BoundaryStatus: {
+            version?: string;
+            status?: string;
+            receipt_store_ready?: boolean;
+            signer_ready?: boolean;
+            open_approvals?: number;
+            quarantined_mcp_servers?: number;
+            last_checkpoint_id?: string;
+            /** Format: date-time */
+            checked_at?: string;
+        };
+        BoundaryCapabilitySummary: {
+            capability_id?: string;
+            category?: string;
+            status?: string;
+            authority?: string;
+            public_routes?: string[];
+            cli_commands?: string[];
+            receipt_bindings?: string[];
+            conformance_level?: string;
+        };
+        ExecutionBoundaryRecord: {
+            record_id?: string;
+            /** @enum {string} */
+            verdict?: "ALLOW" | "DENY" | "ESCALATE";
+            reason_code?: string;
+            tool_name?: string;
+            args_hash?: string;
+            policy_epoch?: string;
+            mcp_server_id?: string;
+            oauth_resource?: string;
+            oauth_scopes?: string[];
+            sandbox_grant_hash?: string;
+            authz_snapshot_hash?: string;
+            approval_receipt_id?: string;
+            receipt_id?: string;
+            record_hash?: string;
+            /** Format: date-time */
+            created_at?: string;
+        };
+        BoundaryRecordVerification: {
+            record_id?: string;
+            record_hash?: string;
+            receipt_id?: string;
+            verified?: boolean;
+            errors?: string[];
+            /** Format: date-time */
+            checked_at?: string;
+        };
+        BoundaryCheckpoint: {
+            checkpoint_id?: string;
+            /** Format: int64 */
+            sequence?: number;
+            previous_checkpoint_hash?: string;
+            receipt_count?: number;
+            record_count?: number;
+            root_hash?: string;
+            checkpoint_hash?: string;
+            /** Format: date-time */
+            created_at?: string;
+        };
+        EvidenceEnvelopeVerification: {
+            manifest_id?: string;
+            manifest_hash?: string;
+            native_evidence_hash?: string;
+            verified?: boolean;
+            authoritative?: boolean;
+            errors?: string[];
+            /** Format: date-time */
+            checked_at?: string;
+        };
+        MCPScanRequest: {
+            server_id: string;
+            name?: string;
+            transport?: string;
+            endpoint?: string;
+            tool_names?: string[];
+            manifest?: {
+                [key: string]: unknown;
+            };
+        };
+        MCPScanResult: {
+            server_id?: string;
+            risk?: string;
+            state?: string;
+            tool_count?: number;
+            findings?: string[];
+            recommended_action?: string;
+            quarantine_record_id?: string;
+            requires_approval?: boolean;
+            schema_pin_required?: boolean;
+            authorization_needed?: boolean;
+            /** Format: date-time */
+            scanned_at?: string;
+        };
+        MCPAuthorizationProfile: {
+            profile_id?: string;
+            protocol_version?: string;
+            resource?: string;
+            authorization_servers?: string[];
+            scopes_supported?: string[];
+            tool_scopes?: {
+                [key: string]: string[];
+            };
+            required_audience?: string;
+            /** Format: date-time */
+            stale_after?: string;
+            profile_hash?: string;
+        };
+        MCPAuthorizeCallRequest: {
+            server_id: string;
+            tool_name: string;
+            args_hash?: string;
+            granted_scopes?: string[];
+            pinned_schema_hash?: string;
+            oauth_resource?: string;
+            receipt_id?: string;
+        };
+        SandboxPreflightRequest: {
+            runtime?: string;
+            profile?: string;
+            image_digest?: string;
+            policy_epoch?: string;
+            requested_grant?: components["schemas"]["SandboxGrant"];
+            expected_grant_hash?: string;
+        };
+        SandboxPreflightResult: {
+            /** @enum {string} */
+            verdict?: "ALLOW" | "DENY" | "ESCALATE";
+            reason_code?: string;
+            grant_id?: string;
+            grant_hash?: string;
+            dispatch_ready?: boolean;
+            findings?: string[];
+            /** Format: date-time */
+            checked_at?: string;
+        };
+        AuthzSnapshot: {
+            snapshot_id?: string;
+            model_id?: string;
+            relationship_hash?: string;
+            tuple_count?: number;
+            resolver?: string;
+            stale?: boolean;
+            snapshot_token?: string;
+            /** Format: date-time */
+            checked_at?: string;
+            snapshot_hash?: string;
+        };
+        AuthzHealth: {
+            status?: string;
+            resolver?: string;
+            model_id?: string;
+            relationship_hash?: string;
+            /** Format: date-time */
+            checked_at?: string;
+        };
+        ApprovalCeremony: {
+            approval_id?: string;
+            subject?: string;
+            action?: string;
+            /** @enum {string} */
+            state?: "pending" | "approved" | "denied" | "revoked" | "expired";
+            requested_by?: string;
+            approvers?: string[];
+            quorum?: number;
+            /** Format: date-time */
+            timelock_until?: string;
+            /** Format: date-time */
+            expires_at?: string;
+            break_glass?: boolean;
+            reason?: string;
+            receipt_id?: string;
+            ceremony_hash?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        AgentIdentityProfile: {
+            agent_id?: string;
+            identity_type?: string;
+            subject?: string;
+            issuer?: string;
+            jwks_uri?: string;
+            spiffe_id?: string;
+            scopes?: string[];
+            anonymous_dev_mode?: boolean;
+            /** Format: date-time */
+            created_at?: string;
+        };
+        BudgetCeiling: {
+            budget_id?: string;
+            subject?: string;
+            window?: string;
+            max_tool_calls?: number;
+            /** Format: int64 */
+            max_spend_minor?: number;
+            /** Format: int64 */
+            max_egress_bytes?: number;
+            max_write_ops?: number;
+            approval_required_after?: number;
+            policy_epoch?: string;
+        };
+        CoexistenceCapabilityManifest: {
+            manifest_id?: string;
+            authority?: string;
+            boundary_role?: string;
+            supported_inputs?: string[];
+            export_surfaces?: string[];
+            receipt_bindings?: string[];
+            /** Format: date-time */
+            generated_at?: string;
+        };
+        TelemetryOTelConfig: {
+            service_name?: string;
+            signal_type?: string;
+            authoritative?: boolean;
+            span_attributes?: {
+                [key: string]: string;
+            };
+            exported_signals?: string[];
+        };
+        TelemetryExportRequest: {
+            format?: string;
+            receipt_id?: string;
+            record_hash?: string;
+            policy_epoch?: string;
+            verdict?: string;
+            reason_code?: string;
+            sandbox_grant_hash?: string;
+            authz_snapshot_hash?: string;
+            attributes?: {
+                [key: string]: string;
+            };
+        };
+        TelemetryExportResult: {
+            export_id?: string;
+            format?: string;
+            authoritative?: boolean;
+            attributes?: {
+                [key: string]: string;
+            };
+            /** Format: date-time */
+            exported_at?: string;
         };
         /** @description An effect submitted for governance evaluation */
         Effect: {
@@ -1504,6 +2400,190 @@ export interface operations {
             };
         };
     };
+    getBoundaryStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Boundary status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoundaryStatus"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    listBoundaryCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Capability summaries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoundaryCapabilitySummary"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    listBoundaryRecords: {
+        parameters: {
+            query?: {
+                verdict?: string;
+                reason_code?: string;
+                tool_name?: string;
+                mcp_server_id?: string;
+                policy_epoch?: string;
+                receipt_id?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Boundary record list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionBoundaryRecord"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    getBoundaryRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Boundary record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionBoundaryRecord"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    verifyBoundaryRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Boundary record verification */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoundaryRecordVerification"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    listBoundaryCheckpoints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Boundary checkpoints */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoundaryCheckpoint"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    createBoundaryCheckpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Boundary checkpoint */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoundaryCheckpoint"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    verifyBoundaryCheckpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                checkpoint_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Boundary checkpoint verification */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
     listSessions: {
         parameters: {
             query?: {
@@ -1650,6 +2730,27 @@ export interface operations {
             400: components["responses"]["HelmError"];
         };
     };
+    listEvidenceEnvelopeManifests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Evidence envelope manifests */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceEnvelopeManifest"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
     createEvidenceEnvelopeManifest: {
         parameters: {
             query?: never;
@@ -1683,6 +2784,78 @@ export interface operations {
             400: components["responses"]["HelmError"];
             401: components["responses"]["HelmError"];
             403: components["responses"]["HelmError"];
+        };
+    };
+    getEvidenceEnvelopeManifest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                manifest_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Evidence envelope manifest */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceEnvelopeManifest"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    getEvidenceEnvelopePayload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                manifest_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Evidence envelope payload */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    verifyEvidenceEnvelopeManifest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                manifest_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Evidence envelope verification */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceEnvelopeVerification"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
         };
     };
     replayVerify: {
@@ -1781,6 +2954,47 @@ export interface operations {
             };
             401: components["responses"]["HelmError"];
             404: components["responses"]["HelmError"];
+        };
+    };
+    listConformanceReports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conformance reports */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConformanceResult"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    listConformanceVectors: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conformance vector list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NegativeBoundaryVector"][];
+                };
+            };
         };
     };
     listNegativeConformanceVectors: {
@@ -1901,6 +3115,197 @@ export interface operations {
             403: components["responses"]["HelmError"];
         };
     };
+    getMcpRegistryRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description MCP server quarantine record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPQuarantineRecord"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    approveMcpRegistryRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MCPRegistryApprovalRequest"];
+            };
+        };
+        responses: {
+            /** @description Approved MCP server record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPQuarantineRecord"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+            403: components["responses"]["HelmError"];
+        };
+    };
+    revokeMcpRegistryRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    reason?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Revoked MCP server record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPQuarantineRecord"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+            403: components["responses"]["HelmError"];
+        };
+    };
+    scanMcpServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MCPScanRequest"];
+            };
+        };
+        responses: {
+            /** @description MCP scan result */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPScanResult"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
+    listMcpAuthProfiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description MCP authorization profiles */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPAuthorizationProfile"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    putMcpAuthProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MCPAuthorizationProfile"];
+            };
+        };
+        responses: {
+            /** @description MCP authorization profile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPAuthorizationProfile"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
+    authorizeMcpCall: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MCPAuthorizeCallRequest"];
+            };
+        };
+        responses: {
+            /** @description Allowed boundary record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionBoundaryRecord"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+            /** @description Denied boundary record */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionBoundaryRecord"];
+                };
+            };
+        };
+    };
     listMCPCapabilities: {
         parameters: {
             query?: never;
@@ -1956,6 +3361,152 @@ export interface operations {
             404: components["responses"]["HelmError"];
         };
     };
+    listSandboxProfiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sandbox backend profiles */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxBackendProfile"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    listSandboxGrants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sandbox grants */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxGrant"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    createSandboxGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    runtime?: string;
+                    profile?: string;
+                    image_digest?: string;
+                    policy_epoch?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sandbox grant */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxGrant"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
+    getSandboxGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sandbox grant */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxGrant"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    verifySandboxGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sandbox preflight result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxPreflightResult"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    preflightSandboxGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxPreflightRequest"];
+            };
+        };
+        responses: {
+            /** @description Sandbox preflight result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxPreflightResult"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
     inspectSandboxGrants: {
         parameters: {
             query?: {
@@ -1984,6 +3535,382 @@ export interface operations {
             400: components["responses"]["HelmError"];
             401: components["responses"]["HelmError"];
             403: components["responses"]["HelmError"];
+        };
+    };
+    listAgentIdentities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agent identity profiles */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentIdentityProfile"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    getAuthzHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorization health */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthzHealth"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    checkAuthz: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Authorization snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthzSnapshot"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    listAuthzSnapshots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorization snapshots */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthzSnapshot"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    getAuthzSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                snapshot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorization snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthzSnapshot"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    listApprovalCeremonies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Approval ceremonies */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalCeremony"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    createApprovalCeremony: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ApprovalCeremony"];
+            };
+        };
+        responses: {
+            /** @description Approval ceremony */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalCeremony"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
+    createApprovalWebAuthnChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @default passkey */
+                    method?: string;
+                    ttl_ms?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Approval WebAuthn challenge */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
+    assertApprovalWebAuthnChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    challenge_id: string;
+                    actor: string;
+                    assertion: string;
+                    receipt_id?: string;
+                    reason?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Approval ceremony */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalCeremony"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
+    transitionApprovalCeremony: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: string;
+                action: "approve" | "deny" | "revoke";
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    actor?: string;
+                    receipt_id?: string;
+                    reason?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Approval ceremony */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalCeremony"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
+    listBudgetCeilings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Budget ceilings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetCeiling"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    putBudgetCeiling: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetCeiling"];
+            };
+        };
+        responses: {
+            /** @description Budget ceiling */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetCeiling"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
+    getCoexistenceCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Coexistence capability manifest */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoexistenceCapabilityManifest"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    getTelemetryOTelConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OTel export configuration */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelemetryOTelConfig"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    exportTelemetry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TelemetryExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Telemetry export result */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelemetryExportResult"];
+                };
+            };
+            401: components["responses"]["HelmError"];
         };
     };
     healthCheck: {

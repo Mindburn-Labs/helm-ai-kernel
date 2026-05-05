@@ -8,14 +8,16 @@ import (
 
 // CORSMiddleware handles Cross-Origin Resource Sharing.
 // Allowed origins are read from the CORS_ORIGINS env var (comma-separated).
-// In development (no env var), defaults to allowing all origins.
+// If no origins are configured, browser cross-origin access is denied by default.
 func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 	if len(allowedOrigins) == 0 {
 		// Read from environment
 		if origins := os.Getenv("CORS_ORIGINS"); origins != "" {
-			allowedOrigins = strings.Split(origins, ",")
-			for i := range allowedOrigins {
-				allowedOrigins[i] = strings.TrimSpace(allowedOrigins[i])
+			for _, origin := range strings.Split(origins, ",") {
+				origin = strings.TrimSpace(origin)
+				if origin != "" {
+					allowedOrigins = append(allowedOrigins, origin)
+				}
 			}
 		}
 	}
@@ -32,7 +34,7 @@ func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 			}
 
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Operator-ID")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Operator-ID, X-Helm-Tenant-ID, X-Helm-Principal-ID")
 			w.Header().Set("Access-Control-Expose-Headers", "Retry-After, X-Request-ID")
 			w.Header().Set("Access-Control-Max-Age", "86400")
 
@@ -48,10 +50,10 @@ func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 }
 
 // isOriginAllowed checks if the origin matches the allowed list.
-// An empty list means all origins are allowed (development mode).
+// An empty list denies browser cross-origin access.
 func isOriginAllowed(origin string, allowed []string) bool {
 	if len(allowed) == 0 {
-		return true // Dev mode: allow all
+		return false
 	}
 	for _, a := range allowed {
 		if a == "*" || a == origin {

@@ -10,11 +10,11 @@ Shows HELM integration with native fetch (no SDK dependency).
 ## Run
 
 ```bash
+cd examples/js_openai_baseurl
 node main.js
 ```
 
 ## Expected Output
 
-```
-Response: <model response or denial>
-```
+The script prints the response content, model, and response id returned by the
+HELM boundary. Policy denials are returned as the boundary's JSON error body.

@@ -24,7 +24,7 @@ import (
 //	2 = config error
 func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm mcp <serve|install|pack|print-config|scan|wrap|approve> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm mcp <serve|install|pack|print-config|scan|wrap|list|get|approve|revoke|auth-profile|authorize-call> [flags]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Subcommands:")
 		fmt.Fprintln(stderr, "  serve         Start the HELM MCP server (stdio or remote HTTP)")
@@ -33,7 +33,12 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "  print-config  Print MCP config for a specific client")
 		fmt.Fprintln(stderr, "  scan          Static scan of an MCP tool catalog for DDIPE / typosquat / suspicious patterns")
 		fmt.Fprintln(stderr, "  wrap          Emit a clean-room execution-firewall wrapper profile for an upstream MCP server")
+		fmt.Fprintln(stderr, "  list          List local MCP registry records")
+		fmt.Fprintln(stderr, "  get           Get one MCP registry record")
 		fmt.Fprintln(stderr, "  approve       Create a receipt-backed MCP server approval record")
+		fmt.Fprintln(stderr, "  revoke        Revoke a local MCP server approval")
+		fmt.Fprintln(stderr, "  auth-profile  Manage MCP OAuth protected-resource profiles")
+		fmt.Fprintln(stderr, "  authorize-call Authorize a tools/call before dispatch")
 		return 2
 	}
 
@@ -50,10 +55,20 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 		return runMCPScan(args[1:], stdout, stderr)
 	case "wrap":
 		return runMCPWrap(args[1:], stdout, stderr)
+	case "list":
+		return runMCPList(args[1:], stdout, stderr)
+	case "get":
+		return runMCPGet(args[1:], stdout, stderr)
 	case "approve":
 		return runMCPApprove(args[1:], stdout, stderr)
+	case "revoke":
+		return runMCPRevoke(args[1:], stdout, stderr)
+	case "auth-profile":
+		return runMCPAuthProfile(args[1:], stdout, stderr)
+	case "authorize-call":
+		return runMCPAuthorizeCall(args[1:], stdout, stderr)
 	case "--help", "-h":
-		fmt.Fprintln(stdout, "Usage: helm mcp <serve|install|pack|print-config|scan|wrap|approve> [flags]")
+		fmt.Fprintln(stdout, "Usage: helm mcp <serve|install|pack|print-config|scan|wrap|list|get|approve|revoke|auth-profile|authorize-call> [flags]")
 		fmt.Fprintln(stdout, "")
 		fmt.Fprintln(stdout, "Subcommands:")
 		fmt.Fprintln(stdout, "  serve         Start the HELM MCP server (stdio or remote HTTP)")
@@ -62,7 +77,12 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "  print-config  Print MCP config for a specific client")
 		fmt.Fprintln(stdout, "  scan          Static scan of an MCP tool catalog for DDIPE / typosquat / suspicious patterns")
 		fmt.Fprintln(stdout, "  wrap          Emit a clean-room execution-firewall wrapper profile for an upstream MCP server")
+		fmt.Fprintln(stdout, "  list          List local MCP registry records")
+		fmt.Fprintln(stdout, "  get           Get one MCP registry record")
 		fmt.Fprintln(stdout, "  approve       Create a receipt-backed MCP server approval record")
+		fmt.Fprintln(stdout, "  revoke        Revoke a local MCP server approval")
+		fmt.Fprintln(stdout, "  auth-profile  Manage MCP OAuth protected-resource profiles")
+		fmt.Fprintln(stdout, "  authorize-call Authorize a tools/call before dispatch")
 		return 0
 	default:
 		fmt.Fprintf(stderr, "Unknown mcp subcommand: %s\n", args[0])

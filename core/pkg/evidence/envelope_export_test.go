@@ -83,3 +83,36 @@ func TestBuildEnvelopeManifestBindsStatementHash(t *testing.T) {
 		t.Fatal("manifest hash did not bind statement hash")
 	}
 }
+
+func TestBuildAndVerifyConcreteEnvelopePayload(t *testing.T) {
+	now := time.Date(2026, 5, 5, 9, 0, 0, 0, time.UTC)
+	manifest, err := BuildEnvelopeManifest(EnvelopeExportRequest{
+		ManifestID:         "manifest-dsse-payload",
+		Envelope:           EnvelopeDSSE,
+		NativeEvidenceHash: "sha256:evidence-root",
+		Subject:            "pack:123",
+		CreatedAt:          now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := BuildEnvelopePayload(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload.Authoritative {
+		t.Fatal("external payload must be non-authoritative")
+	}
+	if payload.PayloadHash == "" || payload.PayloadType == "" {
+		t.Fatalf("payload is not sealed: %+v", payload)
+	}
+	result := VerifyEnvelopePayload(manifest, payload)
+	if !result.Verified || result.PayloadHash != payload.PayloadHash {
+		t.Fatalf("payload verification failed: %+v", result)
+	}
+	payload.Payload["native_evidence_hash"] = "sha256:tampered"
+	result = VerifyEnvelopePayload(manifest, payload)
+	if result.Verified {
+		t.Fatalf("tampered payload should fail: %+v", result)
+	}
+}

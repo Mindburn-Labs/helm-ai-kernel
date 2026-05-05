@@ -89,6 +89,16 @@ helm:
   # Demo mode (disables real connectors, uses ephemeral keys)
   demoMode: false
 
+  # Runtime API authentication. Production rendering refuses to omit these keys
+  # because protected evidence, receipt, tenant, and service-internal routes fail
+  # closed when no key material is configured.
+  auth:
+    adminAPIKey: ""
+    serviceAPIKey: ""
+    existingSecret: ""
+    adminAPIKeySecretKey: "HELM_ADMIN_API_KEY"
+    serviceAPIKeySecretKey: "HELM_SERVICE_API_KEY"
+
   # Signing key configuration
   signing:
     algorithm: "ed25519"  # or "ml-dsa-65"

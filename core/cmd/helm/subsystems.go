@@ -145,11 +145,58 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 
 	// --- Authz ---
 	mux.HandleFunc("/api/v1/authz/check", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			hash := ""
+			if svc.Authz != nil {
+				hash, _ = svc.Authz.RelationshipSnapshotHash()
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"engine":            "rebac",
+				"status":            "active",
+				"relationship_hash": hash,
+			})
+			return
+		}
+		if r.Method != http.MethodPost {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		var req struct {
+			Resolver      string `json:"resolver"`
+			ModelID       string `json:"model_id"`
+			Object        string `json:"object"`
+			Relation      string `json:"relation"`
+			Subject       string `json:"subject"`
+			Stale         bool   `json:"stale"`
+			ModelMismatch bool   `json:"model_mismatch"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			api.WriteBadRequest(w, "Invalid authz check request")
+			return
+		}
+		if req.Resolver == "" {
+			req.Resolver = "helm-rebac"
+		}
+		if req.ModelID == "" {
+			req.ModelID = "helm-local-v1"
+		}
+		if svc.Authz == nil {
+			api.WriteError(w, http.StatusServiceUnavailable, "Authz unavailable", "relationship resolver is not initialized")
+			return
+		}
+		snapshot, err := svc.Authz.SnapshotCheck(r.Context(), req.Resolver, req.ModelID, req.Object, req.Relation, req.Subject, time.Now().UTC(), req.Stale, req.ModelMismatch)
+		if err != nil {
+			api.WriteBadRequest(w, err.Error())
+			return
+		}
+		if svc.BoundarySurfaces != nil {
+			if sealed, putErr := svc.BoundarySurfaces.PutSnapshot(snapshot); putErr == nil {
+				snapshot = sealed
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"engine": "rebac",
-			"status": "active",
-		})
+		_ = json.NewEncoder(w).Encode(snapshot)
 	}))
 
 	// --- Version ---
@@ -170,7 +217,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	// --- Durable receipt API ---
 	registerReceiptRoutes(mux, svc)
 	approveHandler := api.NewApproveHandler(csvEnv("HELM_APPROVER_PUBLIC_KEYS"))
-	mux.HandleFunc("/api/v1/kernel/approve", approveHandler.HandleApprove)
+	mux.HandleFunc("/api/v1/kernel/approve", protectRuntimeHandler(RouteAuthService, approveHandler.HandleApprove))
 	registerContractRoutes(mux, svc)
 
 	// --- Obligation ---

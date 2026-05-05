@@ -1,6 +1,7 @@
 package labs.mindburn.helm;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.reflect.TypeToken;
 import labs.mindburn.helm.TypesGen.*;
 
@@ -65,9 +66,40 @@ public class HelmClient {
         public boolean native_authority;
         public String subject;
         public String statement_hash;
+        public String payload_type;
+        public String payload_hash;
         public boolean experimental;
         public String created_at;
         public String manifest_hash;
+    }
+
+    public static class EvidenceEnvelopePayload {
+        public String manifest_id;
+        public String envelope;
+        public String native_evidence_hash;
+        public boolean native_authority;
+        public String manifest_hash;
+        public String payload_type;
+        public String payload_hash;
+        public Object payload;
+    }
+
+    public static class ApprovalWebAuthnChallenge {
+        public String challenge_id;
+        public String approval_id;
+        public String challenge;
+        public String challenge_hash;
+        public String actor;
+        public String method;
+        public String expires_at;
+    }
+
+    public static class ApprovalWebAuthnAssertion {
+        public String challenge_id;
+        public String actor;
+        public String assertion;
+        public String receipt_id;
+        public String reason;
     }
 
     public static class NegativeBoundaryVector {
@@ -184,6 +216,22 @@ public class HelmClient {
         }
     }
 
+    private JsonElement sendJson(HttpRequest request) {
+        try {
+            HttpResponse<String> resp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() >= 400) {
+                HelmError err = gson.fromJson(resp.body(), HelmError.class);
+                throw new HelmApiException(
+                        resp.statusCode(),
+                        err != null && err.getError() != null ? err.getError().getMessage() : resp.body(),
+                        err != null && err.getError() != null ? String.valueOf(err.getError().getReasonCode()) : "ERROR_INTERNAL");
+            }
+            return gson.fromJson(resp.body(), JsonElement.class);
+        } catch (IOException | InterruptedException e) {
+            throw new RuntimeException("HELM API request failed", e);
+        }
+    }
+
     /** POST /v1/chat/completions */
     public ChatCompletionResponse chatCompletions(ChatCompletionRequest req) {
         HttpRequest r = req("POST", "/v1/chat/completions")
@@ -276,6 +324,60 @@ public class HelmClient {
         return send(r, EvidenceEnvelopeManifest.class);
     }
 
+    public JsonElement listEvidenceEnvelopeManifests() {
+        return sendJson(req("GET", "/api/v1/evidence/envelopes").GET().build());
+    }
+
+    public JsonElement getEvidenceEnvelopeManifest(String manifestId) {
+        return sendJson(req("GET", "/api/v1/evidence/envelopes/" + encode(manifestId)).GET().build());
+    }
+
+    public JsonElement verifyEvidenceEnvelopeManifest(String manifestId) {
+        return sendJson(req("POST", "/api/v1/evidence/envelopes/" + encode(manifestId) + "/verify")
+                .POST(HttpRequest.BodyPublishers.ofString("{}")).build());
+    }
+
+    public EvidenceEnvelopePayload getEvidenceEnvelopePayload(String manifestId) {
+        HttpRequest r = req("GET", "/api/v1/evidence/envelopes/" + encode(manifestId) + "/payload")
+                .GET().build();
+        return send(r, EvidenceEnvelopePayload.class);
+    }
+
+    public JsonElement getBoundaryStatus() {
+        return sendJson(req("GET", "/api/v1/boundary/status").GET().build());
+    }
+
+    public JsonElement listBoundaryCapabilities() {
+        return sendJson(req("GET", "/api/v1/boundary/capabilities").GET().build());
+    }
+
+    public JsonElement listBoundaryRecords() {
+        return sendJson(req("GET", "/api/v1/boundary/records").GET().build());
+    }
+
+    public JsonElement getBoundaryRecord(String recordId) {
+        return sendJson(req("GET", "/api/v1/boundary/records/" + encode(recordId)).GET().build());
+    }
+
+    public JsonElement verifyBoundaryRecord(String recordId) {
+        return sendJson(req("POST", "/api/v1/boundary/records/" + encode(recordId) + "/verify")
+                .POST(HttpRequest.BodyPublishers.ofString("{}")).build());
+    }
+
+    public JsonElement listBoundaryCheckpoints() {
+        return sendJson(req("GET", "/api/v1/boundary/checkpoints").GET().build());
+    }
+
+    public JsonElement createBoundaryCheckpoint() {
+        return sendJson(req("POST", "/api/v1/boundary/checkpoints")
+                .POST(HttpRequest.BodyPublishers.ofString("{}")).build());
+    }
+
+    public JsonElement verifyBoundaryCheckpoint(String checkpointId) {
+        return sendJson(req("POST", "/api/v1/boundary/checkpoints/" + encode(checkpointId) + "/verify")
+                .POST(HttpRequest.BodyPublishers.ofString("{}")).build());
+    }
+
     /** POST /api/v1/conformance/run */
     public ConformanceResult conformanceRun(ConformanceRequest req) {
         HttpRequest r = this.req("POST", "/api/v1/conformance/run")
@@ -297,6 +399,14 @@ public class HelmClient {
                 .GET().build();
         return sendList(r, new TypeToken<List<NegativeBoundaryVector>>() {
         });
+    }
+
+    public JsonElement listConformanceReports() {
+        return sendJson(req("GET", "/api/v1/conformance/reports").GET().build());
+    }
+
+    public JsonElement listConformanceVectors() {
+        return sendJson(req("GET", "/api/v1/conformance/vectors").GET().build());
     }
 
     /** GET /api/v1/mcp/registry */
@@ -323,6 +433,45 @@ public class HelmClient {
         return send(r, MCPQuarantineRecord.class);
     }
 
+    public MCPQuarantineRecord getMcpRegistryRecord(String serverId) {
+        HttpRequest r = req("GET", "/api/v1/mcp/registry/" + encode(serverId)).GET().build();
+        return send(r, MCPQuarantineRecord.class);
+    }
+
+    public MCPQuarantineRecord approveMcpRegistryRecord(String serverId, MCPRegistryApprovalRequest req) {
+        HttpRequest r = this.req("POST", "/api/v1/mcp/registry/" + encode(serverId) + "/approve")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+        return send(r, MCPQuarantineRecord.class);
+    }
+
+    public MCPQuarantineRecord revokeMcpRegistryRecord(String serverId, String reason) {
+        HttpRequest r = this.req("POST", "/api/v1/mcp/registry/" + encode(serverId) + "/revoke")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(java.util.Map.of("reason", reason)))).build();
+        return send(r, MCPQuarantineRecord.class);
+    }
+
+    public JsonElement scanMcpServer(Object req) {
+        HttpRequest r = this.req("POST", "/api/v1/mcp/scan")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+        return sendJson(r);
+    }
+
+    public JsonElement listMcpAuthProfiles() {
+        return sendJson(req("GET", "/api/v1/mcp/auth-profiles").GET().build());
+    }
+
+    public JsonElement putMcpAuthProfile(String profileId, Object profile) {
+        HttpRequest r = this.req("PUT", "/api/v1/mcp/auth-profiles/" + encode(profileId))
+                .PUT(HttpRequest.BodyPublishers.ofString(gson.toJson(profile))).build();
+        return sendJson(r);
+    }
+
+    public JsonElement authorizeMcpCall(Object req) {
+        HttpRequest r = this.req("POST", "/api/v1/mcp/authorize-call")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+        return sendJson(r);
+    }
+
     /** GET /api/v1/sandbox/grants/inspect without a runtime lists backend profiles. */
     public List<SandboxBackendProfile> listSandboxBackendProfiles() {
         HttpRequest r = req("GET", "/api/v1/sandbox/grants/inspect")
@@ -344,6 +493,110 @@ public class HelmClient {
         HttpRequest r = req("GET", "/api/v1/sandbox/grants/inspect?" + String.join("&", params))
                 .GET().build();
         return send(r, SandboxGrant.class);
+    }
+
+    public JsonElement listSandboxProfiles() {
+        return sendJson(req("GET", "/api/v1/sandbox/profiles").GET().build());
+    }
+
+    public JsonElement listSandboxGrants() {
+        return sendJson(req("GET", "/api/v1/sandbox/grants").GET().build());
+    }
+
+    public SandboxGrant createSandboxGrant(Object req) {
+        HttpRequest r = this.req("POST", "/api/v1/sandbox/grants")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+        return send(r, SandboxGrant.class);
+    }
+
+    public SandboxGrant getSandboxGrant(String grantId) {
+        HttpRequest r = req("GET", "/api/v1/sandbox/grants/" + encode(grantId)).GET().build();
+        return send(r, SandboxGrant.class);
+    }
+
+    public JsonElement verifySandboxGrant(String grantId) {
+        return sendJson(req("POST", "/api/v1/sandbox/grants/" + encode(grantId) + "/verify")
+                .POST(HttpRequest.BodyPublishers.ofString("{}")).build());
+    }
+
+    public JsonElement preflightSandboxGrant(Object req) {
+        HttpRequest r = this.req("POST", "/api/v1/sandbox/preflight")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+        return sendJson(r);
+    }
+
+    public JsonElement listAgentIdentities() {
+        return sendJson(req("GET", "/api/v1/identity/agents").GET().build());
+    }
+
+    public JsonElement getAuthzHealth() {
+        return sendJson(req("GET", "/api/v1/authz/health").GET().build());
+    }
+
+    public JsonElement checkAuthz(Object req) {
+        HttpRequest r = this.req("POST", "/api/v1/authz/check")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+        return sendJson(r);
+    }
+
+    public JsonElement listAuthzSnapshots() {
+        return sendJson(req("GET", "/api/v1/authz/snapshots").GET().build());
+    }
+
+    public JsonElement getAuthzSnapshot(String snapshotId) {
+        return sendJson(req("GET", "/api/v1/authz/snapshots/" + encode(snapshotId)).GET().build());
+    }
+
+    public JsonElement listApprovalCeremonies() {
+        return sendJson(req("GET", "/api/v1/approvals").GET().build());
+    }
+
+    public JsonElement createApprovalCeremony(Object req) {
+        HttpRequest r = this.req("POST", "/api/v1/approvals")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+        return sendJson(r);
+    }
+
+    public JsonElement transitionApprovalCeremony(String approvalId, String action, Object req) {
+        HttpRequest r = this.req("POST", "/api/v1/approvals/" + encode(approvalId) + "/" + encode(action))
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+        return sendJson(r);
+    }
+
+    public ApprovalWebAuthnChallenge createApprovalWebAuthnChallenge(String approvalId, Object req) {
+        HttpRequest r = this.req("POST", "/api/v1/approvals/" + encode(approvalId) + "/webauthn/challenge")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+        return send(r, ApprovalWebAuthnChallenge.class);
+    }
+
+    public JsonElement assertApprovalWebAuthnChallenge(String approvalId, ApprovalWebAuthnAssertion req) {
+        HttpRequest r = this.req("POST", "/api/v1/approvals/" + encode(approvalId) + "/webauthn/assert")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+        return sendJson(r);
+    }
+
+    public JsonElement listBudgetCeilings() {
+        return sendJson(req("GET", "/api/v1/budgets").GET().build());
+    }
+
+    public JsonElement putBudgetCeiling(String budgetId, Object req) {
+        HttpRequest r = this.req("PUT", "/api/v1/budgets/" + encode(budgetId))
+                .PUT(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+        return sendJson(r);
+    }
+
+    public JsonElement getCoexistenceCapabilities() {
+        return sendJson(req("GET", "/api/v1/coexistence/capabilities").GET().build());
+    }
+
+    public JsonElement getTelemetryOtelConfig() {
+        return sendJson(req("GET", "/api/v1/telemetry/otel/config").GET().build());
+    }
+
+    public JsonElement exportTelemetry(Object req) {
+        HttpRequest r = this.req("POST", "/api/v1/telemetry/export")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+        return sendJson(r);
     }
 
     private static String encode(String value) {

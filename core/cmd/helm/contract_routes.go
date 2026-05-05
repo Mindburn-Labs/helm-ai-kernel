@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/api"
+	boundarypkg "github.com/Mindburn-Labs/helm-oss/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/conformance"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
 	evidencepkg "github.com/Mindburn-Labs/helm-oss/core/pkg/evidence"
@@ -47,6 +48,107 @@ type evidenceBundle struct {
 
 func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 	mcpQuarantine := mcppkg.NewQuarantineRegistry()
+	surfaces := boundarypkg.NewSurfaceRegistry(time.Now)
+	if svc != nil && svc.BoundarySurfaces != nil {
+		surfaces = svc.BoundarySurfaces
+	}
+	hydrateMCPQuarantine(context.Background(), mcpQuarantine, surfaces.ListMCPServers())
+
+	mux.HandleFunc("/api/v1/boundary/status", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		writeContractJSON(w, http.StatusOK, surfaces.Status(displayVersion(), svc != nil && svc.ReceiptStore != nil, svc != nil && svc.ReceiptSigner != nil, countMCPQuarantined(mcpQuarantine.List(r.Context()))))
+	}))
+
+	mux.HandleFunc("/api/v1/boundary/capabilities", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		writeContractJSON(w, http.StatusOK, surfaces.Capabilities())
+	}))
+
+	mux.HandleFunc("/api/v1/boundary/records", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		query := contracts.BoundarySearchRequest{
+			Verdict:     r.URL.Query().Get("verdict"),
+			ReasonCode:  r.URL.Query().Get("reason_code"),
+			ToolName:    r.URL.Query().Get("tool_name"),
+			MCPServerID: r.URL.Query().Get("mcp_server_id"),
+			PolicyEpoch: r.URL.Query().Get("policy_epoch"),
+			ReceiptID:   r.URL.Query().Get("receipt_id"),
+			Limit:       parseLimit(r.URL.Query().Get("limit"), 50, 1000),
+		}
+		writeContractJSON(w, http.StatusOK, surfaces.ListRecords(query))
+	}))
+
+	mux.HandleFunc("/api/v1/boundary/records/", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/boundary/records/")
+		recordID, verify := strings.CutSuffix(suffix, "/verify")
+		if recordID == "" || strings.Contains(recordID, "/") {
+			api.WriteBadRequest(w, "Invalid boundary record id")
+			return
+		}
+		if verify {
+			if r.Method != http.MethodPost {
+				api.WriteMethodNotAllowed(w)
+				return
+			}
+			writeContractJSON(w, http.StatusOK, surfaces.VerifyRecord(recordID))
+			return
+		}
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		record, ok := surfaces.GetRecord(recordID)
+		if !ok {
+			api.WriteNotFound(w, "boundary record not found")
+			return
+		}
+		writeContractJSON(w, http.StatusOK, record)
+	}))
+
+	mux.HandleFunc("/api/v1/boundary/checkpoints", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeContractJSON(w, http.StatusOK, surfaces.ListCheckpoints())
+		case http.MethodPost:
+			receiptCount := 0
+			if svc != nil && svc.ReceiptStore != nil {
+				if receipts, err := contractReceipts(r.Context(), svc, "", 1000); err == nil {
+					receiptCount = len(receipts)
+				}
+			}
+			checkpoint, err := surfaces.CreateCheckpoint(receiptCount)
+			if err != nil {
+				api.WriteInternal(w, err)
+				return
+			}
+			writeContractJSON(w, http.StatusCreated, checkpoint)
+		default:
+			api.WriteMethodNotAllowed(w)
+		}
+	}))
+
+	mux.HandleFunc("/api/v1/boundary/checkpoints/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/boundary/checkpoints/")
+		checkpointID, verify := strings.CutSuffix(suffix, "/verify")
+		if checkpointID == "" || strings.Contains(checkpointID, "/") || !verify {
+			api.WriteBadRequest(w, "Invalid boundary checkpoint route")
+			return
+		}
+		if r.Method != http.MethodPost {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		writeContractJSON(w, http.StatusOK, surfaces.VerifyCheckpoint(checkpointID))
+	}))
 
 	mux.HandleFunc("/api/v1/proofgraph/sessions", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -158,6 +260,10 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 	})
 
 	mux.HandleFunc("/api/v1/evidence/envelopes", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			writeContractJSON(w, http.StatusOK, surfaces.ListEnvelopes())
+			return
+		}
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -183,6 +289,77 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		})
 		if err != nil {
 			api.WriteBadRequest(w, err.Error())
+			return
+		}
+		payload, err := evidencepkg.BuildEnvelopePayload(manifest)
+		if err != nil {
+			api.WriteBadRequest(w, err.Error())
+			return
+		}
+		if err := surfaces.PutEnvelope(manifest); err != nil {
+			api.WriteError(w, http.StatusInternalServerError, "Boundary registry persistence failed", err.Error())
+			return
+		}
+		if err := surfaces.PutEnvelopePayload(payload); err != nil {
+			api.WriteError(w, http.StatusInternalServerError, "Boundary registry persistence failed", err.Error())
+			return
+		}
+		writeContractJSON(w, http.StatusOK, manifest)
+	}))
+
+	mux.HandleFunc("/api/v1/evidence/envelopes/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/evidence/envelopes/")
+		manifestID, verify := strings.CutSuffix(suffix, "/verify")
+		payloadRoute := false
+		if !verify {
+			manifestID, payloadRoute = strings.CutSuffix(suffix, "/payload")
+		}
+		if manifestID == "" || strings.Contains(manifestID, "/") {
+			api.WriteBadRequest(w, "Invalid evidence envelope manifest id")
+			return
+		}
+		manifest, ok := surfaces.GetEnvelope(manifestID)
+		if !ok {
+			api.WriteNotFound(w, "evidence envelope manifest not found")
+			return
+		}
+		if verify {
+			if r.Method != http.MethodPost {
+				api.WriteMethodNotAllowed(w)
+				return
+			}
+			payload, ok := surfaces.GetEnvelopePayload(manifest.ManifestID)
+			if !ok {
+				var err error
+				payload, err = evidencepkg.BuildEnvelopePayload(manifest)
+				if err != nil {
+					api.WriteBadRequest(w, err.Error())
+					return
+				}
+			}
+			result := evidencepkg.VerifyEnvelopePayload(manifest, payload)
+			writeContractJSON(w, http.StatusOK, result)
+			return
+		}
+		if payloadRoute {
+			if r.Method != http.MethodGet {
+				api.WriteMethodNotAllowed(w)
+				return
+			}
+			payload, ok := surfaces.GetEnvelopePayload(manifest.ManifestID)
+			if !ok {
+				var err error
+				payload, err = evidencepkg.BuildEnvelopePayload(manifest)
+				if err != nil {
+					api.WriteBadRequest(w, err.Error())
+					return
+				}
+			}
+			writeContractJSON(w, http.StatusOK, payload)
+			return
+		}
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
 			return
 		}
 		writeContractJSON(w, http.StatusOK, manifest)
@@ -216,11 +393,33 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteBadRequest(w, "Invalid conformance request")
 			return
 		}
-		if req.Level != "L1" && req.Level != "L2" {
-			api.WriteBadRequest(w, "Conformance level must be L1 or L2")
+		if req.Level != "L1" && req.Level != "L2" && req.Level != "L3" && req.Level != "L4" {
+			api.WriteBadRequest(w, "Conformance level must be L1, L2, L3, or L4")
 			return
 		}
-		writeContractJSON(w, http.StatusOK, conformanceReport(req.Level, req.Profile))
+		report := conformanceReport(req.Level, req.Profile)
+		if err := surfaces.PutReport(report); err != nil {
+			api.WriteError(w, http.StatusInternalServerError, "Boundary registry persistence failed", err.Error())
+			return
+		}
+		writeContractJSON(w, http.StatusOK, report)
+	}))
+
+	mux.HandleFunc("/api/v1/conformance/reports", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		reports := surfaces.ListReports()
+		if len(reports) == 0 {
+			report := conformanceReport("L4", "sota-2026")
+			if err := surfaces.PutReport(report); err != nil {
+				api.WriteError(w, http.StatusInternalServerError, "Boundary registry persistence failed", err.Error())
+				return
+			}
+			reports = append(reports, report)
+		}
+		writeContractJSON(w, http.StatusOK, reports)
 	}))
 
 	mux.HandleFunc("/api/v1/conformance/reports/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
@@ -236,6 +435,18 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		writeContractJSON(w, http.StatusOK, conformanceReport("L1", "runtime"))
 	}))
 
+	mux.HandleFunc("/api/v1/conformance/vectors", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		writeContractJSON(w, http.StatusOK, map[string]any{
+			"levels":   []string{"L1", "L2", "L3", "L4"},
+			"negative": conformance.DefaultNegativeBoundaryVectors(),
+			"profiles": []string{"receipts", "mcp", "sandbox", "authz", "approval", "telemetry", "envelopes", "checkpoints"},
+		})
+	})
+
 	mux.HandleFunc("/api/v1/conformance/negative", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
@@ -247,7 +458,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 	mux.HandleFunc("/api/v1/mcp/registry", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			writeContractJSON(w, http.StatusOK, mcpQuarantine.List(r.Context()))
+			writeContractJSON(w, http.StatusOK, surfaces.ListMCPServers())
 		case http.MethodPost:
 			var req struct {
 				ServerID  string   `json:"server_id"`
@@ -273,6 +484,10 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			})
 			if err != nil {
 				api.WriteBadRequest(w, err.Error())
+				return
+			}
+			if _, err := surfaces.PutMCPServer(record); err != nil {
+				api.WriteInternal(w, err)
 				return
 			}
 			writeContractJSON(w, http.StatusAccepted, record)
@@ -307,7 +522,296 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteBadRequest(w, err.Error())
 			return
 		}
+		if _, err := surfaces.PutMCPServer(record); err != nil {
+			api.WriteInternal(w, err)
+			return
+		}
 		writeContractJSON(w, http.StatusOK, record)
+	}))
+
+	mux.HandleFunc("/api/v1/mcp/registry/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/mcp/registry/")
+		serverID := suffix
+		action := ""
+		if strings.Contains(suffix, "/") {
+			parts := strings.SplitN(suffix, "/", 2)
+			serverID, action = parts[0], parts[1]
+		}
+		if serverID == "" {
+			api.WriteBadRequest(w, "Invalid MCP server id")
+			return
+		}
+		switch {
+		case action == "" && r.Method == http.MethodGet:
+			record, ok := surfaces.GetMCPServer(serverID)
+			if !ok {
+				api.WriteNotFound(w, "MCP server not found")
+				return
+			}
+			writeContractJSON(w, http.StatusOK, record)
+		case action == "approve" && r.Method == http.MethodPost:
+			var req struct {
+				ApproverID        string `json:"approver_id"`
+				ApprovalReceiptID string `json:"approval_receipt_id"`
+				Reason            string `json:"reason"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				api.WriteBadRequest(w, "Invalid MCP approval request")
+				return
+			}
+			record, err := mcpQuarantine.Approve(r.Context(), mcppkg.ApprovalDecision{
+				ServerID:          serverID,
+				ApproverID:        req.ApproverID,
+				ApprovalReceiptID: req.ApprovalReceiptID,
+				ApprovedAt:        time.Now().UTC(),
+				Reason:            req.Reason,
+			})
+			if err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
+			if _, err := surfaces.PutMCPServer(record); err != nil {
+				api.WriteInternal(w, err)
+				return
+			}
+			writeContractJSON(w, http.StatusOK, record)
+		case action == "revoke" && r.Method == http.MethodPost:
+			var req struct {
+				Reason string `json:"reason"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			record, err := mcpQuarantine.Revoke(r.Context(), serverID, req.Reason, time.Now().UTC())
+			if err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
+			if _, err := surfaces.PutMCPServer(record); err != nil {
+				api.WriteInternal(w, err)
+				return
+			}
+			writeContractJSON(w, http.StatusOK, record)
+		default:
+			api.WriteMethodNotAllowed(w)
+		}
+	}))
+
+	mux.HandleFunc("/api/v1/mcp/scan", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		var req contracts.MCPScanRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			api.WriteBadRequest(w, "Invalid MCP scan request")
+			return
+		}
+		record, err := mcpQuarantine.Discover(r.Context(), mcppkg.DiscoverServerRequest{
+			ServerID:  req.ServerID,
+			Name:      req.Name,
+			Transport: req.Transport,
+			Endpoint:  req.Endpoint,
+			ToolNames: req.ToolNames,
+			Risk:      mcppkg.ServerRiskHigh,
+			Reason:    "scan requires approval before dispatch",
+		})
+		if err != nil {
+			api.WriteBadRequest(w, err.Error())
+			return
+		}
+		if _, err := surfaces.PutMCPServer(record); err != nil {
+			api.WriteInternal(w, err)
+			return
+		}
+		writeContractJSON(w, http.StatusAccepted, contracts.MCPScanResult{
+			ServerID:            record.ServerID,
+			Risk:                string(record.Risk),
+			State:               string(record.State),
+			ToolCount:           len(record.ToolNames),
+			Findings:            []string{"unknown MCP server defaults to quarantine", "schema pins required before call-time dispatch"},
+			RecommendedAction:   "approve or revoke after review",
+			QuarantineRecordID:  record.ServerID,
+			RequiresApproval:    true,
+			SchemaPinRequired:   true,
+			AuthorizationNeeded: true,
+			ScannedAt:           time.Now().UTC(),
+		})
+	}))
+
+	mux.HandleFunc("/api/v1/mcp/auth-profiles", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		writeContractJSON(w, http.StatusOK, surfaces.ListAuthProfiles())
+	}))
+
+	mux.HandleFunc("/api/v1/mcp/auth-profiles/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		profileID := strings.TrimPrefix(r.URL.Path, "/api/v1/mcp/auth-profiles/")
+		if profileID == "" || strings.Contains(profileID, "/") {
+			api.WriteBadRequest(w, "Invalid MCP auth profile id")
+			return
+		}
+		if r.Method != http.MethodPut {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		var profile contracts.MCPAuthorizationProfile
+		if err := json.NewDecoder(r.Body).Decode(&profile); err != nil {
+			api.WriteBadRequest(w, "Invalid MCP auth profile request")
+			return
+		}
+		profile.ProfileID = profileID
+		sealed, err := surfaces.PutAuthProfile(profile)
+		if err != nil {
+			api.WriteBadRequest(w, err.Error())
+			return
+		}
+		writeContractJSON(w, http.StatusOK, sealed)
+	}))
+
+	mux.HandleFunc("/api/v1/mcp/authorize-call", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		var req contracts.MCPAuthorizeCallRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			api.WriteBadRequest(w, "Invalid MCP authorize-call request")
+			return
+		}
+		catalog := mcppkg.NewToolCatalog()
+		catalog.RegisterCommonTools()
+		firewall := mcppkg.NewExecutionFirewall(catalog, mcpQuarantine, "api")
+		firewall.RequirePinnedSchema = true
+		record, err := firewall.AuthorizeToolCall(r.Context(), mcppkg.ToolCallAuthorization{
+			ServerID:         req.ServerID,
+			ToolName:         req.ToolName,
+			ArgsHash:         req.ArgsHash,
+			GrantedScopes:    req.GrantedScopes,
+			PinnedSchemaHash: req.PinnedSchemaHash,
+			OAuthResource:    req.OAuthResource,
+			ReceiptID:        req.ReceiptID,
+		})
+		if err != nil {
+			api.WriteInternal(w, err)
+			return
+		}
+		if _, putErr := surfaces.PutRecord(record); putErr != nil {
+			api.WriteInternal(w, putErr)
+			return
+		}
+		status := http.StatusOK
+		if record.Verdict != contracts.VerdictAllow {
+			status = http.StatusForbidden
+		}
+		writeContractJSON(w, status, record)
+	}))
+
+	mux.HandleFunc("/api/v1/sandbox/profiles", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		writeContractJSON(w, http.StatusOK, runtimesandbox.DefaultBackendProfiles())
+	}))
+
+	mux.HandleFunc("/api/v1/sandbox/grants", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeContractJSON(w, http.StatusOK, surfaces.ListSandboxGrants())
+		case http.MethodPost:
+			var req struct {
+				Runtime     string `json:"runtime"`
+				Profile     string `json:"profile"`
+				ImageDigest string `json:"image_digest"`
+				PolicyEpoch string `json:"policy_epoch"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				api.WriteBadRequest(w, "Invalid sandbox grant request")
+				return
+			}
+			if strings.TrimSpace(req.ImageDigest) == "" {
+				api.WriteBadRequest(w, "sandbox grant requires image_digest or template digest before execution")
+				return
+			}
+			policy := runtimesandbox.DefaultPolicy()
+			if req.Profile != "" {
+				policy.PolicyID = req.Profile
+			}
+			grant, err := runtimesandbox.GrantFromPolicy(policy, req.Runtime, policy.PolicyID, req.ImageDigest, req.PolicyEpoch, time.Now().UTC())
+			if err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
+			grant, err = surfaces.PutSandboxGrant(grant)
+			if err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
+			writeContractJSON(w, http.StatusCreated, grant)
+		default:
+			api.WriteMethodNotAllowed(w)
+		}
+	}))
+
+	mux.HandleFunc("/api/v1/sandbox/grants/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/sandbox/grants/")
+		grantID, verify := strings.CutSuffix(suffix, "/verify")
+		if grantID == "" || strings.Contains(grantID, "/") {
+			api.WriteBadRequest(w, "Invalid sandbox grant id")
+			return
+		}
+		grant, ok := surfaces.GetSandboxGrant(grantID)
+		if !ok {
+			api.WriteNotFound(w, "sandbox grant not found")
+			return
+		}
+		if verify {
+			if r.Method != http.MethodPost {
+				api.WriteMethodNotAllowed(w)
+				return
+			}
+			result := verifySandboxGrantForDispatch(grant, "")
+			writeContractJSON(w, http.StatusOK, result)
+			return
+		}
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		writeContractJSON(w, http.StatusOK, grant)
+	}))
+
+	mux.HandleFunc("/api/v1/sandbox/preflight", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		var req contracts.SandboxPreflightRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			api.WriteBadRequest(w, "Invalid sandbox preflight request")
+			return
+		}
+		grant := req.RequestedGrant
+		if grant.GrantID == "" {
+			policy := runtimesandbox.DefaultPolicy()
+			if req.Profile != "" {
+				policy.PolicyID = req.Profile
+			}
+			generated, err := runtimesandbox.GrantFromPolicy(policy, req.Runtime, policy.PolicyID, req.ImageDigest, req.PolicyEpoch, time.Now().UTC())
+			if err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
+			grant = generated
+		}
+		grant, err := surfaces.PutSandboxGrant(grant)
+		if err != nil {
+			api.WriteBadRequest(w, err.Error())
+			return
+		}
+		result := verifySandboxGrantForDispatch(grant, req.ExpectedGrantHash)
+		writeContractJSON(w, http.StatusOK, result)
 	}))
 
 	mux.HandleFunc("/api/v1/sandbox/grants/inspect", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
@@ -331,6 +835,264 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		writeContractJSON(w, http.StatusOK, grant)
 	}))
+
+	mux.HandleFunc("/api/v1/identity/agents", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		writeContractJSON(w, http.StatusOK, surfaces.ListAgents())
+	}))
+
+	mux.HandleFunc("/api/v1/authz/health", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		hash := ""
+		if svc != nil && svc.Authz != nil {
+			hash, _ = svc.Authz.RelationshipSnapshotHash()
+		}
+		writeContractJSON(w, http.StatusOK, contracts.AuthzHealth{
+			Status:           "ready",
+			Resolver:         "helm-rebac",
+			ModelID:          "helm-local-v1",
+			RelationshipHash: hash,
+			CheckedAt:        time.Now().UTC(),
+		})
+	}))
+
+	mux.HandleFunc("/api/v1/authz/snapshots", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		writeContractJSON(w, http.StatusOK, surfaces.ListSnapshots())
+	}))
+
+	mux.HandleFunc("/api/v1/authz/snapshots/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		snapshotID := strings.TrimPrefix(r.URL.Path, "/api/v1/authz/snapshots/")
+		if snapshotID == "" || strings.Contains(snapshotID, "/") {
+			api.WriteBadRequest(w, "Invalid authz snapshot id")
+			return
+		}
+		snapshot, ok := surfaces.GetSnapshot(snapshotID)
+		if !ok {
+			api.WriteNotFound(w, "authz snapshot not found")
+			return
+		}
+		writeContractJSON(w, http.StatusOK, snapshot)
+	}))
+
+	mux.HandleFunc("/api/v1/approvals", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeContractJSON(w, http.StatusOK, surfaces.ListApprovals())
+		case http.MethodPost:
+			var req struct {
+				ApprovalID  string   `json:"approval_id"`
+				Subject     string   `json:"subject"`
+				Action      string   `json:"action"`
+				RequestedBy string   `json:"requested_by"`
+				Approvers   []string `json:"approvers"`
+				Quorum      int      `json:"quorum"`
+				TimelockMs  int64    `json:"timelock_ms"`
+				ExpiresInMs int64    `json:"expires_in_ms"`
+				Reason      string   `json:"reason"`
+				ReceiptID   string   `json:"receipt_id"`
+				BreakGlass  bool     `json:"break_glass"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				api.WriteBadRequest(w, "Invalid approval request")
+				return
+			}
+			if req.ApprovalID == "" {
+				req.ApprovalID = contracts.SurfaceID("approval", req.Subject+"-"+req.Action)
+			}
+			now := time.Now().UTC()
+			var timelock time.Time
+			if req.TimelockMs > 0 {
+				timelock = now.Add(time.Duration(req.TimelockMs) * time.Millisecond)
+			}
+			var expires time.Time
+			if req.ExpiresInMs > 0 {
+				expires = now.Add(time.Duration(req.ExpiresInMs) * time.Millisecond)
+			}
+			approval, err := surfaces.PutApproval(contracts.ApprovalCeremony{
+				ApprovalID:    req.ApprovalID,
+				Subject:       req.Subject,
+				Action:        req.Action,
+				State:         contracts.ApprovalCeremonyPending,
+				RequestedBy:   req.RequestedBy,
+				Approvers:     req.Approvers,
+				Quorum:        req.Quorum,
+				TimelockUntil: timelock,
+				ExpiresAt:     expires,
+				BreakGlass:    req.BreakGlass,
+				Reason:        req.Reason,
+				ReceiptID:     req.ReceiptID,
+				CreatedAt:     now,
+				UpdatedAt:     now,
+			})
+			if err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
+			writeContractJSON(w, http.StatusCreated, approval)
+		default:
+			api.WriteMethodNotAllowed(w)
+		}
+	}))
+
+	mux.HandleFunc("/api/v1/approvals/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/approvals/")
+		approvalID, action, ok := strings.Cut(suffix, "/")
+		if !ok || approvalID == "" {
+			api.WriteBadRequest(w, "Invalid approval route")
+			return
+		}
+		if r.Method != http.MethodPost {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		if action == "webauthn/challenge" {
+			var req struct {
+				Method string `json:"method"`
+				TTLMS  int64  `json:"ttl_ms"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			challenge, err := surfaces.CreateApprovalChallenge(approvalID, req.Method, time.Duration(req.TTLMS)*time.Millisecond)
+			if err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
+			writeContractJSON(w, http.StatusCreated, challenge)
+			return
+		}
+		if action == "webauthn/assert" {
+			var req contracts.ApprovalWebAuthnAssertion
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				api.WriteBadRequest(w, "Invalid WebAuthn assertion request")
+				return
+			}
+			approval, err := surfaces.AssertApprovalChallenge(req)
+			if err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
+			writeContractJSON(w, http.StatusOK, approval)
+			return
+		}
+		var req struct {
+			Actor     string `json:"actor"`
+			ReceiptID string `json:"receipt_id"`
+			Reason    string `json:"reason"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		state := contracts.ApprovalCeremonyPending
+		switch action {
+		case "approve":
+			state = contracts.ApprovalCeremonyAllowed
+		case "deny":
+			state = contracts.ApprovalCeremonyDenied
+		case "revoke":
+			state = contracts.ApprovalCeremonyRevoked
+		default:
+			api.WriteNotFound(w, "approval action not found")
+			return
+		}
+		approval, err := surfaces.TransitionApproval(approvalID, state, req.Actor, req.ReceiptID, req.Reason)
+		if err != nil {
+			api.WriteBadRequest(w, err.Error())
+			return
+		}
+		writeContractJSON(w, http.StatusOK, approval)
+	}))
+
+	mux.HandleFunc("/api/v1/budgets", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		writeContractJSON(w, http.StatusOK, surfaces.ListBudgets())
+	}))
+
+	mux.HandleFunc("/api/v1/budgets/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		budgetID := strings.TrimPrefix(r.URL.Path, "/api/v1/budgets/")
+		if budgetID == "" || strings.Contains(budgetID, "/") {
+			api.WriteBadRequest(w, "Invalid budget id")
+			return
+		}
+		if r.Method != http.MethodPut {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		var req contracts.BudgetCeiling
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			api.WriteBadRequest(w, "Invalid budget request")
+			return
+		}
+		req.BudgetID = budgetID
+		if req.Subject == "" {
+			req.Subject = "tenant:default"
+		}
+		if req.Window == "" {
+			req.Window = "24h"
+		}
+		budget, err := surfaces.PutBudget(req)
+		if err != nil {
+			api.WriteError(w, http.StatusInternalServerError, "Boundary registry persistence failed", err.Error())
+			return
+		}
+		writeContractJSON(w, http.StatusOK, budget)
+	}))
+
+	mux.HandleFunc("/api/v1/coexistence/capabilities", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		writeContractJSON(w, http.StatusOK, contracts.CoexistenceCapabilityManifest{
+			ManifestID:      "helm-coexistence-oss",
+			Authority:       "helm-native-receipts",
+			BoundaryRole:    "inner-proof-bearing-execution-boundary",
+			SupportedInputs: []string{"mcp", "openai-compatible-proxy", "framework-middleware", "gateway-export"},
+			ExportSurfaces:  []string{"evidencepack", "dsse", "jws", "in-toto", "slsa", "sigstore", "otel-genai", "cloudevents"},
+			ReceiptBindings: []string{"receipt_id", "record_hash", "sandbox_grant_hash", "authz_snapshot_hash"},
+			GeneratedAt:     time.Now().UTC(),
+		})
+	}))
+
+	mux.HandleFunc("/api/v1/telemetry/otel/config", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		writeContractJSON(w, http.StatusOK, telemetryConfig())
+	}))
+
+	mux.HandleFunc("/api/v1/telemetry/export", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		var req contracts.TelemetryExportRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if req.Format == "" {
+			req.Format = "otel-genai"
+		}
+		writeContractJSON(w, http.StatusAccepted, contracts.TelemetryExportResult{
+			ExportID:      contracts.SurfaceID("telemetry", req.Format+"-"+req.ReceiptID+"-"+req.RecordHash),
+			Format:        req.Format,
+			Authoritative: false,
+			Attributes:    req.Attributes,
+			ExportedAt:    time.Now().UTC(),
+		})
+	}))
 }
 
 func contractReceipts(ctx context.Context, svc *Services, sessionID string, limit int) ([]*contracts.Receipt, error) {
@@ -341,6 +1103,76 @@ func contractReceipts(ctx context.Context, svc *Services, sessionID string, limi
 		return svc.ReceiptStore.ListByAgent(ctx, sessionID, 0, limit)
 	}
 	return listReceiptsForCursor(ctx, svc, "", 0, limit)
+}
+
+func hydrateMCPQuarantine(ctx context.Context, registry *mcppkg.QuarantineRegistry, records []mcppkg.ServerQuarantineRecord) {
+	for _, record := range records {
+		_, _ = registry.Discover(ctx, mcppkg.DiscoverServerRequest{
+			ServerID:     record.ServerID,
+			Name:         record.Name,
+			Transport:    record.Transport,
+			Endpoint:     record.Endpoint,
+			ToolNames:    record.ToolNames,
+			Risk:         record.Risk,
+			DiscoveredAt: record.DiscoveredAt,
+			ExpiresAt:    record.ExpiresAt,
+			Reason:       record.Reason,
+		})
+		switch record.State {
+		case mcppkg.QuarantineApproved:
+			if record.ApprovedBy != "" && record.ApprovalReceiptID != "" {
+				_, _ = registry.Approve(ctx, mcppkg.ApprovalDecision{
+					ServerID:          record.ServerID,
+					ApproverID:        record.ApprovedBy,
+					ApprovalReceiptID: record.ApprovalReceiptID,
+					ApprovedAt:        record.ApprovedAt,
+					ExpiresAt:         record.ExpiresAt,
+					Reason:            record.Reason,
+				})
+			}
+		case mcppkg.QuarantineRevoked:
+			_, _ = registry.Revoke(ctx, record.ServerID, record.Reason, record.RevokedAt)
+		}
+	}
+}
+
+func verifySandboxGrantForDispatch(grant contracts.SandboxGrant, expectedHash string) contracts.SandboxPreflightResult {
+	result := contracts.SandboxPreflightResult{
+		Verdict:       contracts.VerdictAllow,
+		GrantID:       grant.GrantID,
+		GrantHash:     grant.GrantHash,
+		DispatchReady: true,
+		CheckedAt:     time.Now().UTC(),
+	}
+	var findings []string
+	if strings.TrimSpace(grant.GrantHash) == "" {
+		findings = append(findings, "sandbox grant hash is required")
+	}
+	if strings.TrimSpace(grant.ImageDigest) == "" && strings.TrimSpace(grant.TemplateDigest) == "" {
+		findings = append(findings, "image_digest or template_digest is required before execution")
+	}
+	if strings.TrimSpace(grant.PolicyEpoch) == "" {
+		findings = append(findings, "policy_epoch is required before execution")
+	}
+	if grant.Env.Mode != "deny-all" && grant.Env.Mode != "allowlist" && grant.Env.Mode != "redacted" {
+		findings = append(findings, "env exposure mode is invalid")
+	}
+	if grant.Env.Mode == "allowlist" && len(grant.Env.Names) == 0 && grant.Env.NamesHash == "" {
+		findings = append(findings, "env allowlist requires explicit names or names_hash")
+	}
+	if grant.Network.Mode != "deny-all" {
+		findings = append(findings, "network access must remain deny-all unless an explicit allowlist profile is reviewed")
+	}
+	if expectedHash != "" && expectedHash != grant.GrantHash {
+		findings = append(findings, "expected grant hash mismatch")
+	}
+	if len(findings) > 0 {
+		result.Verdict = contracts.VerdictDeny
+		result.ReasonCode = contracts.ReasonSandboxViolation
+		result.DispatchReady = false
+		result.Findings = findings
+	}
+	return result
 }
 
 func contractReceiptsForExport(ctx context.Context, svc *Services, sessionID string) ([]*contracts.Receipt, error) {
@@ -695,6 +1527,30 @@ func writeContractJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+func countMCPQuarantined(records []mcppkg.ServerQuarantineRecord) int {
+	count := 0
+	for _, record := range records {
+		if record.State == mcppkg.QuarantineQuarantined {
+			count++
+		}
+	}
+	return count
+}
+
+func telemetryConfig() contracts.TelemetryOTelConfig {
+	return contracts.TelemetryOTelConfig{
+		ServiceName:   "helm-oss",
+		SignalType:    "otel",
+		Authoritative: false,
+		SpanAttributes: map[string]string{
+			"service.name":         "helm-oss",
+			"helm.boundary.role":   "execution-kernel",
+			"helm.evidence.source": "runtime-export",
+		},
+		ExportedSignals: []string{"traces", "metrics", "logs"},
+	}
 }
 
 func conformanceReport(level, profile string) map[string]any {

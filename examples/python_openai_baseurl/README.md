@@ -10,6 +10,7 @@ Shows HELM integration with the OpenAI Python SDK using a single `base_url` swap
 ## Run
 
 ```bash
+cd examples/python_openai_baseurl
 pip install httpx
 python main.py
 ```
@@ -24,17 +25,6 @@ python main.py
 
 ## Expected Output
 
-```
-=== Chat Completions ===
-Denied: DENY_TOOL_NOT_FOUND — Tool not found: ...
-
-=== Evidence ===
-Exported 1234 bytes
-Verification: PASS
-
-=== Conformance ===
-Verdict: PASS, Gates: 12, Failed: 0
-
-=== Health ===
-Status: {'status': 'ok', 'version': '0.1.0'}
-```
+The example prints sections for chat completions, evidence export and
+verification, conformance, and health. The exact verdict, reason code, byte
+count, and version depend on the policy and HELM server you run locally.

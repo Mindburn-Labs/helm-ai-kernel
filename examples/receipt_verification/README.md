@@ -7,3 +7,23 @@ Run offline receipt checks with the bundled examples:
 
 Both scripts demonstrate verifying receipt integrity and expected reason codes
 from exported HELM evidence data.
+
+## Prerequisites
+
+- HELM running at `http://localhost:8080`
+- Receipts already present in the ProofGraph store
+- Python package from `sdk/python` or a JavaScript runtime with `fetch`
+
+## Run
+
+```bash
+cd examples/receipt_verification
+PYTHONPATH=../../sdk/python python verify_receipts.py
+npx tsx verify_receipts.ts
+```
+
+The scripts are examples for receipt inspection. The retained verifier gate is:
+
+```bash
+make verify-fixtures
+```

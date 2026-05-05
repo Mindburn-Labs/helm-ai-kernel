@@ -1,17 +1,51 @@
 # Deployment
 
-The retained deployment material in this repository is the Helm chart under `deploy/helm-chart/`.
+The retained deployment material in this repository is the Kubernetes Helm
+chart under `deploy/helm-chart/`. Docker Compose remains the local development
+path and is documented in `docker-compose.yml` and `docs/DEVELOPER_JOURNEY.md`.
+
+## Deployment Shape
+
+```mermaid
+flowchart LR
+  values["values.yaml"] --> chart["helm-firewall chart"]
+  chart --> deploy["Deployment"]
+  chart --> svc["Service"]
+  chart --> secret["signing and auth Secrets"]
+  chart --> config["policy ConfigMap"]
+  chart --> pvc["PVC or emptyDir"]
+  deploy --> pod["helm serve"]
+```
 
 ## Helm Chart
 
 ```bash
-cd deploy/helm-chart
-helm dependency update
-helm install helm-oss .
+make helm-chart-smoke
+helm lint deploy/helm-chart
+helm template helm-oss deploy/helm-chart
+helm install helm-oss deploy/helm-chart
 ```
 
-Review `values.yaml` before use in a real environment.
+Review `deploy/helm-chart/values.yaml` before use in a real environment.
 
 ## Scope
 
-Hosted demo deployment material, operator templates, and monitoring bundles that were not part of the tight OSS kernel surface have been removed from this repository.
+Included:
+
+- `Deployment` running `helm serve`
+- `Service` for HTTP, health, and optional metrics ports
+- optional `Ingress`
+- generated or existing signing-key `Secret`
+- generated or existing runtime-auth `Secret`
+- policy `ConfigMap`
+- optional `PersistentVolumeClaim`
+- optional Prometheus Operator `ServiceMonitor`
+
+Not included:
+
+- Kubernetes operator CRDs
+- hosted demo deployment material
+- Grafana dashboards or broader monitoring bundles
+- managed control-plane deployment material
+
+Those excluded surfaces are not part of the retained OSS deployment contract.

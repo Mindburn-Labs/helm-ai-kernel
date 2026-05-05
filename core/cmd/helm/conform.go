@@ -27,6 +27,9 @@ func runConform(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "negative" {
 		return runConformNegative(args[1:], stdout, stderr)
 	}
+	if len(args) > 0 && args[0] == "vectors" {
+		return runConformVectors(args[1:], stdout, stderr)
+	}
 
 	cmd := flag.NewFlagSet("conform", flag.ContinueOnError)
 	cmd.SetOutput(stderr)

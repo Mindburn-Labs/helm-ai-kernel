@@ -76,10 +76,18 @@ pub struct EvidenceEnvelopeManifest {
     #[serde(default)]
     pub statement_hash: Option<String>,
     #[serde(default)]
+    pub payload_type: Option<String>,
+    #[serde(default)]
+    pub payload_hash: Option<String>,
+    #[serde(default)]
     pub experimental: bool,
     #[serde(default)]
     pub manifest_hash: Option<String>,
 }
+
+pub type EvidenceEnvelopePayload = serde_json::Value;
+pub type ApprovalWebAuthnChallenge = serde_json::Value;
+pub type ApprovalWebAuthnAssertion = serde_json::Value;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NegativeBoundaryVector {
@@ -239,6 +247,123 @@ impl HelmClient {
         }
     }
 
+    fn get_value(&self, path: &str) -> Result<serde_json::Value, HelmApiError> {
+        let resp = self
+            .client
+            .get(self.url(path))
+            .send()
+            .map_err(|e| HelmApiError {
+                status: 0,
+                message: e.to_string(),
+                reason_code: ReasonCode::ErrorInternal,
+            })?;
+        let resp = self.check(resp)?;
+        resp.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
+    }
+
+    fn post_value<T: Serialize>(
+        &self,
+        path: &str,
+        body: &T,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        let resp = self
+            .client
+            .post(self.url(path))
+            .json(body)
+            .send()
+            .map_err(|e| HelmApiError {
+                status: 0,
+                message: e.to_string(),
+                reason_code: ReasonCode::ErrorInternal,
+            })?;
+        let resp = self.check(resp)?;
+        resp.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
+    }
+
+    fn put_value<T: Serialize>(
+        &self,
+        path: &str,
+        body: &T,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        let resp = self
+            .client
+            .put(self.url(path))
+            .json(body)
+            .send()
+            .map_err(|e| HelmApiError {
+                status: 0,
+                message: e.to_string(),
+                reason_code: ReasonCode::ErrorInternal,
+            })?;
+        let resp = self.check(resp)?;
+        resp.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
+    }
+
+    pub fn get_boundary_status(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/boundary/status")
+    }
+
+    pub fn list_boundary_capabilities(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/boundary/capabilities")
+    }
+
+    pub fn list_boundary_records(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/boundary/records")
+    }
+
+    pub fn get_boundary_record(&self, record_id: &str) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value(&format!(
+            "/api/v1/boundary/records/{}",
+            encode_query(record_id)
+        ))
+    }
+
+    pub fn verify_boundary_record(
+        &self,
+        record_id: &str,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value(
+            &format!(
+                "/api/v1/boundary/records/{}/verify",
+                encode_query(record_id)
+            ),
+            &serde_json::json!({}),
+        )
+    }
+
+    pub fn list_boundary_checkpoints(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/boundary/checkpoints")
+    }
+
+    pub fn create_boundary_checkpoint(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value("/api/v1/boundary/checkpoints", &serde_json::json!({}))
+    }
+
+    pub fn verify_boundary_checkpoint(
+        &self,
+        checkpoint_id: &str,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value(
+            &format!(
+                "/api/v1/boundary/checkpoints/{}/verify",
+                encode_query(checkpoint_id)
+            ),
+            &serde_json::json!({}),
+        )
+    }
+
     /// POST /v1/chat/completions
     pub fn chat_completions(
         &self,
@@ -340,13 +465,11 @@ impl HelmClient {
                 reason_code: ReasonCode::ErrorInternal,
             })?;
         let resp = self.check(resp)?;
-        resp.bytes()
-            .map(|b| b.to_vec())
-            .map_err(|e| HelmApiError {
-                status: 0,
-                message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
-            })
+        resp.bytes().map(|b| b.to_vec()).map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
     }
 
     /// POST /api/v1/evidence/verify
@@ -426,14 +549,48 @@ impl HelmClient {
         })
     }
 
+    pub fn list_evidence_envelope_manifests(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/evidence/envelopes")
+    }
+
+    pub fn get_evidence_envelope_manifest(
+        &self,
+        manifest_id: &str,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value(&format!(
+            "/api/v1/evidence/envelopes/{}",
+            encode_query(manifest_id)
+        ))
+    }
+
+    pub fn get_evidence_envelope_payload(
+        &self,
+        manifest_id: &str,
+    ) -> Result<EvidenceEnvelopePayload, HelmApiError> {
+        self.get_value(&format!(
+            "/api/v1/evidence/envelopes/{}/payload",
+            encode_query(manifest_id)
+        ))
+    }
+
+    pub fn verify_evidence_envelope_manifest(
+        &self,
+        manifest_id: &str,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value(
+            &format!(
+                "/api/v1/evidence/envelopes/{}/verify",
+                encode_query(manifest_id)
+            ),
+            &serde_json::json!({}),
+        )
+    }
+
     /// GET /api/v1/proofgraph/receipts/{hash}
     pub fn get_receipt(&self, receipt_hash: &str) -> Result<Receipt, HelmApiError> {
         let resp = self
             .client
-            .get(self.url(&format!(
-                "/api/v1/proofgraph/receipts/{}",
-                receipt_hash
-            )))
+            .get(self.url(&format!("/api/v1/proofgraph/receipts/{}", receipt_hash)))
             .send()
             .map_err(|e| HelmApiError {
                 status: 0,
@@ -478,10 +635,7 @@ impl HelmClient {
     ) -> Result<ConformanceResult, HelmApiError> {
         let resp = self
             .client
-            .get(self.url(&format!(
-                "/api/v1/conformance/reports/{}",
-                report_id
-            )))
+            .get(self.url(&format!("/api/v1/conformance/reports/{}", report_id)))
             .send()
             .map_err(|e| HelmApiError {
                 status: 0,
@@ -515,6 +669,14 @@ impl HelmClient {
             message: e.to_string(),
             reason_code: ReasonCode::ErrorInternal,
         })
+    }
+
+    pub fn list_conformance_reports(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/conformance/reports")
+    }
+
+    pub fn list_conformance_vectors(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/conformance/vectors")
     }
 
     /// GET /api/v1/mcp/registry
@@ -582,6 +744,109 @@ impl HelmClient {
         })
     }
 
+    pub fn get_mcp_registry_record(
+        &self,
+        server_id: &str,
+    ) -> Result<McpQuarantineRecord, HelmApiError> {
+        let resp = self
+            .client
+            .get(self.url(&format!("/api/v1/mcp/registry/{}", encode_query(server_id))))
+            .send()
+            .map_err(|e| HelmApiError {
+                status: 0,
+                message: e.to_string(),
+                reason_code: ReasonCode::ErrorInternal,
+            })?;
+        let resp = self.check(resp)?;
+        resp.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
+    }
+
+    pub fn approve_mcp_registry_record(
+        &self,
+        server_id: &str,
+        req: &McpRegistryApprovalRequest,
+    ) -> Result<McpQuarantineRecord, HelmApiError> {
+        let resp = self
+            .client
+            .post(self.url(&format!(
+                "/api/v1/mcp/registry/{}/approve",
+                encode_query(server_id)
+            )))
+            .json(req)
+            .send()
+            .map_err(|e| HelmApiError {
+                status: 0,
+                message: e.to_string(),
+                reason_code: ReasonCode::ErrorInternal,
+            })?;
+        let resp = self.check(resp)?;
+        resp.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
+    }
+
+    pub fn revoke_mcp_registry_record(
+        &self,
+        server_id: &str,
+        reason: Option<&str>,
+    ) -> Result<McpQuarantineRecord, HelmApiError> {
+        let body = serde_json::json!({ "reason": reason.unwrap_or("") });
+        let resp = self
+            .client
+            .post(self.url(&format!(
+                "/api/v1/mcp/registry/{}/revoke",
+                encode_query(server_id)
+            )))
+            .json(&body)
+            .send()
+            .map_err(|e| HelmApiError {
+                status: 0,
+                message: e.to_string(),
+                reason_code: ReasonCode::ErrorInternal,
+            })?;
+        let resp = self.check(resp)?;
+        resp.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
+    }
+
+    pub fn scan_mcp_server<T: Serialize>(
+        &self,
+        req: &T,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value("/api/v1/mcp/scan", req)
+    }
+
+    pub fn list_mcp_auth_profiles(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/mcp/auth-profiles")
+    }
+
+    pub fn put_mcp_auth_profile<T: Serialize>(
+        &self,
+        profile_id: &str,
+        profile: &T,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.put_value(
+            &format!("/api/v1/mcp/auth-profiles/{}", encode_query(profile_id)),
+            profile,
+        )
+    }
+
+    pub fn authorize_mcp_call<T: Serialize>(
+        &self,
+        req: &T,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value("/api/v1/mcp/authorize-call", req)
+    }
+
     /// GET /api/v1/sandbox/grants/inspect
     pub fn inspect_sandbox_grants(
         &self,
@@ -604,17 +869,162 @@ impl HelmClient {
             path.push('?');
             path.push_str(&params.join("&"));
         }
-        let resp = self.client.get(self.url(&path)).send().map_err(|e| HelmApiError {
-            status: 0,
-            message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
-        })?;
+        let resp = self
+            .client
+            .get(self.url(&path))
+            .send()
+            .map_err(|e| HelmApiError {
+                status: 0,
+                message: e.to_string(),
+                reason_code: ReasonCode::ErrorInternal,
+            })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
             reason_code: ReasonCode::ErrorInternal,
         })
+    }
+
+    pub fn list_sandbox_profiles(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/sandbox/profiles")
+    }
+
+    pub fn list_sandbox_grants(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/sandbox/grants")
+    }
+
+    pub fn create_sandbox_grant<T: Serialize>(
+        &self,
+        req: &T,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value("/api/v1/sandbox/grants", req)
+    }
+
+    pub fn get_sandbox_grant(&self, grant_id: &str) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value(&format!(
+            "/api/v1/sandbox/grants/{}",
+            encode_query(grant_id)
+        ))
+    }
+
+    pub fn verify_sandbox_grant(&self, grant_id: &str) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value(
+            &format!("/api/v1/sandbox/grants/{}/verify", encode_query(grant_id)),
+            &serde_json::json!({}),
+        )
+    }
+
+    pub fn preflight_sandbox_grant<T: Serialize>(
+        &self,
+        req: &T,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value("/api/v1/sandbox/preflight", req)
+    }
+
+    pub fn list_agent_identities(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/identity/agents")
+    }
+
+    pub fn get_authz_health(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/authz/health")
+    }
+
+    pub fn check_authz<T: Serialize>(&self, req: &T) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value("/api/v1/authz/check", req)
+    }
+
+    pub fn list_authz_snapshots(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/authz/snapshots")
+    }
+
+    pub fn get_authz_snapshot(&self, snapshot_id: &str) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value(&format!(
+            "/api/v1/authz/snapshots/{}",
+            encode_query(snapshot_id)
+        ))
+    }
+
+    pub fn list_approval_ceremonies(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/approvals")
+    }
+
+    pub fn create_approval_ceremony<T: Serialize>(
+        &self,
+        req: &T,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value("/api/v1/approvals", req)
+    }
+
+    pub fn transition_approval_ceremony<T: Serialize>(
+        &self,
+        approval_id: &str,
+        action: &str,
+        req: &T,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value(
+            &format!(
+                "/api/v1/approvals/{}/{}",
+                encode_query(approval_id),
+                encode_query(action)
+            ),
+            req,
+        )
+    }
+
+    pub fn create_approval_webauthn_challenge<T: Serialize>(
+        &self,
+        approval_id: &str,
+        req: &T,
+    ) -> Result<ApprovalWebAuthnChallenge, HelmApiError> {
+        self.post_value(
+            &format!(
+                "/api/v1/approvals/{}/webauthn/challenge",
+                encode_query(approval_id)
+            ),
+            req,
+        )
+    }
+
+    pub fn assert_approval_webauthn_challenge<T: Serialize>(
+        &self,
+        approval_id: &str,
+        req: &T,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value(
+            &format!(
+                "/api/v1/approvals/{}/webauthn/assert",
+                encode_query(approval_id)
+            ),
+            req,
+        )
+    }
+
+    pub fn list_budget_ceilings(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/budgets")
+    }
+
+    pub fn put_budget_ceiling<T: Serialize>(
+        &self,
+        budget_id: &str,
+        req: &T,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.put_value(&format!("/api/v1/budgets/{}", encode_query(budget_id)), req)
+    }
+
+    pub fn get_coexistence_capabilities(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/coexistence/capabilities")
+    }
+
+    pub fn get_telemetry_otel_config(&self) -> Result<serde_json::Value, HelmApiError> {
+        self.get_value("/api/v1/telemetry/otel/config")
+    }
+
+    pub fn export_telemetry<T: Serialize>(
+        &self,
+        req: &T,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value("/api/v1/telemetry/export", req)
     }
 
     /// GET /healthz
@@ -695,6 +1105,12 @@ mod tests {
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("native_evidence_hash"));
+
+        let manifest: EvidenceEnvelopeManifest = serde_json::from_str(
+            r#"{"manifest_id":"env1","envelope":"dsse","native_evidence_hash":"sha256:native","native_authority":false,"created_at":"2026-05-05T00:00:00Z","payload_type":"application/vnd.dsse+json","payload_hash":"sha256:payload","manifest_hash":"sha256:manifest"}"#,
+        )
+        .unwrap();
+        assert_eq!(manifest.payload_hash.as_deref(), Some("sha256:payload"));
 
         let record: McpQuarantineRecord = serde_json::from_str(
             r#"{"server_id":"mcp1","risk":"high","state":"quarantined","discovered_at":"2026-05-05T00:00:00Z"}"#,

@@ -20,12 +20,18 @@ import (
 //	2 = config error
 func runSandboxCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm sandbox <exec|conform|inspect> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm sandbox <exec|conform|inspect|profiles|grant|list|get|verify|preflight> [flags]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Subcommands:")
 		fmt.Fprintln(stderr, "  exec      Execute a command in a governed sandbox")
 		fmt.Fprintln(stderr, "  conform   Run sandbox conformance checks")
 		fmt.Fprintln(stderr, "  inspect   Inspect sandbox backend profiles or sealed grant posture")
+		fmt.Fprintln(stderr, "  profiles  List sandbox backend profiles")
+		fmt.Fprintln(stderr, "  grant     Create a sealed sandbox grant")
+		fmt.Fprintln(stderr, "  list      List local sandbox grants")
+		fmt.Fprintln(stderr, "  get       Get a local sandbox grant")
+		fmt.Fprintln(stderr, "  verify    Verify a sandbox grant hash")
+		fmt.Fprintln(stderr, "  preflight Preflight sandbox authority before execution")
 		return 2
 	}
 
@@ -36,13 +42,31 @@ func runSandboxCmd(args []string, stdout, stderr io.Writer) int {
 		return runSandboxConform(args[1:], stdout, stderr)
 	case "inspect":
 		return runSandboxInspect(args[1:], stdout, stderr)
+	case "profiles":
+		return runSandboxProfiles(args[1:], stdout, stderr)
+	case "grant":
+		return runSandboxGrant(args[1:], stdout, stderr)
+	case "list":
+		return runSandboxList(args[1:], stdout, stderr)
+	case "get":
+		return runSandboxGet(args[1:], stdout, stderr)
+	case "verify":
+		return runSandboxVerify(args[1:], stdout, stderr)
+	case "preflight":
+		return runSandboxPreflightSurface(args[1:], stdout, stderr)
 	case "--help", "-h":
-		fmt.Fprintln(stdout, "Usage: helm sandbox <exec|conform|inspect> [flags]")
+		fmt.Fprintln(stdout, "Usage: helm sandbox <exec|conform|inspect|profiles|grant|list|get|verify|preflight> [flags]")
 		fmt.Fprintln(stdout, "")
 		fmt.Fprintln(stdout, "Subcommands:")
 		fmt.Fprintln(stdout, "  exec      Execute a command in a governed sandbox")
 		fmt.Fprintln(stdout, "  conform   Run sandbox conformance checks")
 		fmt.Fprintln(stdout, "  inspect   Inspect sandbox backend profiles or sealed grant posture")
+		fmt.Fprintln(stdout, "  profiles  List sandbox backend profiles")
+		fmt.Fprintln(stdout, "  grant     Create a sealed sandbox grant")
+		fmt.Fprintln(stdout, "  list      List local sandbox grants")
+		fmt.Fprintln(stdout, "  get       Get a local sandbox grant")
+		fmt.Fprintln(stdout, "  verify    Verify a sandbox grant hash")
+		fmt.Fprintln(stdout, "  preflight Preflight sandbox authority before execution")
 		return 0
 	default:
 		fmt.Fprintf(stderr, "Unknown sandbox subcommand: %s\n", args[0])

@@ -1,21 +1,36 @@
-# Release
-<!-- docs-generated: surface-readme -->
+# Release Evidence
 
-## Purpose
+The `release/` directory stores retained release evidence inputs and policy
+files. It is not a complete copy of any GitHub release.
 
-Active surface for the `helm-oss` project.
+## Files
 
-## Canonical Interface
+| Path | Purpose |
+| --- | --- |
+| `vex.openvex.json` | Baseline OpenVEX document kept in-tree for policy review. |
+| `vex/policies.yaml` | Maintainer policy file consumed by `scripts/release/generate_vex.sh`. |
 
-- Source path: `release`
-- Surface type: `surface`
-- Package/source identity: `release`
-- Coverage record: `docs/documentation-coverage.csv`
+## Current Public Release
 
-## Local Commands
+The current public GitHub release is `v0.4.0`, published on 2026-04-25. Its
+visible release assets are platform binaries for Darwin, Linux, and Windows,
+`helm.mcpb`, `helm.rb`, `SHA256SUMS.txt`, `sbom.json`,
+`release-attestation.json`, `evidence-pack.tar`, and
+`release.high_risk.v3.toml`.
 
-- `make docs-coverage` from the repository root verifies coverage for this surface.
+Do not document Cosign bundle or OpenVEX files as attached to `v0.4.0`; they
+were not present in the release asset list.
 
-## Documentation Contract
+## Validation
 
-Generated surface README. This file is a local ownership and validation contract, not the primary docs information architecture entry point. It covers the active surface. Keep it aligned with the source path above and update `docs/documentation-coverage.csv` when ownership, interfaces, validation, or lifecycle status changes.
+```bash
+make release-binaries-reproducible
+make sbom
+make vex
+bash scripts/release/verify_cosign.sh ./downloaded-release
+make docs-coverage docs-truth
+```
+
+Cosign verification requires matching `*.cosign.bundle` files in the release
+directory. OpenVEX consumption requires an OpenVEX file attached to that
+release.

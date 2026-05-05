@@ -1,6 +1,8 @@
-# Golden EvidencePack Fixture
+# Golden EvidencePack Example
 
-This directory contains a golden EvidencePack for testing and demo purposes.
+This directory contains small static receipt and manifest examples for
+documentation and demos. The canonical fixture roots used by the retained test
+gate live under `fixtures/minimal/`.
 
 ## Contents
 
@@ -11,18 +13,11 @@ This directory contains a golden EvidencePack for testing and demo purposes.
 ## Usage
 
 ```bash
-# Verify the golden pack
-helm verify --bundle examples/golden/
-
-# Use in tests
-cp -r examples/golden/ /tmp/test-evidence/
-helm verify --bundle /tmp/test-evidence/
+make verify-fixtures
 ```
 
 ## What This Proves
 
-- Causal chain integrity (Lamport clock ordering)
-- Deterministic hash chain (SHA-256 preimage binding)
-- Fail-closed governance (DENY receipt present)
-- Skill lifecycle integration (SkillCandidate proposed)
-- Maintenance loop integration (incident auto-resolved)
+The example files show the shape of an allow receipt, a deny receipt, and a
+small manifest. Use `fixtures/minimal/` and `make verify-fixtures` for the
+source-backed verifier gate.

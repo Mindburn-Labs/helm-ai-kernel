@@ -133,6 +133,18 @@ public class HelmClientTest {
         envelope.native_evidence_hash = "sha256:native";
         assertTrue(mapper.writeValueAsString(envelope).contains("native_evidence_hash"));
 
+        HelmClient.EvidenceEnvelopeManifest manifest = mapper.readValue(
+            "{\"manifest_id\":\"env1\",\"envelope\":\"dsse\",\"native_evidence_hash\":\"sha256:native\",\"native_authority\":false,\"created_at\":\"2026-05-05T00:00:00Z\",\"payload_type\":\"application/vnd.dsse+json\",\"payload_hash\":\"sha256:payload\"}",
+            HelmClient.EvidenceEnvelopeManifest.class
+        );
+        assertEquals("sha256:payload", manifest.payload_hash);
+
+        HelmClient.ApprovalWebAuthnAssertion assertion = new HelmClient.ApprovalWebAuthnAssertion();
+        assertion.challenge_id = "challenge-1";
+        assertion.actor = "user:alice";
+        assertion.assertion = "signed-client-data";
+        assertTrue(mapper.writeValueAsString(assertion).contains("challenge_id"));
+
         HelmClient.MCPRegistryDiscoverRequest discover = new HelmClient.MCPRegistryDiscoverRequest();
         discover.server_id = "mcp1";
         discover.risk = "high";

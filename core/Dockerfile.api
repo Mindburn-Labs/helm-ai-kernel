@@ -12,21 +12,23 @@ WORKDIR /app
 # Install build dependencies
 RUN apk add --no-cache git make
 
-# Copy dependency definitions
-COPY go.mod go.sum ./
-RUN go mod download
+# Copy dependency definitions. The OSS root is not a Go module; the kernel
+# module lives under core/.
+COPY core/go.mod core/go.sum ./core/
+RUN --mount=type=cache,id=helm-oss-go-mod,target=/go/pkg/mod cd core && go mod download
 
 # Copy source code
-COPY . .
+COPY core/ ./core/
 
 # Build the application
 ENV CGO_ENABLED=0
 ENV GOOS=${TARGETOS:-linux}
 ENV GOARCH=${TARGETARCH:-amd64}
-RUN go build -ldflags="-s -w" -trimpath -o /app/bin/helm ./core/cmd/helm
+RUN --mount=type=cache,id=helm-oss-go-mod,target=/go/pkg/mod --mount=type=cache,id=helm-oss-go-build,target=/root/.cache/go-build \
+    cd core && go build -ldflags="-s -w" -trimpath -o /app/bin/helm ./cmd/helm
 
 # Stage 2: Runtime
-FROM alpine:3.21@sha256:c3f8e73fdb79deaebaa2037150150191b9dcbfba68b4a46d70103204c53f4709
+FROM alpine:3.21@sha256:f27cad9117495d32d067133afff942cb2dc745dfe9163e949f6bfe8a6a245339
 
 WORKDIR /app
 
@@ -35,7 +37,6 @@ RUN addgroup -S helm && adduser -S helm -G helm
 
 # Copy binary
 COPY --from=builder /app/bin/helm /app/helm
-COPY --from=builder /app/packs /app/packs
 
 # Set ownership
 RUN chown -R helm:helm /app

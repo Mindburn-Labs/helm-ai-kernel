@@ -10,28 +10,12 @@ Shows HELM's MCP (Model Context Protocol) gateway integration.
 ## Run
 
 ```bash
+cd examples/mcp_client
 bash main.sh
 ```
 
 ## Expected Output
 
-```
-=== MCP Capabilities ===
-"file_read"
-"file_write"
-
-=== Execute Governed Tool ===
-{
-  "result": "...",
-  "receipt_id": "rec_...",
-  "reason_code": "ALLOW"
-}
-
-=== Denied Tool Call ===
-{
-  "error": {
-    "message": "Tool not found: unknown_tool",
-    "reason_code": "DENY_TOOL_NOT_FOUND"
-  }
-}
-```
+The script prints the MCP capabilities response, a governed tool execution
+response, and an OpenAI-compatible chat response. If the HELM server is not
+running, the script prints `(server not running)` for each request.

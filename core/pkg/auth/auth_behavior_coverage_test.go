@@ -123,6 +123,17 @@ func TestCORSMiddlewareDisallowedOrigin(t *testing.T) {
 	assert.Empty(t, rr.Header().Get("Access-Control-Allow-Origin"))
 }
 
+func TestCORSMiddlewareDefaultDeniesOrigin(t *testing.T) {
+	t.Setenv("CORS_ORIGINS", "")
+	handler := CORSMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Origin", "https://any.com")
+	handler.ServeHTTP(rr, req)
+	assert.Empty(t, rr.Header().Get("Access-Control-Allow-Origin"))
+	assert.Contains(t, rr.Header().Get("Access-Control-Allow-Headers"), "X-Helm-Tenant-ID")
+}
+
 func TestCORSMiddlewarePreflightReturns204(t *testing.T) {
 	handler := CORSMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }))
 	rr := httptest.NewRecorder()

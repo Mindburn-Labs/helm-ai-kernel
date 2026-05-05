@@ -7,8 +7,6 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Use this page when you need the public `helm-oss/console` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
-
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
@@ -60,11 +58,20 @@ surface.
 - Command-first governance over the local kernel.
 - Live receipts from `/api/v1/receipts` and `/api/v1/receipts/tail`.
 - Intent evaluation through `/api/v1/evaluate`.
-- ProofGraph, replay, evidence, conformance, MCP, trust, approval, incident,
-  audit, developer, and settings navigation surfaces.
+- Route-backed boundary records, MCP quarantine, sandbox grants, authz
+  snapshots, approvals, budgets, evidence envelopes, conformance reports,
+  telemetry export configuration, and coexistence manifests.
+- ProofGraph, replay, trust, audit, developer, and settings navigation surfaces.
 - A read-only bootstrap contract at `/api/v1/console/bootstrap` for kernel
   version, workspace, health, counts, recent receipts, conformance, and MCP
   scope state.
+
+The Console does not invent private state. The new operational workspaces load
+from public API routes such as `/api/v1/boundary/records`,
+`/api/v1/mcp/registry`, `/api/v1/sandbox/grants`,
+`/api/v1/authz/snapshots`, `/api/v1/approvals`, `/api/v1/budgets`,
+`/api/v1/evidence/envelopes`, `/api/v1/conformance/reports`,
+`/api/v1/telemetry/otel/config`, and `/api/v1/coexistence/capabilities`.
 
 ## Running Locally
 

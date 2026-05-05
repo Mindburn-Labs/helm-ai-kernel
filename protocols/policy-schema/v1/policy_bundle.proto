@@ -11,7 +11,7 @@ package helm.policy.v1;
 option go_package = "helm.mindburn.run/policy/v1;policyv1";
 
 import "google/protobuf/timestamp.proto";
-import "v1/foundations.proto";
+import "foundations.proto";
 
 message PolicyBundle {
   // SHA-256 of canonical form.

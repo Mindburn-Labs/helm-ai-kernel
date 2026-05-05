@@ -7,8 +7,6 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Use this page when you need the public `helm-oss/quickstart` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
-
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
@@ -120,6 +118,19 @@ helm-edge-local - listening :7714 - ready
 ```
 
 The sample policy uses retained reference-pack and receipt-store behavior. If you installed through Homebrew, replace `./bin/helm` with `helm`.
+
+Lite Mode persists receipts and boundary surface state in SQLite. Standalone local CLI commands persist their boundary registry under `HELM_BOUNDARY_REGISTRY_PATH` or `HELM_DATA_DIR/boundary/surfaces.json`.
+
+Quick proof checks:
+
+```bash
+./bin/helm boundary status --json
+./bin/helm conform negative --json
+./bin/helm mcp authorize-call --server-id new-server --tool-name file.delete --json
+./bin/helm sandbox preflight --runtime wazero --json
+```
+
+The MCP authorization example is expected to deny before dispatch until the server, tool schema, and scopes are approved.
 
 ## 3. Start the OpenAI-Compatible Proxy
 

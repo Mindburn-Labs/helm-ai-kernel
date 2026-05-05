@@ -10,7 +10,7 @@ package helm.policy.v1.learning;
 
 option go_package = "helm.mindburn.run/policy/v1/learning;learningv1";
 
-import "v1/learning/common.proto";
+import "learning/common.proto";
 
 // ModelStatus tracks the lifecycle of a model artifact.
 enum ModelStatus {

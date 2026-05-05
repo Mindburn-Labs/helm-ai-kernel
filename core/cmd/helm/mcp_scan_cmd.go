@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"sort"
+	"time"
 
 	mcppkg "github.com/Mindburn-Labs/helm-oss/core/pkg/mcp"
 )
@@ -121,6 +123,29 @@ func runMCPScan(args []string, stdout, stderr io.Writer) int {
 		exitCode = 1
 	}
 	report.ExitCode = exitCode
+	if manifest.ServerID != "" {
+		toolNames := make([]string, 0, len(manifest.Tools))
+		for _, tool := range manifest.Tools {
+			toolNames = append(toolNames, tool.Name)
+		}
+		risk := mcppkg.ServerRiskMedium
+		reason := "mcp scan requires review before dispatch"
+		if exitCode != 0 {
+			risk = mcppkg.ServerRiskHigh
+			reason = "mcp scan findings require quarantine"
+		}
+		registry := mcppkg.NewQuarantineRegistry()
+		record, err := registry.Discover(context.Background(), mcppkg.DiscoverServerRequest{
+			ServerID:     manifest.ServerID,
+			ToolNames:    toolNames,
+			Risk:         risk,
+			DiscoveredAt: time.Now().UTC(),
+			Reason:       reason,
+		})
+		if err == nil {
+			_, _ = newLocalSurfaceRegistry().PutMCPServer(record)
+		}
+	}
 
 	if jsonOut {
 		enc := json.NewEncoder(stdout)

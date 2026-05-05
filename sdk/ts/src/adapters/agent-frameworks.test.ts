@@ -3,11 +3,18 @@ import {
   agentFrameworkAdapters,
   buildGovernedToolRequest,
   createAgentFrameworkAdapter,
+  fromAutoGenToolCall,
   fromCrewAITask,
   fromLangGraphToolCall,
+  fromLangChainToolCall,
   fromLlamaIndexToolCall,
+  fromLiteLLMToolCall,
+  fromN8NNodeExecution,
   fromOpenAIAgentsToolCall,
   fromPydanticAIToolCall,
+  fromRawMCPToolCall,
+  fromSemanticKernelFunctionCall,
+  fromZapierWebhookCall,
   toOpenAIFunctionTool,
   type HelmGovernanceClient,
 } from "./agent-frameworks.js";
@@ -15,11 +22,18 @@ import {
 describe("agent framework adapters", () => {
   it("catalogs the frameworks tracked against Microsoft AGT coverage", () => {
     expect(agentFrameworkAdapters.map((adapter) => adapter.framework)).toEqual([
+      "langchain",
       "langgraph",
+      "autogen",
       "crewai",
       "openai-agents",
+      "semantic-kernel",
       "pydantic-ai",
       "llamaindex",
+      "litellm",
+      "n8n",
+      "zapier-webhook",
+      "raw-mcp",
     ]);
   });
 
@@ -104,6 +118,73 @@ describe("agent framework adapters", () => {
       toolCallId: "llama-call",
       arguments: { items: ["policy", "evidence"] },
     });
+  });
+
+  it("normalizes the 2026 framework middleware set into pre-dispatch actions", () => {
+    expect(
+      fromLangChainToolCall({
+        id: "lc-call",
+        name: "retriever.lookup",
+        args: { q: "boundary" },
+        runId: "run-lc",
+      }),
+    ).toMatchObject({
+      framework: "langchain",
+      toolName: "retriever.lookup",
+      runId: "run-lc",
+    });
+
+    expect(
+      fromAutoGenToolCall({
+        id: "ag-call",
+        tool: "shell.exec",
+        args: { command: "make test" },
+        agent: "coder",
+      }),
+    ).toMatchObject({ framework: "autogen", toolName: "shell.exec", agentId: "coder" });
+
+    expect(
+      fromSemanticKernelFunctionCall({
+        pluginName: "Files",
+        functionName: "Write",
+        arguments: { path: "/tmp/out" },
+      }),
+    ).toMatchObject({ framework: "semantic-kernel", toolName: "Files.Write" });
+
+    expect(
+      fromLiteLLMToolCall({
+        function: { name: "db.query", arguments: "{}" },
+        model: "gpt-4.1",
+      }),
+    ).toMatchObject({ framework: "litellm", toolName: "db.query" });
+
+    expect(
+      fromN8NNodeExecution({
+        id: "n8n-node",
+        node: "http.request",
+        parameters: { url: "https://example.test" },
+        workflowId: "wf-1",
+      }),
+    ).toMatchObject({ framework: "n8n", toolName: "http.request", runId: "wf-1" });
+
+    expect(
+      fromZapierWebhookCall({
+        id: "zap-call",
+        action: "crm.update",
+        payload: { id: "lead-1" },
+        zapId: "zap-1",
+      }),
+    ).toMatchObject({ framework: "zapier-webhook", toolName: "crm.update", runId: "zap-1" });
+
+    expect(
+      fromRawMCPToolCall({
+        id: "mcp-call",
+        serverId: "srv-1",
+        toolName: "files.read",
+        args: { path: "/tmp/a" },
+        scopes: ["tools.call"],
+      }),
+    ).toMatchObject({ framework: "raw-mcp", toolName: "files.read", agentId: "srv-1" });
   });
 
   it("builds an OpenAI-compatible HELM request with the original action in the policy prompt", () => {

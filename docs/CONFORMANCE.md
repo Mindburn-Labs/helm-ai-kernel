@@ -7,8 +7,6 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Use this page when you need the public `helm-oss/conformance` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
-
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
@@ -55,7 +53,15 @@ HELM keeps a retained conformance profile under `tests/conformance/profile-v1/`.
 ```bash
 ./bin/helm conform --level L1 --json
 ./bin/helm conform --level L2 --json
+./bin/helm conform negative --json
+./bin/helm conform vectors --json
 ```
+
+The public API exposes the same negative gates at
+`GET /api/v1/conformance/negative` and `GET /api/v1/conformance/vectors`.
+Reports can be created and read through `POST /api/v1/conformance/run`,
+`GET /api/v1/conformance/reports`, and
+`GET /api/v1/conformance/reports/{report_id}`.
 
 ## Run the Conformance Test Suite
 
@@ -74,7 +80,9 @@ The profile directory contains:
 
 ## What L1 and L2 Mean in This Repo
 
-- `L1` covers core structural correctness such as canonicalization, schema handling, and receipt shape.
-- `L2` adds broader runtime verification around exported evidence, replay, and retained kernel invariants.
+- `L1` covers core structural correctness such as canonicalization, schema handling, receipt shape, offline verification, and checkpoint roots.
+- `L2` adds MCP execution-firewall behavior: quarantine, tool-list/call consistency, OAuth resource and scope checks, schema pinning, direct-bypass denial, and deny-path receipt emission.
+- `L3` covers sandbox grants, ReBAC snapshots, approval ceremonies, budget ceilings, stale tuple/model mismatch denial, and backend outage denial.
+- `L4` covers non-authoritative telemetry/coexistence exports, evidence envelope wrappers, framework middleware, and checkpoint inclusion verification.
 
 The exact checks are defined by the code and checklist in `tests/conformance/`, not by this page.

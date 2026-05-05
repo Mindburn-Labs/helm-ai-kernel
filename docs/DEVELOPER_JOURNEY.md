@@ -5,23 +5,16 @@ last_reviewed: 2026-05-05
 
 # Developer Journey
 
-## Diagram
-
-This scheme maps the main sections of Developer Journey in reading order.
+## Runtime Path
 
 ```mermaid
 flowchart LR
-  Page["Developer Journey"]
-  A["Audience"]
-  B["Outcome"]
-  C["Source Truth"]
-  D["Install Selector"]
-  E["First Local Boundary"]
-  Page --> A
-  A --> B
-  B --> C
-  C --> D
-  D --> E
+  Install["install or build helm"] --> Serve["helm serve --policy"]
+  Serve --> Proxy["helm proxy"]
+  Proxy --> Client["OpenAI-compatible client"]
+  Client --> Receipts["helm receipts tail --agent"]
+  Receipts --> Export["helm export"]
+  Export --> Verify["helm verify"]
 ```
 
 This page is the source-backed end-to-end path for a developer evaluating HELM OSS. It ties install, runtime, SDKs, policy, receipts, verification, deployment, conformance, release artifacts, and troubleshooting to live repository surfaces. If a claim here is not backed by code, examples, tests, or canonical docs, remove the claim or add the missing proof first.
@@ -55,6 +48,9 @@ The developer journey is backed by:
 - `docker-compose.yml`
 - `.goreleaser.yml`
 - `core/cmd/helm/*`
+- `docs/reference/cli.md`
+- `docs/reference/http-api.md`
+- `docs/reference/execution-boundary.md`
 - `core/pkg/verifier/`
 - `core/pkg/conformance/`
 - `api/openapi/helm.openapi.yaml`
@@ -208,16 +204,18 @@ Expected behavior:
 HELM OSS is useful only when you can prove both outcomes:
 
 ```bash
-./bin/helm receipts tail --server http://127.0.0.1:7714
+./bin/helm receipts tail --agent agent.titan.exec --server http://127.0.0.1:7714
 ```
 
 Use allow and deny fixtures from `examples/policies/` when validating policy-language behavior. The policy bundle command supports CEL, Rego, and Cedar:
 
 ```bash
-./bin/helm bundle build --policy examples/policies/cel/example.cel --language cel
-./bin/helm bundle build --policy examples/policies/rego/example.rego --language rego
-./bin/helm bundle build --policy examples/policies/cedar/example.cedar --language cedar --entities examples/policies/cedar/entities.json
+./bin/helm bundle build --language cel examples/policies/cel/example.cel
+./bin/helm bundle build --language rego examples/policies/rego/example.rego
+./bin/helm bundle build --language cedar --entities examples/policies/cedar/entities.json examples/policies/cedar/example.cedar
 ```
+
+`helm bundle build` takes the policy source as the positional argument. It does not accept `--policy`; that flag belongs to `helm serve`.
 
 ## EvidencePack Export And Verification
 
@@ -418,7 +416,7 @@ paths when those files are attached to a release.
 | Symptom | Likely cause | First check |
 | --- | --- | --- |
 | `helm serve` starts but clients still bypass HELM | client base URL still points to upstream provider | log request host and set base URL to `http://localhost:9090/v1` |
-| no receipts appear | wrong receipt server or directory | run `helm receipts tail` without an agent filter |
+| no receipts appear | wrong receipt server, directory, or agent id | run `helm receipts tail --agent <id> --server http://127.0.0.1:7714` |
 | denied call retries forever | app treats policy denial as transient | handle HELM denials as final authorization results |
 | offline verification fails | EvidencePack is incomplete or modified | rerun export and verify fixture roots with `make verify-fixtures` |
 | MCP call fails with OAuth scope error | token lacks required scope or resource indicator | inspect `HELM_OAUTH_RESOURCE` and `HELM_OAUTH_SCOPES` |

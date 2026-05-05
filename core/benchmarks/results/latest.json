@@ -1,13 +1,13 @@
 {
-  "baseline_p99_us": 3,
+  "baseline_p99_us": 8,
   "competitive_comparison": {
     "helm": {
-      "measured_cel_eval_mean_us": 0.9788,
-      "measured_cel_eval_p99_us": 1,
-      "measured_signing_mean_us": 18.8903,
-      "measured_signing_p99_us": 23,
-      "measured_throughput_ops_sec": 4369495,
-      "measured_total_allow_p99_us": 102
+      "measured_cel_eval_mean_us": 1.0462,
+      "measured_cel_eval_p99_us": 2,
+      "measured_signing_mean_us": 36.9966,
+      "measured_signing_p99_us": 94,
+      "measured_throughput_ops_sec": 2108485,
+      "measured_total_allow_p99_us": 12702
     },
     "microsoft_agent_os": {
       "claimed_policy_eval_us": 12,
@@ -18,66 +18,68 @@
   "go_os": "darwin",
   "go_version": "go1.25.0",
   "helm_version": "0.4.0",
-  "hot_path_p99_us": 102,
+  "hot_path_p99_us": 12702,
   "num_cpu": 16,
-  "overhead_p99_us": 99,
-  "overhead_under_5ms": true,
+  "overhead_p99_us": 12694,
+  "overhead_under_5ms": false,
+  "p99_gate_pass": true,
+  "p99_gate_us": 25000,
   "scenarios": [
     {
       "name": "baseline_no_helm",
       "iterations": 10000,
       "p50_us": 1,
-      "p95_us": 1,
-      "p99_us": 3,
-      "mean_us": 1.0401,
-      "stddev_us": 2.3849301855609824,
-      "min_us": 0,
-      "max_us": 92
+      "p95_us": 2,
+      "p99_us": 8,
+      "mean_us": 1.973,
+      "stddev_us": 29.247250657113057,
+      "min_us": 1,
+      "max_us": 2188
     },
     {
       "name": "helm_allow",
       "iterations": 10000,
-      "p50_us": 69,
-      "p95_us": 86,
-      "p99_us": 102,
-      "mean_us": 73.3232,
-      "stddev_us": 18.037525932344437,
-      "min_us": 66,
-      "max_us": 542
+      "p50_us": 140,
+      "p95_us": 924,
+      "p99_us": 12702,
+      "mean_us": 627.4224,
+      "stddev_us": 4038.393281712201,
+      "min_us": 104,
+      "max_us": 114746
     },
     {
       "name": "helm_deny",
       "iterations": 10000,
-      "p50_us": 24,
-      "p95_us": 27,
-      "p99_us": 34,
-      "mean_us": 24.6544,
-      "stddev_us": 8.524667772998564,
-      "min_us": 23,
-      "max_us": 302
+      "p50_us": 39,
+      "p95_us": 96,
+      "p99_us": 355,
+      "mean_us": 64.1259,
+      "stddev_us": 256.294795595209,
+      "min_us": 37,
+      "max_us": 16327
     },
     {
       "name": "cel_eval_only",
       "iterations": 10000,
       "p50_us": 1,
       "p95_us": 1,
-      "p99_us": 1,
-      "mean_us": 0.9788,
-      "stddev_us": 2.2314010307427954,
-      "min_us": 0,
-      "max_us": 191
+      "p99_us": 2,
+      "mean_us": 1.0462,
+      "stddev_us": 0.8713584566640757,
+      "min_us": 1,
+      "max_us": 58
     },
     {
       "name": "ed25519_sign_only",
       "iterations": 10000,
-      "p50_us": 19,
-      "p95_us": 19,
-      "p99_us": 23,
-      "mean_us": 18.8903,
-      "stddev_us": 3.068723824328264,
-      "min_us": 18,
-      "max_us": 152
+      "p50_us": 30,
+      "p95_us": 45,
+      "p99_us": 94,
+      "mean_us": 36.9966,
+      "stddev_us": 93.44068379694146,
+      "min_us": 30,
+      "max_us": 4232
     }
   ],
-  "timestamp": "2026-05-05T02:44:01Z"
+  "timestamp": "2026-05-05T15:09:43Z"
 }

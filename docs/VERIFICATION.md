@@ -7,8 +7,6 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Use this page when you need the public `helm-oss/verification` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
-
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
@@ -91,6 +89,27 @@ helm export --evidence ./data/evidence --out evidence.tar
 helm verify evidence.tar
 ```
 
+## Boundary Records, Checkpoints, and Envelopes
+
+The execution-boundary verifier checks HELM-native records first. External envelopes are wrappers over HELM roots, not independent authority.
+
+```bash
+helm boundary records --json
+helm boundary checkpoint --create --receipt-count 1 --json
+helm boundary verify boundary-record-bootstrap --json
+helm evidence envelope create --envelope dsse --native-hash sha256:evidence --manifest-id demo --json
+helm evidence envelope verify --manifest-id demo --json
+```
+
+For API-backed verification, use:
+
+```text
+POST /api/v1/boundary/records/{record_id}/verify
+POST /api/v1/evidence/envelopes/{manifest_id}/verify
+POST /api/v1/evidence/verify
+POST /api/v1/replay/verify
+```
+
 ## Release Asset Verification
 
 Download the binary and `SHA256SUMS.txt` from the same GitHub release, then
@@ -144,14 +163,14 @@ Verify every artifact in a downloaded release directory in one command when the
 directory contains matching `*.cosign.bundle` files:
 
 ```bash
-make verify-cosign DIR=./downloaded-release/
+bash scripts/release/verify_cosign.sh ./downloaded-release/
 ```
 
-`make verify-cosign` walks the directory, finds every `*.cosign.bundle`, runs
+The script walks the directory, finds every `*.cosign.bundle`, runs
 `cosign verify-blob` against the matching artifact, and exits non-zero on any
-failure. If the release has no bundle assets, use checksum, SBOM,
-release-attestation, offline evidence-pack, and reproducible-build verification
-instead.
+failure. The `make verify-cosign` target runs the same script against `dist/`.
+If the release has no bundle assets, use checksum, SBOM, release-attestation,
+offline evidence-pack, and reproducible-build verification instead.
 
 ### VEX Consumption When A VEX File Is Attached
 

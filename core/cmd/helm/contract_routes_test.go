@@ -164,6 +164,20 @@ func TestBoundaryContractRoutesExposeNewControlSurfaces(t *testing.T) {
 	if envelopeRec.Code != http.StatusOK {
 		t.Fatalf("envelope status=%d body=%s", envelopeRec.Code, envelopeRec.Body.String())
 	}
+	payloadReq := httptest.NewRequest(http.MethodGet, "/api/v1/evidence/envelopes/manifest-1/payload", nil)
+	authorizeTestRequest(payloadReq)
+	payloadRec := httptest.NewRecorder()
+	mux.ServeHTTP(payloadRec, payloadReq)
+	if payloadRec.Code != http.StatusOK {
+		t.Fatalf("payload status=%d body=%s", payloadRec.Code, payloadRec.Body.String())
+	}
+	verifyEnvelopeReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/envelopes/manifest-1/verify", nil)
+	authorizeTestRequest(verifyEnvelopeReq)
+	verifyEnvelopeRec := httptest.NewRecorder()
+	mux.ServeHTTP(verifyEnvelopeRec, verifyEnvelopeReq)
+	if verifyEnvelopeRec.Code != http.StatusOK {
+		t.Fatalf("envelope verify status=%d body=%s", verifyEnvelopeRec.Code, verifyEnvelopeRec.Body.String())
+	}
 }
 
 func TestReplayVerifyDetectsTamperedEvidenceBundle(t *testing.T) {
@@ -197,6 +211,52 @@ func TestReplayVerifyDetectsTamperedEvidenceBundle(t *testing.T) {
 	}
 	if result["verdict"] != "FAIL" {
 		t.Fatalf("expected tampered bundle to fail verification, got %+v", result)
+	}
+}
+
+func TestApprovalRoutesSupportWebAuthnChallengeAssertion(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals", strings.NewReader(`{"approval_id":"approval-webauthn","subject":"mcp:srv","action":"mcp.approve","requested_by":"agent:test","quorum":1}`))
+	authorizeTestRequest(createReq)
+	createRec := httptest.NewRecorder()
+	mux.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create approval status=%d body=%s", createRec.Code, createRec.Body.String())
+	}
+
+	challengeReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/approval-webauthn/webauthn/challenge", strings.NewReader(`{"method":"passkey","ttl_ms":60000}`))
+	authorizeTestRequest(challengeReq)
+	challengeRec := httptest.NewRecorder()
+	mux.ServeHTTP(challengeRec, challengeReq)
+	if challengeRec.Code != http.StatusCreated {
+		t.Fatalf("challenge status=%d body=%s", challengeRec.Code, challengeRec.Body.String())
+	}
+	var challenge map[string]any
+	if err := json.Unmarshal(challengeRec.Body.Bytes(), &challenge); err != nil {
+		t.Fatal(err)
+	}
+	challengeID, _ := challenge["challenge_id"].(string)
+	if challengeID == "" {
+		t.Fatalf("challenge missing id: %+v", challenge)
+	}
+
+	assertReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/approval-webauthn/webauthn/assert", strings.NewReader(fmt.Sprintf(`{"challenge_id":%q,"actor":"user:alice","assertion":"signed-client-data","receipt_id":"rcpt-approval"}`, challengeID)))
+	authorizeTestRequest(assertReq)
+	assertRec := httptest.NewRecorder()
+	mux.ServeHTTP(assertRec, assertReq)
+	if assertRec.Code != http.StatusOK {
+		t.Fatalf("assert status=%d body=%s", assertRec.Code, assertRec.Body.String())
+	}
+	var approval map[string]any
+	if err := json.Unmarshal(assertRec.Body.Bytes(), &approval); err != nil {
+		t.Fatal(err)
+	}
+	if approval["state"] != "approved" || approval["auth_method"] != "passkey" {
+		t.Fatalf("approval did not bind passkey assertion: %+v", approval)
 	}
 }
 
@@ -374,6 +434,7 @@ func requestReceiptList(t *testing.T, mux *http.ServeMux, target string) map[str
 
 func authorizeTestRequest(req *http.Request) {
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant.test")
 }
 
 type overflowReceiptStore struct {

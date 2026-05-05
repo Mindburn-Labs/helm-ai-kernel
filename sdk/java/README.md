@@ -1,4 +1,4 @@
-# HELM SDK — Java
+# HELM SDK - Java
 
 Typed Java client for the retained HELM kernel API.
 
@@ -12,7 +12,7 @@ Typed Java client for the retained HELM kernel API.
 </dependency>
 ```
 
-Published Maven version is `0.4.0` and is declared in `pom.xml`.
+Package metadata declares version `0.4.0` in `pom.xml`.
 
 ## Local Development
 
@@ -22,7 +22,8 @@ mvn -q test package
 
 ## Generated Sources
 
-`TypesGen.java` is generated from `api/openapi/helm.openapi.yaml`. Protobuf bindings under `src/main/java/helm/**` are generated from `protocols/proto/`.
+`TypesGen.java` is generated from `api/openapi/helm.openapi.yaml`. Protobuf
+bindings under `src/main/java/helm/**` are generated from `protocols/proto/`.
 
 ## Usage
 
@@ -48,7 +49,12 @@ class Example {
 
 ## Execution Boundary Methods
 
-`HelmClient` exposes typed methods for `createEvidenceEnvelopeManifest`, `listNegativeConformanceVectors`, `listMcpRegistry`, `discoverMcpServer`, `approveMcpServer`, `listSandboxBackendProfiles`, and `inspectSandboxGrant`. These methods mirror the public OpenAPI execution-boundary routes without making external evidence envelopes authoritative.
+`HelmClient` exposes methods for evidence envelope manifests, boundary records
+and checkpoints, conformance vectors, MCP quarantine and authorization
+profiles, sandbox profiles and grants, authz snapshots, approvals, budgets,
+telemetry export, and coexistence capabilities. These methods mirror public
+OpenAPI execution-boundary routes without making external evidence envelopes
+authoritative.
 
 ## Release Notes
 

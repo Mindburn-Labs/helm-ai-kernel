@@ -29,6 +29,37 @@ PRIVATE_TITAN_PATTERNS = (
     'runbooks/policy_bundle_signing_ceremony',
 )
 
+OSS_CONSOLE_CONTRADICTIONS = (
+    'No bundled interactive client',
+    'does not present a hosted SaaS control plane, a product UI surface',
+)
+
+OSS_SCOPE_SPEC_ONLY_PATHS = (
+    'crypto/hybrid',
+    'crypto/zkproof',
+    'memory',
+    'threatscan/ensemble',
+    'evidencepack/summary',
+    'skillfortify',
+    'provenance',
+    'budget/cost',
+    'delegation/aip',
+    'replay/comparison',
+    'a2a/federation',
+    'mcptox',
+    'effects/reversibility',
+    'observability/slo_engine',
+    'otel/cloudevents',
+    'connectors/ddipe',
+)
+
+FORBIDDEN_SOURCE_INVENTORY_PATTERNS = {'*', 'core/**', 'api/**'}
+REQUIRED_RUNTIME_REFERENCE_SLUGS = {
+    'helm-oss/reference/cli',
+    'helm-oss/reference/http-api',
+    'helm-oss/reference/execution-boundary',
+}
+
 
 def read_text(path: Path) -> str:
     return path.read_text(errors='ignore')
@@ -47,6 +78,96 @@ def load_manifest(path: Path) -> dict:
     return json.loads(read_text(path))
 
 
+def git_ls_files() -> list[str]:
+    result = subprocess.run(['git', 'ls-files'], cwd=ROOT, capture_output=True, text=True, check=True)
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def inventory_pattern_to_regex(pattern: str) -> re.Pattern[str]:
+    output = '^'
+    index = 0
+    while index < len(pattern):
+        char = pattern[index]
+        next_char = pattern[index + 1] if index + 1 < len(pattern) else ''
+        if char == '*' and next_char == '*':
+            output += '.*'
+            index += 2
+            continue
+        if char == '*':
+            output += '[^/]*'
+        else:
+            output += re.escape(char)
+        index += 1
+    return re.compile(f'{output}$')
+
+
+def matches_inventory_pattern(file_path: str, pattern: str) -> bool:
+    return bool(inventory_pattern_to_regex(pattern).match(file_path))
+
+
+def matches_inventory_family(file_path: str, family: dict) -> bool:
+    for pattern in family.get('exclude_patterns') or []:
+        if matches_inventory_pattern(file_path, str(pattern)):
+            return False
+    return any(matches_inventory_pattern(file_path, str(pattern)) for pattern in family.get('source_patterns') or [])
+
+
+def validate_source_inventory(failures: list[str], public_slugs: set[str]) -> None:
+    manifest_path = ROOT / 'docs' / 'source-inventory.manifest.json'
+    if not manifest_path.exists():
+        failures.append('docs/source-inventory.manifest.json is missing')
+        return
+
+    try:
+        manifest = load_manifest(manifest_path)
+    except Exception as exc:
+        failures.append(f'docs/source-inventory.manifest.json is not valid JSON: {exc}')
+        return
+
+    if manifest.get('schema_version') != 1:
+        failures.append('docs/source-inventory.manifest.json schema_version must be 1')
+    if manifest.get('repo') != ROOT.name:
+        failures.append(f'docs/source-inventory.manifest.json repo is {manifest.get("repo")!r}, expected {ROOT.name!r}')
+
+    inventory = manifest.get('inventory')
+    if not isinstance(inventory, list) or not inventory:
+        failures.append('docs/source-inventory.manifest.json inventory must be a non-empty list')
+        return
+
+    tracked = git_ls_files()
+    seen_ids: set[str] = set()
+    inventory_slugs: set[str] = set()
+    for family in inventory:
+        family_id = str(family.get('id') or '<missing-id>')
+        if family_id in seen_ids:
+            failures.append(f'docs/source-inventory.manifest.json has duplicate source family id: {family_id}')
+        seen_ids.add(family_id)
+
+        patterns = [str(pattern) for pattern in family.get('source_patterns') or []]
+        if not patterns:
+            failures.append(f'docs/source-inventory.manifest.json:{family_id} has no source_patterns')
+        for pattern in patterns:
+            if pattern in FORBIDDEN_SOURCE_INVENTORY_PATTERNS:
+                failures.append(f'docs/source-inventory.manifest.json:{family_id} uses broad source pattern {pattern!r}')
+
+        owner_doc = str(family.get('owner_doc_path') or '').strip()
+        if owner_doc and not (ROOT / owner_doc).exists():
+            failures.append(f'docs/source-inventory.manifest.json:{family_id} owner_doc_path does not exist: {owner_doc}')
+
+        public_doc_slugs = [str(slug).strip() for slug in family.get('public_doc_slugs') or [] if str(slug).strip()]
+        inventory_slugs.update(public_doc_slugs)
+        for slug in public_doc_slugs:
+            if (slug == 'oss' or slug.startswith('helm-oss/')) and slug not in public_slugs:
+                failures.append(f'docs/source-inventory.manifest.json:{family_id} public_doc_slug is missing from public docs manifest: {slug}')
+
+        if patterns and not any(matches_inventory_family(file_path, family) for file_path in tracked):
+            failures.append(f'docs/source-inventory.manifest.json:{family_id} did not match any tracked source file')
+
+    missing_reference_slugs = REQUIRED_RUNTIME_REFERENCE_SLUGS - inventory_slugs
+    for slug in sorted(missing_reference_slugs):
+        failures.append(f'docs/source-inventory.manifest.json does not link required runtime reference slug: {slug}')
+
+
 def main() -> int:
     coverage = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'check_documentation_coverage.py')], cwd=ROOT)
     if coverage.returncode != 0:
@@ -55,6 +176,28 @@ def main() -> int:
     path = ROOT / 'docs' / 'documentation-coverage.csv'
     rows = list(csv.DictReader(path.open(newline='')))
     failures: list[str] = []
+    public_slugs: set[str] = set()
+
+    architecture = ROOT / 'docs' / 'ARCHITECTURE.md'
+    if (ROOT / 'apps' / 'console').exists() and architecture.exists():
+        text = read_text(architecture)
+        for marker in OSS_CONSOLE_CONTRADICTIONS:
+            if marker in text:
+                failures.append(f'docs/ARCHITECTURE.md contradicts shipped apps/console with marker {marker!r}')
+
+    oss_scope = ROOT / 'docs' / 'OSS_SCOPE.md'
+    if oss_scope.exists():
+        text = read_text(oss_scope)
+        for rel_path in OSS_SCOPE_SPEC_ONLY_PATHS:
+            if not (ROOT / rel_path).exists() and f'| `{rel_path}/`' in text and '✅ Active' in text:
+                failures.append(f'docs/OSS_SCOPE.md marks missing path {rel_path}/ as active')
+
+    sdk_go_mod = ROOT / 'sdk' / 'go' / 'go.mod'
+    if sdk_go_mod.exists() and (ROOT / 'sdk' / 'go' / 'gen').exists():
+        sdk_text = read_text(sdk_go_mod)
+        for module in ('google.golang.org/grpc', 'google.golang.org/protobuf'):
+            if module not in sdk_text:
+                failures.append(f'sdk/go/go.mod is missing standalone generated SDK dependency {module}')
 
     for row in rows:
         source = ROOT if row['source_path'] == '.' else ROOT / row['source_path']
@@ -117,6 +260,9 @@ def main() -> int:
                 normalized = source_path.lower()
                 if any(pattern in normalized for pattern in PRIVATE_TITAN_PATTERNS):
                     failures.append(f'Titan public docs manifest exposes private path for {slug}: {source_path}')
+        public_slugs = slugs
+
+    validate_source_inventory(failures, public_slugs)
 
     workflows_dir = ROOT / '.github' / 'workflows'
     if workflows_dir.exists() and list(workflows_dir.glob('*.yml')):

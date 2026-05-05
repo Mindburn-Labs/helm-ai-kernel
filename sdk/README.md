@@ -1,21 +1,62 @@
-# Sdk
-<!-- docs-generated: surface-readme -->
+# HELM OSS SDKs
 
-## Purpose
+The SDK directory contains the retained public client surfaces for HELM OSS.
+Each package wraps the HTTP/OpenAPI boundary and, where present, generated
+protobuf message bindings under the language-specific generated directories.
 
-Active surface for the `helm-oss` project.
+## Source Truth
 
-## Canonical Interface
+```mermaid
+flowchart LR
+  openapi["api/openapi/helm.openapi.yaml"] --> types["generated SDK types"]
+  proto["protocols/proto/**/*.proto"] --> bindings["protobuf bindings"]
+  types --> clients["language clients"]
+  bindings --> clients
+  clients --> examples["examples/*_client and OpenAI base-url examples"]
+```
 
-- Source path: `sdk`
-- Surface type: `surface`
-- Package/source identity: `sdk`
-- Coverage record: `docs/documentation-coverage.csv`
+## SDK Matrix
 
-## Local Commands
+| Language | Source | Package identity | Validation |
+| --- | --- | --- | --- |
+| Go | `sdk/go/client/` | `github.com/Mindburn-Labs/helm-oss/sdk/go` | `cd sdk/go && GOWORK=off go test ./...` |
+| Python | `sdk/python/helm_sdk/` | `helm-sdk` | `make test-sdk-py` |
+| TypeScript / JavaScript | `sdk/ts/src/` | `@mindburn/helm` | `make test-sdk-ts` |
+| Rust | `sdk/rust/src/` | `helm-sdk` | `make test-sdk-rust` |
+| Java | `sdk/java/src/main/java/` | `com.github.Mindburn-Labs:helm-sdk` | `make test-sdk-java` |
 
-- `make docs-coverage` from the repository root verifies coverage for this surface.
+## What Is Covered
 
-## Documentation Contract
+- Chat-completion calls through the OpenAI-compatible HELM boundary.
+- Kernel approval, ProofGraph receipt lookup, evidence export, evidence
+  verification, replay verification, and conformance routes.
+- Execution-boundary helper methods where the language client has source for
+  the corresponding OpenAPI route.
+- TypeScript-only framework adapter helpers for LangGraph, CrewAI, OpenAI
+  Agents SDK, PydanticAI, and LlamaIndex tool-call events.
 
-Generated surface README. This file is a local ownership and validation contract, not the primary docs information architecture entry point. It covers the active surface. Keep it aligned with the source path above and update `docs/documentation-coverage.csv` when ownership, interfaces, validation, or lifecycle status changes.
+## What Is Not Claimed
+
+- A language package is not documented as published merely because package
+  metadata exists. Registry publication must be verified against the retained
+  publish workflow or the registry itself.
+- Framework adapter helpers are compatibility helpers, not vendor
+  certification and not full framework runtimes.
+- External evidence envelopes are compatibility wrappers over HELM-native
+  EvidencePack roots, not independent authority.
+
+## Regeneration
+
+OpenAPI type generation is owned by `scripts/sdk/gen.sh`. Protobuf generation
+is owned by the `make codegen-*` targets in the repository `Makefile`.
+
+Run these gates before publishing SDK claims:
+
+```bash
+make test-sdk-go-standalone
+make test-sdk-py
+make test-sdk-ts
+make test-sdk-rust
+make test-sdk-java
+make docs-coverage docs-truth
+```

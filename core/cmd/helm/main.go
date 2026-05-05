@@ -285,7 +285,9 @@ func runServerWithOptions(opts serverOptions) {
 		Addr: fmt.Sprintf("%s:%d", bindAddr, port),
 		Handler: helmauth.SecurityHeaders(
 			helmauth.CORSMiddleware(nil)(
-				rateLimiter.Middleware(mux),
+				helmauth.RequestIDMiddleware(
+					rateLimiter.Middleware(mux),
+				),
 			),
 		),
 		ReadHeaderTimeout: 15 * time.Second,

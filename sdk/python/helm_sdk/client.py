@@ -41,6 +41,8 @@ class EvidenceEnvelopeManifest:
     created_at: str
     subject: Optional[str] = None
     statement_hash: Optional[str] = None
+    payload_type: Optional[str] = None
+    payload_hash: Optional[str] = None
     experimental: bool = False
     manifest_hash: Optional[str] = None
 
@@ -270,6 +272,67 @@ class HelmClient:
         self._check(resp)
         return EvidenceEnvelopeManifest(**resp.json())
 
+    def list_evidence_envelope_manifests(self) -> list[dict[str, Any]]:
+        resp = self._client.get("/api/v1/evidence/envelopes")
+        self._check(resp)
+        return resp.json()
+
+    def get_evidence_envelope_manifest(self, manifest_id: str) -> dict[str, Any]:
+        resp = self._client.get(f"/api/v1/evidence/envelopes/{manifest_id}")
+        self._check(resp)
+        return resp.json()
+
+    def verify_evidence_envelope_manifest(self, manifest_id: str) -> dict[str, Any]:
+        resp = self._client.post(f"/api/v1/evidence/envelopes/{manifest_id}/verify")
+        self._check(resp)
+        return resp.json()
+
+    def get_evidence_envelope_payload(self, manifest_id: str) -> dict[str, Any]:
+        resp = self._client.get(f"/api/v1/evidence/envelopes/{manifest_id}/payload")
+        self._check(resp)
+        return resp.json()
+
+    # ── Execution Boundary ──────────────────────────
+    def get_boundary_status(self) -> dict[str, Any]:
+        resp = self._client.get("/api/v1/boundary/status")
+        self._check(resp)
+        return resp.json()
+
+    def list_boundary_capabilities(self) -> list[dict[str, Any]]:
+        resp = self._client.get("/api/v1/boundary/capabilities")
+        self._check(resp)
+        return resp.json()
+
+    def list_boundary_records(self, **query: Any) -> list[dict[str, Any]]:
+        resp = self._client.get("/api/v1/boundary/records", params={k: v for k, v in query.items() if v is not None})
+        self._check(resp)
+        return resp.json()
+
+    def get_boundary_record(self, record_id: str) -> dict[str, Any]:
+        resp = self._client.get(f"/api/v1/boundary/records/{record_id}")
+        self._check(resp)
+        return resp.json()
+
+    def verify_boundary_record(self, record_id: str) -> dict[str, Any]:
+        resp = self._client.post(f"/api/v1/boundary/records/{record_id}/verify")
+        self._check(resp)
+        return resp.json()
+
+    def list_boundary_checkpoints(self) -> list[dict[str, Any]]:
+        resp = self._client.get("/api/v1/boundary/checkpoints")
+        self._check(resp)
+        return resp.json()
+
+    def create_boundary_checkpoint(self) -> dict[str, Any]:
+        resp = self._client.post("/api/v1/boundary/checkpoints")
+        self._check(resp)
+        return resp.json()
+
+    def verify_boundary_checkpoint(self, checkpoint_id: str) -> dict[str, Any]:
+        resp = self._client.post(f"/api/v1/boundary/checkpoints/{checkpoint_id}/verify")
+        self._check(resp)
+        return resp.json()
+
     # ── Conformance ─────────────────────────────────
     def conformance_run(self, req: ConformanceRequest) -> ConformanceResult:
         resp = self._client.post("/api/v1/conformance/run", json=_json_body(req))
@@ -284,6 +347,16 @@ class HelmClient:
         result = ConformanceResult.from_dict(resp.json())
         assert result is not None
         return result
+
+    def list_conformance_reports(self) -> list[dict[str, Any]]:
+        resp = self._client.get("/api/v1/conformance/reports")
+        self._check(resp)
+        return resp.json()
+
+    def list_conformance_vectors(self) -> list[dict[str, Any]]:
+        resp = self._client.get("/api/v1/conformance/vectors")
+        self._check(resp)
+        return resp.json()
 
     def list_negative_conformance_vectors(self) -> list[NegativeBoundaryVector]:
         resp = self._client.get("/api/v1/conformance/negative")
@@ -312,6 +385,41 @@ class HelmClient:
         self._check(resp)
         return MCPQuarantineRecord(**resp.json())
 
+    def get_mcp_registry_record(self, server_id: str) -> MCPQuarantineRecord:
+        resp = self._client.get(f"/api/v1/mcp/registry/{server_id}")
+        self._check(resp)
+        return MCPQuarantineRecord(**resp.json())
+
+    def approve_mcp_registry_record(self, server_id: str, req: dict[str, Any]) -> MCPQuarantineRecord:
+        resp = self._client.post(f"/api/v1/mcp/registry/{server_id}/approve", json=req)
+        self._check(resp)
+        return MCPQuarantineRecord(**resp.json())
+
+    def revoke_mcp_registry_record(self, server_id: str, reason: Optional[str] = None) -> MCPQuarantineRecord:
+        resp = self._client.post(f"/api/v1/mcp/registry/{server_id}/revoke", json={"reason": reason})
+        self._check(resp)
+        return MCPQuarantineRecord(**resp.json())
+
+    def scan_mcp_server(self, req: dict[str, Any]) -> dict[str, Any]:
+        resp = self._client.post("/api/v1/mcp/scan", json=req)
+        self._check(resp)
+        return resp.json()
+
+    def list_mcp_auth_profiles(self) -> list[dict[str, Any]]:
+        resp = self._client.get("/api/v1/mcp/auth-profiles")
+        self._check(resp)
+        return resp.json()
+
+    def put_mcp_auth_profile(self, profile_id: str, profile: dict[str, Any]) -> dict[str, Any]:
+        resp = self._client.put(f"/api/v1/mcp/auth-profiles/{profile_id}", json=profile)
+        self._check(resp)
+        return resp.json()
+
+    def authorize_mcp_call(self, req: dict[str, Any]) -> dict[str, Any]:
+        resp = self._client.post("/api/v1/mcp/authorize-call", json=req)
+        self._check(resp)
+        return resp.json()
+
     # ── Sandbox ─────────────────────────────────────
     def inspect_sandbox_grants(
         self,
@@ -334,6 +442,113 @@ class HelmClient:
         if isinstance(body, list):
             return [SandboxBackendProfile(**item) for item in body]
         return SandboxGrant(**body)
+
+    def list_sandbox_profiles(self) -> list[SandboxBackendProfile]:
+        resp = self._client.get("/api/v1/sandbox/profiles")
+        self._check(resp)
+        return [SandboxBackendProfile(**item) for item in resp.json()]
+
+    def list_sandbox_grants(self) -> list[SandboxGrant]:
+        resp = self._client.get("/api/v1/sandbox/grants")
+        self._check(resp)
+        return [SandboxGrant(**item) for item in resp.json()]
+
+    def create_sandbox_grant(self, req: dict[str, Any]) -> SandboxGrant:
+        resp = self._client.post("/api/v1/sandbox/grants", json=req)
+        self._check(resp)
+        return SandboxGrant(**resp.json())
+
+    def get_sandbox_grant(self, grant_id: str) -> SandboxGrant:
+        resp = self._client.get(f"/api/v1/sandbox/grants/{grant_id}")
+        self._check(resp)
+        return SandboxGrant(**resp.json())
+
+    def verify_sandbox_grant(self, grant_id: str) -> dict[str, Any]:
+        resp = self._client.post(f"/api/v1/sandbox/grants/{grant_id}/verify")
+        self._check(resp)
+        return resp.json()
+
+    def preflight_sandbox_grant(self, req: dict[str, Any]) -> dict[str, Any]:
+        resp = self._client.post("/api/v1/sandbox/preflight", json=req)
+        self._check(resp)
+        return resp.json()
+
+    # ── Identity, Authz, Approvals, Budgets ─────────
+    def list_agent_identities(self) -> list[dict[str, Any]]:
+        resp = self._client.get("/api/v1/identity/agents")
+        self._check(resp)
+        return resp.json()
+
+    def get_authz_health(self) -> dict[str, Any]:
+        resp = self._client.get("/api/v1/authz/health")
+        self._check(resp)
+        return resp.json()
+
+    def check_authz(self, req: dict[str, Any]) -> dict[str, Any]:
+        resp = self._client.post("/api/v1/authz/check", json=req)
+        self._check(resp)
+        return resp.json()
+
+    def list_authz_snapshots(self) -> list[dict[str, Any]]:
+        resp = self._client.get("/api/v1/authz/snapshots")
+        self._check(resp)
+        return resp.json()
+
+    def get_authz_snapshot(self, snapshot_id: str) -> dict[str, Any]:
+        resp = self._client.get(f"/api/v1/authz/snapshots/{snapshot_id}")
+        self._check(resp)
+        return resp.json()
+
+    def list_approval_ceremonies(self) -> list[dict[str, Any]]:
+        resp = self._client.get("/api/v1/approvals")
+        self._check(resp)
+        return resp.json()
+
+    def create_approval_ceremony(self, req: dict[str, Any]) -> dict[str, Any]:
+        resp = self._client.post("/api/v1/approvals", json=req)
+        self._check(resp)
+        return resp.json()
+
+    def transition_approval_ceremony(self, approval_id: str, action: str, req: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+        resp = self._client.post(f"/api/v1/approvals/{approval_id}/{action}", json=req or {})
+        self._check(resp)
+        return resp.json()
+
+    def create_approval_webauthn_challenge(self, approval_id: str, req: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+        resp = self._client.post(f"/api/v1/approvals/{approval_id}/webauthn/challenge", json=req or {})
+        self._check(resp)
+        return resp.json()
+
+    def assert_approval_webauthn_challenge(self, approval_id: str, req: dict[str, Any]) -> dict[str, Any]:
+        resp = self._client.post(f"/api/v1/approvals/{approval_id}/webauthn/assert", json=req)
+        self._check(resp)
+        return resp.json()
+
+    def list_budget_ceilings(self) -> list[dict[str, Any]]:
+        resp = self._client.get("/api/v1/budgets")
+        self._check(resp)
+        return resp.json()
+
+    def put_budget_ceiling(self, budget_id: str, req: dict[str, Any]) -> dict[str, Any]:
+        resp = self._client.put(f"/api/v1/budgets/{budget_id}", json=req)
+        self._check(resp)
+        return resp.json()
+
+    # ── Telemetry and Coexistence ───────────────────
+    def get_coexistence_capabilities(self) -> dict[str, Any]:
+        resp = self._client.get("/api/v1/coexistence/capabilities")
+        self._check(resp)
+        return resp.json()
+
+    def get_telemetry_otel_config(self) -> dict[str, Any]:
+        resp = self._client.get("/api/v1/telemetry/otel/config")
+        self._check(resp)
+        return resp.json()
+
+    def export_telemetry(self, req: dict[str, Any]) -> dict[str, Any]:
+        resp = self._client.post("/api/v1/telemetry/export", json=req)
+        self._check(resp)
+        return resp.json()
 
     # ── System ──────────────────────────────────────
     def health(self) -> dict[str, Any]:

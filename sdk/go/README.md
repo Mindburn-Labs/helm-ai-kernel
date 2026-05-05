@@ -1,6 +1,6 @@
-# HELM SDK — Go
+# HELM SDK - Go
 
-Typed Go client for the HELM kernel API. Zero external dependencies.
+Typed Go client for the HELM kernel HTTP API.
 
 ## Install
 
@@ -8,17 +8,28 @@ Typed Go client for the HELM kernel API. Zero external dependencies.
 go get github.com/Mindburn-Labs/helm-oss/sdk/go
 ```
 
-Version truth is the repository `VERSION` file (`0.4.0` for this reset). Go consumers pin by module commit or release tag.
+Version truth is the repository `VERSION` file (`0.4.0` for this reset).
+Go consumers pin by module commit or release tag.
 
 ## Local Test
 
 ```bash
-GOWORK=off go test ./client
+cd sdk/go
+GOWORK=off go test ./...
 ```
 
-## Generated Sources
+## Source Layout
 
-The Go SDK is a hand-maintained HTTP client over the OpenAPI contract. It does not currently ship generated protobuf bindings.
+- `client/client.go` is the hand-maintained HTTP wrapper over the OpenAPI
+  routes.
+- `client/types_gen.go` contains OpenAPI-derived model types.
+- `client/execution_boundary.go` contains the May 2026 execution-boundary
+  helper methods.
+- `gen/` contains protobuf bindings generated from `protocols/proto/`.
+
+The HTTP wrapper itself uses Go standard-library `net/http` and
+`encoding/json`. The module also declares protobuf and gRPC dependencies for
+the generated bindings in `gen/`.
 
 ## Quick Example
 
@@ -35,7 +46,7 @@ import (
 func main() {
     c := helm.New("http://localhost:8080")
 
-    // Chat completions via HELM proxy
+    // Chat completions via the HELM boundary.
     res, err := c.ChatCompletions(helm.ChatCompletionRequest{
         Model:    "gpt-4",
         Messages: []helm.ChatMessage{{Role: "user", Content: "List files in /tmp"}},
@@ -58,7 +69,7 @@ func main() {
 ## API
 
 | Method | Endpoint |
-|--------|----------|
+| --- | --- |
 | `ChatCompletions(req)` | `POST /v1/chat/completions` |
 | `ApproveIntent(req)` | `POST /api/v1/kernel/approve` |
 | `ListSessions(limit, offset)` | `GET /api/v1/proofgraph/sessions` |
@@ -68,9 +79,14 @@ func main() {
 | `CreateEvidenceEnvelopeManifest(req)` | `POST /api/v1/evidence/envelopes` |
 | `ConformanceRun(req)` | `POST /api/v1/conformance/run` |
 | `ListNegativeConformanceVectors()` | `GET /api/v1/conformance/negative` |
+| `ListConformanceVectors()` | `GET /api/v1/conformance/vectors` |
 | `ListMCPRegistry()` | `GET /api/v1/mcp/registry` |
 | `DiscoverMCPServer(req)` | `POST /api/v1/mcp/registry` |
 | `ApproveMCPServer(req)` | `POST /api/v1/mcp/registry/approve` |
+| `GetBoundaryStatus()` | `GET /api/v1/boundary/status` |
+| `ListBoundaryCapabilities()` | `GET /api/v1/boundary/capabilities` |
+| `ListBoundaryRecords(query)` | `GET /api/v1/boundary/records` |
+| `VerifyBoundaryRecord(recordID)` | `POST /api/v1/boundary/records/{id}/verify` |
 | `ListSandboxBackendProfiles()` | `GET /api/v1/sandbox/grants/inspect` |
 | `InspectSandboxGrant(runtime, profile, policyEpoch)` | `GET /api/v1/sandbox/grants/inspect` |
 | `Health()` | `GET /healthz` |

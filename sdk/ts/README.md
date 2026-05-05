@@ -1,4 +1,4 @@
-# HELM SDK — TypeScript
+# HELM SDK - TypeScript
 
 Typed TypeScript client for the retained HELM kernel API.
 
@@ -8,7 +8,7 @@ Typed TypeScript client for the retained HELM kernel API.
 npm install @mindburn/helm
 ```
 
-Published package version is `0.4.0` and is declared in `package.json`.
+Package metadata declares version `0.4.0` in `package.json`.
 
 ## Local Development
 
@@ -18,9 +18,14 @@ npm test -- --run
 npm run build
 ```
 
-## Generated Sources
+## Source Layout
 
-The HTTP wrapper uses OpenAPI-derived types. Protobuf bindings under `src/generated/` are generated from `protocols/proto/` with `ts-proto`.
+- `src/client.ts` is the hand-maintained HTTP wrapper.
+- `src/types.gen.ts` contains OpenAPI-derived model types.
+- `src/adapters/agent-frameworks.ts` contains the source-backed framework
+  adapter helpers.
+- Protobuf bindings under `src/generated/` are generated from
+  `protocols/proto/` with `ts-proto` when codegen has been run.
 
 ## Usage
 
@@ -65,11 +70,19 @@ const result = await adapter.submit(
 console.log(result.governance.receiptId);
 ```
 
-The helpers do not add Microsoft Agent Governance Toolkit as a dependency and do not claim Microsoft certification. They cover the same framework families so HELM can sit behind AGT or another orchestrator as the receipt-bearing enforcement boundary.
+The helpers do not add Microsoft Agent Governance Toolkit as a dependency and
+do not claim Microsoft certification. They cover the same framework families
+so HELM can sit behind AGT or another orchestrator as the receipt-bearing
+enforcement boundary.
 
 ## Execution Boundary Methods
 
-The client also exposes typed methods for proof-bearing boundary operations: `createEvidenceEnvelopeManifest`, `listNegativeConformanceVectors`, `listMcpRegistry`, `discoverMcpServer`, `approveMcpServer`, and `inspectSandboxGrants`. These methods keep external envelopes, MCP quarantine decisions, and sandbox grants attached to HELM-native receipts and EvidencePacks.
+The client also exposes methods for proof-bearing boundary operations:
+evidence envelope manifests, boundary records and checkpoints, conformance
+vectors, MCP quarantine and authorization profiles, sandbox profiles and
+grants, authz snapshots, approvals, budgets, telemetry export, and coexistence
+capabilities. These methods keep external envelopes, MCP quarantine decisions,
+and sandbox grants attached to HELM-native receipts and EvidencePacks.
 
 ## Release Notes
 

@@ -31,9 +31,8 @@ helm mcp serve --transport http
 ## What's Included
 
 | File | Purpose |
-|------|---------|
+| --- | --- |
 | `helm.yaml` | HELM config with OpenAI base-URL proxy pattern |
-| `.env.example` | Required environment variables |
 | `first-governed-call.sh` | Runnable script demonstrating a governed tool call |
 | `ci-smoke.sh` | CI-compatible smoke test |
 
@@ -41,11 +40,11 @@ helm mcp serve --transport http
 
 HELM sits between your application and the OpenAI API as a governance proxy:
 
-```
-Your App → HELM MCP Server → OpenAI API
-              ↓
-         Governance
-         (receipts, proofs, policy enforcement)
+```mermaid
+flowchart LR
+  app["Your app"] --> helm["HELM MCP server"]
+  helm --> provider["OpenAI API"]
+  helm --> evidence["receipts and proofs"]
 ```
 
 Every tool call is intercepted by the governance firewall, which evaluates it against

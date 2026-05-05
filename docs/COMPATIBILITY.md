@@ -5,42 +5,27 @@ last_reviewed: 2026-05-05
 
 # Compatibility
 
+HELM OSS compatibility is the retained public surface that maps to code, examples, tests, or canonical docs. Historical experiments are not supported unless they appear in the source-backed tables below.
+
 ## Audience
 
-Use this page when you need the public `helm-oss/compatibility` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
+This page is for developers and operators deciding whether HELM OSS supports their operating system, SDK language, framework helper, policy language, deployment target, or verification path today.
 
 ## Outcome
 
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
+After this page you should know which surfaces are supported, example-only, or outside HELM OSS; which source paths prove each claim; and which validation commands must pass before a compatibility claim changes.
 
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
-| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
-| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
-
-## Diagram
-
-This scheme maps the main sections of Compatibility in reading order.
+## Surface Map
 
 ```mermaid
 flowchart LR
-  Page["Compatibility"]
-  A["Source Truth"]
-  B["Supported Public Surfaces"]
-  C["Framework Adapter Helpers"]
-  D["Provider Starters"]
-  E["Policy Languages"]
-  Page --> A
-  A --> B
-  B --> C
-  C --> D
-  D --> E
+  Kernel["Go kernel and CLI"] --> API["HTTP API and proxy"]
+  API --> Console["self-hostable OSS Console"]
+  API --> SDKs["SDKs and adapters"]
+  SDKs --> Starters["provider starters"]
+  Kernel --> Policy["CEL, Rego, Cedar bundles"]
+  Policy --> Deploy["Docker and Kubernetes"]
 ```
-
-This page defines the retained HELM OSS compatibility surface. It is intentionally narrower than every historical experiment in the repository: public claims must map to code, examples, tests, or canonical docs.
 
 ## Source Truth
 
@@ -55,6 +40,8 @@ This page is backed by:
 - `examples/policies/`
 - `docs/architecture/policy-languages.md`
 - `deploy/helm-chart/`
+- `apps/console/`
+- `docs/CONSOLE.md`
 
 ## Supported Public Surfaces
 
@@ -63,7 +50,9 @@ This page is backed by:
 | Go kernel and CLI | Supported | `make build`, `make test` |
 | OpenAI-compatible proxy | Supported | `core/cmd/helm/proxy_cmd.go`, proxy examples |
 | MCP server, OAuth scope enforcement, and bundle generation | Supported | `core/cmd/helm/mcp_*`, MCP tests |
+| Boundary records, MCP quarantine, sandbox grants, authz snapshots, approvals, budgets, telemetry, and coexistence APIs | Supported | `api/openapi/helm.openapi.yaml`, `core/cmd/helm/route_registry.go`, `core/cmd/helm/contract_routes.go` |
 | Evidence export and offline verification | Supported | `core/cmd/helm/export_cmd.go`, `core/cmd/helm/verify_cmd.go` |
+| Self-hostable OSS Console | Supported | `apps/console/`, `make test-console` |
 | Python SDK | Supported | `make test-sdk-py` |
 | TypeScript SDK and JavaScript OpenAI-compatible path | Supported | `make test-sdk-ts` |
 | Go SDK | Supported | `cd sdk/go && go test ./...` |
@@ -115,7 +104,7 @@ Use `docs/architecture/policy-languages.md` for the longer comparison and comman
 
 ## Deployment Surface
 
-The repository keeps Docker, Docker Compose, and a Kubernetes Helm chart. It does not ship a browser product UI, static report viewer, or hosted control plane in HELM OSS.
+The repository keeps Docker, Docker Compose, a Kubernetes Helm chart, and the self-hostable OSS Console. It does not ship the managed browser product UI, a static report viewer, or a hosted control plane in HELM OSS.
 
 | Deployment | Status | Source |
 | --- | --- | --- |
@@ -124,7 +113,8 @@ The repository keeps Docker, Docker Compose, and a Kubernetes Helm chart. It doe
 | Docker Compose | Supported | `docker-compose.yml` |
 | Kubernetes Helm chart | Supported | `deploy/helm-chart/` |
 | Hosted control plane | Not in HELM OSS | commercial HELM |
-| Browser product UI | Not in HELM OSS | commercial HELM |
+| Self-hostable OSS Console | Supported | `apps/console/` |
+| Managed browser product UI | Not in HELM OSS | commercial HELM |
 
 ## Source Build Expectations
 
@@ -152,6 +142,14 @@ Do not claim a language, framework, deployment target, or provider integration a
 - the row points at live source paths and example paths;
 - the row names the validation command that proves the claim;
 - the public docs page exposes the same claim in Markdown, LLM, and MCP surfaces.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| A docs page claims support that is missing here | Add or fix the row in `docs/developer-coverage.manifest.json`, then link the source, example, and validation command. |
+| A framework helper is mistaken for full framework ownership | Keep the status as compatible helper unless HELM owns runnable framework integration code and tests. |
+| A deployment target lacks a smoke command | Mark it example-only or not-supported until a source-backed validation command exists. |
 
 ## MCP 2026 Radar Notes
 

@@ -1,4 +1,4 @@
-.PHONY: build test test-race test-sdk-ts test-design-system build-console test-console test-platform test-sdk-py test-sdk-rust test-sdk-java verify-fixtures verify-presentation test-all bench bench-report lint crucible proxy docker docker-up sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check clean docs-coverage docs-truth
+.PHONY: build test test-race test-sdk-go-standalone test-sdk-ts test-design-system build-console test-console test-platform test-sdk-py test-sdk-rust test-sdk-java verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check clean docs-coverage docs-truth
 
 VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.4.0)
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -13,6 +13,9 @@ test:
 
 test-race:
 	cd core && go test ./pkg/... -count=1 -race
+
+test-sdk-go-standalone:
+	cd sdk/go && GOWORK=off go test ./...
 
 test-sdk-ts:
 	cd sdk/ts && npm ci && npm test -- --run && npm run build
@@ -57,6 +60,23 @@ lint: docs-coverage docs-truth
 	cd core && go vet ./...
 	cd core && test -z "$$(gofmt -l .)" || (echo "Run gofmt -w ." && exit 1)
 
+proto-lint:
+	buf lint protocols/policy-schema
+
+BUF_AGAINST ?= .git#branch=main,subdir=protocols/policy-schema
+proto-breaking:
+	buf breaking protocols/policy-schema --against "$(BUF_AGAINST)"
+
+docker-verify:
+	docker build -f Dockerfile -t helm-oss:verify-root .
+	docker build -f Dockerfile.slim -t helm-oss:verify-slim .
+	docker build -f core/Dockerfile -t helm-oss:verify-core core
+	docker build -f core/Dockerfile.api -t helm-oss:verify-core-api .
+	docker build -f oss-fuzz/Dockerfile -t helm-oss:verify-oss-fuzz oss-fuzz
+
+release-readiness: verify-boundary docs-truth test-sdk-go-standalone proto-lint proto-breaking docker-verify deployment-smoke release-smoke
+	@echo "✅ Release readiness gate passed"
+
 crucible: build
 	bash scripts/usecases/run_all.sh
 
@@ -68,6 +88,23 @@ docker: build-console
 
 docker-up:
 	docker compose up -d
+
+docker-smoke: docker
+	bash scripts/ci/docker_smoke.sh
+
+compose-smoke: docker
+	bash scripts/ci/docker_smoke.sh --compose
+
+helm-chart-smoke:
+	bash scripts/ci/helm_chart_smoke.sh
+
+kind-smoke: docker
+	bash scripts/ci/kind_smoke.sh
+
+deployment-smoke: docker-smoke compose-smoke helm-chart-smoke
+
+release-smoke:
+	bash scripts/ci/release_smoke.sh
 
 sbom: build
 	bash scripts/ci/generate_sbom.sh
@@ -171,7 +208,13 @@ codegen-rust:
 	cd sdk/rust && cargo build --features codegen
 
 codegen-check: codegen
-	@git diff --exit-code sdk/ || (echo "SDK types are out of sync. Run 'make codegen'." && exit 1)
+	@git diff --exit-code -- \
+		sdk/go/gen \
+		sdk/python/helm_sdk/generated \
+		sdk/ts/src/generated \
+		sdk/java/src/main/java/helm \
+		sdk/rust/src/generated \
+		|| (echo "Generated SDK bindings are out of sync. Run 'make codegen'." && exit 1)
 
 verify-boundary:
 	bash tools/verify-boundary.sh

@@ -1,4 +1,4 @@
-# HELM SDK — Rust
+# HELM SDK - Rust
 
 Typed Rust client for the retained HELM kernel API.
 
@@ -8,7 +8,7 @@ Typed Rust client for the retained HELM kernel API.
 helm-sdk = "0.4.0"
 ```
 
-Published crate version is `0.4.0` and is declared in `Cargo.toml`.
+Package metadata declares crate version `0.4.0` in `Cargo.toml`.
 
 ## Local Development
 
@@ -18,7 +18,10 @@ cargo test
 
 ## Generated Sources
 
-`src/types_gen.rs` is generated from `api/openapi/helm.openapi.yaml`. Protobuf bindings under `src/generated/` are generated from `protocols/proto/`; the `codegen` feature can rebuild them with `tonic-build`.
+`src/types_gen.rs` is generated from `api/openapi/helm.openapi.yaml`.
+Protobuf bindings under `src/generated/` are generated from
+`protocols/proto/`; the `codegen` feature can rebuild them with
+`tonic-build`.
 
 ## Usage
 
@@ -41,7 +44,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Execution Boundary Methods
 
-`HelmClient` includes typed calls for `create_evidence_envelope_manifest`, `list_negative_conformance_vectors`, `list_mcp_registry`, `discover_mcp_server`, `approve_mcp_server`, and `inspect_sandbox_grants`. `SandboxGrantInspection` returns either backend profiles or a sealed grant depending on whether a runtime query is provided.
+`HelmClient` includes calls for evidence envelope manifests, boundary records
+and checkpoints, conformance vectors, MCP quarantine and authorization
+profiles, sandbox profiles and grants, authz snapshots, approvals, budgets,
+telemetry export, and coexistence capabilities. `SandboxGrantInspection`
+returns either backend profiles or a sealed grant depending on whether a
+runtime query is provided.
 
 ## Release Notes
 

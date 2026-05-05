@@ -7,20 +7,20 @@ ARG TARGETARCH
 RUN apk add --no-cache git ca-certificates
 
 WORKDIR /src
-COPY . ./
+COPY go.mod go.sum ./
+RUN --mount=type=cache,id=helm-oss-go-mod,target=/go/pkg/mod go mod download
 
-RUN go mod download
-RUN CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-amd64}" go build -ldflags="-s -w" -trimpath -o /helm ./cmd/helm/
-RUN CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-amd64}" go build -ldflags="-s -w" -trimpath -o /helm-node ./cmd/helm-node/
+COPY . ./
+RUN --mount=type=cache,id=helm-oss-go-mod,target=/go/pkg/mod --mount=type=cache,id=helm-oss-go-build,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-amd64}" go build -ldflags="-s -w" -trimpath -o /helm ./cmd/helm/
 
 # ── Stage 2: Runtime ───────────────────────────────────
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1
 
 COPY --from=builder /helm /usr/local/bin/helm
-COPY --from=builder /helm-node /usr/local/bin/helm-node
 
-EXPOSE 8080 9090
+EXPOSE 8080
 
 USER nonroot:nonroot
 
-ENTRYPOINT ["helm-node"]
+ENTRYPOINT ["helm"]

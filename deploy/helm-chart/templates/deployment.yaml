@@ -83,6 +83,20 @@ spec:
                 secretKeyRef:
                   name: {{ include "helm-firewall.signingSecretName" . }}
                   key: signing-key
+            {{- if or .Values.helm.auth.existingSecret .Values.helm.auth.adminAPIKey }}
+            - name: HELM_ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helm-firewall.authSecretName" . }}
+                  key: {{ .Values.helm.auth.adminAPIKeySecretKey }}
+            {{- end }}
+            {{- if or .Values.helm.auth.existingSecret .Values.helm.auth.serviceAPIKey }}
+            - name: HELM_SERVICE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helm-firewall.authSecretName" . }}
+                  key: {{ .Values.helm.auth.serviceAPIKeySecretKey }}
+            {{- end }}
             {{- if eq .Values.helm.storage.type "postgres" }}
             {{- if .Values.helm.storage.postgres.existingSecret }}
             - name: DATABASE_URL

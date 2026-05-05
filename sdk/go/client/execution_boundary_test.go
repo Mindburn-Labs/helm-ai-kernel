@@ -18,7 +18,20 @@ func TestExecutionBoundaryClientMethods(t *testing.T) {
 			Envelope:           "dsse",
 			NativeEvidenceHash: "sha256:native",
 			NativeAuthority:    true,
+			PayloadHash:        "sha256:payload",
 		})
+	})
+	mux.HandleFunc("/api/v1/evidence/envelopes/env1/payload", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, EvidenceEnvelopePayload{"manifest_id": "env1", "payload_hash": "sha256:payload"})
+	})
+	mux.HandleFunc("/api/v1/boundary/checkpoints/cp1/verify", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, SurfaceRecord{"verdict": "PASS", "checkpoint_id": "cp1"})
+	})
+	mux.HandleFunc("/api/v1/approvals/ap1/webauthn/challenge", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, ApprovalWebAuthnChallenge{"challenge_id": "ch1", "approval_id": "ap1"})
+	})
+	mux.HandleFunc("/api/v1/approvals/ap1/webauthn/assert", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, ApprovalCeremony{"approval_id": "ap1", "state": "approved"})
 	})
 	mux.HandleFunc("/api/v1/conformance/negative", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(t, w, []NegativeBoundaryVector{{ID: "pdp-outage", Category: "policy"}})
@@ -48,6 +61,25 @@ func TestExecutionBoundaryClientMethods(t *testing.T) {
 	})
 	if err != nil || !manifest.NativeAuthority {
 		t.Fatalf("manifest = %#v, err = %v", manifest, err)
+	}
+	if manifest.PayloadHash != "sha256:payload" {
+		t.Fatalf("payload hash = %q", manifest.PayloadHash)
+	}
+	payload, err := client.GetEvidenceEnvelopePayload("env1")
+	if err != nil || (*payload)["payload_hash"] != "sha256:payload" {
+		t.Fatalf("payload = %#v, err = %v", payload, err)
+	}
+	checkpoint, err := client.VerifyBoundaryCheckpoint("cp1")
+	if err != nil || (*checkpoint)["verdict"] != "PASS" {
+		t.Fatalf("checkpoint = %#v, err = %v", checkpoint, err)
+	}
+	challenge, err := client.CreateApprovalWebAuthnChallenge("ap1", SurfaceRecord{"actor": "user1"})
+	if err != nil || (*challenge)["challenge_id"] != "ch1" {
+		t.Fatalf("challenge = %#v, err = %v", challenge, err)
+	}
+	asserted, err := client.AssertApprovalWebAuthnChallenge("ap1", ApprovalWebAuthnAssertion{"challenge_id": "ch1", "assertion": "sig"})
+	if err != nil || (*asserted)["state"] != "approved" {
+		t.Fatalf("asserted = %#v, err = %v", asserted, err)
 	}
 	vectors, err := client.ListNegativeConformanceVectors()
 	if err != nil || vectors[0].ID != "pdp-outage" {

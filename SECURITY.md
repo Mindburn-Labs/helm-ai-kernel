@@ -23,7 +23,9 @@ Security fixes are expected on the current minor version and, when practical, th
 
 The repository keeps:
 
-- signed release binaries and checksums via release automation
+- reproducible release-binary targets and checksum generation
+- release automation that can sign artifacts when Cosign bundles are produced
+  and attached
 - an SBOM generation script in `scripts/ci/generate_sbom.sh`
 - offline evidence verification in the `helm verify` command
 
@@ -55,9 +57,9 @@ Verification commands and the recovery path are documented in
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
 The current public GitHub release, `v0.4.0` published on 2026-04-25, does not
-attach `*.cosign.bundle` files. For that release, use `SHA256SUMS.txt`,
-`sbom.json`, `release-attestation.json`, offline `evidence-pack.tar`
-verification, and reproducible-build validation.
+attach `*.cosign.bundle` or `*.openvex.json` files. For that release, use
+`SHA256SUMS.txt`, `sbom.json`, `release-attestation.json`, offline
+`evidence-pack.tar` verification, and reproducible-build validation.
 
 ## Continuous Fuzzing
 

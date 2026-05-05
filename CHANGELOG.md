@@ -7,7 +7,7 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Use this page when you need the public `helm-oss/changelog` guidance without opening repo internals first. It is written for developers, operators, security reviewers, and evaluators who need to connect the docs website back to the owning HELM source files.
+This changelog is for developers, operators, security reviewers, and evaluators tracking public HELM OSS interface changes across releases.
 
 ## Outcome
 

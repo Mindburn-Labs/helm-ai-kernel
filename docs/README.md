@@ -7,6 +7,7 @@ This tree is the canonical public documentation source for HELM OSS. Public prot
 - [Documentation index](index.md)
 - [Quickstart](QUICKSTART.md)
 - [Architecture](ARCHITECTURE.md)
+- [Canonical diagrams](architecture/canonical-diagrams.md)
 
 ## How-To
 
@@ -27,6 +28,7 @@ This tree is the canonical public documentation source for HELM OSS. Public prot
 - [OSS scope](OSS_SCOPE.md)
 - [OWASP MCP threat mapping](OWASP_MCP_THREAT_MAPPING.md)
 - [Architecture rationale: cognitive firewall](architecture/cognitive-firewall.md)
+- [Canonical visual doctrine](architecture/canonical-diagrams.md)
 
 ## Security And Compliance
 

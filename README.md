@@ -1,19 +1,35 @@
-# HELM
+# HELM OSS
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Mindburn-Labs/helm-oss/badge)](https://scorecard.dev/viewer/?uri=github.com/Mindburn-Labs/helm-oss)
-[![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF-Best%20Practices-informational)](BEST_PRACTICES.md)
-[![Release checksums](https://img.shields.io/badge/release-checksums-success)](docs/VERIFICATION.md)
-[![SLSA Level 3](https://img.shields.io/badge/SLSA-Level%203-blue)](docs/PUBLISHING.md)
-[![SBOM CycloneDX](https://img.shields.io/badge/SBOM-CycloneDX%201.5-orange)](docs/PUBLISHING.md)
 
-HELM is an open-source execution kernel for governed AI tool calling. It sits
-on the execution boundary, applies fail-closed policy checks before dispatch,
-records signed receipts for allow and deny decisions, and exports evidence
-bundles that can be verified offline.
+HELM OSS is the fail-closed execution firewall for AI agents.
 
-Current public release: `v0.4.0` from 2026-04-25. The canonical public docs
-entry point is <https://helm.docs.mindburn.org/oss>.
+It sits between stochastic proposals and deterministic side effects. Agents,
+LLMs, copilots, and orchestration frameworks may propose work; HELM decides
+what is authorized to execute, records the decision, and emits receipts that
+can be verified or replayed outside the model.
+
+Not Kubernetes Helm: this repository is Mindburn Labs' HELM execution kernel,
+not the Kubernetes package manager.
+
+```text
+Agent attempts dangerous action
+        |
+        v
+HELM execution boundary
+        |
+        +--> DENY / ESCALATE before side effects
+        |
+        v
+Signed receipt -> verify passes -> tamper fails
+```
+
+Current public release: `v0.4.0` from 2026-04-25. Canonical OSS docs:
+<https://helm.docs.mindburn.org/oss>.
+
+Public proof console target: <https://oss.mindburn.org/>. Do not treat it as
+live until DNS, `/api/health`, `/api/demo/run`, `/api/demo/verify`, and
+`/api/demo/tamper` smoke tests pass.
 
 ## Project Status
 
@@ -41,6 +57,26 @@ Start a local boundary and optional Console:
 helm serve --policy ./release.high_risk.v3.toml
 helm serve --policy ./release.high_risk.v3.toml --console
 helm boundary status
+```
+
+Run the local public proof API after `helm serve` starts:
+
+```bash
+curl http://127.0.0.1:7714/api/demo/run \
+  -H 'content-type: application/json' \
+  -d '{"action_id":"export_customer_list","policy_id":"agent_tool_call_boundary"}'
+```
+
+Then verify the returned receipt and confirm tampering fails:
+
+```bash
+curl http://127.0.0.1:7714/api/demo/verify \
+  -H 'content-type: application/json' \
+  -d '{"receipt":{...}}'
+
+curl http://127.0.0.1:7714/api/demo/tamper \
+  -H 'content-type: application/json' \
+  -d '{"receipt":{...},"mutation":"flip_verdict"}'
 ```
 
 Govern MCP tools or an OpenAI-compatible client:
@@ -81,6 +117,87 @@ make test-platform
 make test-all
 make crucible
 ```
+
+## Canonical Diagrams
+
+The complete diagram doctrine lives in
+[docs/architecture/canonical-diagrams.md](docs/architecture/canonical-diagrams.md).
+The public README keeps the OSS path short: proposal, boundary, verdict,
+receipt, replay.
+
+```mermaid
+flowchart LR
+    Agent["Agent tool call"] --> Boundary["HELM boundary"]
+    Boundary --> Verdict["ALLOW / DENY / ESCALATE"]
+    Verdict --> Receipt["Signed receipt"]
+    Receipt --> Verify["Verify / replay"]
+    Verify --> Tamper["Tamper fails"]
+```
+
+Unknown MCP servers and tools enter quarantine before they can dispatch side
+effects:
+
+```mermaid
+flowchart TD
+    A["Discovered MCP server"] --> B["Quarantined by default"]
+    B --> C["Metadata + schema inspection"]
+    C --> D["Risk classification"]
+    D --> E["Approval record"]
+    E --> F["Policy-bound active state"]
+    F --> G["ALLOW / DENY / ESCALATE per tool call"]
+    G --> H["Receipt + ProofGraph event"]
+```
+
+Sandbox grants are explicit authority records, not generic container access:
+
+```text
+Sandbox grant
+grant_id · runtime · runtime_version · backend_profile
+image_digest / template_digest
+filesystem preopens · environment variables · network policy
+resource limits · policy_epoch · grant_hash
+```
+
+## Why HELM Is Different
+
+Orchestration decides what an agent should attempt. HELM decides what it is
+allowed to execute.
+
+```mermaid
+flowchart LR
+    subgraph Orchestration["Agent orchestration stack"]
+      A["Agent framework decides what to attempt"] --> B["Tool router sends calls"] --> C["Logs record after the fact"]
+    end
+    subgraph HELM["HELM execution stack"]
+      D["Agent proposes"] --> E["CPI validates"] --> F["PEP enforces"] --> G["Sandbox contains"] --> H["Connector contract constrains"] --> I["Receipt proves"] --> J["ProofGraph replays"]
+    end
+```
+
+- Agent frameworks shape plans; HELM enforces authority at the side-effect boundary.
+- MCP gateways route tool calls; HELM evaluates policy, approval state, sandbox grants, connector contracts, and proof requirements.
+- IAM grants identity and coarse permissions; HELM evaluates concrete intent and risk at execution time.
+- Observability explains what happened after; HELM blocks or escalates before side effects dispatch.
+- Governance dashboards document policy; HELM applies policy in the runtime path and records evidence.
+- Workflow automation assumes deterministic scripts; HELM contains stochastic proposals inside deterministic execution semantics.
+
+## Agent Tool Call Boundary Demo
+
+The sample policy covers:
+
+| Action | Expected result |
+| --- | --- |
+| Read ticket / read file | `ALLOW` |
+| Draft reply / dry run | `ALLOW` |
+| Small refund / low-risk write | `ALLOW` |
+| Large refund / high-risk write | `ESCALATE` |
+| Dangerous shell command | `DENY` |
+| Export customer list / secret exfiltration | `DENY` |
+| Modify policy / IAM-like action | `ESCALATE` |
+
+Every run is labeled `OSS-BACKED`, `SANDBOX`, and `SAMPLE POLICY`. The demo
+uses HELM OSS Guardian evaluation and signed receipt persistence. It does not
+touch customer data, payment systems, infrastructure, shells, or external
+networks.
 
 ## Public Interfaces
 

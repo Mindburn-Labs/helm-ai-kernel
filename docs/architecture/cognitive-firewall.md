@@ -65,3 +65,9 @@ flowchart LR
   block --> receipt
   receipt --> verify["Verification"]
 ```
+
+<!-- docs-depth-final-pass -->
+
+## Implementation Checklist
+
+A change to this pattern is complete only when the adapter test covers allow, deny, and missing-planner-reference paths, the receipt records the Sentinel risk and planner reference, and the public page still describes the browser UI and cloud planner as integration points rather than bundled HELM OSS features. Keep examples focused on the boundary contract: input hashes, domain scope, side-effect flag, destination, policy threshold, and resulting receipt. If a downstream browser extension or MCP browser tool adds richer context later, update this page by linking to that source-owner document instead of widening the core adapter claim.

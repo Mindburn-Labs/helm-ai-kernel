@@ -85,3 +85,12 @@ For component-level work:
 cd core
 go test -bench=. -benchmem ./pkg/crypto/ ./pkg/store/ ./pkg/guardian/ ./benchmarks/
 ```
+
+<!-- docs-depth-final-pass -->
+
+## Benchmark Evidence Checklist
+
+Every benchmark claim must name the runner, fixture, hardware or container profile, sample size, and validation command. Treat benchmark numbers as release-scoped facts: keep the command output with the release evidence pack and update this page only after the same command passes against the current tree. For developer trust, include both the success metric and the failure interpretation. A slow verification run should point to verifier profiling and receipt bundle size; an unexpected pass/fail split should point to the conformance fixture and ProofGraph row that produced it. Avoid competitive claims unless the compared artifact, version, and command are reproducible from public sources.
+
+<!-- docs-depth-final-pass-extra -->
+ Keep benchmark tables paired with raw artifacts and exact commit SHA. If the result cannot be reproduced from a clean checkout, move it to a lab note instead of the public benchmark page.

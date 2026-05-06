@@ -97,3 +97,9 @@ MCP activity that emits receipts can be inspected with:
 ```bash
 helm receipts tail --agent agent.titan.exec
 ```
+
+<!-- docs-depth-final-pass -->
+
+## MCP Integration Checklist
+
+A complete MCP integration claim includes the transport, tool list, input schema, output schema, receipt behavior, denial behavior, and a validation command. The public example must show at least one allowed call and one policy-denied call, with the receipt or diagnostic ID a developer should capture. Keep model-provider setup separate from MCP governance: the server exposes a controlled tool boundary, while HELM owns policy evaluation, evidence capture, and verifier replay. If a tool is experimental, mark it as such and keep it out of conformance tables until it has schema and fixture coverage.

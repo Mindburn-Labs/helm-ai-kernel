@@ -71,3 +71,9 @@ The April 2026 MCP update also records two evidence requirements relevant to hig
 - `tool_scope_enforcement`: per-tool scopes can be exposed in MCP metadata and enforced before execution.
 
 These requirements complement, but do not replace, receipt signing, ProofGraph verification, AI-BOM availability, conformity-assessment evidence, and QTSP timestamp anchoring.
+
+<!-- docs-depth-final-pass -->
+
+## Evidence Boundary
+
+This pack is a documentation and evidence mapping layer, not a legal conclusion. A release-ready pack should identify the receipt fields, policy bundle, evidence export, operator control, and verification command that support each mapped obligation. When the implementation changes, update the mapping by linking to schemas, tests, and example EvidencePacks instead of copying unsupported compliance language. Public docs can describe what HELM OSS can produce for an evaluator; customer or legal-specific filings belong outside anonymous exports. The minimum acceptance path is: generate a governed decision, export its EvidencePack, verify the receipt offline, and show which mapped controls the exported artifact supports.

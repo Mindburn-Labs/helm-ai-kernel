@@ -84,3 +84,12 @@ flowchart LR
   effect --> receipt["Receipt evidence"]
   deny --> receipt
 ```
+
+<!-- docs-depth-final-pass -->
+
+## Security Review Checklist
+
+A taint-tracking claim is publishable only when the source channel, propagation rule, egress decision, and receipt evidence are all visible to a reviewer. Keep examples concrete: user input, tool output, retrieved document, browser observation, and connector payloads should be classified separately. The expected failure mode is an explicit deny or escalation, not silent sanitization. If a new adapter bypasses taint metadata, document the gap as unsupported until the adapter attaches source channel and destination context. Reviewers should be able to reproduce the deny path, inspect the receipt, and verify the bundle offline.
+
+<!-- docs-depth-final-pass-extra -->
+ Record the specific adapter and policy bundle used for each reproduced deny path so a verifier can distinguish taint propagation from a generic policy denial.

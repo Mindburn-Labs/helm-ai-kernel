@@ -67,3 +67,9 @@ Do not merge either approach into the default path until:
 - benchmark fixtures show the false-positive impact on benign tool-use workflows;
 - policy authors can disable the pre-filter without weakening HELM's existing Guardian gate;
 - emitted evidence can be replayed or independently inspected during incident review.
+
+<!-- docs-depth-final-pass -->
+
+## Review Cadence
+
+Keep this watchlist tied to dated examples, affected adapters, and the receipt fields that expose attempted injection.

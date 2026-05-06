@@ -115,3 +115,9 @@ Run the broader platform gate:
 ```bash
 make test-platform
 ```
+
+<!-- docs-depth-final-pass -->
+
+## Scope Boundary
+
+HELM OSS does not promise the commercial Console experience. This page should describe the OSS inspection and source artifacts that the Console consumes: receipts, ProofGraph nodes, policy bundle metadata, verification output, and exported evidence. If a screen or workflow exists only in HELM commercial, link to authenticated customer documentation from the product site and keep anonymous OSS docs focused on the data contracts a developer can generate locally. The validation path is to create a receipt, inspect it through the CLI or export, and verify that the fields named here are present in the public schema.

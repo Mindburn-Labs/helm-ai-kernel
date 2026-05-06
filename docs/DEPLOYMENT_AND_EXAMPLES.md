@@ -85,3 +85,9 @@ as example-only or omit a support claim.
 | Helm chart lint fails | Check `deploy/helm-chart/values.yaml` and required Kubernetes settings. |
 | Example cannot reach the proxy | Confirm `helm proxy` is running and the client base URL points at the HELM boundary. |
 | Receipt verification fails | Use `/helm-oss/verification` and compare against `examples/golden/`. |
+
+<!-- docs-depth-final-pass -->
+
+## Deployment Acceptance Checklist
+
+Each deployment example should name the supported target, prerequisites, port exposure, persistence model, health check, and rollback signal. Docker Compose examples must identify which services are durable and which can be recreated. Kubernetes examples must identify ConfigMaps, Secrets, Services, probes, and the release artifact version. A deployment doc should not claim production readiness unless the chart or manifest is linted, the health endpoint is exercised, and receipt verification still works after restart. Include the first diagnostic to collect for failed startup: container logs, effective environment, policy bundle path, and verifier command output.

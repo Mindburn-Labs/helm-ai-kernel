@@ -60,3 +60,12 @@ This file is a code-oriented inventory of retained control points in the OSS ker
 | ASI-10 Insufficient Monitoring | evidence export, proof graph, and verification commands |
 
 Use this page as an implementation map. Validation still depends on the code, tests, and verification commands in the repository.
+
+<!-- docs-depth-final-pass -->
+
+## Coverage Discipline
+
+OWASP Agentic Top 10 coverage must stay evidence-backed. For each risk, name the HELM OSS control, the code or schema that implements it, the public example or fixture that exercises it, and the residual risk that remains outside the OSS boundary. Do not imply that policy evaluation replaces app authorization, secrets management, sandboxing, or network egress controls. The strongest public page shows both prevention and observability: how a risky action is blocked, how the receipt records it, how the verifier checks it, and what an operator should inspect when the action is allowed under policy.
+
+<!-- docs-depth-final-pass-extra -->
+ Link every mitigation to a concrete evidence artifact so evaluators can check the claim without reading unrelated implementation internals.

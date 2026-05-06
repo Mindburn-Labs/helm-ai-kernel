@@ -73,3 +73,15 @@ developer experience, not position it as a standalone commercial UI kit.
 | Token or contrast behavior changes | Review `docs/design-system/contrast-table.md` and package token tests. |
 | A primitive lacks accessibility coverage | Add or update the design-system accessibility and primitive coverage docs before release. |
 | A package change is invisible in public docs | Update this page or `/helm-oss/console`, then rerun diagram and source-coverage gates. |
+
+<!-- docs-depth-final-pass -->
+
+## Documentation And UI Contract
+
+The design system docs should connect visual components to governance meaning. Status badges, receipt summaries, policy decisions, warnings, and verifier output must use stable labels that match schemas and CLI output. When a token or component changes, update screenshots, accessibility notes, and any consuming Console or docs-platform page together. A reader should know which styles are illustrative, which are required for accessible evidence review, and which are commercial-only. Keep color and icon decisions tied to state semantics such as allow, deny, warning, pending verification, and stale evidence rather than decorative preference.
+
+<!-- docs-depth-final-pass-extra -->
+ Include keyboard focus, color contrast, reduced-motion behavior, and copy semantics for each stateful component. Evidence review UI must remain usable in screenshots, Markdown exports, and assistive technology.
+
+<!-- docs-depth-final-pass-extra-2 -->
+ State ownership for token changes and keep component examples aligned with generated screenshots.

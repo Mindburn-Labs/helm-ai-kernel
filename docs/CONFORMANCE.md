@@ -86,3 +86,9 @@ The profile directory contains:
 - `L4` covers non-authoritative telemetry/coexistence exports, evidence envelope wrappers, framework middleware, and checkpoint inclusion verification.
 
 The exact checks are defined by the code and checklist in `tests/conformance/`, not by this page.
+
+<!-- docs-depth-final-pass -->
+
+## Conformance Completion Path
+
+A conformance page is complete only when it tells a maintainer how to run the profile, how to interpret a failure, and which fixture owns the expected behavior. Keep profiles explicit: runtime decision, receipt canonicalization, verifier replay, policy denial, MCP boundary, and OpenAI-compatible proxy behavior are different surfaces. When adding a profile, add a fixture, a golden expected output, a negative case, and a short compatibility note. Public users should be able to run the command from a clean checkout, compare output to the documented profile, and decide whether a failure is a local environment issue, a schema drift, or an implementation regression.

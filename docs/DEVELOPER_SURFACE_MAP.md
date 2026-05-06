@@ -62,3 +62,15 @@ coverage-backed claims appear in public docs, search, Markdown exports,
 | You know the source path but not the public route | Match the source family in the table above. |
 | You know the integration but not the proof command | Open `docs/developer-coverage.manifest.json` and inspect `validation_commands`. |
 | A public page claims a capability but no example exists | Treat it as a docs bug unless the coverage manifest lists a live `example_paths` entry. |
+
+<!-- docs-depth-final-pass -->
+
+## Surface Ownership Rules
+
+The surface map is the index a maintainer checks before creating new public docs. Every meaningful code family should have exactly one owning doc, one validation command, and a decision about whether it is public direct, public hub, source-owner, generated/config, or private/internal. When a new directory, schema, SDK, example, or CLI command appears, update this map before adding marketing copy. The public site should expose supported developer paths; source-owner docs can carry implementation detail; generated/config rows can stay classified without standalone prose when they do not affect external workflows.
+
+<!-- docs-depth-final-pass-extra -->
+ Treat missing ownership as a release blocker for high-value surfaces such as CLI commands, SDK packages, schemas, release artifacts, conformance fixtures, verifier paths, deployment examples, and policy bundles.
+
+<!-- docs-depth-final-pass-extra-2 -->
+ This map is also the first stop for deciding whether a new doc belongs in public IA or source-owner docs.

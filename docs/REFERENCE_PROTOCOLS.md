@@ -72,3 +72,15 @@ packs, policy bundles, effects, MCP-adjacent contracts, and conformance vectors.
 | A policy bundle evaluates differently | Check policy language canonicalization and reason-code mapping. |
 | A conformance implementation fails | Compare against `protocols/conformance/v1/test-vectors.json`. |
 | A receipt cannot be replayed | Check the evidence-pack schema, receipt version, and referenced artifact hashes. |
+
+<!-- docs-depth-final-pass -->
+
+## Protocol Update Rules
+
+Protocol documentation is current only when schemas, examples, tests, and public references agree. Any change to a JSON schema, bundle layout, receipt field, MCP message shape, or verifier payload must update the schema index, at least one valid example, one invalid example, and the compatibility note. Public docs should distinguish stable contracts from implementation details; generated files and private operator payloads can be indexed without being explained as public APIs. When drift appears, prefer generated schemas and conformance fixtures over prose, then repair the prose and rerun docs truth.
+
+<!-- docs-depth-final-pass-extra -->
+ The public protocol hub should also state which generated registries are authoritative and which compatibility windows apply to clients pinned to older receipt or bundle versions.
+
+<!-- docs-depth-final-pass-extra-2 -->
+ Include migration notes whenever a field is renamed, deprecated, or promoted to stable.

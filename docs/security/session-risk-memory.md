@@ -79,3 +79,9 @@ flowchart LR
   action -->|no| intervention["Intervention"]
   intervention --> receipt
 ```
+
+<!-- docs-depth-final-pass -->
+
+## Session Risk Evidence
+
+Session-risk memory should explain what is remembered, why it changes policy, and how a developer proves the change occurred. Keep examples scoped to metadata and risk state, not raw secrets or private browser sessions. A complete update names the storage key or schema, the event that raises risk, the event that lowers or expires it, and the receipt fields that record the decision. If a deployment stores richer session state, that detail belongs in protected operator docs; public docs should describe the OSS contract and verification path only.

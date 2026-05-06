@@ -56,3 +56,9 @@ This page maps retained HELM OSS control points to OWASP-style MCP and agent-too
 | replay and dispute handling | offline verification, causal hashes, evidence pack export | verifier command and evidence archive |
 
 For a deeper agentic threat inventory, use [security/owasp-agentic-top10-coverage.md](security/owasp-agentic-top10-coverage.md). For product-level trust language, use the HELM trust docs on `helm.docs.mindburn.org`.
+
+<!-- docs-depth-final-pass -->
+
+## Mapping Rules
+
+Every OWASP mapping row should connect a threat to a HELM OSS control, the evidence a reviewer can inspect, and the command that proves the control. Do not treat the mapping as automatic protection for arbitrary MCP servers. The developer must still define tool scope, policy thresholds, allowed destinations, and evidence retention. A useful public mapping includes negative examples: prompt-injected tool output, oversized argument payload, missing user intent, untrusted destination, and replay without expected receipt metadata. If a control depends on deployment configuration rather than code, call that out and link to the deployment or policy page that owns the configuration.

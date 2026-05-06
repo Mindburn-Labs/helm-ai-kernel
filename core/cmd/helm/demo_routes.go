@@ -42,12 +42,14 @@ type demoRunRequest struct {
 }
 
 type demoVerifyRequest struct {
-	Receipt contracts.Receipt `json:"receipt"`
+	Receipt             contracts.Receipt `json:"receipt"`
+	ExpectedReceiptHash string            `json:"expected_receipt_hash"`
 }
 
 type demoTamperRequest struct {
-	Receipt  contracts.Receipt `json:"receipt"`
-	Mutation string            `json:"mutation"`
+	Receipt             contracts.Receipt `json:"receipt"`
+	ExpectedReceiptHash string            `json:"expected_receipt_hash"`
+	Mutation            string            `json:"mutation"`
 }
 
 var demoActions = map[string]demoAction{
@@ -113,8 +115,8 @@ func registerDemoRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusBadRequest, "Unknown demo action", "action_id is not in the Agent Tool Call Boundary scenario")
 			return
 		}
-		if svc == nil || svc.ReceiptStore == nil || svc.ReceiptSigner == nil {
-			api.WriteError(w, http.StatusServiceUnavailable, "Demo unavailable", "receipt store or signer not initialized")
+		if svc == nil || svc.ReceiptSigner == nil {
+			api.WriteError(w, http.StatusServiceUnavailable, "Demo unavailable", "receipt signer not initialized")
 			return
 		}
 
@@ -135,7 +137,7 @@ func registerDemoRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		bodyBytes, _ := json.Marshal(map[string]any{"action_id": action.ID, "policy_id": req.PolicyID, "args": req.Args})
-		if err := persistDecisionReceipt(r.Context(), svc, decision, "demo.agent@helm-oss", bodyBytes, map[string]any{
+		receipt, err := buildDemoReceipt(svc, decision, bodyBytes, map[string]any{
 			"source":                 "public.demo",
 			"policy_id":              demoPolicyID,
 			"action_id":              action.ID,
@@ -143,13 +145,9 @@ func registerDemoRoutes(mux *http.ServeMux, svc *Services) {
 			"sandbox_label":          demoSandboxLabel,
 			"side_effect_dispatched": false,
 			"truth_label":            "OSS-BACKED SANDBOX SAMPLE POLICY",
-		}); err != nil {
-			api.WriteInternal(w, err)
-			return
-		}
-		receipt, err := svc.ReceiptStore.GetByReceiptID(r.Context(), "rcpt_"+decision.ID)
+		})
 		if err != nil {
-			api.WriteInternal(w, fmt.Errorf("load persisted demo receipt: %w", err))
+			api.WriteInternal(w, err)
 			return
 		}
 		receiptHash, _ := contracts.ReceiptChainHash(receipt)
@@ -178,7 +176,11 @@ func registerDemoRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteBadRequest(w, "Invalid JSON body")
 			return
 		}
-		result := verifyDemoReceipt(svc, &req.Receipt)
+		if strings.TrimSpace(req.ExpectedReceiptHash) == "" {
+			api.WriteBadRequest(w, "expected_receipt_hash is required")
+			return
+		}
+		result := verifyDemoReceipt(svc, &req.Receipt, req.ExpectedReceiptHash)
 		writeJSON(w, result)
 	})
 
@@ -190,6 +192,10 @@ func registerDemoRoutes(mux *http.ServeMux, svc *Services) {
 		var req demoTamperRequest
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16_384)).Decode(&req); err != nil {
 			api.WriteBadRequest(w, "Invalid JSON body")
+			return
+		}
+		if strings.TrimSpace(req.ExpectedReceiptHash) == "" {
+			api.WriteBadRequest(w, "expected_receipt_hash is required")
 			return
 		}
 		originalHash, _ := contracts.ReceiptChainHash(&req.Receipt)
@@ -207,12 +213,44 @@ func registerDemoRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusBadRequest, "Unknown tamper mutation", "supported mutations: flip_verdict, change_action")
 			return
 		}
-		result := verifyDemoReceipt(svc, &tampered)
+		result := verifyDemoReceipt(svc, &tampered, req.ExpectedReceiptHash)
 		tamperedHash, _ := contracts.ReceiptChainHash(&tampered)
 		result["original_hash"] = originalHash
 		result["tampered_hash"] = tamperedHash
 		writeJSON(w, result)
 	})
+}
+
+func buildDemoReceipt(svc *Services, decision *contracts.DecisionRecord, body []byte, metadata map[string]any) (*contracts.Receipt, error) {
+	if svc == nil || svc.ReceiptSigner == nil || decision == nil {
+		return nil, fmt.Errorf("receipt signer unavailable")
+	}
+	const agentID = "demo.agent@helm-oss"
+	argsHash := sha256HexBytes(body)
+	receiptID := "rcpt_" + decision.ID
+	effectID := decision.Action
+	timestamp := decision.Timestamp.UTC()
+	if timestamp.IsZero() {
+		timestamp = time.Now().UTC()
+	}
+	receipt := &contracts.Receipt{
+		ReceiptID:    receiptID,
+		DecisionID:   decision.ID,
+		EffectID:     effectID,
+		Status:       decision.Verdict,
+		BlobHash:     argsHash,
+		OutputHash:   decision.PolicyDecisionHash,
+		Timestamp:    timestamp,
+		ExecutorID:   agentID,
+		Metadata:     metadata,
+		PrevHash:     "",
+		LamportClock: 1,
+		ArgsHash:     argsHash,
+	}
+	if err := svc.ReceiptSigner.SignReceipt(receipt); err != nil {
+		return nil, fmt.Errorf("sign demo receipt %s: %w", receiptID, err)
+	}
+	return receipt, nil
 }
 
 func demoGuardian(svc *Services, action demoAction) (*guardian.Guardian, error) {
@@ -296,33 +334,53 @@ func publicReasonCode(decision *contracts.DecisionRecord) string {
 	return "UNSPECIFIED"
 }
 
-func verifyDemoReceipt(svc *Services, receipt *contracts.Receipt) map[string]any {
+func verifyDemoReceipt(svc *Services, receipt *contracts.Receipt, expectedReceiptHash string) map[string]any {
+	expectedReceiptHash = strings.TrimSpace(expectedReceiptHash)
 	receiptHash, hashErr := contracts.ReceiptChainHash(receipt)
+	hashMatches := hashErr == nil && expectedReceiptHash != "" && receiptHash == expectedReceiptHash
 	if svc == nil || svc.ReceiptSigner == nil {
-		return map[string]any{"valid": false, "reason": "receipt signer unavailable", "receipt_hash": receiptHash}
+		return map[string]any{
+			"valid":                 false,
+			"signature_valid":       false,
+			"hash_matches":          hashMatches,
+			"reason":                "receipt signer unavailable",
+			"receipt_hash":          receiptHash,
+			"expected_receipt_hash": expectedReceiptHash,
+		}
 	}
 	verifier, ok := svc.ReceiptSigner.(interface {
 		VerifyReceipt(*contracts.Receipt) (bool, error)
 	})
 	if !ok {
-		return map[string]any{"valid": false, "reason": "receipt signer cannot verify receipts", "receipt_hash": receiptHash}
+		return map[string]any{
+			"valid":                 false,
+			"signature_valid":       false,
+			"hash_matches":          hashMatches,
+			"reason":                "receipt signer cannot verify receipts",
+			"receipt_hash":          receiptHash,
+			"expected_receipt_hash": expectedReceiptHash,
+		}
 	}
-	valid, verifyErr := verifier.VerifyReceipt(receipt)
-	reason := "signature verified"
+	signatureValid, verifyErr := verifier.VerifyReceipt(receipt)
+	reason := "signature and receipt hash verified"
 	if hashErr != nil {
-		valid = false
 		reason = "receipt hash failed: " + hashErr.Error()
 	} else if verifyErr != nil {
-		valid = false
 		reason = "signature verification failed: " + verifyErr.Error()
-	} else if !valid {
+	} else if !signatureValid {
 		reason = "signature verification failed"
+	} else if !hashMatches {
+		reason = "receipt hash mismatch"
 	}
+	valid := signatureValid && hashMatches && hashErr == nil && verifyErr == nil
 	return map[string]any{
-		"valid":           valid,
-		"reason":          reason,
-		"verified_fields": []string{"receipt_id", "decision_id", "effect_id", "status", "output_hash", "prev_hash", "lamport_clock", "args_hash", "signature"},
-		"receipt_hash":    receiptHash,
+		"valid":                 valid,
+		"signature_valid":       signatureValid,
+		"hash_matches":          hashMatches,
+		"reason":                reason,
+		"verified_fields":       []string{"receipt_id", "decision_id", "effect_id", "status", "output_hash", "prev_hash", "lamport_clock", "args_hash", "signature"},
+		"receipt_hash":          receiptHash,
+		"expected_receipt_hash": expectedReceiptHash,
 	}
 }
 

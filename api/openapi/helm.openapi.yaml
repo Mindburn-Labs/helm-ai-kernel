@@ -139,8 +139,12 @@ paths:
                   receipt:
                     $ref: '#/components/schemas/Receipt'
                   proof_refs:
-                    type: array
-                    items: { type: string }
+                    type: object
+                    required: [decision_id, receipt_id, receipt_hash]
+                    properties:
+                      decision_id: { type: string }
+                      receipt_id: { type: string }
+                      receipt_hash: { type: string }
                   verification_hint: { type: string }
                   sandbox_label: { type: string }
                   helm_oss_version: { type: string }
@@ -160,10 +164,13 @@ paths:
           application/json:
             schema:
               type: object
-              required: [receipt]
+              required: [receipt, expected_receipt_hash]
               properties:
                 receipt:
                   $ref: '#/components/schemas/Receipt'
+                expected_receipt_hash:
+                  type: string
+                  description: Receipt hash returned in /api/demo/run proof_refs.receipt_hash.
       responses:
         '200':
           description: Verification result
@@ -171,14 +178,17 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [valid, reason, verified_fields, receipt_hash]
+                required: [valid, signature_valid, hash_matches, reason, verified_fields, receipt_hash, expected_receipt_hash]
                 properties:
                   valid: { type: boolean }
+                  signature_valid: { type: boolean }
+                  hash_matches: { type: boolean }
                   reason: { type: string }
                   verified_fields:
                     type: array
                     items: { type: string }
                   receipt_hash: { type: string }
+                  expected_receipt_hash: { type: string }
         '400':
           $ref: '#/components/responses/HelmError'
 
@@ -193,10 +203,13 @@ paths:
           application/json:
             schema:
               type: object
-              required: [receipt]
+              required: [receipt, expected_receipt_hash]
               properties:
                 receipt:
                   $ref: '#/components/schemas/Receipt'
+                expected_receipt_hash:
+                  type: string
+                  description: Receipt hash returned in /api/demo/run proof_refs.receipt_hash.
                 mutation:
                   type: string
                   default: flip_verdict
@@ -207,10 +220,14 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [valid, reason, original_hash, tampered_hash]
+                required: [valid, signature_valid, hash_matches, reason, receipt_hash, expected_receipt_hash, original_hash, tampered_hash]
                 properties:
                   valid: { type: boolean, const: false }
+                  signature_valid: { type: boolean }
+                  hash_matches: { type: boolean }
                   reason: { type: string }
+                  receipt_hash: { type: string }
+                  expected_receipt_hash: { type: string }
                   original_hash: { type: string }
                   tampered_hash: { type: string }
         '400':

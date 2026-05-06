@@ -83,9 +83,12 @@ export interface DemoRunResult {
 
 export interface DemoVerifyResult {
   readonly valid: boolean;
+  readonly signature_valid?: boolean;
+  readonly hash_matches?: boolean;
   readonly reason: string;
   readonly verified_fields?: readonly string[];
   readonly receipt_hash?: string;
+  readonly expected_receipt_hash?: string;
   readonly original_hash?: string;
   readonly tampered_hash?: string;
 }
@@ -216,12 +219,20 @@ export async function runPublicDemo(actionID: string): Promise<DemoRunResult> {
   return jsonFetch<DemoRunResult>("/api/demo/run", { action_id: actionID, policy_id: "agent_tool_call_boundary" }, "Demo run failed");
 }
 
-export async function verifyPublicDemoReceipt(receipt: Receipt): Promise<DemoVerifyResult> {
-  return jsonFetch<DemoVerifyResult>("/api/demo/verify", { receipt }, "Demo receipt verification failed");
+export async function verifyPublicDemoReceipt(receipt: Receipt, expectedReceiptHash: string): Promise<DemoVerifyResult> {
+  return jsonFetch<DemoVerifyResult>(
+    "/api/demo/verify",
+    { receipt, expected_receipt_hash: expectedReceiptHash },
+    "Demo receipt verification failed",
+  );
 }
 
-export async function tamperPublicDemoReceipt(receipt: Receipt, mutation = "flip_verdict"): Promise<DemoVerifyResult> {
-  return jsonFetch<DemoVerifyResult>("/api/demo/tamper", { receipt, mutation }, "Demo tamper check failed");
+export async function tamperPublicDemoReceipt(receipt: Receipt, expectedReceiptHash: string, mutation = "flip_verdict"): Promise<DemoVerifyResult> {
+  return jsonFetch<DemoVerifyResult>(
+    "/api/demo/tamper",
+    { receipt, expected_receipt_hash: expectedReceiptHash, mutation },
+    "Demo tamper check failed",
+  );
 }
 
 export async function evaluateIntent(request: DecisionRequest): Promise<void> {

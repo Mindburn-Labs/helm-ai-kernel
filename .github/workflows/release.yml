@@ -140,7 +140,7 @@ jobs:
         run: |
           cd bin && shasum -a 256 helm-* > SHA256SUMS.txt
           echo "digest=$(shasum -a 256 SHA256SUMS.txt | awk '{print $1}')" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-assets
           path: |
@@ -175,7 +175,7 @@ jobs:
           done
       - name: Verify cosign bundles
         run: bash scripts/release/verify_cosign.sh dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cosign-bundles
           path: dist/**/*.cosign.bundle

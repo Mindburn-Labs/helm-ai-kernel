@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Core HELM-compatible design-system tokens, primitives, layouts, data, forms, feedback, and inspection components.",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",

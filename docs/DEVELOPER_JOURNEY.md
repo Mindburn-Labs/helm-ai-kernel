@@ -76,7 +76,7 @@ make docs-truth
 Use Homebrew when you want the published CLI path:
 
 ```bash
-brew install mindburn/tap/helm
+brew install mindburn-labs/tap/helm
 helm --version
 ```
 

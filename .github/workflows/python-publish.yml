@@ -32,12 +32,12 @@ jobs:
           FILE_VERSION=$(cat ../../VERSION)
           REQUESTED="${{ github.event.inputs.version }}"
           PACKAGE_VERSION=$(python - <<'PY'
-from pathlib import Path
-import tomllib
-data = tomllib.loads(Path("pyproject.toml").read_text())
-print(data["project"]["version"])
-PY
-)
+          from pathlib import Path
+          import tomllib
+          data = tomllib.loads(Path("pyproject.toml").read_text())
+          print(data["project"]["version"])
+          PY
+          )
           test "$REQUESTED" = "$FILE_VERSION"
           test "$PACKAGE_VERSION" = "$FILE_VERSION"
       - name: Build and validate

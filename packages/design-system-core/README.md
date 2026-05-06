@@ -6,8 +6,16 @@ Core React primitives, design tokens, semantic state utilities, and production C
 
 ## Install
 
+This package is consumed from the workspace by the OSS Console. Public npm
+registry publication was not verified during the 2026-05-06 OSS readiness
+audit.
+
+For local package validation:
+
 ```bash
-npm install @helm/design-system-core react react-dom
+npm ci
+npm run build
+npm run pack:dry
 ```
 
 ## Use

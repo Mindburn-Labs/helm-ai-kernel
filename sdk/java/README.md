@@ -2,7 +2,7 @@
 
 Typed Java client for the retained HELM kernel API.
 
-## Coordinate
+## Coordinates
 
 ```xml
 <dependency>
@@ -11,6 +11,10 @@ Typed Java client for the retained HELM kernel API.
   <version>0.4.0</version>
 </dependency>
 ```
+
+The Maven publish workflow owns the `com.github.Mindburn-Labs:helm-sdk`
+coordinate. The public JitPack release URL checked during OSS readiness
+resolved as `com.github.mindburn-labs:helm-oss:0.4.0`.
 
 Package metadata declares version `0.4.0` in `pom.xml`.
 

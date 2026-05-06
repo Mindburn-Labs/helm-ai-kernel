@@ -170,7 +170,7 @@ func (a *TDXAttester) Measurement() ([]byte, error) {
 	if runtime.GOOS != "linux" {
 		return nil, fmt.Errorf("%w: TDX requires linux", ErrNoHardware)
 	}
-	// TODO: real ioctl on Linux TDX guest.
+	// Follow-up: real ioctl on Linux TDX guest.
 	return nil, ErrNoHardware
 }
 
@@ -186,7 +186,7 @@ func (a *TDXAttester) Quote(_ context.Context, nonce []byte) ([]byte, error) {
 	if runtime.GOOS != "linux" {
 		return nil, fmt.Errorf("%w: TDX requires linux", ErrNoHardware)
 	}
-	// TODO: real ioctl on Linux TDX guest.
+	// Follow-up: real ioctl on Linux TDX guest.
 	//
 	// The Linux TDX guest driver exposes /dev/tdx_guest. The TDX guest tools
 	// reference (https://github.com/intel/tdx-tools) issues

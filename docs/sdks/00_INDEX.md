@@ -65,9 +65,9 @@ This page is backed by:
 | Python | `helm-sdk` | `sdk/python/helm_sdk/client.py` | `sdk/python/README.md`, `examples/python_openai_baseurl/` | `make test-sdk-py` |
 | TypeScript | `@mindburn/helm` | `sdk/ts/src/client.ts` | `sdk/ts/README.md`, `examples/ts_openai_baseurl/` | `make test-sdk-ts` |
 | JavaScript | `@mindburn/helm` or OpenAI base URL client | `sdk/ts/src/client.ts` | `examples/js_openai_baseurl/` | `make test-sdk-ts` |
-| Go | repository module | `sdk/go/client/client.go` | `examples/go_client/` | `cd sdk/go && go test ./...` |
+| Go | repository module at current source | `sdk/go/client/client.go` | `examples/go_client/` | `cd sdk/go && go test ./...` |
 | Rust | `helm-sdk` | `sdk/rust/src/client.rs` | `examples/rust_client/` | `make test-sdk-rust` |
-| Java | `com.github.Mindburn-Labs:helm-sdk` | `sdk/java/pom.xml` | `examples/java_client/` | `make test-sdk-java` |
+| Java | Maven workflow: `com.github.Mindburn-Labs:helm-sdk`; JitPack: `com.github.mindburn-labs:helm-oss:0.4.0` | `sdk/java/pom.xml` | `examples/java_client/` | `make test-sdk-java` |
 
 ## Choose a Client
 
@@ -170,7 +170,7 @@ For existing JavaScript OpenAI clients, use the OpenAI-compatible proxy instead 
 Install:
 
 ```bash
-go get github.com/Mindburn-Labs/helm-oss/sdk/go
+go get github.com/Mindburn-Labs/helm-oss/sdk/go@main
 ```
 
 Local validation:

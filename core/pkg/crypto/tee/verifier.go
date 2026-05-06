@@ -138,7 +138,7 @@ func verifySEVSNP(raw []byte, expectedNonce []byte, roots TrustRoots) (*VerifyRe
 		if len(roots.AMDKDSRoots) == 0 {
 			return nil, fmt.Errorf("%w: no AMD KDS roots configured", ErrChainUntrusted)
 		}
-		// TODO: real ECDSA-P384 validation of report.Signature over report.Body
+		// Follow-up: real ECDSA-P384 validation of report.Signature over report.Body
 		// against the VCEK chain rooted in roots.AMDKDSRoots. Reference:
 		// https://github.com/google/go-sev-guest. Until that lands the
 		// strict path returns ErrChainUntrusted so deployments cannot opt
@@ -167,7 +167,7 @@ func verifyTDX(raw []byte, expectedNonce []byte, roots TrustRoots) (*VerifyResul
 		if len(roots.IntelPCSRoots) == 0 {
 			return nil, fmt.Errorf("%w: no Intel PCS roots configured", ErrChainUntrusted)
 		}
-		// TODO: real ECDSA-P256 validation of TDX quote against the QE chain
+		// Follow-up: real ECDSA-P256 validation of TDX quote against the QE chain
 		// rooted in roots.IntelPCSRoots. Reference:
 		// https://github.com/google/go-tdx-guest.
 		return nil, fmt.Errorf("%w: TDX chain validation pending hardware test surface", ErrChainUntrusted)
@@ -194,7 +194,7 @@ func verifyNitro(raw []byte, expectedNonce []byte, roots TrustRoots) (*VerifyRes
 		if len(roots.AWSNitroRoots) == 0 {
 			return nil, fmt.Errorf("%w: no AWS Nitro roots configured", ErrChainUntrusted)
 		}
-		// TODO: real COSE_Sign1 validation of d.Signature against the AWS
+		// Follow-up: real COSE_Sign1 validation of d.Signature against the AWS
 		// Nitro Attestation PKI rooted in roots.AWSNitroRoots.
 		return nil, fmt.Errorf("%w: Nitro chain validation pending hardware test surface", ErrChainUntrusted)
 	}

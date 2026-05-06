@@ -1,0 +1,55 @@
+name: Bug report
+description: Report a reproducible HELM OSS defect.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include secrets, provider keys, private prompts, customer data, or unredacted production receipts.
+        Security-sensitive reports must go to security@mindburn.org instead of public issues.
+  - type: input
+    id: version
+    attributes:
+      label: HELM version
+      description: Run `helm --version` or provide the commit SHA.
+      placeholder: "0.4.0"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest command sequence, policy, fixture, or SDK call that reproduces the issue.
+      placeholder: |
+        1. Run ...
+        2. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Paste sanitized logs, receipt IDs, verifier output, or stack traces.
+      render: text
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - CLI/kernel
+        - Console
+        - SDK
+        - Protocol/schema
+        - Deployment
+        - Documentation
+        - Other
+    validations:
+      required: true

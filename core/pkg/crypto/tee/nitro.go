@@ -229,7 +229,7 @@ func (a *NitroAttester) Measurement() ([]byte, error) {
 	if runtime.GOOS != "linux" {
 		return nil, fmt.Errorf("%w: Nitro requires linux", ErrNoHardware)
 	}
-	// TODO: real NSM ioctl on AWS Nitro Enclave guest.
+	// Follow-up: real NSM ioctl on AWS Nitro Enclave guest.
 	return nil, ErrNoHardware
 }
 
@@ -251,7 +251,7 @@ func (a *NitroAttester) Quote(_ context.Context, nonce []byte) ([]byte, error) {
 	if runtime.GOOS != "linux" {
 		return nil, fmt.Errorf("%w: Nitro requires linux", ErrNoHardware)
 	}
-	// TODO: real NSM ioctl on AWS Nitro Enclave guest.
+	// Follow-up: real NSM ioctl on AWS Nitro Enclave guest.
 	//
 	// On a Nitro enclave the kernel exposes /dev/nsm. The
 	// aws-nitro-enclaves-nsm-api crate (Rust) issues NSM_GET_ATTESTATION_DOC

@@ -179,7 +179,7 @@ func (a *SEVSNPAttester) Measurement() ([]byte, error) {
 	if runtime.GOOS != "linux" {
 		return nil, fmt.Errorf("%w: SEV-SNP requires linux", ErrNoHardware)
 	}
-	// TODO: real ioctl on Linux SEV-SNP guest. The reference user-space at
+	// Follow-up: real ioctl on Linux SEV-SNP guest. The reference user-space at
 	// https://github.com/AMDESE/sev-guest issues SNP_GET_REPORT with an
 	// arbitrary user data buffer; the kernel returns the 1184-byte report.
 	return nil, ErrNoHardware
@@ -199,7 +199,7 @@ func (a *SEVSNPAttester) Quote(_ context.Context, nonce []byte) ([]byte, error) 
 	if runtime.GOOS != "linux" {
 		return nil, fmt.Errorf("%w: SEV-SNP requires linux", ErrNoHardware)
 	}
-	// TODO: real ioctl on Linux SEV-SNP guest.
+	// Follow-up: real ioctl on Linux SEV-SNP guest.
 	//
 	// The Linux SEV-SNP guest driver exposes /dev/sev-guest. Issue
 	// SNP_GET_REPORT (ioctl number 0xc0205300) with a struct

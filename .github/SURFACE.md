@@ -1,0 +1,25 @@
+# GitHub Surface
+<!-- docs-generated: surface-readme -->
+
+## Purpose
+
+Active GitHub automation and community metadata surface for the `helm-oss`
+project.
+
+## Canonical Interface
+
+- Source path: `.github`
+- Surface type: `ci-cd`
+- Package/source identity: `.github`
+- Coverage record: `docs/documentation-coverage.csv`
+
+## Local Commands
+
+- `make docs-coverage` from the repository root verifies coverage for this surface.
+
+## Documentation Contract
+
+Generated surface documentation. This file is a local ownership and validation
+contract, not the repository landing README. Keep it aligned with the source
+path above and update `docs/documentation-coverage.csv` when ownership,
+interfaces, validation, or lifecycle status changes.

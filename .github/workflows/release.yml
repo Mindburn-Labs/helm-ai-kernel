@@ -225,7 +225,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - id: push
         name: Build and push main image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
@@ -238,7 +238,7 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
       - id: push-slim
         name: Build and push slim image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile.slim

@@ -116,8 +116,24 @@ describe("HELM Console", () => {
       sandbox_label: "HELM OSS public sandbox - no external side effects",
       helm_oss_version: "0.4.0",
     });
-    apiMock.verifyPublicDemoReceipt.mockResolvedValue({ valid: true, reason: "signature verified", receipt_hash: "sha256:receipt" });
-    apiMock.tamperPublicDemoReceipt.mockResolvedValue({ valid: false, reason: "signature verification failed", original_hash: "sha256:receipt", tampered_hash: "sha256:tampered" });
+    apiMock.verifyPublicDemoReceipt.mockResolvedValue({
+      valid: true,
+      signature_valid: true,
+      hash_matches: true,
+      reason: "signature and receipt hash verified",
+      receipt_hash: "sha256:receipt",
+      expected_receipt_hash: "sha256:receipt",
+    });
+    apiMock.tamperPublicDemoReceipt.mockResolvedValue({
+      valid: false,
+      signature_valid: false,
+      hash_matches: false,
+      reason: "signature verification failed",
+      receipt_hash: "sha256:tampered",
+      expected_receipt_hash: "sha256:receipt",
+      original_hash: "sha256:receipt",
+      tampered_hash: "sha256:tampered",
+    });
     apiMock.replayVerifyCurrentEvidence.mockResolvedValue({ verdict: "PASS", checks: { replay: "PASS" } });
     apiMock.watchReceipts.mockReturnValue(() => undefined);
   });
@@ -147,11 +163,17 @@ describe("HELM Console", () => {
     expect(await screen.findByText("MISSING_REQUIREMENT")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Verify receipt" }));
-    await waitFor(() => expect(apiMock.verifyPublicDemoReceipt).toHaveBeenCalled());
-    expect(await screen.findByText(/valid · signature verified/i)).toBeInTheDocument();
+    await waitFor(() => expect(apiMock.verifyPublicDemoReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({ receipt_id: "rcpt_demo" }),
+      "sha256:receipt",
+    ));
+    expect(await screen.findByText(/valid · signature and receipt hash verified/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Tamper" }));
-    await waitFor(() => expect(apiMock.tamperPublicDemoReceipt).toHaveBeenCalled());
+    await waitFor(() => expect(apiMock.tamperPublicDemoReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({ receipt_id: "rcpt_demo" }),
+      "sha256:receipt",
+    ));
     expect(await screen.findByText(/invalid · sha256:tampered/i)).toBeInTheDocument();
   });
 

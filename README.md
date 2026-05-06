@@ -76,11 +76,11 @@ Then verify the returned receipt and confirm tampering fails:
 ```bash
 curl http://127.0.0.1:7714/api/demo/verify \
   -H 'content-type: application/json' \
-  -d '{"receipt":{...}}'
+  -d '{"receipt":{...},"expected_receipt_hash":"<receipt_hash from proof_refs>"}'
 
 curl http://127.0.0.1:7714/api/demo/tamper \
   -H 'content-type: application/json' \
-  -d '{"receipt":{...},"mutation":"flip_verdict"}'
+  -d '{"receipt":{...},"expected_receipt_hash":"<receipt_hash from proof_refs>","mutation":"flip_verdict"}'
 ```
 
 Govern MCP tools or an OpenAI-compatible client:

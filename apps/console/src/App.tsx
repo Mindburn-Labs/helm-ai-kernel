@@ -447,8 +447,6 @@ function ConsoleApp() {
     try {
       const result = await runPublicDemo(demoAction);
       setDemoResult(result);
-      setReceipts((current) => mergeReceipts(current, [result.receipt]));
-      setSelectedId(result.receipt.receipt_id ?? null);
     } catch (err) {
       setDemoError(err instanceof Error ? err.message : "Demo run failed");
     } finally {
@@ -458,11 +456,16 @@ function ConsoleApp() {
 
   const verifyDemoScenario = async () => {
     const receipt = demoResult?.receipt;
+    const expectedReceiptHash = demoResult?.proof_refs.receipt_hash;
     if (!receipt) return;
+    if (!expectedReceiptHash) {
+      setDemoError("Demo receipt hash missing");
+      return;
+    }
     setDemoBusy("verify");
     setDemoError(null);
     try {
-      setDemoVerify(await verifyPublicDemoReceipt(receipt));
+      setDemoVerify(await verifyPublicDemoReceipt(receipt, expectedReceiptHash));
     } catch (err) {
       setDemoError(err instanceof Error ? err.message : "Demo verification failed");
     } finally {
@@ -472,11 +475,16 @@ function ConsoleApp() {
 
   const tamperDemoScenario = async () => {
     const receipt = demoResult?.receipt;
+    const expectedReceiptHash = demoResult?.proof_refs.receipt_hash;
     if (!receipt) return;
+    if (!expectedReceiptHash) {
+      setDemoError("Demo receipt hash missing");
+      return;
+    }
     setDemoBusy("tamper");
     setDemoError(null);
     try {
-      setDemoTamper(await tamperPublicDemoReceipt(receipt));
+      setDemoTamper(await tamperPublicDemoReceipt(receipt, expectedReceiptHash));
     } catch (err) {
       setDemoError(err instanceof Error ? err.message : "Demo tamper failed");
     } finally {

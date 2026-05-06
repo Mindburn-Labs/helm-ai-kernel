@@ -4,6 +4,83 @@
  */
 
 export interface paths {
+    "/api/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read public HELM OSS demo health
+         * @description Public health endpoint for the self-hostable HELM OSS proof console.
+         *     Includes build and version metadata used by deployment smoke tests.
+         */
+        get: operations["getPublicDemoHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/demo/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run the Agent Tool Call Boundary sandbox scenario
+         * @description Evaluates a sample action through the HELM OSS guardian path and emits
+         *     a signed receipt. The scenario is sandboxed and dispatches no external
+         *     side effects.
+         */
+        post: operations["runPublicDemo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/demo/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify a HELM OSS demo receipt */
+        post: operations["verifyPublicDemoReceipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/demo/tamper": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Tamper with a demo receipt and verify that validation fails */
+        post: operations["tamperPublicDemoReceipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/chat/completions": {
         parameters: {
             query?: never;
@@ -1985,6 +2062,159 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getPublicDemoHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Public demo service health */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        version: string;
+                        commit: string;
+                        helm_oss_version: string;
+                        status: string;
+                        build_time: string;
+                        git_sha: string;
+                        deployment_id: string;
+                    };
+                };
+            };
+        };
+    };
+    runPublicDemo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    action_id: "read_ticket" | "draft_reply" | "small_refund" | "large_refund" | "dangerous_shell" | "export_customer_list" | "modify_policy";
+                    /** @default agent_tool_call_boundary */
+                    policy_id?: string;
+                    args?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description HELM OSS sandbox verdict and receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        verdict: "ALLOW" | "DENY" | "ESCALATE";
+                        reason_code: string;
+                        receipt: components["schemas"]["Receipt"];
+                        proof_refs: {
+                            decision_id: string;
+                            receipt_id: string;
+                            receipt_hash: string;
+                        };
+                        verification_hint: string;
+                        sandbox_label: string;
+                        helm_oss_version: string;
+                    };
+                };
+            };
+            400: components["responses"]["HelmError"];
+            500: components["responses"]["HelmError"];
+        };
+    };
+    verifyPublicDemoReceipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    receipt: components["schemas"]["Receipt"];
+                    /** @description Receipt hash returned in /api/demo/run proof_refs.receipt_hash. */
+                    expected_receipt_hash: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Verification result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        valid: boolean;
+                        signature_valid: boolean;
+                        hash_matches: boolean;
+                        reason: string;
+                        verified_fields: string[];
+                        receipt_hash: string;
+                        expected_receipt_hash: string;
+                    };
+                };
+            };
+            400: components["responses"]["HelmError"];
+        };
+    };
+    tamperPublicDemoReceipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    receipt: components["schemas"]["Receipt"];
+                    /** @description Receipt hash returned in /api/demo/run proof_refs.receipt_hash. */
+                    expected_receipt_hash: string;
+                    /** @default flip_verdict */
+                    mutation?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Tamper result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        valid: false;
+                        signature_valid: boolean;
+                        hash_matches: boolean;
+                        reason: string;
+                        receipt_hash: string;
+                        expected_receipt_hash: string;
+                        original_hash: string;
+                        tampered_hash: string;
+                    };
+                };
+            };
+            400: components["responses"]["HelmError"];
+        };
+    };
     chatCompletions: {
         parameters: {
             query?: never;

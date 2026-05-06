@@ -16,7 +16,7 @@ This audit records repository and remote-readiness gaps found during the
 | Community health files | Fixed in repo | Maintainers | GitHub community profile API |
 | Issue and PR templates | Fixed in repo | Maintainers | New issue/PR UI after push |
 | Python publish workflow YAML | Fixed in repo | Maintainers | YAML parser and `gh workflow list` |
-| Dependabot PR creation | Fixed in repo | Maintainers | Dependabot updates dashboard |
+| Dependabot PR creation | Disabled by operator preference | Maintainers | Dependabot updates dashboard |
 | Code scanning | Fixed in repo | Maintainers | Code scanning alerts page after workflow run |
 | README install claims | Fixed in repo | Maintainers | Package/channel commands below |
 | Branch protection | Configured as repository ruleset | Maintainers | Rulesets API |

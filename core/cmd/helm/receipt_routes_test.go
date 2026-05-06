@@ -18,11 +18,17 @@ type captureReceiptStore struct {
 }
 
 func (s *captureReceiptStore) Get(context.Context, string) (*contracts.Receipt, error) {
-	return nil, errors.New("not implemented")
+	if s.stored != nil {
+		return s.stored, nil
+	}
+	return nil, errors.New("receipt not found")
 }
 
-func (s *captureReceiptStore) GetByReceiptID(context.Context, string) (*contracts.Receipt, error) {
-	return nil, errors.New("not implemented")
+func (s *captureReceiptStore) GetByReceiptID(_ context.Context, receiptID string) (*contracts.Receipt, error) {
+	if s.stored != nil && s.stored.ReceiptID == receiptID {
+		return s.stored, nil
+	}
+	return nil, errors.New("receipt not found")
 }
 
 func (s *captureReceiptStore) List(context.Context, int) ([]*contracts.Receipt, error) {

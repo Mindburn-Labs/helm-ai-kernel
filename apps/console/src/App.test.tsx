@@ -6,6 +6,9 @@ const apiMock = vi.hoisted(() => ({
   loadBootstrap: vi.fn(),
   loadReceipts: vi.fn(),
   evaluateIntent: vi.fn(),
+  runPublicDemo: vi.fn(),
+  verifyPublicDemoReceipt: vi.fn(),
+  tamperPublicDemoReceipt: vi.fn(),
   replayVerifyCurrentEvidence: vi.fn(),
   watchReceipts: vi.fn(),
   getConsoleAdminKey: vi.fn(() => window.sessionStorage.getItem("helm.console.admin_api_key") ?? ""),
@@ -90,6 +93,31 @@ describe("HELM Console", () => {
     apiMock.loadBootstrap.mockResolvedValue(bootstrapFixture());
     apiMock.loadReceipts.mockResolvedValue([]);
     apiMock.evaluateIntent.mockResolvedValue(undefined);
+    apiMock.runPublicDemo.mockResolvedValue({
+      action_id: "export_customer_list",
+      selected_action: "Export customer list",
+      active_policy: { policy_id: "agent_tool_call_boundary" },
+      verdict: "DENY",
+      reason_code: "MISSING_REQUIREMENT",
+      receipt: {
+        receipt_id: "rcpt_demo",
+        decision_id: "dec_demo",
+        effect_id: "demo.export_customer_list",
+        status: "DENY",
+        timestamp: "2026-05-05T00:03:00Z",
+        executor_id: "demo.agent@helm-oss",
+        output_hash: "sha256:demo",
+        signature: "sig",
+        lamport_clock: 4,
+        metadata: { action_id: "export_customer_list", source: "public.demo" },
+      },
+      proof_refs: { decision_id: "dec_demo", receipt_id: "rcpt_demo", receipt_hash: "sha256:receipt" },
+      verification_hint: "/api/demo/verify",
+      sandbox_label: "HELM OSS public sandbox - no external side effects",
+      helm_oss_version: "0.4.0",
+    });
+    apiMock.verifyPublicDemoReceipt.mockResolvedValue({ valid: true, reason: "signature verified", receipt_hash: "sha256:receipt" });
+    apiMock.tamperPublicDemoReceipt.mockResolvedValue({ valid: false, reason: "signature verification failed", original_hash: "sha256:receipt", tampered_hash: "sha256:tampered" });
     apiMock.replayVerifyCurrentEvidence.mockResolvedValue({ verdict: "PASS", checks: { replay: "PASS" } });
     apiMock.watchReceipts.mockReturnValue(() => undefined);
   });
@@ -97,12 +125,34 @@ describe("HELM Console", () => {
   it("renders the command shell with live receipt primitives", async () => {
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Governance command" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Agent tool call boundary" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Intent → Policy → Decision → Receipt → Evidence" })).toBeInTheDocument();
     expect(screen.getAllByText("rcpt_test").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Evaluate intent/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "MCP quarantine" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Sandbox grants" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Evidence export" })).toBeInTheDocument();
+  });
+
+  it("runs the public proof workflow and shows tamper failure", async () => {
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Agent tool call boundary" })).toBeInTheDocument();
+    expect(screen.getByText("Agent tool call")).toBeInTheDocument();
+    expect(screen.getByText("Tamper fails")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("sample action"), { target: { value: "export_customer_list" } });
+    fireEvent.click(screen.getByRole("button", { name: "Run scenario" }));
+
+    await waitFor(() => expect(apiMock.runPublicDemo).toHaveBeenCalledWith("export_customer_list"));
+    expect(await screen.findByText("MISSING_REQUIREMENT")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Verify receipt" }));
+    await waitFor(() => expect(apiMock.verifyPublicDemoReceipt).toHaveBeenCalled());
+    expect(await screen.findByText(/valid · signature verified/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tamper" }));
+    await waitFor(() => expect(apiMock.tamperPublicDemoReceipt).toHaveBeenCalled());
+    expect(await screen.findByText(/invalid · sha256:tampered/i)).toBeInTheDocument();
   });
 
   it("does not report hashes or signatures as verified without explicit verification metadata", async () => {

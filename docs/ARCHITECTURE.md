@@ -32,6 +32,8 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 ## Diagram
 
 This scheme maps the main sections of Architecture in reading order.
+Use [Canonical diagrams](architecture/canonical-diagrams.md) for public
+execution-boundary, MCP quarantine, evidence, drift, and long-horizon visuals.
 
 ```mermaid
 flowchart LR

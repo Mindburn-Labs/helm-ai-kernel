@@ -67,6 +67,29 @@ export interface VerificationResult {
   readonly errors?: readonly string[];
 }
 
+export interface DemoRunResult {
+  readonly action_id: string;
+  readonly selected_action: string;
+  readonly active_policy: Record<string, unknown>;
+  readonly verdict: string;
+  readonly reason_code: string;
+  readonly reason?: string;
+  readonly receipt: Receipt;
+  readonly proof_refs: Record<string, string>;
+  readonly verification_hint: string;
+  readonly sandbox_label: string;
+  readonly helm_oss_version: string;
+}
+
+export interface DemoVerifyResult {
+  readonly valid: boolean;
+  readonly reason: string;
+  readonly verified_fields?: readonly string[];
+  readonly receipt_hash?: string;
+  readonly original_hash?: string;
+  readonly tampered_hash?: string;
+}
+
 export interface ConsoleSurfaceState {
   readonly id: string;
   readonly status: string;
@@ -175,6 +198,30 @@ async function unwrap<T>(promise: Promise<{ data?: T; error?: unknown; response:
 
 export async function loadBootstrap(): Promise<ConsoleBootstrap> {
   return unwrap(client.GET("/api/v1/console/bootstrap", { headers: authHeaders() }), "Console bootstrap failed") as Promise<ConsoleBootstrap>;
+}
+
+async function jsonFetch<T>(path: string, body: unknown, fallbackMessage: string): Promise<T> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw await consoleApiErrorFromResponse(response, fallbackMessage);
+  }
+  return await response.json() as T;
+}
+
+export async function runPublicDemo(actionID: string): Promise<DemoRunResult> {
+  return jsonFetch<DemoRunResult>("/api/demo/run", { action_id: actionID, policy_id: "agent_tool_call_boundary" }, "Demo run failed");
+}
+
+export async function verifyPublicDemoReceipt(receipt: Receipt): Promise<DemoVerifyResult> {
+  return jsonFetch<DemoVerifyResult>("/api/demo/verify", { receipt }, "Demo receipt verification failed");
+}
+
+export async function tamperPublicDemoReceipt(receipt: Receipt, mutation = "flip_verdict"): Promise<DemoVerifyResult> {
+  return jsonFetch<DemoVerifyResult>("/api/demo/tamper", { receipt, mutation }, "Demo tamper check failed");
 }
 
 export async function evaluateIntent(request: DecisionRequest): Promise<void> {

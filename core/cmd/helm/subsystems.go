@@ -213,6 +213,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 			"version": displayVersion(),
 		})
 	})
+	registerDemoRoutes(mux, svc)
 
 	// --- Durable receipt API ---
 	registerReceiptRoutes(mux, svc)

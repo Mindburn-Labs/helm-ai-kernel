@@ -53,9 +53,14 @@ import {
   loadEndpoint,
   loadReceipts,
   replayVerifyCurrentEvidence,
+  runPublicDemo,
   setConsoleAdminKey,
+  tamperPublicDemoReceipt,
+  verifyPublicDemoReceipt,
   watchReceipts,
   type ConsoleBootstrap,
+  type DemoRunResult,
+  type DemoVerifyResult,
   type ConsoleSurfaceState,
   type Receipt,
 } from "./api/client";
@@ -97,6 +102,15 @@ const NAV_GROUPS = [
 ] as const;
 
 const LIFECYCLE = ["Intent", "Policy", "Decision", "Receipt", "Evidence"] as const;
+const PROOF_DEMO_ACTIONS = [
+  { id: "read_ticket", label: "Read ticket" },
+  { id: "draft_reply", label: "Draft reply" },
+  { id: "small_refund", label: "Small refund" },
+  { id: "large_refund", label: "Large refund" },
+  { id: "dangerous_shell", label: "Dangerous shell" },
+  { id: "export_customer_list", label: "Export customer list" },
+  { id: "modify_policy", label: "Modify policy" },
+] as const;
 
 const ENDPOINT_SURFACES: Record<string, string> = {
   agents: "/api/v1/identity/agents",
@@ -354,6 +368,12 @@ function ConsoleApp() {
   const [principal, setPrincipal] = useState("operator@local");
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [demoAction, setDemoAction] = useState<(typeof PROOF_DEMO_ACTIONS)[number]["id"]>("read_ticket");
+  const [demoResult, setDemoResult] = useState<DemoRunResult | null>(null);
+  const [demoVerify, setDemoVerify] = useState<DemoVerifyResult | null>(null);
+  const [demoTamper, setDemoTamper] = useState<DemoVerifyResult | null>(null);
+  const [demoError, setDemoError] = useState<string | null>(null);
+  const [demoBusy, setDemoBusy] = useState<"run" | "verify" | "tamper" | null>(null);
   const [replayStatus, setReplayStatus] = useState("not checked");
   const surface = useSurfaceState(active, authRevision);
   const authChanged = useCallback(() => {
@@ -419,6 +439,51 @@ function ConsoleApp() {
     }
   };
 
+  const runDemoScenario = async () => {
+    setDemoBusy("run");
+    setDemoError(null);
+    setDemoVerify(null);
+    setDemoTamper(null);
+    try {
+      const result = await runPublicDemo(demoAction);
+      setDemoResult(result);
+      setReceipts((current) => mergeReceipts(current, [result.receipt]));
+      setSelectedId(result.receipt.receipt_id ?? null);
+    } catch (err) {
+      setDemoError(err instanceof Error ? err.message : "Demo run failed");
+    } finally {
+      setDemoBusy(null);
+    }
+  };
+
+  const verifyDemoScenario = async () => {
+    const receipt = demoResult?.receipt;
+    if (!receipt) return;
+    setDemoBusy("verify");
+    setDemoError(null);
+    try {
+      setDemoVerify(await verifyPublicDemoReceipt(receipt));
+    } catch (err) {
+      setDemoError(err instanceof Error ? err.message : "Demo verification failed");
+    } finally {
+      setDemoBusy(null);
+    }
+  };
+
+  const tamperDemoScenario = async () => {
+    const receipt = demoResult?.receipt;
+    if (!receipt) return;
+    setDemoBusy("tamper");
+    setDemoError(null);
+    try {
+      setDemoTamper(await tamperPublicDemoReceipt(receipt));
+    } catch (err) {
+      setDemoError(err instanceof Error ? err.message : "Demo tamper failed");
+    } finally {
+      setDemoBusy(null);
+    }
+  };
+
   return (
     <div className="console-shell">
       <Sidebar active={active} onActiveChange={setActive} counts={bootstrap?.counts} />
@@ -430,6 +495,18 @@ function ConsoleApp() {
             <ConsoleIntro active={active} bootstrap={bootstrap} />
             {active === "command" ? (
               <div className="console-stack">
+                <ProofDemoSurface
+                  action={demoAction}
+                  result={demoResult}
+                  verifyResult={demoVerify}
+                  tamperResult={demoTamper}
+                  busy={demoBusy}
+                  error={demoError}
+                  onActionChange={setDemoAction}
+                  onRun={runDemoScenario}
+                  onVerify={verifyDemoScenario}
+                  onTamper={tamperDemoScenario}
+                />
                 <CommandSurface
                   bootstrap={bootstrap}
                   receipt={selectedReceipt}
@@ -702,6 +779,95 @@ function ConsoleIntro({ active, bootstrap }: { readonly active: string; readonly
         </div>
       </dl>
     </header>
+  );
+}
+
+function ProofDemoSurface({
+  action,
+  result,
+  verifyResult,
+  tamperResult,
+  busy,
+  error,
+  onActionChange,
+  onRun,
+  onVerify,
+  onTamper,
+}: {
+  readonly action: (typeof PROOF_DEMO_ACTIONS)[number]["id"];
+  readonly result: DemoRunResult | null;
+  readonly verifyResult: DemoVerifyResult | null;
+  readonly tamperResult: DemoVerifyResult | null;
+  readonly busy: "run" | "verify" | "tamper" | null;
+  readonly error: string | null;
+  readonly onActionChange: (value: (typeof PROOF_DEMO_ACTIONS)[number]["id"]) => void;
+  readonly onRun: () => void;
+  readonly onVerify: () => void;
+  readonly onTamper: () => void;
+}) {
+  return (
+    <section className="proof-demo" aria-labelledby="proof-demo-title">
+      <div className="panel-head">
+        <div>
+          <span className="eyebrow">public proof workflow</span>
+          <h2 id="proof-demo-title">Agent tool call boundary</h2>
+        </div>
+        <Badge state={(normalizeVerdict(result?.verdict) as HelmSemanticState) ?? "pending"} label={result ? result.verdict : "SANDBOX"} dot />
+      </div>
+      <div className="proof-demo__labels" aria-label="Truth labels">
+        {["LIVE", "OSS-BACKED", "SANDBOX", "SAMPLE POLICY"].map((label) => (
+          <span key={label}>{label}</span>
+        ))}
+      </div>
+      <div className="proof-demo__loop" aria-label="OSS proof loop">
+        {["Agent tool call", "HELM boundary", "ALLOW / DENY / ESCALATE", "Receipt", "Verify", "Tamper fails"].map((label) => (
+          <span key={label}>{label}</span>
+        ))}
+      </div>
+      <div className="proof-demo__controls">
+        <label>
+          <span>sample action</span>
+          <select value={action} onChange={(event) => onActionChange(event.target.value as typeof action)}>
+            {PROOF_DEMO_ACTIONS.map((item) => (
+              <option key={item.id} value={item.id}>{item.label}</option>
+            ))}
+          </select>
+        </label>
+        <Button variant="proof" size="sm" leading={<Play size={13} />} disabled={busy !== null} onClick={onRun}>
+          {busy === "run" ? "Running" : "Run scenario"}
+        </Button>
+        <Button variant="secondary" size="sm" disabled={!result || busy !== null} onClick={onVerify}>
+          Verify receipt
+        </Button>
+        <Button variant="secondary" size="sm" disabled={!result || busy !== null} onClick={onTamper}>
+          Tamper
+        </Button>
+      </div>
+      {error ? (
+        <div className="inline-error" role="alert">
+          <AlertCircle size={13} aria-hidden="true" />
+          {error}
+        </div>
+      ) : null}
+      <div className="proof-demo__grid">
+        <ProofDatum label="verdict" value={result?.verdict ?? "not run"} />
+        <ProofDatum label="reason" value={result?.reason_code ?? "not run"} />
+        <ProofDatum label="receipt" value={shortHash(result?.receipt.receipt_id)} />
+        <ProofDatum label="hash" value={shortHash(result?.proof_refs.receipt_hash)} />
+        <ProofDatum label="verify" value={verifyResult ? `${verifyResult.valid ? "valid" : "invalid"} · ${verifyResult.reason}` : "not checked"} />
+        <ProofDatum label="tamper" value={tamperResult ? `${tamperResult.valid ? "valid" : "invalid"} · ${shortHash(tamperResult.tampered_hash)}` : "not checked"} />
+      </div>
+      {result ? <JsonBlock title="receipt" value={result.receipt} /> : null}
+    </section>
+  );
+}
+
+function ProofDatum({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <div className="proof-demo__datum">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
 

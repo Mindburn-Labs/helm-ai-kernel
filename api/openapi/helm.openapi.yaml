@@ -43,6 +43,8 @@ tags:
     description: Health and version
   - name: console
     description: HELM OSS Console platform state
+  - name: demo
+    description: Public HELM OSS sandbox proof scenario
 
 x-helm-reason-codes:
   description: Deterministic reason codes returned by the kernel
@@ -64,6 +66,156 @@ x-helm-reason-codes:
     - ERROR_INTERNAL
 
 paths:
+  # -- Public OSS proof demo ---------------------------
+  /api/health:
+    get:
+      operationId: getPublicDemoHealth
+      tags: [demo, system]
+      summary: Read public HELM OSS demo health
+      description: |
+        Public health endpoint for the self-hostable HELM OSS proof console.
+        Includes build and version metadata used by deployment smoke tests.
+      responses:
+        '200':
+          description: Public demo service health
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, commit, helm_oss_version, status, build_time, git_sha, deployment_id]
+                properties:
+                  version: { type: string }
+                  commit: { type: string }
+                  helm_oss_version: { type: string }
+                  status: { type: string }
+                  build_time: { type: string }
+                  git_sha: { type: string }
+                  deployment_id: { type: string }
+
+  /api/demo/run:
+    post:
+      operationId: runPublicDemo
+      tags: [demo]
+      summary: Run the Agent Tool Call Boundary sandbox scenario
+      description: |
+        Evaluates a sample action through the HELM OSS guardian path and emits
+        a signed receipt. The scenario is sandboxed and dispatches no external
+        side effects.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action_id]
+              properties:
+                action_id:
+                  type: string
+                  enum:
+                    - read_ticket
+                    - draft_reply
+                    - small_refund
+                    - large_refund
+                    - dangerous_shell
+                    - export_customer_list
+                    - modify_policy
+                policy_id:
+                  type: string
+                  default: agent_tool_call_boundary
+                args:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: HELM OSS sandbox verdict and receipt
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [verdict, reason_code, receipt, proof_refs, verification_hint, sandbox_label, helm_oss_version]
+                properties:
+                  verdict: { type: string, enum: [ALLOW, DENY, ESCALATE] }
+                  reason_code: { type: string }
+                  receipt:
+                    $ref: '#/components/schemas/Receipt'
+                  proof_refs:
+                    type: array
+                    items: { type: string }
+                  verification_hint: { type: string }
+                  sandbox_label: { type: string }
+                  helm_oss_version: { type: string }
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '500':
+          $ref: '#/components/responses/HelmError'
+
+  /api/demo/verify:
+    post:
+      operationId: verifyPublicDemoReceipt
+      tags: [demo]
+      summary: Verify a HELM OSS demo receipt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [receipt]
+              properties:
+                receipt:
+                  $ref: '#/components/schemas/Receipt'
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [valid, reason, verified_fields, receipt_hash]
+                properties:
+                  valid: { type: boolean }
+                  reason: { type: string }
+                  verified_fields:
+                    type: array
+                    items: { type: string }
+                  receipt_hash: { type: string }
+        '400':
+          $ref: '#/components/responses/HelmError'
+
+  /api/demo/tamper:
+    post:
+      operationId: tamperPublicDemoReceipt
+      tags: [demo]
+      summary: Tamper with a demo receipt and verify that validation fails
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [receipt]
+              properties:
+                receipt:
+                  $ref: '#/components/schemas/Receipt'
+                mutation:
+                  type: string
+                  default: flip_verdict
+      responses:
+        '200':
+          description: Tamper result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [valid, reason, original_hash, tampered_hash]
+                properties:
+                  valid: { type: boolean, const: false }
+                  reason: { type: string }
+                  original_hash: { type: string }
+                  tampered_hash: { type: string }
+        '400':
+          $ref: '#/components/responses/HelmError'
+
   # ── OpenAI Proxy ────────────────────────────────────
   /v1/chat/completions:
     post:

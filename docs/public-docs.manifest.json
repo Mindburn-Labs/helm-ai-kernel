@@ -54,6 +54,15 @@
       "sensitivity": "public"
     },
     {
+      "slug": "helm-oss/architecture/canonical-diagrams",
+      "title": "Canonical Diagrams",
+      "section": "architecture",
+      "source_path": "docs/architecture/canonical-diagrams.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/architecture/canonical-diagrams",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "helm-oss/conformance",
       "title": "Conformance",
       "section": "start-here",

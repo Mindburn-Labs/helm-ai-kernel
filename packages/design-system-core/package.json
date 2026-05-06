@@ -133,7 +133,7 @@
     "smoke": "node ./scripts/smoke-package.mjs"
   },
   "dependencies": {
-    "lucide-react": "^0.561.0",
+    "lucide-react": "^1.14.0",
     "shiki": "^4.0.2"
   },
   "devDependencies": {

@@ -217,7 +217,7 @@ jobs:
       slim-digest: ${{ steps.push-slim.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}

@@ -1,13 +1,15 @@
 # HELM Canonical Diagrams
 
 This doctrine keeps HELM public diagrams aligned with UCS v1.3. Diagrams must
-explain execution authority, not generic AI governance. HELM OSS and HELM
-Commercial are canonical HELM surfaces; sibling systems remain reference or
-private unless a source explicitly says otherwise.
+explain the boundary where AI asks and HELM checks. They must not turn HELM
+into generic AI governance. HELM OSS and HELM Commercial are canonical HELM
+surfaces. Sibling systems remain reference or private unless a source explicitly
+says otherwise.
 
 ## Usage Rules
 
 - Use `ALLOW`, `DENY`, and `ESCALATE` for new public proof flows.
+- Define technical terms near the diagram when the surface is public.
 - Treat OrgDNA as intake material. Treat OrgGenome as reviewed, signed,
   policy-bearing organizational law.
 - Do not show Pilot as a HELM component. Do not show TITAN as a public product.
@@ -17,6 +19,9 @@ private unless a source explicitly says otherwise.
   verification, and tamper-failure smoke tests pass.
 
 ## 1. Execution Boundary
+
+Plain version: the agent proposes. HELM checks. The tool runs only when HELM
+allows it. The result gets a receipt.
 
 ```text
 LLM / Agent / Copilot
@@ -40,6 +45,8 @@ Receipt -> ProofGraph -> EvidencePack
 ```
 
 ## 2. Models Propose, HELM Governs
+
+Plain version: models can suggest work, but HELM owns the execution check.
 
 ```mermaid
 sequenceDiagram
@@ -67,11 +74,14 @@ sequenceDiagram
     end
 ```
 
-`ALLOW` dispatches. `DENY` records a blocked action. `ESCALATE` routes missing
-facts, approval, solver timeout, or policy-hold paths without dispatching side
-effects.
+`ALLOW` runs the action. `DENY` records a blocked action. `ESCALATE` stops and
+routes missing facts, approval, solver timeout, or policy-hold paths without
+dispatching side effects.
 
 ## 3. Company AI OS Loop
+
+Plain version: company sources become memory. HELM compares what should happen
+with what did happen. Draft fixes still need review before action.
 
 ```text
 Company Reality
@@ -106,6 +116,9 @@ until reviewed or approved according to policy.
 
 ## 4. OrgDNA, OrgGenome, OrgPhenotype
 
+Plain version: OrgDNA is raw input. OrgGenome is the reviewed company rule set.
+OrgPhenotype is the current runtime state from approved rules and proof records.
+
 ```text
 OrgDNA
 raw intake material
@@ -135,6 +148,9 @@ OrgDNA is never execution authority. OrgGenome carries execution authority only
 after review and approval.
 
 ## 5. MCP Quarantine Lifecycle
+
+Plain version: a new MCP tool starts blocked. It must be inspected and approved
+before any side effect is allowed.
 
 ```text
 Discovered MCP server
@@ -167,6 +183,8 @@ evaluation is unavailable, the boundary must fail closed.
 
 ## 6. Evidence And Redaction
 
+Plain version: proof should be checkable without making secrets public.
+
 ```text
 Sensitive evidence
 raw payloads · PII · secrets · customer data
@@ -193,6 +211,9 @@ public proof uses hashes, signatures, policy verdicts, inclusion proofs, and
 deterministic redactions.
 
 ## 7. Connector Drift Lifecycle
+
+Plain version: if a tool changes shape, HELM blocks the action instead of
+guessing how to parse it.
 
 ```text
 Connector response arrives

@@ -4,10 +4,14 @@
 
 HELM OSS is the fail-closed execution firewall for AI agents.
 
-It sits between stochastic proposals and deterministic side effects. Agents,
-LLMs, copilots, and orchestration frameworks may propose work; HELM decides
-what is authorized to execute, records the decision, and emits receipts that
-can be verified or replayed outside the model.
+Plain version: an agent can ask to use a tool, but it does not execute directly.
+HELM checks the request, returns `ALLOW`, `DENY`, or `ESCALATE`, and writes a
+receipt that can be checked later.
+
+Technical version: HELM sits between stochastic proposals and deterministic
+side effects. Agents, LLMs, copilots, and orchestration frameworks may propose
+work; HELM decides what is authorized to execute, records the decision, and
+emits receipts that can be verified or replayed outside the model.
 
 Not Kubernetes Helm: this repository is Mindburn Labs' HELM execution kernel,
 not the Kubernetes package manager.
@@ -125,6 +129,15 @@ The complete diagram doctrine lives in
 The public README keeps the OSS path short: proposal, boundary, verdict,
 receipt, replay.
 
+Plain terms used below:
+
+- `ALLOW`: HELM lets the action run.
+- `DENY`: HELM blocks the action.
+- `ESCALATE`: HELM stops and asks for more facts, policy, or human approval.
+- `Receipt`: a signed record of the decision.
+- `ProofGraph`: the record chain used to replay and check what happened.
+- `EvidencePack`: a small bundle of records for one review path.
+
 ```mermaid
 flowchart LR
     Agent["Agent tool call"] --> Boundary["HELM boundary"]
@@ -148,7 +161,8 @@ flowchart TD
     G --> H["Receipt + ProofGraph event"]
 ```
 
-Sandbox grants are explicit authority records, not generic container access:
+Sandbox grants are explicit authority records, not generic container access.
+They say what code may touch before it runs:
 
 ```text
 Sandbox grant
@@ -162,6 +176,9 @@ resource limits · policy_epoch · grant_hash
 
 Orchestration decides what an agent should attempt. HELM decides what it is
 allowed to execute.
+
+Plain version: orchestration picks a plan. HELM checks whether that plan is
+allowed to cause a side effect.
 
 ```mermaid
 flowchart LR

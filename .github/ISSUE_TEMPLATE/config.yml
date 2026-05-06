@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Mindburn-Labs/helm-oss/security/policy
+    about: Report security-sensitive issues privately.
+  - name: Public support and design discussion
+    url: https://github.com/Mindburn-Labs/helm-oss/discussions
+    about: Ask usage questions or discuss proposals before filing an issue.

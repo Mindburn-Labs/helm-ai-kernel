@@ -52,12 +52,12 @@ The repository retains packaging metadata for the kernel binaries, container ima
 
 | Surface | Package Identity |
 | --- | --- |
-| CLI/Homebrew | `mindburn/tap/helm` |
+| CLI/Homebrew | `mindburn-labs/tap/helm` |
 | TypeScript SDK | `@mindburn/helm` |
 | Python SDK | `helm-sdk` |
 | Rust SDK | `helm-sdk` |
-| Java SDK | `com.github.Mindburn-Labs:helm-sdk` |
-| Go SDK | module path under this repository |
+| Java SDK | Maven workflow: `com.github.Mindburn-Labs:helm-sdk`; JitPack release artifact: `com.github.mindburn-labs:helm-oss:0.4.0` |
+| Go SDK | `github.com/Mindburn-Labs/helm-oss/sdk/go@main`; tagged module version alignment is tracked in `docs/OSS_READINESS_AUDIT.md` |
 
 ## Release Inputs
 

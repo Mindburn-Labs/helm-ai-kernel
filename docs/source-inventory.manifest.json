@@ -42,7 +42,7 @@
       "label": "CI workflows, local scripts, boundary manifests, and tooling",
       "classification": "public-hub",
       "source_patterns": [".github/**", "scripts/**", "tools/README.md", "tools/*.go", "tools/*.sh", "tools/*.lock", "tools/*/**"],
-      "owner_doc_path": ".github/README.md",
+      "owner_doc_path": ".github/SURFACE.md",
       "public_doc_slugs": ["helm-oss/source-map", "helm-oss/security/release-security"],
       "rationale": "CI and tooling are externally relevant as validation gates and release evidence, but individual workflow files remain source-owned.",
       "validation_commands": ["make docs-coverage", "make docs-truth"]

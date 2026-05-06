@@ -1,0 +1,42 @@
+name: Feature request
+description: Propose an OSS-scoped HELM improvement.
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        HELM OSS scope is the kernel, CLI, contracts, SDKs, Console, examples, deployment material, and verification artifacts.
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use case
+      description: What user or operator problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the interface, command, SDK method, schema, or documentation change you want.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Target surface
+      options:
+        - CLI/kernel
+        - Console
+        - SDK
+        - Protocol/schema
+        - Deployment
+        - Documentation
+        - Governance/community
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility notes
+      description: Call out migrations, breaking changes, or verification impact if known.

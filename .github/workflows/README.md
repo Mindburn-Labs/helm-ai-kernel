@@ -3,7 +3,8 @@
 
 ## Purpose
 
-Active CI/CD surface for the `helm-oss` project.
+Active CI/CD, publication, documentation, scorecard, proof, and code-scanning
+surface for the `helm-oss` project.
 
 ## Canonical Interface
 

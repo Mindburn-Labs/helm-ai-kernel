@@ -4,9 +4,10 @@ This repo ships `@helm/design-system-core` as the OSS frontend contract. It does
 
 ## Install
 
-```bash
-npm install @helm/design-system-core react react-dom
-```
+This package is consumed from the repository workspace by `apps/console`.
+Public npm registry publication was not verified during the 2026-05-06 OSS
+readiness audit. For external consumers, use a verified release tarball or wait
+for the package publication workflow to publish the package.
 
 ## Required CSS
 

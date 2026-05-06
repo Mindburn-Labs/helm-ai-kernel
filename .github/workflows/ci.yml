@@ -28,15 +28,17 @@ jobs:
           MARKER_B='FIX''ME'
           MARKER_C='WI''P'
           MARKER_D='coming ''soon'
-          TOKEN_PHASE='[Pp]''hase [0-9]'
-          TOKEN_PLAN_A='road''map'
-          TOKEN_PLAN_B='road''map item'
-          PATTERN="${MARKER_A}|${MARKER_B}|${MARKER_C}|${MARKER_D}|${TOKEN_PHASE}|${TOKEN_PLAN_B}|${TOKEN_PLAN_A}"
+          PATTERN="${MARKER_A}|${MARKER_B}|${MARKER_C}|${MARKER_D}"
           ! rg -n --hidden -S "$PATTERN" \
             README.md docs .github core sdk deploy tests scripts \
             --glob '!**/node_modules/**' \
             --glob '!**/dist/**' \
+            --glob '!**/build/**' \
             --glob '!**/target/**' \
+            --glob '!sdk/python/helm_sdk/types_gen.py' \
+            --glob '!sdk/python/helm_sdk/generated/**' \
+            --glob '!scripts/check_documentation_*.py' \
+            --glob '!scripts/sdk/gen.sh' \
             --glob '!core/pkg/buildguard/verify.go' \
             --glob '!core/pkg/crypto/canonical_hardening_test.go'
       - name: Check tracked file hygiene

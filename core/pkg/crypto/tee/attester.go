@@ -4,7 +4,12 @@
 // mock attester for non-TEE development and a verifier that walks vendor-specific
 // quote chains to recognized trust roots.
 //
-// Design (Workstream A, helm-oss SOTA plan):
+// Experimental status: vendor adapters for SEV-SNP, TDX, and Nitro are not
+// production-ready until strict signature-chain verification is implemented and
+// tested against real hardware artifacts. Production deployments must keep
+// RequireSignedChain=true and treat ErrChainUntrusted as a hard failure.
+//
+// Design:
 //
 //   - The kernel binds every TEE quote to a single receipt. The quote nonce is
 //     SHA-256 of the receipt's pre-signature canonical form. This makes the

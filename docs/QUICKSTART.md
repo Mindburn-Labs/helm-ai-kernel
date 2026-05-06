@@ -64,7 +64,7 @@ This page is backed by:
 ### macOS
 
 ```bash
-brew install mindburn/tap/helm
+brew install mindburn-labs/tap/helm
 helm --version
 ```
 

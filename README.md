@@ -1,6 +1,11 @@
 # HELM OSS
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mindburn-labs/helm-oss/badge)](https://scorecard.dev/viewer/?uri=github.com/mindburn-labs/helm-oss)
+[![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF-Best%20Practices-informational)](BEST_PRACTICES.md)
+[![Release checksums](https://img.shields.io/badge/release-checksums-success)](docs/VERIFICATION.md)
+[![SLSA Level 3](https://img.shields.io/badge/SLSA-Level%203-blue)](docs/PUBLISHING.md)
+[![SBOM CycloneDX](https://img.shields.io/badge/SBOM-CycloneDX%201.5-orange)](docs/PUBLISHING.md)
 
 HELM OSS is the fail-closed execution firewall for AI agents.
 

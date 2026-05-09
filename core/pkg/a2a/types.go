@@ -73,16 +73,17 @@ const (
 
 // Envelope wraps an agent-to-agent interaction with negotiation metadata.
 type Envelope struct {
-	EnvelopeID       string        `json:"envelope_id"`
-	SchemaVersion    SchemaVersion `json:"schema_version"`
-	OriginAgentID    string        `json:"origin_agent_id"`
-	TargetAgentID    string        `json:"target_agent_id"`
-	RequiredFeatures []Feature     `json:"required_features"`
-	OfferedFeatures  []Feature     `json:"offered_features"`
-	PayloadHash      string        `json:"payload_hash"`
-	Signature        Signature     `json:"signature"`
-	CreatedAt        time.Time     `json:"created_at"`
-	ExpiresAt        time.Time     `json:"expires_at"`
+	EnvelopeID       string         `json:"envelope_id"`
+	SchemaVersion    SchemaVersion  `json:"schema_version"`
+	OriginAgentID    string         `json:"origin_agent_id"`
+	TargetAgentID    string         `json:"target_agent_id"`
+	RequiredFeatures []Feature      `json:"required_features"`
+	OfferedFeatures  []Feature      `json:"offered_features"`
+	PayloadHash      string         `json:"payload_hash"`
+	Signature        Signature      `json:"signature"`
+	Metadata         map[string]any `json:"metadata,omitempty"` // extensible envelope metadata (federation, routing hints, etc.)
+	CreatedAt        time.Time      `json:"created_at"`
+	ExpiresAt        time.Time      `json:"expires_at"`
 }
 
 // Signature is a cryptographic signature on an A2A envelope.

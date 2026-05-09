@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/a2a"
 	helmcrypto "github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/guardian"
 	mcppkg "github.com/Mindburn-Labs/helm-oss/core/pkg/mcp"
@@ -54,6 +55,7 @@ func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog
 	}
 	catalog := mcppkg.NewInMemoryCatalog()
 	catalog.RegisterCommonTools()
+	catalog.RegisterGovernanceTools()
 	// The local MCP catalog is discoverable by default, but execution must not
 	// inherit an implicit allow policy. Until serve policy wiring is plumbed into
 	// this gateway, an empty graph keeps MCP execution fail-closed.
@@ -410,6 +412,12 @@ func newLocalMCPHTTPServer(port int, authMode string) (*http.Server, error) {
 
 	mux := http.NewServeMux()
 	gateway.RegisterRoutes(mux)
+
+	// A2A agent card discovery (/.well-known/agent-card.json)
+	a2a.RegisterWellKnownRoute(mux, a2a.NewKernelCardProvider(a2a.KernelCardConfig{
+		EndpointURL: baseURL,
+	}))
+
 	healthHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{

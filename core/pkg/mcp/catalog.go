@@ -114,6 +114,92 @@ func (c *ToolCatalog) RegisterCommonTools() {
 	}
 }
 
+// RegisterGovernanceTools registers the HELM governance tools that let
+// any MCP-speaking agent request policy decisions and A2A envelope evaluation.
+func (c *ToolCatalog) RegisterGovernanceTools() {
+	tools := []ToolRef{
+		{
+			Name:        "helm.verify",
+			Title:       "Verify Agent Action",
+			Description: "Evaluate an agent action against HELM governance policy. Returns a cryptographic receipt with verdict, reason code, and proof graph node reference.",
+			ServerID:    "helm-governance",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action":    map[string]any{"type": "string", "description": "The action to verify (e.g., tool name or operation ID)"},
+					"principal": map[string]any{"type": "string", "description": "Identity of the agent requesting the action"},
+					"resource":  map[string]any{"type": "string", "description": "Target resource for the action"},
+					"args_hash": map[string]any{"type": "string", "description": "SHA-256 hash of the action arguments for deterministic verification"},
+				},
+				"required": []string{"action", "principal"},
+			},
+			OutputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"verdict":         map[string]any{"type": "string", "enum": []string{"ALLOW", "DENY"}},
+					"receipt_id":      map[string]any{"type": "string"},
+					"reason_code":     map[string]any{"type": "string"},
+					"proofgraph_node": map[string]any{"type": "string"},
+				},
+				"required": []string{"verdict", "receipt_id", "reason_code"},
+			},
+			Annotations: &ToolAnnotations{
+				ReadOnlyHint:   true,
+				IdempotentHint: true,
+			},
+			RequiredScopes: []string{"mcp:tools", "helm:verify"},
+		},
+		{
+			Name:        "helm.evaluate",
+			Title:       "Evaluate A2A Envelope",
+			Description: "Negotiate A2A protocol features and verify envelope signatures for cross-agent communication. Returns negotiation result with agreed features and trust assessment.",
+			ServerID:    "helm-governance",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"envelope": map[string]any{
+						"type":        "object",
+						"description": "The A2A envelope to evaluate",
+						"properties": map[string]any{
+							"envelope_id":       map[string]any{"type": "string"},
+							"origin_agent_id":   map[string]any{"type": "string"},
+							"target_agent_id":   map[string]any{"type": "string"},
+							"required_features": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+							"offered_features":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+							"payload_hash":      map[string]any{"type": "string"},
+						},
+					},
+					"local_features": map[string]any{
+						"type":        "array",
+						"items":       map[string]any{"type": "string"},
+						"description": "Features supported by the local agent for negotiation",
+					},
+				},
+				"required": []string{"envelope"},
+			},
+			OutputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"accepted":        map[string]any{"type": "boolean"},
+					"deny_reason":     map[string]any{"type": "string"},
+					"agreed_features": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"receipt_id":      map[string]any{"type": "string"},
+				},
+				"required": []string{"accepted", "receipt_id"},
+			},
+			Annotations: &ToolAnnotations{
+				ReadOnlyHint:   true,
+				IdempotentHint: true,
+			},
+			RequiredScopes: []string{"mcp:tools", "helm:evaluate"},
+		},
+	}
+
+	for _, ref := range tools {
+		_ = c.Register(context.Background(), ref)
+	}
+}
+
 func (c *ToolCatalog) Register(ctx context.Context, ref ToolRef) error {
 	if err := ref.Validate(); err != nil {
 		return fmt.Errorf("invalid tool ref: %w", err)

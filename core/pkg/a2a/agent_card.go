@@ -28,19 +28,37 @@ import (
 // ── Agent Card ───────────────────────────────────────────────────
 
 // AgentCard is the public identity and capability document for an A2A agent.
+// Aligned with Linux Foundation A2A v1.0 GA schema.
 type AgentCard struct {
-	AgentID           string          `json:"agent_id"`
-	Name              string          `json:"name"`
-	Description       string          `json:"description,omitempty"`
-	Endpoint          string          `json:"endpoint"`
-	SupportedVersions []SchemaVersion `json:"supported_versions"`
-	Skills            []AgentSkill    `json:"skills"`
-	AuthMethods       []AuthMethod    `json:"auth_methods,omitempty"`
-	Features          []Feature       `json:"features,omitempty"`
-	Signature         string          `json:"signature,omitempty"`
-	ContentHash       string          `json:"content_hash,omitempty"`
-	CreatedAt         time.Time       `json:"created_at"`
-	UpdatedAt         time.Time       `json:"updated_at"`
+	AgentID            string            `json:"agent_id"`
+	Name               string            `json:"name"`
+	Description        string            `json:"description,omitempty"`
+	Endpoint           string            `json:"endpoint"`
+	Provider           *AgentProvider    `json:"provider,omitempty"`
+	SupportedVersions  []SchemaVersion   `json:"supported_versions"`
+	Skills             []AgentSkill      `json:"skills"`
+	AuthMethods        []AuthMethod      `json:"auth_methods,omitempty"`
+	Features           []Feature         `json:"features,omitempty"`
+	DefaultInputModes  []string          `json:"defaultInputModes,omitempty"`
+	DefaultOutputModes []string          `json:"defaultOutputModes,omitempty"`
+	Capabilities       AgentCapabilities `json:"capabilities,omitempty"`
+	Signature          string            `json:"signature,omitempty"`
+	ContentHash        string            `json:"content_hash,omitempty"`
+	CreatedAt          time.Time         `json:"created_at"`
+	UpdatedAt          time.Time         `json:"updated_at"`
+}
+
+// AgentProvider identifies the organization that hosts the agent.
+type AgentProvider struct {
+	Organization string `json:"organization"`
+	URL          string `json:"url,omitempty"`
+}
+
+// AgentCapabilities describes optional protocol features the agent supports.
+type AgentCapabilities struct {
+	Streaming              bool `json:"streaming"`
+	PushNotifications      bool `json:"pushNotifications"`
+	StateTransitionHistory bool `json:"stateTransitionHistory"`
 }
 
 // AgentSkill describes one capability that an agent offers.
@@ -48,6 +66,7 @@ type AgentSkill struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
 	Description string   `json:"description,omitempty"`
+	Examples    []string `json:"examples,omitempty"`
 	InputModes  []string `json:"input_modes,omitempty"`  // "text", "file", "structured"
 	OutputModes []string `json:"output_modes,omitempty"` // "text", "artifact", "structured"
 }
@@ -79,6 +98,9 @@ func ValidateAgentCard(card *AgentCard) error {
 	if len(card.Skills) == 0 {
 		return errors.New("agent_card: at least one skill is required")
 	}
+	if card.Provider != nil && card.Provider.Organization == "" {
+		return errors.New("agent_card: provider.organization is required when provider is set")
+	}
 	for i, skill := range card.Skills {
 		if skill.ID == "" {
 			return fmt.Errorf("agent_card: skill[%d].id is required", i)
@@ -91,21 +113,31 @@ func ValidateAgentCard(card *AgentCard) error {
 }
 
 // ComputeCardHash creates a deterministic SHA-256 hash of the card content.
+// All identity-bearing fields are included; mutable metadata (timestamps,
+// signature) is excluded so the hash is stable across re-signings.
 func ComputeCardHash(card *AgentCard) string {
 	hashable := struct {
-		AgentID           string          `json:"agent_id"`
-		Name              string          `json:"name"`
-		Endpoint          string          `json:"endpoint"`
-		SupportedVersions []SchemaVersion `json:"supported_versions"`
-		Skills            []AgentSkill    `json:"skills"`
-		Features          []Feature       `json:"features"`
+		AgentID            string            `json:"agent_id"`
+		Name               string            `json:"name"`
+		Endpoint           string            `json:"endpoint"`
+		Provider           *AgentProvider    `json:"provider,omitempty"`
+		SupportedVersions  []SchemaVersion   `json:"supported_versions"`
+		Skills             []AgentSkill      `json:"skills"`
+		Features           []Feature         `json:"features"`
+		DefaultInputModes  []string          `json:"defaultInputModes,omitempty"`
+		DefaultOutputModes []string          `json:"defaultOutputModes,omitempty"`
+		Capabilities       AgentCapabilities `json:"capabilities,omitempty"`
 	}{
-		AgentID:           card.AgentID,
-		Name:              card.Name,
-		Endpoint:          card.Endpoint,
-		SupportedVersions: card.SupportedVersions,
-		Skills:            card.Skills,
-		Features:          card.Features,
+		AgentID:            card.AgentID,
+		Name:               card.Name,
+		Endpoint:           card.Endpoint,
+		Provider:           card.Provider,
+		SupportedVersions:  card.SupportedVersions,
+		Skills:             card.Skills,
+		Features:           card.Features,
+		DefaultInputModes:  card.DefaultInputModes,
+		DefaultOutputModes: card.DefaultOutputModes,
+		Capabilities:       card.Capabilities,
 	}
 	data, _ := json.Marshal(hashable)
 	h := sha256.Sum256(data)

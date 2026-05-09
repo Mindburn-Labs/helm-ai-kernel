@@ -11,10 +11,12 @@ import (
 
 // DefaultVerifier implements the Verifier interface with fail-closed semantics.
 type DefaultVerifier struct {
-	mu          sync.RWMutex
-	trustedKeys map[string]TrustedKey // kid → key
-	policyRules []PolicyRule
-	clock       func() time.Time
+	mu                   sync.RWMutex
+	trustedKeys          map[string]TrustedKey // kid → key
+	policyRules          []PolicyRule
+	clock                func() time.Time
+	MaxNegotiationDuration time.Duration // bounded compute invariant; 0 = 10s default
+	FederationPolicy     *FederationPolicy  // nil = federation disabled
 }
 
 // NewDefaultVerifier creates a new A2A verifier.
@@ -46,8 +48,16 @@ func (v *DefaultVerifier) AddPolicyRule(rule PolicyRule) {
 }
 
 // Negotiate performs schema/feature negotiation with fail-closed semantics.
+// Enforces a deadline to prevent CPU-burning negotiation attacks.
 func (v *DefaultVerifier) Negotiate(ctx context.Context, env *Envelope, localFeatures []Feature) (*NegotiationResult, error) {
-	_ = ctx
+	// Enforce negotiation deadline (bounded compute invariant)
+	maxDur := v.MaxNegotiationDuration
+	if maxDur <= 0 {
+		maxDur = 10 * time.Second
+	}
+	deadlineCtx, cancel := context.WithTimeout(ctx, maxDur)
+	defer cancel()
+
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
@@ -115,6 +125,29 @@ func (v *DefaultVerifier) Negotiate(ctx context.Context, env *Envelope, localFea
 	result.Accepted = true
 	result.AgreedFeatures = agreed
 	result.AgreedVersion = &agreedVersion
+
+	// 6. Federation policy check (if federation context is present in envelope metadata)
+	if v.FederationPolicy != nil && env.Metadata != nil {
+		if fcRaw, ok := env.Metadata["federation"]; ok {
+			if fc, ok := fcRaw.(*FederationContext); ok {
+				fedResult := EvaluateFederationPolicy(fc, v.FederationPolicy)
+				if !fedResult.Accepted {
+					result.Accepted = false
+					result.DenyReason = fedResult.DenyReason
+					result.DenyDetails = fedResult.DenyDetails
+					return result, nil
+				}
+			}
+		}
+	}
+
+	// 7. Check for context deadline expiry (post-compute guard)
+	if deadlineCtx.Err() != nil {
+		result.Accepted = false
+		result.DenyReason = DenyVersionIncompatible
+		result.DenyDetails = "negotiation exceeded deadline"
+		return result, nil
+	}
 
 	return result, nil
 }

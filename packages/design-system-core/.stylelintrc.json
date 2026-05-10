@@ -1,0 +1,14 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "rules": {
+    "color-no-hex": true,
+    "declaration-property-value-disallowed-list": {
+      "/^border/": ["/px/"],
+      "/^padding/": ["/px/"],
+      "/^margin/": ["/px/"],
+      "/^width/": ["/px/"],
+      "/^height/": ["/px/"],
+      "/^font-size/": ["/px/"]
+    }
+  }
+}

@@ -17,3 +17,4 @@ export * from "./status";
 export * from "./theme-provider";
 export * from "./announce";
 export * from "./telemetry";
+export * from './canvas';

@@ -718,6 +718,31 @@ export function EmptyState({ title, body, action }: { readonly title: string; re
   );
 }
 
+export function LoadingState({ label = 'Loading…' }: { readonly label?: string }) {
+  return (
+    <div className="empty-state">
+      <Loader2 className="animate-spin" size={18} aria-hidden="true" />
+      <div>
+        <p>{label}</p>
+      </div>
+    </div>
+  );
+}
+
+export function ErrorState({ title, error, retry }: { readonly title: string; readonly error: unknown; readonly retry?: () => void }) {
+  const description = error instanceof Error ? error.message : 'The service did not return a usable response.';
+  return (
+    <div className="empty-state error">
+      <AlertTriangle size={18} aria-hidden="true" />
+      <div>
+        <h3>{title}</h3>
+        <p>{description}</p>
+      </div>
+      {retry ? <div className="empty-actions"><Button onClick={retry}>Retry</Button></div> : null}
+    </div>
+  );
+}
+
 export function StatusRow({
   state,
   label,

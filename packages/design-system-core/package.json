@@ -133,7 +133,9 @@
     "smoke": "node ./scripts/smoke-package.mjs"
   },
   "dependencies": {
+    "@pixi/react": "^8.0.5",
     "lucide-react": "^0.561.0",
+    "pixi.js": "^8.18.1",
     "shiki": "^4.0.2"
   },
   "devDependencies": {
@@ -146,6 +148,8 @@
     "jsdom": "^27.3.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
+    "stylelint": "^17.11.0",
+    "stylelint-config-standard": "^40.0.0",
     "typescript": "^6.0.3",
     "vite": "^7.2.6",
     "vitest": "^4.0.18"

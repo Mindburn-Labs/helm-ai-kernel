@@ -1,0 +1,31 @@
+name: SLSA L3 Provenance
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build artifacts
+        run: make build-release
+      - name: Generate hashes
+        id: hash
+        run: |
+          # sha256sum all artifacts and output for the provenance builder
+          echo "hashes=$(sha256sum bin/* | base64 -w0)" >> $GITHUB_OUTPUT
+
+  provenance:
+    needs: [build]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.4.0
+    with:
+      base64-subjects: "${{ needs.build.outputs.hashes }}"
+      upload-assets: true

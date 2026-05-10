@@ -1,16 +1,31 @@
 :root {
   color-scheme: dark;
-  --helm-bg-root: #07090c;
-  --helm-bg-surface: #0b0f14;
-  --helm-bg-elevated: #11161d;
-  --helm-bg-inset: #060809;
-  --helm-bg-terminal: #04060a;
-  --helm-bg-critical-surface: #131923;
-  --helm-bg-selected-row: #161d27;
-  --helm-bg-live-row: rgba(117, 180, 255, 0.05);
-  --helm-bg-overlay: rgba(4, 6, 10, 0.78);
+  --helm-bg-root: hsl(230 18% 7%);
+  --helm-bg-surface: hsl(230 16% 10%);
+  --helm-bg-elevated: hsl(230 14% 13%);
+  --helm-bg-inset: hsl(230 18% 7%);
+  --helm-bg-terminal: hsl(230 18% 7%);
+  --helm-bg-critical-surface: hsla(0 70% 55% / 0.12);
+  --helm-bg-selected-row: hsl(230 12% 17%);
+  --helm-bg-live-row: hsla(215 80% 60% / 0.12);
+  --helm-bg-overlay: hsla(230 18% 4% / 0.65);
+  
+  /* --- Glassmorphism --- */
+  --helm-glass-bg: hsla(230 18% 12% / 0.72);
+  --helm-glass-border: hsla(0 0% 100% / 0.06);
+  --helm-glass-highlight: hsla(0 0% 100% / 0.04);
+  --helm-glass-blur: 16px;
+
+  /* --- Shadows & Glows --- */
+  --helm-shadow-xs: 0 1px 2px hsla(0 0% 0% / 0.2);
+  --helm-shadow-sm: 0 1px 3px hsla(0 0% 0% / 0.2), 0 1px 2px hsla(0 0% 0% / 0.16);
+  --helm-shadow: 0 4px 16px hsla(0 0% 0% / 0.24), 0 1px 4px hsla(0 0% 0% / 0.16);
   --helm-shadow-raised: 0 8px 20px rgba(0, 0, 0, 0.16);
-  --helm-shadow-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  --helm-shadow-lg: 0 16px 48px hsla(0 0% 0% / 0.32), 0 4px 12px hsla(0 0% 0% / 0.2);
+  --helm-shadow-xl: 0 24px 64px hsla(0 0% 0% / 0.4), 0 8px 20px hsla(0 0% 0% / 0.24);
+  --helm-shadow-glow: 0 0 24px hsla(252 90% 65% / 0.15), 0 0 8px hsla(252 90% 65% / 0.08);
+  --helm-shadow-glow-lg: 0 0 40px hsla(252 90% 65% / 0.2), 0 0 12px hsla(252 90% 65% / 0.12);
+  --helm-shadow-inset-highlight: inset 0 1px 0 hsla(0 0% 100% / 0.04);
   --helm-shadow-toast: 0 10px 24px rgba(0, 0, 0, 0.18);
 
   --helm-border-subtle: #161b23;
@@ -54,6 +69,11 @@
   --helm-env-production: #e5484d;
   --helm-env-enterprise: #9c7cff;
 
+  --helm-accent: hsl(252 92% 66%);
+  --helm-accent-hover: hsl(252 88% 58%);
+  --helm-accent-subtle: hsla(252 80% 60% / 0.12);
+  --helm-accent-glow: hsla(252 90% 65% / 0.25);
+
   --helm-rail-w: 3px;
   --helm-rail-w-card: 4px;
   --helm-rail-w-hero: 6px;
@@ -67,32 +87,35 @@
   --helm-rail-selected: var(--helm-proof-hash);
   --helm-rail-live: var(--helm-proof-hash);
 
-  --helm-radius-xs: 2px;
-  --helm-radius-sm: 3px;
-  --helm-radius-md: 4px;
-  --helm-radius-panel: 6px;
+  --helm-radius-xs: 6px;
+  --helm-radius-sm: 8px;
+  --helm-radius-md: 12px;
+  --helm-radius-panel: 12px;
   --helm-radius-pill: 999px;
 
-  --helm-font-sans: "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --helm-font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --helm-font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --helm-font-body: 13px;
   --helm-font-table: 12px;
   --helm-font-meta: 12px;
   --helm-font-code: 12px;
-  --helm-font-panel-title: 14px;
-  --helm-font-page-title: 22px;
+  --helm-font-panel-title: 15px;
+  --helm-font-page-title: 24px;
 
-  --helm-space-1: 2px;
-  --helm-space-2: 4px;
-  --helm-space-3: 6px;
-  --helm-space-4: 8px;
-  --helm-space-5: 10px;
-  --helm-space-6: 12px;
-  --helm-space-8: 16px;
-  --helm-space-10: 20px;
-  --helm-space-12: 24px;
-  --helm-space-16: 32px;
+  --helm-space-0: 0px;
+  --helm-space-1: 4px;
+  --helm-space-2: 8px;
+  --helm-space-3: 12px;
+  --helm-space-4: 16px;
+  --helm-space-5: 20px;
+  --helm-space-6: 24px;
+  --helm-space-7: 32px;
+  --helm-space-8: 40px;
+  --helm-space-9: 48px;
+  --helm-space-10: 64px;
+  --helm-space-12: 80px;
+  --helm-space-16: 96px;
 
   --helm-sidebar-w: 248px;
   --helm-topbar-h: 52px;
@@ -133,17 +156,29 @@
 
 [data-theme="light"] {
   color-scheme: light;
-  --helm-bg-root: #eceef1;
-  --helm-bg-surface: #f4f6f8;
-  --helm-bg-elevated: #ffffff;
-  --helm-bg-inset: #eef1f5;
+  --helm-bg-root: hsl(230 25% 97%);
+  --helm-bg-surface: hsl(0 0% 100%);
+  --helm-bg-elevated: hsl(230 22% 98%);
+  --helm-bg-inset: hsl(230 25% 97%);
   --helm-bg-terminal: #0e1218;
-  --helm-bg-critical-surface: #f0f4fa;
-  --helm-bg-selected-row: #e6ebf2;
-  --helm-bg-live-row: rgba(46, 91, 183, 0.06);
+  --helm-bg-critical-surface: hsla(0 65% 50% / 0.1);
+  --helm-bg-selected-row: hsl(230 18% 94%);
+  --helm-bg-live-row: hsla(215 70% 50% / 0.1);
   --helm-bg-overlay: rgba(20, 24, 32, 0.34);
+  
+  --helm-glass-bg: hsla(230 20% 100% / 0.75);
+  --helm-glass-border: hsla(230 20% 0% / 0.06);
+  --helm-glass-highlight: hsla(0 0% 100% / 0.7);
+
+  --helm-shadow-xs: 0 1px 2px hsla(0 0% 0% / 0.04);
+  --helm-shadow-sm: 0 1px 3px hsla(0 0% 0% / 0.06), 0 1px 2px hsla(0 0% 0% / 0.04);
+  --helm-shadow: 0 4px 16px hsla(0 0% 0% / 0.08), 0 1px 4px hsla(0 0% 0% / 0.04);
   --helm-shadow-raised: 0 8px 20px rgba(20, 24, 32, 0.12);
-  --helm-shadow-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  --helm-shadow-lg: 0 16px 48px hsla(0 0% 0% / 0.1), 0 4px 12px hsla(0 0% 0% / 0.06);
+  --helm-shadow-xl: 0 24px 64px hsla(0 0% 0% / 0.14), 0 8px 20px hsla(0 0% 0% / 0.08);
+  --helm-shadow-glow: 0 0 24px hsla(252 80% 54% / 0.08), 0 0 8px hsla(252 80% 54% / 0.04);
+  --helm-shadow-glow-lg: 0 0 40px hsla(252 80% 54% / 0.12), 0 0 12px hsla(252 80% 54% / 0.06);
+  --helm-shadow-inset-highlight: inset 0 1px 0 hsla(0 0% 100% / 0.6);
   --helm-shadow-toast: 0 10px 24px rgba(20, 24, 32, 0.16);
   --helm-border-subtle: #e3e7ed;
   --helm-border-default: #d5dbe4;
@@ -180,6 +215,11 @@
   --helm-env-staging: #92670a;
   --helm-env-production: #c42828;
   --helm-env-enterprise: #6f52c7;
+
+  --helm-accent: hsl(252 82% 54%);
+  --helm-accent-hover: hsl(252 78% 46%);
+  --helm-accent-subtle: hsla(252 70% 54% / 0.1);
+  --helm-accent-glow: hsla(252 80% 54% / 0.15);
 }
 
 [data-density="comfortable"] {
@@ -239,6 +279,11 @@
     --helm-env-staging: #92670a;
     --helm-env-production: #c42828;
     --helm-env-enterprise: #6f52c7;
+
+    --helm-accent: hsl(252 82% 54%);
+    --helm-accent-hover: hsl(252 78% 46%);
+    --helm-accent-subtle: hsla(252 70% 54% / 0.1);
+    --helm-accent-glow: hsla(252 80% 54% / 0.15);
   }
 }
 

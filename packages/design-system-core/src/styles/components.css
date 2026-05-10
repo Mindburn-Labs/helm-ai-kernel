@@ -530,10 +530,12 @@ pre {
 .unsupported-state {
   position: relative;
   min-width: 0;
-  border: 1px solid var(--helm-border-default);
+  border: 1px solid var(--helm-glass-border);
   border-radius: var(--helm-radius-panel);
-  background: var(--helm-bg-elevated);
-  box-shadow: var(--helm-shadow-inset-highlight);
+  background: var(--helm-glass-bg);
+  backdrop-filter: blur(var(--helm-glass-blur));
+  -webkit-backdrop-filter: blur(var(--helm-glass-blur));
+  box-shadow: var(--helm-shadow-sm), var(--helm-shadow-inset-highlight);
 }
 
 .panel--primary {

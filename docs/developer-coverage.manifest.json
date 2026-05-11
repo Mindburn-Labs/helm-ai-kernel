@@ -223,32 +223,10 @@
       "surface": "Checksums, SBOM, Cosign bundles, VEX, provenance, and reproducible binaries",
       "status": "supported",
       "public_doc_slug": "helm-oss/publishing",
-      "source_paths": ["Makefile", ".github/workflows/release.yml", ".github/workflows/slsa-provenance.yml", "scripts/release/verify_cosign.sh", "scripts/release/build-evidence-bundle.sh"],
+      "source_paths": ["Makefile", ".github/workflows/release.yml", "scripts/release/verify_cosign.sh", "scripts/release/build-evidence-bundle.sh"],
       "example_paths": ["docs/PUBLISHING.md", "release/README.md"],
       "validation_commands": ["make release-binaries-reproducible", "make verify-cosign"],
       "claim_terms": ["SBOM", "Cosign", "reproducible"]
-    },
-    {
-      "id": "launch-readiness-demo-suite",
-      "category": "runtime",
-      "surface": "Launch Readiness Demo Suite",
-      "status": "supported",
-      "public_doc_slug": "helm-oss/developer-journey",
-      "source_paths": ["examples/launch", "scripts/launch"],
-      "example_paths": ["examples/launch/README.md"],
-      "validation_commands": ["make launch-smoke"],
-      "claim_terms": ["launch", "demo"]
-    },
-    {
-      "id": "console-frontend",
-      "category": "frontend",
-      "surface": "Console Frontend",
-      "status": "supported",
-      "public_doc_slug": "helm-oss/developer-journey",
-      "source_paths": ["package.json", "apps/console/pnpm-lock.yaml", "apps/console/pnpm-workspace.yaml"],
-      "example_paths": ["docs/CONSOLE.md"],
-      "validation_commands": ["make build-console"],
-      "claim_terms": ["console"]
     },
     {
       "id": "troubleshooting-runtime",

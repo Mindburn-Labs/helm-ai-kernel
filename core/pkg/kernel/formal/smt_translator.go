@@ -1,7 +1,11 @@
 package formal
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"os/exec"
+	"strings"
 )
 
 // SMTTranslator translates a HELM policy stack or Plan IR into SMT-LIB v2 format
@@ -24,9 +28,30 @@ func (t *SMTTranslator) Translate(ctx context.Context, policies []byte, intent [
 }
 
 // Evaluate runs the translated proof obligation through an SMT solver.
-// Pending architecture decision on using binary `z3` calls vs `z3-go` bindings.
+// Uses a shell-out bridge to the `z3` binary.
 func (t *SMTTranslator) Evaluate(ctx context.Context, proofObligation string) (bool, error) {
-	// TODO: Interface with z3 binary or CGO bindings.
-	// For now, we stub this out to return true (satisfiable).
-	return true, nil
+	cmd := exec.CommandContext(ctx, "z3", "-in")
+	cmd.Stdin = strings.NewReader(proofObligation)
+
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		// z3 might return non-zero exit code if it errors or just based on sat/unsat, but usually returns 0 for successful processing
+		// Let's check output regardless of err to be safe, but report error if stdout is empty
+		if out.Len() == 0 {
+			return false, fmt.Errorf("z3 evaluation failed: %w (stderr: %s)", err, stderr.String())
+		}
+	}
+
+	output := strings.TrimSpace(out.String())
+	if strings.HasPrefix(output, "sat") {
+		return true, nil
+	} else if strings.HasPrefix(output, "unsat") {
+		return false, nil
+	}
+
+	return false, fmt.Errorf("unexpected z3 output: %s", output)
 }

@@ -8,24 +8,35 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/executor"
 )
 
 // PostgresEffectOutboxStore implements executor.OutboxStore
 type PostgresEffectOutboxStore struct {
-	db *sql.DB
+	db       *sql.DB
+	verifier crypto.Verifier
 }
 
-func NewPostgresEffectOutboxStore(db *sql.DB) *PostgresEffectOutboxStore {
-	return &PostgresEffectOutboxStore{db: db}
+func NewPostgresEffectOutboxStore(db *sql.DB, verifier crypto.Verifier) *PostgresEffectOutboxStore {
+	return &PostgresEffectOutboxStore{db: db, verifier: verifier}
 }
 
-func (s *PostgresEffectOutboxStore) Schedule(ctx context.Context, effect *contracts.Effect, decision *contracts.DecisionRecord) error {
+func (s *PostgresEffectOutboxStore) Schedule(ctx context.Context, effect *contracts.Effect, intent *contracts.AuthorizedExecutionIntent) error {
+	// 1. Verify intent signature for fail-closed boundary
+	valid, err := s.verifier.VerifyIntent(intent)
+	if err != nil {
+		return fmt.Errorf("fail-closed: error verifying intent: %w", err)
+	}
+	if !valid {
+		return fmt.Errorf("fail-closed: invalid intent signature")
+	}
+
 	effectJSON, err := json.Marshal(effect)
 	if err != nil {
 		return err
 	}
-	decisionJSON, err := json.Marshal(decision)
+	intentJSON, err := json.Marshal(intent)
 	if err != nil {
 		return err
 	}
@@ -35,8 +46,8 @@ func (s *PostgresEffectOutboxStore) Schedule(ctx context.Context, effect *contra
 		VALUES ($1, $2, $3, $4, 'PENDING')
 		ON CONFLICT (id) DO NOTHING
 	`
-	// Use DecisionID as ID (idempotency key for schedule)
-	_, err = s.db.ExecContext(ctx, query, decision.ID, effectJSON, decisionJSON, time.Now())
+	// Use intent.ID as ID (idempotency key for schedule)
+	_, err = s.db.ExecContext(ctx, query, intent.ID, effectJSON, intentJSON, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to schedule effect: %w", err)
 	}
@@ -71,15 +82,15 @@ func (s *PostgresEffectOutboxStore) GetPending(ctx context.Context) ([]*executor
 		if err := json.Unmarshal(effectJSON, &effect); err != nil {
 			return nil, fmt.Errorf("corrupt effect JSON in outbox record %s: %w", id, err)
 		}
-		var decision contracts.DecisionRecord
-		if err := json.Unmarshal(decisionJSON, &decision); err != nil {
-			return nil, fmt.Errorf("corrupt decision JSON in outbox record %s: %w", id, err)
+		var intent contracts.AuthorizedExecutionIntent
+		if err := json.Unmarshal(decisionJSON, &intent); err != nil {
+			return nil, fmt.Errorf("corrupt intent JSON in outbox record %s: %w", id, err)
 		}
 
 		results = append(results, &executor.OutboxRecord{
 			ID:        id,
 			Effect:    &effect,
-			Decision:  &decision,
+			Intent:    &intent,
 			Scheduled: scheduledAt,
 			Status:    status,
 		})

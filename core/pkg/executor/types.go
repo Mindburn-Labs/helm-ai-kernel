@@ -9,17 +9,17 @@ import (
 
 // OutboxRecord represents an intent to execute an effect.
 type OutboxRecord struct {
-	ID        string                    `json:"id"`
-	Effect    *contracts.Effect         `json:"effect"`
-	Decision  *contracts.DecisionRecord `json:"decision"`
-	Scheduled time.Time                 `json:"scheduled"`
-	Status    string                    `json:"status"` // PENDING, DONE, FAILED
+	ID        string                                `json:"id"`
+	Effect    *contracts.Effect                     `json:"effect"`
+	Intent    *contracts.AuthorizedExecutionIntent  `json:"intent"`
+	Scheduled time.Time                             `json:"scheduled"`
+	Status    string                                `json:"status"` // PENDING, DONE, FAILED
 }
 
 // OutboxStore defines the transactional persistence layer for effects.
 type OutboxStore interface {
 	// Schedule persists the intent to execute.
-	Schedule(ctx context.Context, effect *contracts.Effect, decision *contracts.DecisionRecord) error
+	Schedule(ctx context.Context, effect *contracts.Effect, intent *contracts.AuthorizedExecutionIntent) error
 	// GetPending returns all scheduled but not yet executed records.
 	GetPending(ctx context.Context) ([]*OutboxRecord, error)
 	// MarkDone marks a record as executed (idempotency key).

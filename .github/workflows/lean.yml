@@ -20,6 +20,10 @@ permissions: read-all
 # touches the proofs tree. Failure here blocks merge to main and gates
 # the release tag (the release workflow polls this job's conclusion).
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+
 jobs:
   lake-build:
     name: lake build (EffectPermitSoundness)

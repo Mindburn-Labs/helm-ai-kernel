@@ -72,7 +72,7 @@ import { HelmClient, createAgentFrameworkAdapter, fromLangGraphToolCall } from "
 // This example targets `helm server` on its default API port. Use
 // http://localhost:7714 for `helm serve` or http://localhost:9090/v1 for the
 // OpenAI-compatible proxy path.
-const helm = new HelmClient({ baseUrl: "http://localhost:8080" });
+const helm = new HelmClient({ baseUrl: "http://port 3000" });
 const adapter = createAgentFrameworkAdapter(helm, {
   model: "helm-governance",
   metadata: { boundary: "agt-coexistence" },

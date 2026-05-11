@@ -4,7 +4,7 @@ Shows HELM integration with the OpenAI-compatible TypeScript SDK / native fetch.
 
 ## Prerequisites
 
-- HELM running at `http://localhost:8080` (`docker compose up -d`)
+- HELM running at `http://port 3000` (`docker compose up -d`)
 - Node.js 18+ or Bun
 
 ## Run

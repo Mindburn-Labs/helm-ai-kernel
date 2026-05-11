@@ -104,8 +104,8 @@ export interface ConsoleSurfaceState {
 
 const client = createClient<paths>({
   baseUrl: "",
-  fetch: (url, init) => {
-    return fetch(url, { ...init, credentials: "include" });
+  fetch: (request) => {
+    return fetch(new Request(request, { credentials: "include" }));
   },
 });
 

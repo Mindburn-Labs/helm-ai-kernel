@@ -29,7 +29,7 @@ Protobuf bindings under `src/generated/` are generated from
 use helm_sdk::{ChatCompletionRequest, ChatCompletionRequestMessagesInner, HelmClient, Role};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = HelmClient::new("http://localhost:8080");
+    let client = HelmClient::new("http://port 3000");
     let result = client.chat_completions(&ChatCompletionRequest::new(
         "gpt-4".to_string(),
         vec![ChatCompletionRequestMessagesInner::new(

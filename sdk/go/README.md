@@ -45,7 +45,7 @@ import (
 )
 
 func main() {
-    c := helm.New("http://localhost:8080")
+    c := helm.New("http://port 3000")
 
     // Chat completions via the HELM boundary.
     res, err := c.ChatCompletions(helm.ChatCompletionRequest{

@@ -1,5 +1,10 @@
 # Canonicalization Rules v0
 
+> [!IMPORTANT]
+> **Status: CANONICAL / NORMATIVE**
+> This document defines current product truth for the stated scope. Conflicts must be resolved through formal canonical update or implementation remediation.
+
+
 > Exact rules for computing deterministic hashes of policy artifacts.
 > These rules ensure byte-identical digests across native Rust and WASM runtimes.
 

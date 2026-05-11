@@ -76,7 +76,7 @@ Then update client base URL to:
 http://localhost:9090/v1
 ```
 
-Do not point applications at `localhost:8080/v1` unless your local command actually bound that port. The proxy default in the CLI is `9090`.
+Do not point applications at `port 3000/v1` unless your local command actually bound that port. The proxy default in the CLI is `9090`.
 
 ## Client Selector
 

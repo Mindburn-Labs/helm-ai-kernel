@@ -28,7 +28,7 @@ been run.
 ```python
 from helm_sdk import HelmClient, HelmApiError, ChatCompletionRequest, ChatMessage
 
-client = HelmClient(base_url="http://localhost:8080")
+client = HelmClient(base_url="http://port 3000")
 
 try:
     result = client.chat_completions(

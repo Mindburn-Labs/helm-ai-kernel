@@ -298,9 +298,5 @@ helm-oss,markdown-document,core/pkg/evidencepack/README.md,core/pkg/evidencepack
 helm-oss,markdown-document,core/pkg/kernel/README.md,core/pkg/kernel/README.md,kernel-guardian,reference,owned-active,go test ./core/pkg/kernel -count=1 && make docs-truth,covered,Kernel source-owner README inventoried; keep deterministic runtime claims aligned to package behavior.
 helm-oss,markdown-document,core/pkg/mcp/README.md,core/pkg/mcp/README.md,mcp-runtime,reference,owned-active,go test ./core/pkg/mcp -count=1 && make docs-truth,covered,MCP source-owner README inventoried; keep MCP gateway and safety claims aligned to implementation.
 helm-oss,markdown-document,core/pkg/proofgraph/README.md,core/pkg/proofgraph/README.md,conformance-engineer,reference,owned-active,go test ./core/pkg/proofgraph -count=1 && make docs-truth,covered,ProofGraph source-owner README inventoried; keep proof graph claims aligned to package behavior.
-helm-oss,ci-cd,.github/workflows/slsa-provenance.yml,.github/workflows/README.md,operator,how-to,owned-active,make docs-coverage && make docs-truth,covered,SLSA provenance workflow coverage.
-helm-oss,configuration,apps/console/pnpm-lock.yaml,docs/CONSOLE.md,developer,reference,owned-active,make test-console,covered,Console pnpm lockfile.
-helm-oss,configuration,apps/console/pnpm-workspace.yaml,docs/CONSOLE.md,developer,reference,owned-active,make test-console,covered,Console pnpm workspace configuration.
-helm-oss,surface,examples/launch,examples/launch/README.md,developer,tutorial,owned-active,make docs-coverage && make docs-truth,covered,Launch demonstration suite coverage.
-helm-oss,configuration,package.json,README.md,maintainer,reference,owned-active,make docs-coverage && make docs-truth,covered,Root package configuration.
-helm-oss,tooling,scripts/launch,scripts/README.md,maintainer,how-to,owned-active,make docs-coverage && make docs-truth,covered,Launch automation scripts coverage.
+helm-oss,scripts,scripts/launch,docs/launch/LAUNCH_READINESS.md,operator,how-to,owned-active,make docs-coverage && make docs-truth,covered,Launch scripts covered by canonical documentation.
+helm-oss,examples,examples/launch,docs/launch/LAUNCH_READINESS.md,developer,how-to,owned-active,make docs-coverage && make docs-truth,covered,Launch examples covered by canonical documentation.

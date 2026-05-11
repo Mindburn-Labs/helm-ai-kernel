@@ -27,7 +27,7 @@ if [ -z "$RAW_VERSION" ]; then
 fi
 OUT="$OUT_DIR/v${RAW_VERSION}.openvex.json"
 
-mkdir -p "$OUT_DIR"
+mkdir -p "$(dirname "$OUT")"
 
 if [ ! -f "$SBOM" ]; then
     echo "::warning::sbom.json missing — run 'make sbom' first; emitting empty VEX"

@@ -17,7 +17,7 @@ const (
 	AccessAllow           AccessDecision = "ALLOW"
 	AccessDeny            AccessDecision = "DENY"
 	AccessRequireMFA      AccessDecision = "REQUIRE_MFA"
-	AccessRequireApproval AccessDecision = "REQUIRE_APPROVAL"
+	AccessRequireApproval AccessDecision = "REQUIRE_APPROVAL" // Legacy, maps to canonical ESCALATE
 )
 
 // AccessContext carries the contextual information for policy evaluation.

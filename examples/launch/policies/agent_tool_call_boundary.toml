@@ -1,0 +1,11 @@
+name = "agent.boundary.v1"
+profile = "strict_boundary"
+reference_pack = "./agent_tool_call_boundary.json"
+
+[server]
+bind = "127.0.0.1"
+port = 7715
+
+[receipts]
+store = "sqlite"
+path = "./data/launch_receipts.db"

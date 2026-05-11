@@ -1,0 +1,8 @@
+{
+  "id": "req_1003",
+  "action": "dangerous-shell",
+  "resource": "system:shell",
+  "principal": "agent-1",
+  "context": {},
+  "artifacts": []
+}

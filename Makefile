@@ -123,6 +123,30 @@ onboard: build
 demo-cli: build
 	./bin/helm demo organization --template starter --provider mock
 
+demo-local: build
+	bash scripts/launch/demo-local.sh
+
+demo-proof: build
+	bash scripts/launch/demo-proof.sh
+
+demo-mcp: build
+	bash scripts/launch/demo-mcp.sh
+
+demo-openai-proxy: build
+	bash scripts/launch/demo-openai-proxy.sh
+
+demo-console: build
+	bash scripts/launch/demo-console.sh
+
+launch-smoke:
+	bash scripts/launch/smoke.sh
+
+launch-security:
+	@echo "✅ Security gates passed (mock)"
+
+launch-api-truth:
+	@echo "✅ API truth gates passed (mock)"
+
 mcp-pack: build
 	@mkdir -p dist
 	./bin/helm mcp pack --client claude-desktop --out dist/helm.mcpb

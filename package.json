@@ -1,0 +1,10 @@
+{
+  "name": "helm-oss-root",
+  "private": true,
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "msw"
+    ]
+  }
+}

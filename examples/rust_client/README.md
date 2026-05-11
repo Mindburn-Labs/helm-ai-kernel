@@ -4,7 +4,7 @@ Shows HELM integration with the Rust SDK.
 
 ## Prerequisites
 
-- HELM running at `http://localhost:8080` (`docker compose up -d`)
+- HELM running at `http://port 3000` (`docker compose up -d`)
 - Rust 1.75+
 
 ## Source Example

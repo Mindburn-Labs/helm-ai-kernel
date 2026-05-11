@@ -1,5 +1,10 @@
 # HELM Canonical Diagrams
 
+> [!IMPORTANT]
+> **Status: CANONICAL / NORMATIVE**
+> This document defines current product truth for the stated scope. Conflicts must be resolved through formal canonical update or implementation remediation.
+
+
 This doctrine keeps HELM public diagrams aligned with UCS v1.3. Diagrams must
 explain the boundary where AI asks and HELM checks. They must not turn HELM
 into generic AI governance. HELM OSS and HELM Commercial are canonical HELM
@@ -10,7 +15,7 @@ says otherwise.
 
 - Use `ALLOW`, `DENY`, and `ESCALATE` for new public proof flows.
 - Define technical terms near the diagram when the surface is public.
-- Treat OrgDNA as intake material. Treat OrgGenome as reviewed, signed,
+- Treat OrgGenome as intake material. Treat OrgGenome as reviewed, signed,
   policy-bearing organizational law.
 - Do not show Pilot as a HELM component. Do not show TITAN as a public product.
 - Mark physical-world and organization-compilation material as strategic /
@@ -114,13 +119,13 @@ Receipt -> ProofGraph -> EvidencePack -> CompanyArtifactGraph
 contradiction but will compound if ignored. `GeneratedSpec` remains a proposal
 until reviewed or approved according to policy.
 
-## 4. OrgDNA, OrgGenome, OrgPhenotype
+## 4. OrgGenome, OrgGenome, OrgPhenotype
 
-Plain version: OrgDNA is raw input. OrgGenome is the reviewed company rule set.
+Plain version: OrgGenome is raw input. OrgGenome is the reviewed company rule set.
 OrgPhenotype is the current runtime state from approved rules and proof records.
 
 ```text
-OrgDNA
+OrgGenome
 raw intake material
         |
         v
@@ -144,7 +149,7 @@ deterministic runtime state from OrgGenome + ProofGraph checkpoints
 PEP / CPI Execution
 ```
 
-OrgDNA is never execution authority. OrgGenome carries execution authority only
+OrgGenome is never execution authority. OrgGenome carries execution authority only
 after review and approval.
 
 ## 5. MCP Quarantine Lifecycle

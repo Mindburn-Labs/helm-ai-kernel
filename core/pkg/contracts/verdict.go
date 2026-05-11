@@ -70,7 +70,7 @@ const (
 	ReasonContextMismatch            ReasonCode = "CONTEXT_MISMATCH"
 	ReasonDataEgressBlocked          ReasonCode = "DATA_EGRESS_BLOCKED"
 	ReasonIdentityIsolationViolation ReasonCode = "IDENTITY_ISOLATION_VIOLATION"
-	ReasonApprovalRequired           ReasonCode = "APPROVAL_REQUIRED"
+	ReasonApprovalRequired           ReasonCode = "APPROVAL_REQUIRED" // Maps to canonical ESCALATE workflow
 	ReasonApprovalTimeout            ReasonCode = "APPROVAL_TIMEOUT"
 
 	// ── Delegation Reasons (v1.3) ───────────────────────────

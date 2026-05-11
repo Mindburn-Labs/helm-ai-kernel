@@ -20,9 +20,9 @@ type EvaluationResult string
 const (
 	ResultAllow           EvaluationResult = "ALLOW"
 	ResultDeny            EvaluationResult = "DENY"
-	ResultRequireApproval EvaluationResult = "REQUIRE_APPROVAL"
+	ResultRequireApproval EvaluationResult = "REQUIRE_APPROVAL" // Legacy, maps to canonical ESCALATE
 	ResultRequireEvidence EvaluationResult = "REQUIRE_EVIDENCE"
-	ResultDefer           EvaluationResult = "DEFER"
+	ResultDefer           EvaluationResult = "DEFER" // Legacy, maps to canonical ESCALATE
 )
 
 // EvaluationRequest is the canonical input to the authority evaluation pipeline.

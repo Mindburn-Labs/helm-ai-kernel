@@ -7,19 +7,15 @@
 [![SLSA Level 3](https://img.shields.io/badge/SLSA-Level%203-blue)](docs/PUBLISHING.md)
 [![SBOM CycloneDX](https://img.shields.io/badge/SBOM-CycloneDX%201.5-orange)](docs/PUBLISHING.md)
 
-HELM OSS is the fail-closed execution firewall for AI agents.
+**HELM OSS is the fail-closed execution firewall for AI agents.**
 
-Plain version: an agent can ask to use a tool, but it does not execute directly.
-HELM checks the request, returns `ALLOW`, `DENY`, or `ESCALATE`, and writes a
-receipt that can be checked later.
+AI models propose. Deterministic systems govern. HELM sits between stochastic AI proposals and your infrastructure's side effects. It intercepts tool calls (via MCP or OpenAI-compatible proxies), decides what is authorized to execute, and emits cryptographically signed receipts.
 
-Technical version: HELM sits between stochastic proposals and deterministic
-side effects. Agents, LLMs, copilots, and orchestration frameworks may propose
-work; HELM decides what is authorized to execute, records the decision, and
-emits receipts that can be verified or replayed outside the model.
+- **Fail-Closed Execution Firewall:** Default deny. Every tool call requires explicit policy or sandbox grants.
+- **Fail-Closed MCP Interceptor:** Drop-in governance for the Model Context Protocol. Govern Claude Desktop, Cursor, or any MCP client without changing code.
+- **Signed Receipts:** Every `ALLOW`, `DENY`, or `ESCALATE` decision is written to a verifiable ProofGraph, proving exactly what the agent attempted and why it was blocked or allowed.
 
-Not Kubernetes Helm: this repository is Mindburn Labs' HELM execution kernel,
-not the Kubernetes package manager.
+*(Note: This is Mindburn Labs' HELM execution kernel for AI, not the Kubernetes package manager.)*
 
 ```text
 Agent attempts dangerous action
@@ -33,12 +29,8 @@ HELM execution boundary
 Signed receipt -> verify passes -> tamper fails
 ```
 
-Current public release: `v0.4.0` from 2026-04-25. Canonical OSS docs:
+Current public release: `v0.4.1`. Canonical OSS docs:
 <https://helm.docs.mindburn.org/oss>.
-
-Public proof console target: <https://oss.mindburn.org/>. Do not treat it as
-live until DNS, `/api/health`, `/api/demo/run`, `/api/demo/verify`, and
-`/api/demo/tamper` smoke tests pass.
 
 ## Project Status
 
@@ -56,7 +48,7 @@ live until DNS, `/api/health`, `/api/demo/run`, `/api/demo/verify`, and
 Install the published macOS CLI:
 
 ```bash
-brew install mindburn-labs/tap/helm
+brew install mindburnlabs/tap/helm
 helm --version
 ```
 
@@ -202,9 +194,15 @@ flowchart LR
 - Governance dashboards document policy; HELM applies policy in the runtime path and records evidence.
 - Workflow automation assumes deterministic scripts; HELM contains stochastic proposals inside deterministic execution semantics.
 
-## Agent Tool Call Boundary Demo
+## Launch Readiness Demo Suite
 
-The sample policy covers:
+HELM OSS includes a comprehensive, fail-closed verification suite in `examples/launch/`. You can execute the end-to-end demo suite by running the smoke scripts:
+
+```bash
+make launch-smoke
+```
+
+The sample launch policy (`examples/launch/policies/agent_tool_call_boundary.toml`) covers:
 
 | Action | Expected result |
 | --- | --- |
@@ -219,7 +217,7 @@ The sample policy covers:
 Every run is labeled `OSS-BACKED`, `SANDBOX`, and `SAMPLE POLICY`. The demo
 uses HELM OSS Guardian evaluation and signed receipt persistence. It does not
 touch customer data, payment systems, infrastructure, shells, or external
-networks.
+networks. See [examples/launch/README.md](examples/launch/README.md) for the full walkthrough.
 
 ## Public Interfaces
 
@@ -245,7 +243,7 @@ report surfaces.
 
 | Surface | Path | Public install or current status |
 | --- | --- | --- |
-| CLI | `core/` | `brew install mindburn-labs/tap/helm`; release binaries are attached to GitHub Releases |
+| CLI | `core/` | `brew install mindburnlabs/tap/helm`; release binaries are attached to GitHub Releases |
 | Go SDK | `sdk/go` | `go get github.com/Mindburn-Labs/helm-oss/sdk/go@main`; tagged module versions are tracked as an OSS readiness follow-up |
 | Python SDK | `sdk/python` | `pip install helm-sdk` |
 | TypeScript SDK | `sdk/ts` | `npm install @mindburn/helm` |

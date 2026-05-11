@@ -113,9 +113,9 @@ type Decision string
 const (
 	DecisionAllow           Decision = "ALLOW"
 	DecisionDeny            Decision = "DENY"
-	DecisionRequireApproval Decision = "REQUIRE_APPROVAL"
+	DecisionRequireApproval Decision = "REQUIRE_APPROVAL" // Legacy, maps to canonical ESCALATE
 	DecisionRequireEvidence Decision = "REQUIRE_EVIDENCE"
-	DecisionDefer           Decision = "DEFER"
+	DecisionDefer           Decision = "DEFER" // Legacy, maps to canonical ESCALATE
 )
 
 // DecisionConstraints per Section 3.4 - constraints on allowed effects.

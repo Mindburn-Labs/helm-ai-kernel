@@ -7,7 +7,7 @@ import (
 
 // PDPResponse represents the decision output.
 type PDPResponse struct {
-	Decision        string         `json:"decision"` // ALLOW, DENY, DEFER
+	Decision        string         `json:"decision"` // Canonical: ALLOW, DENY, ESCALATE (legacy: DEFER)
 	DeferReasonCode string         `json:"defer_reason_code,omitempty"`
 	RequiredFacts   []FactRef      `json:"required_facts,omitempty"`
 	TimeoutPolicy   *TimeoutPolicy `json:"timeout_policy,omitempty"`

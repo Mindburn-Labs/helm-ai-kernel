@@ -67,6 +67,7 @@ type RunOptions struct {
 	GateFilter   []string // if non-empty, only run these gates
 	ProjectRoot  string
 	OutputDir    string // base dir for EvidencePack (default: artifacts/conformance)
+	SeedBaseline bool   // seed deterministic compatibility evidence before gate execution
 }
 
 // Run executes a full conformance run for the given profile.
@@ -110,6 +111,11 @@ func (e *Engine) Run(opts *RunOptions) (*ConformanceReport, error) {
 		ProjectRoot:  opts.ProjectRoot,
 		Clock:        e.clock,
 		ExtraConfig:  make(map[string]any),
+	}
+	if opts.SeedBaseline {
+		if err := SeedBaselineEvidence(ctx, requiredGates); err != nil {
+			return nil, fmt.Errorf("failed to seed baseline evidence: %w", err)
+		}
 	}
 
 	// Run gates deterministically in order

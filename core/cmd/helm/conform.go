@@ -102,6 +102,7 @@ func runConform(args []string, stdout, stderr io.Writer) int {
 		GateFilter:   []string(gateFilter),
 		ProjectRoot:  projectRoot,
 		OutputDir:    outputDir,
+		SeedBaseline: level != "",
 	}
 
 	report, err := engine.Run(opts)

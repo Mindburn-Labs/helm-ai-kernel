@@ -156,6 +156,8 @@ func RegisterConsoleRoutes(mux *http.ServeMux, svc *Services, opts serverOptions
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(state)
 	}))
+
+	RegisterConsoleAGUIRoutes(mux, svc, opts)
 }
 
 func consoleSurfaceCatalog() []map[string]string {

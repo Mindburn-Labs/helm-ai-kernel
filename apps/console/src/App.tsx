@@ -64,6 +64,9 @@ import {
   type ConsoleSurfaceState,
   type Receipt,
 } from "./api/client";
+import { HelmOssAssistantDrawer } from "./agent/drawer";
+import { HelmOssAgentProvider } from "./agent/provider";
+import { buildOssAgentState } from "./agent/state";
 
 const DesignSystemErrorBoundary = ErrorBoundary as unknown as ComponentType<{ readonly children: ReactNode }>;
 
@@ -375,6 +378,7 @@ function ConsoleApp() {
   const [demoError, setDemoError] = useState<string | null>(null);
   const [demoBusy, setDemoBusy] = useState<"run" | "verify" | "tamper" | null>(null);
   const [replayStatus, setReplayStatus] = useState("not checked");
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const surface = useSurfaceState(active, authRevision);
   const authChanged = useCallback(() => {
     setAuthRevision((value) => value + 1);
@@ -402,6 +406,20 @@ function ConsoleApp() {
   const selectedReceipt = useMemo(() => {
     return filteredReceipts.find((receipt) => receipt.receipt_id === selectedId) ?? filteredReceipts[0] ?? null;
   }, [filteredReceipts, selectedId]);
+
+  const agentState = useMemo(
+    () =>
+      buildOssAgentState({
+        bootstrap,
+        active,
+        selectedReceipt,
+        query,
+        receipts: filteredReceipts,
+        demoAction,
+        replayStatus,
+      }),
+    [active, bootstrap, demoAction, filteredReceipts, query, replayStatus, selectedReceipt],
+  );
 
   const submitIntent = async () => {
     setSubmitting(true);
@@ -493,10 +511,26 @@ function ConsoleApp() {
   };
 
   return (
-    <div className="console-shell">
+    <HelmOssAgentProvider state={agentState}>
+      <div className="console-shell">
       <Sidebar active={active} onActiveChange={setActive} counts={bootstrap?.counts} />
       <main className="console-main">
         <Topbar bootstrap={bootstrap} active={active} streamState={streamState} query={query} onQueryChange={setQuery} />
+        <div className="assistant-affordance">
+          <HelmOssAssistantDrawer
+            state={agentState}
+            open={assistantOpen}
+            onOpenChange={setAssistantOpen}
+            onNavigate={setActive}
+            onSelectReceipt={setSelectedId}
+            onSearchChange={setQuery}
+            onDemoActionChange={(action) => {
+              if (PROOF_DEMO_ACTIONS.some((item) => item.id === action)) {
+                setDemoAction(action as (typeof PROOF_DEMO_ACTIONS)[number]["id"]);
+              }
+            }}
+          />
+        </div>
         <section className="console-page" aria-label="HELM Console workspace">
           <AccessBanner accessState={accessState} error={error} onAuthChanged={authChanged} />
           <div className="page-grid">
@@ -558,7 +592,8 @@ function ConsoleApp() {
           <OperationsStrip bootstrap={bootstrap} receipt={selectedReceipt} />
         </section>
       </main>
-    </div>
+      </div>
+    </HelmOssAgentProvider>
   );
 }
 

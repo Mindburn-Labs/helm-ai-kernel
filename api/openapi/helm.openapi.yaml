@@ -43,6 +43,8 @@ tags:
     description: Health and version
   - name: console
     description: HELM OSS Console platform state
+  - name: agent
+    description: Self-hosted AG-UI runtime for the OSS Console assistant
   - name: demo
     description: Public HELM OSS sandbox proof scenario
 
@@ -498,6 +500,77 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConsoleSurfaceState'
         '404':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/ag-ui/info:
+    get:
+      operationId: getAGUIRuntimeInfo
+      tags: [agent, console]
+      summary: Read OSS AG-UI runtime capabilities
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: AG-UI runtime metadata and read-only tool catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                required: [runtime, protocol, transport, tools]
+                properties:
+                  runtime: { type: string }
+                  protocol: { type: string, const: ag-ui }
+                  transport: { type: string, const: sse }
+                  tools:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/ag-ui/run:
+    post:
+      operationId: runAGUIRuntime
+      tags: [agent, console]
+      summary: Run the OSS read-only AG-UI assistant
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              properties:
+                threadId: { type: string }
+                runId: { type: string }
+                workspaceId: { type: string }
+                currentSurface: { type: string }
+                state:
+                  type: object
+                  additionalProperties: true
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+                    properties:
+                      id: { type: string }
+                      role: { type: string }
+                      content: { type: string }
+      responses:
+        '200':
+          description: Server-sent AG-UI lifecycle event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
           $ref: '#/components/responses/HelmError'
         '401':
           $ref: '#/components/responses/HelmError'

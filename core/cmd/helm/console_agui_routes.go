@@ -29,7 +29,7 @@ type ossAGUIMessage struct {
 // It is intentionally thin: no commercial graph/spec concepts and no kernel
 // package mutation. Tool results are derived from existing console/demo routes.
 func RegisterConsoleAGUIRoutes(mux *http.ServeMux, svc *Services, opts serverOptions) {
-	mux.HandleFunc("/api/ag-ui/info", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	infoHandler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -53,9 +53,9 @@ func RegisterConsoleAGUIRoutes(mux *http.ServeMux, svc *Services, opts serverOpt
 				ossAGUITool("run_replay_probe", "Run replay probe over current evidence."),
 			},
 		})
-	}))
+	})
 
-	mux.HandleFunc("/api/ag-ui/run", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	runHandler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -152,7 +152,12 @@ func RegisterConsoleAGUIRoutes(mux *http.ServeMux, svc *Services, opts serverOpt
 			"runId":    runID,
 			"result":   map[string]any{"status": "complete"},
 		})
-	}))
+	})
+
+	mux.HandleFunc("/api/v1/agent-ui/info", infoHandler)
+	mux.HandleFunc("/api/v1/agent-ui/run", runHandler)
+	mux.HandleFunc("/api/ag-ui/info", infoHandler)
+	mux.HandleFunc("/api/ag-ui/run", runHandler)
 }
 
 func ossAGUITool(name, description string) map[string]any {

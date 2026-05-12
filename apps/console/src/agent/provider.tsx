@@ -8,14 +8,14 @@ interface OssAgentProviderValue {
 }
 
 const OssAgentContext = createContext<OssAgentProviderValue>({
-  runtimeUrl: "/api/ag-ui",
+  runtimeUrl: "/api/v1/agent-ui",
   state: null,
 });
 
 export function HelmOssAgentProvider({
   children,
   state = null,
-  runtimeUrl = "/api/ag-ui",
+  runtimeUrl = "/api/v1/agent-ui",
 }: {
   readonly children: ReactNode;
   readonly state?: HelmOssAgentState | null;

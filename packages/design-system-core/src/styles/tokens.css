@@ -40,7 +40,7 @@
   --helm-text-muted: #8b97a7;
   --helm-text-disabled: #7a8595;
   --helm-text-inverse: #07090c;
-  --helm-text-on-accent: #ffffff;
+  --helm-text-on-accent: #07090c;
   --helm-text-code-muted: #a0abba;
   --helm-text-table-primary: var(--helm-text-primary);
   --helm-text-table-secondary: var(--helm-text-secondary);
@@ -253,7 +253,7 @@
   --helm-text-muted: #647082;
   --helm-text-disabled: #5e6877;
   --helm-text-inverse: #ffffff;
-  --helm-text-on-accent: #ffffff;
+  --helm-text-on-accent: #07090c;
   --helm-text-code-muted: #4d5868;
   --helm-verdict-allow: #1f8a5f;
   --helm-verdict-allow-bg: rgba(31, 138, 95, 0.09);

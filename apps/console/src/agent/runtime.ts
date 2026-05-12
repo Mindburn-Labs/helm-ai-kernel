@@ -21,7 +21,7 @@ export async function runOssAgent(input: {
   readonly onEvent: (event: OssAgentEvent) => void;
   readonly signal?: AbortSignal;
 }) {
-  const response = await fetch(`${(input.runtimeUrl ?? "/api/ag-ui").replace(/\/$/, "")}/run`, {
+  const response = await fetch(`${(input.runtimeUrl ?? "/api/v1/agent-ui").replace(/\/$/, "")}/run`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },

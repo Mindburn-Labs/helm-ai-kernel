@@ -1830,8 +1830,9 @@ pre {
   display: inline-flex;
   align-items: center;
   gap: var(--helm-space-3);
-  min-height: 24px;
-  padding: 1px var(--helm-space-5);
+  min-width: var(--helm-min-touch-target);
+  min-height: var(--helm-min-touch-target);
+  padding: var(--helm-space-2) var(--helm-space-5);
   color: var(--helm-text-secondary);
   background: var(--helm-bg-surface);
   border: 1px solid var(--helm-border-default);

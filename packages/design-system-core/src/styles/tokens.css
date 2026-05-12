@@ -40,6 +40,7 @@
   --helm-text-muted: #8b97a7;
   --helm-text-disabled: #7a8595;
   --helm-text-inverse: #07090c;
+  --helm-text-on-accent: #ffffff;
   --helm-text-code-muted: #a0abba;
   --helm-text-table-primary: var(--helm-text-primary);
   --helm-text-table-secondary: var(--helm-text-secondary);
@@ -152,6 +153,67 @@
   --helm-z-toast: 60;
   --helm-z-palette-backdrop: 70;
   --helm-z-palette: 71;
+
+  /* Marketing compatibility aliases.
+     These are canonical downstream-facing aliases for public company sites.
+     They map to HELM tokens so Mindburn surfaces do not need local token bridges. */
+  --space-0: var(--helm-space-0);
+  --space-1: var(--helm-space-1);
+  --space-2: var(--helm-space-2);
+  --space-3: var(--helm-space-3);
+  --space-4: var(--helm-space-4);
+  --space-5: var(--helm-space-5);
+  --space-6: var(--helm-space-6);
+  --space-7: var(--helm-space-7);
+  --space-8: var(--helm-space-8);
+  --space-9: var(--helm-space-9);
+  --space-10: var(--helm-space-10);
+  --space-11: var(--helm-space-10);
+  --space-12: var(--helm-space-12);
+  --space-14: var(--helm-space-16);
+  --space-16: var(--helm-space-16);
+  --space-24: var(--helm-space-16);
+  --font-sans: var(--helm-font-sans);
+  --font-mono: var(--helm-font-mono);
+  --font-editorial: var(--helm-font-body);
+  --type-control: var(--helm-font-meta);
+  --text-primary: var(--helm-text-primary);
+  --text-secondary: var(--helm-text-secondary);
+  --text-tertiary: var(--helm-text-muted);
+  --text-muted: var(--helm-text-muted);
+  --surface-base: var(--helm-bg-root);
+  --surface-page: var(--helm-bg-root);
+  --surface-panel: var(--helm-bg-surface);
+  --surface-section: var(--helm-bg-inset);
+  --border: var(--helm-border-default);
+  --border-strong: var(--helm-border-strong);
+  --accent-brand: #9f8cff;
+  --accent-brand-muted: color-mix(in oklab, #9f8cff, transparent 82%);
+  --accent-brand-strong: #c4b5fd;
+  --proof: var(--helm-proof-hash);
+  --proof-bg: var(--helm-proof-bg);
+  --radius-card: var(--helm-radius-md);
+  --radius-glass: var(--helm-radius-panel);
+  --shadow-md: var(--helm-shadow);
+  --glass-shadow: var(--helm-shadow-raised);
+  --duration-fast: var(--helm-dur-fast);
+  --focus-ring: var(--helm-border-focus);
+  --state-allow: var(--helm-verdict-allow);
+  --state-allow-bg: var(--helm-verdict-allow-bg);
+  --state-allow-edge: var(--helm-rail-allow);
+  --state-deny: var(--helm-verdict-deny);
+  --state-deny-bg: var(--helm-verdict-deny-bg);
+  --state-escalate: var(--helm-verdict-escalate);
+  --state-escalate-bg: var(--helm-verdict-escalate-bg);
+  --z-modal: var(--helm-z-modal);
+  --frame: 1120px;
+  --frame-narrow: 720px;
+  --frame-wide: 1440px;
+  --viewport-min-h: 100dvh;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --mb-charcoal: var(--helm-bg-terminal);
+  --mb-paper: var(--helm-text-primary);
 }
 
 [data-theme="light"] {
@@ -191,6 +253,7 @@
   --helm-text-muted: #647082;
   --helm-text-disabled: #5e6877;
   --helm-text-inverse: #ffffff;
+  --helm-text-on-accent: #ffffff;
   --helm-text-code-muted: #4d5868;
   --helm-verdict-allow: #1f8a5f;
   --helm-verdict-allow-bg: rgba(31, 138, 95, 0.09);

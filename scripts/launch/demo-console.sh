@@ -1,25 +1,83 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-echo "==> HELM Launch Demo: Console Walkthrough"
-echo "Starting the HELM Local Governance Console..."
-echo ""
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT"
 
-make build > /dev/null
+echo "==> HELM Launch Demo: Console Smoke"
 
-echo "Starting server with console enabled..."
-./bin/helm serve --console --policy examples/launch/policies/agent_tool_call_boundary.toml &
+pick_port() {
+  python3 - <<'PY'
+import socket
+with socket.socket() as s:
+    s.bind(("127.0.0.1", 0))
+    print(s.getsockname()[1])
+PY
+}
+
+wait_for() {
+  local url="$1"
+  for _ in $(seq 1 60); do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  echo "timed out waiting for $url" >&2
+  return 1
+}
+
+PORT="$(pick_port)"
+HEALTH_PORT="$(pick_port)"
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/helm-console-demo.XXXXXX")"
+ADMIN_KEY="launch-console-admin-key"
+LOG_FILE="$TMP_DIR/console.log"
+
+cleanup() {
+  if [[ -n "${HELM_PID:-}" ]]; then
+    kill "$HELM_PID" >/dev/null 2>&1 || true
+    wait "$HELM_PID" >/dev/null 2>&1 || true
+  fi
+  rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
+
+make build-console >/dev/null
+make build >/dev/null
+
+HELM_ADMIN_API_KEY="$ADMIN_KEY" \
+HELM_HEALTH_PORT="$HEALTH_PORT" \
+./bin/helm serve \
+  --console \
+  --console-dir apps/console/dist \
+  --policy examples/launch/policies/agent_tool_call_boundary.toml \
+  --addr 127.0.0.1 \
+  --port "$PORT" \
+  --data-dir "$TMP_DIR/state" \
+  >"$LOG_FILE" 2>&1 &
 HELM_PID=$!
-sleep 2
 
-echo ""
-echo "Console is now running at http://127.0.0.1:7715"
-echo "In this console, you can:"
-echo "1. View all intercepted and governed requests."
-echo "2. Inspect the cryptographically signed receipts."
-echo "3. Review the policy boundaries enforced on the agent."
-echo "4. Simulate tools/call requests directly."
-echo ""
-echo "To exit the demo, press Ctrl+C."
-trap "kill $HELM_PID" EXIT
-wait $HELM_PID
+wait_for "http://127.0.0.1:$HEALTH_PORT/healthz"
+
+curl -fsS "http://127.0.0.1:$PORT/" >/dev/null
+BOOTSTRAP="$(curl -fsS \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "X-Helm-Tenant-ID: launch-demo" \
+  "http://127.0.0.1:$PORT/api/v1/console/bootstrap")"
+
+python3 - "$BOOTSTRAP" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+health = payload.get("health", {})
+if health.get("kernel") != "ready" or health.get("policy") != "ready" or health.get("store") != "ready":
+    raise SystemExit(f"unexpected console health: {payload.get('health')}")
+if payload.get("version", {}).get("version") not in {"0.5.0", "v0.5.0"}:
+    raise SystemExit(f"unexpected console version: {payload.get('version')}")
+mcp = payload.get("mcp", {})
+if mcp.get("authorization") != "local" or not mcp.get("scopes"):
+    raise SystemExit(f"unexpected console MCP summary: {mcp}")
+PY
+
+echo "✅ Console build and localhost runtime smoke passed"

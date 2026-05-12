@@ -1,0 +1,43 @@
+name: Integration request
+description: Request or scope a HELM OSS integration.
+title: "[Integration]: "
+labels: ["integration", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep requests OSS-scoped and fixture-friendly. Do not include customer data, private endpoints, live credentials, or proprietary schemas.
+  - type: input
+    id: integration
+    attributes:
+      label: Integration target
+      description: Name the tool, MCP server, SDK/runtime, API, or deployment platform.
+      placeholder: "Local MCP stdio server"
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Workflow to govern
+      description: Describe the action HELM should authorize, deny, escalate, record, or verify.
+    validations:
+      required: true
+  - type: dropdown
+    id: verdicts
+    attributes:
+      label: Expected verdict coverage
+      options:
+        - ALLOW only
+        - DENY only
+        - ESCALATE only
+        - ALLOW and DENY
+        - ALLOW, DENY, and ESCALATE
+    validations:
+      required: true
+  - type: textarea
+    id: fixture
+    attributes:
+      label: Local fixture plan
+      description: Explain how this can be tested with localhost services, temp directories, or sample policy data.
+    validations:
+      required: true

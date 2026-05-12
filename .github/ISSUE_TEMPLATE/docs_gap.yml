@@ -1,0 +1,44 @@
+name: Documentation gap
+description: Report missing, stale, or unclear HELM OSS documentation.
+title: "[Docs]: "
+labels: ["documentation", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include secrets, provider keys, private prompts, customer data, or unredacted production receipts.
+  - type: input
+    id: page
+    attributes:
+      label: Page or file
+      description: Link to the page, doc path, README section, or example that needs work.
+      placeholder: "docs/VERIFICATION.md"
+    validations:
+      required: true
+  - type: textarea
+    id: gap
+    attributes:
+      label: Gap
+      description: What is missing, stale, incorrect, or hard to follow?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected documentation
+      description: What should the doc say or demonstrate?
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Documentation surface
+      options:
+        - Quickstart
+        - Verification
+        - Publishing
+        - SDK
+        - MCP
+        - Launch examples
+        - Deployment
+        - Other
+    validations:
+      required: true

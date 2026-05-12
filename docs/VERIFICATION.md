@@ -118,6 +118,20 @@ helm export --evidence ./data/evidence --out evidence.tar
 helm verify evidence.tar
 ```
 
+## Local Tamper-Failure Demo
+
+The launch proof demo exercises the public verification path without external
+network calls:
+
+```bash
+./scripts/launch/demo-proof.sh
+```
+
+The script starts a localhost HELM boundary, creates a signed `DENY` receipt
+for the dangerous shell fixture, verifies the receipt through `/api/demo/verify`,
+then flips the verdict through `/api/demo/tamper`. The original receipt must
+verify, and the tamper attempt must fail signature and ProofGraph hash checks.
+
 ## Boundary Records, Checkpoints, and Envelopes
 
 The execution-boundary verifier checks HELM-native records first. External envelopes are wrappers over HELM roots, not independent authority.

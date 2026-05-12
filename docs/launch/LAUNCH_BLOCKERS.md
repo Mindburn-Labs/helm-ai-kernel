@@ -46,13 +46,19 @@ These items *must* be resolved by the Launch Execution Agent prior to the comple
 
 ### 5. Verdict Drift (DEFER / REQUIRE_APPROVAL)
 
-*   **Status**: `PENDING` (Phase 0/1)
+*   **Status**: `RESOLVED` (Phase 0/1)
 *   **Description**: The repository contains legacy terminology (`DEFER`, `REQUIRE_APPROVAL`) that violates the canonical HELM UCS v1.3 verdict model (`ALLOW`, `DENY`, `ESCALATE`).
-*   **Remediation**: Generate `docs/VERDICT_CANONICALIZATION.md` to map these terms. Update Go source code comments and JSON schema descriptions to clarify that `DEFER` is an internal engine state that translates to the canonical `ESCALATE` verdict. Do not break generated SDKs.
+*   **Resolution**: `docs/VERDICT_CANONICALIZATION.md` is the canonical public compatibility note. New launch, SDK, and MCP docs use only `ALLOW`, `DENY`, and `ESCALATE`; legacy terms are confined to compatibility/generated-code contexts.
+
+### 6. Launch Checklist Automation
+
+*   **Status**: `RESOLVED` (Phase 0/1/2)
+*   **Description**: `docs/launch/LAUNCH_READINESS.md` named `scripts/launch/launch-ready.sh`, but the script did not exist and several checks were manual.
+*   **Resolution**: Added `make launch-ready`, `scripts/launch/launch-ready.sh`, `make launch-security`, and `make launch-release-dry-run`. The readiness document is generated from executable checks covering boundaries, build/test, demos, console, MCP, proxy, proof, issue templates, docs sync, security, and release artifact dry-run.
 
 ## Governance & Ecosystem Blockers
 
-### 6. Maintainer Diversity
+### 7. Maintainer Diversity
 
 *   **Status**: `RECORDED`
 *   **Description**: The repository is currently single-vendor governed by Mindburn Labs. While this is expected at launch, long-term CNCF/Linux Foundation readiness requires a diversified maintainer base.

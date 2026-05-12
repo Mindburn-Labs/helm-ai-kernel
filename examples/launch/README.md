@@ -17,6 +17,7 @@ Run individual demos:
 ./scripts/launch/demo-mcp.sh
 ./scripts/launch/demo-openai-proxy.sh
 ./scripts/launch/demo-proof.sh
+./scripts/launch/demo-console.sh
 ```
 
 Record sanitized launch transcripts:
@@ -53,6 +54,14 @@ allows one schema-pinned `local.echo` call.
 
 Unknown MCP servers, unknown tools, and missing schema pins must return `DENY`
 or `ESCALATE`; they must never dispatch to the fixture server.
+
+## Offline Proof And Tamper Failure
+
+`scripts/launch/demo-proof.sh` runs the proof path against localhost only. It
+creates a signed `DENY` receipt for the dangerous shell fixture, verifies the
+receipt through `/api/demo/verify`, then submits a flipped-verdict copy through
+`/api/demo/tamper`. The original receipt must verify, and the tamper attempt
+must fail both signature and ProofGraph hash checks.
 
 ## Side-Effect Boundary
 

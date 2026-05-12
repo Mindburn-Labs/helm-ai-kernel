@@ -1,77 +1,32 @@
 ---
 title: Quickstart
-last_reviewed: 2026-05-05
+last_reviewed: 2026-05-12
 ---
 
 # Quickstart
 
-## Audience
-
-## Outcome
-
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
-
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
-| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
-| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
-
-## Diagram
-
-This scheme maps the main sections of Quickstart in reading order.
-
-```mermaid
-flowchart LR
-  Page["Quickstart"]
-  A["Source Truth"]
-  B["1. Install"]
-  C["2. Start a Local Boundary"]
-  D["3. Start the OpenAI-Compatible Proxy"]
-  E["4. Send One Request"]
-  Page --> A
-  A --> B
-  B --> C
-  C --> D
-  D --> E
-```
-
-This is the shortest source-backed HELM OSS path: install the CLI, start a local boundary, open the Console, proxy one OpenAI-compatible request, inspect receipts, export an EvidencePack, and verify it offline.
-
-For the complete end-to-end path across SDKs, MCP, Docker, Kubernetes, conformance, and release verification, use [Developer Journey](DEVELOPER_JOURNEY.md).
+This is the shortest current HELM OSS path: build or install the CLI, start a local fail-closed execution boundary, run the built-in proof demo, inspect receipts, and run the docs truth gates.
 
 ## Source Truth
 
-This page is backed by:
-
-- `Makefile`
-- `apps/console/`
 - `core/cmd/helm/server_cmd.go`
-- `core/cmd/helm/console_routes.go`
+- `core/cmd/helm/demo_routes.go`
 - `core/cmd/helm/proxy_cmd.go`
-- `core/cmd/helm/verify_cmd.go`
 - `core/cmd/helm/receipts_cmd.go`
-- `examples/python_openai_baseurl/`
-- `examples/ts_openai_baseurl/`
-- `examples/js_openai_baseurl/`
-- `examples/receipt_verification/`
+- `core/cmd/helm/verify_cmd.go`
+- `api/openapi/helm.openapi.yaml`
+- `release.high_risk.v3.toml`
 
-## 1. Install
+## 1. Install Or Build
 
-:::selector os
-### macOS
+Use Homebrew for the published macOS CLI:
 
 ```bash
 brew install mindburnlabs/tap/helm
 helm --version
 ```
 
-Use Homebrew for the published macOS CLI path in the `v0.4.0` GitHub release
-notes. Use `make build` when editing HELM OSS itself.
-
-### Linux
+Use a source build when editing this repository:
 
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-oss.git
@@ -80,32 +35,14 @@ make build
 ./bin/helm --version
 ```
 
-Release builds also produce Linux amd64 and arm64 binaries.
-
-### Windows / WSL
-
-```powershell
-wsl --install
-wsl
-git clone https://github.com/Mindburn-Labs/helm-oss.git
-cd helm-oss
-make build
-./bin/helm --version
-```
-
-Use WSL2 or Docker for local development on Windows. Native Windows release binaries are produced by the release build target.
-
-### Docker
+Use Docker when you want a clean local runtime:
 
 ```bash
 docker build -t ghcr.io/mindburn-labs/helm-oss:local .
 docker compose up -d
 ```
 
-Use Docker when you want a clean runtime boundary without installing the Go toolchain locally.
-:::
-
-## 2. Start a Local Boundary
+## 2. Start A Local Boundary
 
 ```bash
 ./bin/helm serve --policy ./release.high_risk.v3.toml
@@ -117,11 +54,9 @@ Expected ready line:
 helm-edge-local - listening :7714 - ready
 ```
 
-The sample policy uses retained reference-pack and receipt-store behavior. If you installed through Homebrew, replace `./bin/helm` with `helm`.
+If you installed with Homebrew, replace `./bin/helm` with `helm`.
 
-Lite Mode persists receipts and boundary surface state in SQLite. Standalone local CLI commands persist their boundary registry under `HELM_BOUNDARY_REGISTRY_PATH` or `HELM_DATA_DIR/boundary/surfaces.json`.
-
-Quick proof checks:
+Run the basic boundary checks in another shell:
 
 ```bash
 ./bin/helm boundary status --json
@@ -130,130 +65,106 @@ Quick proof checks:
 ./bin/helm sandbox preflight --runtime wazero --json
 ```
 
-The MCP authorization example is expected to deny before dispatch until the server, tool schema, and scopes are approved.
+The MCP authorization example should fail closed until the server identity, tool schema, scopes, and policy state are approved.
 
-## 3. Start the OpenAI-Compatible Proxy
+## 3. Run The Built-In Proof Demo
 
-Optional Console build:
+The local demo routes are implemented in the CLI server and exercise receipt verification without requiring a hosted service.
 
 ```bash
-make build-console
-./bin/helm serve --policy ./release.high_risk.v3.toml --console
+curl http://127.0.0.1:7714/api/demo/run \
+  -H 'content-type: application/json' \
+  -d '{"action_id":"export_customer_list","policy_id":"agent_tool_call_boundary"}'
 ```
 
-Open `http://127.0.0.1:7714` to use the self-hostable HELM OSS Console.
+Copy the returned `receipt` and `proof_refs.receipt_hash`, then verify it:
 
-In another shell:
+```bash
+curl http://127.0.0.1:7714/api/demo/verify \
+  -H 'content-type: application/json' \
+  -d '{"receipt":{...},"expected_receipt_hash":"<receipt_hash>"}'
+```
+
+Tamper checks must fail:
+
+```bash
+curl http://127.0.0.1:7714/api/demo/tamper \
+  -H 'content-type: application/json' \
+  -d '{"receipt":{...},"expected_receipt_hash":"<receipt_hash>","mutation":"flip_verdict"}'
+```
+
+## 4. Optional OpenAI-Compatible Proxy
+
+Start the proxy only when an existing client can set an OpenAI-style base URL:
+
+```bash
+python3 scripts/launch/mock-openai-upstream.py --port 19090
+```
+
+Then start the proxy against that local upstream:
 
 ```bash
 ./bin/helm proxy \
-  --upstream https://api.openai.com/v1 \
+  --upstream http://127.0.0.1:19090/v1 \
   --port 9090 \
   --receipts-dir ./helm-receipts
 ```
 
-Point existing OpenAI-compatible clients at:
+Point the client at:
 
 ```text
 http://localhost:9090/v1
 ```
 
-## 4. Send One Request
-
-:::selector language
-### Python
-
-```bash
-cd examples/python_openai_baseurl
-python -m venv .venv
-. .venv/bin/activate
-pip install openai
-OPENAI_BASE_URL=http://localhost:9090/v1 python main.py
-```
-
-### TypeScript
-
-```bash
-cd examples/ts_openai_baseurl
-npm install
-OPENAI_BASE_URL=http://localhost:9090/v1 npm run start
-```
-
-### JavaScript
-
-```bash
-cd examples/js_openai_baseurl
-npm install
-OPENAI_BASE_URL=http://localhost:9090/v1 node main.js
-```
-:::
-
-Expected result:
-
-- allowed request: normal model output plus HELM receipt metadata;
-- denied request: policy denial with a reason code;
-- no silent bypass: request logs show the local HELM proxy host.
+The retained source examples under `examples/*_openai_baseurl/` are HELM HTTP/SDK examples, not verified OpenAI SDK examples. Use [OpenAI-Compatible Proxy Integration](INTEGRATIONS/openai_baseurl.md) for the proxy contract.
 
 ## 5. Inspect Receipts
 
-Tail all local receipts first:
+The CLI receipt tail requires an agent id:
 
 ```bash
-./bin/helm receipts tail --server http://127.0.0.1:7714
+./bin/helm receipts tail --agent agent.demo.exec --server http://127.0.0.1:7714
 ```
 
-Then filter by agent or session once you know the recorded identity:
+For an unfiltered local list, use the HTTP API:
 
 ```bash
-./bin/helm receipts tail --agent agent.titan.exec --server http://127.0.0.1:7714
+curl 'http://127.0.0.1:7714/api/v1/receipts?limit=20'
 ```
 
-If nothing appears, remove the filter and check whether the client is still calling the upstream provider directly.
+## 6. Verify Evidence
 
-## 6. Export and Verify Evidence
-
-Create a local demo EvidencePack:
+`helm verify` is offline-first and succeeds only when the EvidencePack contains the required roots, proof material, and receipts.
 
 ```bash
-./bin/helm onboard --yes
-./bin/helm demo organization --template starter --provider mock
-./bin/helm export --evidence ./data/evidence --out evidence.tar --tar
+./bin/helm verify evidence-pack.tar
+./bin/helm verify evidence-pack.tar --json
 ```
 
-Verify offline:
+Use the `v0.4.0` release `evidence-pack.tar` or an operator-generated pack known to contain ProofGraph and receipt material. Do not treat the local onboarding demo export as verified unless it includes those records.
+
+## 7. Validate The Checkout
 
 ```bash
-./bin/helm verify evidence.tar
-./bin/helm verify evidence.tar --json
-```
-
-Optional online verification:
-
-```bash
-./bin/helm verify evidence.tar --online
-```
-
-`--online` runs only after offline verification passes. It checks embedded envelope/root metadata against `HELM_LEDGER_URL` or the public proof verifier.
-
-## 7. Validate the Checkout
-
-```bash
-make test
-make test-console
-make test-platform
-make test-all
 make docs-coverage
 make docs-truth
+cd core && go test ./cmd/helm -run 'Test.*Route|Test.*OpenAPI|Test.*Receipt' -count=1
 ```
 
-Use these targets before editing docs that claim support for a CLI command, SDK, example, schema, deployment surface, or verification behavior.
+Run broader targets when you changed their surface:
+
+```bash
+make test-console
+make test-design-system
+make verify-fixtures
+```
 
 ## Common Failures
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| client call reaches the upstream provider directly | base URL is not pointed at HELM | set `OPENAI_BASE_URL=http://localhost:9090/v1` or the matching client option |
-| receipt tail is empty | wrong server or filter | remove the agent filter and check `--server` |
-| denied request retries forever | client treats policy denial as transient | handle HELM denials as final authorization results |
-| `helm verify` fails | EvidencePack is incomplete or modified | rerun export and `make verify-fixtures` |
-| Docker path fails | local image or compose state is stale | rebuild with `docker build` and restart `docker compose` |
+| client call reaches the upstream provider directly | base URL still points to the provider | set the client base URL to HELM and log the request host |
+| `helm receipts tail` exits with usage | missing required agent filter | pass `--agent <id>` or use `GET /api/v1/receipts` for an unfiltered list |
+| denied request retries forever | client treats policy denial as transient | handle `DENY` as a final authorization result |
+| `helm verify` fails | EvidencePack is incomplete or modified | use a complete pack and run `make verify-fixtures` |
+| Docker path fails | local image or compose state is stale | rebuild the image and restart `docker compose` |

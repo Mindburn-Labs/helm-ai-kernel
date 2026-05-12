@@ -98,3 +98,18 @@ func TestG0_DependencyLocksMissing(t *testing.T) {
 	require.False(t, result.Pass)
 	require.Contains(t, result.Reasons, conform.ReasonBuildIdentityMissing)
 }
+
+func TestG0_DependencyLockUnderCoreModule(t *testing.T) {
+	_, ctx := setupG0(t)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(ctx.ProjectRoot, "core"), 0750))
+	require.NoError(t, os.WriteFile(filepath.Join(ctx.ProjectRoot, "core", "go.sum"), []byte("dep-lock"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(ctx.ProjectRoot, "artifacts", "build_identity.json"), []byte(`{"version":"1.0"}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(ctx.ProjectRoot, "artifacts", "sbom.json"), []byte(`{"components":[]}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(ctx.ProjectRoot, "artifacts", "provenance.json"), []byte(`{"predicate":{}}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(ctx.ProjectRoot, "artifacts", "trust_roots.json"), []byte(`{"keys":[]}`), 0600))
+
+	gate := &G0BuildIdentity{}
+	result := gate.Run(ctx)
+	require.True(t, result.Pass, "core/go.sum should satisfy monorepo dependency lock: %v", result.Reasons)
+}

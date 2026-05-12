@@ -1,7 +1,7 @@
 openapi: "3.1.0"
 info:
   title: HELM Kernel API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Deterministic execution kernel for AI tool calls.
     Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
@@ -1839,11 +1839,7 @@ paths:
           content:
             application/json:
               schema:
-                oneOf:
-                  - type: array
-                    items:
-                      $ref: '#/components/schemas/SandboxBackendProfile'
-                  - $ref: '#/components/schemas/SandboxGrant'
+                $ref: '#/components/schemas/SandboxGrantInspection'
         '400':
           $ref: '#/components/responses/HelmError'
         '401':
@@ -2897,6 +2893,16 @@ components:
         native_isolation: { type: boolean }
         experimental: { type: boolean }
 
+    SandboxBackendProfileList:
+      type: array
+      items:
+        $ref: '#/components/schemas/SandboxBackendProfile'
+
+    SandboxGrantInspection:
+      oneOf:
+        - $ref: '#/components/schemas/SandboxBackendProfileList'
+        - $ref: '#/components/schemas/SandboxGrant'
+
     FilesystemPreopen:
       type: object
       required: [path, mode]
@@ -3123,6 +3129,12 @@ components:
           type: array
           items: { type: string }
         pinned_schema_hash: { type: string }
+        tool_schema:
+          type: object
+          additionalProperties: true
+        output_schema:
+          type: object
+          additionalProperties: true
         oauth_resource: { type: string }
         receipt_id: { type: string }
 

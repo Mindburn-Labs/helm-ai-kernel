@@ -13,12 +13,13 @@ make build
 ## Validation Before a PR
 
 ```bash
-make test
-make test-all
-make crucible
+make quality-pr
 ```
 
-Run any additional target relevant to the area you changed, such as `make bench` for benchmark work or the package-specific SDK targets for SDK changes.
+Run `make quality-impact` for a quick path-scoped package pass, or use focused
+targets such as `make quality-contracts`, `make quality-security`, or
+`make quality-typecheck` for the area you changed. Before merge or release,
+maintainers use `make quality-merge` and `make quality-release`.
 
 ## Contribution Rules
 

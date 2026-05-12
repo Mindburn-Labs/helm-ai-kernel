@@ -1,0 +1,58 @@
+==> Building HELM binary
+==> Starting local HELM boundary with sample launch policy
+==> Running seven-action launch demo
+{
+  "external_side_effects": false,
+  "launch_demo": [
+    {
+      "action_id": "read_ticket",
+      "proof_ref": "36daab5e86bd9e2f20e704eade4dfde2806e9cc6d083aac0406daa2c84106e6e",
+      "receipt_id": "rcpt_<id>",
+      "side_effect_dispatched": false,
+      "verdict": "ALLOW"
+    },
+    {
+      "action_id": "draft_reply",
+      "proof_ref": "346d474176f07149161c5116140806e728151fc78bde565060db562ec0f3e466",
+      "receipt_id": "rcpt_<id>",
+      "side_effect_dispatched": false,
+      "verdict": "ALLOW"
+    },
+    {
+      "action_id": "small_refund",
+      "proof_ref": "b7988bfb4a6e3aea8ccf0c7fc73edff34ab3648b1d5c293e4a8b72175d61c1ad",
+      "receipt_id": "rcpt_<id>",
+      "side_effect_dispatched": false,
+      "verdict": "ALLOW"
+    },
+    {
+      "action_id": "large_refund",
+      "proof_ref": "cf2497e53a43770afb1b9ca393d25d94cbbfcac505cdc962f90133fa84a695e1",
+      "receipt_id": "rcpt_<id>",
+      "side_effect_dispatched": false,
+      "verdict": "ESCALATE"
+    },
+    {
+      "action_id": "dangerous_shell",
+      "proof_ref": "437eb0099fb033feb4ebb4470a1502beec8f3d997c18268ef271414aa4aa839b",
+      "receipt_id": "rcpt_<id>",
+      "side_effect_dispatched": false,
+      "verdict": "DENY"
+    },
+    {
+      "action_id": "export_customer_list",
+      "proof_ref": "f789b59f860115fb1dd235cdc930ac3b34fa3540554294f46ab7c9aa69020d83",
+      "receipt_id": "rcpt_<id>",
+      "side_effect_dispatched": false,
+      "verdict": "DENY"
+    },
+    {
+      "action_id": "modify_policy",
+      "proof_ref": "2e6bc4e18a58335f6d1f86ef22b95cd2c87b926b519b3f618af53f4dcf5d052b",
+      "receipt_id": "rcpt_<id>",
+      "side_effect_dispatched": false,
+      "verdict": "ESCALATE"
+    }
+  ]
+}
+==> Local launch demo completed with sample data only.

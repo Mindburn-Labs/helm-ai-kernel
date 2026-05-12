@@ -13,6 +13,7 @@ import type {
   VersionInfo,
   HelmError,
   ReasonCode,
+  DecisionRequest,
 } from './types.gen.js';
 
 export type { ReasonCode, HelmError };
@@ -122,6 +123,8 @@ export type MCPScanResult = SurfaceRecord;
 export type MCPAuthorizeCallRequest = SurfaceRecord;
 export type SandboxPreflightRequest = SurfaceRecord;
 export type SandboxPreflightResult = SurfaceRecord;
+export type DemoRunResult = SurfaceRecord;
+export type DemoReceiptVerification = SurfaceRecord;
 export type AuthzSnapshot = SurfaceRecord;
 export type ApprovalCeremony = SurfaceRecord;
 export type ApprovalWebAuthnChallenge = SurfaceRecord;
@@ -160,19 +163,34 @@ export class HelmApiError extends Error {
   readonly status: number;
   readonly reasonCode: ReasonCode;
   readonly details?: Record<string, unknown>;
+  readonly body?: unknown;
 
-  constructor(status: number, body: HelmError) {
-    super(body.error.message);
+  constructor(status: number, body: HelmError | unknown) {
+    const helmBody = isHelmError(body) ? body : undefined;
+    const message = helmBody?.error.message ?? `HELM API request failed with HTTP ${status}`;
+    super(message);
     this.name = 'HelmApiError';
     this.status = status;
-    this.reasonCode = body.error.reason_code;
-    this.details = body.error.details;
+    this.reasonCode = helmBody?.error.reason_code ?? 'ERROR_INTERNAL';
+    this.details = helmBody?.error.details;
+    this.body = body;
   }
+}
+
+function isHelmError(body: unknown): body is HelmError {
+  return typeof body === 'object'
+    && body !== null
+    && 'error' in body
+    && typeof (body as { error?: unknown }).error === 'object'
+    && (body as { error?: unknown }).error !== null
+    && 'message' in ((body as { error: Record<string, unknown> }).error)
+    && 'reason_code' in ((body as { error: Record<string, unknown> }).error);
 }
 
 export interface HelmClientConfig {
   baseUrl: string;
   apiKey?: string;
+  tenantId?: string;
   timeout?: number; // ms, default 30000
 }
 
@@ -187,6 +205,9 @@ export class HelmClient {
     this.headers = { 'Content-Type': 'application/json' };
     if (config.apiKey) {
       this.headers['Authorization'] = `Bearer ${config.apiKey}`;
+    }
+    if (config.tenantId) {
+      this.headers['X-Helm-Tenant-ID'] = config.tenantId;
     }
   }
 
@@ -251,6 +272,26 @@ export class HelmClient {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  // ── Decision Evaluation ──────────────────────────
+  async evaluateDecision(req: DecisionRequest | SurfaceRecord): Promise<SurfaceRecord> {
+    return this.request<SurfaceRecord>('POST', '/api/v1/evaluate', req);
+  }
+
+  async runPublicDemo(actionId: string, args: SurfaceRecord = {}): Promise<DemoRunResult> {
+    return this.request<DemoRunResult>('POST', '/api/demo/run', {
+      action_id: actionId,
+      policy_id: 'agent_tool_call_boundary',
+      args,
+    });
+  }
+
+  async verifyPublicDemoReceipt(receipt: SurfaceRecord, expectedReceiptHash: string): Promise<DemoReceiptVerification> {
+    return this.request<DemoReceiptVerification>('POST', '/api/demo/verify', {
+      receipt,
+      expected_receipt_hash: expectedReceiptHash,
+    });
   }
 
   // ── Approval Ceremony ────────────────────────────

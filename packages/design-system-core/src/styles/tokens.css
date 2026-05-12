@@ -156,7 +156,7 @@
 
   /* Downstream compatibility aliases.
      These aliases let product, docs, and marketing consumers migrate off the
-     retired @helm/design-tokens package without creating a second token source. */
+     retired HELM token compatibility package without creating a second token source. */
   --space-0: var(--helm-space-0);
   --space-1: var(--helm-space-1);
   --space-2: var(--helm-space-2);

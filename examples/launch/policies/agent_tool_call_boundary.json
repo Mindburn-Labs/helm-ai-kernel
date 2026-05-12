@@ -8,6 +8,14 @@
       "enabled": true
     },
     {
+      "action": "draft-reply",
+      "enabled": true
+    },
+    {
+      "action": "small-refund",
+      "enabled": true
+    },
+    {
       "action": "export-customer-list",
       "enabled": false
     },
@@ -26,6 +34,21 @@
             "id": "req-human-approval",
             "description": "Large refunds require an explicit human approval artifact",
             "artifact_type": "human_approval"
+          }
+        ]
+      }
+    },
+    {
+      "action": "modify-policy",
+      "enabled": true,
+      "requirement_set": {
+        "id": "escalate-modify-policy",
+        "logic": "AND",
+        "requirements": [
+          {
+            "id": "req-authority-approval",
+            "description": "Policy and IAM-like changes require explicit authority approval",
+            "artifact_type": "authority_approval"
           }
         ]
       }

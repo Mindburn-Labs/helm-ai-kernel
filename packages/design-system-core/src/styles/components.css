@@ -2920,7 +2920,7 @@ pre {
   background: var(--helm-bg-elevated);
   border: 1px solid var(--helm-border-strong);
   border-radius: var(--helm-radius-md);
-  box-shadow: var(--helm-shadow-raised, 0 8px 20px rgba(0, 0, 0, 0.16));
+  box-shadow: var(--helm-shadow-raised);
   z-index: var(--helm-z-palette);
   max-height: 280px;
   overflow-y: auto;

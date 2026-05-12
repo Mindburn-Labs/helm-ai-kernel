@@ -37,30 +37,14 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           version: "34.1"
+      - uses: bufbuild/buf-setup-action@v1
       - name: Install codegen tools
         run: |
           python -m pip install --require-hashes -r .github/codegen-requirements.txt
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.0
       - name: Build and test retained surfaces
-        run: |
-          make build
-          make lint
-          make test
-          go test ./core/cmd/helm -count=1
-          make test-sdk-go-standalone
-          make test-sdk-py
-          make test-sdk-ts
-          make test-sdk-rust
-          make test-sdk-java
-          make test-design-system
-          make test-console
-          make verify-fixtures
-          make docs-coverage
-          make docs-truth
-          make codegen-check
-          make verify-boundary
-          make bench-report
+        run: make quality-release
 
   deployment-smoke:
     runs-on: ubuntu-latest
@@ -117,41 +101,20 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25.10"
-      - name: Build reproducible release binaries
-        run: make release-binaries-reproducible
-      - name: Build MCP bundle
-        run: make mcp-pack
-      - name: Generate SBOM
-        run: make sbom
-      - name: Generate VEX
-        run: make vex
+      - name: Build and stage release assets
+        run: make release-assets
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: |
-            bin/helm-*
-            bin/SHA256SUMS.txt
-            dist/helm.mcpb
-            sbom.json
-            release/vex/*.openvex.json
-      - name: Stage quickstart assets
-        run: |
-          mkdir -p dist
-          cp release.high_risk.v3.toml dist/release.high_risk.v3.toml
+          subject-path: dist/release-assets/*
       - id: checksums
         name: Aggregate digest set
         run: |
-          cd bin && shasum -a 256 helm-* > SHA256SUMS.txt
-          echo "digest=$(shasum -a 256 SHA256SUMS.txt | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "digest=$(shasum -a 256 dist/release-assets/SHA256SUMS.txt | awk '{print $1}')" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: release-assets
-          path: |
-            bin/
-            dist/helm.mcpb
-            dist/release.high_risk.v3.toml
-            sbom.json
-            release/vex/
+          path: dist/release-assets/
 
   cosign-binaries:
     runs-on: ubuntu-latest
@@ -161,7 +124,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: release-assets
-          path: dist/
+          path: release-assets/
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
       - name: Cosign keyless-sign every artifact
@@ -169,19 +132,22 @@ jobs:
           COSIGN_EXPERIMENTAL: "1"
         run: |
           set -euo pipefail
-          cd dist
-          for f in bin/helm-* bin/SHA256SUMS.txt dist/helm.mcpb sbom.json release/vex/v*.openvex.json; do
+          cd release-assets
+          for f in *; do
             [ -f "$f" ] || continue
+            case "$f" in
+              *.cosign.bundle) continue ;;
+            esac
             echo "::group::Signing $f"
             cosign sign-blob --yes --bundle "${f}.cosign.bundle" "$f"
             echo "::endgroup::"
           done
       - name: Verify cosign bundles
-        run: bash scripts/release/verify_cosign.sh dist
+        run: bash scripts/release/verify_cosign.sh release-assets
       - uses: actions/upload-artifact@v4
         with:
           name: cosign-bundles
-          path: dist/**/*.cosign.bundle
+          path: release-assets/*.cosign.bundle
 
   reproducibility-check:
     runs-on: ubuntu-latest
@@ -303,14 +269,11 @@ jobs:
         with:
           name: release-assets
           path: release-assets/
-      - name: Generate Homebrew formula
+      - name: Stage Homebrew formula
         run: |
           mkdir -p Formula
-          ruby scripts/release/homebrew_formula.rb \
-            --version "${GITHUB_REF_NAME#v}" \
-            --checksums release-assets/bin/SHA256SUMS.txt \
-            --repo Mindburn-Labs/helm-oss > Formula/helm.rb
-      - name: Push formula to mindburn/homebrew-tap
+          cp release-assets/helm.rb Formula/helm.rb
+      - name: Push formula to mindburnlabs/homebrew-tap
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
@@ -320,7 +283,7 @@ jobs:
           fi
           git config --global user.name "mindburn-release-bot"
           git config --global user.email "release@mindburn.org"
-          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/mindburn/homebrew-tap.git" tap
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/mindburnlabs/homebrew-tap.git" tap
           mkdir -p tap/Formula
           cp Formula/helm.rb tap/Formula/helm.rb
           cd tap
@@ -330,7 +293,7 @@ jobs:
 
   github-release:
     runs-on: ubuntu-latest
-    needs: [binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, deployment-smoke, kind-smoke, release-smoke]
+    needs: [binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, homebrew, deployment-smoke, kind-smoke, release-smoke]
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -344,9 +307,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/bin/*
-            dist/dist/helm.mcpb
-            dist/dist/release.high_risk.v3.toml
-            dist/sbom.json
-            dist/release/vex/*.openvex.json
+            dist/*
             cosign/**/*.cosign.bundle

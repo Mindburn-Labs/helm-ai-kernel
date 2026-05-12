@@ -29,6 +29,10 @@ export function StatusPill({ state = "historical", label, dot = true, icon, inte
   );
 }
 
+export function StatusLabel(props: StatusPillProps) {
+  return <StatusPill {...props} />;
+}
+
 export interface StatusLineProps extends SharedVisualProps {
   readonly label: string;
   readonly detail?: string;

@@ -1,5 +1,5 @@
 import type { Story, StoryDefault } from "@ladle/react";
-import { Badge, HoverCard, Panel } from "@helm/design-system-core";
+import { Badge, HoverCard, Panel } from "@mindburn/ui-core";
 
 export default {
   title: "Primitives / HoverCard",
@@ -9,7 +9,7 @@ export const AvatarPeek: Story = () => (
   <Panel title="HoverCard" kicker="Hover the @handle to peek at the profile.">
     <p style={{ lineHeight: 1.6 }}>
       Approval was filed by{" "}
-      <HoverCard trigger={<a href="#ada">@ada</a>} side="bottom" align="start">
+      <HoverCard trigger={<a href="https://example.com/ada">@ada</a>} side="bottom" align="start">
         <strong>Ada Lovelace</strong>
         <span style={{ color: "var(--helm-text-muted)" }}>
           Compliance lead · last seen 2h ago

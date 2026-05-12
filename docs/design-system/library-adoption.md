@@ -1,6 +1,6 @@
 # Library Adoption
 
-This repo ships `@helm/design-system-core` as the OSS frontend contract. It does not ship a browser app, workbench, Next starter, or HELM product-specific design-system package.
+This repo ships `@mindburn/ui-core` as the OSS frontend contract. It does not ship a browser app, workbench, Next starter, or HELM product-specific design-system package.
 
 ## Install
 
@@ -12,7 +12,7 @@ for the package publication workflow to publish the package.
 ## Required CSS
 
 ```tsx
-import "@helm/design-system-core/styles.css";
+import "@mindburn/ui-core/styles.css";
 ```
 
 Core CSS owns tokens, primitive styles, providers, forms, layout, data, feedback, and inspection components.
@@ -22,15 +22,15 @@ Core CSS owns tokens, primitive styles, providers, forms, layout, data, feedback
 Use package roots for convenience:
 
 ```tsx
-import { Button, DataTable, Dialog, FormField, TextInput } from "@helm/design-system-core";
+import { Button, DataTable, Dialog, FormField, TextInput } from "@mindburn/ui-core";
 ```
 
 Use subpaths when bundle boundaries matter:
 
 ```tsx
-import { DatePicker } from "@helm/design-system-core/components/datepicker";
-import { Accordion, MenuButton, Popover } from "@helm/design-system-core/components/primitives";
-import { primitiveCoverage } from "@helm/design-system-core/primitives/catalog";
+import { DatePicker } from "@mindburn/ui-core/components/datepicker";
+import { Accordion, MenuButton, Popover } from "@mindburn/ui-core/components/primitives";
+import { primitiveCoverage } from "@mindburn/ui-core/primitives/catalog";
 ```
 
 Never import from `packages/design-system-core/src`, `dist` internals, or relative workspace paths. The package smoke test typechecks public entrypoints, CSS imports, and token JSON imports.
@@ -38,7 +38,7 @@ Never import from `packages/design-system-core/src`, `dist` internals, or relati
 ## Composition Rules
 
 - Build product routes from core primitives first, then add product semantics in the consuming application.
-- Keep state vocabulary from `@helm/design-system-core/state`; do not invent one-off visual states.
+- Keep state vocabulary from `@mindburn/ui-core/state`; do not invent one-off visual states.
 - Keep tokens as the only source of color, spacing, typography, motion, density, and theme values.
 
 ## Consumer Verification

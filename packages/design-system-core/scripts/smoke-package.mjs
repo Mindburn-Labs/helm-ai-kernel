@@ -44,7 +44,7 @@ for (const target of packageExportTargets(pkg.exports)) {
   }
 }
 
-const temp = await mkdtemp(path.join(tmpdir(), "helm-design-system-smoke-"));
+const temp = await mkdtemp(path.join(tmpdir(), "mindburn-ui-core-smoke-"));
 
 try {
   await writeFile(
@@ -96,37 +96,37 @@ try {
 
   await writeFile(
     path.join(temp, "index.tsx"),
-    `import "@helm/design-system-core/styles.css";
-import tokens from "@helm/design-system-core/tokens.json";
+    `import "@mindburn/ui-core/styles.css";
+import tokens from "@mindburn/ui-core/tokens.json";
 import {
   Button,
   DatePicker,
   DataTable,
   ThemeProvider,
   primitiveCoverage,
-} from "@helm/design-system-core";
-import { Calendar } from "@helm/design-system-core/components/datepicker";
-import { DataTable as SubpathDataTable } from "@helm/design-system-core/components/data-table";
-import { ContextMenu } from "@helm/design-system-core/components/context-menu";
-import { FieldArray, FileField } from "@helm/design-system-core/components/form-extensions";
-import { HoverCard } from "@helm/design-system-core/components/hover-card";
-import { I18nProvider } from "@helm/design-system-core/components/i18n";
-import { MenuBar } from "@helm/design-system-core/components/menubar";
-import { AnnounceProvider } from "@helm/design-system-core/components/announce";
-import { TelemetryProvider } from "@helm/design-system-core/components/telemetry";
-import { Slot } from "@helm/design-system-core/components/slot";
-import * as components from "@helm/design-system-core/components";
-import * as core from "@helm/design-system-core/components/core";
-import * as data from "@helm/design-system-core/components/data";
-import * as feedback from "@helm/design-system-core/components/feedback";
-import * as forms from "@helm/design-system-core/components/forms";
-import * as inspect from "@helm/design-system-core/components/inspect";
-import * as layout from "@helm/design-system-core/components/layout";
-import * as primitives from "@helm/design-system-core/components/primitives";
-import * as status from "@helm/design-system-core/components/status";
-import * as state from "@helm/design-system-core/state";
-import * as tokenApi from "@helm/design-system-core/tokens";
-import { primitiveCoverageSummary } from "@helm/design-system-core/primitives/catalog";
+} from "@mindburn/ui-core";
+import { Calendar } from "@mindburn/ui-core/components/datepicker";
+import { DataTable as SubpathDataTable } from "@mindburn/ui-core/components/data-table";
+import { ContextMenu } from "@mindburn/ui-core/components/context-menu";
+import { FieldArray, FileField } from "@mindburn/ui-core/components/form-extensions";
+import { HoverCard } from "@mindburn/ui-core/components/hover-card";
+import { I18nProvider } from "@mindburn/ui-core/components/i18n";
+import { MenuBar } from "@mindburn/ui-core/components/menubar";
+import { AnnounceProvider } from "@mindburn/ui-core/components/announce";
+import { TelemetryProvider } from "@mindburn/ui-core/components/telemetry";
+import { Slot } from "@mindburn/ui-core/components/slot";
+import * as components from "@mindburn/ui-core/components";
+import * as core from "@mindburn/ui-core/components/core";
+import * as data from "@mindburn/ui-core/components/data";
+import * as feedback from "@mindburn/ui-core/components/feedback";
+import * as forms from "@mindburn/ui-core/components/forms";
+import * as inspect from "@mindburn/ui-core/components/inspect";
+import * as layout from "@mindburn/ui-core/components/layout";
+import * as primitives from "@mindburn/ui-core/components/primitives";
+import * as status from "@mindburn/ui-core/components/status";
+import * as state from "@mindburn/ui-core/state";
+import * as tokenApi from "@mindburn/ui-core/tokens";
+import { primitiveCoverageSummary } from "@mindburn/ui-core/primitives/catalog";
 
 const refs = [
   Button,
@@ -169,37 +169,37 @@ void refs;
   await writeFile(
     path.join(temp, "runtime.mjs"),
     `const paths = [
-  "@helm/design-system-core",
-  "@helm/design-system-core/components",
-  "@helm/design-system-core/components/core",
-  "@helm/design-system-core/components/data",
-  "@helm/design-system-core/components/data-table",
-  "@helm/design-system-core/components/datepicker",
-  "@helm/design-system-core/components/feedback",
-  "@helm/design-system-core/components/form-extensions",
-  "@helm/design-system-core/components/forms",
-  "@helm/design-system-core/components/context-menu",
-  "@helm/design-system-core/components/hover-card",
-  "@helm/design-system-core/components/i18n",
-  "@helm/design-system-core/components/inspect",
-  "@helm/design-system-core/components/layout",
-  "@helm/design-system-core/components/menubar",
-  "@helm/design-system-core/components/primitives",
-  "@helm/design-system-core/components/slot",
-  "@helm/design-system-core/components/status",
-  "@helm/design-system-core/components/theme-provider",
-  "@helm/design-system-core/components/announce",
-  "@helm/design-system-core/components/telemetry",
-  "@helm/design-system-core/primitives/catalog",
-  "@helm/design-system-core/state",
-  "@helm/design-system-core/tokens",
+  "@mindburn/ui-core",
+  "@mindburn/ui-core/components",
+  "@mindburn/ui-core/components/core",
+  "@mindburn/ui-core/components/data",
+  "@mindburn/ui-core/components/data-table",
+  "@mindburn/ui-core/components/datepicker",
+  "@mindburn/ui-core/components/feedback",
+  "@mindburn/ui-core/components/form-extensions",
+  "@mindburn/ui-core/components/forms",
+  "@mindburn/ui-core/components/context-menu",
+  "@mindburn/ui-core/components/hover-card",
+  "@mindburn/ui-core/components/i18n",
+  "@mindburn/ui-core/components/inspect",
+  "@mindburn/ui-core/components/layout",
+  "@mindburn/ui-core/components/menubar",
+  "@mindburn/ui-core/components/primitives",
+  "@mindburn/ui-core/components/slot",
+  "@mindburn/ui-core/components/status",
+  "@mindburn/ui-core/components/theme-provider",
+  "@mindburn/ui-core/components/announce",
+  "@mindburn/ui-core/components/telemetry",
+  "@mindburn/ui-core/primitives/catalog",
+  "@mindburn/ui-core/state",
+  "@mindburn/ui-core/tokens",
 ];
 
 for (const specifier of paths) {
   await import(specifier);
 }
 
-await import("@helm/design-system-core/tokens.json", { with: { type: "json" } });
+await import("@mindburn/ui-core/tokens.json", { with: { type: "json" } });
 `,
   );
 

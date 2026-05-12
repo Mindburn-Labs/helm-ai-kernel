@@ -15,7 +15,7 @@ export interface CanvasElementProps {
 export function CanvasElement({ 
   width = 800, 
   height = 600, 
-  backgroundColor = '#0b0c10',
+  backgroundColor,
   className = ''
 }: CanvasElementProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -28,11 +28,16 @@ export function CanvasElement({
       if (!canvasRef.current) return;
       
       const app = new PIXI.Application();
+      const resolvedBackgroundColor =
+        backgroundColor ??
+        (getComputedStyle(document.documentElement)
+          .getPropertyValue('--helm-bg-inset')
+          .trim() || 'black');
       await app.init({
         canvas: canvasRef.current,
         width,
         height,
-        backgroundColor: backgroundColor,
+        backgroundColor: resolvedBackgroundColor,
         resolution: window.devicePixelRatio || 1,
         autoDensity: true,
         antialias: true

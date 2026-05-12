@@ -1,6 +1,6 @@
 import type { Story, StoryDefault } from "@ladle/react";
 import { useState } from "react";
-import { ContextMenu, Panel, type MenuItem } from "@helm/design-system-core";
+import { ContextMenu, Panel, type MenuItem } from "@mindburn/ui-core";
 
 export default {
   title: "Primitives / ContextMenu",

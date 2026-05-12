@@ -116,6 +116,33 @@ for name in ("MCPJSONRPCRequestId", "MCPJSONRPCResponseId", "MCPToolCallResponse
         "}",
     )
 
+s = replace_one(
+    s,
+    "export function SandboxGrantInspectionFromJSONTyped(json: any, ignoreDiscriminator: boolean): SandboxGrantInspection",
+    "export function SandboxGrantInspectionFromJSONTyped(json: any, ignoreDiscriminator: boolean): SandboxGrantInspection {\n"
+    "    if (json == null) {\n"
+    "        return json;\n"
+    "    }\n"
+    "    if (Array.isArray(json)) {\n"
+    "        return json.map((item) => SandboxBackendProfileFromJSONTyped(item, true));\n"
+    "    }\n"
+    "    return SandboxGrantFromJSONTyped(json, true);\n"
+    "}",
+)
+s = replace_one(
+    s,
+    "export function SandboxGrantInspectionToJSON(value?: SandboxGrantInspection | null): any",
+    "export function SandboxGrantInspectionToJSON(value?: SandboxGrantInspection | null): any {\n"
+    "    if (value == null) {\n"
+    "        return value;\n"
+    "    }\n"
+    "    if (Array.isArray(value)) {\n"
+    "        return value.map((item) => SandboxBackendProfileToJSON(item));\n"
+    "    }\n"
+    "    return SandboxGrantToJSON(value as SandboxGrant);\n"
+    "}",
+)
+
 if "export type ReasonCode = HelmErrorErrorReasonCodeEnum;" not in s:
     s += "\nexport type ReasonCode = HelmErrorErrorReasonCodeEnum;\n"
 
@@ -175,9 +202,61 @@ if [ -d "$PROJECT_ROOT/.gen_tmp/go" ]; then
 // Regenerate: bash scripts/sdk/gen.sh
 
 package client
+
+import (
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "time"
+)
 HEADER
+    GO_SKIP_MODELS=(
+        model_agent_identity_profile.go
+        model_approval_ceremony.go
+        model_approval_web_authn_assertion.go
+        model_approval_web_authn_challenge.go
+        model_authz_health.go
+        model_authz_snapshot.go
+        model_boundary_capability_summary.go
+        model_boundary_checkpoint.go
+        model_boundary_record_verification.go
+        model_boundary_status.go
+        model_budget_ceiling.go
+        model_coexistence_capability_manifest.go
+        model_evidence_envelope_export_request.go
+        model_evidence_envelope_manifest.go
+        model_evidence_envelope_payload.go
+        model_evidence_envelope_verification.go
+        model_execution_boundary_record.go
+        model_mcp_authorization_profile.go
+        model_mcp_authorize_call_request.go
+        model_mcp_quarantine_record.go
+        model_mcp_registry_approval_request.go
+        model_mcp_registry_discover_request.go
+        model_mcp_scan_request.go
+        model_mcp_scan_result.go
+        model_negative_boundary_vector.go
+        model_sandbox_backend_profile.go
+        model_sandbox_grant.go
+        model_sandbox_preflight_request.go
+        model_sandbox_preflight_result.go
+        model_telemetry_export_request.go
+        model_telemetry_export_result.go
+        model_telemetry_o_tel_config.go
+    )
+    should_skip_go_model() {
+        local base="$1"
+        for skip in "${GO_SKIP_MODELS[@]}"; do
+            if [ "$base" = "$skip" ]; then
+                return 0
+            fi
+        done
+        return 1
+    }
     for f in "$PROJECT_ROOT/.gen_tmp/go/model_"*.go; do
-        [ -f "$f" ] && sed '/^package /d;/^import/,/^)/d' "$f" >> "$PROJECT_ROOT/sdk/go/client/types_gen.go" 2>/dev/null || true
+        if [ -f "$f" ] && ! should_skip_go_model "$(basename "$f")"; then
+            sed '/^package /d;/^import/,/^)/d' "$f" >> "$PROJECT_ROOT/sdk/go/client/types_gen.go" 2>/dev/null || true
+        fi
     done
     python3 - "$PROJECT_ROOT/sdk/go/client/types_gen.go" <<'PY'
 from pathlib import Path
@@ -187,6 +266,7 @@ path = Path(sys.argv[1])
 s = path.read_text()
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY
+    gofmt -w "$PROJECT_ROOT/sdk/go/client/types_gen.go"
 fi
 echo "  [go] ✅ sdk/go/client/types_gen.go"
 
@@ -207,7 +287,26 @@ if [ -d "$PROJECT_ROOT/.gen_tmp/rust/src/models" ]; then
 use serde::{Deserialize, Serialize};
 HEADER
     for f in "$PROJECT_ROOT/.gen_tmp/rust/src/models/"*.rs; do
-        [ -f "$f" ] && grep -v "^use\|^pub mod\|^mod" "$f" >> "$PROJECT_ROOT/sdk/rust/src/types_gen.rs" 2>/dev/null || true
+        [ -f "$f" ] && python3 - "$f" >> "$PROJECT_ROOT/sdk/rust/src/types_gen.rs" <<'PY' || true
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+s = "\n".join(
+    line
+    for line in path.read_text().splitlines()
+    if not (line.startswith("use ") or line.startswith("pub mod") or line.startswith("mod "))
+)
+struct_match = re.search(r"\bpub struct ([A-Za-z0-9_]+)\b", s)
+if struct_match:
+    struct_name = struct_match.group(1)
+    enum_names = list(dict.fromkeys(re.findall(r"\bpub enum ([A-Za-z0-9_]+)\b", s)))
+    for enum_name in enum_names:
+        renamed = f"{struct_name}{enum_name}"
+        s = re.sub(rf"\b{re.escape(enum_name)}\b", renamed, s)
+print(s)
+PY
     done
     python3 - "$PROJECT_ROOT/sdk/rust/src/types_gen.rs" <<'PY'
 from pathlib import Path
@@ -283,6 +382,9 @@ if pos != -1:
     dup = s.find(verdict_block, pos)
     if dup != -1:
         s = s[:dup] + "// Duplicate Verdict enum removed (canonical def above)\n" + s[dup + len(verdict_block):]
+
+if "pub type ReasonCode = HelmErrorErrorReasonCode;" not in s and "pub enum HelmErrorErrorReasonCode" in s:
+    s += "\npub type ReasonCode = HelmErrorErrorReasonCode;\n"
 
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY
@@ -367,15 +469,26 @@ HEADER
     for f in "$PROJECT_ROOT/.gen_tmp/java/src/main/java/labs/mindburn/helm/models/"*.java; do
         [ -f "$f" ] && sed '/^package /d;/^import/d' "$f" >> "$JAVA_OUT/TypesGen.java" 2>/dev/null || true
     done
-    python3 - "$JAVA_OUT/TypesGen.java" <<'PY'
+python3 - "$JAVA_OUT/TypesGen.java" <<'PY'
 from pathlib import Path
+import re
 import sys
 
 path = Path(sys.argv[1])
 s = path.read_text()
+s = re.sub(
+    r'@javax\.annotation\.Generated\(value = "org\.openapitools\.codegen\.languages\.JavaClientCodegen", date = "[^"]+", comments = "Generator version: ([^"]+)"\)',
+    r'@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: \1")',
+    s,
+)
 s = s.replace("public class ", "public static class ")
 s = s.replace("Map<String, Object>.class", "Map.class")
+s = s.replace("List<SandboxBackendProfile>.class", "List.class")
+s = s.replace("getActualInstance() instanceof List<SandboxBackendProfile>", "getActualInstance() instanceof List")
+s = s.replace("((SandboxBackendProfile)getActualInstance()).get(i)", "((List<SandboxBackendProfile>)getActualInstance()).get(i)")
 s = s.replace("getMap<String, Object>()", "getMap()")
+s = s.replace("getList<SandboxBackendProfile>()", "getSandboxBackendProfiles()")
+s = s.replace("public List<SandboxBackendProfile> getSandboxBackendProfiles() throws ClassCastException", "@SuppressWarnings(\"unchecked\")\n    public List<SandboxBackendProfile> getSandboxBackendProfiles() throws ClassCastException")
 s = s.replace("public Map<String, Object> getMap() throws ClassCastException", "public Map<String, Object> getMapStringObject() throws ClassCastException")
 s = s.replace(
     "if (getActualInstance() instanceof Map<String, Object>) {\n        if (getActualInstance() != null) {",

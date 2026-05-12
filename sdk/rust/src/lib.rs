@@ -387,6 +387,14 @@ impl HelmClient {
         })
     }
 
+    /// POST /api/v1/evaluate
+    pub fn evaluate_decision<T: Serialize>(
+        &self,
+        req: &T,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value("/api/v1/evaluate", req)
+    }
+
     /// POST /api/v1/kernel/approve
     pub fn approve_intent(&self, req: &ApprovalRequest) -> Result<Receipt, HelmApiError> {
         let resp = self

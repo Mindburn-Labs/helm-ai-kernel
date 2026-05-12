@@ -5,11 +5,11 @@ last_reviewed: 2026-05-05
 
 # HELM OSS Developer Portal
 
-HELM OSS is the open execution boundary for governed AI tool use. It gives developers a local kernel, policy bundle loader, OpenAI-compatible proxy path, MCP integration, receipts, evidence packs, and offline verification without requiring a hosted control plane.
+HELM OSS is the fail-closed execution firewall for AI agents. It gives developers a local kernel, policy bundle loader, OpenAI-compatible proxy path, MCP firewall, receipts, EvidencePacks, and offline verification without requiring a hosted service.
 
-## Audience
+## Who This Is For
 
-This page is for open-source developers, platform teams, security reviewers, and framework authors who need to integrate or inspect the HELM kernel directly. If you need workspaces, approvals, SSO, retention, or team administration, start with the Teams and Enterprise docs on `helm.docs.mindburn.org`.
+This page is for open-source developers, platform teams, security reviewers, and framework authors who need to integrate or inspect the HELM OSS kernel directly.
 
 ## Outcome
 
@@ -83,7 +83,7 @@ HELM OSS docs separate implementation security from compliance mapping:
 - [Execution Security Model](EXECUTION_SECURITY_MODEL.md) describes containment, policy evaluation, receipts, and evidence.
 - [OWASP MCP Threat Mapping](OWASP_MCP_THREAT_MAPPING.md) maps MCP-specific risks to HELM controls.
 - [OWASP Agentic Top 10 Mapping](security/owasp-agentic-top10-coverage.md) maps agentic failure modes to boundary controls.
-- [NIST AI RMF to ISO 42001 Crosswalk](compliance/nist-ai-rmf-iso-42001-crosswalk.md) explains how reference packs are intended to support operator evidence.
+- [NIST AI RMF to ISO 42001 Crosswalk](compliance/nist-ai-rmf-iso-42001-crosswalk.md) explains how reference packs can support operator evidence without claiming certification.
 
 ## Compatibility and Publishing
 

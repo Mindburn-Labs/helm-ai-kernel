@@ -1,7 +1,7 @@
 # Mindburn Labs Design System Governance (UCS 1.3)
 
 ## Core Philosophy
-`@helm/design-system-core` is the shared Mindburn UI foundation and the canonical source for HELM OSS-safe primitives, base tokens, semantic state utilities, and production CSS.
+`@mindburn/ui-core` is the shared Mindburn UI foundation and the canonical source for HELM OSS-safe primitives, base tokens, semantic state utilities, and production CSS.
 
 Sibling and portfolio products may consume the core package, but they do not become normative HELM components and they cannot define HELM conformance. HELM product truth remains bounded to HELM OSS, HELM Commercial, and OrgGenome Compiler scope; Titan, Pilot, Mindburn Admin, docs, and marketing layers are consumers or product skins.
 
@@ -11,12 +11,12 @@ Our philosophy is **Canonical Compliance**:
 - **Fail-Closed Accessibility**: Surfaces that fail WCAG 2.2 AA standards (via `axe-core`) cannot be merged.
 
 ## System Boundaries
-- `@helm/design-system-core`: HELM OSS-safe primitives, layout structures, canonical base tokens, accessibility primitives, and platform-agnostic components.
+- `@mindburn/ui-core`: HELM OSS-safe primitives, layout structures, canonical base tokens, accessibility primitives, and platform-agnostic components.
 - `@helm/design-system-helm`: HELM product-specific proof, policy, evidence, execution, assistant, route, state, and handoff patterns built on public core exports.
 - `site-ui`: Mindburn marketing and editorial compositions built on public core exports.
 - Product skins: Titan and other sibling products may alias or extend core foundations for their own domain semantics, but those skins are not HELM conformance sources.
 
 ## Contribution Process
 1. **No Local Escapes**: Shared primitives and base tokens must be elevated to the core design system before being consumed by a downstream repository. Product-domain components stay in their product layer.
-2. **Review Requirement**: Any changes to `design-system-core` require review from the Core Architecture team.
+2. **Review Requirement**: Any changes to `@mindburn/ui-core` require review from the Core Architecture team.
 3. **Automated Enforcement**: All PRs must pass Playwright Visual Regression tests and Stylelint token enforcement.

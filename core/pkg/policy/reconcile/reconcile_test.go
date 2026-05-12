@@ -2,7 +2,10 @@ package reconcile
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -79,6 +82,66 @@ func TestReconcilerInstallsInitialSnapshotAndUpdatesOnPoll(t *testing.T) {
 	}
 	if len(statuses) != 1 || statuses[0].InstalledPolicyEpoch != 2 {
 		t.Fatalf("poll did not install epoch 2: %+v", statuses)
+	}
+}
+
+func TestControlPlaneSourcePublishesPolicyToReconciler(t *testing.T) {
+	scope := PolicyScope{TenantID: "tenant-a", WorkspaceID: "workspace-a"}
+	bundle := []byte("commercial-policy-v7")
+	head := PolicyHead{
+		Scope:       scope,
+		PolicyEpoch: 7,
+		PolicyHash:  HashBytes(bundle),
+		BundleRef:   "controlplane://policies/tenant-a/workspace-a/7",
+		SourceRefs:  []string{"company-policy-version:7", "approval:policy-council"},
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("tenant_id") != scope.TenantID || r.URL.Query().Get("workspace_id") != scope.WorkspaceID {
+			http.Error(w, "wrong scope", http.StatusBadRequest)
+			return
+		}
+		switch r.URL.Path {
+		case "/api/v1/policy/head":
+			_ = json.NewEncoder(w).Encode(head)
+		case "/api/v1/policy/bundle":
+			if r.URL.Query().Get("policy_epoch") != "7" {
+				http.Error(w, "wrong epoch", http.StatusBadRequest)
+				return
+			}
+			_, _ = w.Write(bundle)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	source := NewControlPlaneSource(server.URL, scope)
+	store := NewAtomicSnapshotStore()
+	reconciler, err := NewReconciler(ReconcilerConfig{
+		Source:            source,
+		Store:             store,
+		Compiler:          testCompiler,
+		KeepLastKnownGood: true,
+	})
+	if err != nil {
+		t.Fatalf("new reconciler: %v", err)
+	}
+	status, err := reconciler.Reconcile(context.Background(), scope)
+	if err != nil {
+		t.Fatalf("reconcile controlplane source: status=%+v err=%v", status, err)
+	}
+	if !status.Updated || status.PolicyEpoch != 7 || status.PolicyHash != HashBytes(bundle) {
+		t.Fatalf("controlplane policy was not installed: %+v", status)
+	}
+	if status.BundleRef != head.BundleRef || len(status.SourceRefs) != 2 || status.AuditEvent != "policy_reconcile" {
+		t.Fatalf("status missing policy audit/source refs: %+v", status)
+	}
+	current, ok := store.Get(scope)
+	if !ok || current.PolicyEpoch != 7 || current.PolicyHash != HashBytes(bundle) {
+		t.Fatalf("store missing installed controlplane policy: %+v", current)
+	}
+	if len(current.SourceRefs) != 2 {
+		t.Fatalf("snapshot did not retain source refs: %+v", current)
 	}
 }
 

@@ -26,7 +26,7 @@ type Finding struct {
 
 	// Vendor identifies the agent framework or service involved.
 	//   "openai" | "anthropic" | "langchain" | "crewai" | "autogen" |
-	//   "llamaindex" | "semantic-kernel" | "vercel-ai" | "agent-os" (AGT) |
+	//   "llamaindex" | "semantic-kernel" | "agent-os" (AGT) |
 	//   "helm" | "mcp"
 	Vendor string `json:"vendor"`
 

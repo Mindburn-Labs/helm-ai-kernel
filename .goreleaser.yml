@@ -26,9 +26,9 @@ builds:
         goarch: arm64
     ldflags:
       - -s -w
-      - -X main.Version={{.Version}}
-      - -X main.Commit={{.Commit}}
-      - -X main.Date={{.Date}}
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.buildTime={{.Date}}
 
 archives:
   - id: default
@@ -71,7 +71,7 @@ docker_signs:
 brews:
   - name: helm
     repository:
-      owner: mindburn
+      owner: mindburnlabs
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
@@ -99,6 +99,8 @@ release:
   prerelease: auto
   draft: false
   extra_files:
-    - glob: "dist/helm.mcpb"
-    - glob: "dist/compatibility-matrix.*"
-    - glob: "dist/golden-evidencepack.tar"
+    - glob: "dist/release-assets/helm.mcpb"
+    - glob: "dist/release-assets/evidence-pack.tar"
+    - glob: "dist/release-assets/release-attestation.json"
+    - glob: "dist/release-assets/sample-policy-material.tar"
+    - glob: "dist/release-assets/release.high_risk.v3.toml"

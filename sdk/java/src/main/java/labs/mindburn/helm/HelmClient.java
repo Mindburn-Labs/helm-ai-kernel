@@ -240,6 +240,14 @@ public class HelmClient {
         return send(r, ChatCompletionResponse.class);
     }
 
+    /** POST /api/v1/evaluate */
+    public JsonElement evaluateDecision(Object req) {
+        HttpRequest r = this.req("POST", "/api/v1/evaluate")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
+                .build();
+        return sendJson(r);
+    }
+
     /** POST /api/v1/kernel/approve */
     public Receipt approveIntent(ApprovalRequest req) {
         HttpRequest r = this.req("POST", "/api/v1/kernel/approve")

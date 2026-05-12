@@ -16,7 +16,7 @@ import {
   type ButtonProps,
   type ComboboxOption,
   type DataTableColumn,
-} from "@helm/design-system-core";
+} from "@mindburn/ui-core";
 
 export default {
   title: "Primitives",

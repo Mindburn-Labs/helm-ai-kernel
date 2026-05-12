@@ -14,7 +14,7 @@ Use a **package-local npm package** with this structure:
 
 ```
 packages/
-  design-system-core/ → @helm/design-system-core
+  design-system-core/ → @mindburn/ui-core
 ```
 
 - The package owns its `package.json`, `package-lock.json`, TypeScript config, test config, build scripts, smoke checks, and publishable `exports` map.

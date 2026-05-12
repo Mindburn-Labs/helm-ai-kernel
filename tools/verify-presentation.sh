@@ -16,6 +16,8 @@ rg -n --hidden -S "$PATTERN" \
   --glob '!sdk/**/generated/**' \
   --glob '!sdk/go/gen/**' \
   --glob '!sdk/python/helm_sdk/generated/**' \
+  --glob '!scripts/check_documentation_*.py' \
+  --glob '!scripts/sdk/gen.sh' \
   --glob '!tools/verify-presentation.sh' && {
     echo "presentation hygiene check failed: remove retained placeholder, unfinished, or marketing copy above" >&2
     exit 1

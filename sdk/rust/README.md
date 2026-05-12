@@ -5,10 +5,10 @@ Typed Rust client for the retained HELM kernel API.
 ## Install
 
 ```toml
-helm-sdk = "0.4.0"
+helm-sdk = "0.5.0"
 ```
 
-Package metadata declares crate version `0.4.0` in `Cargo.toml`.
+Package metadata declares crate version `0.5.0` in `Cargo.toml`.
 
 ## Local Development
 
@@ -29,7 +29,7 @@ Protobuf bindings under `src/generated/` are generated from
 use helm_sdk::{ChatCompletionRequest, ChatCompletionRequestMessagesInner, HelmClient, Role};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = HelmClient::new("http://port 3000");
+    let client = HelmClient::new("http://127.0.0.1:7714");
     let result = client.chat_completions(&ChatCompletionRequest::new(
         "gpt-4".to_string(),
         vec![ChatCompletionRequestMessagesInner::new(
@@ -53,4 +53,4 @@ runtime query is provided.
 
 ## Release Notes
 
-`0.4.0` is the cleaned OSS kernel baseline with the retained OpenAPI client surface and optional protobuf codegen.
+`0.5.0` is the cleaned OSS kernel baseline with the retained OpenAPI client surface and optional protobuf codegen.

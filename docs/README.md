@@ -1,11 +1,12 @@
 # HELM OSS Docs
 
-This tree is the canonical public documentation source for HELM OSS. Public protocol, schema, SDK, conformance, verification, and design-system-core material starts here before it is mirrored into commercial HELM surfaces.
+This tree is the canonical public documentation source for HELM OSS. Public protocol, schema, SDK, conformance, verification, deployment, and Console material starts here before it is mirrored to the docs site.
 
 ## Start
 
 - [Documentation index](index.md)
 - [Quickstart](QUICKSTART.md)
+- [Developer journey](DEVELOPER_JOURNEY.md)
 - [Architecture](ARCHITECTURE.md)
 - [Canonical diagrams](architecture/canonical-diagrams.md)
 
@@ -21,6 +22,8 @@ This tree is the canonical public documentation source for HELM OSS. Public prot
 - [Compatibility](COMPATIBILITY.md)
 - [Execution security model](EXECUTION_SECURITY_MODEL.md)
 - [SDK index](sdks/00_INDEX.md)
+- [CLI reference](reference/cli.md)
+- [HTTP API reference](reference/http-api.md)
 - [OpenAPI contract](../api/openapi/README.md)
 
 ## Explanation

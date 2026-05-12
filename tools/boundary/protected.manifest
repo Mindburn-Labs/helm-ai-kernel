@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-05-12T14:57:16Z
-# Commit: 0a9e2871b4535d17eb50333fd9bc9efa5aa9c616
+# Generated: 2026-05-12T20:09:49Z
+# Commit: 50729d62ec088c34bfb5b1a7d69166c4f33c8685
 # Format: SHA256  PATH
 #
 8986a802cccc1469019c7da0b92b3e8182897e24cb8ce2b90d237b7ffb2b3b67  core/pkg/kernel/README.md
@@ -120,7 +120,7 @@ a65443797c63eaf591076538f1fb4cddcd578c120db433b5a3b70b6521ba6f6c  core/pkg/contr
 13ca81cd8b0b8e86d1c3f6a2db8eea6f36bc7ca2cdd9034c5bd838520ad0e27f  core/pkg/contracts/autonomy_envelope.go
 23425a052bfbb886dabacb4eef162782f58e153289eb53e2d224506a2819cac7  core/pkg/contracts/autonomy_state.go
 a86578b8bcd29db5e0bbc3321e0ea7b4e9b5aa174760782bc47b5e976ba07c0e  core/pkg/contracts/autonomy_state_test.go
-33cb69593d9f9ca871fbb91bf99058337423854670f5d655c613f0692c368f49  core/pkg/contracts/boundary_surfaces.go
+9182be7780200297ae4bc58fc0a9bf7a1df5463867ddb99f980be696b376fe06  core/pkg/contracts/boundary_surfaces.go
 58d52b26cb02373d2cd3aeb7bde69ba02e9f7cd1cd52b203407a4c17c2b46424  core/pkg/contracts/build.go
 cb435386cac61780c38600c984752912aca4d48d41115d9ec41e704aca5ecf66  core/pkg/contracts/capability_diff.go
 c45b82300afc35f97deb75cf37416a8e014e389cf47184990a89a8ba2931372b  core/pkg/contracts/capability_diff_determinism_test.go
@@ -330,9 +330,9 @@ b5ee6af6ed178f55f3120b176d7d004dc238df58d4b04fc3fcf326dff24e4cd9  core/pkg/recei
 5954161e04428dee60638925df72bb144201ced5012d022d423221043450f225  core/pkg/receipts/policies/enforcer.go
 c700c48a580d1c1bc0ea011d3d52006f71e302197b00db9bbceea4a7d46e56e2  core/pkg/receipts/policies/policies_test.go
 397135cd17dfd342e8fb2a437a0fbd33dd48e5294c19649426413dfcc8a1ec58  core/pkg/receipts/policies/policy_table.go
-66f487bd160961a884de2c1c8ef9d5af50b6330d9dad1a452b588d706e160d57  core/pkg/verifier/verifier.go
+79351aaee943f639e4cc06979e3523f3aac90a6789a1aa1d1b7f0a04ff159c8c  core/pkg/verifier/verifier.go
 ce266e57a125c5f28989b6a9e50932b26c37289ea94fc8aa26ef8c83abc194da  core/pkg/verifier/verifier_behavior_coverage_test.go
-a342655712a50b2d3d17a33fbc0554c746df1b2f61aa19f283fffd87f3fa5b4a  core/pkg/verifier/verifier_test.go
+ac6f31ff9dcfbacfc56fc1b5d3c9ee73600ba096f2df2894d94bb3d0ec6140d4  core/pkg/verifier/verifier_test.go
 cc210265ddc2c419c3ca872f476bd735e8ab559189fbaac572e2abfd780866e7  core/pkg/connectors/sandbox/README.md
 bdbbfb0f816f0c903e5ee350a7c1f734699cc4202263ca8be81c49b1c263d297  core/pkg/connectors/sandbox/branchfs.go
 50cba522e21f898bbbdf30fdf6dc3e4810f67e234892ff660caacf063ea10b9f  core/pkg/connectors/sandbox/bridge.go

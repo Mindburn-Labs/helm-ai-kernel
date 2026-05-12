@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -39,6 +40,25 @@ type benchHarness struct {
 	signer   crypto.Signer
 	store    *store.SQLiteReceiptStore
 	db       *sql.DB
+}
+
+func benchHelmVersion() string {
+	if version := strings.TrimSpace(os.Getenv("HELM_VERSION")); version != "" {
+		return strings.TrimPrefix(version, "v")
+	}
+	for _, candidate := range []string{
+		filepath.Join("..", "..", "VERSION"),
+		filepath.Join("..", "VERSION"),
+		"VERSION",
+	} {
+		raw, err := os.ReadFile(candidate)
+		if err == nil {
+			if version := strings.TrimSpace(string(raw)); version != "" {
+				return strings.TrimPrefix(version, "v")
+			}
+		}
+	}
+	return "unknown"
 }
 
 func newHarness(tb testing.TB) *benchHarness {
@@ -559,7 +579,7 @@ func TestOverheadReport(t *testing.T) {
 
 	// Write JSON report
 	report := map[string]any{
-		"helm_version": "0.4.0",
+		"helm_version": benchHelmVersion(),
 		"timestamp":    time.Now().UTC().Format(time.RFC3339),
 		"go_version":   runtime.Version(),
 		"go_os":        runtime.GOOS,

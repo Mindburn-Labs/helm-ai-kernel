@@ -1,8 +1,8 @@
 export const dataTableCodeConnect = {
-  figmaLibrary: "HELM Core UI Library",
+  figmaLibrary: "Mindburn Core UI Library",
   figmaComponent: "DataTable",
-  packageName: "@helm/design-system-core",
-  importPath: "@helm/design-system-core",
+  packageName: "@mindburn/ui-core",
+  importPath: "@mindburn/ui-core",
   exportName: "DataTable",
   status: "stub",
   notes: "Replace with a Figma Code Connect mapping when the library component key is available."

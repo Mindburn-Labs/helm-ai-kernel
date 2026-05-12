@@ -47,8 +47,10 @@ func (g *G0BuildIdentity) Run(ctx *conform.RunContext) *conform.GateResult {
 	}
 
 	// 2. Check dependency locks (go.sum)
-	goSumPath := filepath.Join(ctx.ProjectRoot, "go.sum")
-	if fileExists(goSumPath) {
+	if firstExistingFile(
+		filepath.Join(ctx.ProjectRoot, "go.sum"),
+		filepath.Join(ctx.ProjectRoot, "core", "go.sum"),
+	) != "" {
 		result.Metrics.Counts["dep_locks"] = 1
 	} else {
 		result.Pass = false

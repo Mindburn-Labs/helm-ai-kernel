@@ -103,7 +103,7 @@ trust:
 	fmt.Fprintf(stdout, "     %shelm demo organization --template starter%s\n\n", ColorBold, ColorReset)
 
 	fmt.Fprintf(stdout, "  %s2.%s Start the governance proxy:\n", ColorBold+ColorCyan, ColorReset)
-	fmt.Fprintf(stdout, "     %shelm proxy --upstream https://api.openai.com/v1%s\n\n", ColorBold, ColorReset)
+	fmt.Fprintf(stdout, "     %shelm proxy --upstream http://127.0.0.1:19090/v1%s\n\n", ColorBold, ColorReset)
 
 	fmt.Fprintf(stdout, "  %s3.%s Start the MCP server:\n", ColorBold+ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "     %shelm mcp serve%s\n\n", ColorBold, ColorReset)

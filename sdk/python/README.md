@@ -2,13 +2,15 @@
 
 Typed Python client for the retained HELM kernel API.
 
-## Install
+## Local Install
 
 ```bash
-pip install helm-sdk
+cd sdk/python
+python -m pip install .
 ```
 
-Package metadata declares version `0.4.0` in `pyproject.toml`.
+Package metadata declares version `0.5.0` in `pyproject.toml`; this README does
+not claim that a registry package has been published.
 
 ## Local Development
 
@@ -26,21 +28,19 @@ been run.
 ## Usage
 
 ```python
-from helm_sdk import HelmClient, HelmApiError, ChatCompletionRequest, ChatMessage
+from helm_sdk import HelmClient
 
-client = HelmClient(base_url="http://port 3000")
-
-try:
-    result = client.chat_completions(
-        ChatCompletionRequest(
-            model="gpt-4",
-            messages=[ChatMessage(role="user", content="hello")],
-        )
-    )
-    print(result.choices[0].message.content)
-except HelmApiError as err:
-    print(err.reason_code)
+client = HelmClient(base_url="http://127.0.0.1:7715")
+decision = client.evaluate_decision({
+    "principal": "example-agent",
+    "action": "read-ticket",
+    "resource": "ticket:123",
+})
+print(decision["verdict"])  # ALLOW, DENY, or ESCALATE
 ```
+
+Run the first-class local example with `make sdk-examples-smoke` or directly
+from `examples/python_sdk/`.
 
 ## Execution Boundary Methods
 
@@ -55,4 +55,4 @@ EvidencePack roots stay authoritative.
 
 ## Release Notes
 
-`0.4.0` is the cleaned OSS kernel baseline with the retained OpenAPI client surface and local test coverage.
+`0.5.0` is the cleaned OSS kernel baseline with the retained OpenAPI client surface and local test coverage.

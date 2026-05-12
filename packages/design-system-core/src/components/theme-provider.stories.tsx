@@ -1,5 +1,5 @@
 import type { Story, StoryDefault } from "@ladle/react";
-import { Button, Panel, ThemeProvider, useTheme } from "@helm/design-system-core";
+import { Button, Panel, ThemeProvider, useTheme } from "@mindburn/ui-core";
 
 export default {
   title: "Providers / ThemeProvider",

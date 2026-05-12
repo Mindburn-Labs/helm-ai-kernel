@@ -5,11 +5,7 @@ last_reviewed: 2026-05-05
 
 # Verification
 
-## Audience
-
-## Outcome
-
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
+Use this page when you need to verify a HELM OSS EvidencePack, boundary record, release artifact, or optional signature bundle without trusting prose.
 
 ## Source Truth
 
@@ -57,8 +53,37 @@ offline checks pass.
 Current public release: `v0.4.0`, published on 2026-04-25 at
 <https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.4.0>. The release
 page attaches platform binaries, `SHA256SUMS.txt`, `sbom.json`,
-`release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`,
+`release-attestation.json` metadata, `evidence-pack.tar`, `release.high_risk.v3.toml`,
 `helm.mcpb`, and `helm.rb`.
+
+There is no public GitHub Release object for `v0.4.1`; treat `v0.4.0` as the
+actual public baseline until `v0.5.0` is published.
+
+## v0.5.0 Target Asset Contract
+
+The `v0.5.0` release workflow stages all primary assets under
+`dist/release-assets/` before upload:
+
+- `helm-darwin-amd64`
+- `helm-darwin-arm64`
+- `helm-linux-amd64`
+- `helm-linux-arm64`
+- `helm-windows-amd64.exe`
+- `SHA256SUMS.txt`
+- `sbom.json`
+- `v0.5.0.openvex.json`
+- `release-attestation.json`
+- `evidence-pack.tar`
+- `release.high_risk.v3.toml`
+- `sample-policy-material.tar`
+- `helm.mcpb`
+- `helm.rb`
+
+`sample-policy-material.tar` must include both
+`release.high_risk.v3.toml` and
+`reference_packs/eu_ai_act_high_risk.v1.json`. The release workflow signs each
+primary asset, including `SHA256SUMS.txt`, with a matching
+`*.cosign.bundle`.
 
 ## Offline Verification
 
@@ -88,6 +113,20 @@ helm verify evidence-pack.tar --online
 helm export --evidence ./data/evidence --out evidence.tar
 helm verify evidence.tar
 ```
+
+## Local Tamper-Failure Demo
+
+The launch proof demo exercises the public verification path without external
+network calls:
+
+```bash
+./scripts/launch/demo-proof.sh
+```
+
+The script starts a localhost HELM boundary, creates a signed `DENY` receipt
+for the dangerous shell fixture, verifies the receipt through `/api/demo/verify`,
+then flips the verdict through `/api/demo/tamper`. The original receipt must
+verify, and the tamper attempt must fail signature and ProofGraph hash checks.
 
 ## Boundary Records, Checkpoints, and Envelopes
 
@@ -119,12 +158,16 @@ check the digest before executing the binary:
 shasum -a 256 -c SHA256SUMS.txt --ignore-missing
 ```
 
-Inspect the release attestation and SBOM:
+Inspect the release metadata and SBOM:
 
 ```bash
 jq . release-attestation.json
 jq . sbom.json
 ```
+
+`release-attestation.json` in `v0.4.0` is release metadata. Treat it as
+descriptive unless a release also provides a cryptographically verifiable
+provenance predicate and a documented verifier command.
 
 Verify the bundled offline evidence pack:
 
@@ -132,9 +175,13 @@ Verify the bundled offline evidence pack:
 helm verify evidence-pack.tar
 ```
 
-For `v0.4.0`, the included evidence pack verifies offline and reports
-`anchor offline`; online proof anchoring depends on the Titan proof deployment
-and public proof credentials.
+For `v0.5.0`, this command must pass without network access. The verifier
+accepts both the legacy `receipts/` layout and the canonical
+`02_PROOFGRAPH/receipts/` layout.
+
+For `v0.4.0`, the included EvidencePack verifies offline and reports
+`anchor offline`; online proof anchoring depends on release-specific public
+proof metadata and credentials.
 
 ## Cosign Artifact Verification When Bundles Are Attached
 
@@ -166,11 +213,13 @@ directory contains matching `*.cosign.bundle` files:
 bash scripts/release/verify_cosign.sh ./downloaded-release/
 ```
 
-The script walks the directory, finds every `*.cosign.bundle`, runs
-`cosign verify-blob` against the matching artifact, and exits non-zero on any
-failure. The `make verify-cosign` target runs the same script against `dist/`.
-If the release has no bundle assets, use checksum, SBOM, release-attestation,
-offline evidence-pack, and reproducible-build verification instead.
+The script walks the directory, finds every `*.cosign.bundle`, and runs
+`cosign verify-blob` against the matching artifact. A run with zero bundle
+files proves no signature coverage; check that bundles exist before treating
+Cosign as part of the release evidence. The `make verify-cosign` target runs
+the same script against `dist/`. If the release has no bundle assets, use
+checksum, SBOM, release metadata, offline EvidencePack, and reproducible-build
+verification instead.
 
 ### VEX Consumption When A VEX File Is Attached
 
@@ -190,8 +239,15 @@ the scanner can still surface them.
 
 ```bash
 make test
+make test-console
+make test-platform
 make test-all
 make crucible
+make launch-smoke
+make sdk-openapi-check
+make sdk-examples-smoke
+make launch-ready
+make release-smoke
 ```
 
 ## Benchmarks

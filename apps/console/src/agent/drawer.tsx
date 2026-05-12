@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Loader2, MessageSquareMore, X } from "lucide-react";
-import { Badge, Button, EmptyState } from "@helm/design-system-core";
+import { Badge, Button, EmptyState } from "@mindburn/ui-core";
 import { useHelmOssAgentProvider } from "./provider";
 import { useOssAgentRenderers } from "./renderers";
 import { runOssAgent, type OssAgentMessage } from "./runtime";

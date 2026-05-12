@@ -905,6 +905,8 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 	argsHash := cmd.String("args-hash", "sha256:local", "Canonical tool args hash")
 	scopes := cmd.String("scopes", "", "Comma-separated granted OAuth scopes")
 	pinnedSchema := cmd.String("pinned-schema-hash", "", "Pinned tool schema hash")
+	toolSchemaJSON := cmd.String("tool-schema-json", "", "JSON Schema for a discovered server-local tool")
+	outputSchemaJSON := cmd.String("output-schema-json", "", "Output JSON Schema for a discovered server-local tool")
 	oauthResource := cmd.String("oauth-resource", "https://helm.local/mcp", "OAuth resource indicator")
 	approved := cmd.Bool("approved", false, "Seed an approved local server before authorization")
 	receiptID := cmd.String("receipt-id", "", "Receipt id to bind")
@@ -918,6 +920,30 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 	}
 	catalog := mcppkg.NewToolCatalog()
 	catalog.RegisterCommonTools()
+	if *toolSchemaJSON != "" {
+		var toolSchema any
+		if err := json.Unmarshal([]byte(*toolSchemaJSON), &toolSchema); err != nil {
+			fmt.Fprintf(stderr, "Error: invalid --tool-schema-json: %v\n", err)
+			return 2
+		}
+		var outputSchema any
+		if *outputSchemaJSON != "" {
+			if err := json.Unmarshal([]byte(*outputSchemaJSON), &outputSchema); err != nil {
+				fmt.Fprintf(stderr, "Error: invalid --output-schema-json: %v\n", err)
+				return 2
+			}
+		}
+		if err := catalog.Register(context.Background(), mcppkg.ToolRef{
+			Name:         *toolName,
+			ServerID:     *serverID,
+			Description:  "Discovered MCP tool with caller-supplied pinned schema",
+			Schema:       toolSchema,
+			OutputSchema: outputSchema,
+		}); err != nil {
+			fmt.Fprintf(stderr, "Error: %v\n", err)
+			return 2
+		}
+	}
 	surfaces := newLocalSurfaceRegistry()
 	quarantine := mcppkg.NewQuarantineRegistry()
 	hydrateMCPQuarantine(context.Background(), quarantine, surfaces.ListMCPServers())

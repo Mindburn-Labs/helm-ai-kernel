@@ -51,6 +51,48 @@ func createValidBundleFixture(t *testing.T) string {
 	return dir
 }
 
+func createValidCanonicalBundleFixture(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	writeJSON(t, filepath.Join(dir, "00_INDEX.json"), map[string]any{
+		"version": "1.0.0",
+		"entries": []any{},
+	})
+	writeJSON(t, filepath.Join(dir, "01_SCORE.json"), map[string]any{
+		"pass": true,
+	})
+	for _, subdir := range []string{
+		"02_PROOFGRAPH",
+		"03_TELEMETRY",
+		"04_EXPORTS",
+		"05_DIFFS",
+		"06_LOGS",
+		"07_ATTESTATIONS",
+		"08_TAPES",
+		"09_SCHEMAS",
+		"12_REPORTS",
+	} {
+		if err := os.MkdirAll(filepath.Join(dir, subdir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(receiptsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(receiptsDir, "receipt-001.json"), map[string]any{
+		"receipt_id":    "rcpt-001",
+		"decision_id":   "dec-001",
+		"decision_hash": "sha256:abc123",
+		"status":        "APPLIED",
+		"lamport_clock": 1,
+	})
+
+	return dir
+}
+
 func TestVerifyBundle_Valid(t *testing.T) {
 	dir := createValidBundleFixture(t)
 
@@ -68,6 +110,23 @@ func TestVerifyBundle_Valid(t *testing.T) {
 	}
 	if report.VerifierVer != VerifierVersion {
 		t.Errorf("expected version %s, got %s", VerifierVersion, report.VerifierVer)
+	}
+}
+
+func TestVerifyBundle_CanonicalProofGraphReceipts(t *testing.T) {
+	dir := createValidCanonicalBundleFixture(t)
+
+	report, err := VerifyBundle(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !report.Verified {
+		t.Errorf("expected PASS, got FAIL: %s", report.Summary)
+		for _, c := range report.Checks {
+			if !c.Pass {
+				t.Logf("  FAIL: %s — %s", c.Name, c.Reason)
+			}
+		}
 	}
 }
 

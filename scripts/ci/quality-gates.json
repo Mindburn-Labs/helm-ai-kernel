@@ -1,0 +1,652 @@
+{
+  "version": 1,
+  "profiles": {
+    "pr": {
+      "description": "Fast pull request profile with core gates and impacted package checks.",
+      "gates": [
+        "docs-truth",
+        "presentation-hygiene",
+        "tracked-file-hygiene",
+        "go-lint",
+        "build",
+        "go-test",
+        "command-tests",
+        "verify-fixtures",
+        "tcb-imports",
+        "boundary-manifest",
+        "python-sdk",
+        "ts-sdk",
+        "design-system",
+        "console",
+        "rust-sdk",
+        "java-sdk"
+      ]
+    },
+    "merge": {
+      "description": "Full merge gate for retained OSS surfaces.",
+      "gates": [
+        "docs-truth",
+        "presentation-hygiene",
+        "tracked-file-hygiene",
+        "go-lint",
+        "build",
+        "go-test",
+        "command-tests",
+        "verify-fixtures",
+        "tcb-imports",
+        "boundary-manifest",
+        "crucible",
+        "go-race",
+        "go-sdk",
+        "python-sdk",
+        "ts-sdk",
+        "design-system",
+        "console",
+        "rust-sdk",
+        "java-sdk",
+        "json-schemas",
+        "openapi-console-drift",
+        "codegen-drift",
+        "proto-lint",
+        "proto-breaking",
+        "deployment-smoke",
+        "release-smoke"
+      ]
+    },
+    "release": {
+      "description": "Release assurance profile for release tags and local release readiness.",
+      "gates": [
+        "quality-self-test",
+        "docs-truth",
+        "presentation-hygiene",
+        "tracked-file-hygiene",
+        "go-lint",
+        "build",
+        "go-test",
+        "command-tests",
+        "verify-fixtures",
+        "tcb-imports",
+        "boundary-manifest",
+        "crucible",
+        "go-sdk",
+        "python-sdk",
+        "ts-sdk",
+        "design-system",
+        "console",
+        "rust-sdk",
+        "java-sdk",
+        "json-schemas",
+        "openapi-console-drift",
+        "codegen-drift",
+        "proto-lint",
+        "proto-breaking",
+        "benchmark-report",
+        "release-readiness",
+        "reproducible-binaries",
+        "sbom",
+        "vex",
+        "cosign-verify",
+        "release-smoke"
+      ]
+    },
+    "nightly": {
+      "description": "Scheduled assurance profile. Noisy gates are advisory unless QUALITY_STRICT=1.",
+      "gates": [
+        "quality-self-test",
+        "secrets",
+        "vuln-audit",
+        "json-schemas",
+        "runbooks",
+        "migrations",
+        "dependency-hygiene",
+        "mutation-core",
+        "flake-core",
+        "benchmark-report"
+      ]
+    },
+    "typecheck": {
+      "description": "Focused type and compile checks.",
+      "gates": [
+        "go-lint",
+        "ts-sdk-typecheck",
+        "design-system-typecheck",
+        "console-typecheck"
+      ]
+    },
+    "contracts": {
+      "description": "Contract, schema, and generated-type drift checks.",
+      "gates": [
+        "json-schemas",
+        "openapi-console-drift",
+        "codegen-drift",
+        "proto-lint",
+        "proto-breaking"
+      ]
+    },
+    "security": {
+      "description": "Security and supply-chain checks.",
+      "gates": [
+        "secrets",
+        "vuln-audit",
+        "sbom",
+        "vex"
+      ]
+    },
+    "runbooks": {
+      "description": "Operational runbook coverage checks.",
+      "gates": [
+        "runbooks"
+      ]
+    },
+    "mutation": {
+      "description": "Core mutation testing.",
+      "gates": [
+        "mutation-core"
+      ]
+    },
+    "flake": {
+      "description": "Repeated core test execution for flake detection.",
+      "gates": [
+        "flake-core"
+      ]
+    },
+    "impact": {
+      "description": "Impacted package tests for changed surfaces.",
+      "gates": [
+        "python-sdk",
+        "ts-sdk",
+        "design-system",
+        "console",
+        "rust-sdk",
+        "java-sdk"
+      ]
+    }
+  },
+  "gates": [
+    {
+      "id": "quality-self-test",
+      "title": "Quality registry self-test",
+      "description": "Validates profile and gate registration before running long checks.",
+      "command": "python3 scripts/ci/quality.py self-test",
+      "timeout_seconds": 60
+    },
+    {
+      "id": "docs-truth",
+      "title": "Documentation coverage and truth",
+      "description": "Ensures docs coverage rows and truth assertions remain aligned with live repo surfaces.",
+      "command": "make docs-coverage docs-truth",
+      "timeout_seconds": 600,
+      "paths": [
+        "docs/**",
+        "README.md",
+        "scripts/check_documentation_*.py",
+        ".github/**",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "presentation-hygiene",
+      "title": "Presentation hygiene",
+      "command": "make verify-presentation",
+      "timeout_seconds": 180,
+      "paths": [
+        "docs/**",
+        "README.md",
+        "tools/verify-presentation.sh"
+      ]
+    },
+    {
+      "id": "tracked-file-hygiene",
+      "title": "Tracked file hygiene",
+      "description": "Blocks accidentally tracked databases, archives, logs, and binary artifacts.",
+      "command": "bash -lc \"! git ls-files | rg '\\\\.(db|sqlite|log|tar|tar\\\\.gz|zip|exe|dll|so|dylib)$'\"",
+      "timeout_seconds": 60
+    },
+    {
+      "id": "go-lint",
+      "title": "Go lint and formatting",
+      "command": "make lint",
+      "timeout_seconds": 900,
+      "paths": [
+        "core/**",
+        "tests/conformance/**",
+        "examples/otel-genai/**",
+        ".golangci.yml",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "build",
+      "title": "Core CLI build",
+      "command": "make build",
+      "timeout_seconds": 900,
+      "paths": [
+        "core/**",
+        "Makefile",
+        "VERSION"
+      ]
+    },
+    {
+      "id": "go-test",
+      "title": "Core Go tests",
+      "command": "make test",
+      "timeout_seconds": 1200,
+      "paths": [
+        "core/**",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "go-race",
+      "title": "Core Go race tests",
+      "command": "make test-race",
+      "timeout_seconds": 1800,
+      "paths": [
+        "core/**",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "command-tests",
+      "title": "CLI command tests",
+      "command": "go test ./core/cmd/helm -count=1",
+      "timeout_seconds": 900,
+      "paths": [
+        "core/cmd/**",
+        "core/pkg/**"
+      ]
+    },
+    {
+      "id": "verify-fixtures",
+      "title": "Golden fixture verification",
+      "command": "make verify-fixtures",
+      "timeout_seconds": 300,
+      "paths": [
+        "core/pkg/verifier/**",
+        "artifacts/golden/**",
+        "fixtures/**",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "tcb-imports",
+      "title": "TCB import isolation",
+      "command": "go run tools/tcbcheck/main.go",
+      "timeout_seconds": 300,
+      "paths": [
+        "core/pkg/**",
+        "tools/tcbcheck/**"
+      ]
+    },
+    {
+      "id": "boundary-manifest",
+      "title": "Boundary manifest drift",
+      "command": "make verify-boundary",
+      "timeout_seconds": 300,
+      "paths": [
+        "core/pkg/kernel/**",
+        "core/pkg/contracts/**",
+        "core/pkg/crypto/**",
+        "core/pkg/evidencepack/**",
+        "core/pkg/proofgraph/**",
+        "core/pkg/receipts/**",
+        "core/pkg/verifier/**",
+        "core/pkg/connectors/sandbox/**",
+        "core/pkg/conformance/**",
+        "core/pkg/api/**",
+        "core/pkg/guardian/**",
+        "protocols/**",
+        "schemas/**",
+        "tools/boundary/**"
+      ]
+    },
+    {
+      "id": "crucible",
+      "title": "Use-case crucible",
+      "command": "make crucible",
+      "timeout_seconds": 1200,
+      "paths": [
+        "core/**",
+        "scripts/usecases/**",
+        "artifacts/golden/**"
+      ]
+    },
+    {
+      "id": "go-sdk",
+      "title": "Standalone Go SDK tests",
+      "command": "make test-sdk-go-standalone",
+      "timeout_seconds": 900,
+      "paths": [
+        "sdk/go/**",
+        "protocols/proto/**"
+      ]
+    },
+    {
+      "id": "python-sdk",
+      "title": "Python SDK tests",
+      "command": "make test-sdk-py",
+      "timeout_seconds": 900,
+      "paths": [
+        "sdk/python/**",
+        "api/openapi/**",
+        "protocols/proto/**"
+      ]
+    },
+    {
+      "id": "ts-sdk",
+      "title": "TypeScript SDK tests",
+      "command": "make test-sdk-ts",
+      "timeout_seconds": 900,
+      "paths": [
+        "sdk/ts/**",
+        "api/openapi/**",
+        "protocols/proto/**"
+      ]
+    },
+    {
+      "id": "rust-sdk",
+      "title": "Rust SDK tests",
+      "command": "make test-sdk-rust",
+      "timeout_seconds": 900,
+      "paths": [
+        "sdk/rust/**",
+        "protocols/proto/**"
+      ]
+    },
+    {
+      "id": "java-sdk",
+      "title": "Java SDK tests",
+      "command": "make test-sdk-java",
+      "timeout_seconds": 900,
+      "paths": [
+        "sdk/java/**",
+        "protocols/proto/**"
+      ]
+    },
+    {
+      "id": "design-system",
+      "title": "Design system package gate",
+      "command": "make test-design-system",
+      "timeout_seconds": 1200,
+      "paths": [
+        "packages/design-system-core/**",
+        "packages/design-system-core-compat/**",
+        "docs/design-system/**"
+      ]
+    },
+    {
+      "id": "console",
+      "title": "Console package gate",
+      "command": "make test-console",
+      "timeout_seconds": 1200,
+      "paths": [
+        "apps/console/**",
+        "packages/design-system-core/**",
+        "api/openapi/**"
+      ]
+    },
+    {
+      "id": "ts-sdk-typecheck",
+      "title": "TypeScript SDK typecheck",
+      "command": "cd sdk/ts && npm ci && npm run build",
+      "timeout_seconds": 600,
+      "paths": [
+        "sdk/ts/**",
+        "protocols/proto/**"
+      ]
+    },
+    {
+      "id": "design-system-typecheck",
+      "title": "Design system typecheck",
+      "command": "cd packages/design-system-core && npm ci && npm run typecheck",
+      "timeout_seconds": 600,
+      "paths": [
+        "packages/design-system-core/**"
+      ]
+    },
+    {
+      "id": "console-typecheck",
+      "title": "Console typecheck",
+      "command": "cd packages/design-system-core && npm ci && npm run build && cd ../../apps/console && npm ci && npm run generate:api && npm run typecheck",
+      "timeout_seconds": 900,
+      "paths": [
+        "apps/console/**",
+        "packages/design-system-core/**",
+        "api/openapi/**"
+      ]
+    },
+    {
+      "id": "json-schemas",
+      "title": "JSON schema compilation",
+      "command": "python3 scripts/ci/check_json_schemas.py",
+      "timeout_seconds": 300,
+      "paths": [
+        "schemas/**",
+        "protocols/json-schemas/**",
+        "protocols/specs/**",
+        "api/openapi/**",
+        "scripts/ci/check_json_schemas.py"
+      ]
+    },
+    {
+      "id": "openapi-console-drift",
+      "title": "OpenAPI generated console type drift",
+      "command": "bash scripts/ci/check_openapi_console_drift.sh",
+      "timeout_seconds": 600,
+      "paths": [
+        "api/openapi/**",
+        "apps/console/src/api/schema.ts",
+        "apps/console/package*.json",
+        "scripts/ci/check_openapi_console_drift.sh"
+      ]
+    },
+    {
+      "id": "codegen-drift",
+      "title": "Generated contract drift",
+      "command": "make codegen-check",
+      "timeout_seconds": 1200,
+      "paths": [
+        "protocols/proto/**",
+        "sdk/go/gen/**",
+        "sdk/python/helm_sdk/generated/**",
+        "sdk/ts/src/generated/**",
+        "sdk/java/src/main/java/helm/**",
+        "sdk/rust/src/generated/**",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "proto-lint",
+      "title": "Protocol lint",
+      "command": "make proto-lint",
+      "timeout_seconds": 300,
+      "paths": [
+        "protocols/policy-schema/**",
+        "buf.yaml",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "proto-breaking",
+      "title": "Protocol breaking-change check",
+      "command": "make proto-breaking",
+      "timeout_seconds": 600,
+      "paths": [
+        "protocols/policy-schema/**",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "deployment-smoke",
+      "title": "Docker, Compose, and chart smoke",
+      "command": "make deployment-smoke",
+      "timeout_seconds": 2400,
+      "paths": [
+        "Dockerfile*",
+        "docker-compose.yml",
+        "deploy/**",
+        "core/**",
+        "apps/console/**",
+        "packages/design-system-core/**",
+        "scripts/ci/*smoke*.sh"
+      ]
+    },
+    {
+      "id": "release-smoke",
+      "title": "Release reproducibility and evidence smoke",
+      "command": "make release-smoke",
+      "timeout_seconds": 2400,
+      "paths": [
+        "Makefile",
+        "scripts/ci/release_smoke.sh",
+        "scripts/release/**",
+        "release/**",
+        "core/**"
+      ]
+    },
+    {
+      "id": "release-readiness",
+      "title": "Release readiness aggregate",
+      "command": "make release-readiness",
+      "timeout_seconds": 3600
+    },
+    {
+      "id": "reproducible-binaries",
+      "title": "Reproducible release binaries",
+      "command": "make release-binaries-reproducible",
+      "timeout_seconds": 1800,
+      "paths": [
+        "core/**",
+        "Makefile",
+        "VERSION"
+      ]
+    },
+    {
+      "id": "sbom",
+      "title": "CycloneDX SBOM generation",
+      "command": "make sbom",
+      "timeout_seconds": 900,
+      "paths": [
+        "core/go.mod",
+        "core/go.sum",
+        "scripts/ci/generate_sbom.sh",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "vex",
+      "title": "OpenVEX generation",
+      "command": "make vex",
+      "timeout_seconds": 300,
+      "paths": [
+        "release/vex/**",
+        "scripts/release/generate_vex.sh",
+        "sbom.json",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "cosign-verify",
+      "title": "Cosign bundle verification",
+      "command": "bash -lc 'if find dist -name \"*.cosign.bundle\" -type f 2>/dev/null | grep -q .; then make verify-cosign; else echo \"No Cosign bundles under dist; skipping local verification.\"; fi'",
+      "timeout_seconds": 300
+    },
+    {
+      "id": "secrets",
+      "title": "Secret scan",
+      "description": "Advisory first. Set QUALITY_STRICT=1 to make findings block.",
+      "command": "python3 scripts/ci/check_secrets.py",
+      "timeout_seconds": 300,
+      "advisory": true
+    },
+    {
+      "id": "vuln-audit",
+      "title": "Dependency vulnerability audits",
+      "description": "Runs available ecosystem audit tools. Missing optional tools warn unless QUALITY_STRICT=1.",
+      "command": "bash scripts/ci/vuln_audit.sh",
+      "timeout_seconds": 1800,
+      "advisory": true,
+      "paths": [
+        "core/go.mod",
+        "core/go.sum",
+        "sdk/**",
+        "apps/console/package*.json",
+        "packages/design-system-core/package*.json"
+      ]
+    },
+    {
+      "id": "mutation-core",
+      "title": "Core mutation testing",
+      "command": "bash scripts/ci/mutation-test.sh",
+      "timeout_seconds": 3600,
+      "advisory": true,
+      "paths": [
+        "core/pkg/**",
+        "scripts/ci/mutation-test.sh"
+      ]
+    },
+    {
+      "id": "flake-core",
+      "title": "Core flake detector",
+      "command": "bash scripts/ci/flake-test.sh",
+      "timeout_seconds": 3600,
+      "advisory": true,
+      "paths": [
+        "core/pkg/**",
+        "scripts/ci/flake-test.sh"
+      ]
+    },
+    {
+      "id": "runbooks",
+      "title": "Runbook coverage",
+      "command": "python3 scripts/ci/check_runbooks.py",
+      "timeout_seconds": 120,
+      "advisory": true,
+      "paths": [
+        "docs/**",
+        "deploy/**",
+        "scripts/ci/README.md",
+        "scripts/ci/check_runbooks.py"
+      ]
+    },
+    {
+      "id": "migrations",
+      "title": "Migration safety coverage",
+      "command": "python3 scripts/ci/check_migrations.py",
+      "timeout_seconds": 120,
+      "advisory": true,
+      "paths": [
+        "core/**/migrations/**",
+        "scripts/ci/check_migrations.py"
+      ]
+    },
+    {
+      "id": "dependency-hygiene",
+      "title": "Dependency manifest hygiene",
+      "command": "python3 scripts/ci/check_dependency_hygiene.py",
+      "timeout_seconds": 120,
+      "advisory": true,
+      "paths": [
+        ".github/dependabot.yml",
+        "go.work",
+        "core/go.mod",
+        "sdk/**",
+        "apps/console/package*.json",
+        "packages/design-system-core/package*.json"
+      ]
+    },
+    {
+      "id": "benchmark-report",
+      "title": "Benchmark report",
+      "command": "make bench-report",
+      "timeout_seconds": 1200,
+      "advisory": true,
+      "paths": [
+        "core/benchmarks/**",
+        "core/pkg/crypto/**",
+        "core/pkg/store/**",
+        "core/pkg/guardian/**"
+      ]
+    }
+  ]
+}

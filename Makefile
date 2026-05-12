@@ -1,9 +1,10 @@
-.PHONY: build test test-race test-sdk-go-standalone test-sdk-ts test-design-system build-console test-console test-platform test-sdk-py test-sdk-rust test-sdk-java verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check clean docs-coverage docs-truth
+.PHONY: build test test-race test-sdk-go-standalone test-sdk-ts test-design-system build-console test-console test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets launch-security launch-api-truth launch-release-dry-run launch-ready conformance-release-gate
 
-VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.4.0)
+VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.5.0)
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME)
+QUALITY := python3 scripts/ci/quality.py
 
 build:
 	cd core && go build -ldflags "$(LDFLAGS)" -o ../bin/helm ./cmd/helm/
@@ -40,6 +41,12 @@ test-sdk-rust:
 test-sdk-java:
 	cd sdk/java && mvn -q test
 
+sdk-openapi-check:
+	bash scripts/sdk/openapi_check.sh
+
+sdk-examples-smoke:
+	bash scripts/sdk/examples_smoke.sh
+
 verify-fixtures:
 	cd core && go test ./pkg/verifier -run TestVerifyBundle_GoldenFixtureRoots -count=1
 
@@ -74,14 +81,14 @@ docker-verify:
 	docker build -f core/Dockerfile.api -t helm-oss:verify-core-api .
 	docker build -f oss-fuzz/Dockerfile -t helm-oss:verify-oss-fuzz oss-fuzz
 
-release-readiness: verify-boundary docs-truth test-sdk-go-standalone proto-lint proto-breaking docker-verify deployment-smoke release-smoke
+release-readiness: verify-boundary docs-truth test-sdk-go-standalone proto-lint proto-breaking docker-verify launch-security launch-api-truth conformance-release-gate deployment-smoke release-smoke
 	@echo "✅ Release readiness gate passed"
 
 crucible: build
 	bash scripts/usecases/run_all.sh
 
 proxy: build
-	./bin/helm proxy --upstream https://api.openai.com/v1
+	./bin/helm proxy --upstream http://127.0.0.1:19090/v1
 
 docker: build-console
 	docker build -t ghcr.io/mindburn-labs/helm-oss:local .
@@ -106,8 +113,51 @@ deployment-smoke: docker-smoke compose-smoke helm-chart-smoke
 release-smoke:
 	bash scripts/ci/release_smoke.sh
 
+quality-pr:
+	$(QUALITY) run pr --impact
+
+quality-merge:
+	$(QUALITY) run merge
+
+quality-release:
+	$(QUALITY) run release --strict
+
+quality-nightly:
+	$(QUALITY) run nightly
+
+quality-list:
+	$(QUALITY) list
+
+quality-explain:
+	@test -n "$(CHECK)" || (echo "Usage: make quality-explain CHECK=<gate-id>" && exit 2)
+	$(QUALITY) explain "$(CHECK)"
+
+quality-self-test:
+	$(QUALITY) self-test
+
+quality-typecheck:
+	$(QUALITY) run typecheck
+
+quality-contracts:
+	$(QUALITY) run contracts
+
+quality-security:
+	$(QUALITY) run security
+
+quality-runbooks:
+	$(QUALITY) run runbooks
+
+quality-mutation:
+	$(QUALITY) run mutation
+
+quality-flake:
+	$(QUALITY) run flake
+
+quality-impact:
+	$(QUALITY) run impact --impact
+
 sbom: build
-	bash scripts/ci/generate_sbom.sh
+	HELM_VERSION=$(VERSION) bash scripts/ci/generate_sbom.sh
 
 provenance:
 	cd core && CGO_ENABLED=0 go build -ldflags="-s -w \
@@ -141,11 +191,24 @@ demo-console: build
 launch-smoke:
 	bash scripts/launch/smoke.sh
 
+launch-record-assets:
+	bash scripts/launch/record-assets.sh
+
 launch-security:
-	@echo "✅ Security gates passed (mock)"
+	bash scripts/launch/security.sh
+	bash scripts/launch/security_gate.sh
+
+launch-release-dry-run:
+	bash scripts/release/dry_run.sh
+
+launch-ready:
+	bash scripts/launch/launch-ready.sh --write
 
 launch-api-truth:
-	@echo "✅ API truth gates passed (mock)"
+	bash scripts/launch/api_truth_gate.sh
+
+conformance-release-gate:
+	bash scripts/release/conformance_release_gate.sh
 
 mcp-pack: build
 	@mkdir -p dist
@@ -165,7 +228,12 @@ release-binaries:
 	cd core && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/helm-windows-amd64.exe ./cmd/helm/
 	cd bin && shasum -a 256 helm-* > SHA256SUMS.txt
 
-release-all: release-binaries sbom mcp-pack
+release-assets: release-binaries-reproducible mcp-pack sbom vex
+	bash scripts/release/stage_release_assets.sh
+
+build-release: release-assets
+
+release-all: release-assets
 
 # --- Reproducibility & Cosign & VEX (Workstream E) -----------------------
 # SOURCE_DATE_EPOCH defaults to the HEAD commit timestamp so local devs and
@@ -187,7 +255,7 @@ release-binaries-reproducible:
 
 # Generate OpenVEX statements for every CVE listed in the current SBOM.
 vex:
-	@bash scripts/release/generate_vex.sh
+	@HELM_VERSION=$(VERSION) bash scripts/release/generate_vex.sh
 
 # Verify the cosign signature of a local artifact tree (smoke / docs example).
 verify-cosign:

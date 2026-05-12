@@ -1,6 +1,6 @@
 import type { Story, StoryDefault } from "@ladle/react";
 import { useState } from "react";
-import { AnnounceProvider, Button, Panel, useAnnounce } from "@helm/design-system-core";
+import { AnnounceProvider, Button, Panel, useAnnounce } from "@mindburn/ui-core";
 
 export default {
   title: "Providers / AnnounceProvider",

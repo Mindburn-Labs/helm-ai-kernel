@@ -15,6 +15,10 @@ Active tooling surface for the `helm-oss` project.
 ## Local Commands
 
 - `make docs-coverage` from the repository root verifies coverage for this surface.
+- `make quality-pr` runs the Make-first PR quality profile from
+  `scripts/ci/quality-gates.json`.
+- `make quality-list` lists registered quality profiles and gates.
+- `make quality-explain CHECK=<gate-id>` explains one registered check.
 - `make docker-smoke` builds the Console/image and verifies the Docker runtime
   can evaluate, persist receipts, export/verify evidence, replay-verify, and
   survive restart with a stable root key.
@@ -26,6 +30,14 @@ Active tooling surface for the `helm-oss` project.
   evidence/replay checks, restarts the pod, and verifies signing-key stability.
 - `make release-smoke` verifies reproducible binaries, SBOM JSON, OpenVEX JSON,
   and Cosign bundles when a signed artifact tree is supplied.
+
+## Quality Gate Tooling
+
+`scripts/ci/quality.py` is the registry runner for HELM OSS quality profiles.
+It supports profile execution, path impact filtering, Advisory gates, timeouts,
+and GitHub Actions annotations. The registry lives in
+`scripts/ci/quality-gates.json`; validate it with `make quality-self-test`
+before changing profiles.
 
 ## Documentation Contract
 

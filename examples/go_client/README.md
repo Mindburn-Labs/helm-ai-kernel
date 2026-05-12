@@ -4,7 +4,7 @@ Shows HELM integration with the Go SDK.
 
 ## Prerequisites
 
-- HELM running at `http://port 3000` (`docker compose up -d`)
+- HELM running at `http://127.0.0.1:7714` (`docker compose up -d`)
 - Go 1.25+
 
 ## Source Example

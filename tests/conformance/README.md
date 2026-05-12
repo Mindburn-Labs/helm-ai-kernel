@@ -25,3 +25,10 @@ make docs-truth
 ```
 
 Public docs may claim conformance only for profiles and checks represented in this directory.
+
+`helm conform --level L1|L2` and `helm test conformance --level L1|L2`
+are local compatibility aliases. They seed deterministic baseline evidence so
+developers can exercise the gates without a release EvidencePack. Public
+release certification must use a non-seeded release EvidencePack and
+conformance report; `make conformance-release-gate` rejects reports marked
+`seeded-local-baseline`.

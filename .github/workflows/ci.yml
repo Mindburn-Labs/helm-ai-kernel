@@ -156,7 +156,7 @@ jobs:
           version: "34.1"
       - name: Install codegen tools
         run: |
-          python -m pip install grpcio-tools==1.76.0
+          python -m pip install --require-hashes -r .github/requirements/codegen.txt
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
       - name: Verify generated contracts

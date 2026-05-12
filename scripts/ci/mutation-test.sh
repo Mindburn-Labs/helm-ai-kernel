@@ -9,7 +9,7 @@ echo "Running mutation testing against helm-oss/core..."
 # Ensure the tool is installed
 if ! command -v go-mutesting &> /dev/null; then
     echo "Installing go-mutesting..."
-    go install github.com/zimmski/go-mutesting/cmd/go-mutesting@latest
+    go install github.com/zimmski/go-mutesting/cmd/go-mutesting@v0.0.0-20210610104036-6d9217011a00
     export PATH=$PATH:$(go env GOPATH)/bin
 fi
 

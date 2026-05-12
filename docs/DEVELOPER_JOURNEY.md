@@ -208,7 +208,16 @@ HELM OSS is useful only when you can prove both outcomes:
 ./bin/helm receipts tail --agent agent.titan.exec --server http://127.0.0.1:7714
 ```
 
-**Launch Demo Suite:** You can evaluate a complete, end-to-end set of allow/deny/escalate outcomes using the canonical launch suite in `examples/launch/`. Run `make launch-smoke` to verify policy execution, receipt proof generation, and MCP quarantine behavior locally.
+**Launch Demo Suite:** You can evaluate a complete, end-to-end set of `ALLOW`,
+`DENY`, and `ESCALATE` outcomes using the canonical launch suite in
+`examples/launch/`. Run `make launch-smoke` to verify policy execution,
+receipt proof generation, MCP quarantine behavior, and localhost-only proxy
+behavior.
+
+**SDK Examples:** Run `make sdk-examples-smoke` to build the Python and
+TypeScript SDKs, start a local boundary, and validate ALLOW, DENY, MCP
+fail-closed denial, signed receipt verification, sandbox preflight, and
+EvidencePack verification.
 
 Use allow and deny fixtures from `examples/policies/` when validating policy-language behavior. The policy bundle command supports CEL, Rego, and Cedar:
 

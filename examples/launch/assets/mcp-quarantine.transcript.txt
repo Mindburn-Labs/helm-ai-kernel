@@ -1,0 +1,14 @@
+==> HELM Launch Demo: MCP Quarantine
+==> Building HELM binary
+==> Inspecting local MCP fixture metadata and schema
+{"fixture": "local-fixture-mcp", "schema_pinned": true, "tool": "local.echo"}
+==> Generating fail-closed MCP wrapper profile
+{"quarantine_default": "quarantined", "wrapper": "local-fixture-mcp"}
+==> Starting local HELM boundary
+==> Exercising API quarantine, approval, and schema-pin authorization
+{"api_missing_schema_pin": "DENY", "api_pinned_call": "ALLOW", "api_unknown_server": "DENY", "api_unknown_tool": "DENY", "approval_receipt_id": "rcpt_<id>", "proofgraph_visible": true}
+==> Exercising CLI authorize-call fail-closed paths
+{"cli_unknown_server": "DENY"}
+{"cli_unknown_tool": "DENY"}
+{"cli_pinned_call": "ALLOW"}
+==> MCP quarantine demo completed with no fixture dispatch for unknown tools or servers.

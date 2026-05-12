@@ -1,0 +1,10 @@
+{
+  "id": "req_1002",
+  "action": "draft-reply",
+  "resource": "ticket:123/draft",
+  "principal": "agent-1",
+  "context": {
+    "dry_run": true
+  },
+  "artifacts": []
+}

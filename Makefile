@@ -1,4 +1,4 @@
-.PHONY: build test test-race test-sdk-go-standalone test-sdk-ts test-design-system build-console test-console test-platform test-sdk-py test-sdk-rust test-sdk-java verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check clean docs-coverage docs-truth
+.PHONY: build test test-race test-sdk-go-standalone test-sdk-ts test-design-system build-console test-console test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check clean docs-coverage docs-truth launch-record-assets
 
 VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.5.0)
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -39,6 +39,12 @@ test-sdk-rust:
 
 test-sdk-java:
 	cd sdk/java && mvn -q test
+
+sdk-openapi-check:
+	bash scripts/sdk/openapi_check.sh
+
+sdk-examples-smoke:
+	bash scripts/sdk/examples_smoke.sh
 
 verify-fixtures:
 	cd core && go test ./pkg/verifier -run TestVerifyBundle_GoldenFixtureRoots -count=1
@@ -140,6 +146,9 @@ demo-console: build
 
 launch-smoke:
 	bash scripts/launch/smoke.sh
+
+launch-record-assets:
+	bash scripts/launch/record-assets.sh
 
 launch-security:
 	@echo "✅ Security gates passed (mock)"

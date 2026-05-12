@@ -1,41 +1,61 @@
 # HELM Launch Demo
 
-Welcome to the 5-minute HELM OSS Launch Demo. This suite demonstrates HELM as a **Fail-Closed Execution Firewall** for your agentic systems.
+This local suite demonstrates HELM as a fail-closed execution boundary for
+agent actions. It uses only localhost fixtures, temp directories, sample policy
+data, and dry-run receipts.
 
-## Prerequisites
+## Run
 
-- [jq](https://stedolan.github.io/jq/) installed (for pretty-printing JSON outputs)
-- A working Go environment (for building the binary)
+```bash
+make launch-smoke
+```
 
-## The Scenario
-
-You have an AI agent that is integrated into your backend. It can read tickets, process refunds, and run shell commands.
-We will place HELM in front of it using the `agent.boundary.v1` policy.
-
-Our policy enforces:
-- `read-ticket` → **ALLOW**
-- `export-customer-list` → **DENY**
-- `dangerous-shell` → **DENY**
-- `large-refund` → **ESCALATE** (Requires explicit human approval artifact)
-
-## Running the Demo
-
-Run the local demo script which builds HELM, starts the server with our strict policy, executes the 4 payloads, and outputs the cryptographically signed receipts:
+Run individual demos:
 
 ```bash
 ./scripts/launch/demo-local.sh
+./scripts/launch/demo-mcp.sh
+./scripts/launch/demo-openai-proxy.sh
+./scripts/launch/demo-proof.sh
 ```
 
-## What Happens?
+Record sanitized launch transcripts:
 
-1. **ALLOW**: The `read-ticket` payload evaluates to `ALLOW` because it is an explicitly allowed capability.
-2. **DENY**: The `export-customer-list` and `dangerous-shell` payloads evaluate to `DENY` with reason `PDP_DENY` because they are explicitly blocked at the boundary.
-3. **ESCALATE**: The `large-refund` payload evaluates to `DENY` with reason `MISSING_REQUIREMENT`. This is HELM escalating the action—it requires a `human_approval` cryptographic artifact to proceed.
-4. **Receipts**: Every single decision is logged as a causally-linked, signed receipt in the local SQLite database. Even the denied actions leave an immutable trail.
+```bash
+make launch-record-assets
+```
 
-## Further Demos
+## Seven-Action Demo
 
-- **`demo-proof.sh`**: Shows how to extract and offline-verify the tamper-proof evidence chain.
-- **`demo-mcp.sh`**: Demonstrates the MCP interceptor capabilities.
-- **`demo-openai-proxy.sh`**: Shows how to route standard OpenAI SDK calls through HELM's enforcement layer.
-- **`demo-console.sh`**: Walkthrough of the local governance console.
+`scripts/launch/demo-local.sh` starts a local `helm serve` boundary and calls
+`/api/demo/run` for every public launch action:
+
+| Action | Expected verdict |
+| --- | --- |
+| read ticket / read file | `ALLOW` |
+| draft reply / dry run | `ALLOW` |
+| small refund / low-risk write | `ALLOW` |
+| large refund / high-risk write | `ESCALATE` |
+| dangerous shell command | `DENY` |
+| export customer list / secret exfiltration | `DENY` |
+| modify policy / IAM-like action | `ESCALATE` |
+
+Each action must emit `receipt.receipt_id`, `receipt.signature`,
+`proof_refs.receipt_hash`, and `receipt.metadata.side_effect_dispatched ==
+false`. The script also verifies every receipt through `/api/demo/verify`.
+
+## MCP Quarantine Demo
+
+`scripts/launch/demo-mcp.sh` discovers the local fixture server, keeps it
+quarantined by default, inspects the metadata/schema, classifies risk, creates
+an approval record bound to a HELM receipt, approves the registry record, then
+allows one schema-pinned `local.echo` call.
+
+Unknown MCP servers, unknown tools, and missing schema pins must return `DENY`
+or `ESCALATE`; they must never dispatch to the fixture server.
+
+## Side-Effect Boundary
+
+The launch suite does not contact real payment systems, customer stores, shell
+targets, infrastructure APIs, or external model endpoints. The OpenAI-compatible
+proxy demo points at `scripts/launch/mock-openai-upstream.py` on localhost.

@@ -35,6 +35,8 @@ flowchart LR
 
 | Example | Server mode | What it proves | Source | Validation |
 | --- | --- | --- | --- | --- |
+| Python SDK | `helm serve --policy examples/launch/policies/agent_tool_call_boundary.toml` | ALLOW, DENY, MCP fail-closed denial, receipt verification, sandbox preflight, and evidence verification | [`examples/python_sdk`](../examples/python_sdk) | `make sdk-examples-smoke` |
+| TypeScript SDK | `helm serve --policy examples/launch/policies/agent_tool_call_boundary.toml` | ALLOW, DENY, MCP fail-closed denial, receipt verification, sandbox preflight, and evidence verification | [`examples/ts_sdk`](../examples/ts_sdk) | `make sdk-examples-smoke` |
 | Python OpenAI base URL | `helm proxy --port 9090` | OpenAI-compatible base URL, receipt headers, deny path | [`examples/python_openai_baseurl`](../examples/python_openai_baseurl) | `make test-sdk-py` |
 | TypeScript OpenAI base URL | `helm proxy --port 9090` | JavaScript/TypeScript client base URL and receipt extraction | [`examples/ts_openai_baseurl`](../examples/ts_openai_baseurl) | `make test-sdk-ts` |
 | JavaScript raw fetch | `helm proxy --port 9090` | Raw HTTP client compatibility | [`examples/js_openai_baseurl`](../examples/js_openai_baseurl) | `make docs-truth` |

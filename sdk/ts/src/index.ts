@@ -20,6 +20,7 @@ export type {
   NegativeBoundaryVector,
   SandboxBackendProfile,
   SandboxGrant,
+  SurfaceRecord,
 } from "./client.js";
 export {
   agentFrameworkAdapters,

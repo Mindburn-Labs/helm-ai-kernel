@@ -2,13 +2,16 @@
 
 Typed TypeScript client for the retained HELM kernel API.
 
-## Install
+## Local Install
 
 ```bash
-npm install @mindburn/helm
+cd sdk/ts
+npm ci
+npm run build
 ```
 
-Package metadata declares version `0.5.0` in `package.json`.
+Package metadata declares version `0.5.0` in `package.json`; this README does
+not claim that a registry package has been published.
 
 ## Local Development
 
@@ -30,22 +33,19 @@ npm run build
 ## Usage
 
 ```ts
-import { HelmApiError, HelmClient } from "@mindburn/helm";
+import { HelmClient } from "@mindburn/helm";
 
-const client = new HelmClient({ baseUrl: "http://port 3000" });
-
-try {
-  const result = await client.chatCompletions({
-    model: "gpt-4",
-    messages: [{ role: "user", content: "hello" }],
-  });
-  console.log(result.choices[0].message.content);
-} catch (error) {
-  if (error instanceof HelmApiError) {
-    console.log(error.reasonCode);
-  }
-}
+const client = new HelmClient({ baseUrl: "http://127.0.0.1:7715" });
+const decision = await client.evaluateDecision({
+  principal: "example-agent",
+  action: "read-ticket",
+  resource: "ticket:123",
+});
+console.log(decision.verdict); // ALLOW, DENY, or ESCALATE
 ```
+
+Run the first-class local example with `make sdk-examples-smoke` or directly
+from `examples/ts_sdk/`.
 
 ## Agent Framework Adapters
 

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	mcppkg "github.com/Mindburn-Labs/helm-oss/core/pkg/mcp"
 )
 
 func TestMain(m *testing.M) {
@@ -164,6 +166,92 @@ func TestRunMCPAuthorizeCallDenyJSON(t *testing.T) {
 		t.Fatalf("parse json: %v\n%s", err, stdout.String())
 	}
 	if record["verdict"] != "DENY" {
+		t.Fatalf("verdict = %v", record["verdict"])
+	}
+	if record["record_hash"] == "" {
+		t.Fatal("record_hash missing")
+	}
+}
+
+func TestRunMCPAuthorizeCallUnknownToolDenyJSON(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runMCPAuthorizeCall([]string{
+		"--server-id", "srv-cli-unknown-tool",
+		"--tool-name", "local.missing",
+		"--approved",
+		"--json",
+	}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d stderr=%s", code, stderr.String())
+	}
+	var record map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &record); err != nil {
+		t.Fatalf("parse json: %v\n%s", err, stdout.String())
+	}
+	if record["verdict"] != "DENY" {
+		t.Fatalf("verdict = %v", record["verdict"])
+	}
+}
+
+func TestRunMCPAuthorizeCallMissingSchemaPinDenyJSON(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"text": map[string]any{"type": "string"},
+		},
+		"required": []string{"text"},
+	}
+	schemaJSON, _ := json.Marshal(schema)
+	var stdout, stderr bytes.Buffer
+	code := runMCPAuthorizeCall([]string{
+		"--server-id", "srv-cli-missing-pin",
+		"--tool-name", "local.echo",
+		"--approved",
+		"--tool-schema-json", string(schemaJSON),
+		"--json",
+	}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	var record map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &record); err != nil {
+		t.Fatalf("parse json: %v\n%s", err, stdout.String())
+	}
+	if record["verdict"] != "DENY" {
+		t.Fatalf("verdict = %v", record["verdict"])
+	}
+}
+
+func TestRunMCPAuthorizeCallApprovedPinnedLocalToolAllowJSON(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"text": map[string]any{"type": "string"},
+		},
+		"required": []string{"text"},
+	}
+	hash, err := mcppkg.ToolSchemaHash(mcppkg.ToolRef{Name: "local.echo", Schema: schema})
+	if err != nil {
+		t.Fatalf("schema hash: %v", err)
+	}
+	schemaJSON, _ := json.Marshal(schema)
+	var stdout, stderr bytes.Buffer
+	code := runMCPAuthorizeCall([]string{
+		"--server-id", "srv-cli-allow",
+		"--tool-name", "local.echo",
+		"--approved",
+		"--tool-schema-json", string(schemaJSON),
+		"--pinned-schema-hash", hash,
+		"--json",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	var record map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &record); err != nil {
+		t.Fatalf("parse json: %v\n%s", err, stdout.String())
+	}
+	if record["verdict"] != "ALLOW" {
 		t.Fatalf("verdict = %v", record["verdict"])
 	}
 	if record["record_hash"] == "" {

@@ -68,12 +68,13 @@ Before tagging a release:
 3. run `make build`, `make test`, `make test-console`,
    `make test-platform`, `make test-all`, `make crucible`, and
    `make launch-smoke`
-4. run `make release-assets`
-5. verify that SDK package versions match `VERSION`
-6. verify `helm verify evidence-pack.tar`; run
+4. run `make sdk-openapi-check` and `make sdk-examples-smoke`
+5. run `make release-assets`
+6. verify that SDK package versions match `VERSION`
+7. verify `helm verify evidence-pack.tar`; run
    `helm verify evidence-pack.tar --online` only when the public proof endpoint
    and credentials for that release are available
-7. run `make release-binaries-reproducible` when validating that release binaries are reproducible from the checked-in source and pinned build metadata
+8. run `make release-binaries-reproducible` when validating that release binaries are reproducible from the checked-in source and pinned build metadata
 
 ## Release Automation
 

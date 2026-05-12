@@ -50,6 +50,8 @@ This page is backed by:
 - `sdk/ts/`
 - `sdk/rust/`
 - `sdk/java/`
+- `examples/python_sdk/`
+- `examples/ts_sdk/`
 - `examples/go_client/`
 - `examples/java_client/`
 - `examples/rust_client/`
@@ -62,11 +64,11 @@ This page is backed by:
 
 | Language | Package | Source | Example | Validation |
 | --- | --- | --- | --- | --- |
-| Python | `helm-sdk` | `sdk/python/helm_sdk/client.py` | `sdk/python/README.md`, `examples/python_openai_baseurl/` | `make test-sdk-py` |
-| TypeScript | `@mindburn/helm` | `sdk/ts/src/client.ts` | `sdk/ts/README.md`, `examples/ts_openai_baseurl/` | `make test-sdk-ts` |
+| Python | `helm-sdk` package metadata, source checkout install | `sdk/python/helm_sdk/client.py` | `sdk/python/README.md`, `examples/python_sdk/` | `make test-sdk-py`, `make sdk-examples-smoke` |
+| TypeScript | `@mindburn/helm` package metadata, source checkout build | `sdk/ts/src/client.ts` | `sdk/ts/README.md`, `examples/ts_sdk/` | `make test-sdk-ts`, `make sdk-examples-smoke` |
 | JavaScript | `@mindburn/helm` or OpenAI base URL client | `sdk/ts/src/client.ts` | `examples/js_openai_baseurl/` | `make test-sdk-ts` |
 | Go | repository module at current source | `sdk/go/client/client.go` | `examples/go_client/` | `cd sdk/go && go test ./...` |
-| Rust | `helm-sdk` | `sdk/rust/src/client.rs` | `examples/rust_client/` | `make test-sdk-rust` |
+| Rust | `helm-sdk` package metadata, source checkout build | `sdk/rust/src/client.rs` | `examples/rust_client/` | `make test-sdk-rust` |
 | Java | Maven workflow: `com.github.Mindburn-Labs:helm-sdk`; JitPack release availability is verified after the GitHub release exists | `sdk/java/pom.xml` | `examples/java_client/` | `make test-sdk-java` |
 
 ## Choose a Client
@@ -83,10 +85,11 @@ This page is backed by:
 :::selector language
 ### Python
 
-Install:
+Local install:
 
 ```bash
-pip install helm-sdk
+cd sdk/python
+python -m pip install .
 ```
 
 Local validation:
@@ -124,10 +127,12 @@ Receipt behavior is available when the boundary returns `X-Helm-*` metadata. Han
 
 ### TypeScript / JavaScript
 
-Install:
+Local build:
 
 ```bash
-npm install @mindburn/helm
+cd sdk/ts
+npm ci
+npm run build
 ```
 
 Local validation:
@@ -167,7 +172,7 @@ For existing JavaScript OpenAI clients, use the OpenAI-compatible proxy instead 
 
 ### Go
 
-Install:
+Use from the repository source:
 
 ```bash
 go get github.com/Mindburn-Labs/helm-oss/sdk/go@main
@@ -213,7 +218,7 @@ func main() {
 
 ### Rust
 
-Install:
+Use from the local crate source:
 
 ```toml
 helm-sdk = "0.5.0"

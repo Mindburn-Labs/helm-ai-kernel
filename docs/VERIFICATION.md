@@ -228,6 +228,8 @@ make test-platform
 make test-all
 make crucible
 make launch-smoke
+make sdk-openapi-check
+make sdk-examples-smoke
 ```
 
 ## Benchmarks

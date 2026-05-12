@@ -25,6 +25,436 @@ const instanceOfnumber = (value: any): value is number => typeof value === 'numb
  * Do not edit the class manually.
  */
 
+
+/**
+ *
+ * @export
+ * @interface A2AAgentCard
+ */
+export interface A2AAgentCard {
+    /**
+     *
+     * @type {string}
+     * @memberof A2AAgentCard
+     */
+    agent_id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof A2AAgentCard
+     */
+    name: string;
+    /**
+     *
+     * @type {string}
+     * @memberof A2AAgentCard
+     */
+    description?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof A2AAgentCard
+     */
+    endpoint: string;
+    /**
+     *
+     * @type {A2AAgentCardProvider}
+     * @memberof A2AAgentCard
+     */
+    provider?: A2AAgentCardProvider;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof A2AAgentCard
+     */
+    supported_versions: Array<string>;
+    /**
+     *
+     * @type {Array<A2AAgentCardSkillsInner>}
+     * @memberof A2AAgentCard
+     */
+    skills: Array<A2AAgentCardSkillsInner>;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof A2AAgentCard
+     */
+    auth_methods?: Array<string>;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof A2AAgentCard
+     */
+    features?: Array<string>;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof A2AAgentCard
+     */
+    defaultInputModes?: Array<string>;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof A2AAgentCard
+     */
+    defaultOutputModes?: Array<string>;
+    /**
+     *
+     * @type {A2AAgentCardCapabilities}
+     * @memberof A2AAgentCard
+     */
+    capabilities?: A2AAgentCardCapabilities;
+    /**
+     *
+     * @type {string}
+     * @memberof A2AAgentCard
+     */
+    signature?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof A2AAgentCard
+     */
+    content_hash?: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof A2AAgentCard
+     */
+    created_at: Date;
+    /**
+     *
+     * @type {Date}
+     * @memberof A2AAgentCard
+     */
+    updated_at: Date;
+}
+
+/**
+ * Check if a given object implements the A2AAgentCard interface.
+ */
+export function instanceOfA2AAgentCard(value: object): boolean {
+    if (!('agent_id' in value)) return false;
+    if (!('name' in value)) return false;
+    if (!('endpoint' in value)) return false;
+    if (!('supported_versions' in value)) return false;
+    if (!('skills' in value)) return false;
+    if (!('created_at' in value)) return false;
+    if (!('updated_at' in value)) return false;
+    return true;
+}
+
+export function A2AAgentCardFromJSON(json: any): A2AAgentCard {
+    return A2AAgentCardFromJSONTyped(json, false);
+}
+
+export function A2AAgentCardFromJSONTyped(json: any, ignoreDiscriminator: boolean): A2AAgentCard {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'agent_id': json['agent_id'],
+        'name': json['name'],
+        'description': json['description'] == null ? undefined : json['description'],
+        'endpoint': json['endpoint'],
+        'provider': json['provider'] == null ? undefined : A2AAgentCardProviderFromJSON(json['provider']),
+        'supported_versions': json['supported_versions'],
+        'skills': ((json['skills'] as Array<any>).map(A2AAgentCardSkillsInnerFromJSON)),
+        'auth_methods': json['auth_methods'] == null ? undefined : json['auth_methods'],
+        'features': json['features'] == null ? undefined : json['features'],
+        'defaultInputModes': json['defaultInputModes'] == null ? undefined : json['defaultInputModes'],
+        'defaultOutputModes': json['defaultOutputModes'] == null ? undefined : json['defaultOutputModes'],
+        'capabilities': json['capabilities'] == null ? undefined : A2AAgentCardCapabilitiesFromJSON(json['capabilities']),
+        'signature': json['signature'] == null ? undefined : json['signature'],
+        'content_hash': json['content_hash'] == null ? undefined : json['content_hash'],
+        'created_at': (new Date(json['created_at'])),
+        'updated_at': (new Date(json['updated_at'])),
+    };
+}
+
+export function A2AAgentCardToJSON(value?: A2AAgentCard | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'agent_id': value['agent_id'],
+        'name': value['name'],
+        'description': value['description'],
+        'endpoint': value['endpoint'],
+        'provider': A2AAgentCardProviderToJSON(value['provider']),
+        'supported_versions': value['supported_versions'],
+        'skills': ((value['skills'] as Array<any>).map(A2AAgentCardSkillsInnerToJSON)),
+        'auth_methods': value['auth_methods'],
+        'features': value['features'],
+        'defaultInputModes': value['defaultInputModes'],
+        'defaultOutputModes': value['defaultOutputModes'],
+        'capabilities': A2AAgentCardCapabilitiesToJSON(value['capabilities']),
+        'signature': value['signature'],
+        'content_hash': value['content_hash'],
+        'created_at': ((value['created_at']).toISOString()),
+        'updated_at': ((value['updated_at']).toISOString()),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface A2AAgentCardCapabilities
+ */
+export interface A2AAgentCardCapabilities {
+    /**
+     *
+     * @type {boolean}
+     * @memberof A2AAgentCardCapabilities
+     */
+    streaming?: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof A2AAgentCardCapabilities
+     */
+    pushNotifications?: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof A2AAgentCardCapabilities
+     */
+    stateTransitionHistory?: boolean;
+}
+
+/**
+ * Check if a given object implements the A2AAgentCardCapabilities interface.
+ */
+export function instanceOfA2AAgentCardCapabilities(value: object): boolean {
+    return true;
+}
+
+export function A2AAgentCardCapabilitiesFromJSON(json: any): A2AAgentCardCapabilities {
+    return A2AAgentCardCapabilitiesFromJSONTyped(json, false);
+}
+
+export function A2AAgentCardCapabilitiesFromJSONTyped(json: any, ignoreDiscriminator: boolean): A2AAgentCardCapabilities {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'streaming': json['streaming'] == null ? undefined : json['streaming'],
+        'pushNotifications': json['pushNotifications'] == null ? undefined : json['pushNotifications'],
+        'stateTransitionHistory': json['stateTransitionHistory'] == null ? undefined : json['stateTransitionHistory'],
+    };
+}
+
+export function A2AAgentCardCapabilitiesToJSON(value?: A2AAgentCardCapabilities | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'streaming': value['streaming'],
+        'pushNotifications': value['pushNotifications'],
+        'stateTransitionHistory': value['stateTransitionHistory'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface A2AAgentCardProvider
+ */
+export interface A2AAgentCardProvider {
+    /**
+     *
+     * @type {string}
+     * @memberof A2AAgentCardProvider
+     */
+    organization?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof A2AAgentCardProvider
+     */
+    url?: string;
+}
+
+/**
+ * Check if a given object implements the A2AAgentCardProvider interface.
+ */
+export function instanceOfA2AAgentCardProvider(value: object): boolean {
+    return true;
+}
+
+export function A2AAgentCardProviderFromJSON(json: any): A2AAgentCardProvider {
+    return A2AAgentCardProviderFromJSONTyped(json, false);
+}
+
+export function A2AAgentCardProviderFromJSONTyped(json: any, ignoreDiscriminator: boolean): A2AAgentCardProvider {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'organization': json['organization'] == null ? undefined : json['organization'],
+        'url': json['url'] == null ? undefined : json['url'],
+    };
+}
+
+export function A2AAgentCardProviderToJSON(value?: A2AAgentCardProvider | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'organization': value['organization'],
+        'url': value['url'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface A2AAgentCardSkillsInner
+ */
+export interface A2AAgentCardSkillsInner {
+    /**
+     *
+     * @type {string}
+     * @memberof A2AAgentCardSkillsInner
+     */
+    id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof A2AAgentCardSkillsInner
+     */
+    name: string;
+    /**
+     *
+     * @type {string}
+     * @memberof A2AAgentCardSkillsInner
+     */
+    description?: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof A2AAgentCardSkillsInner
+     */
+    examples?: Array<string>;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof A2AAgentCardSkillsInner
+     */
+    input_modes?: Array<string>;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof A2AAgentCardSkillsInner
+     */
+    output_modes?: Array<string>;
+}
+
+/**
+ * Check if a given object implements the A2AAgentCardSkillsInner interface.
+ */
+export function instanceOfA2AAgentCardSkillsInner(value: object): boolean {
+    if (!('id' in value)) return false;
+    if (!('name' in value)) return false;
+    return true;
+}
+
+export function A2AAgentCardSkillsInnerFromJSON(json: any): A2AAgentCardSkillsInner {
+    return A2AAgentCardSkillsInnerFromJSONTyped(json, false);
+}
+
+export function A2AAgentCardSkillsInnerFromJSONTyped(json: any, ignoreDiscriminator: boolean): A2AAgentCardSkillsInner {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'id': json['id'],
+        'name': json['name'],
+        'description': json['description'] == null ? undefined : json['description'],
+        'examples': json['examples'] == null ? undefined : json['examples'],
+        'input_modes': json['input_modes'] == null ? undefined : json['input_modes'],
+        'output_modes': json['output_modes'] == null ? undefined : json['output_modes'],
+    };
+}
+
+export function A2AAgentCardSkillsInnerToJSON(value?: A2AAgentCardSkillsInner | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'id': value['id'],
+        'name': value['name'],
+        'description': value['description'],
+        'examples': value['examples'],
+        'input_modes': value['input_modes'],
+        'output_modes': value['output_modes'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
 /**
  *
  * @export
@@ -181,6 +611,314 @@ export function AddTrustKeyRequestToJSON(value?: AddTrustKeyRequest | null): any
 /**
  *
  * @export
+ * @interface AgentIdentityProfile
+ */
+export interface AgentIdentityProfile {
+    /**
+     *
+     * @type {string}
+     * @memberof AgentIdentityProfile
+     */
+    agent_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AgentIdentityProfile
+     */
+    identity_type?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AgentIdentityProfile
+     */
+    subject?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AgentIdentityProfile
+     */
+    issuer?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AgentIdentityProfile
+     */
+    jwks_uri?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AgentIdentityProfile
+     */
+    spiffe_id?: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof AgentIdentityProfile
+     */
+    scopes?: Array<string>;
+    /**
+     *
+     * @type {boolean}
+     * @memberof AgentIdentityProfile
+     */
+    anonymous_dev_mode?: boolean;
+    /**
+     *
+     * @type {Date}
+     * @memberof AgentIdentityProfile
+     */
+    created_at?: Date;
+}
+
+/**
+ * Check if a given object implements the AgentIdentityProfile interface.
+ */
+export function instanceOfAgentIdentityProfile(value: object): boolean {
+    return true;
+}
+
+export function AgentIdentityProfileFromJSON(json: any): AgentIdentityProfile {
+    return AgentIdentityProfileFromJSONTyped(json, false);
+}
+
+export function AgentIdentityProfileFromJSONTyped(json: any, ignoreDiscriminator: boolean): AgentIdentityProfile {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'agent_id': json['agent_id'] == null ? undefined : json['agent_id'],
+        'identity_type': json['identity_type'] == null ? undefined : json['identity_type'],
+        'subject': json['subject'] == null ? undefined : json['subject'],
+        'issuer': json['issuer'] == null ? undefined : json['issuer'],
+        'jwks_uri': json['jwks_uri'] == null ? undefined : json['jwks_uri'],
+        'spiffe_id': json['spiffe_id'] == null ? undefined : json['spiffe_id'],
+        'scopes': json['scopes'] == null ? undefined : json['scopes'],
+        'anonymous_dev_mode': json['anonymous_dev_mode'] == null ? undefined : json['anonymous_dev_mode'],
+        'created_at': json['created_at'] == null ? undefined : (new Date(json['created_at'])),
+    };
+}
+
+export function AgentIdentityProfileToJSON(value?: AgentIdentityProfile | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'agent_id': value['agent_id'],
+        'identity_type': value['identity_type'],
+        'subject': value['subject'],
+        'issuer': value['issuer'],
+        'jwks_uri': value['jwks_uri'],
+        'spiffe_id': value['spiffe_id'],
+        'scopes': value['scopes'],
+        'anonymous_dev_mode': value['anonymous_dev_mode'],
+        'created_at': value['created_at'] == null ? undefined : ((value['created_at']).toISOString()),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface ApprovalCeremony
+ */
+export interface ApprovalCeremony {
+    /**
+     *
+     * @type {string}
+     * @memberof ApprovalCeremony
+     */
+    approval_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ApprovalCeremony
+     */
+    subject?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ApprovalCeremony
+     */
+    action?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ApprovalCeremony
+     */
+    state?: ApprovalCeremonyStateEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof ApprovalCeremony
+     */
+    requested_by?: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof ApprovalCeremony
+     */
+    approvers?: Array<string>;
+    /**
+     *
+     * @type {number}
+     * @memberof ApprovalCeremony
+     */
+    quorum?: number;
+    /**
+     *
+     * @type {Date}
+     * @memberof ApprovalCeremony
+     */
+    timelock_until?: Date;
+    /**
+     *
+     * @type {Date}
+     * @memberof ApprovalCeremony
+     */
+    expires_at?: Date;
+    /**
+     *
+     * @type {boolean}
+     * @memberof ApprovalCeremony
+     */
+    break_glass?: boolean;
+    /**
+     *
+     * @type {string}
+     * @memberof ApprovalCeremony
+     */
+    reason?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ApprovalCeremony
+     */
+    receipt_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ApprovalCeremony
+     */
+    ceremony_hash?: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof ApprovalCeremony
+     */
+    created_at?: Date;
+    /**
+     *
+     * @type {Date}
+     * @memberof ApprovalCeremony
+     */
+    updated_at?: Date;
+}
+
+
+/**
+ * @export
+ */
+export const ApprovalCeremonyStateEnum = {
+    Pending: 'pending',
+    Approved: 'approved',
+    Denied: 'denied',
+    Revoked: 'revoked',
+    Expired: 'expired'
+} as const;
+export type ApprovalCeremonyStateEnum = typeof ApprovalCeremonyStateEnum[keyof typeof ApprovalCeremonyStateEnum];
+
+
+/**
+ * Check if a given object implements the ApprovalCeremony interface.
+ */
+export function instanceOfApprovalCeremony(value: object): boolean {
+    return true;
+}
+
+export function ApprovalCeremonyFromJSON(json: any): ApprovalCeremony {
+    return ApprovalCeremonyFromJSONTyped(json, false);
+}
+
+export function ApprovalCeremonyFromJSONTyped(json: any, ignoreDiscriminator: boolean): ApprovalCeremony {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'approval_id': json['approval_id'] == null ? undefined : json['approval_id'],
+        'subject': json['subject'] == null ? undefined : json['subject'],
+        'action': json['action'] == null ? undefined : json['action'],
+        'state': json['state'] == null ? undefined : json['state'],
+        'requested_by': json['requested_by'] == null ? undefined : json['requested_by'],
+        'approvers': json['approvers'] == null ? undefined : json['approvers'],
+        'quorum': json['quorum'] == null ? undefined : json['quorum'],
+        'timelock_until': json['timelock_until'] == null ? undefined : (new Date(json['timelock_until'])),
+        'expires_at': json['expires_at'] == null ? undefined : (new Date(json['expires_at'])),
+        'break_glass': json['break_glass'] == null ? undefined : json['break_glass'],
+        'reason': json['reason'] == null ? undefined : json['reason'],
+        'receipt_id': json['receipt_id'] == null ? undefined : json['receipt_id'],
+        'ceremony_hash': json['ceremony_hash'] == null ? undefined : json['ceremony_hash'],
+        'created_at': json['created_at'] == null ? undefined : (new Date(json['created_at'])),
+        'updated_at': json['updated_at'] == null ? undefined : (new Date(json['updated_at'])),
+    };
+}
+
+export function ApprovalCeremonyToJSON(value?: ApprovalCeremony | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'approval_id': value['approval_id'],
+        'subject': value['subject'],
+        'action': value['action'],
+        'state': value['state'],
+        'requested_by': value['requested_by'],
+        'approvers': value['approvers'],
+        'quorum': value['quorum'],
+        'timelock_until': value['timelock_until'] == null ? undefined : ((value['timelock_until']).toISOString()),
+        'expires_at': value['expires_at'] == null ? undefined : ((value['expires_at']).toISOString()),
+        'break_glass': value['break_glass'],
+        'reason': value['reason'],
+        'receipt_id': value['receipt_id'],
+        'ceremony_hash': value['ceremony_hash'],
+        'created_at': value['created_at'] == null ? undefined : ((value['created_at']).toISOString()),
+        'updated_at': value['updated_at'] == null ? undefined : ((value['updated_at']).toISOString()),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
  * @interface ApprovalRequest
  */
 export interface ApprovalRequest {
@@ -247,6 +985,881 @@ export function ApprovalRequestToJSON(value?: ApprovalRequest | null): any {
         'signature_b64': value['signature_b64'],
         'public_key_b64': value['public_key_b64'],
         'challenge_response': value['challenge_response'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface AssertApprovalWebAuthnChallengeRequest
+ */
+export interface AssertApprovalWebAuthnChallengeRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof AssertApprovalWebAuthnChallengeRequest
+     */
+    challenge_id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AssertApprovalWebAuthnChallengeRequest
+     */
+    actor: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AssertApprovalWebAuthnChallengeRequest
+     */
+    assertion: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AssertApprovalWebAuthnChallengeRequest
+     */
+    receipt_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AssertApprovalWebAuthnChallengeRequest
+     */
+    reason?: string;
+}
+
+/**
+ * Check if a given object implements the AssertApprovalWebAuthnChallengeRequest interface.
+ */
+export function instanceOfAssertApprovalWebAuthnChallengeRequest(value: object): boolean {
+    if (!('challenge_id' in value)) return false;
+    if (!('actor' in value)) return false;
+    if (!('assertion' in value)) return false;
+    return true;
+}
+
+export function AssertApprovalWebAuthnChallengeRequestFromJSON(json: any): AssertApprovalWebAuthnChallengeRequest {
+    return AssertApprovalWebAuthnChallengeRequestFromJSONTyped(json, false);
+}
+
+export function AssertApprovalWebAuthnChallengeRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): AssertApprovalWebAuthnChallengeRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'challenge_id': json['challenge_id'],
+        'actor': json['actor'],
+        'assertion': json['assertion'],
+        'receipt_id': json['receipt_id'] == null ? undefined : json['receipt_id'],
+        'reason': json['reason'] == null ? undefined : json['reason'],
+    };
+}
+
+export function AssertApprovalWebAuthnChallengeRequestToJSON(value?: AssertApprovalWebAuthnChallengeRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'challenge_id': value['challenge_id'],
+        'actor': value['actor'],
+        'assertion': value['assertion'],
+        'receipt_id': value['receipt_id'],
+        'reason': value['reason'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface AuthzHealth
+ */
+export interface AuthzHealth {
+    /**
+     *
+     * @type {string}
+     * @memberof AuthzHealth
+     */
+    status?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthzHealth
+     */
+    resolver?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthzHealth
+     */
+    model_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthzHealth
+     */
+    relationship_hash?: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof AuthzHealth
+     */
+    checked_at?: Date;
+}
+
+/**
+ * Check if a given object implements the AuthzHealth interface.
+ */
+export function instanceOfAuthzHealth(value: object): boolean {
+    return true;
+}
+
+export function AuthzHealthFromJSON(json: any): AuthzHealth {
+    return AuthzHealthFromJSONTyped(json, false);
+}
+
+export function AuthzHealthFromJSONTyped(json: any, ignoreDiscriminator: boolean): AuthzHealth {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'status': json['status'] == null ? undefined : json['status'],
+        'resolver': json['resolver'] == null ? undefined : json['resolver'],
+        'model_id': json['model_id'] == null ? undefined : json['model_id'],
+        'relationship_hash': json['relationship_hash'] == null ? undefined : json['relationship_hash'],
+        'checked_at': json['checked_at'] == null ? undefined : (new Date(json['checked_at'])),
+    };
+}
+
+export function AuthzHealthToJSON(value?: AuthzHealth | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'status': value['status'],
+        'resolver': value['resolver'],
+        'model_id': value['model_id'],
+        'relationship_hash': value['relationship_hash'],
+        'checked_at': value['checked_at'] == null ? undefined : ((value['checked_at']).toISOString()),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface AuthzSnapshot
+ */
+export interface AuthzSnapshot {
+    /**
+     *
+     * @type {string}
+     * @memberof AuthzSnapshot
+     */
+    snapshot_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthzSnapshot
+     */
+    model_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthzSnapshot
+     */
+    relationship_hash?: string;
+    /**
+     *
+     * @type {number}
+     * @memberof AuthzSnapshot
+     */
+    tuple_count?: number;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthzSnapshot
+     */
+    resolver?: string;
+    /**
+     *
+     * @type {boolean}
+     * @memberof AuthzSnapshot
+     */
+    stale?: boolean;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthzSnapshot
+     */
+    snapshot_token?: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof AuthzSnapshot
+     */
+    checked_at?: Date;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthzSnapshot
+     */
+    snapshot_hash?: string;
+}
+
+/**
+ * Check if a given object implements the AuthzSnapshot interface.
+ */
+export function instanceOfAuthzSnapshot(value: object): boolean {
+    return true;
+}
+
+export function AuthzSnapshotFromJSON(json: any): AuthzSnapshot {
+    return AuthzSnapshotFromJSONTyped(json, false);
+}
+
+export function AuthzSnapshotFromJSONTyped(json: any, ignoreDiscriminator: boolean): AuthzSnapshot {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'snapshot_id': json['snapshot_id'] == null ? undefined : json['snapshot_id'],
+        'model_id': json['model_id'] == null ? undefined : json['model_id'],
+        'relationship_hash': json['relationship_hash'] == null ? undefined : json['relationship_hash'],
+        'tuple_count': json['tuple_count'] == null ? undefined : json['tuple_count'],
+        'resolver': json['resolver'] == null ? undefined : json['resolver'],
+        'stale': json['stale'] == null ? undefined : json['stale'],
+        'snapshot_token': json['snapshot_token'] == null ? undefined : json['snapshot_token'],
+        'checked_at': json['checked_at'] == null ? undefined : (new Date(json['checked_at'])),
+        'snapshot_hash': json['snapshot_hash'] == null ? undefined : json['snapshot_hash'],
+    };
+}
+
+export function AuthzSnapshotToJSON(value?: AuthzSnapshot | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'snapshot_id': value['snapshot_id'],
+        'model_id': value['model_id'],
+        'relationship_hash': value['relationship_hash'],
+        'tuple_count': value['tuple_count'],
+        'resolver': value['resolver'],
+        'stale': value['stale'],
+        'snapshot_token': value['snapshot_token'],
+        'checked_at': value['checked_at'] == null ? undefined : ((value['checked_at']).toISOString()),
+        'snapshot_hash': value['snapshot_hash'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface BoundaryCapabilitySummary
+ */
+export interface BoundaryCapabilitySummary {
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryCapabilitySummary
+     */
+    capability_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryCapabilitySummary
+     */
+    category?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryCapabilitySummary
+     */
+    status?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryCapabilitySummary
+     */
+    authority?: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof BoundaryCapabilitySummary
+     */
+    public_routes?: Array<string>;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof BoundaryCapabilitySummary
+     */
+    cli_commands?: Array<string>;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof BoundaryCapabilitySummary
+     */
+    receipt_bindings?: Array<string>;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryCapabilitySummary
+     */
+    conformance_level?: string;
+}
+
+/**
+ * Check if a given object implements the BoundaryCapabilitySummary interface.
+ */
+export function instanceOfBoundaryCapabilitySummary(value: object): boolean {
+    return true;
+}
+
+export function BoundaryCapabilitySummaryFromJSON(json: any): BoundaryCapabilitySummary {
+    return BoundaryCapabilitySummaryFromJSONTyped(json, false);
+}
+
+export function BoundaryCapabilitySummaryFromJSONTyped(json: any, ignoreDiscriminator: boolean): BoundaryCapabilitySummary {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'capability_id': json['capability_id'] == null ? undefined : json['capability_id'],
+        'category': json['category'] == null ? undefined : json['category'],
+        'status': json['status'] == null ? undefined : json['status'],
+        'authority': json['authority'] == null ? undefined : json['authority'],
+        'public_routes': json['public_routes'] == null ? undefined : json['public_routes'],
+        'cli_commands': json['cli_commands'] == null ? undefined : json['cli_commands'],
+        'receipt_bindings': json['receipt_bindings'] == null ? undefined : json['receipt_bindings'],
+        'conformance_level': json['conformance_level'] == null ? undefined : json['conformance_level'],
+    };
+}
+
+export function BoundaryCapabilitySummaryToJSON(value?: BoundaryCapabilitySummary | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'capability_id': value['capability_id'],
+        'category': value['category'],
+        'status': value['status'],
+        'authority': value['authority'],
+        'public_routes': value['public_routes'],
+        'cli_commands': value['cli_commands'],
+        'receipt_bindings': value['receipt_bindings'],
+        'conformance_level': value['conformance_level'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface BoundaryCheckpoint
+ */
+export interface BoundaryCheckpoint {
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryCheckpoint
+     */
+    checkpoint_id?: string;
+    /**
+     *
+     * @type {number}
+     * @memberof BoundaryCheckpoint
+     */
+    sequence?: number;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryCheckpoint
+     */
+    previous_checkpoint_hash?: string;
+    /**
+     *
+     * @type {number}
+     * @memberof BoundaryCheckpoint
+     */
+    receipt_count?: number;
+    /**
+     *
+     * @type {number}
+     * @memberof BoundaryCheckpoint
+     */
+    record_count?: number;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryCheckpoint
+     */
+    root_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryCheckpoint
+     */
+    checkpoint_hash?: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof BoundaryCheckpoint
+     */
+    created_at?: Date;
+}
+
+/**
+ * Check if a given object implements the BoundaryCheckpoint interface.
+ */
+export function instanceOfBoundaryCheckpoint(value: object): boolean {
+    return true;
+}
+
+export function BoundaryCheckpointFromJSON(json: any): BoundaryCheckpoint {
+    return BoundaryCheckpointFromJSONTyped(json, false);
+}
+
+export function BoundaryCheckpointFromJSONTyped(json: any, ignoreDiscriminator: boolean): BoundaryCheckpoint {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'checkpoint_id': json['checkpoint_id'] == null ? undefined : json['checkpoint_id'],
+        'sequence': json['sequence'] == null ? undefined : json['sequence'],
+        'previous_checkpoint_hash': json['previous_checkpoint_hash'] == null ? undefined : json['previous_checkpoint_hash'],
+        'receipt_count': json['receipt_count'] == null ? undefined : json['receipt_count'],
+        'record_count': json['record_count'] == null ? undefined : json['record_count'],
+        'root_hash': json['root_hash'] == null ? undefined : json['root_hash'],
+        'checkpoint_hash': json['checkpoint_hash'] == null ? undefined : json['checkpoint_hash'],
+        'created_at': json['created_at'] == null ? undefined : (new Date(json['created_at'])),
+    };
+}
+
+export function BoundaryCheckpointToJSON(value?: BoundaryCheckpoint | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'checkpoint_id': value['checkpoint_id'],
+        'sequence': value['sequence'],
+        'previous_checkpoint_hash': value['previous_checkpoint_hash'],
+        'receipt_count': value['receipt_count'],
+        'record_count': value['record_count'],
+        'root_hash': value['root_hash'],
+        'checkpoint_hash': value['checkpoint_hash'],
+        'created_at': value['created_at'] == null ? undefined : ((value['created_at']).toISOString()),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface BoundaryRecordVerification
+ */
+export interface BoundaryRecordVerification {
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryRecordVerification
+     */
+    record_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryRecordVerification
+     */
+    record_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryRecordVerification
+     */
+    receipt_id?: string;
+    /**
+     *
+     * @type {boolean}
+     * @memberof BoundaryRecordVerification
+     */
+    verified?: boolean;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof BoundaryRecordVerification
+     */
+    errors?: Array<string>;
+    /**
+     *
+     * @type {Date}
+     * @memberof BoundaryRecordVerification
+     */
+    checked_at?: Date;
+}
+
+/**
+ * Check if a given object implements the BoundaryRecordVerification interface.
+ */
+export function instanceOfBoundaryRecordVerification(value: object): boolean {
+    return true;
+}
+
+export function BoundaryRecordVerificationFromJSON(json: any): BoundaryRecordVerification {
+    return BoundaryRecordVerificationFromJSONTyped(json, false);
+}
+
+export function BoundaryRecordVerificationFromJSONTyped(json: any, ignoreDiscriminator: boolean): BoundaryRecordVerification {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'record_id': json['record_id'] == null ? undefined : json['record_id'],
+        'record_hash': json['record_hash'] == null ? undefined : json['record_hash'],
+        'receipt_id': json['receipt_id'] == null ? undefined : json['receipt_id'],
+        'verified': json['verified'] == null ? undefined : json['verified'],
+        'errors': json['errors'] == null ? undefined : json['errors'],
+        'checked_at': json['checked_at'] == null ? undefined : (new Date(json['checked_at'])),
+    };
+}
+
+export function BoundaryRecordVerificationToJSON(value?: BoundaryRecordVerification | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'record_id': value['record_id'],
+        'record_hash': value['record_hash'],
+        'receipt_id': value['receipt_id'],
+        'verified': value['verified'],
+        'errors': value['errors'],
+        'checked_at': value['checked_at'] == null ? undefined : ((value['checked_at']).toISOString()),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface BoundaryStatus
+ */
+export interface BoundaryStatus {
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryStatus
+     */
+    version?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryStatus
+     */
+    status?: string;
+    /**
+     *
+     * @type {boolean}
+     * @memberof BoundaryStatus
+     */
+    receipt_store_ready?: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof BoundaryStatus
+     */
+    signer_ready?: boolean;
+    /**
+     *
+     * @type {number}
+     * @memberof BoundaryStatus
+     */
+    open_approvals?: number;
+    /**
+     *
+     * @type {number}
+     * @memberof BoundaryStatus
+     */
+    quarantined_mcp_servers?: number;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryStatus
+     */
+    last_checkpoint_id?: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof BoundaryStatus
+     */
+    checked_at?: Date;
+}
+
+/**
+ * Check if a given object implements the BoundaryStatus interface.
+ */
+export function instanceOfBoundaryStatus(value: object): boolean {
+    return true;
+}
+
+export function BoundaryStatusFromJSON(json: any): BoundaryStatus {
+    return BoundaryStatusFromJSONTyped(json, false);
+}
+
+export function BoundaryStatusFromJSONTyped(json: any, ignoreDiscriminator: boolean): BoundaryStatus {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'version': json['version'] == null ? undefined : json['version'],
+        'status': json['status'] == null ? undefined : json['status'],
+        'receipt_store_ready': json['receipt_store_ready'] == null ? undefined : json['receipt_store_ready'],
+        'signer_ready': json['signer_ready'] == null ? undefined : json['signer_ready'],
+        'open_approvals': json['open_approvals'] == null ? undefined : json['open_approvals'],
+        'quarantined_mcp_servers': json['quarantined_mcp_servers'] == null ? undefined : json['quarantined_mcp_servers'],
+        'last_checkpoint_id': json['last_checkpoint_id'] == null ? undefined : json['last_checkpoint_id'],
+        'checked_at': json['checked_at'] == null ? undefined : (new Date(json['checked_at'])),
+    };
+}
+
+export function BoundaryStatusToJSON(value?: BoundaryStatus | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'version': value['version'],
+        'status': value['status'],
+        'receipt_store_ready': value['receipt_store_ready'],
+        'signer_ready': value['signer_ready'],
+        'open_approvals': value['open_approvals'],
+        'quarantined_mcp_servers': value['quarantined_mcp_servers'],
+        'last_checkpoint_id': value['last_checkpoint_id'],
+        'checked_at': value['checked_at'] == null ? undefined : ((value['checked_at']).toISOString()),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface BudgetCeiling
+ */
+export interface BudgetCeiling {
+    /**
+     *
+     * @type {string}
+     * @memberof BudgetCeiling
+     */
+    budget_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof BudgetCeiling
+     */
+    subject?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof BudgetCeiling
+     */
+    window?: string;
+    /**
+     *
+     * @type {number}
+     * @memberof BudgetCeiling
+     */
+    max_tool_calls?: number;
+    /**
+     *
+     * @type {number}
+     * @memberof BudgetCeiling
+     */
+    max_spend_minor?: number;
+    /**
+     *
+     * @type {number}
+     * @memberof BudgetCeiling
+     */
+    max_egress_bytes?: number;
+    /**
+     *
+     * @type {number}
+     * @memberof BudgetCeiling
+     */
+    max_write_ops?: number;
+    /**
+     *
+     * @type {number}
+     * @memberof BudgetCeiling
+     */
+    approval_required_after?: number;
+    /**
+     *
+     * @type {string}
+     * @memberof BudgetCeiling
+     */
+    policy_epoch?: string;
+}
+
+/**
+ * Check if a given object implements the BudgetCeiling interface.
+ */
+export function instanceOfBudgetCeiling(value: object): boolean {
+    return true;
+}
+
+export function BudgetCeilingFromJSON(json: any): BudgetCeiling {
+    return BudgetCeilingFromJSONTyped(json, false);
+}
+
+export function BudgetCeilingFromJSONTyped(json: any, ignoreDiscriminator: boolean): BudgetCeiling {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'budget_id': json['budget_id'] == null ? undefined : json['budget_id'],
+        'subject': json['subject'] == null ? undefined : json['subject'],
+        'window': json['window'] == null ? undefined : json['window'],
+        'max_tool_calls': json['max_tool_calls'] == null ? undefined : json['max_tool_calls'],
+        'max_spend_minor': json['max_spend_minor'] == null ? undefined : json['max_spend_minor'],
+        'max_egress_bytes': json['max_egress_bytes'] == null ? undefined : json['max_egress_bytes'],
+        'max_write_ops': json['max_write_ops'] == null ? undefined : json['max_write_ops'],
+        'approval_required_after': json['approval_required_after'] == null ? undefined : json['approval_required_after'],
+        'policy_epoch': json['policy_epoch'] == null ? undefined : json['policy_epoch'],
+    };
+}
+
+export function BudgetCeilingToJSON(value?: BudgetCeiling | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'budget_id': value['budget_id'],
+        'subject': value['subject'],
+        'window': value['window'],
+        'max_tool_calls': value['max_tool_calls'],
+        'max_spend_minor': value['max_spend_minor'],
+        'max_egress_bytes': value['max_egress_bytes'],
+        'max_write_ops': value['max_write_ops'],
+        'approval_required_after': value['approval_required_after'],
+        'policy_epoch': value['policy_epoch'],
     };
 }
 
@@ -1082,6 +2695,113 @@ export function ChatCompletionResponseUsageToJSON(value?: ChatCompletionResponse
 /**
  *
  * @export
+ * @interface CoexistenceCapabilityManifest
+ */
+export interface CoexistenceCapabilityManifest {
+    /**
+     *
+     * @type {string}
+     * @memberof CoexistenceCapabilityManifest
+     */
+    manifest_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof CoexistenceCapabilityManifest
+     */
+    authority?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof CoexistenceCapabilityManifest
+     */
+    boundary_role?: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof CoexistenceCapabilityManifest
+     */
+    supported_inputs?: Array<string>;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof CoexistenceCapabilityManifest
+     */
+    export_surfaces?: Array<string>;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof CoexistenceCapabilityManifest
+     */
+    receipt_bindings?: Array<string>;
+    /**
+     *
+     * @type {Date}
+     * @memberof CoexistenceCapabilityManifest
+     */
+    generated_at?: Date;
+}
+
+/**
+ * Check if a given object implements the CoexistenceCapabilityManifest interface.
+ */
+export function instanceOfCoexistenceCapabilityManifest(value: object): boolean {
+    return true;
+}
+
+export function CoexistenceCapabilityManifestFromJSON(json: any): CoexistenceCapabilityManifest {
+    return CoexistenceCapabilityManifestFromJSONTyped(json, false);
+}
+
+export function CoexistenceCapabilityManifestFromJSONTyped(json: any, ignoreDiscriminator: boolean): CoexistenceCapabilityManifest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'manifest_id': json['manifest_id'] == null ? undefined : json['manifest_id'],
+        'authority': json['authority'] == null ? undefined : json['authority'],
+        'boundary_role': json['boundary_role'] == null ? undefined : json['boundary_role'],
+        'supported_inputs': json['supported_inputs'] == null ? undefined : json['supported_inputs'],
+        'export_surfaces': json['export_surfaces'] == null ? undefined : json['export_surfaces'],
+        'receipt_bindings': json['receipt_bindings'] == null ? undefined : json['receipt_bindings'],
+        'generated_at': json['generated_at'] == null ? undefined : (new Date(json['generated_at'])),
+    };
+}
+
+export function CoexistenceCapabilityManifestToJSON(value?: CoexistenceCapabilityManifest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'manifest_id': value['manifest_id'],
+        'authority': value['authority'],
+        'boundary_role': value['boundary_role'],
+        'supported_inputs': value['supported_inputs'],
+        'export_surfaces': value['export_surfaces'],
+        'receipt_bindings': value['receipt_bindings'],
+        'generated_at': value['generated_at'] == null ? undefined : ((value['generated_at']).toISOString()),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
  * @interface ConformanceRequest
  */
 export interface ConformanceRequest {
@@ -1268,6 +2988,1050 @@ export function ConformanceResultToJSON(value?: ConformanceResult | null): any {
  * Do not edit the class manually.
  */
 
+
+/**
+ *
+ * @export
+ * @interface ConsoleBootstrap
+ */
+export interface ConsoleBootstrap {
+    /**
+     *
+     * @type {VersionInfo}
+     * @memberof ConsoleBootstrap
+     */
+    version: VersionInfo;
+    /**
+     *
+     * @type {ConsoleBootstrapWorkspace}
+     * @memberof ConsoleBootstrap
+     */
+    workspace: ConsoleBootstrapWorkspace;
+    /**
+     *
+     * @type {ConsoleBootstrapHealth}
+     * @memberof ConsoleBootstrap
+     */
+    health: ConsoleBootstrapHealth;
+    /**
+     *
+     * @type {ConsoleBootstrapCounts}
+     * @memberof ConsoleBootstrap
+     */
+    counts: ConsoleBootstrapCounts;
+    /**
+     *
+     * @type {Array<Receipt>}
+     * @memberof ConsoleBootstrap
+     */
+    receipts: Array<Receipt>;
+    /**
+     *
+     * @type {ConsoleBootstrapConformance}
+     * @memberof ConsoleBootstrap
+     */
+    conformance: ConsoleBootstrapConformance;
+    /**
+     *
+     * @type {ConsoleBootstrapMcp}
+     * @memberof ConsoleBootstrap
+     */
+    mcp: ConsoleBootstrapMcp;
+}
+
+/**
+ * Check if a given object implements the ConsoleBootstrap interface.
+ */
+export function instanceOfConsoleBootstrap(value: object): boolean {
+    if (!('version' in value)) return false;
+    if (!('workspace' in value)) return false;
+    if (!('health' in value)) return false;
+    if (!('counts' in value)) return false;
+    if (!('receipts' in value)) return false;
+    if (!('conformance' in value)) return false;
+    if (!('mcp' in value)) return false;
+    return true;
+}
+
+export function ConsoleBootstrapFromJSON(json: any): ConsoleBootstrap {
+    return ConsoleBootstrapFromJSONTyped(json, false);
+}
+
+export function ConsoleBootstrapFromJSONTyped(json: any, ignoreDiscriminator: boolean): ConsoleBootstrap {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'version': VersionInfoFromJSON(json['version']),
+        'workspace': ConsoleBootstrapWorkspaceFromJSON(json['workspace']),
+        'health': ConsoleBootstrapHealthFromJSON(json['health']),
+        'counts': ConsoleBootstrapCountsFromJSON(json['counts']),
+        'receipts': ((json['receipts'] as Array<any>).map(ReceiptFromJSON)),
+        'conformance': ConsoleBootstrapConformanceFromJSON(json['conformance']),
+        'mcp': ConsoleBootstrapMcpFromJSON(json['mcp']),
+    };
+}
+
+export function ConsoleBootstrapToJSON(value?: ConsoleBootstrap | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'version': VersionInfoToJSON(value['version']),
+        'workspace': ConsoleBootstrapWorkspaceToJSON(value['workspace']),
+        'health': ConsoleBootstrapHealthToJSON(value['health']),
+        'counts': ConsoleBootstrapCountsToJSON(value['counts']),
+        'receipts': ((value['receipts'] as Array<any>).map(ReceiptToJSON)),
+        'conformance': ConsoleBootstrapConformanceToJSON(value['conformance']),
+        'mcp': ConsoleBootstrapMcpToJSON(value['mcp']),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface ConsoleBootstrapConformance
+ */
+export interface ConsoleBootstrapConformance {
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleBootstrapConformance
+     */
+    level: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleBootstrapConformance
+     */
+    status: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleBootstrapConformance
+     */
+    report_id?: string;
+}
+
+/**
+ * Check if a given object implements the ConsoleBootstrapConformance interface.
+ */
+export function instanceOfConsoleBootstrapConformance(value: object): boolean {
+    if (!('level' in value)) return false;
+    if (!('status' in value)) return false;
+    return true;
+}
+
+export function ConsoleBootstrapConformanceFromJSON(json: any): ConsoleBootstrapConformance {
+    return ConsoleBootstrapConformanceFromJSONTyped(json, false);
+}
+
+export function ConsoleBootstrapConformanceFromJSONTyped(json: any, ignoreDiscriminator: boolean): ConsoleBootstrapConformance {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'level': json['level'],
+        'status': json['status'],
+        'report_id': json['report_id'] == null ? undefined : json['report_id'],
+    };
+}
+
+export function ConsoleBootstrapConformanceToJSON(value?: ConsoleBootstrapConformance | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'level': value['level'],
+        'status': value['status'],
+        'report_id': value['report_id'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface ConsoleBootstrapCounts
+ */
+export interface ConsoleBootstrapCounts {
+    /**
+     *
+     * @type {number}
+     * @memberof ConsoleBootstrapCounts
+     */
+    receipts: number;
+    /**
+     *
+     * @type {number}
+     * @memberof ConsoleBootstrapCounts
+     */
+    pending_approvals: number;
+    /**
+     *
+     * @type {number}
+     * @memberof ConsoleBootstrapCounts
+     */
+    open_incidents: number;
+    /**
+     *
+     * @type {number}
+     * @memberof ConsoleBootstrapCounts
+     */
+    mcp_tools: number;
+}
+
+/**
+ * Check if a given object implements the ConsoleBootstrapCounts interface.
+ */
+export function instanceOfConsoleBootstrapCounts(value: object): boolean {
+    if (!('receipts' in value)) return false;
+    if (!('pending_approvals' in value)) return false;
+    if (!('open_incidents' in value)) return false;
+    if (!('mcp_tools' in value)) return false;
+    return true;
+}
+
+export function ConsoleBootstrapCountsFromJSON(json: any): ConsoleBootstrapCounts {
+    return ConsoleBootstrapCountsFromJSONTyped(json, false);
+}
+
+export function ConsoleBootstrapCountsFromJSONTyped(json: any, ignoreDiscriminator: boolean): ConsoleBootstrapCounts {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'receipts': json['receipts'],
+        'pending_approvals': json['pending_approvals'],
+        'open_incidents': json['open_incidents'],
+        'mcp_tools': json['mcp_tools'],
+    };
+}
+
+export function ConsoleBootstrapCountsToJSON(value?: ConsoleBootstrapCounts | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'receipts': value['receipts'],
+        'pending_approvals': value['pending_approvals'],
+        'open_incidents': value['open_incidents'],
+        'mcp_tools': value['mcp_tools'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface ConsoleBootstrapHealth
+ */
+export interface ConsoleBootstrapHealth {
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleBootstrapHealth
+     */
+    kernel: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleBootstrapHealth
+     */
+    policy: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleBootstrapHealth
+     */
+    store: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleBootstrapHealth
+     */
+    conformance: string;
+}
+
+/**
+ * Check if a given object implements the ConsoleBootstrapHealth interface.
+ */
+export function instanceOfConsoleBootstrapHealth(value: object): boolean {
+    if (!('kernel' in value)) return false;
+    if (!('policy' in value)) return false;
+    if (!('store' in value)) return false;
+    if (!('conformance' in value)) return false;
+    return true;
+}
+
+export function ConsoleBootstrapHealthFromJSON(json: any): ConsoleBootstrapHealth {
+    return ConsoleBootstrapHealthFromJSONTyped(json, false);
+}
+
+export function ConsoleBootstrapHealthFromJSONTyped(json: any, ignoreDiscriminator: boolean): ConsoleBootstrapHealth {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'kernel': json['kernel'],
+        'policy': json['policy'],
+        'store': json['store'],
+        'conformance': json['conformance'],
+    };
+}
+
+export function ConsoleBootstrapHealthToJSON(value?: ConsoleBootstrapHealth | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'kernel': value['kernel'],
+        'policy': value['policy'],
+        'store': value['store'],
+        'conformance': value['conformance'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface ConsoleBootstrapMcp
+ */
+export interface ConsoleBootstrapMcp {
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleBootstrapMcp
+     */
+    authorization: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof ConsoleBootstrapMcp
+     */
+    scopes: Array<string>;
+}
+
+/**
+ * Check if a given object implements the ConsoleBootstrapMcp interface.
+ */
+export function instanceOfConsoleBootstrapMcp(value: object): boolean {
+    if (!('authorization' in value)) return false;
+    if (!('scopes' in value)) return false;
+    return true;
+}
+
+export function ConsoleBootstrapMcpFromJSON(json: any): ConsoleBootstrapMcp {
+    return ConsoleBootstrapMcpFromJSONTyped(json, false);
+}
+
+export function ConsoleBootstrapMcpFromJSONTyped(json: any, ignoreDiscriminator: boolean): ConsoleBootstrapMcp {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'authorization': json['authorization'],
+        'scopes': json['scopes'],
+    };
+}
+
+export function ConsoleBootstrapMcpToJSON(value?: ConsoleBootstrapMcp | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'authorization': value['authorization'],
+        'scopes': value['scopes'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface ConsoleBootstrapWorkspace
+ */
+export interface ConsoleBootstrapWorkspace {
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleBootstrapWorkspace
+     */
+    organization: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleBootstrapWorkspace
+     */
+    project: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleBootstrapWorkspace
+     */
+    environment: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleBootstrapWorkspace
+     */
+    mode: string;
+}
+
+/**
+ * Check if a given object implements the ConsoleBootstrapWorkspace interface.
+ */
+export function instanceOfConsoleBootstrapWorkspace(value: object): boolean {
+    if (!('organization' in value)) return false;
+    if (!('project' in value)) return false;
+    if (!('environment' in value)) return false;
+    if (!('mode' in value)) return false;
+    return true;
+}
+
+export function ConsoleBootstrapWorkspaceFromJSON(json: any): ConsoleBootstrapWorkspace {
+    return ConsoleBootstrapWorkspaceFromJSONTyped(json, false);
+}
+
+export function ConsoleBootstrapWorkspaceFromJSONTyped(json: any, ignoreDiscriminator: boolean): ConsoleBootstrapWorkspace {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'organization': json['organization'],
+        'project': json['project'],
+        'environment': json['environment'],
+        'mode': json['mode'],
+    };
+}
+
+export function ConsoleBootstrapWorkspaceToJSON(value?: ConsoleBootstrapWorkspace | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'organization': value['organization'],
+        'project': value['project'],
+        'environment': value['environment'],
+        'mode': value['mode'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface ConsoleSurfaceRef
+ */
+export interface ConsoleSurfaceRef {
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleSurfaceRef
+     */
+    id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleSurfaceRef
+     */
+    source: string;
+}
+
+/**
+ * Check if a given object implements the ConsoleSurfaceRef interface.
+ */
+export function instanceOfConsoleSurfaceRef(value: object): boolean {
+    if (!('id' in value)) return false;
+    if (!('source' in value)) return false;
+    return true;
+}
+
+export function ConsoleSurfaceRefFromJSON(json: any): ConsoleSurfaceRef {
+    return ConsoleSurfaceRefFromJSONTyped(json, false);
+}
+
+export function ConsoleSurfaceRefFromJSONTyped(json: any, ignoreDiscriminator: boolean): ConsoleSurfaceRef {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'id': json['id'],
+        'source': json['source'],
+    };
+}
+
+export function ConsoleSurfaceRefToJSON(value?: ConsoleSurfaceRef | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'id': value['id'],
+        'source': value['source'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface ConsoleSurfaceState
+ */
+export interface ConsoleSurfaceState {
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleSurfaceState
+     */
+    id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleSurfaceState
+     */
+    status: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ConsoleSurfaceState
+     */
+    source: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof ConsoleSurfaceState
+     */
+    generated_at: Date;
+    /**
+     *
+     * @type {{ [key: string]: any; }}
+     * @memberof ConsoleSurfaceState
+     */
+    summary?: { [key: string]: any; };
+    /**
+     *
+     * @type {Array<{ [key: string]: any; }>}
+     * @memberof ConsoleSurfaceState
+     */
+    records?: Array<{ [key: string]: any; }>;
+}
+
+/**
+ * Check if a given object implements the ConsoleSurfaceState interface.
+ */
+export function instanceOfConsoleSurfaceState(value: object): boolean {
+    if (!('id' in value)) return false;
+    if (!('status' in value)) return false;
+    if (!('source' in value)) return false;
+    if (!('generated_at' in value)) return false;
+    return true;
+}
+
+export function ConsoleSurfaceStateFromJSON(json: any): ConsoleSurfaceState {
+    return ConsoleSurfaceStateFromJSONTyped(json, false);
+}
+
+export function ConsoleSurfaceStateFromJSONTyped(json: any, ignoreDiscriminator: boolean): ConsoleSurfaceState {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'id': json['id'],
+        'status': json['status'],
+        'source': json['source'],
+        'generated_at': (new Date(json['generated_at'])),
+        'summary': json['summary'] == null ? undefined : json['summary'],
+        'records': json['records'] == null ? undefined : json['records'],
+    };
+}
+
+export function ConsoleSurfaceStateToJSON(value?: ConsoleSurfaceState | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'id': value['id'],
+        'status': value['status'],
+        'source': value['source'],
+        'generated_at': ((value['generated_at']).toISOString()),
+        'summary': value['summary'],
+        'records': value['records'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface CreateApprovalWebAuthnChallengeRequest
+ */
+export interface CreateApprovalWebAuthnChallengeRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof CreateApprovalWebAuthnChallengeRequest
+     */
+    method?: string;
+    /**
+     *
+     * @type {number}
+     * @memberof CreateApprovalWebAuthnChallengeRequest
+     */
+    ttl_ms?: number;
+}
+
+/**
+ * Check if a given object implements the CreateApprovalWebAuthnChallengeRequest interface.
+ */
+export function instanceOfCreateApprovalWebAuthnChallengeRequest(value: object): boolean {
+    return true;
+}
+
+export function CreateApprovalWebAuthnChallengeRequestFromJSON(json: any): CreateApprovalWebAuthnChallengeRequest {
+    return CreateApprovalWebAuthnChallengeRequestFromJSONTyped(json, false);
+}
+
+export function CreateApprovalWebAuthnChallengeRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): CreateApprovalWebAuthnChallengeRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'method': json['method'] == null ? undefined : json['method'],
+        'ttl_ms': json['ttl_ms'] == null ? undefined : json['ttl_ms'],
+    };
+}
+
+export function CreateApprovalWebAuthnChallengeRequestToJSON(value?: CreateApprovalWebAuthnChallengeRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'method': value['method'],
+        'ttl_ms': value['ttl_ms'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface CreateSandboxGrantRequest
+ */
+export interface CreateSandboxGrantRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof CreateSandboxGrantRequest
+     */
+    runtime?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof CreateSandboxGrantRequest
+     */
+    profile?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof CreateSandboxGrantRequest
+     */
+    image_digest?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof CreateSandboxGrantRequest
+     */
+    policy_epoch?: string;
+}
+
+/**
+ * Check if a given object implements the CreateSandboxGrantRequest interface.
+ */
+export function instanceOfCreateSandboxGrantRequest(value: object): boolean {
+    return true;
+}
+
+export function CreateSandboxGrantRequestFromJSON(json: any): CreateSandboxGrantRequest {
+    return CreateSandboxGrantRequestFromJSONTyped(json, false);
+}
+
+export function CreateSandboxGrantRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): CreateSandboxGrantRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'runtime': json['runtime'] == null ? undefined : json['runtime'],
+        'profile': json['profile'] == null ? undefined : json['profile'],
+        'image_digest': json['image_digest'] == null ? undefined : json['image_digest'],
+        'policy_epoch': json['policy_epoch'] == null ? undefined : json['policy_epoch'],
+    };
+}
+
+export function CreateSandboxGrantRequestToJSON(value?: CreateSandboxGrantRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'runtime': value['runtime'],
+        'profile': value['profile'],
+        'image_digest': value['image_digest'],
+        'policy_epoch': value['policy_epoch'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface DecisionRecord
+ */
+export interface DecisionRecord {
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    action?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    resource?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    verdict?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    reason?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    policy_version?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    policy_decision_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    signature?: string;
+}
+
+/**
+ * Check if a given object implements the DecisionRecord interface.
+ */
+export function instanceOfDecisionRecord(value: object): boolean {
+    return true;
+}
+
+export function DecisionRecordFromJSON(json: any): DecisionRecord {
+    return DecisionRecordFromJSONTyped(json, false);
+}
+
+export function DecisionRecordFromJSONTyped(json: any, ignoreDiscriminator: boolean): DecisionRecord {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'id': json['id'] == null ? undefined : json['id'],
+        'action': json['action'] == null ? undefined : json['action'],
+        'resource': json['resource'] == null ? undefined : json['resource'],
+        'verdict': json['verdict'] == null ? undefined : json['verdict'],
+        'reason': json['reason'] == null ? undefined : json['reason'],
+        'policy_version': json['policy_version'] == null ? undefined : json['policy_version'],
+        'policy_decision_hash': json['policy_decision_hash'] == null ? undefined : json['policy_decision_hash'],
+        'signature': json['signature'] == null ? undefined : json['signature'],
+    };
+}
+
+export function DecisionRecordToJSON(value?: DecisionRecord | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'id': value['id'],
+        'action': value['action'],
+        'resource': value['resource'],
+        'verdict': value['verdict'],
+        'reason': value['reason'],
+        'policy_version': value['policy_version'],
+        'policy_decision_hash': value['policy_decision_hash'],
+        'signature': value['signature'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface DecisionRequest
+ */
+export interface DecisionRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRequest
+     */
+    principal?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRequest
+     */
+    action: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRequest
+     */
+    resource: string;
+    /**
+     *
+     * @type {{ [key: string]: any; }}
+     * @memberof DecisionRequest
+     */
+    context?: { [key: string]: any; };
+}
+
+/**
+ * Check if a given object implements the DecisionRequest interface.
+ */
+export function instanceOfDecisionRequest(value: object): boolean {
+    if (!('action' in value)) return false;
+    if (!('resource' in value)) return false;
+    return true;
+}
+
+export function DecisionRequestFromJSON(json: any): DecisionRequest {
+    return DecisionRequestFromJSONTyped(json, false);
+}
+
+export function DecisionRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): DecisionRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'principal': json['principal'] == null ? undefined : json['principal'],
+        'action': json['action'],
+        'resource': json['resource'],
+        'context': json['context'] == null ? undefined : json['context'],
+    };
+}
+
+export function DecisionRequestToJSON(value?: DecisionRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'principal': value['principal'],
+        'action': value['action'],
+        'resource': value['resource'],
+        'context': value['context'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
 /**
  * An effect submitted for governance evaluation
  * @export
@@ -1435,6 +4199,646 @@ export function EffectBoundaryToJSON(value?: EffectBoundary | null): any {
 /**
  *
  * @export
+ * @interface EnvExposurePolicy
+ */
+export interface EnvExposurePolicy {
+    /**
+     *
+     * @type {string}
+     * @memberof EnvExposurePolicy
+     */
+    mode: EnvExposurePolicyModeEnum;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof EnvExposurePolicy
+     */
+    names?: Array<string>;
+    /**
+     *
+     * @type {string}
+     * @memberof EnvExposurePolicy
+     */
+    names_hash?: string;
+    /**
+     *
+     * @type {boolean}
+     * @memberof EnvExposurePolicy
+     */
+    redacted?: boolean;
+}
+
+
+/**
+ * @export
+ */
+export const EnvExposurePolicyModeEnum = {
+    DenyAll: 'deny-all',
+    Allowlist: 'allowlist',
+    Redacted: 'redacted'
+} as const;
+export type EnvExposurePolicyModeEnum = typeof EnvExposurePolicyModeEnum[keyof typeof EnvExposurePolicyModeEnum];
+
+
+/**
+ * Check if a given object implements the EnvExposurePolicy interface.
+ */
+export function instanceOfEnvExposurePolicy(value: object): boolean {
+    if (!('mode' in value)) return false;
+    return true;
+}
+
+export function EnvExposurePolicyFromJSON(json: any): EnvExposurePolicy {
+    return EnvExposurePolicyFromJSONTyped(json, false);
+}
+
+export function EnvExposurePolicyFromJSONTyped(json: any, ignoreDiscriminator: boolean): EnvExposurePolicy {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'mode': json['mode'],
+        'names': json['names'] == null ? undefined : json['names'],
+        'names_hash': json['names_hash'] == null ? undefined : json['names_hash'],
+        'redacted': json['redacted'] == null ? undefined : json['redacted'],
+    };
+}
+
+export function EnvExposurePolicyToJSON(value?: EnvExposurePolicy | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'mode': value['mode'],
+        'names': value['names'],
+        'names_hash': value['names_hash'],
+        'redacted': value['redacted'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface EvidenceEnvelopeExportRequest
+ */
+export interface EvidenceEnvelopeExportRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof EvidenceEnvelopeExportRequest
+     */
+    manifest_id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof EvidenceEnvelopeExportRequest
+     */
+    envelope: EvidenceEnvelopeExportRequestEnvelopeEnum;
+    /**
+     * HELM-native EvidencePack root hash.
+     * @type {string}
+     * @memberof EvidenceEnvelopeExportRequest
+     */
+    native_evidence_hash: string;
+    /**
+     *
+     * @type {string}
+     * @memberof EvidenceEnvelopeExportRequest
+     */
+    subject?: string;
+    /**
+     * Must be true for experimental SCITT or COSE exports.
+     * @type {boolean}
+     * @memberof EvidenceEnvelopeExportRequest
+     */
+    experimental?: boolean;
+}
+
+
+/**
+ * @export
+ */
+export const EvidenceEnvelopeExportRequestEnvelopeEnum = {
+    Dsse: 'dsse',
+    Jws: 'jws',
+    InToto: 'in-toto',
+    Slsa: 'slsa',
+    Sigstore: 'sigstore',
+    Scitt: 'scitt',
+    Cose: 'cose'
+} as const;
+export type EvidenceEnvelopeExportRequestEnvelopeEnum = typeof EvidenceEnvelopeExportRequestEnvelopeEnum[keyof typeof EvidenceEnvelopeExportRequestEnvelopeEnum];
+
+
+/**
+ * Check if a given object implements the EvidenceEnvelopeExportRequest interface.
+ */
+export function instanceOfEvidenceEnvelopeExportRequest(value: object): boolean {
+    if (!('manifest_id' in value)) return false;
+    if (!('envelope' in value)) return false;
+    if (!('native_evidence_hash' in value)) return false;
+    return true;
+}
+
+export function EvidenceEnvelopeExportRequestFromJSON(json: any): EvidenceEnvelopeExportRequest {
+    return EvidenceEnvelopeExportRequestFromJSONTyped(json, false);
+}
+
+export function EvidenceEnvelopeExportRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): EvidenceEnvelopeExportRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'manifest_id': json['manifest_id'],
+        'envelope': json['envelope'],
+        'native_evidence_hash': json['native_evidence_hash'],
+        'subject': json['subject'] == null ? undefined : json['subject'],
+        'experimental': json['experimental'] == null ? undefined : json['experimental'],
+    };
+}
+
+export function EvidenceEnvelopeExportRequestToJSON(value?: EvidenceEnvelopeExportRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'manifest_id': value['manifest_id'],
+        'envelope': value['envelope'],
+        'native_evidence_hash': value['native_evidence_hash'],
+        'subject': value['subject'],
+        'experimental': value['experimental'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface EvidenceEnvelopeManifest
+ */
+export interface EvidenceEnvelopeManifest {
+    /**
+     *
+     * @type {string}
+     * @memberof EvidenceEnvelopeManifest
+     */
+    manifest_id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof EvidenceEnvelopeManifest
+     */
+    envelope: EvidenceEnvelopeManifestEnvelopeEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof EvidenceEnvelopeManifest
+     */
+    native_evidence_hash: string;
+    /**
+     *
+     * @type {boolean}
+     * @memberof EvidenceEnvelopeManifest
+     */
+    native_authority: boolean;
+    /**
+     *
+     * @type {string}
+     * @memberof EvidenceEnvelopeManifest
+     */
+    subject?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof EvidenceEnvelopeManifest
+     */
+    statement_hash?: string;
+    /**
+     *
+     * @type {boolean}
+     * @memberof EvidenceEnvelopeManifest
+     */
+    experimental?: boolean;
+    /**
+     *
+     * @type {Date}
+     * @memberof EvidenceEnvelopeManifest
+     */
+    created_at: Date;
+    /**
+     *
+     * @type {string}
+     * @memberof EvidenceEnvelopeManifest
+     */
+    manifest_hash?: string;
+}
+
+
+/**
+ * @export
+ */
+export const EvidenceEnvelopeManifestEnvelopeEnum = {
+    Dsse: 'dsse',
+    Jws: 'jws',
+    InToto: 'in-toto',
+    Slsa: 'slsa',
+    Sigstore: 'sigstore',
+    Scitt: 'scitt',
+    Cose: 'cose'
+} as const;
+export type EvidenceEnvelopeManifestEnvelopeEnum = typeof EvidenceEnvelopeManifestEnvelopeEnum[keyof typeof EvidenceEnvelopeManifestEnvelopeEnum];
+
+
+/**
+ * Check if a given object implements the EvidenceEnvelopeManifest interface.
+ */
+export function instanceOfEvidenceEnvelopeManifest(value: object): boolean {
+    if (!('manifest_id' in value)) return false;
+    if (!('envelope' in value)) return false;
+    if (!('native_evidence_hash' in value)) return false;
+    if (!('native_authority' in value)) return false;
+    if (!('created_at' in value)) return false;
+    return true;
+}
+
+export function EvidenceEnvelopeManifestFromJSON(json: any): EvidenceEnvelopeManifest {
+    return EvidenceEnvelopeManifestFromJSONTyped(json, false);
+}
+
+export function EvidenceEnvelopeManifestFromJSONTyped(json: any, ignoreDiscriminator: boolean): EvidenceEnvelopeManifest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'manifest_id': json['manifest_id'],
+        'envelope': json['envelope'],
+        'native_evidence_hash': json['native_evidence_hash'],
+        'native_authority': json['native_authority'],
+        'subject': json['subject'] == null ? undefined : json['subject'],
+        'statement_hash': json['statement_hash'] == null ? undefined : json['statement_hash'],
+        'experimental': json['experimental'] == null ? undefined : json['experimental'],
+        'created_at': (new Date(json['created_at'])),
+        'manifest_hash': json['manifest_hash'] == null ? undefined : json['manifest_hash'],
+    };
+}
+
+export function EvidenceEnvelopeManifestToJSON(value?: EvidenceEnvelopeManifest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'manifest_id': value['manifest_id'],
+        'envelope': value['envelope'],
+        'native_evidence_hash': value['native_evidence_hash'],
+        'native_authority': value['native_authority'],
+        'subject': value['subject'],
+        'statement_hash': value['statement_hash'],
+        'experimental': value['experimental'],
+        'created_at': ((value['created_at']).toISOString()),
+        'manifest_hash': value['manifest_hash'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface EvidenceEnvelopeVerification
+ */
+export interface EvidenceEnvelopeVerification {
+    /**
+     *
+     * @type {string}
+     * @memberof EvidenceEnvelopeVerification
+     */
+    manifest_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof EvidenceEnvelopeVerification
+     */
+    manifest_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof EvidenceEnvelopeVerification
+     */
+    native_evidence_hash?: string;
+    /**
+     *
+     * @type {boolean}
+     * @memberof EvidenceEnvelopeVerification
+     */
+    verified?: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof EvidenceEnvelopeVerification
+     */
+    authoritative?: boolean;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof EvidenceEnvelopeVerification
+     */
+    errors?: Array<string>;
+    /**
+     *
+     * @type {Date}
+     * @memberof EvidenceEnvelopeVerification
+     */
+    checked_at?: Date;
+}
+
+/**
+ * Check if a given object implements the EvidenceEnvelopeVerification interface.
+ */
+export function instanceOfEvidenceEnvelopeVerification(value: object): boolean {
+    return true;
+}
+
+export function EvidenceEnvelopeVerificationFromJSON(json: any): EvidenceEnvelopeVerification {
+    return EvidenceEnvelopeVerificationFromJSONTyped(json, false);
+}
+
+export function EvidenceEnvelopeVerificationFromJSONTyped(json: any, ignoreDiscriminator: boolean): EvidenceEnvelopeVerification {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'manifest_id': json['manifest_id'] == null ? undefined : json['manifest_id'],
+        'manifest_hash': json['manifest_hash'] == null ? undefined : json['manifest_hash'],
+        'native_evidence_hash': json['native_evidence_hash'] == null ? undefined : json['native_evidence_hash'],
+        'verified': json['verified'] == null ? undefined : json['verified'],
+        'authoritative': json['authoritative'] == null ? undefined : json['authoritative'],
+        'errors': json['errors'] == null ? undefined : json['errors'],
+        'checked_at': json['checked_at'] == null ? undefined : (new Date(json['checked_at'])),
+    };
+}
+
+export function EvidenceEnvelopeVerificationToJSON(value?: EvidenceEnvelopeVerification | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'manifest_id': value['manifest_id'],
+        'manifest_hash': value['manifest_hash'],
+        'native_evidence_hash': value['native_evidence_hash'],
+        'verified': value['verified'],
+        'authoritative': value['authoritative'],
+        'errors': value['errors'],
+        'checked_at': value['checked_at'] == null ? undefined : ((value['checked_at']).toISOString()),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface ExecutionBoundaryRecord
+ */
+export interface ExecutionBoundaryRecord {
+    /**
+     *
+     * @type {string}
+     * @memberof ExecutionBoundaryRecord
+     */
+    record_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ExecutionBoundaryRecord
+     */
+    verdict?: ExecutionBoundaryRecordVerdictEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof ExecutionBoundaryRecord
+     */
+    reason_code?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ExecutionBoundaryRecord
+     */
+    tool_name?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ExecutionBoundaryRecord
+     */
+    args_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ExecutionBoundaryRecord
+     */
+    policy_epoch?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ExecutionBoundaryRecord
+     */
+    mcp_server_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ExecutionBoundaryRecord
+     */
+    oauth_resource?: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof ExecutionBoundaryRecord
+     */
+    oauth_scopes?: Array<string>;
+    /**
+     *
+     * @type {string}
+     * @memberof ExecutionBoundaryRecord
+     */
+    sandbox_grant_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ExecutionBoundaryRecord
+     */
+    authz_snapshot_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ExecutionBoundaryRecord
+     */
+    approval_receipt_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ExecutionBoundaryRecord
+     */
+    receipt_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ExecutionBoundaryRecord
+     */
+    record_hash?: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof ExecutionBoundaryRecord
+     */
+    created_at?: Date;
+}
+
+
+/**
+ * @export
+ */
+export const ExecutionBoundaryRecordVerdictEnum = {
+    Allow: 'ALLOW',
+    Deny: 'DENY',
+    Escalate: 'ESCALATE'
+} as const;
+export type ExecutionBoundaryRecordVerdictEnum = typeof ExecutionBoundaryRecordVerdictEnum[keyof typeof ExecutionBoundaryRecordVerdictEnum];
+
+
+/**
+ * Check if a given object implements the ExecutionBoundaryRecord interface.
+ */
+export function instanceOfExecutionBoundaryRecord(value: object): boolean {
+    return true;
+}
+
+export function ExecutionBoundaryRecordFromJSON(json: any): ExecutionBoundaryRecord {
+    return ExecutionBoundaryRecordFromJSONTyped(json, false);
+}
+
+export function ExecutionBoundaryRecordFromJSONTyped(json: any, ignoreDiscriminator: boolean): ExecutionBoundaryRecord {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'record_id': json['record_id'] == null ? undefined : json['record_id'],
+        'verdict': json['verdict'] == null ? undefined : json['verdict'],
+        'reason_code': json['reason_code'] == null ? undefined : json['reason_code'],
+        'tool_name': json['tool_name'] == null ? undefined : json['tool_name'],
+        'args_hash': json['args_hash'] == null ? undefined : json['args_hash'],
+        'policy_epoch': json['policy_epoch'] == null ? undefined : json['policy_epoch'],
+        'mcp_server_id': json['mcp_server_id'] == null ? undefined : json['mcp_server_id'],
+        'oauth_resource': json['oauth_resource'] == null ? undefined : json['oauth_resource'],
+        'oauth_scopes': json['oauth_scopes'] == null ? undefined : json['oauth_scopes'],
+        'sandbox_grant_hash': json['sandbox_grant_hash'] == null ? undefined : json['sandbox_grant_hash'],
+        'authz_snapshot_hash': json['authz_snapshot_hash'] == null ? undefined : json['authz_snapshot_hash'],
+        'approval_receipt_id': json['approval_receipt_id'] == null ? undefined : json['approval_receipt_id'],
+        'receipt_id': json['receipt_id'] == null ? undefined : json['receipt_id'],
+        'record_hash': json['record_hash'] == null ? undefined : json['record_hash'],
+        'created_at': json['created_at'] == null ? undefined : (new Date(json['created_at'])),
+    };
+}
+
+export function ExecutionBoundaryRecordToJSON(value?: ExecutionBoundaryRecord | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'record_id': value['record_id'],
+        'verdict': value['verdict'],
+        'reason_code': value['reason_code'],
+        'tool_name': value['tool_name'],
+        'args_hash': value['args_hash'],
+        'policy_epoch': value['policy_epoch'],
+        'mcp_server_id': value['mcp_server_id'],
+        'oauth_resource': value['oauth_resource'],
+        'oauth_scopes': value['oauth_scopes'],
+        'sandbox_grant_hash': value['sandbox_grant_hash'],
+        'authz_snapshot_hash': value['authz_snapshot_hash'],
+        'approval_receipt_id': value['approval_receipt_id'],
+        'receipt_id': value['receipt_id'],
+        'record_hash': value['record_hash'],
+        'created_at': value['created_at'] == null ? undefined : ((value['created_at']).toISOString()),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
  * @interface ExportRequest
  */
 export interface ExportRequest {
@@ -1492,6 +4896,295 @@ export function ExportRequestToJSON(value?: ExportRequest | null): any {
 
         'session_id': value['session_id'],
         'format': value['format'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface FilesystemPreopen
+ */
+export interface FilesystemPreopen {
+    /**
+     *
+     * @type {string}
+     * @memberof FilesystemPreopen
+     */
+    path: string;
+    /**
+     *
+     * @type {string}
+     * @memberof FilesystemPreopen
+     */
+    mode: FilesystemPreopenModeEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof FilesystemPreopen
+     */
+    content_hash?: string;
+}
+
+
+/**
+ * @export
+ */
+export const FilesystemPreopenModeEnum = {
+    Ro: 'ro',
+    Rw: 'rw'
+} as const;
+export type FilesystemPreopenModeEnum = typeof FilesystemPreopenModeEnum[keyof typeof FilesystemPreopenModeEnum];
+
+
+/**
+ * Check if a given object implements the FilesystemPreopen interface.
+ */
+export function instanceOfFilesystemPreopen(value: object): boolean {
+    if (!('path' in value)) return false;
+    if (!('mode' in value)) return false;
+    return true;
+}
+
+export function FilesystemPreopenFromJSON(json: any): FilesystemPreopen {
+    return FilesystemPreopenFromJSONTyped(json, false);
+}
+
+export function FilesystemPreopenFromJSONTyped(json: any, ignoreDiscriminator: boolean): FilesystemPreopen {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'path': json['path'],
+        'mode': json['mode'],
+        'content_hash': json['content_hash'] == null ? undefined : json['content_hash'],
+    };
+}
+
+export function FilesystemPreopenToJSON(value?: FilesystemPreopen | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'path': value['path'],
+        'mode': value['mode'],
+        'content_hash': value['content_hash'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface GetAgentUIRuntimeInfo200Response
+ */
+export interface GetAgentUIRuntimeInfo200Response {
+    /**
+     *
+     * @type {string}
+     * @memberof GetAgentUIRuntimeInfo200Response
+     */
+    runtime: string;
+    /**
+     *
+     * @type {any}
+     * @memberof GetAgentUIRuntimeInfo200Response
+     */
+    protocol: any | null;
+    /**
+     *
+     * @type {any}
+     * @memberof GetAgentUIRuntimeInfo200Response
+     */
+    transport: any | null;
+    /**
+     *
+     * @type {any}
+     * @memberof GetAgentUIRuntimeInfo200Response
+     */
+    tools: any | null;
+}
+
+/**
+ * Check if a given object implements the GetAgentUIRuntimeInfo200Response interface.
+ */
+export function instanceOfGetAgentUIRuntimeInfo200Response(value: object): boolean {
+    if (!('runtime' in value)) return false;
+    if (!('protocol' in value)) return false;
+    if (!('transport' in value)) return false;
+    if (!('tools' in value)) return false;
+    return true;
+}
+
+export function GetAgentUIRuntimeInfo200ResponseFromJSON(json: any): GetAgentUIRuntimeInfo200Response {
+    return GetAgentUIRuntimeInfo200ResponseFromJSONTyped(json, false);
+}
+
+export function GetAgentUIRuntimeInfo200ResponseFromJSONTyped(json: any, ignoreDiscriminator: boolean): GetAgentUIRuntimeInfo200Response {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'runtime': json['runtime'],
+        'protocol': json['protocol'],
+        'transport': json['transport'],
+        'tools': json['tools'],
+    };
+}
+
+export function GetAgentUIRuntimeInfo200ResponseToJSON(value?: GetAgentUIRuntimeInfo200Response | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'runtime': value['runtime'],
+        'protocol': value['protocol'],
+        'transport': value['transport'],
+        'tools': value['tools'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface GetPublicDemoHealth200Response
+ */
+export interface GetPublicDemoHealth200Response {
+    /**
+     *
+     * @type {string}
+     * @memberof GetPublicDemoHealth200Response
+     */
+    version: string;
+    /**
+     *
+     * @type {string}
+     * @memberof GetPublicDemoHealth200Response
+     */
+    commit: string;
+    /**
+     *
+     * @type {string}
+     * @memberof GetPublicDemoHealth200Response
+     */
+    helm_oss_version: string;
+    /**
+     *
+     * @type {string}
+     * @memberof GetPublicDemoHealth200Response
+     */
+    status: string;
+    /**
+     *
+     * @type {string}
+     * @memberof GetPublicDemoHealth200Response
+     */
+    build_time: string;
+    /**
+     *
+     * @type {string}
+     * @memberof GetPublicDemoHealth200Response
+     */
+    git_sha: string;
+    /**
+     *
+     * @type {string}
+     * @memberof GetPublicDemoHealth200Response
+     */
+    deployment_id: string;
+}
+
+/**
+ * Check if a given object implements the GetPublicDemoHealth200Response interface.
+ */
+export function instanceOfGetPublicDemoHealth200Response(value: object): boolean {
+    if (!('version' in value)) return false;
+    if (!('commit' in value)) return false;
+    if (!('helm_oss_version' in value)) return false;
+    if (!('status' in value)) return false;
+    if (!('build_time' in value)) return false;
+    if (!('git_sha' in value)) return false;
+    if (!('deployment_id' in value)) return false;
+    return true;
+}
+
+export function GetPublicDemoHealth200ResponseFromJSON(json: any): GetPublicDemoHealth200Response {
+    return GetPublicDemoHealth200ResponseFromJSONTyped(json, false);
+}
+
+export function GetPublicDemoHealth200ResponseFromJSONTyped(json: any, ignoreDiscriminator: boolean): GetPublicDemoHealth200Response {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'version': json['version'],
+        'commit': json['commit'],
+        'helm_oss_version': json['helm_oss_version'],
+        'status': json['status'],
+        'build_time': json['build_time'],
+        'git_sha': json['git_sha'],
+        'deployment_id': json['deployment_id'],
+    };
+}
+
+export function GetPublicDemoHealth200ResponseToJSON(value?: GetPublicDemoHealth200Response | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'version': value['version'],
+        'commit': value['commit'],
+        'helm_oss_version': value['helm_oss_version'],
+        'status': value['status'],
+        'build_time': value['build_time'],
+        'git_sha': value['git_sha'],
+        'deployment_id': value['deployment_id'],
     };
 }
 
@@ -1865,6 +5558,314 @@ export function HelmErrorErrorToJSON(value?: HelmErrorError | null): any {
         'code': value['code'],
         'reason_code': value['reason_code'],
         'details': value['details'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+/**
+ *
+ * @export
+ * @interface ListConsoleSurfaces200Response
+ */
+export interface ListConsoleSurfaces200Response {
+    /**
+     *
+     * @type {Array<ConsoleSurfaceRef>}
+     * @memberof ListConsoleSurfaces200Response
+     */
+    surfaces?: Array<ConsoleSurfaceRef>;
+}
+
+/**
+ * Check if a given object implements the ListConsoleSurfaces200Response interface.
+ */
+export function instanceOfListConsoleSurfaces200Response(value: object): boolean {
+    return true;
+}
+
+export function ListConsoleSurfaces200ResponseFromJSON(json: any): ListConsoleSurfaces200Response {
+    return ListConsoleSurfaces200ResponseFromJSONTyped(json, false);
+}
+
+export function ListConsoleSurfaces200ResponseFromJSONTyped(json: any, ignoreDiscriminator: boolean): ListConsoleSurfaces200Response {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'surfaces': json['surfaces'] == null ? undefined : ((json['surfaces'] as Array<any>).map(ConsoleSurfaceRefFromJSON)),
+    };
+}
+
+export function ListConsoleSurfaces200ResponseToJSON(value?: ListConsoleSurfaces200Response | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'surfaces': value['surfaces'] == null ? undefined : ((value['surfaces'] as Array<any>).map(ConsoleSurfaceRefToJSON)),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface MCPAuthorizationProfile
+ */
+export interface MCPAuthorizationProfile {
+    /**
+     *
+     * @type {string}
+     * @memberof MCPAuthorizationProfile
+     */
+    profile_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPAuthorizationProfile
+     */
+    protocol_version?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPAuthorizationProfile
+     */
+    resource?: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof MCPAuthorizationProfile
+     */
+    authorization_servers?: Array<string>;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof MCPAuthorizationProfile
+     */
+    scopes_supported?: Array<string>;
+    /**
+     *
+     * @type {{ [key: string]: any; }}
+     * @memberof MCPAuthorizationProfile
+     */
+    tool_scopes?: { [key: string]: any; };
+    /**
+     *
+     * @type {string}
+     * @memberof MCPAuthorizationProfile
+     */
+    required_audience?: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof MCPAuthorizationProfile
+     */
+    stale_after?: Date;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPAuthorizationProfile
+     */
+    profile_hash?: string;
+}
+
+/**
+ * Check if a given object implements the MCPAuthorizationProfile interface.
+ */
+export function instanceOfMCPAuthorizationProfile(value: object): boolean {
+    return true;
+}
+
+export function MCPAuthorizationProfileFromJSON(json: any): MCPAuthorizationProfile {
+    return MCPAuthorizationProfileFromJSONTyped(json, false);
+}
+
+export function MCPAuthorizationProfileFromJSONTyped(json: any, ignoreDiscriminator: boolean): MCPAuthorizationProfile {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'profile_id': json['profile_id'] == null ? undefined : json['profile_id'],
+        'protocol_version': json['protocol_version'] == null ? undefined : json['protocol_version'],
+        'resource': json['resource'] == null ? undefined : json['resource'],
+        'authorization_servers': json['authorization_servers'] == null ? undefined : json['authorization_servers'],
+        'scopes_supported': json['scopes_supported'] == null ? undefined : json['scopes_supported'],
+        'tool_scopes': json['tool_scopes'] == null ? undefined : json['tool_scopes'],
+        'required_audience': json['required_audience'] == null ? undefined : json['required_audience'],
+        'stale_after': json['stale_after'] == null ? undefined : (new Date(json['stale_after'])),
+        'profile_hash': json['profile_hash'] == null ? undefined : json['profile_hash'],
+    };
+}
+
+export function MCPAuthorizationProfileToJSON(value?: MCPAuthorizationProfile | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'profile_id': value['profile_id'],
+        'protocol_version': value['protocol_version'],
+        'resource': value['resource'],
+        'authorization_servers': value['authorization_servers'],
+        'scopes_supported': value['scopes_supported'],
+        'tool_scopes': value['tool_scopes'],
+        'required_audience': value['required_audience'],
+        'stale_after': value['stale_after'] == null ? undefined : ((value['stale_after']).toISOString()),
+        'profile_hash': value['profile_hash'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface MCPAuthorizeCallRequest
+ */
+export interface MCPAuthorizeCallRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof MCPAuthorizeCallRequest
+     */
+    server_id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPAuthorizeCallRequest
+     */
+    tool_name: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPAuthorizeCallRequest
+     */
+    args_hash?: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof MCPAuthorizeCallRequest
+     */
+    granted_scopes?: Array<string>;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPAuthorizeCallRequest
+     */
+    pinned_schema_hash?: string;
+    /**
+     *
+     * @type {{ [key: string]: any; }}
+     * @memberof MCPAuthorizeCallRequest
+     */
+    tool_schema?: { [key: string]: any; };
+    /**
+     *
+     * @type {{ [key: string]: any; }}
+     * @memberof MCPAuthorizeCallRequest
+     */
+    output_schema?: { [key: string]: any; };
+    /**
+     *
+     * @type {string}
+     * @memberof MCPAuthorizeCallRequest
+     */
+    oauth_resource?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPAuthorizeCallRequest
+     */
+    receipt_id?: string;
+}
+
+/**
+ * Check if a given object implements the MCPAuthorizeCallRequest interface.
+ */
+export function instanceOfMCPAuthorizeCallRequest(value: object): boolean {
+    if (!('server_id' in value)) return false;
+    if (!('tool_name' in value)) return false;
+    return true;
+}
+
+export function MCPAuthorizeCallRequestFromJSON(json: any): MCPAuthorizeCallRequest {
+    return MCPAuthorizeCallRequestFromJSONTyped(json, false);
+}
+
+export function MCPAuthorizeCallRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): MCPAuthorizeCallRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'server_id': json['server_id'],
+        'tool_name': json['tool_name'],
+        'args_hash': json['args_hash'] == null ? undefined : json['args_hash'],
+        'granted_scopes': json['granted_scopes'] == null ? undefined : json['granted_scopes'],
+        'pinned_schema_hash': json['pinned_schema_hash'] == null ? undefined : json['pinned_schema_hash'],
+        'tool_schema': json['tool_schema'] == null ? undefined : json['tool_schema'],
+        'output_schema': json['output_schema'] == null ? undefined : json['output_schema'],
+        'oauth_resource': json['oauth_resource'] == null ? undefined : json['oauth_resource'],
+        'receipt_id': json['receipt_id'] == null ? undefined : json['receipt_id'],
+    };
+}
+
+export function MCPAuthorizeCallRequestToJSON(value?: MCPAuthorizeCallRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'server_id': value['server_id'],
+        'tool_name': value['tool_name'],
+        'args_hash': value['args_hash'],
+        'granted_scopes': value['granted_scopes'],
+        'pinned_schema_hash': value['pinned_schema_hash'],
+        'tool_schema': value['tool_schema'],
+        'output_schema': value['output_schema'],
+        'oauth_resource': value['oauth_resource'],
+        'receipt_id': value['receipt_id'],
     };
 }
 
@@ -2397,6 +6398,407 @@ export function MCPProtectedResourceMetadataToJSON(value?: MCPProtectedResourceM
 /**
  *
  * @export
+ * @interface MCPQuarantineRecord
+ */
+export interface MCPQuarantineRecord {
+    /**
+     *
+     * @type {string}
+     * @memberof MCPQuarantineRecord
+     */
+    server_id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPQuarantineRecord
+     */
+    name?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPQuarantineRecord
+     */
+    transport?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPQuarantineRecord
+     */
+    endpoint?: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof MCPQuarantineRecord
+     */
+    tool_names?: Array<string>;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPQuarantineRecord
+     */
+    risk: MCPQuarantineRecordRiskEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPQuarantineRecord
+     */
+    state: MCPQuarantineRecordStateEnum;
+    /**
+     *
+     * @type {Date}
+     * @memberof MCPQuarantineRecord
+     */
+    discovered_at: Date;
+    /**
+     *
+     * @type {Date}
+     * @memberof MCPQuarantineRecord
+     */
+    approved_at?: Date;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPQuarantineRecord
+     */
+    approved_by?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPQuarantineRecord
+     */
+    approval_receipt_id?: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof MCPQuarantineRecord
+     */
+    revoked_at?: Date;
+    /**
+     *
+     * @type {Date}
+     * @memberof MCPQuarantineRecord
+     */
+    expires_at?: Date;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPQuarantineRecord
+     */
+    reason?: string;
+}
+
+
+/**
+ * @export
+ */
+export const MCPQuarantineRecordRiskEnum = {
+    Unknown: 'unknown',
+    Low: 'low',
+    Medium: 'medium',
+    High: 'high',
+    Critical: 'critical'
+} as const;
+export type MCPQuarantineRecordRiskEnum = typeof MCPQuarantineRecordRiskEnum[keyof typeof MCPQuarantineRecordRiskEnum];
+
+/**
+ * @export
+ */
+export const MCPQuarantineRecordStateEnum = {
+    Discovered: 'discovered',
+    Quarantined: 'quarantined',
+    Approved: 'approved',
+    Revoked: 'revoked',
+    Expired: 'expired'
+} as const;
+export type MCPQuarantineRecordStateEnum = typeof MCPQuarantineRecordStateEnum[keyof typeof MCPQuarantineRecordStateEnum];
+
+
+/**
+ * Check if a given object implements the MCPQuarantineRecord interface.
+ */
+export function instanceOfMCPQuarantineRecord(value: object): boolean {
+    if (!('server_id' in value)) return false;
+    if (!('risk' in value)) return false;
+    if (!('state' in value)) return false;
+    if (!('discovered_at' in value)) return false;
+    return true;
+}
+
+export function MCPQuarantineRecordFromJSON(json: any): MCPQuarantineRecord {
+    return MCPQuarantineRecordFromJSONTyped(json, false);
+}
+
+export function MCPQuarantineRecordFromJSONTyped(json: any, ignoreDiscriminator: boolean): MCPQuarantineRecord {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'server_id': json['server_id'],
+        'name': json['name'] == null ? undefined : json['name'],
+        'transport': json['transport'] == null ? undefined : json['transport'],
+        'endpoint': json['endpoint'] == null ? undefined : json['endpoint'],
+        'tool_names': json['tool_names'] == null ? undefined : json['tool_names'],
+        'risk': json['risk'],
+        'state': json['state'],
+        'discovered_at': (new Date(json['discovered_at'])),
+        'approved_at': json['approved_at'] == null ? undefined : (new Date(json['approved_at'])),
+        'approved_by': json['approved_by'] == null ? undefined : json['approved_by'],
+        'approval_receipt_id': json['approval_receipt_id'] == null ? undefined : json['approval_receipt_id'],
+        'revoked_at': json['revoked_at'] == null ? undefined : (new Date(json['revoked_at'])),
+        'expires_at': json['expires_at'] == null ? undefined : (new Date(json['expires_at'])),
+        'reason': json['reason'] == null ? undefined : json['reason'],
+    };
+}
+
+export function MCPQuarantineRecordToJSON(value?: MCPQuarantineRecord | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'server_id': value['server_id'],
+        'name': value['name'],
+        'transport': value['transport'],
+        'endpoint': value['endpoint'],
+        'tool_names': value['tool_names'],
+        'risk': value['risk'],
+        'state': value['state'],
+        'discovered_at': ((value['discovered_at']).toISOString()),
+        'approved_at': value['approved_at'] == null ? undefined : ((value['approved_at']).toISOString()),
+        'approved_by': value['approved_by'],
+        'approval_receipt_id': value['approval_receipt_id'],
+        'revoked_at': value['revoked_at'] == null ? undefined : ((value['revoked_at']).toISOString()),
+        'expires_at': value['expires_at'] == null ? undefined : ((value['expires_at']).toISOString()),
+        'reason': value['reason'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface MCPRegistryApprovalRequest
+ */
+export interface MCPRegistryApprovalRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof MCPRegistryApprovalRequest
+     */
+    server_id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPRegistryApprovalRequest
+     */
+    approver_id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPRegistryApprovalRequest
+     */
+    approval_receipt_id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPRegistryApprovalRequest
+     */
+    reason?: string;
+}
+
+/**
+ * Check if a given object implements the MCPRegistryApprovalRequest interface.
+ */
+export function instanceOfMCPRegistryApprovalRequest(value: object): boolean {
+    if (!('server_id' in value)) return false;
+    if (!('approver_id' in value)) return false;
+    if (!('approval_receipt_id' in value)) return false;
+    return true;
+}
+
+export function MCPRegistryApprovalRequestFromJSON(json: any): MCPRegistryApprovalRequest {
+    return MCPRegistryApprovalRequestFromJSONTyped(json, false);
+}
+
+export function MCPRegistryApprovalRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): MCPRegistryApprovalRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'server_id': json['server_id'],
+        'approver_id': json['approver_id'],
+        'approval_receipt_id': json['approval_receipt_id'],
+        'reason': json['reason'] == null ? undefined : json['reason'],
+    };
+}
+
+export function MCPRegistryApprovalRequestToJSON(value?: MCPRegistryApprovalRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'server_id': value['server_id'],
+        'approver_id': value['approver_id'],
+        'approval_receipt_id': value['approval_receipt_id'],
+        'reason': value['reason'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface MCPRegistryDiscoverRequest
+ */
+export interface MCPRegistryDiscoverRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof MCPRegistryDiscoverRequest
+     */
+    server_id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPRegistryDiscoverRequest
+     */
+    name?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPRegistryDiscoverRequest
+     */
+    transport?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPRegistryDiscoverRequest
+     */
+    endpoint?: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof MCPRegistryDiscoverRequest
+     */
+    tool_names?: Array<string>;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPRegistryDiscoverRequest
+     */
+    risk?: MCPRegistryDiscoverRequestRiskEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPRegistryDiscoverRequest
+     */
+    reason?: string;
+}
+
+
+/**
+ * @export
+ */
+export const MCPRegistryDiscoverRequestRiskEnum = {
+    Unknown: 'unknown',
+    Low: 'low',
+    Medium: 'medium',
+    High: 'high',
+    Critical: 'critical'
+} as const;
+export type MCPRegistryDiscoverRequestRiskEnum = typeof MCPRegistryDiscoverRequestRiskEnum[keyof typeof MCPRegistryDiscoverRequestRiskEnum];
+
+
+/**
+ * Check if a given object implements the MCPRegistryDiscoverRequest interface.
+ */
+export function instanceOfMCPRegistryDiscoverRequest(value: object): boolean {
+    if (!('server_id' in value)) return false;
+    return true;
+}
+
+export function MCPRegistryDiscoverRequestFromJSON(json: any): MCPRegistryDiscoverRequest {
+    return MCPRegistryDiscoverRequestFromJSONTyped(json, false);
+}
+
+export function MCPRegistryDiscoverRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): MCPRegistryDiscoverRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'server_id': json['server_id'],
+        'name': json['name'] == null ? undefined : json['name'],
+        'transport': json['transport'] == null ? undefined : json['transport'],
+        'endpoint': json['endpoint'] == null ? undefined : json['endpoint'],
+        'tool_names': json['tool_names'] == null ? undefined : json['tool_names'],
+        'risk': json['risk'] == null ? undefined : json['risk'],
+        'reason': json['reason'] == null ? undefined : json['reason'],
+    };
+}
+
+export function MCPRegistryDiscoverRequestToJSON(value?: MCPRegistryDiscoverRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'server_id': value['server_id'],
+        'name': value['name'],
+        'transport': value['transport'],
+        'endpoint': value['endpoint'],
+        'tool_names': value['tool_names'],
+        'risk': value['risk'],
+        'reason': value['reason'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
  * @interface MCPRemoteDiscovery
  */
 export interface MCPRemoteDiscovery {
@@ -2492,6 +6894,245 @@ export function MCPRemoteDiscoveryToJSON(value?: MCPRemoteDiscovery | null): any
         'supported_protocol_versions': value['supported_protocol_versions'],
         'auth_mode': value['auth_mode'],
         'governance': value['governance'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface MCPScanRequest
+ */
+export interface MCPScanRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof MCPScanRequest
+     */
+    server_id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPScanRequest
+     */
+    name?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPScanRequest
+     */
+    transport?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPScanRequest
+     */
+    endpoint?: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof MCPScanRequest
+     */
+    tool_names?: Array<string>;
+    /**
+     *
+     * @type {{ [key: string]: any; }}
+     * @memberof MCPScanRequest
+     */
+    manifest?: { [key: string]: any; };
+}
+
+/**
+ * Check if a given object implements the MCPScanRequest interface.
+ */
+export function instanceOfMCPScanRequest(value: object): boolean {
+    if (!('server_id' in value)) return false;
+    return true;
+}
+
+export function MCPScanRequestFromJSON(json: any): MCPScanRequest {
+    return MCPScanRequestFromJSONTyped(json, false);
+}
+
+export function MCPScanRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): MCPScanRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'server_id': json['server_id'],
+        'name': json['name'] == null ? undefined : json['name'],
+        'transport': json['transport'] == null ? undefined : json['transport'],
+        'endpoint': json['endpoint'] == null ? undefined : json['endpoint'],
+        'tool_names': json['tool_names'] == null ? undefined : json['tool_names'],
+        'manifest': json['manifest'] == null ? undefined : json['manifest'],
+    };
+}
+
+export function MCPScanRequestToJSON(value?: MCPScanRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'server_id': value['server_id'],
+        'name': value['name'],
+        'transport': value['transport'],
+        'endpoint': value['endpoint'],
+        'tool_names': value['tool_names'],
+        'manifest': value['manifest'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface MCPScanResult
+ */
+export interface MCPScanResult {
+    /**
+     *
+     * @type {string}
+     * @memberof MCPScanResult
+     */
+    server_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPScanResult
+     */
+    risk?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPScanResult
+     */
+    state?: string;
+    /**
+     *
+     * @type {number}
+     * @memberof MCPScanResult
+     */
+    tool_count?: number;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof MCPScanResult
+     */
+    findings?: Array<string>;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPScanResult
+     */
+    recommended_action?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPScanResult
+     */
+    quarantine_record_id?: string;
+    /**
+     *
+     * @type {boolean}
+     * @memberof MCPScanResult
+     */
+    requires_approval?: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof MCPScanResult
+     */
+    schema_pin_required?: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof MCPScanResult
+     */
+    authorization_needed?: boolean;
+    /**
+     *
+     * @type {Date}
+     * @memberof MCPScanResult
+     */
+    scanned_at?: Date;
+}
+
+/**
+ * Check if a given object implements the MCPScanResult interface.
+ */
+export function instanceOfMCPScanResult(value: object): boolean {
+    return true;
+}
+
+export function MCPScanResultFromJSON(json: any): MCPScanResult {
+    return MCPScanResultFromJSONTyped(json, false);
+}
+
+export function MCPScanResultFromJSONTyped(json: any, ignoreDiscriminator: boolean): MCPScanResult {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'server_id': json['server_id'] == null ? undefined : json['server_id'],
+        'risk': json['risk'] == null ? undefined : json['risk'],
+        'state': json['state'] == null ? undefined : json['state'],
+        'tool_count': json['tool_count'] == null ? undefined : json['tool_count'],
+        'findings': json['findings'] == null ? undefined : json['findings'],
+        'recommended_action': json['recommended_action'] == null ? undefined : json['recommended_action'],
+        'quarantine_record_id': json['quarantine_record_id'] == null ? undefined : json['quarantine_record_id'],
+        'requires_approval': json['requires_approval'] == null ? undefined : json['requires_approval'],
+        'schema_pin_required': json['schema_pin_required'] == null ? undefined : json['schema_pin_required'],
+        'authorization_needed': json['authorization_needed'] == null ? undefined : json['authorization_needed'],
+        'scanned_at': json['scanned_at'] == null ? undefined : (new Date(json['scanned_at'])),
+    };
+}
+
+export function MCPScanResultToJSON(value?: MCPScanResult | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'server_id': value['server_id'],
+        'risk': value['risk'],
+        'state': value['state'],
+        'tool_count': value['tool_count'],
+        'findings': value['findings'],
+        'recommended_action': value['recommended_action'],
+        'quarantine_record_id': value['quarantine_record_id'],
+        'requires_approval': value['requires_approval'],
+        'schema_pin_required': value['schema_pin_required'],
+        'authorization_needed': value['authorization_needed'],
+        'scanned_at': value['scanned_at'] == null ? undefined : ((value['scanned_at']).toISOString()),
     };
 }
 
@@ -2800,6 +7441,227 @@ export function MCPToolRefToJSON(value?: MCPToolRef | null): any {
  * Do not edit the class manually.
  */
 
+/**
+ *
+ * @export
+ * @interface NegativeBoundaryVector
+ */
+export interface NegativeBoundaryVector {
+    /**
+     *
+     * @type {string}
+     * @memberof NegativeBoundaryVector
+     */
+    id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof NegativeBoundaryVector
+     */
+    category: string;
+    /**
+     *
+     * @type {string}
+     * @memberof NegativeBoundaryVector
+     */
+    trigger: string;
+    /**
+     *
+     * @type {string}
+     * @memberof NegativeBoundaryVector
+     */
+    expected_verdict: NegativeBoundaryVectorExpectedVerdictEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof NegativeBoundaryVector
+     */
+    expected_reason_code: string;
+    /**
+     *
+     * @type {boolean}
+     * @memberof NegativeBoundaryVector
+     */
+    must_emit_receipt: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof NegativeBoundaryVector
+     */
+    must_not_dispatch: boolean;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof NegativeBoundaryVector
+     */
+    must_bind_evidence?: Array<string>;
+}
+
+
+/**
+ * @export
+ */
+export const NegativeBoundaryVectorExpectedVerdictEnum = {
+    Allow: 'ALLOW',
+    Deny: 'DENY',
+    Escalate: 'ESCALATE'
+} as const;
+export type NegativeBoundaryVectorExpectedVerdictEnum = typeof NegativeBoundaryVectorExpectedVerdictEnum[keyof typeof NegativeBoundaryVectorExpectedVerdictEnum];
+
+
+/**
+ * Check if a given object implements the NegativeBoundaryVector interface.
+ */
+export function instanceOfNegativeBoundaryVector(value: object): boolean {
+    if (!('id' in value)) return false;
+    if (!('category' in value)) return false;
+    if (!('trigger' in value)) return false;
+    if (!('expected_verdict' in value)) return false;
+    if (!('expected_reason_code' in value)) return false;
+    if (!('must_emit_receipt' in value)) return false;
+    if (!('must_not_dispatch' in value)) return false;
+    return true;
+}
+
+export function NegativeBoundaryVectorFromJSON(json: any): NegativeBoundaryVector {
+    return NegativeBoundaryVectorFromJSONTyped(json, false);
+}
+
+export function NegativeBoundaryVectorFromJSONTyped(json: any, ignoreDiscriminator: boolean): NegativeBoundaryVector {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'id': json['id'],
+        'category': json['category'],
+        'trigger': json['trigger'],
+        'expected_verdict': json['expected_verdict'],
+        'expected_reason_code': json['expected_reason_code'],
+        'must_emit_receipt': json['must_emit_receipt'],
+        'must_not_dispatch': json['must_not_dispatch'],
+        'must_bind_evidence': json['must_bind_evidence'] == null ? undefined : json['must_bind_evidence'],
+    };
+}
+
+export function NegativeBoundaryVectorToJSON(value?: NegativeBoundaryVector | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'id': value['id'],
+        'category': value['category'],
+        'trigger': value['trigger'],
+        'expected_verdict': value['expected_verdict'],
+        'expected_reason_code': value['expected_reason_code'],
+        'must_emit_receipt': value['must_emit_receipt'],
+        'must_not_dispatch': value['must_not_dispatch'],
+        'must_bind_evidence': value['must_bind_evidence'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface NetworkGrant
+ */
+export interface NetworkGrant {
+    /**
+     *
+     * @type {string}
+     * @memberof NetworkGrant
+     */
+    mode: NetworkGrantModeEnum;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof NetworkGrant
+     */
+    destinations?: Array<string>;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof NetworkGrant
+     */
+    cidrs?: Array<string>;
+}
+
+
+/**
+ * @export
+ */
+export const NetworkGrantModeEnum = {
+    DenyAll: 'deny-all',
+    Allowlist: 'allowlist'
+} as const;
+export type NetworkGrantModeEnum = typeof NetworkGrantModeEnum[keyof typeof NetworkGrantModeEnum];
+
+
+/**
+ * Check if a given object implements the NetworkGrant interface.
+ */
+export function instanceOfNetworkGrant(value: object): boolean {
+    if (!('mode' in value)) return false;
+    return true;
+}
+
+export function NetworkGrantFromJSON(json: any): NetworkGrant {
+    return NetworkGrantFromJSONTyped(json, false);
+}
+
+export function NetworkGrantFromJSONTyped(json: any, ignoreDiscriminator: boolean): NetworkGrant {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'mode': json['mode'],
+        'destinations': json['destinations'] == null ? undefined : json['destinations'],
+        'cidrs': json['cidrs'] == null ? undefined : json['cidrs'],
+    };
+}
+
+export function NetworkGrantToJSON(value?: NetworkGrant | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'mode': value['mode'],
+        'destinations': value['destinations'],
+        'cidrs': value['cidrs'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
 
 /**
  * Request to the Policy Decision Point
@@ -3058,7 +7920,7 @@ export interface Receipt {
      * @type {string}
      * @memberof Receipt
      */
-    status?: ReceiptStatusEnum;
+    status?: string;
     /**
      *
      * @type {string}
@@ -3107,19 +7969,25 @@ export interface Receipt {
      * @memberof Receipt
      */
     principal?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    executor_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    args_hash?: string;
+    /**
+     *
+     * @type {{ [key: string]: any; }}
+     * @memberof Receipt
+     */
+    metadata?: { [key: string]: any; };
 }
-
-
-/**
- * @export
- */
-export const ReceiptStatusEnum = {
-    Approved: 'APPROVED',
-    Denied: 'DENIED',
-    Pending: 'PENDING'
-} as const;
-export type ReceiptStatusEnum = typeof ReceiptStatusEnum[keyof typeof ReceiptStatusEnum];
-
 
 /**
  * Check if a given object implements the Receipt interface.
@@ -3150,6 +8018,9 @@ export function ReceiptFromJSONTyped(json: any, ignoreDiscriminator: boolean): R
         'signature': json['signature'] == null ? undefined : json['signature'],
         'timestamp': json['timestamp'] == null ? undefined : (new Date(json['timestamp'])),
         'principal': json['principal'] == null ? undefined : json['principal'],
+        'executor_id': json['executor_id'] == null ? undefined : json['executor_id'],
+        'args_hash': json['args_hash'] == null ? undefined : json['args_hash'],
+        'metadata': json['metadata'] == null ? undefined : json['metadata'],
     };
 }
 
@@ -3171,6 +8042,152 @@ export function ReceiptToJSON(value?: Receipt | null): any {
         'signature': value['signature'],
         'timestamp': value['timestamp'] == null ? undefined : ((value['timestamp']).toISOString()),
         'principal': value['principal'],
+        'executor_id': value['executor_id'],
+        'args_hash': value['args_hash'],
+        'metadata': value['metadata'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+/**
+ *
+ * @export
+ * @interface ReceiptListResponse
+ */
+export interface ReceiptListResponse {
+    /**
+     *
+     * @type {Array<Receipt>}
+     * @memberof ReceiptListResponse
+     */
+    receipts?: Array<Receipt>;
+    /**
+     *
+     * @type {number}
+     * @memberof ReceiptListResponse
+     */
+    count?: number;
+    /**
+     *
+     * @type {string}
+     * @memberof ReceiptListResponse
+     */
+    next_cursor?: string;
+    /**
+     *
+     * @type {boolean}
+     * @memberof ReceiptListResponse
+     */
+    has_more?: boolean;
+}
+
+/**
+ * Check if a given object implements the ReceiptListResponse interface.
+ */
+export function instanceOfReceiptListResponse(value: object): boolean {
+    return true;
+}
+
+export function ReceiptListResponseFromJSON(json: any): ReceiptListResponse {
+    return ReceiptListResponseFromJSONTyped(json, false);
+}
+
+export function ReceiptListResponseFromJSONTyped(json: any, ignoreDiscriminator: boolean): ReceiptListResponse {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'receipts': json['receipts'] == null ? undefined : ((json['receipts'] as Array<any>).map(ReceiptFromJSON)),
+        'count': json['count'] == null ? undefined : json['count'],
+        'next_cursor': json['next_cursor'] == null ? undefined : json['next_cursor'],
+        'has_more': json['has_more'] == null ? undefined : json['has_more'],
+    };
+}
+
+export function ReceiptListResponseToJSON(value?: ReceiptListResponse | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'receipts': value['receipts'] == null ? undefined : ((value['receipts'] as Array<any>).map(ReceiptToJSON)),
+        'count': value['count'],
+        'next_cursor': value['next_cursor'],
+        'has_more': value['has_more'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface RevokeMcpRegistryRecordRequest
+ */
+export interface RevokeMcpRegistryRecordRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof RevokeMcpRegistryRecordRequest
+     */
+    reason?: string;
+}
+
+/**
+ * Check if a given object implements the RevokeMcpRegistryRecordRequest interface.
+ */
+export function instanceOfRevokeMcpRegistryRecordRequest(value: object): boolean {
+    return true;
+}
+
+export function RevokeMcpRegistryRecordRequestFromJSON(json: any): RevokeMcpRegistryRecordRequest {
+    return RevokeMcpRegistryRecordRequestFromJSONTyped(json, false);
+}
+
+export function RevokeMcpRegistryRecordRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): RevokeMcpRegistryRecordRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'reason': json['reason'] == null ? undefined : json['reason'],
+    };
+}
+
+export function RevokeMcpRegistryRecordRequestToJSON(value?: RevokeMcpRegistryRecordRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'reason': value['reason'],
     };
 }
 
@@ -3260,6 +8277,1040 @@ export function RevokeTrustKeyRequestToJSON(value?: RevokeTrustKeyRequest | null
 /**
  *
  * @export
+ * @interface RunAgentUIRuntimeRequest
+ */
+export interface RunAgentUIRuntimeRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof RunAgentUIRuntimeRequest
+     */
+    threadId?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof RunAgentUIRuntimeRequest
+     */
+    runId?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof RunAgentUIRuntimeRequest
+     */
+    workspaceId?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof RunAgentUIRuntimeRequest
+     */
+    currentSurface?: string;
+    /**
+     *
+     * @type {{ [key: string]: any; }}
+     * @memberof RunAgentUIRuntimeRequest
+     */
+    state?: { [key: string]: any; };
+    /**
+     *
+     * @type {any}
+     * @memberof RunAgentUIRuntimeRequest
+     */
+    messages?: any;
+}
+
+/**
+ * Check if a given object implements the RunAgentUIRuntimeRequest interface.
+ */
+export function instanceOfRunAgentUIRuntimeRequest(value: object): boolean {
+    return true;
+}
+
+export function RunAgentUIRuntimeRequestFromJSON(json: any): RunAgentUIRuntimeRequest {
+    return RunAgentUIRuntimeRequestFromJSONTyped(json, false);
+}
+
+export function RunAgentUIRuntimeRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): RunAgentUIRuntimeRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'threadId': json['threadId'] == null ? undefined : json['threadId'],
+        'runId': json['runId'] == null ? undefined : json['runId'],
+        'workspaceId': json['workspaceId'] == null ? undefined : json['workspaceId'],
+        'currentSurface': json['currentSurface'] == null ? undefined : json['currentSurface'],
+        'state': json['state'] == null ? undefined : json['state'],
+        'messages': json['messages'] == null ? undefined : json['messages'],
+    };
+}
+
+export function RunAgentUIRuntimeRequestToJSON(value?: RunAgentUIRuntimeRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'threadId': value['threadId'],
+        'runId': value['runId'],
+        'workspaceId': value['workspaceId'],
+        'currentSurface': value['currentSurface'],
+        'state': value['state'],
+        'messages': value['messages'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+/**
+ *
+ * @export
+ * @interface RunPublicDemo200Response
+ */
+export interface RunPublicDemo200Response {
+    /**
+     *
+     * @type {string}
+     * @memberof RunPublicDemo200Response
+     */
+    verdict: RunPublicDemo200ResponseVerdictEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof RunPublicDemo200Response
+     */
+    reason_code: string;
+    /**
+     *
+     * @type {Receipt}
+     * @memberof RunPublicDemo200Response
+     */
+    receipt: Receipt;
+    /**
+     *
+     * @type {RunPublicDemo200ResponseProofRefs}
+     * @memberof RunPublicDemo200Response
+     */
+    proof_refs: RunPublicDemo200ResponseProofRefs;
+    /**
+     *
+     * @type {string}
+     * @memberof RunPublicDemo200Response
+     */
+    verification_hint: string;
+    /**
+     *
+     * @type {string}
+     * @memberof RunPublicDemo200Response
+     */
+    sandbox_label: string;
+    /**
+     *
+     * @type {string}
+     * @memberof RunPublicDemo200Response
+     */
+    helm_oss_version: string;
+}
+
+
+/**
+ * @export
+ */
+export const RunPublicDemo200ResponseVerdictEnum = {
+    Allow: 'ALLOW',
+    Deny: 'DENY',
+    Escalate: 'ESCALATE'
+} as const;
+export type RunPublicDemo200ResponseVerdictEnum = typeof RunPublicDemo200ResponseVerdictEnum[keyof typeof RunPublicDemo200ResponseVerdictEnum];
+
+
+/**
+ * Check if a given object implements the RunPublicDemo200Response interface.
+ */
+export function instanceOfRunPublicDemo200Response(value: object): boolean {
+    if (!('verdict' in value)) return false;
+    if (!('reason_code' in value)) return false;
+    if (!('receipt' in value)) return false;
+    if (!('proof_refs' in value)) return false;
+    if (!('verification_hint' in value)) return false;
+    if (!('sandbox_label' in value)) return false;
+    if (!('helm_oss_version' in value)) return false;
+    return true;
+}
+
+export function RunPublicDemo200ResponseFromJSON(json: any): RunPublicDemo200Response {
+    return RunPublicDemo200ResponseFromJSONTyped(json, false);
+}
+
+export function RunPublicDemo200ResponseFromJSONTyped(json: any, ignoreDiscriminator: boolean): RunPublicDemo200Response {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'verdict': json['verdict'],
+        'reason_code': json['reason_code'],
+        'receipt': ReceiptFromJSON(json['receipt']),
+        'proof_refs': RunPublicDemo200ResponseProofRefsFromJSON(json['proof_refs']),
+        'verification_hint': json['verification_hint'],
+        'sandbox_label': json['sandbox_label'],
+        'helm_oss_version': json['helm_oss_version'],
+    };
+}
+
+export function RunPublicDemo200ResponseToJSON(value?: RunPublicDemo200Response | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'verdict': value['verdict'],
+        'reason_code': value['reason_code'],
+        'receipt': ReceiptToJSON(value['receipt']),
+        'proof_refs': RunPublicDemo200ResponseProofRefsToJSON(value['proof_refs']),
+        'verification_hint': value['verification_hint'],
+        'sandbox_label': value['sandbox_label'],
+        'helm_oss_version': value['helm_oss_version'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface RunPublicDemo200ResponseProofRefs
+ */
+export interface RunPublicDemo200ResponseProofRefs {
+    /**
+     *
+     * @type {string}
+     * @memberof RunPublicDemo200ResponseProofRefs
+     */
+    decision_id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof RunPublicDemo200ResponseProofRefs
+     */
+    receipt_id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof RunPublicDemo200ResponseProofRefs
+     */
+    receipt_hash: string;
+}
+
+/**
+ * Check if a given object implements the RunPublicDemo200ResponseProofRefs interface.
+ */
+export function instanceOfRunPublicDemo200ResponseProofRefs(value: object): boolean {
+    if (!('decision_id' in value)) return false;
+    if (!('receipt_id' in value)) return false;
+    if (!('receipt_hash' in value)) return false;
+    return true;
+}
+
+export function RunPublicDemo200ResponseProofRefsFromJSON(json: any): RunPublicDemo200ResponseProofRefs {
+    return RunPublicDemo200ResponseProofRefsFromJSONTyped(json, false);
+}
+
+export function RunPublicDemo200ResponseProofRefsFromJSONTyped(json: any, ignoreDiscriminator: boolean): RunPublicDemo200ResponseProofRefs {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'decision_id': json['decision_id'],
+        'receipt_id': json['receipt_id'],
+        'receipt_hash': json['receipt_hash'],
+    };
+}
+
+export function RunPublicDemo200ResponseProofRefsToJSON(value?: RunPublicDemo200ResponseProofRefs | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'decision_id': value['decision_id'],
+        'receipt_id': value['receipt_id'],
+        'receipt_hash': value['receipt_hash'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface RunPublicDemoRequest
+ */
+export interface RunPublicDemoRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof RunPublicDemoRequest
+     */
+    action_id: RunPublicDemoRequestActionIdEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof RunPublicDemoRequest
+     */
+    policy_id?: string;
+    /**
+     *
+     * @type {{ [key: string]: any; }}
+     * @memberof RunPublicDemoRequest
+     */
+    args?: { [key: string]: any; };
+}
+
+
+/**
+ * @export
+ */
+export const RunPublicDemoRequestActionIdEnum = {
+    ReadTicket: 'read_ticket',
+    DraftReply: 'draft_reply',
+    SmallRefund: 'small_refund',
+    LargeRefund: 'large_refund',
+    DangerousShell: 'dangerous_shell',
+    ExportCustomerList: 'export_customer_list',
+    ModifyPolicy: 'modify_policy'
+} as const;
+export type RunPublicDemoRequestActionIdEnum = typeof RunPublicDemoRequestActionIdEnum[keyof typeof RunPublicDemoRequestActionIdEnum];
+
+
+/**
+ * Check if a given object implements the RunPublicDemoRequest interface.
+ */
+export function instanceOfRunPublicDemoRequest(value: object): boolean {
+    if (!('action_id' in value)) return false;
+    return true;
+}
+
+export function RunPublicDemoRequestFromJSON(json: any): RunPublicDemoRequest {
+    return RunPublicDemoRequestFromJSONTyped(json, false);
+}
+
+export function RunPublicDemoRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): RunPublicDemoRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'action_id': json['action_id'],
+        'policy_id': json['policy_id'] == null ? undefined : json['policy_id'],
+        'args': json['args'] == null ? undefined : json['args'],
+    };
+}
+
+export function RunPublicDemoRequestToJSON(value?: RunPublicDemoRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'action_id': value['action_id'],
+        'policy_id': value['policy_id'],
+        'args': value['args'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface SandboxBackendProfile
+ */
+export interface SandboxBackendProfile {
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxBackendProfile
+     */
+    name: string;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxBackendProfile
+     */
+    kind: SandboxBackendProfileKindEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxBackendProfile
+     */
+    runtime: string;
+    /**
+     *
+     * @type {boolean}
+     * @memberof SandboxBackendProfile
+     */
+    hosted: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof SandboxBackendProfile
+     */
+    deny_network_by_default: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof SandboxBackendProfile
+     */
+    native_isolation: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof SandboxBackendProfile
+     */
+    experimental?: boolean;
+}
+
+
+/**
+ * @export
+ */
+export const SandboxBackendProfileKindEnum = {
+    WasiWazero: 'wasi-wazero',
+    WasiWasmtime: 'wasi-wasmtime',
+    NativeNsjail: 'native-nsjail',
+    NativeGvisor: 'native-gvisor',
+    NativeFirecracker: 'native-firecracker',
+    HostedAdapter: 'hosted-adapter'
+} as const;
+export type SandboxBackendProfileKindEnum = typeof SandboxBackendProfileKindEnum[keyof typeof SandboxBackendProfileKindEnum];
+
+
+/**
+ * Check if a given object implements the SandboxBackendProfile interface.
+ */
+export function instanceOfSandboxBackendProfile(value: object): boolean {
+    if (!('name' in value)) return false;
+    if (!('kind' in value)) return false;
+    if (!('runtime' in value)) return false;
+    if (!('hosted' in value)) return false;
+    if (!('deny_network_by_default' in value)) return false;
+    if (!('native_isolation' in value)) return false;
+    return true;
+}
+
+export function SandboxBackendProfileFromJSON(json: any): SandboxBackendProfile {
+    return SandboxBackendProfileFromJSONTyped(json, false);
+}
+
+export function SandboxBackendProfileFromJSONTyped(json: any, ignoreDiscriminator: boolean): SandboxBackendProfile {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'name': json['name'],
+        'kind': json['kind'],
+        'runtime': json['runtime'],
+        'hosted': json['hosted'],
+        'deny_network_by_default': json['deny_network_by_default'],
+        'native_isolation': json['native_isolation'],
+        'experimental': json['experimental'] == null ? undefined : json['experimental'],
+    };
+}
+
+export function SandboxBackendProfileToJSON(value?: SandboxBackendProfile | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'name': value['name'],
+        'kind': value['kind'],
+        'runtime': value['runtime'],
+        'hosted': value['hosted'],
+        'deny_network_by_default': value['deny_network_by_default'],
+        'native_isolation': value['native_isolation'],
+        'experimental': value['experimental'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+/**
+ *
+ * @export
+ * @interface SandboxGrant
+ */
+export interface SandboxGrant {
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxGrant
+     */
+    grant_id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxGrant
+     */
+    runtime: string;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxGrant
+     */
+    runtime_version?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxGrant
+     */
+    profile: string;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxGrant
+     */
+    image_digest?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxGrant
+     */
+    template_digest?: string;
+    /**
+     *
+     * @type {Array<FilesystemPreopen>}
+     * @memberof SandboxGrant
+     */
+    filesystem_preopens?: Array<FilesystemPreopen>;
+    /**
+     *
+     * @type {EnvExposurePolicy}
+     * @memberof SandboxGrant
+     */
+    env: EnvExposurePolicy;
+    /**
+     *
+     * @type {NetworkGrant}
+     * @memberof SandboxGrant
+     */
+    network: NetworkGrant;
+    /**
+     *
+     * @type {SandboxGrantLimits}
+     * @memberof SandboxGrant
+     */
+    limits?: SandboxGrantLimits;
+    /**
+     *
+     * @type {Date}
+     * @memberof SandboxGrant
+     */
+    declared_at: Date;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxGrant
+     */
+    policy_epoch?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxGrant
+     */
+    grant_hash?: string;
+}
+
+/**
+ * Check if a given object implements the SandboxGrant interface.
+ */
+export function instanceOfSandboxGrant(value: object): boolean {
+    if (!('grant_id' in value)) return false;
+    if (!('runtime' in value)) return false;
+    if (!('profile' in value)) return false;
+    if (!('env' in value)) return false;
+    if (!('network' in value)) return false;
+    if (!('declared_at' in value)) return false;
+    return true;
+}
+
+export function SandboxGrantFromJSON(json: any): SandboxGrant {
+    return SandboxGrantFromJSONTyped(json, false);
+}
+
+export function SandboxGrantFromJSONTyped(json: any, ignoreDiscriminator: boolean): SandboxGrant {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'grant_id': json['grant_id'],
+        'runtime': json['runtime'],
+        'runtime_version': json['runtime_version'] == null ? undefined : json['runtime_version'],
+        'profile': json['profile'],
+        'image_digest': json['image_digest'] == null ? undefined : json['image_digest'],
+        'template_digest': json['template_digest'] == null ? undefined : json['template_digest'],
+        'filesystem_preopens': json['filesystem_preopens'] == null ? undefined : ((json['filesystem_preopens'] as Array<any>).map(FilesystemPreopenFromJSON)),
+        'env': EnvExposurePolicyFromJSON(json['env']),
+        'network': NetworkGrantFromJSON(json['network']),
+        'limits': json['limits'] == null ? undefined : SandboxGrantLimitsFromJSON(json['limits']),
+        'declared_at': (new Date(json['declared_at'])),
+        'policy_epoch': json['policy_epoch'] == null ? undefined : json['policy_epoch'],
+        'grant_hash': json['grant_hash'] == null ? undefined : json['grant_hash'],
+    };
+}
+
+export function SandboxGrantToJSON(value?: SandboxGrant | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'grant_id': value['grant_id'],
+        'runtime': value['runtime'],
+        'runtime_version': value['runtime_version'],
+        'profile': value['profile'],
+        'image_digest': value['image_digest'],
+        'template_digest': value['template_digest'],
+        'filesystem_preopens': value['filesystem_preopens'] == null ? undefined : ((value['filesystem_preopens'] as Array<any>).map(FilesystemPreopenToJSON)),
+        'env': EnvExposurePolicyToJSON(value['env']),
+        'network': NetworkGrantToJSON(value['network']),
+        'limits': SandboxGrantLimitsToJSON(value['limits']),
+        'declared_at': ((value['declared_at']).toISOString()),
+        'policy_epoch': value['policy_epoch'],
+        'grant_hash': value['grant_hash'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+/**
+ * @type SandboxGrantInspection
+ *
+ * @export
+ */
+export type SandboxGrantInspection = Array<SandboxBackendProfile> | SandboxGrant;
+
+export function SandboxGrantInspectionFromJSON(json: any): SandboxGrantInspection {
+    return SandboxGrantInspectionFromJSONTyped(json, false);
+}
+
+export function SandboxGrantInspectionFromJSONTyped(json: any, ignoreDiscriminator: boolean): SandboxGrantInspection {
+    if (json == null) {
+        return json;
+    }
+    if (Array.isArray(json)) {
+        return json.map((item) => SandboxBackendProfileFromJSONTyped(item, true));
+    }
+    return SandboxGrantFromJSONTyped(json, true);
+}
+
+export function SandboxGrantInspectionToJSON(value?: SandboxGrantInspection | null): any {
+    if (value == null) {
+        return value;
+    }
+    if (Array.isArray(value)) {
+        return value.map((item) => SandboxBackendProfileToJSON(item));
+    }
+    return SandboxGrantToJSON(value as SandboxGrant);
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface SandboxGrantLimits
+ */
+export interface SandboxGrantLimits {
+    /**
+     *
+     * @type {number}
+     * @memberof SandboxGrantLimits
+     */
+    memory_bytes?: number;
+    /**
+     * Go duration in nanoseconds.
+     * @type {number}
+     * @memberof SandboxGrantLimits
+     */
+    cpu_time?: number;
+    /**
+     *
+     * @type {number}
+     * @memberof SandboxGrantLimits
+     */
+    output_bytes?: number;
+    /**
+     *
+     * @type {number}
+     * @memberof SandboxGrantLimits
+     */
+    open_files?: number;
+}
+
+/**
+ * Check if a given object implements the SandboxGrantLimits interface.
+ */
+export function instanceOfSandboxGrantLimits(value: object): boolean {
+    return true;
+}
+
+export function SandboxGrantLimitsFromJSON(json: any): SandboxGrantLimits {
+    return SandboxGrantLimitsFromJSONTyped(json, false);
+}
+
+export function SandboxGrantLimitsFromJSONTyped(json: any, ignoreDiscriminator: boolean): SandboxGrantLimits {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'memory_bytes': json['memory_bytes'] == null ? undefined : json['memory_bytes'],
+        'cpu_time': json['cpu_time'] == null ? undefined : json['cpu_time'],
+        'output_bytes': json['output_bytes'] == null ? undefined : json['output_bytes'],
+        'open_files': json['open_files'] == null ? undefined : json['open_files'],
+    };
+}
+
+export function SandboxGrantLimitsToJSON(value?: SandboxGrantLimits | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'memory_bytes': value['memory_bytes'],
+        'cpu_time': value['cpu_time'],
+        'output_bytes': value['output_bytes'],
+        'open_files': value['open_files'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+/**
+ *
+ * @export
+ * @interface SandboxPreflightRequest
+ */
+export interface SandboxPreflightRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxPreflightRequest
+     */
+    runtime?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxPreflightRequest
+     */
+    profile?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxPreflightRequest
+     */
+    image_digest?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxPreflightRequest
+     */
+    policy_epoch?: string;
+    /**
+     *
+     * @type {SandboxGrant}
+     * @memberof SandboxPreflightRequest
+     */
+    requested_grant?: SandboxGrant;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxPreflightRequest
+     */
+    expected_grant_hash?: string;
+}
+
+/**
+ * Check if a given object implements the SandboxPreflightRequest interface.
+ */
+export function instanceOfSandboxPreflightRequest(value: object): boolean {
+    return true;
+}
+
+export function SandboxPreflightRequestFromJSON(json: any): SandboxPreflightRequest {
+    return SandboxPreflightRequestFromJSONTyped(json, false);
+}
+
+export function SandboxPreflightRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): SandboxPreflightRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'runtime': json['runtime'] == null ? undefined : json['runtime'],
+        'profile': json['profile'] == null ? undefined : json['profile'],
+        'image_digest': json['image_digest'] == null ? undefined : json['image_digest'],
+        'policy_epoch': json['policy_epoch'] == null ? undefined : json['policy_epoch'],
+        'requested_grant': json['requested_grant'] == null ? undefined : SandboxGrantFromJSON(json['requested_grant']),
+        'expected_grant_hash': json['expected_grant_hash'] == null ? undefined : json['expected_grant_hash'],
+    };
+}
+
+export function SandboxPreflightRequestToJSON(value?: SandboxPreflightRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'runtime': value['runtime'],
+        'profile': value['profile'],
+        'image_digest': value['image_digest'],
+        'policy_epoch': value['policy_epoch'],
+        'requested_grant': SandboxGrantToJSON(value['requested_grant']),
+        'expected_grant_hash': value['expected_grant_hash'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface SandboxPreflightResult
+ */
+export interface SandboxPreflightResult {
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxPreflightResult
+     */
+    verdict?: SandboxPreflightResultVerdictEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxPreflightResult
+     */
+    reason_code?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxPreflightResult
+     */
+    grant_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof SandboxPreflightResult
+     */
+    grant_hash?: string;
+    /**
+     *
+     * @type {boolean}
+     * @memberof SandboxPreflightResult
+     */
+    dispatch_ready?: boolean;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof SandboxPreflightResult
+     */
+    findings?: Array<string>;
+    /**
+     *
+     * @type {Date}
+     * @memberof SandboxPreflightResult
+     */
+    checked_at?: Date;
+}
+
+
+/**
+ * @export
+ */
+export const SandboxPreflightResultVerdictEnum = {
+    Allow: 'ALLOW',
+    Deny: 'DENY',
+    Escalate: 'ESCALATE'
+} as const;
+export type SandboxPreflightResultVerdictEnum = typeof SandboxPreflightResultVerdictEnum[keyof typeof SandboxPreflightResultVerdictEnum];
+
+
+/**
+ * Check if a given object implements the SandboxPreflightResult interface.
+ */
+export function instanceOfSandboxPreflightResult(value: object): boolean {
+    return true;
+}
+
+export function SandboxPreflightResultFromJSON(json: any): SandboxPreflightResult {
+    return SandboxPreflightResultFromJSONTyped(json, false);
+}
+
+export function SandboxPreflightResultFromJSONTyped(json: any, ignoreDiscriminator: boolean): SandboxPreflightResult {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'verdict': json['verdict'] == null ? undefined : json['verdict'],
+        'reason_code': json['reason_code'] == null ? undefined : json['reason_code'],
+        'grant_id': json['grant_id'] == null ? undefined : json['grant_id'],
+        'grant_hash': json['grant_hash'] == null ? undefined : json['grant_hash'],
+        'dispatch_ready': json['dispatch_ready'] == null ? undefined : json['dispatch_ready'],
+        'findings': json['findings'] == null ? undefined : json['findings'],
+        'checked_at': json['checked_at'] == null ? undefined : (new Date(json['checked_at'])),
+    };
+}
+
+export function SandboxPreflightResultToJSON(value?: SandboxPreflightResult | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'verdict': value['verdict'],
+        'reason_code': value['reason_code'],
+        'grant_id': value['grant_id'],
+        'grant_hash': value['grant_hash'],
+        'dispatch_ready': value['dispatch_ready'],
+        'findings': value['findings'],
+        'checked_at': value['checked_at'] == null ? undefined : ((value['checked_at']).toISOString()),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
  * @interface Session
  */
 export interface Session {
@@ -3323,6 +9374,587 @@ export function SessionToJSON(value?: Session | null): any {
         'created_at': value['created_at'] == null ? undefined : ((value['created_at']).toISOString()),
         'receipt_count': value['receipt_count'],
         'last_lamport_clock': value['last_lamport_clock'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface TamperPublicDemoReceipt200Response
+ */
+export interface TamperPublicDemoReceipt200Response {
+    /**
+     *
+     * @type {boolean}
+     * @memberof TamperPublicDemoReceipt200Response
+     */
+    valid: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof TamperPublicDemoReceipt200Response
+     */
+    signature_valid: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof TamperPublicDemoReceipt200Response
+     */
+    hash_matches: boolean;
+    /**
+     *
+     * @type {string}
+     * @memberof TamperPublicDemoReceipt200Response
+     */
+    reason: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TamperPublicDemoReceipt200Response
+     */
+    receipt_hash: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TamperPublicDemoReceipt200Response
+     */
+    expected_receipt_hash: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TamperPublicDemoReceipt200Response
+     */
+    original_hash: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TamperPublicDemoReceipt200Response
+     */
+    tampered_hash: string;
+}
+
+/**
+ * Check if a given object implements the TamperPublicDemoReceipt200Response interface.
+ */
+export function instanceOfTamperPublicDemoReceipt200Response(value: object): boolean {
+    if (!('valid' in value)) return false;
+    if (!('signature_valid' in value)) return false;
+    if (!('hash_matches' in value)) return false;
+    if (!('reason' in value)) return false;
+    if (!('receipt_hash' in value)) return false;
+    if (!('expected_receipt_hash' in value)) return false;
+    if (!('original_hash' in value)) return false;
+    if (!('tampered_hash' in value)) return false;
+    return true;
+}
+
+export function TamperPublicDemoReceipt200ResponseFromJSON(json: any): TamperPublicDemoReceipt200Response {
+    return TamperPublicDemoReceipt200ResponseFromJSONTyped(json, false);
+}
+
+export function TamperPublicDemoReceipt200ResponseFromJSONTyped(json: any, ignoreDiscriminator: boolean): TamperPublicDemoReceipt200Response {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'valid': json['valid'],
+        'signature_valid': json['signature_valid'],
+        'hash_matches': json['hash_matches'],
+        'reason': json['reason'],
+        'receipt_hash': json['receipt_hash'],
+        'expected_receipt_hash': json['expected_receipt_hash'],
+        'original_hash': json['original_hash'],
+        'tampered_hash': json['tampered_hash'],
+    };
+}
+
+export function TamperPublicDemoReceipt200ResponseToJSON(value?: TamperPublicDemoReceipt200Response | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'valid': value['valid'],
+        'signature_valid': value['signature_valid'],
+        'hash_matches': value['hash_matches'],
+        'reason': value['reason'],
+        'receipt_hash': value['receipt_hash'],
+        'expected_receipt_hash': value['expected_receipt_hash'],
+        'original_hash': value['original_hash'],
+        'tampered_hash': value['tampered_hash'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+/**
+ *
+ * @export
+ * @interface TamperPublicDemoReceiptRequest
+ */
+export interface TamperPublicDemoReceiptRequest {
+    /**
+     *
+     * @type {Receipt}
+     * @memberof TamperPublicDemoReceiptRequest
+     */
+    receipt: Receipt;
+    /**
+     * Receipt hash returned in /api/demo/run proof_refs.receipt_hash.
+     * @type {string}
+     * @memberof TamperPublicDemoReceiptRequest
+     */
+    expected_receipt_hash: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TamperPublicDemoReceiptRequest
+     */
+    mutation?: string;
+}
+
+/**
+ * Check if a given object implements the TamperPublicDemoReceiptRequest interface.
+ */
+export function instanceOfTamperPublicDemoReceiptRequest(value: object): boolean {
+    if (!('receipt' in value)) return false;
+    if (!('expected_receipt_hash' in value)) return false;
+    return true;
+}
+
+export function TamperPublicDemoReceiptRequestFromJSON(json: any): TamperPublicDemoReceiptRequest {
+    return TamperPublicDemoReceiptRequestFromJSONTyped(json, false);
+}
+
+export function TamperPublicDemoReceiptRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): TamperPublicDemoReceiptRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'receipt': ReceiptFromJSON(json['receipt']),
+        'expected_receipt_hash': json['expected_receipt_hash'],
+        'mutation': json['mutation'] == null ? undefined : json['mutation'],
+    };
+}
+
+export function TamperPublicDemoReceiptRequestToJSON(value?: TamperPublicDemoReceiptRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'receipt': ReceiptToJSON(value['receipt']),
+        'expected_receipt_hash': value['expected_receipt_hash'],
+        'mutation': value['mutation'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface TelemetryExportRequest
+ */
+export interface TelemetryExportRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof TelemetryExportRequest
+     */
+    format?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TelemetryExportRequest
+     */
+    receipt_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TelemetryExportRequest
+     */
+    record_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TelemetryExportRequest
+     */
+    policy_epoch?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TelemetryExportRequest
+     */
+    verdict?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TelemetryExportRequest
+     */
+    reason_code?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TelemetryExportRequest
+     */
+    sandbox_grant_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TelemetryExportRequest
+     */
+    authz_snapshot_hash?: string;
+    /**
+     *
+     * @type {{ [key: string]: string; }}
+     * @memberof TelemetryExportRequest
+     */
+    attributes?: { [key: string]: string; };
+}
+
+/**
+ * Check if a given object implements the TelemetryExportRequest interface.
+ */
+export function instanceOfTelemetryExportRequest(value: object): boolean {
+    return true;
+}
+
+export function TelemetryExportRequestFromJSON(json: any): TelemetryExportRequest {
+    return TelemetryExportRequestFromJSONTyped(json, false);
+}
+
+export function TelemetryExportRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): TelemetryExportRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'format': json['format'] == null ? undefined : json['format'],
+        'receipt_id': json['receipt_id'] == null ? undefined : json['receipt_id'],
+        'record_hash': json['record_hash'] == null ? undefined : json['record_hash'],
+        'policy_epoch': json['policy_epoch'] == null ? undefined : json['policy_epoch'],
+        'verdict': json['verdict'] == null ? undefined : json['verdict'],
+        'reason_code': json['reason_code'] == null ? undefined : json['reason_code'],
+        'sandbox_grant_hash': json['sandbox_grant_hash'] == null ? undefined : json['sandbox_grant_hash'],
+        'authz_snapshot_hash': json['authz_snapshot_hash'] == null ? undefined : json['authz_snapshot_hash'],
+        'attributes': json['attributes'] == null ? undefined : json['attributes'],
+    };
+}
+
+export function TelemetryExportRequestToJSON(value?: TelemetryExportRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'format': value['format'],
+        'receipt_id': value['receipt_id'],
+        'record_hash': value['record_hash'],
+        'policy_epoch': value['policy_epoch'],
+        'verdict': value['verdict'],
+        'reason_code': value['reason_code'],
+        'sandbox_grant_hash': value['sandbox_grant_hash'],
+        'authz_snapshot_hash': value['authz_snapshot_hash'],
+        'attributes': value['attributes'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface TelemetryExportResult
+ */
+export interface TelemetryExportResult {
+    /**
+     *
+     * @type {string}
+     * @memberof TelemetryExportResult
+     */
+    export_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TelemetryExportResult
+     */
+    format?: string;
+    /**
+     *
+     * @type {boolean}
+     * @memberof TelemetryExportResult
+     */
+    authoritative?: boolean;
+    /**
+     *
+     * @type {{ [key: string]: string; }}
+     * @memberof TelemetryExportResult
+     */
+    attributes?: { [key: string]: string; };
+    /**
+     *
+     * @type {Date}
+     * @memberof TelemetryExportResult
+     */
+    exported_at?: Date;
+}
+
+/**
+ * Check if a given object implements the TelemetryExportResult interface.
+ */
+export function instanceOfTelemetryExportResult(value: object): boolean {
+    return true;
+}
+
+export function TelemetryExportResultFromJSON(json: any): TelemetryExportResult {
+    return TelemetryExportResultFromJSONTyped(json, false);
+}
+
+export function TelemetryExportResultFromJSONTyped(json: any, ignoreDiscriminator: boolean): TelemetryExportResult {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'export_id': json['export_id'] == null ? undefined : json['export_id'],
+        'format': json['format'] == null ? undefined : json['format'],
+        'authoritative': json['authoritative'] == null ? undefined : json['authoritative'],
+        'attributes': json['attributes'] == null ? undefined : json['attributes'],
+        'exported_at': json['exported_at'] == null ? undefined : (new Date(json['exported_at'])),
+    };
+}
+
+export function TelemetryExportResultToJSON(value?: TelemetryExportResult | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'export_id': value['export_id'],
+        'format': value['format'],
+        'authoritative': value['authoritative'],
+        'attributes': value['attributes'],
+        'exported_at': value['exported_at'] == null ? undefined : ((value['exported_at']).toISOString()),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface TelemetryOTelConfig
+ */
+export interface TelemetryOTelConfig {
+    /**
+     *
+     * @type {string}
+     * @memberof TelemetryOTelConfig
+     */
+    service_name?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TelemetryOTelConfig
+     */
+    signal_type?: string;
+    /**
+     *
+     * @type {boolean}
+     * @memberof TelemetryOTelConfig
+     */
+    authoritative?: boolean;
+    /**
+     *
+     * @type {{ [key: string]: string; }}
+     * @memberof TelemetryOTelConfig
+     */
+    span_attributes?: { [key: string]: string; };
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof TelemetryOTelConfig
+     */
+    exported_signals?: Array<string>;
+}
+
+/**
+ * Check if a given object implements the TelemetryOTelConfig interface.
+ */
+export function instanceOfTelemetryOTelConfig(value: object): boolean {
+    return true;
+}
+
+export function TelemetryOTelConfigFromJSON(json: any): TelemetryOTelConfig {
+    return TelemetryOTelConfigFromJSONTyped(json, false);
+}
+
+export function TelemetryOTelConfigFromJSONTyped(json: any, ignoreDiscriminator: boolean): TelemetryOTelConfig {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'service_name': json['service_name'] == null ? undefined : json['service_name'],
+        'signal_type': json['signal_type'] == null ? undefined : json['signal_type'],
+        'authoritative': json['authoritative'] == null ? undefined : json['authoritative'],
+        'span_attributes': json['span_attributes'] == null ? undefined : json['span_attributes'],
+        'exported_signals': json['exported_signals'] == null ? undefined : json['exported_signals'],
+    };
+}
+
+export function TelemetryOTelConfigToJSON(value?: TelemetryOTelConfig | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'service_name': value['service_name'],
+        'signal_type': value['signal_type'],
+        'authoritative': value['authoritative'],
+        'span_attributes': value['span_attributes'],
+        'exported_signals': value['exported_signals'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface TransitionApprovalCeremonyRequest
+ */
+export interface TransitionApprovalCeremonyRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof TransitionApprovalCeremonyRequest
+     */
+    actor?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TransitionApprovalCeremonyRequest
+     */
+    receipt_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TransitionApprovalCeremonyRequest
+     */
+    reason?: string;
+}
+
+/**
+ * Check if a given object implements the TransitionApprovalCeremonyRequest interface.
+ */
+export function instanceOfTransitionApprovalCeremonyRequest(value: object): boolean {
+    return true;
+}
+
+export function TransitionApprovalCeremonyRequestFromJSON(json: any): TransitionApprovalCeremonyRequest {
+    return TransitionApprovalCeremonyRequestFromJSONTyped(json, false);
+}
+
+export function TransitionApprovalCeremonyRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): TransitionApprovalCeremonyRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'actor': json['actor'] == null ? undefined : json['actor'],
+        'receipt_id': json['receipt_id'] == null ? undefined : json['receipt_id'],
+        'reason': json['reason'] == null ? undefined : json['reason'],
+    };
+}
+
+export function TransitionApprovalCeremonyRequestToJSON(value?: TransitionApprovalCeremonyRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'actor': value['actor'],
+        'receipt_id': value['receipt_id'],
+        'reason': value['reason'],
     };
 }
 
@@ -3597,6 +10229,190 @@ export function VerificationResultRootsToJSON(value?: VerificationResultRoots | 
         'manifest_root_hash': value['manifest_root_hash'],
         'merkle_root': value['merkle_root'],
         'entry_count': value['entry_count'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface VerifyPublicDemoReceipt200Response
+ */
+export interface VerifyPublicDemoReceipt200Response {
+    /**
+     *
+     * @type {boolean}
+     * @memberof VerifyPublicDemoReceipt200Response
+     */
+    valid: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof VerifyPublicDemoReceipt200Response
+     */
+    signature_valid: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof VerifyPublicDemoReceipt200Response
+     */
+    hash_matches: boolean;
+    /**
+     *
+     * @type {string}
+     * @memberof VerifyPublicDemoReceipt200Response
+     */
+    reason: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof VerifyPublicDemoReceipt200Response
+     */
+    verified_fields: Array<string>;
+    /**
+     *
+     * @type {string}
+     * @memberof VerifyPublicDemoReceipt200Response
+     */
+    receipt_hash: string;
+    /**
+     *
+     * @type {string}
+     * @memberof VerifyPublicDemoReceipt200Response
+     */
+    expected_receipt_hash: string;
+}
+
+/**
+ * Check if a given object implements the VerifyPublicDemoReceipt200Response interface.
+ */
+export function instanceOfVerifyPublicDemoReceipt200Response(value: object): boolean {
+    if (!('valid' in value)) return false;
+    if (!('signature_valid' in value)) return false;
+    if (!('hash_matches' in value)) return false;
+    if (!('reason' in value)) return false;
+    if (!('verified_fields' in value)) return false;
+    if (!('receipt_hash' in value)) return false;
+    if (!('expected_receipt_hash' in value)) return false;
+    return true;
+}
+
+export function VerifyPublicDemoReceipt200ResponseFromJSON(json: any): VerifyPublicDemoReceipt200Response {
+    return VerifyPublicDemoReceipt200ResponseFromJSONTyped(json, false);
+}
+
+export function VerifyPublicDemoReceipt200ResponseFromJSONTyped(json: any, ignoreDiscriminator: boolean): VerifyPublicDemoReceipt200Response {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'valid': json['valid'],
+        'signature_valid': json['signature_valid'],
+        'hash_matches': json['hash_matches'],
+        'reason': json['reason'],
+        'verified_fields': json['verified_fields'],
+        'receipt_hash': json['receipt_hash'],
+        'expected_receipt_hash': json['expected_receipt_hash'],
+    };
+}
+
+export function VerifyPublicDemoReceipt200ResponseToJSON(value?: VerifyPublicDemoReceipt200Response | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'valid': value['valid'],
+        'signature_valid': value['signature_valid'],
+        'hash_matches': value['hash_matches'],
+        'reason': value['reason'],
+        'verified_fields': value['verified_fields'],
+        'receipt_hash': value['receipt_hash'],
+        'expected_receipt_hash': value['expected_receipt_hash'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.0
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+/**
+ *
+ * @export
+ * @interface VerifyPublicDemoReceiptRequest
+ */
+export interface VerifyPublicDemoReceiptRequest {
+    /**
+     *
+     * @type {Receipt}
+     * @memberof VerifyPublicDemoReceiptRequest
+     */
+    receipt: Receipt;
+    /**
+     * Receipt hash returned in /api/demo/run proof_refs.receipt_hash.
+     * @type {string}
+     * @memberof VerifyPublicDemoReceiptRequest
+     */
+    expected_receipt_hash: string;
+}
+
+/**
+ * Check if a given object implements the VerifyPublicDemoReceiptRequest interface.
+ */
+export function instanceOfVerifyPublicDemoReceiptRequest(value: object): boolean {
+    if (!('receipt' in value)) return false;
+    if (!('expected_receipt_hash' in value)) return false;
+    return true;
+}
+
+export function VerifyPublicDemoReceiptRequestFromJSON(json: any): VerifyPublicDemoReceiptRequest {
+    return VerifyPublicDemoReceiptRequestFromJSONTyped(json, false);
+}
+
+export function VerifyPublicDemoReceiptRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): VerifyPublicDemoReceiptRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'receipt': ReceiptFromJSON(json['receipt']),
+        'expected_receipt_hash': json['expected_receipt_hash'],
+    };
+}
+
+export function VerifyPublicDemoReceiptRequestToJSON(value?: VerifyPublicDemoReceiptRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'receipt': ReceiptToJSON(value['receipt']),
+        'expected_receipt_hash': value['expected_receipt_hash'],
     };
 }
 

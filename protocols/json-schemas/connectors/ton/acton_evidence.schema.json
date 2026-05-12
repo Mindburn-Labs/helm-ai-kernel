@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.dev/connectors/ton/acton_evidence.schema.json",
+  "title": "TON Acton EvidencePack artifact index",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "required_artifacts"],
+  "properties": {
+    "schema_version": { "const": "ton.acton.evidence.v1" },
+    "required_artifacts": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "acton_command_envelope.json" }
+    },
+    "t3_required_artifacts": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

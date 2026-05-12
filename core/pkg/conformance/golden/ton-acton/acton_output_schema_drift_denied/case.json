@@ -1,0 +1,1 @@
+{"case_id":"acton_output_schema_drift_denied","action_urn":"connector.ton.acton.contract.build","expected_verdict":"DENY","expected_reason_code":"ERR_CONNECTOR_CONTRACT_DRIFT","must_dispatch":true}

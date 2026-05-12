@@ -1,0 +1,1 @@
+{"case_id":"compiler_version_mismatch_denied","action_urn":"connector.ton.acton.source.verify_dry_run","expected_verdict":"DENY","expected_reason_code":"ERR_TON_TOLK_COMPILER_MISMATCH","must_dispatch":false}

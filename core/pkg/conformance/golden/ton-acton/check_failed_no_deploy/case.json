@@ -1,0 +1,1 @@
+{"case_id":"check_failed_no_deploy","action_urn":"connector.ton.acton.contract.check","expected_status":"tool_error","blocked_followup":"connector.ton.acton.script.mainnet","must_emit_receipt":true}

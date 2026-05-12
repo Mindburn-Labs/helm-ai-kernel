@@ -1,0 +1,94 @@
+# TON Acton default MAPL policy template
+#
+# This template documents the P0 ceilings enforced by
+# core/pkg/connectors/ton/acton. The Go connector helper is the executable
+# source in this OSS tree; this file is the operator-facing policy seed.
+
+connector "ton.acton" {
+  allowed_command_classes = [
+    "project",
+    "doctor",
+    "env",
+    "version",
+    "contract.build",
+    "contract.check",
+    "contract.format",
+    "contract.format_check",
+    "contract.test",
+    "contract.test_coverage",
+    "contract.test_mutation",
+    "contract.wrapper_generate",
+    "contract.compile",
+    "contract.disasm",
+    "contract.doc",
+    "contract.retrace",
+    "contract.func2tolk",
+    "script.local",
+    "script.fork_testnet",
+    "script.fork_mainnet",
+    "script.testnet",
+    "script.mainnet",
+    "source.verify_dry_run",
+    "source.verify_testnet",
+    "source.verify_mainnet",
+    "library.info",
+    "library.fetch",
+    "library.publish_testnet",
+    "library.publish_mainnet",
+    "library.topup_testnet",
+    "library.topup_mainnet",
+    "wallet.list",
+    "rpc.query"
+  ]
+
+  network_profiles {
+    local        { egress = "deny-all";  broadcast = false }
+    fork_testnet { egress = "allowlist"; broadcast = false }
+    fork_mainnet { egress = "allowlist"; broadcast = false }
+    testnet      { egress = "allowlist"; broadcast = true }
+    mainnet      { egress = "allowlist"; broadcast = true; default_risk = "T3" }
+  }
+
+  p0_ceilings {
+    MAX_TON_SPEND_PER_ACTION = "0"
+    MAX_TON_SPEND_PER_DAY = "0"
+    MAX_TON_MAINNET_SPEND_PER_ACTION = "0"
+    MAX_TON_MAINNET_SPEND_PER_DAY = "0"
+    ALLOW_TESTNET_DEPLOY = false
+    ALLOW_MAINNET_DEPLOY = false
+    ALLOW_MAINNET_LIBRARY_PUBLISH = false
+    REQUIRE_SOURCE_VERIFICATION = true
+    REQUIRE_COMPILER_PIN = true
+    REQUIRE_MUTATION_SCORE_MIN = 0
+    REQUIRE_COVERAGE_MIN = 0
+    FORBID_PLAINTEXT_MNEMONIC = true
+    FORBID_GENERIC_MAINNET_SCRIPT = true
+    REQUIRE_APPROVAL_CEREMONY_FOR_MAINNET = true
+  }
+
+  wallet {
+    plaintext_mnemonic = "deny"
+    wallet_ref = "opaque"
+    tonconnect = "preferred"
+    secret_manager_injection = "policy-and-sandbox-grant-required"
+  }
+
+  mainnet {
+    effect_class = "IRREVERSIBLE"
+    verdict_without_approval = "ESCALATE"
+    evidence_pack = "full"
+  }
+
+  deny "generic mainnet scripts" when {
+    action == "connector.ton.acton.script.mainnet" &&
+    expected_effects.empty
+  }
+
+  deny "unknown Acton version" when {
+    acton_version.not_in(connector.supported_acton_versions)
+  }
+
+  deny "unknown Tolk compiler version" when {
+    tolk_compiler_version.not_in(connector.supported_tolk_compiler_versions)
+  }
+}

@@ -225,6 +225,17 @@ func RegisterL1Tests(suite *Suite) {
 			return nil
 		},
 	})
+
+	suite.Register(TestCase{
+		ID:          "L1-TON-ACTON-001",
+		Level:       LevelL1,
+		Category:    "connectors",
+		Name:        "TON Acton golden pack registry",
+		Description: "Verify TON Acton connector golden packs are present and machine-readable",
+		Run: func(ctx *TestContext) error {
+			return validateTONActonGoldenPacks(ctx)
+		},
+	})
 }
 
 // RegisterL2Tests registers all L2 (execution correctness) tests.
@@ -263,6 +274,24 @@ func RegisterL2Tests(suite *Suite) {
 				return nil // No drift detected → negative test fails (passes unexpectedly)
 			}
 			return fmt.Errorf("drift detected on connector %q: effect denied (schema_hash mismatch)", drift.ConnectorID)
+		},
+	})
+
+	suite.Register(TestCase{
+		ID:          "L2-TON-ACTON-001",
+		Level:       LevelL2,
+		Category:    "connectors",
+		Name:        "TON Acton mainnet generic script fails closed",
+		Description: "Verify TON Acton conformance vectors include generic mainnet script denial and drift denial",
+		Run: func(ctx *TestContext) error {
+			cases := loadTONActonGoldenCases(ctx)
+			if cases["mainnet_generic_script_denied"] != "ERR_TON_ACTON_GENERIC_MAINNET_SCRIPT_DENIED" {
+				ctx.Fail("mainnet_generic_script_denied reason missing")
+			}
+			if cases["acton_output_schema_drift_denied"] != "ERR_CONNECTOR_CONTRACT_DRIFT" {
+				ctx.Fail("acton_output_schema_drift_denied reason missing")
+			}
+			return nil
 		},
 	})
 }

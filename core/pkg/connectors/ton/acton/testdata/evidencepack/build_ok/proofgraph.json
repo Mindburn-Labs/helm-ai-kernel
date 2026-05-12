@@ -1,0 +1,14 @@
+{
+  "nodes": [
+    {
+      "type": "INTENT",
+      "connector_id": "ton.acton",
+      "seq": 1
+    },
+    {
+      "type": "EFFECT",
+      "connector_id": "ton.acton",
+      "seq": 2
+    }
+  ]
+}

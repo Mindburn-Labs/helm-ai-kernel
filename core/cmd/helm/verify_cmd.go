@@ -31,6 +31,10 @@ import (
 //	1 = verification failed
 //	2 = runtime error
 func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && (args[0] == "pack" || args[0] == "proofgraph") {
+		args = args[1:]
+	}
+
 	cmd := flag.NewFlagSet("verify", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 

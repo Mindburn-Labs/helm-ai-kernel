@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.dev/connectors/ton/acton_script_manifest.schema.json",
+  "title": "TON Acton script sidecar manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "script_path", "script_hash", "allowed_networks", "expected_effects", "required_preflight"],
+  "properties": {
+    "schema_version": { "const": "ton.acton.script_manifest.v1" },
+    "script_path": { "type": "string", "minLength": 1 },
+    "script_hash": { "type": "string", "pattern": "^sha256:" },
+    "allowed_networks": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "enum": ["testnet", "mainnet", "fork_testnet", "fork_mainnet"] }
+    },
+    "expected_effects": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/expected_effect" }
+    },
+    "required_preflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "build": { "type": "boolean" },
+        "test": { "type": "boolean" },
+        "check": { "type": "boolean" },
+        "fmt_check": { "type": "boolean" },
+        "verify_dry_run": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "expected_effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effect_kind", "effect_class", "wallet_ref", "max_ton_spend"],
+      "properties": {
+        "effect_kind": { "type": "string" },
+        "effect_class": { "enum": ["REVERSIBLE", "COMPENSABLE", "IRREVERSIBLE"] },
+        "network": { "type": "string" },
+        "wallet_ref": { "type": "string", "pattern": "^wallet:" },
+        "max_ton_spend": { "type": "string" },
+        "contract_address": { "type": "string" },
+        "contract_code_hash": { "type": "string" },
+        "requires_source_verification": { "type": "boolean" },
+        "irreversible_reason": { "type": "string" }
+      }
+    }
+  }
+}

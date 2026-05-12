@@ -1,0 +1,1 @@
+{"case_id":"wallet_mnemonic_workspace_denied","action_urn":"connector.ton.acton.script.testnet","expected_verdict":"DENY","expected_reason_code":"ERR_TON_PLAINTEXT_MNEMONIC_FORBIDDEN","must_dispatch":false}

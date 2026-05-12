@@ -1,0 +1,1 @@
+{"case_id":"library_publish_mainnet_escalated","action_urn":"connector.ton.acton.library.publish_mainnet","expected_verdict":"ESCALATE","expected_reason_code":"ERR_TON_LIBRARY_MAINNET_REQUIRES_APPROVAL","must_dispatch":false}

@@ -157,10 +157,20 @@
 | -------------- | ----------- | --------- | --------------------------------- |
 | `openapi.yaml` | L1          | normative | EffectBoundary REST API (OAS 3.1) |
 
+### Connectors (`connectors/`)
+
+| Schema                                                | Conformance | Status    | Description                              |
+| ----------------------------------------------------- | ----------- | --------- | ---------------------------------------- |
+| `connectors/ton/acton_command.schema.json`           | L2          | normative | TON Acton typed command envelope         |
+| `connectors/ton/acton_receipt.schema.json`           | L2          | normative | TON Acton deterministic connector receipt |
+| `connectors/ton/acton_contract_bundle.schema.json`   | L2          | normative | TON Acton connector contract bundle      |
+| `connectors/ton/acton_script_manifest.schema.json`   | L2          | normative | TON Acton network script sidecar manifest |
+| `connectors/ton/acton_evidence.schema.json`          | L2          | normative | TON Acton EvidencePack artifact index    |
+
 ---
 
-**Total schemas**: 127 files across 24 domains.
+**Total schemas**: 132 files across 25 domains.
 **L1 (Core)**: 41 schemas
-**L2 (Extended)**: 62 schemas
+**L2 (Extended)**: 67 schemas
 **L3 (Optional)**: 18 schemas
 **Informational**: 6 schemas

@@ -1,0 +1,1 @@
+{"case_id":"build_ok","action_urn":"connector.ton.acton.contract.build","expected_verdict":"ALLOW","must_dispatch":true,"must_require_network":false,"must_emit_receipt":true}

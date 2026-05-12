@@ -1,0 +1,14 @@
+{
+  "schema_version": "ton.acton.receipt.v1",
+  "connector_id": "ton.acton",
+  "command_id": "ton-acton-build-ok",
+  "action_urn": "connector.ton.acton.contract.build",
+  "verdict": "ALLOW",
+  "status": "ok",
+  "reason_code": "OK",
+  "request_hash": "sha256:request",
+  "decision_hash": "sha256:decision",
+  "sandbox_grant_hash": "sha256:sandbox",
+  "acton_version": "fixture-acton-1.0.0",
+  "tolk_compiler_version": "fixture-tolk-1.0.0"
+}

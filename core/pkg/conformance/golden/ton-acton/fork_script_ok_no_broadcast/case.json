@@ -1,0 +1,1 @@
+{"case_id":"fork_script_ok_no_broadcast","action_urn":"connector.ton.acton.script.fork_testnet","expected_verdict":"ALLOW","must_require_network":true,"must_broadcast":false}

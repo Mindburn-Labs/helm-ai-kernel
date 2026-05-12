@@ -1,0 +1,1 @@
+{"case_id":"local_script_ok","action_urn":"connector.ton.acton.script.local","expected_verdict":"ALLOW","must_dispatch":true,"must_require_network":false,"must_broadcast":false}

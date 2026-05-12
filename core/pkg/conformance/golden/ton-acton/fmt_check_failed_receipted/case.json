@@ -1,0 +1,1 @@
+{"case_id":"fmt_check_failed_receipted","action_urn":"connector.ton.acton.contract.format_check","expected_verdict":"ALLOW","expected_status":"tool_error","must_dispatch":true,"must_emit_receipt":true}

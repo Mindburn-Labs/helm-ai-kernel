@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.dev/connectors/ton/acton_contract_bundle.schema.json",
+  "title": "TON Acton connector contract bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "connector_id",
+    "connector_version",
+    "executor_kind",
+    "supported_acton_versions",
+    "supported_tolk_compiler_versions",
+    "allowed_commands",
+    "schema_artifacts",
+    "network_profiles",
+    "idempotency_strategy",
+    "irreversibility_tags",
+    "drift_detection"
+  ],
+  "properties": {
+    "schema_version": { "const": "helm.connector_contract.v1" },
+    "connector_id": { "const": "ton.acton" },
+    "connector_version": { "type": "string" },
+    "executor_kind": { "const": "DIGITAL" },
+    "supported_acton_versions": { "type": "array", "items": { "type": "string" } },
+    "supported_tolk_compiler_versions": { "type": "array", "items": { "type": "string" } },
+    "allowed_commands": { "type": "array", "items": { "type": "string" } },
+    "schema_artifacts": { "type": "object" },
+    "network_profiles": { "type": "object" },
+    "idempotency_strategy": { "type": "object" },
+    "irreversibility_tags": { "type": "array", "items": { "type": "string" } },
+    "drift_detection": {
+      "type": "object",
+      "required": ["fail_closed"],
+      "properties": {
+        "fixtures": { "type": "array", "items": { "type": "string" } },
+        "fail_closed": { "const": true }
+      }
+    },
+    "effect_classes": { "type": "object" }
+  }
+}

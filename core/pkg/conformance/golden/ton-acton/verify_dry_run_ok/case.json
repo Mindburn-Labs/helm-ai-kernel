@@ -1,0 +1,1 @@
+{"case_id":"verify_dry_run_ok","action_urn":"connector.ton.acton.source.verify_dry_run","expected_verdict":"ALLOW","must_include":["compiler_version","source_hash","verifier_response_hash"],"must_broadcast":false}

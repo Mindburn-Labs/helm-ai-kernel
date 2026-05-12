@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.dev/connectors/ton/acton_receipt.schema.json",
+  "title": "TON Acton receipt",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "connector_id",
+    "command_id",
+    "action_urn",
+    "verdict",
+    "status",
+    "reason_code",
+    "risk_class",
+    "executor_kind",
+    "request_hash",
+    "sandbox_grant_hash",
+    "environment",
+    "artifacts",
+    "tx",
+    "drift"
+  ],
+  "properties": {
+    "schema_version": { "const": "ton.acton.receipt.v1" },
+    "connector_id": { "const": "ton.acton" },
+    "command_id": { "type": "string", "minLength": 1 },
+    "action_urn": { "type": "string", "pattern": "^connector\\.ton\\.acton\\." },
+    "verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+    "status": { "enum": ["ok", "denied", "escalated", "tool_error", "timeout", "resource_exhausted", "error"] },
+    "reason_code": { "type": "string" },
+    "risk_class": { "enum": ["T0", "T1", "T2", "T3"] },
+    "effect_class": { "enum": ["REVERSIBLE", "COMPENSABLE", "IRREVERSIBLE"] },
+    "executor_kind": { "const": "DIGITAL" },
+    "request_hash": { "type": "string", "pattern": "^sha256:" },
+    "response_hash": { "type": "string", "pattern": "^sha256:" },
+    "stdout_hash": { "type": "string", "pattern": "^sha256:" },
+    "stderr_hash": { "type": "string", "pattern": "^sha256:" },
+    "sandbox_grant_hash": { "type": "string", "pattern": "^sha256:" },
+    "acton_version": { "type": "string" },
+    "tolk_compiler_version": { "type": "string" },
+    "environment": { "type": "object" },
+    "artifacts": { "type": "object" },
+    "network": { "type": "string" },
+    "wallet_ref": { "type": "string" },
+    "redactions": { "type": "array", "items": { "type": "string" } },
+    "tx": { "type": "object" },
+    "drift": {
+      "type": "object",
+      "required": ["contract_drift"],
+      "properties": {
+        "contract_drift": { "type": "boolean" },
+        "schema_hash": { "type": "string" },
+        "observed_output_shape_hash": { "type": "string" },
+        "reason_code": { "type": "string" }
+      }
+    },
+    "evidence_refs": { "type": "array", "items": { "type": "string" } }
+  }
+}

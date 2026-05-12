@@ -1,0 +1,1 @@
+{"case_id":"mutation_threshold_failed_escalate","action_urn":"connector.ton.acton.contract.test_mutation","expected_verdict":"ESCALATE","expected_reason_code":"ERR_TON_MUTATION_THRESHOLD_FAILED","must_not_dispatch_followup":true}

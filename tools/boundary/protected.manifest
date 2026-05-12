@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-05-12T13:23:25Z
-# Commit: f39c64b33b2aac1124513af62e57c9e98b21f44a
+# Generated: 2026-05-12T14:03:27Z
+# Commit: 2ffc12b9415fd179ce6ca05c2dc3702658b5de82
 # Format: SHA256  PATH
 #
 8986a802cccc1469019c7da0b92b3e8182897e24cb8ce2b90d237b7ffb2b3b67  core/pkg/kernel/README.md
@@ -528,7 +528,7 @@ fa33c31da708aa84ca68b9c985c0c9565f7874f29638e4b5e3b937162c516f29  protocols/json
 56ca14b9d0d64a9812a2132b7b0ac2a15fc974ee9f898b575e18c097ce027488  protocols/json-schemas/connectors/ton/acton_command.schema.json
 24ced91e07926bfa398826c39ceb00e776e01ca04ca0175e2047e62d085cf8b3  protocols/json-schemas/connectors/ton/acton_contract_bundle.schema.json
 06990b8bf936e9a3e009f6ef35ee7c3e4426ea8c3323be7d5fa1ce5c39b78b6e  protocols/json-schemas/connectors/ton/acton_evidence.schema.json
-b456f384ad1eff72f4d8045c33dcefa00266b6e49b831eb79645edcc60cc24c7  protocols/json-schemas/connectors/ton/acton_receipt.schema.json
+6d6eba08ba0c94b5e1185537b3ea6ff9908ce96841f775672e6633df7dcbcff0  protocols/json-schemas/connectors/ton/acton_receipt.schema.json
 83084b4de17844e4722e2022930a2b15e52751d0ecc5110e88718138c1040121  protocols/json-schemas/connectors/ton/acton_script_manifest.schema.json
 f50b1a3d0f82b6487e0bb38dfaebe647e7d13f578557f87f3517cae23e543978  protocols/json-schemas/core/ProvenanceEnvelope.v1.json
 76a06b0baf1e60b7c5f80424fbfae303fcdaaa0788055ffa85b8428bd53a80bd  protocols/json-schemas/core/approval_artifact.schema.json

@@ -69,6 +69,16 @@ func BuildEvidencePack(input EvidencePackInput) (*EvidencePackBuildResult, error
 	builder.AddRawEntry("Acton.toml.hash", "text/plain", []byte(input.Envelope.ManifestHash))
 	builder.AddRawEntry("replay_instructions.txt", "text/plain", []byte(ReplayInstructions(input.Envelope)))
 	builder.AddRawEntry("redaction_map.json", "application/json", mustJSON(map[string]any{"redactions": input.Receipt.Redactions}))
+	builder.AddRawEntry("proofgraph.json", "application/json", mustJSON(map[string]any{
+		"nodes": []map[string]any{
+			{"type": "INTENT", "connector_id": ConnectorID, "seq": 1, "command_id": input.Envelope.CommandID},
+			{"type": "EFFECT", "connector_id": ConnectorID, "seq": 2, "command_id": input.Envelope.CommandID},
+		},
+	}))
+	builder.AddRawEntry("08_TAPES/tape_manifest.json", "application/json", mustJSON(map[string]any{
+		"run_id":  input.Envelope.CommandID,
+		"entries": []any{},
+	}))
 	if input.PlanIR != nil {
 		builder.AddRawEntry("plan_ir.json", "application/json", mustJSON(input.PlanIR))
 	}

@@ -23,6 +23,7 @@ type ActonReceipt struct {
 	EffectClass         EffectClass            `json:"effect_class,omitempty"`
 	ExecutorKind        ExecutorKind           `json:"executor_kind"`
 	RequestHash         string                 `json:"request_hash"`
+	DecisionHash        string                 `json:"decision_hash"`
 	ResponseHash        string                 `json:"response_hash,omitempty"`
 	StdoutHash          string                 `json:"stdout_hash,omitempty"`
 	StderrHash          string                 `json:"stderr_hash,omitempty"`
@@ -98,6 +99,7 @@ func NewPreDispatchReceipt(env *ActonCommandEnvelope, decision PolicyDecision) (
 		EffectClass:         env.EffectClass,
 		ExecutorKind:        env.ExecutorKind,
 		RequestHash:         reqHash,
+		DecisionHash:        decisionHash(env, decision.Verdict, decision.ReasonCode, decision.Dispatch),
 		SandboxGrantHash:    env.SandboxGrantHash,
 		ActonVersion:        env.ActonVersion,
 		TolkCompilerVersion: env.TolkCompilerVersion,
@@ -160,6 +162,7 @@ func ReceiptFromExec(env *ActonCommandEnvelope, result *actuators.ExecResult, pr
 		EffectClass:         env.EffectClass,
 		ExecutorKind:        env.ExecutorKind,
 		RequestHash:         reqHash,
+		DecisionHash:        decisionHash(env, verdict, ReasonOK, true),
 		ResponseHash:        "sha256:" + responseHash,
 		StdoutHash:          resultStdoutHash(result),
 		StderrHash:          resultStderrHash(result),
@@ -207,6 +210,28 @@ func (r *ActonReceipt) ToToolReceipt() map[string]any {
 	var out map[string]any
 	_ = json.Unmarshal(data, &out)
 	return out
+}
+
+func decisionHash(env *ActonCommandEnvelope, verdict contracts.Verdict, reason ReasonCode, dispatch bool) string {
+	hash, _ := canonicalize.CanonicalHash(map[string]any{
+		"action_urn":      env.ActionURN,
+		"command_id":      env.CommandID,
+		"connector_id":    env.ConnectorID,
+		"dispatch":        dispatch,
+		"idempotency_key": env.IdempotencyKey,
+		"reason_code":     reason,
+		"request_hash":    mustEnvelopeHash(env),
+		"verdict":         verdict,
+	})
+	return "sha256:" + hash
+}
+
+func mustEnvelopeHash(env *ActonCommandEnvelope) string {
+	hash, err := env.Hash()
+	if err != nil {
+		return ""
+	}
+	return hash
 }
 
 func resultExitCode(result *actuators.ExecResult) int {

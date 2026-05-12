@@ -7,8 +7,8 @@ import (
 
 const ConnectorVersion = "0.1.0"
 
-var SupportedActonVersions = []string{"fixture-acton-1.0.0", "0.5.0", "0.6.0"}
-var SupportedTolkCompilerVersions = []string{"fixture-tolk-1.0.0", "0.12.0", "0.13.0"}
+var SupportedActonVersions = []string{"fixture-acton-1.0.0", "0.5.0", "0.6.0", "1.0.0"}
+var SupportedTolkCompilerVersions = []string{"fixture-tolk-1.0.0", "0.12.0", "0.13.0", "1.4.0"}
 
 type ConnectorContractBundle struct {
 	SchemaVersion                 string                        `json:"schema_version"`
@@ -59,7 +59,7 @@ func ContractBundle() ConnectorContractBundle {
 		AllowedCommands:               AllActionURNs(),
 		SchemaArtifacts: SchemaArtifacts{
 			CommandSchemaHash:        "sha256:56ca14b9d0d64a9812a2132b7b0ac2a15fc974ee9f898b575e18c097ce027488",
-			ReceiptSchemaHash:        "sha256:b456f384ad1eff72f4d8045c33dcefa00266b6e49b831eb79645edcc60cc24c7",
+			ReceiptSchemaHash:        "sha256:6d6eba08ba0c94b5e1185537b3ea6ff9908ce96841f775672e6633df7dcbcff0",
 			ScriptManifestSchemaHash: "sha256:83084b4de17844e4722e2022930a2b15e52751d0ecc5110e88718138c1040121",
 			EvidenceSchemaHash:       "sha256:06990b8bf936e9a3e009f6ef35ee7c3e4426ea8c3323be7d5fa1ce5c39b78b6e",
 		},

@@ -7,41 +7,45 @@
 [![SLSA Level 3](https://img.shields.io/badge/SLSA-Level%203-blue)](docs/PUBLISHING.md)
 [![SBOM CycloneDX](https://img.shields.io/badge/SBOM-CycloneDX%201.5-orange)](docs/PUBLISHING.md)
 
-**HELM OSS is the fail-closed execution firewall for AI agents.**
+HELM OSS is the fail-closed execution firewall for AI agents.
 
-AI models propose. Deterministic systems govern. HELM sits between stochastic AI proposals and your infrastructure's side effects. It intercepts tool calls (via MCP or OpenAI-compatible proxies), decides what is authorized to execute, and emits cryptographically signed receipts.
+AI models propose. Deterministic systems govern. HELM sits between stochastic
+agent tool calls and infrastructure side effects. It intercepts MCP tools and
+OpenAI-compatible requests, evaluates authority before dispatch, and emits
+signed receipts that can be verified offline.
 
-- **Fail-Closed Execution Firewall:** Default deny. Every tool call requires explicit policy or sandbox grants.
-- **Fail-Closed MCP Interceptor:** Drop-in governance for the Model Context Protocol. Govern Claude Desktop, Cursor, or any MCP client without changing code.
-- **Signed Receipts:** Every `ALLOW`, `DENY`, or `ESCALATE` decision is written to a verifiable ProofGraph, proving exactly what the agent attempted and why it was blocked or allowed.
-
-*(Note: This is Mindburn Labs' HELM execution kernel for AI, not the Kubernetes package manager.)*
+This is Mindburn Labs' HELM execution kernel for AI, not the Kubernetes package
+manager.
 
 ```text
-Agent attempts dangerous action
-        |
-        v
-HELM execution boundary
-        |
-        +--> DENY / ESCALATE before side effects
-        |
-        v
-Signed receipt -> verify passes -> tamper fails
+Agent proposal -> HELM boundary -> ALLOW / DENY / ESCALATE -> signed receipt
 ```
 
-Current public release: `v0.4.1`. Canonical OSS docs:
-<https://helm.docs.mindburn.org/oss>.
+## Status
 
-## Project Status
-
-- Public repository: `Mindburn-Labs/helm-oss`
+- Repository: `Mindburn-Labs/helm-oss`
+- Current public release: `v0.4.0`
 - License: Apache-2.0
-- Default branch: `main`
 - Supported security line: `0.4.x`; `0.3.x` is best effort
-- Public release assets: CLI binaries, checksums, SBOM, release attestation,
-  `evidence-pack.tar`, `helm.mcpb`, and sample policy material
-- Known OSS-readiness follow-ups are tracked in
-  [docs/OSS_READINESS_AUDIT.md](docs/OSS_READINESS_AUDIT.md)
+- Canonical docs: <https://helm.docs.mindburn.org/oss>
+- Readiness follow-ups: [docs/OSS_READINESS_AUDIT.md](docs/OSS_READINESS_AUDIT.md)
+
+Public release assets include CLI binaries, checksums, SBOM, release
+attestation, `evidence-pack.tar`, `helm.mcpb`, and sample policy material.
+
+## What HELM OSS Does
+
+- Enforces default-deny execution for agent tool calls.
+- Wraps MCP servers so unknown tools can be quarantined before side effects.
+- Runs the kernel, guardian, proxy, receipt store, evidence export, and
+  verification paths.
+- Produces signed receipts and EvidencePacks for replay, audit, and tamper
+  checks.
+- Ships public SDK sources for Go, Python, TypeScript, Rust, and Java.
+
+HELM OSS does not include the managed Mindburn hosted service, billing, private
+operational tooling, proprietary connector programs, or generated commercial
+report surfaces.
 
 ## Quick Start
 
@@ -52,7 +56,7 @@ brew install mindburnlabs/tap/helm
 helm --version
 ```
 
-Start a local boundary and optional Console:
+Start a local boundary. Add `--console` when you want the self-hostable Console:
 
 ```bash
 helm serve --policy ./release.high_risk.v3.toml
@@ -60,7 +64,7 @@ helm serve --policy ./release.high_risk.v3.toml --console
 helm boundary status
 ```
 
-Run the local public proof API after `helm serve` starts:
+Run the local proof demo after `helm serve` starts on `127.0.0.1:7714`:
 
 ```bash
 curl http://127.0.0.1:7714/api/demo/run \
@@ -68,7 +72,7 @@ curl http://127.0.0.1:7714/api/demo/run \
   -d '{"action_id":"export_customer_list","policy_id":"agent_tool_call_boundary"}'
 ```
 
-Then verify the returned receipt and confirm tampering fails:
+Verify the returned receipt and confirm that tampering fails:
 
 ```bash
 curl http://127.0.0.1:7714/api/demo/verify \
@@ -95,12 +99,12 @@ helm receipts tail --agent agent.titan.exec
 helm verify evidence-pack.tar
 ```
 
-`helm serve --policy` starts the local boundary on `127.0.0.1:7714` by
-default and stores receipts durably in SQLite unless `DATABASE_URL` is set.
-`helm verify evidence-pack.tar` runs offline by default. Add `--online` only
-when the public proof endpoint and credentials for that release are available.
+`helm serve --policy` stores receipts in SQLite by default unless
+`DATABASE_URL` is set. `helm verify evidence-pack.tar` runs offline by default;
+use `--online` only when public proof endpoint credentials are available for
+that release.
 
-Build from source:
+## Build From Source
 
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-oss.git
@@ -119,21 +123,10 @@ make test-all
 make crucible
 ```
 
-## Canonical Diagrams
+## Architecture
 
-The complete diagram doctrine lives in
-[docs/architecture/canonical-diagrams.md](docs/architecture/canonical-diagrams.md).
-The public README keeps the OSS path short: proposal, boundary, verdict,
-receipt, replay.
-
-Plain terms used below:
-
-- `ALLOW`: HELM lets the action run.
-- `DENY`: HELM blocks the action.
-- `ESCALATE`: HELM stops and asks for more facts, policy, or human approval.
-- `Receipt`: a signed record of the decision.
-- `ProofGraph`: the record chain used to replay and check what happened.
-- `EvidencePack`: a small bundle of records for one review path.
+HELM separates orchestration from execution authority. Agent frameworks decide
+what to attempt; HELM decides what is allowed to execute.
 
 ```mermaid
 flowchart LR
@@ -144,137 +137,65 @@ flowchart LR
     Verify --> Tamper["Tamper fails"]
 ```
 
-Unknown MCP servers and tools enter quarantine before they can dispatch side
-effects:
+Unknown MCP servers and tools enter quarantine before dispatch:
 
 ```mermaid
 flowchart TD
-    A["Discovered MCP server"] --> B["Quarantined by default"]
-    B --> C["Metadata + schema inspection"]
-    C --> D["Risk classification"]
-    D --> E["Approval record"]
-    E --> F["Policy-bound active state"]
-    F --> G["ALLOW / DENY / ESCALATE per tool call"]
-    G --> H["Receipt + ProofGraph event"]
+    Server["Discovered MCP server"] --> Quarantine["Quarantined by default"]
+    Quarantine --> Inspect["Metadata and schema inspection"]
+    Inspect --> Risk["Risk classification"]
+    Risk --> Approval["Approval record"]
+    Approval --> Active["Policy-bound active state"]
+    Active --> Decision["ALLOW / DENY / ESCALATE"]
+    Decision --> Proof["Receipt and ProofGraph event"]
 ```
 
-Sandbox grants are explicit authority records, not generic container access.
-They say what code may touch before it runs:
+Key terms:
 
-```text
-Sandbox grant
-grant_id · runtime · runtime_version · backend_profile
-image_digest / template_digest
-filesystem preopens · environment variables · network policy
-resource limits · policy_epoch · grant_hash
-```
+- `ALLOW`: HELM lets the action run.
+- `DENY`: HELM blocks the action.
+- `ESCALATE`: HELM stops and asks for more facts, policy, or human approval.
+- `Receipt`: signed record of the decision.
+- `ProofGraph`: replayable record chain for what happened.
+- `EvidencePack`: portable bundle of records for a review path.
 
-## Why HELM Is Different
-
-Orchestration decides what an agent should attempt. HELM decides what it is
-allowed to execute.
-
-Plain version: orchestration picks a plan. HELM checks whether that plan is
-allowed to cause a side effect.
-
-```mermaid
-flowchart LR
-    subgraph Orchestration["Agent orchestration stack"]
-      A["Agent framework decides what to attempt"] --> B["Tool router sends calls"] --> C["Logs record after the fact"]
-    end
-    subgraph HELM["HELM execution stack"]
-      D["Agent proposes"] --> E["CPI validates"] --> F["PEP enforces"] --> G["Sandbox contains"] --> H["Connector contract constrains"] --> I["Receipt proves"] --> J["ProofGraph replays"]
-    end
-```
-
-- Agent frameworks shape plans; HELM enforces authority at the side-effect boundary.
-- MCP gateways route tool calls; HELM evaluates policy, approval state, sandbox grants, connector contracts, and proof requirements.
-- IAM grants identity and coarse permissions; HELM evaluates concrete intent and risk at execution time.
-- Observability explains what happened after; HELM blocks or escalates before side effects dispatch.
-- Governance dashboards document policy; HELM applies policy in the runtime path and records evidence.
-- Workflow automation assumes deterministic scripts; HELM contains stochastic proposals inside deterministic execution semantics.
-
-## Launch Readiness Demo Suite
-
-HELM OSS includes a comprehensive, fail-closed verification suite in `examples/launch/`. You can execute the end-to-end demo suite by running the smoke scripts:
-
-```bash
-make launch-smoke
-```
-
-The sample launch policy (`examples/launch/policies/agent_tool_call_boundary.toml`) covers:
-
-| Action | Expected result |
-| --- | --- |
-| Read ticket / read file | `ALLOW` |
-| Draft reply / dry run | `ALLOW` |
-| Small refund / low-risk write | `ALLOW` |
-| Large refund / high-risk write | `ESCALATE` |
-| Dangerous shell command | `DENY` |
-| Export customer list / secret exfiltration | `DENY` |
-| Modify policy / IAM-like action | `ESCALATE` |
-
-Every run is labeled `OSS-BACKED`, `SANDBOX`, and `SAMPLE POLICY`. The demo
-uses HELM OSS Guardian evaluation and signed receipt persistence. It does not
-touch customer data, payment systems, infrastructure, shells, or external
-networks. See [examples/launch/README.md](examples/launch/README.md) for the full walkthrough.
+The complete diagram doctrine lives in
+[docs/architecture/canonical-diagrams.md](docs/architecture/canonical-diagrams.md).
 
 ## Public Interfaces
 
-This repository is intentionally scoped to the OSS kernel:
-
-- `core/` contains the Go kernel, CLI, HTTP API, proxy, evidence export, and
-  verification logic.
-- `apps/console/` contains the single self-hostable HELM OSS Console frontend.
-- `packages/design-system-core/` contains the React/token design-system source
-  used by the Console. It is source-available in this repo; it was not present
-  in the public npm registry when this audit was created.
-- `protocols/`, `schemas/`, and `api/openapi/` define the wire contracts and
-  generated SDK inputs.
-- `sdk/` contains public SDK sources for Go, Python, TypeScript, Rust, and
-  Java.
-- `examples/` contains runnable integration examples.
-
-The repository does not ship the managed Mindburn hosted service, billing,
-private operational tooling, proprietary connector programs, or generated HTML
-report surfaces.
+| Surface | Path | Status |
+| --- | --- | --- |
+| CLI and kernel | `core/` | Go implementation of boundary, CLI, HTTP API, proxy, receipts, evidence export, and verification |
+| Console | `apps/console/` | Self-hostable HELM OSS Console |
+| Design system core | `packages/design-system-core/` | Workspace package source used by the Console |
+| Wire contracts | `api/openapi/`, `protocols/`, `schemas/` | OpenAPI, Protobuf, policy schemas, and JSON schemas |
+| SDKs | `sdk/` | Go, Python, TypeScript, Rust, and Java sources |
+| Examples | `examples/` | Runnable integrations and launch smoke material |
+| Conformance | `tests/conformance/`, `reference_packs/` | Profile, checklist, fixtures, and reference packs |
+| Deployment | `deploy/helm-chart/` | Helm chart for running the kernel in Kubernetes |
 
 ## SDKs And Packages
 
-| Surface | Path | Public install or current status |
-| --- | --- | --- |
-| CLI | `core/` | `brew install mindburnlabs/tap/helm`; release binaries are attached to GitHub Releases |
-| Go SDK | `sdk/go` | `go get github.com/Mindburn-Labs/helm-oss/sdk/go@main`; tagged module versions are tracked as an OSS readiness follow-up |
-| Python SDK | `sdk/python` | `pip install helm-sdk` |
-| TypeScript SDK | `sdk/ts` | `npm install @mindburn/helm` |
-| Rust SDK | `sdk/rust` | `cargo add helm-sdk` |
-| Java SDK | `sdk/java` | Maven workflow coordinate: `com.github.Mindburn-Labs:helm-sdk`; JitPack resolves the release as `com.github.mindburn-labs:helm-oss:0.4.0` |
-| Design system core | `packages/design-system-core` | Workspace package source; public npm registry publication is not yet verified |
+| Surface | Current install or status |
+| --- | --- |
+| CLI | `brew install mindburnlabs/tap/helm`; release binaries are attached to GitHub Releases |
+| Go SDK | `go get github.com/Mindburn-Labs/helm-oss/sdk/go@main`; tagged module versions are tracked as an OSS-readiness follow-up |
+| Python SDK | `pip install helm-sdk` |
+| TypeScript SDK | `npm install @mindburn/helm` |
+| Rust SDK | `cargo add helm-sdk` |
+| Java SDK | Maven workflow coordinate: `com.github.Mindburn-Labs:helm-sdk`; JitPack resolves the release as `com.github.mindburn-labs:helm-oss:0.4.0` |
+| Design system core | Workspace source; public npm registry publication is not verified in this repo |
 
-The HTTP client/types layer is generated from
+HTTP clients are generated from
 [`api/openapi/helm.openapi.yaml`](api/openapi/helm.openapi.yaml). Protobuf
 message bindings come from [`protocols/proto/`](protocols/proto/) where a
 language SDK ships them.
 
-## Repository Map
-
-| Path | Purpose |
-| --- | --- |
-| `core/` | Go implementation of the kernel, CLI, HTTP API, proxy, and verification paths |
-| `apps/console/` | Self-hostable HELM OSS Console frontend |
-| `packages/design-system-core/` | HELM React/token design-system source |
-| `api/openapi/` | OpenAPI contract used by generated SDK types |
-| `protocols/` | Protocol specifications and schema sources |
-| `schemas/` | JSON schemas used by kernel and verification flows |
-| `sdk/` | Public SDK source packages |
-| `tests/conformance/` | Conformance profile, checklist, and verification tests |
-| `reference_packs/` | Example policy/reference bundles used by tests and examples |
-| `deploy/helm-chart/` | Helm chart for running the kernel in Kubernetes |
-
 ## Documentation
 
-Public OSS docs are sourced from this repository and canonically published
-through `helm.docs.mindburn.org`. The owned docs set for sync is declared in
+Public OSS docs are sourced from this repo and published through
+`helm.docs.mindburn.org`. The owned docs set for sync is declared in
 `docs/public-docs.manifest.json`.
 
 - [Quickstart](docs/QUICKSTART.md)
@@ -290,19 +211,6 @@ through `helm.docs.mindburn.org`. The owned docs set for sync is declared in
 - [NIST AI Agent Critical Infrastructure Alignment](docs/compliance/nist-ai-agent-critical-infrastructure.md)
 - [NIST AI RMF to ISO 42001 Crosswalk](docs/compliance/nist-ai-rmf-iso-42001-crosswalk.md)
 
-## Security, Contributing, And Governance
-
-- Report vulnerabilities through [SECURITY.md](SECURITY.md). Do not open
-  public issues for security-sensitive reports.
-- Contribution setup and validation expectations are in
-  [CONTRIBUTING.md](CONTRIBUTING.md).
-- Project governance, maintainer roles, and decision rules are in
-  [GOVERNANCE.md](GOVERNANCE.md) and [MAINTAINERS.md](MAINTAINERS.md).
-- Community behavior expectations are in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-- Support channels are listed in [SUPPORT.md](SUPPORT.md).
-- Near-term open-source readiness work is summarized in [ROADMAP.md](ROADMAP.md)
-  and tracked in [docs/OSS_READINESS_AUDIT.md](docs/OSS_READINESS_AUDIT.md).
-
 ## Release Verification
 
 For `v0.4.0`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
@@ -311,8 +219,20 @@ For `v0.4.0`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
 `*.cosign.bundle` files are attached to a release.
 
 See [docs/VERIFICATION.md](docs/VERIFICATION.md) and
-[docs/PUBLISHING.md](docs/PUBLISHING.md) for the full release verification
-path.
+[docs/PUBLISHING.md](docs/PUBLISHING.md) for the full release verification path.
+
+## Security, Contributing, And Governance
+
+- Report vulnerabilities through [SECURITY.md](SECURITY.md). Do not open public
+  issues for security-sensitive reports.
+- Contribution setup and validation expectations are in
+  [CONTRIBUTING.md](CONTRIBUTING.md).
+- Project governance and maintainer responsibilities are in
+  [GOVERNANCE.md](GOVERNANCE.md) and [MAINTAINERS.md](MAINTAINERS.md).
+- Community behavior expectations are in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+- Support channels are listed in [SUPPORT.md](SUPPORT.md).
+- Near-term OSS work is summarized in [ROADMAP.md](ROADMAP.md) and tracked in
+  [docs/OSS_READINESS_AUDIT.md](docs/OSS_READINESS_AUDIT.md).
 
 ## License
 

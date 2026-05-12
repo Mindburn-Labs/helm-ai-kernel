@@ -441,15 +441,6 @@
       "sensitivity": "public"
     },
     {
-      "slug": "sdk-python-pytestcache-readme",
-      "title": "pytest cache directory #",
-      "section": "backend",
-      "source_path": "sdk/python/.pytest_cache/README.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/backend/sdk-python-pytestcache-readme",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
       "slug": "packages-design-system-core-governance",
       "title": "Mindburn Labs Design System Governance (UCS 1.3)",
       "section": "frontend",

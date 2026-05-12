@@ -41,6 +41,26 @@ func TestBuildArgvRejectsRawCommandFields(t *testing.T) {
 	}
 }
 
+func TestCurrentActonVersionMappings(t *testing.T) {
+	versionArgv, err := BuildArgv(ActionVersion, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(versionArgv); got != 2 || versionArgv[0] != "acton" || versionArgv[1] != "--version" {
+		t.Fatalf("unexpected version argv: %#v", versionArgv)
+	}
+	envArgv, err := BuildArgv(ActionEnv, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(envArgv); got != 2 || envArgv[0] != "acton" || envArgv[1] != "doctor" {
+		t.Fatalf("unexpected env argv: %#v", envArgv)
+	}
+	if !stringIn("1.0.0", SupportedActonVersions) || !stringIn("1.4.0", SupportedTolkCompilerVersions) {
+		t.Fatalf("validated Acton/Tolk versions are not in the connector contract")
+	}
+}
+
 func TestMainnetGenericScriptDeniedWithoutDispatch(t *testing.T) {
 	exec := &fakeExecutor{stdout: []byte(`{"ok":true}`)}
 	connector := NewConnector(Config{Runner: Runner{Executor: exec, SandboxID: "s1"}, SandboxGrant: sealedGrant(t, true, false)})

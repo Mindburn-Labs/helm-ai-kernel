@@ -630,8 +630,9 @@ func TestOverheadReport(t *testing.T) {
 
 	reportJSON, _ := json.MarshalIndent(report, "", "  ")
 
-	// Write to benchmarks/results/
-	outDir := filepath.Join("..", "benchmarks", "results")
+	// go test runs this package from core/benchmarks, so walk back to the
+	// repository root before writing the generated benchmark report.
+	outDir := filepath.Join("..", "..", "benchmarks", "results")
 	_ = os.MkdirAll(outDir, 0750)
 	outPath := filepath.Join(outDir, "latest.json")
 	if err := os.WriteFile(outPath, reportJSON, 0644); err != nil {

@@ -65,6 +65,7 @@ artifacts/*
 !artifacts/golden/
 !artifacts/golden/**
 reports/
+benchmarks/results/latest.json
 
 # ─── Temporary and logs ──────────────────────────────────────────────────────
 tmp/

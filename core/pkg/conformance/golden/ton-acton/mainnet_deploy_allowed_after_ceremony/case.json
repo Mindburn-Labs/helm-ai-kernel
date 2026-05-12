@@ -1,0 +1,1 @@
+{"case_id":"mainnet_deploy_allowed_after_ceremony","action_urn":"connector.ton.acton.script.mainnet","expected_verdict":"ALLOW","requires":["approval_ref","network_grant","wallet_ref","spend_cap","script_manifest","full_evidence_pack"]}

@@ -1,0 +1,1 @@
+{"case_id":"evidencepack_replay_ok","action_urn":"connector.ton.acton.script.mainnet","expected_verdict":"ALLOW","must_verify_pack":true,"must_replay":true}

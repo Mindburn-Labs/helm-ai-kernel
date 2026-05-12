@@ -1,0 +1,1 @@
+{"case_id":"library_publish_generic_denied","action_urn":"connector.ton.acton.library.publish_mainnet","expected_verdict":"DENY","expected_reason_code":"ERR_TON_ACTON_GENERIC_MAINNET_SCRIPT_DENIED","must_dispatch":false}

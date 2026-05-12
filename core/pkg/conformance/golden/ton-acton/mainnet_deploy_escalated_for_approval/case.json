@@ -1,0 +1,1 @@
+{"case_id":"mainnet_deploy_escalated_for_approval","action_urn":"connector.ton.acton.script.mainnet","expected_verdict":"ESCALATE","expected_reason_code":"ERR_TON_APPROVAL_CEREMONY_REQUIRED","must_dispatch":false}

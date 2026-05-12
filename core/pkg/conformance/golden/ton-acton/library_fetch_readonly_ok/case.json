@@ -1,0 +1,1 @@
+{"case_id":"library_fetch_readonly_ok","action_urn":"connector.ton.acton.library.fetch","expected_verdict":"ALLOW","must_require_network":true,"must_require_wallet":false,"must_broadcast":false}

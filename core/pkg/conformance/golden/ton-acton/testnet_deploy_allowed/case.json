@@ -1,0 +1,1 @@
+{"case_id":"testnet_deploy_allowed","action_urn":"connector.ton.acton.script.testnet","expected_verdict":"ALLOW","requires":["network_grant","wallet_ref","spend_cap","script_manifest","expected_effects"]}

@@ -1,0 +1,8 @@
+{
+  "pack_id": "ton-acton-build-ok",
+  "created_at": "2026-05-12T00:00:00Z",
+  "actor_did": "did:helm:local",
+  "intent_id": "intent-ton-acton-build-ok",
+  "policy_hash": "sha256:policy",
+  "entries": []
+}

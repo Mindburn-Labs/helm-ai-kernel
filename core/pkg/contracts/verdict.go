@@ -96,6 +96,35 @@ const (
 	ReasonTaintedInvokeDeny          ReasonCode = "TAINTED_PRIVILEGED_INVOKE_DENY"
 	ReasonTaintedEgressDeny          ReasonCode = "TAINTED_DATA_EGRESS_DENY"
 	ReasonTaintedEscalate            ReasonCode = "TAINTED_HIGH_RISK_ESCALATE"
+
+	// ── TON / Acton Connector Reasons (v1.3) ──────────────────
+	ReasonTONActonUnknownCommand             ReasonCode = "ERR_TON_ACTON_UNKNOWN_COMMAND"
+	ReasonTONActonUnsupportedVersion         ReasonCode = "ERR_TON_ACTON_UNSUPPORTED_VERSION"
+	ReasonTONTolkCompilerUnpinned            ReasonCode = "ERR_TON_TOLK_COMPILER_UNPINNED"
+	ReasonTONTolkCompilerMismatch            ReasonCode = "ERR_TON_TOLK_COMPILER_MISMATCH"
+	ReasonTONActonArgvRejected               ReasonCode = "ERR_TON_ACTON_ARGV_REJECTED"
+	ReasonTONActonRawShellForbidden          ReasonCode = "ERR_TON_ACTON_RAW_SHELL_FORBIDDEN"
+	ReasonTONActonGenericMainnetScriptDenied ReasonCode = "ERR_TON_ACTON_GENERIC_MAINNET_SCRIPT_DENIED"
+	ReasonTONScriptManifestRequired          ReasonCode = "ERR_TON_SCRIPT_MANIFEST_REQUIRED"
+	ReasonTONScriptManifestHashMismatch      ReasonCode = "ERR_TON_SCRIPT_MANIFEST_HASH_MISMATCH"
+	ReasonTONExpectedEffectMismatch          ReasonCode = "ERR_TON_EXPECTED_EFFECT_MISMATCH"
+	ReasonTONSpendCeilingExceeded            ReasonCode = "ERR_TON_SPEND_CEILING_EXCEEDED"
+	ReasonTONMainnetRequiresApproval         ReasonCode = "ERR_TON_MAINNET_REQUIRES_APPROVAL"
+	ReasonTONApprovalCeremonyRequired        ReasonCode = "ERR_TON_APPROVAL_CEREMONY_REQUIRED"
+	ReasonTONWalletRefRequired               ReasonCode = "ERR_TON_WALLET_REF_REQUIRED"
+	ReasonTONPlaintextMnemonicForbidden      ReasonCode = "ERR_TON_PLAINTEXT_MNEMONIC_FORBIDDEN"
+	ReasonTONNetworkGrantRequired            ReasonCode = "ERR_TON_NETWORK_GRANT_REQUIRED"
+	ReasonTONSandboxGrantRequired            ReasonCode = "ERR_TON_SANDBOX_GRANT_REQUIRED"
+	ReasonTONSourceVerificationRequired      ReasonCode = "ERR_TON_SOURCE_VERIFICATION_REQUIRED"
+	ReasonTONVerifyDryRunRequired            ReasonCode = "ERR_TON_VERIFY_DRY_RUN_REQUIRED"
+	ReasonTONVerifyBytecodeMismatch          ReasonCode = "ERR_TON_VERIFY_BYTECODE_MISMATCH"
+	ReasonTONCoverageThresholdFailed         ReasonCode = "ERR_TON_COVERAGE_THRESHOLD_FAILED"
+	ReasonTONMutationThresholdFailed         ReasonCode = "ERR_TON_MUTATION_THRESHOLD_FAILED"
+	ReasonTONLibraryMainnetRequiresApproval  ReasonCode = "ERR_TON_LIBRARY_MAINNET_REQUIRES_APPROVAL"
+	ReasonTONLibrarySpendCeilingExceeded     ReasonCode = "ERR_TON_LIBRARY_SPEND_CEILING_EXCEEDED"
+	ReasonConnectorContractDrift             ReasonCode = "ERR_CONNECTOR_CONTRACT_DRIFT"
+	ReasonComputeGasExhausted                ReasonCode = "ERR_COMPUTE_GAS_EXHAUSTED"
+	ReasonComputeTimeExhausted               ReasonCode = "ERR_COMPUTE_TIME_EXHAUSTED"
 )
 
 // CanonicalVerdicts returns the full normative verdict vocabulary.
@@ -150,6 +179,33 @@ func CoreReasonCodes() []ReasonCode {
 		ReasonTaintedInvokeDeny,
 		ReasonTaintedEgressDeny,
 		ReasonTaintedEscalate,
+		ReasonTONActonUnknownCommand,
+		ReasonTONActonUnsupportedVersion,
+		ReasonTONTolkCompilerUnpinned,
+		ReasonTONTolkCompilerMismatch,
+		ReasonTONActonArgvRejected,
+		ReasonTONActonRawShellForbidden,
+		ReasonTONActonGenericMainnetScriptDenied,
+		ReasonTONScriptManifestRequired,
+		ReasonTONScriptManifestHashMismatch,
+		ReasonTONExpectedEffectMismatch,
+		ReasonTONSpendCeilingExceeded,
+		ReasonTONMainnetRequiresApproval,
+		ReasonTONApprovalCeremonyRequired,
+		ReasonTONWalletRefRequired,
+		ReasonTONPlaintextMnemonicForbidden,
+		ReasonTONNetworkGrantRequired,
+		ReasonTONSandboxGrantRequired,
+		ReasonTONSourceVerificationRequired,
+		ReasonTONVerifyDryRunRequired,
+		ReasonTONVerifyBytecodeMismatch,
+		ReasonTONCoverageThresholdFailed,
+		ReasonTONMutationThresholdFailed,
+		ReasonTONLibraryMainnetRequiresApproval,
+		ReasonTONLibrarySpendCeilingExceeded,
+		ReasonConnectorContractDrift,
+		ReasonComputeGasExhausted,
+		ReasonComputeTimeExhausted,
 	}
 }
 

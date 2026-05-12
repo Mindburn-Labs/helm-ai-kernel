@@ -1,0 +1,1 @@
+{"case_id":"verify_mainnet_escalated","action_urn":"connector.ton.acton.source.verify_mainnet","expected_verdict":"ESCALATE","expected_reason_code":"ERR_TON_APPROVAL_CEREMONY_REQUIRED","must_dispatch":false}

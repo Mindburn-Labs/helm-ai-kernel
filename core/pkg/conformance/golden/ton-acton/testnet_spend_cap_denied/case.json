@@ -1,0 +1,1 @@
+{"case_id":"testnet_spend_cap_denied","action_urn":"connector.ton.acton.script.testnet","expected_verdict":"DENY","expected_reason_code":"ERR_TON_SPEND_CEILING_EXCEEDED","must_dispatch":false}

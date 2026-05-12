@@ -1,0 +1,1 @@
+{"case_id":"coverage_threshold_failed_escalate","action_urn":"connector.ton.acton.contract.test_coverage","expected_verdict":"ESCALATE","expected_reason_code":"ERR_TON_COVERAGE_THRESHOLD_FAILED","must_not_dispatch_followup":true}

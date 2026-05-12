@@ -38,6 +38,8 @@ jobs:
         with:
           version: "34.1"
       - uses: bufbuild/buf-setup-action@v1
+      - name: Fetch main ref for proto compatibility checks
+        run: git fetch origin main:refs/heads/main
       - name: Install codegen tools
         run: |
           python -m pip install --require-hashes -r .github/codegen-requirements.txt

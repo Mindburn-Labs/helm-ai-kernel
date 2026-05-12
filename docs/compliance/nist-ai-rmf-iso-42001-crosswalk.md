@@ -7,6 +7,8 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
+Compliance reviewers comparing HELM OSS evidence surfaces with NIST AI RMF and ISO 42001 control language.
+
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.

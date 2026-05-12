@@ -5,7 +5,7 @@ Shows HELM integration with the Java SDK.
 ## Prerequisites
 
 - HELM running at `http://127.0.0.1:7714` (`docker compose up -d`)
-- Java 17+
+- Java 21+
 
 ## Source Example
 

@@ -4,7 +4,6 @@
   "helm_product_layer": "helm/packages/design-system-helm",
   "brand_layer": "mindburn/src/components/site-ui",
   "docs_layer": "docs-platform/packages/site",
-  "titan_skin": "titan/apps/titan-console/src/styles/titan-tokens.css",
   "deprecated": [
     "helm-oss/packages/design-system-core-compat",
     "helm/packages/design-tokens"
@@ -29,6 +28,6 @@
     "brand": "Mindburn Brand Foundations",
     "core": "Mindburn Core UI Library",
     "product": "HELM Product Patterns",
-    "titan": "Titan Product Skin"
+    "downstream": "Downstream Product Skin"
   }
 }

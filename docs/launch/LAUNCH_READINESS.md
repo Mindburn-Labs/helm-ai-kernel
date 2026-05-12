@@ -2,7 +2,7 @@
 
 This document tracks the final launch-readiness state of the `helm-oss` repository. It is updated mechanically by the `scripts/launch/launch-ready.sh` verification tool.
 
-Last verification: 2026-05-12T19:34:51Z
+Last verification: 2026-05-12T21:47:43Z
 Verification logs are emitted by the tool for each run and are intentionally
 not committed to the repository.
 

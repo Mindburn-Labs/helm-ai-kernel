@@ -7,6 +7,8 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
+Security reviewers checking which OWASP Agentic AI Top 10 risks are covered by current HELM OSS evidence.
+
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.

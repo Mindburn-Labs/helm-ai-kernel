@@ -7,6 +7,14 @@ last_reviewed: 2026-05-12
 
 HELM OSS retains typed SDK surfaces for developers who want clients over the HTTP API instead of raw requests. Package publication status must be proven separately from source availability.
 
+```mermaid
+flowchart LR
+  OpenAPI["OpenAPI contract"] --> SDKs["Python SDK / TypeScript / Go SDK / Rust SDK / Java"]
+  SDKs --> Boundary["HELM HTTP boundary"]
+  Boundary --> Receipts["signed receipts"]
+  Receipts --> Verify["offline verification"]
+```
+
 ## Source Truth
 
 - `api/openapi/helm.openapi.yaml`
@@ -27,11 +35,11 @@ HELM OSS retains typed SDK surfaces for developers who want clients over the HTT
 
 | Language | Public package status | Source | Validation |
 | --- | --- | --- | --- |
-| Python | Published as `helm-sdk` `0.4.0` | `sdk/python/helm_sdk/client.py` | `make test-sdk-py` |
-| TypeScript | Published as `@mindburn/helm` `0.4.0` | `sdk/ts/src/client.ts` | `make test-sdk-ts` |
+| Python SDK | Package name `helm-sdk`; source manifest currently declares `0.5.0`. Verify registry state before publishing pinned install claims. | `sdk/python/helm_sdk/client.py` | `make test-sdk-py` |
+| TypeScript | Package name `@mindburn/helm`; source manifest currently declares `0.5.0`. Verify registry state before publishing pinned install claims. | `sdk/ts/src/client.ts` | `make test-sdk-ts` |
 | JavaScript | Uses `@mindburn/helm` or raw HTTP/fetch | `sdk/ts/src/client.ts`, `examples/js_openai_baseurl/` | `make test-sdk-ts` |
-| Go | Source/module path only; pin `@main` or a commit until tagged SDK modules are aligned | `sdk/go/client/client.go` | `cd sdk/go && go test ./...` |
-| Rust | Published as `helm-sdk` `0.4.0` | `sdk/rust/src/client.rs` | `make test-sdk-rust` |
+| Go SDK | Source/module path only; pin `@main` or a commit until tagged SDK modules are aligned | `sdk/go/client/client.go` | `cd sdk/go && go test ./...` |
+| Rust SDK | Package name `helm-sdk`; source manifest currently declares `0.5.0`. Verify registry state before publishing pinned install claims. | `sdk/rust/src/client.rs` | `make test-sdk-rust` |
 | Java | Source-available local Maven build; public coordinate not verified | `sdk/java/pom.xml` | `make test-sdk-java` |
 
 Use `http://127.0.0.1:7714` for the local `helm serve --policy` quickstart, `http://localhost:8080` for `helm server` or the current Docker Compose mapping, and `http://localhost:9090/v1` only for the OpenAI-compatible proxy.
@@ -83,8 +91,8 @@ client := helm.New("http://127.0.0.1:7714")
 
 ## Rust
 
-```toml
-helm-sdk = "0.4.0"
+```bash
+cargo add helm-sdk
 ```
 
 ```bash

@@ -180,24 +180,6 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-oss/strategy/mcp-governance-competitive-radar-2026-04",
-      "title": "MCP Governance Competitive Radar - April 2026",
-      "section": "strategy",
-      "source_path": "docs/strategy/mcp-governance-competitive-radar-2026-04.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "helm-oss/strategy/policy-research-watchlist-2026-04",
-      "title": "Policy Research Watchlist - April 2026",
-      "section": "strategy",
-      "source_path": "docs/strategy/policy-research-watchlist-2026-04.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
       "slug": "helm-oss/security/owasp-agentic-top10-mapping",
       "title": "OWASP Agentic Top 10 Mapping",
       "section": "security",
@@ -383,15 +365,6 @@
       "section": "security",
       "source_path": "docs/RELEASE_SECURITY.md",
       "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/security/release-security",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "helm-oss/governance/cncf-application",
-      "title": "CNCF Application Evidence",
-      "section": "governance",
-      "source_path": "docs/governance/cncf-application.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/governance/cncf-application",
       "access": "public",
       "sensitivity": "public"
     },

@@ -7,6 +7,8 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
+Operators and frontend maintainers running the self-hostable Console against a local HELM API.
+
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
@@ -94,8 +96,8 @@ set.
 ## Production Boundary
 
 The Console is OSS and self-hostable. It is not the managed Mindburn hosted
-service. The OSS repository still excludes billing, hosted retention, proprietary
-operator workflows, entitlement systems, private connector programs, and managed
+service. The OSS repository still excludes hosted retention, private
+account-management systems, org-specific operator workflows, and managed
 multi-region operations.
 
 `helm serve --console` serves static assets with the same security middleware as

@@ -104,7 +104,7 @@ Use `docs/architecture/policy-languages.md` for the longer comparison and comman
 
 ## Deployment Surface
 
-The repository keeps Docker, Docker Compose, a Kubernetes Helm chart, and the self-hostable OSS Console. It does not ship the managed browser product UI, a static report viewer, or a hosted control plane in HELM OSS.
+The repository keeps Docker, Docker Compose, a Kubernetes Helm chart, and the self-hostable OSS Console. It does not ship hosted operations, a static report viewer, or tenant-admin services in HELM OSS.
 
 | Deployment | Status | Source |
 | --- | --- | --- |
@@ -112,9 +112,22 @@ The repository keeps Docker, Docker Compose, a Kubernetes Helm chart, and the se
 | Docker image | Supported | `Dockerfile` |
 | Docker Compose | Supported | `docker-compose.yml` |
 | Kubernetes Helm chart | Supported | `deploy/helm-chart/` |
-| Hosted control plane | Not in HELM OSS | commercial HELM |
 | Self-hostable OSS Console | Supported | `apps/console/` |
-| Managed browser product UI | Not in HELM OSS | commercial HELM |
+
+## Verdict Compatibility
+
+Current HELM OSS runtime docs use `ALLOW`, `DENY`, and `ESCALATE`.
+Historical docs and generated compatibility code may still contain older
+verdict labels. Treat them only as migration aliases:
+
+| Legacy label | Current meaning |
+| --- | --- |
+| `DEFER` | `ESCALATE` |
+| `REQUIRE_APPROVAL` | `ESCALATE` |
+| `APPROVAL_REQUIRED` | `ESCALATE` |
+
+Do not use legacy verdict labels in new runtime docs, policy examples, or
+quickstart paths.
 
 ## Source Build Expectations
 

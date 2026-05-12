@@ -25,7 +25,7 @@ packages/
 
 - **+ Self-contained OSS verification** — contributors can run the package checks without a root Node workspace.
 - **+ Publishable artifact** — `npm pack --dry-run` reflects the real package contents and public entrypoints.
-- **+ Clear boundary** — commercial-only helpers, workbench apps, and product route packages are not implied by OSS docs.
+- **+ Clear boundary** — non-OSS helpers, workbench apps, and product route packages are not implied by OSS docs.
 - **−** Commercial consumers need their own browser-level integration and visual checks.
 
 ## References

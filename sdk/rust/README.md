@@ -4,11 +4,12 @@ Typed Rust client for the retained HELM kernel API.
 
 ## Install
 
-```toml
-helm-sdk = "0.5.0"
+```bash
+cargo add helm-sdk
 ```
 
-Package metadata declares crate version `0.5.0` in `Cargo.toml`.
+Package metadata declares crate version `0.5.0` in `Cargo.toml`; verify registry
+state before publishing a pinned install claim.
 
 ## Local Development
 

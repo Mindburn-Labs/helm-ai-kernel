@@ -3,7 +3,7 @@
 ## Core Philosophy
 `@mindburn/ui-core` is the shared Mindburn UI foundation and the canonical source for HELM OSS-safe primitives, base tokens, semantic state utilities, and production CSS.
 
-Sibling and portfolio products may consume the core package, but they do not become normative HELM components and they cannot define HELM conformance. HELM product truth remains bounded to HELM OSS, HELM Commercial, and OrgGenome Compiler scope; Titan, Pilot, Mindburn Admin, docs, and marketing layers are consumers or product skins.
+Downstream products may consume the core package, but they do not become normative HELM components and they cannot define HELM OSS conformance. HELM OSS product truth remains bounded to this repository and its public source contracts.
 
 Our philosophy is **Canonical Compliance**: 
 - **Zero Raw HTML**: UI surfaces must be constructed exclusively from composed React primitives (e.g., `AppShell`, `Stack`, `Grid`, `Badge`).
@@ -14,7 +14,7 @@ Our philosophy is **Canonical Compliance**:
 - `@mindburn/ui-core`: HELM OSS-safe primitives, layout structures, canonical base tokens, accessibility primitives, and platform-agnostic components.
 - `@helm/design-system-helm`: HELM product-specific proof, policy, evidence, execution, assistant, route, state, and handoff patterns built on public core exports.
 - `site-ui`: Mindburn marketing and editorial compositions built on public core exports.
-- Product skins: Titan and other sibling products may alias or extend core foundations for their own domain semantics, but those skins are not HELM conformance sources.
+- Product skins: downstream products may alias or extend core foundations for their own domain semantics, but those skins are not HELM OSS conformance sources.
 
 ## Contribution Process
 1. **No Local Escapes**: Shared primitives and base tokens must be elevated to the core design system before being consumed by a downstream repository. Product-domain components stay in their product layer.

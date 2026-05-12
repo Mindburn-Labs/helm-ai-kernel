@@ -20,16 +20,16 @@ This audit records repository and remote-readiness gaps found during the
 | Code scanning | Fixed in repo | Maintainers | Code scanning alerts page after workflow run |
 | README install claims | Fixed in repo | Maintainers | Package/channel commands below |
 | Branch protection | Configured as repository ruleset | Maintainers | Rulesets API |
-| GitHub Actions billing lock | External blocker | Organization admins | Latest Actions run starts jobs |
+| GitHub Actions account availability | External blocker | Organization admins | Latest Actions run starts jobs |
 | TEE vendor attestation | Known implementation gap | Kernel maintainers | Hardware-backed signature-chain tests |
 | Public maintainer diversity | Known governance gap | Governance maintainers | `MAINTAINERS.md` |
 
 ## High-Priority Gaps
 
-1. **Remote GitHub Actions are blocked by billing.** Latest `main` runs did not
-   start jobs because the GitHub account was locked for billing. This must be
-   resolved in GitHub billing settings before branch protection can provide a
-   useful signal.
+1. **Remote GitHub Actions are blocked by account state.** Latest `main` runs
+   did not start jobs because the organization account could not schedule
+   Actions jobs. This must be resolved in GitHub organization settings before
+   branch protection can provide a useful signal.
 2. **Classic branch protection was disabled.** `main` is protected through an
    active repository ruleset requiring pull requests, status checks, no force
    pushes, and no branch deletion.

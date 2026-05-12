@@ -32,7 +32,8 @@ flowchart LR
 
 ## Install
 
-Use one of these current paths:
+Use one of these current paths. The published Homebrew path is the macOS path;
+source builds and Docker remain the portable paths for Linux and WSL.
 
 ```bash
 brew install mindburnlabs/tap/helm

@@ -45,9 +45,8 @@ retained release workflow or the release page actually provides.
   checks.
 - Ships public SDK sources for Go, Python, TypeScript, Rust, and Java.
 
-HELM OSS does not include the managed Mindburn hosted service, billing, private
-operational tooling, proprietary connector programs, or generated commercial
-report surfaces.
+HELM OSS does not include hosted Mindburn operations, private operational
+tooling, or non-OSS downstream extensions.
 
 ## Quick Start
 

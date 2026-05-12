@@ -7,6 +7,8 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
+Operators and contributors diagnosing local HELM OSS startup, proxy, Console, receipt, and verification failures.
+
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
@@ -219,4 +221,4 @@ when needed.
 | `PROXY_ITERATION_LIMIT` | Too many tool call rounds | Increase `--max-iterations`      |
 | `PROXY_WALLCLOCK_LIMIT` | Session too long          | Increase `--max-wallclock`       |
 | `HELM_UNREACHABLE`      | Server down or wrong URL  | Check `helm health`              |
-| `APPROVAL_REQUIRED`     | Human approval needed     | Complete approval ceremony       |
+| `ESCALATE`              | Human approval or more evidence needed | Stop dispatch and complete the required approval/evidence path |

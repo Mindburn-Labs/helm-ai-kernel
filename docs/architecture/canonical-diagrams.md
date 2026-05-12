@@ -2,6 +2,10 @@
 
 This page defines the public diagram doctrine for HELM OSS. Diagrams must show the implemented execution boundary: agents propose actions, deterministic HELM systems evaluate authority before dispatch, and signed receipts plus EvidencePacks make the result verifiable offline.
 
+Source Truth: this page is owned by `docs/source-inventory.manifest.json`, `docs/public-docs.manifest.json`, `docs/EXECUTION_SECURITY_MODEL.md`, `docs/INTEGRATIONS/mcp.md`, `core/pkg/kernel/README.md`, and `core/pkg/proofgraph/README.md`.
+
+Source Truth: this page is owned by `docs/source-inventory.manifest.json`, `docs/public-docs.manifest.json`, `docs/EXECUTION_SECURITY_MODEL.md`, `docs/INTEGRATIONS/mcp.md`, `core/pkg/kernel/README.md`, and `core/pkg/proofgraph/README.md`.
+
 Do not use HELM OSS diagrams to describe commercial products, hosted services, organization compilers, portfolio systems, private domains, or roadmap-only surfaces.
 
 ## Diagram Rules
@@ -11,7 +15,7 @@ Do not use HELM OSS diagrams to describe commercial products, hosted services, o
 - Use `EvidencePack` and `ProofGraph` for canonical evidence terms.
 - Show MCP quarantine as fail-closed before tool dispatch.
 - Mark any non-implemented idea as roadmap outside current-state docs.
-- Do not imply hosted control-plane, billing, private connector, or tenant-admin capabilities ship in HELM OSS.
+- Do not imply hosted operations, private account-management, non-OSS extension, or tenant-admin capabilities ship in HELM OSS.
 
 ## 1. Execution Boundary
 

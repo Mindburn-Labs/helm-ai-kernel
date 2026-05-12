@@ -7,6 +7,8 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
+Internal maintainers using this private strategy note to track policy-research inputs that may inform future HELM OSS roadmap work.
+
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
@@ -69,4 +71,3 @@ Move a watchlist item into implementation only when it satisfies all of these:
 - it has local fixtures or negative tests that fail before implementation and pass after;
 - it does not require paid external services for default verification;
 - it clarifies rather than dilutes the OSS kernel boundary.
-

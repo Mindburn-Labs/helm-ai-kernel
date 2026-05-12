@@ -7,12 +7,17 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	helm "github.com/Mindburn-Labs/helm-oss/sdk/go/client"
 )
 
 func main() {
-	client := helm.New("http://localhost:8080")
+	baseURL := os.Getenv("HELM_URL")
+	if baseURL == "" {
+		baseURL = "http://127.0.0.1:7714"
+	}
+	client := helm.New(baseURL)
 
 	// 1. Chat completions (governed by HELM)
 	fmt.Println("=== Chat Completions ===")

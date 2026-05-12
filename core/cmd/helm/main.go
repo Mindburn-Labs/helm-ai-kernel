@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +15,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,7 +24,7 @@ import (
 	helmauth "github.com/Mindburn-Labs/helm-oss/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/guardian"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/pdp"
+	policyreconcile "github.com/Mindburn-Labs/helm-oss/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/registry"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/store"
@@ -137,7 +140,8 @@ func runServerWithOptions(opts serverOptions) {
 		opts.Stderr = os.Stderr
 	}
 	fmt.Fprintf(opts.Stdout, "%sHELM Kernel starting...%s\n", ColorBold+ColorBlue, ColorReset)
-	ctx := context.Background()
+	ctx, runtimeCancel := context.WithCancel(context.Background())
+	defer runtimeCancel()
 	logger := slog.Default()
 	dataDir := opts.DataDir
 	if dataDir == "" {
@@ -215,26 +219,62 @@ func runServerWithOptions(opts serverOptions) {
 		log.Printf("Services init (non-fatal, degraded mode): %v", svcErr)
 	}
 
-	// 2.5 PRG & Guardian. The serve policy is authoritative when provided.
-	// No implicit allow rule is installed; an empty or action-less policy graph
-	// fails closed at evaluation time with NO_POLICY_DEFINED.
+	// 2.5 PRG & Guardian. --policy remains bootstrap/source configuration;
+	// runtime policy authority is installed only through the reconciler.
 	ruleGraph := prg.NewGraph()
-	var runtimePolicy *servePolicyRuntime
+	policyScope := policyreconcile.DefaultScope
+	var (
+		policyStore      policyreconcile.PolicySnapshotStore
+		policyReconciler *policyreconcile.Reconciler
+	)
 	if opts.PolicyPath != "" {
-		runtimePolicy, err = loadServePolicyRuntime(opts.PolicyPath)
-		if err != nil {
-			log.Fatalf("Failed to load serve policy runtime: %v", err)
+		policySource, policySourceKind, sourceErr := policySourceFromEnv(opts.PolicyPath, policyScope)
+		if sourceErr != nil {
+			log.Fatalf("Failed to configure policy source: %v", sourceErr)
 		}
-		ruleGraph = runtimePolicy.Graph
-		log.Printf("[helm] policy: loaded %s reference_pack=%s actions=%d", runtimePolicy.Policy.Name, runtimePolicy.ReferencePack.PackID, len(ruleGraph.Rules))
+		policyVerifier, requirePolicySignature, verifierErr := policySignatureVerifierFromEnv()
+		if verifierErr != nil {
+			log.Fatalf("Failed to configure policy signature verifier: %v", verifierErr)
+		}
+		policyStore = policyreconcile.NewAtomicSnapshotStore()
+		policyReconciler, err = policyreconcile.NewReconciler(policyreconcile.ReconcilerConfig{
+			Source:            policySource,
+			Store:             policyStore,
+			Compiler:          compileServePolicySnapshot,
+			Verifier:          policyVerifier,
+			RequireSignature:  requirePolicySignature,
+			KeepLastKnownGood: true,
+		})
+		if err != nil {
+			log.Fatalf("Failed to initialize policy reconciler: %v", err)
+		}
+		reconcileCtx := ctx
+		if timeout := policyInitialReconcileTimeoutFromEnv(); timeout > 0 {
+			var cancel context.CancelFunc
+			reconcileCtx, cancel = context.WithTimeout(ctx, timeout)
+			defer cancel()
+		}
+		status, recErr := policyReconciler.Reconcile(reconcileCtx, policyScope)
+		if recErr != nil {
+			log.Fatalf("Failed to reconcile initial policy snapshot: %v", recErr)
+		}
+		snapshot, ok := policyStore.Get(policyScope)
+		if !ok || snapshot == nil {
+			log.Fatalf("Failed to install initial policy snapshot: %s", status.ReconcileStatus)
+		}
+		if snapshot.Graph != nil {
+			ruleGraph = snapshot.Graph
+		}
+		policyReconciler.Start(ctx, policyPollIntervalFromEnv())
+		log.Printf("[helm] policy: source=%s reconciled snapshot hash=%s epoch=%d actions=%d", policySourceKind, snapshot.PolicyHash, snapshot.PolicyEpoch, len(ruleGraph.Rules))
 	} else {
 		log.Printf("[helm] policy: no serve policy provided; kernel starts with an empty fail-closed rule graph")
 	}
 
 	// Guardian
 	guardianOpts := []guardian.GuardianOption{}
-	if runtimePolicy != nil {
-		guardianOpts = append(guardianOpts, guardian.WithPDP(pdp.NewHelmPDP(runtimePolicy.Policy.Name, runtimePolicy.AllowMap())))
+	if policyStore != nil {
+		guardianOpts = append(guardianOpts, guardian.WithPolicySnapshots(policyStore, policyScope))
 	}
 	guard := guardian.NewGuardian(signer, ruleGraph, artRegistry, guardianOpts...)
 
@@ -247,6 +287,9 @@ func runServerWithOptions(opts serverOptions) {
 		services.Guardian = guard
 		services.ReceiptStore = receiptStore
 		services.ReceiptSigner = signer
+		services.PolicyReconciler = policyReconciler
+		services.PolicySnapshotStore = policyStore
+		services.PolicyScope = policyScope
 		extraRoutes = func(mux *http.ServeMux) {
 			RegisterSubsystemRoutes(mux, services)
 			RegisterConsoleRoutes(mux, services, opts)
@@ -354,6 +397,7 @@ func runServerWithOptions(opts serverOptions) {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 	log.Println("[helm] shutting down...")
+	runtimeCancel()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -369,6 +413,68 @@ func runServerWithOptions(opts serverOptions) {
 func envBool(key string) bool {
 	value := os.Getenv(key)
 	return value == "1" || value == "true" || value == "TRUE" || value == "yes" || value == "YES"
+}
+
+func policyPollIntervalFromEnv() time.Duration {
+	return durationFromEnv("HELM_POLICY_POLL_INTERVAL", 10*time.Second)
+}
+
+func policyInitialReconcileTimeoutFromEnv() time.Duration {
+	return durationFromEnv("HELM_POLICY_INITIAL_RECONCILE_TIMEOUT", 30*time.Second)
+}
+
+func policySourceFromEnv(policyPath string, scope policyreconcile.PolicyScope) (policyreconcile.PolicySource, string, error) {
+	kind := strings.TrimSpace(os.Getenv("HELM_POLICY_SOURCE_KIND"))
+	if kind == "" {
+		kind = "mountedFile"
+	}
+	switch strings.ToLower(kind) {
+	case "mountedfile", "mounted-file", "mounted_file":
+		return policyreconcile.NewMountedFileSource(policyPath, scope), "mountedFile", nil
+	case "controlplane", "control-plane", "control_plane":
+		baseURL := strings.TrimSpace(os.Getenv("HELM_POLICY_CONTROLPLANE_URL"))
+		if baseURL == "" {
+			return nil, "controlplane", fmt.Errorf("HELM_POLICY_CONTROLPLANE_URL is required when HELM_POLICY_SOURCE_KIND=controlplane")
+		}
+		source := policyreconcile.NewControlPlaneSource(baseURL, scope)
+		source.BearerToken = os.Getenv("HELM_POLICY_BEARER_TOKEN")
+		return source, "controlplane", nil
+	case "crd":
+		return nil, "crd", fmt.Errorf("HELM_POLICY_SOURCE_KIND=crd requires a CRD source implementation in the runtime build; this OSS binary only ships the chart CRD/RBAC contract")
+	default:
+		return nil, kind, fmt.Errorf("unsupported HELM_POLICY_SOURCE_KIND %q", kind)
+	}
+}
+
+func policySignatureVerifierFromEnv() (policyreconcile.SignatureVerifier, bool, error) {
+	requireSignature := envBool("HELM_POLICY_SIGNATURE_REQUIRED")
+	publicKey := strings.TrimSpace(os.Getenv("HELM_POLICY_TRUST_PUBLIC_KEY"))
+	if publicKey == "" {
+		if requireSignature {
+			return nil, true, fmt.Errorf("HELM_POLICY_TRUST_PUBLIC_KEY is required when HELM_POLICY_SIGNATURE_REQUIRED=true")
+		}
+		return nil, false, nil
+	}
+	keyBytes, err := hex.DecodeString(publicKey)
+	if err != nil {
+		return nil, requireSignature, fmt.Errorf("HELM_POLICY_TRUST_PUBLIC_KEY must be hex encoded: %w", err)
+	}
+	if len(keyBytes) != ed25519.PublicKeySize {
+		return nil, requireSignature, fmt.Errorf("HELM_POLICY_TRUST_PUBLIC_KEY must be a %d-byte Ed25519 public key encoded as hex", ed25519.PublicKeySize)
+	}
+	return policyreconcile.NewEd25519PolicyVerifier(publicKey), requireSignature, nil
+}
+
+func durationFromEnv(key string, fallback time.Duration) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil || duration < 0 {
+		return fallback
+	}
+	return duration
 }
 
 func init() {

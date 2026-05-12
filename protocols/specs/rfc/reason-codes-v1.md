@@ -35,12 +35,16 @@ representation is the `ReasonCode` enum in `protocols/proto/helm/kernel/v1/helm.
 
 ### 4.1 Policy-Domain Codes
 
-| Code                   | Applies To | Description                                |
-| ---------------------- | ---------- | ------------------------------------------ |
-| `POLICY_VIOLATION`     | DENY       | Effect violates an active policy rule      |
-| `NO_POLICY_DEFINED`    | DENY       | No policy covers this effect type          |
-| `PRG_EVALUATION_ERROR` | DENY       | Policy Requirement Graph evaluation failed |
-| `SCHEMA_VIOLATION`     | DENY       | Request does not conform to schema         |
+| Code                       | Applies To | Description                                           |
+| -------------------------- | ---------- | ----------------------------------------------------- |
+| `POLICY_VIOLATION`         | DENY       | Effect violates an active policy rule                 |
+| `NO_POLICY_DEFINED`        | DENY       | No policy covers this effect type                     |
+| `POLICY_NOT_READY`         | DENY       | No verified EffectivePolicySnapshot is installed      |
+| `POLICY_HASH_MISMATCH`     | DENY       | Source bytes did not match the published policy hash  |
+| `POLICY_SIGNATURE_INVALID` | DENY       | Policy signature or provenance verification failed    |
+| `POLICY_EPOCH_CHANGED`     | DENY       | Policy epoch changed before effect intent issue       |
+| `PRG_EVALUATION_ERROR`     | DENY       | Policy Requirement Graph evaluation failed            |
+| `SCHEMA_VIOLATION`         | DENY       | Request does not conform to schema                    |
 
 ### 4.2 PDP Codes
 

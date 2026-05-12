@@ -34,6 +34,7 @@ type DecisionRecord struct {
 	// V2: Policy backend metadata for receipt binding (P0.1 competitive defense)
 	PolicyBackend      string `json:"policy_backend,omitempty"`       // "helm" | "external"
 	PolicyContentHash  string `json:"policy_content_hash,omitempty"`  // content-addressed policy version
+	PolicyEpoch        string `json:"policy_epoch,omitempty"`         // active policy epoch bound to this decision
 	PolicyDecisionHash string `json:"policy_decision_hash,omitempty"` // SHA-256 of canonical decision
 
 	StateCursor    string         `json:"state_cursor"`

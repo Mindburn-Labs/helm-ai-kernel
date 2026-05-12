@@ -36,6 +36,10 @@ const (
 	// ── Policy Reasons ─────────────────────────────────────
 	ReasonPolicyViolation    ReasonCode = "POLICY_VIOLATION"
 	ReasonNoPolicy           ReasonCode = "NO_POLICY_DEFINED"
+	ReasonPolicyNotReady     ReasonCode = "POLICY_NOT_READY"
+	ReasonPolicyHashMismatch ReasonCode = "POLICY_HASH_MISMATCH"
+	ReasonPolicySigInvalid   ReasonCode = "POLICY_SIGNATURE_INVALID"
+	ReasonPolicyEpochChanged ReasonCode = "POLICY_EPOCH_CHANGED"
 	ReasonPRGEvalError       ReasonCode = "PRG_EVALUATION_ERROR"
 	ReasonMissingRequirement ReasonCode = "MISSING_REQUIREMENT"
 
@@ -108,6 +112,10 @@ func CoreReasonCodes() []ReasonCode {
 	return []ReasonCode{
 		ReasonPolicyViolation,
 		ReasonNoPolicy,
+		ReasonPolicyNotReady,
+		ReasonPolicyHashMismatch,
+		ReasonPolicySigInvalid,
+		ReasonPolicyEpochChanged,
 		ReasonPRGEvalError,
 		ReasonMissingRequirement,
 		ReasonPDPDeny,

@@ -16,6 +16,34 @@
       "since": "1.0.0"
     },
     {
+      "code": "POLICY_NOT_READY",
+      "applies_to": ["DENY"],
+      "domain": "policy",
+      "description": "No verified EffectivePolicySnapshot is installed for the requested scope",
+      "since": "1.3.0"
+    },
+    {
+      "code": "POLICY_HASH_MISMATCH",
+      "applies_to": ["DENY"],
+      "domain": "policy",
+      "description": "Policy source bytes did not match the published canonical policy hash",
+      "since": "1.3.0"
+    },
+    {
+      "code": "POLICY_SIGNATURE_INVALID",
+      "applies_to": ["DENY"],
+      "domain": "policy",
+      "description": "Policy source signature or provenance verification failed",
+      "since": "1.3.0"
+    },
+    {
+      "code": "POLICY_EPOCH_CHANGED",
+      "applies_to": ["DENY"],
+      "domain": "policy",
+      "description": "The active policy epoch changed before the effect could be issued",
+      "since": "1.3.0"
+    },
+    {
       "code": "PRG_EVALUATION_ERROR",
       "applies_to": ["DENY"],
       "domain": "policy",

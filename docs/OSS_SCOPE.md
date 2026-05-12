@@ -1,6 +1,6 @@
 ---
 title: OSS_SCOPE
-last_reviewed: 2026-05-05
+last_reviewed: 2026-05-12
 ---
 
 # HELM OSS Scope
@@ -78,6 +78,7 @@ non-TCB supporting infrastructure:
 | `a2a/`                 | Agent-to-Agent trust protocol              | ✅ Active |
 | `otel/`                | OpenTelemetry governance telemetry         | ✅ Active |
 | `identity/did/`        | W3C DID-based agent identity               | ✅ Active |
+| `policy/reconcile/`    | Runtime policy source reconciliation and snapshot swap | ✅ Active |
 
 ### Frontier / Spec-Only Surfaces
 
@@ -104,7 +105,7 @@ The following names appear in strategy, standard, or roadmap material but are no
 
 | Package                         | Purpose                                  | Status    |
 | ------------------------------- | ---------------------------------------- | --------- |
-| `deploy/helm-operator/`         | K8s CRDs (PolicyBundle, GuardianSidecar) | ✅ Active |
+| `deploy/helm-chart/`            | Kubernetes Helm chart, optional HelmPolicyBundle CRD template | ✅ Active |
 | `protocols/spec/`               | RFC-style protocol specification         | ✅ Active |
 | `protocols/conformance/v1/owasp/` | Machine-readable OWASP threat vectors  | ✅ Active |
 

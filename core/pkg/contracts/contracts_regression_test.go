@@ -11,7 +11,16 @@ import (
 // ──────────────────────────────────────────────────────────────
 
 func TestClosing_ReasonCode_PolicyViolation(t *testing.T) {
-	for _, rc := range []ReasonCode{ReasonPolicyViolation, ReasonNoPolicy, ReasonPRGEvalError, ReasonMissingRequirement} {
+	for _, rc := range []ReasonCode{
+		ReasonPolicyViolation,
+		ReasonNoPolicy,
+		ReasonPolicyNotReady,
+		ReasonPolicyHashMismatch,
+		ReasonPolicySigInvalid,
+		ReasonPolicyEpochChanged,
+		ReasonPRGEvalError,
+		ReasonMissingRequirement,
+	} {
 		t.Run(string(rc), func(t *testing.T) {
 			if !IsCanonicalReasonCode(string(rc)) {
 				t.Errorf("expected %s to be canonical", rc)

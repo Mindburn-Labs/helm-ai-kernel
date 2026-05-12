@@ -1,4 +1,4 @@
-{{- if not .Values.helm.policy.configMap -}}
+{{- if not (or .Values.helm.policy.configMap .Values.helm.policy.source.mountedFile.existingConfigMap .Values.helm.policy.source.mountedFile.existingSecret) -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -55,4 +55,11 @@ data:
       {{ end }}
     metrics:
       enabled: {{ .Values.helm.metrics.enabled }}
+    policy:
+      source:
+        kind: {{ .Values.helm.policy.source.kind | quote }}
+        poll_interval: {{ .Values.helm.policy.source.pollInterval | quote }}
+        initial_reconcile_timeout: {{ .Values.helm.policy.source.initialReconcileTimeout | quote }}
+      reload_hints:
+        http_wake_endpoint: {{ .Values.helm.policy.reloadHints.httpWakeEndpoint | quote }}
 {{- end }}

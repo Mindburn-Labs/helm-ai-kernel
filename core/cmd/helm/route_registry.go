@@ -39,6 +39,7 @@ type RuntimeRouteSpec struct {
 func RuntimeRouteSpecs() []RuntimeRouteSpec {
 	return []RuntimeRouteSpec{
 		{Method: http.MethodPost, Path: "/v1/chat/completions", MuxPattern: "/v1/chat/completions", Auth: RouteAuthPublic, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "chatCompletions", Owner: "core/cmd/helm"},
+		{Method: http.MethodPost, Path: "/internal/policy/reconcile", MuxPattern: "/internal/policy/reconcile", Auth: RouteAuthService, RateLimit: RouteRateAdmin, ContractStatus: RouteContractInternal, OperationID: "wakePolicyReconciler", Owner: "core/cmd/helm"},
 		{Method: http.MethodPost, Path: "/api/v1/kernel/approve", MuxPattern: "/api/v1/kernel/approve", Auth: RouteAuthService, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "approveIntent", Owner: "core/pkg/api"},
 		{Method: http.MethodGet, Path: "/api/health", MuxPattern: "/api/health", Auth: RouteAuthPublic, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "getPublicDemoHealth", Owner: "core/cmd/helm"},
 		{Method: http.MethodPost, Path: "/api/demo/run", MuxPattern: "/api/demo/run", Auth: RouteAuthPublic, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "runPublicDemo", Owner: "core/cmd/helm"},

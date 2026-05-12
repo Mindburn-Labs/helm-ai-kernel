@@ -12,8 +12,10 @@ flowchart LR
   chart --> deploy["Deployment"]
   chart --> svc["Service"]
   chart --> secret["signing and auth Secrets"]
-  chart --> config["policy ConfigMap"]
+  chart --> source["policy.source config"]
+  source --> delivery["ConfigMap/Secret delivery or CRD watch"]
   chart --> pvc["PVC or emptyDir"]
+  delivery --> pod["runtime reconciler"]
   deploy --> pod["helm serve"]
 ```
 
@@ -37,13 +39,14 @@ Included:
 - optional `Ingress`
 - generated or existing signing-key `Secret`
 - generated or existing runtime-auth `Secret`
-- policy `ConfigMap`
+- policy source configuration with default mounted-file delivery
+- optional mounted-file policy `ConfigMap` or `Secret`
+- optional `HelmPolicyBundle` CRD/RBAC template for `policy.source.kind=crd`
 - optional `PersistentVolumeClaim`
 - optional Prometheus Operator `ServiceMonitor`
 
 Not included:
 
-- Kubernetes operator CRDs
 - hosted demo deployment material
 - Grafana dashboards or broader monitoring bundles
 - managed control-plane deployment material

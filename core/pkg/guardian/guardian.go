@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/pdp"
+	policyreconcile "github.com/Mindburn-Labs/helm-oss/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/threatscan"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/trust"
@@ -79,6 +81,15 @@ func WithEnvFingerprint(fp string) GuardianOption { return func(g *Guardian) { g
 
 // WithPDP injects an external policy decision point.
 func WithPDP(p pdp.PolicyDecisionPoint) GuardianOption { return func(g *Guardian) { g.pdp = p } }
+
+// WithPolicySnapshots makes the Guardian resolve policy authority from an
+// installed EffectivePolicySnapshot instead of static process state.
+func WithPolicySnapshots(store policyreconcile.PolicySnapshotStore, scope policyreconcile.PolicyScope) GuardianOption {
+	return func(g *Guardian) {
+		g.snapshotStore = store
+		g.snapshotScope = scope.Normalize()
+	}
+}
 
 // WithComplianceChecker injects a compliance verifier phase.
 func WithComplianceChecker(c ComplianceChecker) GuardianOption {
@@ -151,8 +162,10 @@ type Guardian struct {
 	tracker           BudgetGate
 	auditLog          *AuditLog
 	temporal          *TemporalGuardian
-	envFprint         string                       // Boot-sequence fingerprint for DecisionRecords
-	pdp               pdp.PolicyDecisionPoint      // Optional pluggable policy backend
+	envFprint         string                  // Boot-sequence fingerprint for DecisionRecords
+	pdp               pdp.PolicyDecisionPoint // Optional pluggable policy backend
+	snapshotStore     policyreconcile.PolicySnapshotStore
+	snapshotScope     policyreconcile.PolicyScope
 	complianceChecker ComplianceChecker            // Optional compliance pre-check
 	freezeCtrl        *kernel.FreezeController     // Global kill-switch
 	agentKillSwitch   *kernel.AgentKillSwitch      // Per-agent kill switch (§Phase E)
@@ -237,6 +250,13 @@ func (g *Guardian) SetPolicyDecisionPoint(p pdp.PolicyDecisionPoint) {
 	g.pdp = p
 }
 
+// SetPolicySnapshots configures the active runtime policy snapshot store.
+// Deprecated: Use WithPolicySnapshots GuardianOption in NewGuardian instead.
+func (g *Guardian) SetPolicySnapshots(store policyreconcile.PolicySnapshotStore, scope policyreconcile.PolicyScope) {
+	g.snapshotStore = store
+	g.snapshotScope = scope.Normalize()
+}
+
 // SetComplianceChecker sets a compliance verifier.
 // Deprecated: Use WithComplianceChecker GuardianOption in NewGuardian instead.
 func (g *Guardian) SetComplianceChecker(c ComplianceChecker) {
@@ -288,6 +308,10 @@ func (g *Guardian) SetSessionRiskMemory(srm *SessionRiskMemory) {
 
 // SignDecision checks requirements and signs only if met
 func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, evidenceHashes []string, intervention *contracts.InterventionMetadata) error {
+	return g.signDecisionWithGraph(ctx, decision, effect, evidenceHashes, intervention, g.prg)
+}
+
+func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, evidenceHashes []string, intervention *contracts.InterventionMetadata, ruleGraph *prg.Graph) error {
 	artifacts := make([]*pkg_artifact.ArtifactEnvelope, 0, len(evidenceHashes))
 	for _, hash := range evidenceHashes {
 		env, err := g.registry.GetArtifact(ctx, hash)
@@ -355,7 +379,10 @@ func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.Decisio
 	}
 
 	// 4. Validate against PRG
-	rule, exists := g.prg.Rules[actionID]
+	if ruleGraph == nil {
+		ruleGraph = prg.NewGraph()
+	}
+	rule, exists := ruleGraph.Rules[actionID]
 	if !exists {
 		decision.Verdict = string(contracts.VerdictDeny)
 		decision.ReasonCode = string(contracts.ReasonNoPolicy)
@@ -416,6 +443,27 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 	}
 	if valid, err := verifier.VerifyDecision(decision); err != nil || !valid {
 		return nil, fmt.Errorf("invalid decision signature: %w", err)
+	}
+
+	if g.snapshotStore != nil {
+		scope := g.policyScopeFromContext(decision.InputContext)
+		current, ok := g.snapshotStore.Get(scope)
+		if !ok || current == nil {
+			return nil, fmt.Errorf("%s: policy snapshot missing for %s", contracts.ReasonPolicyEpochChanged, scope.Key())
+		}
+		decisionEpoch, err := strconv.ParseUint(decision.PolicyEpoch, 10, 64)
+		if err != nil || decision.PolicyContentHash == "" {
+			return nil, fmt.Errorf("%s: decision missing policy hash/epoch binding", contracts.ReasonPolicyEpochChanged)
+		}
+		if current.PolicyHash != decision.PolicyContentHash || current.PolicyEpoch != decisionEpoch {
+			return nil, fmt.Errorf("%s: decision policy %s/%d current %s/%d",
+				contracts.ReasonPolicyEpochChanged,
+				decision.PolicyContentHash,
+				decisionEpoch,
+				current.PolicyHash,
+				current.PolicyEpoch,
+			)
+		}
 	}
 
 	// Determine Allowed Tool (matching identification logic)
@@ -522,6 +570,67 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		attribute.String("resource", req.Resource),
 	)
 
+	activeGraph := g.prg
+	activePDP := g.pdp
+	var activeSnapshot *policyreconcile.EffectivePolicySnapshot
+
+	// GOV-001: Content-addressed policy version derived from PRG rule hash.
+	// When a runtime snapshot store is configured, snapshot policy_hash/epoch
+	// becomes the signed decision authority boundary for every decision path.
+	policyVersion := "v1.0.0" // fallback
+	if g.prg != nil {
+		if hash, err := g.prg.ContentHash(); err == nil && hash != "" {
+			policyVersion = "sha256:" + hash
+		}
+	}
+	if g.snapshotStore != nil {
+		scope := g.policyScopeFromContext(req.Context)
+		snapshot, ok := g.snapshotStore.Get(scope)
+		if !ok || snapshot == nil {
+			decision := &contracts.DecisionRecord{
+				ID:            newDecisionID(),
+				Timestamp:     g.clock.Now(),
+				Verdict:       string(contracts.VerdictDeny),
+				ReasonCode:    string(contracts.ReasonPolicyNotReady),
+				Reason:        fmt.Sprintf("%s: no active policy snapshot for %s", contracts.ReasonPolicyNotReady, scope.Key()),
+				InputContext:  req.Context,
+				PolicyVersion: "unavailable",
+			}
+			if signErr := g.signer.SignDecision(decision); signErr != nil {
+				return nil, fmt.Errorf("failed to sign policy-not-ready decision: %w", signErr)
+			}
+			return decision, nil
+		}
+		if snapshot.Validation.Status != "" && snapshot.Validation.Status != policyreconcile.StatusActive {
+			decision := &contracts.DecisionRecord{
+				ID:            newDecisionID(),
+				Timestamp:     g.clock.Now(),
+				Verdict:       string(contracts.VerdictDeny),
+				ReasonCode:    string(contracts.ReasonPolicyNotReady),
+				Reason:        fmt.Sprintf("%s: policy snapshot for %s is %s", contracts.ReasonPolicyNotReady, scope.Key(), snapshot.Validation.Status),
+				InputContext:  req.Context,
+				PolicyVersion: snapshot.PolicyHash,
+			}
+			bindRuntimePolicyDecision(decision, snapshot, snapshot.PolicyHash)
+			if signErr := g.signer.SignDecision(decision); signErr != nil {
+				return nil, fmt.Errorf("failed to sign policy-not-ready decision: %w", signErr)
+			}
+			return decision, nil
+		}
+		activeSnapshot = snapshot
+		policyVersion = snapshot.PolicyHash
+		if snapshot.Graph != nil {
+			activeGraph = snapshot.Graph
+		}
+		if snapshot.PDP != nil {
+			activePDP = snapshot.PDP
+		}
+	}
+	signDecision := func(decision *contracts.DecisionRecord) error {
+		bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
+		return g.signer.SignDecision(decision)
+	}
+
 	// ── Pre-PDP enforcement gates (fail-closed, checked before policy) ──
 
 	// Gate 0: Global freeze check — if frozen, deny everything immediately
@@ -534,7 +643,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			Reason:     string(contracts.ReasonSystemFrozen),
 			ReasonCode: string(contracts.ReasonSystemFrozen),
 		}
-		if signErr := g.signer.SignDecision(decision); signErr != nil {
+		if signErr := signDecision(decision); signErr != nil {
 			return nil, fmt.Errorf("failed to sign freeze-deny decision: %w", signErr)
 		}
 		return decision, nil
@@ -550,7 +659,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			Reason:     string(contracts.ReasonAgentKilled),
 			ReasonCode: string(contracts.ReasonAgentKilled),
 		}
-		if signErr := g.signer.SignDecision(decision); signErr != nil {
+		if signErr := signDecision(decision); signErr != nil {
 			return nil, fmt.Errorf("failed to sign agent-killed decision: %w", signErr)
 		}
 		return decision, nil
@@ -567,7 +676,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				Reason:     fmt.Sprintf("CONTEXT_MISMATCH: %v", err),
 				ReasonCode: string(contracts.ReasonContextMismatch),
 			}
-			if signErr := g.signer.SignDecision(decision); signErr != nil {
+			if signErr := signDecision(decision); signErr != nil {
 				return nil, fmt.Errorf("failed to sign context-mismatch decision: %w", signErr)
 			}
 			return decision, nil
@@ -594,7 +703,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					Reason:     fmt.Sprintf("IDENTITY_ISOLATION_VIOLATION: %v", err),
 					ReasonCode: string(contracts.ReasonIdentityIsolationViolation),
 				}
-				if signErr := g.signer.SignDecision(decision); signErr != nil {
+				if signErr := signDecision(decision); signErr != nil {
 					return nil, fmt.Errorf("failed to sign isolation-violation decision: %w", signErr)
 				}
 				return decision, nil
@@ -619,7 +728,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					Reason:     fmt.Sprintf("DATA_EGRESS_BLOCKED: %s", result.ReasonCode),
 					ReasonCode: string(contracts.ReasonDataEgressBlocked),
 				}
-				if signErr := g.signer.SignDecision(decision); signErr != nil {
+				if signErr := signDecision(decision); signErr != nil {
 					return nil, fmt.Errorf("failed to sign egress-blocked decision: %w", signErr)
 				}
 				g.recordBehavioralEvent(req.Principal, trust.EventEgressBlocked, fmt.Sprintf("egress blocked: %s", result.ReasonCode))
@@ -649,7 +758,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				"taint": taintLabels,
 			},
 		}
-		if signErr := g.signer.SignDecision(decision); signErr != nil {
+		if signErr := signDecision(decision); signErr != nil {
 			return nil, fmt.Errorf("failed to sign tainted-egress decision: %w", signErr)
 		}
 		g.recordBehavioralEvent(req.Principal, trust.EventEgressBlocked, "tainted egress blocked")
@@ -713,7 +822,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 						"threat_scan": scanResult.Ref(),
 					},
 				}
-				if signErr := g.signer.SignDecision(decision); signErr != nil {
+				if signErr := signDecision(decision); signErr != nil {
 					return nil, fmt.Errorf("failed to sign threat-deny decision: %w", signErr)
 				}
 				if g.auditLog != nil {
@@ -744,7 +853,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					Reason:     fmt.Sprintf("DELEGATION_INVALID: %v", loadErr),
 					ReasonCode: string(contracts.ReasonDelegationInvalid),
 				}
-				if signErr := g.signer.SignDecision(decision); signErr != nil {
+				if signErr := signDecision(decision); signErr != nil {
 					return nil, fmt.Errorf("failed to sign delegation-invalid decision: %w", signErr)
 				}
 				return decision, nil
@@ -757,7 +866,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					Reason:     "DELEGATION_INVALID: session not found",
 					ReasonCode: string(contracts.ReasonDelegationInvalid),
 				}
-				if signErr := g.signer.SignDecision(decision); signErr != nil {
+				if signErr := signDecision(decision); signErr != nil {
 					return nil, fmt.Errorf("failed to sign delegation-invalid decision: %w", signErr)
 				}
 				return decision, nil
@@ -774,7 +883,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					Reason:     fmt.Sprintf("DELEGATION_INVALID: %v", validErr),
 					ReasonCode: string(contracts.ReasonDelegationInvalid),
 				}
-				if signErr := g.signer.SignDecision(decision); signErr != nil {
+				if signErr := signDecision(decision); signErr != nil {
 					return nil, fmt.Errorf("failed to sign delegation-invalid decision: %w", signErr)
 				}
 				return decision, nil
@@ -792,7 +901,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					Reason:     fmt.Sprintf("DELEGATION_SCOPE_VIOLATION: tool %q not in session scope", req.Resource),
 					ReasonCode: string(contracts.ReasonDelegationScopeViolation),
 				}
-				if signErr := g.signer.SignDecision(decision); signErr != nil {
+				if signErr := signDecision(decision); signErr != nil {
 					return nil, fmt.Errorf("failed to sign delegation-scope decision: %w", signErr)
 				}
 				if g.auditLog != nil {
@@ -812,7 +921,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 						Reason:     fmt.Sprintf("DELEGATION_SCOPE_VIOLATION: action %q on %q not granted", req.Action, req.Resource),
 						ReasonCode: string(contracts.ReasonDelegationScopeViolation),
 					}
-					if signErr := g.signer.SignDecision(decision); signErr != nil {
+					if signErr := signDecision(decision); signErr != nil {
 						return nil, fmt.Errorf("failed to sign delegation-scope decision: %w", signErr)
 					}
 					if g.auditLog != nil {
@@ -887,7 +996,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				SessionCentroidHash:    snapshot.SessionCentroidHash,
 				RiskAccumulationWindow: snapshot.RiskAccumulationWindow,
 			}
-			if signErr := g.signer.SignDecision(decision); signErr != nil {
+			if signErr := signDecision(decision); signErr != nil {
 				return nil, fmt.Errorf("failed to sign session-risk decision: %w", signErr)
 			}
 			if g.auditLog != nil {
@@ -944,7 +1053,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				ReasonCode: string(contracts.ReasonInsufficientPrivilege),
 				Reason:     fmt.Sprintf("INSUFFICIENT_PRIVILEGE: agent tier %s < required %s for %s", effectiveTier, requiredTier, req.Action),
 			}
-			if signErr := g.signer.SignDecision(decision); signErr != nil {
+			if signErr := signDecision(decision); signErr != nil {
 				return nil, fmt.Errorf("failed to sign privilege-deny decision: %w", signErr)
 			}
 			span.SetAttributes(
@@ -992,16 +1101,6 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		envFP = "sha256:unconfigured"
 	}
 
-	// GOV-001: Content-addressed policy version derived from PRG rule hash.
-	// This ties each DecisionRecord to the exact policy state evaluated,
-	// rather than a hardcoded semver string.
-	policyVersion := "v1.0.0" // fallback
-	if g.prg != nil {
-		if hash, err := g.prg.ContentHash(); err == nil && hash != "" {
-			policyVersion = "sha256:" + hash
-		}
-	}
-
 	decision := &contracts.DecisionRecord{
 		ID:             newDecisionID(),
 		Timestamp:      g.clock.Now(),
@@ -1011,6 +1110,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		EnvFingerprint: envFP,
 		PolicyVersion:  policyVersion,
 	}
+	bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
 	if sessionRiskSnapshot != nil {
 		decision.TrajectoryRiskScore = sessionRiskSnapshot.TrajectoryRiskScore
 		decision.SessionCentroidHash = sessionRiskSnapshot.SessionCentroidHash
@@ -1025,8 +1125,8 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		decision.InputContext["threat_scan"] = scanResult.Ref()
 	}
 
-	// 2.5: Delegate to external PDP if configured (P0.1 competitive defense)
-	if g.pdp != nil {
+	// 2.5: Delegate to active PDP if configured (P0.1 competitive defense)
+	if activePDP != nil {
 		pdpReq := &pdp.DecisionRequest{
 			Principal: req.Principal,
 			Action:    req.Action,
@@ -1034,22 +1134,24 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			Context:   req.Context,
 			Timestamp: g.clock.Now(),
 		}
-		pdpResp, pdpErr := g.pdp.Evaluate(ctx, pdpReq)
+		pdpResp, pdpErr := activePDP.Evaluate(ctx, pdpReq)
 		if pdpErr != nil {
 			// Fail-closed: PDP error → DENY
 			decision.Verdict = string(contracts.VerdictDeny)
 			decision.ReasonCode = string(contracts.ReasonPDPError)
 			decision.Reason = fmt.Sprintf("%s: %v", contracts.ReasonPDPError, pdpErr)
-			decision.PolicyBackend = string(g.pdp.Backend())
-			if signErr := g.signer.SignDecision(decision); signErr != nil {
+			decision.PolicyBackend = string(activePDP.Backend())
+			if signErr := signDecision(decision); signErr != nil {
 				return nil, fmt.Errorf("failed to sign PDP-error decision: %w", signErr)
 			}
 			return decision, nil
 		}
 
 		// Bind PDP metadata into DecisionRecord for receipt chain
-		decision.PolicyBackend = string(g.pdp.Backend())
-		decision.PolicyContentHash = g.pdp.PolicyHash()
+		decision.PolicyBackend = string(activePDP.Backend())
+		if activeSnapshot == nil {
+			decision.PolicyContentHash = activePDP.PolicyHash()
+		}
 		decision.PolicyDecisionHash = pdpResp.DecisionHash
 
 		if !pdpResp.Allow {
@@ -1060,7 +1162,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			decision.Verdict = string(contracts.VerdictDeny)
 			decision.ReasonCode = reasonCode
 			decision.Reason = fmt.Sprintf("%s (ref=%s)", reasonCode, pdpResp.PolicyRef)
-			if signErr := g.signer.SignDecision(decision); signErr != nil {
+			if signErr := signDecision(decision); signErr != nil {
 				return nil, fmt.Errorf("failed to sign PDP-deny decision: %w", signErr)
 			}
 			// Audit log for PDP denials
@@ -1117,7 +1219,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		}
 	}
 
-	err := g.SignDecision(ctx, decision, effect, []string{}, intervention)
+	err := g.signDecisionWithGraph(ctx, decision, effect, []string{}, intervention, activeGraph)
 	if err != nil {
 		return nil, err
 	}
@@ -1152,6 +1254,53 @@ func responseToIntervention(level ResponseLevel) contracts.InterventionType {
 	default:
 		return contracts.InterventionNone
 	}
+}
+
+func (g *Guardian) policyScopeFromContext(ctx map[string]any) policyreconcile.PolicyScope {
+	scope := g.snapshotScope.Normalize()
+	if tenantID, ok := stringContextValue(ctx, "tenant_id", "tenantId", "tenant"); ok {
+		scope.TenantID = tenantID
+	}
+	if workspaceID, ok := stringContextValue(ctx, "workspace_id", "workspaceId", "workspace"); ok {
+		scope.WorkspaceID = workspaceID
+	}
+	return scope.Normalize()
+}
+
+func bindRuntimePolicyDecision(decision *contracts.DecisionRecord, snapshot *policyreconcile.EffectivePolicySnapshot, policyVersion string) {
+	if decision == nil {
+		return
+	}
+	if decision.PolicyVersion == "" {
+		decision.PolicyVersion = policyVersion
+	}
+	if snapshot == nil {
+		return
+	}
+	decision.PolicyBackend = string(pdp.BackendHELM)
+	decision.PolicyContentHash = snapshot.PolicyHash
+	decision.PolicyEpoch = strconv.FormatUint(snapshot.PolicyEpoch, 10)
+}
+
+func stringContextValue(ctx map[string]any, keys ...string) (string, bool) {
+	for _, key := range keys {
+		if ctx == nil {
+			return "", false
+		}
+		value, ok := ctx[key]
+		if !ok {
+			continue
+		}
+		text, ok := value.(string)
+		if !ok {
+			continue
+		}
+		text = strings.TrimSpace(text)
+		if text != "" {
+			return text, true
+		}
+	}
+	return "", false
 }
 
 func taintTrackingEnabled() bool {

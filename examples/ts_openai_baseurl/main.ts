@@ -4,7 +4,7 @@
 
 import { HelmClient, HelmApiError } from '../../sdk/ts/src/index.js';
 
-const HELM_URL = process.env.HELM_URL || 'http://localhost:8080';
+const HELM_URL = process.env.HELM_URL || 'http://127.0.0.1:7714';
 
 async function main() {
   const helm = new HelmClient({ baseUrl: HELM_URL });

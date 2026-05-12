@@ -9,7 +9,7 @@ script or source file needed to run it.
 
 ```mermaid
 flowchart LR
-  server["HELM boundary on :8080"] --> sdk["SDK client examples"]
+  server["HELM boundary on :7714"] --> sdk["SDK client examples"]
   server --> proxy["OpenAI base-url examples"]
   server --> mcp["MCP client example"]
   server --> receipts["receipt and golden fixtures"]
@@ -19,17 +19,17 @@ flowchart LR
 
 ## Before Running Networked Examples
 
-Most client examples expect a HELM boundary at `http://port 3000`.
+Most client examples expect a HELM boundary at `http://127.0.0.1:7714`.
 
 ```bash
 make build
-docker compose up -d
+./bin/helm serve --policy ./release.high_risk.v3.toml
 ```
 
 Or run the binary directly with an explicit port:
 
 ```bash
-./bin/helm serve --policy ./release.high_risk.v3.toml --addr 127.0.0.1 --port 3000
+./bin/helm serve --policy ./release.high_risk.v3.toml --addr 127.0.0.1 --port 7714
 ```
 
 ## SDK Examples
@@ -55,7 +55,7 @@ Or run the binary directly with an explicit port:
 | Path | Purpose | Validation |
 | --- | --- |
 | `golden/` | Small static reference artifacts for documentation and demos | `make verify-fixtures` validates the canonical fixture roots under `fixtures/`; this directory is example material. |
-| `mcp_client/` | Simple MCP and OpenAI-compatible invocation flow | `cd examples/mcp_client && HELM_URL=http://port 3000 bash main.sh` |
+| `mcp_client/` | Simple MCP and OpenAI-compatible invocation flow | `cd examples/mcp_client && HELM_URL=http://127.0.0.1:7714 bash main.sh` |
 | `openclaw/` | Browser split-compute runtime-adapter contract | Documentation-only contract example. |
 | `otel-genai/` | OpenTelemetry GenAI semantic convention smoke example | `cd examples/otel-genai && go test ./...` |
 | `policies/` | CEL, Rego, and Cedar policy fixtures | See `examples/policies/README.md`. |

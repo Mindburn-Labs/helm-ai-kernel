@@ -360,6 +360,15 @@
       "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/execution-boundary-oss-response"
     },
     {
+      "slug": "internal/helm-oss/docs/governance/cncf-application",
+      "title": "CNCF Application Evidence",
+      "section": "internal",
+      "source_path": "docs/governance/cncf-application.md",
+      "access": "staff",
+      "sensitivity": "internal",
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/governance/cncf-application"
+    },
+    {
       "slug": "internal/helm-oss/docs/readme",
       "title": "HELM OSS Docs",
       "section": "internal",
@@ -369,13 +378,22 @@
       "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/readme"
     },
     {
-      "slug": "internal/helm-oss/docs/strategy/competitive-intelligence-2026-05-05",
-      "title": "Competitive Intelligence And Clean Room Workstream May 2026",
+      "slug": "internal/helm-oss/docs/strategy/mcp-governance-competitive-radar-2026-04",
+      "title": "MCP Governance Competitive Radar - April 2026",
       "section": "internal",
-      "source_path": "docs/strategy/competitive-intelligence-2026-05-05.md",
+      "source_path": "docs/strategy/mcp-governance-competitive-radar-2026-04.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/strategy/competitive-intelligence-2026-05-05"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/strategy/mcp-governance-competitive-radar-2026-04"
+    },
+    {
+      "slug": "internal/helm-oss/docs/strategy/policy-research-watchlist-2026-04",
+      "title": "Policy Research Watchlist - April 2026",
+      "section": "internal",
+      "source_path": "docs/strategy/policy-research-watchlist-2026-04.md",
+      "access": "staff",
+      "sensitivity": "internal",
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/strategy/policy-research-watchlist-2026-04"
     },
     {
       "slug": "internal/helm-oss/examples/go_client/readme",

@@ -443,7 +443,7 @@
     },
     {
       "id": "public-docs-and-research",
-      "label": "Public docs, compliance notes, architecture notes, strategy notes, and generated docs ledgers",
+      "label": "Public docs, compliance notes, architecture notes, internal strategy notes, and generated docs ledgers",
       "classification": "public-hub",
       "source_patterns": [
         "docs/**"
@@ -456,8 +456,6 @@
         "helm-oss/compatibility",
         "helm-oss/owasp-mcp-threat-mapping",
         "helm-oss/integrations/microsoft-agent-governance-toolkit",
-        "helm-oss/strategy/mcp-governance-competitive-radar-2026-04",
-        "helm-oss/strategy/policy-research-watchlist-2026-04",
         "helm-oss/security/owasp-agentic-top10-mapping",
         "helm-oss/security/prompt-injection-watchlist-2026-04",
         "helm-oss/compliance/nist-ai-agent-critical-infrastructure",
@@ -469,7 +467,6 @@
         "helm-oss/architecture/policy-languages",
         "helm-oss/security/clawguard-taint-tracking",
         "helm-oss/security/session-risk-memory",
-        "helm-oss/governance/cncf-application",
         "helm-oss/architecture/canonical-diagrams"
       ],
       "rationale": "Docs files are source material for the public site and are checked through manifest, LLM, search, and source-inventory gates.",

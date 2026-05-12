@@ -1,9 +1,9 @@
 # Contributing to Mindburn Labs Design System
 
-Thank you for your interest in improving the foundational UI architecture of Mindburn Labs! This design system is shared across our entire monorepo, including OSS, Commercial, Pilot, and Titan surfaces.
+Thank you for your interest in improving the foundational UI architecture of Mindburn Labs. This design-system core is shared by HELM OSS and downstream products, but downstream skins do not define HELM OSS conformance.
 
 ## Getting Started
-1. Ensure your Node version meets the required SOTA standards (`>=22.22.2`).
+1. Ensure your Node version meets the required project standard (`>=22.22.2`).
 2. Do not bypass `npm run validate` which will enforce Stylelint (blocking raw hex/px values) and Axe-Core (accessibility).
 
 ## Development Workflow

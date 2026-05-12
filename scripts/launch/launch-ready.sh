@@ -62,6 +62,7 @@ for key in "${ORDER[@]}"; do
 done
 
 if [[ "$WRITE" -eq 1 ]]; then
+  mkdir -p docs/launch
   cat > docs/launch/LAUNCH_READINESS.md <<EOF
 # HELM OSS Launch Readiness Checklist
 

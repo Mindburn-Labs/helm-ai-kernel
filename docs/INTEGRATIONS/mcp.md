@@ -7,6 +7,8 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
+Integration developers and operators routing MCP tool calls through the HELM OSS firewall/quarantine path.
+
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
@@ -110,7 +112,7 @@ return `DENY` or `ESCALATE`; they never dispatch to the fixture server.
 MCP activity that emits receipts can be inspected with:
 
 ```bash
-helm receipts tail --agent agent.titan.exec
+helm receipts tail --agent <agent-id>
 ```
 
 <!-- docs-depth-final-pass -->

@@ -18,7 +18,7 @@ from helm_sdk import HelmClient
 def main():
     # 1. Connect to HELM kernel
     client = HelmClient(
-        base_url="http://localhost:8080",
+        base_url="http://127.0.0.1:7714",
         api_key="your-api-key-here"  # or set HELM_API_KEY env var
     )
 

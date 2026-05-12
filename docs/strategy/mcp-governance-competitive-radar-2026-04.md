@@ -7,6 +7,8 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
+Internal maintainers using this private strategy note to compare MCP governance signals against HELM OSS scope.
+
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
@@ -71,4 +73,3 @@ HELM OSS should avoid a "proxy-only" story. The competitive field increasingly v
 ## No-Dependency Decisions
 
 No competitor SDK is imported into HELM OSS from this scan. The verified response is documentation plus the first-party MCP OAuth resource/scope implementation. PQC/ML-DSA remains a roadmap option because adopting it would change key-management, release-signing, and verification policy across the evidence stack.
-

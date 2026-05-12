@@ -1,44 +1,43 @@
-# Mindburn Labs Canonical Test Matrix (UCS v1.3)
+# HELM OSS Test Matrix
 
-This document defines the strictly enforced minimum test matrix required for all repositories governed by the HELM Unified Canonical Standard (UCS v1.3). Any PR merging to `main` across governed repositories must satisfy these requirements.
+This document defines the minimum source-backed test matrix for HELM OSS. It
+does not define gates for sibling repositories.
 
-## 1. Governance Boundaries
-All systems contributing to or interacting with the **Trusted Computing Base (TCB)** must enforce:
-- **Offline Determinism:** No tests asserting KERNEL_VERDICT, PEP, or ProofGraph generation may utilize mocks, spies, or active network connections. All must assert against offline golden fixtures.
-- **Fail-Closed Verification:** A negative vector test must exist for every structural change to an integration, ensuring unhandled inputs yield a DENY or ESCALATE state rather than a silent failure.
+## Governance Boundaries
 
-## 2. Minimum Coverage Matrix by Repository
+Systems that contribute to HELM OSS execution truth must enforce:
 
-### HELM OSS (`helm-oss`)
-- **Go Kernel:** Unit tests, race detector, memory leak assertions.
-- **SDKs:** Cross-language vector parity hashes (Python, Rust, Java, TS must produce identical byte hashes).
-- **ProofGraph:** Redaction boundary and proof condensation fixtures.
+- Offline determinism for ProofGraph, EvidencePack, receipt, and conformance
+  fixtures.
+- Fail-closed negative vectors for integration changes, so unhandled inputs
+  return `DENY` or `ESCALATE` instead of silently dispatching.
+- Source-backed OpenAPI and route parity for public HTTP claims.
 
-### HELM Commercial (`helm`)
-- **API & Routes:** OpenAPI vs Code route registry bidirectional drift test (`openapi:check`).
-- **Auth & Tenant:** Testcontainers real-database isolation tests (NO IN-MEMORY MOCKS).
-- **Console:** Playwright semantic E2E for the high-risk Approval Ceremony.
+## Required HELM OSS Coverage
 
-### Titan (`titan`)
-- **Policy Engine:** Fuzzing and property tests for HMAC and Risk Policy bounds.
-- **Execution:** Rust side-by-side NATS integration spin-ups.
+| Surface | Required signal |
+| --- | --- |
+| Go kernel and CLI | `go test` over `core/cmd/helm`, boundary, contracts, conformance, and verifier packages |
+| SDKs | Language-specific SDK gates and generated-type parity |
+| ProofGraph and EvidencePack | Offline fixture verification and tamper checks |
+| MCP and sandbox | Negative vectors for unknown server/tool/schema, missing grants, and authorization failures |
+| Console | Static build, unit tests, and smoke check against generated API schema |
+| Deployment | Docker, Docker Compose, chart, and release smoke checks where environment support exists |
+| Documentation | `make docs-coverage`, `make docs-truth`, docs-platform manifest/source checks |
 
-### Pilot (`pilot`)
-- **Connectors:** Offline schema drift fixtures (`schema_hash_mismatch`).
-- **Orchestrator:** Postgres rollback checkpoint verification.
+## CI Branch Protection Baseline
 
-## 3. CI Branch Protection Baseline
-The following jobs MUST pass. Skipping is forbidden without an explicit
-Advisory suppression linked to a tracked risk:
+The following jobs should pass before merging to `main` unless a tracked
+Advisory suppression explicitly explains the risk:
 
-1. `quality-pr` / `make quality-pr` (Make-first summary gate with impact filtering)
-2. `hygiene` (presentation, unfinished-marker, and tracked-file hygiene)
-3. `kernel` (lint, build, native tests, fixtures, boundary, crucible, benchmark report)
-4. `contract-drift` (generated schema and SDK alignment)
-5. `deployment-smoke` and `release-smoke` (Docker/Compose/chart and release evidence)
-6. `codeql` and `scorecard` (SAST and supply-chain posture)
+1. `quality-pr` / `make quality-pr`
+2. `hygiene`
+3. `kernel`
+4. `contract-drift`
+5. `deployment-smoke` and `release-smoke`
+6. `codeql` and `scorecard`
 
-Nightly runs `make quality-nightly`. New noisy gates remain Advisory until their
-baselines are clean or `QUALITY_STRICT=1` promotes them to blocking.
+Nightly runs `make quality-nightly`. New noisy gates remain Advisory until
+their baselines are clean or `QUALITY_STRICT=1` promotes them to blocking.
 
-**No mock tests are permitted to define canonical execution truth.**
+No mock test defines canonical execution truth.

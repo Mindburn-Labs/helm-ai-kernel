@@ -1,6 +1,6 @@
 # @mindburn/ui-core
 
-Shared Mindburn UI foundation for design-system tokens, primitives, semantic state utilities, and production CSS. HELM, docs, marketing, Titan, and future products may consume this package, but sibling products do not define HELM conformance.
+Shared Mindburn UI foundation for design-system tokens, primitives, semantic state utilities, and production CSS. HELM OSS and downstream products may consume this package, but downstream products do not define HELM OSS conformance.
 
 Core React primitives, design tokens, semantic state utilities, and production CSS for Mindburn products.
 

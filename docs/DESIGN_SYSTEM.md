@@ -78,7 +78,7 @@ developer experience, not position it as a standalone commercial UI kit.
 
 ## Documentation And UI Contract
 
-The design system docs should connect visual components to governance meaning. Status badges, receipt summaries, policy decisions, warnings, and verifier output must use stable labels that match schemas and CLI output. When a token or component changes, update screenshots, accessibility notes, and any consuming Console or docs-platform page together. A reader should know which styles are illustrative, which are required for accessible evidence review, and which are commercial-only. Keep color and icon decisions tied to state semantics such as allow, deny, warning, pending verification, and stale evidence rather than decorative preference.
+The design system docs should connect visual components to governance meaning. Status badges, receipt summaries, policy decisions, warnings, and verifier output must use stable labels that match schemas and CLI output. When a token or component changes, update screenshots, accessibility notes, and any consuming Console or docs-platform page together. A reader should know which styles are illustrative, which are required for accessible evidence review, and which are outside the OSS surface. Keep color and icon decisions tied to state semantics such as allow, deny, warning, pending verification, and stale evidence rather than decorative preference.
 
 <!-- docs-depth-final-pass-extra -->
  Include keyboard focus, color contrast, reduced-motion behavior, and copy semantics for each stateful component. Evidence review UI must remain usable in screenshots, Markdown exports, and assistive technology.

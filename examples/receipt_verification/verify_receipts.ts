@@ -33,7 +33,7 @@ interface VerificationResult {
   receipt_count: number;
 }
 
-const BASE_URL = process.env.HELM_URL ?? "http://localhost:8080";
+const BASE_URL = process.env.HELM_URL ?? "http://127.0.0.1:7714";
 const API_KEY = process.env.HELM_API_KEY ?? "";
 
 async function helmFetch<T>(path: string, init?: RequestInit): Promise<T> {

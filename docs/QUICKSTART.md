@@ -7,6 +7,14 @@ last_reviewed: 2026-05-12
 
 This is the shortest current HELM OSS path: build or install the CLI, start a local fail-closed execution boundary, run the built-in proof demo, inspect receipts, and run the docs truth gates.
 
+```mermaid
+flowchart LR
+  Install["install or build helm"] --> Serve["helm serve :7714"]
+  Serve --> Demo["demo run and verify"]
+  Serve --> Receipts["signed receipts"]
+  Receipts --> Verify["offline verification"]
+```
+
 ## Source Truth
 
 - `core/cmd/helm/server_cmd.go`

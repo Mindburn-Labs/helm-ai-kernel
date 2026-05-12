@@ -3,7 +3,7 @@
  * Change ONLY the baseURL to route through HELM governance.
  */
 
-const HELM_URL = process.env.HELM_URL || "http://localhost:8080";
+const HELM_URL = process.env.HELM_URL || "http://127.0.0.1:7714";
 
 async function main() {
   const response = await fetch(`${HELM_URL}/v1/chat/completions`, {

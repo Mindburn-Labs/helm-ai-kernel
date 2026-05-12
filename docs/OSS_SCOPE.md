@@ -7,6 +7,8 @@ last_reviewed: 2026-05-12
 
 ## Audience
 
+Maintainers, adopters, and downstream packagers deciding what is in HELM OSS and what is outside this repository.
+
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
@@ -35,7 +37,7 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 
 HELM OSS is the **open execution kernel and self-hostable Console** of the HELM stack.
 
-It exists to keep the deterministic boundary small, portable, and independently trustworthy. The commercial HELM layers must extend this kernel, not replace it.
+It exists to keep the deterministic boundary small, portable, and independently trustworthy. Downstream HELM layers must extend this kernel through public contracts, not replace it.
 
 ## Kernel TCB (Trusted Computing Base)
 
@@ -174,18 +176,17 @@ OSS includes:
 - **HELM OSS Console** — one self-hostable browser UI for command, receipts, policy, MCP, evidence, replay, ProofGraph, conformance, trust, incidents, audit, developer, and settings workflows
 - Adapters and integration surfaces
 
-OSS does not include (commercial overlays only):
+OSS does not include:
 
-- Managed hosted control plane operations
-- Enterprise identity and admin (SCIM, SSO/SAML/OIDC, directory sync)
-- Legal hold, long-term hosted retention, regulator-facing workflows
-- Org-scale rollout / staging / shadow enforcement on live production traffic
-- Managed federation and hosted trust registries
-- Premium pack channels (teams, enterprise) and entitlement engine
-- Certified connector program as a hosted service (OSS ships the connector SDK + community verification harness)
-- Billing, seat management, usage metering
+- Hosted Mindburn operations
+- Enterprise identity and admin beyond the OSS runtime contract
+- Legal hold, long-term hosted retention, or regulator-facing workflows
+- Organization-scale rollout, staging, or shadow enforcement on live production traffic
+- Managed federation or hosted trust registries
+- Private entitlement, seat management, usage metering, or account-management systems
+- Non-OSS connector certification programs
 
-The invariant is simple: OSS must stay fully useful on its own as a developer-first execution kernel and self-hostable Console: Go CLI, HTTP/API contracts, SDKs, evidence export, offline verification, replay, conformance, Console assets, and release artifacts. Mindburn-specific managed-service operations live outside this repository and integrate through those public contracts.
+The invariant is simple: OSS must stay fully useful on its own as a developer-first execution kernel and self-hostable Console: Go CLI, HTTP/API contracts, SDKs, evidence export, offline verification, replay, conformance, Console assets, and release artifacts. Hosted or organization-specific operations live outside this repository and integrate through those public contracts.
 
 ## Diagram
 

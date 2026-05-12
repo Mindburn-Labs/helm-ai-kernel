@@ -18,9 +18,13 @@ REQUIRED_COLUMNS = [
     'diataxis_type', 'owner_status', 'verification_command', 'gap_status', 'reviewer_notes'
 ]
 NON_DOC_STATUSES = {'not_applicable', 'known_gap', 'generated', 'external', 'mirror'}
+GENERATED_PREFIXES = ('artifacts/conformance',)
 
 
 def is_excluded(path: Path) -> bool:
+    source = path.as_posix()
+    if any(source == prefix or source.startswith(f'{prefix}/') for prefix in GENERATED_PREFIXES):
+        return True
     return any(part in EXCLUDE for part in path.parts) or any(part.startswith('.') and part not in {'.github', '.env.example'} for part in path.parts)
 
 

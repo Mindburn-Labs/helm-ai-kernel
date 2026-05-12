@@ -7,6 +7,8 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
+Maintainers using this internal governance note to track source-backed CNCF-readiness evidence for HELM OSS.
+
 ## Outcome
 
 After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.

@@ -5,13 +5,14 @@ Shows: chat completions, denial handling, conformance.
 Run: pip install httpx && python main.py
 """
 
+import os
 import sys
 sys.path.insert(0, "../../sdk/python")
 
 from helm_sdk import HelmClient, HelmApiError, ChatCompletionRequest, ConformanceRequest
 from helm_sdk.types_gen import ChatMessage
 
-HELM_URL = "http://localhost:8080"
+HELM_URL = os.environ.get("HELM_URL", "http://127.0.0.1:7714")
 
 def main():
     helm = HelmClient(base_url=HELM_URL)

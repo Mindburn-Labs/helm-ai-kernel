@@ -4,7 +4,7 @@ This file is the tracked documentation-completeness certificate for `helm-oss`.
 
 ## Standard
 
-Coverage follows a standards-based SOTA bar:
+Coverage follows a source-backed documentation bar:
 
 - Diataxis: every active surface is classified as tutorial, how-to, reference, or explanation.
 - Google developer documentation style: canonical docs should be clear, direct, and audience-specific.

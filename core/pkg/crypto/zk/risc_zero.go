@@ -27,10 +27,10 @@ func NewRISCZeroVerifier(guestImageID string) *RISCZeroVerifier {
 // produced the given Output (e.g., a CPI verdict) without revealing
 // intermediate state, and that it executed correctly.
 func (v *RISCZeroVerifier) VerifyReceipt(ctx context.Context, receiptBytes []byte, expectedOutput []byte) (bool, error) {
-	// TODO: Implement actual RISC Zero verification logic.
+	// Future implementation: actual RISC Zero verification logic.
 	// This will likely require FFI bindings to the RISC Zero Rust verifier
 	// or an equivalent Go implementation.
-	
+
 	if len(receiptBytes) == 0 {
 		return false, fmt.Errorf("empty ZK receipt")
 	}

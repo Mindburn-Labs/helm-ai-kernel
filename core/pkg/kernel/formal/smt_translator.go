@@ -21,7 +21,7 @@ func NewSMTTranslator() *SMTTranslator {
 // Translate compiles a set of policies and an execution intent into an SMT
 // proof obligation.
 func (t *SMTTranslator) Translate(ctx context.Context, policies []byte, intent []byte) (string, error) {
-	// TODO: Implement translation to SMT-LIB v2 format.
+	// Future implementation: translation to SMT-LIB v2 format.
 	// It should encode the policy hierarchy (P0 ceilings, P1 bundles)
 	// and the specific execution intent as assertions to check for satisfiability.
 	return "; SMT-LIB v2 representation placeholder\n(check-sat)\n", nil

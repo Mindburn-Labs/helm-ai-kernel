@@ -9,11 +9,11 @@ import (
 
 // OutboxRecord represents an intent to execute an effect.
 type OutboxRecord struct {
-	ID        string                                `json:"id"`
-	Effect    *contracts.Effect                     `json:"effect"`
-	Intent    *contracts.AuthorizedExecutionIntent  `json:"intent"`
-	Scheduled time.Time                             `json:"scheduled"`
-	Status    string                                `json:"status"` // PENDING, DONE, FAILED
+	ID        string                               `json:"id"`
+	Effect    *contracts.Effect                    `json:"effect"`
+	Intent    *contracts.AuthorizedExecutionIntent `json:"intent"`
+	Scheduled time.Time                            `json:"scheduled"`
+	Status    string                               `json:"status"` // PENDING, DONE, FAILED
 }
 
 // OutboxStore defines the transactional persistence layer for effects.

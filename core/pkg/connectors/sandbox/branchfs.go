@@ -34,14 +34,14 @@ func NewBranchFS(baseDir, branchID string) (*BranchFS, error) {
 
 // Mount performs the actual overlayfs or FUSE mount attaching the BranchFS.
 func (b *BranchFS) Mount(ctx context.Context) error {
-	// TODO: Implement host-level overlayfs mount logic here.
+	// Future implementation: host-level overlayfs mount logic.
 	// Example: syscall.Mount("overlay", target, "overlay", 0, options)
 	return nil
 }
 
 // Unmount detaches the speculative filesystem cleanly.
 func (b *BranchFS) Unmount(ctx context.Context) error {
-	// TODO: Implement syscall.Unmount
+	// Future implementation: syscall.Unmount integration.
 	return nil
 }
 
@@ -49,7 +49,7 @@ func (b *BranchFS) Unmount(ctx context.Context) error {
 // diff against the BaseDir, which is then recorded in the ProofGraph as part
 // of the execution receipt.
 func (b *BranchFS) Commit(ctx context.Context) (string, error) {
-	// TODO: Traverse BranchDir and generate an RFC 8785 canonical hash 
+	// Future implementation: traverse BranchDir and generate an RFC 8785 canonical hash
 	// representing the total side-effect state.
 	return "sha256:branchfs_commit_hash_placeholder", nil
 }

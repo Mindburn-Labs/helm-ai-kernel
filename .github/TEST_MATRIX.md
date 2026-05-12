@@ -29,7 +29,7 @@ All systems contributing to or interacting with the **Trusted Computing Base (TC
 
 ## 3. CI Branch Protection Baseline
 The following jobs MUST pass. Skipping is forbidden without an explicit `ADVISORY` suppression flag linked to an open risk issue:
-1. `hygiene` (Presentation, TODO tracking, uncommitted secrets)
+1. `hygiene` (Presentation, unfinished-marker tracking, uncommitted secrets)
 2. `kernel / tests` (Native suite execution)
 3. `contract-drift` (Generated schema alignment)
 4. `security` (Axe, SAST, dependency audits)

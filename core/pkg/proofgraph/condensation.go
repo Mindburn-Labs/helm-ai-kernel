@@ -59,7 +59,7 @@ func (c *DefaultMerkleCondenser) buildTree(hashes []string) string {
 		if i+1 < len(hashes) {
 			right = hashes[i+1]
 		}
-		
+
 		combined := left + right
 		hash := sha256.Sum256([]byte(combined))
 		nextLevel = append(nextLevel, hex.EncodeToString(hash[:]))

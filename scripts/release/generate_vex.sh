@@ -22,6 +22,9 @@ OUT_DIR="$PROJECT_ROOT/release/vex"
 
 RAW_VERSION="${HELM_VERSION:-${GITHUB_REF_NAME:-}}"
 RAW_VERSION="${RAW_VERSION#v}"
+if [[ "$RAW_VERSION" == */* ]]; then
+    RAW_VERSION=""
+fi
 if [ -z "$RAW_VERSION" ]; then
     RAW_VERSION="$(cat "$PROJECT_ROOT/VERSION" 2>/dev/null || echo "0.0.0-dev")"
 fi

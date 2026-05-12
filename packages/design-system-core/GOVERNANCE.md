@@ -1,7 +1,9 @@
 # Mindburn Labs Design System Governance (UCS 1.3)
 
 ## Core Philosophy
-The Mindburn Labs Design System (@helm/design-system-core) is the single, canonical source of truth for all visual and interactive surfaces across the Mindburn Labs enterprise ecosystem. This includes HELM OSS, HELM Commercial, Titan, Pilot, Mindburn Admin, and the public-facing documentation and marketing sites.
+`@helm/design-system-core` is the shared Mindburn UI foundation and the canonical source for HELM OSS-safe primitives, base tokens, semantic state utilities, and production CSS.
+
+Sibling and portfolio products may consume the core package, but they do not become normative HELM components and they cannot define HELM conformance. HELM product truth remains bounded to HELM OSS, HELM Commercial, and OrgGenome Compiler scope; Titan, Pilot, Mindburn Admin, docs, and marketing layers are consumers or product skins.
 
 Our philosophy is **Canonical Compliance**: 
 - **Zero Raw HTML**: UI surfaces must be constructed exclusively from composed React primitives (e.g., `AppShell`, `Stack`, `Grid`, `Badge`).
@@ -9,11 +11,12 @@ Our philosophy is **Canonical Compliance**:
 - **Fail-Closed Accessibility**: Surfaces that fail WCAG 2.2 AA standards (via `axe-core`) cannot be merged.
 
 ## System Boundaries
-- `@helm/design-system-core`: Foundational UI primitives, layout structures, canonical tokens, and platform-agnostic components.
-- `@helm/design-system-helm`: Commercial/Product-specific extensions built purely on top of `core`.
-- `site-ui`: Marketing-specific layout structures (e.g., `LabHero`) built purely on top of `core`.
+- `@helm/design-system-core`: HELM OSS-safe primitives, layout structures, canonical base tokens, accessibility primitives, and platform-agnostic components.
+- `@helm/design-system-helm`: HELM product-specific proof, policy, evidence, execution, assistant, route, state, and handoff patterns built on public core exports.
+- `site-ui`: Mindburn marketing and editorial compositions built on public core exports.
+- Product skins: Titan and other sibling products may alias or extend core foundations for their own domain semantics, but those skins are not HELM conformance sources.
 
 ## Contribution Process
-1. **No Local Escapes**: Any new design pattern must be elevated to the core design system before being consumed by a downstream repository.
+1. **No Local Escapes**: Shared primitives and base tokens must be elevated to the core design system before being consumed by a downstream repository. Product-domain components stay in their product layer.
 2. **Review Requirement**: Any changes to `design-system-core` require review from the Core Architecture team.
 3. **Automated Enforcement**: All PRs must pass Playwright Visual Regression tests and Stylelint token enforcement.

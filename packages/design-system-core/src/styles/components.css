@@ -69,6 +69,144 @@ pre {
   border: 0;
 }
 
+.skip-link {
+  position: fixed;
+  top: var(--helm-space-3);
+  left: var(--helm-space-3);
+  z-index: var(--helm-z-toast);
+  transform: translateY(calc(-100% - var(--helm-space-6)));
+  min-height: var(--helm-min-touch-target);
+  padding: 0 var(--helm-space-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--helm-border-focus);
+  border-radius: var(--helm-radius-sm);
+  background: var(--helm-bg-elevated);
+  color: var(--helm-text-primary);
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: var(--helm-shadow-lg);
+  transition: transform var(--helm-dur-fast) var(--helm-ease);
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+.icon {
+  width: 1.125em;
+  height: 1.125em;
+  flex: 0 0 auto;
+  display: inline-block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.btn {
+  min-height: var(--helm-min-touch-target);
+  min-width: var(--helm-min-touch-target);
+  padding: 0 var(--helm-space-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--helm-space-2);
+  border: 1px solid var(--helm-border-strong);
+  border-radius: var(--helm-radius-xs);
+  background: transparent;
+  color: var(--helm-text-primary);
+  font: inherit;
+  font-size: var(--helm-font-meta);
+  font-weight: 750;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--helm-dur-fast) var(--helm-ease),
+    border-color var(--helm-dur-fast) var(--helm-ease),
+    color var(--helm-dur-fast) var(--helm-ease),
+    transform var(--helm-dur-fast) var(--helm-ease);
+}
+
+.btn:hover {
+  border-color: var(--helm-accent);
+  transform: translateY(-1px);
+}
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.48;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  border-color: var(--accent-brand-strong, var(--helm-accent));
+  background: var(--accent-brand-strong, var(--helm-accent));
+  color: var(--helm-text-on-accent);
+}
+
+.btn--ghost {
+  background: var(--helm-bg-surface);
+  color: var(--helm-text-primary);
+}
+
+.btn--text {
+  min-width: 0;
+  padding-inline: var(--helm-space-2);
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent-brand-strong, var(--helm-accent));
+}
+
+.btn--small {
+  min-height: 34px;
+  min-width: 34px;
+  padding-inline: var(--helm-space-3);
+  font-size: 11px;
+}
+
+.btn--has-icon .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.btn__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icon-btn {
+  min-width: var(--helm-min-touch-target);
+  min-height: var(--helm-min-touch-target);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--helm-border-default);
+  border-radius: var(--helm-radius-xs);
+  background: var(--helm-bg-surface);
+  color: var(--helm-text-primary);
+  cursor: pointer;
+}
+
+.icon-btn:hover,
+.icon-btn.is-active {
+  border-color: var(--helm-accent);
+  background: var(--helm-accent-subtle);
+}
+
+.icon-btn .icon {
+  width: 18px;
+  height: 18px;
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;

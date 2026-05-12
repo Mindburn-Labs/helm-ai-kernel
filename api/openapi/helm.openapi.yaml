@@ -504,11 +504,82 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+  /api/v1/agent-ui/info:
+    get:
+      operationId: getAgentUIRuntimeInfo
+      tags: [agent, console]
+      summary: Read OSS Agent UI runtime capabilities
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: AG-UI runtime metadata and read-only tool catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                required: [runtime, protocol, transport, tools]
+                properties:
+                  runtime: { type: string }
+                  protocol: { type: string, const: ag-ui }
+                  transport: { type: string, const: sse }
+                  tools:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/agent-ui/run:
+    post:
+      operationId: runAgentUIRuntime
+      tags: [agent, console]
+      summary: Run the OSS read-only Agent UI assistant
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              properties:
+                threadId: { type: string }
+                runId: { type: string }
+                workspaceId: { type: string }
+                currentSurface: { type: string }
+                state:
+                  type: object
+                  additionalProperties: true
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+                    properties:
+                      id: { type: string }
+                      role: { type: string }
+                      content: { type: string }
+      responses:
+        '200':
+          description: Server-sent AG-UI lifecycle event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
   /api/ag-ui/info:
     get:
-      operationId: getAGUIRuntimeInfo
+      operationId: getAGUIRuntimeInfoCompat
       tags: [agent, console]
-      summary: Read OSS AG-UI runtime capabilities
+      summary: Read OSS AG-UI runtime capabilities compatibility route
       security:
         - AdminBearerAuth: []
       responses:
@@ -534,9 +605,9 @@ paths:
 
   /api/ag-ui/run:
     post:
-      operationId: runAGUIRuntime
+      operationId: runAGUIRuntimeCompat
       tags: [agent, console]
-      summary: Run the OSS read-only AG-UI assistant
+      summary: Run the OSS read-only AG-UI assistant compatibility route
       security:
         - AdminBearerAuth: []
       requestBody:

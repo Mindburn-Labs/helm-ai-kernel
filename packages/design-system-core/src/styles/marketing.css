@@ -4,6 +4,7 @@
   .frame,
   .frame-wide,
   .frame-narrow,
+  .ds-frame,
   .company-frame {
     width: min(var(--frame), calc(100% - 40px));
     margin-inline: auto;
@@ -21,6 +22,7 @@
     .frame,
     .frame-wide,
     .frame-narrow,
+    .ds-frame,
     .company-frame {
       width: min(100% - 28px, var(--frame));
     }
@@ -2008,6 +2010,183 @@
   .ds-mobile-menu__cta {
     justify-content: center;
     width: 100%;
+  }
+
+  .site-footer {
+    border-top: 1px solid var(--border);
+    background: var(--surface-page);
+    color: var(--text-primary);
+  }
+
+  .site-footer__inner,
+  .site-footer__compact-inner {
+    width: min(var(--frame), calc(100% - 40px));
+    margin-inline: auto;
+  }
+
+  .site-footer__inner {
+    display: grid;
+    gap: var(--space-8);
+    padding: var(--space-10) 0 var(--space-6);
+  }
+
+  .site-footer__callout {
+    display: grid;
+    grid-template-columns: minmax(220px, 0.6fr) minmax(0, 1fr);
+    gap: var(--space-8);
+    align-items: start;
+  }
+
+  .site-footer__brand,
+  .site-footer__brand-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .site-footer__brand-copy {
+    display: grid;
+    gap: 2px;
+  }
+
+  .site-footer__mark {
+    flex: 0 0 auto;
+    color: var(--accent-brand-strong);
+  }
+
+  .site-footer__brand-name {
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .site-footer__brand-sub {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  .site-footer__thesis {
+    display: grid;
+    gap: var(--space-3);
+    max-width: 760px;
+  }
+
+  .site-footer__thesis h2 {
+    margin: 0;
+    color: var(--text-primary);
+    font-family: var(--font-editorial);
+    font-size: clamp(28px, 4vw, 46px);
+    font-weight: 520;
+    line-height: 1.08;
+  }
+
+  .site-footer__thesis p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 17px;
+    line-height: 1.6;
+  }
+
+  .site-footer__matrix {
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-6);
+  }
+
+  .site-footer__columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-5);
+  }
+
+  .site-footer__column {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .site-footer__column h2 {
+    margin: 0;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .site-footer__column ul {
+    display: grid;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .site-footer__column a {
+    display: inline-grid;
+    gap: 2px;
+    width: fit-content;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .site-footer__column a:hover,
+  .site-footer__meta a:hover,
+  .site-footer__compact-nav a:hover {
+    color: var(--accent-brand-strong);
+  }
+
+  .site-footer__column a small {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .site-footer__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3) var(--space-5);
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-5);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  .site-footer__meta nav,
+  .site-footer__compact-nav {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  .site-footer__meta a,
+  .site-footer__compact-nav a {
+    color: var(--text-secondary);
+    text-decoration: none;
+  }
+
+  .site-footer--compact {
+    padding: var(--space-4) 0;
+  }
+
+  .site-footer__compact-inner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-items: center;
+    justify-content: space-between;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
   }
 
   .company-button--primary {

@@ -248,6 +248,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ag-ui/info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read OSS AG-UI runtime capabilities */
+        get: operations["getAGUIRuntimeInfo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ag-ui/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run the OSS read-only AG-UI assistant */
+        post: operations["runAGUIRuntime"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/trust/keys/add": {
         parameters: {
             query?: never;
@@ -2538,6 +2572,81 @@ export interface operations {
             };
             401: components["responses"]["HelmError"];
             404: components["responses"]["HelmError"];
+        };
+    };
+    getAGUIRuntimeInfo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AG-UI runtime metadata and read-only tool catalog */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        runtime: string;
+                        /** @constant */
+                        protocol: "ag-ui";
+                        /** @constant */
+                        transport: "sse";
+                        tools: {
+                            [key: string]: unknown;
+                        }[];
+                    } & {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    runAGUIRuntime: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    threadId?: string;
+                    runId?: string;
+                    workspaceId?: string;
+                    currentSurface?: string;
+                    state?: {
+                        [key: string]: unknown;
+                    };
+                    messages?: ({
+                        id?: string;
+                        role?: string;
+                        content?: string;
+                    } & {
+                        [key: string]: unknown;
+                    })[];
+                } & {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Server-sent AG-UI lifecycle event stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
         };
     };
     addTrustKey: {

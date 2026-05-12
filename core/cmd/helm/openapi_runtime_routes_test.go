@@ -97,6 +97,7 @@ func TestProtectedRuntimeHandlersAreDeclaredInRouteRegistry(t *testing.T) {
 		"subsystems.go",
 		"receipt_routes.go",
 		"console_routes.go",
+		"console_agui_routes.go",
 		"contract_routes.go",
 		"policy_reconcile_routes.go",
 	}

@@ -161,6 +161,125 @@ body {
   grid-template-rows: 44px minmax(0, 1fr);
 }
 
+.assistant-affordance {
+  position: fixed;
+  top: 54px;
+  right: var(--helm-space-8);
+  z-index: 40;
+}
+
+.assistant-drawer {
+  position: fixed;
+  top: 92px;
+  right: var(--helm-space-8);
+  width: min(420px, calc(100vw - var(--helm-space-8) * 2));
+  max-height: calc(100vh - 112px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--helm-space-6);
+  border: 1px solid var(--helm-border-boundary);
+  border-radius: var(--helm-radius-md);
+  background: var(--helm-bg-surface);
+  box-shadow: var(--helm-shadow-lg);
+  padding: var(--helm-space-8);
+}
+
+.assistant-drawer > header,
+.agent-result-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--helm-space-5);
+}
+
+.assistant-drawer h2 {
+  margin: var(--helm-space-2) 0 0;
+  font-size: 16px;
+}
+
+.icon-button {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--helm-border-default);
+  border-radius: var(--helm-radius-sm);
+  color: var(--helm-text-secondary);
+  background: var(--helm-bg-terminal);
+  cursor: pointer;
+}
+
+.assistant-thread {
+  min-height: 220px;
+  overflow: auto;
+  display: grid;
+  gap: var(--helm-space-5);
+  align-content: start;
+}
+
+.assistant-message,
+.agent-result-card {
+  border: 1px solid var(--helm-border-default);
+  border-radius: var(--helm-radius-sm);
+  background: var(--helm-bg-inset);
+  padding: var(--helm-space-6);
+}
+
+.assistant-message strong {
+  display: block;
+  margin-bottom: var(--helm-space-3);
+  color: var(--helm-text-secondary);
+  font-size: 12px;
+}
+
+.assistant-message p,
+.agent-result-card p {
+  margin: 0;
+  color: var(--helm-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.assistant-composer {
+  display: grid;
+  gap: var(--helm-space-5);
+}
+
+.assistant-composer textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--helm-border-default);
+  border-radius: var(--helm-radius-sm);
+  background: var(--helm-bg-terminal);
+  color: var(--helm-text-primary);
+  padding: var(--helm-space-5);
+}
+
+.assistant-error {
+  margin: 0;
+  color: var(--helm-verdict-deny);
+  font-size: 12px;
+}
+
+.agent-result-card dl {
+  display: grid;
+  gap: var(--helm-space-3);
+  margin: var(--helm-space-5) 0 0;
+}
+
+.agent-result-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--helm-space-5);
+}
+
+.agent-result-card dt,
+.agent-result-card dd {
+  margin: 0;
+  color: var(--helm-text-muted);
+  font-size: 12px;
+}
+
 .console-topbar {
   min-width: 0;
   display: flex;

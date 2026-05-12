@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 
 const apiMock = vi.hoisted(() => ({
   loadBootstrap: vi.fn(),
@@ -28,6 +29,17 @@ const apiMock = vi.hoisted(() => ({
 }));
 
 vi.mock("./api/client", () => apiMock);
+vi.mock("@copilotkit/react-core/v2/styles.css", () => ({}));
+vi.mock("@copilotkit/react-core", () => ({
+  CopilotKit: ({ children }: { readonly children: ReactNode }) => children,
+}));
+vi.mock("@copilotkit/react-core/v2/headless", () => ({
+  useComponent: vi.fn(),
+  useFrontendTool: vi.fn(),
+}));
+vi.mock("@copilotkit/react-core/v2", () => ({
+  useRenderTool: vi.fn(),
+}));
 
 import { App } from "./App";
 

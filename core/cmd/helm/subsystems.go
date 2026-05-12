@@ -38,6 +38,8 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 		"go_version": runtime.Version(),
 	}
 
+	registerPolicyReconcileRoutes(mux, svc)
+
 	// --- OpenAI-Compatible Proxy (governed inference) ---
 	// Wraps api.HandleOpenAIProxy with Guardian governance enforcement and receipt headers.
 	// Requires HELM_UPSTREAM_URL to be set for real upstream forwarding.

@@ -135,9 +135,57 @@ helm:
 
   # Policy configuration
   policy:
+    # Kubernetes delivery is a policy-source backend, not runtime truth.
+    # Runtime reconciliation verifies and compiles an EffectivePolicySnapshot.
+    source:
+      kind: "mountedFile" # controlplane | crd | mountedFile
+      pollInterval: "10s"
+      initialReconcileTimeout: "30s"
+      controlplane:
+        url: ""
+        auth:
+          mode: "serviceAccountJWT" # serviceAccountJWT | bearerToken
+          bearerToken: ""
+          existingSecret: ""
+          existingSecretKey: "HELM_POLICY_BEARER_TOKEN"
+      crd:
+        install: false
+        apiGroup: "policy.helm.ai"
+        resource: "HelmPolicyBundle"
+      mountedFile:
+        existingConfigMap: ""
+        existingSecret: ""
+        mountPath: "/etc/helm/policy"
+
+    failClosed:
+      requireInitialSnapshot: true
+      onMissingSnapshot: "deny"
+      onInvalidUpdate: "keepLastKnownGood"
+      lastKnownGoodMaxAge: "10m"
+
+    reloadHints:
+      enabled: true
+      httpWakeEndpoint: "/internal/policy/reconcile"
+      fsnotify: false
+      k8sWatch: false
+      configReloaderSidecar:
+        enabled: false
+        image: "ghcr.io/jimmidyson/configmap-reload:v0.13.1"
+
+    signature:
+      # When true, runtime reconciliation rejects unsigned policy heads.
+      required: false
+      # Ed25519 public key hex used to verify canonical policy bundle bytes.
+      publicKey: ""
+      # Optional secret containing the public key. Public keys are not secret,
+      # but existingSecret keeps production values files free of key material.
+      existingSecret: ""
+      existingSecretKey: "HELM_POLICY_TRUST_PUBLIC_KEY"
+
     # Name of an existing ConfigMap containing the serve policy file.
-    # Leave empty to use the chart-generated policy.
+    # Legacy alias for policy.source.mountedFile.existingConfigMap.
     configMap: ""
+    # Legacy alias for policy.source.mountedFile.mountPath.
     mountPath: "/etc/helm/policy"
     fileName: "serve-policy.toml"
     name: "helm-chart"

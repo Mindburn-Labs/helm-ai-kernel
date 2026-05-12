@@ -134,7 +134,10 @@ bundle, err := bundles.LoadBundle("/path/to/my-bundle")
 
 ### 7.2 Hot Reload
 
-Bundles can be reloaded without restart:
+Bundles can be reconciled without restart. File watchers or callbacks are
+wake-up hints only; the runtime still loads the canonical bundle, verifies the
+expected content hash and signature/provenance, compiles an immutable snapshot,
+and swaps that snapshot atomically.
 
 ```yaml
 bundle_loader:

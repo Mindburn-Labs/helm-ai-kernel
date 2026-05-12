@@ -29,6 +29,7 @@ import (
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/merkle"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/observability"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/pack"
+	policyreconcile "github.com/Mindburn-Labs/helm-oss/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/runtime/obligation"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/runtime/sandbox"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/store"
@@ -64,6 +65,11 @@ type Services struct {
 
 	// --- Security ---
 	Guardian *guardian.Guardian
+
+	// --- Runtime Policy Authority ---
+	PolicyReconciler    *policyreconcile.Reconciler
+	PolicySnapshotStore policyreconcile.PolicySnapshotStore
+	PolicyScope         policyreconcile.PolicyScope
 
 	// --- Governed Memory (LKS/CKS) ---
 	GovMemory *memory.InMemoryStore

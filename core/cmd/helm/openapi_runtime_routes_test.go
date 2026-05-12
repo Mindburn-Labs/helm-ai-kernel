@@ -98,6 +98,7 @@ func TestProtectedRuntimeHandlersAreDeclaredInRouteRegistry(t *testing.T) {
 		"receipt_routes.go",
 		"console_routes.go",
 		"contract_routes.go",
+		"policy_reconcile_routes.go",
 	}
 	protectedRoute := regexp.MustCompile(`mux\.HandleFunc\("([^"]+)",\s*protectRuntimeHandler`)
 	for _, routeFile := range routeFiles {

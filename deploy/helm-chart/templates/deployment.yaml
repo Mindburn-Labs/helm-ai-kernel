@@ -1,3 +1,21 @@
+{{- if not (or (eq .Values.helm.policy.source.kind "controlplane") (eq .Values.helm.policy.source.kind "crd") (eq .Values.helm.policy.source.kind "mountedFile")) -}}
+{{- fail "helm.policy.source.kind must be one of controlplane, crd, mountedFile" -}}
+{{- end -}}
+{{- if and .Values.helm.production (eq .Values.helm.policy.source.kind "controlplane") (not .Values.helm.policy.source.controlplane.url) -}}
+{{- fail "helm.production=true with helm.policy.source.kind=controlplane requires helm.policy.source.controlplane.url" -}}
+{{- end -}}
+{{- if and .Values.helm.production (eq .Values.helm.policy.source.kind "controlplane") (eq .Values.helm.policy.source.controlplane.auth.mode "bearerToken") (not (or .Values.helm.policy.source.controlplane.auth.bearerToken .Values.helm.policy.source.controlplane.auth.existingSecret)) -}}
+{{- fail "helm.production=true with controlplane bearerToken auth requires helm.policy.source.controlplane.auth.bearerToken or existingSecret" -}}
+{{- end -}}
+{{- if and .Values.helm.policy.signature.publicKey (not (regexMatch "^[0-9a-fA-F]{64}$" .Values.helm.policy.signature.publicKey)) -}}
+{{- fail "helm.policy.signature.publicKey must be a 64-character hex Ed25519 public key" -}}
+{{- end -}}
+{{- if and .Values.helm.policy.signature.required (not (or .Values.helm.policy.signature.publicKey .Values.helm.policy.signature.existingSecret)) -}}
+{{- fail "helm.policy.signature.required=true requires helm.policy.signature.publicKey or helm.policy.signature.existingSecret" -}}
+{{- end -}}
+{{- if and .Values.helm.production (eq .Values.helm.policy.source.kind "controlplane") (not .Values.helm.policy.signature.required) -}}
+{{- fail "helm.production=true with helm.policy.source.kind=controlplane requires helm.policy.signature.required=true" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -11,11 +29,10 @@ spec:
       {{- include "helm-firewall.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      {{- with .Values.podAnnotations }}
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-        {{- end }}
+      {{- end }}
       labels:
         {{- include "helm-firewall.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
@@ -60,6 +77,46 @@ spec:
           env:
             - name: HELM_HEALTH_PORT
               value: {{ .Values.service.healthPort | quote }}
+            - name: HELM_POLICY_SOURCE_KIND
+              value: {{ .Values.helm.policy.source.kind | quote }}
+            - name: HELM_POLICY_POLL_INTERVAL
+              value: {{ .Values.helm.policy.source.pollInterval | quote }}
+            - name: HELM_POLICY_INITIAL_RECONCILE_TIMEOUT
+              value: {{ .Values.helm.policy.source.initialReconcileTimeout | quote }}
+            - name: HELM_POLICY_RELOAD_ENDPOINT
+              value: {{ .Values.helm.policy.reloadHints.httpWakeEndpoint | quote }}
+            - name: HELM_POLICY_SIGNATURE_REQUIRED
+              value: {{ ternary "1" "0" .Values.helm.policy.signature.required | quote }}
+            {{- if or .Values.helm.policy.signature.publicKey .Values.helm.policy.signature.existingSecret }}
+            - name: HELM_POLICY_TRUST_PUBLIC_KEY
+              {{- if .Values.helm.policy.signature.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.helm.policy.signature.existingSecret }}
+                  key: {{ .Values.helm.policy.signature.existingSecretKey }}
+              {{- else }}
+              value: {{ .Values.helm.policy.signature.publicKey | quote }}
+              {{- end }}
+            {{- end }}
+            {{- if eq .Values.helm.policy.source.kind "controlplane" }}
+            - name: HELM_POLICY_CONTROLPLANE_URL
+              value: {{ .Values.helm.policy.source.controlplane.url | quote }}
+            - name: HELM_POLICY_CONTROLPLANE_AUTH_MODE
+              value: {{ .Values.helm.policy.source.controlplane.auth.mode | quote }}
+            {{- if or .Values.helm.policy.source.controlplane.auth.bearerToken .Values.helm.policy.source.controlplane.auth.existingSecret }}
+            - name: HELM_POLICY_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (printf "%s-policy-controlplane" (include "helm-firewall.fullname" .)) .Values.helm.policy.source.controlplane.auth.existingSecret }}
+                  key: {{ .Values.helm.policy.source.controlplane.auth.existingSecretKey }}
+            {{- end }}
+            {{- end }}
+            {{- if eq .Values.helm.policy.source.kind "crd" }}
+            - name: HELM_POLICY_CRD_API_GROUP
+              value: {{ .Values.helm.policy.source.crd.apiGroup | quote }}
+            - name: HELM_POLICY_CRD_RESOURCE
+              value: {{ .Values.helm.policy.source.crd.resource | quote }}
+            {{- end }}
             - name: HELM_PRODUCTION
               value: {{ ternary "1" "0" .Values.helm.production | quote }}
             - name: PORT
@@ -135,10 +192,24 @@ spec:
               subPath: root.key
               readOnly: true
             - name: policy
-              mountPath: {{ .Values.helm.policy.mountPath }}
+              mountPath: {{ include "helm-firewall.policyMountPath" . }}
               readOnly: true
             - name: tmp
               mountPath: /tmp
+        {{- if and .Values.helm.policy.reloadHints.enabled .Values.helm.policy.reloadHints.configReloaderSidecar.enabled }}
+        - name: config-reloader
+          image: {{ .Values.helm.policy.reloadHints.configReloaderSidecar.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - --volume-dir={{ include "helm-firewall.policyMountPath" . }}
+            - --webhook-url=http://127.0.0.1:{{ .Values.service.port }}{{ .Values.helm.policy.reloadHints.httpWakeEndpoint }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: policy
+              mountPath: {{ include "helm-firewall.policyMountPath" . }}
+              readOnly: true
+        {{- end }}
       volumes:
         - name: data
           {{ if .Values.persistence.enabled }}
@@ -154,8 +225,13 @@ spec:
               - key: signing-key
                 path: root.key
         - name: policy
+          {{- if .Values.helm.policy.source.mountedFile.existingSecret }}
+          secret:
+            secretName: {{ include "helm-firewall.policySecretName" . }}
+          {{- else }}
           configMap:
             name: {{ include "helm-firewall.policyConfigMapName" . }}
+          {{- end }}
         - name: tmp
           emptyDir: {}
       {{- with .Values.nodeSelector }}

@@ -96,7 +96,9 @@ Return the runtime auth secret name
 Return the policy ConfigMap name
 */}}
 {{- define "helm-firewall.policyConfigMapName" -}}
-{{- if .Values.helm.policy.configMap }}
+{{- if .Values.helm.policy.source.mountedFile.existingConfigMap }}
+{{- .Values.helm.policy.source.mountedFile.existingConfigMap }}
+{{- else if .Values.helm.policy.configMap }}
 {{- .Values.helm.policy.configMap }}
 {{- else }}
 {{- printf "%s-config" (include "helm-firewall.fullname" .) }}
@@ -104,10 +106,24 @@ Return the policy ConfigMap name
 {{- end }}
 
 {{/*
+Return the policy Secret name for mounted-file delivery, when configured.
+*/}}
+{{- define "helm-firewall.policySecretName" -}}
+{{- .Values.helm.policy.source.mountedFile.existingSecret }}
+{{- end }}
+
+{{/*
+Return the policy mount path inside the container.
+*/}}
+{{- define "helm-firewall.policyMountPath" -}}
+{{- default .Values.helm.policy.mountPath .Values.helm.policy.source.mountedFile.mountPath }}
+{{- end }}
+
+{{/*
 Return the serve policy path inside the container
 */}}
 {{- define "helm-firewall.policyPath" -}}
-{{- printf "%s/%s" (.Values.helm.policy.mountPath | trimSuffix "/") .Values.helm.policy.fileName }}
+{{- printf "%s/%s" ((include "helm-firewall.policyMountPath" .) | trimSuffix "/") .Values.helm.policy.fileName }}
 {{- end }}
 
 {{/*

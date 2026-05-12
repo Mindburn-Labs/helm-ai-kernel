@@ -36,8 +36,16 @@ func loadServePolicy(path string) (*servePolicy, error) {
 		return nil, fmt.Errorf("policy not found: %w", err)
 	}
 
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read policy: %w", err)
+	}
+	return decodeServePolicy(path, data)
+}
+
+func decodeServePolicy(path string, data []byte) (*servePolicy, error) {
 	var policy servePolicy
-	if _, err := toml.DecodeFile(path, &policy); err != nil {
+	if _, err := toml.Decode(string(data), &policy); err != nil {
 		return nil, fmt.Errorf("decode policy: %w", err)
 	}
 	if err := policy.validate(); err != nil {
@@ -70,22 +78,29 @@ type serveRuntimeAction struct {
 }
 
 func loadServePolicyRuntime(path string) (*servePolicyRuntime, error) {
-	policy, err := loadServePolicy(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read policy: %w", err)
+	}
+	return loadServePolicyRuntimeFromBytes(path, data)
+}
+
+func loadServePolicyRuntimeFromBytes(path string, data []byte) (*servePolicyRuntime, error) {
+	policy, err := decodeServePolicy(path, data)
 	if err != nil {
 		return nil, err
 	}
-
 	refPath := policy.ReferencePack
 	if !filepath.IsAbs(refPath) {
 		refPath = filepath.Join(filepath.Dir(path), refPath)
 	}
-	data, err := os.ReadFile(refPath)
+	refData, err := os.ReadFile(refPath)
 	if err != nil {
 		return nil, fmt.Errorf("read reference_pack %s: %w", policy.ReferencePack, err)
 	}
 
 	var pack serveReferencePack
-	if err := json.Unmarshal(data, &pack); err != nil {
+	if err := json.Unmarshal(refData, &pack); err != nil {
 		return nil, fmt.Errorf("decode reference_pack %s: %w", policy.ReferencePack, err)
 	}
 	if strings.TrimSpace(pack.PackID) == "" {

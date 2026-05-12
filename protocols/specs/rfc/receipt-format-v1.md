@@ -88,6 +88,10 @@ present. Valid reason codes form the following normative registry:
 | ------------------------ | ------------ | ------------------------------------------------- |
 | `POLICY_VIOLATION`       | Policy       | General policy rule violation                     |
 | `NO_POLICY_DEFINED`      | Policy       | No policy exists for the requested action         |
+| `POLICY_NOT_READY`       | Policy       | No verified policy snapshot is installed          |
+| `POLICY_HASH_MISMATCH`   | Policy       | Policy bytes failed expected hash verification    |
+| `POLICY_SIGNATURE_INVALID` | Policy     | Policy signature or provenance verification failed |
+| `POLICY_EPOCH_CHANGED`   | Policy       | Policy epoch changed before intent issue          |
 | `PRG_EVALUATION_ERROR`   | Policy       | Error evaluating the Proof Requirement Graph      |
 | `MISSING_REQUIREMENT`    | Policy       | Required evidence or condition not met            |
 | `PDP_DENY`               | PDP          | External policy decision point denied the request |

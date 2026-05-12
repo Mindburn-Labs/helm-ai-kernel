@@ -2,11 +2,30 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func chdirTempDir(t *testing.T) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(wd); err != nil {
+			t.Fatalf("restore working directory: %v", err)
+		}
+	})
+	return dir
+}
 
 // TestRun_Help verifies that the help command prints usage and exits 0.
 func TestRun_Help(t *testing.T) {

@@ -13,14 +13,7 @@ import (
 )
 
 func TestOpenAPIPathsAreRegisteredByHelmServeRuntime(t *testing.T) {
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(wd) })
-	if err := os.Chdir(t.TempDir()); err != nil {
-		t.Fatal(err)
-	}
+	chdirTempDir(t)
 
 	mux := http.NewServeMux()
 	svc, cleanup := newContractRouteTestServices(t)

@@ -11,15 +11,7 @@ import (
 )
 
 func TestLocalMCPRuntimeFailsClosedWithoutPolicyGraph(t *testing.T) {
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(wd) })
-	dir := t.TempDir()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
+	dir := chdirTempDir(t)
 	target := filepath.Join(dir, "secret.txt")
 	if err := os.WriteFile(target, []byte("sensitive"), 0600); err != nil {
 		t.Fatal(err)

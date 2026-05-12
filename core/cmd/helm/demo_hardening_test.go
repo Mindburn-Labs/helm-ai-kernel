@@ -13,8 +13,7 @@ import (
 // produces identical receipt hashes (deterministic replay).
 func TestDemoReplayDeterminism(t *testing.T) {
 	// Run 1
-	dir1 := t.TempDir()
-	os.Chdir(dir1)
+	dir1 := chdirTempDir(t)
 
 	var out1 bytes.Buffer
 	code1 := runDemoCompany([]string{"--template", "starter", "--provider", "mock"}, &out1, &out1)
@@ -26,8 +25,7 @@ func TestDemoReplayDeterminism(t *testing.T) {
 	receipts1 := readDemoReceipts(t, filepath.Join(dir1, "data", "evidence"))
 
 	// Run 2
-	dir2 := t.TempDir()
-	os.Chdir(dir2)
+	dir2 := chdirTempDir(t)
 
 	var out2 bytes.Buffer
 	code2 := runDemoCompany([]string{"--template", "starter", "--provider", "mock"}, &out2, &out2)
@@ -66,8 +64,7 @@ func TestDemoReplayDeterminism(t *testing.T) {
 
 // TestDemoModeReceiptField verifies that demo receipts carry mode:"demo".
 func TestDemoModeReceiptField(t *testing.T) {
-	dir := t.TempDir()
-	os.Chdir(dir)
+	dir := chdirTempDir(t)
 
 	var out bytes.Buffer
 	code := runDemoCompany([]string{"--template", "starter", "--provider", "mock"}, &out, &out)
@@ -85,8 +82,7 @@ func TestDemoModeReceiptField(t *testing.T) {
 
 // TestDemoRunReportGenerated verifies JSON reports are generated without a UI artifact.
 func TestDemoProofReportGenerated(t *testing.T) {
-	dir := t.TempDir()
-	os.Chdir(dir)
+	dir := chdirTempDir(t)
 
 	var out bytes.Buffer
 	code := runDemoCompany([]string{"--template", "starter", "--provider", "mock"}, &out, &out)
@@ -126,8 +122,7 @@ func TestDemoProofReportGenerated(t *testing.T) {
 
 // TestReceiptHashSensitivity verifies that changing any field changes the hash.
 func TestReceiptHashSensitivity(t *testing.T) {
-	dir := t.TempDir()
-	os.Chdir(dir)
+	dir := chdirTempDir(t)
 
 	var out bytes.Buffer
 	code := runDemoCompany([]string{"--template", "starter", "--provider", "mock"}, &out, &out)
@@ -162,8 +157,7 @@ func TestReceiptHashSensitivity(t *testing.T) {
 
 // TestReceiptRequiredFields verifies all required fields are always present.
 func TestReceiptRequiredFields(t *testing.T) {
-	dir := t.TempDir()
-	os.Chdir(dir)
+	dir := chdirTempDir(t)
 
 	var out bytes.Buffer
 	code := runDemoCompany([]string{"--template", "starter", "--provider", "mock"}, &out, &out)
@@ -209,8 +203,7 @@ func TestReceiptRequiredFields(t *testing.T) {
 
 // TestDemoDenyPathPresent verifies a DENY receipt exists with correct reason.
 func TestDemoDenyPathPresent(t *testing.T) {
-	dir := t.TempDir()
-	os.Chdir(dir)
+	dir := chdirTempDir(t)
 
 	var out bytes.Buffer
 	code := runDemoCompany([]string{"--template", "starter", "--provider", "mock"}, &out, &out)

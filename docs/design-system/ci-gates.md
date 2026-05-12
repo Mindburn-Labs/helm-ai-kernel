@@ -1,15 +1,16 @@
 # CI Gates
 
-`make test-design-system` is the OSS release gate for `@helm/design-system-core`.
+`make test-design-system` is the OSS release gate for `@mindburn/ui-core`.
 
 It runs:
 
 1. package install from `package-lock.json`
-2. TypeScript typecheck
-3. unit and contract tests
-4. package build
-5. package smoke checks
-6. `npm pack --dry-run`
+2. `npm run tokens:check`
+3. TypeScript typecheck
+4. unit and contract tests
+5. package build
+6. package smoke checks
+7. `npm pack --dry-run`
 
 ## Package Smoke Coverage
 
@@ -29,6 +30,7 @@ The quality gate rejects:
 - hard-coded colors outside token source files.
 - private package or source imports.
 - package exports that are not present in the packed tarball.
+- generated token JSON that diverges from `src/tokens/source.ts`.
 - component class names that lack shipped CSS selectors.
 - dynamic inline styles that are not listed in `approvedDynamicInlineStyles`.
 - generated package output committed under `src`.

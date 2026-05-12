@@ -69,6 +69,7 @@ func runExportCmd(args []string, stdout, stderr io.Writer) int {
 			"01_SCORE.json",
 			"02_PROOFGRAPH",
 			"03_TELEMETRY",
+			"04_EXPORTS",
 			"05_DIFFS",
 			"06_LOGS",
 			"07_ATTESTATIONS",

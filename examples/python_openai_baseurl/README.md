@@ -4,7 +4,7 @@ Shows HELM integration with the OpenAI Python SDK using a single `base_url` swap
 
 ## Prerequisites
 
-- HELM running at `http://port 3000` (`docker compose up -d`)
+- HELM running at `http://127.0.0.1:7714` (`docker compose up -d`)
 - Python 3.9+
 
 ## Run

@@ -1,161 +1,69 @@
-# HELM Canonical Diagrams
+# HELM OSS Canonical Diagrams
 
-> [!IMPORTANT]
-> **Status: CANONICAL / NORMATIVE**
-> This document defines current product truth for the stated scope. Conflicts must be resolved through formal canonical update or implementation remediation.
+This page defines the public diagram doctrine for HELM OSS. Diagrams must show the implemented execution boundary: agents propose actions, deterministic HELM systems evaluate authority before dispatch, and signed receipts plus EvidencePacks make the result verifiable offline.
 
+Do not use HELM OSS diagrams to describe commercial products, hosted services, organization compilers, portfolio systems, private domains, or roadmap-only surfaces.
 
-This doctrine keeps HELM public diagrams aligned with UCS v1.3. Diagrams must
-explain the boundary where AI asks and HELM checks. They must not turn HELM
-into generic AI governance. HELM OSS and HELM Commercial are canonical HELM
-surfaces. Sibling systems remain reference or private unless a source explicitly
-says otherwise.
+## Diagram Rules
 
-## Usage Rules
-
-- Use `ALLOW`, `DENY`, and `ESCALATE` for new public proof flows.
-- Define technical terms near the diagram when the surface is public.
-- Treat OrgGenome as intake material. Treat OrgGenome as reviewed, signed,
-  policy-bearing organizational law.
-- Do not show Pilot as a HELM component. Do not show TITAN as a public product.
-- Mark physical-world and organization-compilation material as strategic /
-  non-normative unless it is tied to shipped OSS behavior.
-- Do not imply that `oss.mindburn.org` is live until DNS, health, demo,
-  verification, and tamper-failure smoke tests pass.
+- Use `ALLOW`, `DENY`, and `ESCALATE` for current runtime decisions.
+- Use `Console` for the self-hostable OSS UI.
+- Use `EvidencePack` and `ProofGraph` for canonical evidence terms.
+- Show MCP quarantine as fail-closed before tool dispatch.
+- Mark any non-implemented idea as roadmap outside current-state docs.
+- Do not imply hosted control-plane, billing, private connector, or tenant-admin capabilities ship in HELM OSS.
 
 ## 1. Execution Boundary
 
-Plain version: the agent proposes. HELM checks. The tool runs only when HELM
-allows it. The result gets a receipt.
-
 ```text
-LLM / Agent / Copilot
+Agent / MCP client / OpenAI-compatible client
         |
         v
-Signed intent
+Proposed tool call or model request
         |
         v
-HELM Execution Boundary
-identity -> OrgGenome policy -> P0 ceilings -> CPI validation
-        -> sandbox grant -> connector contract -> MCP approval state
+HELM OSS execution boundary
+identity -> policy bundle -> PEP -> CPI -> sandbox grant -> MCP approval state
         |
         v
 ALLOW / DENY / ESCALATE
         |
         v
-Tool / Connector / Human approval
+Dispatch only on ALLOW
         |
         v
-Receipt -> ProofGraph -> EvidencePack
+Signed receipt -> ProofGraph -> EvidencePack
 ```
+
+Plain version: the model or agent proposes. HELM checks. The side effect runs only after `ALLOW`. Every outcome records a signed receipt.
 
 ## 2. Models Propose, HELM Governs
 
-Plain version: models can suggest work, but HELM owns the execution check.
-
 ```mermaid
 sequenceDiagram
-    participant Agent as Agent / LLM
-    participant Console as HELM Console
-    participant CPI as CPI Validator
-    participant PEP as PEP Boundary
-    participant Tool as Tool / Connector
+    participant Agent as Agent / client
+    participant PEP as PEP boundary
+    participant CPI as CPI validator
+    participant Tool as Tool / upstream
     participant PG as ProofGraph
 
-    Agent->>Console: Propose action
-    Console->>CPI: Validate Plan IR + policy + P0 ceilings
-    CPI-->>Console: ALLOW / DENY / ESCALATE
-    Console->>PEP: Submit signed intent
-    PEP->>PEP: Verify identity, policy, sandbox grant, connector contract
+    Agent->>PEP: Proposed action
+    PEP->>CPI: Validate identity, policy, sandbox, and MCP state
+    CPI-->>PEP: ALLOW / DENY / ESCALATE
     alt ALLOW
         PEP->>Tool: Dispatch side effect
-        Tool-->>PEP: Connector receipt
-        PEP->>PG: Write effect receipt
+        Tool-->>PEP: Result
+        PEP->>PG: Signed allow receipt
     else DENY
-        PEP->>PG: Write denial receipt
+        PEP->>PG: Signed denial receipt
     else ESCALATE
-        PEP->>Console: Route approval ceremony
-        PEP->>PG: Write escalation receipt
+        PEP->>PG: Signed escalation receipt
     end
 ```
 
-`ALLOW` runs the action. `DENY` records a blocked action. `ESCALATE` stops and
-routes missing facts, approval, solver timeout, or policy-hold paths without
-dispatching side effects.
+`ESCALATE` stops execution and asks for more facts, policy, or human approval. It must not dispatch the side effect.
 
-## 3. Company AI OS Loop
-
-Plain version: company sources become memory. HELM compares what should happen
-with what did happen. Draft fixes still need review before action.
-
-```text
-Company Reality
-meetings · tickets · PRs · deployments · customer calls · docs · specs
-        |
-        v
-CompanyArtifactGraph
-        |
-        v
-Should-vs-is Engine
-        |
-        v
-TruthConflict / DriftSignal
-        |
-        v
-GeneratedSpec
-        |
-        v
-Review / Approval / Policy
-        |
-        v
-PEP / CPI Boundary
-        |
-        v
-Receipt -> ProofGraph -> EvidencePack -> CompanyArtifactGraph
-```
-
-`TruthConflict` is a mismatch between a claim source and a reality source.
-`DriftSignal` is process or organizational divergence that has not yet become a
-contradiction but will compound if ignored. `GeneratedSpec` remains a proposal
-until reviewed or approved according to policy.
-
-## 4. OrgGenome, OrgGenome, OrgPhenotype
-
-Plain version: OrgGenome is raw input. OrgGenome is the reviewed company rule set.
-OrgPhenotype is the current runtime state from approved rules and proof records.
-
-```text
-OrgGenome
-raw intake material
-        |
-        v
-OrgGenome Compiler
-        |
-        v
-Draft OrgGenome artifacts
-        |
-        v
-Verified Genesis Loop
-        |
-        v
-OrgGenome
-reviewed, signed, policy-bearing organizational specification
-        |
-        v
-OrgPhenotype
-deterministic runtime state from OrgGenome + ProofGraph checkpoints
-        |
-        v
-PEP / CPI Execution
-```
-
-OrgGenome is never execution authority. OrgGenome carries execution authority only
-after review and approval.
-
-## 5. MCP Quarantine Lifecycle
-
-Plain version: a new MCP tool starts blocked. It must be inspected and approved
-before any side effect is allowed.
+## 3. MCP Quarantine Lifecycle
 
 ```text
 Discovered MCP server
@@ -164,7 +72,7 @@ Discovered MCP server
 Quarantined by default
         |
         v
-Metadata + schema inspection
+Metadata and schema inspection
         |
         v
 Risk classification
@@ -180,48 +88,63 @@ Policy-bound active state
 ALLOW / DENY / ESCALATE per tool call
         |
         v
-Receipt + ProofGraph event
+Signed receipt + ProofGraph event
 ```
 
-If registry state, approval state, metadata, schema validation, or policy
-evaluation is unavailable, the boundary must fail closed.
+If registry state, approval state, metadata, schema validation, or policy evaluation is unavailable, the boundary fails closed.
 
-## 6. Evidence And Redaction
-
-Plain version: proof should be checkable without making secrets public.
+## 4. Evidence And Redaction
 
 ```text
-Sensitive evidence
-raw payloads · PII · secrets · customer data
+Sensitive payloads
+PII · secrets · customer data
         |
         v
-Encrypted off-graph storage
-ciphertext_hash · blob_ref · kek_ref · redaction_policy_ref
+Off-graph storage or redaction
+ciphertext hash · blob ref · policy ref
         |
         v
 ProofGraph
-hashes · signatures · policy verdicts · inclusion proofs
+hashes · signatures · decisions · inclusion proofs
         |
         v
 EvidencePack
 minimal replay slice
         |
         v
-Redacted views
-operator · auditor · regulator · public
+Offline verification
 ```
 
-Proof should not require publishing secrets. Sensitive payloads stay off-graph;
-public proof uses hashes, signatures, policy verdicts, inclusion proofs, and
-deterministic redactions.
+Proof should not require publishing secrets. Public proof uses hashes, signatures, decision records, inclusion proofs, and deterministic redactions.
 
-## 7. Connector Drift Lifecycle
-
-Plain version: if a tool changes shape, HELM blocks the action instead of
-guessing how to parse it.
+## 5. Sandbox Grants
 
 ```text
-Connector response arrives
+Requested execution
+        |
+        v
+Sandbox profile
+runtime · image/template digest · filesystem preopens · env policy · network policy
+        |
+        v
+Grant hash
+        |
+        v
+PEP / CPI decision
+        |
+        v
+ALLOW / DENY / ESCALATE
+        |
+        v
+Signed receipt
+```
+
+Sandbox grants should expose `grant_id`, runtime, runtime version, backend profile, image or template digest, filesystem preopens, environment variables, network policy, resource limits, policy epoch, and `grant_hash`.
+
+## 6. Connector Drift
+
+```text
+Connector response
         |
         v
 Schema hash / contract check
@@ -230,57 +153,13 @@ Schema hash / contract check
 Drift detected
         |
         v
-DENY with ERR_CONNECTOR_CONTRACT_DRIFT
+DENY with connector contract reason
         |
         v
 Execution thread halts safely
         |
         v
-Mechanic shim proposal
-        |
-        v
-Offline simulation + policy equivalence check
-        |
-        v
-Human / CI approval
-        |
-        v
-Replay halted intent with shim receipt
+Out-of-band remediation
 ```
 
-Runtime drift is not healed probabilistically. Shims are proposed out of band,
-simulated offline, and approved before replay.
-
-## 8. Digital-To-Physical Bridge
-
-```text
-Digital effect
-API call · database write · deploy
-        -> PEP/CPI + receipt + replay
-
-Analog proxy effect
-human contractor · delivery service · off-platform actor
-        -> approval unless allowlisted
-
-Kinetic effect
-robot · actuator · industrial system
-        -> actuation envelope · safe-state command · telemetry · simulation · receipt
-```
-
-Strategic / non-normative: physical and analog effects require stronger
-boundaries because they cannot be reliably rolled back.
-
-## Product Detail Blocks
-
-Sandbox grants should expose `grant_id`, runtime, runtime version,
-backend profile, image or template digest, filesystem preopens, environment
-variables, network policy, resource limits, policy epoch, and `grant_hash`.
-
-Approval ceremonies should bind the exact intent hash, human-visible summary,
-P0 ceilings, quorum or approver policy, deliberate confirmation, timelock where
-required, and final approval attestation.
-
-Proof condensation should route T3 high-risk actions to full EvidencePacks,
-T2 medium-risk actions to policy-selected EvidencePacks, T1 low-risk actions to
-hash-only receipts plus checkpoints, and T0 routine operations to Merkle
-condensation checkpoints.
+Runtime drift is not healed probabilistically. Compatibility shims are proposed out of band, simulated offline, and approved before replay.

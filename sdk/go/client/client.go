@@ -106,6 +106,13 @@ func (c *HelmClient) ChatCompletions(req ChatCompletionRequest) (*ChatCompletion
 	return &out, err
 }
 
+// EvaluateDecision calls POST /api/v1/evaluate.
+func (c *HelmClient) EvaluateDecision(req any) (map[string]any, error) {
+	var out map[string]any
+	err := c.do("POST", "/api/v1/evaluate", req, &out)
+	return out, err
+}
+
 // ApproveIntent calls POST /api/v1/kernel/approve.
 func (c *HelmClient) ApproveIntent(req ApprovalRequest) (*Receipt, error) {
 	var out Receipt

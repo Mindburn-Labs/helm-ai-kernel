@@ -64,8 +64,9 @@ Start the policy boundary:
 Start the proxy:
 
 ```bash
+python3 scripts/launch/mock-openai-upstream.py --port 19090
 ./bin/helm proxy \
-  --upstream https://api.openai.com/v1 \
+  --upstream http://127.0.0.1:19090/v1 \
   --port 9090 \
   --receipts-dir ./helm-receipts
 ```

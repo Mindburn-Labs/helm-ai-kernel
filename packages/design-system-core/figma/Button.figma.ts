@@ -1,8 +1,8 @@
 export const buttonCodeConnect = {
-  figmaLibrary: "HELM Core UI Library",
+  figmaLibrary: "Mindburn Core UI Library",
   figmaComponent: "Button",
-  packageName: "@helm/design-system-core",
-  importPath: "@helm/design-system-core",
+  packageName: "@mindburn/ui-core",
+  importPath: "@mindburn/ui-core",
   exportName: "Button",
   status: "stub",
   notes: "Replace with a Figma Code Connect mapping when the library component key is available."

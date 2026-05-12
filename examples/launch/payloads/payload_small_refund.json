@@ -1,0 +1,12 @@
+{
+  "id": "req_1005",
+  "action": "small-refund",
+  "resource": "payment:refund",
+  "principal": "agent-1",
+  "context": {
+    "amount": 25,
+    "currency": "USD",
+    "dry_run": true
+  },
+  "artifacts": []
+}

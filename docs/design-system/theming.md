@@ -3,7 +3,7 @@
 Import one CSS entrypoint:
 
 ```ts
-import "@helm/design-system-core/styles.css";
+import "@mindburn/ui-core/styles.css";
 ```
 
 Set theme and density on the root document:

@@ -1,0 +1,40 @@
+name: Policy example request
+description: Request a sample HELM policy or launch-demo scenario.
+title: "[Policy example]: "
+labels: ["policy", "example", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Sample policies must use synthetic data and local fixtures only. Do not submit real customer records, payment identifiers, infrastructure names, or secrets.
+  - type: input
+    id: scenario
+    attributes:
+      label: Scenario
+      description: Name the policy scenario or action class.
+      placeholder: "High-risk refund escalation"
+    validations:
+      required: true
+  - type: dropdown
+    id: expected_verdict
+    attributes:
+      label: Expected verdict
+      options:
+        - ALLOW
+        - DENY
+        - ESCALATE
+        - Mixed verdicts
+    validations:
+      required: true
+  - type: textarea
+    id: inputs
+    attributes:
+      label: Example inputs
+      description: Provide sanitized tool-call payloads, MCP metadata, sandbox intent, or evidence-export context.
+    validations:
+      required: true
+  - type: textarea
+    id: proof
+    attributes:
+      label: Proof expectations
+      description: Describe the receipt, ProofGraph, sandbox, or evidence-pack behavior the example should demonstrate.

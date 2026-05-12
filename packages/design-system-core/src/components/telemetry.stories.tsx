@@ -7,7 +7,7 @@ import {
   useTelemetry,
   useTelemetryMount,
   type TelemetryEvent,
-} from "@helm/design-system-core";
+} from "@mindburn/ui-core";
 
 export default {
   title: "Providers / TelemetryProvider",

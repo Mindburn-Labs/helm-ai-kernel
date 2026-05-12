@@ -8,7 +8,7 @@ import {
   Panel,
   SelectField,
   TextInput,
-} from "@helm/design-system-core";
+} from "@mindburn/ui-core";
 
 export default {
   title: "Primitives / FormExtensions",

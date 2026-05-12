@@ -5,11 +5,7 @@ last_reviewed: 2026-05-05
 
 # Publishing
 
-## Audience
-
-## Outcome
-
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
+Use this page when preparing or consuming HELM OSS release and package artifacts.
 
 ## Source Truth
 
@@ -52,12 +48,12 @@ The repository retains packaging metadata for the kernel binaries, container ima
 
 | Surface | Package Identity |
 | --- | --- |
-| CLI/Homebrew | `mindburn-labs/tap/helm` |
+| CLI/Homebrew | `mindburnlabs/tap/helm` backed by `mindburnlabs/homebrew-tap` |
 | TypeScript SDK | `@mindburn/helm` |
 | Python SDK | `helm-sdk` |
 | Rust SDK | `helm-sdk` |
-| Java SDK | Maven workflow: `com.github.Mindburn-Labs:helm-sdk`; JitPack release artifact: `com.github.mindburn-labs:helm-oss:0.4.0` |
-| Go SDK | `github.com/Mindburn-Labs/helm-oss/sdk/go@main`; tagged module version alignment is tracked in `docs/OSS_READINESS_AUDIT.md` |
+| Java SDK | Source-available local Maven build under `sdk/java`; public package coordinate not verified |
+| Go SDK | `github.com/Mindburn-Labs/helm-oss/sdk/go@main`; pin `@main` or a commit until tagged module releases are aligned |
 
 ## Release Inputs
 
@@ -65,13 +61,16 @@ Before tagging a release:
 
 1. update `VERSION`
 2. update `CHANGELOG.md`
-3. run `make build`, `make test`, `make test-all`, `make crucible`
-4. run `make release-binaries`, `make sbom`, and `make mcp-pack`
-5. verify that SDK package versions match `VERSION`
-6. verify `helm verify evidence-pack.tar`; run
+3. run `make build`, `make test`, `make test-console`,
+   `make test-platform`, `make test-all`, `make crucible`, and
+   `make launch-smoke`
+4. run `make sdk-openapi-check` and `make sdk-examples-smoke`
+5. run `make release-assets`
+6. verify that SDK package versions match `VERSION`
+7. verify `helm verify evidence-pack.tar`; run
    `helm verify evidence-pack.tar --online` only when the public proof endpoint
    and credentials for that release are available
-7. run `make release-binaries-reproducible` when validating that release binaries are reproducible from the checked-in source and pinned build metadata
+8. run `make release-binaries-reproducible` when validating that release binaries are reproducible from the checked-in source and pinned build metadata
 
 ## Release Automation
 
@@ -79,12 +78,15 @@ The retained workflow set under `.github/workflows/` covers:
 
 - main CI
 - GitHub Release creation for tagged versions
-- Homebrew formula generation for `mindburn/homebrew-tap`
+- Homebrew formula generation for `mindburnlabs/homebrew-tap`
 - GHCR image publication for `latest`, version tag, and slim tag
 - manual publication workflows for npm, PyPI, crates.io, and Maven-compatible distribution
 
 Current public GitHub release: `v0.4.0`, published on 2026-04-25 at
 <https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.4.0>.
+
+There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
+actual release baseline when auditing deltas.
 
 Its attached assets are:
 
@@ -95,11 +97,22 @@ Its attached assets are:
 - `helm-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `release-attestation.json`
+- `release-attestation.json` metadata
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
 - `helm.mcpb`
 - `helm.rb`
+
+Target `v0.5.0` assets additionally include `v0.5.0.openvex.json`,
+`sample-policy-material.tar`, and `*.cosign.bundle` files for every primary
+asset, including `SHA256SUMS.txt`. `sample-policy-material.tar` must include
+the sample policy and its referenced EU AI Act high-risk reference pack.
+
+The retained SDK package manifests are versioned with `VERSION`, but npm,
+PyPI, crates.io, and Maven publication require the corresponding registry
+secrets. If `NPM_TOKEN`, `PYPI_TOKEN`, `CRATES_TOKEN`, or Maven credentials are
+absent, that registry channel is not published for the release and must not be
+documented as published.
 
 Do not document an asset as published unless it appears on the GitHub release
 or is produced by a retained workflow and attached to that release.
@@ -110,7 +123,7 @@ If a package or channel is not represented in the retained workflow set, it shou
 
 Every public release must include enough material to verify what was downloaded.
 For `v0.4.0`, use `SHA256SUMS.txt`, `sbom.json`,
-`release-attestation.json`, the platform binary assets, and the offline
+`release-attestation.json` metadata, the platform binary assets, and the offline
 `evidence-pack.tar`.
 
 Cosign bundle verification applies only when `*.cosign.bundle` files are
@@ -139,3 +152,4 @@ cosign verify \
 The same recipe is documented in `docs/VERIFICATION.md`. The local helper
 `scripts/release/verify_cosign.sh` is called via `make verify-cosign`, but it
 requires matching `*.cosign.bundle` files in the downloaded release directory.
+A zero-bundle run is not signature evidence.

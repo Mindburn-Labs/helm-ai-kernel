@@ -4,7 +4,7 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mindburn-labs/helm-oss/badge)](https://scorecard.dev/viewer/?uri=github.com/mindburn-labs/helm-oss)
 [![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF-Best%20Practices-informational)](BEST_PRACTICES.md)
 [![Release checksums](https://img.shields.io/badge/release-checksums-success)](docs/VERIFICATION.md)
-[![SLSA Level 3](https://img.shields.io/badge/SLSA-Level%203-blue)](docs/PUBLISHING.md)
+[![Release attestations](https://img.shields.io/badge/release-attestations-informational)](docs/PUBLISHING.md)
 [![SBOM CycloneDX](https://img.shields.io/badge/SBOM-CycloneDX%201.5-orange)](docs/PUBLISHING.md)
 
 HELM OSS is the fail-closed execution firewall for AI agents.
@@ -24,14 +24,16 @@ Agent proposal -> HELM boundary -> ALLOW / DENY / ESCALATE -> signed receipt
 ## Status
 
 - Repository: `Mindburn-Labs/helm-oss`
+- Root package identity: `helm-oss-root`
 - Current public release: `v0.4.0`
 - License: Apache-2.0
 - Supported security line: `0.4.x`; `0.3.x` is best effort
 - Canonical docs: <https://helm.docs.mindburn.org/oss>
-- Readiness follow-ups: [docs/OSS_READINESS_AUDIT.md](docs/OSS_READINESS_AUDIT.md)
 
-Public release assets include CLI binaries, checksums, SBOM, release
-attestation, `evidence-pack.tar`, `helm.mcpb`, and sample policy material.
+The current `v0.4.0` GitHub release includes CLI binaries, checksums, SBOM
+JSON, release-attestation metadata, `evidence-pack.tar`, `helm.mcpb`, and
+sample policy material. Future release docs must only claim assets that the
+retained release workflow or the release page actually provides.
 
 ## What HELM OSS Does
 
@@ -87,15 +89,16 @@ curl http://127.0.0.1:7714/api/demo/tamper \
 Govern MCP tools or an OpenAI-compatible client:
 
 ```bash
-helm mcp wrap --server-id local-tools --upstream-command "node server.js"
-helm proxy --upstream https://api.openai.com/v1
+python3 scripts/launch/mock-openai-upstream.py --port 19090
+helm mcp wrap --server-id local-tools --upstream-command "python3 scripts/launch/mcp-fixture-server.py"
+helm proxy --upstream http://127.0.0.1:19090/v1
 ```
 
 Inspect and verify evidence:
 
 ```bash
 helm sandbox preflight --runtime wazero
-helm receipts tail --agent agent.titan.exec
+helm receipts tail --agent agent.demo.exec
 helm verify evidence-pack.tar
 ```
 
@@ -184,7 +187,7 @@ The complete diagram doctrine lives in
 | Python SDK | `pip install helm-sdk` |
 | TypeScript SDK | `npm install @mindburn/helm` |
 | Rust SDK | `cargo add helm-sdk` |
-| Java SDK | Maven workflow coordinate: `com.github.Mindburn-Labs:helm-sdk`; JitPack resolves the release as `com.github.mindburn-labs:helm-oss:0.4.0` |
+| Java SDK | Source-available local Maven build under `sdk/java`; public package coordinate is not verified in this repo |
 | Design system core | Workspace source; public npm registry publication is not verified in this repo |
 
 HTTP clients are generated from
@@ -214,7 +217,7 @@ Public OSS docs are sourced from this repo and published through
 ## Release Verification
 
 For `v0.4.0`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
-`release-attestation.json`, the platform binary assets, and offline
+`release-attestation.json` metadata, the platform binary assets, and offline
 `evidence-pack.tar` verification. Cosign bundle verification applies only when
 `*.cosign.bundle` files are attached to a release.
 
@@ -231,8 +234,7 @@ See [docs/VERIFICATION.md](docs/VERIFICATION.md) and
   [GOVERNANCE.md](GOVERNANCE.md) and [MAINTAINERS.md](MAINTAINERS.md).
 - Community behavior expectations are in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 - Support channels are listed in [SUPPORT.md](SUPPORT.md).
-- Near-term OSS work is summarized in [ROADMAP.md](ROADMAP.md) and tracked in
-  [docs/OSS_READINESS_AUDIT.md](docs/OSS_READINESS_AUDIT.md).
+- Near-term OSS work is summarized in [ROADMAP.md](ROADMAP.md).
 
 ## License
 

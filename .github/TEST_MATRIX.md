@@ -28,11 +28,17 @@ All systems contributing to or interacting with the **Trusted Computing Base (TC
 - **Orchestrator:** Postgres rollback checkpoint verification.
 
 ## 3. CI Branch Protection Baseline
-The following jobs MUST pass. Skipping is forbidden without an explicit `ADVISORY` suppression flag linked to an open risk issue:
-1. `hygiene` (Presentation, unfinished-marker tracking, uncommitted secrets)
-2. `kernel / tests` (Native suite execution)
-3. `contract-drift` (Generated schema alignment)
-4. `security` (Axe, SAST, dependency audits)
-5. `deployment-smoke` (Docker/Compose boot verification)
+The following jobs MUST pass. Skipping is forbidden without an explicit
+Advisory suppression linked to a tracked risk:
+
+1. `quality-pr` / `make quality-pr` (Make-first summary gate with impact filtering)
+2. `hygiene` (presentation, unfinished-marker, and tracked-file hygiene)
+3. `kernel` (lint, build, native tests, fixtures, boundary, crucible, benchmark report)
+4. `contract-drift` (generated schema and SDK alignment)
+5. `deployment-smoke` and `release-smoke` (Docker/Compose/chart and release evidence)
+6. `codeql` and `scorecard` (SAST and supply-chain posture)
+
+Nightly runs `make quality-nightly`. New noisy gates remain Advisory until their
+baselines are clean or `QUALITY_STRICT=1` promotes them to blocking.
 
 **No mock tests are permitted to define canonical execution truth.**

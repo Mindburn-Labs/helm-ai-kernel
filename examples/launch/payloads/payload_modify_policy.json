@@ -1,0 +1,11 @@
+{
+  "id": "req_1006",
+  "action": "modify-policy",
+  "resource": "policy:agent_tool_call_boundary",
+  "principal": "agent-1",
+  "context": {
+    "dry_run": true,
+    "authority_change": true
+  },
+  "artifacts": []
+}

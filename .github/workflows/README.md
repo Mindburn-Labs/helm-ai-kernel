@@ -16,6 +16,20 @@ surface for the `helm-oss` project.
 ## Local Commands
 
 - `make docs-coverage` from the repository root verifies coverage for this surface.
+- `make quality-pr` mirrors the CI summary gate for pull requests.
+- `make quality-nightly` mirrors the scheduled advisory assurance workflow.
+- `make quality-release` mirrors release validation before tag publication.
+
+## Active Quality Workflows
+
+- `ci.yml` runs the retained per-surface jobs and the Make-first
+  `quality-pr` summary job.
+- `nightly-quality.yml` runs advisory mutation, flake, vulnerability, runbook,
+  migration, dependency hygiene, schema, and benchmark checks.
+- `release.yml` calls `make quality-release` before producing binaries,
+  container images, SBOM, VEX, attestations, and signatures.
+- `slsa-provenance.yml` builds reproducible release binaries before generating
+  provenance subjects.
 
 ## Documentation Contract
 

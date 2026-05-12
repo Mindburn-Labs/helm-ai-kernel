@@ -1,16 +1,24 @@
 {
   "canonical_core": "helm-oss/packages/design-system-core",
+  "canonical_core_package": "@mindburn/ui-core",
   "helm_product_layer": "helm/packages/design-system-helm",
   "brand_layer": "mindburn/src/components/site-ui",
   "docs_layer": "docs-platform/packages/site",
   "titan_skin": "titan/apps/titan-console/src/styles/titan-tokens.css",
-  "deprecated": ["helm/packages/design-tokens"],
+  "deprecated": [
+    "helm-oss/packages/design-system-core-compat",
+    "helm/packages/design-tokens"
+  ],
+  "compatibility_packages": {
+    "@helm/design-system-core": "helm-oss/packages/design-system-core-compat",
+    "@helm/design-tokens": "helm/packages/design-tokens"
+  },
   "public_interfaces": {
     "core": [
-      "@helm/design-system-core",
-      "@helm/design-system-core/styles.css",
-      "@helm/design-system-core/tokens",
-      "@helm/design-system-core/tokens.json"
+      "@mindburn/ui-core",
+      "@mindburn/ui-core/styles.css",
+      "@mindburn/ui-core/tokens",
+      "@mindburn/ui-core/tokens.json"
     ],
     "helm_product": [
       "@helm/design-system-helm",
@@ -19,7 +27,7 @@
   },
   "figma_libraries": {
     "brand": "Mindburn Brand Foundations",
-    "core": "HELM Core UI Library",
+    "core": "Mindburn Core UI Library",
     "product": "HELM Product Patterns",
     "titan": "Titan Product Skin"
   }

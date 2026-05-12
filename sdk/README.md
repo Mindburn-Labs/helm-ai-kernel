@@ -17,13 +17,13 @@ flowchart LR
 
 ## SDK Matrix
 
-| Language | Source | Package identity | Validation |
-| --- | --- | --- | --- |
-| Go | `sdk/go/client/` | `github.com/Mindburn-Labs/helm-oss/sdk/go` | `cd sdk/go && GOWORK=off go test ./...` |
-| Python | `sdk/python/helm_sdk/` | `helm-sdk` | `make test-sdk-py` |
-| TypeScript / JavaScript | `sdk/ts/src/` | `@mindburn/helm` | `make test-sdk-ts` |
-| Rust | `sdk/rust/src/` | `helm-sdk` | `make test-sdk-rust` |
-| Java | `sdk/java/src/main/java/` | `com.github.Mindburn-Labs:helm-sdk` | `make test-sdk-java` |
+| Language | Source | Package identity | Readiness | Validation |
+| --- | --- | --- | --- | --- |
+| Go | `sdk/go/client/` | `github.com/Mindburn-Labs/helm-oss/sdk/go` | Source-backed SDK package | `make test-sdk-go-standalone` |
+| Python | `sdk/python/helm_sdk/` | `helm-sdk` | First-class local example under `examples/python_sdk/` | `make test-sdk-py` |
+| TypeScript / JavaScript | `sdk/ts/src/` | `@mindburn/helm` | First-class local example under `examples/ts_sdk/` | `make test-sdk-ts` |
+| Rust | `sdk/rust/src/` | `helm-sdk` | Source-backed SDK package | `make test-sdk-rust` |
+| Java | `sdk/java/src/main/java/` | `com.github.Mindburn-Labs:helm-sdk` | Source-backed SDK package | `make test-sdk-java` |
 
 ## What Is Covered
 
@@ -32,6 +32,8 @@ flowchart LR
   verification, replay verification, and conformance routes.
 - Execution-boundary helper methods where the language client has source for
   the corresponding OpenAPI route.
+- `evaluateDecision` / `evaluate_decision` helpers for the retained
+  `/api/v1/evaluate` route.
 - TypeScript-only framework adapter helpers for LangGraph, CrewAI, OpenAI
   Agents SDK, PydanticAI, and LlamaIndex tool-call events.
 
@@ -53,10 +55,12 @@ is owned by the `make codegen-*` targets in the repository `Makefile`.
 Run these gates before publishing SDK claims:
 
 ```bash
+make sdk-openapi-check
 make test-sdk-go-standalone
 make test-sdk-py
 make test-sdk-ts
 make test-sdk-rust
 make test-sdk-java
+make sdk-examples-smoke
 make docs-coverage docs-truth
 ```

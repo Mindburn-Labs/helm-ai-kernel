@@ -103,8 +103,8 @@
       "status": "supported",
       "public_doc_slug": "helm-oss/sdks",
       "source_paths": ["sdk/python/pyproject.toml", "sdk/python/helm_sdk/client.py", "sdk/python/tests/test_client.py"],
-      "example_paths": ["sdk/python/README.md", "examples/python_openai_baseurl/README.md"],
-      "validation_commands": ["make test-sdk-py"],
+      "example_paths": ["sdk/python/README.md", "examples/python_sdk/README.md", "examples/python_openai_baseurl/README.md"],
+      "validation_commands": ["make test-sdk-py", "make sdk-examples-smoke"],
       "claim_terms": ["Python SDK"]
     },
     {
@@ -114,8 +114,8 @@
       "status": "supported",
       "public_doc_slug": "helm-oss/sdks",
       "source_paths": ["sdk/ts/package.json", "sdk/ts/src/client.ts", "sdk/ts/src/index.test.ts"],
-      "example_paths": ["sdk/ts/README.md", "examples/ts_openai_baseurl/README.md", "examples/js_openai_baseurl/README.md"],
-      "validation_commands": ["make test-sdk-ts"],
+      "example_paths": ["sdk/ts/README.md", "examples/ts_sdk/README.md", "examples/ts_openai_baseurl/README.md", "examples/js_openai_baseurl/README.md"],
+      "validation_commands": ["make test-sdk-ts", "make sdk-examples-smoke"],
       "claim_terms": ["TypeScript SDK", "JavaScript"]
     },
     {
@@ -179,9 +179,9 @@
       "surface": "MCP server, OAuth scope enforcement, client config, and MCP bundle",
       "status": "supported",
       "public_doc_slug": "helm-oss/integrations/mcp",
-      "source_paths": ["core/cmd/helm/mcp_cmd.go", "core/cmd/helm/mcp_runtime.go", "core/cmd/helm/mcp_runtime_auth_test.go"],
-      "example_paths": ["examples/mcp_client/README.md", "docs/INTEGRATIONS/mcp.md"],
-      "validation_commands": ["make mcp-pack", "cd core && go test ./cmd/helm -run TestMCP -count=1"],
+      "source_paths": ["core/cmd/helm/mcp_cmd.go", "core/cmd/helm/mcp_runtime.go", "core/cmd/helm/mcp_runtime_auth_test.go", "scripts/launch/demo-mcp.sh"],
+      "example_paths": ["examples/mcp_client/README.md", "examples/launch/README.md", "docs/INTEGRATIONS/mcp.md"],
+      "validation_commands": ["make mcp-pack", "make launch-smoke", "cd core && go test ./cmd/helm -run TestMCP -count=1"],
       "claim_terms": ["MCP", "OAuth"]
     },
     {

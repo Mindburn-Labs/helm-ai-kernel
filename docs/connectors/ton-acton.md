@@ -10,6 +10,12 @@ The OSS connector is `ton.acton`. It exposes typed actions such as
 `connector.ton.acton.source.verify_dry_run`. It does not expose raw shell
 commands or a generic `acton` passthrough.
 
+Launch status: preview. TON Acton is not a 0.5.0 launch blocker unless release
+CI provides a real `ACTON_BIN` smoke, schema-drift fixtures, connector
+EvidencePack verification, approval proof, and release-manifest pin. Without
+those artifacts, public copy must say production connector certification is
+pending.
+
 ## Risk Map
 
 - Local diagnostics: T0/T1

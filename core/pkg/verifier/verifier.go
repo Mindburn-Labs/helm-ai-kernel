@@ -187,8 +187,7 @@ func firstUint(document map[string]any, keys ...string) *uint64 {
 func countEmbeddedSignatures(bundlePath string) (int, int) {
 	total := 0
 	valid := 0
-	for _, dirName := range []string{"receipts", "07_ATTESTATIONS"} {
-		dir := filepath.Join(bundlePath, dirName)
+	for _, dir := range []string{receiptPath(bundlePath), filepath.Join(bundlePath, "07_ATTESTATIONS")} {
 		if !dirExists(dir) {
 			continue
 		}
@@ -457,12 +456,12 @@ func checkChainIntegrity(bundlePath string) CheckResult {
 func checkLamportMonotonicity(bundlePath string) CheckResult {
 	// Receipt files are required for Lamport monotonicity verification.
 	// An evidence pack without receipts cannot prove ordering.
-	receiptsDir := filepath.Join(bundlePath, "receipts")
+	receiptsDir := receiptPath(bundlePath)
 	if !dirExists(receiptsDir) {
 		return CheckResult{
 			Name:   "lamport_monotonicity",
 			Pass:   false,
-			Reason: "missing receipts directory — Lamport ordering cannot be verified",
+			Reason: "missing receipts directory (checked receipts/ and 02_PROOFGRAPH/receipts/) — Lamport ordering cannot be verified",
 		}
 	}
 
@@ -481,10 +480,10 @@ func checkLamportMonotonicity(bundlePath string) CheckResult {
 func checkPolicyDecisionHashes(bundlePath string) CheckResult {
 	// Verify that decision records exist and contain decision hashes.
 	// Check receipts for decision_hash fields.
-	receiptsDir := filepath.Join(bundlePath, "receipts")
+	receiptsDir := receiptPath(bundlePath)
 	if !dirExists(receiptsDir) {
 		// Already caught by lamport check, but note here too
-		return CheckResult{Name: "policy_decision_hashes", Pass: false, Reason: "no receipts directory — cannot verify decision hashes"}
+		return CheckResult{Name: "policy_decision_hashes", Pass: false, Reason: "no receipts directory (checked receipts/ and 02_PROOFGRAPH/receipts/) — cannot verify decision hashes"}
 	}
 
 	entries, err := os.ReadDir(receiptsDir)
@@ -545,6 +544,14 @@ func fileExists(path string) bool {
 func dirExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
+}
+
+func receiptPath(bundlePath string) string {
+	legacy := filepath.Join(bundlePath, "receipts")
+	if dirExists(legacy) {
+		return legacy
+	}
+	return filepath.Join(bundlePath, "02_PROOFGRAPH", "receipts")
 }
 
 func sha256Hex(data []byte) string {

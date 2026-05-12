@@ -1,6 +1,6 @@
 # Canonical UI System
 
-HELM UI is governed as one platform with product-specific layers. `helm-oss/packages/design-system-core` is the canonical source for OSS-safe HELM primitives, base tokens, semantic state utilities, accessibility primitives, and production CSS.
+Mindburn UI is governed as one parent-company platform with product-specific layers. `helm-oss/packages/design-system-core` currently hosts `@mindburn/ui-core`, the canonical source for shared primitives, base tokens, semantic state utilities, accessibility primitives, and production CSS.
 
 Sibling and portfolio repositories may consume this foundation, but they do not define HELM conformance. HELM-specific proof, policy, evidence, execution, assistant, route, state, and handoff patterns live in the commercial product layer. Mindburn marketing, docs, and Titan are consumers or skins.
 
@@ -8,7 +8,7 @@ Sibling and portfolio repositories may consume this foundation, but they do not 
 
 | Layer | Path | Authority |
 | --- | --- | --- |
-| Core UI foundation | `helm-oss/packages/design-system-core` | Canonical HELM OSS-safe primitives and tokens |
+| Mindburn Core UI foundation | `helm-oss/packages/design-system-core` | Canonical shared primitives and tokens for Mindburn products |
 | HELM product layer | `helm/packages/design-system-helm` | HELM domain components and patterns |
 | Commercial Console | `helm/apps/console` | Consumer of core plus HELM product layer |
 | Mindburn site UI | `mindburn/src/components/site-ui` | Brand, marketing, editorial, and diagram compositions |
@@ -19,26 +19,26 @@ Sibling and portfolio repositories may consume this foundation, but they do not 
 
 Supported core interfaces are:
 
-- `@helm/design-system-core`
-- `@helm/design-system-core/styles.css`
-- `@helm/design-system-core/tokens`
-- `@helm/design-system-core/tokens.json`
+- `@mindburn/ui-core`
+- `@mindburn/ui-core/styles.css`
+- `@mindburn/ui-core/tokens`
+- `@mindburn/ui-core/tokens.json`
 
 Supported HELM product interfaces are:
 
 - `@helm/design-system-helm`
 - `@helm/design-system-helm/styles.css`
 
-`@helm/design-system-helm` must not re-export `@helm/design-system-core`. Consumers import primitives from core and HELM domain components from the product package.
+`@helm/design-system-helm` must not re-export `@mindburn/ui-core`. Consumers import primitives from core and HELM domain components from the product package.
 
-`@helm/design-tokens` is deprecated for one migration window. Core owns the legacy `--color-*`, `--space-*`, `--radius-*`, `--shadow-*`, motion, layout, and state aliases needed by existing Console usage. New code must use core exports and core CSS.
+`@helm/design-system-core` and `@helm/design-tokens` are deprecated for one migration window. Core owns the legacy `--helm-*`, `--color-*`, `--space-*`, `--radius-*`, `--shadow-*`, motion, layout, and state aliases needed by existing usage. New code must use `@mindburn/ui-core` exports and CSS.
 
 ## Figma
 
 Figma mirrors implementation; it is not an implementation source of truth. The governed libraries are:
 
 - Mindburn Brand Foundations
-- HELM Core UI Library
+- Mindburn Core UI Library
 - HELM Product Patterns
 - Titan Product Skin
 

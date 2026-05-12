@@ -8,7 +8,7 @@ import {
   useFormatNumber,
   useFormatRelativeTime,
   useI18n,
-} from "@helm/design-system-core";
+} from "@mindburn/ui-core";
 
 export default {
   title: "Providers / I18nProvider",

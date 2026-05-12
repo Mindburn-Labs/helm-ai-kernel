@@ -169,18 +169,21 @@ func (v *Ed25519PolicyVerifier) VerifyPolicyBundle(ctx context.Context, head Pol
 
 // ReconcileStatus is returned by wake-only reconcile routes.
 type ReconcileStatus struct {
-	TenantID             string `json:"tenant_id"`
-	WorkspaceID          string `json:"workspace_id"`
-	PolicyHash           string `json:"policy_hash,omitempty"`
-	PolicyEpoch          uint64 `json:"policy_epoch,omitempty"`
-	InstalledPolicyHash  string `json:"installed_policy_hash,omitempty"`
-	InstalledPolicyEpoch uint64 `json:"installed_policy_epoch,omitempty"`
-	DesiredPolicyHash    string `json:"desired_policy_hash,omitempty"`
-	DesiredPolicyEpoch   uint64 `json:"desired_policy_epoch,omitempty"`
-	ReconcileStatus      string `json:"reconcile_status"`
-	SnapshotStatus       string `json:"snapshot_status,omitempty"`
-	Reason               string `json:"reason,omitempty"`
-	Updated              bool   `json:"updated"`
+	TenantID             string   `json:"tenant_id"`
+	WorkspaceID          string   `json:"workspace_id"`
+	PolicyHash           string   `json:"policy_hash,omitempty"`
+	PolicyEpoch          uint64   `json:"policy_epoch,omitempty"`
+	InstalledPolicyHash  string   `json:"installed_policy_hash,omitempty"`
+	InstalledPolicyEpoch uint64   `json:"installed_policy_epoch,omitempty"`
+	DesiredPolicyHash    string   `json:"desired_policy_hash,omitempty"`
+	DesiredPolicyEpoch   uint64   `json:"desired_policy_epoch,omitempty"`
+	ReconcileStatus      string   `json:"reconcile_status"`
+	SnapshotStatus       string   `json:"snapshot_status,omitempty"`
+	BundleRef            string   `json:"bundle_ref,omitempty"`
+	SourceRefs           []string `json:"source_refs,omitempty"`
+	AuditEvent           string   `json:"audit_event,omitempty"`
+	Reason               string   `json:"reason,omitempty"`
+	Updated              bool     `json:"updated"`
 }
 
 // Reconciler verifies source truth and atomically installs compiled snapshots.
@@ -264,6 +267,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, scope PolicyScope) (Reconcil
 	}
 	status.DesiredPolicyHash = head.PolicyHash
 	status.DesiredPolicyEpoch = head.PolicyEpoch
+	status.BundleRef = head.BundleRef
+	status.SourceRefs = append([]string(nil), head.SourceRefs...)
+	status.AuditEvent = "policy_reconcile"
 
 	if installed, ok := r.store.Get(scope); ok {
 		status.PolicyHash = installed.PolicyHash

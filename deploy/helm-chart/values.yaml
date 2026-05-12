@@ -81,7 +81,7 @@ helm:
   # Proxy mode: forward to upstream LLM provider
   proxy:
     enabled: true
-    upstream: "https://api.openai.com/v1"
+    upstream: "https://your-upstream.example/v1"
 
   # Region identifier
   region: "us"

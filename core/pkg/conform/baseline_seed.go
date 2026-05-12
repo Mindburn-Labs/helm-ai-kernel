@@ -154,6 +154,7 @@ func baselineReceipt(ctx *RunContext, seq uint64, actor, actionType, effectType 
 		"effect_class":          "REVERSIBLE",
 		"effect_type":           effectType,
 		"decision_id":           "decision:" + receiptHash,
+		"decision_hash":         receiptHash,
 		"intent_id":             "intent:" + ctx.RunID,
 		"effect_digest_hash":    baselineHash(ctx.RunID, effectType, "effect"),
 		"capability_ref":        "capability:conformance",

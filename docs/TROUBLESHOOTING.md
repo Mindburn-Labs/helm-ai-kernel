@@ -84,11 +84,18 @@ The separate `helm server` health endpoint uses `HELM_HEALTH_PORT` or `8081`;
 
 ```bash
 # Set your upstream API key
-helm proxy --upstream https://api.openai.com/v1 --api-key $OPENAI_API_KEY
+helm proxy --upstream https://your-upstream.example/v1 --api-key $OPENAI_API_KEY
 
 # Or via environment
 export OPENAI_API_KEY=sk-...
-helm proxy --upstream https://api.openai.com/v1
+helm proxy --upstream https://your-upstream.example/v1
+```
+
+For release smoke or customer-data-free debugging, use the local fixture instead:
+
+```bash
+python3 scripts/launch/mock-openai-upstream.py --port 19090
+helm proxy --upstream http://127.0.0.1:19090/v1
 ```
 
 ---
@@ -125,7 +132,7 @@ curl http://localhost:9100/mcp
 
 ```bash
 # Increase wallclock limit (default: 120s)
-helm proxy --upstream https://api.openai.com/v1 --max-wallclock 300s
+helm proxy --upstream http://127.0.0.1:19090/v1 --max-wallclock 300s
 ```
 
 ### Sandbox execution timeout
@@ -184,8 +191,22 @@ Confirm the local boundary is running and that receipts are being emitted for th
 
 ```bash
 helm serve --policy ./release.high_risk.v3.toml
-helm receipts tail --agent agent.titan.exec --server http://127.0.0.1:7714
+helm receipts tail --agent agent.helm.demo --server http://127.0.0.1:7714
 ```
+
+### release smoke fails locally
+
+Run `make release-smoke` from the repository root and inspect the first failing
+phase: reproducible binaries, SBOM JSON, OpenVEX JSON, or optional Cosign
+bundle verification. The command writes generated evidence under ignored
+release/build artifact paths, so rerun after fixing the source failure.
+
+### Kubernetes Helm validation uses the HELM OSS CLI
+
+The local `helm` binary in this repository may be the HELM OSS CLI, not the
+Kubernetes Helm v3 binary. Set `KUBE_HELM_CMD` to a Kubernetes Helm v3 binary or
+run `make helm-chart-smoke`, which uses the pinned containerized chart runner
+when needed.
 
 ---
 

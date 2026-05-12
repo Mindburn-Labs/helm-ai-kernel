@@ -1,8 +1,8 @@
-# @helm/design-system-core
+# @mindburn/ui-core
 
-Canonical OSS source for HELM design-system tokens, primitives, semantic state utilities, and production CSS. Commercial HELM repos may carry a synced mirror for workspace builds, but this package is the source of truth for OSS-safe core UI contracts.
+Shared Mindburn UI foundation for design-system tokens, primitives, semantic state utilities, and production CSS. HELM, docs, marketing, Titan, and future products may consume this package, but sibling products do not define HELM conformance.
 
-Core React primitives, design tokens, semantic state utilities, and production CSS for HELM-compatible products.
+Core React primitives, design tokens, semantic state utilities, and production CSS for Mindburn products.
 
 ## Install
 
@@ -21,8 +21,8 @@ npm run pack:dry
 ## Use
 
 ```tsx
-import { Button, Dialog, FormField, TextInput, primitiveCoverage } from "@helm/design-system-core";
-import "@helm/design-system-core/styles.css";
+import { Button, Dialog, FormField, TextInput, primitiveCoverage } from "@mindburn/ui-core";
+import "@mindburn/ui-core/styles.css";
 
 export function Example() {
   return (
@@ -35,32 +35,32 @@ export function Example() {
 
 ## Public Entry Points
 
-- `@helm/design-system-core`
-- `@helm/design-system-core/components`
-- `@helm/design-system-core/components/announce`
-- `@helm/design-system-core/components/context-menu`
-- `@helm/design-system-core/components/core`
-- `@helm/design-system-core/components/data`
-- `@helm/design-system-core/components/data-table`
-- `@helm/design-system-core/components/datepicker`
-- `@helm/design-system-core/components/feedback`
-- `@helm/design-system-core/components/form-extensions`
-- `@helm/design-system-core/components/primitives`
-- `@helm/design-system-core/components/forms`
-- `@helm/design-system-core/components/hover-card`
-- `@helm/design-system-core/components/i18n`
-- `@helm/design-system-core/components/inspect`
-- `@helm/design-system-core/components/layout`
-- `@helm/design-system-core/components/menubar`
-- `@helm/design-system-core/components/slot`
-- `@helm/design-system-core/components/status`
-- `@helm/design-system-core/components/telemetry`
-- `@helm/design-system-core/components/theme-provider`
-- `@helm/design-system-core/state`
-- `@helm/design-system-core/tokens`
-- `@helm/design-system-core/primitives/catalog`
-- `@helm/design-system-core/styles.css`
-- `@helm/design-system-core/tokens.json`
+- `@mindburn/ui-core`
+- `@mindburn/ui-core/components`
+- `@mindburn/ui-core/components/announce`
+- `@mindburn/ui-core/components/context-menu`
+- `@mindburn/ui-core/components/core`
+- `@mindburn/ui-core/components/data`
+- `@mindburn/ui-core/components/data-table`
+- `@mindburn/ui-core/components/datepicker`
+- `@mindburn/ui-core/components/feedback`
+- `@mindburn/ui-core/components/form-extensions`
+- `@mindburn/ui-core/components/primitives`
+- `@mindburn/ui-core/components/forms`
+- `@mindburn/ui-core/components/hover-card`
+- `@mindburn/ui-core/components/i18n`
+- `@mindburn/ui-core/components/inspect`
+- `@mindburn/ui-core/components/layout`
+- `@mindburn/ui-core/components/menubar`
+- `@mindburn/ui-core/components/slot`
+- `@mindburn/ui-core/components/status`
+- `@mindburn/ui-core/components/telemetry`
+- `@mindburn/ui-core/components/theme-provider`
+- `@mindburn/ui-core/state`
+- `@mindburn/ui-core/tokens`
+- `@mindburn/ui-core/primitives/catalog`
+- `@mindburn/ui-core/styles.css`
+- `@mindburn/ui-core/tokens.json`
 
 Only these entry points are supported. Do not import from `src` or package internals.
 

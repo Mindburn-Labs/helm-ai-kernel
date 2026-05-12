@@ -92,6 +92,21 @@ The resource check follows [RFC 8707](https://datatracker.ietf.org/doc/html/rfc8
 
 Use `./bin/helm mcp print-config --client <name>` for text configuration snippets where supported by the CLI.
 
+## Quarantine and Schema Pins
+
+Unknown MCP servers are quarantined by default. A call is dispatchable only
+after server discovery, metadata/schema inspection, risk classification,
+approval bound to a HELM receipt, and a matching pinned schema hash.
+
+The maintained local demo covers this full path:
+
+```bash
+./scripts/launch/demo-mcp.sh
+```
+
+The demo asserts that unknown servers, unknown tools, and missing schema pins
+return `DENY` or `ESCALATE`; they never dispatch to the fixture server.
+
 MCP activity that emits receipts can be inspected with:
 
 ```bash

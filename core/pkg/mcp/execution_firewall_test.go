@@ -63,6 +63,36 @@ func TestExecutionFirewallDeniesUnknownToolBeforeDispatch(t *testing.T) {
 	}
 }
 
+func TestExecutionFirewallDeniesUnknownServerBeforeDispatch(t *testing.T) {
+	ctx := context.Background()
+	catalog := NewToolCatalog()
+	tool := ToolRef{Name: "local.echo", ServerID: "srv-unknown", Schema: map[string]any{"type": "object"}}
+	if err := catalog.Register(ctx, tool); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	firewall := NewExecutionFirewall(catalog, NewQuarantineRegistry(), "epoch-42")
+	firewall.Clock = boundaryFixedClock()
+	hash, err := ToolSchemaHash(tool)
+	if err != nil {
+		t.Fatalf("schema hash: %v", err)
+	}
+	record, err := firewall.AuthorizeToolCall(ctx, ToolCallAuthorization{
+		ServerID:         "srv-unknown",
+		ToolName:         "local.echo",
+		ArgsHash:         "sha256:args",
+		PinnedSchemaHash: hash,
+	})
+	if err != nil {
+		t.Fatalf("authorize: %v", err)
+	}
+	if record.Verdict != contracts.VerdictDeny {
+		t.Fatalf("verdict = %s, want DENY", record.Verdict)
+	}
+	if record.ReasonCode != contracts.ReasonApprovalRequired {
+		t.Fatalf("reason = %s, want approval required", record.ReasonCode)
+	}
+}
+
 func TestExecutionFirewallDeniesScopeMismatch(t *testing.T) {
 	ctx := context.Background()
 	firewall := approvedFirewall(t)
@@ -82,6 +112,36 @@ func TestExecutionFirewallDeniesScopeMismatch(t *testing.T) {
 	}
 	if record.ReasonCode != contracts.ReasonInsufficientPrivilege {
 		t.Fatalf("reason = %s, want insufficient privilege", record.ReasonCode)
+	}
+}
+
+func TestExecutionFirewallDeniesMissingSchemaPin(t *testing.T) {
+	ctx := context.Background()
+	firewall := approvedFirewall(t)
+	firewall.RequirePinnedSchema = true
+	if err := firewall.Catalog.Register(ctx, ToolRef{
+		Name:     "local.echo",
+		ServerID: "srv-1",
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"text": map[string]any{"type": "string"},
+			},
+			"required": []string{"text"},
+		},
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	record, err := firewall.AuthorizeToolCall(ctx, ToolCallAuthorization{
+		ServerID: "srv-1",
+		ToolName: "local.echo",
+		ArgsHash: "sha256:args",
+	})
+	if err != nil {
+		t.Fatalf("authorize: %v", err)
+	}
+	if record.Verdict != contracts.VerdictDeny || record.ReasonCode != contracts.ReasonSchemaViolation {
+		t.Fatalf("expected missing pin denial, got %s/%s", record.Verdict, record.ReasonCode)
 	}
 }
 

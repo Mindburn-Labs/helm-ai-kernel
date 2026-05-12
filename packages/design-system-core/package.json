@@ -1,8 +1,8 @@
 {
-  "name": "@helm/design-system-core",
+  "name": "@mindburn/ui-core",
   "version": "1.0.0",
   "type": "module",
-  "description": "Core HELM-compatible design-system tokens, primitives, layouts, data, forms, feedback, and inspection components.",
+  "description": "Shared Mindburn UI foundation tokens, primitives, layouts, data, forms, feedback, and inspection components.",
   "license": "Apache-2.0",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -126,7 +126,9 @@
     "README.md"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json && node ./scripts/fix-esm-imports.mjs dist && node ./scripts/copy-assets.mjs",
+    "tokens:generate": "node ./scripts/generate-tokens.mjs",
+    "tokens:check": "node ./scripts/generate-tokens.mjs --check",
+    "build": "npm run tokens:check && rm -rf dist && tsc -p tsconfig.build.json && node ./scripts/fix-esm-imports.mjs dist && node ./scripts/copy-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --pretty false",
     "test": "vitest run --config vitest.config.ts",
     "pack:dry": "npm pack --dry-run",
@@ -157,10 +159,5 @@
   "peerDependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
   }
 }

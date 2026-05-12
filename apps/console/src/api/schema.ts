@@ -1805,6 +1805,8 @@ export interface components {
             native_isolation: boolean;
             experimental?: boolean;
         };
+        SandboxBackendProfileList: components["schemas"]["SandboxBackendProfile"][];
+        SandboxGrantInspection: components["schemas"]["SandboxBackendProfileList"] | components["schemas"]["SandboxGrant"];
         FilesystemPreopen: {
             path: string;
             /** @enum {string} */
@@ -1967,6 +1969,12 @@ export interface components {
             args_hash?: string;
             granted_scopes?: string[];
             pinned_schema_hash?: string;
+            tool_schema?: {
+                [key: string]: unknown;
+            };
+            output_schema?: {
+                [key: string]: unknown;
+            };
             oauth_resource?: string;
             receipt_id?: string;
         };
@@ -4055,7 +4063,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SandboxBackendProfile"][] | components["schemas"]["SandboxGrant"];
+                    "application/json": components["schemas"]["SandboxGrantInspection"];
                 };
             };
             400: components["responses"]["HelmError"];

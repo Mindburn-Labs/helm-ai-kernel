@@ -111,9 +111,9 @@ The following names appear in strategy, standard, or roadmap material but are no
 
 ### Product Surfaces
 
-The OSS boundary ships exactly one browser UI: `apps/console`, the HELM OSS Console. It is a self-hostable operator surface over the local kernel and uses `@helm/design-system-core` for all product UI primitives and styling. The repository does not ship a second browser UI, a static report viewer, a Node CLI wrapper, a Next starter, or generated HTML report surface.
+The OSS boundary ships exactly one browser UI: `apps/console`, the HELM OSS Console. It is a self-hostable operator surface over the local kernel and uses `@mindburn/ui-core` for all product UI primitives and styling. The repository does not ship a second browser UI, a static report viewer, a Node CLI wrapper, a Next starter, or generated HTML report surface.
 
-`@helm/design-system-core` remains a reusable React/token package. The Console consumes it through public package entrypoints so package integrity, app fidelity, and OSS boundary truth are tested together.
+`@mindburn/ui-core` remains a reusable React/token package. The Console consumes it through public package entrypoints so package integrity, app fidelity, and OSS boundary truth are tested together.
 
 ## Removed from TCB (Enterprise)
 

@@ -5,7 +5,7 @@ The core package is intended to cover the same adoption surface an engineer expe
 The canonical machine-readable coverage list is exported from:
 
 ```ts
-import { primitiveCoverage, primitiveCoverageSummary } from "@helm/design-system-core/primitives/catalog";
+import { primitiveCoverage, primitiveCoverageSummary } from "@mindburn/ui-core/primitives/catalog";
 ```
 
 ## Stable Coverage

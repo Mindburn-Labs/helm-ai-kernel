@@ -681,6 +681,18 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		catalog := mcppkg.NewToolCatalog()
 		catalog.RegisterCommonTools()
+		if req.ToolSchema != nil {
+			if err := catalog.Register(r.Context(), mcppkg.ToolRef{
+				Name:         req.ToolName,
+				ServerID:     req.ServerID,
+				Description:  "Discovered MCP tool with caller-supplied pinned schema",
+				Schema:       req.ToolSchema,
+				OutputSchema: req.OutputSchema,
+			}); err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
+		}
 		firewall := mcppkg.NewExecutionFirewall(catalog, mcpQuarantine, "api")
 		firewall.RequirePinnedSchema = true
 		record, err := firewall.AuthorizeToolCall(r.Context(), mcppkg.ToolCallAuthorization{

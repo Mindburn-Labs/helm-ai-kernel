@@ -1,6 +1,6 @@
 import type { Story, StoryDefault } from "@ladle/react";
 import { useState } from "react";
-import { MenuBar, Panel, type MenuBarMenu } from "@helm/design-system-core";
+import { MenuBar, Panel, type MenuBarMenu } from "@mindburn/ui-core";
 
 export default {
   title: "Primitives / MenuBar",

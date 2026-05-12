@@ -43,6 +43,12 @@ updates:
     schedule:
       interval: weekly
 
+  - package-ecosystem: npm
+    directory: /apps/console
+    open-pull-requests-limit: 0
+    schedule:
+      interval: weekly
+
   - package-ecosystem: cargo
     directory: /sdk/rust
     open-pull-requests-limit: 0

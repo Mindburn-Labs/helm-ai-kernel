@@ -105,7 +105,7 @@ Technology stack:
 - Frontend: React 19, Vite 7, TypeScript, Vitest, React Testing Library,
   `openapi-fetch`, `openapi-typescript`, `lucide-react`, `shiki`.
 - Design system: `packages/design-system-core`, public package
-  `@helm/design-system-core`; owns tokens, CSS, React primitives, layout,
+  `@mindburn/ui-core`; owns tokens, CSS, React primitives, layout,
   tables, forms, feedback, inspection, semantic state, providers, and package
   smoke contracts.
 - Database/storage: SQLite by default for Lite Mode (`data/helm.db`), optional
@@ -211,7 +211,7 @@ Follow these principles throughout the project:
 16. No inconsistent UX.
     Console components, spacing, typography, colors, interactions, forms,
     loading states, error states, empty states, status states, and operator
-    language must follow `@helm/design-system-core`.
+    language must follow `@mindburn/ui-core`.
 
 17. No happy-path-only implementation.
     Every feature must handle loading, error, empty, unauthorized, validation,
@@ -464,7 +464,7 @@ Review:
 - Empty states and not-configured states
 - Responsive behavior
 - Accessibility, focus, keyboard navigation, semantics, labels, and ARIA
-- Styling strategy in Console CSS versus `@helm/design-system-core`
+- Styling strategy in Console CSS versus `@mindburn/ui-core`
 - Data fetching with `openapi-fetch`, generated `schema.ts`, and direct `fetch`
   escape hatches
 - Caching, live updates, optimistic UI, and stale data behavior

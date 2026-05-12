@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
+	mcppkg "github.com/Mindburn-Labs/helm-oss/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/store"
 
 	_ "modernc.org/sqlite"
@@ -177,6 +178,85 @@ func TestBoundaryContractRoutesExposeNewControlSurfaces(t *testing.T) {
 	mux.ServeHTTP(verifyEnvelopeRec, verifyEnvelopeReq)
 	if verifyEnvelopeRec.Code != http.StatusOK {
 		t.Fatalf("envelope verify status=%d body=%s", verifyEnvelopeRec.Code, verifyEnvelopeRec.Body.String())
+	}
+}
+
+func TestMCPAuthorizeCallAPIFailClosedAndPinnedAllow(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"text": map[string]any{"type": "string"},
+		},
+		"required": []string{"text"},
+	}
+	hash, err := mcppkg.ToolSchemaHash(mcppkg.ToolRef{Name: "local.echo", Schema: schema})
+	if err != nil {
+		t.Fatalf("schema hash: %v", err)
+	}
+
+	unknownServer := postMCPAuthorizeForTest(t, mux, map[string]any{
+		"server_id":          "api-unknown-server",
+		"tool_name":          "local.echo",
+		"args_hash":          "sha256:unknown-server",
+		"tool_schema":        schema,
+		"pinned_schema_hash": hash,
+	}, http.StatusForbidden)
+	if unknownServer["verdict"] != "DENY" && unknownServer["verdict"] != "ESCALATE" {
+		t.Fatalf("unknown server verdict = %+v", unknownServer)
+	}
+
+	discoverReq := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/registry", strings.NewReader(`{"server_id":"api-fixture","tool_names":["local.echo"],"risk":"high"}`))
+	authorizeTestRequest(discoverReq)
+	discoverRec := httptest.NewRecorder()
+	mux.ServeHTTP(discoverRec, discoverReq)
+	if discoverRec.Code != http.StatusAccepted {
+		t.Fatalf("discover status=%d body=%s", discoverRec.Code, discoverRec.Body.String())
+	}
+
+	approveReq := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/registry/api-fixture/approve", strings.NewReader(`{"approver_id":"user:alice","approval_receipt_id":"approval-r1"}`))
+	authorizeTestRequest(approveReq)
+	approveRec := httptest.NewRecorder()
+	mux.ServeHTTP(approveRec, approveReq)
+	if approveRec.Code != http.StatusOK {
+		t.Fatalf("approve status=%d body=%s", approveRec.Code, approveRec.Body.String())
+	}
+
+	unknownTool := postMCPAuthorizeForTest(t, mux, map[string]any{
+		"server_id": "api-fixture",
+		"tool_name": "local.missing",
+		"args_hash": "sha256:unknown-tool",
+	}, http.StatusForbidden)
+	if unknownTool["verdict"] != "DENY" && unknownTool["verdict"] != "ESCALATE" {
+		t.Fatalf("unknown tool verdict = %+v", unknownTool)
+	}
+
+	missingPin := postMCPAuthorizeForTest(t, mux, map[string]any{
+		"server_id":   "api-fixture",
+		"tool_name":   "local.echo",
+		"args_hash":   "sha256:missing-pin",
+		"tool_schema": schema,
+	}, http.StatusForbidden)
+	if missingPin["verdict"] != "DENY" && missingPin["verdict"] != "ESCALATE" {
+		t.Fatalf("missing pin verdict = %+v", missingPin)
+	}
+
+	allowed := postMCPAuthorizeForTest(t, mux, map[string]any{
+		"server_id":          "api-fixture",
+		"tool_name":          "local.echo",
+		"args_hash":          "sha256:pinned-allow",
+		"tool_schema":        schema,
+		"pinned_schema_hash": hash,
+	}, http.StatusOK)
+	if allowed["verdict"] != "ALLOW" {
+		t.Fatalf("allow verdict = %+v", allowed)
+	}
+	if allowed["record_hash"] == "" {
+		t.Fatal("allowed record_hash missing")
 	}
 }
 
@@ -424,6 +504,26 @@ func requestReceiptList(t *testing.T, mux *http.ServeMux, target string) map[str
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("receipt list status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var result map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func postMCPAuthorizeForTest(t *testing.T, mux *http.ServeMux, body map[string]any, wantStatus int) map[string]any {
+	t.Helper()
+	data, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/authorize-call", bytes.NewReader(data))
+	authorizeTestRequest(req)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != wantStatus {
+		t.Fatalf("authorize status=%d want=%d body=%s", rec.Code, wantStatus, rec.Body.String())
 	}
 	var result map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {

@@ -49,7 +49,7 @@ flowchart LR
 HELM OSS ships one browser frontend: `apps/console`.
 
 The Console is a self-hostable operator surface for the OSS kernel. It is built
-with React, Vite, TypeScript, and `@helm/design-system-core`; it does not carry a
+with React, Vite, TypeScript, and `@mindburn/ui-core`; it does not carry a
 second component system, Tailwind layer, private package, or generated marketing
 surface.
 

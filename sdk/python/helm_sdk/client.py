@@ -16,6 +16,7 @@ from .types_gen import (
     ChatCompletionResponse,
     ConformanceRequest,
     ConformanceResult,
+    DecisionRequest,
     Receipt,
     Session,
     VerificationResult,
@@ -138,11 +139,12 @@ def _json_body(model: Any) -> Any:
 class HelmApiError(Exception):
     """Raised when the HELM API returns a non-2xx response."""
 
-    def __init__(self, status: int, message: str, reason_code: str, details: Any = None):
+    def __init__(self, status: int, message: str, reason_code: str, details: Any = None, body: Any = None):
         super().__init__(message)
         self.status = status
         self.reason_code = reason_code
         self.details = details
+        self.body = body
 
 
 class HelmClient:
@@ -152,12 +154,15 @@ class HelmClient:
         self,
         base_url: str = "http://localhost:8080",
         api_key: Optional[str] = None,
+        tenant_id: Optional[str] = None,
         timeout: float = 30.0,
     ):
         self.base_url = base_url.rstrip("/")
-        headers: dict[str, str] = {"Content-Type": "application/json"}
+        headers: dict[str, str] = {}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
+        if tenant_id:
+            headers["X-Helm-Tenant-ID"] = tenant_id
         self._client = httpx.Client(
             base_url=self.base_url,
             headers=headers,
@@ -180,15 +185,17 @@ class HelmClient:
                 err = body.get("error", {})
                 raise HelmApiError(
                     status=resp.status_code,
-                    message=err.get("message", resp.text),
-                    reason_code=err.get("reason_code", "ERROR_INTERNAL"),
-                    details=err.get("details"),
+                    message=err.get("message", resp.text) if isinstance(err, dict) else resp.text,
+                    reason_code=err.get("reason_code", "ERROR_INTERNAL") if isinstance(err, dict) else "ERROR_INTERNAL",
+                    details=err.get("details") if isinstance(err, dict) else body,
+                    body=body,
                 )
             except (ValueError, KeyError):
                 raise HelmApiError(
                     status=resp.status_code,
                     message=resp.text,
                     reason_code="ERROR_INTERNAL",
+                    body=resp.text,
                 )
 
     # ── OpenAI Proxy ────────────────────────────────
@@ -198,6 +205,39 @@ class HelmClient:
         result = ChatCompletionResponse.from_dict(resp.json())
         assert result is not None
         return result
+
+    # ── Decision Evaluation ─────────────────────────
+    def evaluate_decision(self, req: Union[DecisionRequest, dict[str, Any]]) -> dict[str, Any]:
+        resp = self._client.post("/api/v1/evaluate", json=_json_body(req))
+        self._check(resp)
+        return resp.json()
+
+    def run_public_demo(self, action_id: str, args: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+        resp = self._client.post(
+            "/api/demo/run",
+            json={
+                "action_id": action_id,
+                "policy_id": "agent_tool_call_boundary",
+                "args": args or {},
+            },
+        )
+        self._check(resp)
+        return resp.json()
+
+    def verify_public_demo_receipt(
+        self,
+        receipt: dict[str, Any],
+        expected_receipt_hash: str,
+    ) -> dict[str, Any]:
+        resp = self._client.post(
+            "/api/demo/verify",
+            json={
+                "receipt": receipt,
+                "expected_receipt_hash": expected_receipt_hash,
+            },
+        )
+        self._check(resp)
+        return resp.json()
 
     # ── Approval Ceremony ───────────────────────────
     def approve_intent(self, req: ApprovalRequest) -> Receipt:

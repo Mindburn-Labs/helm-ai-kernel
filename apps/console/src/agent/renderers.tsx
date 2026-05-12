@@ -1,6 +1,6 @@
 import { useComponent } from "@copilotkit/react-core/v2/headless";
 import { z } from "zod";
-import { Badge, EmptyState } from "@helm/design-system-core";
+import { Badge, EmptyState } from "@mindburn/ui-core";
 import type { OssAgentToolResult } from "./state";
 
 const componentSchema = z.object({

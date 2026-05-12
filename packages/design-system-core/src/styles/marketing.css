@@ -591,12 +591,12 @@
     background: color-mix(in oklab, var(--surface-panel), transparent 20%);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    box-shadow: var(--helm-shadow-sm), var(--helm-shadow-inset-highlight);
     transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease, border-color 0.4s ease;
   }
   .mb-diagram:hover {
     transform: translateY(-2px);
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    box-shadow: var(--helm-shadow), var(--helm-shadow-inset-highlight);
     border-color: color-mix(in oklab, var(--accent-brand), transparent 50%);
   }
 
@@ -632,7 +632,7 @@
     border-left: 3px solid var(--accent-brand);
     border-radius: 6px;
     background: color-mix(in oklab, var(--surface-page), transparent 30%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    box-shadow: var(--helm-shadow-inset-highlight);
     transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .mb-diagram li:hover,
@@ -782,7 +782,7 @@
     border-left: 3px solid var(--accent-brand);
     border-radius: 6px;
     background: color-mix(in oklab, var(--surface-page), transparent 30%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    box-shadow: var(--helm-shadow-inset-highlight);
     transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .canonical-flow li:hover,
@@ -1016,7 +1016,7 @@
     padding: var(--space-3) var(--space-4);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-glass);
-    background: var(--surface-raised, #ffffff);
+    background: var(--surface-raised, var(--helm-bg-elevated));
     box-shadow: var(--shadow-md);
     color: var(--text-secondary);
     font-family: var(--font-sans);
@@ -1249,7 +1249,7 @@
   }
 
   .company-final .company-button--secondary {
-    border-color: rgba(255, 250, 241, 0.45);
+    border-color: color-mix(in oklab, var(--mb-paper), transparent 55%);
     color: var(--mb-paper);
   }
 
@@ -1341,7 +1341,7 @@
 
   .contact-path-card:hover {
     border-color: var(--border-strong);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--helm-shadow-xs);
   }
 
   .contact-path-card strong {

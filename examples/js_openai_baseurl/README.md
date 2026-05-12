@@ -4,7 +4,7 @@ Shows HELM integration with native fetch (no SDK dependency).
 
 ## Prerequisites
 
-- HELM running at `http://port 3000` (`docker compose up -d`)
+- HELM running at `http://127.0.0.1:7714` (`docker compose up -d`)
 - Node.js 18+
 
 ## Run

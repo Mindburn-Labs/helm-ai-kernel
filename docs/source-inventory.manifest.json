@@ -33,32 +33,67 @@
         "install.sh",
         "jitpack.yml",
         "mcp-bundle.json",
-        "release.high_risk.v3.toml"
+        "release.high_risk.v3.toml",
+        "CLAIMS.md",
+        "artifacthub-repo.yml",
+        "package.json"
       ],
       "owner_doc_path": "README.md",
-      "public_doc_slugs": ["oss", "helm-oss/source-map", "helm-oss/security/release-security", "helm-oss/changelog"],
+      "public_doc_slugs": [
+        "oss",
+        "helm-oss/source-map",
+        "helm-oss/security/release-security",
+        "helm-oss/changelog"
+      ],
       "rationale": "Top-level tracked files define install, release, contribution, governance, and security behavior without masking runtime trees behind a repository-wide wildcard.",
-      "validation_commands": ["make docs-coverage", "make docs-truth"]
+      "validation_commands": [
+        "make docs-coverage",
+        "make docs-truth"
+      ]
     },
     {
       "id": "ci-scripts-tools",
       "label": "CI workflows, local scripts, boundary manifests, and tooling",
       "classification": "public-hub",
-      "source_patterns": [".github/**", "scripts/**", "tools/README.md", "tools/*.go", "tools/*.sh", "tools/*.lock", "tools/*/**"],
+      "source_patterns": [
+        ".github/**",
+        "scripts/**",
+        "tools/README.md",
+        "tools/*.go",
+        "tools/*.sh",
+        "tools/*.lock",
+        "tools/*/**"
+      ],
       "owner_doc_path": ".github/SURFACE.md",
-      "public_doc_slugs": ["helm-oss/source-map", "helm-oss/security/release-security"],
+      "public_doc_slugs": [
+        "helm-oss/source-map",
+        "helm-oss/security/release-security"
+      ],
       "rationale": "CI and tooling are externally relevant as validation gates and release evidence, but individual workflow files remain source-owned.",
-      "validation_commands": ["make docs-coverage", "make docs-truth"]
+      "validation_commands": [
+        "make docs-coverage",
+        "make docs-truth"
+      ]
     },
     {
       "id": "api-openapi-contract",
       "label": "HELM OSS public OpenAPI contract and generated route parity tests",
       "classification": "public-direct",
-      "source_patterns": ["api/README.md", "api/openapi/**", "core/cmd/helm/openapi_runtime_routes_test.go"],
+      "source_patterns": [
+        "api/README.md",
+        "api/openapi/**",
+        "core/cmd/helm/openapi_runtime_routes_test.go"
+      ],
       "owner_doc_path": "api/openapi/README.md",
-      "public_doc_slugs": ["helm-oss/reference/http-api", "helm-oss/reference/execution-boundary"],
+      "public_doc_slugs": [
+        "helm-oss/reference/http-api",
+        "helm-oss/reference/execution-boundary"
+      ],
       "rationale": "The OpenAPI contract is a direct public reference surface and must stay tied to route parity tests and the HTTP API page.",
-      "validation_commands": ["cd core && go test ./cmd/helm -run TestOpenAPI -count=1", "make docs-truth"]
+      "validation_commands": [
+        "cd core && go test ./cmd/helm -run TestOpenAPI -count=1",
+        "make docs-truth"
+      ]
     },
     {
       "id": "protocols-schemas-reference-packs",
@@ -75,9 +110,17 @@
         "reference_packs/*/**"
       ],
       "owner_doc_path": "protocols/README.md",
-      "public_doc_slugs": ["helm-oss/reference/protocols-and-schemas", "helm-oss/reference/json-schemas", "helm-oss/conformance", "helm-oss/reference/execution-boundary"],
+      "public_doc_slugs": [
+        "helm-oss/reference/protocols-and-schemas",
+        "helm-oss/reference/json-schemas",
+        "helm-oss/conformance",
+        "helm-oss/reference/execution-boundary"
+      ],
       "rationale": "Protocol and schema truth must be public and agent-readable, with detailed source ownership kept in protocol README files.",
-      "validation_commands": ["make docs-coverage", "make docs-truth"]
+      "validation_commands": [
+        "make docs-coverage",
+        "make docs-truth"
+      ]
     },
     {
       "id": "core-build-runtime-config",
@@ -94,29 +137,55 @@
         "core/benchmarks/**"
       ],
       "owner_doc_path": "core/README.md",
-      "public_doc_slugs": ["helm-oss/reference/cli", "helm-oss/architecture", "helm-oss/benchmarks"],
+      "public_doc_slugs": [
+        "helm-oss/reference/cli",
+        "helm-oss/architecture",
+        "helm-oss/benchmarks"
+      ],
       "rationale": "Core build and benchmark files are runtime evidence, but they are not allowed to stand in for command, API, or package source ownership.",
-      "validation_commands": ["make build", "make test", "make docs-truth"]
+      "validation_commands": [
+        "make build",
+        "make test",
+        "make docs-truth"
+      ]
     },
     {
       "id": "runtime-cli-commands",
       "label": "Primary HELM OSS CLI command registry and command implementations",
       "classification": "public-direct",
-      "source_patterns": ["core/cmd/README.md", "core/cmd/helm/*.go"],
+      "source_patterns": [
+        "core/cmd/README.md",
+        "core/cmd/helm/*.go"
+      ],
       "owner_doc_path": "core/cmd/README.md",
-      "public_doc_slugs": ["helm-oss/reference/cli", "helm-oss/developer-journey", "helm-oss/troubleshooting"],
+      "public_doc_slugs": [
+        "helm-oss/reference/cli",
+        "helm-oss/developer-journey",
+        "helm-oss/troubleshooting"
+      ],
       "rationale": "The CLI is a first-class public runtime surface; flags and subcommands must be source-linked to the CLI reference rather than hidden behind core/**.",
-      "validation_commands": ["cd core && go test ./cmd/helm -count=1", "make docs-truth"]
+      "validation_commands": [
+        "cd core && go test ./cmd/helm -count=1",
+        "make docs-truth"
+      ]
     },
     {
       "id": "runtime-cli-helper-binaries",
       "label": "Auxiliary core/cmd helper binaries outside the primary helm command",
       "classification": "source-owner-doc",
-      "source_patterns": ["core/cmd/bootstrap/**", "core/cmd/channel_gateway/**", "core/cmd/pack_verify/**", "core/cmd/skill_lint/**", "core/cmd/skill_pack/**"],
+      "source_patterns": [
+        "core/cmd/bootstrap/**",
+        "core/cmd/channel_gateway/**",
+        "core/cmd/pack_verify/**",
+        "core/cmd/skill_lint/**",
+        "core/cmd/skill_pack/**"
+      ],
       "owner_doc_path": "core/cmd/README.md",
       "public_doc_slugs": [],
       "rationale": "Helper binaries are source-owned under core/cmd and must not be presented as supported top-level helm subcommands unless wired through core/cmd/helm.",
-      "validation_commands": ["cd core && go test ./cmd/..."]
+      "validation_commands": [
+        "cd core && go test ./cmd/..."
+      ]
     },
     {
       "id": "runtime-http-api-routes",
@@ -136,9 +205,16 @@
         "core/pkg/api/**"
       ],
       "owner_doc_path": "core/cmd/README.md",
-      "public_doc_slugs": ["helm-oss/reference/http-api", "helm-oss/reference/execution-boundary", "helm-oss/console"],
+      "public_doc_slugs": [
+        "helm-oss/reference/http-api",
+        "helm-oss/reference/execution-boundary",
+        "helm-oss/console"
+      ],
       "rationale": "HTTP route behavior is enforceable at file-level granularity through the route registry, auth wrapper, handler files, and OpenAPI route parity tests.",
-      "validation_commands": ["cd core && go test ./cmd/helm -run 'Test.*Route|Test.*OpenAPI|Test.*Receipt' -count=1", "make docs-truth"]
+      "validation_commands": [
+        "cd core && go test ./cmd/helm -run 'Test.*Route|Test.*OpenAPI|Test.*Receipt' -count=1",
+        "make docs-truth"
+      ]
     },
     {
       "id": "execution-boundary-runtime",
@@ -160,9 +236,18 @@
         "core/pkg/verifier/**"
       ],
       "owner_doc_path": "core/pkg/README.md",
-      "public_doc_slugs": ["helm-oss/reference/execution-boundary", "helm-oss/reference/http-api", "helm-oss/conformance", "helm-oss/verification", "helm-oss/integrations/mcp"],
+      "public_doc_slugs": [
+        "helm-oss/reference/execution-boundary",
+        "helm-oss/reference/http-api",
+        "helm-oss/conformance",
+        "helm-oss/verification",
+        "helm-oss/integrations/mcp"
+      ],
       "rationale": "Boundary behavior is the highest-value OSS runtime reference surface and must remain directly linked to package families, HTTP routes, CLI commands, receipt schemas, and conformance vectors.",
-      "validation_commands": ["cd core && go test ./pkg/contracts ./pkg/boundary ./pkg/conformance ./cmd/helm -count=1", "make docs-truth"]
+      "validation_commands": [
+        "cd core && go test ./pkg/contracts ./pkg/boundary ./pkg/conformance ./cmd/helm -count=1",
+        "make docs-truth"
+      ]
     },
     {
       "id": "policy-kernel-runtime",
@@ -193,15 +278,25 @@
         "core/pkg/vcredentials/**"
       ],
       "owner_doc_path": "core/pkg/README.md",
-      "public_doc_slugs": ["helm-oss/architecture", "helm-oss/execution-security-model", "helm-oss/reference/execution-boundary", "helm-oss/reference/protocols-and-schemas"],
+      "public_doc_slugs": [
+        "helm-oss/architecture",
+        "helm-oss/execution-security-model",
+        "helm-oss/reference/execution-boundary",
+        "helm-oss/reference/protocols-and-schemas"
+      ],
       "rationale": "Kernel and policy packages back public runtime guarantees, but public docs should describe supported behavior through architecture, execution-boundary, and protocol references.",
-      "validation_commands": ["make test", "make docs-truth"]
+      "validation_commands": [
+        "make test",
+        "make docs-truth"
+      ]
     },
     {
       "id": "runtime-supporting-packages",
       "label": "Supporting core/pkg runtime libraries not directly exposed as CLI/API/boundary reference surfaces",
       "classification": "public-hub",
-      "source_patterns": ["core/pkg/**"],
+      "source_patterns": [
+        "core/pkg/**"
+      ],
       "exclude_patterns": [
         "core/pkg/api/**",
         "core/pkg/auth/**",
@@ -240,25 +335,53 @@
         "core/pkg/verifier/**"
       ],
       "owner_doc_path": "core/pkg/README.md",
-      "public_doc_slugs": ["helm-oss/architecture", "helm-oss/source-map"],
+      "public_doc_slugs": [
+        "helm-oss/architecture",
+        "helm-oss/source-map"
+      ],
       "rationale": "Remaining runtime libraries stay documented through owner docs and architecture/source-map pages without diluting the direct CLI/API/boundary rows.",
-      "validation_commands": ["make test", "make docs-truth"]
+      "validation_commands": [
+        "make test",
+        "make docs-truth"
+      ]
     },
     {
       "id": "console-and-design-system",
       "label": "HELM OSS Console application and shared UI packages",
       "classification": "public-hub",
-      "source_patterns": ["apps/README.md", "apps/*/**", "packages/README.md", "packages/*/**"],
+      "source_patterns": [
+        "apps/README.md",
+        "apps/*/**",
+        "packages/README.md",
+        "packages/*/**"
+      ],
       "owner_doc_path": "apps/console/README.md",
-      "public_doc_slugs": ["helm-oss/console", "helm-oss/design-system", "helm-oss/source-map"],
+      "public_doc_slugs": [
+        "helm-oss/console",
+        "helm-oss/design-system",
+        "helm-oss/source-map"
+      ],
       "rationale": "The console and UI packages are public OSS surfaces, with browser-level details owned near the app code.",
-      "validation_commands": ["make test-console", "make docs-truth"]
+      "validation_commands": [
+        "make test-console",
+        "make docs-truth"
+      ]
     },
     {
       "id": "examples-deploy-sdk",
       "label": "Examples, SDKs, Docker, Docker Compose, and Kubernetes Helm chart deployment",
       "classification": "public-hub",
-      "source_patterns": ["examples/README.md", "examples/*/**", "deploy/README.md", "deploy/*/**", "Dockerfile", "Dockerfile.slim", "docker-compose.yml", "sdk/README.md", "sdk/*/**"],
+      "source_patterns": [
+        "examples/README.md",
+        "examples/*/**",
+        "deploy/README.md",
+        "deploy/*/**",
+        "Dockerfile",
+        "Dockerfile.slim",
+        "docker-compose.yml",
+        "sdk/README.md",
+        "sdk/*/**"
+      ],
       "owner_doc_path": "examples/README.md",
       "public_doc_slugs": [
         "helm-oss/developer-journey",
@@ -270,13 +393,40 @@
         "helm-oss/integrations/mcp"
       ],
       "rationale": "Developers need install, SDK, framework, and deployment paths from the public docs, with examples and package docs as executable proof.",
-      "validation_commands": ["make test-sdk-py", "make test-sdk-ts", "make test-sdk-rust", "make test-sdk-java"]
+      "validation_commands": [
+        "make test-sdk-py",
+        "make test-sdk-ts",
+        "make test-sdk-rust",
+        "make test-sdk-java"
+      ]
     },
     {
       "id": "conformance-fixtures-evidence",
       "label": "Conformance tests, fixtures, golden artifacts, proofs, benchmarks, and release evidence",
       "classification": "public-hub",
-      "source_patterns": ["tests/README.md", "tests/*/**", "fixtures/README.md", "fixtures/*/**", "artifacts/README.md", "artifacts/*/**", "proofs/README.md", "proofs/*", "proofs/*/**", "benchmarks/README.md", "benchmarks/*/**", "release/README.md", "release/*", "release/*/**", "data/README.md", "data/*/**", "oss-fuzz/README.md", "oss-fuzz/*/**", "oss-fuzz/*"],
+      "source_patterns": [
+        "tests/README.md",
+        "tests/*/**",
+        "fixtures/README.md",
+        "fixtures/*/**",
+        "artifacts/README.md",
+        "artifacts/*/**",
+        "proofs/README.md",
+        "proofs/*",
+        "proofs/*/**",
+        "benchmarks/README.md",
+        "benchmarks/*/**",
+        "release/README.md",
+        "release/*",
+        "release/*/**",
+        "data/README.md",
+        "data/*/**",
+        "oss-fuzz/README.md",
+        "oss-fuzz/*/**",
+        "oss-fuzz/*",
+        "data/.keep",
+        "tests/parity_test.go"
+      ],
       "owner_doc_path": "tests/conformance/README.md",
       "public_doc_slugs": [
         "helm-oss/conformance",
@@ -286,13 +436,18 @@
         "helm-oss/security/release-security"
       ],
       "rationale": "Evidence and conformance material is public proof material; generated artifacts are linked through verification and publishing docs rather than duplicated.",
-      "validation_commands": ["make verify-fixtures", "make release-binaries-reproducible"]
+      "validation_commands": [
+        "make verify-fixtures",
+        "make release-binaries-reproducible"
+      ]
     },
     {
       "id": "public-docs-and-research",
       "label": "Public docs, compliance notes, architecture notes, strategy notes, and generated docs ledgers",
       "classification": "public-hub",
-      "source_patterns": ["docs/**"],
+      "source_patterns": [
+        "docs/**"
+      ],
       "owner_doc_path": "docs/README.md",
       "public_doc_slugs": [
         "oss",
@@ -314,10 +469,14 @@
         "helm-oss/architecture/policy-languages",
         "helm-oss/security/clawguard-taint-tracking",
         "helm-oss/security/session-risk-memory",
-        "helm-oss/governance/cncf-application"
+        "helm-oss/governance/cncf-application",
+        "helm-oss/architecture/canonical-diagrams"
       ],
       "rationale": "Docs files are source material for the public site and are checked through manifest, LLM, search, and source-inventory gates.",
-      "validation_commands": ["make docs-coverage", "make docs-truth"]
+      "validation_commands": [
+        "make docs-coverage",
+        "make docs-truth"
+      ]
     }
   ]
 }

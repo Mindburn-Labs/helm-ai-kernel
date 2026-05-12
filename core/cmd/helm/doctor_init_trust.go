@@ -29,10 +29,10 @@ var initProfiles = map[string]initProfile{
 	"openai": {
 		Name:         "openai",
 		ProviderHint: "openai",
-		EnvTemplate:  "OPENAI_API_KEY=\nHELM_UPSTREAM_URL=https://api.openai.com/v1\n",
+		EnvTemplate:  "OPENAI_API_KEY=\nHELM_UPSTREAM_URL=http://127.0.0.1:19090/v1\n",
 		NextSteps: []string{
-			"export OPENAI_API_KEY=...",
-			"helm proxy --upstream https://api.openai.com/v1",
+			"python3 scripts/launch/mock-openai-upstream.py --port 19090",
+			"helm proxy --upstream http://127.0.0.1:19090/v1",
 		},
 	},
 	"claude": {

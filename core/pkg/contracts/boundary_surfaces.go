@@ -261,6 +261,8 @@ type MCPAuthorizeCallRequest struct {
 	ArgsHash         string   `json:"args_hash,omitempty"`
 	GrantedScopes    []string `json:"granted_scopes,omitempty"`
 	PinnedSchemaHash string   `json:"pinned_schema_hash,omitempty"`
+	ToolSchema       any      `json:"tool_schema,omitempty"`
+	OutputSchema     any      `json:"output_schema,omitempty"`
 	OAuthResource    string   `json:"oauth_resource,omitempty"`
 	ReceiptID        string   `json:"receipt_id,omitempty"`
 }

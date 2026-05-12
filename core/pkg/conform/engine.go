@@ -156,10 +156,13 @@ func (e *Engine) Run(opts *RunOptions) (*ConformanceReport, error) {
 
 	// Inject environment fingerprint for reproducibility
 	report.Metadata = map[string]any{
-		"go_version": runtime.Version(),
-		"go_os":      runtime.GOOS,
-		"go_arch":    runtime.GOARCH,
-		"git_commit": gitCommit(),
+		"go_version":                     runtime.Version(),
+		"go_os":                          runtime.GOOS,
+		"go_arch":                        runtime.GOARCH,
+		"git_commit":                     gitCommit(),
+		"seed_baseline":                  opts.SeedBaseline,
+		"evidence_mode":                  evidenceMode(opts.SeedBaseline),
+		"release_certification_eligible": !opts.SeedBaseline,
 	}
 
 	// Write 01_SCORE.json (JCS-canonicalized for deterministic bytes)
@@ -173,6 +176,13 @@ func (e *Engine) Run(opts *RunOptions) (*ConformanceReport, error) {
 	}
 
 	return report, nil
+}
+
+func evidenceMode(seedBaseline bool) string {
+	if seedBaseline {
+		return "seeded-local-baseline"
+	}
+	return "release-evidencepack"
 }
 
 // resolveGates returns the gate IDs to run based on options.

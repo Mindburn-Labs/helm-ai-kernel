@@ -403,6 +403,114 @@
       "docs_origin_hint": "helm.docs.mindburn.org/helm-oss/design-system",
       "access": "public",
       "sensitivity": "public"
+    },
+    {
+      "slug": "codeofconduct",
+      "title": "Code of Conduct",
+      "section": "reference",
+      "source_path": "CODE_OF_CONDUCT.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/codeofconduct",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "docs-ossreadinessaudit",
+      "title": "OSS Readiness Audit",
+      "section": "oss",
+      "source_path": "docs/OSS_READINESS_AUDIT.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/oss/docs-ossreadinessaudit",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "support",
+      "title": "Support",
+      "section": "reference",
+      "source_path": "SUPPORT.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/support",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "roadmap",
+      "title": "Roadmap",
+      "section": "reference",
+      "source_path": "ROADMAP.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/roadmap",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "packages-design-system-core-governance",
+      "title": "Mindburn Labs Design System Governance (UCS 1.3)",
+      "section": "frontend",
+      "source_path": "packages/design-system-core/GOVERNANCE.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/frontend/packages-design-system-core-governance",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "packages-design-system-core-contributing",
+      "title": "Contributing to Mindburn Labs Design System",
+      "section": "frontend",
+      "source_path": "packages/design-system-core/CONTRIBUTING.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/frontend/packages-design-system-core-contributing",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "github-testmatrix",
+      "title": "Mindburn Labs Canonical Test Matrix (UCS v1.3)",
+      "section": "reference",
+      "source_path": ".github/TEST_MATRIX.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/github-testmatrix",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "github-surface",
+      "title": "GitHub Surface",
+      "section": "reference",
+      "source_path": ".github/SURFACE.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/github-surface",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "github-workflows-readme",
+      "title": "Workflows",
+      "section": "reference",
+      "source_path": ".github/workflows/README.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/github-workflows-readme",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "github-pullrequesttemplate",
+      "title": "PULL_REQUEST_TEMPLATE",
+      "section": "reference",
+      "source_path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/github-pullrequesttemplate",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "claims",
+      "title": "HELM OSS Claims",
+      "section": "reference",
+      "source_path": "CLAIMS.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/claims",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "data-readme",
+      "title": "Data",
+      "section": "reference",
+      "source_path": "data/README.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/data-readme",
+      "access": "public",
+      "sensitivity": "public"
     }
   ]
 }

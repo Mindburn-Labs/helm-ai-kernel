@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-oss/core/pkg/a2a"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
@@ -213,6 +214,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 			"version": displayVersion(),
 		})
 	})
+	a2a.RegisterWellKnownRoute(mux, a2a.NewKernelCardProvider(a2a.KernelCardConfig{}))
 	registerDemoRoutes(mux, svc)
 
 	// --- Durable receipt API ---

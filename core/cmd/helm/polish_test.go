@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"os"
 	"strings"
 	"testing"
 )
@@ -10,8 +9,7 @@ import (
 // TestDemoTerminalSummaryCard verifies the box-drawn summary card
 // is printed at the end of the demo with CLI/auditor paths.
 func TestDemoTerminalSummaryCard(t *testing.T) {
-	dir := t.TempDir()
-	os.Chdir(dir)
+	chdirTempDir(t)
 
 	var out bytes.Buffer
 	code := runDemoCompany([]string{"--template", "starter", "--provider", "mock"}, &out, &out)
@@ -44,8 +42,7 @@ func TestDemoTerminalSummaryCard(t *testing.T) {
 // TestDenyExplanation verifies the deny receipt in demo output
 // includes human explanation, policy clause, and remediation.
 func TestDenyExplanation(t *testing.T) {
-	dir := t.TempDir()
-	os.Chdir(dir)
+	chdirTempDir(t)
 
 	var out bytes.Buffer
 	code := runDemoCompany([]string{"--template", "starter", "--provider", "mock"}, &out, &out)

@@ -1,0 +1,34 @@
+{
+  "pack_id": "agent-tool-call-boundary-v1",
+  "label": "Agent Tool Call Boundary",
+  "version": 1,
+  "actions": [
+    {
+      "action": "read-ticket",
+      "enabled": true
+    },
+    {
+      "action": "export-customer-list",
+      "enabled": false
+    },
+    {
+      "action": "dangerous-shell",
+      "enabled": false
+    },
+    {
+      "action": "large-refund",
+      "enabled": true,
+      "requirement_set": {
+        "id": "escalate-large-refund",
+        "logic": "AND",
+        "requirements": [
+          {
+            "id": "req-human-approval",
+            "description": "Large refunds require an explicit human approval artifact",
+            "artifact_type": "human_approval"
+          }
+        ]
+      }
+    }
+  ]
+}

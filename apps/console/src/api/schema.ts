@@ -325,6 +325,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/.well-known/agent-card.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the public A2A agent card for HELM discovery */
+        get: operations["getA2AAgentCard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/boundary/status": {
         parameters: {
             query?: never;
@@ -1516,6 +1533,40 @@ export interface components {
             bearer_methods_supported?: string[];
             resource_documentation?: string;
         };
+        A2AAgentCard: {
+            agent_id: string;
+            name: string;
+            description?: string;
+            endpoint: string;
+            provider?: {
+                organization?: string;
+                url?: string;
+            };
+            supported_versions: string[];
+            skills: {
+                id: string;
+                name: string;
+                description?: string;
+                examples?: string[];
+                input_modes?: string[];
+                output_modes?: string[];
+            }[];
+            auth_methods?: string[];
+            features?: string[];
+            defaultInputModes?: string[];
+            defaultOutputModes?: string[];
+            capabilities?: {
+                streaming?: boolean;
+                pushNotifications?: boolean;
+                stateTransitionHistory?: boolean;
+            };
+            signature?: string;
+            content_hash?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         MCPRegistryDiscoverRequest: {
             server_id: string;
             name?: string;
@@ -2623,6 +2674,33 @@ export interface operations {
             };
             /** @description OAuth mode is not enabled */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getA2AAgentCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A2A agent discovery card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["A2AAgentCard"];
+                };
+            };
+            /** @description Agent card is not configured */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

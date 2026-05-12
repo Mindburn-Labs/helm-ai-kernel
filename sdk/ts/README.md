@@ -32,7 +32,7 @@ npm run build
 ```ts
 import { HelmApiError, HelmClient } from "@mindburn/helm";
 
-const client = new HelmClient({ baseUrl: "http://localhost:8080" });
+const client = new HelmClient({ baseUrl: "http://port 3000" });
 
 try {
   const result = await client.chatCompletions({
@@ -54,7 +54,7 @@ The TypeScript SDK includes lightweight adapter helpers for LangGraph, CrewAI, O
 ```ts
 import { HelmClient, createAgentFrameworkAdapter, fromOpenAIAgentsToolCall } from "@mindburn/helm";
 
-const helm = new HelmClient({ baseUrl: "http://localhost:8080" });
+const helm = new HelmClient({ baseUrl: "http://port 3000" });
 const adapter = createAgentFrameworkAdapter(helm, { model: "helm-governance" });
 
 const result = await adapter.submit(

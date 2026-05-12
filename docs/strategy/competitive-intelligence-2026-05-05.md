@@ -356,8 +356,8 @@ Clean-room spec candidates:
 | [NEW] | P1 | Optional DSSE/JWS export envelope design | DSSE/JWS/Sigstore/SCITT | E45-E50 | standards/open | interoperability without format swap | wrap HELM receipt roots, not replace native receipts | `protocols/spec/evidence-pack-v1.md`, `docs/VERIFICATION.md` | future golden fixtures | verification docs | M | procurement bridge | evidence less portable |
 | [NEW] | P1 | Optional OpenFGA relationship resolver | OpenFGA/Zanzibar | E30 | Apache-2.0 | resource graph auth | relationship snapshot token recorded in decision receipt | `core/pkg/authz`, `core/pkg/pdp`, `schemas/receipts` | stale tuple, service unavailable, race tests | policy-language docs | M | enterprise auth | weak delegated auth |
 | [NEW] | P2 | MCP server quarantine/approval surface | MCPProxy, VerdictLayer | E11, E14 | MIT/public | developer trust/DX | unknown server enters quarantined state until approved | `core/pkg/mcp`, `schemas/approvals`, `apps/console` | UI state/API tests | Console docs | L | adoption | weaker desktop UX |
-| [DEFER] | P3 | PQC/ML-DSA/SCITT default receipts | asqav, SCITT, COSE | E48-E50 plus prior April radar | draft/mixed | future proofing | monitor; no default key-management change | none now | none now | roadmap note only | S | future narrative | low now |
-| [DEFER] | P3 | Physical AI adapter | ROS 2/Open-RMF | E54-E55 | mixed/open | future vertical | monitor; no OSS core expansion | none now | none now | no tactical docs now | S | optional vertical | low unless customer asks |
+| [ESCALATE] | P3 | PQC/ML-DSA/SCITT default receipts | asqav, SCITT, COSE | E48-E50 plus prior April radar | draft/mixed | future proofing | monitor; no default key-management change | none now | none now | roadmap note only | S | future narrative | low now |
+| [ESCALATE] | P3 | Physical AI adapter | ROS 2/Open-RMF | E54-E55 | mixed/open | future vertical | monitor; no OSS core expansion | none now | none now | no tactical docs now | S | optional vertical | low unless customer asks |
 
 ## Clean-Room Implementation Specs
 

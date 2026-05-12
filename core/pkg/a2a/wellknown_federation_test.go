@@ -242,7 +242,7 @@ func TestAgentCard_V1_LF_Fields(t *testing.T) {
 			Organization: "Linux Foundation",
 			URL:          "https://linuxfoundation.org",
 		},
-		SupportedVersions:  []SchemaVersion{CurrentVersion},
+		SupportedVersions: []SchemaVersion{CurrentVersion},
 		Skills: []AgentSkill{
 			{
 				ID:          "research",

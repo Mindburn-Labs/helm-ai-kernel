@@ -621,6 +621,21 @@ paths:
         '404':
           description: OAuth mode is not enabled
 
+  /.well-known/agent-card.json:
+    get:
+      operationId: getA2AAgentCard
+      tags: [a2a]
+      summary: Read the public A2A agent card for HELM discovery
+      responses:
+        '200':
+          description: A2A agent discovery card
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/A2AAgentCard'
+        '503':
+          description: Agent card is not configured
+
   # ── Execution Boundary ─────────────────────────────
   /api/v1/boundary/status:
     get:
@@ -2452,6 +2467,63 @@ components:
           type: array
           items: { type: string }
         resource_documentation: { type: string }
+
+    A2AAgentCard:
+      type: object
+      required: [agent_id, name, endpoint, supported_versions, skills, created_at, updated_at]
+      properties:
+        agent_id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        endpoint: { type: string }
+        provider:
+          type: object
+          properties:
+            organization: { type: string }
+            url: { type: string }
+        supported_versions:
+          type: array
+          items: { type: string }
+        skills:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              description: { type: string }
+              examples:
+                type: array
+                items: { type: string }
+              input_modes:
+                type: array
+                items: { type: string }
+              output_modes:
+                type: array
+                items: { type: string }
+        auth_methods:
+          type: array
+          items: { type: string }
+        features:
+          type: array
+          items: { type: string }
+        defaultInputModes:
+          type: array
+          items: { type: string }
+        defaultOutputModes:
+          type: array
+          items: { type: string }
+        capabilities:
+          type: object
+          properties:
+            streaming: { type: boolean }
+            pushNotifications: { type: boolean }
+            stateTransitionHistory: { type: boolean }
+        signature: { type: string }
+        content_hash: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
 
     MCPRegistryDiscoverRequest:
       type: object

@@ -11,7 +11,7 @@ from exported HELM evidence data.
 ## Prerequisites
 
 - HELM running in the mode that produced the receipts you are inspecting.
-  `helm server` defaults to `http://localhost:8080`; `helm serve --policy`
+  `helm server` defaults to `http://port 3000`; `helm serve --policy`
   defaults to `http://localhost:7714`.
 - Receipts already present in the ProofGraph store
 - Python package from `sdk/python` or a JavaScript runtime with `fetch`

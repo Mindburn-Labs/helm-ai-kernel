@@ -11,6 +11,7 @@ permissions:
   attestations: write
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -21,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.25.10"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -34,11 +35,13 @@ jobs:
           java-version: "21"
       - uses: dtolnay/rust-toolchain@stable
       - uses: arduino/setup-protoc@v3
+        with:
+          version: "34.1"
       - name: Install codegen tools
         run: |
-          python -m pip install grpcio-tools
+          python -m pip install --require-hashes -r .github/requirements/codegen.txt
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.0
       - name: Build and test retained surfaces
         run: |
           make build
@@ -66,7 +69,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.25.10"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -83,7 +86,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.25.10"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -100,7 +103,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.25.10"
       - name: Reproducibility, SBOM, and VEX smoke
         run: make release-smoke
 
@@ -113,7 +116,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.25.10"
       - name: Build reproducible release binaries
         run: make release-binaries-reproducible
       - name: Build MCP bundle
@@ -187,7 +190,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.25.10"
       - name: First reproducible build
         run: |
           make release-binaries-reproducible
@@ -280,7 +283,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.25.10"
       - name: Run benchmark report
         run: make bench-report
       - name: Pin per-release benchmark snapshot

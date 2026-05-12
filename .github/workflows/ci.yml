@@ -14,6 +14,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+
 jobs:
   hygiene:
     runs-on: ubuntu-latest
@@ -52,7 +56,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.25.10"
       - name: Lint
         run: make lint
       - name: Build
@@ -135,7 +139,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.25.10"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -148,11 +152,13 @@ jobs:
           java-version: "21"
       - uses: dtolnay/rust-toolchain@stable
       - uses: arduino/setup-protoc@v3
+        with:
+          version: "34.1"
       - name: Install codegen tools
         run: |
-          python -m pip install grpcio-tools
+          python -m pip install --require-hashes -r .github/requirements/codegen.txt
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.0
       - name: Verify generated contracts
         run: make codegen-check
 
@@ -162,7 +168,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.25.10"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -178,7 +184,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.25.10"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -194,6 +200,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.25.10"
       - name: Reproducibility, SBOM, and VEX smoke
         run: make release-smoke

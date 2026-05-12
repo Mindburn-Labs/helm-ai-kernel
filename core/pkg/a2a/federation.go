@@ -34,24 +34,24 @@ type FederationContext struct {
 
 // FederationPolicy controls which organizations can federate.
 type FederationPolicy struct {
-	AllowedOrgs     []string      `json:"allowed_orgs"`              // empty = deny all
-	DenyOrgs        []string      `json:"deny_orgs,omitempty"`       // explicit denials
-	RequireProof    bool          `json:"require_proof"`             // require proof capsule
-	CapsuleTTL      time.Duration `json:"capsule_ttl,omitempty"`     // max age of capsule
-	MinTrustLevel   string        `json:"min_trust_level,omitempty"` // "full", "limited", "verify_only"
+	AllowedOrgs   []string      `json:"allowed_orgs"`              // empty = deny all
+	DenyOrgs      []string      `json:"deny_orgs,omitempty"`       // explicit denials
+	RequireProof  bool          `json:"require_proof"`             // require proof capsule
+	CapsuleTTL    time.Duration `json:"capsule_ttl,omitempty"`     // max age of capsule
+	MinTrustLevel string        `json:"min_trust_level,omitempty"` // "full", "limited", "verify_only"
 }
 
 // ProofCapsule is a portable, self-contained proof of governed execution history.
 type ProofCapsule struct {
-	CapsuleID   string    `json:"capsule_id"`
-	OriginOrg   string    `json:"origin_org"`
-	MerkleRoot  string    `json:"merkle_root"`
-	ProofNodes  []string  `json:"proof_nodes"`  // selected proof graph node hashes
-	NodeCount   int       `json:"node_count"`   // total nodes in the proof graph
-	PolicyVersion string  `json:"policy_version"`
-	CreatedAt   time.Time `json:"created_at"`
-	ExpiresAt   time.Time `json:"expires_at"`
-	ContentHash string    `json:"content_hash"`
+	CapsuleID     string    `json:"capsule_id"`
+	OriginOrg     string    `json:"origin_org"`
+	MerkleRoot    string    `json:"merkle_root"`
+	ProofNodes    []string  `json:"proof_nodes"` // selected proof graph node hashes
+	NodeCount     int       `json:"node_count"`  // total nodes in the proof graph
+	PolicyVersion string    `json:"policy_version"`
+	CreatedAt     time.Time `json:"created_at"`
+	ExpiresAt     time.Time `json:"expires_at"`
+	ContentHash   string    `json:"content_hash"`
 }
 
 // FederationDenyReason enumerates federation-specific denial codes.
@@ -95,11 +95,11 @@ func EvaluateFederationPolicy(fc *FederationContext, policy *FederationPolicy) *
 	for _, denied := range policy.DenyOrgs {
 		if denied == fc.OriginOrg {
 			return &NegotiationResult{
-				Accepted:   false,
-				DenyReason: DenyFederationOrgDenied,
+				Accepted:    false,
+				DenyReason:  DenyFederationOrgDenied,
 				DenyDetails: fmt.Sprintf("organization %q is on the deny list", fc.OriginOrg),
-				ReceiptID:  "federation_deny",
-				Timestamp:  now,
+				ReceiptID:   "federation_deny",
+				Timestamp:   now,
 			}
 		}
 	}
@@ -115,11 +115,11 @@ func EvaluateFederationPolicy(fc *FederationContext, policy *FederationPolicy) *
 		}
 		if !found {
 			return &NegotiationResult{
-				Accepted:   false,
-				DenyReason: DenyFederationOrgDenied,
+				Accepted:    false,
+				DenyReason:  DenyFederationOrgDenied,
 				DenyDetails: fmt.Sprintf("organization %q is not in the allow list", fc.OriginOrg),
-				ReceiptID:  "federation_deny",
-				Timestamp:  now,
+				ReceiptID:   "federation_deny",
+				Timestamp:   now,
 			}
 		}
 	}
@@ -131,11 +131,11 @@ func EvaluateFederationPolicy(fc *FederationContext, policy *FederationPolicy) *
 		actualRank := trustRank[fc.TrustLevel]
 		if actualRank < minRank {
 			return &NegotiationResult{
-				Accepted:   false,
-				DenyReason: DenyFederationTrustTooLow,
+				Accepted:    false,
+				DenyReason:  DenyFederationTrustTooLow,
 				DenyDetails: fmt.Sprintf("trust_level %q below minimum %q", fc.TrustLevel, policy.MinTrustLevel),
-				ReceiptID:  "federation_deny",
-				Timestamp:  now,
+				ReceiptID:   "federation_deny",
+				Timestamp:   now,
 			}
 		}
 	}
@@ -143,11 +143,11 @@ func EvaluateFederationPolicy(fc *FederationContext, policy *FederationPolicy) *
 	// Check proof requirement.
 	if policy.RequireProof && fc.ProofCapsuleRef == "" {
 		return &NegotiationResult{
-			Accepted:   false,
-			DenyReason: DenyFederationProofInvalid,
+			Accepted:    false,
+			DenyReason:  DenyFederationProofInvalid,
 			DenyDetails: "federation policy requires a proof capsule but none was provided",
-			ReceiptID:  "federation_deny",
-			Timestamp:  now,
+			ReceiptID:   "federation_deny",
+			Timestamp:   now,
 		}
 	}
 

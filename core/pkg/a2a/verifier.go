@@ -11,12 +11,12 @@ import (
 
 // DefaultVerifier implements the Verifier interface with fail-closed semantics.
 type DefaultVerifier struct {
-	mu                   sync.RWMutex
-	trustedKeys          map[string]TrustedKey // kid → key
-	policyRules          []PolicyRule
-	clock                func() time.Time
-	MaxNegotiationDuration time.Duration // bounded compute invariant; 0 = 10s default
-	FederationPolicy     *FederationPolicy  // nil = federation disabled
+	mu                     sync.RWMutex
+	trustedKeys            map[string]TrustedKey // kid → key
+	policyRules            []PolicyRule
+	clock                  func() time.Time
+	MaxNegotiationDuration time.Duration     // bounded compute invariant; 0 = 10s default
+	FederationPolicy       *FederationPolicy // nil = federation disabled
 }
 
 // NewDefaultVerifier creates a new A2A verifier.

@@ -63,7 +63,7 @@ The Authority Court returns:
 |---------------------|----------|-------------|
 | `decision_id`       | UUID     | Unique decision identifier |
 | `request_id`        | UUID     | Binds to the originating request |
-| `result`            | enum     | ALLOW / DENY / REQUIRE_APPROVAL / REQUIRE_EVIDENCE / DEFER |
+| `result`            | enum     | ALLOW / DENY / ESCALATE / REQUIRE_EVIDENCE / ESCALATE |
 | `reason_codes`      | string[] | Machine-readable reason codes |
 | `ceilings_snapshot` | Object   | Budget, rate, scope ceilings at decision time |
 | `commit_token`      | Object   | If ALLOW: token bound to draft+ceilings+epoch+TTL |
@@ -173,7 +173,7 @@ Standard reason codes for decisions:
 | `DENY_UNAUTHENTICATED_MEMORY` | Context capsule provenance invalid |
 | `DENY_POLICY_EPOCH_EXPIRED` | Policy epoch no longer valid |
 | `DENY_EFFECT_NOT_TYPED` | Tool missing effect type descriptors |
-| `REQUIRE_APPROVAL` | Human approval required |
+| `ESCALATE` | Human approval required |
 | `REQUIRE_EVIDENCE` | Additional evidence required |
 
 ## Canonicalization

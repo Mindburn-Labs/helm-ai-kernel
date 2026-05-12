@@ -1,0 +1,10 @@
+{
+  "id": "req_1004",
+  "action": "large-refund",
+  "resource": "payment:refund",
+  "principal": "agent-1",
+  "context": {
+    "amount": 5000
+  },
+  "artifacts": []
+}

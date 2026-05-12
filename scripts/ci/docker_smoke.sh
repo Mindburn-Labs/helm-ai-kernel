@@ -129,6 +129,14 @@ stop_runtime() {
     fi
 }
 
+root_key_hash() {
+    if shasum -a 256 "$DATA_DIR/root.key" >/dev/null 2>&1; then
+        shasum -a 256 "$DATA_DIR/root.key" | awk '{print $1}'
+        return
+    fi
+    docker run --rm -v "${DATA_DIR}:/data:ro" busybox:1.36.1 sha256sum /data/root.key | awk '{print $1}'
+}
+
 evaluate_unknown_tool() {
     curl -fsS -X POST "$(base_url)/api/v1/evaluate" \
         -H 'Content-Type: application/json' \
@@ -211,11 +219,11 @@ PY
 assert_persistence_files() {
     test -f "$DATA_DIR/root.key" || { echo "::error::root.key missing from durable data dir"; exit 1; }
     test -f "$DATA_DIR/helm.db" || { echo "::error::helm.db missing from durable data dir"; exit 1; }
-    shasum -a 256 "$DATA_DIR/root.key" | awk '{print $1}' >"$DATA_DIR/root-key.before"
+    root_key_hash >"$DATA_DIR/root-key.before"
 }
 
 assert_persistence_after_restart() {
-    shasum -a 256 "$DATA_DIR/root.key" | awk '{print $1}' >"$DATA_DIR/root-key.after"
+    root_key_hash >"$DATA_DIR/root-key.after"
     diff "$DATA_DIR/root-key.before" "$DATA_DIR/root-key.after" >/dev/null || {
         echo "::error::root key changed across restart"
         exit 1

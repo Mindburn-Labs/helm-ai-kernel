@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Mindburn Labs", email = "oss@mindburn.org" }]
-dependencies = ["httpx>=0.25.0"]
+dependencies = ["httpx>=0.25.0", "pydantic>=2.0,<3"]
 
 [build-system]
 requires = ["setuptools>=68.0"]

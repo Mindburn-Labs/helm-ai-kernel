@@ -76,7 +76,7 @@ make docs-truth
 Use Homebrew when you want the published CLI path:
 
 ```bash
-brew install mindburn-labs/tap/helm
+brew install mindburnlabs/tap/helm
 helm --version
 ```
 
@@ -206,6 +206,8 @@ HELM OSS is useful only when you can prove both outcomes:
 ```bash
 ./bin/helm receipts tail --agent agent.titan.exec --server http://127.0.0.1:7714
 ```
+
+**Launch Demo Suite:** You can evaluate a complete, end-to-end set of allow/deny/escalate outcomes using the canonical launch suite in `examples/launch/`. Run `make launch-smoke` to verify policy execution, receipt proof generation, and MCP quarantine behavior locally.
 
 Use allow and deny fixtures from `examples/policies/` when validating policy-language behavior. The policy bundle command supports CEL, Rego, and Cedar:
 

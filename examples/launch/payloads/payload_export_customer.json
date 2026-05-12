@@ -1,0 +1,8 @@
+{
+  "id": "req_1002",
+  "action": "export-customer-list",
+  "resource": "customers:*",
+  "principal": "agent-1",
+  "context": {},
+  "artifacts": []
+}

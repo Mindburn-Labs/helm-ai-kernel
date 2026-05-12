@@ -141,7 +141,7 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 
 	// 5. Outbox Scheduling
 	if e.outboxStore != nil {
-		if err := e.outboxStore.Schedule(ctx, effect, decision); err != nil {
+		if err := e.outboxStore.Schedule(ctx, effect, intent); err != nil {
 			return nil, nil, fmt.Errorf("failed to schedule effect in outbox: %w", err)
 		}
 	}

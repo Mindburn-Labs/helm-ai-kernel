@@ -1,0 +1,8 @@
+{
+  "id": "req_1001",
+  "action": "read-ticket",
+  "resource": "ticket:123",
+  "principal": "agent-1",
+  "context": {},
+  "artifacts": []
+}

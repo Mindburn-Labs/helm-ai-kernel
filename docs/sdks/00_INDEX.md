@@ -99,14 +99,14 @@ pytest -v --tb=short
 
 Minimal client:
 
-This client targets `helm server`, whose API default is `http://localhost:8080`.
+This client targets `helm server`, whose API default is `http://port 3000`.
 For the local policy-boundary path started with `helm serve --policy <file>`, set
 the base URL to `http://localhost:7714` unless you passed a custom `--port`.
 
 ```python
 from helm_sdk import HelmApiError, HelmClient, ChatCompletionRequest, ChatMessage
 
-client = HelmClient(base_url="http://localhost:8080")
+client = HelmClient(base_url="http://port 3000")
 
 try:
     result = client.chat_completions(
@@ -141,14 +141,14 @@ npm run build
 
 Minimal client:
 
-This client targets `helm server`, whose API default is `http://localhost:8080`.
+This client targets `helm server`, whose API default is `http://port 3000`.
 For `helm serve`, use `http://localhost:7714`; for `helm proxy`, use the
 OpenAI-compatible proxy default `http://localhost:9090/v1`.
 
 ```ts
 import { HelmApiError, HelmClient } from "@mindburn/helm";
 
-const client = new HelmClient({ baseUrl: "http://localhost:8080" });
+const client = new HelmClient({ baseUrl: "http://port 3000" });
 
 try {
   const result = await client.chatCompletions({
@@ -193,7 +193,7 @@ import (
 )
 
 func main() {
-	client := helm.New("http://localhost:8080")
+	client := helm.New("http://port 3000")
 	res, err := client.ChatCompletions(helm.ChatCompletionRequest{
 		Model: "gpt-4",
 		Messages: []helm.ChatMessage{{
@@ -232,7 +232,7 @@ Minimal client:
 use helm_sdk::{ChatCompletionRequest, ChatCompletionRequestMessagesInner, HelmClient, Role};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = HelmClient::new("http://localhost:8080");
+    let client = HelmClient::new("http://port 3000");
     let result = client.chat_completions(&ChatCompletionRequest::new(
         "gpt-4".to_string(),
         vec![ChatCompletionRequestMessagesInner::new(
@@ -275,7 +275,7 @@ import java.util.List;
 
 class Example {
   public static void main(String[] args) {
-    HelmClient client = new HelmClient("http://localhost:8080");
+    HelmClient client = new HelmClient("http://port 3000");
     ChatCompletionRequest req = new ChatCompletionRequest()
         .model("gpt-4")
         .messages(List.of(new ChatCompletionRequestMessagesInner()

@@ -104,6 +104,9 @@ export interface ConsoleSurfaceState {
 
 const client = createClient<paths>({
   baseUrl: "",
+  fetch: (request) => {
+    return fetch(new Request(request, { credentials: "include" }));
+  },
 });
 
 const CONSOLE_ADMIN_KEY_STORAGE = "helm.console.admin_api_key";
@@ -207,6 +210,7 @@ async function jsonFetch<T>(path: string, body: unknown, fallbackMessage: string
   const response = await fetch(path, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!response.ok) {
@@ -276,7 +280,7 @@ export async function loadConsoleSurface(surface: string): Promise<ConsoleSurfac
 }
 
 export async function loadEndpoint(path: string): Promise<{ readonly status: number; readonly ok: boolean; readonly data: unknown }> {
-  const response = await fetch(path, { headers: { Accept: "application/json", ...authHeaders() } });
+  const response = await fetch(path, { headers: { Accept: "application/json", ...authHeaders() }, credentials: "include" });
   const contentType = response.headers.get("Content-Type") ?? "";
   let data: unknown;
   if (contentType.includes("application/json")) {
@@ -295,6 +299,7 @@ export async function replayVerifyCurrentEvidence(sessionID: string): Promise<Ve
       "Content-Type": "application/json",
       ...authHeaders(),
     },
+    credentials: "include",
     body: JSON.stringify({ session_id: sessionID, format: "tar.gz" }),
   });
   if (!exportResponse.ok) {
@@ -308,6 +313,7 @@ export async function replayVerifyCurrentEvidence(sessionID: string): Promise<Ve
       "Content-Type": "application/octet-stream",
       ...authHeaders(),
     },
+    credentials: "include",
     body: bundle,
   });
   if (!verifyResponse.ok) {
@@ -329,6 +335,7 @@ export function watchReceipts(onReceipt: (receipt: Receipt) => void, onError: (e
 async function streamReceiptEvents(signal: AbortSignal, onReceipt: (receipt: Receipt) => void): Promise<void> {
   const response = await fetch("/api/v1/receipts/tail?limit=100", {
     headers: { Accept: "text/event-stream", ...authHeaders() },
+    credentials: "include",
     signal,
   });
   if (!response.ok) {

@@ -40,7 +40,7 @@ import java.util.List;
 
 class Example {
   public static void main(String[] args) {
-    HelmClient client = new HelmClient("http://localhost:8080");
+    HelmClient client = new HelmClient("http://port 3000");
     ChatCompletionRequest req = new ChatCompletionRequest()
         .model("gpt-4")
         .messages(List.of(new ChatCompletionRequestMessagesInner()

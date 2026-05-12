@@ -5,10 +5,10 @@ Typed Rust client for the retained HELM kernel API.
 ## Install
 
 ```toml
-helm-sdk = "0.4.0"
+helm-sdk = "0.5.0"
 ```
 
-Package metadata declares crate version `0.4.0` in `Cargo.toml`.
+Package metadata declares crate version `0.5.0` in `Cargo.toml`.
 
 ## Local Development
 
@@ -53,4 +53,4 @@ runtime query is provided.
 
 ## Release Notes
 
-`0.4.0` is the cleaned OSS kernel baseline with the retained OpenAPI client surface and optional protobuf codegen.
+`0.5.0` is the cleaned OSS kernel baseline with the retained OpenAPI client surface and optional protobuf codegen.

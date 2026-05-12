@@ -24,6 +24,7 @@ Agent proposal -> HELM boundary -> ALLOW / DENY / ESCALATE -> signed receipt
 ## Status
 
 - Repository: `Mindburn-Labs/helm-oss`
+- Root package identity: `helm-oss-root`
 - Current public release: `v0.4.0`
 - License: Apache-2.0
 - Supported security line: `0.4.x`; `0.3.x` is best effort
@@ -87,8 +88,9 @@ curl http://127.0.0.1:7714/api/demo/tamper \
 Govern MCP tools or an OpenAI-compatible client:
 
 ```bash
-helm mcp wrap --server-id local-tools --upstream-command "node server.js"
-helm proxy --upstream https://api.openai.com/v1
+python3 scripts/launch/mock-openai-upstream.py --port 19090
+helm mcp wrap --server-id local-tools --upstream-command "python3 scripts/launch/mcp-fixture-server.py"
+helm proxy --upstream http://127.0.0.1:19090/v1
 ```
 
 Inspect and verify evidence:
@@ -184,7 +186,7 @@ The complete diagram doctrine lives in
 | Python SDK | `pip install helm-sdk` |
 | TypeScript SDK | `npm install @mindburn/helm` |
 | Rust SDK | `cargo add helm-sdk` |
-| Java SDK | Maven workflow coordinate: `com.github.Mindburn-Labs:helm-sdk`; JitPack resolves the release as `com.github.mindburn-labs:helm-oss:0.4.0` |
+| Java SDK | Maven workflow coordinate: `com.github.Mindburn-Labs:helm-sdk`; JitPack release availability is tracked in the OSS-readiness audit |
 | Design system core | Workspace source; public npm registry publication is not verified in this repo |
 
 HTTP clients are generated from

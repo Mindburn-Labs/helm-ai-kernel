@@ -101,7 +101,7 @@ helm upgrade --install helm-oss deploy/helm-chart \
 | Value | Default | Source-backed behavior |
 | --- | --- | --- |
 | `image.repository` | `ghcr.io/mindburn-labs/helm-oss` | Container image used by the Deployment. |
-| `image.tag` | chart `appVersion` | Defaults to `0.4.0` from `Chart.yaml`. |
+| `image.tag` | chart `appVersion` | Defaults to `0.5.0` from `Chart.yaml`. |
 | `helm.bindAddr` | `0.0.0.0` | Required because the pod must bind beyond loopback. |
 | `service.port` | `8080` | Runtime HTTP port passed to `helm serve --port`. |
 | `service.healthPort` | `8081` | Health probe port via `HELM_HEALTH_PORT`. |

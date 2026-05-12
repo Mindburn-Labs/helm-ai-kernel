@@ -8,7 +8,7 @@ Typed TypeScript client for the retained HELM kernel API.
 npm install @mindburn/helm
 ```
 
-Package metadata declares version `0.4.0` in `package.json`.
+Package metadata declares version `0.5.0` in `package.json`.
 
 ## Local Development
 
@@ -86,4 +86,4 @@ and sandbox grants attached to HELM-native receipts and EvidencePacks.
 
 ## Release Notes
 
-`0.4.0` is the cleaned OSS kernel baseline with the retained OpenAPI client surface and protobuf message bindings.
+`0.5.0` is the cleaned OSS kernel baseline with the retained OpenAPI client surface and protobuf message bindings.

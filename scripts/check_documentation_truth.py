@@ -61,6 +61,36 @@ REQUIRED_RUNTIME_REFERENCE_SLUGS = {
 }
 
 
+def expected_repo_name() -> str:
+    """Derive the repository name from git remote metadata.
+
+    Release worktrees often include branch/version suffixes in the checkout
+    directory. Documentation manifests should be checked against the actual
+    repository identity, not the local folder name.
+    """
+    try:
+        result = subprocess.run(
+            ['git', 'config', '--get', 'remote.origin.url'],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception:
+        return ROOT.name
+
+    url = result.stdout.strip().rstrip('/')
+    if not url:
+        return ROOT.name
+    repo = re.split(r'[:/]', url)[-1]
+    if repo.endswith('.git'):
+        repo = repo[:-4]
+    return repo or ROOT.name
+
+
+EXPECTED_REPO_NAME = expected_repo_name()
+
+
 def read_text(path: Path) -> str:
     return path.read_text(errors='ignore')
 
@@ -126,8 +156,11 @@ def validate_source_inventory(failures: list[str], public_slugs: set[str]) -> No
 
     if manifest.get('schema_version') != 1:
         failures.append('docs/source-inventory.manifest.json schema_version must be 1')
-    if manifest.get('repo') != ROOT.name:
-        failures.append(f'docs/source-inventory.manifest.json repo is {manifest.get("repo")!r}, expected {ROOT.name!r}')
+    if manifest.get('repo') != EXPECTED_REPO_NAME:
+        failures.append(
+            f'docs/source-inventory.manifest.json repo is {manifest.get("repo")!r}, '
+            f'expected {EXPECTED_REPO_NAME!r}'
+        )
 
     inventory = manifest.get('inventory')
     if not isinstance(inventory, list) or not inventory:
@@ -239,8 +272,8 @@ def main() -> int:
             failures.append(f'docs/public-docs.manifest.json is not valid JSON: {exc}')
             manifest = {}
         repo_name = manifest.get('repo')
-        if repo_name and repo_name != ROOT.name:
-            failures.append(f'docs/public-docs.manifest.json repo is {repo_name!r}, expected {ROOT.name!r}')
+        if repo_name and repo_name != EXPECTED_REPO_NAME:
+            failures.append(f'docs/public-docs.manifest.json repo is {repo_name!r}, expected {EXPECTED_REPO_NAME!r}')
         documents = manifest.get('documents') or manifest.get('owned_documents') or []
         slugs: set[str] = set()
         for document in documents:
@@ -256,7 +289,7 @@ def main() -> int:
                 continue
             if not (ROOT / source_path).exists():
                 failures.append(f'docs/public-docs.manifest.json source does not exist for {slug}: {source_path}')
-            if ROOT.name == 'titan':
+            if EXPECTED_REPO_NAME == 'titan':
                 normalized = source_path.lower()
                 if any(pattern in normalized for pattern in PRIVATE_TITAN_PATTERNS):
                     failures.append(f'Titan public docs manifest exposes private path for {slug}: {source_path}')

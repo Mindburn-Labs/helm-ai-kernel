@@ -1,6 +1,6 @@
-.PHONY: build test test-race test-sdk-go-standalone test-sdk-ts test-design-system build-console test-console test-platform test-sdk-py test-sdk-rust test-sdk-java verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check clean docs-coverage docs-truth
+.PHONY: build test test-race test-sdk-go-standalone test-sdk-ts test-design-system build-console test-console test-platform test-sdk-py test-sdk-rust test-sdk-java verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check clean docs-coverage docs-truth
 
-VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.4.0)
+VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.5.0)
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME)
@@ -81,7 +81,7 @@ crucible: build
 	bash scripts/usecases/run_all.sh
 
 proxy: build
-	./bin/helm proxy --upstream https://api.openai.com/v1
+	./bin/helm proxy --upstream http://127.0.0.1:19090/v1
 
 docker: build-console
 	docker build -t ghcr.io/mindburn-labs/helm-oss:local .
@@ -107,7 +107,7 @@ release-smoke:
 	bash scripts/ci/release_smoke.sh
 
 sbom: build
-	bash scripts/ci/generate_sbom.sh
+	HELM_VERSION=$(VERSION) bash scripts/ci/generate_sbom.sh
 
 provenance:
 	cd core && CGO_ENABLED=0 go build -ldflags="-s -w \
@@ -165,7 +165,12 @@ release-binaries:
 	cd core && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/helm-windows-amd64.exe ./cmd/helm/
 	cd bin && shasum -a 256 helm-* > SHA256SUMS.txt
 
-release-all: release-binaries sbom mcp-pack
+release-assets: release-binaries-reproducible mcp-pack sbom vex
+	bash scripts/release/stage_release_assets.sh
+
+build-release: release-assets
+
+release-all: release-assets
 
 # --- Reproducibility & Cosign & VEX (Workstream E) -----------------------
 # SOURCE_DATE_EPOCH defaults to the HEAD commit timestamp so local devs and
@@ -187,7 +192,7 @@ release-binaries-reproducible:
 
 # Generate OpenVEX statements for every CVE listed in the current SBOM.
 vex:
-	@bash scripts/release/generate_vex.sh
+	@HELM_VERSION=$(VERSION) bash scripts/release/generate_vex.sh
 
 # Verify the cosign signature of a local artifact tree (smoke / docs example).
 verify-cosign:

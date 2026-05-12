@@ -8,7 +8,7 @@ Typed Go client for the HELM kernel HTTP API.
 go get github.com/Mindburn-Labs/helm-oss/sdk/go@main
 ```
 
-Version truth is the repository `VERSION` file (`0.4.0` for this reset).
+Version truth is the repository `VERSION` file (`0.5.0` for this reset).
 Go consumers should pin by commit or `@main` until SDK module release tags are
 realigned with the repository release version.
 
@@ -95,4 +95,4 @@ func main() {
 
 ## Release Notes
 
-`0.4.0` is the cleaned OSS kernel baseline with the public HTTP client surface, conformance entrypoints, and evidence verification helpers.
+`0.5.0` is the cleaned OSS kernel baseline with the public HTTP client surface, conformance entrypoints, and evidence verification helpers.

@@ -1,7 +1,7 @@
 openapi: "3.1.0"
 info:
   title: HELM Kernel API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Deterministic execution kernel for AI tool calls.
     Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.

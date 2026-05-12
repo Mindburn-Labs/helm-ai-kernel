@@ -15,7 +15,7 @@ These items are accepted as blockers that cannot be resolved within the local la
 *   **Impact**: Prevents automated PR gating, remote test execution, and the automated release pipeline (binaries, SBOM, provenance).
 *   **Remediation**: 
     1. Organization billing administrator must unfreeze the account.
-    2. Alternatively, release artifacts for `v0.4.1` must be cut locally via the `make release-all` and `make release-binaries-reproducible` commands if a manual launch path is required.
+    2. Alternatively, release artifacts for `v0.5.0` must be cut locally via the `make release-assets` and `make release-binaries-reproducible` commands if a manual launch path is required.
 *   **Owner**: Mindburn Infrastructure / Billing Admin
 
 ### 2. TEE Hardware Validation Environment

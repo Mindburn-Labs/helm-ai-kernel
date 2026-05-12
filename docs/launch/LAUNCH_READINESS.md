@@ -6,7 +6,7 @@ This document tracks the final launch-readiness state of the `helm-oss` reposito
 - [x] **PR Boundary**: No open PRs contain commercial infrastructure terminology.
 - [x] **Config Boundary**: `wrangler.toml` does not enforce hosted domains.
 - [ ] **Terminology Boundary**: `VERDICT_CANONICALIZATION.md` exists and resolves the ALLOW/DENY/ESCALATE vs. DEFER drift.
-- [x] **Version**: `VERSION` is set to launch target `0.4.1`.
+- [x] **Version**: `VERSION` is set to launch target `0.5.0`.
 - [ ] **Homebrew**: README points to canonical `mindburnlabs/tap/helm`.
 
 ## Phase 1: Implementation & Proof

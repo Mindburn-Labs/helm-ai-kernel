@@ -8,7 +8,7 @@ Typed Python client for the retained HELM kernel API.
 pip install helm-sdk
 ```
 
-Package metadata declares version `0.4.0` in `pyproject.toml`.
+Package metadata declares version `0.5.0` in `pyproject.toml`.
 
 ## Local Development
 
@@ -55,4 +55,4 @@ EvidencePack roots stay authoritative.
 
 ## Release Notes
 
-`0.4.0` is the cleaned OSS kernel baseline with the retained OpenAPI client surface and local test coverage.
+`0.5.0` is the cleaned OSS kernel baseline with the retained OpenAPI client surface and local test coverage.

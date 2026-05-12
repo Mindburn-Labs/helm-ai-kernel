@@ -67,7 +67,7 @@ This page is backed by:
 | JavaScript | `@mindburn/helm` or OpenAI base URL client | `sdk/ts/src/client.ts` | `examples/js_openai_baseurl/` | `make test-sdk-ts` |
 | Go | repository module at current source | `sdk/go/client/client.go` | `examples/go_client/` | `cd sdk/go && go test ./...` |
 | Rust | `helm-sdk` | `sdk/rust/src/client.rs` | `examples/rust_client/` | `make test-sdk-rust` |
-| Java | Maven workflow: `com.github.Mindburn-Labs:helm-sdk`; JitPack: `com.github.mindburn-labs:helm-oss:0.4.0` | `sdk/java/pom.xml` | `examples/java_client/` | `make test-sdk-java` |
+| Java | Maven workflow: `com.github.Mindburn-Labs:helm-sdk`; JitPack release availability is verified after the GitHub release exists | `sdk/java/pom.xml` | `examples/java_client/` | `make test-sdk-java` |
 
 ## Choose a Client
 
@@ -216,7 +216,7 @@ func main() {
 Install:
 
 ```toml
-helm-sdk = "0.4.0"
+helm-sdk = "0.5.0"
 ```
 
 Local validation:
@@ -253,7 +253,7 @@ Coordinate:
 <dependency>
   <groupId>com.github.Mindburn-Labs</groupId>
   <artifactId>helm-sdk</artifactId>
-  <version>0.4.0</version>
+  <version>0.5.0</version>
 </dependency>
 ```
 

@@ -155,7 +155,8 @@ helm-edge-local - listening :7714 - ready
 Then start the OpenAI-compatible proxy in another shell:
 
 ```bash
-./bin/helm proxy --upstream https://api.openai.com/v1 --port 9090 --receipts-dir ./helm-receipts
+python3 scripts/launch/mock-openai-upstream.py --port 19090
+./bin/helm proxy --upstream http://127.0.0.1:19090/v1 --port 9090 --receipts-dir ./helm-receipts
 ```
 
 Point OpenAI-compatible clients at:
@@ -402,9 +403,14 @@ go test ./...
 Run the retained OSS release gates:
 
 ```bash
+make test
+make test-console
+make test-platform
 make test-all
+make crucible
+make launch-smoke
 make verify-fixtures
-make release-binaries-reproducible
+make release-assets
 ```
 
 Release artifact verification is documented in `docs/PUBLISHING.md` and

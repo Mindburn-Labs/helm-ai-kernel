@@ -41,7 +41,7 @@ The schema shape is:
 
 ```json
 {
-  "helm_version": "0.4.0",
+  "helm_version": "0.5.0",
   "go_version": "go1.24.0",
   "go_os": "<os>",
   "go_arch": "<arch>",

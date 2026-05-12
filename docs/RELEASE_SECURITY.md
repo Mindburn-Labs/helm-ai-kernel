@@ -56,6 +56,7 @@ assets visible on GitHub are Darwin/Linux/Windows binaries, `SHA256SUMS.txt`,
 ```bash
 make release-binaries-reproducible
 make release-smoke
+make release-assets
 make verify-cosign
 make verify-fixtures
 make docs-coverage docs-truth
@@ -71,6 +72,9 @@ For `v0.4.0`, the public release does not expose `*.cosign.bundle` or
 release-attestation inspection, offline evidence-pack verification, and
 reproducible-build validation for that release. Use Cosign/OpenVEX verification
 only for releases that attach those files.
+
+The `v0.5.0` target workflow attaches OpenVEX and Cosign bundle assets for each
+primary release file after `make release-assets` stages the complete asset set.
 
 ## Source Truth
 

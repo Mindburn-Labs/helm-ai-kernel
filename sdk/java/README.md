@@ -8,15 +8,15 @@ Typed Java client for the retained HELM kernel API.
 <dependency>
   <groupId>com.github.Mindburn-Labs</groupId>
   <artifactId>helm-sdk</artifactId>
-  <version>0.4.0</version>
+  <version>0.5.0</version>
 </dependency>
 ```
 
 The Maven publish workflow owns the `com.github.Mindburn-Labs:helm-sdk`
-coordinate. The public JitPack release URL checked during OSS readiness
-resolved as `com.github.mindburn-labs:helm-oss:0.4.0`.
+coordinate. JitPack release availability is verified during OSS readiness and
+must not be claimed for `0.5.0` until the GitHub release exists.
 
-Package metadata declares version `0.4.0` in `pom.xml`.
+Package metadata declares version `0.5.0` in `pom.xml`.
 
 ## Local Development
 
@@ -62,4 +62,4 @@ authoritative.
 
 ## Release Notes
 
-`0.4.0` is the cleaned OSS kernel baseline with the retained OpenAPI client surface and protobuf message bindings.
+`0.5.0` is the cleaned OSS kernel baseline with the retained OpenAPI client surface and protobuf message bindings.

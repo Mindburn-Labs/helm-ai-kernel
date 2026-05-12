@@ -146,8 +146,14 @@ Open `http://127.0.0.1:7714` to use the self-hostable HELM OSS Console.
 In another shell:
 
 ```bash
+python3 scripts/launch/mock-openai-upstream.py --port 19090
+```
+
+Then start the proxy against that local upstream:
+
+```bash
 ./bin/helm proxy \
-  --upstream https://api.openai.com/v1 \
+  --upstream http://127.0.0.1:19090/v1 \
   --port 9090 \
   --receipts-dir ./helm-receipts
 ```

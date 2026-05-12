@@ -60,6 +60,35 @@ page attaches platform binaries, `SHA256SUMS.txt`, `sbom.json`,
 `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`,
 `helm.mcpb`, and `helm.rb`.
 
+There is no public GitHub Release object for `v0.4.1`; treat `v0.4.0` as the
+actual public baseline until `v0.5.0` is published.
+
+## v0.5.0 Target Asset Contract
+
+The `v0.5.0` release workflow stages all primary assets under
+`dist/release-assets/` before upload:
+
+- `helm-darwin-amd64`
+- `helm-darwin-arm64`
+- `helm-linux-amd64`
+- `helm-linux-arm64`
+- `helm-windows-amd64.exe`
+- `SHA256SUMS.txt`
+- `sbom.json`
+- `v0.5.0.openvex.json`
+- `release-attestation.json`
+- `evidence-pack.tar`
+- `release.high_risk.v3.toml`
+- `sample-policy-material.tar`
+- `helm.mcpb`
+- `helm.rb`
+
+`sample-policy-material.tar` must include both
+`release.high_risk.v3.toml` and
+`reference_packs/eu_ai_act_high_risk.v1.json`. The release workflow signs each
+primary asset, including `SHA256SUMS.txt`, with a matching
+`*.cosign.bundle`.
+
 ## Offline Verification
 
 ```bash
@@ -132,6 +161,10 @@ Verify the bundled offline evidence pack:
 helm verify evidence-pack.tar
 ```
 
+For `v0.5.0`, this command must pass without network access. The verifier
+accepts both the legacy `receipts/` layout and the canonical
+`02_PROOFGRAPH/receipts/` layout.
+
 For `v0.4.0`, the included evidence pack verifies offline and reports
 `anchor offline`; online proof anchoring depends on the Titan proof deployment
 and public proof credentials.
@@ -190,8 +223,11 @@ the scanner can still surface them.
 
 ```bash
 make test
+make test-console
+make test-platform
 make test-all
 make crucible
+make launch-smoke
 ```
 
 ## Benchmarks

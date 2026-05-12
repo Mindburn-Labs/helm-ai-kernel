@@ -84,11 +84,18 @@ The separate `helm server` health endpoint uses `HELM_HEALTH_PORT` or `8081`;
 
 ```bash
 # Set your upstream API key
-helm proxy --upstream https://api.openai.com/v1 --api-key $OPENAI_API_KEY
+helm proxy --upstream https://your-upstream.example/v1 --api-key $OPENAI_API_KEY
 
 # Or via environment
 export OPENAI_API_KEY=sk-...
-helm proxy --upstream https://api.openai.com/v1
+helm proxy --upstream https://your-upstream.example/v1
+```
+
+For release smoke or customer-data-free debugging, use the local fixture instead:
+
+```bash
+python3 scripts/launch/mock-openai-upstream.py --port 19090
+helm proxy --upstream http://127.0.0.1:19090/v1
 ```
 
 ---
@@ -125,7 +132,7 @@ curl http://localhost:9100/mcp
 
 ```bash
 # Increase wallclock limit (default: 120s)
-helm proxy --upstream https://api.openai.com/v1 --max-wallclock 300s
+helm proxy --upstream http://127.0.0.1:19090/v1 --max-wallclock 300s
 ```
 
 ### Sandbox execution timeout

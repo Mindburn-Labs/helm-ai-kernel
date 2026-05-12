@@ -39,16 +39,37 @@ This scheme maps the main sections of HELM OSS Changelog in reading order.
 flowchart LR
   Page["HELM OSS Changelog"]
   A["[Unreleased]"]
-  B["[0.4.0] - 2026-04-25"]
-  C["Validation"]
+  B["[0.5.0] - 2026-05-12"]
+  C["[0.4.0] - 2026-04-25"]
+  D["Validation"]
   Page --> A
   A --> B
   B --> C
+  C --> D
 ```
 
 All notable changes to the retained HELM OSS surface are documented here. Public entries focus on developer-visible interfaces, compatibility, verification, SDKs, and security-relevant documentation.
 
 ## [Unreleased]
+
+## [0.5.0] - 2026-05-12
+
+- Bumped source, CLI fallback, OpenAPI, SDK package manifests, generated SDK
+  version comments, Helm chart metadata, and Console visible version to
+  `0.5.0`.
+- Added canonical release asset staging through `make release-assets`, including
+  five CLI binaries, checksums, SBOM, OpenVEX, release attestation,
+  `evidence-pack.tar`, `helm.mcpb`, `helm.rb`, and complete sample policy
+  material.
+- Fixed offline EvidencePack verification for canonical
+  `02_PROOFGRAPH/receipts/` packs while preserving legacy root `receipts/`
+  compatibility.
+- Made audit export include `04_EXPORTS`.
+- Added local launch-smoke coverage for MCP wrapping and the HTTP proxy using
+  checked-in local fixtures with no external side effects.
+- Retargeted Homebrew release workflow/docs to `mindburnlabs/homebrew-tap`.
+- Corrected the release baseline: no public `v0.4.1` GitHub Release exists, so
+  `v0.4.0` is the actual public baseline for the `v0.5.0` delta.
 
 - Established `helm.docs.mindburn.org` as the canonical product docs surface while keeping HELM OSS source docs in this repository.
 - Reduced duplicate public docs routes so `/oss` is the OSS portal entry and older `/helm-oss` links redirect.

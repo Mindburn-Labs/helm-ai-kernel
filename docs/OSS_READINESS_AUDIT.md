@@ -52,7 +52,7 @@ for path in sorted(Path(".github/workflows").glob("*.yml")):
     yaml.safe_load(path.read_text())
     print(path)
 PY
-brew info mindburn-labs/tap/helm
+brew info mindburnlabs/tap/helm
 npm view @mindburn/helm version
 python3 -m pip index versions helm-sdk
 cargo search helm-sdk --limit 5
@@ -72,7 +72,7 @@ gh run list --repo Mindburn-Labs/helm-oss --limit 10
 
 | Surface | Observed state |
 | --- | --- |
-| Homebrew | `mindburn-labs/tap/helm` and `mindburnlabs/tap/helm` resolve to `0.4.0`; `mindburn/tap/helm` does not. |
+| Homebrew | Canonical tap is `mindburnlabs/tap/helm`; the legacy `mindburn-labs/tap/helm` alias was observed for `0.4.0` but is not the release automation target. |
 | npm TypeScript SDK | `@mindburn/helm` resolves to `0.4.0`. |
 | npm design-system core | `@helm/design-system-core` was not present in the public npm registry. |
 | PyPI | `helm-sdk` resolves to `0.4.0`. |

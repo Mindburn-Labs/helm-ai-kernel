@@ -5,7 +5,7 @@ Typed Go client for the HELM kernel HTTP API.
 ## Install
 
 ```bash
-go get github.com/Mindburn-Labs/helm-oss/sdk/go@main
+go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@main
 ```
 
 Version truth is the repository `VERSION` file (`0.5.0` for this reset).
@@ -41,7 +41,7 @@ import (
     "fmt"
     "log"
 
-    helm "github.com/Mindburn-Labs/helm-oss/sdk/go/client"
+    helm "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go/client"
 )
 
 func main() {

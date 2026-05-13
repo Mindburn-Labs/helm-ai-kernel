@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/replay"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/replay"
 )
 
 var fixedTime = time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC)

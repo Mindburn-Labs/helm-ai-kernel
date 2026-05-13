@@ -20,28 +20,28 @@ echo ""
 
 # 2. Onboard
 echo "▸ Onboarding..."
-./bin/helm onboard --yes
+./bin/helm-ai-kernel onboard --yes
 echo ""
 
 # 3. Run demo
 echo "▸ Running demo (starter organization, mock provider)..."
-./bin/helm demo organization --template starter --provider mock
+./bin/helm-ai-kernel demo organization --template starter --provider mock
 echo ""
 
 # 4. Export
 echo "▸ Exporting evidence pack..."
-./bin/helm export --evidence ./data/evidence --out "$GOLDEN_DIR/starter-organization.tar"
+./bin/helm-ai-kernel export --evidence ./data/evidence --out "$GOLDEN_DIR/starter-organization.tar"
 echo ""
 
 # 5. Verify
 echo "▸ Verifying golden pack..."
-./bin/helm verify --bundle "$GOLDEN_DIR/starter-organization.tar"
+./bin/helm-ai-kernel verify --bundle "$GOLDEN_DIR/starter-organization.tar"
 echo ""
 
 # 6. Conformance
 echo "▸ Running conformance..."
-./bin/helm conform --level L1 --json > "$GOLDEN_DIR/conformance-l1.json" 2>/dev/null || true
-./bin/helm conform --level L2 --json > "$GOLDEN_DIR/conformance-l2.json" 2>/dev/null || true
+./bin/helm-ai-kernel conform --level L1 --json > "$GOLDEN_DIR/conformance-l1.json" 2>/dev/null || true
+./bin/helm-ai-kernel conform --level L2 --json > "$GOLDEN_DIR/conformance-l2.json" 2>/dev/null || true
 echo ""
 
 echo "══════════════════════════════════════════"

@@ -2,7 +2,7 @@
 // This package enables hardware-backed cryptographic key protection for
 // high-security deployments requiring FIPS 140-2/3 compliance.
 //
-// Two providers ship with HELM OSS:
+// Two providers ship with HELM AI Kernel:
 //   - SoftwareProvider: uses real crypto/ed25519 for development and testing
 //   - PKCS11Provider: interface + config for production HSM integration
 //     (requires platform-specific PKCS#11 library)
@@ -330,7 +330,7 @@ type PKCS11Config struct {
 // To use: provide a PKCS#11 shared library path in config. The provider
 // delegates all cryptographic operations to the HSM hardware via PKCS#11.
 //
-// Note: HELM OSS ships this as an integration interface. The actual PKCS#11
+// Note: HELM AI Kernel ships this as an integration interface. The actual PKCS#11
 // binding requires a platform-specific library (e.g., github.com/miekg/pkcs11).
 // For development and testing, use SoftwareProvider instead.
 type PKCS11Provider struct {
@@ -338,7 +338,7 @@ type PKCS11Provider struct {
 }
 
 // NewPKCS11Provider creates a PKCS#11 provider.
-// Returns ErrPKCS11NotLinked because HELM OSS does not bundle a PKCS#11
+// Returns ErrPKCS11NotLinked because HELM AI Kernel does not bundle a PKCS#11
 // library. To use hardware HSMs, implement the Provider interface with
 // your platform's PKCS#11 binding.
 func NewPKCS11Provider(cfg PKCS11Config) (*PKCS11Provider, error) {

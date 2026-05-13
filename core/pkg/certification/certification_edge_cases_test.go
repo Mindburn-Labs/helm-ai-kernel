@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/vcredentials"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/vcredentials"
 )
 
 var deepTime = time.Date(2026, 4, 12, 10, 0, 0, 0, time.UTC)

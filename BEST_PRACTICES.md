@@ -5,7 +5,7 @@ This document maps the OpenSSF Best Practices Badge gold-tier criteria
 Each criterion lists the file, CI workflow, or policy that satisfies it. Items
 not yet satisfied are listed as known gaps with an owner and tracking issue.
 
-helm-oss already holds passing-tier and silver-tier criteria via the
+helm-ai-kernel already holds passing-tier and silver-tier criteria via the
 underlying CI hygiene; this file enumerates the gold-tier delta.
 
 ## Basics
@@ -19,7 +19,7 @@ underlying CI hygiene; this file enumerates the gold-tier delta.
 ## Change Control
 
 - **Public version-controlled source repository** — GitHub
-  `Mindburn-Labs/helm-oss`, tracked in `.git`.
+  `Mindburn-Labs/helm-ai-kernel`, tracked in `.git`.
 - **Unique version numbering** — `VERSION` file and tag-driven release flow
   documented in `RELEASE.md`.
 - **Release notes are documented** — `CHANGELOG.md` plus the

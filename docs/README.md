@@ -1,6 +1,6 @@
-# HELM OSS Docs
+# HELM AI Kernel Docs
 
-This tree is the canonical public documentation source for HELM OSS. Public protocol, schema, SDK, conformance, verification, deployment, and Console material starts here before it is mirrored to the docs site.
+This tree is the canonical public documentation source for HELM AI Kernel. Public protocol, schema, SDK, conformance, verification, deployment, and Console material starts here before it is mirrored to the docs site.
 
 ## Start
 

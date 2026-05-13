@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/prg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 )
 
 // MissingOrgan describes a single missing capability with resolution options.

@@ -15967,7 +15967,7 @@ public static class GetAgentUIRuntimeInfo200Response {
 @JsonPropertyOrder({
   GetPublicDemoHealth200Response.JSON_PROPERTY_VERSION,
   GetPublicDemoHealth200Response.JSON_PROPERTY_COMMIT,
-  GetPublicDemoHealth200Response.JSON_PROPERTY_HELM_OSS_VERSION,
+  GetPublicDemoHealth200Response.JSON_PROPERTY_HELM_AI_KERNEL_VERSION,
   GetPublicDemoHealth200Response.JSON_PROPERTY_STATUS,
   GetPublicDemoHealth200Response.JSON_PROPERTY_BUILD_TIME,
   GetPublicDemoHealth200Response.JSON_PROPERTY_GIT_SHA,
@@ -15981,8 +15981,8 @@ public static class GetPublicDemoHealth200Response {
   public static final String JSON_PROPERTY_COMMIT = "commit";
   private String commit;
 
-  public static final String JSON_PROPERTY_HELM_OSS_VERSION = "helm_oss_version";
-  private String helmOssVersion;
+  public static final String JSON_PROPERTY_HELM_AI_KERNEL_VERSION = "helm_ai_kernel_version";
+  private String helmAiKernelVersion;
 
   public static final String JSON_PROPERTY_STATUS = "status";
   private String status;
@@ -16049,28 +16049,28 @@ public static class GetPublicDemoHealth200Response {
   }
 
 
-  public GetPublicDemoHealth200Response helmOssVersion(String helmOssVersion) {
-    this.helmOssVersion = helmOssVersion;
+  public GetPublicDemoHealth200Response helmAiKernelVersion(String helmAiKernelVersion) {
+    this.helmAiKernelVersion = helmAiKernelVersion;
     return this;
   }
 
    /**
-   * Get helmOssVersion
-   * @return helmOssVersion
+   * Get helmAiKernelVersion
+   * @return helmAiKernelVersion
   **/
   @javax.annotation.Nonnull
-  @JsonProperty(JSON_PROPERTY_HELM_OSS_VERSION)
+  @JsonProperty(JSON_PROPERTY_HELM_AI_KERNEL_VERSION)
   @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
-  public String getHelmOssVersion() {
-    return helmOssVersion;
+  public String getHelmAiKernelVersion() {
+    return helmAiKernelVersion;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_HELM_OSS_VERSION)
+  @JsonProperty(JSON_PROPERTY_HELM_AI_KERNEL_VERSION)
   @JsonInclude(value = JsonInclude.Include.ALWAYS)
-  public void setHelmOssVersion(String helmOssVersion) {
-    this.helmOssVersion = helmOssVersion;
+  public void setHelmAiKernelVersion(String helmAiKernelVersion) {
+    this.helmAiKernelVersion = helmAiKernelVersion;
   }
 
 
@@ -16188,7 +16188,7 @@ public static class GetPublicDemoHealth200Response {
     GetPublicDemoHealth200Response getPublicDemoHealth200Response = (GetPublicDemoHealth200Response) o;
     return Objects.equals(this.version, getPublicDemoHealth200Response.version) &&
         Objects.equals(this.commit, getPublicDemoHealth200Response.commit) &&
-        Objects.equals(this.helmOssVersion, getPublicDemoHealth200Response.helmOssVersion) &&
+        Objects.equals(this.helmAiKernelVersion, getPublicDemoHealth200Response.helmAiKernelVersion) &&
         Objects.equals(this.status, getPublicDemoHealth200Response.status) &&
         Objects.equals(this.buildTime, getPublicDemoHealth200Response.buildTime) &&
         Objects.equals(this.gitSha, getPublicDemoHealth200Response.gitSha) &&
@@ -16197,7 +16197,7 @@ public static class GetPublicDemoHealth200Response {
 
   @Override
   public int hashCode() {
-    return Objects.hash(version, commit, helmOssVersion, status, buildTime, gitSha, deploymentId);
+    return Objects.hash(version, commit, helmAiKernelVersion, status, buildTime, gitSha, deploymentId);
   }
 
   @Override
@@ -16206,7 +16206,7 @@ public static class GetPublicDemoHealth200Response {
     sb.append("class GetPublicDemoHealth200Response {\n");
     sb.append("    version: ").append(toIndentedString(version)).append("\n");
     sb.append("    commit: ").append(toIndentedString(commit)).append("\n");
-    sb.append("    helmOssVersion: ").append(toIndentedString(helmOssVersion)).append("\n");
+    sb.append("    helmAiKernelVersion: ").append(toIndentedString(helmAiKernelVersion)).append("\n");
     sb.append("    status: ").append(toIndentedString(status)).append("\n");
     sb.append("    buildTime: ").append(toIndentedString(buildTime)).append("\n");
     sb.append("    gitSha: ").append(toIndentedString(gitSha)).append("\n");
@@ -16268,9 +16268,9 @@ public static class GetPublicDemoHealth200Response {
       joiner.add(String.format("%scommit%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCommit()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
-    // add `helm_oss_version` to the URL query string
-    if (getHelmOssVersion() != null) {
-      joiner.add(String.format("%shelm_oss_version%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getHelmOssVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    // add `helm_ai_kernel_version` to the URL query string
+    if (getHelmAiKernelVersion() != null) {
+      joiner.add(String.format("%shelm_ai_kernel_version%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getHelmAiKernelVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `status` to the URL query string
@@ -26799,7 +26799,7 @@ public static class RunAgentUIRuntimeRequest {
   RunPublicDemo200Response.JSON_PROPERTY_PROOF_REFS,
   RunPublicDemo200Response.JSON_PROPERTY_VERIFICATION_HINT,
   RunPublicDemo200Response.JSON_PROPERTY_SANDBOX_LABEL,
-  RunPublicDemo200Response.JSON_PROPERTY_HELM_OSS_VERSION
+  RunPublicDemo200Response.JSON_PROPERTY_HELM_AI_KERNEL_VERSION
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class RunPublicDemo200Response {
@@ -26858,8 +26858,8 @@ public static class RunPublicDemo200Response {
   public static final String JSON_PROPERTY_SANDBOX_LABEL = "sandbox_label";
   private String sandboxLabel;
 
-  public static final String JSON_PROPERTY_HELM_OSS_VERSION = "helm_oss_version";
-  private String helmOssVersion;
+  public static final String JSON_PROPERTY_HELM_AI_KERNEL_VERSION = "helm_ai_kernel_version";
+  private String helmAiKernelVersion;
 
   public RunPublicDemo200Response() {
   }
@@ -27014,28 +27014,28 @@ public static class RunPublicDemo200Response {
   }
 
 
-  public RunPublicDemo200Response helmOssVersion(String helmOssVersion) {
-    this.helmOssVersion = helmOssVersion;
+  public RunPublicDemo200Response helmAiKernelVersion(String helmAiKernelVersion) {
+    this.helmAiKernelVersion = helmAiKernelVersion;
     return this;
   }
 
    /**
-   * Get helmOssVersion
-   * @return helmOssVersion
+   * Get helmAiKernelVersion
+   * @return helmAiKernelVersion
   **/
   @javax.annotation.Nonnull
-  @JsonProperty(JSON_PROPERTY_HELM_OSS_VERSION)
+  @JsonProperty(JSON_PROPERTY_HELM_AI_KERNEL_VERSION)
   @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
-  public String getHelmOssVersion() {
-    return helmOssVersion;
+  public String getHelmAiKernelVersion() {
+    return helmAiKernelVersion;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_HELM_OSS_VERSION)
+  @JsonProperty(JSON_PROPERTY_HELM_AI_KERNEL_VERSION)
   @JsonInclude(value = JsonInclude.Include.ALWAYS)
-  public void setHelmOssVersion(String helmOssVersion) {
-    this.helmOssVersion = helmOssVersion;
+  public void setHelmAiKernelVersion(String helmAiKernelVersion) {
+    this.helmAiKernelVersion = helmAiKernelVersion;
   }
 
 
@@ -27057,12 +27057,12 @@ public static class RunPublicDemo200Response {
         Objects.equals(this.proofRefs, runPublicDemo200Response.proofRefs) &&
         Objects.equals(this.verificationHint, runPublicDemo200Response.verificationHint) &&
         Objects.equals(this.sandboxLabel, runPublicDemo200Response.sandboxLabel) &&
-        Objects.equals(this.helmOssVersion, runPublicDemo200Response.helmOssVersion);
+        Objects.equals(this.helmAiKernelVersion, runPublicDemo200Response.helmAiKernelVersion);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(verdict, reasonCode, receipt, proofRefs, verificationHint, sandboxLabel, helmOssVersion);
+    return Objects.hash(verdict, reasonCode, receipt, proofRefs, verificationHint, sandboxLabel, helmAiKernelVersion);
   }
 
   @Override
@@ -27075,7 +27075,7 @@ public static class RunPublicDemo200Response {
     sb.append("    proofRefs: ").append(toIndentedString(proofRefs)).append("\n");
     sb.append("    verificationHint: ").append(toIndentedString(verificationHint)).append("\n");
     sb.append("    sandboxLabel: ").append(toIndentedString(sandboxLabel)).append("\n");
-    sb.append("    helmOssVersion: ").append(toIndentedString(helmOssVersion)).append("\n");
+    sb.append("    helmAiKernelVersion: ").append(toIndentedString(helmAiKernelVersion)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -27153,9 +27153,9 @@ public static class RunPublicDemo200Response {
       joiner.add(String.format("%ssandbox_label%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSandboxLabel()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
-    // add `helm_oss_version` to the URL query string
-    if (getHelmOssVersion() != null) {
-      joiner.add(String.format("%shelm_oss_version%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getHelmOssVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    // add `helm_ai_kernel_version` to the URL query string
+    if (getHelmAiKernelVersion() != null) {
+      joiner.add(String.format("%shelm_ai_kernel_version%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getHelmAiKernelVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();

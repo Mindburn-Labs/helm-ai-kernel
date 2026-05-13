@@ -2,7 +2,7 @@
 //
 // Per HELM 2030 Spec §6.1.7:
 //
-//	HELM OSS MUST include inspectable operational phenotype definitions,
+//	HELM AI Kernel MUST include inspectable operational phenotype definitions,
 //	phenotype contract format, test fixtures, and execution constraints.
 //
 // Resolves: GAP-A24.

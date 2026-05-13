@@ -18,7 +18,7 @@ Scratch installs and logs belong outside the repository, for example:
 Core matrix:
 
 ```sh
-helm mcp scan --manifest tools/competitive-bakeoff/fixtures/hostile_mcp_manifest.json --json
-helm conform negative --json
-helm sandbox inspect --runtime wazero --json
+helm-ai-kernel mcp scan --manifest tools/competitive-bakeoff/fixtures/hostile_mcp_manifest.json --json
+helm-ai-kernel conform negative --json
+helm-ai-kernel sandbox inspect --runtime wazero --json
 ```

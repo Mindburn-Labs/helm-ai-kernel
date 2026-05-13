@@ -1,15 +1,15 @@
 apiVersion: v2
-name: helm-firewall
+name: helm-ai-kernel
 description: HELM — Fail-closed AI execution firewall with cryptographic governance proofs
 type: application
 version: 0.5.0
 appVersion: "0.5.0"
-home: https://github.com/Mindburn-Labs/helm-oss
+home: https://github.com/Mindburn-Labs/helm-ai-kernel
 sources:
-  - https://github.com/Mindburn-Labs/helm-oss
+  - https://github.com/Mindburn-Labs/helm-ai-kernel
 maintainers:
   - name: Mindburn Labs
-    url: https://github.com/Mindburn-Labs/helm-oss
+    url: https://github.com/Mindburn-Labs/helm-ai-kernel
 keywords:
   - ai
   - governance

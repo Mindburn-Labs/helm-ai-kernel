@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/pdp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 )
 
 // Server is the HELM Governance REST API server.

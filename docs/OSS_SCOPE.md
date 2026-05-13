@@ -3,11 +3,11 @@ title: OSS_SCOPE
 last_reviewed: 2026-05-12
 ---
 
-# HELM OSS Scope
+# HELM AI Kernel Scope
 
 ## Audience
 
-Maintainers, adopters, and downstream packagers deciding what is in HELM OSS and what is outside this repository.
+Maintainers, adopters, and downstream packagers deciding what is in HELM AI Kernel and what is outside this repository.
 
 ## Outcome
 
@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/oss-scope`
-- Source document: `helm-oss/docs/OSS_SCOPE.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/oss-scope`
+- Source document: `helm-ai-kernel/docs/OSS_SCOPE.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -35,7 +35,7 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 > normative trust boundary model and TCB definition. For the canonical
 > 8-package TCB inventory, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-HELM OSS is the **open execution kernel and self-hostable Console** of the HELM stack.
+HELM AI Kernel is the **open execution kernel and self-hostable Console** of the HELM stack.
 
 It exists to keep the deterministic boundary small, portable, and independently trustworthy. Downstream HELM layers must extend this kernel through public contracts, not replace it.
 
@@ -113,7 +113,7 @@ The following names appear in strategy, standard, or roadmap material but are no
 
 ### Product Surfaces
 
-The OSS boundary ships exactly one browser UI: `apps/console`, the HELM OSS Console. It is a self-hostable operator surface over the local kernel and uses `@mindburn/ui-core` for all product UI primitives and styling. The repository does not ship a second browser UI, a static report viewer, a Node CLI wrapper, a Next starter, or generated HTML report surface.
+The OSS boundary ships exactly one browser UI: `apps/console`, the HELM AI Kernel Console. It is a self-hostable operator surface over the local kernel and uses `@mindburn/ui-core` for all product UI primitives and styling. The repository does not ship a second browser UI, a static report viewer, a Node CLI wrapper, a Next starter, or generated HTML report surface.
 
 `@mindburn/ui-core` remains a reusable React/token package. The Console consumes it through public package entrypoints so package integrity, app fidelity, and OSS boundary truth are tested together.
 
@@ -173,7 +173,7 @@ OSS includes:
 - **Verifiable receipts** — signed receipts, ProofGraph, replay
 - **MCP interceptor** — first-class governed MCP surface
 - **OpenAI proxy** — governed proxy for OpenAI-compatible SDKs
-- **HELM OSS Console** — one self-hostable browser UI for command, receipts, policy, MCP, evidence, replay, ProofGraph, conformance, trust, incidents, audit, developer, and settings workflows
+- **HELM AI Kernel Console** — one self-hostable browser UI for command, receipts, policy, MCP, evidence, replay, ProofGraph, conformance, trust, incidents, audit, developer, and settings workflows
 - Adapters and integration surfaces
 
 OSS does not include:

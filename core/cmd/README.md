@@ -1,4 +1,4 @@
-# HELM OSS CLI Source Owner
+# HELM AI Kernel CLI Source Owner
 
 ## Audience
 
@@ -23,7 +23,7 @@ Run focused CLI tests before changing public command docs:
 
 ```bash
 cd core
-go test ./cmd/helm -count=1
+go test ./cmd/helm-ai-kernel -count=1
 ```
 
 Then run the docs truth gates from the repo root.

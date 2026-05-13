@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	helmcrypto "github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
 // KeyPurpose defines what a key can be used for.

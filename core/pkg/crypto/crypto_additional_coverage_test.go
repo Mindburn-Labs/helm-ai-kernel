@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // ─── 1: ML-DSA signature rejected by Ed25519 verifier ─────────

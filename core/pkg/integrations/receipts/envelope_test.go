@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/integrations/capgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/integrations/capgraph"
 )
 
 func TestEnvelopeJSON_RoundTrip(t *testing.T) {

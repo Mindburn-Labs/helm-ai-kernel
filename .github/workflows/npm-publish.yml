@@ -30,7 +30,7 @@ jobs:
       matrix:
         package:
           - path: sdk/ts
-            name: "@mindburn/helm"
+            name: "@mindburn/helm-ai-kernel"
             version_policy: root
             test_command: "npm test -- --run"
             smoke_command: ""

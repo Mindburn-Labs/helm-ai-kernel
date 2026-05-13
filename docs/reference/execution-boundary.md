@@ -5,7 +5,7 @@ last_reviewed: 2026-05-05
 
 # Execution Boundary Reference
 
-HELM OSS is the proof-bearing execution boundary for governed AI tool use. The authoritative runtime record is the HELM boundary record plus its receipt binding; telemetry, coexistence manifests, external evidence envelopes, and scanner outputs are compatibility surfaces around that native authority.
+HELM AI Kernel is the proof-bearing execution boundary for governed AI tool use. The authoritative runtime record is the HELM boundary record plus its receipt binding; telemetry, coexistence manifests, external evidence envelopes, and scanner outputs are compatibility surfaces around that native authority.
 
 ## Audience
 
@@ -34,8 +34,8 @@ flowchart LR
 
 | Surface | Source |
 | --- | --- |
-| CLI commands | [`core/cmd/helm/boundary_surface_cmd.go`](../../core/cmd/helm/boundary_surface_cmd.go), [`core/cmd/helm/mcp_boundary_cmd.go`](../../core/cmd/helm/mcp_boundary_cmd.go), [`core/cmd/helm/sandbox_cmd.go`](../../core/cmd/helm/sandbox_cmd.go), [`core/cmd/helm/evidence_cmd.go`](../../core/cmd/helm/evidence_cmd.go) |
-| HTTP routes | [`core/cmd/helm/route_registry.go`](../../core/cmd/helm/route_registry.go), [`core/cmd/helm/contract_routes.go`](../../core/cmd/helm/contract_routes.go), [`api/openapi/helm.openapi.yaml`](../../api/openapi/helm.openapi.yaml) |
+| CLI commands | [`core/cmd/helm-ai-kernel/boundary_surface_cmd.go`](../../core/cmd/helm-ai-kernel/boundary_surface_cmd.go), [`core/cmd/helm-ai-kernel/mcp_boundary_cmd.go`](../../core/cmd/helm-ai-kernel/mcp_boundary_cmd.go), [`core/cmd/helm-ai-kernel/sandbox_cmd.go`](../../core/cmd/helm-ai-kernel/sandbox_cmd.go), [`core/cmd/helm-ai-kernel/evidence_cmd.go`](../../core/cmd/helm-ai-kernel/evidence_cmd.go) |
+| HTTP routes | [`core/cmd/helm-ai-kernel/route_registry.go`](../../core/cmd/helm-ai-kernel/route_registry.go), [`core/cmd/helm-ai-kernel/contract_routes.go`](../../core/cmd/helm-ai-kernel/contract_routes.go), [`api/openapi/helm.openapi.yaml`](../../api/openapi/helm.openapi.yaml) |
 | Durable boundary state | [`core/pkg/boundary`](../../core/pkg/boundary), [`core/pkg/contracts`](../../core/pkg/contracts) |
 | Receipt and evidence contracts | [`schemas/receipts`](../../schemas/receipts), [`core/pkg/receipts`](../../core/pkg/receipts), [`core/pkg/evidencepack`](../../core/pkg/evidencepack), [`core/pkg/verifier`](../../core/pkg/verifier) |
 | Conformance vectors | [`core/pkg/conformance`](../../core/pkg/conformance), [`tests/conformance`](../../tests/conformance), [`protocols/conformance/v1`](../../protocols/conformance/v1) |
@@ -44,20 +44,20 @@ flowchart LR
 
 | Capability | CLI | HTTP API | Authority |
 | --- | --- | --- | --- |
-| Boundary health and capability inventory | `helm boundary status`, `helm boundary capabilities` | `GET /api/v1/boundary/status`, `GET /api/v1/boundary/capabilities` | Runtime status and capability summaries. |
-| Boundary records | `helm boundary records`, `helm boundary get`, `helm boundary verify` | `GET /api/v1/boundary/records`, `GET /api/v1/boundary/records/{record_id}`, `POST /api/v1/boundary/records/{record_id}/verify` | JCS-hashed boundary records linked to receipts. |
-| Checkpoints | `helm boundary checkpoint` | `GET|POST /api/v1/boundary/checkpoints` | Tamper-evident roots over records and receipts. |
-| Negative conformance vectors | `helm conform negative --json`, `helm conform vectors --json` | `GET /api/v1/conformance/negative`, `GET /api/v1/conformance/vectors` | Clean-room fail-closed behavior fixtures. |
-| MCP quarantine and authorization | `helm mcp scan`, `helm mcp wrap`, `helm mcp list`, `helm mcp get`, `helm mcp approve`, `helm mcp revoke`, `helm mcp auth-profile`, `helm mcp authorize-call` | `/api/v1/mcp/*`, `/.well-known/oauth-protected-resource/mcp` | Pre-dispatch MCP firewall state and OAuth/profile bindings. |
-| Sandbox grants | `helm sandbox profiles`, `helm sandbox grant`, `helm sandbox list`, `helm sandbox get`, `helm sandbox verify`, `helm sandbox preflight`, `helm sandbox inspect` | `/api/v1/sandbox/profiles`, `/api/v1/sandbox/grants`, `/api/v1/sandbox/preflight`, `/api/v1/sandbox/grants/inspect` | Grant hashes, deny-default profiles, and dispatch preflight results. |
-| Authz snapshots | `helm identity agents`, `helm authz health`, `helm authz check`, `helm authz snapshots`, `helm authz get` | `/api/v1/identity/agents`, `/api/v1/authz/health`, `/api/v1/authz/check`, `/api/v1/authz/snapshots` | ReBAC snapshot hash and relationship freshness. |
-| Approvals and budgets | `helm approvals *`, `helm budget *` | `/api/v1/approvals`, `/api/v1/budgets` | Local approval ceremonies and spend/tool/egress ceilings. |
-| Evidence envelopes | `helm evidence export --envelope`, `helm evidence envelope *` | `/api/v1/evidence/envelopes`, `/api/v1/evidence/export`, `/api/v1/evidence/verify`, `/api/v1/replay/verify` | Native EvidencePack roots; external envelopes are wrappers. |
-| Telemetry and coexistence | `helm telemetry otel-config`, `helm coexistence manifest`, `helm integrate scaffold` | `/api/v1/telemetry/otel/config`, `/api/v1/telemetry/export`, `/api/v1/coexistence/capabilities` | Non-authoritative export and integration metadata. |
+| Boundary health and capability inventory | `helm-ai-kernel boundary status`, `helm-ai-kernel boundary capabilities` | `GET /api/v1/boundary/status`, `GET /api/v1/boundary/capabilities` | Runtime status and capability summaries. |
+| Boundary records | `helm-ai-kernel boundary records`, `helm-ai-kernel boundary get`, `helm-ai-kernel boundary verify` | `GET /api/v1/boundary/records`, `GET /api/v1/boundary/records/{record_id}`, `POST /api/v1/boundary/records/{record_id}/verify` | JCS-hashed boundary records linked to receipts. |
+| Checkpoints | `helm-ai-kernel boundary checkpoint` | `GET|POST /api/v1/boundary/checkpoints` | Tamper-evident roots over records and receipts. |
+| Negative conformance vectors | `helm-ai-kernel conform negative --json`, `helm-ai-kernel conform vectors --json` | `GET /api/v1/conformance/negative`, `GET /api/v1/conformance/vectors` | Clean-room fail-closed behavior fixtures. |
+| MCP quarantine and authorization | `helm-ai-kernel mcp scan`, `helm-ai-kernel mcp wrap`, `helm-ai-kernel mcp list`, `helm-ai-kernel mcp get`, `helm-ai-kernel mcp approve`, `helm-ai-kernel mcp revoke`, `helm-ai-kernel mcp auth-profile`, `helm-ai-kernel mcp authorize-call` | `/api/v1/mcp/*`, `/.well-known/oauth-protected-resource/mcp` | Pre-dispatch MCP firewall state and OAuth/profile bindings. |
+| Sandbox grants | `helm-ai-kernel sandbox profiles`, `helm-ai-kernel sandbox grant`, `helm-ai-kernel sandbox list`, `helm-ai-kernel sandbox get`, `helm-ai-kernel sandbox verify`, `helm-ai-kernel sandbox preflight`, `helm-ai-kernel sandbox inspect` | `/api/v1/sandbox/profiles`, `/api/v1/sandbox/grants`, `/api/v1/sandbox/preflight`, `/api/v1/sandbox/grants/inspect` | Grant hashes, deny-default profiles, and dispatch preflight results. |
+| Authz snapshots | `helm-ai-kernel identity agents`, `helm-ai-kernel authz health`, `helm-ai-kernel authz check`, `helm-ai-kernel authz snapshots`, `helm-ai-kernel authz get` | `/api/v1/identity/agents`, `/api/v1/authz/health`, `/api/v1/authz/check`, `/api/v1/authz/snapshots` | ReBAC snapshot hash and relationship freshness. |
+| Approvals and budgets | `helm-ai-kernel approvals *`, `helm-ai-kernel budget *` | `/api/v1/approvals`, `/api/v1/budgets` | Local approval ceremonies and spend/tool/egress ceilings. |
+| Evidence envelopes | `helm-ai-kernel evidence export --envelope`, `helm-ai-kernel evidence envelope *` | `/api/v1/evidence/envelopes`, `/api/v1/evidence/export`, `/api/v1/evidence/verify`, `/api/v1/replay/verify` | Native EvidencePack roots; external envelopes are wrappers. |
+| Telemetry and coexistence | `helm-ai-kernel telemetry otel-config`, `helm-ai-kernel coexistence manifest`, `helm-ai-kernel integrate scaffold` | `/api/v1/telemetry/otel/config`, `/api/v1/telemetry/export`, `/api/v1/coexistence/capabilities` | Non-authoritative export and integration metadata. |
 
 ## Durable State
 
-`helm serve` persists boundary surface state in the runtime database through `boundary_surface_snapshots`. SQLite Lite Mode and Postgres use the same table contract. Standalone CLI commands use `HELM_BOUNDARY_REGISTRY_PATH` or `HELM_DATA_DIR/boundary/surfaces.json`, so records, approvals, checkpoints, envelopes, and budget changes survive separate CLI invocations.
+`helm-ai-kernel serve` persists boundary surface state in the runtime database through `boundary_surface_snapshots`. SQLite Lite Mode and Postgres use the same table contract. Standalone CLI commands use `HELM_BOUNDARY_REGISTRY_PATH` or `HELM_DATA_DIR/boundary/surfaces.json`, so records, approvals, checkpoints, envelopes, and budget changes survive separate CLI invocations.
 
 ## Fail-Closed Cases
 
@@ -84,7 +84,7 @@ External envelopes can help auditors and procurement teams move evidence between
 
 ```bash
 cd core
-go test ./pkg/contracts ./pkg/boundary ./cmd/helm -run 'Test.*Boundary|Test.*Route|Test.*Evidence|Test.*MCP|Test.*Sandbox' -count=1
+go test ./pkg/contracts ./pkg/boundary ./cmd/helm-ai-kernel -run 'Test.*Boundary|Test.*Route|Test.*Evidence|Test.*MCP|Test.*Sandbox' -count=1
 cd ../tests/conformance
 go test ./...
 ```

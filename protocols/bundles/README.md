@@ -17,4 +17,4 @@ make docs-coverage
 make docs-truth
 ```
 
-If a public page claims bundle compatibility, the claim must map to this directory, `core/cmd/helm/bundle_cmd.go`, or an executable example.
+If a public page claims bundle compatibility, the claim must map to this directory, `core/cmd/helm-ai-kernel/bundle_cmd.go`, or an executable example.

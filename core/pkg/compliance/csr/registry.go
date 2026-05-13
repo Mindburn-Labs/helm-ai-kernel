@@ -9,8 +9,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/compliance/jkg"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/compliance/regwatch"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/jkg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/regwatch"
 )
 
 // Standard errors for registry operations.

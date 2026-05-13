@@ -10,7 +10,7 @@ Shows HELM integration with the Go SDK.
 ## Source Example
 
 `main.go` is a small integration source file that imports
-`github.com/Mindburn-Labs/helm-oss/sdk/go/client`. This directory does not
+`github.com/Mindburn-Labs/helm-ai-kernel/sdk/go/client`. This directory does not
 carry its own `go.mod`; use it as source material for a service module or run
 the SDK package gate below.
 

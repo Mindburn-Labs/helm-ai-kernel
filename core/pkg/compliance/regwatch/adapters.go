@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/compliance/jkg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/jkg"
 )
 
 // BaseAdapter provides common functionality for source adapters.

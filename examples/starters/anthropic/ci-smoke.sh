@@ -2,7 +2,7 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-HELM_BIN="${REPO_ROOT}/bin/helm"
+HELM_BIN="${REPO_ROOT}/bin/helm-ai-kernel"
 TMPDIR_CI=$(mktemp -d)
 trap "rm -rf $TMPDIR_CI" EXIT
 echo "=== Anthropic Starter CI Smoke ==="

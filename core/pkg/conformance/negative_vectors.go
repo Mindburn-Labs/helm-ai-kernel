@@ -1,6 +1,6 @@
 package conformance
 
-import "github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
+import "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 
 // NegativeBoundaryVector is a clean-room conformance vector for fail-closed
 // execution boundaries. These vectors describe HELM-required behavior, not a

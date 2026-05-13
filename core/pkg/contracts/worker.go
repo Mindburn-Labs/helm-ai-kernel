@@ -2,7 +2,7 @@
 //
 // Per HELM 2030 Spec §6.1.3 / §5.5:
 //
-//	HELM OSS MUST include isolated worker execution and
+//	HELM AI Kernel MUST include isolated worker execution and
 //	phenotype-bound worker semantics.
 //
 // Resolves: GAP-A23, GAP-A9.

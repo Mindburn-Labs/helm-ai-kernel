@@ -1,6 +1,6 @@
 # Elastic ECS SIEM exporter
 
-OpenTelemetry `SpanExporter` that translates helm-oss governance spans into
+OpenTelemetry `SpanExporter` that translates helm-ai-kernel governance spans into
 ECS-shaped documents posted to the Elasticsearch `_bulk` API. The OTel GenAI
 semconv keys (`gen_ai.system`, `gen_ai.request.model`, `gen_ai.tool.name`,
 `gen_ai.tool.call.id`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`)
@@ -13,7 +13,7 @@ the canonical ECS fields (`@timestamp`, `event.dataset`, `event.outcome`,
 
 ```go
 import (
-    "github.com/Mindburn-Labs/helm-oss/core/pkg/connectors/siem/elastic_ecs"
+    "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/siem/elastic_ecs"
     sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 

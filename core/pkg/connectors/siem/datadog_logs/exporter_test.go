@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/observability"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -70,7 +70,7 @@ func TestExportSpans_ProducesDatadogLogs(t *testing.T) {
 		t.Fatalf("expected 1 log, got %d", len(got))
 	}
 	log := got[0]
-	if log.Source != "helm-oss" {
+	if log.Source != "helm-ai-kernel" {
 		t.Errorf("ddsource = %q", log.Source)
 	}
 	if log.Service != "helm-governance" {

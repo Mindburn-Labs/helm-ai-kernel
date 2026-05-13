@@ -13,13 +13,13 @@ RAW_VERSION="${RAW_VERSION#v}"
 if [ -z "$RAW_VERSION" ]; then
     RAW_VERSION="0.0.0-dev"
 fi
-ROOT_MODULE_PURL="pkg:golang/github.com/Mindburn-Labs/helm-oss/core@${RAW_VERSION}"
+ROOT_MODULE_PURL="pkg:golang/github.com/Mindburn-Labs/helm-ai-kernel/core@${RAW_VERSION}"
 
 cd "$CORE_DIR"
 
 # Generate deps.txt (debug artifact, replaces old SBOM.txt)
 echo "--- Go Module Info ---" > "$DEPS_OUTPUT"
-go version -m "$PROJECT_ROOT/bin/helm" >> "$DEPS_OUTPUT" 2>/dev/null || echo "(binary not built yet — run 'make build' first)" >> "$DEPS_OUTPUT"
+go version -m "$PROJECT_ROOT/bin/helm-ai-kernel" >> "$DEPS_OUTPUT" 2>/dev/null || echo "(binary not built yet — run 'make build' first)" >> "$DEPS_OUTPUT"
 echo "" >> "$DEPS_OUTPUT"
 echo "--- All Dependencies ---" >> "$DEPS_OUTPUT"
 go list -m all >> "$DEPS_OUTPUT"

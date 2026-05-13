@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# HELM OSS v0.1 — Use Case Runner
+# HELM AI Kernel v0.1 — Use Case Runner
 # Runs UC-001..UC-012 and asserts outputs
 set -euo pipefail
 
@@ -57,11 +57,11 @@ run_uc "UC-006" "Idempotency" \
 
 # UC-007: EvidencePack Export (build export cmd)
 run_uc "UC-007" "Export CLI Build" \
-    "cd $CORE_DIR && go build ./cmd/helm"
+    "cd $CORE_DIR && go build ./cmd/helm-ai-kernel"
 
 # UC-008: EvidencePack Replay (build replay cmd)
 run_uc "UC-008" "Replay CLI Build" \
-    "cd $CORE_DIR && go build ./cmd/helm"
+    "cd $CORE_DIR && go build ./cmd/helm-ai-kernel"
 
 # UC-009: Output Drift Detection
 run_uc "UC-009" "Output Drift" \
@@ -73,7 +73,7 @@ run_uc "UC-010" "Trust Rotation" \
 
 # UC-011: Island Mode (build passes without network)
 run_uc "UC-011" "Island Mode" \
-    "cd $CORE_DIR && go build ./cmd/helm"
+    "cd $CORE_DIR && go build ./cmd/helm-ai-kernel"
 
 # UC-012: Conformance Gates
 run_uc "UC-012" "Conformance Gates" \

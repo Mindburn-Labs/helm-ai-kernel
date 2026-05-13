@@ -1,13 +1,13 @@
 # Governance
 
-This document describes how the helm-oss project is governed. It is the
+This document describes how the helm-ai-kernel project is governed. It is the
 canonical reference for maintainer responsibilities, decision-making, and
 project change control. The governance model is designed to satisfy CNCF
 Sandbox eligibility and to scale to a multi-organization maintainer set.
 
 ## Project Scope
 
-helm-oss is the open-source kernel for governed AI tool calling. Its public
+helm-ai-kernel is the open-source kernel for governed AI tool calling. Its public
 surface is documented in `README.md` and bounded by `docs/OSS_SCOPE.md`.
 Anything outside that scope (hosted control-plane features, commercial
 Studio surfaces, private operational tooling) is governed elsewhere and is

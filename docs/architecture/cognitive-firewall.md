@@ -7,7 +7,7 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Architecture reviewers evaluating the fail-closed execution firewall pattern and its HELM OSS implementation boundaries.
+Architecture reviewers evaluating the fail-closed execution firewall pattern and its HELM AI Kernel implementation boundaries.
 
 ## Outcome
 
@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/architecture/cognitive-firewall`
-- Source document: `helm-oss/docs/architecture/cognitive-firewall.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/architecture/cognitive-firewall`
+- Source document: `helm-ai-kernel/docs/architecture/cognitive-firewall.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -33,9 +33,9 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 
 Source: Qianlong Lan and Anuj Kaul, "The Cognitive Firewall: Securing Browser Based AI Agents Against Indirect Prompt Injection Via Hybrid Edge Cloud Defense", arXiv:2603.23791.
 
-The HELM OSS mapping keeps the paper's three-stage split:
+The HELM AI Kernel mapping keeps the paper's three-stage split:
 
-| Paper stage | HELM OSS mapping |
+| Paper stage | HELM AI Kernel mapping |
 | --- | --- |
 | Local visual Sentinel | `BrowserSplitObservation`: URL, DOM hash, visual-text hash, Sentinel risk, findings |
 | Cloud Deep Planner | `BrowserSplitPlan`: tool intent, side-effect flag, planner reference hash |
@@ -72,4 +72,4 @@ flowchart LR
 
 ## Implementation Checklist
 
-A change to this pattern is complete only when the adapter test covers allow, deny, and missing-planner-reference paths, the receipt records the Sentinel risk and planner reference, and the public page still describes the browser UI and cloud planner as integration points rather than bundled HELM OSS features. Keep examples focused on the boundary contract: input hashes, domain scope, side-effect flag, destination, policy threshold, and resulting receipt. If a downstream browser extension or MCP browser tool adds richer context later, update this page by linking to that source-owner document instead of widening the core adapter claim.
+A change to this pattern is complete only when the adapter test covers allow, deny, and missing-planner-reference paths, the receipt records the Sentinel risk and planner reference, and the public page still describes the browser UI and cloud planner as integration points rather than bundled HELM AI Kernel features. Keep examples focused on the boundary contract: input hashes, domain scope, side-effect flag, destination, policy threshold, and resulting receipt. If a downstream browser extension or MCP browser tool adds richer context later, update this page by linking to that source-owner document instead of widening the core adapter claim.

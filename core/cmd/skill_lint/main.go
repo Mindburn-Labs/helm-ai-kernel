@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/registry/skills"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/skills"
 )
 
 // validationResult is the structured JSON output.

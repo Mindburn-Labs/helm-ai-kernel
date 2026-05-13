@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/vcredentials"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/vcredentials"
 )
 
 // BadgeIssuer creates W3C Verifiable Credential badges for certified agents.

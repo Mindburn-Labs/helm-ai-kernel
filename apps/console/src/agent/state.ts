@@ -1,6 +1,6 @@
 import type { ConsoleBootstrap, Receipt } from "../api/client";
 
-export interface HelmOssAgentState {
+export interface HelmAiKernelAgentState {
   workspace: ConsoleBootstrap["workspace"] | null;
   surface: string;
   selectedReceiptId: string | null;
@@ -11,10 +11,10 @@ export interface HelmOssAgentState {
   receiptCount: number;
   demoAction: string;
   replayStatus: string;
-  buildProfile: "oss";
+  buildProfile: "ai-kernel";
 }
 
-export function buildOssAgentState(input: {
+export function buildAiKernelAgentState(input: {
   bootstrap: ConsoleBootstrap | null;
   active: string;
   selectedReceipt: Receipt | null;
@@ -22,7 +22,7 @@ export function buildOssAgentState(input: {
   receipts: readonly Receipt[];
   demoAction: string;
   replayStatus: string;
-}): HelmOssAgentState {
+}): HelmAiKernelAgentState {
   return {
     workspace: input.bootstrap?.workspace ?? null,
     surface: input.active,
@@ -34,11 +34,11 @@ export function buildOssAgentState(input: {
     receiptCount: input.receipts.length,
     demoAction: input.demoAction,
     replayStatus: input.replayStatus,
-    buildProfile: "oss",
+    buildProfile: "ai-kernel",
   };
 }
 
-export interface OssAgentToolResult {
+export interface AiKernelAgentToolResult {
   status: "complete" | "error" | "denied";
   summary: string;
   data?: Record<string, unknown>;

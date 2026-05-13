@@ -7,7 +7,7 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Integration developers and operators routing MCP tool calls through the HELM OSS firewall/quarantine path.
+Integration developers and operators routing MCP tool calls through the HELM AI Kernel firewall/quarantine path.
 
 ## Outcome
 
@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/integrations/mcp`
-- Source document: `helm-oss/docs/INTEGRATIONS/mcp.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/integrations/mcp`
+- Source document: `helm-ai-kernel/docs/INTEGRATIONS/mcp.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -53,18 +53,18 @@ HELM retains an MCP surface for governed tool access.
 The local boundary quickstart remains the entry point:
 
 ```bash
-helm serve --policy ./release.high_risk.v3.toml
+helm-ai-kernel serve --policy ./release.high_risk.v3.toml
 ```
 
 ## Run the Server
 
 ```bash
-./bin/helm mcp serve
+./bin/helm-ai-kernel mcp serve
 ```
 
 ## OAuth Resource and Scope Enforcement
 
-`./bin/helm mcp serve --auth oauth` supports production JWKS validation and the dev-only `HELM_OAUTH_BEARER_TOKEN` fallback. Production mode validates issuer, audience, expiration, issued-at, configured global scopes, and the MCP resource indicator before forwarding the request to the gateway.
+`./bin/helm-ai-kernel mcp serve --auth oauth` supports production JWKS validation and the dev-only `HELM_OAUTH_BEARER_TOKEN` fallback. Production mode validates issuer, audience, expiration, issued-at, configured global scopes, and the MCP resource indicator before forwarding the request to the gateway.
 
 Configure production OAuth with:
 
@@ -83,16 +83,16 @@ The resource check follows [RFC 8707](https://datatracker.ietf.org/doc/html/rfc8
 ## Build a Bundle
 
 ```bash
-./bin/helm mcp pack --client claude-desktop --out helm.mcpb
+./bin/helm-ai-kernel mcp pack --client claude-desktop --out helm-ai-kernel.mcpb
 ```
 
 ## Install a Local Client Configuration
 
 ```bash
-./bin/helm mcp install --client claude-code
+./bin/helm-ai-kernel mcp install --client claude-code
 ```
 
-Use `./bin/helm mcp print-config --client <name>` for text configuration snippets where supported by the CLI.
+Use `./bin/helm-ai-kernel mcp print-config --client <name>` for text configuration snippets where supported by the CLI.
 
 ## Quarantine and Schema Pins
 
@@ -112,7 +112,7 @@ return `DENY` or `ESCALATE`; they never dispatch to the fixture server.
 MCP activity that emits receipts can be inspected with:
 
 ```bash
-helm receipts tail --agent <agent-id>
+helm-ai-kernel receipts tail --agent <agent-id>
 ```
 
 <!-- docs-depth-final-pass -->

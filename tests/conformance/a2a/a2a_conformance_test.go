@@ -23,11 +23,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/a2a"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/proofgraph"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/runtimeadapters"
-	a2aadapter "github.com/Mindburn-Labs/helm-oss/core/pkg/runtimeadapters/a2a"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/a2a"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters"
+	a2aadapter "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters/a2a"
 )
 
 // ══════════════════════════════════════════════════════════════════════════════

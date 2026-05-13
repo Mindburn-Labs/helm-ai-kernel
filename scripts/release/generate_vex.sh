@@ -37,7 +37,7 @@ if [ ! -f "$SBOM" ]; then
 fi
 
 TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-DOC_ID="https://mindburn.org/vex/helm-oss/v${RAW_VERSION}"
+DOC_ID="https://mindburn.org/vex/helm-ai-kernel/v${RAW_VERSION}"
 
 # Note: This baseline VEX intentionally enumerates zero statements. The
 # release process appends statements as CVEs are observed in the SBOM and
@@ -51,7 +51,7 @@ cat > "$OUT" <<VEX_EOF
   "role": "Project Maintainer",
   "timestamp": "${TIMESTAMP}",
   "version": 1,
-  "tooling": "helm-oss/scripts/release/generate_vex.sh",
+  "tooling": "helm-ai-kernel/scripts/release/generate_vex.sh",
   "statements": []
 }
 VEX_EOF

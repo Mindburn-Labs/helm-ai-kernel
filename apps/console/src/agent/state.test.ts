@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildOssAgentState } from "./state";
+import { buildAiKernelAgentState } from "./state";
 
-describe("HELM OSS agent state", () => {
-  it("keeps OSS state read-only and excludes commercial concepts", () => {
-    const state = buildOssAgentState({
+describe("HELM AI Kernel agent state", () => {
+  it("keeps HELM AI Kernel state read-only and excludes commercial concepts", () => {
+    const state = buildAiKernelAgentState({
       bootstrap: null,
       active: "command",
       selectedReceipt: {
@@ -17,7 +17,7 @@ describe("HELM OSS agent state", () => {
       replayStatus: "not checked",
     });
 
-    expect(state.buildProfile).toBe("oss");
+    expect(state.buildProfile).toBe("ai-kernel");
     expect(state.selectedReceiptId).toBe("receipt-1");
     expect(state.receiptCount).toBe(1);
     expect("companyArtifactGraph" in state).toBe(false);

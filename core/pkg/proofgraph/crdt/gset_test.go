@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/proofgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 )
 
 func makeNode(t *testing.T, kind proofgraph.NodeType, payload string, lamport uint64, principal string) *proofgraph.Node {

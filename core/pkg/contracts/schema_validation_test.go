@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-// repoRoot returns the root of the helm-oss repository by walking up
+// repoRoot returns the root of the helm-ai-kernel repository by walking up
 // from this test file's location (core/pkg/contracts/).
 func repoRoot(t *testing.T) string {
 	t.Helper()

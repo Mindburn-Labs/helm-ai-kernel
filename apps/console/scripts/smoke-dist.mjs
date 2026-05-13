@@ -14,7 +14,7 @@ if (!entries.some((entry) => entry.isEntry && String(entry.file).endsWith(".js")
 }
 
 const index = await readFile(join(dist.pathname, "index.html"), "utf8");
-if (!index.includes("HELM OSS Console")) {
+if (!index.includes("HELM AI Kernel Console")) {
   throw new Error("Console index.html is missing the app title.");
 }
 

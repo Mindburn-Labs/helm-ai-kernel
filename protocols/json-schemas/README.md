@@ -10,8 +10,8 @@ Use this file when changing protocol JSON Schemas, adding receipt/evidence schem
 
 ## Documentation Contract
 
-- Public reference hub: `helm-oss/reference/protocols-and-schemas`.
-- Conformance route: `helm-oss/conformance`.
+- Public reference hub: `helm-ai-kernel/reference/protocols-and-schemas`.
+- Conformance route: `helm-ai-kernel/conformance`.
 - Inventory row: `api-protocols-schemas` in `docs/source-inventory.manifest.json`.
 
 Do not document a schema field as stable unless the schema file and at least one validation or conformance path prove it.

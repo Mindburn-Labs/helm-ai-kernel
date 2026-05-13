@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/authz"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/authz"
 	"github.com/stretchr/testify/assert"
 )
 

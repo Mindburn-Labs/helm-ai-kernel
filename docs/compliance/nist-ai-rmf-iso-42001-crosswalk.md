@@ -7,7 +7,7 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Compliance reviewers comparing HELM OSS evidence surfaces with NIST AI RMF and ISO 42001 control language.
+Compliance reviewers comparing HELM AI Kernel evidence surfaces with NIST AI RMF and ISO 42001 control language.
 
 ## Outcome
 
@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/compliance/nist-ai-rmf-iso-42001-crosswalk`
-- Source document: `helm-oss/docs/compliance/nist-ai-rmf-iso-42001-crosswalk.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/compliance/nist-ai-rmf-iso-42001-crosswalk`
+- Source document: `helm-ai-kernel/docs/compliance/nist-ai-rmf-iso-42001-crosswalk.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -50,7 +50,7 @@ flowchart LR
   D --> E
 ```
 
-This page maps the HELM OSS `reference_packs/iso_42001.v1.json` pack to NIST AI RMF 1.0 functions. The goal is one runtime evidence set that can support ISO 42001 AI management system audit readiness and NIST AI RMF reporting.
+This page maps the HELM AI Kernel `reference_packs/iso_42001.v1.json` pack to NIST AI RMF 1.0 functions. The goal is one runtime evidence set that can support ISO 42001 AI management system audit readiness and NIST AI RMF reporting.
 
 ## Source Status
 

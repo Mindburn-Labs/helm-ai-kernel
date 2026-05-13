@@ -1,9 +1,9 @@
-# Default values for helm-firewall
+# Default values for helm-ai-kernel
 
 replicaCount: 1
 
 image:
-  repository: ghcr.io/mindburn-labs/helm-oss
+  repository: ghcr.io/mindburn-labs/helm-ai-kernel
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion
   tag: ""
@@ -67,7 +67,9 @@ resources:
     cpu: 100m
     memory: 128Mi
 
-# HELM-specific configuration
+# HELM-specific configuration.
+# Legacy values root retained for one compatibility window while the chart
+# identity and rendered resource names move to helm-ai-kernel.
 helm:
   # Bind address used inside the pod. Kubernetes Services require 0.0.0.0.
   bindAddr: "0.0.0.0"
@@ -112,7 +114,7 @@ helm:
   storage:
     type: "sqlite"  # or "postgres"
     sqlite:
-      path: "/data/helm.db"
+      path: "/data/helm-ai-kernel.db"
     postgres:
       host: ""
       port: 5432
@@ -155,7 +157,7 @@ helm:
       mountedFile:
         existingConfigMap: ""
         existingSecret: ""
-        mountPath: "/etc/helm/policy"
+        mountPath: "/etc/helm-ai-kernel/policy"
 
     failClosed:
       requireInitialSnapshot: true
@@ -186,7 +188,7 @@ helm:
     # Legacy alias for policy.source.mountedFile.existingConfigMap.
     configMap: ""
     # Legacy alias for policy.source.mountedFile.mountPath.
-    mountPath: "/etc/helm/policy"
+    mountPath: "/etc/helm-ai-kernel/policy"
     fileName: "serve-policy.toml"
     name: "helm-chart"
     profile: "kubernetes"
@@ -235,6 +237,6 @@ postgresql:
   enabled: false
   auth:
     database: helm
-    username: helm
+    username: helm-ai-kernel
     password: ""
     # existingSecret: ""

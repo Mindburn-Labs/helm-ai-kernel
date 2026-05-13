@@ -1,24 +1,24 @@
-import type { HelmOssAgentState } from "./state";
+import type { HelmAiKernelAgentState } from "./state";
 
-export interface OssAgentMessage {
+export interface AiKernelAgentMessage {
   readonly id: string;
   readonly role: "user" | "assistant" | "tool" | "system";
   readonly content: string;
   readonly createdAt: string;
 }
 
-export interface OssAgentEvent {
+export interface AiKernelAgentEvent {
   type: string;
   [key: string]: unknown;
 }
 
-export async function runOssAgent(input: {
+export async function runAiKernelAgent(input: {
   readonly runtimeUrl?: string;
   readonly threadId: string;
   readonly runId: string;
-  readonly messages: readonly OssAgentMessage[];
-  readonly state: HelmOssAgentState;
-  readonly onEvent: (event: OssAgentEvent) => void;
+  readonly messages: readonly AiKernelAgentMessage[];
+  readonly state: HelmAiKernelAgentState;
+  readonly onEvent: (event: AiKernelAgentEvent) => void;
   readonly signal?: AbortSignal;
 }) {
   const response = await fetch(`${(input.runtimeUrl ?? "/api/v1/agent-ui").replace(/\/$/, "")}/run`, {
@@ -28,7 +28,7 @@ export async function runOssAgent(input: {
     body: JSON.stringify({
       threadId: input.threadId,
       runId: input.runId,
-      workspaceId: input.state.workspace?.project ?? "oss",
+      workspaceId: input.state.workspace?.project ?? "ai-kernel",
       currentSurface: input.state.surface,
       messages: input.messages.map((message) => ({
         id: message.id,
@@ -62,7 +62,7 @@ export async function runOssAgent(input: {
   }
 }
 
-function parseSSEFrame(frame: string): OssAgentEvent | null {
+function parseSSEFrame(frame: string): AiKernelAgentEvent | null {
   const lines = frame.split("\n");
   let eventType = "";
   const data: string[] = [];
@@ -72,7 +72,7 @@ function parseSSEFrame(frame: string): OssAgentEvent | null {
   }
   if (!data.length) return null;
   try {
-    const parsed = JSON.parse(data.join("\n")) as OssAgentEvent;
+    const parsed = JSON.parse(data.join("\n")) as AiKernelAgentEvent;
     if (!parsed.type && eventType) parsed.type = eventType;
     return parsed;
   } catch {

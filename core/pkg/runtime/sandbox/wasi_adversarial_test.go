@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/runtime/budget"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/budget"
 )
 
 // TestWASI_InfiniteLoop verifies the sandbox terminates an infinite loop within budget.

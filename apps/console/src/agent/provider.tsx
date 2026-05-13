@@ -1,34 +1,34 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
-import type { HelmOssAgentState } from "./state";
+import type { HelmAiKernelAgentState } from "./state";
 
-interface OssAgentProviderValue {
+interface AiKernelAgentProviderValue {
   readonly runtimeUrl: string;
-  readonly state: HelmOssAgentState | null;
+  readonly state: HelmAiKernelAgentState | null;
 }
 
-const OssAgentContext = createContext<OssAgentProviderValue>({
+const AiKernelAgentContext = createContext<AiKernelAgentProviderValue>({
   runtimeUrl: "/api/v1/agent-ui",
   state: null,
 });
 
-export function HelmOssAgentProvider({
+export function HelmAiKernelAgentProvider({
   children,
   state = null,
   runtimeUrl = "/api/v1/agent-ui",
 }: {
   readonly children: ReactNode;
-  readonly state?: HelmOssAgentState | null;
+  readonly state?: HelmAiKernelAgentState | null;
   readonly runtimeUrl?: string;
 }) {
   return (
-    <OssAgentContext.Provider value={{ runtimeUrl, state }}>
+    <AiKernelAgentContext.Provider value={{ runtimeUrl, state }}>
       <CopilotKit
         runtimeUrl={runtimeUrl}
         credentials="include"
         properties={{
           hosting: "self-hosted",
-          product: "helm-oss-console",
+          product: "helm-ai-kernel-console",
           agent_state: state,
         }}
         showDevConsole={false}
@@ -36,10 +36,10 @@ export function HelmOssAgentProvider({
       >
         {children}
       </CopilotKit>
-    </OssAgentContext.Provider>
+    </AiKernelAgentContext.Provider>
   );
 }
 
-export function useHelmOssAgentProvider() {
-  return useContext(OssAgentContext);
+export function useHelmAiKernelAgentProvider() {
+  return useContext(AiKernelAgentContext);
 }

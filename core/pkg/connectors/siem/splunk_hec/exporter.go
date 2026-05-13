@@ -1,5 +1,5 @@
 // Package splunk_hec implements an OTel SpanExporter that translates
-// helm-oss governance spans (carrying OTel GenAI semconv attributes plus the
+// helm-ai-kernel governance spans (carrying OTel GenAI semconv attributes plus the
 // helm.* governance namespace) into Splunk HTTP Event Collector (HEC) events.
 //
 // Wire shape: each ReadOnlySpan becomes one HEC event with `event.type =
@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/observability"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
@@ -34,7 +34,7 @@ type Config struct {
 	Token string
 	// Index optionally pins emitted events to a specific Splunk index.
 	Index string
-	// Source overrides Splunk's `source` field (default "helm-oss").
+	// Source overrides Splunk's `source` field (default "helm-ai-kernel").
 	Source string
 	// SourceType overrides Splunk's `sourcetype` field (default "helm:governance").
 	SourceType string
@@ -60,7 +60,7 @@ func New(cfg Config) (*Exporter, error) {
 		return nil, errors.New("splunk_hec: Token is required")
 	}
 	if cfg.Source == "" {
-		cfg.Source = "helm-oss"
+		cfg.Source = "helm-ai-kernel"
 	}
 	if cfg.SourceType == "" {
 		cfg.SourceType = "helm:governance"

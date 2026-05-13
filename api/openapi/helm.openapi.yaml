@@ -7,7 +7,7 @@ info:
     Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
   license:
     name: Apache-2.0
-    url: https://github.com/Mindburn-Labs/helm-oss/blob/main/LICENSE
+    url: https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/LICENSE
   contact:
     name: Mindburn Labs
     url: https://mindburn.org
@@ -42,11 +42,11 @@ tags:
   - name: system
     description: Health and version
   - name: console
-    description: HELM OSS Console platform state
+    description: HELM AI Kernel Console platform state
   - name: agent
-    description: Self-hosted AG-UI runtime for the OSS Console assistant
+    description: Self-hosted AG-UI runtime for the HELM AI Kernel Console assistant
   - name: demo
-    description: Public HELM OSS sandbox proof scenario
+    description: Public HELM AI Kernel sandbox proof scenario
 
 x-helm-reason-codes:
   description: Deterministic reason codes returned by the kernel
@@ -68,14 +68,14 @@ x-helm-reason-codes:
     - ERROR_INTERNAL
 
 paths:
-  # -- Public OSS proof demo ---------------------------
+  # -- Public HELM AI Kernel proof demo ---------------------------
   /api/health:
     get:
       operationId: getPublicDemoHealth
       tags: [demo, system]
-      summary: Read public HELM OSS demo health
+      summary: Read public HELM AI Kernel demo health
       description: |
-        Public health endpoint for the self-hostable HELM OSS proof console.
+        Public health endpoint for the self-hostable HELM AI Kernel proof console.
         Includes build and version metadata used by deployment smoke tests.
       responses:
         '200':
@@ -84,11 +84,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [version, commit, helm_oss_version, status, build_time, git_sha, deployment_id]
+                required: [version, commit, helm_ai_kernel_version, status, build_time, git_sha, deployment_id]
                 properties:
                   version: { type: string }
                   commit: { type: string }
-                  helm_oss_version: { type: string }
+                  helm_ai_kernel_version: { type: string }
                   status: { type: string }
                   build_time: { type: string }
                   git_sha: { type: string }
@@ -100,7 +100,7 @@ paths:
       tags: [demo]
       summary: Run the Agent Tool Call Boundary sandbox scenario
       description: |
-        Evaluates a sample action through the HELM OSS guardian path and emits
+        Evaluates a sample action through the HELM AI Kernel guardian path and emits
         a signed receipt. The scenario is sandboxed and dispatches no external
         side effects.
       requestBody:
@@ -129,12 +129,12 @@ paths:
                   additionalProperties: true
       responses:
         '200':
-          description: HELM OSS sandbox verdict and receipt
+          description: HELM AI Kernel sandbox verdict and receipt
           content:
             application/json:
               schema:
                 type: object
-                required: [verdict, reason_code, receipt, proof_refs, verification_hint, sandbox_label, helm_oss_version]
+                required: [verdict, reason_code, receipt, proof_refs, verification_hint, sandbox_label, helm_ai_kernel_version]
                 properties:
                   verdict: { type: string, enum: [ALLOW, DENY, ESCALATE] }
                   reason_code: { type: string }
@@ -149,7 +149,7 @@ paths:
                       receipt_hash: { type: string }
                   verification_hint: { type: string }
                   sandbox_label: { type: string }
-                  helm_oss_version: { type: string }
+                  helm_ai_kernel_version: { type: string }
         '400':
           $ref: '#/components/responses/HelmError'
         '500':
@@ -159,7 +159,7 @@ paths:
     post:
       operationId: verifyPublicDemoReceipt
       tags: [demo]
-      summary: Verify a HELM OSS demo receipt
+      summary: Verify a HELM AI Kernel demo receipt
       requestBody:
         required: true
         content:
@@ -440,11 +440,11 @@ paths:
     get:
       operationId: getConsoleBootstrap
       tags: [console]
-      summary: Read HELM OSS Console bootstrap state
+      summary: Read HELM AI Kernel Console bootstrap state
       security:
         - AdminBearerAuth: []
       description: |
-        Consolidated read-only platform state used by the OSS Console shell.
+        Consolidated read-only platform state used by the HELM AI Kernel Console shell.
         Values are derived from kernel services and local configuration.
       responses:
         '200':

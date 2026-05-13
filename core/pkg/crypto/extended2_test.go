@@ -8,11 +8,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto/mtls"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto/sdjwt"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto/shredding"
-	helmtls "github.com/Mindburn-Labs/helm-oss/core/pkg/crypto/tls"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto/mtls"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto/sdjwt"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto/shredding"
+	helmtls "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto/tls"
 )
 
 // ─── 1: ML-DSA keygen determinism from same seed ─────────────────

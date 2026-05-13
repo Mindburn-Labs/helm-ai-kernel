@@ -12,9 +12,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/proofgraph"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/runtimeadapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters"
 )
 
 // A2AAdapter intercepts A2A protocol messages and routes them through HELM governance.

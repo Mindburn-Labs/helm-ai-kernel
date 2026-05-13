@@ -1,6 +1,6 @@
-# OpenAI Starter — HELM OSS Governed AI
+# OpenAI Starter — HELM AI Kernel Governed AI
 
-Get started with HELM OSS governance over OpenAI models in under 5 minutes.
+Get started with HELM AI Kernel governance over OpenAI models in under 5 minutes.
 
 ## Prerequisites
 
@@ -12,17 +12,17 @@ Get started with HELM OSS governance over OpenAI models in under 5 minutes.
 
 ```bash
 # 1. Initialize a new HELM project with the OpenAI profile
-helm init openai ./my-openai-project
+helm-ai-kernel init openai ./my-openai-project
 
 # 2. Set your API key
 cd my-openai-project
 echo "OPENAI_API_KEY=sk-..." >> .env
 
 # 3. Run the doctor to verify setup
-helm doctor --dir .
+helm-ai-kernel doctor --dir .
 
 # 4. Start the governed MCP server
-helm mcp serve --transport http
+helm-ai-kernel mcp serve --transport http
 
 # 5. Run your first governed call
 ./first-governed-call.sh

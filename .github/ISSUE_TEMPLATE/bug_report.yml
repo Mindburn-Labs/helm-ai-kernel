@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible HELM OSS defect.
+description: Report a reproducible HELM AI Kernel defect.
 title: "[Bug]: "
 labels: ["bug", "needs-triage"]
 body:
@@ -12,7 +12,7 @@ body:
     id: version
     attributes:
       label: HELM version
-      description: Run `helm --version` or provide the commit SHA.
+      description: Run `helm-ai-kernel --version` or provide the commit SHA.
       placeholder: "0.5.0"
     validations:
       required: true

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify cosign-keyless signatures on every helm-oss release artifact in a
+# Verify cosign-keyless signatures on every helm-ai-kernel release artifact in a
 # given directory tree. Used as a smoke check post-release and as the
 # canonical verification recipe documented in docs/VERIFICATION.md.
 #
@@ -9,7 +9,7 @@
 set -euo pipefail
 
 DIR="${1:-dist}"
-IDENTITY_REGEX="${COSIGN_IDENTITY_REGEX:-https://github.com/Mindburn-Labs/helm-oss}"
+IDENTITY_REGEX="${COSIGN_IDENTITY_REGEX:-https://github.com/Mindburn-Labs/helm-ai-kernel}"
 ISSUER="${COSIGN_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
 
 if ! command -v cosign >/dev/null 2>&1; then

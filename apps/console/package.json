@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Self-hostable HELM OSS Console frontend.",
+  "description": "Self-hostable HELM AI Kernel Console frontend.",
   "scripts": {
     "generate:api": "openapi-typescript ../../api/openapi/helm.openapi.yaml -o src/api/schema.ts",
     "dev": "vite --host 127.0.0.1",

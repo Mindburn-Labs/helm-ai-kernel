@@ -1,6 +1,6 @@
 # Maintainers
 
-This file lists the active maintainers of helm-oss. The roster is governed
+This file lists the active maintainers of helm-ai-kernel. The roster is governed
 by `GOVERNANCE.md`. Pull requests that change this file follow the
 maintainer-addition or maintainer-removal rule documented there.
 

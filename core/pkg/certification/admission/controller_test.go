@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/certification"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/certification"
 )
 
 func TestController_PackAdmission_NoAttestation(t *testing.T) {

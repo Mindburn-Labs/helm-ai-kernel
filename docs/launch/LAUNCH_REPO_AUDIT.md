@@ -1,14 +1,14 @@
-# HELM OSS Repository Audit (Pre-Launch)
+# HELM AI Kernel Repository Audit (Pre-Launch)
 
 Date: 2026-05-11
-Target: `Mindburn-Labs/helm-oss`
+Target: `Mindburn-Labs/helm-ai-kernel`
 Commit: `8a39bad` (local equivalent)
 
 This document captures the baseline state of the repository before the Phase 0 launch-readiness remediation execution.
 
 ## 1. Branch and Build Health
 *   **Branch**: `main`
-*   **Go Build**: ✅ Compiles cleanly (`go build ./cmd/helm/`)
+*   **Go Build**: ✅ Compiles cleanly (`go build ./cmd/helm-ai-kernel/`)
 *   **Unit Tests (TEE)**: ✅ 7/7 PASS (`go test ./pkg/crypto/tee/... -count=1`)
 *   **CI (GitHub Actions)**: ❌ ALL FAILING due to organization billing lock. (Accepted exception).
 
@@ -31,4 +31,4 @@ This document captures the baseline state of the repository before the Phase 0 l
 *   **Issue Templates**: PR template, `bug_report`, `feature_request`, and `config` exist.
 *   **Missing Templates**: `docs_gap`, `integration_request`, `policy_example_request` must be created.
 *   **Seed Issues**: 0 open issues. Requires seeding.
-*   **Homebrew**: Canonical installation path requires alignment to `mindburnlabs/tap/helm`.
+*   **Homebrew**: Canonical installation path requires alignment to `mindburnlabs/tap/helm-ai-kernel`.

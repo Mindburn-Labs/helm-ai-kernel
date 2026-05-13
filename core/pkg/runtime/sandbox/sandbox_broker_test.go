@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/effectgraph"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/lease"
-	sandbox_runtime "github.com/Mindburn-Labs/helm-oss/core/pkg/runtime/sandbox"
-	pkg_sandbox "github.com/Mindburn-Labs/helm-oss/core/pkg/sandbox"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effectgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/lease"
+	sandbox_runtime "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox"
+	pkg_sandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
 )
 
 var (

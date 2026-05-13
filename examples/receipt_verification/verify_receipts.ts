@@ -8,7 +8,7 @@
  * 4. Export and verify evidence packs
  *
  * Prerequisites:
- *   npm install @mindburn/helm
+ *   npm install @mindburn/helm-ai-kernel
  */
 import { createHash } from "crypto";
 

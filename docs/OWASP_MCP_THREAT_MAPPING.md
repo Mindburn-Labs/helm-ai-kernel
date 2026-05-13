@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/owasp-mcp-threat-mapping`
-- Source document: `helm-oss/docs/OWASP_MCP_THREAT_MAPPING.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/owasp-mcp-threat-mapping`
+- Source document: `helm-ai-kernel/docs/OWASP_MCP_THREAT_MAPPING.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -46,7 +46,7 @@ flowchart LR
   B --> C
 ```
 
-This page maps retained HELM OSS control points to OWASP-style MCP and agent-tooling threat areas. It is a public engineering map, not a certification statement.
+This page maps retained HELM AI Kernel control points to OWASP-style MCP and agent-tooling threat areas. It is a public engineering map, not a certification statement.
 
 | Risk Area | Primary HELM Control Points | Evidence To Review |
 | --- | --- | --- |
@@ -63,4 +63,4 @@ For a deeper agentic threat inventory, use [security/owasp-agentic-top10-coverag
 
 ## Mapping Rules
 
-Every OWASP mapping row should connect a threat to a HELM OSS control, the evidence a reviewer can inspect, and the command that proves the control. Do not treat the mapping as automatic protection for arbitrary MCP servers. The developer must still define tool scope, policy thresholds, allowed destinations, and evidence retention. A useful public mapping includes negative examples: prompt-injected tool output, oversized argument payload, missing user intent, untrusted destination, and replay without expected receipt metadata. If a control depends on deployment configuration rather than code, call that out and link to the deployment or policy page that owns the configuration.
+Every OWASP mapping row should connect a threat to a HELM AI Kernel control, the evidence a reviewer can inspect, and the command that proves the control. Do not treat the mapping as automatic protection for arbitrary MCP servers. The developer must still define tool scope, policy thresholds, allowed destinations, and evidence retention. A useful public mapping includes negative examples: prompt-injected tool output, oversized argument payload, missing user intent, untrusted destination, and replay without expected receipt metadata. If a control depends on deployment configuration rather than code, call that out and link to the deployment or policy page that owns the configuration.

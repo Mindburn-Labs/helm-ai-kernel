@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/connector"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/effects"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/proofgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connector"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 )
 
 // Compile-time interface compliance check.

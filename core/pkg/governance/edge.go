@@ -2,7 +2,7 @@
 //
 // Per HELM 2030 Spec §6.1.13:
 //
-//	HELM OSS MUST include an edge governance assistant, fallback
+//	HELM AI Kernel MUST include an edge governance assistant, fallback
 //	governance mode, and offline explanation capabilities.
 //
 // Resolves: GAP-A25.

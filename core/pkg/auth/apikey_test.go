@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/auth"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 )
 
 func TestAdminAPIKeyMiddleware_ValidKey(t *testing.T) {

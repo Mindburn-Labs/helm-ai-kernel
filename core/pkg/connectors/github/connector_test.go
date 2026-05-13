@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/connector"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/effects"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connector"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 )
 
 func validPermit() *effects.EffectPermit {

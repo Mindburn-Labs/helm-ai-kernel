@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OSS-Fuzz build script for helm-oss.
+# OSS-Fuzz build script for helm-ai-kernel.
 #
 # Discovers every Fuzz* function under core/pkg/... and compiles each into
 # a libFuzzer-compatible binary at $OUT/.
@@ -20,7 +20,7 @@
 # be picked up automatically once they ship.
 set -euo pipefail
 
-cd "$SRC/helm-oss/core"
+cd "$SRC/helm-ai-kernel/core"
 
 # Discover every package that contains at least one Fuzz* function.
 # `go test -list 'Fuzz.*' ./...` emits Fuzz* identifiers followed by an

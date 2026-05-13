@@ -4,7 +4,7 @@
 ## Purpose
 
 Active CI/CD, publication, documentation, scorecard, proof, and code-scanning
-surface for the `helm-oss` project.
+surface for the `helm-ai-kernel` project.
 
 ## Canonical Interface
 

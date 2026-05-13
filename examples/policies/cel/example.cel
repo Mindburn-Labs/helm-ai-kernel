@@ -5,7 +5,7 @@
 //   examples/policies/cedar/example.cedar
 //
 // CEL evaluates as a single boolean expression returning the verdict
-// envelope. helm-oss surfaces request fields as the top-level `request`
+// envelope. helm-ai-kernel surfaces request fields as the top-level `request`
 // variable.
 
 request.action == "view"

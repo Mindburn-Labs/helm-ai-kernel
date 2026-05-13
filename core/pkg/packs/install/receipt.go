@@ -13,7 +13,7 @@ import (
 // per pack via PrevReceiptID so commercial callers can replay and
 // verify the complete lifecycle of any installed pack.
 //
-// OSS receipts are unsigned: the ContentHash authenticates the payload
+// Install receipts are unsigned: the ContentHash authenticates the payload
 // against tampering within a single trust domain (the operator's local
 // store). Signed distribution is a commercial concern and is added by
 // wrapping this receipt in a commercial envelope.

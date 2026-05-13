@@ -1,15 +1,15 @@
-# Codex Starter — HELM OSS Governed AI
+# Codex Starter — HELM AI Kernel Governed AI
 
-Get started with HELM OSS governance over OpenAI Codex.
+Get started with HELM AI Kernel governance over OpenAI Codex.
 
 ## Quick Start
 
 ```bash
-helm init codex ./my-codex-project
+helm-ai-kernel init codex ./my-codex-project
 cd my-codex-project
 echo "OPENAI_API_KEY=sk-..." >> .env
-helm doctor --dir .
-helm mcp serve --transport http
+helm-ai-kernel doctor --dir .
+helm-ai-kernel mcp serve --transport http
 ./first-governed-call.sh
 ```
 
@@ -22,4 +22,4 @@ helm mcp serve --transport http
 | `ci-smoke.sh` | CI-compatible smoke test |
 
 The `ci-smoke.sh` script validates generated project files from
-`helm init codex`; it does not require a real OpenAI API key.
+`helm-ai-kernel init codex`; it does not require a real OpenAI API key.

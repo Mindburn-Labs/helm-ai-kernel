@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/guardian"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 )
 
 // GuardianAdapter bridges guardian.Guardian to the PolicyEvaluator interface,

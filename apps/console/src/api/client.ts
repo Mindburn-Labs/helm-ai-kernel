@@ -78,7 +78,7 @@ export interface DemoRunResult {
   readonly proof_refs: Record<string, string>;
   readonly verification_hint: string;
   readonly sandbox_label: string;
-  readonly helm_oss_version: string;
+  readonly helm_ai_kernel_version: string;
 }
 
 export interface DemoVerifyResult {

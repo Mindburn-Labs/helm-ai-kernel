@@ -1,1092 +1,1093 @@
 {
   "schema_version": 1,
-  "repo": "helm-oss",
-  "display_name": "helm-oss authenticated docs",
+  "repo": "helm-ai-kernel",
+  "local_repo_path": "helm-ai-kernel",
+  "display_name": "helm-ai-kernel authenticated docs",
   "docs_origin": {
     "canonical_host": "helm.docs.mindburn.org",
-    "source_repo": "Mindburn-Labs/helm-oss",
+    "source_repo": "Mindburn-Labs/helm-ai-kernel",
     "source_root": "/"
   },
   "documents": [
     {
-      "slug": "internal/helm-oss/api/openapi/readme",
+      "slug": "internal/helm-ai-kernel/api/openapi/readme",
       "title": "OpenAPI Contract",
       "section": "internal",
       "source_path": "api/openapi/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/api/openapi/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/api/openapi/readme"
     },
     {
-      "slug": "internal/helm-oss/api/readme",
+      "slug": "internal/helm-ai-kernel/api/readme",
       "title": "Api",
       "section": "internal",
       "source_path": "api/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/api/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/api/readme"
     },
     {
-      "slug": "internal/helm-oss/apps/console/readme",
-      "title": "HELM OSS Console Source Owner",
+      "slug": "internal/helm-ai-kernel/apps/console/readme",
+      "title": "HELM AI Kernel Console Source Owner",
       "section": "internal",
       "source_path": "apps/console/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/apps/console/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/apps/console/readme"
     },
     {
-      "slug": "internal/helm-oss/artifacts/golden/readme",
+      "slug": "internal/helm-ai-kernel/artifacts/golden/readme",
       "title": "Golden Artifacts",
       "section": "internal",
       "source_path": "artifacts/golden/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/artifacts/golden/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/artifacts/golden/readme"
     },
     {
-      "slug": "internal/helm-oss/artifacts/readme",
+      "slug": "internal/helm-ai-kernel/artifacts/readme",
       "title": "Artifacts",
       "section": "internal",
       "source_path": "artifacts/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/artifacts/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/artifacts/readme"
     },
     {
-      "slug": "internal/helm-oss/benchmarks/readme",
+      "slug": "internal/helm-ai-kernel/benchmarks/readme",
       "title": "HELM Benchmark Harness",
       "section": "internal",
       "source_path": "benchmarks/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/benchmarks/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/benchmarks/readme"
     },
     {
-      "slug": "internal/helm-oss/best_practices",
+      "slug": "internal/helm-ai-kernel/best_practices",
       "title": "OpenSSF Best Practices: Gold Tier Mapping",
       "section": "internal",
       "source_path": "BEST_PRACTICES.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/best_practices"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/best_practices"
     },
     {
-      "slug": "internal/helm-oss/contributing",
+      "slug": "internal/helm-ai-kernel/contributing",
       "title": "Contributing",
       "section": "internal",
       "source_path": "CONTRIBUTING.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/contributing"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/contributing"
     },
     {
-      "slug": "internal/helm-oss/core/cmd/readme",
-      "title": "HELM OSS CLI Source Owner",
+      "slug": "internal/helm-ai-kernel/core/cmd/readme",
+      "title": "HELM AI Kernel CLI Source Owner",
       "section": "internal",
       "source_path": "core/cmd/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/core/cmd/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/cmd/readme"
     },
     {
-      "slug": "internal/helm-oss/core/pkg/compliance/readme",
-      "title": "HELM OSS Compliance Package Source Owner",
+      "slug": "internal/helm-ai-kernel/core/pkg/compliance/readme",
+      "title": "HELM AI Kernel Compliance Package Source Owner",
       "section": "internal",
       "source_path": "core/pkg/compliance/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/core/pkg/compliance/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/compliance/readme"
     },
     {
-      "slug": "internal/helm-oss/core/pkg/connectors/sandbox/readme",
+      "slug": "internal/helm-ai-kernel/core/pkg/connectors/sandbox/readme",
       "title": "Sandbox Provider Connector Definitions",
       "section": "internal",
       "source_path": "core/pkg/connectors/sandbox/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/core/pkg/connectors/sandbox/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/connectors/sandbox/readme"
     },
     {
-      "slug": "internal/helm-oss/core/pkg/connectors/siem/datadog_logs/readme",
+      "slug": "internal/helm-ai-kernel/core/pkg/connectors/siem/datadog_logs/readme",
       "title": "Datadog Logs SIEM Exporter",
       "section": "internal",
       "source_path": "core/pkg/connectors/siem/datadog_logs/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/core/pkg/connectors/siem/datadog_logs/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/connectors/siem/datadog_logs/readme"
     },
     {
-      "slug": "internal/helm-oss/core/pkg/connectors/siem/elastic_ecs/readme",
+      "slug": "internal/helm-ai-kernel/core/pkg/connectors/siem/elastic_ecs/readme",
       "title": "Elastic ECS SIEM Exporter",
       "section": "internal",
       "source_path": "core/pkg/connectors/siem/elastic_ecs/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/core/pkg/connectors/siem/elastic_ecs/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/connectors/siem/elastic_ecs/readme"
     },
     {
-      "slug": "internal/helm-oss/core/pkg/connectors/siem/splunk_hec/readme",
+      "slug": "internal/helm-ai-kernel/core/pkg/connectors/siem/splunk_hec/readme",
       "title": "Splunk HEC SIEM Exporter",
       "section": "internal",
       "source_path": "core/pkg/connectors/siem/splunk_hec/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/core/pkg/connectors/siem/splunk_hec/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/connectors/siem/splunk_hec/readme"
     },
     {
-      "slug": "internal/helm-oss/core/pkg/contracts/readme",
-      "title": "HELM OSS Contracts Package Source Owner",
+      "slug": "internal/helm-ai-kernel/core/pkg/contracts/readme",
+      "title": "HELM AI Kernel Contracts Package Source Owner",
       "section": "internal",
       "source_path": "core/pkg/contracts/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/core/pkg/contracts/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/contracts/readme"
     },
     {
-      "slug": "internal/helm-oss/core/pkg/evidencepack/readme",
-      "title": "HELM OSS EvidencePack Package Source Owner",
+      "slug": "internal/helm-ai-kernel/core/pkg/evidencepack/readme",
+      "title": "HELM AI Kernel EvidencePack Package Source Owner",
       "section": "internal",
       "source_path": "core/pkg/evidencepack/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/core/pkg/evidencepack/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/evidencepack/readme"
     },
     {
-      "slug": "internal/helm-oss/core/pkg/kernel/readme",
-      "title": "HELM OSS Kernel Package Source Owner",
+      "slug": "internal/helm-ai-kernel/core/pkg/kernel/readme",
+      "title": "HELM AI Kernel Kernel Package Source Owner",
       "section": "internal",
       "source_path": "core/pkg/kernel/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/core/pkg/kernel/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/kernel/readme"
     },
     {
-      "slug": "internal/helm-oss/core/pkg/mcp/readme",
-      "title": "HELM OSS MCP Package Source Owner",
+      "slug": "internal/helm-ai-kernel/core/pkg/mcp/readme",
+      "title": "HELM AI Kernel MCP Package Source Owner",
       "section": "internal",
       "source_path": "core/pkg/mcp/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/core/pkg/mcp/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/mcp/readme"
     },
     {
-      "slug": "internal/helm-oss/core/pkg/proofgraph/readme",
-      "title": "HELM OSS ProofGraph Package Source Owner",
+      "slug": "internal/helm-ai-kernel/core/pkg/proofgraph/readme",
+      "title": "HELM AI Kernel ProofGraph Package Source Owner",
       "section": "internal",
       "source_path": "core/pkg/proofgraph/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/core/pkg/proofgraph/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/proofgraph/readme"
     },
     {
-      "slug": "internal/helm-oss/core/pkg/readme",
-      "title": "HELM OSS Core Packages Source Owner",
+      "slug": "internal/helm-ai-kernel/core/pkg/readme",
+      "title": "HELM AI Kernel Core Packages Source Owner",
       "section": "internal",
       "source_path": "core/pkg/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/core/pkg/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/readme"
     },
     {
-      "slug": "internal/helm-oss/core/readme",
+      "slug": "internal/helm-ai-kernel/core/readme",
       "title": "Core",
       "section": "internal",
       "source_path": "core/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/core/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/readme"
     },
     {
-      "slug": "internal/helm-oss/deploy/helm-chart/readme",
+      "slug": "internal/helm-ai-kernel/deploy/helm-chart/readme",
       "title": "HELM Chart",
       "section": "internal",
       "source_path": "deploy/helm-chart/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/deploy/helm-chart/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/deploy/helm-chart/readme"
     },
     {
-      "slug": "internal/helm-oss/deploy/helm-chart/templates/notes",
+      "slug": "internal/helm-ai-kernel/deploy/helm-chart/templates/notes",
       "title": "NOTES",
       "section": "internal",
       "source_path": "deploy/helm-chart/templates/NOTES.txt",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/deploy/helm-chart/templates/notes"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/deploy/helm-chart/templates/notes"
     },
     {
-      "slug": "internal/helm-oss/deploy/readme",
+      "slug": "internal/helm-ai-kernel/deploy/readme",
       "title": "Deployment",
       "section": "internal",
       "source_path": "deploy/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/deploy/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/deploy/readme"
     },
     {
-      "slug": "internal/helm-oss/docs/design-system/accessibility",
+      "slug": "internal/helm-ai-kernel/docs/design-system/accessibility",
       "title": "Accessibility",
       "section": "internal",
       "source_path": "docs/design-system/accessibility.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/design-system/accessibility"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/accessibility"
     },
     {
-      "slug": "internal/helm-oss/docs/design-system/architecture",
+      "slug": "internal/helm-ai-kernel/docs/design-system/architecture",
       "title": "Architecture",
       "section": "internal",
       "source_path": "docs/design-system/architecture.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/design-system/architecture"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/architecture"
     },
     {
-      "slug": "internal/helm-oss/docs/design-system/ci-gates",
+      "slug": "internal/helm-ai-kernel/docs/design-system/ci-gates",
       "title": "CI Gates",
       "section": "internal",
       "source_path": "docs/design-system/ci-gates.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/design-system/ci-gates"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/ci-gates"
     },
     {
-      "slug": "internal/helm-oss/docs/design-system/contrast-table",
+      "slug": "internal/helm-ai-kernel/docs/design-system/contrast-table",
       "title": "Contrast Table",
       "section": "internal",
       "source_path": "docs/design-system/contrast-table.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/design-system/contrast-table"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/contrast-table"
     },
     {
-      "slug": "internal/helm-oss/docs/design-system/decisions/0001-monorepo-layout",
+      "slug": "internal/helm-ai-kernel/docs/design-system/decisions/0001-monorepo-layout",
       "title": "0001 — OSS Design System Package Layout",
       "section": "internal",
       "source_path": "docs/design-system/decisions/0001-monorepo-layout.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/design-system/decisions/0001-monorepo-layout"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/decisions/0001-monorepo-layout"
     },
     {
-      "slug": "internal/helm-oss/docs/design-system/decisions/0002-token-sourcing",
+      "slug": "internal/helm-ai-kernel/docs/design-system/decisions/0002-token-sourcing",
       "title": "0002 — Two Source Of Truth Tokens With Parity Tests",
       "section": "internal",
       "source_path": "docs/design-system/decisions/0002-token-sourcing.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/design-system/decisions/0002-token-sourcing"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/decisions/0002-token-sourcing"
     },
     {
-      "slug": "internal/helm-oss/docs/design-system/decisions/0003-aschild-pattern",
+      "slug": "internal/helm-ai-kernel/docs/design-system/decisions/0003-aschild-pattern",
       "title": "0003 — AsChild Composition Over Polymorphic As Prop",
       "section": "internal",
       "source_path": "docs/design-system/decisions/0003-asChild-pattern.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/design-system/decisions/0003-aschild-pattern"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/decisions/0003-aschild-pattern"
     },
     {
-      "slug": "internal/helm-oss/docs/design-system/decisions/0004-no-css-in-js-runtime",
+      "slug": "internal/helm-ai-kernel/docs/design-system/decisions/0004-no-css-in-js-runtime",
       "title": "0004 — No CSS In JS Runtime; Static .Css + Tokens",
       "section": "internal",
       "source_path": "docs/design-system/decisions/0004-no-css-in-js-runtime.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/design-system/decisions/0004-no-css-in-js-runtime"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/decisions/0004-no-css-in-js-runtime"
     },
     {
-      "slug": "internal/helm-oss/docs/design-system/decisions/0005-locale-defaults",
+      "slug": "internal/helm-ai-kernel/docs/design-system/decisions/0005-locale-defaults",
       "title": "0005 — Locale Defaults & RTL Detection",
       "section": "internal",
       "source_path": "docs/design-system/decisions/0005-locale-defaults.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/design-system/decisions/0005-locale-defaults"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/decisions/0005-locale-defaults"
     },
     {
-      "slug": "internal/helm-oss/docs/design-system/decisions/readme",
+      "slug": "internal/helm-ai-kernel/docs/design-system/decisions/readme",
       "title": "Architecture Decision Records (ADRs)",
       "section": "internal",
       "source_path": "docs/design-system/decisions/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/design-system/decisions/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/decisions/readme"
     },
     {
-      "slug": "internal/helm-oss/docs/design-system/library-adoption",
+      "slug": "internal/helm-ai-kernel/docs/design-system/library-adoption",
       "title": "Library Adoption",
       "section": "internal",
       "source_path": "docs/design-system/library-adoption.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/design-system/library-adoption"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/library-adoption"
     },
     {
-      "slug": "internal/helm-oss/docs/design-system/primitive-coverage",
+      "slug": "internal/helm-ai-kernel/docs/design-system/primitive-coverage",
       "title": "Primitive Coverage",
       "section": "internal",
       "source_path": "docs/design-system/primitive-coverage.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/design-system/primitive-coverage"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/primitive-coverage"
     },
     {
-      "slug": "internal/helm-oss/docs/design-system/theming",
+      "slug": "internal/helm-ai-kernel/docs/design-system/theming",
       "title": "Theming",
       "section": "internal",
       "source_path": "docs/design-system/theming.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/design-system/theming"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/theming"
     },
     {
-      "slug": "internal/helm-oss/docs/documentation-coverage",
+      "slug": "internal/helm-ai-kernel/docs/documentation-coverage",
       "title": "Documentation Coverage",
       "section": "internal",
       "source_path": "docs/documentation-coverage.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/documentation-coverage"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/documentation-coverage"
     },
     {
-      "slug": "internal/helm-oss/docs/execution-boundary-oss-response",
-      "title": "HELM OSS Execution Boundary Response",
+      "slug": "internal/helm-ai-kernel/docs/execution-boundary-oss-response",
+      "title": "HELM AI Kernel Execution Boundary Response",
       "section": "internal",
       "source_path": "docs/execution-boundary-oss-response.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/execution-boundary-oss-response"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/execution-boundary-oss-response"
     },
     {
-      "slug": "internal/helm-oss/docs/governance/cncf-application",
+      "slug": "internal/helm-ai-kernel/docs/governance/cncf-application",
       "title": "CNCF Application Evidence",
       "section": "internal",
       "source_path": "docs/governance/cncf-application.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/governance/cncf-application"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/governance/cncf-application"
     },
     {
-      "slug": "internal/helm-oss/docs/readme",
-      "title": "HELM OSS Docs",
+      "slug": "internal/helm-ai-kernel/docs/readme",
+      "title": "HELM AI Kernel Docs",
       "section": "internal",
       "source_path": "docs/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/readme"
     },
     {
-      "slug": "internal/helm-oss/docs/strategy/mcp-governance-competitive-radar-2026-04",
+      "slug": "internal/helm-ai-kernel/docs/strategy/mcp-governance-competitive-radar-2026-04",
       "title": "MCP Governance Competitive Radar - April 2026",
       "section": "internal",
       "source_path": "docs/strategy/mcp-governance-competitive-radar-2026-04.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/strategy/mcp-governance-competitive-radar-2026-04"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/strategy/mcp-governance-competitive-radar-2026-04"
     },
     {
-      "slug": "internal/helm-oss/docs/strategy/policy-research-watchlist-2026-04",
+      "slug": "internal/helm-ai-kernel/docs/strategy/policy-research-watchlist-2026-04",
       "title": "Policy Research Watchlist - April 2026",
       "section": "internal",
       "source_path": "docs/strategy/policy-research-watchlist-2026-04.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/docs/strategy/policy-research-watchlist-2026-04"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/strategy/policy-research-watchlist-2026-04"
     },
     {
-      "slug": "internal/helm-oss/examples/go_client/readme",
+      "slug": "internal/helm-ai-kernel/examples/go_client/readme",
       "title": "Go Client Example",
       "section": "internal",
       "source_path": "examples/go_client/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/go_client/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/go_client/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/golden/readme",
+      "slug": "internal/helm-ai-kernel/examples/golden/readme",
       "title": "Golden EvidencePack Example",
       "section": "internal",
       "source_path": "examples/golden/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/golden/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/golden/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/java_client/readme",
+      "slug": "internal/helm-ai-kernel/examples/java_client/readme",
       "title": "Java Client Example",
       "section": "internal",
       "source_path": "examples/java_client/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/java_client/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/java_client/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/js_openai_baseurl/readme",
+      "slug": "internal/helm-ai-kernel/examples/js_openai_baseurl/readme",
       "title": "JavaScript — OpenAI Baseurl Example",
       "section": "internal",
       "source_path": "examples/js_openai_baseurl/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/js_openai_baseurl/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/js_openai_baseurl/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/mcp_client/readme",
+      "slug": "internal/helm-ai-kernel/examples/mcp_client/readme",
       "title": "MCP Client Example",
       "section": "internal",
       "source_path": "examples/mcp_client/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/mcp_client/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/mcp_client/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/openclaw/readme",
+      "slug": "internal/helm-ai-kernel/examples/openclaw/readme",
       "title": "OpenClaw Browser Split Compute Pattern",
       "section": "internal",
       "source_path": "examples/openclaw/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/openclaw/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/openclaw/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/otel-genai/readme",
+      "slug": "internal/helm-ai-kernel/examples/otel-genai/readme",
       "title": "OTel GenAI Semantic Conventions Example",
       "section": "internal",
       "source_path": "examples/otel-genai/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/otel-genai/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/otel-genai/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/policies/readme",
+      "slug": "internal/helm-ai-kernel/examples/policies/readme",
       "title": "Policy Examples",
       "section": "internal",
       "source_path": "examples/policies/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/policies/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/policies/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/python_openai_baseurl/readme",
+      "slug": "internal/helm-ai-kernel/examples/python_openai_baseurl/readme",
       "title": "Python — OpenAI Baseurl Example",
       "section": "internal",
       "source_path": "examples/python_openai_baseurl/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/python_openai_baseurl/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/python_openai_baseurl/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/readme",
+      "slug": "internal/helm-ai-kernel/examples/readme",
       "title": "Examples",
       "section": "internal",
       "source_path": "examples/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/receipt_verification/readme",
+      "slug": "internal/helm-ai-kernel/examples/receipt_verification/readme",
       "title": "Receipt Verification Examples",
       "section": "internal",
       "source_path": "examples/receipt_verification/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/receipt_verification/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/receipt_verification/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/rust_client/readme",
+      "slug": "internal/helm-ai-kernel/examples/rust_client/readme",
       "title": "Rust Client Example",
       "section": "internal",
       "source_path": "examples/rust_client/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/rust_client/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/rust_client/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/starters/anthropic/readme",
-      "title": "Anthropic Starter — HELM OSS Governed AI",
+      "slug": "internal/helm-ai-kernel/examples/starters/anthropic/readme",
+      "title": "Anthropic Starter — HELM AI Kernel Governed AI",
       "section": "internal",
       "source_path": "examples/starters/anthropic/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/starters/anthropic/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/starters/anthropic/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/starters/codex/readme",
-      "title": "Codex Starter — HELM OSS Governed AI",
+      "slug": "internal/helm-ai-kernel/examples/starters/codex/readme",
+      "title": "Codex Starter — HELM AI Kernel Governed AI",
       "section": "internal",
       "source_path": "examples/starters/codex/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/starters/codex/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/starters/codex/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/starters/google/readme",
-      "title": "Google ADK Starter — HELM OSS Governed AI",
+      "slug": "internal/helm-ai-kernel/examples/starters/google/readme",
+      "title": "Google ADK Starter — HELM AI Kernel Governed AI",
       "section": "internal",
       "source_path": "examples/starters/google/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/starters/google/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/starters/google/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/starters/openai/readme",
-      "title": "OpenAI Starter — HELM OSS Governed AI",
+      "slug": "internal/helm-ai-kernel/examples/starters/openai/readme",
+      "title": "OpenAI Starter — HELM AI Kernel Governed AI",
       "section": "internal",
       "source_path": "examples/starters/openai/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/starters/openai/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/starters/openai/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/starters/readme",
+      "slug": "internal/helm-ai-kernel/examples/starters/readme",
       "title": "Provider Starters",
       "section": "internal",
       "source_path": "examples/starters/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/starters/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/starters/readme"
     },
     {
-      "slug": "internal/helm-oss/examples/ts_openai_baseurl/readme",
+      "slug": "internal/helm-ai-kernel/examples/ts_openai_baseurl/readme",
       "title": "TypeScript — OpenAI SDK Example",
       "section": "internal",
       "source_path": "examples/ts_openai_baseurl/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/examples/ts_openai_baseurl/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/examples/ts_openai_baseurl/readme"
     },
     {
-      "slug": "internal/helm-oss/fixtures/readme",
+      "slug": "internal/helm-ai-kernel/fixtures/readme",
       "title": "Fixtures",
       "section": "internal",
       "source_path": "fixtures/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/fixtures/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/fixtures/readme"
     },
     {
-      "slug": "internal/helm-oss/governance",
+      "slug": "internal/helm-ai-kernel/governance",
       "title": "Governance",
       "section": "internal",
       "source_path": "GOVERNANCE.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/governance"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/governance"
     },
     {
-      "slug": "internal/helm-oss/helm_oss_tailored_engineering_prompt",
-      "title": "HELM OSS Tailored Engineering Review And Implementation Prompt",
+      "slug": "internal/helm-ai-kernel/helm_ai_kernel_tailored_engineering_prompt",
+      "title": "HELM AI Kernel Tailored Engineering Review And Implementation Prompt",
       "section": "internal",
-      "source_path": "HELM_OSS_TAILORED_ENGINEERING_PROMPT.md",
+      "source_path": "HELM_AI_KERNEL_TAILORED_ENGINEERING_PROMPT.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/helm_oss_tailored_engineering_prompt"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/helm_ai_kernel_tailored_engineering_prompt"
     },
     {
-      "slug": "internal/helm-oss/maintainers",
+      "slug": "internal/helm-ai-kernel/maintainers",
       "title": "Maintainers",
       "section": "internal",
       "source_path": "MAINTAINERS.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/maintainers"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/maintainers"
     },
     {
-      "slug": "internal/helm-oss/oss-fuzz/readme",
+      "slug": "internal/helm-ai-kernel/oss-fuzz/readme",
       "title": "Oss Fuzz",
       "section": "internal",
       "source_path": "oss-fuzz/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/oss-fuzz/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/oss-fuzz/readme"
     },
     {
-      "slug": "internal/helm-oss/packages/design-system-core/readme",
+      "slug": "internal/helm-ai-kernel/packages/design-system-core/readme",
       "title": "@Helm/Design System Core",
       "section": "internal",
       "source_path": "packages/design-system-core/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/packages/design-system-core/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/packages/design-system-core/readme"
     },
     {
-      "slug": "internal/helm-oss/packages/readme",
+      "slug": "internal/helm-ai-kernel/packages/readme",
       "title": "Packages",
       "section": "internal",
       "source_path": "packages/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/packages/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/packages/readme"
     },
     {
-      "slug": "internal/helm-oss/proofs/lean/readme",
-      "title": "HELM OSS Lean Proofs",
+      "slug": "internal/helm-ai-kernel/proofs/lean/readme",
+      "title": "HELM AI Kernel Lean Proofs",
       "section": "internal",
       "source_path": "proofs/Lean/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/proofs/lean/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/proofs/lean/readme"
     },
     {
-      "slug": "internal/helm-oss/proofs/readme",
+      "slug": "internal/helm-ai-kernel/proofs/readme",
       "title": "Proofs",
       "section": "internal",
       "source_path": "proofs/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/proofs/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/proofs/readme"
     },
     {
-      "slug": "internal/helm-oss/protocols/bundles/readme",
+      "slug": "internal/helm-ai-kernel/protocols/bundles/readme",
       "title": "Protocol Bundles Source Owner",
       "section": "internal",
       "source_path": "protocols/bundles/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/bundles/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/bundles/readme"
     },
     {
-      "slug": "internal/helm-oss/protocols/conformance/v1/conformance_guide",
+      "slug": "internal/helm-ai-kernel/protocols/conformance/v1/conformance_guide",
       "title": "HELM Conformance Guide",
       "section": "internal",
       "source_path": "protocols/conformance/v1/CONFORMANCE_GUIDE.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/conformance/v1/conformance_guide"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/conformance/v1/conformance_guide"
     },
     {
-      "slug": "internal/helm-oss/protocols/json-schemas/readme",
+      "slug": "internal/helm-ai-kernel/protocols/json-schemas/readme",
       "title": "JSON Schemas Source Owner",
       "section": "internal",
       "source_path": "protocols/json-schemas/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/json-schemas/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/json-schemas/readme"
     },
     {
-      "slug": "internal/helm-oss/protocols/json-schemas/schema_index",
+      "slug": "internal/helm-ai-kernel/protocols/json-schemas/schema_index",
       "title": "HELM JSON Schema Index",
       "section": "internal",
       "source_path": "protocols/json-schemas/SCHEMA_INDEX.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/json-schemas/schema_index"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/json-schemas/schema_index"
     },
     {
-      "slug": "internal/helm-oss/protocols/policy-schema/readme",
+      "slug": "internal/helm-ai-kernel/protocols/policy-schema/readme",
       "title": "Policy Schema Source Owner",
       "section": "internal",
       "source_path": "protocols/policy-schema/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/policy-schema/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/policy-schema/readme"
     },
     {
-      "slug": "internal/helm-oss/protocols/policy-schema/v1/canonicalization",
+      "slug": "internal/helm-ai-kernel/protocols/policy-schema/v1/canonicalization",
       "title": "Canonicalization Rules V0",
       "section": "internal",
       "source_path": "protocols/policy-schema/v1/canonicalization.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/policy-schema/v1/canonicalization"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/policy-schema/v1/canonicalization"
     },
     {
-      "slug": "internal/helm-oss/protocols/policy-schema/v1/dsl_grammar",
+      "slug": "internal/helm-ai-kernel/protocols/policy-schema/v1/dsl_grammar",
       "title": "Policy DSL Grammar V0",
       "section": "internal",
       "source_path": "protocols/policy-schema/v1/dsl_grammar.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/policy-schema/v1/dsl_grammar"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/policy-schema/v1/dsl_grammar"
     },
     {
-      "slug": "internal/helm-oss/protocols/policy-schema/v1/i18n_keys",
+      "slug": "internal/helm-ai-kernel/protocols/policy-schema/v1/i18n_keys",
       "title": "I18n Key Namespaces V0",
       "section": "internal",
       "source_path": "protocols/policy-schema/v1/i18n_keys.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/policy-schema/v1/i18n_keys"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/policy-schema/v1/i18n_keys"
     },
     {
-      "slug": "internal/helm-oss/protocols/policy-schema/v1/reason_codes",
+      "slug": "internal/helm-ai-kernel/protocols/policy-schema/v1/reason_codes",
       "title": "ReasonCode Registry V0",
       "section": "internal",
       "source_path": "protocols/policy-schema/v1/reason_codes.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/policy-schema/v1/reason_codes"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/policy-schema/v1/reason_codes"
     },
     {
-      "slug": "internal/helm-oss/protocols/proto/readme",
+      "slug": "internal/helm-ai-kernel/protocols/proto/readme",
       "title": "Proto",
       "section": "internal",
       "source_path": "protocols/proto/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/proto/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/proto/readme"
     },
     {
-      "slug": "internal/helm-oss/protocols/readme",
+      "slug": "internal/helm-ai-kernel/protocols/readme",
       "title": "Protocols",
       "section": "internal",
       "source_path": "protocols/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/readme"
     },
     {
-      "slug": "internal/helm-oss/protocols/spec/evidence-pack-v1",
+      "slug": "internal/helm-ai-kernel/protocols/spec/evidence-pack-v1",
       "title": "Evidence Pack Format Specification V1.0",
       "section": "internal",
       "source_path": "protocols/spec/evidence-pack-v1.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/spec/evidence-pack-v1"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/spec/evidence-pack-v1"
     },
     {
-      "slug": "internal/helm-oss/protocols/spec/protocol",
+      "slug": "internal/helm-ai-kernel/protocols/spec/protocol",
       "title": "HELM Governance Protocol Specification",
       "section": "internal",
       "source_path": "protocols/spec/PROTOCOL.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/spec/protocol"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/spec/protocol"
     },
     {
-      "slug": "internal/helm-oss/protocols/specs/authority-court/protocol",
+      "slug": "internal/helm-ai-kernel/protocols/specs/authority-court/protocol",
       "title": "HELM RFC: Authority Court Protocol",
       "section": "internal",
       "source_path": "protocols/specs/authority-court/protocol.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/specs/authority-court/protocol"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/specs/authority-court/protocol"
     },
     {
-      "slug": "internal/helm-oss/protocols/specs/effects/taxonomy",
+      "slug": "internal/helm-ai-kernel/protocols/specs/effects/taxonomy",
       "title": "HELM RFC: Effect Taxonomy",
       "section": "internal",
       "source_path": "protocols/specs/effects/taxonomy.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/specs/effects/taxonomy"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/specs/effects/taxonomy"
     },
     {
-      "slug": "internal/helm-oss/protocols/specs/readme",
+      "slug": "internal/helm-ai-kernel/protocols/specs/readme",
       "title": "Protocol Specs Source Owner",
       "section": "internal",
       "source_path": "protocols/specs/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/specs/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/specs/readme"
     },
     {
-      "slug": "internal/helm-oss/protocols/specs/rfc/artifact-versioning-v1",
+      "slug": "internal/helm-ai-kernel/protocols/specs/rfc/artifact-versioning-v1",
       "title": "RFC: HELM Artifact Versioning V1.0",
       "section": "internal",
       "source_path": "protocols/specs/rfc/artifact-versioning-v1.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/specs/rfc/artifact-versioning-v1"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/specs/rfc/artifact-versioning-v1"
     },
     {
-      "slug": "internal/helm-oss/protocols/specs/rfc/identifier-urn-v1",
+      "slug": "internal/helm-ai-kernel/protocols/specs/rfc/identifier-urn-v1",
       "title": "RFC: HELM Identifier And URN Grammar V1.0",
       "section": "internal",
       "source_path": "protocols/specs/rfc/identifier-urn-v1.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/specs/rfc/identifier-urn-v1"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/specs/rfc/identifier-urn-v1"
     },
     {
-      "slug": "internal/helm-oss/protocols/specs/rfc/policy-bundle-v1",
+      "slug": "internal/helm-ai-kernel/protocols/specs/rfc/policy-bundle-v1",
       "title": "RFC: HELM Policy Bundle Format V1",
       "section": "internal",
       "source_path": "protocols/specs/rfc/policy-bundle-v1.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/specs/rfc/policy-bundle-v1"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/specs/rfc/policy-bundle-v1"
     },
     {
-      "slug": "internal/helm-oss/protocols/specs/rfc/reason-codes-v1",
+      "slug": "internal/helm-ai-kernel/protocols/specs/rfc/reason-codes-v1",
       "title": "RFC: HELM Reason Code Registry V1",
       "section": "internal",
       "source_path": "protocols/specs/rfc/reason-codes-v1.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/specs/rfc/reason-codes-v1"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/specs/rfc/reason-codes-v1"
     },
     {
-      "slug": "internal/helm-oss/protocols/specs/rfc/receipt-format-v1",
+      "slug": "internal/helm-ai-kernel/protocols/specs/rfc/receipt-format-v1",
       "title": "RFC: HELM Receipt Format V1.0",
       "section": "internal",
       "source_path": "protocols/specs/rfc/receipt-format-v1.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/protocols/specs/rfc/receipt-format-v1"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/protocols/specs/rfc/receipt-format-v1"
     },
     {
-      "slug": "internal/helm-oss/readme",
+      "slug": "internal/helm-ai-kernel/readme",
       "title": "HELM",
       "section": "internal",
       "source_path": "README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/readme"
     },
     {
-      "slug": "internal/helm-oss/reference_packs/readme",
+      "slug": "internal/helm-ai-kernel/reference_packs/readme",
       "title": "Reference Packs",
       "section": "internal",
       "source_path": "reference_packs/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/reference_packs/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/reference_packs/readme"
     },
     {
-      "slug": "internal/helm-oss/release",
+      "slug": "internal/helm-ai-kernel/release",
       "title": "Release Process",
       "section": "internal",
       "source_path": "RELEASE.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/release"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/release"
     },
     {
-      "slug": "internal/helm-oss/release/readme",
+      "slug": "internal/helm-ai-kernel/release/readme",
       "title": "Release Evidence",
       "section": "internal",
       "source_path": "release/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/release/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/release/readme"
     },
     {
-      "slug": "internal/helm-oss/schemas/readme",
+      "slug": "internal/helm-ai-kernel/schemas/readme",
       "title": "Schemas",
       "section": "internal",
       "source_path": "schemas/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/schemas/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/schemas/readme"
     },
     {
-      "slug": "internal/helm-oss/schemas/receipts/readme",
+      "slug": "internal/helm-ai-kernel/schemas/receipts/readme",
       "title": "Receipt Schemas Source Owner",
       "section": "internal",
       "source_path": "schemas/receipts/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/schemas/receipts/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/schemas/receipts/readme"
     },
     {
-      "slug": "internal/helm-oss/scripts/bench/readme",
+      "slug": "internal/helm-ai-kernel/scripts/bench/readme",
       "title": "Bench",
       "section": "internal",
       "source_path": "scripts/bench/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/scripts/bench/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/scripts/bench/readme"
     },
     {
-      "slug": "internal/helm-oss/scripts/ci/readme",
+      "slug": "internal/helm-ai-kernel/scripts/ci/readme",
       "title": "Ci",
       "section": "internal",
       "source_path": "scripts/ci/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/scripts/ci/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/scripts/ci/readme"
     },
     {
-      "slug": "internal/helm-oss/scripts/readme",
+      "slug": "internal/helm-ai-kernel/scripts/readme",
       "title": "Scripts",
       "section": "internal",
       "source_path": "scripts/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/scripts/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/scripts/readme"
     },
     {
-      "slug": "internal/helm-oss/scripts/release/readme",
+      "slug": "internal/helm-ai-kernel/scripts/release/readme",
       "title": "Release Tooling",
       "section": "internal",
       "source_path": "scripts/release/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/scripts/release/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/scripts/release/readme"
     },
     {
-      "slug": "internal/helm-oss/scripts/sdk/readme",
+      "slug": "internal/helm-ai-kernel/scripts/sdk/readme",
       "title": "SDK Tooling",
       "section": "internal",
       "source_path": "scripts/sdk/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/scripts/sdk/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/scripts/sdk/readme"
     },
     {
-      "slug": "internal/helm-oss/scripts/tla/readme",
+      "slug": "internal/helm-ai-kernel/scripts/tla/readme",
       "title": "Tla",
       "section": "internal",
       "source_path": "scripts/tla/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/scripts/tla/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/scripts/tla/readme"
     },
     {
-      "slug": "internal/helm-oss/scripts/usecases/readme",
+      "slug": "internal/helm-ai-kernel/scripts/usecases/readme",
       "title": "Usecases",
       "section": "internal",
       "source_path": "scripts/usecases/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/scripts/usecases/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/scripts/usecases/readme"
     },
     {
-      "slug": "internal/helm-oss/sdk/go/readme",
+      "slug": "internal/helm-ai-kernel/sdk/go/readme",
       "title": "HELM SDK Go",
       "section": "internal",
       "source_path": "sdk/go/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/sdk/go/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/sdk/go/readme"
     },
     {
-      "slug": "internal/helm-oss/sdk/java/readme",
+      "slug": "internal/helm-ai-kernel/sdk/java/readme",
       "title": "HELM SDK Java",
       "section": "internal",
       "source_path": "sdk/java/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/sdk/java/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/sdk/java/readme"
     },
     {
-      "slug": "internal/helm-oss/sdk/python/readme",
+      "slug": "internal/helm-ai-kernel/sdk/python/readme",
       "title": "HELM SDK Python",
       "section": "internal",
       "source_path": "sdk/python/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/sdk/python/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/sdk/python/readme"
     },
     {
-      "slug": "internal/helm-oss/sdk/readme",
-      "title": "HELM OSS SDKs",
+      "slug": "internal/helm-ai-kernel/sdk/readme",
+      "title": "HELM AI Kernel SDKs",
       "section": "internal",
       "source_path": "sdk/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/sdk/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/sdk/readme"
     },
     {
-      "slug": "internal/helm-oss/sdk/rust/readme",
+      "slug": "internal/helm-ai-kernel/sdk/rust/readme",
       "title": "HELM SDK Rust",
       "section": "internal",
       "source_path": "sdk/rust/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/sdk/rust/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/sdk/rust/readme"
     },
     {
-      "slug": "internal/helm-oss/sdk/ts/readme",
+      "slug": "internal/helm-ai-kernel/sdk/ts/readme",
       "title": "HELM SDK TypeScript",
       "section": "internal",
       "source_path": "sdk/ts/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/sdk/ts/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/sdk/ts/readme"
     },
     {
-      "slug": "internal/helm-oss/security",
+      "slug": "internal/helm-ai-kernel/security",
       "title": "Security Policy",
       "section": "internal",
       "source_path": "SECURITY.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/security"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/security"
     },
     {
-      "slug": "internal/helm-oss/tests/conformance/policy-langs/readme",
+      "slug": "internal/helm-ai-kernel/tests/conformance/policy-langs/readme",
       "title": "Cross Language Policy Equivalence Corpus",
       "section": "internal",
       "source_path": "tests/conformance/policy-langs/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/tests/conformance/policy-langs/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/tests/conformance/policy-langs/readme"
     },
     {
-      "slug": "internal/helm-oss/tests/conformance/profile-v1/readme",
+      "slug": "internal/helm-ai-kernel/tests/conformance/profile-v1/readme",
       "title": "HELM Conformance Profile V1",
       "section": "internal",
       "source_path": "tests/conformance/profile-v1/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/tests/conformance/profile-v1/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/tests/conformance/profile-v1/readme"
     },
     {
-      "slug": "internal/helm-oss/tests/conformance/readme",
+      "slug": "internal/helm-ai-kernel/tests/conformance/readme",
       "title": "Conformance Source Owner",
       "section": "internal",
       "source_path": "tests/conformance/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/tests/conformance/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/tests/conformance/readme"
     },
     {
-      "slug": "internal/helm-oss/tests/readme",
+      "slug": "internal/helm-ai-kernel/tests/readme",
       "title": "Tests",
       "section": "internal",
       "source_path": "tests/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/tests/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/tests/readme"
     },
     {
-      "slug": "internal/helm-oss/tools/boundary/readme",
+      "slug": "internal/helm-ai-kernel/tools/boundary/readme",
       "title": "Boundary",
       "section": "internal",
       "source_path": "tools/boundary/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/tools/boundary/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/tools/boundary/readme"
     },
     {
-      "slug": "internal/helm-oss/tools/competitive-bakeoff/readme",
+      "slug": "internal/helm-ai-kernel/tools/competitive-bakeoff/readme",
       "title": "Competitive Bakeoff Harness",
       "section": "internal",
       "source_path": "tools/competitive-bakeoff/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/tools/competitive-bakeoff/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/tools/competitive-bakeoff/readme"
     },
     {
-      "slug": "internal/helm-oss/tools/doccheck/readme",
+      "slug": "internal/helm-ai-kernel/tools/doccheck/readme",
       "title": "Doccheck",
       "section": "internal",
       "source_path": "tools/doccheck/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/tools/doccheck/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/tools/doccheck/readme"
     },
     {
-      "slug": "internal/helm-oss/tools/readme",
+      "slug": "internal/helm-ai-kernel/tools/readme",
       "title": "Tools",
       "section": "internal",
       "source_path": "tools/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/tools/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/tools/readme"
     },
     {
-      "slug": "internal/helm-oss/tools/tcbcheck/readme",
+      "slug": "internal/helm-ai-kernel/tools/tcbcheck/readme",
       "title": "Tcbcheck",
       "section": "internal",
       "source_path": "tools/tcbcheck/README.md",
       "access": "staff",
       "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-oss/tools/tcbcheck/readme"
+      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/tools/tcbcheck/readme"
     }
   ]
 }

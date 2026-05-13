@@ -3,7 +3,7 @@ package capgraph
 import (
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/integrations/manifest"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/integrations/manifest"
 )
 
 func TestCapabilityURNParse(t *testing.T) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke-test the self-hosted HELM OSS container runtime.
+# Smoke-test the self-hosted HELM AI Kernel container runtime.
 #
 # The test exercises the production entrypoint shape used by Docker and Compose:
 # explicit `serve --policy`, durable data directory, admin/tenant auth, receipt
@@ -14,14 +14,14 @@ if [ "${1:-}" = "--compose" ]; then
     MODE="compose"
 fi
 
-IMAGE="${HELM_SMOKE_IMAGE:-ghcr.io/mindburn-labs/helm-oss:local}"
+IMAGE="${HELM_SMOKE_IMAGE:-ghcr.io/mindburn-labs/helm-ai-kernel:local}"
 API_PORT="${HELM_SMOKE_API_PORT:-18080}"
 HEALTH_PORT="${HELM_SMOKE_HEALTH_PORT:-18081}"
 ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-helm-admin-smoke}"
 SERVICE_KEY="${HELM_SMOKE_SERVICE_KEY:-helm-service-smoke}"
 TENANT_ID="${HELM_SMOKE_TENANT_ID:-tenant-smoke}"
 AGENT_ID="${HELM_SMOKE_AGENT_ID:-agent.smoke}"
-CONTAINER_NAME="${HELM_SMOKE_CONTAINER_NAME:-helm-oss-smoke}"
+CONTAINER_NAME="${HELM_SMOKE_CONTAINER_NAME:-helm-ai-kernel-smoke}"
 DATA_DIR="${HELM_SMOKE_DATA_DIR:-}"
 COMPOSE_PROJECT="${HELM_SMOKE_COMPOSE_PROJECT:-helmoss_smoke}"
 COMPOSE_FILE="${HELM_SMOKE_COMPOSE_FILE:-docker-compose.yml}"
@@ -40,7 +40,7 @@ require python3
 
 if [ -z "$DATA_DIR" ]; then
     mkdir -p "$ROOT/tmp"
-    DATA_DIR="$(mktemp -d "$ROOT/tmp/helm-oss-docker-smoke.XXXXXX")"
+    DATA_DIR="$(mktemp -d "$ROOT/tmp/helm-ai-kernel-docker-smoke.XXXXXX")"
     cleanup_data=1
 fi
 mkdir -p "$DATA_DIR"
@@ -96,7 +96,7 @@ start_docker() {
         -e HELM_SERVICE_API_KEY="$SERVICE_KEY" \
         -e EVIDENCE_SIGNING_KEY="helm-evidence-smoke" \
         -e HELM_HEALTH_PORT=8081 \
-        -v "${DATA_DIR}:/var/lib/helm" \
+        -v "${DATA_DIR}:/var/lib/helm-ai-kernel" \
         "$IMAGE" >/dev/null
 }
 

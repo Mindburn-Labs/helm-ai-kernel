@@ -1,6 +1,6 @@
 # Documentation Coverage
 
-This file is the tracked documentation-completeness certificate for `helm-oss`.
+This file is the tracked documentation-completeness certificate for `helm-ai-kernel`.
 
 ## Standard
 

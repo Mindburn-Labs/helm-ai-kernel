@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/api"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
 	"github.com/golang-jwt/jwt/v5"
 )
 

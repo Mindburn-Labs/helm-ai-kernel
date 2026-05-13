@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1714000000}"
-TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/helm-oss-release-smoke.XXXXXX")"
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/helm-ai-kernel-release-smoke.XXXXXX")"
 COSIGN_DIR="${COSIGN_ARTIFACT_DIR:-dist}"
 REQUIRE_COSIGN="${REQUIRE_COSIGN_BUNDLES:-0}"
 
@@ -29,13 +29,13 @@ cd "$ROOT"
 echo "release smoke: first reproducible build"
 SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" make release-binaries-reproducible >/dev/null
 mkdir -p "$TMP_DIR/build1"
-cp bin/helm-* bin/SHA256SUMS.txt "$TMP_DIR/build1/"
+cp bin/helm-ai-kernel-* bin/SHA256SUMS.txt "$TMP_DIR/build1/"
 shasum -a 256 "$TMP_DIR"/build1/helm-* | sed 's#.*/##' >"$TMP_DIR/build1.sha256"
 
 echo "release smoke: second reproducible build"
-rm -f bin/helm-* bin/SHA256SUMS.txt
+rm -f bin/helm-ai-kernel-* bin/SHA256SUMS.txt
 SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" make release-binaries-reproducible >/dev/null
-shasum -a 256 bin/helm-* | sed 's#.*/##' >"$TMP_DIR/build2.sha256"
+shasum -a 256 bin/helm-ai-kernel-* | sed 's#.*/##' >"$TMP_DIR/build2.sha256"
 diff "$TMP_DIR/build1.sha256" "$TMP_DIR/build2.sha256" >/dev/null || {
     echo "::error::reproducible binary hashes differ"
     diff -u "$TMP_DIR/build1.sha256" "$TMP_DIR/build2.sha256" || true

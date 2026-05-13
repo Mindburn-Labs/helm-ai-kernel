@@ -1,9 +1,9 @@
-module github.com/Mindburn-Labs/helm-oss/examples/otel-genai
+module github.com/Mindburn-Labs/helm-ai-kernel/examples/otel-genai
 
 go 1.25.0
 
 require (
-	github.com/Mindburn-Labs/helm-oss/core v0.0.0
+	github.com/Mindburn-Labs/helm-ai-kernel/core v0.0.0
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/sdk v1.43.0
 )
@@ -32,4 +32,4 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-replace github.com/Mindburn-Labs/helm-oss/core => ../../core
+replace github.com/Mindburn-Labs/helm-ai-kernel/core => ../../core

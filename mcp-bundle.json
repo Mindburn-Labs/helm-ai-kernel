@@ -5,14 +5,14 @@
   "description": "HELM Execution Authority — fail-closed AI governance firewall with policy enforcement, Ed25519-signed receipts, and tamper-evident EvidencePack audit trail.",
   "author": {
     "name": "Mindburn Labs",
-    "url": "https://github.com/Mindburn-Labs/helm-oss",
-    "support": "https://github.com/Mindburn-Labs/helm-oss/issues"
+    "url": "https://github.com/Mindburn-Labs/helm-ai-kernel",
+    "support": "https://github.com/Mindburn-Labs/helm-ai-kernel/issues"
   },
   "license": "Apache-2.0",
-  "homepage": "https://github.com/Mindburn-Labs/helm-oss",
+  "homepage": "https://github.com/Mindburn-Labs/helm-ai-kernel",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Mindburn-Labs/helm-oss.git"
+    "url": "https://github.com/Mindburn-Labs/helm-ai-kernel.git"
   },
   "server": {
     "type": "binary",

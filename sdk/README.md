@@ -1,6 +1,6 @@
-# HELM OSS SDKs
+# HELM AI Kernel SDKs
 
-The SDK directory contains the retained public client surfaces for HELM OSS.
+The SDK directory contains the retained public client surfaces for HELM AI Kernel.
 Each package wraps the HTTP/OpenAPI boundary and, where present, generated
 protobuf message bindings under the language-specific generated directories.
 
@@ -19,9 +19,9 @@ flowchart LR
 
 | Language | Source | Package identity | Readiness | Validation |
 | --- | --- | --- | --- | --- |
-| Go | `sdk/go/client/` | `github.com/Mindburn-Labs/helm-oss/sdk/go` | Source-backed SDK package | `make test-sdk-go-standalone` |
+| Go | `sdk/go/client/` | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go` | Source-backed SDK package | `make test-sdk-go-standalone` |
 | Python | `sdk/python/helm_sdk/` | `helm-sdk` | First-class local example under `examples/python_sdk/` | `make test-sdk-py` |
-| TypeScript / JavaScript | `sdk/ts/src/` | `@mindburn/helm` | First-class local example under `examples/ts_sdk/` | `make test-sdk-ts` |
+| TypeScript / JavaScript | `sdk/ts/src/` | `@mindburn/helm-ai-kernel` | First-class local example under `examples/ts_sdk/` | `make test-sdk-ts` |
 | Rust | `sdk/rust/src/` | `helm-sdk` | Source-backed SDK package | `make test-sdk-rust` |
 | Java | `sdk/java/src/main/java/` | `com.github.Mindburn-Labs:helm-sdk` | Source-backed SDK package | `make test-sdk-java` |
 

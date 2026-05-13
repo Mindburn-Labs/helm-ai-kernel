@@ -9,7 +9,7 @@ import (
 	"log"
 	"os"
 
-	helm "github.com/Mindburn-Labs/helm-oss/sdk/go/client"
+	helm "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go/client"
 )
 
 func main() {

@@ -1,9 +1,9 @@
-// Package loki implements an OTel SpanExporter that translates helm-oss
+// Package loki implements an OTel SpanExporter that translates helm-ai-kernel
 // governance spans (carrying OTel GenAI semconv attributes plus the helm.*
 // governance namespace) into Grafana Loki push events.
 //
 // Wire shape: each ReadOnlySpan becomes one entry in a Loki stream keyed by
-// labels {service:"helm-oss", verdict:"<allow|deny|escalate>", policy_id,
+// labels {service:"helm-ai-kernel", verdict:"<allow|deny|escalate>", policy_id,
 // gen_ai_system}. The line value is a JSON-encoded copy of the full
 // attribute bag plus span identifiers so Grafana queries can pivot on
 // either gen_ai.* or helm.* without flattening loss.
@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/observability"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
@@ -41,7 +41,7 @@ type Config struct {
 	BasicAuthUser string
 	BasicAuthPass string
 	// ServiceLabel is the value emitted under the `service` Loki label;
-	// defaults to "helm-oss".
+	// defaults to "helm-ai-kernel".
 	ServiceLabel string
 	// HTTPClient is optional; defaults to a 10s-timeout client.
 	HTTPClient *http.Client
@@ -60,7 +60,7 @@ func New(cfg Config) (*Exporter, error) {
 		return nil, errors.New("loki: URL is required")
 	}
 	if cfg.ServiceLabel == "" {
-		cfg.ServiceLabel = "helm-oss"
+		cfg.ServiceLabel = "helm-ai-kernel"
 	}
 	hc := cfg.HTTPClient
 	if hc == nil {

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/observability"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -55,8 +55,8 @@ func TestNew_DefaultsServiceLabel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if e.cfg.ServiceLabel != "helm-oss" {
-		t.Errorf("ServiceLabel default = %q, want %q", e.cfg.ServiceLabel, "helm-oss")
+	if e.cfg.ServiceLabel != "helm-ai-kernel" {
+		t.Errorf("ServiceLabel default = %q, want %q", e.cfg.ServiceLabel, "helm-ai-kernel")
 	}
 }
 
@@ -95,7 +95,7 @@ func TestExportSpans_ProducesPushPayload(t *testing.T) {
 	}
 
 	for _, s := range captured.Streams {
-		if s.Stream["service"] != "helm-oss" {
+		if s.Stream["service"] != "helm-ai-kernel" {
 			t.Errorf("stream service label = %q", s.Stream["service"])
 		}
 		if s.Stream["gen_ai_system"] != "openai" {

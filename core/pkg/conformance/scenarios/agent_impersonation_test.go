@@ -3,8 +3,8 @@ package scenarios
 import (
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
 )
 
 // Scenario 3: Agent Impersonation via Shared Secret + Email

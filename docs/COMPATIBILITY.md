@@ -5,22 +5,22 @@ last_reviewed: 2026-05-05
 
 # Compatibility
 
-HELM OSS compatibility is the retained public surface that maps to code, examples, tests, or canonical docs. Historical experiments are not supported unless they appear in the source-backed tables below.
+HELM AI Kernel compatibility is the retained public surface that maps to code, examples, tests, or canonical docs. Historical experiments are not supported unless they appear in the source-backed tables below.
 
 ## Audience
 
-This page is for developers and operators deciding whether HELM OSS supports their operating system, SDK language, framework helper, policy language, deployment target, or verification path today.
+This page is for developers and operators deciding whether HELM AI Kernel supports their operating system, SDK language, framework helper, policy language, deployment target, or verification path today.
 
 ## Outcome
 
-After this page you should know which surfaces are supported, example-only, or outside HELM OSS; which source paths prove each claim; and which validation commands must pass before a compatibility claim changes.
+After this page you should know which surfaces are supported, example-only, or outside HELM AI Kernel; which source paths prove each claim; and which validation commands must pass before a compatibility claim changes.
 
 ## Surface Map
 
 ```mermaid
 flowchart LR
   Kernel["Go kernel and CLI"] --> API["HTTP API and proxy"]
-  API --> Console["self-hostable OSS Console"]
+  API --> Console["self-hostable HELM AI Kernel Console"]
   API --> SDKs["SDKs and adapters"]
   SDKs --> Starters["provider starters"]
   Kernel --> Policy["CEL, Rego, Cedar bundles"]
@@ -48,11 +48,11 @@ This page is backed by:
 | Surface | Status | Proof |
 | --- | --- | --- |
 | Go kernel and CLI | Supported | `make build`, `make test` |
-| OpenAI-compatible proxy | Supported | `core/cmd/helm/proxy_cmd.go`, proxy examples |
-| MCP server, OAuth scope enforcement, and bundle generation | Supported | `core/cmd/helm/mcp_*`, MCP tests |
-| Boundary records, MCP quarantine, sandbox grants, authz snapshots, approvals, budgets, telemetry, and coexistence APIs | Supported | `api/openapi/helm.openapi.yaml`, `core/cmd/helm/route_registry.go`, `core/cmd/helm/contract_routes.go` |
-| Evidence export and offline verification | Supported | `core/cmd/helm/export_cmd.go`, `core/cmd/helm/verify_cmd.go` |
-| Self-hostable OSS Console | Supported | `apps/console/`, `make test-console` |
+| OpenAI-compatible proxy | Supported | `core/cmd/helm-ai-kernel/proxy_cmd.go`, proxy examples |
+| MCP server, OAuth scope enforcement, and bundle generation | Supported | `core/cmd/helm-ai-kernel/mcp_*`, MCP tests |
+| Boundary records, MCP quarantine, sandbox grants, authz snapshots, approvals, budgets, telemetry, and coexistence APIs | Supported | `api/openapi/helm.openapi.yaml`, `core/cmd/helm-ai-kernel/route_registry.go`, `core/cmd/helm-ai-kernel/contract_routes.go` |
+| Evidence export and offline verification | Supported | `core/cmd/helm-ai-kernel/export_cmd.go`, `core/cmd/helm-ai-kernel/verify_cmd.go` |
+| Self-hostable HELM AI Kernel Console | Supported | `apps/console/`, `make test-console` |
 | Python SDK | Supported | `make test-sdk-py` |
 | TypeScript SDK and JavaScript OpenAI-compatible path | Supported | `make test-sdk-ts` |
 | Go SDK | Supported | `cd sdk/go && go test ./...` |
@@ -88,11 +88,11 @@ make test-sdk-ts
 | Codex starter | Example-only | `examples/starters/codex/` | `bash examples/starters/codex/ci-smoke.sh` |
 | OpenAI starter | Example-only | `examples/starters/openai/` | `bash examples/starters/openai/ci-smoke.sh` |
 
-Example-only means the repository contains a starter layout and smoke script. It does not mean HELM OSS owns the provider SDK or certifies every feature of that ecosystem.
+Example-only means the repository contains a starter layout and smoke script. It does not mean HELM AI Kernel owns the provider SDK or certifies every feature of that ecosystem.
 
 ## Policy Languages
 
-HELM OSS supports CEL, Rego, and Cedar policy bundle examples.
+HELM AI Kernel supports CEL, Rego, and Cedar policy bundle examples.
 
 | Language | Source example | Notes |
 | --- | --- | --- |
@@ -104,7 +104,7 @@ Use `docs/architecture/policy-languages.md` for the longer comparison and comman
 
 ## Deployment Surface
 
-The repository keeps Docker, Docker Compose, a Kubernetes Helm chart, and the self-hostable OSS Console. It does not ship hosted operations, a static report viewer, or tenant-admin services in HELM OSS.
+The repository keeps Docker, Docker Compose, a Kubernetes Helm chart, and the self-hostable HELM AI Kernel Console. It does not ship hosted operations, a static report viewer, or tenant-admin services in HELM AI Kernel.
 
 | Deployment | Status | Source |
 | --- | --- | --- |
@@ -112,11 +112,11 @@ The repository keeps Docker, Docker Compose, a Kubernetes Helm chart, and the se
 | Docker image | Supported | `Dockerfile` |
 | Docker Compose | Supported | `docker-compose.yml` |
 | Kubernetes Helm chart | Supported | `deploy/helm-chart/` |
-| Self-hostable OSS Console | Supported | `apps/console/` |
+| Self-hostable HELM AI Kernel Console | Supported | `apps/console/` |
 
 ## Verdict Compatibility
 
-Current HELM OSS runtime docs use `ALLOW`, `DENY`, and `ESCALATE`.
+Current HELM AI Kernel runtime docs use `ALLOW`, `DENY`, and `ESCALATE`.
 Historical docs and generated compatibility code may still contain older
 verdict labels. Treat them only as migration aliases:
 
@@ -166,4 +166,4 @@ Do not claim a language, framework, deployment target, or provider integration a
 
 ## MCP 2026 Radar Notes
 
-The original Linear radar item pointed at `https://modelcontextprotocol.io/roadmap`; as of April 30, 2026 that URL returns a 404 and the current source is [MCP Roadmap](https://modelcontextprotocol.io/development/roadmap). The current roadmap frames enterprise-managed auth, gateway/proxy authorization propagation, and finer-grained least-privilege scopes as active enterprise/security directions, while RFC 8707 remains the normative OAuth source for resource indicators. HELM OSS implements this as an additive auth and metadata layer; protocol versions and existing tool schemas remain backward compatible.
+The original Linear radar item pointed at `https://modelcontextprotocol.io/roadmap`; as of April 30, 2026 that URL returns a 404 and the current source is [MCP Roadmap](https://modelcontextprotocol.io/development/roadmap). The current roadmap frames enterprise-managed auth, gateway/proxy authorization propagation, and finer-grained least-privilege scopes as active enterprise/security directions, while RFC 8707 remains the normative OAuth source for resource indicators. HELM AI Kernel implements this as an additive auth and metadata layer; protocol versions and existing tool schemas remain backward compatible.

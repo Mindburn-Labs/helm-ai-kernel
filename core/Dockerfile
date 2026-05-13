@@ -8,19 +8,19 @@ RUN apk add --no-cache git ca-certificates
 
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN --mount=type=cache,id=helm-oss-go-mod,target=/go/pkg/mod go mod download
+RUN --mount=type=cache,id=helm-ai-kernel-go-mod,target=/go/pkg/mod go mod download
 
 COPY . ./
-RUN --mount=type=cache,id=helm-oss-go-mod,target=/go/pkg/mod --mount=type=cache,id=helm-oss-go-build,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-amd64}" go build -ldflags="-s -w" -trimpath -o /helm ./cmd/helm/
+RUN --mount=type=cache,id=helm-ai-kernel-go-mod,target=/go/pkg/mod --mount=type=cache,id=helm-ai-kernel-go-build,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-amd64}" go build -ldflags="-s -w" -trimpath -o /helm-ai-kernel ./cmd/helm-ai-kernel/
 
 # ── Stage 2: Runtime ───────────────────────────────────
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1
 
-COPY --from=builder /helm /usr/local/bin/helm
+COPY --from=builder /helm-ai-kernel /usr/local/bin/helm-ai-kernel
 
 EXPOSE 8080
 
 USER nonroot:nonroot
 
-ENTRYPOINT ["helm"]
+ENTRYPOINT ["helm-ai-kernel"]

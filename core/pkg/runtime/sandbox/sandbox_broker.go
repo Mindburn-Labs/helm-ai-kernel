@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/effectgraph"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/lease"
-	pkg_sandbox "github.com/Mindburn-Labs/helm-oss/core/pkg/sandbox"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effectgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/lease"
+	pkg_sandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
 )
 
 // SandboxRunner is the interface for executing work in a sandbox.

@@ -1,4 +1,4 @@
-# HELM OSS MCP Package Source Owner
+# HELM AI Kernel MCP Package Source Owner
 
 ## Audience
 
@@ -14,11 +14,11 @@ Classification: `public-direct`.
 
 Public docs should link here from:
 
-- `helm-oss/integrations/mcp`
-- `helm-oss/reference/execution-boundary`
-- `helm-oss/reference/http-api`
-- `helm-oss/security/owasp-agentic-top10-mapping`
-- `helm-oss/owasp-mcp-threat-mapping`
+- `helm-ai-kernel/integrations/mcp`
+- `helm-ai-kernel/reference/execution-boundary`
+- `helm-ai-kernel/reference/http-api`
+- `helm-ai-kernel/security/owasp-agentic-top10-mapping`
+- `helm-ai-kernel/owasp-mcp-threat-mapping`
 
 ## Source Map
 

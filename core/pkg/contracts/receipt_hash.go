@@ -3,7 +3,7 @@ package contracts
 import (
 	"fmt"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
 
 // ReceiptChainHash returns the canonical SHA-256 digest used for receipt

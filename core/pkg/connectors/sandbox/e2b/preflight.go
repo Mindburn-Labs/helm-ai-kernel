@@ -1,7 +1,7 @@
 package e2b
 
 import (
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts/actuators"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators"
 )
 
 // runPreflightChecks performs E2B-specific preflight checks.

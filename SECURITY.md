@@ -28,7 +28,7 @@ The repository keeps:
 - release automation that can sign artifacts when Cosign bundles are produced
   and attached
 - an SBOM generation script in `scripts/ci/generate_sbom.sh`
-- offline evidence verification in the `helm verify` command
+- offline evidence verification in the `helm-ai-kernel verify` command
 
 For release-process details, see [RELEASE.md](RELEASE.md).
 
@@ -53,7 +53,7 @@ release attaches matching `*.cosign.bundle` files. The trust roots are:
   signing event.
 
 The signing identity is the GitHub Actions workflow itself
-(`https://github.com/Mindburn-Labs/helm-oss/.github/workflows/release.yml@refs/tags/v*`).
+(`https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/v*`).
 Verification commands and the recovery path are documented in
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
@@ -66,7 +66,7 @@ OpenVEX and Cosign bundle material for every primary asset. Verify
 ## Continuous Fuzzing
 
 Continuous fuzzing is configured for upstream OSS-Fuzz under the
-[`oss-fuzz/`](oss-fuzz/) directory. ClusterFuzz issues against helm-oss
+[`oss-fuzz/`](oss-fuzz/) directory. ClusterFuzz issues against helm-ai-kernel
 are tracked publicly through the OSS-Fuzz issue tracker; the project
 maintainer set is the auto-CC for new findings via the `auto_ccs` field
 in `oss-fuzz/project.yaml`.

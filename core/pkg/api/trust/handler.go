@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/trust/registry"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust/registry"
 )
 
 // Handler provides Trust Registry HTTP endpoints.

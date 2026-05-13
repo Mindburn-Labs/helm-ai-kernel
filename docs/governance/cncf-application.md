@@ -3,11 +3,11 @@ title: CNCF Sandbox Application
 last_reviewed: 2026-05-05
 ---
 
-# helm-oss CNCF Sandbox Application
+# helm-ai-kernel CNCF Sandbox Application
 
 ## Audience
 
-Maintainers using this internal governance note to track source-backed CNCF-readiness evidence for HELM OSS.
+Maintainers using this internal governance note to track source-backed CNCF-readiness evidence for HELM AI Kernel.
 
 ## Outcome
 
@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/governance/cncf-application`
-- Source document: `helm-oss/docs/governance/cncf-application.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/governance/cncf-application`
+- Source document: `helm-ai-kernel/docs/governance/cncf-application.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -31,23 +31,23 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 | A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
 | A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
 
-This document is the canonical narrative used to file helm-oss for CNCF
+This document is the canonical narrative used to file helm-ai-kernel for CNCF
 Sandbox admission. It is intentionally short and references the project's
 existing governance, security, and release artifacts rather than restating
 them.
 
 ## Project Name
 
-**helm-oss** — open-source execution kernel for governed AI tool calling.
+**helm-ai-kernel** — open-source execution kernel for governed AI tool calling.
 
 ## Description
 
-helm-oss is a fail-closed execution boundary that sits between an AI agent
+helm-ai-kernel is a fail-closed execution boundary that sits between an AI agent
 or tool-calling LLM and the systems it would otherwise call directly. It
 applies policy bundles (CEL today; Rego and Cedar planned), records signed
 receipts for both allow and deny decisions, anchors evidence in
 transparency logs (Sigstore Rekor and RFC 3161 TSA), and exports evidence
-packs that any third party can verify offline with the bundled `helm verify`
+packs that any third party can verify offline with the bundled `helm-ai-kernel verify`
 CLI.
 
 The kernel is small (a few hundred KB binary), pure Go, and ships with
@@ -73,7 +73,7 @@ options solve adjacent problems (model-evaluation, prompt-firewalling,
 guardrail-libraries) but none provide a verifiable, signed, replayable
 record of every governed call.
 
-helm-oss closes that gap by being an execution-side governance kernel:
+helm-ai-kernel closes that gap by being an execution-side governance kernel:
 policy enforcement is a fail-closed precondition for the call, every
 allow/deny decision produces a signed receipt, every receipt is anchored
 in a transparency log, and every receipt can be verified offline against
@@ -81,7 +81,7 @@ the published trust roots.
 
 ## Why CNCF
 
-helm-oss is a cloud-native control plane for AI tool calling: it ships as
+helm-ai-kernel is a cloud-native control plane for AI tool calling: it ships as
 a container image, deploys via a Helm chart, exposes Prometheus metrics,
 emits OpenTelemetry spans (with planned GenAI semconv adoption), and is
 governed neutrally rather than as a single-vendor stack. CNCF Sandbox
@@ -90,7 +90,7 @@ infrastructure they will run on the execution path.
 
 ## Alignment with Cloud-Native Principles
 
-- **Container-first**: published as `ghcr.io/mindburn-labs/helm-oss` with a
+- **Container-first**: published as `ghcr.io/mindburn-labs/helm-ai-kernel` with a
   slim variant; deployed via `deploy/helm-chart/`.
 - **Declarative configuration**: signed policy bundles loaded at startup;
   no runtime configuration drift.
@@ -151,15 +151,15 @@ The HELM Conformance Profile v1
 (`tests/conformance/profile-v1/`) is being submitted to LF AI as a
 cross-implementation conformance profile. The relationship is:
 
-- **CNCF (this application)**: governs the helm-oss kernel — code,
+- **CNCF (this application)**: governs the helm-ai-kernel kernel — code,
   binaries, container images, Helm chart, SDKs.
 - **LF AI**: governs the Conformance Profile as a vendor-neutral
   specification with multiple implementations.
 
-The two homes are complementary. helm-oss as the reference implementation
+The two homes are complementary. helm-ai-kernel as the reference implementation
 lives at CNCF; the conformance specification it implements lives at LF AI,
 allowing competing implementations to certify against the same axes
-without depending on the helm-oss codebase.
+without depending on the helm-ai-kernel codebase.
 
 ## Application Status
 

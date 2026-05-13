@@ -3,7 +3,7 @@
 
 ## Purpose
 
-Active proof surface for the `helm-oss` project.
+Active proof surface for the `helm-ai-kernel` project.
 
 ## Canonical Interface
 

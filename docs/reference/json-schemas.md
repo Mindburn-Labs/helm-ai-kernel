@@ -1,9 +1,9 @@
 ---
-title: HELM OSS JSON Schema Reference
+title: HELM AI Kernel JSON Schema Reference
 last_reviewed: 2026-05-05
 ---
 
-# HELM OSS JSON Schema Reference
+# HELM AI Kernel JSON Schema Reference
 
 This page is for developers who need the public schema inventory before writing validators, SDK bindings, conformance tests, or receipt processors. The outcome is a concrete map from schema family to source path, validation command, and public docs surface.
 

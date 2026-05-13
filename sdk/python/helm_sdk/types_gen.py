@@ -4734,12 +4734,12 @@ class GetPublicDemoHealth200Response(BaseModel):
     """ # noqa: E501
     version: StrictStr
     commit: StrictStr
-    helm_oss_version: StrictStr
+    helm_ai_kernel_version: StrictStr
     status: StrictStr
     build_time: StrictStr
     git_sha: StrictStr
     deployment_id: StrictStr
-    __properties: ClassVar[List[str]] = ["version", "commit", "helm_oss_version", "status", "build_time", "git_sha", "deployment_id"]
+    __properties: ClassVar[List[str]] = ["version", "commit", "helm_ai_kernel_version", "status", "build_time", "git_sha", "deployment_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -4794,7 +4794,7 @@ class GetPublicDemoHealth200Response(BaseModel):
         _obj = cls.model_validate({
             "version": obj.get("version"),
             "commit": obj.get("commit"),
-            "helm_oss_version": obj.get("helm_oss_version"),
+            "helm_ai_kernel_version": obj.get("helm_ai_kernel_version"),
             "status": obj.get("status"),
             "build_time": obj.get("build_time"),
             "git_sha": obj.get("git_sha"),
@@ -8064,8 +8064,8 @@ class RunPublicDemo200Response(BaseModel):
     proof_refs: RunPublicDemo200ResponseProofRefs
     verification_hint: StrictStr
     sandbox_label: StrictStr
-    helm_oss_version: StrictStr
-    __properties: ClassVar[List[str]] = ["verdict", "reason_code", "receipt", "proof_refs", "verification_hint", "sandbox_label", "helm_oss_version"]
+    helm_ai_kernel_version: StrictStr
+    __properties: ClassVar[List[str]] = ["verdict", "reason_code", "receipt", "proof_refs", "verification_hint", "sandbox_label", "helm_ai_kernel_version"]
 
     @field_validator('verdict')
     def verdict_validate_enum(cls, value):
@@ -8137,7 +8137,7 @@ class RunPublicDemo200Response(BaseModel):
             "proof_refs": RunPublicDemo200ResponseProofRefs.from_dict(obj["proof_refs"]) if obj.get("proof_refs") is not None else None,
             "verification_hint": obj.get("verification_hint"),
             "sandbox_label": obj.get("sandbox_label"),
-            "helm_oss_version": obj.get("helm_oss_version")
+            "helm_ai_kernel_version": obj.get("helm_ai_kernel_version")
         })
         return _obj
 

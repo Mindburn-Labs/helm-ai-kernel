@@ -11,7 +11,7 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
 
 // DeliveryStrategy defines the rollout approach.

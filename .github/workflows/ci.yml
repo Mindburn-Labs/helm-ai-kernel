@@ -88,7 +88,7 @@ jobs:
       - name: Test
         run: make test
       - name: Command tests
-        run: go test ./core/cmd/helm -count=1
+        run: go test ./core/cmd/helm-ai-kernel -count=1
       - name: Verify fixtures
         run: make verify-fixtures
       - name: Boundary registry drift
@@ -135,7 +135,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Test HELM OSS Console
+      - name: Test HELM AI Kernel Console
         run: make test-console
 
   rust-sdk:
@@ -214,7 +214,7 @@ jobs:
           node-version: "22"
       - uses: helm/kind-action@v1
         with:
-          cluster_name: helm-oss-smoke
+          cluster_name: helm-ai-kernel-smoke
       - name: kind install smoke
         run: make kind-smoke
 

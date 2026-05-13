@@ -1,17 +1,17 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 version: 2
 
-project_name: helm
+project_name: helm-ai-kernel
 
 before:
   hooks:
     - cd core && go mod tidy
 
 builds:
-  - id: helm
+  - id: helm-ai-kernel
     dir: core
-    main: ./cmd/helm/
-    binary: helm
+    main: ./cmd/helm-ai-kernel/
+    binary: helm-ai-kernel
     env:
       - CGO_ENABLED=0
     goos:
@@ -33,7 +33,7 @@ builds:
 archives:
   - id: default
     format: tar.gz
-    name_template: "helm-{{ .Os }}-{{ .Arch }}"
+    name_template: "helm-ai-kernel-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
         format: zip
@@ -69,19 +69,19 @@ docker_signs:
     artifacts: manifests
 
 brews:
-  - name: helm
+  - name: helm-ai-kernel
     repository:
       owner: mindburnlabs
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
-    homepage: "https://github.com/Mindburn-Labs/helm-oss"
+    homepage: "https://github.com/Mindburn-Labs/helm-ai-kernel"
     description: "Fail-closed execution authority for AI agents"
     license: "Apache-2.0"
     install: |
-      bin.install "helm"
+      bin.install "helm-ai-kernel"
     test: |
-      system "#{bin}/helm", "--help"
+      system "#{bin}/helm-ai-kernel", "--help"
 
 changelog:
   sort: asc
@@ -95,11 +95,11 @@ changelog:
 release:
   github:
     owner: Mindburn-Labs
-    name: helm-oss
+    name: helm-ai-kernel
   prerelease: auto
   draft: false
   extra_files:
-    - glob: "dist/release-assets/helm.mcpb"
+    - glob: "dist/release-assets/helm-ai-kernel.mcpb"
     - glob: "dist/release-assets/evidence-pack.tar"
     - glob: "dist/release-assets/release-attestation.json"
     - glob: "dist/release-assets/sample-policy-material.tar"

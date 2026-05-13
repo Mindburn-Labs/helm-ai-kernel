@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/evidencepack"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidencepack"
 )
 
 const EvidenceSchemaVersion = "ton.acton.evidence.v1"

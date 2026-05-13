@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"sort"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel/csnf"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/csnf"
 )
 
 type MerkleLeaf struct {

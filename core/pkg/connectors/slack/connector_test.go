@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/effects"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 )
 
 func TestNewConnector_DefaultID(t *testing.T) {

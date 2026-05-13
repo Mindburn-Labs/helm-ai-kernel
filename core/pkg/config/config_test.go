@@ -3,7 +3,7 @@ package config_test
 import (
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/config"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/config"
 	"github.com/stretchr/testify/assert"
 )
 

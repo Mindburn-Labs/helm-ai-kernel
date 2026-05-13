@@ -10,7 +10,7 @@ import (
 // contains every OTel GenAI key the plan requires, plus the helm.* keys, plus
 // the cross-reference statement showing helm correlation_id == gen_ai.tool.call.id.
 //
-// This is the C2 acceptance gate from is-helm-oss-state-robust-sloth.md:
+// This is the C2 acceptance gate from is-helm-ai-kernel-state-robust-sloth.md:
 //
 //	"a receipt's correlation_id is recoverable from the matching OTel trace
 //	 via gen_ai.tool.call.id"

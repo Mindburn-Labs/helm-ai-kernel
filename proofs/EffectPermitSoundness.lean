@@ -1,7 +1,7 @@
 /-
   EffectPermitSoundness.lean
 
-  Workstream F / F2 — Phase 3 of the helm-oss 100% SOTA execution plan.
+  Workstream F / F2 — Phase 3 of the helm-ai-kernel 100% SOTA execution plan.
 
   Machine-checked proof of the ceiling-precedence theorem for HELM's
   decision kernel: given a P0 ceiling and a P1 bundle, the kernel's

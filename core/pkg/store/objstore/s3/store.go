@@ -14,7 +14,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/store/objstore"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store/objstore"
 )
 
 // Config holds S3 connection parameters.

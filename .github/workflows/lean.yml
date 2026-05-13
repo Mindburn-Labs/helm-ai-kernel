@@ -15,7 +15,7 @@ on:
 
 permissions: read-all
 
-# Workstream F / F3 — Phase 3 of the helm-oss 100% SOTA execution plan.
+# Workstream F / F3 — Phase 3 of the helm-ai-kernel 100% SOTA execution plan.
 # Builds the EffectPermitSoundness Lean proof on every push/PR that
 # touches the proofs tree. Failure here blocks merge to main and gates
 # the release tag (the release workflow polls this job's conclusion).

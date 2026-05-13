@@ -2,7 +2,7 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://mindburn.org/schemas/helm-cli/v1",
     "title": "HELM CLI Verification Output",
-    "description": "JSON Schema for the output of `npx @mindburn/helm` verification command. Exit code 0 = verified, non-zero = failure.",
+    "description": "JSON Schema for the output of `npx @mindburn/helm-ai-kernel` verification command. Exit code 0 = verified, non-zero = failure.",
     "oneOf": [
         {
             "$ref": "#/$defs/SuccessResult"

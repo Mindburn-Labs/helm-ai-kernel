@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/compliance/jkg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/jkg"
 )
 
 // ControlLanguagePrimitive represents a Tier 1 universal control.

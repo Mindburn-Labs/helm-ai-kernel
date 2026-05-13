@@ -1,9 +1,9 @@
-module github.com/Mindburn-Labs/helm-oss/tests/conformance
+module github.com/Mindburn-Labs/helm-ai-kernel/tests/conformance
 
 go 1.24.0
 
 require (
-	github.com/Mindburn-Labs/helm-oss/core v0.0.0
+	github.com/Mindburn-Labs/helm-ai-kernel/core v0.0.0
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -15,4 +15,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/Mindburn-Labs/helm-oss/core => ../../core
+replace github.com/Mindburn-Labs/helm-ai-kernel/core => ../../core

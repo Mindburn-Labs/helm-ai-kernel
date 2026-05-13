@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 type EnvelopeExportType string
@@ -219,7 +219,7 @@ func payloadForEnvelope(envelope EnvelopeExportType, manifest contracts.Evidence
 		return map[string]any{
 			"_type":         "https://in-toto.io/Statement/v1",
 			"predicateType": "https://slsa.dev/provenance/v1",
-			"predicate":     map[string]any{"buildDefinition": root, "runDetails": map[string]any{"builder": map[string]any{"id": "helm-oss"}}},
+			"predicate":     map[string]any{"buildDefinition": root, "runDetails": map[string]any{"builder": map[string]any{"id": "helm-ai-kernel"}}},
 		}
 	case EnvelopeSigstore:
 		return map[string]any{

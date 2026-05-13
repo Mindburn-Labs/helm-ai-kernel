@@ -25,5 +25,5 @@ bash examples/starters/google/ci-smoke.sh
 bash examples/starters/openai/ci-smoke.sh
 ```
 
-The smoke scripts check that `helm init <profile>` creates `helm.yaml` and
-`.env` in a temporary project and that `helm doctor` can inspect it.
+The smoke scripts check that `helm-ai-kernel init <profile>` creates `helm.yaml` and
+`.env` in a temporary project and that `helm-ai-kernel doctor` can inspect it.

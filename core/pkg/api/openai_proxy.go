@@ -67,7 +67,7 @@ type OpenAIChatResponse struct {
 //
 // For CLI-based governance with interactive upstream forwarding, use:
 //
-//	helm proxy --upstream <url>
+//	helm-ai-kernel proxy --upstream <url>
 //
 // maxOpenAIRequestSize is the maximum allowed request body size (10 MiB).
 const maxOpenAIRequestSize = 10 << 20
@@ -98,7 +98,7 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 			"error": map[string]any{
 				"message": "HELM server mode requires HELM_UPSTREAM_URL to be set. " +
 					"Set this to your LLM API endpoint (e.g., https://api.openai.com). " +
-					"Alternatively, use: helm proxy --upstream <url>",
+					"Alternatively, use: helm-ai-kernel proxy --upstream <url>",
 				"type": "helm_configuration_error",
 				"code": "upstream_not_configured",
 			},

@@ -3,7 +3,7 @@ package zkgov
 import (
 	"fmt"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
 
 // Anchor records a ZK governance proof on a transparency log.

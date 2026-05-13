@@ -8,11 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity/did"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity/did/method/key"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/vcredentials"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/did"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/did/method/key"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/vcredentials"
 )
 
 // fixedNow is the deterministic clock used across all IATP tests.

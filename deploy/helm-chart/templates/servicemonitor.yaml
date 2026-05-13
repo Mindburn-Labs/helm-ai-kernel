@@ -2,16 +2,16 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "helm-firewall.fullname" . }}
+  name: {{ include "helm-ai-kernel.fullname" . }}
   labels:
-    {{- include "helm-firewall.labels" . | nindent 4 }}
+    {{- include "helm-ai-kernel.labels" . | nindent 4 }}
     {{- with .Values.helm.metrics.serviceMonitor.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
   selector:
     matchLabels:
-      {{- include "helm-firewall.selectorLabels" . | nindent 6 }}
+      {{- include "helm-ai-kernel.selectorLabels" . | nindent 6 }}
   endpoints:
     - port: metrics
       interval: {{ .Values.helm.metrics.serviceMonitor.interval }}

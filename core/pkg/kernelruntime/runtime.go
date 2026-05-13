@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/interfaces"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/interfaces"
 )
 
 // Runtime is the concrete implementation of the Kernel.

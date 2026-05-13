@@ -7,7 +7,7 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Security maintainers tracking public prompt-injection research that affects HELM OSS execution-boundary design.
+Security maintainers tracking public prompt-injection research that affects HELM AI Kernel execution-boundary design.
 
 ## Outcome
 
@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/security/prompt-injection-watchlist-2026-04`
-- Source document: `helm-oss/docs/security/prompt-injection-watchlist-2026-04.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/security/prompt-injection-watchlist-2026-04`
+- Source document: `helm-ai-kernel/docs/security/prompt-injection-watchlist-2026-04.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.

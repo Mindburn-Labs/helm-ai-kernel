@@ -6,34 +6,34 @@ RUN apk add --no-cache git ca-certificates
 RUN mkdir -p /runtime-data
 WORKDIR /src
 COPY core/go.mod core/go.sum ./core/
-RUN --mount=type=cache,id=helm-oss-go-mod,target=/go/pkg/mod cd core && go mod download
+RUN --mount=type=cache,id=helm-ai-kernel-go-mod,target=/go/pkg/mod cd core && go mod download
 COPY core/ ./core/
-RUN --mount=type=cache,id=helm-oss-go-mod,target=/go/pkg/mod --mount=type=cache,id=helm-oss-go-build,target=/root/.cache/go-build \
-    cd core && CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-amd64}" go build -ldflags="-s -w" -o /helm ./cmd/helm/
+RUN --mount=type=cache,id=helm-ai-kernel-go-mod,target=/go/pkg/mod --mount=type=cache,id=helm-ai-kernel-go-build,target=/root/.cache/go-build \
+    cd core && CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-amd64}" go build -ldflags="-s -w" -o /helm-ai-kernel ./cmd/helm-ai-kernel/
 
 # Stage 2: Minimal runtime
 FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
 RUN apk add --no-cache ca-certificates tzdata && \
-    adduser -D -h /home/helm helm
-COPY --from=builder /helm /usr/local/bin/helm
-COPY --from=builder --chown=helm:helm /runtime-data/ /var/lib/helm/
-COPY release.high_risk.v3.toml /etc/helm/release.high_risk.v3.toml
-COPY reference_packs/ /etc/helm/reference_packs/
+    adduser -D -h /home/helm-ai-kernel helm-kernel
+COPY --from=builder /helm-ai-kernel /usr/local/bin/helm-ai-kernel
+COPY --from=builder --chown=helm-kernel:helm-kernel /runtime-data/ /var/lib/helm-ai-kernel/
+COPY release.high_risk.v3.toml /etc/helm-ai-kernel/release.high_risk.v3.toml
+COPY reference_packs/ /etc/helm-ai-kernel/reference_packs/
 
 # Create data dir writable by helm user (for root.key, receipts, etc.)
-RUN mkdir -p /var/lib/helm && chown helm:helm /var/lib/helm
+RUN mkdir -p /var/lib/helm-ai-kernel && chown helm-kernel:helm-kernel /var/lib/helm-ai-kernel
 
 EXPOSE 8080
 EXPOSE 8081
 
-ENV HELM_DATA_DIR=/var/lib/helm
+ENV HELM_DATA_DIR=/var/lib/helm-ai-kernel
 
-USER helm
-WORKDIR /home/helm
+USER helm-kernel
+WORKDIR /home/helm-ai-kernel
 
-ENTRYPOINT ["helm"]
-CMD ["serve", "--policy", "/etc/helm/release.high_risk.v3.toml", "--addr", "0.0.0.0", "--port", "8080", "--data-dir", "/var/lib/helm"]
+ENTRYPOINT ["helm-ai-kernel"]
+CMD ["serve", "--policy", "/etc/helm-ai-kernel/release.high_risk.v3.toml", "--addr", "0.0.0.0", "--port", "8080", "--data-dir", "/var/lib/helm-ai-kernel"]
 
-LABEL org.opencontainers.image.source="https://github.com/Mindburn-Labs/helm-oss"
+LABEL org.opencontainers.image.source="https://github.com/Mindburn-Labs/helm-ai-kernel"
 LABEL org.opencontainers.image.description="HELM — Fail-closed execution authority for AI agents (slim)"
 LABEL org.opencontainers.image.licenses="Apache-2.0"

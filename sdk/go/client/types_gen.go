@@ -9100,13 +9100,13 @@ var _ MappedNullable = &GetPublicDemoHealth200Response{}
 
 // GetPublicDemoHealth200Response struct for GetPublicDemoHealth200Response
 type GetPublicDemoHealth200Response struct {
-	Version        string `json:"version"`
-	Commit         string `json:"commit"`
-	HelmOssVersion string `json:"helm_oss_version"`
-	Status         string `json:"status"`
-	BuildTime      string `json:"build_time"`
-	GitSha         string `json:"git_sha"`
-	DeploymentId   string `json:"deployment_id"`
+	Version             string `json:"version"`
+	Commit              string `json:"commit"`
+	HelmAiKernelVersion string `json:"helm_ai_kernel_version"`
+	Status              string `json:"status"`
+	BuildTime           string `json:"build_time"`
+	GitSha              string `json:"git_sha"`
+	DeploymentId        string `json:"deployment_id"`
 }
 
 type _GetPublicDemoHealth200Response GetPublicDemoHealth200Response
@@ -9115,11 +9115,11 @@ type _GetPublicDemoHealth200Response GetPublicDemoHealth200Response
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewGetPublicDemoHealth200Response(version string, commit string, helmOssVersion string, status string, buildTime string, gitSha string, deploymentId string) *GetPublicDemoHealth200Response {
+func NewGetPublicDemoHealth200Response(version string, commit string, helmAiKernelVersion string, status string, buildTime string, gitSha string, deploymentId string) *GetPublicDemoHealth200Response {
 	this := GetPublicDemoHealth200Response{}
 	this.Version = version
 	this.Commit = commit
-	this.HelmOssVersion = helmOssVersion
+	this.HelmAiKernelVersion = helmAiKernelVersion
 	this.Status = status
 	this.BuildTime = buildTime
 	this.GitSha = gitSha
@@ -9183,28 +9183,28 @@ func (o *GetPublicDemoHealth200Response) SetCommit(v string) {
 	o.Commit = v
 }
 
-// GetHelmOssVersion returns the HelmOssVersion field value
-func (o *GetPublicDemoHealth200Response) GetHelmOssVersion() string {
+// GetHelmAiKernelVersion returns the HelmAiKernelVersion field value
+func (o *GetPublicDemoHealth200Response) GetHelmAiKernelVersion() string {
 	if o == nil {
 		var ret string
 		return ret
 	}
 
-	return o.HelmOssVersion
+	return o.HelmAiKernelVersion
 }
 
-// GetHelmOssVersionOk returns a tuple with the HelmOssVersion field value
+// GetHelmAiKernelVersionOk returns a tuple with the HelmAiKernelVersion field value
 // and a boolean to check if the value has been set.
-func (o *GetPublicDemoHealth200Response) GetHelmOssVersionOk() (*string, bool) {
+func (o *GetPublicDemoHealth200Response) GetHelmAiKernelVersionOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.HelmOssVersion, true
+	return &o.HelmAiKernelVersion, true
 }
 
-// SetHelmOssVersion sets field value
-func (o *GetPublicDemoHealth200Response) SetHelmOssVersion(v string) {
-	o.HelmOssVersion = v
+// SetHelmAiKernelVersion sets field value
+func (o *GetPublicDemoHealth200Response) SetHelmAiKernelVersion(v string) {
+	o.HelmAiKernelVersion = v
 }
 
 // GetStatus returns the Status field value
@@ -9315,7 +9315,7 @@ func (o GetPublicDemoHealth200Response) ToMap() (map[string]interface{}, error) 
 	toSerialize := map[string]interface{}{}
 	toSerialize["version"] = o.Version
 	toSerialize["commit"] = o.Commit
-	toSerialize["helm_oss_version"] = o.HelmOssVersion
+	toSerialize["helm_ai_kernel_version"] = o.HelmAiKernelVersion
 	toSerialize["status"] = o.Status
 	toSerialize["build_time"] = o.BuildTime
 	toSerialize["git_sha"] = o.GitSha
@@ -9330,7 +9330,7 @@ func (o *GetPublicDemoHealth200Response) UnmarshalJSON(data []byte) (err error) 
 	requiredProperties := []string{
 		"version",
 		"commit",
-		"helm_oss_version",
+		"helm_ai_kernel_version",
 		"status",
 		"build_time",
 		"git_sha",
@@ -15348,13 +15348,13 @@ var _ MappedNullable = &RunPublicDemo200Response{}
 
 // RunPublicDemo200Response struct for RunPublicDemo200Response
 type RunPublicDemo200Response struct {
-	Verdict          string                            `json:"verdict"`
-	ReasonCode       string                            `json:"reason_code"`
-	Receipt          Receipt                           `json:"receipt"`
-	ProofRefs        RunPublicDemo200ResponseProofRefs `json:"proof_refs"`
-	VerificationHint string                            `json:"verification_hint"`
-	SandboxLabel     string                            `json:"sandbox_label"`
-	HelmOssVersion   string                            `json:"helm_oss_version"`
+	Verdict             string                            `json:"verdict"`
+	ReasonCode          string                            `json:"reason_code"`
+	Receipt             Receipt                           `json:"receipt"`
+	ProofRefs           RunPublicDemo200ResponseProofRefs `json:"proof_refs"`
+	VerificationHint    string                            `json:"verification_hint"`
+	SandboxLabel        string                            `json:"sandbox_label"`
+	HelmAiKernelVersion string                            `json:"helm_ai_kernel_version"`
 }
 
 type _RunPublicDemo200Response RunPublicDemo200Response
@@ -15363,7 +15363,7 @@ type _RunPublicDemo200Response RunPublicDemo200Response
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewRunPublicDemo200Response(verdict string, reasonCode string, receipt Receipt, proofRefs RunPublicDemo200ResponseProofRefs, verificationHint string, sandboxLabel string, helmOssVersion string) *RunPublicDemo200Response {
+func NewRunPublicDemo200Response(verdict string, reasonCode string, receipt Receipt, proofRefs RunPublicDemo200ResponseProofRefs, verificationHint string, sandboxLabel string, helmAiKernelVersion string) *RunPublicDemo200Response {
 	this := RunPublicDemo200Response{}
 	this.Verdict = verdict
 	this.ReasonCode = reasonCode
@@ -15371,7 +15371,7 @@ func NewRunPublicDemo200Response(verdict string, reasonCode string, receipt Rece
 	this.ProofRefs = proofRefs
 	this.VerificationHint = verificationHint
 	this.SandboxLabel = sandboxLabel
-	this.HelmOssVersion = helmOssVersion
+	this.HelmAiKernelVersion = helmAiKernelVersion
 	return &this
 }
 
@@ -15527,28 +15527,28 @@ func (o *RunPublicDemo200Response) SetSandboxLabel(v string) {
 	o.SandboxLabel = v
 }
 
-// GetHelmOssVersion returns the HelmOssVersion field value
-func (o *RunPublicDemo200Response) GetHelmOssVersion() string {
+// GetHelmAiKernelVersion returns the HelmAiKernelVersion field value
+func (o *RunPublicDemo200Response) GetHelmAiKernelVersion() string {
 	if o == nil {
 		var ret string
 		return ret
 	}
 
-	return o.HelmOssVersion
+	return o.HelmAiKernelVersion
 }
 
-// GetHelmOssVersionOk returns a tuple with the HelmOssVersion field value
+// GetHelmAiKernelVersionOk returns a tuple with the HelmAiKernelVersion field value
 // and a boolean to check if the value has been set.
-func (o *RunPublicDemo200Response) GetHelmOssVersionOk() (*string, bool) {
+func (o *RunPublicDemo200Response) GetHelmAiKernelVersionOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.HelmOssVersion, true
+	return &o.HelmAiKernelVersion, true
 }
 
-// SetHelmOssVersion sets field value
-func (o *RunPublicDemo200Response) SetHelmOssVersion(v string) {
-	o.HelmOssVersion = v
+// SetHelmAiKernelVersion sets field value
+func (o *RunPublicDemo200Response) SetHelmAiKernelVersion(v string) {
+	o.HelmAiKernelVersion = v
 }
 
 func (o RunPublicDemo200Response) MarshalJSON() ([]byte, error) {
@@ -15567,7 +15567,7 @@ func (o RunPublicDemo200Response) ToMap() (map[string]interface{}, error) {
 	toSerialize["proof_refs"] = o.ProofRefs
 	toSerialize["verification_hint"] = o.VerificationHint
 	toSerialize["sandbox_label"] = o.SandboxLabel
-	toSerialize["helm_oss_version"] = o.HelmOssVersion
+	toSerialize["helm_ai_kernel_version"] = o.HelmAiKernelVersion
 	return toSerialize, nil
 }
 
@@ -15582,7 +15582,7 @@ func (o *RunPublicDemo200Response) UnmarshalJSON(data []byte) (err error) {
 		"proof_refs",
 		"verification_hint",
 		"sandbox_label",
-		"helm_oss_version",
+		"helm_ai_kernel_version",
 	}
 
 	allProperties := make(map[string]interface{})

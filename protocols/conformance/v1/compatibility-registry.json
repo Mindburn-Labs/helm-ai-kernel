@@ -17,7 +17,7 @@
       "vectors_passed": "8/8",
       "last_verified": "2026-03-07",
       "maintainer": "Mindburn Labs",
-      "repository": "https://github.com/Mindburn-Labs/helm-oss"
+      "repository": "https://github.com/Mindburn-Labs/helm-ai-kernel"
     },
     {
       "name": "HELM Python SDK",
@@ -28,7 +28,7 @@
       "vectors_passed": "8/8",
       "last_verified": "2026-03-07",
       "maintainer": "Mindburn Labs",
-      "repository": "https://github.com/Mindburn-Labs/helm-oss/tree/main/sdk/python"
+      "repository": "https://github.com/Mindburn-Labs/helm-ai-kernel/tree/main/sdk/python"
     },
     {
       "name": "HELM TypeScript SDK",
@@ -39,7 +39,7 @@
       "vectors_passed": "8/8",
       "last_verified": "2026-03-07",
       "maintainer": "Mindburn Labs",
-      "repository": "https://github.com/Mindburn-Labs/helm-oss/tree/main/sdk/ts"
+      "repository": "https://github.com/Mindburn-Labs/helm-ai-kernel/tree/main/sdk/ts"
     },
     {
       "name": "HELM Go SDK",
@@ -50,7 +50,7 @@
       "vectors_passed": "8/8",
       "last_verified": "2026-03-07",
       "maintainer": "Mindburn Labs",
-      "repository": "https://github.com/Mindburn-Labs/helm-oss/tree/main/sdk/go"
+      "repository": "https://github.com/Mindburn-Labs/helm-ai-kernel/tree/main/sdk/go"
     },
     {
       "name": "HELM Rust SDK",
@@ -61,7 +61,7 @@
       "vectors_passed": "6/8",
       "last_verified": "2026-03-07",
       "maintainer": "Mindburn Labs",
-      "repository": "https://github.com/Mindburn-Labs/helm-oss/tree/main/sdk/rust"
+      "repository": "https://github.com/Mindburn-Labs/helm-ai-kernel/tree/main/sdk/rust"
     },
     {
       "name": "HELM Java SDK",
@@ -72,7 +72,7 @@
       "vectors_passed": "6/8",
       "last_verified": "2026-03-07",
       "maintainer": "Mindburn Labs",
-      "repository": "https://github.com/Mindburn-Labs/helm-oss/tree/main/sdk/java"
+      "repository": "https://github.com/Mindburn-Labs/helm-ai-kernel/tree/main/sdk/java"
     }
   ],
   "sandbox_adapters": [

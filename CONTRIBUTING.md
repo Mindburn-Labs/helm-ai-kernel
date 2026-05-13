@@ -5,8 +5,8 @@ HELM is maintained as a small OSS kernel. Contributions should improve the retai
 ## Local Setup
 
 ```bash
-git clone https://github.com/Mindburn-Labs/helm-oss.git
-cd helm-oss
+git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
+cd helm-ai-kernel
 make build
 ```
 

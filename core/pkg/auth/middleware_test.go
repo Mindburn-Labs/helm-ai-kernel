@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/auth"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
 	"github.com/golang-jwt/jwt/v5"
 )
 

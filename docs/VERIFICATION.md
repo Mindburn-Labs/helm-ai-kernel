@@ -5,14 +5,22 @@ last_reviewed: 2026-05-05
 
 # Verification
 
-Use this page when you need to verify a HELM OSS EvidencePack, boundary record, release artifact, or optional signature bundle without trusting prose.
+Verification proves a HELM AI Kernel EvidencePack, boundary record, release artifact, or optional signature bundle from source-owned material instead of prose.
+
+## Audience
+
+This page is for release consumers, security reviewers, and integration owners who need to verify HELM AI Kernel outputs without trusting a hosted service or marketing claim.
+
+## Outcome
+
+You should be able to run local offline verification, distinguish release metadata from cryptographic evidence, and identify which release assets have enough material to verify before you execute or redistribute them.
 
 ## Source Truth
 
-- Public route: `helm-oss/verification`
-- Source document: `helm-oss/docs/VERIFICATION.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/verification`
+- Source document: `helm-ai-kernel/docs/VERIFICATION.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -46,16 +54,16 @@ flowchart LR
   F --> E
 ```
 
-The verification path is local-first. `helm verify <evidence-pack.tar|dir>`
+The verification path is local-first. `helm-ai-kernel verify <evidence-pack.tar|dir>`
 performs offline checks by default; `--online` is optional and only runs after
 offline checks pass.
 
 Current public release: `v0.5.0`, published on 2026-05-13 at
-<https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.5.0>. The release
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.0>. The release
 page attaches platform binaries, `SHA256SUMS.txt`, `sbom.json`,
 `v0.5.0.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
-`release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm.mcpb`,
-`helm.rb`, and matching `*.cosign.bundle` files for each primary asset.
+`release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm-ai-kernel.mcpb`,
+`helm-ai-kernel.rb`, and matching `*.cosign.bundle` files for each primary asset.
 
 There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
 actual baseline when auditing the `v0.5.0` delta.
@@ -64,11 +72,11 @@ actual baseline when auditing the `v0.5.0` delta.
 
 The `v0.5.0` release attaches these primary assets:
 
-- `helm-darwin-amd64`
-- `helm-darwin-arm64`
-- `helm-linux-amd64`
-- `helm-linux-arm64`
-- `helm-windows-amd64.exe`
+- `helm-ai-kernel-darwin-amd64`
+- `helm-ai-kernel-darwin-arm64`
+- `helm-ai-kernel-linux-amd64`
+- `helm-ai-kernel-linux-arm64`
+- `helm-ai-kernel-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
 - `v0.5.0.openvex.json`
@@ -76,8 +84,8 @@ The `v0.5.0` release attaches these primary assets:
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
 - `sample-policy-material.tar`
-- `helm.mcpb`
-- `helm.rb`
+- `helm-ai-kernel.mcpb`
+- `helm-ai-kernel.rb`
 
 `sample-policy-material.tar` must include both
 `release.high_risk.v3.toml` and
@@ -88,13 +96,13 @@ primary asset, including `SHA256SUMS.txt`, with a matching
 ## Offline Verification
 
 ```bash
-helm verify evidence-pack.tar
+helm-ai-kernel verify evidence-pack.tar
 ```
 
 Compatibility form:
 
 ```bash
-helm verify --bundle evidence-pack.tar
+helm-ai-kernel verify --bundle evidence-pack.tar
 ```
 
 Successful compact output includes the envelope id, signature count, anchor state, and sealed timestamp when those fields are embedded in the pack. If no anchor is embedded, the CLI reports `anchor offline`; it does not invent an anchor.
@@ -102,7 +110,7 @@ Successful compact output includes the envelope id, signature count, anchor stat
 ## Online Proof Check
 
 ```bash
-helm verify evidence-pack.tar --online
+helm-ai-kernel verify evidence-pack.tar --online
 ```
 
 `--online` posts envelope/root metadata to `HELM_LEDGER_URL` or `https://mindburn.org/api/proof/verify`. Public proof verification is additive and must never use fixture-backed positive proof.
@@ -110,8 +118,8 @@ helm verify evidence-pack.tar --online
 ## Export and Verify
 
 ```bash
-helm export --evidence ./data/evidence --out evidence.tar
-helm verify evidence.tar
+helm-ai-kernel export --evidence ./data/evidence --out evidence.tar
+helm-ai-kernel verify evidence.tar
 ```
 
 ## Local Tamper-Failure Demo
@@ -133,11 +141,11 @@ verify, and the tamper attempt must fail signature and ProofGraph hash checks.
 The execution-boundary verifier checks HELM-native records first. External envelopes are wrappers over HELM roots, not independent authority.
 
 ```bash
-helm boundary records --json
-helm boundary checkpoint --create --receipt-count 1 --json
-helm boundary verify boundary-record-bootstrap --json
-helm evidence envelope create --envelope dsse --native-hash sha256:evidence --manifest-id demo --json
-helm evidence envelope verify --manifest-id demo --json
+helm-ai-kernel boundary records --json
+helm-ai-kernel boundary checkpoint --create --receipt-count 1 --json
+helm-ai-kernel boundary verify boundary-record-bootstrap --json
+helm-ai-kernel evidence envelope create --envelope dsse --native-hash sha256:evidence --manifest-id demo --json
+helm-ai-kernel evidence envelope verify --manifest-id demo --json
 ```
 
 For API-backed verification, use:
@@ -172,7 +180,7 @@ provenance predicate and a documented verifier command.
 Verify the bundled offline evidence pack:
 
 ```bash
-helm verify evidence-pack.tar
+helm-ai-kernel verify evidence-pack.tar
 ```
 
 For `v0.5.0`, this command passes without network access. The verifier
@@ -190,19 +198,19 @@ with the bundled signature:
 
 ```bash
 cosign verify-blob \
-  --bundle helm-linux-amd64.cosign.bundle \
-  --certificate-identity-regexp "https://github.com/Mindburn-Labs/helm-oss" \
+  --bundle helm-ai-kernel-linux-amd64.cosign.bundle \
+  --certificate-identity-regexp "https://github.com/Mindburn-Labs/helm-ai-kernel" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  helm-linux-amd64
+  helm-ai-kernel-linux-amd64
 ```
 
 Verify the published container image when one is published for the release:
 
 ```bash
 cosign verify \
-  --certificate-identity-regexp "Mindburn-Labs/helm-oss" \
+  --certificate-identity-regexp "Mindburn-Labs/helm-ai-kernel" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/mindburn-labs/helm-oss:<version>
+  ghcr.io/mindburn-labs/helm-ai-kernel:<version>
 ```
 
 Verify every artifact in a downloaded release directory in one command when the

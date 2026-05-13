@@ -7,7 +7,7 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Operators and contributors diagnosing local HELM OSS startup, proxy, Console, receipt, and verification failures.
+Operators and contributors diagnosing local HELM AI Kernel startup, proxy, Console, receipt, and verification failures.
 
 ## Outcome
 
@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/troubleshooting`
-- Source document: `helm-oss/docs/TROUBLESHOOTING.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/troubleshooting`
+- Source document: `helm-ai-kernel/docs/TROUBLESHOOTING.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -56,10 +56,10 @@ Common issues and solutions for HELM.
 
 ## First Diagnostic
 
-Run `helm doctor --json` before deeper debugging when the CLI is installed but the runtime path is unclear. The doctor command checks local initialization, trust material, data directories, and common environment mistakes.
+Run `helm-ai-kernel doctor --json` before deeper debugging when the CLI is installed but the runtime path is unclear. The doctor command checks local initialization, trust material, data directories, and common environment mistakes.
 
 ```bash
-helm doctor --json
+helm-ai-kernel doctor --json
 ```
 
 ---
@@ -78,26 +78,26 @@ curl http://127.0.0.1:7714/healthz
 export HELM_URL=http://127.0.0.1:7714
 ```
 
-`helm server` still defaults to `127.0.0.1:8080`. The public quickstart uses `helm serve --policy ./release.high_risk.v3.toml`, which defaults to `127.0.0.1:7714`.
-The separate `helm server` health endpoint uses `HELM_HEALTH_PORT` or `8081`;
-`helm health` checks that health endpoint, not the main API port.
+`helm-ai-kernel server` still defaults to `127.0.0.1:8080`. The public quickstart uses `helm-ai-kernel serve --policy ./release.high_risk.v3.toml`, which defaults to `127.0.0.1:7714`.
+The separate `helm-ai-kernel server` health endpoint uses `HELM_HEALTH_PORT` or `8081`;
+`helm-ai-kernel health` checks that health endpoint, not the main API port.
 
 ### `401 Unauthorized` from proxy
 
 ```bash
 # Set your upstream API key
-helm proxy --upstream https://your-upstream.example/v1 --api-key $OPENAI_API_KEY
+helm-ai-kernel proxy --upstream https://your-upstream.example/v1 --api-key $OPENAI_API_KEY
 
 # Or via environment
 export OPENAI_API_KEY=sk-...
-helm proxy --upstream https://your-upstream.example/v1
+helm-ai-kernel proxy --upstream https://your-upstream.example/v1
 ```
 
 For release smoke or customer-data-free debugging, use the local fixture instead:
 
 ```bash
 python3 scripts/launch/mock-openai-upstream.py --port 19090
-helm proxy --upstream http://127.0.0.1:19090/v1
+helm-ai-kernel proxy --upstream http://127.0.0.1:19090/v1
 ```
 
 ---
@@ -110,7 +110,7 @@ The sandbox provider's egress policy is too restrictive or the provider is not c
 
 ```bash
 # Check preflight details
-helm sandbox exec --provider e2b --json -- echo test | jq .preflight
+helm-ai-kernel sandbox exec --provider e2b --json -- echo test | jq .preflight
 
 # Ensure provider credentials
 export E2B_API_KEY=your-key
@@ -120,7 +120,7 @@ export E2B_API_KEY=your-key
 
 ```bash
 # Start with explicit transport
-helm mcp serve --transport http --port 9100
+helm-ai-kernel mcp serve --transport http --port 9100
 
 # Check firewall allows the port
 curl http://localhost:9100/mcp
@@ -134,14 +134,14 @@ curl http://localhost:9100/mcp
 
 ```bash
 # Increase wallclock limit (default: 120s)
-helm proxy --upstream http://127.0.0.1:19090/v1 --max-wallclock 300s
+helm-ai-kernel proxy --upstream http://127.0.0.1:19090/v1 --max-wallclock 300s
 ```
 
 ### Sandbox execution timeout
 
 ```bash
 # Increase timeout (default: 30s)
-helm sandbox exec --provider opensandbox --timeout 60s -- long-running-command
+helm-ai-kernel sandbox exec --provider opensandbox --timeout 60s -- long-running-command
 ```
 
 ---
@@ -170,30 +170,30 @@ EvidencePack requires deterministic tar with epoch mtime:
 
 ```bash
 # Export with HELM (ensures determinism)
-helm export --evidence ./data/evidence --out evidence.tar
+helm-ai-kernel export --evidence ./data/evidence --out evidence.tar
 
 # Verify
-helm verify evidence.tar
+helm-ai-kernel verify evidence.tar
 ```
 
-### `helm verify --online` fails but offline verification passes
+### `helm-ai-kernel verify --online` fails but offline verification passes
 
 `--online` requires a reachable public proof API and matching ledger metadata in the pack.
 
 ```bash
 export HELM_LEDGER_URL=https://mindburn.org/api/proof/verify
-helm verify evidence.tar --online
+helm-ai-kernel verify evidence.tar --online
 ```
 
 If the pack has no public anchor, use offline verification or regenerate the pack from a release asset with public proof metadata.
 
-### `helm receipts tail` does not print events
+### `helm-ai-kernel receipts tail` does not print events
 
 Confirm the local boundary is running and that receipts are being emitted for the same agent id:
 
 ```bash
-helm serve --policy ./release.high_risk.v3.toml
-helm receipts tail --agent agent.helm.demo --server http://127.0.0.1:7714
+helm-ai-kernel serve --policy ./release.high_risk.v3.toml
+helm-ai-kernel receipts tail --agent agent.helm.demo --server http://127.0.0.1:7714
 ```
 
 ### release smoke fails locally
@@ -203,9 +203,9 @@ phase: reproducible binaries, SBOM JSON, OpenVEX JSON, or optional Cosign
 bundle verification. The command writes generated evidence under ignored
 release/build artifact paths, so rerun after fixing the source failure.
 
-### Kubernetes Helm validation uses the HELM OSS CLI
+### Kubernetes Helm validation uses the HELM AI Kernel CLI
 
-The local `helm` binary in this repository may be the HELM OSS CLI, not the
+The local `helm` binary in this repository may be the HELM AI Kernel CLI, not the
 Kubernetes Helm v3 binary. Set `KUBE_HELM_CMD` to a Kubernetes Helm v3 binary or
 run `make helm-chart-smoke`, which uses the pinned containerized chart runner
 when needed.
@@ -220,5 +220,5 @@ when needed.
 | `ERR_SCHEMA_MISMATCH`   | Args don't match schema   | Check tool argument types        |
 | `PROXY_ITERATION_LIMIT` | Too many tool call rounds | Increase `--max-iterations`      |
 | `PROXY_WALLCLOCK_LIMIT` | Session too long          | Increase `--max-wallclock`       |
-| `HELM_UNREACHABLE`      | Server down or wrong URL  | Check `helm health`              |
+| `HELM_UNREACHABLE`      | Server down or wrong URL  | Check `helm-ai-kernel health`              |
 | `ESCALATE`              | Human approval or more evidence needed | Stop dispatch and complete the required approval/evidence path |

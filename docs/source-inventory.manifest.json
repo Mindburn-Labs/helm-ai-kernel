@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
-  "product": "HELM OSS",
-  "repo": "helm-oss",
+  "product": "HELM AI Kernel",
+  "repo": "helm-ai-kernel",
+  "local_repo_path": "helm-ai-kernel",
   "docs_site": "helm",
   "inventory": [
     {
@@ -18,7 +19,7 @@
         "CODE_OF_CONDUCT.md",
         "CONTRIBUTING.md",
         "GOVERNANCE.md",
-        "HELM_OSS_TAILORED_ENGINEERING_PROMPT.md",
+        "HELM_AI_KERNEL_TAILORED_ENGINEERING_PROMPT.md",
         "LICENSE",
         "MAINTAINERS.md",
         "Makefile",
@@ -41,9 +42,9 @@
       "owner_doc_path": "README.md",
       "public_doc_slugs": [
         "oss",
-        "helm-oss/source-map",
-        "helm-oss/security/release-security",
-        "helm-oss/changelog"
+        "helm-ai-kernel/source-map",
+        "helm-ai-kernel/security/release-security",
+        "helm-ai-kernel/changelog"
       ],
       "rationale": "Top-level tracked files define install, release, contribution, governance, and security behavior without masking runtime trees behind a repository-wide wildcard.",
       "validation_commands": [
@@ -66,8 +67,8 @@
       ],
       "owner_doc_path": ".github/SURFACE.md",
       "public_doc_slugs": [
-        "helm-oss/source-map",
-        "helm-oss/security/release-security"
+        "helm-ai-kernel/source-map",
+        "helm-ai-kernel/security/release-security"
       ],
       "rationale": "CI and tooling are externally relevant as validation gates and release evidence, but individual workflow files remain source-owned.",
       "validation_commands": [
@@ -77,21 +78,21 @@
     },
     {
       "id": "api-openapi-contract",
-      "label": "HELM OSS public OpenAPI contract and generated route parity tests",
+      "label": "HELM AI Kernel public OpenAPI contract and generated route parity tests",
       "classification": "public-direct",
       "source_patterns": [
         "api/README.md",
         "api/openapi/**",
-        "core/cmd/helm/openapi_runtime_routes_test.go"
+        "core/cmd/helm-ai-kernel/openapi_runtime_routes_test.go"
       ],
       "owner_doc_path": "api/openapi/README.md",
       "public_doc_slugs": [
-        "helm-oss/reference/http-api",
-        "helm-oss/reference/execution-boundary"
+        "helm-ai-kernel/reference/http-api",
+        "helm-ai-kernel/reference/execution-boundary"
       ],
       "rationale": "The OpenAPI contract is a direct public reference surface and must stay tied to route parity tests and the HTTP API page.",
       "validation_commands": [
-        "cd core && go test ./cmd/helm -run TestOpenAPI -count=1",
+        "cd core && go test ./cmd/helm-ai-kernel -run TestOpenAPI -count=1",
         "make docs-truth"
       ]
     },
@@ -111,10 +112,10 @@
       ],
       "owner_doc_path": "protocols/README.md",
       "public_doc_slugs": [
-        "helm-oss/reference/protocols-and-schemas",
-        "helm-oss/reference/json-schemas",
-        "helm-oss/conformance",
-        "helm-oss/reference/execution-boundary"
+        "helm-ai-kernel/reference/protocols-and-schemas",
+        "helm-ai-kernel/reference/json-schemas",
+        "helm-ai-kernel/conformance",
+        "helm-ai-kernel/reference/execution-boundary"
       ],
       "rationale": "Protocol and schema truth must be public and agent-readable, with detailed source ownership kept in protocol README files.",
       "validation_commands": [
@@ -138,9 +139,9 @@
       ],
       "owner_doc_path": "core/README.md",
       "public_doc_slugs": [
-        "helm-oss/reference/cli",
-        "helm-oss/architecture",
-        "helm-oss/benchmarks"
+        "helm-ai-kernel/reference/cli",
+        "helm-ai-kernel/architecture",
+        "helm-ai-kernel/benchmarks"
       ],
       "rationale": "Core build and benchmark files are runtime evidence, but they are not allowed to stand in for command, API, or package source ownership.",
       "validation_commands": [
@@ -151,21 +152,21 @@
     },
     {
       "id": "runtime-cli-commands",
-      "label": "Primary HELM OSS CLI command registry and command implementations",
+      "label": "Primary HELM AI Kernel CLI command registry and command implementations",
       "classification": "public-direct",
       "source_patterns": [
         "core/cmd/README.md",
-        "core/cmd/helm/*.go"
+        "core/cmd/helm-ai-kernel/*.go"
       ],
       "owner_doc_path": "core/cmd/README.md",
       "public_doc_slugs": [
-        "helm-oss/reference/cli",
-        "helm-oss/developer-journey",
-        "helm-oss/troubleshooting"
+        "helm-ai-kernel/reference/cli",
+        "helm-ai-kernel/developer-journey",
+        "helm-ai-kernel/troubleshooting"
       ],
       "rationale": "The CLI is a first-class public runtime surface; flags and subcommands must be source-linked to the CLI reference rather than hidden behind core/**.",
       "validation_commands": [
-        "cd core && go test ./cmd/helm -count=1",
+        "cd core && go test ./cmd/helm-ai-kernel -count=1",
         "make docs-truth"
       ]
     },
@@ -182,7 +183,7 @@
       ],
       "owner_doc_path": "core/cmd/README.md",
       "public_doc_slugs": [],
-      "rationale": "Helper binaries are source-owned under core/cmd and must not be presented as supported top-level helm subcommands unless wired through core/cmd/helm.",
+      "rationale": "Helper binaries are source-owned under core/cmd and must not be presented as supported top-level helm subcommands unless wired through core/cmd/helm-ai-kernel.",
       "validation_commands": [
         "cd core && go test ./cmd/..."
       ]
@@ -192,27 +193,27 @@
       "label": "Runtime HTTP route registry, auth wrapper, contract routes, receipt routes, and console bootstrap API",
       "classification": "public-direct",
       "source_patterns": [
-        "core/cmd/helm/route_registry.go",
-        "core/cmd/helm/route_auth.go",
-        "core/cmd/helm/route_auth_test.go",
-        "core/cmd/helm/contract_routes.go",
-        "core/cmd/helm/contract_routes_test.go",
-        "core/cmd/helm/subsystems.go",
-        "core/cmd/helm/receipt_routes.go",
-        "core/cmd/helm/receipt_routes_test.go",
-        "core/cmd/helm/console_routes.go",
-        "core/cmd/helm/console_routes_test.go",
+        "core/cmd/helm-ai-kernel/route_registry.go",
+        "core/cmd/helm-ai-kernel/route_auth.go",
+        "core/cmd/helm-ai-kernel/route_auth_test.go",
+        "core/cmd/helm-ai-kernel/contract_routes.go",
+        "core/cmd/helm-ai-kernel/contract_routes_test.go",
+        "core/cmd/helm-ai-kernel/subsystems.go",
+        "core/cmd/helm-ai-kernel/receipt_routes.go",
+        "core/cmd/helm-ai-kernel/receipt_routes_test.go",
+        "core/cmd/helm-ai-kernel/console_routes.go",
+        "core/cmd/helm-ai-kernel/console_routes_test.go",
         "core/pkg/api/**"
       ],
       "owner_doc_path": "core/cmd/README.md",
       "public_doc_slugs": [
-        "helm-oss/reference/http-api",
-        "helm-oss/reference/execution-boundary",
-        "helm-oss/console"
+        "helm-ai-kernel/reference/http-api",
+        "helm-ai-kernel/reference/execution-boundary",
+        "helm-ai-kernel/console"
       ],
       "rationale": "HTTP route behavior is enforceable at file-level granularity through the route registry, auth wrapper, handler files, and OpenAPI route parity tests.",
       "validation_commands": [
-        "cd core && go test ./cmd/helm -run 'Test.*Route|Test.*OpenAPI|Test.*Receipt' -count=1",
+        "cd core && go test ./cmd/helm-ai-kernel -run 'Test.*Route|Test.*OpenAPI|Test.*Receipt' -count=1",
         "make docs-truth"
       ]
     },
@@ -237,15 +238,15 @@
       ],
       "owner_doc_path": "core/pkg/README.md",
       "public_doc_slugs": [
-        "helm-oss/reference/execution-boundary",
-        "helm-oss/reference/http-api",
-        "helm-oss/conformance",
-        "helm-oss/verification",
-        "helm-oss/integrations/mcp"
+        "helm-ai-kernel/reference/execution-boundary",
+        "helm-ai-kernel/reference/http-api",
+        "helm-ai-kernel/conformance",
+        "helm-ai-kernel/verification",
+        "helm-ai-kernel/integrations/mcp"
       ],
       "rationale": "Boundary behavior is the highest-value OSS runtime reference surface and must remain directly linked to package families, HTTP routes, CLI commands, receipt schemas, and conformance vectors.",
       "validation_commands": [
-        "cd core && go test ./pkg/contracts ./pkg/boundary ./pkg/conformance ./cmd/helm -count=1",
+        "cd core && go test ./pkg/contracts ./pkg/boundary ./pkg/conformance ./cmd/helm-ai-kernel -count=1",
         "make docs-truth"
       ]
     },
@@ -279,10 +280,10 @@
       ],
       "owner_doc_path": "core/pkg/README.md",
       "public_doc_slugs": [
-        "helm-oss/architecture",
-        "helm-oss/execution-security-model",
-        "helm-oss/reference/execution-boundary",
-        "helm-oss/reference/protocols-and-schemas"
+        "helm-ai-kernel/architecture",
+        "helm-ai-kernel/execution-security-model",
+        "helm-ai-kernel/reference/execution-boundary",
+        "helm-ai-kernel/reference/protocols-and-schemas"
       ],
       "rationale": "Kernel and policy packages back public runtime guarantees, but public docs should describe supported behavior through architecture, execution-boundary, and protocol references.",
       "validation_commands": [
@@ -336,8 +337,8 @@
       ],
       "owner_doc_path": "core/pkg/README.md",
       "public_doc_slugs": [
-        "helm-oss/architecture",
-        "helm-oss/source-map"
+        "helm-ai-kernel/architecture",
+        "helm-ai-kernel/source-map"
       ],
       "rationale": "Remaining runtime libraries stay documented through owner docs and architecture/source-map pages without diluting the direct CLI/API/boundary rows.",
       "validation_commands": [
@@ -347,7 +348,7 @@
     },
     {
       "id": "console-and-design-system",
-      "label": "HELM OSS Console application and shared UI packages",
+      "label": "HELM AI Kernel Console application and shared UI packages",
       "classification": "public-hub",
       "source_patterns": [
         "apps/README.md",
@@ -357,9 +358,9 @@
       ],
       "owner_doc_path": "apps/console/README.md",
       "public_doc_slugs": [
-        "helm-oss/console",
-        "helm-oss/design-system",
-        "helm-oss/source-map"
+        "helm-ai-kernel/console",
+        "helm-ai-kernel/design-system",
+        "helm-ai-kernel/source-map"
       ],
       "rationale": "The console and UI packages are public OSS surfaces, with browser-level details owned near the app code.",
       "validation_commands": [
@@ -384,13 +385,13 @@
       ],
       "owner_doc_path": "examples/README.md",
       "public_doc_slugs": [
-        "helm-oss/developer-journey",
-        "helm-oss/deployment-and-examples",
-        "helm-oss/examples",
-        "helm-oss/deployment/kubernetes",
-        "helm-oss/sdks",
-        "helm-oss/integrations/openai-compatible-proxy",
-        "helm-oss/integrations/mcp"
+        "helm-ai-kernel/developer-journey",
+        "helm-ai-kernel/deployment-and-examples",
+        "helm-ai-kernel/examples",
+        "helm-ai-kernel/deployment/kubernetes",
+        "helm-ai-kernel/sdks",
+        "helm-ai-kernel/integrations/openai-compatible-proxy",
+        "helm-ai-kernel/integrations/mcp"
       ],
       "rationale": "Developers need install, SDK, framework, and deployment paths from the public docs, with examples and package docs as executable proof.",
       "validation_commands": [
@@ -429,11 +430,11 @@
       ],
       "owner_doc_path": "tests/conformance/README.md",
       "public_doc_slugs": [
-        "helm-oss/conformance",
-        "helm-oss/verification",
-        "helm-oss/benchmarks",
-        "helm-oss/publishing",
-        "helm-oss/security/release-security"
+        "helm-ai-kernel/conformance",
+        "helm-ai-kernel/verification",
+        "helm-ai-kernel/benchmarks",
+        "helm-ai-kernel/publishing",
+        "helm-ai-kernel/security/release-security"
       ],
       "rationale": "Evidence and conformance material is public proof material; generated artifacts are linked through verification and publishing docs rather than duplicated.",
       "validation_commands": [
@@ -451,23 +452,23 @@
       "owner_doc_path": "docs/README.md",
       "public_doc_slugs": [
         "oss",
-        "helm-oss/source-map",
-        "helm-oss/quickstart",
-        "helm-oss/compatibility",
-        "helm-oss/owasp-mcp-threat-mapping",
-        "helm-oss/integrations/microsoft-agent-governance-toolkit",
-        "helm-oss/security/owasp-agentic-top10-mapping",
-        "helm-oss/security/prompt-injection-watchlist-2026-04",
-        "helm-oss/compliance/nist-ai-agent-critical-infrastructure",
-        "helm-oss/compliance/eu-ai-act-high-risk-pack",
-        "helm-oss/compliance/nist-ai-rmf-iso-42001-crosswalk",
-        "helm-oss/oss-scope",
-        "helm-oss/architecture/cognitive-firewall",
-        "helm-oss/architecture/eidas-qtsp",
-        "helm-oss/architecture/policy-languages",
-        "helm-oss/security/clawguard-taint-tracking",
-        "helm-oss/security/session-risk-memory",
-        "helm-oss/architecture/canonical-diagrams"
+        "helm-ai-kernel/source-map",
+        "helm-ai-kernel/quickstart",
+        "helm-ai-kernel/compatibility",
+        "helm-ai-kernel/owasp-mcp-threat-mapping",
+        "helm-ai-kernel/integrations/microsoft-agent-governance-toolkit",
+        "helm-ai-kernel/security/owasp-agentic-top10-mapping",
+        "helm-ai-kernel/security/prompt-injection-watchlist-2026-04",
+        "helm-ai-kernel/compliance/nist-ai-agent-critical-infrastructure",
+        "helm-ai-kernel/compliance/eu-ai-act-high-risk-pack",
+        "helm-ai-kernel/compliance/nist-ai-rmf-iso-42001-crosswalk",
+        "helm-ai-kernel/oss-scope",
+        "helm-ai-kernel/architecture/cognitive-firewall",
+        "helm-ai-kernel/architecture/eidas-qtsp",
+        "helm-ai-kernel/architecture/policy-languages",
+        "helm-ai-kernel/security/clawguard-taint-tracking",
+        "helm-ai-kernel/security/session-risk-memory",
+        "helm-ai-kernel/architecture/canonical-diagrams"
       ],
       "rationale": "Docs files are source material for the public site and are checked through manifest, LLM, search, and source-inventory gates.",
       "validation_commands": [

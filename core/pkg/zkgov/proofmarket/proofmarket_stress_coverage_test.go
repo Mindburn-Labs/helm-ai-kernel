@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/zkgov"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/zkgov"
 )
 
 func TestStress_ProofMarket20Tasks(t *testing.T) {

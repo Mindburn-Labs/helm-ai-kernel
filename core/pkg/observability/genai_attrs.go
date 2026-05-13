@@ -1,7 +1,7 @@
 // Package observability — OpenTelemetry GenAI semantic convention attribute keys.
 //
 // This file is the single source of truth for the OTel GenAI semconv attribute
-// keys helm-oss emits. Stable keys defined here MUST NOT be renamed without a
+// keys helm-ai-kernel emits. Stable keys defined here MUST NOT be renamed without a
 // major version bump; the SIEM exporter packs in core/pkg/connectors/siem and
 // the OTel collector contract documented in docs/architecture/otel-genai.md
 // rely on these names.
@@ -12,7 +12,7 @@ package observability
 
 // ── OTel GenAI stable keys ───────────────────────────────────
 //
-// These keys mirror the upstream OTel GenAI semantic convention. helm-oss
+// These keys mirror the upstream OTel GenAI semantic convention. helm-ai-kernel
 // emits them on every governed model call so the trace is portable across any
 // OTel-compatible backend.
 
@@ -33,7 +33,7 @@ const (
 	GenAIToolName = "gen_ai.tool.name"
 
 	// GenAIToolCallID is the upstream provider's tool call identifier.
-	// helm-oss sets this to the helm correlation_id so traces and receipts
+	// helm-ai-kernel sets this to the helm correlation_id so traces and receipts
 	// cross-reference 1:1.
 	GenAIToolCallID = "gen_ai.tool.call.id"
 

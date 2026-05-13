@@ -62,8 +62,8 @@ instructions.
 Allowed local build:
 
 ```sh
-helm verify pack <ton-acton-evidencepack>
-helm replay --evidence <ton-acton-evidencepack> --verify
+helm-ai-kernel verify pack <ton-acton-evidencepack>
+helm-ai-kernel replay --evidence <ton-acton-evidencepack> --verify
 ```
 
 Denied mainnet script:

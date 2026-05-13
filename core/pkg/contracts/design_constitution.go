@@ -2,7 +2,7 @@
 //
 // Per HELM 2030 Spec §6.1.15:
 //
-//	HELM OSS MUST include operator-console primitives, information
+//	HELM AI Kernel MUST include operator-console primitives, information
 //	architecture rules, anti-pattern registry, visualization grammar,
 //	and agent-facing UI generation constraints.
 //

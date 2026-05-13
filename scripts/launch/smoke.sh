@@ -38,4 +38,4 @@ bash ./scripts/launch/demo-console.sh > /dev/null
 echo "✅ Console Passed"
 
 echo ""
-echo "🚀 HELM OSS is Launch Ready! All smoke tests passed."
+echo "🚀 HELM AI Kernel is Launch Ready! All smoke tests passed."

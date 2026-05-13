@@ -1,4 +1,4 @@
-// Package rbac implements role-based access control for HELM enterprise deployments.
+// Package rbac implements role-based access control for HELM AI Enterprise deployments.
 // Permissions are scoped to tenants and optionally to workspaces or programs.
 // Fail-closed: any error during permission evaluation results in denial.
 package rbac

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/proofgraph"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/runtimeadapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters"
 )
 
 func TestGRPCAdapterID(t *testing.T) {

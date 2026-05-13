@@ -10,16 +10,16 @@ services:
     command:
       - serve
       - --policy
-      - /etc/helm/release.high_risk.v3.toml
+      - /etc/helm-ai-kernel/release.high_risk.v3.toml
       - --addr
       - 0.0.0.0
       - --port
       - "8080"
       - --data-dir
-      - /var/lib/helm
+      - /var/lib/helm-ai-kernel
       - --console
       - --console-dir
-      - /usr/share/helm/console
+      - /usr/share/helm-ai-kernel/console
     environment:
       HELM_REGION: "us"
       HELM_ENABLE_OPENAI_PROXY: "1"
@@ -31,9 +31,9 @@ services:
       - "${HELM_SMOKE_API_PORT:-8080}:8080"
       - "${HELM_SMOKE_HEALTH_PORT:-8081}:8081"
     volumes:
-      - ${HELM_SMOKE_DATA_DIR:-helmdata}:/var/lib/helm
+      - ${HELM_SMOKE_DATA_DIR:-helmdata}:/var/lib/helm-ai-kernel
     healthcheck:
-      test: ["CMD", "helm", "health"]
+      test: ["CMD", "helm-ai-kernel", "health"]
       interval: 10s
       timeout: 5s
       retries: 6

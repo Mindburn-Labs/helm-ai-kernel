@@ -6,7 +6,7 @@ rule is expressed once per language (a "triple"); the harness compiles
 all three forms, drives 100 deterministically-randomized requests
 through them, and asserts the verdicts are byte-identical.
 
-Workstream F / F1 — Phase 3 of the helm-oss policy-language conformance plan.
+Workstream F / F1 — Phase 3 of the helm-ai-kernel policy-language conformance plan.
 
 ## Layout
 

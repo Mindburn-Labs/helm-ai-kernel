@@ -228,7 +228,7 @@ export const TOOL_CALL_SEMANTICS: Record<ToolCallState, SemanticSpec<ToolCallSta
   escalated: semantic("escalated", "ESCALATED", "escalate", "escalate", "HELM policy escalated execution.", "--helm-verdict-escalate"),
   permission_denied: semantic("permission_denied", "PERMISSION DENIED", "deny", "deny", "User lacks required permission.", "--helm-verdict-deny"),
   unavailable_in_oss: semantic("unavailable_in_oss", "UNAVAILABLE IN OSS", "muted", "historical", "Commercial-only capability.", "--helm-text-muted"),
-  commercial_only: semantic("commercial_only", "COMMERCIAL ONLY", "info", "selected", "Requires HELM Commercial.", "--helm-env-enterprise"),
+  commercial_only: semantic("commercial_only", "COMMERCIAL ONLY", "info", "selected", "Requires HELM AI Enterprise.", "--helm-env-enterprise"),
   mock_only: semantic("mock_only", "MOCK ONLY", "escalate", "escalate", "Demo-only result.", "--helm-verdict-escalate"),
 };
 

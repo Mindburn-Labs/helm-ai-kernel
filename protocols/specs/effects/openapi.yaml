@@ -9,10 +9,10 @@ info:
   version: "1.0.0"
   contact:
     name: HELM Core Team
-    url: https://github.com/Mindburn-Labs/helm-oss
+    url: https://github.com/Mindburn-Labs/helm-ai-kernel
   license:
     name: Apache-2.0
-    url: https://github.com/Mindburn-Labs/helm-oss/blob/main/LICENSE
+    url: https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/LICENSE
 
 servers:
   - url: http://localhost:8080

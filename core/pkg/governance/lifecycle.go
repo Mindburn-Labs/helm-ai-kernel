@@ -6,8 +6,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/capabilities"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capabilities"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // ModuleBundle represents a compiled module artifact.

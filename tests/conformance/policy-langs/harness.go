@@ -3,7 +3,7 @@
 // CEL, OPA/Rego, and Cedar form, evaluates each rendition against the
 // same DecisionRequest, and reports the per-language verdict.
 //
-// Workstream F / F1 — Phase 3 of the helm-oss 100% SOTA execution plan.
+// Workstream F / F1 — Phase 3 of the helm-ai-kernel 100% SOTA execution plan.
 //
 // Why a hand-rolled CEL leg here:
 // the policybundles registry advertises CEL but does not yet route CEL
@@ -21,8 +21,8 @@ import (
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 
-	cedarfront "github.com/Mindburn-Labs/helm-oss/core/pkg/policybundles/cedar"
-	regofront "github.com/Mindburn-Labs/helm-oss/core/pkg/policybundles/rego"
+	cedarfront "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policybundles/cedar"
+	regofront "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policybundles/rego"
 )
 
 // Verdicts. Kept identical to the front-end packages so a string compare

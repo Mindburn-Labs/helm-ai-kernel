@@ -3,7 +3,7 @@ package obligations
 import (
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/compliance/jkg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/jkg"
 )
 
 func TestNewCompiler(t *testing.T) {

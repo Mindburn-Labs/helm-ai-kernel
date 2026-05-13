@@ -41,10 +41,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity/did"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/vcredentials"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/did"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/vcredentials"
 )
 
 // nonceBytes is the size of the handshake nonce in random bytes.

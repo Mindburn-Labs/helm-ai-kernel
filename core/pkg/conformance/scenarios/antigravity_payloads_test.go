@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/firewall"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/threatscan"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/firewall"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/threatscan"
 )
 
 //go:embed antigravity_payloads/manifest.json

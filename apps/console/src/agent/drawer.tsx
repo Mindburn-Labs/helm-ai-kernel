@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Loader2, MessageSquareMore, X } from "lucide-react";
 import { Badge, Button, EmptyState } from "@mindburn/ui-core";
-import { useHelmOssAgentProvider } from "./provider";
-import { useOssAgentRenderers } from "./renderers";
-import { runOssAgent, type OssAgentMessage } from "./runtime";
-import type { HelmOssAgentState, OssAgentToolResult } from "./state";
-import { useOssFrontendTools } from "./tools";
+import { useHelmAiKernelAgentProvider } from "./provider";
+import { useAiKernelAgentRenderers } from "./renderers";
+import { runAiKernelAgent, type AiKernelAgentMessage } from "./runtime";
+import type { HelmAiKernelAgentState, AiKernelAgentToolResult } from "./state";
+import { useAiKernelFrontendTools } from "./tools";
 
-export function HelmOssAssistantDrawer({
+export function HelmAiKernelAssistantDrawer({
   state,
   open,
   onOpenChange,
@@ -16,7 +16,7 @@ export function HelmOssAssistantDrawer({
   onSearchChange,
   onDemoActionChange,
 }: {
-  readonly state: HelmOssAgentState;
+  readonly state: HelmAiKernelAgentState;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onNavigate: (surface: string) => void;
@@ -24,12 +24,12 @@ export function HelmOssAssistantDrawer({
   readonly onSearchChange: (query: string) => void;
   readonly onDemoActionChange: (action: string) => void;
 }) {
-  const { runtimeUrl } = useHelmOssAgentProvider();
-  const [threadId] = useState(() => `helm-oss-${Date.now()}`);
+  const { runtimeUrl } = useHelmAiKernelAgentProvider();
+  const [threadId] = useState(() => `helm-ai-kernel-${Date.now()}`);
   const [draft, setDraft] = useState("Explain the selected DENY receipt and show the safest proof demo step.");
-  const [messages, setMessages] = useState<OssAgentMessage[]>([]);
-  const [streaming, setStreaming] = useState<OssAgentMessage | null>(null);
-  const [results, setResults] = useState<OssAgentToolResult[]>([]);
+  const [messages, setMessages] = useState<AiKernelAgentMessage[]>([]);
+  const [streaming, setStreaming] = useState<AiKernelAgentMessage | null>(null);
+  const [results, setResults] = useState<AiKernelAgentToolResult[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -43,8 +43,8 @@ export function HelmOssAssistantDrawer({
     }),
     [onDemoActionChange, onNavigate, onSearchChange, onSelectReceipt],
   );
-  useOssAgentRenderers();
-  useOssFrontendTools(frontendToolHandlers);
+  useAiKernelAgentRenderers();
+  useAiKernelFrontendTools(frontendToolHandlers);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -54,14 +54,14 @@ export function HelmOssAssistantDrawer({
     const controller = new AbortController();
     abortRef.current?.abort();
     abortRef.current = controller;
-    const userMessage: OssAgentMessage = {
-      id: `oss-user-${Date.now()}`,
+    const userMessage: AiKernelAgentMessage = {
+      id: `kernel-user-${Date.now()}`,
       role: "user",
       content: prompt,
       createdAt: new Date().toISOString(),
     };
-    const assistantMessage: OssAgentMessage = {
-      id: `oss-assistant-${Date.now()}`,
+    const assistantMessage: AiKernelAgentMessage = {
+      id: `kernel-assistant-${Date.now()}`,
       role: "assistant",
       content: "",
       createdAt: new Date().toISOString(),
@@ -75,10 +75,10 @@ export function HelmOssAssistantDrawer({
     setRunning(true);
     setError(null);
     try {
-      await runOssAgent({
+      await runAiKernelAgent({
         runtimeUrl,
         threadId,
-        runId: `oss-run-${Date.now()}`,
+        runId: `kernel-run-${Date.now()}`,
         messages: nextMessages,
         state,
         signal: controller.signal,
@@ -98,7 +98,7 @@ export function HelmOssAssistantDrawer({
       }
     } catch (err) {
       if (!controller.signal.aborted) {
-        setError(err instanceof Error ? err.message : "OSS agent run failed");
+        setError(err instanceof Error ? err.message : "HELM AI Kernel agent run failed");
       }
     } finally {
       setRunning(false);
@@ -111,7 +111,7 @@ export function HelmOssAssistantDrawer({
   return (
     <>
       <Button
-        aria-label="Open HELM OSS assistant"
+        aria-label="Open HELM AI Kernel assistant"
         variant="proof"
         size="sm"
         onClick={() => onOpenChange(true)}
@@ -120,11 +120,11 @@ export function HelmOssAssistantDrawer({
         Agent
       </Button>
       {open ? (
-        <aside className="assistant-drawer" aria-label="HELM OSS assistant">
+        <aside className="assistant-drawer" aria-label="HELM AI Kernel assistant">
           <header>
             <div>
               <Badge label="read-only" tone="proof" />
-              <h2>HELM OSS Agent</h2>
+              <h2>HELM AI Kernel Agent</h2>
             </div>
             <button type="button" className="icon-button" aria-label="Close assistant" onClick={() => onOpenChange(false)}>
               <X size={16} aria-hidden="true" />
@@ -174,9 +174,9 @@ export function HelmOssAssistantDrawer({
   );
 }
 
-function parseResult(content: string): OssAgentToolResult {
+function parseResult(content: string): AiKernelAgentToolResult {
   try {
-    return JSON.parse(content) as OssAgentToolResult;
+    return JSON.parse(content) as AiKernelAgentToolResult;
   } catch {
     return { status: "complete", summary: content };
   }

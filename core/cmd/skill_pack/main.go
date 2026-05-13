@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/registry/skills"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/skills"
 )
 
 // bundleInfo is the structured JSON output printed on success.

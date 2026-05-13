@@ -1,5 +1,5 @@
 // Package ceremony provides the VGL (Verified Genesis Loop) state machine
-// and ceremony orchestrator for HELM OSS single-operator deployments.
+// and ceremony orchestrator for HELM AI Kernel single-operator deployments.
 //
 // This is the OSS-native Genesis ceremony: a six-phase state machine that
 // walks a draft genome through INGEST → MIRROR → WARGAME → CEILINGS →

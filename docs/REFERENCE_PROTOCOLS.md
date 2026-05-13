@@ -3,9 +3,9 @@ title: Protocols and Schemas
 last_reviewed: 2026-05-05
 ---
 
-# HELM OSS Protocols and Schemas
+# HELM AI Kernel Protocols and Schemas
 
-This page is the public hub for HELM OSS protocols, JSON schemas, policy
+This page is the public hub for HELM AI Kernel protocols, JSON schemas, policy
 language material, conformance fixtures, and evidence-pack formats.
 
 ## Audience

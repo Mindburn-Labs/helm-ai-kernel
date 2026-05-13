@@ -3,7 +3,7 @@ package consensus
 import (
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
 func TestQuorumChecker_ComputeQuorum(t *testing.T) {

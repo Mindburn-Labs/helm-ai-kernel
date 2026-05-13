@@ -3,7 +3,7 @@ package gates
 import (
 	"path/filepath"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/conform"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 )
 
 // GXSDKDrift validates that the canonical OpenAPI spec, SDKs, and CLI are in sync per §GX.

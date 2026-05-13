@@ -351,7 +351,7 @@ var importRules = []importRule{
 		Severity: "LOW",
 		Note:     "Microsoft Semantic Kernel (JS)"},
 	{Kind: "sdk_import", Vendor: "helm", Language: "typescript",
-		Pattern:  regexp.MustCompile(`(?m)from\s+['"]@mindburn/helm(-cli)?['"]`),
+		Pattern:  regexp.MustCompile(`(?m)from\s+['"]@mindburn/helm-ai-kernel(-cli)?['"]`),
 		Severity: "INFO",
 		Note:     "HELM TypeScript SDK detected"},
 
@@ -369,7 +369,7 @@ var importRules = []importRule{
 		Severity: "LOW",
 		Note:     "langchaingo"},
 	{Kind: "sdk_import", Vendor: "helm", Language: "go",
-		Pattern:  regexp.MustCompile(`(?m)"github\.com/Mindburn-Labs/helm-oss(/.*)?"`),
+		Pattern:  regexp.MustCompile(`(?m)"github\.com/Mindburn-Labs/helm-ai-kernel(/.*)?"`),
 		Severity: "INFO",
 		Note:     "HELM Go SDK detected"},
 

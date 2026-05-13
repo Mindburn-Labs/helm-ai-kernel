@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/channels"
-	slackadapter "github.com/Mindburn-Labs/helm-oss/core/pkg/channels/slack"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/channels"
+	slackadapter "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/channels/slack"
 )
 
 // ---------------------------------------------------------------------------

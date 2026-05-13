@@ -1,6 +1,6 @@
 package threatscan
 
-import "github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
+import "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 
 // ────────────────────────────────────────────────────────────────
 // Indirect Injection Rules

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/pack"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pack"
 )
 
 func fixedClock() time.Time {

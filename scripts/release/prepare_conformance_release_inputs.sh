@@ -44,7 +44,7 @@ def go_version() -> str:
         return "unavailable"
 
 created_at = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-repo = os.environ.get("GITHUB_REPOSITORY", "Mindburn-Labs/helm-oss")
+repo = os.environ.get("GITHUB_REPOSITORY", "Mindburn-Labs/helm-ai-kernel")
 server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
 workflow = os.environ.get("GITHUB_WORKFLOW", "local-release-readiness")
 run_id = os.environ.get("GITHUB_RUN_ID", "local")
@@ -74,7 +74,7 @@ provenance = {
     "predicateType": "https://slsa.dev/provenance/v1",
     "subject": [{"name": "helm", "digest": {"gitCommit": commit}}],
     "builder": {"id": f"{server}/{repo}/actions/workflows/release.yml"},
-    "buildType": "https://github.com/Mindburn-Labs/helm-oss/.github/workflows/release.yml",
+    "buildType": "https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml",
     "invocation": {
         "configSource": {"uri": f"git+{server}/{repo}", "digest": {"sha1": commit}, "entryPoint": ref},
         "parameters": {"make_target": "conformance-release-report"},
@@ -100,7 +100,7 @@ trust_roots = {
     ],
     "notes": [
         "Release assets are signed by the GitHub release workflow with Sigstore/cosign keyless identity when OIDC is available.",
-        "helm conform --signed emits Ed25519 signatures when HELM_SIGNING_KEY_HEX is present and digest artifacts otherwise.",
+        "helm-ai-kernel conform --signed emits Ed25519 signatures when HELM_SIGNING_KEY_HEX is present and digest artifacts otherwise.",
     ],
 }
 

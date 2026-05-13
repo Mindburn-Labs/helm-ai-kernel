@@ -96,10 +96,10 @@ else
         echo "🔑 Logging into Docker..."
         echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
     fi
-    docker tag helm:latest "$DOCKER_REPO/helm:v$VERSION"
-    docker tag helm:latest "$DOCKER_REPO/helm:latest"
-    docker push "$DOCKER_REPO/helm:v$VERSION"
-    docker push "$DOCKER_REPO/helm:latest"
+    docker tag helm-ai-kernel:latest "$DOCKER_REPO/helm-ai-kernel:v$VERSION"
+    docker tag helm-ai-kernel:latest "$DOCKER_REPO/helm-ai-kernel:latest"
+    docker push "$DOCKER_REPO/helm-ai-kernel:v$VERSION"
+    docker push "$DOCKER_REPO/helm-ai-kernel:latest"
     echo "✅ Docker image published."
 fi
 

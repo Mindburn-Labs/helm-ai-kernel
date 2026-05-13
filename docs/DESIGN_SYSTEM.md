@@ -1,17 +1,17 @@
 ---
-title: HELM OSS Design System Surface
+title: HELM AI Kernel Design System Surface
 last_reviewed: 2026-05-05
 ---
 
-# HELM OSS Design System Surface
+# HELM AI Kernel Design System Surface
 
-This page documents the public HELM OSS console and design-system surface. It
+This page documents the public HELM AI Kernel console and design-system surface. It
 exists so the docs site covers the frontend package family instead of burying it
 inside repository-only package READMEs.
 
 ## Audience
 
-This page is for contributors extending the HELM OSS Console, maintainers
+This page is for contributors extending the HELM AI Kernel Console, maintainers
 reviewing frontend package changes, and developers who need to understand which
 UI assets are part of the self-hostable OSS surface.
 
@@ -19,13 +19,13 @@ UI assets are part of the self-hostable OSS surface.
 
 You should know which packages and docs own console UI primitives, how the
 design-system package is validated, and where the public console docs fit into
-the larger HELM OSS developer journey.
+the larger HELM AI Kernel developer journey.
 
 ## Surface Model
 
 ```mermaid
 flowchart LR
-  console["HELM OSS Console"] --> package["packages/design-system-core"]
+  console["HELM AI Kernel Console"] --> package["packages/design-system-core"]
   package --> docs["docs/design-system/*"]
   docs --> tests["package tests and CI gates"]
   tests --> public["Public console docs"]
@@ -36,10 +36,10 @@ flowchart LR
 
 | Source family | Purpose | Public handling |
 | --- | --- | --- |
-| `apps/console/` | Browser console for receipts, policy, MCP, evidence, replay, conformance, trust, incidents, audit, developer, and settings workflows. | Covered by `/helm-oss/console`. |
+| `apps/console/` | Browser console for receipts, policy, MCP, evidence, replay, conformance, trust, incidents, audit, developer, and settings workflows. | Covered by `/helm-ai-kernel/console`. |
 | `packages/design-system-core/` | Frontend primitives, tokens, grammar highlighting, and package-level tests. | Covered by this page and package README truth checks. |
 | `docs/design-system/` | Accessibility, architecture, CI gates, contrast, decisions, library adoption, primitive coverage, and theming docs. | Summarized here; detailed source remains edit-linked in repo. |
-| `docs/CONSOLE.md` | Public user-facing Console docs. | Rendered directly at `/helm-oss/console`. |
+| `docs/CONSOLE.md` | Public user-facing Console docs. | Rendered directly at `/helm-ai-kernel/console`. |
 
 ## Validation
 
@@ -72,7 +72,7 @@ developer experience, not position it as a standalone commercial UI kit.
 | Console UI copy diverges from docs | Update `docs/CONSOLE.md` and the relevant component tests together. |
 | Token or contrast behavior changes | Review `docs/design-system/contrast-table.md` and package token tests. |
 | A primitive lacks accessibility coverage | Add or update the design-system accessibility and primitive coverage docs before release. |
-| A package change is invisible in public docs | Update this page or `/helm-oss/console`, then rerun diagram and source-coverage gates. |
+| A package change is invisible in public docs | Update this page or `/helm-ai-kernel/console`, then rerun diagram and source-coverage gates. |
 
 <!-- docs-depth-final-pass -->
 

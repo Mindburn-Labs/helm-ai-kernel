@@ -36,7 +36,7 @@ done
 curl -fsS "http://127.0.0.1:$UPSTREAM_PORT/healthz" > /dev/null
 
 echo "==> 2. Starting HELM Proxy on :$PROXY_PORT"
-./bin/helm proxy \
+./bin/helm-ai-kernel proxy \
   --upstream "http://127.0.0.1:$UPSTREAM_PORT/v1" \
   --port "$PROXY_PORT" \
   --tenant-id "launch-demo-tenant" \

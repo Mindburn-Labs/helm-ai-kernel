@@ -15,7 +15,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/proofgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 )
 
 // AgentContribution describes a single agent's responsibility for a failure,

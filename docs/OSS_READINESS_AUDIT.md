@@ -6,13 +6,13 @@ last_reviewed: 2026-05-06
 # OSS Readiness Audit
 
 This audit records repository and remote-readiness gaps found during the
-2026-05-06 review of `Mindburn-Labs/helm-oss`.
+2026-05-06 review of `Mindburn-Labs/helm-ai-kernel`.
 
 ## Status Summary
 
 | Area | Status | Owner | Verification |
 | --- | --- | --- | --- |
-| GitHub landing README | Fixed in repo | Maintainers | `gh api repos/Mindburn-Labs/helm-oss/readme` after push |
+| GitHub landing README | Fixed in repo | Maintainers | `gh api repos/Mindburn-Labs/helm-ai-kernel/readme` after push |
 | Community health files | Fixed in repo | Maintainers | GitHub community profile API |
 | Issue and PR templates | Fixed in repo | Maintainers | New issue/PR UI after push |
 | Python publish workflow YAML | Fixed in repo | Maintainers | YAML parser and `gh workflow list` |
@@ -52,33 +52,33 @@ for path in sorted(Path(".github/workflows").glob("*.yml")):
     yaml.safe_load(path.read_text())
     print(path)
 PY
-brew info mindburnlabs/tap/helm
-npm view @mindburn/helm version
+brew info mindburnlabs/tap/helm-ai-kernel
+npm view @mindburn/helm-ai-kernel version
 python3 -m pip index versions helm-sdk
 cargo search helm-sdk --limit 5
-curl -I --max-time 10 https://jitpack.io/com/github/Mindburn-Labs/helm-oss/0.4.0/helm-oss-0.4.0.pom
+curl -I --max-time 10 https://jitpack.io/com/github/Mindburn-Labs/helm-ai-kernel/0.4.0/helm-ai-kernel-0.4.0.pom
 ```
 
 After pushing, also check:
 
 ```bash
-gh api repos/Mindburn-Labs/helm-oss/community/profile
-gh api repos/Mindburn-Labs/helm-oss/readme
-gh api repos/Mindburn-Labs/helm-oss/rulesets
-gh run list --repo Mindburn-Labs/helm-oss --limit 10
+gh api repos/Mindburn-Labs/helm-ai-kernel/community/profile
+gh api repos/Mindburn-Labs/helm-ai-kernel/readme
+gh api repos/Mindburn-Labs/helm-ai-kernel/rulesets
+gh run list --repo Mindburn-Labs/helm-ai-kernel --limit 10
 ```
 
 ## Package State Checked On 2026-05-06
 
 | Surface | Observed state |
 | --- | --- |
-| Homebrew | Canonical tap is `mindburnlabs/tap/helm`; the legacy `mindburn-labs/tap/helm` alias was observed for `0.4.0` but is not the release automation target. |
-| npm TypeScript SDK | `@mindburn/helm` resolves to `0.4.0`. |
+| Homebrew | Canonical tap is `mindburnlabs/tap/helm-ai-kernel`; the legacy `mindburn-labs/tap/helm` alias was observed for `0.4.0` but is not the release automation target. |
+| npm TypeScript SDK | `@mindburn/helm-ai-kernel` resolves to `0.4.0`. |
 | npm design-system core | `@mindburn/ui-core` was not present in the public npm registry. |
 | PyPI | `helm-sdk` resolves to `0.4.0`. |
 | crates.io | `helm-sdk` resolves to `0.4.0`. |
 | Go SDK | `go list` reported tagged versions that do not align with repository `VERSION`; use `@main` for current source until tags are corrected. |
-| Java/JitPack | The checked JitPack release URL resolved for `com.github.mindburn-labs:helm-oss:0.4.0`; the Maven deploy workflow still owns `com.github.Mindburn-Labs:helm-sdk`. |
+| Java/JitPack | The checked JitPack release URL resolved for `com.github.mindburn-labs:helm-ai-kernel:0.4.0`; the Maven deploy workflow still owns `com.github.Mindburn-Labs:helm-sdk`. |
 
 ## Maintenance Rules
 

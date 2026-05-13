@@ -7,7 +7,7 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Maintainers and operators who need the current HELM OSS execution-boundary model before changing kernel, Console, API, or integration docs.
+Maintainers and operators who need the current HELM AI Kernel execution-boundary model before changing kernel, Console, API, or integration docs.
 
 ## Outcome
 
@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/architecture`
-- Source document: `helm-oss/docs/ARCHITECTURE.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/architecture`
+- Source document: `helm-ai-kernel/docs/ARCHITECTURE.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -65,13 +65,13 @@ The policy boundary evaluates requests before tool dispatch. In the OSS kernel t
 - receipt generation for the decision outcome
 - boundary records, checkpoints, approval ceremonies, MCP quarantine state, authz snapshots, sandbox grants, and evidence envelope manifests
 
-The core implementation lives under `core/pkg/guardian/`, `core/pkg/manifest/`, `core/pkg/policy/`, `core/pkg/boundary/`, and related contract packages. `helm serve` stores the boundary surface snapshot in the runtime database; local CLI-only workflows use the same contracts through the file-backed boundary registry.
+The core implementation lives under `core/pkg/guardian/`, `core/pkg/manifest/`, `core/pkg/policy/`, `core/pkg/boundary/`, and related contract packages. `helm-ai-kernel serve` stores the boundary surface snapshot in the runtime database; local CLI-only workflows use the same contracts through the file-backed boundary registry.
 
 ## 2. Execution and Proxy Surface
 
 The kernel exposes:
 
-- a Go CLI in `core/cmd/helm`
+- a Go CLI in `core/cmd/helm-ai-kernel`
 - an HTTP API and OpenAI-compatible proxy surface
 - an MCP server surface for governed tool access
 - route-backed Console workspaces for boundary records, MCP registry/auth profiles, sandbox grants, approvals, budgets, conformance, evidence envelopes, telemetry exports, and coexistence manifests
@@ -110,7 +110,7 @@ The public client surface is:
 - Rust SDK in `sdk/rust`
 - Java SDK in `sdk/java`
 
-The repository ships one bundled interactive client: `apps/console`, the HELM OSS Console. It is a self-hostable operator surface over the kernel contracts, CLI/API JSON output, SDKs, evidence bundles, and conformance reports. No second browser UI, hosted SaaS control plane, static viewer, Node CLI wrapper, or generated browser-rendered report is shipped from this repository.
+The repository ships one bundled interactive client: `apps/console`, the HELM AI Kernel Console. It is a self-hostable operator surface over the kernel contracts, CLI/API JSON output, SDKs, evidence bundles, and conformance reports. No second browser UI, hosted SaaS control plane, static viewer, Node CLI wrapper, or generated browser-rendered report is shipped from this repository.
 
 ## Directory Layout
 

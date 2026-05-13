@@ -7,7 +7,7 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Internal maintainers using this private strategy note to track policy-research inputs that may inform future HELM OSS roadmap work.
+Internal maintainers using this private strategy note to track policy-research inputs that may inform future HELM AI Kernel roadmap work.
 
 ## Outcome
 
@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/strategy/policy-research-watchlist-2026-04`
-- Source document: `helm-oss/docs/strategy/policy-research-watchlist-2026-04.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/strategy/policy-research-watchlist-2026-04`
+- Source document: `helm-ai-kernel/docs/strategy/policy-research-watchlist-2026-04.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -46,13 +46,13 @@ flowchart LR
   B --> C
 ```
 
-This page records source verification and implementation decisions for April 2026 HELM OSS research radar items. Research items close when the source is verified and a clear adopt, watch, or no-go decision is recorded.
+This page records source verification and implementation decisions for April 2026 HELM AI Kernel research radar items. Research items close when the source is verified and a clear adopt, watch, or no-go decision is recorded.
 
 ## Verified Sources
 
 | Linear | Source | Verification | Decision |
 | --- | --- | --- | --- |
-| `MIN-195` | [AgentSpec: Customizable Runtime Enforcement for Safe and Reliable LLM Agents](https://arxiv.org/abs/2503.18666) | arXiv record exists; paper was submitted March 24, 2025 and later revised; accepted by ICSE 2026 per arXiv metadata | Watch for policy-authoring UX patterns; do not introduce a second DSL into HELM OSS |
+| `MIN-195` | [AgentSpec: Customizable Runtime Enforcement for Safe and Reliable LLM Agents](https://arxiv.org/abs/2503.18666) | arXiv record exists; paper was submitted March 24, 2025 and later revised; accepted by ICSE 2026 per arXiv metadata | Watch for policy-authoring UX patterns; do not introduce a second DSL into HELM AI Kernel |
 | `MIN-196` | [Zero-Knowledge Audit for Internet of Agents](https://arxiv.org/abs/2512.14737) and [Engineering Trustworthy MLOps with ZK Proofs](https://arxiv.org/abs/2505.20136) | Both arXiv records exist and align with privacy-preserving verification / ZK ML operations | Keep `core/pkg/zkgov` as the exploration surface; no default ZK proof requirement for evidence packs yet |
 | `MIN-199` | [Runtime Governance for AI Agents: Policies on Paths](https://arxiv.org/html/2603.16586v1) | arXiv HTML exists; paper frames policies as deterministic functions over execution paths and organizational state | Map to HELM session history, ProofGraph, and policy composition; no new formal language in this cycle |
 | `MIN-264` | [Before the Tool Call: Deterministic Pre-Action Authorization for Autonomous AI Agents](https://arxiv.org/abs/2603.20953) | arXiv record exists; source describes Open Agent Passport and pre-action authorization | HELM already implements the reference-monitor pattern; document as compatibility/positioning, not a new runtime dependency |

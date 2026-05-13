@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/boundary"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/conformance"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conformance"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 func TestSOTA2026NegativeBoundaryVectorsAreConformanceGates(t *testing.T) {

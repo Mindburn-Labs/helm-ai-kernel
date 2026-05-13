@@ -1,12 +1,12 @@
-// Example: helm-oss governance tracer emitting OTel GenAI semconv spans.
+// Example: helm-ai-kernel governance tracer emitting OTel GenAI semconv spans.
 //
 // This program is the canonical end-to-end smoke test for Workstream C of
-// the helm-oss SOTA execution plan. It demonstrates that:
+// the helm-ai-kernel SOTA execution plan. It demonstrates that:
 //
-//  1. helm-oss governance spans carry the stable OTel GenAI attribute keys
+//  1. helm-ai-kernel governance spans carry the stable OTel GenAI attribute keys
 //     (gen_ai.system, gen_ai.request.model, gen_ai.tool.call.id, ...).
 //  2. The helm correlation_id is mirrored into gen_ai.tool.call.id, giving
-//     a 1:1 cross-reference between OTel traces and helm receipts.
+//     a 1:1 cross-reference between OTel traces and helm-ai-kernel receipts.
 //  3. helm-specific governance attributes (helm.verdict, helm.policy_id,
 //     helm.proof_node_id) live under the helm.* namespace alongside the
 //     gen_ai.* keys on the same span.
@@ -27,9 +27,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/observability"
-	helmotel "github.com/Mindburn-Labs/helm-oss/core/pkg/otel"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/tracing"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
+	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 	otelapi "go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -59,7 +59,7 @@ func run(out io.Writer) error {
 
 	gt := helmotel.NoopTracer()
 
-	// Generate a helm correlation_id, the same way the helm proxy does.
+	// Generate a helm correlation_id, the same way the helm-ai-kernel proxy does.
 	corr := tracing.NewCorrelationID()
 
 	// Emit a governed GenAI tool-call span. This is the wire shape every

@@ -103,7 +103,7 @@ print(match.group(1) if match else "v1.0.0")
 PY
 )
 PROFILES_SHA256=$(shasum -a 256 "${PROFILE_CHECKLIST}" | awk '{print $1}')
-KEYS_KEY_ID="helm-oss-v1"
+KEYS_KEY_ID="helm-ai-kernel-v1"
 
 cat > "${OUTPUT_DIR}/${ATTESTATION_NAME}" <<EOF
 {

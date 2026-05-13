@@ -1,11 +1,11 @@
-# HELM OSS Lean proofs
+# HELM AI Kernel Lean proofs
 
 Machine-checked proofs of HELM kernel invariants. The current scope is
 the **ceiling-precedence** theorem (also called *EffectPermitSoundness*):
 no P1 policy bundle, however constructed, can cause `Decide` to return
 ALLOW for a request a P0 ceiling forbids.
 
-Workstream F / F2 + F3 — Phase 3 of the helm-oss formal proof execution
+Workstream F / F2 + F3 — Phase 3 of the helm-ai-kernel formal proof execution
 plan. Companion to the existing TLA+ specs in `proofs/`
 (`GuardianPipeline.tla`, `DelegationModel.tla`, etc.) which model
 liveness and message-ordering properties; the Lean proof targets the

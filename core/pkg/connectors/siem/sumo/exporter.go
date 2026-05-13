@@ -1,4 +1,4 @@
-// Package sumo implements an OTel SpanExporter that translates helm-oss
+// Package sumo implements an OTel SpanExporter that translates helm-ai-kernel
 // governance spans (carrying OTel GenAI semconv attributes plus the helm.*
 // governance namespace) into Sumo Logic HTTP source events.
 //
@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/observability"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
@@ -33,7 +33,7 @@ type Config struct {
 	// URL is the Sumo Logic HTTP source endpoint, e.g.
 	// "https://endpoint.collection.sumologic.com/receiver/v1/http/<token>".
 	URL string
-	// Name is sent as `X-Sumo-Name` (default "helm-oss").
+	// Name is sent as `X-Sumo-Name` (default "helm-ai-kernel").
 	Name string
 	// Category is sent as `X-Sumo-Category` (default "helm/governance").
 	Category string
@@ -56,7 +56,7 @@ func New(cfg Config) (*Exporter, error) {
 		return nil, errors.New("sumo: URL is required")
 	}
 	if cfg.Name == "" {
-		cfg.Name = "helm-oss"
+		cfg.Name = "helm-ai-kernel"
 	}
 	if cfg.Category == "" {
 		cfg.Category = "helm/governance"

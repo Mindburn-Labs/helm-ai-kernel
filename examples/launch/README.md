@@ -28,7 +28,7 @@ make launch-record-assets
 
 ## Seven-Action Demo
 
-`scripts/launch/demo-local.sh` starts a local `helm serve` boundary and calls
+`scripts/launch/demo-local.sh` starts a local `helm-ai-kernel serve` boundary and calls
 `/api/demo/run` for every public launch action:
 
 | Action | Expected verdict |

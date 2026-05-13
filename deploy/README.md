@@ -8,7 +8,7 @@ path and is documented in `docker-compose.yml` and `docs/DEVELOPER_JOURNEY.md`.
 
 ```mermaid
 flowchart LR
-  values["values.yaml"] --> chart["helm-firewall chart"]
+  values["values.yaml"] --> chart["helm-ai-kernel chart"]
   chart --> deploy["Deployment"]
   chart --> svc["Service"]
   chart --> secret["signing and auth Secrets"]
@@ -16,7 +16,7 @@ flowchart LR
   source --> delivery["ConfigMap/Secret delivery or CRD watch"]
   chart --> pvc["PVC or emptyDir"]
   delivery --> pod["runtime reconciler"]
-  deploy --> pod["helm serve"]
+  deploy --> pod["helm-ai-kernel serve"]
 ```
 
 ## Helm Chart
@@ -24,8 +24,8 @@ flowchart LR
 ```bash
 make helm-chart-smoke
 helm lint deploy/helm-chart
-helm template helm-oss deploy/helm-chart
-helm install helm-oss deploy/helm-chart
+helm template helm-ai-kernel deploy/helm-chart
+helm install helm-ai-kernel deploy/helm-chart
 ```
 
 Review `deploy/helm-chart/values.yaml` before use in a real environment.
@@ -34,7 +34,7 @@ Review `deploy/helm-chart/values.yaml` before use in a real environment.
 
 Included:
 
-- `Deployment` running `helm serve`
+- `Deployment` running `helm-ai-kernel serve`
 - `Service` for HTTP, health, and optional metrics ports
 - optional `Ingress`
 - generated or existing signing-key `Secret`

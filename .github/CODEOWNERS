@@ -7,5 +7,5 @@
 /.github/ @Mindburn-Labs/helm-core
 /scripts/ @Mindburn-Labs/helm-core
 
-/sdk/ @Mindburn-Labs/helm
+/sdk/ @Mindburn-Labs/helm-core
 /deploy/helm-chart/ @Mindburn-Labs/helm-core

@@ -41,7 +41,7 @@
       ],
       "owner_doc_path": "README.md",
       "public_doc_slugs": [
-        "oss",
+        "helm-ai-kernel",
         "helm-ai-kernel/source-map",
         "helm-ai-kernel/security/release-security",
         "helm-ai-kernel/changelog"
@@ -451,7 +451,7 @@
       ],
       "owner_doc_path": "docs/README.md",
       "public_doc_slugs": [
-        "oss",
+        "helm-ai-kernel",
         "helm-ai-kernel/source-map",
         "helm-ai-kernel/quickstart",
         "helm-ai-kernel/compatibility",

@@ -10,9 +10,9 @@
   },
   "documents": [
     {
-      "slug": "oss",
+      "slug": "helm-ai-kernel",
       "title": "HELM AI Kernel",
-      "section": "oss",
+      "section": "helm-ai-kernel",
       "source_path": "docs/index.md",
       "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel",
       "access": "public",
@@ -102,7 +102,7 @@
     {
       "slug": "helm-ai-kernel/changelog",
       "title": "HELM AI Kernel Changelog",
-      "section": "oss",
+      "section": "helm-ai-kernel",
       "source_path": "CHANGELOG.md",
       "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/changelog",
       "access": "public",
@@ -228,7 +228,7 @@
     {
       "slug": "helm-ai-kernel/source-map",
       "title": "Developer Surface Map",
-      "section": "oss",
+      "section": "helm-ai-kernel",
       "source_path": "docs/DEVELOPER_SURFACE_MAP.md",
       "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/source-map",
       "access": "public",
@@ -236,8 +236,8 @@
     },
     {
       "slug": "helm-ai-kernel/oss-scope",
-      "title": "OSS Scope",
-      "section": "oss",
+      "title": "Open Source Scope",
+      "section": "helm-ai-kernel",
       "source_path": "docs/OSS_SCOPE.md",
       "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/oss-scope",
       "access": "public",

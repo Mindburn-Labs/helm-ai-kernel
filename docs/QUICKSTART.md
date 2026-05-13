@@ -77,7 +77,7 @@ Expected ready line:
 helm-edge-local - listening :7714 - ready
 ```
 
-If you installed with Homebrew, replace `./bin/helm-ai-kernel` with `helm`.
+If you installed with Homebrew, replace `./bin/helm-ai-kernel` with `helm-ai-kernel`.
 
 Run the basic boundary checks in another shell:
 

@@ -89,6 +89,13 @@ fi
 echo -e "  • Installing to ${BOLD}${INSTALL_DIR}${NC}..."
 chmod +x "$DOWNLOAD_PATH"
 
+if [ ! -d "$INSTALL_DIR" ]; then
+    if ! mkdir -p "$INSTALL_DIR" 2>/dev/null; then
+        echo -e "${BLUE}  ℹ️  Sudo required to create install directory.${NC}"
+        sudo mkdir -p "$INSTALL_DIR"
+    fi
+fi
+
 if [ -w "$INSTALL_DIR" ]; then
     mv "$DOWNLOAD_PATH" "$INSTALL_DIR/$BIN_NAME"
 else

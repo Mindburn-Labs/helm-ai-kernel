@@ -1,5 +1,5 @@
 {
-  "name": "@mindburn/helm",
+  "name": "@mindburn/helm-ai-kernel",
   "version": "0.5.0",
   "description": "TypeScript SDK for HELM — fail-closed tool calling for AI agents",
   "main": "dist/index.js",
@@ -33,7 +33,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Mindburn-Labs/helm-oss",
+    "url": "https://github.com/Mindburn-Labs/helm-ai-kernel",
     "directory": "sdk/ts"
   },
   "keywords": [

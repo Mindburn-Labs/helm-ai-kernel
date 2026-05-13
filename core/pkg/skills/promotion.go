@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/proofgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 )
 
 // PromotionLadder enforces the skill promotion lifecycle.

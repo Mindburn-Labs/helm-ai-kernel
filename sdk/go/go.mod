@@ -1,4 +1,4 @@
-module github.com/Mindburn-Labs/helm-oss/sdk/go
+module github.com/Mindburn-Labs/helm-ai-kernel/sdk/go
 
 go 1.25.0
 

@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/pdp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 )
 
 func newTestServer(t *testing.T) *Server {

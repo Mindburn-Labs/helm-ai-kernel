@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
 // PackExporter defines the interface for generating and signing proof packs.

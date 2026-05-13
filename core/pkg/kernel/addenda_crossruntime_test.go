@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 )
 
 // CrossRuntimeTestVector represents a test vector for cross-runtime verification.

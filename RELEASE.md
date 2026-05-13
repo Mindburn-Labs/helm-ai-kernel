@@ -36,8 +36,8 @@ make release-assets
 5. Confirm `dist/release-assets/` contains CLI binaries, `SHA256SUMS.txt`,
    `sbom.json`, `v0.5.0.openvex.json`, `release-attestation.json`,
    `evidence-pack.tar`, `release.high_risk.v3.toml`,
-   `sample-policy-material.tar`, `helm.mcpb`, and `helm.rb`.
-6. Confirm `./bin/helm verify dist/release-assets/evidence-pack.tar` passes
+   `sample-policy-material.tar`, `helm-ai-kernel.mcpb`, and `helm-ai-kernel.rb`.
+6. Confirm `./bin/helm-ai-kernel verify dist/release-assets/evidence-pack.tar` passes
    offline.
 
 ## Publish

@@ -37,10 +37,10 @@ type BoundaryAssertions struct {
 func DefaultKernelBoundaryAssertions() *BoundaryAssertions {
 	return &BoundaryAssertions{
 		AllowedImportPrefixes: []string{
-			"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel",
-			"github.com/Mindburn-Labs/helm-oss/core/pkg/policy",
-			"github.com/Mindburn-Labs/helm-oss/core/pkg/capabilities",
-			"github.com/Mindburn-Labs/helm-oss/core/pkg/firewall",
+			"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel",
+			"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy",
+			"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capabilities",
+			"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/firewall",
 			// Standard library is always allowed
 			"context",
 			"crypto",
@@ -59,9 +59,9 @@ func DefaultKernelBoundaryAssertions() *BoundaryAssertions {
 		},
 		DisallowedImportPatterns: []string{
 			// Domain-specific (vendor logic)
-			"github.com/Mindburn-Labs/helm-oss/core/pkg/domain",
-			"github.com/Mindburn-Labs/helm-oss/core/pkg/vendor",
-			"github.com/Mindburn-Labs/helm-oss/core/pkg/business",
+			"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/domain",
+			"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/vendor",
+			"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/business",
 			// External vendor SDKs
 			"github.com/openai",
 			"github.com/anthropics",
@@ -70,7 +70,7 @@ func DefaultKernelBoundaryAssertions() *BoundaryAssertions {
 			"net/http",
 		},
 		TrustedPackages: map[string]bool{
-			"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel": true,
+			"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel": true,
 		},
 	}
 }
@@ -130,7 +130,7 @@ func CompileTimeBoundaryCheck() (bool, []BoundaryViolation) {
 	assertions := DefaultKernelBoundaryAssertions()
 
 	kernelPackages := []string{
-		"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel",
+		"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel",
 	}
 
 	var allViolations []BoundaryViolation

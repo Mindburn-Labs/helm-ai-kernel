@@ -7,7 +7,7 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Security researchers and maintainers reviewing the source-backed ClawGuard taint-tracking mapping for HELM OSS.
+Security researchers and maintainers reviewing the source-backed ClawGuard taint-tracking mapping for HELM AI Kernel.
 
 ## Outcome
 
@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/security/clawguard-taint-tracking`
-- Source document: `helm-oss/docs/security/clawguard-taint-tracking.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/security/clawguard-taint-tracking`
+- Source document: `helm-ai-kernel/docs/security/clawguard-taint-tracking.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -33,9 +33,9 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 
 Source: Wei Zhao, Zhe Li, Peixin Zhang, and Jun Sun, "ClawGuard: A Runtime Security Framework for Tool-Augmented LLM Agents Against Indirect Prompt Injection", arXiv:2604.11790.
 
-ClawGuard's core operational move is deterministic enforcement at every tool-call boundary. HELM OSS maps that into the existing Guardian and PRG surfaces:
+ClawGuard's core operational move is deterministic enforcement at every tool-call boundary. HELM AI Kernel maps that into the existing Guardian and PRG surfaces:
 
-| ClawGuard concept | HELM OSS implementation |
+| ClawGuard concept | HELM AI Kernel implementation |
 | --- | --- |
 | Task/tool boundary rule set | PRG/CEL requirements evaluated by Guardian |
 | Taint on tool-returned or external content | `Effect.Taint` and `AuthorizedExecutionIntent.Taint` |

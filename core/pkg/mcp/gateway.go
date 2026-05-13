@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/bridge"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/manifest"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/bridge"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
 )
 
 // GatewayConfig configures the MCP gateway server.
@@ -456,7 +456,7 @@ func (g *Gateway) handleProtectedResourceMetadata(w http.ResponseWriter, _ *http
 		"authorization_servers":    []string{authServer},
 		"scopes_supported":         scopes,
 		"bearer_methods_supported": []string{"header"},
-		"resource_documentation":   "https://github.com/Mindburn-Labs/helm-oss/tree/main/docs/INTEGRATIONS",
+		"resource_documentation":   "https://github.com/Mindburn-Labs/helm-ai-kernel/tree/main/docs/INTEGRATIONS",
 	})
 }
 

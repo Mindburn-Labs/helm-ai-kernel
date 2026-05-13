@@ -23,7 +23,7 @@ echo "==> Building HELM binary"
 make build >/dev/null
 
 echo "==> Starting local HELM boundary with sample launch policy"
-HELM_HEALTH_PORT="$HEALTH_PORT" ./bin/helm serve \
+HELM_HEALTH_PORT="$HEALTH_PORT" ./bin/helm-ai-kernel serve \
   --policy examples/launch/policies/agent_tool_call_boundary.toml \
   --addr 127.0.0.1 \
   --port "$PORT" \

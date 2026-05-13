@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/api"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 )
 
 // RateLimitMiddleware enforces per-actor rate limiting at the HTTP layer.

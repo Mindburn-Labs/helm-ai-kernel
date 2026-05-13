@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	pkg_artifact "github.com/Mindburn-Labs/helm-oss/core/pkg/artifacts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/prg"
+	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 )
 
 // Chaos tests for the Guardian pipeline fail-closed invariant.

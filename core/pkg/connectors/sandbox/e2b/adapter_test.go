@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/conformance"
-	sbxconformance "github.com/Mindburn-Labs/helm-oss/core/pkg/conformance/sandbox"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts/actuators"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conformance"
+	sbxconformance "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conformance/sandbox"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

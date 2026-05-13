@@ -1,15 +1,15 @@
 # HELM Chart
 
 This chart deploys the retained OSS kernel from source in this repository.
-The chart name is `helm-firewall` to avoid confusion with the Kubernetes Helm
-package manager.
+The chart name is `helm-ai-kernel`. Values remain under the `.Values.helm`
+root for one compatibility window.
 
 ## Validate
 
 ```bash
 make helm-chart-smoke
 helm lint deploy/helm-chart
-helm template helm-oss deploy/helm-chart
+helm template helm-ai-kernel deploy/helm-chart
 ```
 
 `make helm-chart-smoke` uses `scripts/ci/helm_chart_smoke.sh`. Set
@@ -19,7 +19,7 @@ the pinned containerized Helm runner.
 ## Install
 
 ```bash
-helm install helm-oss deploy/helm-chart \
+helm install helm-ai-kernel deploy/helm-chart \
   --set helm.production=true \
   --set helm.signing.key=<64-char-ed25519-seed-hex> \
   --set helm.auth.adminAPIKey=<admin-api-key> \
@@ -36,7 +36,7 @@ flowchart TD
   cm["ConfigMap/Secret mounted-file delivery"] --> runtime
   hint["reload hints"] --> runtime
   runtime --> snapshot["verified EffectivePolicySnapshot"]
-  snapshot --> pod["helm serve pod"]
+  snapshot --> pod["helm-ai-kernel serve pod"]
   signing["signing-key Secret"] --> pod
   auth["admin/service API-key Secret"] --> pod
   pvc["data volume"] --> pod
@@ -49,8 +49,9 @@ flowchart TD
 
 | Value | Default | Effect |
 | --- | --- | --- |
-| `image.repository` | `ghcr.io/mindburn-labs/helm-oss` | Container image repository. |
+| `image.repository` | `ghcr.io/mindburn-labs/helm-ai-kernel` | Container image repository. |
 | `image.tag` | chart `appVersion` | Container image tag. |
+| `helm.*` | retained | Legacy values root retained for one compatibility window. |
 | `helm.bindAddr` | `0.0.0.0` | Required inside Kubernetes pods. |
 | `helm.production` | `false` | Refuses generated signing/auth material when set to `true`. |
 | `helm.signing.key` | empty | 64-char hex Ed25519 seed when not using an existing secret. |

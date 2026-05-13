@@ -1,6 +1,6 @@
 {
   "title": "HELM Governance",
-  "description": "helm-oss governance verdicts and GenAI tool-calls — sourced from the Datadog Logs exporter.",
+  "description": "helm-ai-kernel governance verdicts and GenAI tool-calls — sourced from the Datadog Logs exporter.",
   "layout_type": "ordered",
   "is_read_only": false,
   "template_variables": [

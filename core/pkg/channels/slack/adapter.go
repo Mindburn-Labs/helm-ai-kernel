@@ -18,7 +18,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/channels"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/channels"
 )
 
 // Compile-time interface compliance check.

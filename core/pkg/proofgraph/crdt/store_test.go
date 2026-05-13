@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/proofgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 )
 
 func TestDistributedStore_Append(t *testing.T) {

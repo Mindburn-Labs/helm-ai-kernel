@@ -1,6 +1,6 @@
-# HELM OSS Launch Readiness Checklist
+# HELM AI Kernel Launch Readiness Checklist
 
-This document tracks the final launch-readiness state of the `helm-oss` repository. It is updated mechanically by the `scripts/launch/launch-ready.sh` verification tool.
+This document tracks the final launch-readiness state of the `helm-ai-kernel` repository. It is updated mechanically by the `scripts/launch/launch-ready.sh` verification tool.
 
 Last verification: 2026-05-12T21:47:43Z
 Verification logs are emitted by the tool for each run and are intentionally
@@ -11,7 +11,7 @@ not committed to the repository.
 - [x] **Config Boundary: wrangler.toml does not enforce hosted domains.**
 - [x] **Terminology Boundary: VERDICT_CANONICALIZATION.md exists and resolves the ALLOW/DENY/ESCALATE vs. DEFER drift.**
 - [x] **Version: VERSION is set to launch target 0.5.0.**
-- [x] **Homebrew: README points to canonical mindburnlabs/tap/helm.**
+- [x] **Homebrew: README points to canonical mindburnlabs/tap/helm-ai-kernel.**
 
 ## Phase 1: Implementation & Proof
 - [x] **Build: make build completes cleanly.**

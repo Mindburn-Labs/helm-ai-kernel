@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	pkg_artifact "github.com/Mindburn-Labs/helm-oss/core/pkg/artifacts"
+	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 )
 
 // --- NewPolicyEngine ---

@@ -33,7 +33,7 @@ TOOL_SCHEMA_HASH="$(printf '%s\n' "$TOOL_SCHEMA_JSON" | python3 -c 'import hashl
 printf '%s\n' "$FIXTURE_JSON" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["status"]=="ok"; assert p["tools"][0]["name"]=="local.echo"; print(json.dumps({"fixture":"local-fixture-mcp","tool":"local.echo","schema_pinned":True}, sort_keys=True))'
 
 echo "==> Generating fail-closed MCP wrapper profile"
-PROFILE_JSON="$(./bin/helm mcp wrap \
+PROFILE_JSON="$(./bin/helm-ai-kernel mcp wrap \
   --server-id "local-fixture-mcp" \
   --upstream-command "$FIXTURE_CMD" \
   --require-pinned-schema=true \
@@ -41,7 +41,7 @@ PROFILE_JSON="$(./bin/helm mcp wrap \
 printf '%s\n' "$PROFILE_JSON" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["server_id"]=="local-fixture-mcp"; assert p["quarantine_default"]=="quarantined"; assert p["upstream_command"][:2]==["python3","scripts/launch/mcp-fixture-server.py"]; print(json.dumps({"wrapper":p["server_id"],"quarantine_default":p["quarantine_default"]}, sort_keys=True))'
 
 echo "==> Starting local HELM boundary"
-HELM_ADMIN_API_KEY="$ADMIN_KEY" HELM_HEALTH_PORT="$HEALTH_PORT" ./bin/helm serve \
+HELM_ADMIN_API_KEY="$ADMIN_KEY" HELM_HEALTH_PORT="$HEALTH_PORT" ./bin/helm-ai-kernel serve \
   --policy examples/launch/policies/agent_tool_call_boundary.toml \
   --addr 127.0.0.1 \
   --port "$PORT" \
@@ -264,7 +264,7 @@ PY
 
 echo "==> Exercising CLI authorize-call fail-closed paths"
 set +e
-CLI_UNKNOWN_SERVER="$(./bin/helm mcp authorize-call --server-id cli-unknown-fixture --tool-name local.echo --json 2>/dev/null)"
+CLI_UNKNOWN_SERVER="$(./bin/helm-ai-kernel mcp authorize-call --server-id cli-unknown-fixture --tool-name local.echo --json 2>/dev/null)"
 CLI_UNKNOWN_CODE=$?
 set -e
 if [ "$CLI_UNKNOWN_CODE" -ne 1 ]; then
@@ -274,7 +274,7 @@ fi
 printf '%s\n' "$CLI_UNKNOWN_SERVER" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["verdict"] in ("DENY","ESCALATE"); print(json.dumps({"cli_unknown_server":p["verdict"]}, sort_keys=True))'
 
 set +e
-CLI_UNKNOWN_TOOL="$(./bin/helm mcp authorize-call --server-id cli-local-fixture --tool-name local.missing --approved --json 2>/dev/null)"
+CLI_UNKNOWN_TOOL="$(./bin/helm-ai-kernel mcp authorize-call --server-id cli-local-fixture --tool-name local.missing --approved --json 2>/dev/null)"
 CLI_UNKNOWN_TOOL_CODE=$?
 set -e
 if [ "$CLI_UNKNOWN_TOOL_CODE" -ne 1 ]; then
@@ -283,7 +283,7 @@ if [ "$CLI_UNKNOWN_TOOL_CODE" -ne 1 ]; then
 fi
 printf '%s\n' "$CLI_UNKNOWN_TOOL" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["verdict"] in ("DENY","ESCALATE"); print(json.dumps({"cli_unknown_tool":p["verdict"]}, sort_keys=True))'
 
-CLI_ALLOWED="$(./bin/helm mcp authorize-call \
+CLI_ALLOWED="$(./bin/helm-ai-kernel mcp authorize-call \
   --server-id cli-local-fixture \
   --tool-name local.echo \
   --approved \

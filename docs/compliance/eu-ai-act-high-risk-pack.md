@@ -7,7 +7,7 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Compliance reviewers using HELM OSS evidence outputs to map, not certify, EU AI Act high-risk controls.
+Compliance reviewers using HELM AI Kernel evidence outputs to map, not certify, EU AI Act high-risk controls.
 
 ## Outcome
 
@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/compliance/eu-ai-act-high-risk-pack`
-- Source document: `helm-oss/docs/compliance/eu-ai-act-high-risk-pack.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/compliance/eu-ai-act-high-risk-pack`
+- Source document: `helm-ai-kernel/docs/compliance/eu-ai-act-high-risk-pack.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -46,7 +46,7 @@ flowchart LR
   B --> C
 ```
 
-The HELM OSS EU AI Act reference pack is `reference_packs/eu_ai_act_high_risk.v1.json`.
+The HELM AI Kernel EU AI Act reference pack is `reference_packs/eu_ai_act_high_risk.v1.json`.
 
 ## Source Status
 
@@ -78,4 +78,4 @@ These requirements complement, but do not replace, receipt signing, ProofGraph v
 
 ## Evidence Boundary
 
-This pack is a documentation and evidence mapping layer, not a legal conclusion. A release-ready pack should identify the receipt fields, policy bundle, evidence export, operator control, and verification command that support each mapped obligation. When the implementation changes, update the mapping by linking to schemas, tests, and example EvidencePacks instead of copying unsupported compliance language. Public docs can describe what HELM OSS can produce for an evaluator; customer or legal-specific filings belong outside anonymous exports. The minimum acceptance path is: generate a governed decision, export its EvidencePack, verify the receipt offline, and show which mapped controls the exported artifact supports.
+This pack is a documentation and evidence mapping layer, not a legal conclusion. A release-ready pack should identify the receipt fields, policy bundle, evidence export, operator control, and verification command that support each mapped obligation. When the implementation changes, update the mapping by linking to schemas, tests, and example EvidencePacks instead of copying unsupported compliance language. Public docs can describe what HELM AI Kernel can produce for an evaluator; customer or legal-specific filings belong outside anonymous exports. The minimum acceptance path is: generate a governed decision, export its EvidencePack, verify the receipt offline, and show which mapped controls the exported artifact supports.

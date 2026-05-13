@@ -18,7 +18,7 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
 
 // CapabilityVerification is the result of verifying a skill's declared capabilities

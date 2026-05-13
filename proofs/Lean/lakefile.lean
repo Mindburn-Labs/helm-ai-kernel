@@ -2,9 +2,9 @@ import Lake
 open Lake DSL
 
 /-
-  Lake build configuration for the HELM OSS Lean proofs.
+  Lake build configuration for the HELM AI Kernel Lean proofs.
 
-  Workstream F / F2 + F3 — Phase 3 of the helm-oss 100% SOTA execution
+  Workstream F / F2 + F3 — Phase 3 of the helm-ai-kernel 100% SOTA execution
   plan. The single library target `EffectPermitSoundness` lives one
   directory up from this lakefile (so the .lean source can sit next to
   the existing TLA+ specs in proofs/), reached via `srcDir`.
@@ -19,7 +19,7 @@ open Lake DSL
   .github/workflows/lean.yml.
 -/
 
-package helmOssProofs where
+package helmAiKernelProofs where
   -- No special build options; the proof is self-contained and uses no
   -- external libraries. Mathlib would let us drop a few `simp` calls
   -- but is not required and would slow CI considerably.

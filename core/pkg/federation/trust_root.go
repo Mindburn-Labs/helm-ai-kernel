@@ -5,7 +5,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
 
 // TrustRootStore manages cross-org trust roots.

@@ -1,19 +1,19 @@
 ---
-title: HELM OSS
+title: HELM AI Kernel
 last_reviewed: 2026-05-05
 ---
 
-# HELM OSS Developer Portal
+# HELM AI Kernel Developer Portal
 
-HELM OSS is the fail-closed execution firewall for AI agents. It gives developers a local kernel, policy bundle loader, OpenAI-compatible proxy path, MCP firewall, receipts, EvidencePacks, and offline verification without requiring a hosted service.
+HELM AI Kernel is the fail-closed execution firewall for AI agents. It gives developers a local kernel, policy bundle loader, OpenAI-compatible proxy path, MCP firewall, receipts, EvidencePacks, and offline verification without requiring a hosted service.
 
-## Who This Is For
+## Audience
 
-This page is for open-source developers, platform teams, security reviewers, and framework authors who need to integrate or inspect the HELM OSS kernel directly.
+This page is for open-source developers, platform teams, security reviewers, and framework authors who need to integrate or inspect the HELM AI Kernel kernel directly.
 
 ## Outcome
 
-After this page you should know which public HELM OSS surface to use:
+After this page you should know which public HELM AI Kernel surface to use:
 
 - quickstart for a local boundary;
 - developer journey for end-to-end install, runtime, SDK, deployment, and verification coverage;
@@ -29,7 +29,7 @@ After this page you should know which public HELM OSS surface to use:
 flowchart LR
   Dev["Developer app"] --> Proxy["OpenAI-compatible proxy"]
   Agent["MCP or agent client"] --> MCP["MCP integration"]
-  Proxy --> Kernel["HELM OSS kernel"]
+  Proxy --> Kernel["HELM AI Kernel kernel"]
   MCP --> Kernel
   Kernel --> Policy["Policy bundle"]
   Kernel --> Receipt["Receipt and evidence pack"]
@@ -78,7 +78,7 @@ The code, command output, and verification artifacts override marketing language
 
 ## Trust and Compliance
 
-HELM OSS docs separate implementation security from compliance mapping:
+HELM AI Kernel docs separate implementation security from compliance mapping:
 
 - [Execution Security Model](EXECUTION_SECURITY_MODEL.md) describes containment, policy evaluation, receipts, and evidence.
 - [OWASP MCP Threat Mapping](OWASP_MCP_THREAT_MAPPING.md) maps MCP-specific risks to HELM controls.

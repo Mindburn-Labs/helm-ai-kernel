@@ -14,7 +14,7 @@ files. It is not a complete copy of any GitHub release.
 
 The current public GitHub release is `v0.5.0`, published on 2026-05-13. Its
 visible release assets are platform binaries for Darwin, Linux, and Windows,
-`helm.mcpb`, `helm.rb`, `SHA256SUMS.txt`, `sbom.json`,
+`helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `SHA256SUMS.txt`, `sbom.json`,
 `v0.5.0.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`, and matching
 `*.cosign.bundle` files for every primary asset.
@@ -36,8 +36,8 @@ GitHub release:
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
 - `sample-policy-material.tar`
-- `helm.mcpb`
-- `helm.rb`
+- `helm-ai-kernel.mcpb`
+- `helm-ai-kernel.rb`
 
 The sample policy material archive contains `release.high_risk.v3.toml` and
 `reference_packs/eu_ai_act_high_risk.v1.json`. The GitHub release workflow

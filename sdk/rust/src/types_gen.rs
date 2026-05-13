@@ -2187,8 +2187,8 @@ pub struct GetPublicDemoHealth200Response {
     pub version: String,
     #[serde(rename = "commit")]
     pub commit: String,
-    #[serde(rename = "helm_oss_version")]
-    pub helm_oss_version: String,
+    #[serde(rename = "helm_ai_kernel_version")]
+    pub helm_ai_kernel_version: String,
     #[serde(rename = "status")]
     pub status: String,
     #[serde(rename = "build_time")]
@@ -2200,11 +2200,11 @@ pub struct GetPublicDemoHealth200Response {
 }
 
 impl GetPublicDemoHealth200Response {
-    pub fn new(version: String, commit: String, helm_oss_version: String, status: String, build_time: String, git_sha: String, deployment_id: String) -> GetPublicDemoHealth200Response {
+    pub fn new(version: String, commit: String, helm_ai_kernel_version: String, status: String, build_time: String, git_sha: String, deployment_id: String) -> GetPublicDemoHealth200Response {
         GetPublicDemoHealth200Response {
             version,
             commit,
-            helm_oss_version,
+            helm_ai_kernel_version,
             status,
             build_time,
             git_sha,
@@ -3698,12 +3698,12 @@ pub struct RunPublicDemo200Response {
     pub verification_hint: String,
     #[serde(rename = "sandbox_label")]
     pub sandbox_label: String,
-    #[serde(rename = "helm_oss_version")]
-    pub helm_oss_version: String,
+    #[serde(rename = "helm_ai_kernel_version")]
+    pub helm_ai_kernel_version: String,
 }
 
 impl RunPublicDemo200Response {
-    pub fn new(verdict: RunPublicDemo200ResponseVerdict, reason_code: String, receipt: Receipt, proof_refs: RunPublicDemo200ResponseProofRefs, verification_hint: String, sandbox_label: String, helm_oss_version: String) -> RunPublicDemo200Response {
+    pub fn new(verdict: RunPublicDemo200ResponseVerdict, reason_code: String, receipt: Receipt, proof_refs: RunPublicDemo200ResponseProofRefs, verification_hint: String, sandbox_label: String, helm_ai_kernel_version: String) -> RunPublicDemo200Response {
         RunPublicDemo200Response {
             verdict,
             reason_code,
@@ -3711,7 +3711,7 @@ impl RunPublicDemo200Response {
             proof_refs: Box::new(proof_refs),
             verification_hint,
             sandbox_label,
-            helm_oss_version,
+            helm_ai_kernel_version,
         }
     }
 }

@@ -3,8 +3,8 @@ package scenarios
 import (
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 )
 
 // Scenario 5: Crypto Miner / Resource Hijack

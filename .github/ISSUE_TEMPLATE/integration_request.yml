@@ -1,5 +1,5 @@
 name: Integration request
-description: Request or scope a HELM OSS integration.
+description: Request or scope a HELM AI Kernel integration.
 title: "[Integration]: "
 labels: ["integration", "needs-triage"]
 body:

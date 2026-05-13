@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/channels"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/channels/lark"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/channels/slack"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/channels/telegram"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/channels"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/channels/lark"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/channels/slack"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/channels/telegram"
 )
 
 // nowMs returns the current time as Unix milliseconds.

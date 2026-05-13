@@ -1,4 +1,4 @@
-# Persistent per-CVE VEX decisions for helm-oss.
+# Persistent per-CVE VEX decisions for helm-ai-kernel.
 #
 # Consumed by scripts/release/generate_vex.sh during the release workflow.
 # Each entry overrides the default "under_investigation" disposition for the

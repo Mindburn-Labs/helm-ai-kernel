@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	pkg_artifact "github.com/Mindburn-Labs/helm-oss/core/pkg/artifacts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel"
-	policyreconcile "github.com/Mindburn-Labs/helm-oss/core/pkg/policy/reconcile"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/prg"
+	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
+	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 )
 
 func allowGraphFor(action string) *prg.Graph {

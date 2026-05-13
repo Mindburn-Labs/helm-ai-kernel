@@ -110,8 +110,8 @@ func TestProfileV1_ReferenceImplPassesWellFormed(t *testing.T) {
 	if err := yaml.Unmarshal(data, &cl); err != nil {
 		t.Fatalf("parse checklist: %v", err)
 	}
-	if cl.ReferenceImpl != "github.com/Mindburn-Labs/helm-oss" {
-		t.Errorf("reference_impl=%q — expected the helm-oss repo as the v1 reference", cl.ReferenceImpl)
+	if cl.ReferenceImpl != "github.com/Mindburn-Labs/helm-ai-kernel" {
+		t.Errorf("reference_impl=%q — expected the helm-ai-kernel repo as the v1 reference", cl.ReferenceImpl)
 	}
 	if cl.Status != "draft" && cl.Status != "stable" {
 		t.Errorf("status=%q — must be draft or stable", cl.Status)

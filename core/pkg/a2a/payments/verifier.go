@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto/hsm"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto/hsm"
 )
 
 // Common errors for payment verification.

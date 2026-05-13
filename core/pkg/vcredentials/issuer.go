@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
 // Issuer creates signed W3C Verifiable Credentials for agent capabilities.

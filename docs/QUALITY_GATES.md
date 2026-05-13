@@ -5,7 +5,7 @@ last_reviewed: 2026-05-12
 
 # Quality Gates
 
-HELM OSS uses a Make-first quality gate pipeline. The root `Makefile` is the
+HELM AI Kernel uses a Make-first quality gate pipeline. The root `Makefile` is the
 canonical local interface; `scripts/ci/quality.py` executes the gate registry in
 `scripts/ci/quality-gates.json`.
 

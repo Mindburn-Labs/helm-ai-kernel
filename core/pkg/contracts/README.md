@@ -1,4 +1,4 @@
-# HELM OSS Contracts Package Source Owner
+# HELM AI Kernel Contracts Package Source Owner
 
 ## Audience
 
@@ -14,12 +14,12 @@ Classification: `public-hub`.
 
 Public docs should link here from:
 
-- `helm-oss/reference/execution-boundary`
-- `helm-oss/reference/http-api`
-- `helm-oss/reference/json-schemas`
-- `helm-oss/reference/protocols-and-schemas`
-- `helm-oss/verification`
-- `helm-oss/conformance`
+- `helm-ai-kernel/reference/execution-boundary`
+- `helm-ai-kernel/reference/http-api`
+- `helm-ai-kernel/reference/json-schemas`
+- `helm-ai-kernel/reference/protocols-and-schemas`
+- `helm-ai-kernel/verification`
+- `helm-ai-kernel/conformance`
 
 ## Source Map
 

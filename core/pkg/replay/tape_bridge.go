@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/tape"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tape"
 )
 
 // TapeEventSource adapts VCR tape entries into replay RunEvents,

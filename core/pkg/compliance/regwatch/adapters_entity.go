@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/compliance/jkg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/jkg"
 )
 
 // GLEIFAdapter monitors the GLEIF LEI API for global legal entity identity and ownership data.

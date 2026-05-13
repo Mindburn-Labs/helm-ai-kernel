@@ -2,7 +2,7 @@
 //
 // Per HELM 2030 Spec §5.4 / §6.1.4:
 //
-//	HELM OSS MUST include portable context bundles, local documentation
+//	HELM AI Kernel MUST include portable context bundles, local documentation
 //	bundles, and version-aware context retrieval.
 //
 // Resolves: GAP-A7, GAP-A8.

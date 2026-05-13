@@ -1,6 +1,6 @@
 # TON Acton Connector
 
-`ton.acton` is the HELM OSS connector for running the Acton TON smart-contract
+`ton.acton` is the HELM AI Kernel connector for running the Acton TON smart-contract
 toolchain through HELM's deterministic execution boundary.
 
 Acton remains the TON development toolchain. HELM remains the policy,

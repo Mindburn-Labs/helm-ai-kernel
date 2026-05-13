@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/policycel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policycel"
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/ext"
 )

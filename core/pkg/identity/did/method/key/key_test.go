@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity/did"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/did"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

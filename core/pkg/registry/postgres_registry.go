@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/manifest"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
 )
 
 // PostgresRegistry implements Registry with SQL persistence.

@@ -1,6 +1,6 @@
 # Splunk HEC SIEM exporter
 
-OpenTelemetry `SpanExporter` that translates helm-oss governance spans into
+OpenTelemetry `SpanExporter` that translates helm-ai-kernel governance spans into
 Splunk HTTP Event Collector (HEC) events. The full OTel GenAI semconv attribute
 set (`gen_ai.system`, `gen_ai.request.model`, `gen_ai.tool.name`,
 `gen_ai.tool.call.id`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`,
@@ -12,7 +12,7 @@ namespace (`helm.verdict`, `helm.policy_id`, `helm.proof_node_id`,
 
 ```go
 import (
-    "github.com/Mindburn-Labs/helm-oss/core/pkg/connectors/siem/splunk_hec"
+    "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/siem/splunk_hec"
     sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -34,7 +34,7 @@ otel.SetTracerProvider(tp)
 | `SPLUNK_HEC_URL`    | HEC event endpoint (`/services/collector/event`).             |
 | `SPLUNK_HEC_TOKEN`  | HEC bearer token (passed as `Authorization: Splunk <token>`). |
 | `SPLUNK_HEC_INDEX`  | Optional. Pin events to a specific Splunk index.              |
-| `SPLUNK_HEC_SOURCE` | Optional. Override `source` (default `helm-oss`).             |
+| `SPLUNK_HEC_SOURCE` | Optional. Override `source` (default `helm-ai-kernel`).             |
 
 ## OpenTelemetry collector configuration (alternative)
 
@@ -47,7 +47,7 @@ exporters:
   splunk_hec:
     token: ${SPLUNK_HEC_TOKEN}
     endpoint: ${SPLUNK_HEC_URL}
-    source: helm-oss
+    source: helm-ai-kernel
     sourcetype: helm:governance
     index: ${SPLUNK_HEC_INDEX}
 

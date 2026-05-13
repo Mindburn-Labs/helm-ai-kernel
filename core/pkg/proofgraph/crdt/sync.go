@@ -6,7 +6,7 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/proofgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 )
 
 // SyncMessageType identifies the kind of gossip message.

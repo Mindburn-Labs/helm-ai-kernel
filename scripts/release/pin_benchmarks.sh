@@ -5,7 +5,7 @@
 # Caller: Makefile target `bench-pin`; .github/workflows/release.yml
 # `benchmark-pin` job after `make bench-report`.
 #
-# Reads:  benchmarks/results/latest.json (helm-oss internal schema produced
+# Reads:  benchmarks/results/latest.json (helm-ai-kernel internal schema produced
 #         by `make bench-report`)
 # Writes: benchmarks/results/v<version>.json (identical schema, pinned)
 set -euo pipefail

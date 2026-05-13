@@ -3,7 +3,7 @@ package contracts
 import (
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
 
 // TestCanonicalReceiptHash_Parity provides reference test vectors

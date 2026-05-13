@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run HELM OSS quality gates from a declarative registry."""
+"""Run HELM AI Kernel quality gates from a declarative registry."""
 from __future__ import annotations
 
 import argparse

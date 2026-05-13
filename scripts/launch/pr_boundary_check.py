@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import sys
 
-REPO = "Mindburn-Labs/helm-oss"
+REPO = "Mindburn-Labs/helm-ai-kernel"
 
 TERMS = [
     re.compile(r"\bcommercial\b", re.IGNORECASE),

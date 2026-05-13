@@ -99,7 +99,7 @@ spec:
 Bundles MUST be signed with Ed25519:
 
 ```bash
-helm bundle sign --key /path/to/private.key ./my-bundle/
+helm-ai-kernel bundle sign --key /path/to/private.key ./my-bundle/
 ```
 
 This produces a `SIGNATURE` file containing the signature over the
@@ -108,7 +108,7 @@ bundle's content hash (SHA-256 of the manifest + all policy files).
 ### 6.2 Verification
 
 ```bash
-helm bundle verify --public-key /path/to/public.key ./my-bundle/
+helm-ai-kernel bundle verify --public-key /path/to/public.key ./my-bundle/
 ```
 
 ### 6.3 Trust Root

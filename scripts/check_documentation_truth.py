@@ -55,9 +55,12 @@ OSS_SCOPE_SPEC_ONLY_PATHS = (
 
 FORBIDDEN_SOURCE_INVENTORY_PATTERNS = {'*', 'core/**', 'api/**'}
 REQUIRED_RUNTIME_REFERENCE_SLUGS = {
-    'helm-oss/reference/cli',
-    'helm-oss/reference/http-api',
-    'helm-oss/reference/execution-boundary',
+    'helm-ai-kernel/reference/cli',
+    'helm-ai-kernel/reference/http-api',
+    'helm-ai-kernel/reference/execution-boundary',
+}
+CANONICAL_REPO_RENAMES = {
+    'helm' + '-oss': 'helm-ai-kernel',
 }
 
 
@@ -77,15 +80,16 @@ def expected_repo_name() -> str:
             check=False,
         )
     except Exception:
-        return ROOT.name
+        return CANONICAL_REPO_RENAMES.get(ROOT.name, ROOT.name)
 
     url = result.stdout.strip().rstrip('/')
     if not url:
-        return ROOT.name
+        return CANONICAL_REPO_RENAMES.get(ROOT.name, ROOT.name)
     repo = re.split(r'[:/]', url)[-1]
     if repo.endswith('.git'):
         repo = repo[:-4]
-    return repo or ROOT.name
+    repo = repo or ROOT.name
+    return CANONICAL_REPO_RENAMES.get(repo, repo)
 
 
 EXPECTED_REPO_NAME = expected_repo_name()
@@ -190,7 +194,7 @@ def validate_source_inventory(failures: list[str], public_slugs: set[str]) -> No
         public_doc_slugs = [str(slug).strip() for slug in family.get('public_doc_slugs') or [] if str(slug).strip()]
         inventory_slugs.update(public_doc_slugs)
         for slug in public_doc_slugs:
-            if (slug == 'oss' or slug.startswith('helm-oss/')) and slug not in public_slugs:
+            if (slug == 'oss' or slug.startswith('helm-ai-kernel/')) and slug not in public_slugs:
                 failures.append(f'docs/source-inventory.manifest.json:{family_id} public_doc_slug is missing from public docs manifest: {slug}')
 
         if patterns and not any(matches_inventory_family(file_path, family) for file_path in tracked):

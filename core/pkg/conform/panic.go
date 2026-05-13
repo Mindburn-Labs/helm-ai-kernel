@@ -11,7 +11,7 @@ import (
 // PanicRecord is the minimal record emitted when the receipt system fails.
 // Per §receipt-emission-failure: if receipts cannot be emitted, the runtime
 // MUST halt and emit a panic record to an immutable local sink.
-// helm conform MUST FAIL with RECEIPT_EMISSION_PANIC.
+// helm-ai-kernel conform MUST FAIL with RECEIPT_EMISSION_PANIC.
 type PanicRecord struct {
 	Timestamp   time.Time `json:"timestamp"`
 	RunID       string    `json:"run_id"`

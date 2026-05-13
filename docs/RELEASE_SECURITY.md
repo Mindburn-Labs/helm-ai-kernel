@@ -3,15 +3,15 @@ title: Release and Security Evidence
 last_reviewed: 2026-05-05
 ---
 
-# HELM OSS Release and Security Evidence
+# HELM AI Kernel Release and Security Evidence
 
 This page collects the public release, vulnerability disclosure, supply-chain,
-fuzzing, OpenSSF, VEX, SBOM, Cosign, and reproducibility material for HELM OSS.
+fuzzing, OpenSSF, VEX, SBOM, Cosign, and reproducibility material for HELM AI Kernel.
 
 ## Audience
 
 This page is for developers installing release artifacts, security reviewers,
-package maintainers, and organizations validating HELM OSS before adoption.
+package maintainers, and organizations validating HELM AI Kernel before adoption.
 
 ## Outcome
 
@@ -34,24 +34,24 @@ flowchart LR
 ```
 
 Current public release: `v0.5.0`, published on 2026-05-13 at
-<https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.5.0>. The release
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.0>. The release
 assets visible on GitHub are Darwin/Linux/Windows binaries, `SHA256SUMS.txt`,
 `sbom.json`, `v0.5.0.openvex.json`, `release-attestation.json`,
 `evidence-pack.tar`, `release.high_risk.v3.toml`,
-`sample-policy-material.tar`, `helm.mcpb`, `helm.rb`, and matching
+`sample-policy-material.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, and matching
 `*.cosign.bundle` files for each primary asset.
 
 ## Public Release Material
 
 | Need | Source path | Public route |
 | --- | --- | --- |
-| Release preparation | `RELEASE.md`, `VERSION`, `CHANGELOG.md` | `/helm-oss/publishing`, `/helm-oss/changelog` |
-| Vulnerability reporting | `SECURITY.md` | This page and `/helm-oss/publishing` |
+| Release preparation | `RELEASE.md`, `VERSION`, `CHANGELOG.md` | `/helm-ai-kernel/publishing`, `/helm-ai-kernel/changelog` |
+| Vulnerability reporting | `SECURITY.md` | This page and `/helm-ai-kernel/publishing` |
 | OpenSSF mapping | `BEST_PRACTICES.md` | This page |
 | SBOM and release metadata | `release/README.md`, `scripts/ci/generate_sbom.sh`, release asset `sbom.json`, release asset `release-attestation.json` | This page |
 | OpenVEX policy source | `release/vex.openvex.json`, `release/vex/policies.yaml` | This page; only claim published VEX when attached to the GitHub release |
-| Cosign and reproducible binaries | `.github/workflows/release.yml`, `scripts/release/`, `docs/VERIFICATION.md` | `/helm-oss/verification`, `/helm-oss/publishing`; Cosign verification requires attached `*.cosign.bundle` files |
-| Fuzzing | `oss-fuzz/`, Go fuzz tests under `core/pkg/` | This page and `/helm-oss/execution-security-model` |
+| Cosign and reproducible binaries | `.github/workflows/release.yml`, `scripts/release/`, `docs/VERIFICATION.md` | `/helm-ai-kernel/verification`, `/helm-ai-kernel/publishing`; Cosign verification requires attached `*.cosign.bundle` files |
+| Fuzzing | `oss-fuzz/`, Go fuzz tests under `core/pkg/` | This page and `/helm-ai-kernel/execution-security-model` |
 
 ## Verification Commands
 
@@ -90,7 +90,7 @@ bundles.
 | Signature verification fails | Confirm the release actually includes `*.cosign.bundle` files, then check the expected workflow identity and Rekor entry documented in `SECURITY.md`. |
 | Reproducible build hashes differ | Confirm `SOURCE_DATE_EPOCH`, `-trimpath`, and build-id settings match the release workflow. |
 | VEX status is unclear | Inspect `release/vex/policies.yaml`; only rely on a release VEX file when it is attached to the GitHub release. |
-| Kubernetes Helm validation runs the HELM OSS CLI | Set `KUBE_HELM_CMD` to a Kubernetes Helm v3 binary or run `make helm-chart-smoke`, which uses a pinned containerized Helm runner when needed. |
+| Kubernetes Helm validation runs the HELM AI Kernel CLI | Set `KUBE_HELM_CMD` to a Kubernetes Helm v3 binary or run `make helm-chart-smoke`, which uses a pinned containerized Helm runner when needed. |
 | A security issue needs disclosure | Use `security@mindburn.org`; do not open a public issue. |
 
 <!-- docs-depth-final-pass -->

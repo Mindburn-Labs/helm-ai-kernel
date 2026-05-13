@@ -1,11 +1,11 @@
-# HELM OSS Test Matrix
+# HELM AI Kernel Test Matrix
 
-This document defines the minimum source-backed test matrix for HELM OSS. It
+This document defines the minimum source-backed test matrix for HELM AI Kernel. It
 does not define gates for sibling repositories.
 
 ## Governance Boundaries
 
-Systems that contribute to HELM OSS execution truth must enforce:
+Systems that contribute to HELM AI Kernel execution truth must enforce:
 
 - Offline determinism for ProofGraph, EvidencePack, receipt, and conformance
   fixtures.
@@ -13,11 +13,11 @@ Systems that contribute to HELM OSS execution truth must enforce:
   return `DENY` or `ESCALATE` instead of silently dispatching.
 - Source-backed OpenAPI and route parity for public HTTP claims.
 
-## Required HELM OSS Coverage
+## Required HELM AI Kernel Coverage
 
 | Surface | Required signal |
 | --- | --- |
-| Go kernel and CLI | `go test` over `core/cmd/helm`, boundary, contracts, conformance, and verifier packages |
+| Go kernel and CLI | `go test` over `core/cmd/helm-ai-kernel`, boundary, contracts, conformance, and verifier packages |
 | SDKs | Language-specific SDK gates and generated-type parity |
 | ProofGraph and EvidencePack | Offline fixture verification and tamper checks |
 | MCP and sandbox | Negative vectors for unknown server/tool/schema, missing grants, and authorization failures |

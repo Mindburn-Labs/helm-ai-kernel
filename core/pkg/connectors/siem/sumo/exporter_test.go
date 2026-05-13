@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/observability"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -55,7 +55,7 @@ func TestNew_AppliesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if e.cfg.Name != "helm-oss" {
+	if e.cfg.Name != "helm-ai-kernel" {
 		t.Errorf("Name default = %q", e.cfg.Name)
 	}
 	if e.cfg.Category != "helm/governance" {
@@ -108,7 +108,7 @@ func TestExportSpans_ProducesNDJSON(t *testing.T) {
 	if got.ContentType != "application/json" {
 		t.Errorf("Content-Type = %q", got.ContentType)
 	}
-	if got.Name != "helm-oss" {
+	if got.Name != "helm-ai-kernel" {
 		t.Errorf("X-Sumo-Name = %q", got.Name)
 	}
 	if got.Category != "helm/governance" {

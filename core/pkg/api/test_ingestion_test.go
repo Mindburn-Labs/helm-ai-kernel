@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/api"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 )
 
 func TestIngestionEndToEnd(t *testing.T) {

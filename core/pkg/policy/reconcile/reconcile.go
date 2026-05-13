@@ -22,10 +22,10 @@ import (
 	"sync"
 	"time"
 
-	helmcrypto "github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel/cpi"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/pdp"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/prg"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/cpi"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 )
 
 const (

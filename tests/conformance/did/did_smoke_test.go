@@ -1,7 +1,7 @@
 // Package didconformance is the smoke suite for HELM's W3C DID surface.
 // It exercises the resolver/verifier APIs plus a complete IATP handshake
 // using the in-tree did:key driver. The CLI itself is covered by
-// core/cmd/helm tests; here we focus on the public package contract.
+// core/cmd/helm-ai-kernel tests; here we focus on the public package contract.
 package didconformance
 
 import (
@@ -12,12 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity/did"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity/did/method/key"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity/iatp"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/vcredentials"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/did"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/did/method/key"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/iatp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/vcredentials"
 )
 
 var smokeNow = time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC)

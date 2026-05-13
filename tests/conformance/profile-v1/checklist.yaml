@@ -14,7 +14,7 @@
 
 version: "v1.0.0"
 status: "draft"
-reference_impl: "github.com/Mindburn-Labs/helm-oss"
+reference_impl: "github.com/Mindburn-Labs/helm-ai-kernel"
 last_updated: "2026-04-15"
 
 checks:
@@ -163,13 +163,13 @@ checks:
   evidencepack:
     - id: evidencepack.export_verify_roundtrip
       axis: 5
-      title: "helm export → helm verify round-trip returns PASS"
+      title: "helm-ai-kernel export → helm-ai-kernel verify round-trip returns PASS"
       verification:
         kind: shell
         target: "tests/conformance/profile-v1/scripts/roundtrip.sh"
       references:
-        - "core/cmd/helm/export_cmd.go"
-        - "core/cmd/helm/verify_cmd.go"
+        - "core/cmd/helm-ai-kernel/export_cmd.go"
+        - "core/cmd/helm-ai-kernel/verify_cmd.go"
       required: true
 
     - id: evidencepack.tamper_detection
@@ -179,7 +179,7 @@ checks:
         kind: shell
         target: "tests/conformance/profile-v1/scripts/tamper.sh"
       references:
-        - "core/cmd/helm/verify_cmd.go"
+        - "core/cmd/helm-ai-kernel/verify_cmd.go"
       required: true
 
   # ────────────────────────────────────────────────────────────
@@ -188,7 +188,7 @@ checks:
   replay:
     - id: replay.bit_identical_match
       axis: 6
-      title: "helm replay reproduces every decision bit-identically; any divergence is an invariant breach"
+      title: "helm-ai-kernel replay reproduces every decision bit-identically; any divergence is an invariant breach"
       verification:
         kind: go_test
         target: "./core/pkg/replay/..."
@@ -205,5 +205,5 @@ checks:
         kind: shell
         target: "tests/conformance/profile-v1/scripts/divergence.sh"
       references:
-        - "core/cmd/helm/replay_cmd.go"
+        - "core/cmd/helm-ai-kernel/replay_cmd.go"
       required: true

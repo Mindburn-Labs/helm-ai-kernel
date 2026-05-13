@@ -5,7 +5,7 @@
 // DecisionRequest. The kernel never branches on language at decision time —
 // only the registry does, and only at compile/load.
 //
-// Workstream B / B3 — Phase 2 of the helm-oss 100% SOTA execution plan.
+// Workstream B / B3 — Phase 2 of the helm-ai-kernel 100% SOTA execution plan.
 package policybundles
 
 import (
@@ -14,8 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/policybundles/cedar"
-	regopkg "github.com/Mindburn-Labs/helm-oss/core/pkg/policybundles/rego"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policybundles/cedar"
+	regopkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policybundles/rego"
 )
 
 // Language tags supported by the registry. Bundle manifests carry one of
@@ -77,7 +77,7 @@ type CompileResult struct {
 
 // Compile dispatches to the per-language compiler.
 //
-// The CEL path is intentionally a thin pass-through: helm-oss already had
+// The CEL path is intentionally a thin pass-through: helm-ai-kernel already had
 // CEL support before the multi-language work and routes CEL bundles through
 // the existing builtin pipeline (see core/pkg/policybundles/builtin.go and
 // core/pkg/celcheck/). Callers that pass language=cel today receive a

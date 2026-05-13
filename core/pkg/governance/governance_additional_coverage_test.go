@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/capabilities"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capabilities"
 )
 
 // ─── 1: CEL validator rejects now() ───────────────────────────

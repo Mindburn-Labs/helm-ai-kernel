@@ -3,7 +3,7 @@
 
 ## Purpose
 
-Active test surface for the helm-oss project.
+Active test surface for the helm-ai-kernel project.
 
 ## Canonical Interface
 

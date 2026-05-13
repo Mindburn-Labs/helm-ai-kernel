@@ -1,4 +1,4 @@
-// Package tenants implements multi-tenant isolation for HELM enterprise deployments.
+// Package tenants implements multi-tenant isolation for HELM AI Enterprise deployments.
 // Every principal, resource, and policy evaluation is scoped to a tenant.
 // Fail-closed: any error in tenant resolution or isolation check results in denial.
 package tenants
@@ -9,7 +9,7 @@ import "time"
 type Tenant struct {
 	TenantID string            `json:"tenant_id"`
 	Name     string            `json:"name"`
-	Edition  string            `json:"edition"` // "team", "enterprise", "self-hosted"
+	Edition  string            `json:"edition"` // "basic", "enterprise", "self-hosted"
 	Status   string            `json:"status"`  // "active", "suspended", "deprovisioned"
 	OwnerID  string            `json:"owner_id"`
 	Metadata map[string]string `json:"metadata,omitempty"`

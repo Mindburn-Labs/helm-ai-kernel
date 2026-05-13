@@ -13,7 +13,7 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   REGISTRY: ghcr.io
-  IMAGE_NAME: mindburn-labs/helm-oss
+  IMAGE_NAME: mindburn-labs/helm-ai-kernel
 
 jobs:
   validate:
@@ -78,7 +78,7 @@ jobs:
           node-version: "22"
       - uses: helm/kind-action@v1
         with:
-          cluster_name: helm-oss-smoke
+          cluster_name: helm-ai-kernel-smoke
       - name: kind install smoke
         run: make kind-smoke
 
@@ -163,13 +163,13 @@ jobs:
         run: |
           make release-binaries-reproducible
           mkdir -p /tmp/build1
-          cp -r bin/helm-* bin/SHA256SUMS.txt /tmp/build1/
+          cp -r bin/helm-ai-kernel-* bin/SHA256SUMS.txt /tmp/build1/
           shasum -a 256 /tmp/build1/helm-* | sed 's#.*/##' > /tmp/build1.sha256
       - name: Clean and second reproducible build
         run: |
-          rm -f bin/helm-* bin/SHA256SUMS.txt
+          rm -f bin/helm-ai-kernel-* bin/SHA256SUMS.txt
           make release-binaries-reproducible
-          shasum -a 256 bin/helm-* | sed 's#.*/##' > /tmp/build2.sha256
+          shasum -a 256 bin/helm-ai-kernel-* | sed 's#.*/##' > /tmp/build2.sha256
       - name: Diff hashes (must be identical)
         run: |
           diff /tmp/build1.sha256 /tmp/build2.sha256 \
@@ -284,7 +284,7 @@ jobs:
       - name: Stage Homebrew formula
         run: |
           mkdir -p Formula
-          cp release-assets/helm.rb Formula/helm.rb
+          cp release-assets/helm-ai-kernel.rb Formula/helm-ai-kernel.rb
       - name: Push formula to mindburnlabs/homebrew-tap
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
@@ -297,10 +297,10 @@ jobs:
           git config --global user.email "release@mindburn.org"
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/mindburnlabs/homebrew-tap.git" tap
           mkdir -p tap/Formula
-          cp Formula/helm.rb tap/Formula/helm.rb
+          cp Formula/helm-ai-kernel.rb tap/Formula/helm-ai-kernel.rb
           cd tap
-          git add Formula/helm.rb
-          git commit -m "Update helm formula to ${GITHUB_REF_NAME}" || exit 0
+          git add Formula/helm-ai-kernel.rb
+          git commit -m "Update helm-ai-kernel formula to ${GITHUB_REF_NAME}" || exit 0
           git push origin HEAD:main
 
   github-release:

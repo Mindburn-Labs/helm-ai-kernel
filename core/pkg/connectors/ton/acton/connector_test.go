@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts/actuators"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/effects"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 )
 
 type fakeExecutor struct {

@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/artifacts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/interfaces"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/manifest"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/receipts/policies"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/interfaces"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receipts/policies"
 )
 
 // UsageMeter is an optional interface for recording execution usage events.

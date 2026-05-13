@@ -12,8 +12,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read public HELM OSS demo health
-         * @description Public health endpoint for the self-hostable HELM OSS proof console.
+         * Read public HELM AI Kernel demo health
+         * @description Public health endpoint for the self-hostable HELM AI Kernel proof console.
          *     Includes build and version metadata used by deployment smoke tests.
          */
         get: operations["getPublicDemoHealth"];
@@ -36,7 +36,7 @@ export interface paths {
         put?: never;
         /**
          * Run the Agent Tool Call Boundary sandbox scenario
-         * @description Evaluates a sample action through the HELM OSS guardian path and emits
+         * @description Evaluates a sample action through the HELM AI Kernel guardian path and emits
          *     a signed receipt. The scenario is sandboxed and dispatches no external
          *     side effects.
          */
@@ -56,7 +56,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Verify a HELM OSS demo receipt */
+        /** Verify a HELM AI Kernel demo receipt */
         post: operations["verifyPublicDemoReceipt"];
         delete?: never;
         options?: never;
@@ -201,8 +201,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read HELM OSS Console bootstrap state
-         * @description Consolidated read-only platform state used by the OSS Console shell.
+         * Read HELM AI Kernel Console bootstrap state
+         * @description Consolidated read-only platform state used by the HELM AI Kernel Console shell.
          *     Values are derived from kernel services and local configuration.
          */
         get: operations["getConsoleBootstrap"];
@@ -2207,7 +2207,7 @@ export interface operations {
                     "application/json": {
                         version: string;
                         commit: string;
-                        helm_oss_version: string;
+                        helm_ai_kernel_version: string;
                         status: string;
                         build_time: string;
                         git_sha: string;
@@ -2238,7 +2238,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description HELM OSS sandbox verdict and receipt */
+            /** @description HELM AI Kernel sandbox verdict and receipt */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2256,7 +2256,7 @@ export interface operations {
                         };
                         verification_hint: string;
                         sandbox_label: string;
-                        helm_oss_version: string;
+                        helm_ai_kernel_version: string;
                     };
                 };
             };

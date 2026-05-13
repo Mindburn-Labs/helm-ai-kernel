@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/conform"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 )
 
 // G1ProofReceipts verifies receipt DAG integrity, signatures,

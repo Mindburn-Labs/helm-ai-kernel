@@ -249,7 +249,7 @@
     {
       "id": "command-tests",
       "title": "CLI command tests",
-      "command": "go test ./core/cmd/helm -count=1",
+      "command": "go test ./core/cmd/helm-ai-kernel -count=1",
       "timeout_seconds": 900,
       "paths": [
         "core/cmd/**",

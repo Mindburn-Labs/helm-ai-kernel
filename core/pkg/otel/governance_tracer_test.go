@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/observability"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	otelapi "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"

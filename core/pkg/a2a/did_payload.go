@@ -25,7 +25,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity/did"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/did"
 )
 
 // IsDID returns true if the supplied agent identifier is a W3C DID URI.

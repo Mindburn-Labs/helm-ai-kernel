@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"unicode/utf8"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/interfaces"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/interfaces"
 )
 
 // Canonicalize converts a raw value into a canonical Artifact.

@@ -3,11 +3,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CLUSTER="${KIND_CLUSTER_NAME:-helm-oss-smoke}"
+CLUSTER="${KIND_CLUSTER_NAME:-helm-ai-kernel-smoke}"
 NAMESPACE="${HELM_SMOKE_NAMESPACE:-helm-smoke}"
 RELEASE="${HELM_SMOKE_RELEASE:-helm-smoke}"
-FULLNAME="${HELM_SMOKE_FULLNAME:-${RELEASE}-helm-firewall}"
-IMAGE="${HELM_SMOKE_IMAGE:-ghcr.io/mindburn-labs/helm-oss:local}"
+FULLNAME="${HELM_SMOKE_FULLNAME:-${RELEASE}-helm-ai-kernel}"
+IMAGE="${HELM_SMOKE_IMAGE:-ghcr.io/mindburn-labs/helm-ai-kernel:local}"
 SIGNING_KEY="${HELM_CHART_SMOKE_SIGNING_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
 API_PORT="${HELM_SMOKE_API_PORT:-18080}"
 ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-helm-admin-smoke}"
@@ -16,7 +16,7 @@ AGENT_ID="${HELM_SMOKE_AGENT_ID:-agent.smoke}"
 KUBE_HELM_IMAGE="${KUBE_HELM_IMAGE:-alpine/helm:3.15.4}"
 CREATED_CLUSTER=0
 PF_PID=""
-TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/helm-oss-kind-smoke.XXXXXX")"
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/helm-ai-kernel-kind-smoke.XXXXXX")"
 
 require() {
     command -v "$1" >/dev/null 2>&1 || {
@@ -52,7 +52,7 @@ helm_runner() {
         kube-helm "$@"
         return
     fi
-    if command -v helm >/dev/null 2>&1 && helm version --short >/dev/null 2>&1 && helm template --help >/dev/null 2>&1; then
+    if command -v helm >/dev/null 2>&1 && helm-ai-kernel version --short >/dev/null 2>&1 && helm template --help >/dev/null 2>&1; then
         helm "$@"
         return
     fi

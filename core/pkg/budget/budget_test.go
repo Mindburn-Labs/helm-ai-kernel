@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/budget"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/budget"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

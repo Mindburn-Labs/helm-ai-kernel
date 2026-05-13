@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 func TestFinal_NewEd25519Signer(t *testing.T) {

@@ -3,7 +3,7 @@ package threatscan
 import (
 	"strings"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // promptArmorRules detects injected instruction blocks before they reach a tool

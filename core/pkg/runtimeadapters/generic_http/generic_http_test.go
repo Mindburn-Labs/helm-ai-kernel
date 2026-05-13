@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/proofgraph"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/runtimeadapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters"
 )
 
 func TestGenericHTTPAdapterIntercept(t *testing.T) {
@@ -22,7 +22,7 @@ func TestGenericHTTPAdapterIntercept(t *testing.T) {
 	req := &runtimeadapters.AdaptedRequest{
 		RuntimeType: "http",
 		ToolName:    "github.create_issue",
-		Arguments:   map[string]any{"repo": "helm-oss", "title": "Bug report"},
+		Arguments:   map[string]any{"repo": "helm-ai-kernel", "title": "Bug report"},
 		PrincipalID: "ve-recruiter",
 	}
 

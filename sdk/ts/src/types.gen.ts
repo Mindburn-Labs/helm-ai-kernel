@@ -5111,7 +5111,7 @@ export interface GetPublicDemoHealth200Response {
      * @type {string}
      * @memberof GetPublicDemoHealth200Response
      */
-    helm_oss_version: string;
+    helm_ai_kernel_version: string;
     /**
      *
      * @type {string}
@@ -5144,7 +5144,7 @@ export interface GetPublicDemoHealth200Response {
 export function instanceOfGetPublicDemoHealth200Response(value: object): boolean {
     if (!('version' in value)) return false;
     if (!('commit' in value)) return false;
-    if (!('helm_oss_version' in value)) return false;
+    if (!('helm_ai_kernel_version' in value)) return false;
     if (!('status' in value)) return false;
     if (!('build_time' in value)) return false;
     if (!('git_sha' in value)) return false;
@@ -5164,7 +5164,7 @@ export function GetPublicDemoHealth200ResponseFromJSONTyped(json: any, ignoreDis
 
         'version': json['version'],
         'commit': json['commit'],
-        'helm_oss_version': json['helm_oss_version'],
+        'helm_ai_kernel_version': json['helm_ai_kernel_version'],
         'status': json['status'],
         'build_time': json['build_time'],
         'git_sha': json['git_sha'],
@@ -5180,7 +5180,7 @@ export function GetPublicDemoHealth200ResponseToJSON(value?: GetPublicDemoHealth
 
         'version': value['version'],
         'commit': value['commit'],
-        'helm_oss_version': value['helm_oss_version'],
+        'helm_ai_kernel_version': value['helm_ai_kernel_version'],
         'status': value['status'],
         'build_time': value['build_time'],
         'git_sha': value['git_sha'],
@@ -8421,7 +8421,7 @@ export interface RunPublicDemo200Response {
      * @type {string}
      * @memberof RunPublicDemo200Response
      */
-    helm_oss_version: string;
+    helm_ai_kernel_version: string;
 }
 
 
@@ -8446,7 +8446,7 @@ export function instanceOfRunPublicDemo200Response(value: object): boolean {
     if (!('proof_refs' in value)) return false;
     if (!('verification_hint' in value)) return false;
     if (!('sandbox_label' in value)) return false;
-    if (!('helm_oss_version' in value)) return false;
+    if (!('helm_ai_kernel_version' in value)) return false;
     return true;
 }
 
@@ -8466,7 +8466,7 @@ export function RunPublicDemo200ResponseFromJSONTyped(json: any, ignoreDiscrimin
         'proof_refs': RunPublicDemo200ResponseProofRefsFromJSON(json['proof_refs']),
         'verification_hint': json['verification_hint'],
         'sandbox_label': json['sandbox_label'],
-        'helm_oss_version': json['helm_oss_version'],
+        'helm_ai_kernel_version': json['helm_ai_kernel_version'],
     };
 }
 
@@ -8482,7 +8482,7 @@ export function RunPublicDemo200ResponseToJSON(value?: RunPublicDemo200Response 
         'proof_refs': RunPublicDemo200ResponseProofRefsToJSON(value['proof_refs']),
         'verification_hint': value['verification_hint'],
         'sandbox_label': value['sandbox_label'],
-        'helm_oss_version': value['helm_oss_version'],
+        'helm_ai_kernel_version': value['helm_ai_kernel_version'],
     };
 }
 

@@ -6,7 +6,7 @@
 #
 # Non-deterministic builtins (http.send, time.now_ns, rand.intn,
 # crypto.x509.parse_certificates) are forbidden by
-# core/pkg/policybundles/rego/capabilities.json so the helm-oss kernel
+# core/pkg/policybundles/rego/capabilities.json so the helm-ai-kernel kernel
 # can replay decisions deterministically.
 
 package helm.policy

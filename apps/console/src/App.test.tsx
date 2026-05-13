@@ -117,7 +117,7 @@ describe("HELM Console", () => {
         effect_id: "demo.export_customer_list",
         status: "DENY",
         timestamp: "2026-05-05T00:03:00Z",
-        executor_id: "demo.agent@helm-oss",
+        executor_id: "demo.agent@helm-ai-kernel",
         output_hash: "sha256:demo",
         signature: "sig",
         lamport_clock: 4,
@@ -125,8 +125,8 @@ describe("HELM Console", () => {
       },
       proof_refs: { decision_id: "dec_demo", receipt_id: "rcpt_demo", receipt_hash: "sha256:receipt" },
       verification_hint: "/api/demo/verify",
-      sandbox_label: "HELM OSS public sandbox - no external side effects",
-      helm_oss_version: "0.5.0",
+      sandbox_label: "HELM AI Kernel public sandbox - no external side effects",
+      helm_ai_kernel_version: "0.5.0",
     });
     apiMock.verifyPublicDemoReceipt.mockResolvedValue({
       valid: true,

@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/conform"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 	"gopkg.in/yaml.v3"
 )
 

@@ -20,9 +20,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/channels"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/channels/slack"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/channels/telegram"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/channels"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/channels/slack"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/channels/telegram"
 )
 
 func main() {

@@ -114,7 +114,7 @@ func seedBuildAttestations(ctx *RunContext) error {
 	}
 	if err := writeJSON(filepath.Join(attestDir, "provenance.json"), map[string]any{
 		"schema_version": "helm.provenance.v1",
-		"builder":        "helm conform --level",
+		"builder":        "helm-ai-kernel conform --level",
 		"run_id":         ctx.RunID,
 		"created_at":     now,
 	}); err != nil {

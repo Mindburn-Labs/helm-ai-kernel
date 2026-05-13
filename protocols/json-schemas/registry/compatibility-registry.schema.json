@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/Mindburn-Labs/helm-oss/schemas/compatibility-registry.schema.json",
+  "$id": "https://github.com/Mindburn-Labs/helm-ai-kernel/schemas/compatibility-registry.schema.json",
   "title": "HELM Compatibility Registry",
   "description": "Machine-readable compatibility matrix for HELM sandbox providers and orchestrator adapters. Published with each release.",
   "type": "object",

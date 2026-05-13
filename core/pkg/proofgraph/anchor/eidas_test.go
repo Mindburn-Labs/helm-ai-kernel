@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/trust"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

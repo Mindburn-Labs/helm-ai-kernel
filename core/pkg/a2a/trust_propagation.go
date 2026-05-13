@@ -15,7 +15,7 @@
 package a2a
 
 import (
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/trust"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust"
 )
 
 // ── Configuration ─────────────────────────────────────────────────

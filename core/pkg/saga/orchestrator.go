@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
 
 // SagaStatus tracks the lifecycle of a saga run.

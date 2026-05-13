@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # First Governed Call — OpenAI via HELM MCP
-# Requires: helm mcp serve running on localhost:8080
+# Requires: helm-ai-kernel mcp serve running on localhost:8080
 
 BASE_URL="${HELM_BASE_URL:-http://localhost:8080}"
 

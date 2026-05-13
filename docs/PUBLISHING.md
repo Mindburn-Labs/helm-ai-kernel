@@ -5,14 +5,22 @@ last_reviewed: 2026-05-05
 
 # Publishing
 
-Use this page when preparing or consuming HELM OSS release and package artifacts.
+Publishing defines the current source-backed release and package artifact contract for HELM AI Kernel.
+
+## Audience
+
+This page is for maintainers preparing a release and consumers checking whether a binary, SDK package, container image, or evidence bundle is actually part of the current HELM AI Kernel release surface.
+
+## Outcome
+
+You should know which package identities are source-backed, which registry claims require separate proof, and which checks must pass before a release artifact is documented as published.
 
 ## Source Truth
 
-- Public route: `helm-oss/publishing`
-- Source document: `helm-oss/docs/PUBLISHING.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/publishing`
+- Source document: `helm-ai-kernel/docs/PUBLISHING.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -48,12 +56,12 @@ The repository retains packaging metadata for the kernel binaries, container ima
 
 | Surface | Package Identity |
 | --- | --- |
-| CLI/Homebrew | `mindburnlabs/tap/helm` backed by `mindburnlabs/homebrew-tap` |
-| TypeScript SDK | `@mindburn/helm` |
+| CLI/Homebrew | `mindburnlabs/tap/helm-ai-kernel` backed by `mindburnlabs/homebrew-tap` |
+| TypeScript SDK | `@mindburn/helm-ai-kernel` |
 | Python SDK | `helm-sdk` |
 | Rust SDK | `helm-sdk` |
 | Java SDK | Source-available local Maven build under `sdk/java`; public package coordinate not verified |
-| Go SDK | `github.com/Mindburn-Labs/helm-oss/sdk/go@main`; pin `@main` or a commit until tagged module releases are aligned |
+| Go SDK | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@main`; pin `@main` or a commit until tagged module releases are aligned |
 
 ## Release Inputs
 
@@ -67,8 +75,8 @@ Before tagging a release:
 4. run `make sdk-openapi-check` and `make sdk-examples-smoke`
 5. run `make release-assets`
 6. verify that SDK package versions match `VERSION`
-7. verify `helm verify evidence-pack.tar`; run
-   `helm verify evidence-pack.tar --online` only when the public proof endpoint
+7. verify `helm-ai-kernel verify evidence-pack.tar`; run
+   `helm-ai-kernel verify evidence-pack.tar --online` only when the public proof endpoint
    and credentials for that release are available
 8. run `make release-binaries-reproducible` when validating that release binaries are reproducible from the checked-in source and pinned build metadata
 
@@ -83,18 +91,18 @@ The retained workflow set under `.github/workflows/` covers:
 - manual publication workflows for npm, PyPI, crates.io, and Maven-compatible distribution
 
 Current public GitHub release: `v0.5.0`, published on 2026-05-13 at
-<https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.5.0>.
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.0>.
 
 There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
 actual release baseline when auditing the `v0.5.0` delta.
 
 Its attached assets are:
 
-- `helm-darwin-amd64`
-- `helm-darwin-arm64`
-- `helm-linux-amd64`
-- `helm-linux-arm64`
-- `helm-windows-amd64.exe`
+- `helm-ai-kernel-darwin-amd64`
+- `helm-ai-kernel-darwin-arm64`
+- `helm-ai-kernel-linux-amd64`
+- `helm-ai-kernel-linux-arm64`
+- `helm-ai-kernel-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
 - `v0.5.0.openvex.json`
@@ -102,13 +110,13 @@ Its attached assets are:
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
 - `sample-policy-material.tar`
-- `helm.mcpb`
-- `helm.rb`
+- `helm-ai-kernel.mcpb`
+- `helm-ai-kernel.rb`
 - matching `*.cosign.bundle` files for every primary asset
 
 `sample-policy-material.tar` includes the sample policy and its referenced EU
 AI Act high-risk reference pack. The Homebrew tap is
-`mindburnlabs/homebrew-tap`, and `mindburnlabs/tap/helm` resolves to `0.5.0`.
+`mindburnlabs/homebrew-tap`, and `mindburnlabs/tap/helm-ai-kernel` resolves to `0.5.0`.
 
 The retained SDK package manifests are versioned with `VERSION`, but npm,
 PyPI, crates.io, and Maven publication require the corresponding registry
@@ -132,10 +140,10 @@ Verify a downloaded binary blob:
 
 ```bash
 cosign verify-blob \
-  --bundle helm-linux-amd64.cosign.bundle \
-  --certificate-identity-regexp "https://github.com/Mindburn-Labs/helm-oss" \
+  --bundle helm-ai-kernel-linux-amd64.cosign.bundle \
+  --certificate-identity-regexp "https://github.com/Mindburn-Labs/helm-ai-kernel" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  helm-linux-amd64
+  helm-ai-kernel-linux-amd64
 ```
 
 Verify a published container image when a container image has been published
@@ -143,9 +151,9 @@ for the release:
 
 ```bash
 cosign verify \
-  --certificate-identity-regexp "Mindburn-Labs/helm-oss" \
+  --certificate-identity-regexp "Mindburn-Labs/helm-ai-kernel" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/mindburn-labs/helm-oss:<version>
+  ghcr.io/mindburn-labs/helm-ai-kernel:<version>
 ```
 
 The same recipe is documented in `docs/VERIFICATION.md`. The local helper

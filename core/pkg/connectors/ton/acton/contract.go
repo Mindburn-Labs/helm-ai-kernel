@@ -1,8 +1,8 @@
 package acton
 
 import (
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/registry/connectors"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/tooling"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tooling"
 )
 
 const ConnectorVersion = "0.1.0"

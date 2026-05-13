@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/proofgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 )
 
 // DistributedStore wraps a GSet and implements the proofgraph.Store interface.

@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/observability"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 )
 
-// TestGenAIKeyStability pins the OTel GenAI semconv attribute keys helm-oss
+// TestGenAIKeyStability pins the OTel GenAI semconv attribute keys helm-ai-kernel
 // emits. Renaming any of these constants is a backwards-incompatible change:
 // downstream SIEM exporters, the OTel collector pipeline, and any user-built
 // dashboards index spans by these exact strings.

@@ -4,14 +4,14 @@
 require "optparse"
 
 ARCHES = {
-  "darwin-arm64" => "helm-darwin-arm64",
-  "darwin-amd64" => "helm-darwin-amd64",
-  "linux-arm64" => "helm-linux-arm64",
-  "linux-amd64" => "helm-linux-amd64"
+  "darwin-arm64" => "helm-ai-kernel-darwin-arm64",
+  "darwin-amd64" => "helm-ai-kernel-darwin-amd64",
+  "linux-arm64" => "helm-ai-kernel-linux-arm64",
+  "linux-amd64" => "helm-ai-kernel-linux-amd64"
 }.freeze
 
 options = {
-  repo: "Mindburn-Labs/helm-oss",
+  repo: "Mindburn-Labs/helm-ai-kernel",
   checksums: File.expand_path("../../bin/SHA256SUMS.txt", __dir__)
 }
 
@@ -46,7 +46,7 @@ end
 puts <<~RUBY
   # frozen_string_literal: true
 
-  class Helm < Formula
+  class HelmAiKernel < Formula
     desc "Fail-closed execution firewall for AI agents"
     homepage "https://github.com/#{options[:repo]}"
     version "#{version}"
@@ -73,12 +73,12 @@ puts <<~RUBY
     end
 
     def install
-      binary = Dir["helm-*"].first || "helm"
-      bin.install binary => "helm"
+      binary = Dir["helm-ai-kernel-*"].first || "helm-ai-kernel"
+      bin.install binary => "helm-ai-kernel"
     end
 
     test do
-      assert_match version.to_s, shell_output("\#{bin}/helm version 2>&1")
+      assert_match version.to_s, shell_output("\#{bin}/helm-ai-kernel version 2>&1")
     end
   end
 RUBY

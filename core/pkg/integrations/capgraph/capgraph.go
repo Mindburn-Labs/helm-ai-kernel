@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/integrations/manifest"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/integrations/manifest"
 )
 
 // CapabilityURN is the canonical identity of an action:

@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/benchmarks`
-- Source document: `helm-oss/docs/BENCHMARKS.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/benchmarks`
+- Source document: `helm-ai-kernel/docs/BENCHMARKS.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -69,7 +69,7 @@ The benchmark code in `core/benchmarks/` focuses on the hot paths used by the OS
 
 ## Test-case count (referenced by pitch decks)
 
-As of 2026-04-18, `helm-oss/core` ships **8,930 Go test cases**, counted via:
+As of 2026-04-18, `helm-ai-kernel/core` ships **8,930 Go test cases**, counted via:
 
 ```bash
 cd core && go test -list '.*' ./... 2>&1 | grep -c '^Test'

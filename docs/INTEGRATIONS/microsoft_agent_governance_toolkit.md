@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/integrations/microsoft-agent-governance-toolkit`
-- Source document: `helm-oss/docs/INTEGRATIONS/microsoft_agent_governance_toolkit.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/integrations/microsoft-agent-governance-toolkit`
+- Source document: `helm-ai-kernel/docs/INTEGRATIONS/microsoft_agent_governance_toolkit.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -56,7 +56,7 @@ HELM should not replace AGT in a customer environment that has already standardi
 
 ## TypeScript SDK Coverage
 
-The `@mindburn/helm` TypeScript SDK includes adapter helpers for the framework families called out in the AGT launch surface:
+The `@mindburn/helm-ai-kernel` TypeScript SDK includes adapter helpers for the framework families called out in the AGT launch surface:
 
 | Framework | Helper |
 | --- | --- |
@@ -69,10 +69,10 @@ The `@mindburn/helm` TypeScript SDK includes adapter helpers for the framework f
 Each helper normalizes a native tool-call event into an OpenAI-compatible HELM request and submits it through `chatCompletionsWithReceipt`. The framework adapter does not execute the tool. It prepares the intent for HELM policy, then returns the kernel-issued governance metadata from `X-Helm-*` headers.
 
 ```ts
-import { HelmClient, createAgentFrameworkAdapter, fromLangGraphToolCall } from "@mindburn/helm";
+import { HelmClient, createAgentFrameworkAdapter, fromLangGraphToolCall } from "@mindburn/helm-ai-kernel";
 
-// This example targets `helm server` on its default API port. Use
-// http://localhost:7714 for `helm serve` or http://localhost:9090/v1 for the
+// This example targets `helm-ai-kernel server` on its default API port. Use
+// http://localhost:7714 for `helm-ai-kernel serve` or http://localhost:9090/v1 for the
 // OpenAI-compatible proxy path.
 const helm = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
 const adapter = createAgentFrameworkAdapter(helm, {

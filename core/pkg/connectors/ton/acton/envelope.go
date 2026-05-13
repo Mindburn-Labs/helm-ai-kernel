@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
 
 const (

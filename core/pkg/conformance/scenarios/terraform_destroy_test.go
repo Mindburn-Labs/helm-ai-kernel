@@ -3,8 +3,8 @@ package scenarios
 import (
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/governance"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/governance"
 )
 
 // Scenario 1: Terraform Destroy / Protected DB

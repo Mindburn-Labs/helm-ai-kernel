@@ -5,11 +5,11 @@ last_reviewed: 2026-05-05
 
 # Kubernetes Deployment
 
-This page is for operators deploying the HELM OSS runtime with the repository-owned Kubernetes Helm chart. The outcome is a chart render, a production-safe value set, and a smoke path for health, receipts, and evidence persistence.
+This page is for operators deploying the HELM AI Kernel runtime with the repository-owned Kubernetes Helm chart. The outcome is a chart render, a production-safe value set, and a smoke path for health, receipts, and evidence persistence.
 
 ## Audience
 
-Use this page if you operate Kubernetes and need to run HELM OSS as a self-hosted execution boundary with durable receipts, signing keys, and optional ingress.
+Use this page if you operate Kubernetes and need to run HELM AI Kernel as a self-hosted execution boundary with durable receipts, signing keys, and optional ingress.
 
 ## Outcome
 
@@ -31,7 +31,7 @@ flowchart LR
   Runtime --> Snapshot["verified EffectivePolicySnapshot"]
   Values --> Secrets["signing and API-key Secrets"]
   Values --> PVC["persistent /data PVC"]
-  Snapshot --> Pod["helm serve pod"]
+  Snapshot --> Pod["helm-ai-kernel serve pod"]
   Secrets --> Pod
   PVC --> Pod
   Pod --> Service["ClusterIP service"]
@@ -44,7 +44,7 @@ flowchart LR
 ```bash
 make helm-chart-smoke
 helm lint deploy/helm-chart
-helm template helm-oss deploy/helm-chart
+helm template helm-ai-kernel deploy/helm-chart
 ```
 
 Expected output: lint succeeds, `helm template` emits Deployment, Service, ConfigMap, Secret, PVC, and optional ServiceMonitor manifests, and `make helm-chart-smoke` completes without rendering a production chart that lacks signing or API key material.
@@ -65,7 +65,7 @@ hints are recovered by `helm.policy.source.pollInterval`.
 ## Production Install Skeleton
 
 ```bash
-helm install helm-oss deploy/helm-chart \
+helm install helm-ai-kernel deploy/helm-chart \
   --set helm.production=true \
   --set helm.signing.key=<64-char-ed25519-seed-hex> \
   --set helm.auth.adminAPIKey=<admin-api-key> \
@@ -86,7 +86,7 @@ kubectl create secret generic helm-auth \
 kubectl create secret generic helm-policy-trust \
   --from-literal=HELM_POLICY_TRUST_PUBLIC_KEY=<64-char-ed25519-public-key-hex>
 
-helm upgrade --install helm-oss deploy/helm-chart \
+helm upgrade --install helm-ai-kernel deploy/helm-chart \
   --set helm.production=true \
   --set helm.policy.source.kind=controlplane \
   --set helm.policy.source.controlplane.url=https://helm-controlplane.example.internal \
@@ -100,10 +100,10 @@ helm upgrade --install helm-oss deploy/helm-chart \
 
 | Value | Default | Source-backed behavior |
 | --- | --- | --- |
-| `image.repository` | `ghcr.io/mindburn-labs/helm-oss` | Container image used by the Deployment. |
+| `image.repository` | `ghcr.io/mindburn-labs/helm-ai-kernel` | Container image used by the Deployment. |
 | `image.tag` | chart `appVersion` | Defaults to `0.5.0` from `Chart.yaml`. |
 | `helm.bindAddr` | `0.0.0.0` | Required because the pod must bind beyond loopback. |
-| `service.port` | `8080` | Runtime HTTP port passed to `helm serve --port`. |
+| `service.port` | `8080` | Runtime HTTP port passed to `helm-ai-kernel serve --port`. |
 | `service.healthPort` | `8081` | Health probe port via `HELM_HEALTH_PORT`. |
 | `service.metricsPort` | `9090` | Metrics container port when metrics are enabled. |
 | `helm.production` | `false` | Production rendering refuses missing signing/auth material. |
@@ -123,8 +123,8 @@ helm upgrade --install helm-oss deploy/helm-chart \
 ## Smoke Checks
 
 ```bash
-kubectl rollout status deploy/helm-oss-helm-firewall
-kubectl port-forward svc/helm-oss-helm-firewall 8080:8080
+kubectl rollout status deploy/helm-ai-kernel
+kubectl port-forward svc/helm-ai-kernel 8080:8080
 curl -fsS http://127.0.0.1:8080/health
 ```
 
@@ -144,4 +144,4 @@ Then run a governed request through the public API or OpenAI-compatible proxy an
 
 ## Not Covered
 
-This page documents the repository-owned OSS chart only. Managed enterprise deployment, tenant migrations, SSO, SIEM, and retention controls belong to the HELM Enterprise docs.
+This page documents the repository-owned HELM AI Kernel chart only. Managed deployment, tenant migrations, SSO, SIEM, and retention controls belong to the HELM AI Enterprise docs.

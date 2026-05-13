@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/prg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 )
 
 // TEST-003: Benchmark tests for Guardian policy evaluation.

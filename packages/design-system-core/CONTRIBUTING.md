@@ -1,6 +1,6 @@
 # Contributing to Mindburn Labs Design System
 
-Thank you for your interest in improving the foundational UI architecture of Mindburn Labs. This design-system core is shared by HELM OSS and downstream products, but downstream skins do not define HELM OSS conformance.
+Thank you for your interest in improving the foundational UI architecture of Mindburn Labs. This design-system core is shared by HELM AI Kernel and downstream products, but downstream skins do not define HELM AI Kernel conformance.
 
 ## Getting Started
 1. Ensure your Node version meets the required project standard (`>=22.22.2`).

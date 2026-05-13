@@ -62,7 +62,7 @@ func TestBoundaryAssertions(t *testing.T) {
 		assertions := DefaultKernelBoundaryAssertions()
 
 		// This may fail if package doesn't exist - that's OK for coverage
-		violations, err := assertions.ValidatePackage("github.com/Mindburn-Labs/helm-oss/core/pkg/kernel")
+		violations, err := assertions.ValidatePackage("github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel")
 		if err != nil {
 			t.Logf("ValidatePackage returned error: %v (expected in test environment)", err)
 		}

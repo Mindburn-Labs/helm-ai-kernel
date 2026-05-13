@@ -7,7 +7,7 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Security and compliance reviewers mapping HELM OSS receipts and conformance evidence to NIST critical-infrastructure concerns.
+Security and compliance reviewers mapping HELM AI Kernel receipts and conformance evidence to NIST critical-infrastructure concerns.
 
 ## Outcome
 
@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/compliance/nist-ai-agent-critical-infrastructure`
-- Source document: `helm-oss/docs/compliance/nist-ai-agent-critical-infrastructure.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/compliance/nist-ai-agent-critical-infrastructure`
+- Source document: `helm-ai-kernel/docs/compliance/nist-ai-agent-critical-infrastructure.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -48,7 +48,7 @@ flowchart LR
   C --> D
 ```
 
-This page maps current NIST AI-agent and critical-infrastructure work to HELM OSS controls.
+This page maps current NIST AI-agent and critical-infrastructure work to HELM AI Kernel controls.
 
 ## Source Status
 

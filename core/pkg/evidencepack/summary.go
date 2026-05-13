@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
 
 // EvidenceSummary is a constant-size tuple that proves pack completeness.

@@ -7,8 +7,8 @@ package receipts
 import (
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/integrations/capgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/integrations/capgraph"
 )
 
 // IntegrationReceipt is the unified receipt envelope for all integration executions.

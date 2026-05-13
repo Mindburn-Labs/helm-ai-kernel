@@ -3,7 +3,7 @@
 
 ## Purpose
 
-Active tooling surface for the `helm-oss` project.
+Active tooling surface for the `helm-ai-kernel` project.
 
 ## Canonical Interface
 
@@ -24,7 +24,7 @@ Active tooling surface for the `helm-oss` project.
   survive restart with a stable root key.
 - `make compose-smoke` runs the same runtime checks through `docker-compose.yml`.
 - `make helm-chart-smoke` renders the Kubernetes chart with a Kubernetes Helm
-  binary. The local `helm` command may be the HELM OSS CLI, so set
+  binary. The local `helm` command may be the HELM AI Kernel CLI, so set
   `KUBE_HELM_CMD` or let the script use the pinned containerized Helm runner.
 - `make kind-smoke` installs the chart into kind, runs the governed-call and
   evidence/replay checks, restarts the pod, and verifies signing-key stability.
@@ -33,7 +33,7 @@ Active tooling surface for the `helm-oss` project.
 
 ## Quality Gate Tooling
 
-`scripts/ci/quality.py` is the registry runner for HELM OSS quality profiles.
+`scripts/ci/quality.py` is the registry runner for HELM AI Kernel quality profiles.
 It supports profile execution, path impact filtering, Advisory gates, timeouts,
 and GitHub Actions annotations. The registry lives in
 `scripts/ci/quality-gates.json`; validate it with `make quality-self-test`

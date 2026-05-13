@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/store/objstore"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store/objstore"
 )
 
 // Store implements ObjectStore using the local filesystem.

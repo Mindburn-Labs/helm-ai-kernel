@@ -1,5 +1,5 @@
 name: Documentation gap
-description: Report missing, stale, or unclear HELM OSS documentation.
+description: Report missing, stale, or unclear HELM AI Kernel documentation.
 title: "[Docs]: "
 labels: ["documentation", "needs-triage"]
 body:

@@ -1,5 +1,5 @@
 {
-  "name": "helm-oss-root",
+  "name": "helm-ai-kernel-root",
   "private": true,
   "pnpm": {
     "onlyBuiltDependencies": [

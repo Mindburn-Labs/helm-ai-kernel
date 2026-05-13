@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // ── Ed25519 Tests ────────────────────────────────────────────────

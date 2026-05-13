@@ -7,7 +7,7 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Security reviewers checking which OWASP Agentic AI Top 10 risks are covered by current HELM OSS evidence.
+Security reviewers checking which OWASP Agentic AI Top 10 risks are covered by current HELM AI Kernel evidence.
 
 ## Outcome
 
@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/security/owasp-agentic-top10-mapping`
-- Source document: `helm-oss/docs/security/owasp-agentic-top10-coverage.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/security/owasp-agentic-top10-mapping`
+- Source document: `helm-ai-kernel/docs/security/owasp-agentic-top10-coverage.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -67,7 +67,7 @@ Use this page as an implementation map. Validation still depends on the code, te
 
 ## Coverage Discipline
 
-OWASP Agentic Top 10 coverage must stay evidence-backed. For each risk, name the HELM OSS control, the code or schema that implements it, the public example or fixture that exercises it, and the residual risk that remains outside the OSS boundary. Do not imply that policy evaluation replaces app authorization, secrets management, sandboxing, or network egress controls. The strongest public page shows both prevention and observability: how a risky action is blocked, how the receipt records it, how the verifier checks it, and what an operator should inspect when the action is allowed under policy.
+OWASP Agentic Top 10 coverage must stay evidence-backed. For each risk, name the HELM AI Kernel control, the code or schema that implements it, the public example or fixture that exercises it, and the residual risk that remains outside the OSS boundary. Do not imply that policy evaluation replaces app authorization, secrets management, sandboxing, or network egress controls. The strongest public page shows both prevention and observability: how a risky action is blocked, how the receipt records it, how the verifier checks it, and what an operator should inspect when the action is allowed under policy.
 
 <!-- docs-depth-final-pass-extra -->
  Link every mitigation to a concrete evidence artifact so evaluators can check the claim without reading unrelated implementation internals.

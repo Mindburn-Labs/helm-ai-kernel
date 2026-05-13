@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/conform"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 	"github.com/stretchr/testify/require"
 )
 

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/sandbox"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
 )
 
 // SandboxesConfig configures the Docker Sandboxes adapter.

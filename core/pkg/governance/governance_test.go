@@ -3,7 +3,7 @@ package governance
 import (
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
 func TestPolicyEngine_Evaluate(t *testing.T) {

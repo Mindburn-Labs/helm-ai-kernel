@@ -3,7 +3,7 @@
 
 ## Purpose
 
-Active GitHub automation and community metadata surface for the `helm-oss`
+Active GitHub automation and community metadata surface for the `helm-ai-kernel`
 project.
 
 ## Canonical Interface

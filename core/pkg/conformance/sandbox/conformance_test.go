@@ -3,8 +3,8 @@ package sandbox
 import (
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/conformance"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts/actuators"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conformance"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

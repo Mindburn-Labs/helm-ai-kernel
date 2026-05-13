@@ -1,5 +1,5 @@
 // Package elastic_ecs implements an OTel SpanExporter that translates
-// helm-oss governance spans into ECS-shaped documents posted to the
+// helm-ai-kernel governance spans into ECS-shaped documents posted to the
 // Elasticsearch _bulk API.
 //
 // Wire shape: each ReadOnlySpan becomes one ECS document with `@timestamp`,
@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/observability"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )

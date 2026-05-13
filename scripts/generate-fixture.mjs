@@ -1,4 +1,4 @@
-// Generate the minimal golden fixture for HELM OSS.
+// Generate the minimal golden fixture for HELM AI Kernel.
 // Run: node scripts/generate-fixture.mjs
 // Output: fixtures/minimal/ with deterministic 00_INDEX.json, 01_SCORE.json, and EXPECTED.json
 

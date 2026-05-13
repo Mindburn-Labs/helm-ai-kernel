@@ -17,18 +17,18 @@ echo "==> HELM Release Asset Dry Run v$VERSION"
 RELEASE_ASSETS_DIR="$ASSETS_DIR" make release-assets >/dev/null
 
 required=(
-  helm-linux-amd64
-  helm-linux-arm64
-  helm-darwin-amd64
-  helm-darwin-arm64
-  helm-windows-amd64.exe
-  helm.mcpb
+  helm-ai-kernel-linux-amd64
+  helm-ai-kernel-linux-arm64
+  helm-ai-kernel-darwin-amd64
+  helm-ai-kernel-darwin-arm64
+  helm-ai-kernel-windows-amd64.exe
+  helm-ai-kernel.mcpb
   sbom.json
   "v$VERSION.openvex.json"
   release.high_risk.v3.toml
   sample-policy-material.tar
   evidence-pack.tar
-  helm.rb
+  helm-ai-kernel.rb
   release-attestation.json
   SHA256SUMS.txt
 )
@@ -41,7 +41,7 @@ for artifact in "${required[@]}"; do
 done
 
 (cd "$ASSETS_DIR" && shasum -a 256 -c SHA256SUMS.txt >/dev/null)
-"$ROOT/bin/helm" verify "$ASSETS_DIR/evidence-pack.tar" >/dev/null
+"$ROOT/bin/helm-ai-kernel" verify "$ASSETS_DIR/evidence-pack.tar" >/dev/null
 
 python3 - "$ASSETS_DIR" "$VERSION" <<'PY'
 import json
@@ -57,18 +57,18 @@ if attestation.get("version") != version:
     raise SystemExit("release attestation version mismatch")
 names = {artifact["name"] for artifact in attestation.get("artifacts", [])}
 required_names = {
-    "helm-linux-amd64",
-    "helm-linux-arm64",
-    "helm-darwin-amd64",
-    "helm-darwin-arm64",
-    "helm-windows-amd64.exe",
-    "helm.mcpb",
+    "helm-ai-kernel-linux-amd64",
+    "helm-ai-kernel-linux-arm64",
+    "helm-ai-kernel-darwin-amd64",
+    "helm-ai-kernel-darwin-arm64",
+    "helm-ai-kernel-windows-amd64.exe",
+    "helm-ai-kernel.mcpb",
     "sbom.json",
     f"v{version}.openvex.json",
     "release.high_risk.v3.toml",
     "sample-policy-material.tar",
     "evidence-pack.tar",
-    "helm.rb",
+    "helm-ai-kernel.rb",
 }
 missing = sorted(required_names - names)
 if missing:
@@ -78,11 +78,11 @@ sbom = json.loads((assets / "sbom.json").read_text(encoding="utf-8"))
 if sbom.get("bomFormat") != "CycloneDX":
     raise SystemExit("sbom.json is not CycloneDX")
 
-formula = (assets / "helm.rb").read_text(encoding="utf-8")
+formula = (assets / "helm-ai-kernel.rb").read_text(encoding="utf-8")
 if version not in formula:
     raise SystemExit("Homebrew formula does not include the release version")
-if "Mindburn-Labs/helm-oss" not in formula:
-    raise SystemExit("Homebrew formula does not point at Mindburn-Labs/helm-oss")
+if "Mindburn-Labs/helm-ai-kernel" not in formula:
+    raise SystemExit("Homebrew formula does not point at Mindburn-Labs/helm-ai-kernel")
 
 with tarfile.open(assets / "sample-policy-material.tar", "r") as tar:
     members = set(tar.getnames())

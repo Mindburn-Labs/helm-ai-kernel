@@ -1,6 +1,6 @@
 # Datadog Logs SIEM exporter
 
-OpenTelemetry `SpanExporter` that translates helm-oss governance spans into
+OpenTelemetry `SpanExporter` that translates helm-ai-kernel governance spans into
 Datadog Logs Intake events posted to `https://http-intake.logs.<site>/api/v2/logs`.
 The OTel GenAI semconv keys (`gen_ai.system`, `gen_ai.request.model`,
 `gen_ai.tool.name`, `gen_ai.tool.call.id`, `gen_ai.usage.input_tokens`,
@@ -12,7 +12,7 @@ log facets.
 
 ```go
 import (
-    "github.com/Mindburn-Labs/helm-oss/core/pkg/connectors/siem/datadog_logs"
+    "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/siem/datadog_logs"
     sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 

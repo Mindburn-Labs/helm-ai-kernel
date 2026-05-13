@@ -1,6 +1,6 @@
 # Canonical UI System
 
-Mindburn UI is governed as one parent-company platform with product-specific layers. `helm-oss/packages/design-system-core` currently hosts `@mindburn/ui-core`, the canonical source for shared primitives, base tokens, semantic state utilities, accessibility primitives, and production CSS.
+Mindburn UI is governed as one parent-company platform with product-specific layers. `helm-ai-kernel/packages/design-system-core` currently hosts `@mindburn/ui-core`, the canonical source for shared primitives, base tokens, semantic state utilities, accessibility primitives, and production CSS.
 
 Sibling and portfolio repositories may consume this foundation, but they do not define HELM conformance. HELM-specific proof, policy, evidence, execution, assistant, route, state, and handoff patterns live in the commercial product layer. Mindburn marketing, docs, and Titan are consumers or skins.
 
@@ -8,7 +8,7 @@ Sibling and portfolio repositories may consume this foundation, but they do not 
 
 | Layer | Path | Authority |
 | --- | --- | --- |
-| Mindburn Core UI foundation | `helm-oss/packages/design-system-core` | Canonical shared primitives and tokens for Mindburn products |
+| Mindburn Core UI foundation | `helm-ai-kernel/packages/design-system-core` | Canonical shared primitives and tokens for Mindburn products |
 | HELM product layer | `helm/packages/design-system-helm` | HELM domain components and patterns |
 | Commercial Console | `helm/apps/console` | Consumer of core plus HELM product layer |
 | Mindburn site UI | `mindburn/src/components/site-ui` | Brand, marketing, editorial, and diagram compositions |

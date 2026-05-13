@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
 
 // BundleManager manages policy bundle CRUD, versioning, and assignment.

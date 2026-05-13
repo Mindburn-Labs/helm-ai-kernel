@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/conform"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 )
 
 // G6Taint validates taint tracking and lineage per §G6.

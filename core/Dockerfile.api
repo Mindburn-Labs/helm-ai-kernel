@@ -15,7 +15,7 @@ RUN apk add --no-cache git make
 # Copy dependency definitions. The OSS root is not a Go module; the kernel
 # module lives under core/.
 COPY core/go.mod core/go.sum ./core/
-RUN --mount=type=cache,id=helm-oss-go-mod,target=/go/pkg/mod cd core && go mod download
+RUN --mount=type=cache,id=helm-ai-kernel-go-mod,target=/go/pkg/mod cd core && go mod download
 
 # Copy source code
 COPY core/ ./core/
@@ -24,8 +24,8 @@ COPY core/ ./core/
 ENV CGO_ENABLED=0
 ENV GOOS=${TARGETOS:-linux}
 ENV GOARCH=${TARGETARCH:-amd64}
-RUN --mount=type=cache,id=helm-oss-go-mod,target=/go/pkg/mod --mount=type=cache,id=helm-oss-go-build,target=/root/.cache/go-build \
-    cd core && go build -ldflags="-s -w" -trimpath -o /app/bin/helm ./cmd/helm
+RUN --mount=type=cache,id=helm-ai-kernel-go-mod,target=/go/pkg/mod --mount=type=cache,id=helm-ai-kernel-go-build,target=/root/.cache/go-build \
+    cd core && go build -ldflags="-s -w" -trimpath -o /app/bin/helm-ai-kernel ./cmd/helm-ai-kernel
 
 # Stage 2: Runtime
 FROM alpine:3.21@sha256:f27cad9117495d32d067133afff942cb2dc745dfe9163e949f6bfe8a6a245339
@@ -36,7 +36,7 @@ WORKDIR /app
 RUN addgroup -S helm && adduser -S helm -G helm
 
 # Copy binary
-COPY --from=builder /app/bin/helm /app/helm
+COPY --from=builder /app/bin/helm-ai-kernel /app/helm-ai-kernel
 
 # Set ownership
 RUN chown -R helm:helm /app
@@ -47,4 +47,4 @@ USER helm
 # Expose API port
 EXPOSE 8080
 
-ENTRYPOINT ["/app/helm"]
+ENTRYPOINT ["/app/helm-ai-kernel"]

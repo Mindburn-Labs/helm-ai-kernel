@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/scheduler"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/scheduler"
 )
 
 // validSpec returns a minimal ScheduleSpec that passes Validate.

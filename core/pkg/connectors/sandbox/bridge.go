@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts/actuators"
-	inner "github.com/Mindburn-Labs/helm-oss/core/pkg/sandbox"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators"
+	inner "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
 )
 
 // RunnerBridge wraps a legacy sandbox.Runner as a partial SandboxActuator.

@@ -1,4 +1,4 @@
-# HELM OSS Compliance Package Source Owner
+# HELM AI Kernel Compliance Package Source Owner
 
 ## Audience
 
@@ -6,7 +6,7 @@ Use this file when changing compliance pack compilation, scorecards, regulatory 
 
 ## Responsibility
 
-`core/pkg/compliance` owns machine-readable compliance support in HELM OSS. Public docs can explain mappings and evidence generation, but this package owns the implementation model and tests.
+`core/pkg/compliance` owns machine-readable compliance support in HELM AI Kernel. Public docs can explain mappings and evidence generation, but this package owns the implementation model and tests.
 
 ## Public Status
 
@@ -14,11 +14,11 @@ Classification: `public-hub`.
 
 Public docs should link here from:
 
-- `helm-oss/compliance/eu-ai-act-high-risk-pack`
-- `helm-oss/compliance/nist-ai-agent-critical-infrastructure`
-- `helm-oss/compliance/nist-ai-rmf-iso-42001-crosswalk`
-- `helm-oss/governance/cncf-application`
-- `helm-oss/verification`
+- `helm-ai-kernel/compliance/eu-ai-act-high-risk-pack`
+- `helm-ai-kernel/compliance/nist-ai-agent-critical-infrastructure`
+- `helm-ai-kernel/compliance/nist-ai-rmf-iso-42001-crosswalk`
+- `helm-ai-kernel/governance/cncf-application`
+- `helm-ai-kernel/verification`
 
 ## Source Map
 

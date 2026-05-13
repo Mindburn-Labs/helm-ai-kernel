@@ -11,7 +11,7 @@
 
     <name>HELM SDK</name>
     <description>Java SDK for HELM — fail-closed tool calling for AI agents</description>
-    <url>https://github.com/Mindburn-Labs/helm-oss</url>
+    <url>https://github.com/Mindburn-Labs/helm-ai-kernel</url>
 
     <licenses>
         <license>
@@ -27,14 +27,14 @@
             <name>Mindburn Labs</name>
             <email>oss@mindburn.org</email>
             <organization>Mindburn Labs</organization>
-            <organizationUrl>https://github.com/Mindburn-Labs/helm-oss</organizationUrl>
+            <organizationUrl>https://github.com/Mindburn-Labs/helm-ai-kernel</organizationUrl>
         </developer>
     </developers>
 
     <scm>
-        <connection>scm:git:git://github.com/Mindburn-Labs/helm-oss.git</connection>
-        <developerConnection>scm:git:ssh://github.com:Mindburn-Labs/helm-oss.git</developerConnection>
-        <url>https://github.com/Mindburn-Labs/helm-oss/tree/main</url>
+        <connection>scm:git:git://github.com/Mindburn-Labs/helm-ai-kernel.git</connection>
+        <developerConnection>scm:git:ssh://github.com:Mindburn-Labs/helm-ai-kernel.git</developerConnection>
+        <url>https://github.com/Mindburn-Labs/helm-ai-kernel/tree/main</url>
     </scm>
 
     <properties>

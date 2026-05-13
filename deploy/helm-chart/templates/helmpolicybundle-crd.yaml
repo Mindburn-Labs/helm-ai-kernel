@@ -4,7 +4,7 @@ kind: CustomResourceDefinition
 metadata:
   name: helmpolicybundles.{{ .Values.helm.policy.source.crd.apiGroup }}
   labels:
-    {{- include "helm-firewall.labels" . | nindent 4 }}
+    {{- include "helm-ai-kernel.labels" . | nindent 4 }}
 spec:
   group: {{ .Values.helm.policy.source.crd.apiGroup }}
   scope: Namespaced

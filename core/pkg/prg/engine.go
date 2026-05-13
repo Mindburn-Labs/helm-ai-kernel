@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	pkg_artifact "github.com/Mindburn-Labs/helm-oss/core/pkg/artifacts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/policycel"
+	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policycel"
 	"github.com/google/cel-go/cel"
 )
 

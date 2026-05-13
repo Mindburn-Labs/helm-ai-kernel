@@ -4,7 +4,7 @@
 // DecisionRequest shape so the kernel never branches on language at
 // decision time.
 //
-// Workstream B / B2 — Phase 2 of the helm-oss 100% SOTA execution plan.
+// Workstream B / B2 — Phase 2 of the helm-ai-kernel 100% SOTA execution plan.
 package cedar
 
 import (

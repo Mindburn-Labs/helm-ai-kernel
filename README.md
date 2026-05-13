@@ -1,13 +1,13 @@
-# HELM OSS
+# HELM AI Kernel
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mindburn-labs/helm-oss/badge)](https://scorecard.dev/viewer/?uri=github.com/mindburn-labs/helm-oss)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mindburn-labs/helm-ai-kernel/badge)](https://scorecard.dev/viewer/?uri=github.com/mindburn-labs/helm-ai-kernel)
 [![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF-Best%20Practices-informational)](BEST_PRACTICES.md)
 [![Release checksums](https://img.shields.io/badge/release-checksums-success)](docs/VERIFICATION.md)
 [![Release attestations](https://img.shields.io/badge/release-attestations-informational)](docs/PUBLISHING.md)
 [![SBOM CycloneDX](https://img.shields.io/badge/SBOM-CycloneDX%201.5-orange)](docs/PUBLISHING.md)
 
-HELM OSS is the fail-closed execution firewall for AI agents.
+HELM AI Kernel is the fail-closed execution firewall for AI agents.
 
 AI models propose. Deterministic systems govern. HELM sits between stochastic
 agent tool calls and infrastructure side effects. It intercepts MCP tools and
@@ -23,20 +23,20 @@ Agent proposal -> HELM boundary -> ALLOW / DENY / ESCALATE -> signed receipt
 
 ## Status
 
-- Repository: `Mindburn-Labs/helm-oss`
-- Root package identity: `helm-oss-root`
+- Repository: `Mindburn-Labs/helm-ai-kernel`
+- Root package identity: `helm-ai-kernel-root`
 - Current public release: `v0.5.0`
 - License: Apache-2.0
 - Supported security line: `0.5.x`; `0.4.x` is best effort
-- Canonical docs: <https://helm.docs.mindburn.org/oss>
+- Canonical docs: <https://helm.docs.mindburn.org/helm-ai-kernel>
 
 The current `v0.5.0` GitHub release was published on 2026-05-13 at
-<https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.5.0>. It includes
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.0>. It includes
 CLI binaries, checksums, SBOM JSON, OpenVEX, release-attestation metadata,
-Cosign bundles, `evidence-pack.tar`, `helm.mcpb`, `helm.rb`, and sample policy
+Cosign bundles, `evidence-pack.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, and sample policy
 material.
 
-## What HELM OSS Does
+## What HELM AI Kernel Does
 
 - Enforces default-deny execution for agent tool calls.
 - Wraps MCP servers so unknown tools can be quarantined before side effects.
@@ -46,7 +46,7 @@ material.
   checks.
 - Ships public SDK sources for Go, Python, TypeScript, Rust, and Java.
 
-HELM OSS does not include hosted Mindburn operations, private operational
+HELM AI Kernel does not include hosted Mindburn operations, private operational
 tooling, or non-OSS downstream extensions.
 
 ## Quick Start
@@ -54,19 +54,19 @@ tooling, or non-OSS downstream extensions.
 Install the published macOS CLI:
 
 ```bash
-brew install mindburnlabs/tap/helm
-helm --version
+brew install mindburnlabs/tap/helm-ai-kernel
+helm-ai-kernel --version
 ```
 
 Start a local boundary. Add `--console` when you want the self-hostable Console:
 
 ```bash
-helm serve --policy ./release.high_risk.v3.toml
-helm serve --policy ./release.high_risk.v3.toml --console
-helm boundary status
+helm-ai-kernel serve --policy ./release.high_risk.v3.toml
+helm-ai-kernel serve --policy ./release.high_risk.v3.toml --console
+helm-ai-kernel boundary status
 ```
 
-Run the local proof demo after `helm serve` starts on `127.0.0.1:7714`:
+Run the local proof demo after `helm-ai-kernel serve` starts on `127.0.0.1:7714`:
 
 ```bash
 curl http://127.0.0.1:7714/api/demo/run \
@@ -90,30 +90,30 @@ Govern MCP tools or an OpenAI-compatible client:
 
 ```bash
 python3 scripts/launch/mock-openai-upstream.py --port 19090
-helm mcp wrap --server-id local-tools --upstream-command "python3 scripts/launch/mcp-fixture-server.py"
-helm proxy --upstream http://127.0.0.1:19090/v1
+helm-ai-kernel mcp wrap --server-id local-tools --upstream-command "python3 scripts/launch/mcp-fixture-server.py"
+helm-ai-kernel proxy --upstream http://127.0.0.1:19090/v1
 ```
 
 Inspect and verify evidence:
 
 ```bash
-helm sandbox preflight --runtime wazero
-helm receipts tail --agent agent.demo.exec
-helm verify evidence-pack.tar
+helm-ai-kernel sandbox preflight --runtime wazero
+helm-ai-kernel receipts tail --agent agent.demo.exec
+helm-ai-kernel verify evidence-pack.tar
 ```
 
-`helm serve --policy` stores receipts in SQLite by default unless
-`DATABASE_URL` is set. `helm verify evidence-pack.tar` runs offline by default;
+`helm-ai-kernel serve --policy` stores receipts in SQLite by default unless
+`DATABASE_URL` is set. `helm-ai-kernel verify evidence-pack.tar` runs offline by default;
 use `--online` only when public proof endpoint credentials are available for
 that release.
 
 ## Build From Source
 
 ```bash
-git clone https://github.com/Mindburn-Labs/helm-oss.git
-cd helm-oss
+git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
+cd helm-ai-kernel
 make build
-./bin/helm serve --policy ./release.high_risk.v3.toml
+./bin/helm-ai-kernel serve --policy ./release.high_risk.v3.toml
 ```
 
 Run the retained validation targets before publishing changes:
@@ -170,7 +170,7 @@ The complete diagram doctrine lives in
 | Surface | Path | Status |
 | --- | --- | --- |
 | CLI and kernel | `core/` | Go implementation of boundary, CLI, HTTP API, proxy, receipts, evidence export, and verification |
-| Console | `apps/console/` | Self-hostable HELM OSS Console |
+| Console | `apps/console/` | Self-hostable HELM AI Kernel Console |
 | Design system core | `packages/design-system-core/` | Workspace package source used by the Console |
 | Wire contracts | `api/openapi/`, `protocols/`, `schemas/` | OpenAPI, Protobuf, policy schemas, and JSON schemas |
 | SDKs | `sdk/` | Go, Python, TypeScript, Rust, and Java sources |
@@ -182,10 +182,10 @@ The complete diagram doctrine lives in
 
 | Surface | Current install or status |
 | --- | --- |
-| CLI | `brew install mindburnlabs/tap/helm`; release binaries are attached to GitHub Releases |
-| Go SDK | `go get github.com/Mindburn-Labs/helm-oss/sdk/go@main`; tagged module versions are tracked as an OSS-readiness follow-up |
+| CLI | `brew install mindburnlabs/tap/helm-ai-kernel`; release binaries are attached to GitHub Releases |
+| Go SDK | `go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@main`; tagged module versions are tracked as an OSS-readiness follow-up |
 | Python SDK | `pip install helm-sdk` |
-| TypeScript SDK | `npm install @mindburn/helm` |
+| TypeScript SDK | `npm install @mindburn/helm-ai-kernel` |
 | Rust SDK | `cargo add helm-sdk` |
 | Java SDK | Source-available local Maven build under `sdk/java`; public package coordinate is not verified in this repo |
 | Design system core | Workspace source; public npm registry publication is not verified in this repo |

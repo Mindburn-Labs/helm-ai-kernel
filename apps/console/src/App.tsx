@@ -64,9 +64,9 @@ import {
   type ConsoleSurfaceState,
   type Receipt,
 } from "./api/client";
-import { HelmOssAssistantDrawer } from "./agent/drawer";
-import { HelmOssAgentProvider } from "./agent/provider";
-import { buildOssAgentState } from "./agent/state";
+import { HelmAiKernelAssistantDrawer } from "./agent/drawer";
+import { HelmAiKernelAgentProvider } from "./agent/provider";
+import { buildAiKernelAgentState } from "./agent/state";
 
 const DesignSystemErrorBoundary = ErrorBoundary as unknown as ComponentType<{ readonly children: ReactNode }>;
 
@@ -409,7 +409,7 @@ function ConsoleApp() {
 
   const agentState = useMemo(
     () =>
-      buildOssAgentState({
+      buildAiKernelAgentState({
         bootstrap,
         active,
         selectedReceipt,
@@ -511,13 +511,13 @@ function ConsoleApp() {
   };
 
   return (
-    <HelmOssAgentProvider state={agentState}>
+    <HelmAiKernelAgentProvider state={agentState}>
       <div className="console-shell">
       <Sidebar active={active} onActiveChange={setActive} counts={bootstrap?.counts} />
       <main className="console-main">
         <Topbar bootstrap={bootstrap} active={active} streamState={streamState} query={query} onQueryChange={setQuery} />
         <div className="assistant-affordance">
-          <HelmOssAssistantDrawer
+          <HelmAiKernelAssistantDrawer
             state={agentState}
             open={assistantOpen}
             onOpenChange={setAssistantOpen}
@@ -593,7 +593,7 @@ function ConsoleApp() {
         </section>
       </main>
       </div>
-    </HelmOssAgentProvider>
+    </HelmAiKernelAgentProvider>
   );
 }
 
@@ -862,7 +862,7 @@ function ProofDemoSurface({
           <span key={label}>{label}</span>
         ))}
       </div>
-      <div className="proof-demo__loop" aria-label="OSS proof loop">
+      <div className="proof-demo__loop" aria-label="HELM AI Kernel proof loop">
         {["Agent tool call", "HELM boundary", "ALLOW / DENY / ESCALATE", "Receipt", "Verify", "Tamper fails"].map((label) => (
           <span key={label}>{label}</span>
         ))}

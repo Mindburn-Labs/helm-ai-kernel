@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/conformance`
-- Source document: `helm-oss/docs/CONFORMANCE.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/conformance`
+- Source document: `helm-ai-kernel/docs/CONFORMANCE.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -53,10 +53,10 @@ HELM keeps a retained conformance profile under `tests/conformance/profile-v1/`.
 ## Run the Kernel Conformance Command
 
 ```bash
-./bin/helm conform --level L1 --json
-./bin/helm conform --level L2 --json
-./bin/helm conform negative --json
-./bin/helm conform vectors --json
+./bin/helm-ai-kernel conform --level L1 --json
+./bin/helm-ai-kernel conform --level L2 --json
+./bin/helm-ai-kernel conform negative --json
+./bin/helm-ai-kernel conform vectors --json
 ```
 
 The public API exposes the same negative gates at

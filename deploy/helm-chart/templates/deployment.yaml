@@ -19,14 +19,14 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "helm-firewall.fullname" . }}
+  name: {{ include "helm-ai-kernel.fullname" . }}
   labels:
-    {{- include "helm-firewall.labels" . | nindent 4 }}
+    {{- include "helm-ai-kernel.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "helm-firewall.selectorLabels" . | nindent 6 }}
+      {{- include "helm-ai-kernel.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -34,7 +34,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "helm-firewall.labels" . | nindent 8 }}
+        {{- include "helm-ai-kernel.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -43,19 +43,19 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "helm-firewall.serviceAccountName" . }}
+      serviceAccountName: {{ include "helm-ai-kernel.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: {{ include "helm-firewall.image" . | quote }}
+          image: {{ include "helm-ai-kernel.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - serve
             - --policy
-            - {{ include "helm-firewall.policyPath" . | quote }}
+            - {{ include "helm-ai-kernel.policyPath" . | quote }}
             - --addr
             - {{ .Values.helm.bindAddr | quote }}
             - --port
@@ -107,7 +107,7 @@ spec:
             - name: HELM_POLICY_BEARER_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ default (printf "%s-policy-controlplane" (include "helm-firewall.fullname" .)) .Values.helm.policy.source.controlplane.auth.existingSecret }}
+                  name: {{ default (printf "%s-policy-controlplane" (include "helm-ai-kernel.fullname" .)) .Values.helm.policy.source.controlplane.auth.existingSecret }}
                   key: {{ .Values.helm.policy.source.controlplane.auth.existingSecretKey }}
             {{- end }}
             {{- end }}
@@ -138,20 +138,20 @@ spec:
             - name: EVIDENCE_SIGNING_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "helm-firewall.signingSecretName" . }}
+                  name: {{ include "helm-ai-kernel.signingSecretName" . }}
                   key: signing-key
             {{- if or .Values.helm.auth.existingSecret .Values.helm.auth.adminAPIKey }}
             - name: HELM_ADMIN_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "helm-firewall.authSecretName" . }}
+                  name: {{ include "helm-ai-kernel.authSecretName" . }}
                   key: {{ .Values.helm.auth.adminAPIKeySecretKey }}
             {{- end }}
             {{- if or .Values.helm.auth.existingSecret .Values.helm.auth.serviceAPIKey }}
             - name: HELM_SERVICE_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "helm-firewall.authSecretName" . }}
+                  name: {{ include "helm-ai-kernel.authSecretName" . }}
                   key: {{ .Values.helm.auth.serviceAPIKeySecretKey }}
             {{- end }}
             {{- if eq .Values.helm.storage.type "postgres" }}
@@ -163,15 +163,15 @@ spec:
                   key: {{ .Values.helm.storage.postgres.existingSecretKey }}
             {{- else if .Values.postgresql.enabled }}
             - name: DATABASE_URL
-              value: "postgres://{{ .Values.postgresql.auth.username }}:$(POSTGRES_PASSWORD)@{{ include "helm-firewall.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}?sslmode=disable"
+              value: "postgres://{{ .Values.postgresql.auth.username }}:$(POSTGRES_PASSWORD)@{{ include "helm-ai-kernel.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}?sslmode=disable"
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "helm-firewall.fullname" . }}-postgresql
+                  name: {{ include "helm-ai-kernel.fullname" . }}-postgresql
                   key: password
             {{- else }}
             - name: DATABASE_URL
-              value: {{ include "helm-firewall.databaseURL" . | quote }}
+              value: {{ include "helm-ai-kernel.databaseURL" . | quote }}
             {{- end }}
             {{- end }}
           {{- with .Values.probes.liveness }}
@@ -192,7 +192,7 @@ spec:
               subPath: root.key
               readOnly: true
             - name: policy
-              mountPath: {{ include "helm-firewall.policyMountPath" . }}
+              mountPath: {{ include "helm-ai-kernel.policyMountPath" . }}
               readOnly: true
             - name: tmp
               mountPath: /tmp
@@ -201,36 +201,36 @@ spec:
           image: {{ .Values.helm.policy.reloadHints.configReloaderSidecar.image | quote }}
           imagePullPolicy: IfNotPresent
           args:
-            - --volume-dir={{ include "helm-firewall.policyMountPath" . }}
+            - --volume-dir={{ include "helm-ai-kernel.policyMountPath" . }}
             - --webhook-url=http://127.0.0.1:{{ .Values.service.port }}{{ .Values.helm.policy.reloadHints.httpWakeEndpoint }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:
             - name: policy
-              mountPath: {{ include "helm-firewall.policyMountPath" . }}
+              mountPath: {{ include "helm-ai-kernel.policyMountPath" . }}
               readOnly: true
         {{- end }}
       volumes:
         - name: data
           {{ if .Values.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ include "helm-firewall.pvcName" . }}
+            claimName: {{ include "helm-ai-kernel.pvcName" . }}
           {{ else }}
           emptyDir: {}
           {{ end }}
         - name: signing-key
           secret:
-            secretName: {{ include "helm-firewall.signingSecretName" . }}
+            secretName: {{ include "helm-ai-kernel.signingSecretName" . }}
             items:
               - key: signing-key
                 path: root.key
         - name: policy
           {{- if .Values.helm.policy.source.mountedFile.existingSecret }}
           secret:
-            secretName: {{ include "helm-firewall.policySecretName" . }}
+            secretName: {{ include "helm-ai-kernel.policySecretName" . }}
           {{- else }}
           configMap:
-            name: {{ include "helm-firewall.policyConfigMapName" . }}
+            name: {{ include "helm-ai-kernel.policyConfigMapName" . }}
           {{- end }}
         - name: tmp
           emptyDir: {}

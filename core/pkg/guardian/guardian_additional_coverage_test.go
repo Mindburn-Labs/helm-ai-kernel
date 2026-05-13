@@ -6,13 +6,13 @@ import (
 	"sync"
 	"testing"
 
-	pkg_artifact "github.com/Mindburn-Labs/helm-oss/core/pkg/artifacts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/firewall"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/kernel"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/prg"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/trust"
+	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/firewall"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust"
 )
 
 // ─── 1: Gate 0 — freeze denies with correct reason code ───────

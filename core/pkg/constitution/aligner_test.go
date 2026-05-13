@@ -3,7 +3,7 @@ package constitution_test
 import (
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/constitution"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/constitution"
 )
 
 func safetyConstitution() *constitution.Constitution {

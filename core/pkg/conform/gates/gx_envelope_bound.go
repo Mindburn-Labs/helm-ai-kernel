@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/conform"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 )
 
 // GXEnvelopeBound validates that the AutonomyEnvelope is a first-class

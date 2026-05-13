@@ -1,15 +1,15 @@
-# Google ADK Starter — HELM OSS Governed AI
+# Google ADK Starter — HELM AI Kernel Governed AI
 
-Get started with HELM OSS governance over Google Gemini models.
+Get started with HELM AI Kernel governance over Google Gemini models.
 
 ## Quick Start
 
 ```bash
-helm init google ./my-google-project
+helm-ai-kernel init google ./my-google-project
 cd my-google-project
 echo "GEMINI_API_KEY=..." >> .env
-helm doctor --dir .
-helm mcp serve --transport http
+helm-ai-kernel doctor --dir .
+helm-ai-kernel mcp serve --transport http
 ./first-governed-call.sh
 ```
 
@@ -22,4 +22,4 @@ helm mcp serve --transport http
 | `ci-smoke.sh` | CI-compatible smoke test |
 
 The `ci-smoke.sh` script validates generated project files from
-`helm init google`; it does not require a real Google API key.
+`helm-ai-kernel init google`; it does not require a real Google API key.

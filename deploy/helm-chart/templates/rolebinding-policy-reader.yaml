@@ -2,15 +2,15 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "helm-firewall.fullname" . }}-policy-reader
+  name: {{ include "helm-ai-kernel.fullname" . }}-policy-reader
   labels:
-    {{- include "helm-firewall.labels" . | nindent 4 }}
+    {{- include "helm-ai-kernel.labels" . | nindent 4 }}
 subjects:
   - kind: ServiceAccount
-    name: {{ include "helm-firewall.serviceAccountName" . }}
+    name: {{ include "helm-ai-kernel.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ include "helm-firewall.fullname" . }}-policy-reader
+  name: {{ include "helm-ai-kernel.fullname" . }}-policy-reader
 {{- end }}

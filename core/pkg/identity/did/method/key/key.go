@@ -13,7 +13,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/identity/did"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/did"
 )
 
 // Driver implements did.Method for the did:key method.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/compliance/jkg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/jkg"
 )
 
 // FederalRegisterAdapter monitors US Federal Register rules, proposed rules, and notices.

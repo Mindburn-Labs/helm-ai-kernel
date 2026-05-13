@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	mcppkg "github.com/Mindburn-Labs/helm-oss/core/pkg/mcp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 )
 
 // SurfaceRegistry is the OSS-local durable-surface model used by CLI/API/Console
@@ -210,12 +210,12 @@ func (r *SurfaceRegistry) Status(version string, receiptStoreReady bool, signerR
 
 func (r *SurfaceRegistry) Capabilities() []contracts.BoundaryCapabilitySummary {
 	return []contracts.BoundaryCapabilitySummary{
-		{CapabilityID: "boundary-records", Category: "execution-boundary", Status: "implemented", Authority: "native-receipt", PublicRoutes: []string{"/api/v1/boundary/records", "/api/v1/boundary/checkpoints"}, CLICommands: []string{"helm boundary records", "helm boundary checkpoint"}, ReceiptBindings: []string{"record_hash", "receipt_id"}, ConformanceLevel: "L1"},
-		{CapabilityID: "mcp-firewall", Category: "mcp", Status: "implemented", Authority: "pre-dispatch-pep", PublicRoutes: []string{"/api/v1/mcp/registry", "/api/v1/mcp/authorize-call", "/.well-known/oauth-protected-resource/mcp"}, CLICommands: []string{"helm mcp scan", "helm mcp authorize-call"}, ReceiptBindings: []string{"mcp_server_id", "oauth_scopes", "record_hash"}, ConformanceLevel: "L2"},
-		{CapabilityID: "sandbox-grants", Category: "sandbox", Status: "implemented", Authority: "native-grant", PublicRoutes: []string{"/api/v1/sandbox/grants", "/api/v1/sandbox/preflight"}, CLICommands: []string{"helm sandbox grant", "helm sandbox preflight"}, ReceiptBindings: []string{"sandbox_grant_hash"}, ConformanceLevel: "L3"},
-		{CapabilityID: "authz-snapshots", Category: "identity-authz", Status: "implemented", Authority: "pdp-snapshot", PublicRoutes: []string{"/api/v1/authz/check", "/api/v1/authz/snapshots"}, CLICommands: []string{"helm authz check", "helm authz snapshots"}, ReceiptBindings: []string{"authz_snapshot_hash"}, ConformanceLevel: "L3"},
-		{CapabilityID: "evidence-envelopes", Category: "evidence", Status: "implemented", Authority: "native-evidencepack", PublicRoutes: []string{"/api/v1/evidence/envelopes"}, CLICommands: []string{"helm evidence envelope"}, ReceiptBindings: []string{"evidence_manifest_hash"}, ConformanceLevel: "L4"},
-		{CapabilityID: "telemetry-coexistence", Category: "telemetry", Status: "non-authoritative", Authority: "export-only", PublicRoutes: []string{"/api/v1/telemetry/otel/config", "/api/v1/coexistence/capabilities"}, CLICommands: []string{"helm telemetry otel-config", "helm coexistence manifest"}, ReceiptBindings: []string{"receipt_id", "record_hash"}, ConformanceLevel: "L4"},
+		{CapabilityID: "boundary-records", Category: "execution-boundary", Status: "implemented", Authority: "native-receipt", PublicRoutes: []string{"/api/v1/boundary/records", "/api/v1/boundary/checkpoints"}, CLICommands: []string{"helm-ai-kernel boundary records", "helm-ai-kernel boundary checkpoint"}, ReceiptBindings: []string{"record_hash", "receipt_id"}, ConformanceLevel: "L1"},
+		{CapabilityID: "mcp-firewall", Category: "mcp", Status: "implemented", Authority: "pre-dispatch-pep", PublicRoutes: []string{"/api/v1/mcp/registry", "/api/v1/mcp/authorize-call", "/.well-known/oauth-protected-resource/mcp"}, CLICommands: []string{"helm-ai-kernel mcp scan", "helm-ai-kernel mcp authorize-call"}, ReceiptBindings: []string{"mcp_server_id", "oauth_scopes", "record_hash"}, ConformanceLevel: "L2"},
+		{CapabilityID: "sandbox-grants", Category: "sandbox", Status: "implemented", Authority: "native-grant", PublicRoutes: []string{"/api/v1/sandbox/grants", "/api/v1/sandbox/preflight"}, CLICommands: []string{"helm-ai-kernel sandbox grant", "helm-ai-kernel sandbox preflight"}, ReceiptBindings: []string{"sandbox_grant_hash"}, ConformanceLevel: "L3"},
+		{CapabilityID: "authz-snapshots", Category: "identity-authz", Status: "implemented", Authority: "pdp-snapshot", PublicRoutes: []string{"/api/v1/authz/check", "/api/v1/authz/snapshots"}, CLICommands: []string{"helm-ai-kernel authz check", "helm-ai-kernel authz snapshots"}, ReceiptBindings: []string{"authz_snapshot_hash"}, ConformanceLevel: "L3"},
+		{CapabilityID: "evidence-envelopes", Category: "evidence", Status: "implemented", Authority: "native-evidencepack", PublicRoutes: []string{"/api/v1/evidence/envelopes"}, CLICommands: []string{"helm-ai-kernel evidence envelope"}, ReceiptBindings: []string{"evidence_manifest_hash"}, ConformanceLevel: "L4"},
+		{CapabilityID: "telemetry-coexistence", Category: "telemetry", Status: "non-authoritative", Authority: "export-only", PublicRoutes: []string{"/api/v1/telemetry/otel/config", "/api/v1/coexistence/capabilities"}, CLICommands: []string{"helm-ai-kernel telemetry otel-config", "helm-ai-kernel coexistence manifest"}, ReceiptBindings: []string{"receipt_id", "record_hash"}, ConformanceLevel: "L4"},
 	}
 }
 

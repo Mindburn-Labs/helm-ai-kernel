@@ -35,7 +35,7 @@ cd core && go test ./pkg/conform/... -tags conformance
 2. Run the conformance runner:
 
 ```bash
-helm conform run \
+helm-ai-kernel conform run \
   --vectors protocols/conformance/v1/test-vectors.json \
   --endpoint http://your-server:4001 \
   --level 4

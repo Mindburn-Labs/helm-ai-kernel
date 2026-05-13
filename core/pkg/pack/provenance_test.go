@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/pack"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pack"
 )
 
 func makeProvenanceFixture() (ed25519.PublicKey, ed25519.PrivateKey, []byte, *pack.ProvenanceRecord) {

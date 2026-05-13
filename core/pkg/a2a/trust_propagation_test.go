@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/trust"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust"
 )
 
 func setupPropagation(t *testing.T) (*trust.BehavioralTrustScorer, *VouchingEngine, crypto.Signer) {

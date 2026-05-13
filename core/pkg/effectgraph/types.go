@@ -8,8 +8,8 @@
 package effectgraph
 
 import (
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/sandbox"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
 )
 
 // ExecutionProfile binds a policy decision to a specific sandbox configuration.

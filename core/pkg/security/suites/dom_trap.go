@@ -3,7 +3,7 @@ package suites
 import (
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/trust"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust"
 	"github.com/google/uuid"
 )
 

@@ -3,7 +3,7 @@ package executor_test
 import (
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

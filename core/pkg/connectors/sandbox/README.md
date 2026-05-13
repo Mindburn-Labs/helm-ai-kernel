@@ -30,9 +30,9 @@ backward compatibility with the legacy `sandbox.Runner` interface.
 
 ```go
 import (
-    "github.com/Mindburn-Labs/helm-oss/core/pkg/connectors/sandbox/opensandbox"
-    "github.com/Mindburn-Labs/helm-oss/core/pkg/connectors/sandbox/e2b"
-    "github.com/Mindburn-Labs/helm-oss/core/pkg/connectors/sandbox/daytona"
+    "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox/opensandbox"
+    "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox/e2b"
+    "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox/daytona"
 )
 
 // Pick a provider:

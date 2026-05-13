@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/compliance/compiler"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/compliance/jkg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/compiler"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/jkg"
 )
 
 // PolicyResult represents the outcome of a policy evaluation.

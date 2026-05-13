@@ -10,10 +10,10 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/pack"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pack"
 )
 
-// repoRoot returns the root of the helm-oss repository by walking up
+// repoRoot returns the root of the helm-ai-kernel repository by walking up
 // from this test file's location (core/pkg/pack/).
 func repoRoot(t *testing.T) string {
 	t.Helper()
@@ -50,7 +50,7 @@ func TestPackGenerationAndGrading_OpsRelease(t *testing.T) {
 		},
 		Provenance: &pack.Provenance{
 			Source: &pack.SourceInfo{
-				Repo:   "github.com/mindburn-labs/helm-oss",
+				Repo:   "github.com/mindburn-labs/helm-ai-kernel",
 				Commit: "abc123",
 				Tag:    "v1.0.0",
 			},

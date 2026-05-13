@@ -1,6 +1,6 @@
-# HELM OSS Launch Blockers
+# HELM AI Kernel Launch Blockers
 
-This document provides a formalized ledger of known execution, governance, and infrastructure blockers for the HELM OSS public technical launch.
+This document provides a formalized ledger of known execution, governance, and infrastructure blockers for the HELM AI Kernel public technical launch.
 
 As per the launch governance policy, **we do not downgrade strategic HELM claims** to bypass blockers. If a claim is unsupported, it must be implemented. If a blocker is external or hardware-constrained, it must be explicitly recorded here with its precise remediation path.
 
@@ -41,7 +41,7 @@ These items *must* be resolved by the Launch Execution Agent prior to the comple
 ### 4. Canonical Domain Leakage: `wrangler.toml`
 
 *   **Status**: `RESOLVED` (Phase 0)
-*   **Description**: The OSS Console deployment config hardcoded `oss.mindburn.org` as the production domain, breaking the requirement that OSS must be self-hostable without hosted infrastructure assumptions.
+*   **Description**: The HELM AI Kernel Console deployment config hardcoded `oss.mindburn.org` as the production domain, breaking the requirement that HELM AI Kernel must be self-hostable without hosted infrastructure assumptions.
 *   **Resolution**: Removed the hardcoded domain. Added documentation comments guiding self-hosters to use localhost (`127.0.0.1:7714`) or custom environment variables.
 
 ### 5. Verdict Drift (DEFER / REQUIRE_APPROVAL)

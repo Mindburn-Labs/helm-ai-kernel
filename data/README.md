@@ -3,7 +3,7 @@
 
 ## Purpose
 
-Active surface for the `helm-oss` project.
+Active surface for the `helm-ai-kernel` project.
 
 ## Canonical Interface
 

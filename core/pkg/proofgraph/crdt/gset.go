@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/proofgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 )
 
 // GSet implements a Grow-Only Set CRDT for ProofGraph nodes.

@@ -1,15 +1,15 @@
-# Anthropic Starter — HELM OSS Governed AI
+# Anthropic Starter — HELM AI Kernel Governed AI
 
-Get started with HELM OSS governance over Anthropic Claude models.
+Get started with HELM AI Kernel governance over Anthropic Claude models.
 
 ## Quick Start
 
 ```bash
-helm init claude ./my-anthropic-project
+helm-ai-kernel init claude ./my-anthropic-project
 cd my-anthropic-project
 echo "ANTHROPIC_API_KEY=sk-ant-..." >> .env
-helm doctor --dir .
-helm mcp serve --transport http
+helm-ai-kernel doctor --dir .
+helm-ai-kernel mcp serve --transport http
 ./first-governed-call.sh
 ```
 
@@ -22,4 +22,4 @@ helm mcp serve --transport http
 | `ci-smoke.sh` | CI-compatible smoke test |
 
 The `ci-smoke.sh` script validates generated project files from
-`helm init claude`; it does not require a real Anthropic API key.
+`helm-ai-kernel init claude`; it does not require a real Anthropic API key.

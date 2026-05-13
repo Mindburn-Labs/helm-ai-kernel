@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/api"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 )
 
 const (

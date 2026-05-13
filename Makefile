@@ -7,7 +7,7 @@ LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.build
 QUALITY := python3 scripts/ci/quality.py
 
 build:
-	cd core && go build -ldflags "$(LDFLAGS)" -o ../bin/helm ./cmd/helm/
+	cd core && go build -ldflags "$(LDFLAGS)" -o ../bin/helm-ai-kernel ./cmd/helm-ai-kernel/
 
 test:
 	cd core && go test ./pkg/... -count=1
@@ -75,11 +75,11 @@ proto-breaking:
 	buf breaking protocols/policy-schema --against "$(BUF_AGAINST)"
 
 docker-verify:
-	docker build -f Dockerfile -t helm-oss:verify-root .
-	docker build -f Dockerfile.slim -t helm-oss:verify-slim .
-	docker build -f core/Dockerfile -t helm-oss:verify-core core
-	docker build -f core/Dockerfile.api -t helm-oss:verify-core-api .
-	docker build -f oss-fuzz/Dockerfile -t helm-oss:verify-oss-fuzz oss-fuzz
+	docker build -f Dockerfile -t helm-ai-kernel:verify-root .
+	docker build -f Dockerfile.slim -t helm-ai-kernel:verify-slim .
+	docker build -f core/Dockerfile -t helm-ai-kernel:verify-core core
+	docker build -f core/Dockerfile.api -t helm-ai-kernel:verify-core-api .
+	docker build -f oss-fuzz/Dockerfile -t helm-ai-kernel:verify-oss-fuzz oss-fuzz
 
 release-readiness: verify-boundary docs-truth test-sdk-go-standalone proto-lint proto-breaking docker-verify launch-security launch-api-truth conformance-release-gate deployment-smoke release-smoke
 	@echo "✅ Release readiness gate passed"
@@ -88,10 +88,10 @@ crucible: build
 	bash scripts/usecases/run_all.sh
 
 proxy: build
-	./bin/helm proxy --upstream http://127.0.0.1:19090/v1
+	./bin/helm-ai-kernel proxy --upstream http://127.0.0.1:19090/v1
 
 docker: build-console
-	docker build -t ghcr.io/mindburn-labs/helm-oss:local .
+	docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:local .
 
 docker-up:
 	docker compose up -d
@@ -164,14 +164,14 @@ provenance:
 		-X main.version=$(VERSION) \
 		-X main.commit=$$(git rev-parse HEAD) \
 		-X main.buildTime=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-		-o ../bin/helm ./cmd/helm/
-	shasum -a 256 bin/helm > bin/helm.sha256
+		-o ../bin/helm-ai-kernel ./cmd/helm-ai-kernel/
+	shasum -a 256 bin/helm-ai-kernel > bin/helm-ai-kernel.sha256
 
 onboard: build
-	./bin/helm onboard --yes
+	./bin/helm-ai-kernel onboard --yes
 
 demo-cli: build
-	./bin/helm demo organization --template starter --provider mock
+	./bin/helm-ai-kernel demo organization --template starter --provider mock
 
 demo-local: build
 	bash scripts/launch/demo-local.sh
@@ -209,7 +209,7 @@ launch-api-truth:
 
 conformance-release-report: build
 	bash scripts/release/prepare_conformance_release_inputs.sh
-	./bin/helm conform --profile SMB --gate G0 --signed --output artifacts/conformance
+	./bin/helm-ai-kernel conform --profile SMB --gate G0 --signed --output artifacts/conformance
 
 conformance-release-gate:
 	@if [ -z "$$HELM_CONFORMANCE_REPORT" ]; then $(MAKE) conformance-release-report; fi
@@ -217,21 +217,21 @@ conformance-release-gate:
 
 mcp-pack: build
 	@mkdir -p dist
-	./bin/helm mcp pack --client claude-desktop --out dist/helm.mcpb
+	./bin/helm-ai-kernel mcp pack --client claude-desktop --out dist/helm-ai-kernel.mcpb
 
 mcp-install: build
-	./bin/helm mcp install --client claude-code
+	./bin/helm-ai-kernel mcp install --client claude-code
 
 RELEASE_LDFLAGS := -s -w $(LDFLAGS)
 
 release-binaries:
 	@mkdir -p bin
-	cd core && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/helm-linux-amd64 ./cmd/helm/
-	cd core && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/helm-linux-arm64 ./cmd/helm/
-	cd core && GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/helm-darwin-amd64 ./cmd/helm/
-	cd core && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/helm-darwin-arm64 ./cmd/helm/
-	cd core && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/helm-windows-amd64.exe ./cmd/helm/
-	cd bin && shasum -a 256 helm-* > SHA256SUMS.txt
+	cd core && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/helm-ai-kernel-linux-amd64 ./cmd/helm-ai-kernel/
+	cd core && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/helm-ai-kernel-linux-arm64 ./cmd/helm-ai-kernel/
+	cd core && GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/helm-ai-kernel-darwin-amd64 ./cmd/helm-ai-kernel/
+	cd core && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/helm-ai-kernel-darwin-arm64 ./cmd/helm-ai-kernel/
+	cd core && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/helm-ai-kernel-windows-amd64.exe ./cmd/helm-ai-kernel/
+	cd bin && shasum -a 256 helm-ai-kernel-* > SHA256SUMS.txt
 
 release-assets: release-binaries-reproducible mcp-pack sbom vex
 	bash scripts/release/stage_release_assets.sh
@@ -251,12 +251,12 @@ REPRO_GOFLAGS := -trimpath -buildvcs=false
 release-binaries-reproducible:
 	@mkdir -p bin
 	@echo "Reproducible build: SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) BUILD_TIME=$(REPRO_BUILD_TIME)"
-	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-linux-amd64       ./cmd/helm/
-	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-linux-arm64       ./cmd/helm/
-	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-darwin-amd64      ./cmd/helm/
-	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-darwin-arm64      ./cmd/helm/
-	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-windows-amd64.exe ./cmd/helm/
-	cd bin && shasum -a 256 helm-* > SHA256SUMS.txt
+	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-ai-kernel-linux-amd64       ./cmd/helm-ai-kernel/
+	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-ai-kernel-linux-arm64       ./cmd/helm-ai-kernel/
+	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-ai-kernel-darwin-amd64      ./cmd/helm-ai-kernel/
+	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-ai-kernel-darwin-arm64      ./cmd/helm-ai-kernel/
+	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-ai-kernel-windows-amd64.exe ./cmd/helm-ai-kernel/
+	cd bin && shasum -a 256 helm-ai-kernel-* > SHA256SUMS.txt
 
 # Generate OpenVEX statements for every CVE listed in the current SBOM.
 vex:

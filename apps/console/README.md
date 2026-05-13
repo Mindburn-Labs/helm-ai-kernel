@@ -1,4 +1,4 @@
-# HELM OSS Console Source Owner
+# HELM AI Kernel Console Source Owner
 
 ## Audience
 
@@ -6,7 +6,7 @@ Use this file when changing the OSS console UI, its API client, schema adapter, 
 
 ## Responsibility
 
-`apps/console` owns the browser surface for inspecting a local HELM OSS boundary. The public docs route is `helm-oss/console`; it should describe user-visible behavior, while this source owner doc keeps implementation paths discoverable for maintainers.
+`apps/console` owns the browser surface for inspecting a local HELM AI Kernel boundary. The public docs route is `helm-ai-kernel/console`; it should describe user-visible behavior, while this source owner doc keeps implementation paths discoverable for maintainers.
 
 ## Source Map
 
@@ -25,4 +25,4 @@ make docs-coverage
 make docs-truth
 ```
 
-If the public docs describe a console feature, the feature must be visible in this directory or in a linked API route under `core/cmd/helm`.
+If the public docs describe a console feature, the feature must be visible in this directory or in a linked API route under `core/cmd/helm-ai-kernel`.

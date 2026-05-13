@@ -1,4 +1,4 @@
-# HELM OSS EvidencePack Package Source Owner
+# HELM AI Kernel EvidencePack Package Source Owner
 
 ## Audience
 
@@ -6,7 +6,7 @@ Use this file when changing EvidencePack archive building, manifests, streaming,
 
 ## Responsibility
 
-`core/pkg/evidencepack` owns the archive builder and reader for evidence bundles exported by HELM OSS. Public docs should teach developers how to export, inspect, replay, and verify packs; this package owns the archive shape and streaming behavior.
+`core/pkg/evidencepack` owns the archive builder and reader for evidence bundles exported by HELM AI Kernel. Public docs should teach developers how to export, inspect, replay, and verify packs; this package owns the archive shape and streaming behavior.
 
 ## Public Status
 
@@ -14,10 +14,10 @@ Classification: `public-direct`.
 
 Public docs should link here from:
 
-- `helm-oss/developer-journey`
-- `helm-oss/verification`
-- `helm-oss/reference/execution-boundary`
-- `helm-oss/reference/json-schemas`
+- `helm-ai-kernel/developer-journey`
+- `helm-ai-kernel/verification`
+- `helm-ai-kernel/reference/execution-boundary`
+- `helm-ai-kernel/reference/json-schemas`
 
 ## Source Map
 

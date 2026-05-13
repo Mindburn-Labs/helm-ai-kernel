@@ -1,9 +1,9 @@
 ---
-title: HELM OSS Console
+title: HELM AI Kernel Console
 last_reviewed: 2026-05-05
 ---
 
-# HELM OSS Console
+# HELM AI Kernel Console
 
 ## Audience
 
@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/console`
-- Source document: `helm-oss/docs/CONSOLE.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/console`
+- Source document: `helm-ai-kernel/docs/CONSOLE.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -33,11 +33,11 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 
 ## Diagram
 
-This scheme maps the main sections of HELM OSS Console in reading order.
+This scheme maps the main sections of HELM AI Kernel Console in reading order.
 
 ```mermaid
 flowchart LR
-  Page["HELM OSS Console"]
+  Page["HELM AI Kernel Console"]
   A["What It Covers"]
   B["Running Locally"]
   C["Production Boundary"]
@@ -48,7 +48,7 @@ flowchart LR
   C --> D
 ```
 
-HELM OSS ships one browser frontend: `apps/console`.
+HELM AI Kernel ships one browser frontend: `apps/console`.
 
 The Console is a self-hostable operator surface for the OSS kernel. It is built
 with React, Vite, TypeScript, and `@mindburn/ui-core`; it does not carry a
@@ -86,10 +86,10 @@ make build-console
 Start the kernel with the Console enabled:
 
 ```bash
-./bin/helm serve --policy ./release.high_risk.v3.toml --console
+./bin/helm-ai-kernel serve --policy ./release.high_risk.v3.toml --console
 ```
 
-The default `helm serve` bind is `127.0.0.1:7714`. Console assets are loaded from
+The default `helm-ai-kernel serve` bind is `127.0.0.1:7714`. Console assets are loaded from
 `apps/console/dist` by default, or from `HELM_CONSOLE_DIR` / `--console-dir` when
 set.
 
@@ -100,7 +100,7 @@ service. The OSS repository still excludes hosted retention, private
 account-management systems, org-specific operator workflows, and managed
 multi-region operations.
 
-`helm serve --console` serves static assets with the same security middleware as
+`helm-ai-kernel serve --console` serves static assets with the same security middleware as
 the API. API-like paths never fall through to `index.html`, so broken contracts
 remain visible during development and deployment.
 
@@ -122,4 +122,4 @@ make test-platform
 
 ## Scope Boundary
 
-HELM OSS does not promise the commercial Console experience. This page should describe the OSS inspection and source artifacts that the Console consumes: receipts, ProofGraph nodes, policy bundle metadata, verification output, and exported evidence. If a screen or workflow exists only in HELM commercial, link to authenticated customer documentation from the product site and keep anonymous OSS docs focused on the data contracts a developer can generate locally. The validation path is to create a receipt, inspect it through the CLI or export, and verify that the fields named here are present in the public schema.
+HELM AI Kernel does not promise the commercial Console experience. This page should describe the OSS inspection and source artifacts that the Console consumes: receipts, ProofGraph nodes, policy bundle metadata, verification output, and exported evidence. If a screen or workflow exists only in HELM commercial, link to authenticated customer documentation from the product site and keep anonymous OSS docs focused on the data contracts a developer can generate locally. The validation path is to create a receipt, inspect it through the CLI or export, and verify that the fields named here are present in the public schema.

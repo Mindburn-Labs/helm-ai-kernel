@@ -28,13 +28,13 @@ require_file() {
 cd "$ROOT"
 
 for artifact in \
-    bin/helm-linux-amd64 \
-    bin/helm-linux-arm64 \
-    bin/helm-darwin-amd64 \
-    bin/helm-darwin-arm64 \
-    bin/helm-windows-amd64.exe \
-    bin/helm \
-    dist/helm.mcpb \
+    bin/helm-ai-kernel-linux-amd64 \
+    bin/helm-ai-kernel-linux-arm64 \
+    bin/helm-ai-kernel-darwin-amd64 \
+    bin/helm-ai-kernel-darwin-arm64 \
+    bin/helm-ai-kernel-windows-amd64.exe \
+    bin/helm-ai-kernel \
+    dist/helm-ai-kernel.mcpb \
     sbom.json \
     release.high_risk.v3.toml \
     reference_packs/eu_ai_act_high_risk.v1.json; do
@@ -50,12 +50,12 @@ require_file "$vex_path"
 rm -rf "$ASSETS_DIR"
 mkdir -p "$ASSETS_DIR"
 
-cp "$ROOT"/bin/helm-linux-amd64 "$ASSETS_DIR/"
-cp "$ROOT"/bin/helm-linux-arm64 "$ASSETS_DIR/"
-cp "$ROOT"/bin/helm-darwin-amd64 "$ASSETS_DIR/"
-cp "$ROOT"/bin/helm-darwin-arm64 "$ASSETS_DIR/"
-cp "$ROOT"/bin/helm-windows-amd64.exe "$ASSETS_DIR/"
-cp "$ROOT"/dist/helm.mcpb "$ASSETS_DIR/"
+cp "$ROOT"/bin/helm-ai-kernel-linux-amd64 "$ASSETS_DIR/"
+cp "$ROOT"/bin/helm-ai-kernel-linux-arm64 "$ASSETS_DIR/"
+cp "$ROOT"/bin/helm-ai-kernel-darwin-amd64 "$ASSETS_DIR/"
+cp "$ROOT"/bin/helm-ai-kernel-darwin-arm64 "$ASSETS_DIR/"
+cp "$ROOT"/bin/helm-ai-kernel-windows-amd64.exe "$ASSETS_DIR/"
+cp "$ROOT"/dist/helm-ai-kernel.mcpb "$ASSETS_DIR/"
 cp "$ROOT"/sbom.json "$ASSETS_DIR/"
 cp "$vex_path" "$ASSETS_DIR/$(basename "$vex_path")"
 cp "$ROOT"/release.high_risk.v3.toml "$ASSETS_DIR/"
@@ -83,23 +83,23 @@ with tarfile.open(out, "w") as tar:
             tar.addfile(info, fh)
 PY
 
-"$ROOT/bin/helm" conform --level L2 --output "$TMP_DIR/conformance" --json > "$TMP_DIR/conformance-report.json"
+"$ROOT/bin/helm-ai-kernel" conform --level L2 --output "$TMP_DIR/conformance" --json > "$TMP_DIR/conformance-report.json"
 pack_root="$(find "$TMP_DIR/conformance" -mindepth 2 -maxdepth 2 -type d -name 'run-*' | sort | tail -n 1)"
 if [ -z "$pack_root" ]; then
     echo "::error::conformance did not produce an EvidencePack directory"
     exit 1
 fi
-"$ROOT/bin/helm" export --audit --evidence "$pack_root" --out "$ASSETS_DIR/evidence-pack.tar" >/dev/null
-"$ROOT/bin/helm" verify "$ASSETS_DIR/evidence-pack.tar" >/dev/null
+"$ROOT/bin/helm-ai-kernel" export --audit --evidence "$pack_root" --out "$ASSETS_DIR/evidence-pack.tar" >/dev/null
+"$ROOT/bin/helm-ai-kernel" verify "$ASSETS_DIR/evidence-pack.tar" >/dev/null
 
 (
     cd "$ASSETS_DIR"
-    shasum -a 256 helm-darwin-amd64 helm-darwin-arm64 helm-linux-amd64 helm-linux-arm64 helm-windows-amd64.exe > "$TMP_DIR/binary-SHA256SUMS.txt"
+    shasum -a 256 helm-ai-kernel-darwin-amd64 helm-ai-kernel-darwin-arm64 helm-ai-kernel-linux-amd64 helm-ai-kernel-linux-arm64 helm-ai-kernel-windows-amd64.exe > "$TMP_DIR/binary-SHA256SUMS.txt"
 )
 ruby "$ROOT/scripts/release/homebrew_formula.rb" \
     --version "$VERSION" \
     --checksums "$TMP_DIR/binary-SHA256SUMS.txt" \
-    --repo Mindburn-Labs/helm-oss > "$ASSETS_DIR/helm.rb"
+    --repo Mindburn-Labs/helm-ai-kernel > "$ASSETS_DIR/helm-ai-kernel.rb"
 
 python3 - "$ROOT" "$ASSETS_DIR" "$TAG" <<'PY'
 import hashlib
@@ -136,7 +136,7 @@ payload = {
     "schema_version": "helm.release.attestation.v1",
     "release": tag,
     "version": tag.removeprefix("v"),
-    "source_repository": "Mindburn-Labs/helm-oss",
+    "source_repository": "Mindburn-Labs/helm-ai-kernel",
     "source_commit": commit,
     "created_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
     "offline_checks": {

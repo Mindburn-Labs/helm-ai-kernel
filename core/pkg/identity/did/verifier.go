@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/vcredentials"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/vcredentials"
 )
 
 // Verifier is a DID-aware Verifiable Credential verifier. It composes a

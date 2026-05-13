@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Validate the Kubernetes Helm chart with an actual Kubernetes Helm CLI.
 #
-# The repository's own CLI is named `helm`, so this script deliberately avoids
-# trusting PATH. Set KUBE_HELM_CMD to an explicit Kubernetes Helm binary, or let
-# the script use a pinned containerized Helm runner.
+# Use the Kubernetes Helm CLI for chart rendering. Set KUBE_HELM_CMD to an
+# explicit binary, or let the script use a pinned containerized Helm runner.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -15,7 +14,7 @@ SIGNING_KEY="${HELM_CHART_SMOKE_SIGNING_KEY:-0123456789abcdef0123456789abcdef012
 TRUST_PUBLIC_KEY="${HELM_CHART_SMOKE_POLICY_TRUST_PUBLIC_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
 ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-helm-admin-smoke}"
 SERVICE_KEY="${HELM_SMOKE_SERVICE_KEY:-helm-service-smoke}"
-RENDER_DIR="${HELM_CHART_RENDER_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/helm-oss-chart.XXXXXX")}"
+RENDER_DIR="${HELM_CHART_RENDER_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/helm-ai-kernel-chart.XXXXXX")}"
 
 cleanup() {
     if [ -z "${HELM_CHART_RENDER_DIR:-}" ]; then
@@ -33,7 +32,7 @@ helm_runner() {
         kube-helm "$@"
         return
     fi
-    if command -v helm >/dev/null 2>&1 && helm version --short >/dev/null 2>&1 && helm template --help >/dev/null 2>&1; then
+    if command -v helm >/dev/null 2>&1 && helm-ai-kernel version --short >/dev/null 2>&1 && helm template --help >/dev/null 2>&1; then
         helm "$@"
         return
     fi
@@ -65,7 +64,7 @@ assert_not_contains() {
 default_rendered="$RENDER_DIR/rendered-default.yaml"
 helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
-    --set image.repository=ghcr.io/mindburn-labs/helm-oss \
+    --set image.repository=ghcr.io/mindburn-labs/helm-ai-kernel \
     --set image.tag=local \
     --set image.pullPolicy=IfNotPresent >"$default_rendered"
 
@@ -73,7 +72,7 @@ assert_contains "$default_rendered" "kind: Deployment"
 assert_contains "$default_rendered" "HELM_POLICY_SOURCE_KIND"
 assert_contains "$default_rendered" "mountedFile"
 assert_contains "$default_rendered" "HELM_POLICY_SIGNATURE_REQUIRED"
-assert_contains "$default_rendered" "/etc/helm/policy/serve-policy.toml"
+assert_contains "$default_rendered" "/etc/helm-ai-kernel/policy/serve-policy.toml"
 assert_contains "$default_rendered" "automountServiceAccountToken: false"
 assert_not_contains "$default_rendered" "HELM_POLICY_TRUST_PUBLIC_KEY"
 assert_not_contains "$default_rendered" "checksum/config"
@@ -96,7 +95,7 @@ helm_runner lint "$CHART" \
     --set helm.signing.key="$SIGNING_KEY" \
     --set helm.auth.adminAPIKey="$ADMIN_KEY" \
     --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
-    --set image.repository=ghcr.io/mindburn-labs/helm-oss \
+    --set image.repository=ghcr.io/mindburn-labs/helm-ai-kernel \
     --set image.tag=local \
     --set image.pullPolicy=IfNotPresent >/dev/null
 
@@ -107,14 +106,14 @@ helm_runner template "$RELEASE" "$CHART" \
     --set helm.signing.key="$SIGNING_KEY" \
     --set helm.auth.adminAPIKey="$ADMIN_KEY" \
     --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
-    --set image.repository=ghcr.io/mindburn-labs/helm-oss \
+    --set image.repository=ghcr.io/mindburn-labs/helm-ai-kernel \
     --set image.tag=local \
     --set image.pullPolicy=IfNotPresent >"$rendered"
 
 assert_contains "$rendered" "kind: Deployment"
 assert_contains "$rendered" "serve"
 assert_contains "$rendered" "--policy"
-assert_contains "$rendered" "/etc/helm/policy/serve-policy.toml"
+assert_contains "$rendered" "/etc/helm-ai-kernel/policy/serve-policy.toml"
 assert_contains "$rendered" "--data-dir"
 assert_contains "$rendered" "/data"
 assert_contains "$rendered" "HELM_PRODUCTION"
@@ -175,7 +174,7 @@ helm_runner template "$RELEASE" "$CHART" \
     --set helm.policy.source.controlplane.url=https://helm-controlplane.example.internal \
     --set helm.policy.signature.required=true \
     --set helm.policy.signature.publicKey="$TRUST_PUBLIC_KEY" \
-    --set image.repository=ghcr.io/mindburn-labs/helm-oss \
+    --set image.repository=ghcr.io/mindburn-labs/helm-ai-kernel \
     --set image.tag=local \
     --set image.pullPolicy=IfNotPresent >"$controlplane_rendered"
 
@@ -198,7 +197,7 @@ helm_runner template "$RELEASE" "$CHART" \
     --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
     --set helm.policy.source.kind=crd \
     --set helm.policy.source.crd.install=true \
-    --set image.repository=ghcr.io/mindburn-labs/helm-oss \
+    --set image.repository=ghcr.io/mindburn-labs/helm-ai-kernel \
     --set image.tag=local \
     --set image.pullPolicy=IfNotPresent >"$crd_rendered"
 

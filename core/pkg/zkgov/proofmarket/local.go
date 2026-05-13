@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/zkgov"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/zkgov"
 )
 
 // LocalProver wraps the existing zkgov.Prover as a ProverNetwork.

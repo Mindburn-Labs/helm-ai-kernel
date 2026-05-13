@@ -5,13 +5,21 @@ last_reviewed: 2026-05-12
 
 # Developer Journey
 
-This page is the source-backed end-to-end path for evaluating HELM OSS. It ties install, runtime, SDKs, policy, receipts, verification, deployment, conformance, release artifacts, and troubleshooting to live repository surfaces.
+This page is the source-backed end-to-end path for evaluating HELM AI Kernel. It ties install, runtime, SDKs, policy, receipts, verification, deployment, conformance, release artifacts, and troubleshooting to live repository surfaces.
+
+## Audience
+
+This journey is for developers and platform teams evaluating HELM AI Kernel beyond the first quickstart. It is the source-backed path for proving local runtime behavior, SDK calls, receipts, EvidencePack verification, conformance, deployment, and release verification.
+
+## Outcome
+
+After completing the path you should know which local command owns each public claim, how to route OpenAI-compatible and MCP traffic through the execution boundary, how to inspect receipts, and which validation commands keep docs aligned with code.
 
 ```mermaid
 flowchart LR
-  Install["install or build helm"] --> Serve["helm serve --policy"]
+  Install["install or build helm-ai-kernel"] --> Serve["helm-ai-kernel serve --policy"]
   Serve --> Demo["local proof demo"]
-  Serve --> Proxy["optional helm proxy"]
+  Serve --> Proxy["optional helm-ai-kernel proxy"]
   Serve --> Receipts["receipts and boundary records"]
   Receipts --> Verify["offline verification"]
   Verify --> Gates["docs and conformance gates"]
@@ -20,7 +28,7 @@ flowchart LR
 ## Source Truth
 
 - `Makefile`, `Dockerfile`, `docker-compose.yml`
-- `core/cmd/helm/*`
+- `core/cmd/helm-ai-kernel/*`
 - `api/openapi/helm.openapi.yaml`
 - `docs/reference/cli.md`
 - `docs/reference/http-api.md`
@@ -36,28 +44,28 @@ Use one of these current paths. The published Homebrew path is the macOS path;
 source builds and Docker remain the portable paths for Linux and WSL.
 
 ```bash
-brew install mindburnlabs/tap/helm
-helm --version
+brew install mindburnlabs/tap/helm-ai-kernel
+helm-ai-kernel --version
 ```
 
 ```bash
-git clone https://github.com/Mindburn-Labs/helm-oss.git
-cd helm-oss
+git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
+cd helm-ai-kernel
 make build
-./bin/helm --version
+./bin/helm-ai-kernel --version
 ```
 
 ```bash
-docker build -t ghcr.io/mindburn-labs/helm-oss:local .
+docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:local .
 docker compose up -d
 ```
 
-Docker Compose exposes the service on its compose-configured port. The local source quickstart uses `helm serve` on `127.0.0.1:7714`.
+Docker Compose exposes the service on its compose-configured port. The local source quickstart uses `helm-ai-kernel serve` on `127.0.0.1:7714`.
 
 ## Local Boundary
 
 ```bash
-./bin/helm serve --policy ./release.high_risk.v3.toml
+./bin/helm-ai-kernel serve --policy ./release.high_risk.v3.toml
 ```
 
 Expected ready line:
@@ -70,7 +78,7 @@ Open the self-hostable Console by adding `--console`:
 
 ```bash
 make build-console
-./bin/helm serve --policy ./release.high_risk.v3.toml --console
+./bin/helm-ai-kernel serve --policy ./release.high_risk.v3.toml --console
 ```
 
 ## First Proof
@@ -101,7 +109,7 @@ Use the proxy when the application already supports an OpenAI-compatible `base_u
 
 ```bash
 python3 scripts/launch/mock-openai-upstream.py --port 19090
-./bin/helm proxy --upstream http://127.0.0.1:19090/v1 --port 9090 --receipts-dir ./helm-receipts
+./bin/helm-ai-kernel proxy --upstream http://127.0.0.1:19090/v1 --port 9090 --receipts-dir ./helm-receipts
 ```
 
 Configure the client base URL as:
@@ -114,12 +122,12 @@ The example directories named `*_openai_baseurl` currently exercise HELM HTTP or
 
 ## Receipts And Boundary Records
 
-HELM OSS is useful only when both allowed and denied outcomes are recorded.
+HELM AI Kernel is useful only when both allowed and denied outcomes are recorded.
 
 ```bash
-./bin/helm receipts tail --agent agent.demo.exec --server http://127.0.0.1:7714
+./bin/helm-ai-kernel receipts tail --agent agent.demo.exec --server http://127.0.0.1:7714
 curl 'http://127.0.0.1:7714/api/v1/receipts?limit=20'
-./bin/helm boundary records --json
+./bin/helm-ai-kernel boundary records --json
 ```
 
 The CLI receipt tail requires `--agent`; the HTTP list route is the unfiltered inspection path.
@@ -142,26 +150,26 @@ policy-language behavior. The policy bundle command supports CEL, Rego, and
 Cedar:
 
 ```bash
-./bin/helm bundle build --language cel examples/policies/cel/example.cel
-./bin/helm bundle build --language rego examples/policies/rego/example.rego
-./bin/helm bundle build --language cedar --entities examples/policies/cedar/entities.json examples/policies/cedar/example.cedar
+./bin/helm-ai-kernel bundle build --language cel examples/policies/cel/example.cel
+./bin/helm-ai-kernel bundle build --language rego examples/policies/rego/example.rego
+./bin/helm-ai-kernel bundle build --language cedar --entities examples/policies/cedar/entities.json examples/policies/cedar/example.cedar
 ```
 
-`helm bundle build` takes the policy source as the positional argument. It does not accept `--policy`; that flag belongs to `helm serve`.
+`helm-ai-kernel bundle build` takes the policy source as the positional argument. It does not accept `--policy`; that flag belongs to `helm-ai-kernel serve`.
 
 ## EvidencePack Verification
 
 Run offline verification first:
 
 ```bash
-./bin/helm verify evidence-pack.tar
-./bin/helm verify evidence-pack.tar --json
+./bin/helm-ai-kernel verify evidence-pack.tar
+./bin/helm-ai-kernel verify evidence-pack.tar --json
 ```
 
 Run online verification only after offline verification passes:
 
 ```bash
-./bin/helm verify evidence-pack.tar --online
+./bin/helm-ai-kernel verify evidence-pack.tar --online
 ```
 
 `--online` checks envelope or root metadata against `HELM_LEDGER_URL` or the public proof verifier. Online checks are additive and do not replace offline receipt and ProofGraph verification.
@@ -171,9 +179,9 @@ Run online verification only after offline verification passes:
 | Language | Public package status | Validation |
 | --- | --- | --- |
 | Python | `pip install helm-sdk` | `make test-sdk-py` |
-| TypeScript / JavaScript | `npm install @mindburn/helm` | `make test-sdk-ts` |
+| TypeScript / JavaScript | `npm install @mindburn/helm-ai-kernel` | `make test-sdk-ts` |
 | Rust | `cargo add helm-sdk` | `make test-sdk-rust` |
-| Go | source/module path `github.com/Mindburn-Labs/helm-oss/sdk/go`; pin `@main` or a commit until tagged module releases are aligned | `cd sdk/go && go test ./...` |
+| Go | source/module path `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go`; pin `@main` or a commit until tagged module releases are aligned | `cd sdk/go && go test ./...` |
 | Java | source-available local Maven build under `sdk/java`; public package coordinate not verified | `make test-sdk-java` |
 
 Use [SDK Index](sdks/00_INDEX.md) before publishing SDK install instructions.
@@ -183,9 +191,9 @@ Use [SDK Index](sdks/00_INDEX.md) before publishing SDK install instructions.
 Use MCP when the integration is tool-oriented and the client expects an MCP server, client config, or MCP bundle:
 
 ```bash
-./bin/helm mcp serve
-./bin/helm mcp pack --client claude-desktop --out helm.mcpb
-./bin/helm mcp install --client claude-code
+./bin/helm-ai-kernel mcp serve
+./bin/helm-ai-kernel mcp pack --client claude-desktop --out helm-ai-kernel.mcpb
+./bin/helm-ai-kernel mcp install --client claude-code
 ```
 
 Unknown MCP servers and tools start in quarantine. They must be inspected and approved before side effects are dispatched.
@@ -203,16 +211,16 @@ Use the Kubernetes Helm chart only with a Kubernetes Helm v3 binary:
 
 ```bash
 helm lint deploy/helm-chart
-helm install helm-oss deploy/helm-chart
+helm install helm-ai-kernel deploy/helm-chart
 ```
 
-If the `helm` command on your machine resolves to this HELM OSS binary, use `KUBE_HELM_CMD` or a pinned containerized chart runner instead.
+If the `helm` command on your machine resolves to this HELM AI Kernel binary, use `KUBE_HELM_CMD` or a pinned containerized chart runner instead.
 
 ## Release And Conformance Gates
 
-Current public release: `v0.5.0`, published on 2026-05-13 at <https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.5.0>.
+Current public release: `v0.5.0`, published on 2026-05-13 at <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.0>.
 
-The release page includes Darwin/Linux/Windows binaries, `SHA256SUMS.txt`, `sbom.json`, `v0.5.0.openvex.json`, `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm.mcpb`, `helm.rb`, and matching `*.cosign.bundle` files for each primary asset.
+The release page includes Darwin/Linux/Windows binaries, `SHA256SUMS.txt`, `sbom.json`, `v0.5.0.openvex.json`, `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, and matching `*.cosign.bundle` files for each primary asset.
 
 Run conformance and docs gates:
 
@@ -241,8 +249,8 @@ make release-assets
 
 | Symptom | Likely cause | First check |
 | --- | --- | --- |
-| `helm serve` starts but clients still bypass HELM | client base URL still points to upstream provider | log request host and set the client base URL to HELM |
-| no receipts appear | wrong server, directory, or agent id | run `helm receipts tail --agent <id> --server http://127.0.0.1:7714` or query `/api/v1/receipts` |
+| `helm-ai-kernel serve` starts but clients still bypass HELM | client base URL still points to upstream provider | log request host and set the client base URL to HELM |
+| no receipts appear | wrong server, directory, or agent id | run `helm-ai-kernel receipts tail --agent <id> --server http://127.0.0.1:7714` or query `/api/v1/receipts` |
 | denied call retries forever | app treats policy denial as transient | handle `DENY` as a final authorization result |
 | offline verification fails | EvidencePack is incomplete or modified | verify a complete pack and run `make verify-fixtures` |
 | MCP call fails with OAuth scope error | token lacks required scope or resource indicator | inspect `HELM_OAUTH_RESOURCE` and `HELM_OAUTH_SCOPES` |

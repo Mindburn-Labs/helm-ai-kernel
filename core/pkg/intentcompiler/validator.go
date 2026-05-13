@@ -4,7 +4,7 @@ package intentcompiler
 import (
 	"fmt"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // GraphValidator validates the structure and semantics of a PlanSpec DAG.

@@ -5,9 +5,9 @@ set -o pipefail
 # HELM Installer
 # Installs the latest release of the HELM CLI.
 
-REPO="Mindburn-Labs/helm-oss"
-BIN_NAME="helm"
-INSTALL_DIR="/usr/local/bin"
+REPO="Mindburn-Labs/helm-ai-kernel"
+BIN_NAME="helm-ai-kernel"
+INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 
 # ANSI Colors
 RED='\033[0;31m'
@@ -97,11 +97,12 @@ else
 fi
 
 # 6. Verify Installation
-INSTALLED_VERSION=$($BIN_NAME version 2>/dev/null || echo "unknown")
+INSTALLED_BIN="$INSTALL_DIR/$BIN_NAME"
+INSTALLED_VERSION=$("$INSTALLED_BIN" version 2>/dev/null || echo "unknown")
 echo ""
 echo -e "${GREEN}✅ HELM Installed Successfully!${NC}"
-echo -e "   Location: $(which $BIN_NAME)"
+echo -e "   Location: $INSTALLED_BIN"
 # echo -e "   Version:  $INSTALLED_VERSION"
 echo ""
 echo -e "Try it now:"
-echo -e "   ${BOLD}helm help${NC}"
+echo -e "   ${BOLD}helm-ai-kernel help${NC}"

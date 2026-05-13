@@ -10,7 +10,7 @@ HELM operates on a strict, three-verdict execution model, documented in the Unif
 
 In earlier iterations of the HELM engine, the terms `DEFER`, `REQUIRE_APPROVAL`, and `APPROVAL_REQUIRED` were used to represent the state where a decision could not be reached autonomously.
 
-To maintain backward compatibility with existing wire-format schemas, generated SDKs, and stored policies, these terms may still appear in the `helm-oss` repository's source code, tests, and JSON schemas.
+To maintain backward compatibility with existing wire-format schemas, generated SDKs, and stored policies, these terms may still appear in the `helm-ai-kernel` repository's source code, tests, and JSON schemas.
 
 **Canonical Mapping:**
 

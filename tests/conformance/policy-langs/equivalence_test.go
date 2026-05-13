@@ -5,7 +5,7 @@
 // random EquivalenceRequest instances, and (3) asserts the verdicts are
 // byte-identical across CEL, Rego, and Cedar evaluators.
 //
-// Workstream F / F1 — Phase 3 of the helm-oss 100% SOTA execution plan.
+// Workstream F / F1 — Phase 3 of the helm-ai-kernel 100% SOTA execution plan.
 package policylangs
 
 import (

@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/conform"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/proofgraph/condensation"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph/condensation"
 )
 
 // G15Condensation validates proof condensation checkpoints per L3 §G15.

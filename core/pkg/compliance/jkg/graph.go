@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/compliance/jcs"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/jcs"
 )
 
 // JurisdictionCode represents an ISO 3166-1 alpha-2 code with extensions.

@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/registry/connectors"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/registry/skills"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/skills"
 )
 
 // bundleHash computes SHA-256 of data and returns the hex string.

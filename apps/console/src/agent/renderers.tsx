@@ -1,7 +1,7 @@
 import { useComponent } from "@copilotkit/react-core/v2/headless";
 import { z } from "zod";
 import { Badge, EmptyState } from "@mindburn/ui-core";
-import type { OssAgentToolResult } from "./state";
+import type { AiKernelAgentToolResult } from "./state";
 
 const componentSchema = z.object({
   title: z.string().optional(),
@@ -9,17 +9,17 @@ const componentSchema = z.object({
   status: z.string().optional(),
 });
 
-export function useOssAgentRenderers() {
+export function useAiKernelAgentRenderers() {
   useComponent(
     {
-      name: "helm_oss_proof_result",
-      description: "Render an OSS proof-demo tool result.",
+      name: "helm_ai_kernel_proof_result",
+      description: "Render an HELM AI Kernel proof-demo tool result.",
       parameters: componentSchema,
       render: ({ title, status, summary }) => (
         <OssToolResultCard
-          name={title ?? "OSS proof result"}
+          name={title ?? "HELM AI Kernel proof result"}
           status={status ?? "complete"}
-          result={{ status: "complete", summary: summary ?? "OSS proof result ready." }}
+          result={{ status: "complete", summary: summary ?? "HELM AI Kernel proof result ready." }}
         />
       ),
     },
@@ -36,7 +36,7 @@ export function OssToolResultCard({
   readonly name: string;
   readonly status: string;
   readonly parameters?: Record<string, unknown>;
-  readonly result?: OssAgentToolResult | null;
+  readonly result?: AiKernelAgentToolResult | null;
 }) {
   if (!result && status === "inProgress") {
     return <EmptyState title="Preparing tool" body={`Preparing ${name}.`} />;

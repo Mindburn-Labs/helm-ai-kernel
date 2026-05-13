@@ -27,8 +27,8 @@ connector.ton.acton.contract.test
 9. The resulting EvidencePack is checked with:
 
 ```sh
-helm verify pack <ton-acton-evidencepack>
-helm replay --evidence <ton-acton-evidencepack> --verify
+helm-ai-kernel verify pack <ton-acton-evidencepack>
+helm-ai-kernel replay --evidence <ton-acton-evidencepack> --verify
 ```
 
 Expected receipts include `OK`, `ERR_TON_SPEND_CEILING_EXCEEDED`,

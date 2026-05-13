@@ -1,15 +1,15 @@
 {
-  "canonical_core": "helm-oss/packages/design-system-core",
+  "canonical_core": "helm-ai-kernel/packages/design-system-core",
   "canonical_core_package": "@mindburn/ui-core",
   "helm_product_layer": "helm/packages/design-system-helm",
   "brand_layer": "mindburn/src/components/site-ui",
   "docs_layer": "docs-platform/packages/site",
   "deprecated": [
-    "helm-oss/packages/design-system-core-compat",
+    "helm-ai-kernel/packages/design-system-core-compat",
     "helm/packages/design-tokens"
   ],
   "compatibility_packages": {
-    "@helm/design-system-core": "helm-oss/packages/design-system-core-compat",
+    "@helm/design-system-core": "helm-ai-kernel/packages/design-system-core-compat",
     "@helm/design-tokens": "helm/packages/design-tokens"
   },
   "public_interfaces": {

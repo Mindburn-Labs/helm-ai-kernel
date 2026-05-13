@@ -20,16 +20,16 @@ if awk '/^launch-security:/,/^[[:alnum:]_.-]+:/' "$ROOT/Makefile" | grep -Eiq 'm
 fi
 
 run_go_test ./pkg/api 'TestCORS'
-run_go_test ./cmd/helm 'TestTenantScopedRuntimeAuth|TestServiceInternalRuntimeAuth'
-run_go_test ./cmd/helm 'TestRuntimeRouteRegistryHasExplicitSecurityMetadata|TestProtectedRuntimeHandlersAreDeclaredInRouteRegistry'
+run_go_test ./cmd/helm-ai-kernel 'TestTenantScopedRuntimeAuth|TestServiceInternalRuntimeAuth'
+run_go_test ./cmd/helm-ai-kernel 'TestRuntimeRouteRegistryHasExplicitSecurityMetadata|TestProtectedRuntimeHandlersAreDeclaredInRouteRegistry'
 
-grep -q 'RouteAuthService' "$ROOT/core/cmd/helm/policy_reconcile_routes.go" \
+grep -q 'RouteAuthService' "$ROOT/core/cmd/helm-ai-kernel/policy_reconcile_routes.go" \
   || fail "internal policy reconcile route is not service-auth protected"
-grep -q 'RouteAuthTenant' "$ROOT/core/cmd/helm/console_agui_routes.go" \
+grep -q 'RouteAuthTenant' "$ROOT/core/cmd/helm-ai-kernel/console_agui_routes.go" \
   || fail "AG-UI runtime is not tenant-auth protected"
-grep -q 'oss-read-only' "$ROOT/core/cmd/helm/console_agui_routes.go" \
-  || fail "AG-UI runtime no longer declares OSS read-only scope"
-if grep -Eq 'GeneratedSpec|CompanyArtifactGraph|CreateArtifact|CreateEdge|Approve|Close' "$ROOT/core/cmd/helm/console_agui_routes.go"; then
+grep -q 'ai-kernel-read-only' "$ROOT/core/cmd/helm-ai-kernel/console_agui_routes.go" \
+  || fail "AG-UI runtime no longer declares HELM AI Kernel read-only scope"
+if grep -Eq 'GeneratedSpec|CompanyArtifactGraph|CreateArtifact|CreateEdge|Approve|Close' "$ROOT/core/cmd/helm-ai-kernel/console_agui_routes.go"; then
   fail "AG-UI runtime references authoritative commercial or mutation concepts"
 fi
 grep -q '"@ag-ui/client": "0.0.53"' "$ROOT/apps/console/package.json" \

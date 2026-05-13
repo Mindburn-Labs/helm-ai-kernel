@@ -11,7 +11,7 @@ from exported HELM evidence data.
 ## Prerequisites
 
 - HELM running in the mode that produced the receipts you are inspecting.
-  `helm serve --policy` defaults to `http://127.0.0.1:7714`; `helm server`
+  `helm-ai-kernel serve --policy` defaults to `http://127.0.0.1:7714`; `helm-ai-kernel server`
   defaults to `http://127.0.0.1:8080` unless configured otherwise.
 - Receipts already present in the ProofGraph store
 - Python package from `sdk/python` or a JavaScript runtime with `fetch`

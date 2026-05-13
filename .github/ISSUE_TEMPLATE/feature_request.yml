@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        HELM OSS scope is the kernel, CLI, contracts, SDKs, Console, examples, deployment material, and verification artifacts.
+        HELM AI Kernel scope is the kernel, CLI, contracts, SDKs, Console, examples, deployment material, and verification artifacts.
   - type: textarea
     id: use_case
     attributes:

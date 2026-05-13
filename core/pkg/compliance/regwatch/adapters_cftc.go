@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/compliance/jkg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/jkg"
 )
 
 // CFTCAdapter monitors US CFTC (Commodity Futures Trading Commission) regulatory updates.

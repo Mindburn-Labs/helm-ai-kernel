@@ -1,9 +1,9 @@
 // Package datadog_logs implements an OTel SpanExporter that translates
-// helm-oss governance spans into Datadog Logs Intake events posted to
+// helm-ai-kernel governance spans into Datadog Logs Intake events posted to
 // /api/v2/logs.
 //
 // Wire shape: each ReadOnlySpan becomes one Datadog log entry with
-// `ddsource = helm-oss`, `service = helm-governance`, structured
+// `ddsource = helm-ai-kernel`, `service = helm-governance`, structured
 // attributes mirroring the OTel GenAI semconv keys (gen_ai.*) and the
 // helm.* governance namespace.
 //
@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/observability"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
@@ -38,7 +38,7 @@ type Config struct {
 	APIKey string
 	// Service overrides the `service` tag (default "helm-governance").
 	Service string
-	// Source overrides the `ddsource` tag (default "helm-oss").
+	// Source overrides the `ddsource` tag (default "helm-ai-kernel").
 	Source string
 	// Hostname is sent as `hostname` (default "" — Datadog will infer).
 	Hostname string
@@ -72,7 +72,7 @@ func New(cfg Config) (*Exporter, error) {
 		cfg.Service = "helm-governance"
 	}
 	if cfg.Source == "" {
-		cfg.Source = "helm-oss"
+		cfg.Source = "helm-ai-kernel"
 	}
 	hc := cfg.HTTPClient
 	if hc == nil {

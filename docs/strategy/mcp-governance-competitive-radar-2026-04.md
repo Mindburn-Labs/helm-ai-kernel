@@ -7,7 +7,7 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Internal maintainers using this private strategy note to compare MCP governance signals against HELM OSS scope.
+Internal maintainers using this private strategy note to compare MCP governance signals against HELM AI Kernel scope.
 
 ## Outcome
 
@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/strategy/mcp-governance-competitive-radar-2026-04`
-- Source document: `helm-oss/docs/strategy/mcp-governance-competitive-radar-2026-04.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/strategy/mcp-governance-competitive-radar-2026-04`
+- Source document: `helm-ai-kernel/docs/strategy/mcp-governance-competitive-radar-2026-04.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -39,14 +39,14 @@ This scheme maps the main sections of MCP Governance Competitive Radar - April 2
 flowchart LR
   Page["MCP Governance Competitive Radar - April 2026"]
   A["Source Matrix"]
-  B["HELM OSS Position"]
+  B["HELM AI Kernel Position"]
   C["No-Dependency Decisions"]
   Page --> A
   A --> B
   B --> C
 ```
 
-This page records the April 2026 competitive scan for HELM OSS MCP governance. It distinguishes verified product signals from HELM's retained OSS differentiation.
+This page records the April 2026 competitive scan for HELM AI Kernel MCP governance. It distinguishes verified product signals from HELM's retained OSS differentiation.
 
 ## Source Matrix
 
@@ -60,9 +60,9 @@ This page records the April 2026 competitive scan for HELM OSS MCP governance. I
 | `MIN-218` | [Anthropic code execution tool](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/code-execution-tool) | Public Anthropic docs verify sandboxed API code execution and workspace scoping; no primary Anthropic page for "Claude Managed Agents GA" was found in this pass | Treat as adjacent positioning only; do not claim Managed Agents parity without a primary source |
 | `MIN-215` | [Agentic AI Foundation events program](https://events.linuxfoundation.org/2026/04/17/agentic-ai-foundation-announces-global-2026-events-program-anchored-by-agntcon-mcpcon-north-america-and-europe/) and [MCP roadmap](https://modelcontextprotocol.io/development/roadmap) | Linux Foundation event source verifies AAIF/MCPCon activity; MCP roadmap records Working Groups, SEPs, contributor ladder, and enterprise authorization priorities | Track SEPs and WG output; publish compatibility notes only when a stable spec or extension lands |
 
-## HELM OSS Position
+## HELM AI Kernel Position
 
-HELM OSS should avoid a "proxy-only" story. The competitive field increasingly validates MCP interception, fail-closed policy, tool-level controls, and structured audit events. HELM's retained wedge is the combination of:
+HELM AI Kernel should avoid a "proxy-only" story. The competitive field increasingly validates MCP interception, fail-closed policy, tool-level controls, and structured audit events. HELM's retained wedge is the combination of:
 
 - deterministic pre-action governance at the execution boundary;
 - signed receipts and ProofGraph evidence rather than log-only audit trails;
@@ -72,4 +72,4 @@ HELM OSS should avoid a "proxy-only" story. The competitive field increasingly v
 
 ## No-Dependency Decisions
 
-No competitor SDK is imported into HELM OSS from this scan. The verified response is documentation plus the first-party MCP OAuth resource/scope implementation. PQC/ML-DSA remains a roadmap option because adopting it would change key-management, release-signing, and verification policy across the evidence stack.
+No competitor SDK is imported into HELM AI Kernel from this scan. The verified response is documentation plus the first-party MCP OAuth resource/scope implementation. PQC/ML-DSA remains a roadmap option because adopting it would change key-management, release-signing, and verification policy across the evidence stack.

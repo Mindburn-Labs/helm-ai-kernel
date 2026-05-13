@@ -9,7 +9,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
 
 // Parser reads agent constitutions from JSON or text format.

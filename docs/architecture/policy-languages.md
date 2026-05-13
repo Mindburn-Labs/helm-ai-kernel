@@ -15,10 +15,10 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-oss/architecture/policy-languages`
-- Source document: `helm-oss/docs/architecture/policy-languages.md`
-- Public manifest: `helm-oss/docs/public-docs.manifest.json`
-- Source inventory: `helm-oss/docs/source-inventory.manifest.json`
+- Public route: `helm-ai-kernel/architecture/policy-languages`
+- Source document: `helm-ai-kernel/docs/architecture/policy-languages.md`
+- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
+- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -31,7 +31,7 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 | A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
 | A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
 
-helm-oss accepts policy sources written in three languages and routes
+helm-ai-kernel accepts policy sources written in three languages and routes
 them through one enforcement boundary. The kernel never branches on
 language at decision time; only the multi-language registry in
 [`core/pkg/policybundles/registry.go`](../../core/pkg/policybundles/registry.go)
@@ -124,7 +124,7 @@ F1) will assert byte-identical decisions across all three on a
 
 ## Non-determinism rules (uniform)
 
-Across all three languages, helm-oss enforces:
+Across all three languages, helm-ai-kernel enforces:
 
 - No network I/O during evaluation.
 - No random number generation.
@@ -146,7 +146,7 @@ Rego uses OPA's capabilities file. CEL uses the curated function set in
 Bundle manifests carry `language: cel | rego | cedar`. The kernel loads
 + dispatches via
 [`core/pkg/policybundles/registry.go`](../../core/pkg/policybundles/registry.go).
-The `helm bundle build` subcommand auto-detects from file extension when
+The `helm-ai-kernel bundle build` subcommand auto-detects from file extension when
 `--language` is omitted.
 
 ## See also

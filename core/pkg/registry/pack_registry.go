@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/compliance/jcs"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/jcs"
 	"github.com/google/uuid"
 )
 

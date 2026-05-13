@@ -33,7 +33,7 @@ npm run build
 ## Usage
 
 ```ts
-import { HelmClient } from "@mindburn/helm";
+import { HelmClient } from "@mindburn/helm-ai-kernel";
 
 const client = new HelmClient({ baseUrl: "http://127.0.0.1:7715" });
 const decision = await client.evaluateDecision({
@@ -52,7 +52,7 @@ from `examples/ts_sdk/`.
 The TypeScript SDK includes lightweight adapter helpers for LangGraph, CrewAI, OpenAI Agents SDK, PydanticAI, and LlamaIndex tool-call events. These helpers normalize each framework event into a HELM governance request and submit it through `chatCompletionsWithReceipt`, preserving the kernel receipt returned in `X-Helm-*` headers.
 
 ```ts
-import { HelmClient, createAgentFrameworkAdapter, fromOpenAIAgentsToolCall } from "@mindburn/helm";
+import { HelmClient, createAgentFrameworkAdapter, fromOpenAIAgentsToolCall } from "@mindburn/helm-ai-kernel";
 
 const helm = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
 const adapter = createAgentFrameworkAdapter(helm, { model: "helm-governance" });

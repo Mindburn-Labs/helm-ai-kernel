@@ -1,4 +1,4 @@
-# HELM OSS Kernel Package Source Owner
+# HELM AI Kernel Kernel Package Source Owner
 
 ## Audience
 
@@ -6,7 +6,7 @@ Use this file when changing deterministic execution, policy decision reduction, 
 
 ## Responsibility
 
-`core/pkg/kernel` owns the runtime kernel semantics behind HELM OSS policy evaluation and governed execution. Public docs should describe the request lifecycle and trust boundary; this package owns the code-level behavior that makes those claims true.
+`core/pkg/kernel` owns the runtime kernel semantics behind HELM AI Kernel policy evaluation and governed execution. Public docs should describe the request lifecycle and trust boundary; this package owns the code-level behavior that makes those claims true.
 
 ## Public Status
 
@@ -14,11 +14,11 @@ Classification: `public-hub`.
 
 Public docs should link here from:
 
-- `helm-oss/architecture`
-- `helm-oss/reference/execution-boundary`
-- `helm-oss/reference/http-api`
-- `helm-oss/verification`
-- `helm-oss/troubleshooting`
+- `helm-ai-kernel/architecture`
+- `helm-ai-kernel/reference/execution-boundary`
+- `helm-ai-kernel/reference/http-api`
+- `helm-ai-kernel/verification`
+- `helm-ai-kernel/troubleshooting`
 
 ## Source Map
 

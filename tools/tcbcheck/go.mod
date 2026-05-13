@@ -1,3 +1,3 @@
-module github.com/Mindburn-Labs/helm-oss/tools/tcbcheck
+module github.com/Mindburn-Labs/helm-ai-kernel/tools/tcbcheck
 
 go 1.22

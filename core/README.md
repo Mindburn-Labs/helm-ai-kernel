@@ -3,7 +3,7 @@
 
 ## Purpose
 
-Active core-runtime surface for the `helm-oss` project.
+Active core-runtime surface for the `helm-ai-kernel` project.
 
 ## Canonical Interface
 

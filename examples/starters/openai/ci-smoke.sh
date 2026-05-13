@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-HELM_BIN="${REPO_ROOT}/bin/helm"
+HELM_BIN="${REPO_ROOT}/bin/helm-ai-kernel"
 TMPDIR_CI=$(mktemp -d)
 
 trap "rm -rf $TMPDIR_CI" EXIT
@@ -22,7 +22,7 @@ echo "✓ helm binary found"
 
 # 2. Init with openai profile
 "$HELM_BIN" init openai "$TMPDIR_CI/test-project" 2>&1
-echo "✓ helm init openai succeeded"
+echo "✓ helm-ai-kernel init openai succeeded"
 
 # 3. Check generated files
 for f in helm.yaml .env; do
@@ -35,6 +35,6 @@ echo "✓ generated files present"
 
 # 4. Doctor
 "$HELM_BIN" doctor --dir "$TMPDIR_CI/test-project" 2>&1 || true
-echo "✓ helm doctor completed"
+echo "✓ helm-ai-kernel doctor completed"
 
 echo "=== PASS ==="

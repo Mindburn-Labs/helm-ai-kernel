@@ -16,13 +16,13 @@ used by the public compatibility docs.
 
 ```bash
 make build
-./bin/helm bundle build --language cel examples/policies/cel/example.cel
-./bin/helm bundle build --language rego examples/policies/rego/example.rego
-./bin/helm bundle build --language cedar --entities examples/policies/cedar/entities.json examples/policies/cedar/example.cedar
+./bin/helm-ai-kernel bundle build --language cel examples/policies/cel/example.cel
+./bin/helm-ai-kernel bundle build --language rego examples/policies/rego/example.rego
+./bin/helm-ai-kernel bundle build --language cedar --entities examples/policies/cedar/entities.json examples/policies/cedar/example.cedar
 ```
 
-`helm bundle build` accepts the policy source as the positional argument.
-`--policy` belongs to `helm serve` and is intentionally not accepted by this
+`helm-ai-kernel bundle build` accepts the policy source as the positional argument.
+`--policy` belongs to `helm-ai-kernel serve` and is intentionally not accepted by this
 subcommand.
 
 Policy-language behavior is documented in

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/manifest"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/registry"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry"
 )
 
 // RegistryAdapter bridges the Bundle Registry to the PackRegistry interface.

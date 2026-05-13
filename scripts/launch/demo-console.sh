@@ -47,7 +47,7 @@ make build >/dev/null
 
 HELM_ADMIN_API_KEY="$ADMIN_KEY" \
 HELM_HEALTH_PORT="$HEALTH_PORT" \
-./bin/helm serve \
+./bin/helm-ai-kernel serve \
   --console \
   --console-dir apps/console/dist \
   --policy examples/launch/policies/agent_tool_call_boundary.toml \

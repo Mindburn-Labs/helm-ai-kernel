@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/conformance"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/evidencepack"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/trust/registry"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conformance"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidencepack"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust/registry"
 )
 
 // RegisterEvidencePackTests adds evidence pack conformance tests.

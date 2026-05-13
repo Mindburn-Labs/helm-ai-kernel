@@ -7,7 +7,7 @@ version = "0.5.0"
 edition = "2021"
 description = "Rust SDK for HELM — fail-closed tool calling for AI agents"
 license = "Apache-2.0"
-repository = "https://github.com/Mindburn-Labs/helm-oss"
+repository = "https://github.com/Mindburn-Labs/helm-ai-kernel"
 
 [dependencies]
 reqwest = { version = "0.13", features = ["json", "multipart", "blocking"] }

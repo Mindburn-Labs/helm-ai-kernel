@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/tracing"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 )
 
 // ── NoopTracer ────────────────────────────────────────────────────────────────

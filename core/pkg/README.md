@@ -1,4 +1,4 @@
-# HELM OSS Core Packages Source Owner
+# HELM AI Kernel Core Packages Source Owner
 
 ## Audience
 
@@ -20,11 +20,11 @@ Use this file when you need to find the package that owns runtime, policy, recei
 
 ## Public Docs Owners
 
-- Runtime and first-call flows: `helm-oss/developer-journey`.
-- Architecture and trust boundary: `helm-oss/architecture`.
-- Verification and receipts: `helm-oss/verification`.
-- MCP behavior: `helm-oss/integrations/mcp`.
-- Protocol and schema contracts: `helm-oss/reference/protocols-and-schemas`.
+- Runtime and first-call flows: `helm-ai-kernel/developer-journey`.
+- Architecture and trust boundary: `helm-ai-kernel/architecture`.
+- Verification and receipts: `helm-ai-kernel/verification`.
+- MCP behavior: `helm-ai-kernel/integrations/mcp`.
+- Protocol and schema contracts: `helm-ai-kernel/reference/protocols-and-schemas`.
 
 ## Validation
 

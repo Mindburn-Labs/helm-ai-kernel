@@ -3,15 +3,15 @@ title: Developer Surface Map
 last_reviewed: 2026-05-05
 ---
 
-# HELM OSS Developer Surface Map
+# HELM AI Kernel Developer Surface Map
 
-This page is the public map of HELM OSS developer surfaces. It complements the
+This page is the public map of HELM AI Kernel developer surfaces. It complements the
 quickstart and developer journey by showing where each source-backed capability
 lives in the repository and which public docs page owns the explanation.
 
 ## Audience
 
-This page is for developers who need the full HELM OSS surface area without
+This page is for developers who need the full HELM AI Kernel surface area without
 reading the repository directory by directory.
 
 ## Outcome
@@ -37,16 +37,16 @@ flowchart LR
 
 | Need | Public page | Source truth |
 | --- | --- | --- |
-| Install on macOS, Linux, Windows/WSL, Docker, or source | `/helm-oss/developer-journey` | `docs/DEVELOPER_JOURNEY.md`, `docs/QUICKSTART.md`, `Makefile`, `.goreleaser.yml` |
-| Run the first local boundary | `/helm-oss/developer-journey` | `core/cmd/helm/server_cmd.go`, `core/cmd/helm/proxy_cmd.go` |
-| Point OpenAI-compatible clients at HELM | `/helm-oss/integrations/openai-compatible-proxy` | `docs/INTEGRATIONS/openai_baseurl.md`, `examples/python_openai_baseurl/`, `examples/ts_openai_baseurl/` |
-| Use MCP | `/helm-oss/integrations/mcp` | `docs/INTEGRATIONS/mcp.md`, `examples/mcp_client/`, `mcp-bundle.json` |
-| Use Python, TypeScript, JavaScript, Go, Rust, or Java | `/helm-oss/sdks` | `sdk/`, `examples/*_client/`, `examples/*openai_baseurl/` |
-| Understand policy languages and bundles | `/helm-oss/reference/protocols-and-schemas`, `/helm-oss/compatibility` | `docs/architecture/policy-languages.md`, `protocols/bundles/`, `examples/policies/` |
-| Validate conformance | `/helm-oss/conformance` | `docs/CONFORMANCE.md`, `protocols/conformance/v1/`, `tests/conformance/` |
-| Verify receipts and evidence packs | `/helm-oss/verification`, `/helm-oss/developer-journey` | `docs/VERIFICATION.md`, `examples/receipt_verification/`, `protocols/spec/evidence-pack-v1.md` |
-| Deploy with Docker or Kubernetes | `/helm-oss/deployment-and-examples` | `docker-compose.yml`, `deploy/`, `deploy/helm-chart/` |
-| Verify release artifacts | `/helm-oss/security/release-security`, `/helm-oss/publishing` | `SECURITY.md`, `RELEASE.md`, `release/`, `.github/workflows/release.yml` |
+| Install on macOS, Linux, Windows/WSL, Docker, or source | `/helm-ai-kernel/developer-journey` | `docs/DEVELOPER_JOURNEY.md`, `docs/QUICKSTART.md`, `Makefile`, `.goreleaser.yml` |
+| Run the first local boundary | `/helm-ai-kernel/developer-journey` | `core/cmd/helm-ai-kernel/server_cmd.go`, `core/cmd/helm-ai-kernel/proxy_cmd.go` |
+| Point OpenAI-compatible clients at HELM | `/helm-ai-kernel/integrations/openai-compatible-proxy` | `docs/INTEGRATIONS/openai_baseurl.md`, `examples/python_openai_baseurl/`, `examples/ts_openai_baseurl/` |
+| Use MCP | `/helm-ai-kernel/integrations/mcp` | `docs/INTEGRATIONS/mcp.md`, `examples/mcp_client/`, `mcp-bundle.json` |
+| Use Python, TypeScript, JavaScript, Go, Rust, or Java | `/helm-ai-kernel/sdks` | `sdk/`, `examples/*_client/`, `examples/*openai_baseurl/` |
+| Understand policy languages and bundles | `/helm-ai-kernel/reference/protocols-and-schemas`, `/helm-ai-kernel/compatibility` | `docs/architecture/policy-languages.md`, `protocols/bundles/`, `examples/policies/` |
+| Validate conformance | `/helm-ai-kernel/conformance` | `docs/CONFORMANCE.md`, `protocols/conformance/v1/`, `tests/conformance/` |
+| Verify receipts and evidence packs | `/helm-ai-kernel/verification`, `/helm-ai-kernel/developer-journey` | `docs/VERIFICATION.md`, `examples/receipt_verification/`, `protocols/spec/evidence-pack-v1.md` |
+| Deploy with Docker or Kubernetes | `/helm-ai-kernel/deployment-and-examples` | `docker-compose.yml`, `deploy/`, `deploy/helm-chart/` |
+| Verify release artifacts | `/helm-ai-kernel/security/release-security`, `/helm-ai-kernel/publishing` | `SECURITY.md`, `RELEASE.md`, `release/`, `.github/workflows/release.yml` |
 
 ## Source Truth
 

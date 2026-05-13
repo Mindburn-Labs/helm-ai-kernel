@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/channels"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/packs/antispoof"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/channels"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/packs/antispoof"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

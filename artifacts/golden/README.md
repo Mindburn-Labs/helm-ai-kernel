@@ -8,8 +8,8 @@ Tracked binary artifacts are intentionally not kept in git. Regenerate them loca
 
 ```bash
 make build
-./bin/helm onboard --yes
-./bin/helm demo organization --template starter --provider mock
-./bin/helm export --evidence ./data/evidence --out artifacts/golden/starter-organization.tar
-./bin/helm verify --bundle artifacts/golden/starter-organization.tar
+./bin/helm-ai-kernel onboard --yes
+./bin/helm-ai-kernel demo organization --template starter --provider mock
+./bin/helm-ai-kernel export --evidence ./data/evidence --out artifacts/golden/starter-organization.tar
+./bin/helm-ai-kernel verify --bundle artifacts/golden/starter-organization.tar
 ```

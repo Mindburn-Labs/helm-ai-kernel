@@ -23,13 +23,13 @@ Most client examples expect a HELM boundary at `http://127.0.0.1:7714`.
 
 ```bash
 make build
-./bin/helm serve --policy ./release.high_risk.v3.toml
+./bin/helm-ai-kernel serve --policy ./release.high_risk.v3.toml
 ```
 
 Or run the binary directly with an explicit port:
 
 ```bash
-./bin/helm serve --policy ./release.high_risk.v3.toml --addr 127.0.0.1 --port 7714
+./bin/helm-ai-kernel serve --policy ./release.high_risk.v3.toml --addr 127.0.0.1 --port 7714
 ```
 
 ## SDK Examples

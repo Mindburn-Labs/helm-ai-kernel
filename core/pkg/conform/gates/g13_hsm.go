@@ -3,8 +3,8 @@ package gates
 import (
 	"context"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/conform"
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/crypto/hsm"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto/hsm"
 )
 
 // G13HSM validates HSM key management per L3 §G13.

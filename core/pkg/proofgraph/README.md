@@ -1,4 +1,4 @@
-# HELM OSS ProofGraph Package Source Owner
+# HELM AI Kernel ProofGraph Package Source Owner
 
 ## Audience
 
@@ -14,10 +14,10 @@ Classification: `public-hub`.
 
 Public docs should link here from:
 
-- `helm-oss/verification`
-- `helm-oss/reference/execution-boundary`
-- `helm-oss/reference/protocols-and-schemas`
-- `helm-oss/trust` pages exposed through the docs site
+- `helm-ai-kernel/verification`
+- `helm-ai-kernel/reference/execution-boundary`
+- `helm-ai-kernel/reference/protocols-and-schemas`
+- `helm-ai-kernel/trust` pages exposed through the docs site
 
 ## Source Map
 

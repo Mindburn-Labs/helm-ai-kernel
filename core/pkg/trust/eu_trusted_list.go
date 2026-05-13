@@ -9,7 +9,7 @@
 // Authority (QTSA) operating under that State's supervision.
 //
 // The LOTL is the regulatory pivot for any eIDAS-qualified evidence claim.
-// helm-oss uses it to decide whether an RFC 3161 timestamp token returned by
+// helm-ai-kernel uses it to decide whether an RFC 3161 timestamp token returned by
 // a QTSP terminates at a State-supervised root.
 //
 // Trust model: this client treats the parsed LOTL as a cache of certificate
@@ -63,7 +63,7 @@ type EUTrustedListConfig struct {
 }
 
 // EUTrustedListStatus is the snapshot returned by Status() — useful for
-// `helm trust eu-list status` and for operator dashboards.
+// `helm-ai-kernel trust eu-list status` and for operator dashboards.
 type EUTrustedListStatus struct {
 	// Endpoint is the URL the list was fetched from.
 	Endpoint string `json:"endpoint"`

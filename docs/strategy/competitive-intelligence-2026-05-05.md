@@ -8,7 +8,7 @@ Research date: 2026-05-05 EEST.
 Local verification: `date` returned `2026-05-05 03:18:17 EEST +0300`.
 Access date for external sources: 2026-05-05 unless a row says otherwise.
 
-This report is an internal strategy and implementation input for HELM OSS. Do
+This report is an internal strategy and implementation input for HELM AI Kernel. Do
 not copy competitor code, tests, schemas, UI expression, examples, branding, or
 distinctive prose into HELM. Do not publish competitor comparisons from this
 file without explicit approval. Public docs should use mechanism-based

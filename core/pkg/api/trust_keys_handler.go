@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/Mindburn-Labs/helm-oss/core/pkg/trust/registry"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust/registry"
 )
 
 // TrustKeyHandler provides HTTP handlers for trust key management.

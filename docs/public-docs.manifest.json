@@ -236,7 +236,7 @@
     },
     {
       "slug": "helm-ai-kernel/kernel-scope",
-      "title": "Open Source Scope",
+      "title": "Kernel Scope",
       "section": "helm-ai-kernel",
       "source_path": "docs/KERNEL_SCOPE.md",
       "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/kernel-scope",

@@ -28,7 +28,7 @@ This tree is the canonical public documentation source for HELM AI Kernel. Publi
 
 ## Explanation
 
-- [OSS scope](OSS_SCOPE.md)
+- [Kernel scope](KERNEL_SCOPE.md)
 - [OWASP MCP threat mapping](OWASP_MCP_THREAT_MAPPING.md)
 - [Architecture rationale: cognitive firewall](architecture/cognitive-firewall.md)
 - [Canonical visual doctrine](architecture/canonical-diagrams.md)

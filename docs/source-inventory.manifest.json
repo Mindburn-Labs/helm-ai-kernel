@@ -462,7 +462,7 @@
         "helm-ai-kernel/compliance/nist-ai-agent-critical-infrastructure",
         "helm-ai-kernel/compliance/eu-ai-act-high-risk-pack",
         "helm-ai-kernel/compliance/nist-ai-rmf-iso-42001-crosswalk",
-        "helm-ai-kernel/oss-scope",
+        "helm-ai-kernel/kernel-scope",
         "helm-ai-kernel/architecture/cognitive-firewall",
         "helm-ai-kernel/architecture/eidas-qtsp",
         "helm-ai-kernel/architecture/policy-languages",

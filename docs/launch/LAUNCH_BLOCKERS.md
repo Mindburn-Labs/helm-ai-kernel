@@ -36,12 +36,12 @@ These items *must* be resolved by the Launch Execution Agent prior to the comple
 
 *   **Status**: `RESOLVED` (Phase 0)
 *   **Description**: PR #112 (`fix(console): pass credentials to commercial DO proxy`) contained a title, branch name, and scope that leaked the existence of commercial infrastructure onto the OSS launch surface.
-*   **Resolution**: Closed PR #112. Cherry-picked OSS-safe changes into a clean branch `fix/oss-console-local-auth`. Removed all references to commercial proxies.
+*   **Resolution**: Closed PR #112. Cherry-picked Kernel-safe changes into a clean branch `fix/helm-ai-kernel-console-local-auth`. Removed all references to commercial proxies.
 
 ### 4. Canonical Domain Leakage: `wrangler.toml`
 
 *   **Status**: `RESOLVED` (Phase 0)
-*   **Description**: The HELM AI Kernel Console deployment config hardcoded `oss.mindburn.org` as the production domain, breaking the requirement that HELM AI Kernel must be self-hostable without hosted infrastructure assumptions.
+*   **Description**: The HELM AI Kernel Console deployment config hardcoded `kernel.mindburn.org` as the production domain, breaking the requirement that HELM AI Kernel must be self-hostable without hosted infrastructure assumptions.
 *   **Resolution**: Removed the hardcoded domain. Added documentation comments guiding self-hosters to use localhost (`127.0.0.1:7714`) or custom environment variables.
 
 ### 5. Verdict Drift (DEFER / REQUIRE_APPROVAL)

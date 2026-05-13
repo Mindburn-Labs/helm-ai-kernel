@@ -2192,7 +2192,7 @@
   .company-button--primary {
     border-color: var(--helm-accent);
     background: var(--helm-accent-hover);
-    color: var(--helm-text-on-accent) !important;
+    color: #ffffff !important;
   }
 
   .mb-diagram,
@@ -2654,6 +2654,15 @@
     .how-it-works,
     .canonical-flow {
       grid-template-columns: 1fr;
+    }
+
+    .site-footer__callout {
+      grid-template-columns: 1fr;
+      gap: var(--space-5);
+    }
+
+    .site-footer__thesis {
+      max-width: 100%;
     }
   }
 

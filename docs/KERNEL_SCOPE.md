@@ -1,5 +1,5 @@
 ---
-title: OSS_SCOPE
+title: KERNEL_SCOPE
 last_reviewed: 2026-05-12
 ---
 
@@ -15,8 +15,8 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-ai-kernel/oss-scope`
-- Source document: `helm-ai-kernel/docs/OSS_SCOPE.md`
+- Public route: `helm-ai-kernel/helm-ai-kernel-scope`
+- Source document: `helm-ai-kernel/docs/KERNEL_SCOPE.md`
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
@@ -192,11 +192,11 @@ The invariant is simple: OSS must stay fully useful on its own as a developer-fi
 
 ```mermaid
 flowchart LR
-  oss["OSS kernel scope"] --> retain["Retained public surfaces"]
+  kernel["Kernel scope"] --> retain["Retained public surfaces"]
   retain --> cli["CLI and proxy"]
   retain --> sdk["SDKs and examples"]
   retain --> protocol["Protocols and schemas"]
   retain --> verify["Receipts and verification"]
-  oss --> exclude["Excluded hosted surfaces"]
+  kernel --> exclude["Excluded hosted surfaces"]
   exclude --> commercial["HELM commercial docs"]
 ```

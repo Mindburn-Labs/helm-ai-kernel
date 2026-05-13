@@ -235,11 +235,11 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/oss-scope",
+      "slug": "helm-ai-kernel/kernel-scope",
       "title": "Open Source Scope",
       "section": "helm-ai-kernel",
-      "source_path": "docs/OSS_SCOPE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/oss-scope",
+      "source_path": "docs/KERNEL_SCOPE.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/kernel-scope",
       "access": "public",
       "sensitivity": "public"
     },

@@ -13,8 +13,8 @@ This document captures the baseline state of the repository before the Phase 0 l
 *   **CI (GitHub Actions)**: ❌ ALL FAILING due to organization billing lock. (Accepted exception).
 
 ## 2. Commercial Leakage
-*   **PR #112**: Contained commercial infrastructure references (`DO proxy`). **Remediated** via closure and replacement with `fix/oss-console-local-auth`.
-*   **`wrangler.toml`**: Contained hardcoded `oss.mindburn.org`. **Remediated** to support localhost default.
+*   **PR #112**: Contained commercial infrastructure references (`DO proxy`). **Remediated** via closure and replacement with `fix/helm-ai-kernel-console-local-auth`.
+*   **`wrangler.toml`**: Contained hardcoded `kernel.mindburn.org`. **Remediated** to support localhost default.
 
 ## 3. Verdict Canonicalization
 *   **Issue**: Legacy terminology (`DEFER`, `REQUIRE_APPROVAL`) exists in ~40+ locations across source, tests, and schemas.

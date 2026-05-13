@@ -15,7 +15,7 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-ai-kernel/oss-scope`
+- Public route: `helm-ai-kernel/helm-ai-kernel-scope`
 - Source document: `helm-ai-kernel/docs/OSS_SCOPE.md`
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`

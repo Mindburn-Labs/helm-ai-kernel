@@ -75,7 +75,7 @@ on 2026-05-13T09:15:00Z.
   `v0.4.0` is the actual public baseline for the `v0.5.0` delta.
 
 - Established `helm.docs.mindburn.org` as the canonical product docs surface while keeping HELM AI Kernel source docs in this repository.
-- Reduced duplicate public docs routes so `/oss` is the OSS portal entry and older `/helm-ai-kernel` links redirect.
+- Reduced duplicate public docs routes so `/helm-ai-kernel` is the Kernel portal entry and older `/helm-ai-kernel` links redirect.
 - Expanded the OpenAI-compatible proxy, MCP, SDK, OWASP mapping, verification, publishing, and compatibility docs for agent-readable exports.
 - Normalized the retained OSS surface around the kernel, contracts, SDKs, static viewer, examples, deployment material, and verification artifacts that remain in the repository.
 - Removed stale workflows, hosted-demo collateral, internal planning material, tracked binaries, and generated repository junk from the public documentation path.

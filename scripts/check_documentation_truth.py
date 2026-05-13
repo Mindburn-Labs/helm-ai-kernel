@@ -34,7 +34,7 @@ OSS_CONSOLE_CONTRADICTIONS = (
     'does not present a hosted SaaS control plane, a product UI surface',
 )
 
-OSS_SCOPE_SPEC_ONLY_PATHS = (
+KERNEL_SCOPE_SPEC_ONLY_PATHS = (
     'crypto/hybrid',
     'crypto/zkproof',
     'memory',
@@ -222,12 +222,12 @@ def main() -> int:
             if marker in text:
                 failures.append(f'docs/ARCHITECTURE.md contradicts shipped apps/console with marker {marker!r}')
 
-    oss_scope = ROOT / 'docs' / 'OSS_SCOPE.md'
-    if oss_scope.exists():
-        text = read_text(oss_scope)
-        for rel_path in OSS_SCOPE_SPEC_ONLY_PATHS:
+    kernel_scope = ROOT / 'docs' / 'KERNEL_SCOPE.md'
+    if kernel_scope.exists():
+        text = read_text(kernel_scope)
+        for rel_path in KERNEL_SCOPE_SPEC_ONLY_PATHS:
             if not (ROOT / rel_path).exists() and f'| `{rel_path}/`' in text and '✅ Active' in text:
-                failures.append(f'docs/OSS_SCOPE.md marks missing path {rel_path}/ as active')
+                failures.append(f'docs/KERNEL_SCOPE.md marks missing path {rel_path}/ as active')
 
     sdk_go_mod = ROOT / 'sdk' / 'go' / 'go.mod'
     if sdk_go_mod.exists() and (ROOT / 'sdk' / 'go' / 'gen').exists():

@@ -7,7 +7,7 @@ HELM adopts the Contributor Covenant Code of Conduct, version 2.1:
 
 Contributors are expected to be respectful, constructive, and precise. Healthy
 technical disagreement is welcome when it stays focused on evidence, tradeoffs,
-and the project scope in `README.md` and `docs/OSS_SCOPE.md`.
+and the project scope in `README.md` and `docs/KERNEL_SCOPE.md`.
 
 ## Unacceptable Behavior
 

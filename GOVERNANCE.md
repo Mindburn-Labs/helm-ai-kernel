@@ -8,7 +8,7 @@ Sandbox eligibility and to scale to a multi-organization maintainer set.
 ## Project Scope
 
 helm-ai-kernel is the open-source kernel for governed AI tool calling. Its public
-surface is documented in `README.md` and bounded by `docs/OSS_SCOPE.md`.
+surface is documented in `README.md` and bounded by `docs/KERNEL_SCOPE.md`.
 Anything outside that scope (hosted control-plane features, commercial
 Studio surfaces, private operational tooling) is governed elsewhere and is
 not in scope for this project's governance.

@@ -2,7 +2,7 @@
 
 HELM's public work is constrained to the OSS kernel, CLI, contracts, SDKs,
 Console, examples, deployment material, and verification artifacts described in
-`README.md` and `docs/OSS_SCOPE.md`.
+`README.md` and `docs/KERNEL_SCOPE.md`.
 
 Near-term open-source readiness work is tracked in
 [`docs/OSS_READINESS_AUDIT.md`](docs/OSS_READINESS_AUDIT.md). The highest

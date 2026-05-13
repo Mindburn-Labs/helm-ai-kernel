@@ -18,7 +18,7 @@ REQUIRED_COLUMNS = [
     'diataxis_type', 'owner_status', 'verification_command', 'gap_status', 'reviewer_notes'
 ]
 NON_DOC_STATUSES = {'not_applicable', 'known_gap', 'generated', 'external', 'mirror'}
-GENERATED_PREFIXES = ('artifacts/conformance',)
+GENERATED_PREFIXES = ('artifacts/conformance', 'benchmarks/results')
 
 
 def is_excluded(path: Path) -> bool:

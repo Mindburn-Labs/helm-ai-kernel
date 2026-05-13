@@ -82,11 +82,11 @@ The retained workflow set under `.github/workflows/` covers:
 - GHCR image publication for `latest`, version tag, and slim tag
 - manual publication workflows for npm, PyPI, crates.io, and Maven-compatible distribution
 
-Current public GitHub release: `v0.4.0`, published on 2026-04-25 at
-<https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.4.0>.
+Current public GitHub release: `v0.5.0`, published on 2026-05-13 at
+<https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.5.0>.
 
 There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
-actual release baseline when auditing deltas.
+actual release baseline when auditing the `v0.5.0` delta.
 
 Its attached assets are:
 
@@ -97,16 +97,18 @@ Its attached assets are:
 - `helm-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `release-attestation.json` metadata
+- `v0.5.0.openvex.json`
+- `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
+- `sample-policy-material.tar`
 - `helm.mcpb`
 - `helm.rb`
+- matching `*.cosign.bundle` files for every primary asset
 
-Target `v0.5.0` assets additionally include `v0.5.0.openvex.json`,
-`sample-policy-material.tar`, and `*.cosign.bundle` files for every primary
-asset, including `SHA256SUMS.txt`. `sample-policy-material.tar` must include
-the sample policy and its referenced EU AI Act high-risk reference pack.
+`sample-policy-material.tar` includes the sample policy and its referenced EU
+AI Act high-risk reference pack. The Homebrew tap is
+`mindburnlabs/homebrew-tap`, and `mindburnlabs/tap/helm` resolves to `0.5.0`.
 
 The retained SDK package manifests are versioned with `VERSION`, but npm,
 PyPI, crates.io, and Maven publication require the corresponding registry
@@ -122,12 +124,9 @@ If a package or channel is not represented in the retained workflow set, it shou
 ## Verification
 
 Every public release must include enough material to verify what was downloaded.
-For `v0.4.0`, use `SHA256SUMS.txt`, `sbom.json`,
-`release-attestation.json` metadata, the platform binary assets, and the offline
-`evidence-pack.tar`.
-
-Cosign bundle verification applies only when `*.cosign.bundle` files are
-attached to the release.
+For `v0.5.0`, use `SHA256SUMS.txt`, `sbom.json`, `v0.5.0.openvex.json`,
+`release-attestation.json`, the platform binary assets, attached
+`*.cosign.bundle` files, and the offline `evidence-pack.tar`.
 
 Verify a downloaded binary blob:
 

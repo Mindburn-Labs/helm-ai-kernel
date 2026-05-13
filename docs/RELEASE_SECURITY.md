@@ -33,11 +33,13 @@ flowchart LR
   optional --> verify
 ```
 
-Current public release: `v0.4.0`, published on 2026-04-25 at
-<https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.4.0>. The release
+Current public release: `v0.5.0`, published on 2026-05-13 at
+<https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.5.0>. The release
 assets visible on GitHub are Darwin/Linux/Windows binaries, `SHA256SUMS.txt`,
-`sbom.json`, `release-attestation.json` metadata, `evidence-pack.tar`,
-`release.high_risk.v3.toml`, `helm.mcpb`, and `helm.rb`.
+`sbom.json`, `v0.5.0.openvex.json`, `release-attestation.json`,
+`evidence-pack.tar`, `release.high_risk.v3.toml`,
+`sample-policy-material.tar`, `helm.mcpb`, `helm.rb`, and matching
+`*.cosign.bundle` files for each primary asset.
 
 ## Public Release Material
 
@@ -67,14 +69,10 @@ downloaded from a release page. Verify checksums, release metadata,
 receipt/evidence material, reproducible-build behavior, and signatures when
 signature bundles are attached.
 
-For `v0.4.0`, the public release does not expose `*.cosign.bundle` or
-`*.openvex.json` assets on GitHub. Use checksum verification, SBOM inspection,
-release metadata inspection, offline EvidencePack verification, and
-reproducible-build validation for that release. Use Cosign/OpenVEX verification
-only for releases that attach those files.
-
-The `v0.5.0` target workflow attaches OpenVEX and Cosign bundle assets for each
-primary release file after `make release-assets` stages the complete asset set.
+For `v0.5.0`, use checksum verification, SBOM inspection, OpenVEX inspection,
+release metadata inspection, offline EvidencePack verification,
+reproducible-build validation, and Cosign verification against the attached
+bundles.
 
 ## Source Truth
 

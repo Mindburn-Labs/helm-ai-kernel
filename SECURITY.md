@@ -15,7 +15,7 @@ Security fixes are expected on the current minor version and, when practical, th
 
 | Version | Supported |
 | --- | --- |
-| `0.5.x` | Yes after `v0.5.0` is published |
+| `0.5.x` | Yes |
 | `0.4.x` | Yes |
 | `0.3.x` | Best effort |
 | Older | No |
@@ -57,14 +57,11 @@ The signing identity is the GitHub Actions workflow itself
 Verification commands and the recovery path are documented in
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
-The current public GitHub release, `v0.4.0` published on 2026-04-25, does not
-attach `*.cosign.bundle` or `*.openvex.json` files. For that release, use
-`SHA256SUMS.txt`, `sbom.json`, `release-attestation.json`, offline
-`evidence-pack.tar` verification, and reproducible-build validation.
-
-The `v0.5.0` target release attaches OpenVEX and Cosign bundle material for
-every primary asset. Do not treat that material as public until the non-draft
-GitHub Release exists.
+The current public GitHub release, `v0.5.0` published on 2026-05-13, attaches
+OpenVEX and Cosign bundle material for every primary asset. Verify
+`SHA256SUMS.txt`, `sbom.json`, `v0.5.0.openvex.json`,
+`release-attestation.json`, offline `evidence-pack.tar`, and matching
+`*.cosign.bundle` files.
 
 ## Continuous Fuzzing
 

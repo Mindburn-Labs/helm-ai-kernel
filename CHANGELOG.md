@@ -39,7 +39,7 @@ This scheme maps the main sections of HELM OSS Changelog in reading order.
 flowchart LR
   Page["HELM OSS Changelog"]
   A["[Unreleased]"]
-  B["[0.5.0] - 2026-05-12"]
+  B["[0.5.0] - 2026-05-13"]
   C["[0.4.0] - 2026-04-25"]
   D["Validation"]
   Page --> A
@@ -52,7 +52,10 @@ All notable changes to the retained HELM OSS surface are documented here. Public
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-05-12
+## [0.5.0] - 2026-05-13
+
+Published at <https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.5.0>
+on 2026-05-13T09:15:00Z.
 
 - Bumped source, CLI fallback, OpenAPI, SDK package manifests, generated SDK
   version comments, Helm chart metadata, and Console visible version to

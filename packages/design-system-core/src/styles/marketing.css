@@ -2192,7 +2192,7 @@
   .company-button--primary {
     border-color: var(--helm-accent);
     background: var(--helm-accent-hover);
-    color: var(--helm-text-on-accent) !important;
+    color: #ffffff !important;
   }
 
   .mb-diagram,

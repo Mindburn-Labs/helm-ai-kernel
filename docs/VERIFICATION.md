@@ -50,19 +50,19 @@ The verification path is local-first. `helm verify <evidence-pack.tar|dir>`
 performs offline checks by default; `--online` is optional and only runs after
 offline checks pass.
 
-Current public release: `v0.4.0`, published on 2026-04-25 at
-<https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.4.0>. The release
+Current public release: `v0.5.0`, published on 2026-05-13 at
+<https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.5.0>. The release
 page attaches platform binaries, `SHA256SUMS.txt`, `sbom.json`,
-`release-attestation.json` metadata, `evidence-pack.tar`, `release.high_risk.v3.toml`,
-`helm.mcpb`, and `helm.rb`.
+`v0.5.0.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
+`release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm.mcpb`,
+`helm.rb`, and matching `*.cosign.bundle` files for each primary asset.
 
-There is no public GitHub Release object for `v0.4.1`; treat `v0.4.0` as the
-actual public baseline until `v0.5.0` is published.
+There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
+actual baseline when auditing the `v0.5.0` delta.
 
-## v0.5.0 Target Asset Contract
+## v0.5.0 Asset Contract
 
-The `v0.5.0` release workflow stages all primary assets under
-`dist/release-assets/` before upload:
+The `v0.5.0` release attaches these primary assets:
 
 - `helm-darwin-amd64`
 - `helm-darwin-arm64`
@@ -175,13 +175,12 @@ Verify the bundled offline evidence pack:
 helm verify evidence-pack.tar
 ```
 
-For `v0.5.0`, this command must pass without network access. The verifier
+For `v0.5.0`, this command passes without network access. The verifier
 accepts both the legacy `receipts/` layout and the canonical
 `02_PROOFGRAPH/receipts/` layout.
 
-For `v0.4.0`, the included EvidencePack verifies offline and reports
-`anchor offline`; online proof anchoring depends on release-specific public
-proof metadata and credentials.
+For `v0.4.0`, the included EvidencePack also verifies offline and reports
+`anchor offline`, but that release does not attach OpenVEX or Cosign bundles.
 
 ## Cosign Artifact Verification When Bundles Are Attached
 

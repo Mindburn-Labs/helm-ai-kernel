@@ -132,10 +132,9 @@ Conduct is the Contributor Covenant 2.1, with reports routed to
 Security policy is in `SECURITY.md`. Vulnerability reports go to
 `security@mindburn.org`. Releases are built reproducibly (verified by the
 `reproducibility-check` job in `.github/workflows/release.yml`) and shipped with
-checksums, SBOM material, and release attestation. Cosign bundle and OpenVEX
-verification apply when those files are attached to the GitHub release; the
-current public `v0.4.0` release published on 2026-04-25 does not attach
-`*.cosign.bundle` or `*.openvex.json` assets. Continuous fuzzing is configured
+checksums, SBOM material, and release attestation. The current public
+`v0.5.0` release published on 2026-05-13 attaches Cosign bundle and OpenVEX
+assets for release verification. Continuous fuzzing is configured
 for upstream OSS-Fuzz under `oss-fuzz/`. The OpenSSF Scorecard runs weekly via
 `.github/workflows/scorecard.yml`. The OpenSSF Best Practices gold-tier mapping
 is in `BEST_PRACTICES.md`.

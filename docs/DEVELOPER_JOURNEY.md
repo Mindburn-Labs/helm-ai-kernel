@@ -210,9 +210,9 @@ If the `helm` command on your machine resolves to this HELM OSS binary, use `KUB
 
 ## Release And Conformance Gates
 
-Current public release: `v0.4.0`, published on 2026-04-25 at <https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.4.0>.
+Current public release: `v0.5.0`, published on 2026-05-13 at <https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.5.0>.
 
-The release page includes Darwin/Linux/Windows binaries, `SHA256SUMS.txt`, `sbom.json`, `release-attestation.json` metadata, `evidence-pack.tar`, `release.high_risk.v3.toml`, `helm.mcpb`, and `helm.rb`. Do not claim Cosign bundle or OpenVEX verification for that release because those files are not attached to `v0.4.0`.
+The release page includes Darwin/Linux/Windows binaries, `SHA256SUMS.txt`, `sbom.json`, `v0.5.0.openvex.json`, `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm.mcpb`, `helm.rb`, and matching `*.cosign.bundle` files for each primary asset.
 
 Run conformance and docs gates:
 

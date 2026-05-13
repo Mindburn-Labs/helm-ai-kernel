@@ -12,14 +12,12 @@ files. It is not a complete copy of any GitHub release.
 
 ## Current Public Release
 
-The current public GitHub release is `v0.4.0`, published on 2026-04-25. Its
+The current public GitHub release is `v0.5.0`, published on 2026-05-13. Its
 visible release assets are platform binaries for Darwin, Linux, and Windows,
 `helm.mcpb`, `helm.rb`, `SHA256SUMS.txt`, `sbom.json`,
-`release-attestation.json` metadata, `evidence-pack.tar`, and
-`release.high_risk.v3.toml`.
-
-Do not document Cosign bundle or OpenVEX files as attached to `v0.4.0`; they
-were not present in the release asset list.
+`v0.5.0.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
+`release.high_risk.v3.toml`, `sample-policy-material.tar`, and matching
+`*.cosign.bundle` files for every primary asset.
 
 There is no public GitHub Release object for `v0.4.1`; the actual public
 baseline for the `v0.5.0` delta is `v0.4.0`.
@@ -27,7 +25,8 @@ baseline for the `v0.5.0` delta is `v0.4.0`.
 ## v0.5.0 Asset Contract
 
 `make release-assets` stages the `v0.5.0` asset set under
-`dist/release-assets/`:
+`dist/release-assets/`, and the release workflow attached that set to the
+GitHub release:
 
 - five CLI binaries
 - `SHA256SUMS.txt`

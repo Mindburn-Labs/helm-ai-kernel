@@ -25,15 +25,16 @@ Agent proposal -> HELM boundary -> ALLOW / DENY / ESCALATE -> signed receipt
 
 - Repository: `Mindburn-Labs/helm-oss`
 - Root package identity: `helm-oss-root`
-- Current public release: `v0.4.0`
+- Current public release: `v0.5.0`
 - License: Apache-2.0
-- Supported security line: `0.4.x`; `0.3.x` is best effort
+- Supported security line: `0.5.x`; `0.4.x` is best effort
 - Canonical docs: <https://helm.docs.mindburn.org/oss>
 
-The current `v0.4.0` GitHub release includes CLI binaries, checksums, SBOM
-JSON, release-attestation metadata, `evidence-pack.tar`, `helm.mcpb`, and
-sample policy material. Future release docs must only claim assets that the
-retained release workflow or the release page actually provides.
+The current `v0.5.0` GitHub release was published on 2026-05-13 at
+<https://github.com/Mindburn-Labs/helm-oss/releases/tag/v0.5.0>. It includes
+CLI binaries, checksums, SBOM JSON, OpenVEX, release-attestation metadata,
+Cosign bundles, `evidence-pack.tar`, `helm.mcpb`, `helm.rb`, and sample policy
+material.
 
 ## What HELM OSS Does
 
@@ -215,10 +216,9 @@ Public OSS docs are sourced from this repo and published through
 
 ## Release Verification
 
-For `v0.4.0`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
-`release-attestation.json` metadata, the platform binary assets, and offline
-`evidence-pack.tar` verification. Cosign bundle verification applies only when
-`*.cosign.bundle` files are attached to a release.
+For `v0.5.0`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
+`v0.5.0.openvex.json`, `release-attestation.json`, the platform binary assets,
+matching `*.cosign.bundle` files, and offline `evidence-pack.tar` verification.
 
 See [docs/VERIFICATION.md](docs/VERIFICATION.md) and
 [docs/PUBLISHING.md](docs/PUBLISHING.md) for the full release verification path.

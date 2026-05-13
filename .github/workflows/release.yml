@@ -232,6 +232,11 @@ jobs:
       packages: write
       id-token: write
     steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: sigstore/cosign-installer@v3
       - name: Sign main image keyless
         env:

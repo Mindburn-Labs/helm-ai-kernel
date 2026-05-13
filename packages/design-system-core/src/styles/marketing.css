@@ -2655,6 +2655,15 @@
     .canonical-flow {
       grid-template-columns: 1fr;
     }
+
+    .site-footer__callout {
+      grid-template-columns: 1fr;
+      gap: var(--space-5);
+    }
+
+    .site-footer__thesis {
+      max-width: 100%;
+    }
   }
 
   @media (max-width: 480px) {

@@ -18,16 +18,25 @@ type RBACStore interface {
 
 // InMemoryRBACStore is a thread-safe in-memory implementation of RBACStore.
 type InMemoryRBACStore struct {
-	mu       sync.RWMutex
-	roles    map[string]*Role        // roleID -> Role
-	bindings map[string]*RoleBinding // bindingID -> RoleBinding
+	mu           sync.RWMutex
+	roles        map[string]*Role        // roleID -> Role
+	bindings     map[string]*RoleBinding // bindingID -> RoleBinding
+	bindingIndex map[bindingIndexKey]map[string]*RoleBinding
+	bindingKeys  map[string]bindingIndexKey
+}
+
+type bindingIndexKey struct {
+	principalID string
+	tenantID    string
 }
 
 // NewInMemoryRBACStore creates a new in-memory RBAC store pre-loaded with built-in roles.
 func NewInMemoryRBACStore() *InMemoryRBACStore {
 	s := &InMemoryRBACStore{
-		roles:    make(map[string]*Role),
-		bindings: make(map[string]*RoleBinding),
+		roles:        make(map[string]*Role),
+		bindings:     make(map[string]*RoleBinding),
+		bindingIndex: make(map[bindingIndexKey]map[string]*RoleBinding),
+		bindingKeys:  make(map[string]bindingIndexKey),
 	}
 	// Seed built-in roles.
 	for _, r := range BuiltinRoles() {
@@ -77,17 +86,27 @@ func (s *InMemoryRBACStore) CreateBinding(_ context.Context, binding *RoleBindin
 		return fmt.Errorf("binding %s already exists", binding.BindingID)
 	}
 	s.bindings[binding.BindingID] = binding
+	key := bindingIndexKey{principalID: binding.PrincipalID, tenantID: binding.TenantID}
+	bindings := s.bindingIndex[key]
+	if bindings == nil {
+		bindings = make(map[string]*RoleBinding)
+		s.bindingIndex[key] = bindings
+	}
+	bindings[binding.BindingID] = binding
+	s.bindingKeys[binding.BindingID] = key
 	return nil
 }
 
 func (s *InMemoryRBACStore) ListBindings(_ context.Context, principalID, tenantID string) ([]*RoleBinding, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var result []*RoleBinding
-	for _, b := range s.bindings {
-		if b.PrincipalID == principalID && b.TenantID == tenantID {
-			result = append(result, b)
-		}
+	indexed := s.bindingIndex[bindingIndexKey{principalID: principalID, tenantID: tenantID}]
+	if len(indexed) == 0 {
+		return nil, nil
+	}
+	result := make([]*RoleBinding, 0, len(indexed))
+	for _, b := range indexed {
+		result = append(result, b)
 	}
 	return result, nil
 }
@@ -99,5 +118,12 @@ func (s *InMemoryRBACStore) RemoveBinding(_ context.Context, bindingID string) e
 		return fmt.Errorf("binding %s not found", bindingID)
 	}
 	delete(s.bindings, bindingID)
+	if key, exists := s.bindingKeys[bindingID]; exists {
+		delete(s.bindingKeys, bindingID)
+		delete(s.bindingIndex[key], bindingID)
+		if len(s.bindingIndex[key]) == 0 {
+			delete(s.bindingIndex, key)
+		}
+	}
 	return nil
 }

@@ -211,6 +211,54 @@ func TestIssuerConstraintEnforced(t *testing.T) {
 	}
 }
 
+func TestCheckBeforeUsesFirstVerifiedIssuerMatch(t *testing.T) {
+	reg := NewRegistry()
+	if err := reg.LoadManifest(testManifest()); err != nil {
+		t.Fatal(err)
+	}
+
+	submissions := []contracts.EvidenceSubmission{
+		{
+			SubmissionID: "unverified-match",
+			EvidenceType: "dual_attestation",
+			IssuerID:     "finance-system",
+			Verified:     false,
+		},
+		{
+			SubmissionID: "wrong-issuer",
+			EvidenceType: "dual_attestation",
+			IssuerID:     "other-system",
+			Verified:     true,
+		},
+		{
+			SubmissionID: "first-verified-match",
+			EvidenceType: "dual_attestation",
+			IssuerID:     "finance-system",
+			Verified:     true,
+		},
+		{
+			SubmissionID: "second-verified-match",
+			EvidenceType: "dual_attestation",
+			IssuerID:     "finance-system",
+			Verified:     true,
+		},
+	}
+
+	verdict, err := reg.CheckBefore(context.Background(), "FUNDS_TRANSFER", submissions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !verdict.Satisfied {
+		t.Fatalf("expected satisfied, missing: %v", verdict.Missing)
+	}
+	if len(verdict.Verified) != 1 {
+		t.Fatalf("expected 1 verified submission, got %d", len(verdict.Verified))
+	}
+	if verdict.Verified[0].SubmissionID != "first-verified-match" {
+		t.Fatalf("expected first verified issuer match, got %s", verdict.Verified[0].SubmissionID)
+	}
+}
+
 func TestUnverifiedEvidenceNotCounted(t *testing.T) {
 	reg := NewRegistry()
 	if err := reg.LoadManifest(testManifest()); err != nil {

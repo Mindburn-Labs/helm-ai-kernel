@@ -46,9 +46,9 @@ pub enum EvaluationResult {
     Unspecified = 0,
     Allow = 1,
     Deny = 2,
-    RequireApproval = 3,
+    Escalate = 3,
     RequireEvidence = 4,
-    Defer = 5,
+    Escalate = 5,
 }
 impl EvaluationResult {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -60,9 +60,9 @@ impl EvaluationResult {
             Self::Unspecified => "EVALUATION_RESULT_UNSPECIFIED",
             Self::Allow => "EVALUATION_RESULT_ALLOW",
             Self::Deny => "EVALUATION_RESULT_DENY",
-            Self::RequireApproval => "EVALUATION_RESULT_REQUIRE_APPROVAL",
+            Self::Escalate => "EVALUATION_RESULT_ESCALATE",
             Self::RequireEvidence => "EVALUATION_RESULT_REQUIRE_EVIDENCE",
-            Self::Defer => "EVALUATION_RESULT_DEFER",
+            Self::Escalate => "EVALUATION_RESULT_ESCALATE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -71,9 +71,9 @@ impl EvaluationResult {
             "EVALUATION_RESULT_UNSPECIFIED" => Some(Self::Unspecified),
             "EVALUATION_RESULT_ALLOW" => Some(Self::Allow),
             "EVALUATION_RESULT_DENY" => Some(Self::Deny),
-            "EVALUATION_RESULT_REQUIRE_APPROVAL" => Some(Self::RequireApproval),
+            "EVALUATION_RESULT_ESCALATE" => Some(Self::Escalate),
             "EVALUATION_RESULT_REQUIRE_EVIDENCE" => Some(Self::RequireEvidence),
-            "EVALUATION_RESULT_DEFER" => Some(Self::Defer),
+            "EVALUATION_RESULT_ESCALATE" => Some(Self::Escalate),
             _ => None,
         }
     }

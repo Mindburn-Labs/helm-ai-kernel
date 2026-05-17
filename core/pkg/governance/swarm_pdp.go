@@ -300,9 +300,9 @@ func (s *SwarmPDP) MergeDecisions(decisions []Decision) Decision {
 				return DecisionDeny
 			}
 		}
-		// Any REQUIRE_* takes precedence over ALLOW
+		// Any REQUIRE_* or ESCALATE takes precedence over ALLOW
 		for _, d := range decisions {
-			if d == DecisionRequireApproval || d == DecisionRequireEvidence {
+			if d == DecisionEscalate || d == DecisionRequireEvidence {
 				return d
 			}
 		}
@@ -311,10 +311,9 @@ func (s *SwarmPDP) MergeDecisions(decisions []Decision) Decision {
 
 	// Priority-based merge (more permissive)
 	priority := map[Decision]int{
-		DecisionDeny:            5,
-		DecisionRequireApproval: 4,
+		DecisionDeny:            6,
+		DecisionEscalate:        5,
 		DecisionRequireEvidence: 3,
-		DecisionDefer:           2,
 		DecisionAllow:           1,
 	}
 

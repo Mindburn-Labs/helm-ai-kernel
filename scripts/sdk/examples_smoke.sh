@@ -57,7 +57,7 @@ PYTHONPATH="$ROOT/sdk/python" HELM_URL="$HELM_URL" HELM_ADMIN_API_KEY="$ADMIN_KE
 "$ROOT/sdk/ts/node_modules/.bin/tsc" -p "$ROOT/examples/ts_sdk/tsconfig.json"
 HELM_URL="$HELM_URL" HELM_ADMIN_API_KEY="$ADMIN_KEY" HELM_TENANT_ID="$TENANT_ID" node "$ROOT/examples/ts_sdk/dist/main.js" | tee "$TMP/ts_sdk.json"
 
-if grep -R -E '"(DEFER|REQUIRE_APPROVAL)"' "$TMP/python_sdk.json" "$TMP/ts_sdk.json"; then
+if grep -R -E '"(ESCALATE|ESCALATE)"' "$TMP/python_sdk.json" "$TMP/ts_sdk.json"; then
   echo "SDK examples emitted a non-canonical public verdict"
   exit 1
 fi

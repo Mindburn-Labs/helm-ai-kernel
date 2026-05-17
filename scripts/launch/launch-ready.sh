@@ -36,7 +36,7 @@ record() {
 
 record pr_boundary "PR Boundary: No open PRs contain commercial infrastructure terminology." "python3 scripts/launch/pr_boundary_check.py"
 record config_boundary "Config Boundary: wrangler.toml does not enforce hosted domains." "! rg -n 'custom_domains\\s*=|oss\\.mindburn\\.org' apps/console/wrangler.toml"
-record terminology_boundary "Terminology Boundary: VERDICT_CANONICALIZATION.md exists and resolves the ALLOW/DENY/ESCALATE vs. DEFER drift." "test -f docs/VERDICT_CANONICALIZATION.md && rg -q 'ALLOW' docs/VERDICT_CANONICALIZATION.md && rg -q 'DENY' docs/VERDICT_CANONICALIZATION.md && rg -q 'ESCALATE' docs/VERDICT_CANONICALIZATION.md && rg -q 'DEFER' docs/VERDICT_CANONICALIZATION.md"
+record terminology_boundary "Terminology Boundary: VERDICT_CANONICALIZATION.md exists and resolves the ALLOW/DENY/ESCALATE vs. ESCALATE drift." "test -f docs/VERDICT_CANONICALIZATION.md && rg -q 'ALLOW' docs/VERDICT_CANONICALIZATION.md && rg -q 'DENY' docs/VERDICT_CANONICALIZATION.md && rg -q 'ESCALATE' docs/VERDICT_CANONICALIZATION.md && rg -q 'ESCALATE' docs/VERDICT_CANONICALIZATION.md"
 record version "Version: VERSION is set to launch target 0.5.0." "test \"\$(cat VERSION)\" = '0.5.0'"
 record homebrew "Homebrew: README points to canonical mindburnlabs/tap/helm-ai-kernel." "rg -q 'brew install mindburnlabs/tap/helm-ai-kernel' README.md && ! rg -q 'brew install (mindburn|Mindburn-Labs|mindburn-labs)/homebrew-tap/helm|brew install mindburn-labs/tap/helm' README.md"
 

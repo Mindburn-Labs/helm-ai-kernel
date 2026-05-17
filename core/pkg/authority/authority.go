@@ -20,10 +20,19 @@ type EvaluationResult string
 const (
 	ResultAllow           EvaluationResult = "ALLOW"
 	ResultDeny            EvaluationResult = "DENY"
-	ResultRequireApproval EvaluationResult = "REQUIRE_APPROVAL" // Legacy, maps to canonical ESCALATE
+	ResultEscalate        EvaluationResult = "ESCALATE"
 	ResultRequireEvidence EvaluationResult = "REQUIRE_EVIDENCE"
-	ResultDefer           EvaluationResult = "DEFER" // Legacy, maps to canonical ESCALATE
+
+	// Legacy aliases, maintained for boundary compatibility
 )
+
+// Normalize normalizes legacy verdicts to canonical ESCALATE
+func (e EvaluationResult) Normalize() EvaluationResult {
+	if e == ResultEscalate {
+		return ResultEscalate
+	}
+	return e
+}
 
 // EvaluationRequest is the canonical input to the authority evaluation pipeline.
 type EvaluationRequest struct {

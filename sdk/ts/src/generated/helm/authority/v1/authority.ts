@@ -33,9 +33,9 @@ export enum EvaluationResult {
   EVALUATION_RESULT_UNSPECIFIED = 0,
   EVALUATION_RESULT_ALLOW = 1,
   EVALUATION_RESULT_DENY = 2,
-  EVALUATION_RESULT_REQUIRE_APPROVAL = 3,
+  EVALUATION_RESULT_ESCALATE = 3,
   EVALUATION_RESULT_REQUIRE_EVIDENCE = 4,
-  EVALUATION_RESULT_DEFER = 5,
+  EVALUATION_RESULT_ESCALATE = 5,
   UNRECOGNIZED = -1,
 }
 
@@ -51,14 +51,14 @@ export function evaluationResultFromJSON(object: any): EvaluationResult {
     case "EVALUATION_RESULT_DENY":
       return EvaluationResult.EVALUATION_RESULT_DENY;
     case 3:
-    case "EVALUATION_RESULT_REQUIRE_APPROVAL":
-      return EvaluationResult.EVALUATION_RESULT_REQUIRE_APPROVAL;
+    case "EVALUATION_RESULT_ESCALATE":
+      return EvaluationResult.EVALUATION_RESULT_ESCALATE;
     case 4:
     case "EVALUATION_RESULT_REQUIRE_EVIDENCE":
       return EvaluationResult.EVALUATION_RESULT_REQUIRE_EVIDENCE;
     case 5:
-    case "EVALUATION_RESULT_DEFER":
-      return EvaluationResult.EVALUATION_RESULT_DEFER;
+    case "EVALUATION_RESULT_ESCALATE":
+      return EvaluationResult.EVALUATION_RESULT_ESCALATE;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -74,12 +74,12 @@ export function evaluationResultToJSON(object: EvaluationResult): string {
       return "EVALUATION_RESULT_ALLOW";
     case EvaluationResult.EVALUATION_RESULT_DENY:
       return "EVALUATION_RESULT_DENY";
-    case EvaluationResult.EVALUATION_RESULT_REQUIRE_APPROVAL:
-      return "EVALUATION_RESULT_REQUIRE_APPROVAL";
+    case EvaluationResult.EVALUATION_RESULT_ESCALATE:
+      return "EVALUATION_RESULT_ESCALATE";
     case EvaluationResult.EVALUATION_RESULT_REQUIRE_EVIDENCE:
       return "EVALUATION_RESULT_REQUIRE_EVIDENCE";
-    case EvaluationResult.EVALUATION_RESULT_DEFER:
-      return "EVALUATION_RESULT_DEFER";
+    case EvaluationResult.EVALUATION_RESULT_ESCALATE:
+      return "EVALUATION_RESULT_ESCALATE";
     case EvaluationResult.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";

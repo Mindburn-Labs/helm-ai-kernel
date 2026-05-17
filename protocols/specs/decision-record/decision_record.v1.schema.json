@@ -175,9 +175,9 @@
                     "enum": [
                         "ALLOW",
                         "DENY",
-                        "REQUIRE_APPROVAL",
+                        "ESCALATE",
                         "REQUIRE_EVIDENCE",
-                        "DEFER"
+                        "ESCALATE"
                     ]
                 },
                 "reason_codes": {

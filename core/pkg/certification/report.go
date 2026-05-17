@@ -13,7 +13,7 @@ type ConformanceReport struct {
 	ReportID     string            `json:"report_id"`     // UUID
 	Timestamp    time.Time         `json:"timestamp"`     // RFC3339
 	GitRevision  string            `json:"git_revision"`  // Full SHA
-	Platform     string            `json:"platform"`      // e.g. "helm-core-v1"
+	Platform     string            `json:"platform"`      // e.g. "helm-ai-enterprise-controlplane-v1"
 	Standard     string            `json:"standard"`      // e.g. "CSNF-1.0"
 	PassedSuites []string          `json:"passed_suites"` // List of passing suites
 	FailedSuites []string          `json:"failed_suites"` // Must be empty for Valid=true
@@ -36,7 +36,7 @@ func SignReport(
 		ReportID:     id,
 		Timestamp:    time.Now().UTC(),
 		GitRevision:  revision,
-		Platform:     "helm-core-go",
+		Platform:     "helm-ai-enterprise-controlplane-go",
 		Standard:     "HELM-STD-2026",
 		PassedSuites: passed,
 		FailedSuites: []string{},

@@ -30,9 +30,9 @@
             "enum": [
                 "ALLOW",
                 "DENY",
-                "REQUIRE_APPROVAL",
+                "ESCALATE",
                 "REQUIRE_EVIDENCE",
-                "DEFER"
+                "ESCALATE"
             ],
             "description": "Authorization outcome"
         },
@@ -52,7 +52,7 @@
                     "DENY_UNAUTHENTICATED_MEMORY",
                     "DENY_POLICY_EPOCH_EXPIRED",
                     "DENY_EFFECT_NOT_TYPED",
-                    "REQUIRE_APPROVAL",
+                    "ESCALATE",
                     "REQUIRE_EVIDENCE"
                 ]
             },

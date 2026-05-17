@@ -23,7 +23,7 @@
     },
     "timeout_action": {
       "type": "string",
-      "enum": ["FAIL_CLOSED", "ESCALATE_TO_HUMAN", "REQUIRE_APPROVAL", "RETRY_WITH_BACKOFF"],
+      "enum": ["FAIL_CLOSED", "ESCALATE_TO_HUMAN", "ESCALATE", "RETRY_WITH_BACKOFF"],
       "description": "Action to take when timeout is reached"
     },
     "escalation_target": {

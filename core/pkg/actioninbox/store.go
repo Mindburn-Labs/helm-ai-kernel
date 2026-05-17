@@ -119,7 +119,7 @@ func (s *InMemoryInboxStore) Deny(ctx context.Context, itemID string, reason str
 	return nil
 }
 
-func (s *InMemoryInboxStore) Defer(ctx context.Context, itemID string, until time.Time) error {
+func (s *InMemoryInboxStore) Escalate(ctx context.Context, itemID string, until time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -131,7 +131,7 @@ func (s *InMemoryInboxStore) Defer(ctx context.Context, itemID string, until tim
 		return fmt.Errorf("actioninbox: item %q is not pending (status=%s)", itemID, item.Status)
 	}
 
-	item.Status = StatusDeferred
+	item.Status = StatusEscalated
 	item.ExpiresAt = until
 	return nil
 }

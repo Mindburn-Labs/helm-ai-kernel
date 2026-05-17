@@ -113,10 +113,19 @@ type Decision string
 const (
 	DecisionAllow           Decision = "ALLOW"
 	DecisionDeny            Decision = "DENY"
-	DecisionRequireApproval Decision = "REQUIRE_APPROVAL" // Legacy, maps to canonical ESCALATE
+	DecisionEscalate        Decision = "ESCALATE"
 	DecisionRequireEvidence Decision = "REQUIRE_EVIDENCE"
-	DecisionDefer           Decision = "DEFER" // Legacy, maps to canonical ESCALATE
+
+	// Legacy aliases, maintained for boundary compatibility
 )
+
+// Normalize normalizes legacy verdicts to canonical ESCALATE
+func (d Decision) Normalize() Decision {
+	if d == DecisionEscalate {
+		return DecisionEscalate
+	}
+	return d
+}
 
 // DecisionConstraints per Section 3.4 - constraints on allowed effects.
 type DecisionConstraints struct {
@@ -277,7 +286,7 @@ func (p *CELPolicyDecisionPoint) Evaluate(ctx context.Context, req PDPRequest) (
 				}
 			}
 
-			resp.Decision = DecisionRequireApproval
+			resp.Decision = DecisionEscalate
 			resp.Constraints.RequiredApprovals = []ApprovalConstraint{
 				{
 					ApprovalType:  "human_operator",

@@ -13,7 +13,7 @@ const (
 	StatusPending      InboxItemStatus = "PENDING"
 	StatusApproved     InboxItemStatus = "APPROVED"
 	StatusDenied       InboxItemStatus = "DENIED"
-	StatusDeferred     InboxItemStatus = "DEFERRED"
+	StatusEscalated     InboxItemStatus = "ESCALATED"
 	StatusExpired      InboxItemStatus = "EXPIRED"
 	StatusAutoApproved InboxItemStatus = "AUTO_APPROVED"
 )

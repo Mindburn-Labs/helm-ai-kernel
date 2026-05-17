@@ -5,16 +5,16 @@ import (
 	"time"
 )
 
-func TestValidateDEFERResponse_NotDefer(t *testing.T) {
+func TestValidateESCALATEResponse_NotDefer(t *testing.T) {
 	resp := PDPResponse{Decision: "ALLOW"}
-	if err := ValidateDEFERResponse(resp); err != nil {
-		t.Errorf("non-DEFER should pass validation: %v", err)
+	if err := ValidateESCALATEResponse(resp); err != nil {
+		t.Errorf("non-ESCALATE should pass validation: %v", err)
 	}
 }
 
-func TestValidateDEFERResponse_Valid(t *testing.T) {
+func TestValidateESCALATEResponse_Valid(t *testing.T) {
 	resp := PDPResponse{
-		Decision:        "DEFER",
+		Decision:        "ESCALATE",
 		DeferReasonCode: "FACT_MISSING",
 		RequiredFacts: []FactRef{
 			{FactType: "identity", FactID: "user-123", RequiredBy: time.Now().Add(time.Hour)},
@@ -29,55 +29,55 @@ func TestValidateDEFERResponse_Valid(t *testing.T) {
 			OriginalQueryHash: "abc123",
 		},
 	}
-	if err := ValidateDEFERResponse(resp); err != nil {
-		t.Errorf("valid DEFER should pass: %v", err)
+	if err := ValidateESCALATEResponse(resp); err != nil {
+		t.Errorf("valid ESCALATE should pass: %v", err)
 	}
 }
 
-func TestValidateDEFERResponse_MissingReasonCode(t *testing.T) {
+func TestValidateESCALATEResponse_MissingReasonCode(t *testing.T) {
 	resp := PDPResponse{
-		Decision:      "DEFER",
+		Decision:      "ESCALATE",
 		RequiredFacts: []FactRef{{FactType: "x", FactID: "y"}},
 		TimeoutPolicy: &TimeoutPolicy{},
 		RequeryRule:   &RequeryRule{},
 	}
-	if err := ValidateDEFERResponse(resp); err == nil {
+	if err := ValidateESCALATEResponse(resp); err == nil {
 		t.Error("expected error for missing defer_reason_code")
 	}
 }
 
-func TestValidateDEFERResponse_MissingFacts(t *testing.T) {
+func TestValidateESCALATEResponse_MissingFacts(t *testing.T) {
 	resp := PDPResponse{
-		Decision:        "DEFER",
+		Decision:        "ESCALATE",
 		DeferReasonCode: "FACT_MISSING",
 		TimeoutPolicy:   &TimeoutPolicy{},
 		RequeryRule:     &RequeryRule{},
 	}
-	if err := ValidateDEFERResponse(resp); err == nil {
+	if err := ValidateESCALATEResponse(resp); err == nil {
 		t.Error("expected error for missing required_facts")
 	}
 }
 
-func TestValidateDEFERResponse_MissingTimeout(t *testing.T) {
+func TestValidateESCALATEResponse_MissingTimeout(t *testing.T) {
 	resp := PDPResponse{
-		Decision:        "DEFER",
+		Decision:        "ESCALATE",
 		DeferReasonCode: "FACT_MISSING",
 		RequiredFacts:   []FactRef{{FactType: "x", FactID: "y"}},
 		RequeryRule:     &RequeryRule{},
 	}
-	if err := ValidateDEFERResponse(resp); err == nil {
+	if err := ValidateESCALATEResponse(resp); err == nil {
 		t.Error("expected error for missing timeout_policy")
 	}
 }
 
-func TestValidateDEFERResponse_MissingRequery(t *testing.T) {
+func TestValidateESCALATEResponse_MissingRequery(t *testing.T) {
 	resp := PDPResponse{
-		Decision:        "DEFER",
+		Decision:        "ESCALATE",
 		DeferReasonCode: "FACT_MISSING",
 		RequiredFacts:   []FactRef{{FactType: "x", FactID: "y"}},
 		TimeoutPolicy:   &TimeoutPolicy{},
 	}
-	if err := ValidateDEFERResponse(resp); err == nil {
+	if err := ValidateESCALATEResponse(resp); err == nil {
 		t.Error("expected error for missing requery_rule")
 	}
 }

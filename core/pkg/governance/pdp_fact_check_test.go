@@ -79,7 +79,7 @@ func TestPDP_FactCheck_DeployGate_Pass(t *testing.T) {
 
 	// Should NOT deny, but Require Approval (default high risk logic)
 	// If it was denied, it would be DecisionDeny
-	assert.Equal(t, DecisionRequireApproval, resp.Decision)
+	assert.Equal(t, DecisionEscalate, resp.Decision)
 
 	// Ensure the deny rule did NOT fire
 	for _, rule := range resp.Trace.RulesFired {

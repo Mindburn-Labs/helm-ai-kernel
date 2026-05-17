@@ -33,9 +33,9 @@ const (
 	EvaluationResult_EVALUATION_RESULT_UNSPECIFIED      EvaluationResult = 0
 	EvaluationResult_EVALUATION_RESULT_ALLOW            EvaluationResult = 1
 	EvaluationResult_EVALUATION_RESULT_DENY             EvaluationResult = 2
-	EvaluationResult_EVALUATION_RESULT_REQUIRE_APPROVAL EvaluationResult = 3
+	EvaluationResult_EVALUATION_RESULT_ESCALATE EvaluationResult = 3
 	EvaluationResult_EVALUATION_RESULT_REQUIRE_EVIDENCE EvaluationResult = 4
-	EvaluationResult_EVALUATION_RESULT_DEFER            EvaluationResult = 5
+	EvaluationResult_EVALUATION_RESULT_ESCALATE            EvaluationResult = 5
 )
 
 // Enum value maps for EvaluationResult.
@@ -44,17 +44,17 @@ var (
 		0: "EVALUATION_RESULT_UNSPECIFIED",
 		1: "EVALUATION_RESULT_ALLOW",
 		2: "EVALUATION_RESULT_DENY",
-		3: "EVALUATION_RESULT_REQUIRE_APPROVAL",
+		3: "EVALUATION_RESULT_ESCALATE",
 		4: "EVALUATION_RESULT_REQUIRE_EVIDENCE",
-		5: "EVALUATION_RESULT_DEFER",
+		5: "EVALUATION_RESULT_ESCALATE",
 	}
 	EvaluationResult_value = map[string]int32{
 		"EVALUATION_RESULT_UNSPECIFIED":      0,
 		"EVALUATION_RESULT_ALLOW":            1,
 		"EVALUATION_RESULT_DENY":             2,
-		"EVALUATION_RESULT_REQUIRE_APPROVAL": 3,
+		"EVALUATION_RESULT_ESCALATE": 3,
 		"EVALUATION_RESULT_REQUIRE_EVIDENCE": 4,
-		"EVALUATION_RESULT_DEFER":            5,
+		"EVALUATION_RESULT_ESCALATE":            5,
 	}
 )
 
@@ -319,9 +319,9 @@ const file_helm_authority_v1_authority_proto_rawDesc = "" +
 	"\x1dEVALUATION_RESULT_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17EVALUATION_RESULT_ALLOW\x10\x01\x12\x1a\n" +
 	"\x16EVALUATION_RESULT_DENY\x10\x02\x12&\n" +
-	"\"EVALUATION_RESULT_REQUIRE_APPROVAL\x10\x03\x12&\n" +
+	"\"EVALUATION_RESULT_ESCALATE\x10\x03\x12&\n" +
 	"\"EVALUATION_RESULT_REQUIRE_EVIDENCE\x10\x04\x12\x1b\n" +
-	"\x17EVALUATION_RESULT_DEFER\x10\x052k\n" +
+	"\x17EVALUATION_RESULT_ESCALATE\x10\x052k\n" +
 	"\x10AuthorityService\x12W\n" +
 	"\bEvaluate\x12$.helm.authority.v1.EvaluationRequest\x1a%.helm.authority.v1.EvaluationDecisionB,Z*helm.mindburn.run/authority/v1;authorityv1b\x06proto3"
 

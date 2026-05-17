@@ -198,5 +198,5 @@ flowchart LR
   retain --> protocol["Protocols and schemas"]
   retain --> verify["Receipts and verification"]
   kernel --> exclude["Excluded hosted surfaces"]
-  exclude --> commercial["HELM commercial docs"]
+  exclude --> commercial["HELM AI Enterprise docs"]
 ```

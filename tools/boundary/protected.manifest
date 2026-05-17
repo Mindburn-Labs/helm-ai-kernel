@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-05-13T12:20:26Z
-# Commit: bba494e6ef84891cdd3271fbf2f70fd9c139ae9f
+# Generated: 2026-05-16T17:30:32Z
+# Commit: f4264df572e43c2bad2f7419477ed0a7c5b51e08
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -629,7 +629,7 @@ b4ba129ddfda5cc795fd9b40f733272504015959ecfdc9b05479188a0df5b8ad  protocols/json
 440bed4c3ac644ca35f1118a872e811b2904774b7411e31bc3d00b778359b9ef  protocols/json-schemas/reason-codes/reason-codes-v1.schema.json
 0db5049dcc300a51c382971f3ccca2f2d3194a0b8e18c6b6251893e540d9eb9b  protocols/json-schemas/receipt/v2.json
 0fec45f58f4c745ef29567307e9067fb392335a54c1bf741c5e531bebc76235c  protocols/json-schemas/receipts/canonical_semantic_receipt.schema.json
-8fd09d60a88b599217450d84669cc80dbe536877dfca7a60e877eb810c979ab2  protocols/json-schemas/receipts/deployment_receipt.v1.json
+5f47e5d28bd3b0df99f1a083a13b006f63c01ff10f552f68bfc8fbb74d54b5f1  protocols/json-schemas/receipts/deployment_receipt.v1.json
 9ecb6eaf44fc4e8e32083250e3f6cf176dceb31a74b90185fe7c7600aeb27ef5  protocols/json-schemas/receipts/model_invocation_receipt.v1.schema.json
 cfd8659ebe7ef2f371bd0d58e426ae982d50373608423f8646bc72db213402a7  protocols/json-schemas/receipts/raw_record_layer.schema.json
 c8d86d919e94e7cd801800d2c61a282c32fbc3c3aa85aebe98d0a6922f721710  protocols/json-schemas/receipts/tool_invocation_receipt.v1.schema.json

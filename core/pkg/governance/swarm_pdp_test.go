@@ -152,8 +152,8 @@ func TestSwarmPDP_MergeDecisions_StrictMode(t *testing.T) {
 		{"single allow", []Decision{DecisionAllow}, DecisionAllow},
 		{"single deny", []Decision{DecisionDeny}, DecisionDeny},
 		{"deny wins", []Decision{DecisionAllow, DecisionDeny, DecisionAllow}, DecisionDeny},
-		{"require approval", []Decision{DecisionAllow, DecisionRequireApproval}, DecisionRequireApproval},
-		{"deny over require", []Decision{DecisionRequireApproval, DecisionDeny}, DecisionDeny},
+		{"require approval", []Decision{DecisionAllow, DecisionEscalate}, DecisionEscalate},
+		{"deny over require", []Decision{DecisionEscalate, DecisionDeny}, DecisionDeny},
 	}
 
 	for _, tt := range tests {

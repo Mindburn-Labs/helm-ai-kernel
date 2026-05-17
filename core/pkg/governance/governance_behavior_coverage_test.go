@@ -326,9 +326,9 @@ func TestSwarmPDP_MergeDecisions_EmptyDenies(t *testing.T) {
 
 func TestSwarmPDP_MergeDecisions_RequireApprovalOverAllow(t *testing.T) {
 	pdp := newTestSwarmPDP(true)
-	result := pdp.MergeDecisions([]Decision{DecisionAllow, DecisionRequireApproval})
-	if result != DecisionRequireApproval {
-		t.Errorf("expected REQUIRE_APPROVAL, got %s", result)
+	result := pdp.MergeDecisions([]Decision{DecisionAllow, DecisionEscalate})
+	if result != DecisionEscalate {
+		t.Errorf("expected ESCALATE, got %s", result)
 	}
 }
 
@@ -836,7 +836,7 @@ func TestCELPDP_HighRiskRequiresApproval(t *testing.T) {
 		Subject:   SubjectDescriptor{ActorID: "agent-1", ActorType: "agent"},
 	}
 	resp, _ := pdp.Evaluate(context.Background(), req)
-	if resp.Decision != DecisionRequireApproval {
+	if resp.Decision != DecisionEscalate {
 		t.Errorf("FUNDS_TRANSFER should require approval, got %s", resp.Decision)
 	}
 }

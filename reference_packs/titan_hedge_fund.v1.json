@@ -188,7 +188,7 @@
           "capability_classes": ["titan.trade_execute"],
           "cel_expression": "state.venue_exposure_pct(intent.venue_id) <= 0.60",
           "parameters": { "max_venue_concentration_pct": 0.60 },
-          "on_violation": "REQUIRE_APPROVAL"
+          "on_violation": "ESCALATE"
         },
         {
           "rule_id": "p1-slippage-guard-bps",
@@ -288,7 +288,7 @@
           "description": "Live trades above threshold require a passing research-court verdict AND a risk-ml anomaly-free window",
           "capability_classes": ["titan.trade_execute"],
           "cel_expression": "intent.mode != 'live' || intent.size_usd <= 50.0 || (has(intent.research_verdict) && intent.research_verdict == 'APPROVED' && state.risk_ml_anomaly_window_clear == true)",
-          "on_violation": "REQUIRE_APPROVAL"
+          "on_violation": "ESCALATE"
         },
         {
           "rule_id": "p1-drift-triggered-rollback",
@@ -345,14 +345,14 @@
           "description": "Research proposals that would promote to live capital require an additional committee verdict",
           "cel_expression": "intent.class == 'RESEARCH_PROPOSAL' && intent.target_mode == 'live'",
           "effect": "TIGHTEN",
-          "override_effect": "REQUIRE_APPROVAL"
+          "override_effect": "ESCALATE"
         },
         {
           "rule_id": "p2-model-change-high-risk-require-approval",
           "description": "Model changes that affect live-trading paths require human approval regardless of PBO/DSR",
           "cel_expression": "intent.class == 'MODEL_CHANGE' && (intent.target_model_kind == 'pricing-ensemble' || intent.target_model_kind == 'allocator' || intent.target_model_kind == 'execution-policy') && intent.target_mode == 'live'",
           "effect": "TIGHTEN",
-          "override_effect": "REQUIRE_APPROVAL"
+          "override_effect": "ESCALATE"
         }
       ]
     }

@@ -69,12 +69,10 @@ func (a *GovernancePDPAdapter) Evaluate(ctx context.Context, req *EffectRequest)
 		decision = "ALLOW"
 	case governance.DecisionDeny:
 		decision = "DENY"
-	case governance.DecisionRequireApproval:
-		decision = "REQUIRE_APPROVAL"
+	case governance.DecisionEscalate:
+		decision = "ESCALATE"
 	case governance.DecisionRequireEvidence:
 		decision = "REQUIRE_EVIDENCE"
-	case governance.DecisionDefer:
-		decision = "DEFER"
 	}
 
 	return decision, resp.DecisionID, nil

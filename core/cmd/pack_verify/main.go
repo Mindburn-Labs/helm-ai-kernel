@@ -183,12 +183,12 @@ func verify(packDir string) verificationResult {
 				result.Errors = append(result.Errors, fmt.Sprintf("policy %q: rule %q has no effect", name, rule.ID))
 			} else {
 				switch rule.Effect {
-				case "ALLOW", "DENY", "AUDIT", "REQUIRE_APPROVAL", "EVALUATE", "OVERRIDE", "PASS_THROUGH":
+				case "ALLOW", "DENY", "AUDIT", "ESCALATE", "EVALUATE", "OVERRIDE", "PASS_THROUGH":
 					// valid
 				default:
 					result.Valid = false
 					result.Errors = append(result.Errors, fmt.Sprintf(
-						"policy %q: rule %q has unrecognised effect %q (must be one of: ALLOW, DENY, AUDIT, REQUIRE_APPROVAL, EVALUATE, OVERRIDE, PASS_THROUGH)",
+						"policy %q: rule %q has unrecognised effect %q (must be one of: ALLOW, DENY, AUDIT, ESCALATE, EVALUATE, OVERRIDE, PASS_THROUGH)",
 						name, rule.ID, rule.Effect,
 					))
 				}

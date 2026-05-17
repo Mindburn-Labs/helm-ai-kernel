@@ -218,11 +218,11 @@ func TestFinal_VerifyUnknownSigner(t *testing.T) {
 }
 
 func TestFinal_ConformanceReportJSONRoundTrip(t *testing.T) {
-	cr := ConformanceReport{ReportID: "r1", GitRevision: "abc123", Platform: "helm-core-go"}
+	cr := ConformanceReport{ReportID: "r1", GitRevision: "abc123", Platform: "helm-ai-enterprise-controlplane-go"}
 	data, _ := json.Marshal(cr)
 	var got ConformanceReport
 	json.Unmarshal(data, &got)
-	if got.ReportID != "r1" || got.Platform != "helm-core-go" {
+	if got.ReportID != "r1" || got.Platform != "helm-ai-enterprise-controlplane-go" {
 		t.Fatal("report round-trip")
 	}
 }

@@ -24,7 +24,7 @@ type P0Ceilings struct {
 	RequireCoverageMin          int      `json:"REQUIRE_COVERAGE_MIN"`
 	ForbidPlaintextMnemonic     bool     `json:"FORBID_PLAINTEXT_MNEMONIC"`
 	ForbidGenericMainnetScript  bool     `json:"FORBID_GENERIC_MAINNET_SCRIPT"`
-	RequireApprovalForMainnet   bool     `json:"REQUIRE_APPROVAL_CEREMONY_FOR_MAINNET"`
+	EscalateForMainnet   bool     `json:"ESCALATE_CEREMONY_FOR_MAINNET"`
 	AllowedActonVersions        []string `json:"allowed_acton_versions,omitempty"`
 	AllowedTolkCompilerVersions []string `json:"allowed_tolk_compiler_versions,omitempty"`
 }
@@ -51,7 +51,7 @@ func DefaultP0Ceilings() P0Ceilings {
 		RequireCoverageMin:          0,
 		ForbidPlaintextMnemonic:     true,
 		ForbidGenericMainnetScript:  true,
-		RequireApprovalForMainnet:   true,
+		EscalateForMainnet:   true,
 		AllowedActonVersions:        SupportedActonVersions,
 		AllowedTolkCompilerVersions: SupportedTolkCompilerVersions,
 	}
@@ -131,7 +131,7 @@ func EvaluatePolicy(env *ActonCommandEnvelope, ceilings P0Ceilings, grant *contr
 		return deny(ReasonSpendCeilingExceeded, "testnet broadcast is not policy-allowed")
 	}
 	if spec.Network == NetworkMainnet && spec.Broadcast {
-		if spec.RequiresApproval && ceilings.RequireApprovalForMainnet && env.ApprovalRef == "" {
+		if spec.RequiresApproval && ceilings.EscalateForMainnet && env.ApprovalRef == "" {
 			if env.ActionURN == ActionLibraryPublishMN || env.ActionURN == ActionLibraryTopupMN {
 				return escalate(ReasonLibraryMainnetRequiresApproval, "mainnet library action requires approval ceremony")
 			}

@@ -41,7 +41,7 @@ public final class SchemaValidator {
     // ── Enum whitelists from protocols/json-schemas/ ──────────────
 
     private static final List<String> VALID_VERDICTS =
-        List.of("ALLOW", "DENY", "REQUIRE_APPROVAL", "REQUIRE_EVIDENCE");
+        List.of("ALLOW", "DENY", "ESCALATE", "REQUIRE_EVIDENCE");
 
     private static final List<String> VALID_EFFECT_STATUSES =
         List.of("PENDING", "EXECUTED", "FAILED", "CANCELLED");

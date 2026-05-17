@@ -7,7 +7,7 @@
 // Initialize tracing at application startup:
 //
 //	tp, err := observability.InitTracer(ctx, observability.TracerConfig{
-//		ServiceName:  "helm-core",
+//		ServiceName:  "helm-ai-enterprise-controlplane",
 //		OTLPEndpoint: "otel-collector:4317",
 //		SampleRate:   0.1, // 10% sampling in production
 //	})

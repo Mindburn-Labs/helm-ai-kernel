@@ -15,15 +15,15 @@ class EvaluationResult(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     EVALUATION_RESULT_UNSPECIFIED: _ClassVar[EvaluationResult]
     EVALUATION_RESULT_ALLOW: _ClassVar[EvaluationResult]
     EVALUATION_RESULT_DENY: _ClassVar[EvaluationResult]
-    EVALUATION_RESULT_REQUIRE_APPROVAL: _ClassVar[EvaluationResult]
+    EVALUATION_RESULT_ESCALATE: _ClassVar[EvaluationResult]
     EVALUATION_RESULT_REQUIRE_EVIDENCE: _ClassVar[EvaluationResult]
-    EVALUATION_RESULT_DEFER: _ClassVar[EvaluationResult]
+    EVALUATION_RESULT_ESCALATE: _ClassVar[EvaluationResult]
 EVALUATION_RESULT_UNSPECIFIED: EvaluationResult
 EVALUATION_RESULT_ALLOW: EvaluationResult
 EVALUATION_RESULT_DENY: EvaluationResult
-EVALUATION_RESULT_REQUIRE_APPROVAL: EvaluationResult
+EVALUATION_RESULT_ESCALATE: EvaluationResult
 EVALUATION_RESULT_REQUIRE_EVIDENCE: EvaluationResult
-EVALUATION_RESULT_DEFER: EvaluationResult
+EVALUATION_RESULT_ESCALATE: EvaluationResult
 
 class EvaluationRequest(_message.Message):
     __slots__ = ("request_id", "principal_id", "principal_type", "effect_types", "policy_epoch", "idempotency_key", "context", "timestamp")

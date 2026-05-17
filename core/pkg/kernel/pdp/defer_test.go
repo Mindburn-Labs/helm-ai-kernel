@@ -5,16 +5,16 @@ import (
 	"time"
 )
 
-func TestValidateDEFERResponse(t *testing.T) {
+func TestValidateESCALATEResponse(t *testing.T) {
 	tests := []struct {
 		name    string
 		resp    PDPResponse
 		wantErr bool
 	}{
 		{
-			name: "Valid DEFER",
+			name: "Valid ESCALATE",
 			resp: PDPResponse{
-				Decision:        "DEFER",
+				Decision:        "ESCALATE",
 				DeferReasonCode: "reason",
 				RequiredFacts:   []FactRef{{FactID: "fact1"}},
 				TimeoutPolicy:   &TimeoutPolicy{PolicyID: "policy1"},
@@ -25,7 +25,7 @@ func TestValidateDEFERResponse(t *testing.T) {
 		{
 			name: "Missing Reason",
 			resp: PDPResponse{
-				Decision:      "DEFER",
+				Decision:      "ESCALATE",
 				RequiredFacts: []FactRef{{FactID: "fact1"}},
 				TimeoutPolicy: &TimeoutPolicy{PolicyID: "policy1"},
 				RequeryRule:   &RequeryRule{Mode: "EXACT_REUSE"},
@@ -35,7 +35,7 @@ func TestValidateDEFERResponse(t *testing.T) {
 		{
 			name: "Missing Required Facts",
 			resp: PDPResponse{
-				Decision:        "DEFER",
+				Decision:        "ESCALATE",
 				DeferReasonCode: "reason",
 				RequiredFacts:   []FactRef{},
 				TimeoutPolicy:   &TimeoutPolicy{PolicyID: "policy1"},
@@ -46,7 +46,7 @@ func TestValidateDEFERResponse(t *testing.T) {
 		{
 			name: "Missing Timeout Policy",
 			resp: PDPResponse{
-				Decision:        "DEFER",
+				Decision:        "ESCALATE",
 				DeferReasonCode: "reason",
 				RequiredFacts:   []FactRef{{FactID: "fact1"}},
 				RequeryRule:     &RequeryRule{Mode: "EXACT_REUSE"},
@@ -56,7 +56,7 @@ func TestValidateDEFERResponse(t *testing.T) {
 		{
 			name: "Missing Requery Rule",
 			resp: PDPResponse{
-				Decision:        "DEFER",
+				Decision:        "ESCALATE",
 				DeferReasonCode: "reason",
 				RequiredFacts:   []FactRef{{FactID: "fact1"}},
 				TimeoutPolicy:   &TimeoutPolicy{PolicyID: "policy1"},
@@ -74,8 +74,8 @@ func TestValidateDEFERResponse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := ValidateDEFERResponse(tt.resp); (err != nil) != tt.wantErr {
-				t.Errorf("ValidateDEFERResponse() error = %v, wantErr %v", err, tt.wantErr)
+			if err := ValidateESCALATEResponse(tt.resp); (err != nil) != tt.wantErr {
+				t.Errorf("ValidateESCALATEResponse() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

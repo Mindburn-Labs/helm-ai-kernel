@@ -8,13 +8,13 @@ HELM operates on a strict, three-verdict execution model, documented in the Unif
 
 ## Legacy Terminology
 
-In earlier iterations of the HELM engine, the terms `DEFER`, `REQUIRE_APPROVAL`, and `APPROVAL_REQUIRED` were used to represent the state where a decision could not be reached autonomously.
+In earlier iterations of the HELM engine, the terms `ESCALATE`, `ESCALATE`, and `APPROVAL_REQUIRED` were used to represent the state where a decision could not be reached autonomously.
 
 To maintain backward compatibility with existing wire-format schemas, generated SDKs, and stored policies, these terms may still appear in the `helm-ai-kernel` repository's source code, tests, and JSON schemas.
 
 **Canonical Mapping:**
 
-*   Any internal engine state returning `DEFER` must be interpreted by integrations as the canonical `ESCALATE` verdict.
-*   Any schema field or SDK constant named `REQUIRE_APPROVAL` or `APPROVAL_REQUIRED` maps directly to the `ESCALATE` workflow.
+*   Any internal engine state returning `ESCALATE` must be interpreted by integrations as the canonical `ESCALATE` verdict.
+*   Any schema field or SDK constant named `ESCALATE` or `APPROVAL_REQUIRED` maps directly to the `ESCALATE` workflow.
 
 New documentation, public APIs, and user-facing Console interfaces must exclusively use the `ALLOW`, `DENY`, and `ESCALATE` terminology.

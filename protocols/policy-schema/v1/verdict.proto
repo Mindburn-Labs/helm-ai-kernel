@@ -1,7 +1,7 @@
 // HELM Policy Schema — CPI Verdict
 //
 // Returned by helm-policy-vm for every PlanIRDelta evaluation.
-// Contains structured payloads for ALLOW, DENY, and REQUIRE_APPROVAL.
+// Contains structured payloads for ALLOW, DENY, and ESCALATE.
 //
 // Stability: v1 additive-only.
 syntax = "proto3";
@@ -41,7 +41,7 @@ enum VerdictKind {
   VERDICT_KIND_UNSPECIFIED = 0;
   VERDICT_KIND_ALLOW = 1;
   VERDICT_KIND_DENY = 2;
-  VERDICT_KIND_REQUIRE_APPROVAL = 3;
+  VERDICT_KIND_ESCALATE = 3;
 }
 
 // ── Payloads ───────────────────────────────────────────────────

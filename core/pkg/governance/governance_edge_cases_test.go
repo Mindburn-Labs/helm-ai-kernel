@@ -322,9 +322,9 @@ func TestDeepSwarmPDPMergeDecisionsAllAllow(t *testing.T) {
 
 func TestDeepSwarmPDPMergeDecisionsRequireApproval(t *testing.T) {
 	swarm := NewSwarmPDP(&mockPDP{version: "v1"}, DefaultSwarmPDPConfig())
-	result := swarm.MergeDecisions([]Decision{DecisionAllow, DecisionRequireApproval})
-	if result != DecisionRequireApproval {
-		t.Fatal("REQUIRE_APPROVAL should take precedence over ALLOW")
+	result := swarm.MergeDecisions([]Decision{DecisionAllow, DecisionEscalate})
+	if result != DecisionEscalate {
+		t.Fatal("ESCALATE should take precedence over ALLOW")
 	}
 }
 

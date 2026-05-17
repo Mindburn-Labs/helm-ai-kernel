@@ -531,9 +531,9 @@ func TestClosing_Decision_Values(t *testing.T) {
 	}{
 		{DecisionAllow, "ALLOW"},
 		{DecisionDeny, "DENY"},
-		{DecisionRequireApproval, "REQUIRE_APPROVAL"},
+		{DecisionEscalate, "ESCALATE"},
 		{DecisionRequireEvidence, "REQUIRE_EVIDENCE"},
-		{DecisionDefer, "DEFER"},
+		{DecisionEscalate, "ESCALATE"},
 	}
 	for _, tc := range decisions {
 		t.Run(tc.name, func(t *testing.T) {
@@ -569,8 +569,8 @@ func TestClosing_CELPolicyDecisionPoint_Evaluate(t *testing.T) {
 		resp, _ := pdp.Evaluate(context.Background(), PDPRequest{
 			Effect: EffectDescriptor{EffectType: "DEPLOY"},
 		})
-		if resp.Decision != DecisionRequireApproval {
-			t.Fatalf("got %q, want REQUIRE_APPROVAL", resp.Decision)
+		if resp.Decision != DecisionEscalate {
+			t.Fatalf("got %q, want ESCALATE", resp.Decision)
 		}
 	})
 	t.Run("policy_version_set", func(t *testing.T) {

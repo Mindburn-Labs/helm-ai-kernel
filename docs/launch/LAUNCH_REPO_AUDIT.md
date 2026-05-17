@@ -17,7 +17,7 @@ This document captures the baseline state of the repository before the Phase 0 l
 *   **`wrangler.toml`**: Contained hardcoded `kernel.mindburn.org`. **Remediated** to support localhost default.
 
 ## 3. Verdict Canonicalization
-*   **Issue**: Legacy terminology (`DEFER`, `REQUIRE_APPROVAL`) exists in ~40+ locations across source, tests, and schemas.
+*   **Issue**: Legacy terminology (`ESCALATE`, `ESCALATE`) exists in ~40+ locations across source, tests, and schemas.
 *   **Action**: Must not break generated SDKs. Will remediate via canonicalization documentation and source code comments mapping these states to the canonical `ALLOW`/`DENY`/`ESCALATE` model.
 
 ## 4. Documentation & Examples

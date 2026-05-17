@@ -39,7 +39,7 @@
       "type": "object",
       "description": "Map of service name to full image reference",
       "properties": {
-        "helm-core": { "type": "string" }
+        "helm-ai-enterprise-controlplane": { "type": "string" }
       },
       "additionalProperties": { "type": "string" }
     },

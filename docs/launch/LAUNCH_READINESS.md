@@ -9,7 +9,7 @@ not committed to the repository.
 ## Phase 0: Boundary Hardening
 - [x] **PR Boundary: No open PRs contain commercial infrastructure terminology.**
 - [x] **Config Boundary: wrangler.toml does not enforce hosted domains.**
-- [x] **Terminology Boundary: VERDICT_CANONICALIZATION.md exists and resolves the ALLOW/DENY/ESCALATE vs. DEFER drift.**
+- [x] **Terminology Boundary: VERDICT_CANONICALIZATION.md exists and resolves the ALLOW/DENY/ESCALATE vs. ESCALATE drift.**
 - [x] **Version: VERSION is set to launch target 0.5.0.**
 - [x] **Homebrew: README points to canonical mindburnlabs/tap/helm-ai-kernel.**
 

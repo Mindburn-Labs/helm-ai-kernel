@@ -24,11 +24,11 @@ grep -qi 'compatibility route' "$ROOT/api/openapi/helm.openapi.yaml" \
 grep -q 'RuntimeRouteSpecs' "$ROOT/core/cmd/helm-ai-kernel/route_registry.go" \
   || fail "runtime route registry is missing"
 
-if grep -RIE 'TBD endpoint|orphan public route|hand[- ]maintained endpoint list|stale compatibility route' "$ROOT/apps/console/src/api" "$ROOT/sdk/go" "$ROOT/sdk/python" "$ROOT/sdk/rust" "$ROOT/sdk/java" >/tmp/helm-api-truth-orphans.$$ 2>/dev/null; then
-  cat /tmp/helm-api-truth-orphans.$$ >&2
-  rm -f /tmp/helm-api-truth-orphans.$$
+if grep -RIE 'TBD endpoint|orphan public route|hand[- ]maintained endpoint list|stale compatibility route' "$ROOT/apps/console/src/api" "$ROOT/sdk/go" "$ROOT/sdk/python" "$ROOT/sdk/rust" "$ROOT/sdk/java" >/tmp/helm-ai-enterprise-api-truth-orphans.$$ 2>/dev/null; then
+  cat /tmp/helm-ai-enterprise-api-truth-orphans.$$ >&2
+  rm -f /tmp/helm-ai-enterprise-api-truth-orphans.$$
   fail "API client surfaces contain unresolved endpoint-list placeholders"
 fi
-rm -f /tmp/helm-api-truth-orphans.$$
+rm -f /tmp/helm-ai-enterprise-api-truth-orphans.$$
 
 printf 'launch-api-truth: passed\n'

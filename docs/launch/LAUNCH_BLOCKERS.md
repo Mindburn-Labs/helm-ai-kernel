@@ -44,10 +44,10 @@ These items *must* be resolved by the Launch Execution Agent prior to the comple
 *   **Description**: The HELM AI Kernel Console deployment config hardcoded `kernel.mindburn.org` as the production domain, breaking the requirement that HELM AI Kernel must be self-hostable without hosted infrastructure assumptions.
 *   **Resolution**: Removed the hardcoded domain. Added documentation comments guiding self-hosters to use localhost (`127.0.0.1:7714`) or custom environment variables.
 
-### 5. Verdict Drift (DEFER / REQUIRE_APPROVAL)
+### 5. Verdict Drift (ESCALATE / ESCALATE)
 
 *   **Status**: `RESOLVED` (Phase 0/1)
-*   **Description**: The repository contains legacy terminology (`DEFER`, `REQUIRE_APPROVAL`) that violates the canonical HELM UCS v1.3 verdict model (`ALLOW`, `DENY`, `ESCALATE`).
+*   **Description**: The repository contains legacy terminology (`ESCALATE`, `ESCALATE`) that violates the canonical HELM UCS v1.3 verdict model (`ALLOW`, `DENY`, `ESCALATE`).
 *   **Resolution**: `docs/VERDICT_CANONICALIZATION.md` is the canonical public compatibility note. New launch, SDK, and MCP docs use only `ALLOW`, `DENY`, and `ESCALATE`; legacy terms are confined to compatibility/generated-code contexts.
 
 ### 6. Launch Checklist Automation

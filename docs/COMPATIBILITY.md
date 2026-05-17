@@ -122,8 +122,8 @@ verdict labels. Treat them only as migration aliases:
 
 | Legacy label | Current meaning |
 | --- | --- |
-| `DEFER` | `ESCALATE` |
-| `REQUIRE_APPROVAL` | `ESCALATE` |
+| `ESCALATE` | `ESCALATE` |
+| `ESCALATE` | `ESCALATE` |
 | `APPROVAL_REQUIRED` | `ESCALATE` |
 
 Do not use legacy verdict labels in new runtime docs, policy examples, or

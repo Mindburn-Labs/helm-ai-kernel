@@ -23,6 +23,6 @@ type Inbox interface {
 	// Deny marks an item as denied with a reason.
 	Deny(ctx context.Context, itemID string, reason string, principalID string) error
 
-	// Defer postpones review of an item until the given time.
-	Defer(ctx context.Context, itemID string, until time.Time) error
+	// Escalate postpones review of an item until the given time.
+	Escalate(ctx context.Context, itemID string, until time.Time) error
 }

@@ -7,7 +7,7 @@ import (
 
 // PDPResponse represents the decision output.
 type PDPResponse struct {
-	Decision        string         `json:"decision"` // Canonical: ALLOW, DENY, ESCALATE (legacy: DEFER)
+	Decision        string         `json:"decision"` // Canonical: ALLOW, DENY, ESCALATE (legacy: ESCALATE)
 	DeferReasonCode string         `json:"defer_reason_code,omitempty"`
 	RequiredFacts   []FactRef      `json:"required_facts,omitempty"`
 	TimeoutPolicy   *TimeoutPolicy `json:"timeout_policy,omitempty"`
@@ -43,26 +43,26 @@ type ObligationState struct {
 	EnteredAt time.Time
 }
 
-// ValidateDEFERResponse checks if a DEFER response is valid per Addendum 9.5.X.
-func ValidateDEFERResponse(resp PDPResponse) error {
-	if resp.Decision != "DEFER" {
+// ValidateESCALATEResponse checks if a ESCALATE response is valid per Addendum 9.5.X.
+func ValidateESCALATEResponse(resp PDPResponse) error {
+	if resp.Decision != "ESCALATE" {
 		return nil
 	}
 
 	if resp.DeferReasonCode == "" {
-		return errors.New("DEFER requires defer_reason_code")
+		return errors.New("ESCALATE requires defer_reason_code")
 	}
 
 	if len(resp.RequiredFacts) == 0 {
-		return errors.New("DEFER requires at least one required_fact")
+		return errors.New("ESCALATE requires at least one required_fact")
 	}
 
 	if resp.TimeoutPolicy == nil {
-		return errors.New("DEFER requires timeout_policy")
+		return errors.New("ESCALATE requires timeout_policy")
 	}
 
 	if resp.RequeryRule == nil {
-		return errors.New("DEFER requires requery_rule")
+		return errors.New("ESCALATE requires requery_rule")
 	}
 
 	return nil

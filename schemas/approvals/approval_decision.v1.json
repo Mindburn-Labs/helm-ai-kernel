@@ -10,7 +10,7 @@
     "request_id": { "type": "string" },
     "decision": {
       "type": "string",
-      "enum": ["APPROVE", "DENY", "DEFER"]
+      "enum": ["APPROVE", "DENY", "ESCALATE"]
     },
     "approver_id": { "type": "string" },
     "reason": { "type": "string" },

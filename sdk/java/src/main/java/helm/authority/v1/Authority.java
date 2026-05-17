@@ -44,17 +44,17 @@ public final class Authority extends com.google.protobuf.GeneratedFile {
      */
     EVALUATION_RESULT_DENY(2),
     /**
-     * <code>EVALUATION_RESULT_REQUIRE_APPROVAL = 3;</code>
+     * <code>EVALUATION_RESULT_ESCALATE = 3;</code>
      */
-    EVALUATION_RESULT_REQUIRE_APPROVAL(3),
+    EVALUATION_RESULT_ESCALATE(3),
     /**
      * <code>EVALUATION_RESULT_REQUIRE_EVIDENCE = 4;</code>
      */
     EVALUATION_RESULT_REQUIRE_EVIDENCE(4),
     /**
-     * <code>EVALUATION_RESULT_DEFER = 5;</code>
+     * <code>EVALUATION_RESULT_ESCALATE = 5;</code>
      */
-    EVALUATION_RESULT_DEFER(5),
+    EVALUATION_RESULT_ESCALATE(5),
     UNRECOGNIZED(-1),
     ;
 
@@ -80,17 +80,17 @@ public final class Authority extends com.google.protobuf.GeneratedFile {
      */
     public static final int EVALUATION_RESULT_DENY_VALUE = 2;
     /**
-     * <code>EVALUATION_RESULT_REQUIRE_APPROVAL = 3;</code>
+     * <code>EVALUATION_RESULT_ESCALATE = 3;</code>
      */
-    public static final int EVALUATION_RESULT_REQUIRE_APPROVAL_VALUE = 3;
+    public static final int EVALUATION_RESULT_ESCALATE_VALUE = 3;
     /**
      * <code>EVALUATION_RESULT_REQUIRE_EVIDENCE = 4;</code>
      */
     public static final int EVALUATION_RESULT_REQUIRE_EVIDENCE_VALUE = 4;
     /**
-     * <code>EVALUATION_RESULT_DEFER = 5;</code>
+     * <code>EVALUATION_RESULT_ESCALATE = 5;</code>
      */
-    public static final int EVALUATION_RESULT_DEFER_VALUE = 5;
+    public static final int EVALUATION_RESULT_ESCALATE_VALUE = 5;
 
 
     public final int getNumber() {
@@ -120,9 +120,9 @@ public final class Authority extends com.google.protobuf.GeneratedFile {
         case 0: return EVALUATION_RESULT_UNSPECIFIED;
         case 1: return EVALUATION_RESULT_ALLOW;
         case 2: return EVALUATION_RESULT_DENY;
-        case 3: return EVALUATION_RESULT_REQUIRE_APPROVAL;
+        case 3: return EVALUATION_RESULT_ESCALATE;
         case 4: return EVALUATION_RESULT_REQUIRE_EVIDENCE;
-        case 5: return EVALUATION_RESULT_DEFER;
+        case 5: return EVALUATION_RESULT_ESCALATE;
         default: return null;
       }
     }
@@ -3748,9 +3748,9 @@ java.lang.String defaultValue) {
       "\010 \001(\t*\333\001\n\020EvaluationResult\022!\n\035EVALUATION" +
       "_RESULT_UNSPECIFIED\020\000\022\033\n\027EVALUATION_RESU" +
       "LT_ALLOW\020\001\022\032\n\026EVALUATION_RESULT_DENY\020\002\022&" +
-      "\n\"EVALUATION_RESULT_REQUIRE_APPROVAL\020\003\022&" +
+      "\n\"EVALUATION_RESULT_ESCALATE\020\003\022&" +
       "\n\"EVALUATION_RESULT_REQUIRE_EVIDENCE\020\004\022\033" +
-      "\n\027EVALUATION_RESULT_DEFER\020\0052k\n\020Authority" +
+      "\n\027EVALUATION_RESULT_ESCALATE\020\0052k\n\020Authority" +
       "Service\022W\n\010Evaluate\022$.helm.authority.v1." +
       "EvaluationRequest\032%.helm.authority.v1.Ev" +
       "aluationDecisionB,Z*helm.mindburn.run/au" +

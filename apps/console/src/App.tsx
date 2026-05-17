@@ -231,11 +231,56 @@ function receiptResource(receipt: Receipt | undefined): string {
   return String(receipt?.metadata?.resource ?? receipt?.metadata?.source ?? "no governed action yet");
 }
 
-function mergeReceipts(current: readonly Receipt[], next: readonly Receipt[]): readonly Receipt[] {
+function receiptKey(receipt: Receipt): string {
+  return receipt.receipt_id ?? `${receipt.decision_id}-${receipt.lamport_clock}`;
+}
+
+function mergeReceiptBatch(current: readonly Receipt[], next: readonly Receipt[]): readonly Receipt[] {
   const map = new Map<string, Receipt>();
-  for (const receipt of current) map.set(receipt.receipt_id ?? `${receipt.decision_id}-${receipt.lamport_clock}`, receipt);
-  for (const receipt of next) map.set(receipt.receipt_id ?? `${receipt.decision_id}-${receipt.lamport_clock}`, receipt);
+  for (const receipt of current) map.set(receiptKey(receipt), receipt);
+  for (const receipt of next) map.set(receiptKey(receipt), receipt);
   return [...map.values()].sort((a, b) => (b.lamport_clock ?? 0) - (a.lamport_clock ?? 0)).slice(0, 200);
+}
+
+function isSortedByLamportDesc(receipts: readonly Receipt[]): boolean {
+  for (let index = 1; index < receipts.length; index += 1) {
+    if ((receipts[index - 1]?.lamport_clock ?? 0) < (receipts[index]?.lamport_clock ?? 0)) return false;
+  }
+  return true;
+}
+
+export function mergeReceipts(current: readonly Receipt[], next: readonly Receipt[]): readonly Receipt[] {
+  if (next.length !== 1 || !isSortedByLamportDesc(current)) {
+    return mergeReceiptBatch(current, next);
+  }
+
+  const receipt = next[0];
+  const key = receiptKey(receipt);
+  const entries: Array<{ readonly receipt: Receipt; readonly originalIndex: number }> = [];
+  let existingIndex = -1;
+
+  for (let index = 0; index < current.length; index += 1) {
+    const currentReceipt = current[index];
+    if (receiptKey(currentReceipt) === key) {
+      existingIndex = index;
+      continue;
+    }
+    entries.push({ receipt: currentReceipt, originalIndex: index });
+  }
+
+  const lamport = receipt.lamport_clock ?? 0;
+  let insertAt = entries.length;
+  for (let index = 0; index < entries.length; index += 1) {
+    const entryLamport = entries[index].receipt.lamport_clock ?? 0;
+    if (entryLamport < lamport || (entryLamport === lamport && existingIndex !== -1 && entries[index].originalIndex > existingIndex)) {
+      insertAt = index;
+      break;
+    }
+  }
+
+  const merged = entries.map((entry) => entry.receipt);
+  merged.splice(insertAt, 0, receipt);
+  return merged.slice(0, 200);
 }
 
 function useConsoleData(authRevision: number) {

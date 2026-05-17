@@ -1,4 +1,5 @@
 import createClient from "openapi-fetch";
+import { appendSseChunk, createSseFrameBuffer } from "../sse";
 import type { paths } from "./schema";
 
 export interface Receipt {
@@ -347,19 +348,19 @@ async function streamReceiptEvents(signal: AbortSignal, onReceipt: (receipt: Rec
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = "";
+  const frameBuffer = createSseFrameBuffer();
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const events = buffer.split(/\r?\n\r?\n/);
-    buffer = events.pop() ?? "";
-    for (const event of events) {
+    appendSseChunk(frameBuffer, decoder.decode(value, { stream: true }), (event) => {
       parseReceiptEvent(event, onReceipt);
-    }
+    });
   }
-  if (buffer.trim() !== "") {
-    parseReceiptEvent(buffer, onReceipt);
+  appendSseChunk(frameBuffer, decoder.decode(), (event) => {
+    parseReceiptEvent(event, onReceipt);
+  });
+  if (frameBuffer.buffer.trim() !== "") {
+    parseReceiptEvent(frameBuffer.buffer, onReceipt);
   }
   throw new Error("Receipt stream closed");
 }

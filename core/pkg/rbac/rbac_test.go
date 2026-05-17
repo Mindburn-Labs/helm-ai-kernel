@@ -272,3 +272,59 @@ func TestRBACStore_CRUD(t *testing.T) {
 		t.Errorf("expected 0 bindings after removal, got %d", len(bindings))
 	}
 }
+
+func TestRBACStore_ListBindingsFiltersByPrincipalAndTenant(t *testing.T) {
+	ctx := context.Background()
+	store := NewInMemoryRBACStore()
+
+	bindings := []*RoleBinding{
+		{
+			BindingID:   "target",
+			PrincipalID: "user-1",
+			RoleID:      "viewer",
+			TenantID:    "tenant-1",
+			Scope:       "tenant",
+			CreatedAt:   time.Now().UTC(),
+		},
+		{
+			BindingID:   "other-principal",
+			PrincipalID: "user-2",
+			RoleID:      "viewer",
+			TenantID:    "tenant-1",
+			Scope:       "tenant",
+			CreatedAt:   time.Now().UTC(),
+		},
+		{
+			BindingID:   "other-tenant",
+			PrincipalID: "user-1",
+			RoleID:      "viewer",
+			TenantID:    "tenant-2",
+			Scope:       "tenant",
+			CreatedAt:   time.Now().UTC(),
+		},
+	}
+	for _, binding := range bindings {
+		if err := store.CreateBinding(ctx, binding); err != nil {
+			t.Fatalf("CreateBinding failed: %v", err)
+		}
+	}
+
+	got, err := store.ListBindings(ctx, "user-1", "tenant-1")
+	if err != nil {
+		t.Fatalf("ListBindings failed: %v", err)
+	}
+	if len(got) != 1 || got[0].BindingID != "target" {
+		t.Fatalf("expected only target binding, got %+v", got)
+	}
+
+	if err := store.RemoveBinding(ctx, "target"); err != nil {
+		t.Fatalf("RemoveBinding failed: %v", err)
+	}
+	got, err = store.ListBindings(ctx, "user-1", "tenant-1")
+	if err != nil {
+		t.Fatalf("ListBindings after removal failed: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected no target bindings after removal, got %+v", got)
+	}
+}

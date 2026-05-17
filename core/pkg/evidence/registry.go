@@ -115,10 +115,25 @@ func (r *Registry) check(actionClass, phase string, submissions []contracts.Evid
 		}
 	}
 
-	// Build a map of submissions by evidence type
-	submissionsByType := make(map[string][]contracts.EvidenceSubmission)
+	// Build first-match indexes while preserving the existing "first verified
+	// submission wins" behavior for each evidence type and issuer constraint.
+	verifiedByType := make(map[string]contracts.EvidenceSubmission)
+	verifiedByTypeAndIssuer := make(map[string]map[string]contracts.EvidenceSubmission)
 	for _, sub := range submissions {
-		submissionsByType[sub.EvidenceType] = append(submissionsByType[sub.EvidenceType], sub)
+		if !sub.Verified {
+			continue
+		}
+		if _, found := verifiedByType[sub.EvidenceType]; !found {
+			verifiedByType[sub.EvidenceType] = sub
+		}
+		byIssuer, found := verifiedByTypeAndIssuer[sub.EvidenceType]
+		if !found {
+			byIssuer = make(map[string]contracts.EvidenceSubmission)
+			verifiedByTypeAndIssuer[sub.EvidenceType] = byIssuer
+		}
+		if _, found := byIssuer[sub.IssuerID]; !found {
+			byIssuer[sub.IssuerID] = sub
+		}
 	}
 
 	// Check each requirement
@@ -126,38 +141,18 @@ func (r *Registry) check(actionClass, phase string, submissions []contracts.Evid
 	var verified []contracts.EvidenceSubmission
 
 	for _, spec := range requiredSpecs {
-		subs, found := submissionsByType[spec.EvidenceType]
-		if !found || len(subs) == 0 {
-			missing = append(missing, spec)
-			continue
-		}
-
 		// Check issuer constraint if present
 		if spec.IssuerConstraint != "" {
-			matched := false
-			for _, sub := range subs {
-				if sub.IssuerID == spec.IssuerConstraint && sub.Verified {
-					verified = append(verified, sub)
-					matched = true
-					break
-				}
-			}
-			if !matched {
+			if sub, matched := verifiedByTypeAndIssuer[spec.EvidenceType][spec.IssuerConstraint]; matched {
+				verified = append(verified, sub)
+			} else {
 				missing = append(missing, spec)
 			}
+		} else if sub, matched := verifiedByType[spec.EvidenceType]; matched {
+			// Any verified submission of the right type is sufficient.
+			verified = append(verified, sub)
 		} else {
-			// Any verified submission of the right type is sufficient
-			matched := false
-			for _, sub := range subs {
-				if sub.Verified {
-					verified = append(verified, sub)
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				missing = append(missing, spec)
-			}
+			missing = append(missing, spec)
 		}
 	}
 

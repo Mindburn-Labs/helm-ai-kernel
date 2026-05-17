@@ -148,14 +148,18 @@ func ComputeCardHash(card *AgentCard) string {
 
 // AgentRegistry manages discovery and lookup of agent cards.
 type AgentRegistry struct {
-	mu    sync.RWMutex
-	cards map[string]*AgentCard // agentID -> card
+	mu           sync.RWMutex
+	cards        map[string]*AgentCard           // agentID -> card
+	skillIndex   map[string]map[string]struct{}  // skillID -> agentIDs
+	featureIndex map[Feature]map[string]struct{} // feature -> agentIDs
 }
 
 // NewAgentRegistry creates an empty agent registry.
 func NewAgentRegistry() *AgentRegistry {
 	return &AgentRegistry{
-		cards: make(map[string]*AgentCard),
+		cards:        make(map[string]*AgentCard),
+		skillIndex:   make(map[string]map[string]struct{}),
+		featureIndex: make(map[Feature]map[string]struct{}),
 	}
 }
 
@@ -169,7 +173,9 @@ func (r *AgentRegistry) Register(card *AgentCard) error {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.removeAgentFromIndexes(card.AgentID)
 	r.cards[card.AgentID] = card
+	r.addCardToIndexes(card)
 	return nil
 }
 
@@ -187,6 +193,7 @@ func (r *AgentRegistry) Deregister(agentID string) bool {
 	defer r.mu.Unlock()
 	_, existed := r.cards[agentID]
 	delete(r.cards, agentID)
+	r.removeAgentFromIndexes(agentID)
 	return existed
 }
 
@@ -205,29 +212,58 @@ func (r *AgentRegistry) ListAgents() []string {
 func (r *AgentRegistry) FindBySkill(skillID string) []*AgentCard {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	var result []*AgentCard
-	for _, card := range r.cards {
-		for _, skill := range card.Skills {
-			if skill.ID == skillID {
-				result = append(result, card)
-				break
-			}
-		}
-	}
-	return result
+	return r.cardsForAgentIDs(r.skillIndex[skillID])
 }
 
 // FindByFeature returns all agents that support the given feature.
 func (r *AgentRegistry) FindByFeature(feature Feature) []*AgentCard {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	var result []*AgentCard
-	for _, card := range r.cards {
-		for _, f := range card.Features {
-			if f == feature {
-				result = append(result, card)
-				break
-			}
+	return r.cardsForAgentIDs(r.featureIndex[feature])
+}
+
+func (r *AgentRegistry) addCardToIndexes(card *AgentCard) {
+	for _, skill := range card.Skills {
+		agents, found := r.skillIndex[skill.ID]
+		if !found {
+			agents = make(map[string]struct{})
+			r.skillIndex[skill.ID] = agents
+		}
+		agents[card.AgentID] = struct{}{}
+	}
+	for _, feature := range card.Features {
+		agents, found := r.featureIndex[feature]
+		if !found {
+			agents = make(map[string]struct{})
+			r.featureIndex[feature] = agents
+		}
+		agents[card.AgentID] = struct{}{}
+	}
+}
+
+func (r *AgentRegistry) removeAgentFromIndexes(agentID string) {
+	for skillID, agents := range r.skillIndex {
+		delete(agents, agentID)
+		if len(agents) == 0 {
+			delete(r.skillIndex, skillID)
+		}
+	}
+	for feature, agents := range r.featureIndex {
+		delete(agents, agentID)
+		if len(agents) == 0 {
+			delete(r.featureIndex, feature)
+		}
+	}
+}
+
+func (r *AgentRegistry) cardsForAgentIDs(agentIDs map[string]struct{}) []*AgentCard {
+	if len(agentIDs) == 0 {
+		return nil
+	}
+	result := make([]*AgentCard, 0, len(agentIDs))
+	for agentID := range agentIDs {
+		if card, found := r.cards[agentID]; found {
+			result = append(result, card)
 		}
 	}
 	return result

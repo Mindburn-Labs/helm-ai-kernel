@@ -41,7 +41,22 @@ vi.mock("@copilotkit/react-core/v2", () => ({
   useRenderTool: vi.fn(),
 }));
 
-import { App } from "./App";
+import { App, mergeReceipts } from "./App";
+
+type ReceiptFixture = ReturnType<typeof bootstrapFixture>["receipts"][number];
+
+function receiptFixture(id: string, lamport_clock: number): ReceiptFixture {
+  return {
+    receipt_id: id,
+    decision_id: `dec_${id}`,
+    effect_id: "LLM_INFERENCE",
+    status: "allow",
+    timestamp: "2026-05-05T00:00:00Z",
+    executor_id: "operator@local",
+    lamport_clock,
+    metadata: { action: "LLM_INFERENCE", resource: id },
+  };
+}
 
 function bootstrapFixture() {
   return {
@@ -245,5 +260,43 @@ describe("HELM Console", () => {
     fireEvent.click(comfortable);
     await waitFor(() => expect(document.documentElement).toHaveAttribute("data-density", "comfortable"));
     expect(comfortable).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+describe("mergeReceipts", () => {
+  it("inserts a single streamed receipt into descending lamport order", () => {
+    const current = [receiptFixture("rcpt_5", 5), receiptFixture("rcpt_3", 3), receiptFixture("rcpt_1", 1)];
+
+    const merged = mergeReceipts(current, [receiptFixture("rcpt_4", 4)]);
+
+    expect(merged.map((receipt) => receipt.receipt_id)).toEqual(["rcpt_5", "rcpt_4", "rcpt_3", "rcpt_1"]);
+  });
+
+  it("replaces an existing streamed receipt without duplicating it", () => {
+    const current = [receiptFixture("rcpt_5", 5), receiptFixture("rcpt_3", 3), receiptFixture("rcpt_1", 1)];
+    const replacement = { ...receiptFixture("rcpt_3", 6), status: "deny" };
+
+    const merged = mergeReceipts(current, [replacement]);
+
+    expect(merged.map((receipt) => receipt.receipt_id)).toEqual(["rcpt_3", "rcpt_5", "rcpt_1"]);
+    expect(merged[0]).toMatchObject({ receipt_id: "rcpt_3", status: "deny" });
+  });
+
+  it("preserves the 200 receipt cap on streamed inserts", () => {
+    const current = Array.from({ length: 200 }, (_, index) => receiptFixture(`rcpt_${200 - index}`, 200 - index));
+
+    const merged = mergeReceipts(current, [receiptFixture("rcpt_new", 250)]);
+
+    expect(merged).toHaveLength(200);
+    expect(merged[0]?.receipt_id).toBe("rcpt_new");
+    expect(merged.at(-1)?.receipt_id).toBe("rcpt_2");
+  });
+
+  it("falls back to batch merge behavior for unsorted inputs", () => {
+    const current = [receiptFixture("rcpt_1", 1), receiptFixture("rcpt_5", 5)];
+
+    const merged = mergeReceipts(current, [receiptFixture("rcpt_3", 3)]);
+
+    expect(merged.map((receipt) => receipt.receipt_id)).toEqual(["rcpt_5", "rcpt_3", "rcpt_1"]);
   });
 });

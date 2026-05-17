@@ -956,6 +956,39 @@ func TestClosing_AgentRegistry_UpdateCard(t *testing.T) {
 	})
 }
 
+func TestClosing_AgentRegistry_UpdateCardRefreshesIndexes(t *testing.T) {
+	reg := NewAgentRegistry()
+	reg.Register(&AgentCard{
+		AgentID:           "a1",
+		Name:              "V1",
+		Endpoint:          "https://a1.com",
+		SupportedVersions: []SchemaVersion{CurrentVersion},
+		Skills:            []AgentSkill{{ID: "s1", Name: "S1"}},
+		Features:          []Feature{FeatureIATPAuth},
+	})
+	reg.Register(&AgentCard{
+		AgentID:           "a1",
+		Name:              "V2",
+		Endpoint:          "https://a1.com",
+		SupportedVersions: []SchemaVersion{CurrentVersion},
+		Skills:            []AgentSkill{{ID: "s2", Name: "S2"}},
+		Features:          []Feature{FeatureEvidenceExport},
+	})
+
+	if cards := reg.FindBySkill("s1"); len(cards) != 0 {
+		t.Fatalf("old skill index should be empty, got %d", len(cards))
+	}
+	if cards := reg.FindBySkill("s2"); len(cards) != 1 || cards[0].AgentID != "a1" {
+		t.Fatalf("new skill index mismatch: %+v", cards)
+	}
+	if cards := reg.FindByFeature(FeatureIATPAuth); len(cards) != 0 {
+		t.Fatalf("old feature index should be empty, got %d", len(cards))
+	}
+	if cards := reg.FindByFeature(FeatureEvidenceExport); len(cards) != 1 || cards[0].AgentID != "a1" {
+		t.Fatalf("new feature index mismatch: %+v", cards)
+	}
+}
+
 func TestClosing_Envelope_Expiry(t *testing.T) {
 	now := time.Now()
 	env := Envelope{

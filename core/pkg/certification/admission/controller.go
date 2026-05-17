@@ -320,15 +320,12 @@ func (c *Controller) checkPackAdmission(profile *PackAdmissionProfile, att *cert
 	}
 
 	// Check required signer roles
+	signerRoles := make(map[string]struct{}, len(att.Signatures))
+	for _, sig := range att.Signatures {
+		signerRoles[sig.SignerRole] = struct{}{}
+	}
 	for _, requiredRole := range reqs.RequiredSignerRoles {
-		found := false
-		for _, sig := range att.Signatures {
-			if sig.SignerRole == requiredRole {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if _, found := signerRoles[requiredRole]; !found {
 			violations = append(violations, Violation{
 				Code:        "MISSING_SIGNER_ROLE",
 				Message:     fmt.Sprintf("Missing required signer role: %s", requiredRole),
@@ -340,14 +337,11 @@ func (c *Controller) checkPackAdmission(profile *PackAdmissionProfile, att *cert
 
 	// Check registry allowlist
 	if len(reqs.AllowedRegistries) > 0 {
-		allowed := false
+		allowedRegistries := make(map[string]struct{}, len(reqs.AllowedRegistries))
 		for _, r := range reqs.AllowedRegistries {
-			if r == registryURI {
-				allowed = true
-				break
-			}
+			allowedRegistries[r] = struct{}{}
 		}
-		if !allowed {
+		if _, allowed := allowedRegistries[registryURI]; !allowed {
 			violations = append(violations, Violation{
 				Code:        "REGISTRY_NOT_ALLOWED",
 				Message:     fmt.Sprintf("Registry %s not in allowlist", registryURI),

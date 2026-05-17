@@ -188,6 +188,44 @@ func TestController_PackAdmission_RegistryDenylist(t *testing.T) {
 	}
 }
 
+func TestController_PackAdmission_RegistryAllowlist(t *testing.T) {
+	ctrl := NewController()
+
+	_, priv, _ := ed25519.GenerateKey(nil)
+	certifier := certification.NewCertifier("builder-1", "builder", priv)
+	att, _ := certifier.CreateAttestation(
+		certification.ModuleIdentity{ModuleID: "mod-1", ArtifactHash: "sha256:abc", ManifestHash: "sha256:def"},
+		certification.BuildProvenance{BuilderID: "ci"},
+		certification.CertificationResults{},
+	)
+
+	profile := &PackAdmissionProfile{
+		ProfileID: "test-profile",
+		Enabled:   true,
+		AdmissionRequirements: AdmissionReqs{
+			AllowedRegistries: []string{"registry.example.com", "trusted.io"},
+		},
+		Enforcement: Enforcement{Mode: ModeEnforce},
+	}
+	_ = ctrl.LoadPackProfile(profile)
+
+	result := ctrl.AdmitPack(context.Background(), "test-profile", att, "untrusted.io")
+
+	if result.Decision != DecisionDeny {
+		t.Errorf("expected Deny, got %s", result.Decision)
+	}
+
+	found := false
+	for _, v := range result.Violations {
+		if v.Code == "REGISTRY_NOT_ALLOWED" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected REGISTRY_NOT_ALLOWED violation")
+	}
+}
+
 func TestController_PackAdmission_AuditMode(t *testing.T) {
 	ctrl := NewController()
 

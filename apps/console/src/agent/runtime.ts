@@ -1,4 +1,5 @@
 import type { HelmAiKernelAgentState } from "./state";
+import { appendSseChunk, createSseFrameBuffer } from "../sse";
 
 export interface AiKernelAgentMessage {
   readonly id: string;
@@ -48,18 +49,19 @@ export async function runAiKernelAgent(input: {
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = "";
+  const frameBuffer = createSseFrameBuffer();
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const frames = buffer.split("\n\n");
-    buffer = frames.pop() ?? "";
-    for (const frame of frames) {
+    appendSseChunk(frameBuffer, decoder.decode(value, { stream: true }), (frame) => {
       const event = parseSSEFrame(frame);
       if (event) input.onEvent(event);
-    }
+    });
   }
+  appendSseChunk(frameBuffer, decoder.decode(), (frame) => {
+    const event = parseSSEFrame(frame);
+    if (event) input.onEvent(event);
+  });
 }
 
 function parseSSEFrame(frame: string): AiKernelAgentEvent | null {

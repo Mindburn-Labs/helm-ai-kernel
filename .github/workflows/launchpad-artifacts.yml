@@ -446,8 +446,13 @@ jobs:
         env:
           HELM_LAUNCHPAD_LIVE_E2E: "1"
           HELM_LAUNCHPAD_ARTIFACT_MANIFEST: /tmp/launchpad/launchpad-artifact-manifest.json
+          HELM_LAUNCHPAD_LIVE_EVIDENCE_DIR: /tmp/launchpad-live-evidence
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: go test ./tests/launchpad/... -run TestLiveOpenRouterLocalContainerConformance -count=1 -v
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: launchpad-live-evidence
+          path: /tmp/launchpad-live-evidence
       - name: Write merged promotion manifest
         run: |
           set -euo pipefail

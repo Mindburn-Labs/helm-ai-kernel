@@ -1,7 +1,10 @@
 package launchpad_test
 
 import (
+	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -9,6 +12,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/promotion"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
 func TestLiveOpenRouterLocalContainerConformance(t *testing.T) {
@@ -94,8 +98,113 @@ func TestLiveOpenRouterLocalContainerConformance(t *testing.T) {
 			if deleted.State != session.StateDeleted || len(deleted.TeardownReceiptRefs) == 0 {
 				t.Fatalf("teardown did not emit receipt: %+v", deleted)
 			}
+			verifyLiveEvidenceRefs(t, appID, deleted.EvidencePackRefs)
+			copyLiveEvidenceRefs(t, appID, deleted.EvidencePackRefs)
 		})
 	}
+}
+
+func verifyLiveEvidenceRefs(t *testing.T, appID string, refs []string) {
+	t.Helper()
+	var dirRef string
+	var archiveRef string
+	for _, ref := range refs {
+		info, err := os.Stat(ref)
+		if err != nil {
+			continue
+		}
+		if info.IsDir() && dirRef == "" {
+			dirRef = ref
+		}
+		if !info.IsDir() && strings.HasSuffix(ref, ".tar") && archiveRef == "" {
+			archiveRef = ref
+		}
+	}
+	if dirRef == "" {
+		t.Fatalf("%s did not produce an EvidencePack directory ref: %#v", appID, refs)
+	}
+	if archiveRef == "" {
+		t.Fatalf("%s did not produce an EvidencePack tar archive ref: %#v", appID, refs)
+	}
+	report, err := verifier.VerifyBundle(dirRef)
+	if err != nil {
+		t.Fatalf("%s EvidencePack directory verifier error: %v", appID, err)
+	}
+	if !report.Verified {
+		t.Fatalf("%s EvidencePack directory did not verify: %s", appID, report.Summary)
+	}
+	root := repoRoot(t)
+	cmd := exec.Command("go", "run", "./core/cmd/helm-ai-kernel", "verify", "--bundle", archiveRef, "--json")
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s EvidencePack tar did not verify offline: %v\n%s", appID, err, string(out))
+	}
+}
+
+func copyLiveEvidenceRefs(t *testing.T, appID string, refs []string) {
+	t.Helper()
+	outputRoot := getenv("HELM_LAUNCHPAD_LIVE_EVIDENCE_DIR")
+	if outputRoot == "" {
+		return
+	}
+	appRoot := filepath.Join(outputRoot, appID)
+	if err := os.MkdirAll(appRoot, 0o700); err != nil {
+		t.Fatalf("create live evidence output dir: %v", err)
+	}
+	for _, ref := range refs {
+		info, err := os.Stat(ref)
+		if err != nil {
+			continue
+		}
+		target := filepath.Join(appRoot, filepath.Base(ref))
+		if info.IsDir() {
+			if err := copyDir(target, ref); err != nil {
+				t.Fatalf("copy EvidencePack directory for %s: %v", appID, err)
+			}
+			continue
+		}
+		if err := copyFile(target, ref); err != nil {
+			t.Fatalf("copy EvidencePack archive for %s: %v", appID, err)
+		}
+	}
+}
+
+func copyDir(dst, src string) error {
+	return filepath.WalkDir(src, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if entry.IsDir() {
+			return os.MkdirAll(target, 0o700)
+		}
+		return copyFile(target, path)
+	})
+}
+
+func copyFile(dst, src string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+		return err
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 func getenv(key string) string {

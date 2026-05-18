@@ -102,6 +102,17 @@ jobs:
       - name: Install grype
         uses: anchore/scan-action/download-grype@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
 
+      - name: Expose grype on PATH
+        run: |
+          set -euo pipefail
+          GRYPE_BIN="$(find /opt/hostedtoolcache/grype -type f -name grype -perm -111 | sort | tail -n 1)"
+          if [ -z "${GRYPE_BIN}" ]; then
+            echo "grype binary not found after download" >&2
+            exit 1
+          fi
+          dirname "${GRYPE_BIN}" >> "$GITHUB_PATH"
+          "${GRYPE_BIN}" version
+
       - id: meta
         name: Compute image coordinates
         run: |
@@ -267,6 +278,18 @@ jobs:
         uses: anchore/sbom-action/download-syft@55dc4ee22412511ee8c3142cbea40418e6cec693 # v0.17.8
       - name: Install grype
         uses: anchore/scan-action/download-grype@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
+
+      - name: Expose grype on PATH
+        run: |
+          set -euo pipefail
+          GRYPE_BIN="$(find /opt/hostedtoolcache/grype -type f -name grype -perm -111 | sort | tail -n 1)"
+          if [ -z "${GRYPE_BIN}" ]; then
+            echo "grype binary not found after download" >&2
+            exit 1
+          fi
+          dirname "${GRYPE_BIN}" >> "$GITHUB_PATH"
+          "${GRYPE_BIN}" version
+
       - id: meta
         name: Compute proxy image coordinates
         run: |

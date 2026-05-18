@@ -10,9 +10,9 @@ Shows HELM integration with the Go SDK.
 ## Source Example
 
 `main.go` is a small integration source file that imports
-`github.com/Mindburn-Labs/helm-ai-kernel/sdk/go/client`. This directory does not
-carry its own `go.mod`; use it as source material for a service module or run
-the SDK package gate below.
+`github.com/Mindburn-Labs/helm-ai-kernel/sdk/go/client`. The local `go.mod`
+pins the example to the repository SDK module through a local `replace`, so
+tooling can build the example without publishing an SDK release first.
 
 ## Expected Output
 
@@ -26,4 +26,10 @@ The Go SDK package is validated from the repository root with:
 
 ```bash
 make test-sdk-go-standalone
+```
+
+The example module can also be compiled directly:
+
+```bash
+go test ./examples/go_client/... -run '^$'
 ```

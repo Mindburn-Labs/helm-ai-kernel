@@ -2,7 +2,9 @@ go 1.25.0
 
 use (
 	./core
+	./examples/go_client
 	./examples/otel-genai
+	./sdk/go
 	./tests/conformance
 	./tests/launchpad
 )

@@ -37,6 +37,10 @@ jobs:
       - name: Build
         working-directory: sdk/java
         run: mvn -q test package
+      - name: Import GPG key
+        env:
+          MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+        run: printf '%s' "$MAVEN_GPG_PRIVATE_KEY" | gpg --batch --import
       - name: Publish
         working-directory: sdk/java
         env:
@@ -49,5 +53,4 @@ jobs:
         run: >
           mvn --batch-mode deploy
           --settings ../../scripts/release/maven-settings.xml
-          -DaltDeploymentRepository=central::https://central.sonatype.com/api/v1/publisher/deployments/upload
           -Dgpg.passphrase="$MAVEN_GPG_PASSPHRASE"

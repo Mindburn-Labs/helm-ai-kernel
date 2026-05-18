@@ -182,9 +182,9 @@ func redactedCommandOutput(stdout, stderr []byte, secrets map[string]string) str
 			combined = strings.ReplaceAll(combined, value, "[REDACTED]")
 		}
 	}
-	const maxDetail = 512
+	const maxDetail = 2048
 	if len(combined) > maxDetail {
-		combined = combined[:maxDetail] + "...[truncated]"
+		combined = "...[truncated]\n" + combined[len(combined)-maxDetail:]
 	}
 	return combined
 }

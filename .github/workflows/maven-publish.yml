@@ -40,7 +40,17 @@ jobs:
       - name: Import GPG key
         env:
           MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
-        run: printf '%s' "$MAVEN_GPG_PRIVATE_KEY" | gpg --batch --import
+        run: |
+          key_file="$RUNNER_TEMP/maven-gpg-private-key"
+          printf '%s' "$MAVEN_GPG_PRIVATE_KEY" > "$key_file"
+          if gpg --batch --import "$key_file"; then
+            exit 0
+          fi
+          if base64 --decode "$key_file" > "${key_file}.decoded" 2>/dev/null && gpg --batch --import "${key_file}.decoded"; then
+            exit 0
+          fi
+          printf '%b' "$MAVEN_GPG_PRIVATE_KEY" > "${key_file}.escaped"
+          gpg --batch --import "${key_file}.escaped"
       - name: Publish
         working-directory: sdk/java
         env:

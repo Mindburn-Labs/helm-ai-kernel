@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -162,6 +163,19 @@ func normalizeDestination(value string) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
 		return ""
+	}
+	parsed, err := url.Parse(trimmed)
+	if err == nil && parsed.Host != "" {
+		host := parsed.Host
+		if !strings.Contains(host, ":") {
+			switch parsed.Scheme {
+			case "https":
+				host += ":443"
+			case "http":
+				host += ":80"
+			}
+		}
+		return strings.ToLower(host)
 	}
 	if !strings.Contains(trimmed, ":") {
 		trimmed += ":443"

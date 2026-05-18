@@ -364,12 +364,18 @@ jobs:
       - name: Write manifest
         run: |
           set -euo pipefail
-          test -f launchpad-artifacts/launchpad-egress-proxy.json
+          find launchpad-artifacts -maxdepth 4 -type f -print | sort
+          openclaw_manifest="$(find launchpad-artifacts -type f -name openclaw.json -print -quit)"
+          hermes_manifest="$(find launchpad-artifacts -type f -name hermes.json -print -quit)"
+          egress_manifest="$(find launchpad-artifacts -type f -name launchpad-egress-proxy.json -print -quit)"
+          test -f "${openclaw_manifest}"
+          test -f "${hermes_manifest}"
+          test -f "${egress_manifest}"
           jq -s \
             --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg github_run_id "${GITHUB_RUN_ID}" \
             --arg github_run_attempt "${GITHUB_RUN_ATTEMPT}" \
-            --slurpfile egress_proxy launchpad-artifacts/launchpad-egress-proxy.json \
+            --slurpfile egress_proxy "${egress_manifest}" \
             '{
               schema_version: "helm.launchpad.artifacts.v1",
               generated_at: $generated_at,
@@ -377,7 +383,7 @@ jobs:
               github_run_attempt: $github_run_attempt,
               egress_proxy: $egress_proxy[0],
               artifacts: .
-            }' launchpad-artifacts/openclaw.json launchpad-artifacts/hermes.json > launchpad-artifact-manifest.json
+            }' "${openclaw_manifest}" "${hermes_manifest}" > launchpad-artifact-manifest.json
           jq . launchpad-artifact-manifest.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

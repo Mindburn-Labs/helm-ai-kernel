@@ -59,7 +59,7 @@ func (p DockerSidecarEgressProxy) Start(req EgressProxyRequest) (EgressProxyHand
 	args := []string{
 		"run", "-d",
 		"--name", proxyName,
-		"--network", networkName,
+		"--network", "bridge",
 		"--cap-drop", "ALL",
 		"--security-opt", "no-new-privileges",
 		"--read-only",
@@ -77,10 +77,10 @@ func (p DockerSidecarEgressProxy) Start(req EgressProxyRequest) (EgressProxyHand
 		return EgressProxyHandle{}, fmt.Errorf("start launch egress proxy sidecar: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	containerID := strings.TrimSpace(string(out))
-	if out, err := exec.Command(docker, "network", "connect", "bridge", proxyName).CombinedOutput(); err != nil {
+	if out, err := exec.Command(docker, "network", "connect", "--alias", proxyName, networkName, proxyName).CombinedOutput(); err != nil {
 		_ = exec.Command(docker, "rm", "-f", proxyName).Run()
 		_ = exec.Command(docker, "network", "rm", networkName).Run()
-		return EgressProxyHandle{}, fmt.Errorf("attach egress proxy to bridge network: %w: %s", err, strings.TrimSpace(string(out)))
+		return EgressProxyHandle{}, fmt.Errorf("attach egress proxy to launch network: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	receiptRef := writeSidecarReceipt(receiptDir, req.LaunchID, "ALLOW", "docker_sidecar_started", map[string]any{
 		"network_name":          networkName,

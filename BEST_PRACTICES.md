@@ -8,6 +8,12 @@ not yet satisfied are listed as known gaps with an owner and tracking issue.
 helm-ai-kernel already holds passing-tier and silver-tier criteria via the
 underlying CI hygiene; this file enumerates the gold-tier delta.
 
+Registration evidence is mirrored in `.bestpractices.json`. Complete the
+external badge registration at
+<https://www.bestpractices.dev/projects/new?repo_url=https%3A%2F%2Fgithub.com%2FMindburn-Labs%2Fhelm-ai-kernel>;
+after a project ID is assigned, replace the README evidence badge with the
+canonical bestpractices.dev project badge.
+
 ## Basics
 
 - **Project website / repository / contribution / license / documentation**

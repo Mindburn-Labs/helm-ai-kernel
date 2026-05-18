@@ -86,8 +86,17 @@ export interface CodeLintFinding {
 function extractHighlightedInner(html: string): string {
   // Shiki output: <pre ...><code>...</code></pre>. Strip the wrappers, keep
   // only the inner span tree so it sits inside our existing `.code-content`.
-  const match = html.match(/<code[^>]*>([\s\S]*)<\/code>/);
-  return match?.[1] ?? html;
+  if (typeof document !== "undefined" && "createElement" in document) {
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    const codeElement = template.content.querySelector("code");
+    return codeElement?.innerHTML ?? html;
+  }
+
+  const openTagEnd = html.indexOf(">", html.indexOf("<code"));
+  const closeTagStart = html.lastIndexOf("</code>");
+  if (openTagEnd === -1 || closeTagStart === -1 || closeTagStart <= openTagEnd) return html;
+  return html.slice(openTagEnd + 1, closeTagStart);
 }
 
 export function CodeBlock({

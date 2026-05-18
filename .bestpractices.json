@@ -1,0 +1,37 @@
+{
+  "name": "HELM AI Kernel",
+  "description": "Fail-closed execution firewall for AI agent tool calls, MCP gateways, policy enforcement, and signed receipts.",
+  "homepage_url": "https://helm.docs.mindburn.org/helm-ai-kernel",
+  "repo_url": "https://github.com/Mindburn-Labs/helm-ai-kernel",
+  "license": "Apache-2.0",
+  "best_practices_url": "https://www.bestpractices.dev/projects/new?repo_url=https%3A%2F%2Fgithub.com%2FMindburn-Labs%2Fhelm-ai-kernel",
+  "evidence": {
+    "license": "LICENSE",
+    "security_policy": "SECURITY.md",
+    "contributing": "CONTRIBUTING.md",
+    "governance": "GOVERNANCE.md",
+    "maintainers": "MAINTAINERS.md",
+    "release_process": "RELEASE.md",
+    "release_verification": "docs/VERIFICATION.md",
+    "publishing": "docs/PUBLISHING.md",
+    "security_model": "docs/EXECUTION_SECURITY_MODEL.md",
+    "threat_mapping": "docs/OWASP_MCP_THREAT_MAPPING.md",
+    "quality_workflow": ".github/workflows/ci.yml",
+    "code_scanning": ".github/workflows/codeql.yml",
+    "scorecard": ".github/workflows/scorecard.yml",
+    "slsa_provenance": ".github/workflows/slsa-provenance.yml",
+    "fuzzing": "oss-fuzz/project.yaml",
+    "best_practices_mapping": "BEST_PRACTICES.md"
+  },
+  "status": {
+    "floss_license_status": "Met",
+    "repo_interim_status": "Met",
+    "vulnerability_report_process_status": "Met",
+    "test_status": "Met",
+    "tests_are_added_status": "Met",
+    "static_analysis_status": "Met",
+    "dynamic_analysis_status": "Met",
+    "ci_tests_status": "Met",
+    "security_review_status": "Met"
+  }
+}

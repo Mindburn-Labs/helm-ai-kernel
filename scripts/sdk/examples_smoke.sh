@@ -24,7 +24,7 @@ cd "$ROOT"
 make build
 
 cd "$ROOT/sdk/python"
-python -m pip install -q .
+python -m pip install -q --require-hashes -r "$ROOT/sdk/python/requirements-runtime.txt"
 
 cd "$ROOT/sdk/ts"
 npm ci

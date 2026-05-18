@@ -40,9 +40,14 @@ if [ -z "${HTTPS_PROXY:-}" ] && [ -z "${HTTP_PROXY:-}" ]; then
   echo "Launchpad egress proxy missing" >&2
   exit 43
 fi
-curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
+status="$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
+  --output /dev/null --write-out "%{http_code}" \
   -H "Authorization: Bearer ${OPENROUTER_API_KEY}" \
-  https://openrouter.ai/api/v1/key >/dev/null
+  https://openrouter.ai/api/v1/key || true)"
+if [ "$status" != "200" ]; then
+  echo "OpenRouter key check failed with HTTP status ${status}" >&2
+  exit 44
+fi
 CHECK
 chmod 0755 /usr/local/bin/helm-launchpad-openrouter-check
 chown -R helm:helm /opt/openclaw /licenses

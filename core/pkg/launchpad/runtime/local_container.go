@@ -142,7 +142,7 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 			CPUMillis:    500,
 			MemoryMB:     512,
 			DiskMB:       1024,
-			Timeout:      30 * time.Second,
+			Timeout:      120 * time.Second,
 			MaxProcesses: 64,
 		},
 		Network: network,
@@ -155,6 +155,10 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 	}
 	if !result.Success() {
 		cleanupEgressProxy(proxyHandle)
+		detail := redactedCommandOutput(result.Stdout, result.Stderr, req.Secrets)
+		if detail != "" {
+			return ContainerHandle{}, fmt.Errorf("local-container command failed: exit=%d timed_out=%t oom=%t output=%q", result.ExitCode, result.TimedOut, result.OOMKilled, detail)
+		}
 		return ContainerHandle{}, fmt.Errorf("local-container command failed: exit=%d timed_out=%t oom=%t", result.ExitCode, result.TimedOut, result.OOMKilled)
 	}
 	if req.AutoCleanup {
@@ -166,6 +170,23 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 	handle.EgressProxyID = proxyHandle.ProxyContainerID
 	handle.EgressProxyName = proxyHandle.ProxyContainerName
 	return handle, nil
+}
+
+func redactedCommandOutput(stdout, stderr []byte, secrets map[string]string) string {
+	combined := strings.TrimSpace(string(append(append([]byte{}, stdout...), stderr...)))
+	if combined == "" {
+		return ""
+	}
+	for _, value := range secrets {
+		if value != "" {
+			combined = strings.ReplaceAll(combined, value, "[REDACTED]")
+		}
+	}
+	const maxDetail = 512
+	if len(combined) > maxDetail {
+		combined = combined[:maxDetail] + "...[truncated]"
+	}
+	return combined
 }
 
 func cleanupEgressProxy(proxyHandle EgressProxyHandle) {

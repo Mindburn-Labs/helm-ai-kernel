@@ -27,7 +27,6 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 
 | Symptom | First check |
 | --- | --- |
-| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
 | A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
 | A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
 
@@ -51,6 +50,24 @@ flowchart LR
 All notable changes to the retained HELM AI Kernel surface are documented here. Public entries focus on developer-visible interfaces, compatibility, verification, SDKs, and security-relevant documentation.
 
 ## [Unreleased]
+
+- Fixed tag-driven release asset staging so release binaries, SBOM, OpenVEX,
+  Homebrew formula metadata, and release attestations use the tag version
+  instead of falling back to `VERSION` when a tag is cut before the file is
+  bumped.
+- Fixed audit EvidencePack export so every file listed in `00_INDEX.json`,
+  including `01_SCORE.json.sha256`, is preserved in exported tar archives and
+  verified during `make release-assets`.
+- Added release staging diagnostics for exact failing commands and conformance
+  gate failures, and require exact OpenVEX documents for tag release assets.
+- Normalized pull-request Scorecard SARIF categories so GitHub code scanning
+  sees the same `supply-chain/branch-protection` configuration on PR refs as it
+  sees on `main`.
+- Moved first-party GitHub setup actions to Node 24-capable pinned SHAs and
+  configured Go workflow caching against `**/go.sum` for the monorepo layout.
+- Downgraded the local release-smoke missing-cosign message from a GitHub
+  warning annotation to a plain informational log unless cosign bundles are
+  explicitly required.
 
 ## [0.5.0] - 2026-05-13
 

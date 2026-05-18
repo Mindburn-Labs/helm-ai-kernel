@@ -69,6 +69,12 @@ downloaded from a release page. Verify checksums, release metadata,
 receipt/evidence material, reproducible-build behavior, and signatures when
 signature bundles are attached.
 
+For tag-triggered releases, the workflow derives the release version from the
+tag ref, requires an exact `v<version>.openvex.json`, exports the audit
+EvidencePack, verifies the staged `evidence-pack.tar`, and only then writes
+final checksums. A failed EvidencePack verification blocks release asset
+publication.
+
 For `v0.5.0`, use checksum verification, SBOM inspection, OpenVEX inspection,
 release metadata inspection, offline EvidencePack verification,
 reproducible-build validation, and Cosign verification against the attached

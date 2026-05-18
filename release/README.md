@@ -54,6 +54,11 @@ bash scripts/release/verify_cosign.sh ./downloaded-release
 make docs-coverage docs-truth
 ```
 
+For tag-triggered release jobs, `make release-assets` uses the tag version,
+requires the matching `release/vex/v<version>.openvex.json`, verifies the
+staged `evidence-pack.tar`, and fails before checksum publication if any
+indexed EvidencePack file is missing.
+
 Cosign verification requires matching `*.cosign.bundle` files in the release
 directory. OpenVEX consumption requires an OpenVEX file attached to that
 release.

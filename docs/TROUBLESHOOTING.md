@@ -201,7 +201,22 @@ helm-ai-kernel receipts tail --agent agent.helm.demo --server http://127.0.0.1:7
 Run `make release-smoke` from the repository root and inspect the first failing
 phase: reproducible binaries, SBOM JSON, OpenVEX JSON, or optional Cosign
 bundle verification. The command writes generated evidence under ignored
-release/build artifact paths, so rerun after fixing the source failure.
+release/build artifact paths, so rerun after fixing the source failure. Missing
+Cosign bundles are informational in local smoke runs unless
+`REQUIRE_COSIGN_BUNDLES=1` is set.
+
+### release asset staging fails in CI
+
+Run the same tag-shaped command locally:
+
+```bash
+GITHUB_REF_TYPE=tag GITHUB_REF_NAME=v<version> RELEASE_ASSETS_DIR="$(mktemp -d)" make release-assets
+```
+
+If the failure reports a missing exact OpenVEX document, run `make vex` with the
+same tag-derived version. If it fails while verifying `evidence-pack.tar`, check
+that `helm-ai-kernel export --audit` preserved every file referenced by
+`00_INDEX.json`.
 
 ### Kubernetes Helm validation uses the HELM AI Kernel CLI
 

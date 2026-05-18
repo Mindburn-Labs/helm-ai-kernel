@@ -33,10 +33,13 @@ type ContainerRequest struct {
 }
 
 type ContainerHandle struct {
-	ContainerID      string            `json:"container_id"`
-	SandboxGrantRef  string            `json:"sandbox_grant_ref"`
-	EgressReceiptRef string            `json:"egress_receipt_ref,omitempty"`
-	ProjectedSecrets map[string]string `json:"projected_secrets"`
+	ContainerID       string            `json:"container_id"`
+	SandboxGrantRef   string            `json:"sandbox_grant_ref"`
+	EgressReceiptRef  string            `json:"egress_receipt_ref,omitempty"`
+	EgressNetworkName string            `json:"egress_network_name,omitempty"`
+	EgressProxyID     string            `json:"egress_proxy_id,omitempty"`
+	EgressProxyName   string            `json:"egress_proxy_name,omitempty"`
+	ProjectedSecrets  map[string]string `json:"projected_secrets"`
 }
 
 func NewLocalContainerRuntime() LocalContainerRuntime {
@@ -101,6 +104,11 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 		if proxyHandle.ProxyURL == "" || proxyHandle.ReceiptRef == "" {
 			return ContainerHandle{}, fmt.Errorf("local-container egress proxy did not return proxy URL and receipt ref")
 		}
+		if proxyHandle.Stop != nil {
+			defer func() {
+				_ = proxyHandle.Stop()
+			}()
+		}
 	}
 	command := req.Command
 	if len(command) == 0 {
@@ -119,6 +127,11 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 		env["HTTP_PROXY"] = proxyHandle.ProxyURL
 		env["NO_PROXY"] = "127.0.0.1,localhost"
 	}
+	network := sandbox.NetworkPolicy{Disabled: true, EgressAllowlist: req.NetworkAllowlist}
+	if proxyHandle.NetworkName != "" {
+		network.Disabled = false
+		network.NetworkName = proxyHandle.NetworkName
+	}
 	spec := &sandbox.SandboxSpec{
 		Image:   req.ImageDigest,
 		Command: command,
@@ -136,7 +149,7 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 			Timeout:      30 * time.Second,
 			MaxProcesses: 64,
 		},
-		Network: sandbox.NetworkPolicy{Disabled: true, EgressAllowlist: req.NetworkAllowlist},
+		Network: network,
 		WorkDir: "/workspace",
 	}
 	result, receipt, err := dockersandbox.NewDockerRunner().Run(spec)
@@ -148,6 +161,9 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 	}
 	handle.ContainerID = receipt.ExecutionID
 	handle.EgressReceiptRef = proxyHandle.ReceiptRef
+	handle.EgressNetworkName = proxyHandle.NetworkName
+	handle.EgressProxyID = proxyHandle.ProxyContainerID
+	handle.EgressProxyName = proxyHandle.ProxyContainerName
 	return handle, nil
 }
 

@@ -12,14 +12,20 @@ type EgressProxy interface {
 }
 
 type EgressProxyRequest struct {
-	LaunchID  string   `json:"launch_id"`
-	Allowlist []string `json:"allowlist"`
+	LaunchID   string   `json:"launch_id"`
+	Allowlist  []string `json:"allowlist"`
+	ReceiptDir string   `json:"receipt_dir,omitempty"`
 }
 
 type EgressProxyHandle struct {
-	ProxyURL   string   `json:"proxy_url"`
-	ReceiptRef string   `json:"receipt_ref"`
-	Allowlist  []string `json:"allowlist"`
+	ProxyURL           string       `json:"proxy_url"`
+	ReceiptRef         string       `json:"receipt_ref"`
+	ReceiptDir         string       `json:"receipt_dir,omitempty"`
+	Allowlist          []string     `json:"allowlist"`
+	NetworkName        string       `json:"network_name,omitempty"`
+	ProxyContainerID   string       `json:"proxy_container_id,omitempty"`
+	ProxyContainerName string       `json:"proxy_container_name,omitempty"`
+	Stop               func() error `json:"-"`
 }
 
 type StaticEgressProxy struct {

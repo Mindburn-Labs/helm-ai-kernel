@@ -1,0 +1,22 @@
+[skill]
+publisher = "Mindburn-Labs"
+scope_default = "repo"
+permission_bypass_forbidden = true
+global_install_default = "deny"
+user_install_default = "ESCALATE"
+mcp_auto_enable_default = "quarantine"
+hooks_default = "off_by_default"
+receipts_required = true
+
+[projection]
+codex_repo_path = ".agents/skills"
+claude_repo_path = ".claude/skills"
+generic_repo_path = ".agents/skills"
+
+[evidence]
+required = [
+  "skill_content_hash",
+  "skill_scan_attestation",
+  "skill_install_receipt",
+  "skill_projection_receipt"
+]

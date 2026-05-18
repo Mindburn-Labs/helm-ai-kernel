@@ -49,6 +49,17 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 			ProxyURL:   proxyURL,
 			ReceiptRef: os.Getenv("HELM_LAUNCHPAD_EGRESS_PROXY_RECEIPT_REF"),
 		}
+	} else if proxyImage := os.Getenv("HELM_LAUNCHPAD_EGRESS_PROXY_IMAGE"); proxyImage != "" {
+		egressProxy = lpruntime.DockerSidecarEgressProxy{
+			Image:      proxyImage,
+			ReceiptDir: os.Getenv("HELM_LAUNCHPAD_EGRESS_RECEIPT_DIR"),
+		}
+	} else if len(compiled.NetworkAllowlist) > 0 {
+		proxy := lpruntime.NewLaunchOwnedEgressProxy()
+		if receiptDir := os.Getenv("HELM_LAUNCHPAD_EGRESS_RECEIPT_DIR"); receiptDir != "" {
+			proxy.ReceiptDir = receiptDir
+		}
+		egressProxy = proxy
 	}
 	handle, err := lpruntime.NewLocalContainerRuntime().Start(lpruntime.ContainerRequest{
 		Plan:             compiled,
@@ -64,9 +75,12 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 		return RuntimeStartResult{}, err
 	}
 	return RuntimeStartResult{
-		ContainerID:      handle.ContainerID,
-		SandboxGrantRef:  handle.SandboxGrantRef,
-		EgressReceiptRef: handle.EgressReceiptRef,
-		Runtime:          "local-container",
+		ContainerID:       handle.ContainerID,
+		SandboxGrantRef:   handle.SandboxGrantRef,
+		EgressReceiptRef:  handle.EgressReceiptRef,
+		EgressNetworkName: handle.EgressNetworkName,
+		EgressProxyID:     handle.EgressProxyID,
+		EgressProxyName:   handle.EgressProxyName,
+		Runtime:           "local-container",
 	}, nil
 }

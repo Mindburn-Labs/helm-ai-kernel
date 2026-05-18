@@ -217,7 +217,7 @@ func runLaunchPromote(args []string, catalog *lpregistry.Catalog, stdout, stderr
 		return 2
 	}
 	if *manifestPath == "" || *appID == "" {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel launch promote --manifest <manifest.json> --app <app> --artifact-verification-ref <ref> --live-e2e-run-id <id> --evidence-pack-ref <ref> --teardown-receipt-ref <ref> [--write] [--json]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel launch promote --manifest <promotion-manifest.json> --app <app> [--artifact-verification-ref <ref> --live-e2e-run-id <id> --evidence-pack-ref <ref> --teardown-receipt-ref <ref>] [--write] [--json]")
 		return 2
 	}
 	manifest, err := lppromotion.LoadManifest(*manifestPath)
@@ -235,12 +235,17 @@ func runLaunchPromote(args []string, catalog *lpregistry.Catalog, stdout, stderr
 		fmt.Fprintf(stderr, "launch promotion error: app %s not found in registry\n", *appID)
 		return 1
 	}
-	promoted, err := lppromotion.Promote(app, artifact, lppromotion.EvidenceRefs{
+	refs, err := manifest.EvidenceRefsFor(artifact, lppromotion.EvidenceRefs{
 		ArtifactVerificationRef: *artifactVerificationRef,
 		LiveE2ERunID:            *liveE2ERunID,
 		EvidencePackRef:         *evidencePackRef,
 		TeardownReceiptRef:      *teardownReceiptRef,
 	})
+	if err != nil {
+		fmt.Fprintf(stderr, "launch promotion denied: %v\n", err)
+		return 1
+	}
+	promoted, err := lppromotion.Promote(app, artifact, refs)
 	if err != nil {
 		fmt.Fprintf(stderr, "launch promotion denied: %v\n", err)
 		return 1

@@ -39,6 +39,10 @@ func TestLaunchPromoteDryRunRequiresCompleteManifestAndRefs(t *testing.T) {
 			"vulnerability_scan_ref":    "artifact://grype-openclaw.json",
 			"vulnerability_scan_status": "completed",
 			"provenance_ref":            "github-actions://123/1",
+			"artifact_verification_ref": "github-actions://123/1/artifact-verification/openclaw",
+			"live_e2e_run_id":           "github-actions://123/1/live-e2e/openclaw",
+			"evidence_pack_ref":         "github-actions://123/1/evidencepack/openclaw",
+			"teardown_receipt_ref":      "github-actions://123/1/teardown/openclaw",
 		}},
 	}
 	data, err := json.Marshal(manifest)
@@ -66,10 +70,6 @@ func TestLaunchPromoteDryRunRequiresCompleteManifestAndRefs(t *testing.T) {
 	code := runLaunchPromote([]string{
 		"--manifest", manifestPath,
 		"--app", "openclaw",
-		"--artifact-verification-ref", "evidence://artifact",
-		"--live-e2e-run-id", "github-actions://123/live-e2e/openclaw",
-		"--evidence-pack-ref", "evidencepack://openclaw",
-		"--teardown-receipt-ref", "receipt://teardown/openclaw",
 		"--json",
 	}, catalog, &stdout, &stderr)
 	if code != 0 {

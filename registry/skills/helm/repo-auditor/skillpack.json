@@ -1,0 +1,22 @@
+{
+  "schema_version": "helm.skillpack.v1",
+  "id": "helm/repo-auditor",
+  "name": "HELM Repo Auditor",
+  "version": "0.1.0",
+  "description": "Read-only repository audit workflow for HELM implementation reality checks.",
+  "publisher": "Mindburn-Labs",
+  "status": "verified",
+  "scope_default": "repo",
+  "risk": "LOW",
+  "license_spdx": "Apache-2.0",
+  "signature_ref": "helm-first-party://skills/repo-auditor/0.1.0",
+  "publisher_key_ref": "helm-first-party-keyring-v1",
+  "provenance_ref": "repo://registry/skills/helm/repo-auditor",
+  "policy_ref": "policies/skills/first-party.safe.toml",
+  "agent_targets": ["codex", "claude-code", "generic"],
+  "requested_mcp_servers": [],
+  "requested_mcp_tools": [],
+  "hooks": [],
+  "scripts": [],
+  "permissions_do_not_grant_tools": true
+}

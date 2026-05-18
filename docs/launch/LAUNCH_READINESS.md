@@ -2,7 +2,7 @@
 
 This document tracks the final launch-readiness state of the `helm-ai-kernel` repository. It is updated mechanically by the `scripts/launch/launch-ready.sh` verification tool.
 
-Last verification: 2026-05-17T21:35:09Z
+Last verification: 2026-05-18T15:08:33Z
 Verification logs are emitted by the tool for each run and are intentionally
 not committed to the repository.
 

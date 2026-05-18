@@ -55,6 +55,11 @@ type NetworkPolicy struct {
 	// Disabled completely disables networking.
 	Disabled bool `json:"disabled"`
 
+	// NetworkName attaches execution to a pre-created container network.
+	// When set, Disabled must be false. Callers use this for controlled
+	// sidecar patterns where the workload has no raw external egress.
+	NetworkName string `json:"network_name,omitempty"`
+
 	// EgressAllowlist is a list of allowed egress destinations (host:port or CIDR).
 	EgressAllowlist []string `json:"egress_allowlist"`
 

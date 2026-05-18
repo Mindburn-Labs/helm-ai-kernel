@@ -70,8 +70,13 @@ func (r *DockerRunner) Run(spec *sandbox.SandboxSpec) (*sandbox.Result, *sandbox
 	}
 
 	// Network policy
+	if spec.Network.Disabled && spec.Network.NetworkName != "" {
+		return nil, nil, fmt.Errorf("sandbox spec: network cannot be both disabled and attached to %q", spec.Network.NetworkName)
+	}
 	if spec.Network.Disabled {
 		args = append(args, "--network", "none")
+	} else if spec.Network.NetworkName != "" {
+		args = append(args, "--network", spec.Network.NetworkName)
 	}
 
 	// Security: drop all capabilities, no new privileges

@@ -25,10 +25,13 @@ type ExecuteOptions struct {
 }
 
 type RuntimeStartResult struct {
-	ContainerID      string
-	SandboxGrantRef  string
-	EgressReceiptRef string
-	Runtime          string
+	ContainerID       string
+	SandboxGrantRef   string
+	EgressReceiptRef  string
+	EgressNetworkName string
+	EgressProxyID     string
+	EgressProxyName   string
+	Runtime           string
 }
 
 type RuntimeStarter interface {
@@ -151,7 +154,21 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		addJSON(artifacts, "runtime_environment.json", map[string]any{"runtime": "local-container", "state": "REPAIR_REQUIRED"})
 		return e.persist(run, artifacts)
 	}
+	if len(compiled.NetworkAllowlist) > 0 && runtimeResult.EgressReceiptRef == "" {
+		failureReceipt := receipts.NewReceipt("launchpad.runtime_failure", compiled.LaunchID, "ALLOW", map[string]any{
+			"status": "repair_required",
+			"error":  "runtime did not return launch-scoped egress receipt ref",
+		})
+		run.State = StateRepairRequired
+		run.Reason = "runtime start did not return egress receipt ref for networked launch; repair required before RUNNING"
+		addJSON(artifacts, "receipts/launchpad-runtime-failure.json", failureReceipt)
+		addJSON(artifacts, "runtime_environment.json", map[string]any{"runtime": "local-container", "state": "REPAIR_REQUIRED", "container_id": runtimeResult.ContainerID})
+		return e.persist(run, artifacts)
+	}
 	run.RuntimeHandles.ContainerID = runtimeResult.ContainerID
+	run.RuntimeHandles.EgressNetworkName = runtimeResult.EgressNetworkName
+	run.RuntimeHandles.EgressProxyID = runtimeResult.EgressProxyID
+	run.RuntimeHandles.EgressProxyName = runtimeResult.EgressProxyName
 	run.SandboxGrantRefs = appendUnique(run.SandboxGrantRefs, runtimeResult.SandboxGrantRef)
 	run.EgressReceiptRefs = appendUnique(run.EgressReceiptRefs, runtimeResult.EgressReceiptRef)
 	startReceipt := receipts.NewReceipt("launchpad.start", compiled.LaunchID, "ALLOW", map[string]any{

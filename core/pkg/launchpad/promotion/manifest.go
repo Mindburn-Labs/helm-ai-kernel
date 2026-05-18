@@ -45,6 +45,10 @@ type ArtifactEntry struct {
 	VulnerabilityScanRef    string `json:"vulnerability_scan_ref"`
 	VulnerabilityScanStatus string `json:"vulnerability_scan_status"`
 	ProvenanceRef           string `json:"provenance_ref"`
+	ArtifactVerificationRef string `json:"artifact_verification_ref,omitempty"`
+	LiveE2ERunID            string `json:"live_e2e_run_id,omitempty"`
+	EvidencePackRef         string `json:"evidence_pack_ref,omitempty"`
+	TeardownReceiptRef      string `json:"teardown_receipt_ref,omitempty"`
 }
 
 type EvidenceRefs struct {
@@ -121,6 +125,32 @@ func ValidateArtifact(entry ArtifactEntry) error {
 		return fmt.Errorf("app %s artifact manifest requires provenance ref", entry.AppID)
 	}
 	return nil
+}
+
+func (m Manifest) EvidenceRefsFor(entry ArtifactEntry, overrides EvidenceRefs) (EvidenceRefs, error) {
+	refs := EvidenceRefs{
+		ArtifactVerificationRef: firstNonEmpty(overrides.ArtifactVerificationRef, entry.ArtifactVerificationRef),
+		LiveE2ERunID:            firstNonEmpty(overrides.LiveE2ERunID, entry.LiveE2ERunID),
+		EvidencePackRef:         firstNonEmpty(overrides.EvidencePackRef, entry.EvidencePackRef),
+		TeardownReceiptRef:      firstNonEmpty(overrides.TeardownReceiptRef, entry.TeardownReceiptRef),
+	}
+	if refs.ArtifactVerificationRef == "" || refs.LiveE2ERunID == "" || refs.EvidencePackRef == "" || refs.TeardownReceiptRef == "" {
+		return refs, errors.New("promotion manifest requires artifact verification, live e2e, EvidencePack, and teardown receipt refs")
+	}
+	if m.GitHubRunID != "" {
+		runToken := "github-actions://" + m.GitHubRunID
+		for name, ref := range map[string]string{
+			"artifact_verification_ref": refs.ArtifactVerificationRef,
+			"live_e2e_run_id":           refs.LiveE2ERunID,
+			"evidence_pack_ref":         refs.EvidencePackRef,
+			"teardown_receipt_ref":      refs.TeardownReceiptRef,
+		} {
+			if !strings.Contains(ref, runToken) {
+				return refs, fmt.Errorf("promotion %s must be tied to current workflow run %s", name, m.GitHubRunID)
+			}
+		}
+	}
+	return refs, nil
 }
 
 func Promote(app registry.AppSpec, entry ArtifactEntry, refs EvidenceRefs) (registry.AppSpec, error) {
@@ -238,4 +268,13 @@ func registryDigest(value string) bool {
 		}
 	}
 	return true
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }

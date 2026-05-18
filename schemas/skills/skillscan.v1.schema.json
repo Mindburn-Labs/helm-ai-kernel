@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindburn.dev/helm/skills/skillscan.v1.schema.json",
+  "title": "HELM Skill Scan Result",
+  "type": "object",
+  "required": ["skill_id", "verdict", "skill_content_hash", "findings", "attestation"],
+  "properties": {
+    "skill_id": { "type": "string" },
+    "verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+    "reason_code": { "type": "string" },
+    "skill_content_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "severity", "message"],
+        "properties": {
+          "code": { "type": "string" },
+          "severity": { "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+          "message": { "type": "string" },
+          "path": { "type": "string" }
+        }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "required": ["id", "type", "skill_id", "verdict", "skill_content_hash", "created_at"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "const": "SKILL_SCAN_ATTESTATION" },
+        "skill_id": { "type": "string" },
+        "verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+        "reason_code": { "type": "string" },
+        "skill_content_hash": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

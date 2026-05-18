@@ -177,8 +177,12 @@ func (r *SandboxesRunner) buildRunArgs(spec *sandbox.SandboxSpec, execID string)
 	}
 
 	// Network policy.
-	if spec.Network.Disabled {
+	if spec.Network.Disabled && spec.Network.NetworkName != "" {
 		args = append(args, "--network", "none")
+	} else if spec.Network.Disabled {
+		args = append(args, "--network", "none")
+	} else if spec.Network.NetworkName != "" {
+		args = append(args, "--network", spec.Network.NetworkName)
 	} else {
 		// When networking is enabled, use a restricted bridge.
 		args = append(args, "--network", "bridge")

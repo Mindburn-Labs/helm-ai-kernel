@@ -22,6 +22,7 @@ const (
 	StateHealthchecking State = "HEALTHCHECKING"
 	StateRunning        State = "RUNNING"
 	StateRepairRequired State = "REPAIR_REQUIRED"
+	StateRepairing      State = "REPAIRING"
 	StateTearingDown    State = "TEARING_DOWN"
 	StateDeleted        State = "DELETED"
 	StateFailed         State = "FAILED"
@@ -55,8 +56,11 @@ type LaunchRun struct {
 }
 
 type RuntimeHandles struct {
-	ContainerID      string            `json:"container_id,omitempty"`
-	CloudResourceIDs map[string]string `json:"cloud_resource_ids,omitempty"`
+	ContainerID       string            `json:"container_id,omitempty"`
+	EgressNetworkName string            `json:"egress_network_name,omitempty"`
+	EgressProxyID     string            `json:"egress_proxy_id,omitempty"`
+	EgressProxyName   string            `json:"egress_proxy_name,omitempty"`
+	CloudResourceIDs  map[string]string `json:"cloud_resource_ids,omitempty"`
 }
 
 type Store struct {

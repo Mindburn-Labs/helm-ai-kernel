@@ -18,6 +18,8 @@ on:
       - "policies/launchpad/apps/hermes.safe.toml"
       - "core/pkg/launchpad/**"
       - "tests/launchpad/**"
+      - "tools/launchpad/artifacts/**"
+      - "tools/launchpad/egressproxy/**"
 
 permissions: read-all
 
@@ -42,13 +44,13 @@ jobs:
             version: v2026.5.12
             upstream_repo: openclaw/openclaw
             upstream_ref: v2026.5.12
-            dockerfile: ./Dockerfile
+            dockerfile: helm/tools/launchpad/artifacts/openclaw.Dockerfile
             license_spdx: MIT
           - app_id: hermes
             version: v2026.5.16
             upstream_repo: NousResearch/hermes-agent
             upstream_ref: v2026.5.16
-            dockerfile: ./Dockerfile
+            dockerfile: helm/tools/launchpad/artifacts/hermes.Dockerfile
             license_spdx: MIT
     outputs:
       openclaw-digest: ${{ steps.digest.outputs.openclaw_digest }}
@@ -113,7 +115,7 @@ jobs:
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: upstream
-          file: upstream/${{ matrix.dockerfile }}
+          file: ${{ matrix.dockerfile }}
           push: true
           provenance: true
           sbom: true
@@ -124,6 +126,7 @@ jobs:
             org.opencontainers.image.version=${{ matrix.version }}
             org.opencontainers.image.licenses=${{ matrix.license_spdx }}
             io.mindburn.helm.launchpad.app=${{ matrix.app_id }}
+            io.mindburn.helm.launchpad.recipe=${{ matrix.dockerfile }}
           tags: |
             ${{ steps.meta.outputs.tag }}
             ${{ steps.meta.outputs.image }}:${{ matrix.upstream_ref }}
@@ -238,28 +241,141 @@ jobs:
             sbom-${{ matrix.app_id }}.spdx.json
             grype-${{ matrix.app_id }}.json
 
+  egress-proxy:
+    name: Build and sign Launchpad egress proxy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    steps:
+      - name: Checkout HELM source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          path: helm
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@55dc4ee22412511ee8c3142cbea40418e6cec693 # v0.17.8
+      - name: Install grype
+        uses: anchore/scan-action/download-grype@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
+      - id: meta
+        name: Compute proxy image coordinates
+        run: |
+          set -euo pipefail
+          image="${REGISTRY}/${IMAGE_PREFIX}/egress-proxy"
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+          echo "tag=${image}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - id: build
+        name: Build and push egress proxy image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: helm
+          file: helm/tools/launchpad/artifacts/egress-proxy.Dockerfile
+          push: true
+          provenance: true
+          sbom: true
+          platforms: linux/amd64
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=Apache-2.0
+            io.mindburn.helm.launchpad.component=egress-proxy
+          tags: |
+            ${{ steps.meta.outputs.tag }}
+      - name: Sign egress proxy digest with keyless cosign
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE_REF}"
+      - name: Verify egress proxy cosign signature
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          cosign verify "${IMAGE_REF}" \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/launchpad-artifacts.yml@${GITHUB_REF}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            > cosign-egress-proxy.json
+      - name: Generate egress proxy SBOM and vulnerability report
+        env:
+          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          syft "${IMAGE_REF}" -o spdx-json=sbom-egress-proxy.spdx.json
+          status=completed
+          if ! grype "${IMAGE_REF}" -o json --file grype-egress-proxy.json; then
+            status=failed
+          fi
+          jq -n \
+            --arg image "${IMAGE_REF}" \
+            --arg digest "${{ steps.build.outputs.digest }}" \
+            --arg signature_ref "cosign://${IMAGE_REF}" \
+            --arg sbom_ref "artifact://sbom-egress-proxy.spdx.json" \
+            --arg vulnerability_scan_ref "artifact://grype-egress-proxy.json" \
+            --arg vulnerability_scan_status "${status}" \
+            --arg provenance_ref "github-actions://${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}" \
+            '{
+              component: "egress-proxy",
+              image: $image,
+              digest: $digest,
+              signature_tool: "cosign",
+              signature_ref: $signature_ref,
+              sbom_tool: "syft",
+              sbom_ref: $sbom_ref,
+              vulnerability_scan_tool: "grype",
+              vulnerability_scan_ref: $vulnerability_scan_ref,
+              vulnerability_scan_status: $vulnerability_scan_status,
+              provenance_ref: $provenance_ref
+            }' > launchpad-egress-proxy.json
+      - name: Upload egress proxy evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: launchpad-egress-proxy
+          path: |
+            launchpad-egress-proxy.json
+            cosign-egress-proxy.json
+            sbom-egress-proxy.spdx.json
+            grype-egress-proxy.json
+
   aggregate:
     name: Aggregate Launchpad artifact manifest
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, egress-proxy]
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: launchpad-artifact-*
           path: launchpad-artifacts
           merge-multiple: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: launchpad-egress-proxy
+          path: launchpad-artifacts
       - name: Write manifest
         run: |
           set -euo pipefail
+          test -f launchpad-artifacts/launchpad-egress-proxy.json
           jq -s \
             --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg github_run_id "${GITHUB_RUN_ID}" \
             --arg github_run_attempt "${GITHUB_RUN_ATTEMPT}" \
+            --slurpfile egress_proxy launchpad-artifacts/launchpad-egress-proxy.json \
             '{
               schema_version: "helm.launchpad.artifacts.v1",
               generated_at: $generated_at,
               github_run_id: $github_run_id,
               github_run_attempt: $github_run_attempt,
+              egress_proxy: $egress_proxy[0],
               artifacts: .
             }' launchpad-artifacts/openclaw.json launchpad-artifacts/hermes.json > launchpad-artifact-manifest.json
           jq . launchpad-artifact-manifest.json
@@ -273,18 +389,52 @@ jobs:
     runs-on: ubuntu-latest
     needs: aggregate
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live_conformance }}
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "1.25.10"
+      - name: Log in to GHCR for conformance pulls
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: launchpad-artifact-manifest
           path: /tmp/launchpad
+      - name: Resolve signed egress proxy image
+        run: |
+          set -euo pipefail
+          proxy_image="$(jq -r '.egress_proxy.image // empty' /tmp/launchpad/launchpad-artifact-manifest.json)"
+          test -n "${proxy_image}"
+          echo "HELM_LAUNCHPAD_EGRESS_PROXY_IMAGE=${proxy_image}" >> "$GITHUB_ENV"
       - name: Run gated live conformance
         env:
           HELM_LAUNCHPAD_LIVE_E2E: "1"
           HELM_LAUNCHPAD_ARTIFACT_MANIFEST: /tmp/launchpad/launchpad-artifact-manifest.json
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: go test ./tests/launchpad/... -run TestLiveOpenRouterLocalContainerConformance -count=1 -v
+      - name: Write merged promotion manifest
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/launchpad-promotion
+          jq \
+            --arg github_run_id "${GITHUB_RUN_ID}" \
+            --arg github_run_attempt "${GITHUB_RUN_ATTEMPT}" \
+            '.artifacts |= map(. + {
+              artifact_verification_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/artifact-verification/" + .app_id),
+              live_e2e_run_id: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/live-e2e/" + .app_id),
+              evidence_pack_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/evidencepack/" + .app_id),
+              teardown_receipt_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/teardown/" + .app_id)
+            })' \
+            /tmp/launchpad/launchpad-artifact-manifest.json > /tmp/launchpad-promotion/launchpad-promotion-manifest.json
+          jq . /tmp/launchpad-promotion/launchpad-promotion-manifest.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: launchpad-promotion-manifest
+          path: /tmp/launchpad-promotion/launchpad-promotion-manifest.json

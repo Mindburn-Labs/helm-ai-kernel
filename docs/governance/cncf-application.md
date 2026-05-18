@@ -23,14 +23,6 @@ After this page you should know what this surface is for, which source files own
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
 
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
-| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
-| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
-
 This document is the canonical narrative used to file helm-ai-kernel for CNCF
 Sandbox admission. It is intentionally short and references the project's
 existing governance, security, and release artifacts rather than restating
@@ -133,7 +125,7 @@ Security policy is in `SECURITY.md`. Vulnerability reports go to
 `security@mindburn.org`. Releases are built reproducibly (verified by the
 `reproducibility-check` job in `.github/workflows/release.yml`) and shipped with
 checksums, SBOM material, and release attestation. The current public
-`v0.5.0` release published on 2026-05-13 attaches Cosign bundle and OpenVEX
+`v0.5.1` release published on 2026-05-18 attaches Cosign bundle and OpenVEX
 assets for release verification. Continuous fuzzing is configured
 for upstream OSS-Fuzz under `oss-fuzz/`. The OpenSSF Scorecard runs weekly via
 `.github/workflows/scorecard.yml`. The OpenSSF Best Practices gold-tier mapping

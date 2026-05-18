@@ -84,13 +84,15 @@ if findings:
 PY
 
 echo "[3/3] SBOM generation and validation"
-HELM_VERSION="$(cat VERSION)" bash scripts/ci/generate_sbom.sh >/dev/null
-python3 - "$ROOT/sbom.json" <<'PY'
+EXPECTED_VERSION="$(cat VERSION)"
+HELM_VERSION="$EXPECTED_VERSION" bash scripts/ci/generate_sbom.sh >/dev/null
+python3 - "$ROOT/sbom.json" "$EXPECTED_VERSION" <<'PY'
 import json
 import pathlib
 import sys
 
 sbom = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+expected_version = sys.argv[2]
 if sbom.get("bomFormat") != "CycloneDX":
     raise SystemExit("sbom.json is not CycloneDX")
 components = sbom.get("components")
@@ -98,7 +100,7 @@ if not isinstance(components, list) or not components:
     raise SystemExit("sbom.json has no components")
 metadata = sbom.get("metadata", {})
 component = metadata.get("component", {})
-if component.get("version") != "0.5.0":
+if component.get("version") != expected_version:
     raise SystemExit(f"sbom version mismatch: {component.get('version')}")
 PY
 

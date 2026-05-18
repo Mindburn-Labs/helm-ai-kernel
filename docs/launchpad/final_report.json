@@ -129,11 +129,11 @@
   "security_review_result": "fail-closed implementation review passed for registry, promotion evidence gates, policy, installer, runtime preflight, OpenRouter egress receipt requirement, MCP governance, session invariants, runtime-handle-before-RUNNING, teardown receipts, and offline EvidencePack index hash verification; live app/container red-team remains blocked",
   "docs_updated": [
     "docs/LAUNCHPAD.md",
-    "docs/launchpad/*.md",
-    "docs/launchpad/HOMEBREW_NAMING_PLAN.md",
-    "docs/public/launchpad.md",
-    "docs/private/launchpad-commercial.md",
-    "docs/public/ownership.json"
+    "docs/launchpad/APP_SPEC.md",
+    "docs/launchpad/CONFORMANCE.md",
+    "docs/launchpad/POLICY_PACKS.md",
+    "docs/launchpad/SECURITY_REVIEW.md",
+    "docs/launchpad/SUBSTRATE_SPEC.md"
   ],
   "release_steps": [
     "do not release Launchpad GA",

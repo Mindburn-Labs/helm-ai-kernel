@@ -27,9 +27,8 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 
 | Symptom | First check |
 | --- | --- |
-| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
-| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
-| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
+| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
+| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
 
 ## Diagram
 
@@ -231,8 +230,8 @@ when needed.
 
 | Error                   | Cause                     | Fix                              |
 | ----------------------- | ------------------------- | -------------------------------- |
-| `ERR_TOOL_NOT_FOUND`    | Unknown tool URN          | Register tool in policy manifest |
-| `ERR_SCHEMA_MISMATCH`   | Args don't match schema   | Check tool argument types        |
+| `DENY_TOOL_NOT_FOUND`   | Unknown tool URN          | Register tool in policy manifest |
+| `DENY_SCHEMA_MISMATCH`  | Args don't match schema   | Check tool argument types        |
 | `PROXY_ITERATION_LIMIT` | Too many tool call rounds | Increase `--max-iterations`      |
 | `PROXY_WALLCLOCK_LIMIT` | Session too long          | Increase `--max-wallclock`       |
 | `HELM_UNREACHABLE`      | Server down or wrong URL  | Check `helm-ai-kernel health`              |

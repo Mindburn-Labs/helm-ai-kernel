@@ -3,7 +3,7 @@ package main
 import "strings"
 
 var (
-	version   = "0.5.0"
+	version   = "0.5.1"
 	commit    = "unknown"
 	buildTime = "unknown"
 )
@@ -11,7 +11,7 @@ var (
 func displayVersion() string {
 	v := version
 	if v == "" {
-		v = "0.5.0"
+		v = "0.5.1"
 	}
 	if !strings.HasPrefix(v, "v") {
 		v = "v" + v

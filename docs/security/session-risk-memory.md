@@ -23,14 +23,6 @@ After this page you should know what this surface is for, which source files own
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
 
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
-| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
-| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
-
 Source: Florin Adrian Chitan, "Session Risk Memory (SRM): Temporal Authorization for Deterministic Pre-Execution Safety Gates", arXiv:2603.22350.
 
 Session Risk Memory adds a trajectory gate after Guardian's existing pre-PDP checks:
@@ -68,6 +60,13 @@ g := guardian.NewGuardian(signer, graph, registry, guardian.WithSessionRiskMemor
 ```
 
 Use `session_id` or `delegation_session_id` in `DecisionRequest.Context` to scope SRM state. If neither is present, Guardian falls back to the principal ID.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
+| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
 
 ## Diagram
 

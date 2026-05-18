@@ -164,7 +164,7 @@ curl 'http://127.0.0.1:7714/api/v1/receipts?limit=20'
 ./bin/helm-ai-kernel verify evidence-pack.tar --json
 ```
 
-Use the `v0.5.0` release `evidence-pack.tar` or an operator-generated pack known to contain ProofGraph and receipt material. Do not treat the local onboarding demo export as verified unless it includes those records.
+Use the `v0.5.1` release `evidence-pack.tar` or an operator-generated pack known to contain ProofGraph and receipt material. Do not treat the local onboarding demo export as verified unless it includes those records.
 
 ## 7. Validate The Checkout
 

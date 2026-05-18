@@ -23,14 +23,6 @@ After this page you should know what this surface is for, which source files own
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
 
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
-| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
-| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
-
 > **Canonical architecture**: see [ARCHITECTURE.md](ARCHITECTURE.md) for the
 > normative trust boundary model and TCB definition. For the canonical
 > 8-package TCB inventory, see [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -187,6 +179,13 @@ OSS does not include:
 - Non-OSS connector certification programs
 
 The invariant is simple: OSS must stay fully useful on its own as a developer-first execution kernel and self-hostable Console: Go CLI, HTTP/API contracts, SDKs, evidence export, offline verification, replay, conformance, Console assets, and release artifacts. Hosted or organization-specific operations live outside this repository and integrate through those public contracts.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
+| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
 
 ## Diagram
 

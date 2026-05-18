@@ -2,7 +2,7 @@
 
 # Tag-triggered release builds should embed the tag version even if VERSION has
 # not been bumped in the repository yet.
-VERSION ?= $(shell if [ "$$GITHUB_REF_TYPE" = "tag" ] && expr "$$GITHUB_REF_NAME" : 'v[0-9]' >/dev/null; then printf '%s\n' "$$GITHUB_REF_NAME" | cut -c2-; else cat VERSION 2>/dev/null || echo 0.5.0; fi)
+VERSION ?= $(shell if [ "$$GITHUB_REF_TYPE" = "tag" ] && expr "$$GITHUB_REF_NAME" : 'v[0-9]' >/dev/null; then printf '%s\n' "$$GITHUB_REF_NAME" | cut -c2-; else cat VERSION 2>/dev/null || echo 0.5.1; fi)
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME)

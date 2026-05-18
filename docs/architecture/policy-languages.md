@@ -23,14 +23,6 @@ After this page you should know what this surface is for, which source files own
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
 
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
-| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
-| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
-
 helm-ai-kernel accepts policy sources written in three languages and routes
 them through one enforcement boundary. The kernel never branches on
 language at decision time; only the multi-language registry in
@@ -154,6 +146,13 @@ The `helm-ai-kernel bundle build` subcommand auto-detects from file extension wh
 - [`core/pkg/policybundles/registry.go`](../../core/pkg/policybundles/registry.go) — language dispatch
 - [Conformance Profile v1](../CONFORMANCE.md) — required behavior across implementations
 - [Verification](../VERIFICATION.md) — verifying a built bundle's hash
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
+| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
 
 ## Diagram
 

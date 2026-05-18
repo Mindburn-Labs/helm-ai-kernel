@@ -1,6 +1,6 @@
 ---
 title: Verification
-last_reviewed: 2026-05-05
+last_reviewed: 2026-05-18
 ---
 
 # Verification
@@ -29,9 +29,8 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 
 | Symptom | First check |
 | --- | --- |
-| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
-| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
-| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
+| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
+| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
 
 ## Diagram
 
@@ -58,19 +57,19 @@ The verification path is local-first. `helm-ai-kernel verify <evidence-pack.tar|
 performs offline checks by default; `--online` is optional and only runs after
 offline checks pass.
 
-Current public release: `v0.5.0`, published on 2026-05-13 at
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.0>. The release
+Current public release: `v0.5.1`, published on 2026-05-18 at
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.1>. The release
 page attaches platform binaries, `SHA256SUMS.txt`, `sbom.json`,
-`v0.5.0.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
+`v0.5.1.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm-ai-kernel.mcpb`,
 `helm-ai-kernel.rb`, and matching `*.cosign.bundle` files for each primary asset.
 
 There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
 actual baseline when auditing the `v0.5.0` delta.
 
-## v0.5.0 Asset Contract
+## v0.5.1 Asset Contract
 
-The `v0.5.0` release attaches these primary assets:
+The `v0.5.1` release attaches these primary assets:
 
 - `helm-ai-kernel-darwin-amd64`
 - `helm-ai-kernel-darwin-arm64`
@@ -79,7 +78,7 @@ The `v0.5.0` release attaches these primary assets:
 - `helm-ai-kernel-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.5.0.openvex.json`
+- `v0.5.1.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
@@ -192,7 +191,7 @@ The release staging path runs the same offline verification before publishing
 release checksums. If this step fails, the release must be treated as incomplete
 and the exported EvidencePack must be repaired before attaching assets.
 
-For `v0.5.0`, this command passes without network access. The verifier
+For `v0.5.1`, this command passes without network access. The verifier
 accepts both the legacy `receipts/` layout and the canonical
 `02_PROOFGRAPH/receipts/` layout.
 

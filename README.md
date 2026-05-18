@@ -6,6 +6,7 @@
 [![Release checksums](https://img.shields.io/badge/release-checksums-success)](docs/VERIFICATION.md)
 [![Release attestations](https://img.shields.io/badge/release-attestations-informational)](docs/PUBLISHING.md)
 [![SBOM CycloneDX](https://img.shields.io/badge/SBOM-CycloneDX%201.5-orange)](docs/PUBLISHING.md)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/mindburn-labs)](https://artifacthub.io/packages/search?repo=mindburn-labs)
 
 HELM AI Kernel is the fail-closed execution firewall for AI agents.
 

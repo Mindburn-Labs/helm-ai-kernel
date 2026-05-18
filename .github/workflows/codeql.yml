@@ -36,10 +36,27 @@ jobs:
           - language: java-kotlin
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - if: matrix.language == 'go'
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.25.10"
       - uses: github/codeql-action/init@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
         with:
           languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.language == 'go' && 'autobuild' || 'none' }}
+          build-mode: ${{ matrix.language == 'go' && 'manual' || 'none' }}
+      - if: matrix.language == 'go'
+        name: Build Go modules for CodeQL
+        run: |
+          go version
+          go test \
+            ./core/cmd/helm-ai-kernel \
+            ./core/pkg/... \
+            ./examples/go_client/... \
+            ./examples/otel-genai/... \
+            ./sdk/go/... \
+            ./tests/conformance/... \
+            ./tests/launchpad/... \
+            -run '^$'
       - uses: github/codeql-action/analyze@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
         with:
           category: "/language:${{ matrix.language }}"

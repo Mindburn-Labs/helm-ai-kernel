@@ -23,7 +23,7 @@ func main() {
 	fmt.Println("=== Chat Completions ===")
 	res, err := client.ChatCompletions(helm.ChatCompletionRequest{
 		Model:    "gpt-4",
-		Messages: []helm.ChatMessage{{Role: "user", Content: "List files in /tmp"}},
+		Messages: []helm.ChatCompletionRequestMessagesInner{{Role: "user", Content: "List files in /tmp"}},
 	})
 	if err != nil {
 		if apiErr, ok := err.(*helm.HelmApiError); ok {
@@ -31,8 +31,12 @@ func main() {
 		} else {
 			log.Fatal(err)
 		}
-	} else if len(res.Choices) > 0 && res.Choices[0].Message.Content != nil {
-		fmt.Printf("Response: %s\n", *res.Choices[0].Message.Content)
+	} else if len(res.Choices) > 0 {
+		if message, ok := res.Choices[0].GetMessageOk(); ok {
+			if content, ok := message.GetContentOk(); ok && content != nil {
+				fmt.Printf("Response: %s\n", *content)
+			}
+		}
 	}
 
 	// 2. Export evidence
@@ -52,7 +56,7 @@ func main() {
 			fmt.Printf("Conformance error: %s\n", apiErr.ReasonCode)
 		}
 	} else {
-		fmt.Printf("Verdict: %s Gates: %d Failed: %d\n", conf.Verdict, conf.Gates, conf.Failed)
+		fmt.Printf("Verdict: %s Gates: %d Failed: %d\n", conf.GetVerdict(), conf.GetGates(), conf.GetFailed())
 	}
 
 	// 4. Health

@@ -32,6 +32,10 @@ jobs:
           results_format: sarif
           publish_results: true
 
+      - name: Normalize pull request SARIF categories
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/ci/normalize_scorecard_sarif.py results.sarif
+
       - name: Upload artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

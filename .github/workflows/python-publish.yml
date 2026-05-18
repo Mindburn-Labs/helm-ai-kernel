@@ -23,6 +23,7 @@ jobs:
   publish:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    environment: pypi-production
     permissions:
       contents: read
       id-token: write
@@ -57,3 +58,4 @@ jobs:
         with:
           password: ${{ secrets.PYPI_TOKEN }}
           packages-dir: sdk/python/dist/
+          skip-existing: true

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -40,7 +41,10 @@ func (fs *FileStore) Store(session *DelegationSession) error {
 		return fmt.Errorf("identity: marshal error: %w", err)
 	}
 
-	path := filepath.Join(fs.dir, session.SessionID+".json")
+	path, err := fs.sessionPath(session.SessionID)
+	if err != nil {
+		return err
+	}
 	return os.WriteFile(path, data, 0600)
 }
 
@@ -48,6 +52,11 @@ func (fs *FileStore) Store(session *DelegationSession) error {
 func (fs *FileStore) Load(sessionID string) (*DelegationSession, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
+
+	path, err := fs.sessionPath(sessionID)
+	if err != nil {
+		return nil, err
+	}
 
 	// Check if revoked first.
 	revoked := fs.loadRevoked()
@@ -58,7 +67,6 @@ func (fs *FileStore) Load(sessionID string) (*DelegationSession, error) {
 		}
 	}
 
-	path := filepath.Join(fs.dir, sessionID+".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -130,6 +138,18 @@ func (fs *FileStore) loadNonces() map[string]bool {
 
 func (fs *FileStore) loadRevoked() map[string]bool {
 	return fs.loadBoolMap(filepath.Join(fs.dir, ".revoked"))
+}
+
+func (fs *FileStore) sessionPath(sessionID string) (string, error) {
+	if sessionID == "" || strings.ContainsRune(sessionID, 0) || strings.ContainsAny(sessionID, `/\`) {
+		return "", fmt.Errorf("identity: invalid session id")
+	}
+	filename := sessionID + ".json"
+	baseName := filepath.Base(filename)
+	if baseName != filename || !filepath.IsLocal(baseName) {
+		return "", fmt.Errorf("identity: invalid session id")
+	}
+	return filepath.Join(fs.dir, baseName), nil
 }
 
 func (fs *FileStore) loadBoolMap(path string) map[string]bool {

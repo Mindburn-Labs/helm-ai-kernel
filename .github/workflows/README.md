@@ -28,8 +28,20 @@ surface for the `helm-ai-kernel` project.
   migration, dependency hygiene, schema, and benchmark checks.
 - `release.yml` calls `make quality-release` before producing binaries,
   container images, SBOM, VEX, attestations, and signatures.
+- `scorecard.yml` uploads OpenSSF Scorecard SARIF for `main` and pull requests;
+  PR SARIF is normalized so GitHub code scanning sees the same branch-protection
+  category that exists on `main`.
 - `slsa-provenance.yml` builds reproducible release binaries before generating
   provenance subjects.
+
+Pinned first-party setup actions should stay on Node 24-capable majors
+(`checkout` v5, `setup-go` v6, `setup-python` v6, `setup-node` v6, and
+`setup-java` v5). Go setup steps use `cache-dependency-path: "**/go.sum"` so
+monorepo jobs do not look for a nonexistent root `go.sum`.
+
+Tag-triggered release jobs rely on the Makefile's `GITHUB_REF_TYPE=tag`
+version inference. Do not override `VERSION` with the repository `VERSION` file
+when building release assets for a `v*` tag.
 
 ## Documentation Contract
 

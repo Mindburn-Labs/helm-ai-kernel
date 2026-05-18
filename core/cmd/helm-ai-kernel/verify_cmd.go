@@ -280,10 +280,9 @@ func extractEvidenceArchive(bundlePath, dstDir string) error {
 			return fmt.Errorf("read tar entry: %w", err)
 		}
 
-		targetPath := filepath.Join(dstDir, filepath.Clean(header.Name))
-		cleanRoot := filepath.Clean(dstDir)
-		if !strings.HasPrefix(targetPath, cleanRoot+string(os.PathSeparator)) && targetPath != cleanRoot {
-			return fmt.Errorf("archive entry escapes destination: %s", header.Name)
+		targetPath, err := safeArchiveEntryPath(dstDir, header.Name)
+		if err != nil {
+			return err
 		}
 
 		switch header.Typeflag {

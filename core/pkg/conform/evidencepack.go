@@ -62,8 +62,9 @@ func ValidateEvidencePackStructure(root string, declaredExtensions ...string) []
 
 	// Build allowed set
 	allowed := map[string]bool{
-		"00_INDEX.json": true,
-		"01_SCORE.json": true,
+		"00_INDEX.json":        true,
+		"01_SCORE.json":        true,
+		"01_SCORE.json.sha256": true,
 	}
 	for _, sub := range EvidencePackSubdirs {
 		allowed[sub] = true

@@ -122,6 +122,11 @@ helm-ai-kernel export --evidence ./data/evidence --out evidence.tar
 helm-ai-kernel verify evidence.tar
 ```
 
+Audit exports preserve every file listed by `00_INDEX.json`, including
+top-level sidecars such as `01_SCORE.json.sha256`. Verification fails when an
+indexed file is missing or the exported archive contains an unexpected
+canonical top-level entry.
+
 ## Local Tamper-Failure Demo
 
 The launch proof demo exercises the public verification path without external
@@ -182,6 +187,10 @@ Verify the bundled offline evidence pack:
 ```bash
 helm-ai-kernel verify evidence-pack.tar
 ```
+
+The release staging path runs the same offline verification before publishing
+release checksums. If this step fails, the release must be treated as incomplete
+and the exported EvidencePack must be repaired before attaching assets.
 
 For `v0.5.0`, this command passes without network access. The verifier
 accepts both the legacy `receipts/` layout and the canonical

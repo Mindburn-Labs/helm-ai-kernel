@@ -80,6 +80,11 @@ Before tagging a release:
    and credentials for that release are available
 8. run `make release-binaries-reproducible` when validating that release binaries are reproducible from the checked-in source and pinned build metadata
 
+For tag-triggered release workflows, the Makefile derives `VERSION` from
+`GITHUB_REF_NAME` when `GITHUB_REF_TYPE=tag`. This keeps binaries, SBOM,
+OpenVEX, the Homebrew formula, and release metadata aligned with the release
+tag even when the repository `VERSION` file has not yet been bumped.
+
 ## Release Automation
 
 The retained workflow set under `.github/workflows/` covers:
@@ -128,6 +133,11 @@ Do not document an asset as published unless it appears on the GitHub release
 or is produced by a retained workflow and attached to that release.
 
 If a package or channel is not represented in the retained workflow set, it should not be described as a supported public publication channel in repository documentation.
+
+`make release-assets` stages only verifiable release material. On tag builds it
+requires `release/vex/v<version>.openvex.json`, exports the audit EvidencePack,
+runs `helm-ai-kernel verify` against the staged `evidence-pack.tar`, and then
+writes the final `SHA256SUMS.txt`.
 
 ## Verification
 

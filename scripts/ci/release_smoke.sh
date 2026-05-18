@@ -70,7 +70,7 @@ elif [ "$REQUIRE_COSIGN" = "1" ]; then
     echo "::error::cosign bundles are required but none were found under $COSIGN_DIR"
     exit 1
 else
-    echo "::warning::no cosign bundles found under $COSIGN_DIR; set REQUIRE_COSIGN_BUNDLES=1 in release artifact jobs"
+    echo "release smoke: no cosign bundles found under $COSIGN_DIR; set REQUIRE_COSIGN_BUNDLES=1 where bundles are mandatory"
 fi
 
 echo "release smoke passed"

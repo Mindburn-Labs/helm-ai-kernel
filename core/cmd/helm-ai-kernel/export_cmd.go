@@ -141,6 +141,13 @@ func runExportCmd(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 		exported = fallback
+	} else {
+		withIndex, err := copyIndexedEvidenceEntries(evidenceDir, exportRoot, exported)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error copying indexed evidence contents: %v\n", err)
+			return 2
+		}
+		exported = withIndex
 	}
 
 	result := map[string]any{
@@ -182,6 +189,68 @@ func runExportCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	return 0
+}
+
+func copyIndexedEvidenceEntries(srcRoot, dstRoot string, exported []string) ([]string, error) {
+	indexPath := filepath.Join(srcRoot, "00_INDEX.json")
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return exported, nil
+		}
+		return nil, err
+	}
+
+	var index struct {
+		Entries []struct {
+			Path string `json:"path"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(data, &index); err != nil {
+		return nil, fmt.Errorf("parse 00_INDEX.json: %w", err)
+	}
+
+	seen := make(map[string]bool, len(exported))
+	for _, item := range exported {
+		seen[item] = true
+	}
+
+	for _, entry := range index.Entries {
+		if entry.Path == "" {
+			continue
+		}
+		srcPath, err := safeArchiveEntryPath(srcRoot, entry.Path)
+		if err != nil {
+			return nil, err
+		}
+		dstPath, err := safeArchiveEntryPath(dstRoot, entry.Path)
+		if err != nil {
+			return nil, err
+		}
+
+		info, err := os.Stat(srcPath)
+		if err != nil {
+			return nil, fmt.Errorf("indexed file missing %s: %w", entry.Path, err)
+		}
+		if info.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(dstPath); err == nil {
+			continue
+		} else if !os.IsNotExist(err) {
+			return nil, err
+		}
+		if err := copyFile(srcPath, dstPath); err != nil {
+			return nil, err
+		}
+		if !seen[entry.Path] {
+			exported = append(exported, entry.Path)
+			seen[entry.Path] = true
+		}
+	}
+
+	sort.Strings(exported)
+	return exported, nil
 }
 
 func copyAllEvidence(srcRoot, dstRoot string) ([]string, error) {

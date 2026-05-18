@@ -28,6 +28,7 @@ func TestValidateEvidencePackStructure_Valid(t *testing.T) {
 	// Write required files
 	require.NoError(t, os.WriteFile(filepath.Join(root, "00_INDEX.json"), []byte("{}"), 0600))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "01_SCORE.json"), []byte("{}"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "01_SCORE.json.sha256"), []byte("hash  01_SCORE.json\n"), 0600))
 
 	issues := ValidateEvidencePackStructure(root)
 	require.Empty(t, issues, "valid pack should have no issues")

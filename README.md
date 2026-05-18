@@ -1,6 +1,8 @@
 # HELM AI Kernel
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mindburn-labs/helm-ai-kernel/badge)](https://scorecard.dev/viewer/?uri=github.com/mindburn-labs/helm-ai-kernel)
 [![OpenSSF Best Practices evidence](https://img.shields.io/badge/OpenSSF-Best%20Practices-evidence%20prepared-informational)](BEST_PRACTICES.md)
 [![Release checksums](https://img.shields.io/badge/release-checksums-success)](docs/VERIFICATION.md)
@@ -219,6 +221,10 @@ Public OSS docs are sourced from this repo and published through
 For `v0.5.0`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
 `v0.5.0.openvex.json`, `release-attestation.json`, the platform binary assets,
 matching `*.cosign.bundle` files, and offline `evidence-pack.tar` verification.
+
+Current release tooling derives artifact versions from tag refs, requires an
+exact `v<version>.openvex.json` for tag releases, and verifies the staged
+`evidence-pack.tar` before checksums are finalized.
 
 See [docs/VERIFICATION.md](docs/VERIFICATION.md) and
 [docs/PUBLISHING.md](docs/PUBLISHING.md) for the full release verification path.

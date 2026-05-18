@@ -36,3 +36,32 @@ func TestExtractEvidenceArchiveRejectsOversizedEntries(t *testing.T) {
 		t.Fatalf("expected size-limit error, got %q", err.Error())
 	}
 }
+
+func TestSafeArchiveEntryPathRejectsEscapes(t *testing.T) {
+	dst := t.TempDir()
+	for _, name := range []string{
+		"../escape.json",
+		"receipts/../../escape.json",
+		"/tmp/escape.json",
+		`..\escape.json`,
+		`C:\tmp\escape.json`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := safeArchiveEntryPath(dst, name); err == nil {
+				t.Fatalf("expected %q to be rejected", name)
+			}
+		})
+	}
+}
+
+func TestSafeArchiveEntryPathAllowsNestedLocalEntries(t *testing.T) {
+	dst := t.TempDir()
+	got, err := safeArchiveEntryPath(dst, "receipts/tool_receipt.json")
+	if err != nil {
+		t.Fatalf("expected nested local entry to be allowed: %v", err)
+	}
+	want := filepath.Join(dst, "receipts", "tool_receipt.json")
+	if got != want {
+		t.Fatalf("target path = %q, want %q", got, want)
+	}
+}

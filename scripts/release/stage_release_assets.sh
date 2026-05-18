@@ -10,22 +10,56 @@ if [[ "$VERSION" == */* || -z "$VERSION" ]]; then
 fi
 TAG="v${VERSION}"
 ASSETS_DIR="${RELEASE_ASSETS_DIR:-$ROOT/dist/release-assets}"
-TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/helm-release-assets.XXXXXX")"
+TMP_PARENT="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
+mkdir -p "$TMP_PARENT"
+TMP_DIR="$(mktemp -d "$TMP_PARENT/helm-release-assets.XXXXXX")"
 
 cleanup() {
     rm -rf "$TMP_DIR"
 }
 trap cleanup EXIT
 
+on_error() {
+    local exit_code=$?
+    echo "::error file=scripts/release/stage_release_assets.sh::release asset staging failed at: ${BASH_COMMAND} (exit ${exit_code})" >&2
+    exit "$exit_code"
+}
+trap on_error ERR
+
+log_step() {
+    echo "release assets: $*"
+}
+
 require_file() {
     local path="$1"
     if [ ! -f "$path" ]; then
-        echo "::error::missing release input: $path"
+        echo "::error file=scripts/release/stage_release_assets.sh::missing release input: $path" >&2
         exit 1
     fi
 }
 
+print_conformance_failures() {
+    local report="$1"
+    python3 - "$report" <<'PY' >&2 || cat "$report" >&2
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    payload = json.load(fh)
+
+print(f"conformance pass: {payload.get('pass')}")
+for gate in payload.get("gate_results", []):
+    if gate.get("pass"):
+        continue
+    print(f"- {gate.get('gate_id')}: failed")
+    for reason in gate.get("reasons", []):
+        print(f"  - {reason}")
+PY
+}
+
 cd "$ROOT"
+
+log_step "staging $TAG into $ASSETS_DIR"
 
 for artifact in \
     bin/helm-ai-kernel-linux-amd64 \
@@ -43,6 +77,10 @@ done
 
 vex_path="$ROOT/release/vex/${TAG}.openvex.json"
 if [ ! -f "$vex_path" ]; then
+    if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+        echo "::error file=scripts/release/stage_release_assets.sh::missing exact OpenVEX document for $TAG" >&2
+        exit 1
+    fi
     vex_path="$(find "$ROOT/release/vex" -maxdepth 1 -name 'v*.openvex.json' -type f | sort | tail -n 1)"
 fi
 require_file "$vex_path"
@@ -83,10 +121,15 @@ with tarfile.open(out, "w") as tar:
             tar.addfile(info, fh)
 PY
 
-"$ROOT/bin/helm-ai-kernel" conform --level L2 --output "$TMP_DIR/conformance" --json > "$TMP_DIR/conformance-report.json"
+log_step "generating L2 conformance evidence"
+if ! "$ROOT/bin/helm-ai-kernel" conform --level L2 --output "$TMP_DIR/conformance" --json > "$TMP_DIR/conformance-report.json"; then
+    echo "::error file=scripts/release/stage_release_assets.sh::conformance failed during release asset staging" >&2
+    print_conformance_failures "$TMP_DIR/conformance-report.json"
+    exit 1
+fi
 pack_root="$(find "$TMP_DIR/conformance" -mindepth 2 -maxdepth 2 -type d -name 'run-*' | sort | tail -n 1)"
 if [ -z "$pack_root" ]; then
-    echo "::error::conformance did not produce an EvidencePack directory"
+    echo "::error file=scripts/release/stage_release_assets.sh::conformance did not produce an EvidencePack directory" >&2
     exit 1
 fi
 "$ROOT/bin/helm-ai-kernel" export --audit --evidence "$pack_root" --out "$ASSETS_DIR/evidence-pack.tar" >/dev/null

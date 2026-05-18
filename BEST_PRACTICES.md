@@ -74,13 +74,14 @@ canonical bestpractices.dev project badge.
   release attestation, and reproducible-build gates. Cosign keyless signing and
   OpenVEX consumption are documented verification paths when the GitHub release
   attaches `*.cosign.bundle` or `*.openvex.json` files. The current public
-  `v0.4.0` release does not attach those optional files.
+  `v0.5.0` release attaches those files.
 - **Reproducible build** — `make release-binaries-reproducible` plus the
   `reproducibility-check` job in `.github/workflows/release.yml`, which runs
   the build twice on independent runners and diffs the SHA-256 set.
 - **Supply-chain hygiene** — pinned tool versions in `.github/workflows/`,
   per-release benchmark snapshots pinned by `scripts/release/pin_benchmarks.sh`,
-  and Scorecard CI in `.github/workflows/scorecard.yml`.
+  Scorecard CI in `.github/workflows/scorecard.yml`, and pull-request
+  Scorecard SARIF category normalization in `scripts/ci/normalize_scorecard_sarif.py`.
 
 ## Analysis (Gold-only Additions)
 

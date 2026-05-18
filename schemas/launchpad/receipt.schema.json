@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindburn.dev/helm/launchpad/receipt.schema.json",
+  "title": "HELM Launchpad Receipt",
+  "type": "object",
+  "required": ["receipt_id", "type", "launch_id", "decision_id", "decision_hash", "verdict", "status", "created_at", "lamport_clock", "hash"],
+  "properties": {
+    "receipt_id": { "type": "string" },
+    "type": { "type": "string" },
+    "launch_id": { "type": "string" },
+    "decision_id": { "type": "string" },
+    "decision_hash": { "type": "string", "pattern": "^sha256:" },
+    "verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+    "status": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+    "subject": { "type": "object" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "lamport_clock": { "type": "integer", "minimum": 1 },
+    "hash": { "type": "string", "pattern": "^sha256:" }
+  },
+  "additionalProperties": true
+}

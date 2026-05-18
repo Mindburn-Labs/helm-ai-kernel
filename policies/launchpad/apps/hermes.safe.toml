@@ -1,0 +1,13 @@
+[app]
+id = "hermes"
+availability = "oss_candidate"
+permission_bypass_forbidden = true
+recursive_launch_forbidden = true
+network_default = "deny"
+network_allowlist = ["https://openrouter.ai/api/v1"]
+mcp_unknown_server_policy = "quarantine"
+mcp_unknown_tool_policy = "ESCALATE"
+require_schema_pin = true
+receipt_required = true
+evidencepack_required = true
+model_gateway_env = "OPENROUTER_API_KEY"

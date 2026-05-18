@@ -1,0 +1,5 @@
+{
+  "version": "1.0.0",
+  "nodes": ["launch_plan", "cpi_output", "kernel_verdict", "sandbox_grant", "mcp_quarantine", "teardown_receipt"],
+  "edges": [["launch_plan", "cpi_output"], ["cpi_output", "kernel_verdict"]]
+}

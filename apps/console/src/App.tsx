@@ -17,6 +17,7 @@ import {
   LockKeyhole,
   Play,
   RefreshCw,
+  Rocket,
   RotateCcw,
   Search,
   Settings,
@@ -67,6 +68,7 @@ import {
 import { HelmAiKernelAssistantDrawer } from "./agent/drawer";
 import { HelmAiKernelAgentProvider } from "./agent/provider";
 import { buildAiKernelAgentState } from "./agent/state";
+import { LaunchpadPage } from "./features/launchpad/LaunchpadPage";
 
 const DesignSystemErrorBoundary = ErrorBoundary as unknown as ComponentType<{ readonly children: ReactNode }>;
 
@@ -91,6 +93,7 @@ const NAV_GROUPS = [
       { id: "replay", label: "Replay", icon: RotateCcw },
       { id: "conformance", label: "Conformance", icon: ListChecks },
       { id: "audit", label: "Audit", icon: Braces },
+      { id: "launchpad", label: "Launchpad", icon: Rocket },
     ],
   },
   {
@@ -612,6 +615,10 @@ function ConsoleApp() {
                   onRefresh={refresh}
                   onSelect={setSelectedId}
                 />
+              </div>
+            ) : active === "launchpad" ? (
+              <div className="console-stack">
+                <LaunchpadPage />
               </div>
             ) : active === "receipts" ? (
               <div className="console-stack">

@@ -1,0 +1,7 @@
+{
+  "launch_id": "reference-hermes-local-container",
+  "app_id": "hermes",
+  "substrate_id": "local-container",
+  "kernel_verdict": "ESCALATE",
+  "evidence": ["cpi_output", "kernel_verdict", "sandbox_grant", "mcp_quarantine", "teardown_receipt"]
+}

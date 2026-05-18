@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindburn.dev/helm/launchpad/launch_plan.schema.json",
+  "title": "HELM Launchpad LaunchPlan",
+  "type": "object",
+  "required": ["launch_id", "app_id", "app_version", "substrate_id", "principal", "risk_class", "policy_hash", "app_spec_hash", "substrate_spec_hash", "sandbox_profile_hash", "required_secret_refs", "network_allowlist", "filesystem_mounts", "mcp_policy", "budgets", "nodes", "edges", "teardown_plan", "evidence_requirements", "action_ir", "teardown_ir", "cpi_output", "kernel_verdict", "status", "plan_hash"],
+  "properties": {
+    "launch_id": { "type": "string" },
+    "app_id": { "type": "string" },
+    "app_version": { "type": "string" },
+    "substrate_id": { "type": "string" },
+    "principal": { "type": "string" },
+    "risk_class": { "type": "string" },
+    "policy_hash": { "type": "string", "pattern": "^sha256:" },
+    "app_spec_hash": { "type": "string", "pattern": "^sha256:" },
+    "substrate_spec_hash": { "type": "string", "pattern": "^sha256:" },
+    "sandbox_profile_hash": { "type": "string", "pattern": "^sha256:" },
+    "required_secret_refs": { "type": "array", "items": { "type": "string" } },
+    "network_allowlist": { "type": "array", "items": { "type": "string" } },
+    "filesystem_mounts": { "type": "array", "items": { "type": "string" } },
+    "mcp_policy": {
+      "type": "object",
+      "required": ["unknown_server_policy", "unknown_tool_policy", "require_schema_pin"],
+      "properties": {
+        "unknown_server_policy": { "const": "quarantine" },
+        "unknown_tool_policy": { "enum": ["quarantine", "ESCALATE"] },
+        "require_schema_pin": { "const": true }
+      },
+      "additionalProperties": true
+    },
+    "budgets": {
+      "type": "object",
+      "required": ["usd_max", "api_calls_max", "time_ms_max"],
+      "properties": {
+        "usd_max": { "type": "number", "minimum": 0 },
+        "api_calls_max": { "type": "integer", "minimum": 0 },
+        "time_ms_max": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "nodes": { "type": "object" },
+    "edges": { "type": "array" },
+    "teardown_plan": { "type": "object" },
+    "evidence_requirements": { "type": "array", "items": { "type": "string" } },
+    "action_ir": { "type": "array", "items": { "$ref": "#/$defs/action_ir" } },
+    "teardown_ir": { "type": "array", "items": { "$ref": "#/$defs/action_ir" } },
+    "cpi_output": {
+      "type": "object",
+      "required": ["decision_id", "verdict", "reason", "actions"],
+      "properties": {
+        "decision_id": { "type": "string" },
+        "verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+        "reason": { "type": "string" },
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/action_ir" } },
+        "raw": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "kernel_verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+    "status": { "enum": ["PLANNED", "VALIDATED", "ESCALATED", "DENIED", "PROVISIONING", "INSTALLING", "STARTING", "HEALTHCHECKING", "RUNNING", "REPAIR_REQUIRED", "TEARING_DOWN", "DELETED", "FAILED"] },
+    "reason_code": { "type": "string" },
+    "plan_hash": { "type": "string", "pattern": "^sha256:" }
+  },
+  "$defs": {
+    "action_ir": {
+      "type": "object",
+      "required": ["id", "kind", "app_id", "substrate_id", "effect", "inputs"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "enum": ["plan", "install", "provision", "sandbox_preflight", "mcp_bind", "start", "healthcheck", "repair", "teardown"] },
+        "app_id": { "type": "string" },
+        "substrate_id": { "type": "string" },
+        "effect": { "type": "string" },
+        "inputs": { "type": "object" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

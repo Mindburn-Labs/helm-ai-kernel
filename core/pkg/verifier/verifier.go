@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -288,11 +289,27 @@ func checkIndex(bundlePath string) CheckResult {
 	if err != nil {
 		return CheckResult{Name: "index_integrity", Pass: false, Reason: fmt.Sprintf("cannot read index: %v", err)}
 	}
-	var index map[string]any
+	var index indexFile
 	if err := json.Unmarshal(data, &index); err != nil {
 		return CheckResult{Name: "index_integrity", Pass: false, Reason: fmt.Sprintf("invalid index JSON: %v", err)}
 	}
-	return CheckResult{Name: "index_integrity", Pass: true, Detail: "00_INDEX.json valid"}
+	for _, entry := range index.Entries {
+		if entry.Path == "" {
+			return CheckResult{Name: "index_integrity", Pass: false, Reason: "index entry path is required"}
+		}
+		clean := filepath.Clean(entry.Path)
+		if filepath.IsAbs(clean) || strings.HasPrefix(clean, "..") {
+			return CheckResult{Name: "index_integrity", Pass: false, Reason: fmt.Sprintf("index entry escapes bundle: %s", entry.Path)}
+		}
+		data, err := os.ReadFile(filepath.Join(bundlePath, clean))
+		if err != nil {
+			return CheckResult{Name: "index_integrity", Pass: false, Reason: fmt.Sprintf("indexed file missing %s: %v", entry.Path, err)}
+		}
+		if actual := sha256Hex(data); actual != entry.SHA256 {
+			return CheckResult{Name: "index_integrity", Pass: false, Reason: fmt.Sprintf("indexed hash mismatch for %s: expected %s, got %s", entry.Path, entry.SHA256, actual)}
+		}
+	}
+	return CheckResult{Name: "index_integrity", Pass: true, Detail: "00_INDEX.json entries verified"}
 }
 
 type indexEntry struct {

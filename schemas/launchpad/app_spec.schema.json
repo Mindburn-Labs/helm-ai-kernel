@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindburn.dev/helm/launchpad/app_spec.schema.json",
+  "title": "HELM Launchpad AppSpec",
+  "type": "object",
+  "required": ["id", "name", "version", "license", "redistribution", "availability", "install", "runtime", "filesystem_policy", "network_policy", "mcp_policy", "risk_class", "budget_ceiling", "evidence_requirements", "conformance"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$" },
+    "name": { "type": "string" },
+    "version": { "type": "string" },
+    "availability": { "enum": ["oss_supported", "oss_candidate", "external_proprietary_adapter", "blocked_license", "blocked_conformance"] },
+    "license": { "type": "object", "required": ["status"], "properties": { "status": { "type": "string" }, "spdx": { "type": "string" }, "url": { "type": "string" } } },
+    "redistribution": { "type": "string" },
+    "install": { "type": "object", "required": ["strategy"], "properties": { "strategy": { "type": "string" }, "image": { "type": "string" }, "digest": { "type": "string" }, "source": { "type": "string" }, "ref": { "type": "string" } } },
+    "runtime": { "type": "object", "required": ["command"], "properties": { "command": { "type": "array", "items": { "type": "string" } }, "ports": { "type": "array", "items": { "type": "integer" } } } },
+    "filesystem_policy": { "$ref": "#/$defs/policyRef" },
+    "network_policy": { "$ref": "#/$defs/networkPolicy" },
+    "mcp_policy": { "$ref": "#/$defs/mcpPolicy" },
+    "risk_class": { "type": "string" },
+    "budget_ceiling": { "$ref": "#/$defs/budget" },
+    "evidence_requirements": { "type": "array", "items": { "type": "string" } },
+    "supply_chain_evidence": {
+      "type": "object",
+      "required": ["artifact_digest", "signature_tool", "signature_ref", "sbom_tool", "sbom_ref", "vulnerability_scan_tool", "vulnerability_scan_ref"],
+      "properties": {
+        "artifact_digest": { "type": "string", "pattern": "^sha256:" },
+        "signature_tool": { "const": "cosign" },
+        "signature_ref": { "type": "string" },
+        "sbom_tool": { "const": "syft" },
+        "sbom_ref": { "type": "string" },
+        "vulnerability_scan_tool": { "enum": ["grype", "trivy"] },
+        "vulnerability_scan_ref": { "type": "string" }
+      }
+    },
+    "conformance": { "type": "object" }
+  },
+  "$defs": {
+    "policyRef": { "type": "object", "required": ["mode"], "properties": { "mode": { "type": "string" }, "mounts": { "type": "array", "items": { "type": "string" } }, "policy_ref": { "type": "string" } } },
+    "networkPolicy": { "type": "object", "required": ["default"], "properties": { "default": { "const": "deny" }, "allowlist": { "type": "array", "items": { "type": "string" } } } },
+    "mcpPolicy": { "type": "object", "required": ["unknown_server_policy", "unknown_tool_policy", "require_schema_pin"], "properties": { "unknown_server_policy": { "const": "quarantine" }, "unknown_tool_policy": { "enum": ["quarantine", "ESCALATE"] }, "require_schema_pin": { "const": true } } },
+    "budget": { "type": "object", "required": ["usd_max", "api_calls_max", "time_ms_max"], "properties": { "usd_max": { "type": "number" }, "api_calls_max": { "type": "integer" }, "time_ms_max": { "type": "integer" } } }
+  }
+}

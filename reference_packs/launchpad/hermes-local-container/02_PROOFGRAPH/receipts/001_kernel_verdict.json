@@ -1,0 +1,8 @@
+{
+  "receipt_id": "launchpad.hermes.kernel-verdict",
+  "decision_id": "launchpad.hermes.local-container",
+  "decision_hash": "sha256:hermes-local-container",
+  "status": "ESCALATE",
+  "verdict": "ESCALATE",
+  "lamport_clock": 1
+}

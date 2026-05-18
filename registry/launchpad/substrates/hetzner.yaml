@@ -1,0 +1,17 @@
+id: hetzner
+name: Hetzner
+kind: cloud
+availability: dry_run_stub
+default_dry_run: true
+policy_pack: policies/launchpad/substrates/hetzner.safe.toml
+provisioner: hetzner
+supports_teardown: true
+requires_approval: true
+network:
+  default: deny
+  allowlist: []
+filesystem:
+  mode: scoped_remote
+  mounts: []
+metadata:
+  status: "Dry-run only until explicit human approval and idempotency reconciliation are implemented."

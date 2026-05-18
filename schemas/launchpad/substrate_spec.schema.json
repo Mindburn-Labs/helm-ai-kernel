@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindburn.dev/helm/launchpad/substrate_spec.schema.json",
+  "title": "HELM Launchpad SubstrateSpec",
+  "type": "object",
+  "required": ["id", "name", "kind", "availability", "default_dry_run", "policy_pack", "provisioner", "supports_teardown", "requires_approval", "network", "filesystem"],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "kind": { "enum": ["local-container", "cloud"] },
+    "availability": { "type": "string" },
+    "default_dry_run": { "type": "boolean" },
+    "policy_pack": { "type": "string" },
+    "provisioner": { "type": "string" },
+    "supports_teardown": { "type": "boolean" },
+    "requires_approval": { "type": "boolean" },
+    "network": { "type": "object", "required": ["default"], "properties": { "default": { "const": "deny" }, "allowlist": { "type": "array", "items": { "type": "string" } } } },
+    "filesystem": { "type": "object", "required": ["mode"], "properties": { "mode": { "type": "string" }, "mounts": { "type": "array", "items": { "type": "string" } } } }
+  }
+}

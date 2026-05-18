@@ -1,0 +1,8 @@
+{
+  "pass": true,
+  "scope": "launchpad",
+  "app_id": "openclaw",
+  "substrate_id": "local-container",
+  "classification": "oss_candidate",
+  "kernel_verdict": "ESCALATE"
+}

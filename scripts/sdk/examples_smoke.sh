@@ -7,6 +7,7 @@ PORT="${HELM_SDK_EXAMPLES_PORT:-$((18000 + (RANDOM % 1000)))}"
 HEALTH_PORT="${HELM_SDK_EXAMPLES_HEALTH_PORT:-$((19000 + (RANDOM % 1000)))}"
 HELM_URL="http://127.0.0.1:${PORT}"
 SERVER_LOG="$TMP/helm-server.log"
+PYTHON_BIN="$TMP/python-venv/bin/python"
 ADMIN_KEY="${HELM_ADMIN_API_KEY:-sdk-examples-local-admin-key}"
 TENANT_ID="${HELM_TENANT_ID:-sdk-examples}"
 
@@ -24,7 +25,8 @@ cd "$ROOT"
 make build
 
 cd "$ROOT/sdk/python"
-python -m pip install -q --require-hashes -r "$ROOT/sdk/python/requirements-runtime.txt"
+python -m venv "$TMP/python-venv"
+"$PYTHON_BIN" -m pip install -q --require-hashes -r "$ROOT/sdk/python/requirements-runtime.txt"
 
 cd "$ROOT/sdk/ts"
 npm ci
@@ -52,7 +54,7 @@ if ! curl -fsS "$HELM_URL/api/health" >/dev/null 2>&1; then
   exit 1
 fi
 
-PYTHONPATH="$ROOT/sdk/python" HELM_URL="$HELM_URL" HELM_ADMIN_API_KEY="$ADMIN_KEY" HELM_TENANT_ID="$TENANT_ID" python "$ROOT/examples/python_sdk/main.py" | tee "$TMP/python_sdk.json"
+PYTHONPATH="$ROOT/sdk/python" HELM_URL="$HELM_URL" HELM_ADMIN_API_KEY="$ADMIN_KEY" HELM_TENANT_ID="$TENANT_ID" "$PYTHON_BIN" "$ROOT/examples/python_sdk/main.py" | tee "$TMP/python_sdk.json"
 
 "$ROOT/sdk/ts/node_modules/.bin/tsc" -p "$ROOT/examples/ts_sdk/tsconfig.json"
 HELM_URL="$HELM_URL" HELM_ADMIN_API_KEY="$ADMIN_KEY" HELM_TENANT_ID="$TENANT_ID" node "$ROOT/examples/ts_sdk/dist/main.js" | tee "$TMP/ts_sdk.json"

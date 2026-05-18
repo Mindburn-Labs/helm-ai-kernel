@@ -2,7 +2,7 @@
 
 # HELM-owned Hermes build recipe.
 # Build context: pinned upstream NousResearch/hermes-agent checkout.
-FROM ghcr.io/astral-sh/uv:0.8.14-python3.12-bookworm@sha256:317f1a5529e59e55e1280c04c950e40afb264df4968ec0bcd3a3d79708c814a4 AS build
+FROM ghcr.io/astral-sh/uv:0.8.14-python3.12-bookworm@sha256:6f0e5c8496f34eba70f7f9f2e55d49e008b095d0395c16e3dda3437f95a2ec71 AS build
 
 WORKDIR /src/hermes
 COPY pyproject.toml uv.lock ./
@@ -11,7 +11,7 @@ COPY . .
 RUN uv sync --frozen --no-dev
 RUN install -d /licenses/hermes && cp LICENSE /licenses/hermes/LICENSE
 
-FROM python:3.12-slim-bookworm@sha256:b0223e13f68ee4a20edfc81510103d8bb34821f0f25b68f8594dffa4af4613d3
+FROM python:3.12-slim-bookworm@sha256:d193c6f51a7dbd10395d6328de3a7edb0516fb0608ca138036576f574c3e07d2
 
 LABEL io.mindburn.helm.launchpad.recipe="hermes.helm-owned.v1"
 ENV PATH="/opt/hermes/.venv/bin:${PATH}" \

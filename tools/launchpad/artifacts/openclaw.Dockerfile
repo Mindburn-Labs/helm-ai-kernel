@@ -2,17 +2,16 @@
 
 # HELM-owned OpenClaw build recipe.
 # Build context: pinned upstream openclaw/openclaw checkout.
-FROM node:24-bookworm@sha256:3a09d9a8e3f4f34e8426515af2c7aa3a4d27ee6dd203d1f92b1d6c5b4d3c8ec8 AS build
+FROM node:24-bookworm@sha256:050bf2bbe33c1d6754e060bec89378a79ed831f04a7bb1a53fe45e997df7b3bb AS build
 
 WORKDIR /src/openclaw
 RUN corepack enable
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
 COPY . .
+RUN pnpm install --frozen-lockfile
 RUN pnpm build:docker
 RUN install -d /licenses/openclaw && cp LICENSE /licenses/openclaw/LICENSE
 
-FROM node:24-bookworm-slim@sha256:e8e27cccd2d6b083a01fe8efce115471e0a8018615ed37c4110b3abb162ec907
+FROM node:24-bookworm-slim@sha256:24dc26ef1e3c3690f27ebc4136c9c186c3133b25563ae4d7f0692e4d1fe5db0e
 
 LABEL io.mindburn.helm.launchpad.recipe="openclaw.helm-owned.v1"
 ENV NODE_ENV=production

@@ -67,6 +67,7 @@ func runExportCmd(args []string, stdout, stderr io.Writer) int {
 		exportDirs = []string{
 			"00_INDEX.json",
 			"01_SCORE.json",
+			"01_SCORE.json.sha256",
 			"02_PROOFGRAPH",
 			"03_TELEMETRY",
 			"04_EXPORTS",
@@ -82,6 +83,7 @@ func runExportCmd(args []string, stdout, stderr io.Writer) int {
 		exportDirs = []string{
 			"00_INDEX.json",
 			"01_SCORE.json",
+			"01_SCORE.json.sha256",
 			"02_PROOFGRAPH",
 			"06_LOGS",
 			"07_ATTESTATIONS",

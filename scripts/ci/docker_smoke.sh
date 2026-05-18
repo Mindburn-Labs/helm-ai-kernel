@@ -55,7 +55,20 @@ cleanup() {
         docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
     fi
     if [ "$cleanup_data" = "1" ]; then
-        rm -rf "$DATA_DIR"
+        # The container ran as distroless nonroot (UID 65532) and may have
+        # written files under $DATA_DIR/keys/ with mode 0700 (KMS keystore).
+        # The host user can't traverse that directory, so delegate the
+        # recursive delete to a short-lived root container with the same
+        # mount. Falling through to the host rm afterwards picks up the
+        # now-empty $DATA_DIR plus anything the cleanup container missed.
+        if [ -d "$DATA_DIR" ]; then
+            docker run --rm \
+                --mount "type=bind,source=$DATA_DIR,target=/cleanup" \
+                busybox:1.36.1 \
+                sh -c 'rm -rf /cleanup/..?* /cleanup/.[!.]* /cleanup/* 2>/dev/null || true' \
+                >/dev/null 2>&1 || true
+        fi
+        rm -rf "$DATA_DIR" 2>/dev/null || true
         rmdir "$ROOT/tmp" >/dev/null 2>&1 || true
     fi
 }

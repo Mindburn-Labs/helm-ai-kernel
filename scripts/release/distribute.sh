@@ -61,7 +61,7 @@ else
     cd sdk/python
     # Update version in pyproject.toml
     sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" pyproject.toml && rm pyproject.toml.bak
-    pip install -q build twine
+    python3 -m pip install -q --require-hashes -r ../../.github/python-build-requirements.txt
     python3 -m build
     twine upload dist/* -u __token__ -p "$PYPI_TOKEN" --skip-existing
     cd ../..

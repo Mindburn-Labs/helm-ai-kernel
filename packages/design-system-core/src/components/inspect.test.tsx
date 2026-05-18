@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CodeBlock, DiffViewer, Tree, type DiffHunk, type TreeNode } from "./inspect";
 import { ToastProvider, Toaster } from "./core";
@@ -68,6 +68,25 @@ describe("CodeBlock", () => {
     fireEvent.click(screen.getByRole("button", { name: /Copy code/i }));
     expect(await screen.findByText("Could not copy code")).toBeInTheDocument();
     expect(screen.getByText("denied by browser")).toBeInTheDocument();
+  });
+
+  it("renders CEL highlight output without pre/code wrappers", async () => {
+    vi.doMock("../lib/highlighter", () => ({
+      highlightCel: vi.fn(async (line: string) => `<pre class="shiki"><code><span>${line}</span></code></pre>`),
+    }));
+    const { CodeBlock: MockedCodeBlock } = await import("./inspect");
+    const { container } = render(
+      <ToastProvider>
+        <MockedCodeBlock code={"request.allow"} language="cel" />
+        <Toaster />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => expect(container.querySelector(".code-content span")).toHaveTextContent("request.allow"));
+    expect(screen.getByText("request.allow")).toBeInTheDocument();
+    expect(container.querySelector(".code-content pre")).toBeNull();
+    expect(container.querySelector(".code-content code code")).toBeNull();
+    vi.doUnmock("../lib/highlighter");
   });
 });
 

@@ -30,6 +30,11 @@ const (
 	// irreversible effects (E4), rotating sensitive secrets, changing core
 	// governance. Always produces high-grade evidence.
 	PostureSovereign Posture = "SOVEREIGN"
+
+	// PostureHighAssurance is the legacy commercial name for the highest
+	// execution posture. Keep it as an alias so synced Enterprise packages
+	// can consume current OSS contracts without weakening posture checks.
+	PostureHighAssurance Posture = PostureSovereign
 )
 
 // AllPostures returns the ordered list of postures from least to most privileged.

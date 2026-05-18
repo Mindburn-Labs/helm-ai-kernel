@@ -60,7 +60,7 @@ function receiptFixture(id: string, lamport_clock: number): ReceiptFixture {
 
 function bootstrapFixture() {
   return {
-    version: { version: "0.5.0", commit: "test", build_time: "2026-05-05T00:00:00Z" },
+    version: { version: "0.5.1", commit: "test", build_time: "2026-05-05T00:00:00Z" },
     workspace: { organization: "local", project: "default", environment: "production", mode: "self-hosted" },
     health: { kernel: "ready", policy: "ready", store: "ready", conformance: "pending" },
     counts: { receipts: 3, pending_approvals: 0, open_incidents: 0, mcp_tools: 2 },
@@ -141,7 +141,7 @@ describe("HELM Console", () => {
       proof_refs: { decision_id: "dec_demo", receipt_id: "rcpt_demo", receipt_hash: "sha256:receipt" },
       verification_hint: "/api/demo/verify",
       sandbox_label: "HELM AI Kernel public sandbox - no external side effects",
-      helm_ai_kernel_version: "0.5.0",
+      helm_ai_kernel_version: "0.5.1",
     });
     apiMock.verifyPublicDemoReceipt.mockResolvedValue({
       valid: true,

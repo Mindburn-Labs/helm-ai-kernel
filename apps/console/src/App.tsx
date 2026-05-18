@@ -740,7 +740,7 @@ function Sidebar({
       <div className="console-brand">
         <span className="brand-glyph" aria-hidden="true" />
         <strong>HELM</strong>
-        <span className="version-chip">v0.5.0</span>
+        <span className="version-chip">v0.5.1</span>
       </div>
       {NAV_GROUPS.map((group) => (
         <nav key={group.title} className="nav-block" aria-label={group.title}>

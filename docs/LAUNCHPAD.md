@@ -1,8 +1,21 @@
+---
+title: HELM Launchpad
+last_reviewed: 2026-05-18
+---
+
 # HELM Launchpad
 
 Status: partial implementation, fail-closed by default.
 
 Launchpad is the OSS app launcher surface for HELM AI Kernel. The current implementation provides registry loading, policy validation, deterministic plan compilation, guarded CLI flows, session records, receipts, and EvidencePack directory generation for escalated plans. It does not yet perform live Docker, cloud, or app install side effects.
+
+## Audience
+
+Operators and maintainers evaluating the source-backed Launchpad slice in HELM AI Kernel.
+
+## Outcome
+
+You can identify the implemented Launchpad command surface, current safety model, app classifications, and conformance sources without relying on retired planning reports.
 
 ## Source Truth
 
@@ -50,4 +63,14 @@ flowchart LR
 - `openclaw`, `hermes`, `opencode`, `kilocode`: `oss_candidate`.
 - `codex`, `claude-code.external`, `cursor.external`, `junie.external`: `external_proprietary_adapter`.
 
-See `docs/launchpad/FINAL_IMPLEMENTATION_REPORT.md` for the exact implementation status.
+For current source-backed details, use the Launchpad specs and conformance docs:
+`docs/launchpad/APP_SPEC.md`, `docs/launchpad/SUBSTRATE_SPEC.md`,
+`docs/launchpad/POLICY_PACKS.md`, `docs/launchpad/SECURITY_REVIEW.md`, and
+`docs/launchpad/CONFORMANCE.md`.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
+| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |

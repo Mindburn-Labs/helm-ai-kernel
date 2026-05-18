@@ -379,24 +379,6 @@
       "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/readme"
     },
     {
-      "slug": "internal/helm-ai-kernel/docs/strategy/mcp-governance-competitive-radar-2026-04",
-      "title": "MCP Governance Competitive Radar - April 2026",
-      "section": "internal",
-      "source_path": "docs/strategy/mcp-governance-competitive-radar-2026-04.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/strategy/mcp-governance-competitive-radar-2026-04"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/docs/strategy/policy-research-watchlist-2026-04",
-      "title": "Policy Research Watchlist - April 2026",
-      "section": "internal",
-      "source_path": "docs/strategy/policy-research-watchlist-2026-04.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/strategy/policy-research-watchlist-2026-04"
-    },
-    {
       "slug": "internal/helm-ai-kernel/examples/go_client/readme",
       "title": "Go Client Example",
       "section": "internal",

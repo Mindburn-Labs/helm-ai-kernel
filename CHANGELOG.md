@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-05-05
+last_reviewed: 2026-05-18
 ---
 
 # Changelog
@@ -38,18 +38,24 @@ This scheme maps the main sections of HELM AI Kernel Changelog in reading order.
 flowchart LR
   Page["HELM AI Kernel Changelog"]
   A["[Unreleased]"]
-  B["[0.5.0] - 2026-05-13"]
-  C["[0.4.0] - 2026-04-25"]
-  D["Validation"]
+  B["[0.5.1] - 2026-05-18"]
+  C["[0.5.0] - 2026-05-13"]
+  D["[0.4.0] - 2026-04-25"]
+  E["Validation"]
   Page --> A
   A --> B
   B --> C
   C --> D
+  D --> E
 ```
 
 All notable changes to the retained HELM AI Kernel surface are documented here. Public entries focus on developer-visible interfaces, compatibility, verification, SDKs, and security-relevant documentation.
 
 ## [Unreleased]
+
+## [0.5.1] - 2026-05-18
+
+Published at <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.1>.
 
 - Fixed tag-driven release asset staging so release binaries, SBOM, OpenVEX,
   Homebrew formula metadata, and release attestations use the tag version
@@ -68,6 +74,9 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - Downgraded the local release-smoke missing-cosign message from a GitHub
   warning annotation to a plain informational log unless cosign bundles are
   explicitly required.
+- Bumped source, CLI fallback, SDK package manifests, Helm chart `appVersion`,
+  OpenAPI version metadata, generated SDK version comments, Console visible
+  version, and launch verification scripts to `0.5.1`.
 
 ## [0.5.0] - 2026-05-13
 

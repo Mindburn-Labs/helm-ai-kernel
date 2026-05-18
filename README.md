@@ -27,13 +27,13 @@ Agent proposal -> HELM boundary -> ALLOW / DENY / ESCALATE -> signed receipt
 
 - Repository: `Mindburn-Labs/helm-ai-kernel`
 - Root package identity: `helm-ai-kernel-root`
-- Current public release: `v0.5.0`
+- Current public release: `v0.5.1`
 - License: Apache-2.0
 - Supported security line: `0.5.x`; `0.4.x` is best effort
 - Canonical docs: <https://helm.docs.mindburn.org/helm-ai-kernel>
 
-The current `v0.5.0` GitHub release was published on 2026-05-13 at
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.0>. It includes
+The current `v0.5.1` GitHub release was published on 2026-05-18 at
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.1>. It includes
 CLI binaries, checksums, SBOM JSON, OpenVEX, release-attestation metadata,
 Cosign bundles, `evidence-pack.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, and sample policy
 material.
@@ -218,8 +218,8 @@ Public OSS docs are sourced from this repo and published through
 
 ## Release Verification
 
-For `v0.5.0`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
-`v0.5.0.openvex.json`, `release-attestation.json`, the platform binary assets,
+For `v0.5.1`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
+`v0.5.1.openvex.json`, `release-attestation.json`, the platform binary assets,
 matching `*.cosign.bundle` files, and offline `evidence-pack.tar` verification.
 
 Current release tooling derives artifact versions from tag refs, requires an

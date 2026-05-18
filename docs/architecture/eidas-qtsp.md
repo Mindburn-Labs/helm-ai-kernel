@@ -23,14 +23,6 @@ After this page you should know what this surface is for, which source files own
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
 
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
-| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
-| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
-
 helm-ai-kernel timestamps every evidence pack against an RFC 3161 anchor. For
 EU regulated workloads, the anchor must be a **Qualified Trust Service
 Provider** (QTSP) under [Regulation (EU) No 910/2014 (eIDAS)](https://eur-lex.europa.eu/eli/reg/2014/910/oj),
@@ -202,6 +194,13 @@ loaded packs, not a runtime flag the operator can forget.
 - [Architecture](../ARCHITECTURE.md) — kernel and anchor architecture
 - [`core/pkg/proofgraph/anchor/eidas.go`](../../core/pkg/proofgraph/anchor/eidas.go) — implementation
 - [`core/pkg/trust/eu_trusted_list.go`](../../core/pkg/trust/eu_trusted_list.go) — LOTL validator
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
+| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
 
 ## Diagram
 

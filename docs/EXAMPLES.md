@@ -40,7 +40,7 @@ flowchart LR
 | Python OpenAI base URL | `helm-ai-kernel proxy --port 9090` | OpenAI-compatible base URL, receipt headers, deny path | [`examples/python_openai_baseurl`](../examples/python_openai_baseurl) | `make test-sdk-py` |
 | TypeScript OpenAI base URL | `helm-ai-kernel proxy --port 9090` | JavaScript/TypeScript client base URL and receipt extraction | [`examples/ts_openai_baseurl`](../examples/ts_openai_baseurl) | `make test-sdk-ts` |
 | JavaScript raw fetch | `helm-ai-kernel proxy --port 9090` | Raw HTTP client compatibility | [`examples/js_openai_baseurl`](../examples/js_openai_baseurl) | `make docs-truth` |
-| Go client | `helm-ai-kernel serve --policy <file>` | typed client request, decision, receipt handling | [`examples/go_client`](../examples/go_client) | `go test ./sdk/go/...` |
+| Go client | `helm-ai-kernel serve --policy <file>` | typed client request, decision, receipt handling | [`examples/go_client`](../examples/go_client) | `go test ./examples/go_client/... -run '^$'` |
 | Rust client | `helm-ai-kernel serve --policy <file>` | Rust client and verifier-facing types | [`examples/rust_client`](../examples/rust_client) | `make test-sdk-rust` |
 | Java client | `helm-ai-kernel serve --policy <file>` | JVM client request and error handling | [`examples/java_client`](../examples/java_client) | `make test-sdk-java` |
 | MCP client | `helm-ai-kernel mcp serve` or `/mcp` runtime | docs/tool boundary and MCP authorization path | [`examples/mcp_client`](../examples/mcp_client) | `make docs-truth` |

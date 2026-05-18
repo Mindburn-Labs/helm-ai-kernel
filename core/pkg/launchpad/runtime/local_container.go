@@ -28,6 +28,7 @@ type ContainerRequest struct {
 	Args             []string
 	NetworkAllowlist []string
 	EgressProxy      EgressProxy
+	AutoCleanup      bool
 	Privileged       bool
 	RecursiveLaunch  bool
 }
@@ -104,11 +105,6 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 		if proxyHandle.ProxyURL == "" || proxyHandle.ReceiptRef == "" {
 			return ContainerHandle{}, fmt.Errorf("local-container egress proxy did not return proxy URL and receipt ref")
 		}
-		if proxyHandle.Stop != nil {
-			defer func() {
-				_ = proxyHandle.Stop()
-			}()
-		}
 	}
 	command := req.Command
 	if len(command) == 0 {
@@ -154,10 +150,15 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 	}
 	result, receipt, err := dockersandbox.NewDockerRunner().Run(spec)
 	if err != nil {
+		cleanupEgressProxy(proxyHandle)
 		return ContainerHandle{}, err
 	}
 	if !result.Success() {
+		cleanupEgressProxy(proxyHandle)
 		return ContainerHandle{}, fmt.Errorf("local-container command failed: exit=%d timed_out=%t oom=%t", result.ExitCode, result.TimedOut, result.OOMKilled)
+	}
+	if req.AutoCleanup {
+		cleanupEgressProxy(proxyHandle)
 	}
 	handle.ContainerID = receipt.ExecutionID
 	handle.EgressReceiptRef = proxyHandle.ReceiptRef
@@ -165,6 +166,12 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 	handle.EgressProxyID = proxyHandle.ProxyContainerID
 	handle.EgressProxyName = proxyHandle.ProxyContainerName
 	return handle, nil
+}
+
+func cleanupEgressProxy(proxyHandle EgressProxyHandle) {
+	if proxyHandle.Stop != nil {
+		_ = proxyHandle.Stop()
+	}
 }
 
 func validateWorkspaceMount(mount string) error {

@@ -54,4 +54,4 @@ chown -R helm:helm /opt/hermes /licenses
 SH
 
 USER helm
-ENTRYPOINT ["hermes"]
+CMD ["hermes"]

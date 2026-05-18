@@ -59,12 +59,16 @@ func (DefaultHealthcheckRunner) Run(compiled plan.LaunchPlan, runtime RuntimeSta
 		workspace = wd
 	}
 	handle, err := lpruntime.NewLocalContainerRuntime().Start(lpruntime.ContainerRequest{
-		Plan:           compiled,
-		ImageDigest:    imageRef,
-		WorkspaceMount: workspace,
-		DryRun:         false,
-		Command:        []string{"/bin/sh"},
-		Args:           []string{"-lc", check.Command},
+		Plan:             compiled,
+		ImageDigest:      imageRef,
+		WorkspaceMount:   workspace,
+		Secrets:          runtimeSecrets(compiled, opts),
+		DryRun:           false,
+		Command:          []string{"/bin/sh"},
+		Args:             []string{"-lc", check.Command},
+		NetworkAllowlist: compiled.NetworkAllowlist,
+		EgressProxy:      egressProxyFromEnv(compiled.NetworkAllowlist),
+		AutoCleanup:      true,
 	})
 	if err != nil {
 		return HealthcheckResult{}, err

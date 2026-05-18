@@ -49,4 +49,4 @@ chown -R helm:helm /opt/openclaw /licenses
 SH
 
 USER helm
-ENTRYPOINT ["openclaw"]
+CMD ["openclaw"]

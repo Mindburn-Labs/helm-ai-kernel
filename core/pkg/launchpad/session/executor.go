@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os/exec"
+	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
@@ -226,10 +228,12 @@ func (e Executor) DeleteLaunch(launchID string, cascade bool) (LaunchRun, error)
 	if err := e.Store.Save(run); err != nil {
 		return LaunchRun{}, err
 	}
+	runtimeTeardown := teardownRuntimeHandles(run.RuntimeHandles)
 	teardown := receipts.NewReceipt("launchpad.teardown", run.LaunchID, "ALLOW", map[string]any{
 		"cascade":        cascade,
 		"previous_state": previousState,
 		"reconciled":     true,
+		"runtime":        runtimeTeardown,
 	})
 	run.State = StateDeleted
 	run.KernelVerdict = "ALLOW"
@@ -243,8 +247,47 @@ func (e Executor) DeleteLaunch(launchID string, cascade bool) (LaunchRun, error)
 		"teardown_receipt_ref":  teardown.ReceiptID,
 		"cloud_reconciled":      true,
 		"mcp_approvals_revoked": true,
+		"runtime":               runtimeTeardown,
 	})
 	return e.persist(run, artifacts)
+}
+
+func teardownRuntimeHandles(handles RuntimeHandles) map[string]any {
+	result := map[string]any{"attempted": false}
+	docker, err := exec.LookPath("docker")
+	if err != nil {
+		result["docker_available"] = false
+		return result
+	}
+	result["docker_available"] = true
+	if handles.ContainerID != "" {
+		result["attempted"] = true
+		result["container_id"] = handles.ContainerID
+		if out, err := exec.Command(docker, "rm", "-f", handles.ContainerID).CombinedOutput(); err != nil {
+			result["container_cleanup"] = strings.TrimSpace(string(out))
+		} else {
+			result["container_cleanup"] = "removed_or_absent"
+		}
+	}
+	if handles.EgressProxyName != "" {
+		result["attempted"] = true
+		result["egress_proxy_name"] = handles.EgressProxyName
+		if out, err := exec.Command(docker, "rm", "-f", handles.EgressProxyName).CombinedOutput(); err != nil {
+			result["egress_proxy_cleanup"] = strings.TrimSpace(string(out))
+		} else {
+			result["egress_proxy_cleanup"] = "removed_or_absent"
+		}
+	}
+	if handles.EgressNetworkName != "" {
+		result["attempted"] = true
+		result["egress_network_name"] = handles.EgressNetworkName
+		if out, err := exec.Command(docker, "network", "rm", handles.EgressNetworkName).CombinedOutput(); err != nil {
+			result["egress_network_cleanup"] = strings.TrimSpace(string(out))
+		} else {
+			result["egress_network_cleanup"] = "removed_or_absent"
+		}
+	}
+	return result
 }
 
 func (e Executor) persist(run LaunchRun, artifacts map[string][]byte) (LaunchRun, error) {

@@ -163,6 +163,22 @@ func TestVerifyDryRunRequiresCompilerPin(t *testing.T) {
 	}
 }
 
+func TestEffectIndexOverflowDeniedBeforeDispatch(t *testing.T) {
+	exec := &fakeExecutor{}
+	connector := NewConnector(Config{Runner: Runner{Executor: exec, SandboxID: "s1"}, SandboxGrant: sealedGrant(t, false, true)})
+	receipt := executeReceipt(t, connector, ActionBuild, map[string]any{
+		"effect_index":          "18446744073709551615",
+		"acton_version":         "fixture-acton-1.0.0",
+		"tolk_compiler_version": "fixture-tolk-1.0.0",
+	})
+	if receipt.Verdict != contracts.VerdictDeny || receipt.ReasonCode != ReasonArgvRejected {
+		t.Fatalf("expected effect index overflow denial, got %s/%s", receipt.Verdict, receipt.ReasonCode)
+	}
+	if exec.calls != 0 {
+		t.Fatalf("overflowed effect index should not dispatch")
+	}
+}
+
 func TestOutputDriftFailsClosed(t *testing.T) {
 	exec := &fakeExecutor{stdout: []byte(`{"unexpected":true}`)}
 	connector := NewConnector(Config{Runner: Runner{Executor: exec, SandboxID: "s1"}, SandboxGrant: sealedGrant(t, false, true)})

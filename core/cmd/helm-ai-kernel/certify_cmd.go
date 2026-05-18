@@ -893,10 +893,9 @@ func extractCertifyArchive(archivePath, dstDir string) error {
 			return fmt.Errorf("read tar entry: %w", tarErr)
 		}
 
-		targetPath := filepath.Join(dstDir, filepath.Clean(header.Name))
-		cleanRoot := filepath.Clean(dstDir)
-		if !strings.HasPrefix(targetPath, cleanRoot+string(os.PathSeparator)) && targetPath != cleanRoot {
-			return fmt.Errorf("archive entry escapes destination: %s", header.Name)
+		targetPath, pathErr := safeArchiveEntryPath(dstDir, header.Name)
+		if pathErr != nil {
+			return pathErr
 		}
 
 		switch header.Typeflag {

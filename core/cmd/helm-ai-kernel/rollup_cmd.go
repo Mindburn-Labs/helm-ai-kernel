@@ -344,8 +344,9 @@ func buildReceiptLeafBytes(r *contracts.Receipt) []byte {
 	canonical := receiptCanonical(r)
 	canJSON, _ := json.Marshal(canonical)
 
-	buf := make([]byte, 0, 22+len(r.ReceiptID)+1+len(canJSON))
-	buf = append(buf, "helm:evidence:leaf:v1\x00"...)
+	const prefix = "helm:evidence:leaf:v1\x00"
+	buf := make([]byte, 0, len(prefix))
+	buf = append(buf, prefix...)
 	buf = append(buf, r.ReceiptID...)
 	buf = append(buf, 0)
 	buf = append(buf, canJSON...)

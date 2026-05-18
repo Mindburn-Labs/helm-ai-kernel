@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sync/atomic"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -64,7 +65,16 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 		}
 		return receipt, err
 	}
-	effectIndex := int(uint64Param(params, "effect_index", 0))
+	effectIndexValue := uint64Param(params, "effect_index", 0)
+	if effectIndexValue > uint64(math.MaxInt) {
+		env := fallbackEnvelopeForAction(action, params, permit)
+		receipt, err := NewPreDispatchReceipt(env, deny(ReasonArgvRejected, "effect_index exceeds int range"))
+		if err == nil {
+			_ = c.appendProofNode(proofgraph.NodeTypeIntent, receipt)
+		}
+		return receipt, err
+	}
+	effectIndex := int(effectIndexValue)
 	env, err := NewEnvelope(params, action, permit.IntentHash, effectIndex)
 	if err != nil {
 		env = fallbackEnvelopeForAction(action, params, permit)

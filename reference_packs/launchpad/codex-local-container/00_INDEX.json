@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "gates": ["launchpad"],
+  "entries": [
+    {
+      "path": "01_SCORE.json",
+      "sha256": "142390729e914dedb586503b72ff83cf85631e8d1440e09d67f11061640d796c"
+    },
+    {
+      "path": "02_PROOFGRAPH/receipts/001_kernel_verdict.json",
+      "sha256": "b4c3cc98736c4b9b5f9c09a4266489a2b300e819fc946559035fb945555c0dab"
+    }
+  ]
+}

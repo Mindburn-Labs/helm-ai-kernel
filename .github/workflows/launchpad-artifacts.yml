@@ -1,0 +1,290 @@
+name: Launchpad Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_live_conformance:
+        description: Run live OpenRouter local-container conformance after artifact build
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/launchpad-artifacts.yml"
+      - "registry/launchpad/apps/openclaw.yaml"
+      - "registry/launchpad/apps/hermes.yaml"
+      - "policies/launchpad/apps/openclaw.safe.toml"
+      - "policies/launchpad/apps/hermes.safe.toml"
+      - "core/pkg/launchpad/**"
+      - "tests/launchpad/**"
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: mindburn-labs/helm-launchpad
+
+jobs:
+  build:
+    name: Build and sign ${{ matrix.app_id }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app_id: openclaw
+            version: v2026.5.12
+            upstream_repo: openclaw/openclaw
+            upstream_ref: v2026.5.12
+            dockerfile: ./Dockerfile
+            license_spdx: MIT
+          - app_id: hermes
+            version: v2026.5.16
+            upstream_repo: NousResearch/hermes-agent
+            upstream_ref: v2026.5.16
+            dockerfile: ./Dockerfile
+            license_spdx: MIT
+    outputs:
+      openclaw-digest: ${{ steps.digest.outputs.openclaw_digest }}
+      hermes-digest: ${{ steps.digest.outputs.hermes_digest }}
+    steps:
+      - name: Checkout HELM source
+        uses: actions/checkout@v4
+        with:
+          path: helm
+
+      - name: Checkout pinned upstream source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.upstream_repo }}
+          ref: ${{ matrix.upstream_ref }}
+          path: upstream
+          persist-credentials: false
+
+      - name: Resolve pinned upstream commit
+        id: upstream
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Verify license marker
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          test -f LICENSE
+          grep -Eiq 'MIT|Massachusetts Institute of Technology' LICENSE
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0.17.8
+
+      - name: Install grype
+        uses: anchore/scan-action/download-grype@v6.5.1
+
+      - id: meta
+        name: Compute image coordinates
+        run: |
+          set -euo pipefail
+          image="${REGISTRY}/${IMAGE_PREFIX}/${{ matrix.app_id }}"
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+          echo "tag=${image}:${{ matrix.version }}" >> "$GITHUB_OUTPUT"
+
+      - id: build
+        name: Build and push OCI image
+        uses: docker/build-push-action@v6
+        with:
+          context: upstream
+          file: upstream/${{ matrix.dockerfile }}
+          push: true
+          provenance: true
+          sbom: true
+          platforms: linux/amd64
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ matrix.upstream_repo }}
+            org.opencontainers.image.revision=${{ steps.upstream.outputs.commit }}
+            org.opencontainers.image.version=${{ matrix.version }}
+            org.opencontainers.image.licenses=${{ matrix.license_spdx }}
+            io.mindburn.helm.launchpad.app=${{ matrix.app_id }}
+          tags: |
+            ${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.image }}:${{ matrix.upstream_ref }}
+
+      - name: Sign image digest with keyless cosign
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          cosign sign --yes "${IMAGE_REF}"
+
+      - name: Verify cosign signature
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          cosign verify "${IMAGE_REF}" \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/launchpad-artifacts.yml@${GITHUB_REF}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            > "cosign-${{ matrix.app_id }}.json"
+
+      - name: Generate syft SBOM
+        env:
+          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          syft "${IMAGE_REF}" -o spdx-json="sbom-${{ matrix.app_id }}.spdx.json"
+
+      - name: Run grype scan
+        id: grype
+        env:
+          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          status=completed
+          if ! grype "${IMAGE_REF}" -o json --file "grype-${{ matrix.app_id }}.json"; then
+            status=failed
+          fi
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+
+      - name: Write artifact manifest entry
+        env:
+          APP_ID: ${{ matrix.app_id }}
+          VERSION: ${{ matrix.version }}
+          UPSTREAM_REPO: https://github.com/${{ matrix.upstream_repo }}
+          UPSTREAM_REF: ${{ matrix.upstream_ref }}
+          UPSTREAM_COMMIT: ${{ steps.upstream.outputs.commit }}
+          LICENSE_SPDX: ${{ matrix.license_spdx }}
+          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          GRYPE_STATUS: ${{ steps.grype.outputs.status }}
+        run: |
+          set -euo pipefail
+          mkdir -p launchpad-artifacts
+          jq -n \
+            --arg app_id "${APP_ID}" \
+            --arg app_version "${VERSION}" \
+            --arg upstream_repo "${UPSTREAM_REPO}" \
+            --arg upstream_ref "${UPSTREAM_REF}" \
+            --arg upstream_commit "${UPSTREAM_COMMIT}" \
+            --arg license_spdx "${LICENSE_SPDX}" \
+            --arg license_ref "${UPSTREAM_REPO}/blob/${UPSTREAM_REF}/LICENSE" \
+            --arg redistribution "allowed_by_${LICENSE_SPDX}_with_upstream_notice" \
+            --arg image "${IMAGE_REF}" \
+            --arg digest "${DIGEST}" \
+            --arg signature_tool "cosign" \
+            --arg signature_ref "cosign://${IMAGE_REF}" \
+            --arg sbom_tool "syft" \
+            --arg sbom_ref "artifact://sbom-${APP_ID}.spdx.json" \
+            --arg vulnerability_scan_tool "grype" \
+            --arg vulnerability_scan_ref "artifact://grype-${APP_ID}.json" \
+            --arg vulnerability_scan_status "${GRYPE_STATUS}" \
+            --arg provenance_ref "github-actions://${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}" \
+            '{
+              app_id: $app_id,
+              app_version: $app_version,
+              upstream_repo: $upstream_repo,
+              upstream_ref: $upstream_ref,
+              upstream_commit: $upstream_commit,
+              license_spdx: $license_spdx,
+              license_ref: $license_ref,
+              redistribution: $redistribution,
+              image: $image,
+              digest: $digest,
+              signature_tool: $signature_tool,
+              signature_ref: $signature_ref,
+              sbom_tool: $sbom_tool,
+              sbom_ref: $sbom_ref,
+              vulnerability_scan_tool: $vulnerability_scan_tool,
+              vulnerability_scan_ref: $vulnerability_scan_ref,
+              vulnerability_scan_status: $vulnerability_scan_status,
+              provenance_ref: $provenance_ref
+            }' > "launchpad-artifacts/${APP_ID}.json"
+
+      - id: digest
+        name: Expose digest output
+        run: |
+          case "${{ matrix.app_id }}" in
+            openclaw) echo "openclaw_digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT" ;;
+            hermes) echo "hermes_digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Upload Launchpad artifact evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: launchpad-artifact-${{ matrix.app_id }}
+          path: |
+            launchpad-artifacts/${{ matrix.app_id }}.json
+            cosign-${{ matrix.app_id }}.json
+            sbom-${{ matrix.app_id }}.spdx.json
+            grype-${{ matrix.app_id }}.json
+
+  aggregate:
+    name: Aggregate Launchpad artifact manifest
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: launchpad-artifact-*
+          path: launchpad-artifacts
+          merge-multiple: true
+      - name: Write manifest
+        run: |
+          set -euo pipefail
+          jq -s \
+            --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg github_run_id "${GITHUB_RUN_ID}" \
+            --arg github_run_attempt "${GITHUB_RUN_ATTEMPT}" \
+            '{
+              schema_version: "helm.launchpad.artifacts.v1",
+              generated_at: $generated_at,
+              github_run_id: $github_run_id,
+              github_run_attempt: $github_run_attempt,
+              artifacts: .
+            }' launchpad-artifacts/openclaw.json launchpad-artifacts/hermes.json > launchpad-artifact-manifest.json
+          jq . launchpad-artifact-manifest.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchpad-artifact-manifest
+          path: launchpad-artifact-manifest.json
+
+  live-conformance:
+    name: Live OpenRouter local-container conformance
+    runs-on: ubuntu-latest
+    needs: aggregate
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live_conformance }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.10"
+      - uses: actions/download-artifact@v4
+        with:
+          name: launchpad-artifact-manifest
+          path: /tmp/launchpad
+      - name: Run gated live conformance
+        env:
+          HELM_LAUNCHPAD_LIVE_E2E: "1"
+          HELM_LAUNCHPAD_ARTIFACT_MANIFEST: /tmp/launchpad/launchpad-artifact-manifest.json
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: go test ./tests/launchpad/... -run TestLiveOpenRouterLocalContainerConformance -count=1 -v

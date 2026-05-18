@@ -1,0 +1,10 @@
+[app]
+id = "junie.external"
+availability = "external_proprietary_adapter"
+redistribution = "prohibited"
+permission_bypass_forbidden = true
+recursive_launch_forbidden = true
+network_default = "deny"
+mcp_unknown_server_policy = "quarantine"
+mcp_unknown_tool_policy = "ESCALATE"
+require_schema_pin = true

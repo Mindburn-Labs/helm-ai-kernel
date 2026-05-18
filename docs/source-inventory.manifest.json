@@ -103,6 +103,8 @@
       "source_patterns": [
         "protocols/README.md",
         "protocols/*/**",
+        "docs/LAUNCHPAD.md",
+        "docs/launchpad/**",
         "schemas/README.md",
         "schemas/*.json",
         "schemas/*/**",
@@ -115,7 +117,9 @@
         "helm-ai-kernel/reference/protocols-and-schemas",
         "helm-ai-kernel/reference/json-schemas",
         "helm-ai-kernel/conformance",
-        "helm-ai-kernel/reference/execution-boundary"
+        "helm-ai-kernel/reference/execution-boundary",
+        "helm-ai-kernel/launchpad",
+        "helm-ai-kernel/launchpad/conformance"
       ],
       "rationale": "Protocol and schema truth must be public and agent-readable, with detailed source ownership kept in protocol README files.",
       "validation_commands": [

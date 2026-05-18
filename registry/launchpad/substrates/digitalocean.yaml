@@ -1,0 +1,17 @@
+id: digitalocean
+name: DigitalOcean
+kind: cloud
+availability: dry_run_stub
+default_dry_run: true
+policy_pack: policies/launchpad/substrates/digitalocean.safe.toml
+provisioner: digitalocean
+supports_teardown: true
+requires_approval: true
+network:
+  default: deny
+  allowlist: []
+filesystem:
+  mode: scoped_remote
+  mounts: []
+metadata:
+  status: "Dry-run only until explicit human approval and idempotency reconciliation are implemented."

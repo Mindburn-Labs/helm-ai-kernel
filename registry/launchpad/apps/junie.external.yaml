@@ -1,0 +1,41 @@
+id: junie.external
+name: Junie External Adapter
+version: external-byo
+license:
+  status: proprietary_byo
+redistribution: prohibited
+availability: external_proprietary_adapter
+install:
+  strategy: byo_tool
+runtime:
+  command: ["junie"]
+model_gateway_env: []
+required_secrets: ["vendor_account"]
+filesystem_policy:
+  mode: scoped_workspace
+  mounts: ["workspace:rw", "app_state:rw"]
+  policy_ref: policies/launchpad/apps/junie.external.toml
+network_policy:
+  default: deny
+  allowlist: []
+mcp_policy:
+  unknown_server_policy: quarantine
+  unknown_tool_policy: ESCALATE
+  require_schema_pin: true
+healthchecks: []
+risk_class: T1
+budget_ceiling:
+  usd_max: 0
+  api_calls_max: 0
+  time_ms_max: 0
+evidence_requirements: ["cpi_output", "kernel_verdict", "sandbox_grant", "launch_receipt", "teardown_receipt", "evidence_pack"]
+conformance:
+  license_verified: false
+  artifact_verified: false
+  policy_pack_present: true
+  sandbox_verified: false
+  healthcheck_passing: false
+  e2e_passing: false
+  teardown_verified: false
+  receipt_verified: false
+  evidence_pack_verified: false

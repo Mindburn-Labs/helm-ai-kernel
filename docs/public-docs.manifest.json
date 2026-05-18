@@ -73,6 +73,24 @@
       "sensitivity": "public"
     },
     {
+      "slug": "helm-ai-kernel/launchpad",
+      "title": "Launchpad",
+      "section": "start-here",
+      "source_path": "docs/LAUNCHPAD.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/launchpad/conformance",
+      "title": "Launchpad Conformance",
+      "section": "start-here",
+      "source_path": "docs/launchpad/CONFORMANCE.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad/conformance",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "helm-ai-kernel/verification",
       "title": "Verification",
       "section": "start-here",

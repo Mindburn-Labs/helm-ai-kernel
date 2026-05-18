@@ -1,0 +1,11 @@
+[substrate]
+id = "local-container"
+permission_bypass_forbidden = true
+recursive_launch_forbidden = true
+network_default = "deny"
+filesystem_default = "deny"
+workspace_mount = "rw"
+app_state_scope = "per-launch"
+secrets_projection = "scoped-env"
+log_redaction = true
+teardown_receipt_required = true

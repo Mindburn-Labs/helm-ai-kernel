@@ -100,6 +100,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/guardian/evaluate", s.handleEvaluate)
 	s.mux.HandleFunc("/api/v1/receipts/", s.handleReceipts)
 	s.mux.HandleFunc("/api/v1/verify/", s.handleVerify)
+	s.mux.HandleFunc("/api/v1/launchpad/", s.handleLaunchpad)
 	s.mux.HandleFunc("/api/v1/health", s.handleHealth)
 }
 

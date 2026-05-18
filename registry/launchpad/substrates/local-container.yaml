@@ -1,0 +1,18 @@
+id: local-container
+name: Local Container
+kind: local-container
+availability: supported
+default_dry_run: false
+policy_pack: policies/launchpad/substrates/local-container.safe.toml
+provisioner: docker
+supports_teardown: true
+requires_approval: false
+network:
+  default: deny
+  allowlist: []
+filesystem:
+  mode: deny_by_default
+  mounts:
+    - workspace:rw
+metadata:
+  status: "MVP default substrate; runtime side effects still blocked until conformance e2e lands."

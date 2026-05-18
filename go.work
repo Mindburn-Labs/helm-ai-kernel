@@ -4,4 +4,5 @@ use (
 	./core
 	./examples/otel-genai
 	./tests/conformance
+	./tests/launchpad
 )

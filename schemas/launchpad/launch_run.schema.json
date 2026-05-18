@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindburn.dev/helm/launchpad/launch_run.schema.json",
+  "title": "HELM Launchpad LaunchRun",
+  "type": "object",
+  "required": ["launch_id", "app_id", "app_version", "substrate_id", "principal", "plan_hash", "state", "kernel_verdict", "created_at", "updated_at", "boundary_record_refs", "cpi_refs", "sandbox_grant_refs", "mcp_refs", "install_receipt_refs", "launch_receipt_refs", "healthcheck_receipt_refs", "teardown_receipt_refs", "evidence_pack_refs", "runtime_handles", "idempotency_keys"],
+  "properties": {
+    "launch_id": { "type": "string" },
+    "app_id": { "type": "string" },
+    "app_version": { "type": "string" },
+    "substrate_id": { "type": "string" },
+    "principal": { "type": "string" },
+    "state": { "enum": ["PLANNED", "VALIDATED", "ESCALATED", "DENIED", "PROVISIONING", "INSTALLING", "STARTING", "HEALTHCHECKING", "RUNNING", "REPAIR_REQUIRED", "TEARING_DOWN", "DELETED", "FAILED"] },
+    "kernel_verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+    "reason": { "type": "string" },
+    "plan_hash": { "type": "string", "pattern": "^sha256:" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "boundary_record_refs": { "type": "array", "items": { "type": "string" } },
+    "cpi_refs": { "type": "array", "items": { "type": "string" } },
+    "sandbox_grant_refs": { "type": "array", "items": { "type": "string" } },
+    "mcp_refs": { "type": "array", "items": { "type": "string" } },
+    "install_receipt_refs": { "type": "array", "items": { "type": "string" } },
+    "launch_receipt_refs": { "type": "array", "items": { "type": "string" } },
+    "healthcheck_receipt_refs": { "type": "array", "items": { "type": "string" } },
+    "teardown_receipt_refs": { "type": "array", "items": { "type": "string" } },
+    "evidence_pack_refs": { "type": "array", "items": { "type": "string" } },
+    "runtime_handles": {
+      "type": "object",
+      "properties": {
+        "container_id": { "type": "string" },
+        "cloud_resource_ids": { "type": "object", "additionalProperties": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "idempotency_keys": { "type": "object", "additionalProperties": { "type": "string" } },
+    "log_path": { "type": "string" }
+  },
+  "additionalProperties": true
+}

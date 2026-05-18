@@ -1,0 +1,68 @@
+id: openclaw
+name: OpenClaw
+version: v2026.5.12
+license:
+  status: verified
+  spdx: MIT
+  url: https://raw.githubusercontent.com/openclaw/openclaw/main/LICENSE
+redistribution: allowed_by_mit_pending_helm_signed_artifact
+availability: oss_candidate
+install:
+  strategy: signed_oci
+  image: ghcr.io/mindburn-labs/helm-launchpad/openclaw:v2026.5.12
+  source: https://github.com/openclaw/openclaw
+  ref: v2026.5.12
+runtime:
+  command: ["openclaw"]
+model_gateway_env: ["OPENROUTER_API_KEY"]
+required_secrets: ["model_gateway"]
+filesystem_policy:
+  mode: scoped_workspace
+  mounts: ["workspace:rw", "app_state:rw"]
+  policy_ref: policies/launchpad/apps/openclaw.safe.toml
+network_policy:
+  default: deny
+  allowlist: ["https://openrouter.ai/api/v1"]
+mcp_policy:
+  unknown_server_policy: quarantine
+  unknown_tool_policy: ESCALATE
+  require_schema_pin: true
+healthchecks:
+  - type: command
+    command: "openclaw --version"
+risk_class: T1
+budget_ceiling:
+  usd_max: 0
+  api_calls_max: 0
+  time_ms_max: 0
+evidence_requirements:
+  - cpi_output
+  - kernel_verdict
+  - sandbox_grant
+  - launch_receipt
+  - install_receipt
+  - healthcheck_receipt
+  - teardown_receipt
+  - evidence_pack
+  - mcp_quarantine
+  - artifact_digest
+  - cosign_signature
+  - syft_sbom
+  - grype_vulnerability_scan
+conformance:
+  license_verified: true
+  artifact_verified: false
+  policy_pack_present: true
+  sandbox_verified: false
+  healthcheck_passing: false
+  e2e_passing: false
+  teardown_verified: false
+  receipt_verified: false
+  evidence_pack_verified: false
+metadata:
+  upstream_repo: https://github.com/openclaw/openclaw
+  latest_release: v2026.5.12
+  release_published_at: "2026-05-14T18:28:04Z"
+  helm_oci_target: ghcr.io/mindburn-labs/helm-launchpad/openclaw:v2026.5.12
+  helm_oci_status: "planned; no signed digest recorded in repo"
+  blocker: "Official license file is MIT and redistribution is allowed by the license. Promotion remains blocked until HELM-built OCI digest, cosign signature, syft SBOM, grype/trivy scan, live OpenRouter local-container e2e, teardown receipt, and offline EvidencePack verification are recorded."

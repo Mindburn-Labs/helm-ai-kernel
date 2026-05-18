@@ -1,0 +1,8 @@
+{
+  "pass": true,
+  "scope": "launchpad",
+  "app_id": "codex",
+  "substrate_id": "local-container",
+  "classification": "external_proprietary_adapter",
+  "kernel_verdict": "ESCALATE"
+}

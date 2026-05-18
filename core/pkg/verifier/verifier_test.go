@@ -189,6 +189,36 @@ func TestVerifyBundle_HashMismatch(t *testing.T) {
 	}
 }
 
+func TestVerifyBundle_IndexHashMismatch(t *testing.T) {
+	dir := createValidCanonicalBundleFixture(t)
+	writeJSON(t, filepath.Join(dir, "00_INDEX.json"), map[string]any{
+		"version": "1.0.0",
+		"entries": []any{
+			map[string]any{
+				"path":   "01_SCORE.json",
+				"sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+			},
+		},
+	})
+
+	report, err := VerifyBundle(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if report.Verified {
+		t.Fatal("expected FAIL for indexed hash mismatch")
+	}
+	found := false
+	for _, c := range report.Checks {
+		if c.Name == "index_integrity" && !c.Pass {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected index_integrity check to fail")
+	}
+}
+
 func TestVerifyBundle_ValidWithHashes(t *testing.T) {
 	dir := createValidBundleFixture(t)
 

@@ -6,6 +6,10 @@
 FROM --platform=$BUILDPLATFORM golang:1.25.10-alpine@sha256:8d22e29d960bc50cd025d93d5b7c7d220b1ee9aa7a239b3c8f55a57e987e8d45 AS builder
 ARG TARGETOS
 ARG TARGETARCH
+# Build metadata for /version. See /Dockerfile for the full explanation.
+ARG BUILD_VERSION=unknown
+ARG BUILD_COMMIT=unknown
+ARG BUILD_TIME=unknown
 
 WORKDIR /app
 
@@ -25,7 +29,9 @@ ENV CGO_ENABLED=0
 ENV GOOS=${TARGETOS:-linux}
 ENV GOARCH=${TARGETARCH:-amd64}
 RUN --mount=type=cache,id=helm-ai-kernel-go-mod,target=/go/pkg/mod --mount=type=cache,id=helm-ai-kernel-go-build,target=/root/.cache/go-build \
-    cd core && go build -ldflags="-s -w" -trimpath -o /app/bin/helm-ai-kernel ./cmd/helm-ai-kernel
+    cd core && go build \
+      -ldflags="-s -w -X main.version=${BUILD_VERSION} -X main.commit=${BUILD_COMMIT} -X main.buildTime=${BUILD_TIME}" \
+      -trimpath -o /app/bin/helm-ai-kernel ./cmd/helm-ai-kernel
 
 # Stage 2: Runtime
 FROM alpine:3.21@sha256:f27cad9117495d32d067133afff942cb2dc745dfe9163e949f6bfe8a6a245339

@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -61,7 +63,11 @@ def normalize(path: Path) -> bool:
         driver["rules"] = []
     runs.append(injected)
 
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    normalized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as fh:
+        tmp_name = fh.name
+        fh.write(normalized)
+    os.replace(tmp_name, path)
     return True
 
 

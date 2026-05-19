@@ -68,4 +68,4 @@ annotations:
     - kind: changed
       description: Move ArtifactHub package metadata (changes, images, links, license, signKey) from artifacthub-pkg.yml into Chart.yaml annotations, which is the only file ArtifactHub reads for Helm charts.
     - kind: fixed
-      description: Light up the Changelog badge that stayed grey under v0.5.4 because annotations were placed in artifacthub-pkg.yml rather than Chart.yaml.
+      description: Light up the Changelog badge that stayed grey under v0.5.3 because annotations were placed in artifacthub-pkg.yml rather than Chart.yaml.

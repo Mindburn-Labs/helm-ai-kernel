@@ -56,7 +56,7 @@ distribution promises.
 | JavaScript | Uses `@mindburn/helm-ai-kernel` or raw HTTP/fetch | `sdk/ts/src/client.ts`, `examples/js_openai_baseurl/` | `make test-sdk-ts` |
 | Go SDK | Source/module path only; pin `@main` or a commit until tagged SDK modules are aligned | `sdk/go/client/client.go` | `cd sdk/go && go test ./...` |
 | Rust SDK | Package name `helm-sdk`; source manifest currently declares `0.5.1`. Verify registry state before publishing pinned install claims. | `sdk/rust/src/client.rs` | `make test-sdk-rust` |
-| Java | Source-available local Maven build; source manifest declares `io.github.mindburnlabs:helm-sdk:0.5.2`. Verify Maven Central before publishing install claims. | `sdk/java/pom.xml` | `make test-sdk-java` |
+| Java | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.2`; verified by remote Maven resolution and repo1 artifacts. | `sdk/java/pom.xml` | `make test-sdk-java` |
 
 Use `http://127.0.0.1:7714` for the local `helm-ai-kernel serve --policy` quickstart, `http://localhost:8080` for `helm-ai-kernel server` or the current Docker Compose mapping, and `http://localhost:9090/v1` only for the OpenAI-compatible proxy.
 
@@ -122,7 +122,17 @@ let client = HelmClient::new("http://127.0.0.1:7714");
 
 ## Java
 
-The Java SDK is source-available in this repository. Use a local Maven build until a public package coordinate is verified.
+Use the verified Maven Central coordinate:
+
+```xml
+<dependency>
+  <groupId>io.github.mindburnlabs</groupId>
+  <artifactId>helm-sdk</artifactId>
+  <version>0.5.2</version>
+</dependency>
+```
+
+Use a local Maven build when editing this repository:
 
 ```bash
 cd sdk/java

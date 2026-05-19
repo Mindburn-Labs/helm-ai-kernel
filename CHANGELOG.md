@@ -38,22 +38,46 @@ This scheme maps the main sections of HELM AI Kernel Changelog in reading order.
 flowchart LR
   Page["HELM AI Kernel Changelog"]
   A["[Unreleased]"]
-  B["[0.5.2] - 2026-05-19"]
-  C["[0.5.1] - 2026-05-18"]
-  D["[0.5.0] - 2026-05-13"]
-  E["[0.4.0] - 2026-04-25"]
-  F["Validation"]
+  B["[0.5.3] - 2026-05-19"]
+  C["[0.5.2] - 2026-05-19"]
+  D["[0.5.1] - 2026-05-18"]
+  E["[0.5.0] - 2026-05-13"]
+  F["[0.4.0] - 2026-04-25"]
+  G["Validation"]
   Page --> A
   A --> B
   B --> C
   C --> D
   D --> E
   E --> F
+  F --> G
 ```
 
 All notable changes to the retained HELM AI Kernel surface are documented here. Public entries focus on developer-visible interfaces, compatibility, verification, SDKs, and security-relevant documentation.
 
 ## [Unreleased]
+
+## [0.5.3] - 2026-05-19
+
+Published at <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.3>.
+
+Chart distribution polish. No kernel binary or API changes; this release
+lights up the previously-grey ArtifactHub badges on the chart page.
+
+- Added `deploy/helm-chart/values.schema.json` (JSON Schema draft 2020-12)
+  covering every documented field in `values.yaml`. Enables IDE autocomplete
+  for chart values, lets `helm install` reject malformed values before
+  reaching the cluster, and lights the ArtifactHub Values Schema badge.
+- Added `deploy/helm-chart/artifacthub-pkg.yml` with display name, license
+  tag, structured changelog, container image inventory (main + slim,
+  multi-arch), and six external project links. Lights the ArtifactHub
+  Changelog badge and replaces the otherwise sparse Chart.yaml description.
+- Added `artifacthub-repo` release job that pushes `artifacthub-repo.yml`
+  as an OCI artifact (tag `:artifacthub.io`) into the chart namespace so
+  ArtifactHub picks up the Verified Publisher UID for the OCI-backed
+  Helm repository.
+- Added `cosign-chart` release job that signs the chart OCI artifact by
+  digest with sigstore keyless OIDC, lighting the ArtifactHub Signed badge.
 
 ## [0.5.2] - 2026-05-19
 

@@ -65,11 +65,13 @@ tooling, or non-OSS downstream extensions.
 
 ## Quick Start
 
-Install the published macOS CLI:
+Install the published macOS CLI from the current GitHub release. The public
+Homebrew tap should be verified before relying on it for the latest version.
 
 ```bash
-brew install mindburnlabs/tap/helm-ai-kernel
-helm-ai-kernel --version
+curl -L -o helm-ai-kernel https://github.com/Mindburn-Labs/helm-ai-kernel/releases/latest/download/helm-ai-kernel-darwin-arm64
+chmod +x helm-ai-kernel
+./helm-ai-kernel --version
 ```
 
 Start a local boundary. Add `--console` when you want the self-hostable Console:

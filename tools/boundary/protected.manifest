@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-05-19T19:12:07Z
-# Commit: ddf658164350d6bbb1cb24472e067d9eacc5b672
+# Generated: 2026-05-19T19:37:23Z
+# Commit: f02313f36b6c5833a334cba8a7311842db092f18
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -378,7 +378,7 @@ ea41c9f055429b36c44ea88d6cccc1db2c3eaae4915379b757b99e8946e44456  core/pkg/confo
 80574a439767655702d41427b8c5871f56753242cb168da0ce357f71a39b02d9  core/pkg/conformance/owasp_llm_top10.go
 59a4da6060250f93beff9e18849a4db16f241ad536cc09f9eb65b195ae72ebc4  core/pkg/conformance/owasp_llm_top10_test.go
 9ba9ff3970ef6762d12e5021b59bcc1932bbded878a61de2664ff5e2cb96c2a1  core/pkg/conformance/sandbox/conformance.go
-dd55a899fe146f0108ed0107f9a079ec3bb1a14fba24c21fef523aefcc9b58d1  core/pkg/conformance/sandbox/conformance_test.go
+870f4ee78949abe7c9803e7b1c53a22949f88d4d982f03a1c19e03980b50e194  core/pkg/conformance/sandbox/conformance_test.go
 5adf09119b7bdebbbd2816621343d7deed8b0836cd610e7161ef7cc0016339d4  core/pkg/conformance/sandbox/mock_actuator.go
 32e70c670ba3407580bb32d7228fceb42aa82c10ab1056d8441151a8e621e5ef  core/pkg/conformance/sandbox/mock_faults.go
 fcd6232bb265e592806d2384992df87345cdaf8ff0f34ad09d4f00fa16082204  core/pkg/conformance/scenarios/agent_impersonation_test.go

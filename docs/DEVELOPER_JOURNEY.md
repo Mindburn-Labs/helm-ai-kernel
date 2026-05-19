@@ -1,6 +1,6 @@
 ---
 title: Developer Journey
-last_reviewed: 2026-05-12
+last_reviewed: 2026-05-19
 ---
 
 # Developer Journey
@@ -218,9 +218,9 @@ If the `helm` command on your machine resolves to this HELM AI Kernel binary, us
 
 ## Release And Conformance Gates
 
-Current public release: `v0.5.1`, published on 2026-05-18 at <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.1>.
+Current public release: `v0.5.2`, published on 2026-05-19 at <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.2>.
 
-The release page includes Darwin/Linux/Windows binaries, `SHA256SUMS.txt`, `sbom.json`, `v0.5.1.openvex.json`, `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, and matching `*.cosign.bundle` files for each primary asset.
+The release page includes Darwin/Linux/Windows binaries, `SHA256SUMS.txt`, `sbom.json`, `v0.5.2.openvex.json`, `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.2.json`, and matching `*.cosign.bundle` files for each primary asset.
 
 Run conformance and docs gates:
 

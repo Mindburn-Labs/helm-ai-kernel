@@ -1,6 +1,6 @@
 ---
 title: CNCF Sandbox Application
-last_reviewed: 2026-05-05
+last_reviewed: 2026-05-19
 ---
 
 # helm-ai-kernel CNCF Sandbox Application
@@ -125,7 +125,7 @@ Security policy is in `SECURITY.md`. Vulnerability reports go to
 `security@mindburn.org`. Releases are built reproducibly (verified by the
 `reproducibility-check` job in `.github/workflows/release.yml`) and shipped with
 checksums, SBOM material, and release attestation. The current public
-`v0.5.1` release published on 2026-05-18 attaches Cosign bundle and OpenVEX
+`v0.5.2` release published on 2026-05-19 attaches Cosign bundle and OpenVEX
 assets for release verification. Continuous fuzzing is configured
 for upstream OSS-Fuzz under `oss-fuzz/`. The OpenSSF Scorecard runs weekly via
 `.github/workflows/scorecard.yml`. The OpenSSF Best Practices gold-tier mapping

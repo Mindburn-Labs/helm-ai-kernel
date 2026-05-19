@@ -4,13 +4,17 @@ Typed Java client for the retained HELM kernel API.
 
 ## Package Status
 
-The Java SDK is source-available in this repository. Do not publish a public
-Maven or JitPack coordinate in OSS docs until a release workflow has verified
-that coordinate.
+The Java SDK is published on Maven Central as
+`io.github.mindburnlabs:helm-sdk:0.5.2`. Remote Maven resolution and repo1
+artifacts were verified for this coordinate.
 
-Package metadata declares coordinate `io.github.mindburnlabs:helm-sdk:0.5.2` in
-`pom.xml`; that is source metadata, not proof that a public package is
-available.
+```xml
+<dependency>
+  <groupId>io.github.mindburnlabs</groupId>
+  <artifactId>helm-sdk</artifactId>
+  <version>0.5.2</version>
+</dependency>
+```
 
 ## Local Development
 

@@ -190,7 +190,7 @@ The complete diagram doctrine lives in
 | Python SDK | `pip install helm-sdk` |
 | TypeScript SDK | `npm install @mindburn/helm-ai-kernel` |
 | Rust SDK | `cargo add helm-sdk` |
-| Java SDK | Source-available local Maven build under `sdk/java`; public package coordinate is not verified in this repo |
+| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.2` |
 | Design system core | Workspace source; public npm registry publication is not verified in this repo |
 
 HTTP clients are generated from

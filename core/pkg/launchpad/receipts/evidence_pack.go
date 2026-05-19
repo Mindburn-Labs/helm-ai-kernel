@@ -57,6 +57,7 @@ func WriteEvidencePack(root, launchID string, artifacts map[string][]byte) (stri
 	if !hasReceipt {
 		artifacts["receipts/launchpad-kernel-verdict.json"] = []byte(fmt.Sprintf(`{"receipt_id":"launchpad:%s","decision_id":"launchpad:%s","decision_hash":"%s","status":"ESCALATE","verdict":"ESCALATE","lamport_clock":1}`, launchID, launchID, HashBytes([]byte(launchID))))
 	}
+	addRequiredDirectoryPlaceholders(artifacts)
 	manifest := EvidencePackManifest{
 		LaunchID:   launchID,
 		Version:    "1.0.0",
@@ -123,6 +124,22 @@ func WriteEvidencePack(root, launchID string, artifacts map[string][]byte) (stri
 		return "", err
 	}
 	return dir, nil
+}
+
+func addRequiredDirectoryPlaceholders(artifacts map[string][]byte) {
+	for _, path := range []string{
+		"03_TELEMETRY/.keep",
+		"05_DIFFS/.keep",
+		"06_LOGS/.keep",
+		"07_ATTESTATIONS/.keep",
+		"08_TAPES/.keep",
+		"09_SCHEMAS/.keep",
+		"12_REPORTS/.keep",
+	} {
+		if _, exists := artifacts[path]; !exists {
+			artifacts[path] = []byte("reserved for Launchpad EvidencePack conformance\n")
+		}
+	}
 }
 
 func mergeExistingArtifacts(dir string, artifacts map[string][]byte) error {

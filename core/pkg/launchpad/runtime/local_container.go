@@ -106,14 +106,7 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 			return ContainerHandle{}, fmt.Errorf("local-container egress proxy did not return proxy URL and receipt ref")
 		}
 	}
-	command := req.Command
-	if len(command) == 0 {
-		command = []string{"/bin/sh"}
-	}
-	args := req.Args
-	if len(args) == 0 {
-		args = []string{"-lc", "true"}
-	}
+	command, args := containerCommand(req.Command, req.Args)
 	env := map[string]string{}
 	for key, value := range req.Secrets {
 		env[key] = value
@@ -170,6 +163,16 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 	handle.EgressProxyID = proxyHandle.ProxyContainerID
 	handle.EgressProxyName = proxyHandle.ProxyContainerName
 	return handle, nil
+}
+
+func containerCommand(command, args []string) ([]string, []string) {
+	if len(command) > 0 {
+		return append([]string{}, command...), append([]string{}, args...)
+	}
+	if len(args) > 0 {
+		return []string{"/bin/sh"}, append([]string{}, args...)
+	}
+	return []string{"/bin/sh"}, []string{"-lc", "true"}
 }
 
 func redactedCommandOutput(stdout, stderr []byte, secrets map[string]string) string {

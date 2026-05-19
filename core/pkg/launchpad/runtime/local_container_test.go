@@ -110,6 +110,21 @@ func TestStartRequiresEgressProxyReceiptForOpenRouterAllowlist(t *testing.T) {
 	}
 }
 
+func TestContainerCommandDoesNotAddShellArgsToAppCommand(t *testing.T) {
+	command, args := containerCommand([]string{"openclaw"}, nil)
+	if got := strings.Join(command, " "); got != "openclaw" {
+		t.Fatalf("command = %q", got)
+	}
+	if len(args) != 0 {
+		t.Fatalf("args = %#v, want none for explicit app command", args)
+	}
+
+	command, args = containerCommand(nil, nil)
+	if got := strings.Join(append(command, args...), " "); got != "/bin/sh -lc true" {
+		t.Fatalf("default command = %q", got)
+	}
+}
+
 func TestLaunchOwnedEgressProxyWritesReceiptAndAllowsOpenRouterConnect(t *testing.T) {
 	upstreamServer, upstreamClient := net.Pipe()
 	defer upstreamClient.Close()

@@ -5,4 +5,5 @@ use (
 	./examples/otel-genai
 	./tests/conformance
 	./tests/launchpad
+	./tests/skills
 )

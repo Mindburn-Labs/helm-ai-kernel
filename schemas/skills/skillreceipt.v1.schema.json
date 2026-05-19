@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindburn.dev/helm/skills/skillreceipt.v1.schema.json",
+  "title": "HELM Skill Receipt",
+  "type": "object",
+  "required": ["id", "type", "skill_id", "verdict", "created_at"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "type": {
+      "enum": [
+        "SKILL_INSTALL_RECEIPT",
+        "SKILL_PROJECTION_RECEIPT",
+        "SKILL_DISABLE_RECEIPT",
+        "SKILL_REVOKE_RECEIPT",
+        "SKILL_PLUGIN_EXPORT_RECEIPT",
+        "PLUGIN_MARKETPLACE_RECEIPT"
+      ]
+    },
+    "skill_id": { "type": "string" },
+    "verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+    "reason_code": { "type": "string" },
+    "skill_content_hash": { "type": "string" },
+    "policy_hash": { "type": "string" },
+    "projection_paths": { "type": "array" },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

@@ -91,6 +91,24 @@
       "sensitivity": "public"
     },
     {
+      "slug": "helm-ai-kernel/skills/flow-catalog",
+      "title": "Skill Packs Flow Catalog",
+      "section": "interfaces",
+      "source_path": "docs/skills/FLOW_CATALOG.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/skills/flow-catalog",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/launchpad/flow-catalog",
+      "title": "Launchpad Flow Catalog",
+      "section": "interfaces",
+      "source_path": "docs/launchpad/FLOW_CATALOG.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad/flow-catalog",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "helm-ai-kernel/verification",
       "title": "Verification",
       "section": "start-here",

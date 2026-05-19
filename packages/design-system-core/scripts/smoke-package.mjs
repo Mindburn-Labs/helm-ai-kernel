@@ -11,8 +11,12 @@ function run(command, args, options = {}) {
     cwd: options.cwd ?? root,
     encoding: "utf8",
     stdio: options.capture ? "pipe" : "inherit",
+    timeout: options.timeout ?? 120000,
     env: { ...process.env, npm_config_audit: "false", npm_config_fund: "false" },
   });
+  if (result.error) {
+    throw new Error(`${command} ${args.join(" ")} failed: ${result.error.message}`);
+  }
   if (result.status !== 0) {
     const detail = options.capture ? `\n${result.stdout}\n${result.stderr}` : "";
     throw new Error(`${command} ${args.join(" ")} failed${detail}`);
@@ -57,6 +61,10 @@ try {
     [
       "install",
       "--silent",
+      "--prefer-offline",
+      "--no-audit",
+      "--no-fund",
+      "--package-lock=false",
       "--ignore-scripts",
       path.join(root, pack.filename),
       "react@19.2.1",

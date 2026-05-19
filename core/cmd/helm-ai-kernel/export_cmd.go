@@ -149,6 +149,12 @@ func runExportCmd(args []string, stdout, stderr io.Writer) int {
 		}
 		exported = withIndex
 	}
+	indexed, err := copyIndexedEvidence(evidenceDir, exportRoot)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error copying indexed evidence contents: %v\n", err)
+		return 2
+	}
+	exported = appendUniqueSorted(exported, indexed...)
 
 	result := map[string]any{
 		"evidence_dir": evidenceDir,
@@ -287,6 +293,51 @@ func copyAllEvidence(srcRoot, dstRoot string) ([]string, error) {
 	return exported, nil
 }
 
+func copyIndexedEvidence(srcRoot, dstRoot string) ([]string, error) {
+	indexPath := filepath.Join(srcRoot, "00_INDEX.json")
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var index struct {
+		Entries []struct {
+			Path string `json:"path"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(data, &index); err != nil {
+		return nil, fmt.Errorf("parse 00_INDEX.json: %w", err)
+	}
+	var exported []string
+	for _, entry := range index.Entries {
+		if entry.Path == "" {
+			continue
+		}
+		clean := filepath.Clean(entry.Path)
+		if filepath.IsAbs(clean) || strings.HasPrefix(clean, "..") {
+			return nil, fmt.Errorf("indexed evidence path escapes bundle: %s", entry.Path)
+		}
+		src := filepath.Join(srcRoot, clean)
+		dst := filepath.Join(dstRoot, clean)
+		info, err := os.Stat(src)
+		if err != nil {
+			return nil, fmt.Errorf("indexed evidence missing %s: %w", entry.Path, err)
+		}
+		if info.IsDir() {
+			if err := copyDir(src, dst); err != nil {
+				return nil, err
+			}
+		} else if err := copyFile(src, dst); err != nil {
+			return nil, err
+		}
+		exported = append(exported, clean)
+	}
+	sort.Strings(exported)
+	return exported, nil
+}
+
 func copyFile(src, dst string) error {
 	data, err := os.ReadFile(src)
 	if err != nil {
@@ -408,6 +459,23 @@ func deterministicTarArchive(srcDir, dstPath string) error {
 	}
 
 	return nil
+}
+
+func appendUniqueSorted(values []string, next ...string) []string {
+	seen := make(map[string]struct{}, len(values)+len(next))
+	out := make([]string, 0, len(values)+len(next))
+	for _, value := range append(values, next...) {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func init() {

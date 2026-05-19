@@ -33,23 +33,8 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 		}
 		workspace = wd
 	}
-	secrets := map[string]string{}
-	for _, envName := range compiled.ModelGatewayEnv {
-		if value := opts.RuntimeSecretEnv[envName]; value != "" {
-			secrets[envName] = value
-			continue
-		}
-		if value, ok := os.LookupEnv(envName); ok && value != "" {
-			secrets[envName] = value
-		}
-	}
-	var egressProxy lpruntime.EgressProxy
-	if proxyURL := os.Getenv("HELM_LAUNCHPAD_EGRESS_PROXY_URL"); proxyURL != "" {
-		egressProxy = lpruntime.StaticEgressProxy{
-			ProxyURL:   proxyURL,
-			ReceiptRef: os.Getenv("HELM_LAUNCHPAD_EGRESS_PROXY_RECEIPT_REF"),
-		}
-	}
+	secrets := runtimeSecrets(compiled, opts)
+	egressProxy := egressProxyFromEnv(compiled.NetworkAllowlist)
 	handle, err := lpruntime.NewLocalContainerRuntime().Start(lpruntime.ContainerRequest{
 		Plan:             compiled,
 		ImageDigest:      imageRef,
@@ -64,9 +49,48 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 		return RuntimeStartResult{}, err
 	}
 	return RuntimeStartResult{
-		ContainerID:      handle.ContainerID,
-		SandboxGrantRef:  handle.SandboxGrantRef,
-		EgressReceiptRef: handle.EgressReceiptRef,
-		Runtime:          "local-container",
+		ContainerID:       handle.ContainerID,
+		SandboxGrantRef:   handle.SandboxGrantRef,
+		EgressReceiptRef:  handle.EgressReceiptRef,
+		EgressNetworkName: handle.EgressNetworkName,
+		EgressProxyID:     handle.EgressProxyID,
+		EgressProxyName:   handle.EgressProxyName,
+		Runtime:           "local-container",
 	}, nil
+}
+
+func egressProxyFromEnv(allowlist []string) lpruntime.EgressProxy {
+	var egressProxy lpruntime.EgressProxy
+	if proxyURL := os.Getenv("HELM_LAUNCHPAD_EGRESS_PROXY_URL"); proxyURL != "" {
+		egressProxy = lpruntime.StaticEgressProxy{
+			ProxyURL:   proxyURL,
+			ReceiptRef: os.Getenv("HELM_LAUNCHPAD_EGRESS_PROXY_RECEIPT_REF"),
+		}
+	} else if proxyImage := os.Getenv("HELM_LAUNCHPAD_EGRESS_PROXY_IMAGE"); proxyImage != "" {
+		egressProxy = lpruntime.DockerSidecarEgressProxy{
+			Image:      proxyImage,
+			ReceiptDir: os.Getenv("HELM_LAUNCHPAD_EGRESS_RECEIPT_DIR"),
+		}
+	} else if len(allowlist) > 0 {
+		proxy := lpruntime.NewLaunchOwnedEgressProxy()
+		if receiptDir := os.Getenv("HELM_LAUNCHPAD_EGRESS_RECEIPT_DIR"); receiptDir != "" {
+			proxy.ReceiptDir = receiptDir
+		}
+		egressProxy = proxy
+	}
+	return egressProxy
+}
+
+func runtimeSecrets(compiled plan.LaunchPlan, opts ExecuteOptions) map[string]string {
+	secrets := map[string]string{}
+	for _, envName := range compiled.ModelGatewayEnv {
+		if value := opts.RuntimeSecretEnv[envName]; value != "" {
+			secrets[envName] = value
+			continue
+		}
+		if value, ok := os.LookupEnv(envName); ok && value != "" {
+			secrets[envName] = value
+		}
+	}
+	return secrets
 }

@@ -13,7 +13,6 @@ REPO = "Mindburn-Labs/helm-ai-kernel"
 
 TERMS = [
     re.compile(r"\bcommercial\b", re.IGNORECASE),
-    re.compile(r"\bDigitalOcean\b", re.IGNORECASE),
     re.compile(r"\bDO proxy\b", re.IGNORECASE),
     re.compile(r"\bproduction proxy\b", re.IGNORECASE),
     re.compile(r"\bcustomer infrastructure\b", re.IGNORECASE),

@@ -61,6 +61,46 @@ func TestExecutorBlocksRunningWhenHealthcheckFails(t *testing.T) {
 	}
 }
 
+func TestExecutorRequiresEgressReceiptForNetworkedLaunch(t *testing.T) {
+	store := NewStore(t.TempDir())
+	p := allowPlan()
+	p.NetworkAllowlist = []string{"openrouter.ai:443"}
+	run, err := NewExecutor(store).ExecuteLaunch(p, ExecuteOptions{
+		Reason:            "test",
+		RuntimeStarter:    &fakeStarter{},
+		HealthcheckRunner: &fakeHealthcheck{},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteLaunch: %v", err)
+	}
+	if run.State != StateRepairRequired {
+		t.Fatalf("expected REPAIR_REQUIRED without egress receipt, got %s", run.State)
+	}
+	if len(run.EgressReceiptRefs) != 0 {
+		t.Fatalf("egress refs should be empty: %#v", run.EgressReceiptRefs)
+	}
+}
+
+func TestExecutorRunsNetworkedLaunchWithEgressReceipt(t *testing.T) {
+	store := NewStore(t.TempDir())
+	p := allowPlan()
+	p.NetworkAllowlist = []string{"openrouter.ai:443"}
+	run, err := NewExecutor(store).ExecuteLaunch(p, ExecuteOptions{
+		Reason:            "test",
+		RuntimeStarter:    &fakeNetworkStarter{},
+		HealthcheckRunner: &fakeHealthcheck{},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteLaunch: %v", err)
+	}
+	if run.State != StateRunning {
+		t.Fatalf("expected RUNNING, got %s", run.State)
+	}
+	if len(run.EgressReceiptRefs) == 0 {
+		t.Fatalf("egress receipt missing: %#v", run)
+	}
+}
+
 type fakeStarter struct {
 	called bool
 }
@@ -76,6 +116,17 @@ func (f *fakeStarter) Start(plan.LaunchPlan, ExecuteOptions) (RuntimeStartResult
 
 type fakeHealthcheck struct {
 	called bool
+}
+
+type fakeNetworkStarter struct{}
+
+func (fakeNetworkStarter) Start(plan.LaunchPlan, ExecuteOptions) (RuntimeStartResult, error) {
+	return RuntimeStartResult{
+		ContainerID:      "container-1",
+		SandboxGrantRef:  "sandbox-grant:runtime",
+		EgressReceiptRef: "receipt:egress",
+		Runtime:          "local-container",
+	}, nil
 }
 
 func (f *fakeHealthcheck) Run(plan.LaunchPlan, RuntimeStartResult, ExecuteOptions) (HealthcheckResult, error) {

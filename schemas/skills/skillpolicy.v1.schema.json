@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindburn.dev/helm/skills/skillpolicy.v1.schema.json",
+  "title": "HELM Skill Policy",
+  "type": "object",
+  "required": ["skill", "projection", "evidence"],
+  "properties": {
+    "skill": {
+      "type": "object",
+      "required": ["permission_bypass_forbidden", "global_install_default", "mcp_auto_enable_default", "receipts_required"],
+      "properties": {
+        "publisher": { "type": "string" },
+        "scope_default": { "enum": ["repo", "user", "global"] },
+        "permission_bypass_forbidden": { "const": true },
+        "global_install_default": { "enum": ["deny", "ESCALATE"] },
+        "user_install_default": { "enum": ["deny", "ESCALATE"] },
+        "mcp_auto_enable_default": { "enum": ["quarantine", "ESCALATE", "deny"] },
+        "hooks_default": { "enum": ["off_by_default", "pending_review"] },
+        "receipts_required": { "const": true }
+      }
+    },
+    "projection": { "type": "object" },
+    "evidence": {
+      "type": "object",
+      "required": ["required"],
+      "properties": {
+        "required": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

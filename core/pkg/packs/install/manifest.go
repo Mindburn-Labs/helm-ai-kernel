@@ -116,11 +116,11 @@ func Verify(manifest contracts.PackManifestV2, manifestHash string) (*Verificati
 	}, nil
 }
 
-// IsKnownChannel reports whether a channel is one of the four recognized
-// values (core, community, teams, enterprise).
+// IsKnownChannel reports whether a channel is one of the recognized values.
 func IsKnownChannel(ch contracts.PackChannel) bool {
 	switch ch {
 	case contracts.PackChannelCore,
+		contracts.PackChannelBasic,
 		contracts.PackChannelCommunity,
 		contracts.PackChannelTeams,
 		contracts.PackChannelEnterprise:

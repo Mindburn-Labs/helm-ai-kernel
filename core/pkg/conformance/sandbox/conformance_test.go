@@ -18,7 +18,7 @@ func TestSandboxConformance_MockActuator(t *testing.T) {
 	t.Run("L1", func(t *testing.T) {
 		results := suite.Run(conformance.LevelL1)
 		for _, r := range results {
-			t.Run(r.Name, func(t *testing.T) {
+			t.Run(r.TestID+"/"+r.Name, func(t *testing.T) {
 				if !r.Passed {
 					t.Fatalf("FAIL: %s — %s", r.TestID, r.Error)
 				}
@@ -31,7 +31,7 @@ func TestSandboxConformance_MockActuator(t *testing.T) {
 	t.Run("L2", func(t *testing.T) {
 		results := suite.Run(conformance.LevelL2)
 		for _, r := range results {
-			t.Run(r.Name, func(t *testing.T) {
+			t.Run(r.TestID+"/"+r.Name, func(t *testing.T) {
 				if !r.Passed {
 					t.Fatalf("FAIL: %s — %s", r.TestID, r.Error)
 				}
@@ -43,7 +43,7 @@ func TestSandboxConformance_MockActuator(t *testing.T) {
 	t.Run("L3", func(t *testing.T) {
 		results := suite.Run(conformance.LevelL3)
 		for _, r := range results {
-			t.Run(r.Name, func(t *testing.T) {
+			t.Run(r.TestID+"/"+r.Name, func(t *testing.T) {
 				if !r.Passed {
 					t.Fatalf("FAIL: %s — %s", r.TestID, r.Error)
 				}

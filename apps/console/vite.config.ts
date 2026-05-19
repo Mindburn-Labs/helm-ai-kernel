@@ -7,6 +7,11 @@ const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 export default defineConfig({
   plugins: [react()],
   resolve: {
+    alias: {
+      "lucide-react": fileURLToPath(
+        new URL("./node_modules/lucide-react/dist/esm/lucide-react.js", import.meta.url),
+      ),
+    },
     dedupe: ["react", "react-dom"],
   },
   server: {

@@ -2,67 +2,88 @@ id: hermes
 name: Hermes
 version: v2026.5.16
 license:
-  status: verified
-  spdx: MIT
-  url: https://raw.githubusercontent.com/NousResearch/hermes-agent/main/LICENSE
-redistribution: allowed_by_mit_pending_helm_signed_artifact
-availability: oss_candidate
+    status: verified
+    spdx: MIT
+    url: https://github.com/NousResearch/hermes-agent/blob/v2026.5.16/LICENSE
+redistribution: allowed_by_MIT_with_upstream_notice
+availability: oss_supported
 install:
-  strategy: signed_oci
-  image: ghcr.io/mindburn-labs/helm-launchpad/hermes:v2026.5.16
-  source: https://github.com/NousResearch/hermes-agent
-  ref: v2026.5.16
+    strategy: signed_oci
+    image: ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527
+    digest: sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527
+    source: https://github.com/NousResearch/hermes-agent
+    ref: v2026.5.16
 runtime:
-  command: ["hermes"]
-model_gateway_env: ["OPENROUTER_API_KEY"]
-required_secrets: ["model_gateway"]
+    command:
+        - hermes
+model_gateway_env:
+    - OPENROUTER_API_KEY
+required_secrets:
+    - model_gateway
 filesystem_policy:
-  mode: scoped_workspace
-  mounts: ["workspace:rw", "app_state:rw"]
-  policy_ref: policies/launchpad/apps/hermes.safe.toml
+    mode: scoped_workspace
+    mounts:
+        - workspace:rw
+        - app_state:rw
+    policy_ref: policies/launchpad/apps/hermes.safe.toml
 network_policy:
-  default: deny
-  allowlist: ["https://openrouter.ai/api/v1"]
+    default: deny
+    allowlist:
+        - https://openrouter.ai/api/v1
 mcp_policy:
-  unknown_server_policy: quarantine
-  unknown_tool_policy: ESCALATE
-  require_schema_pin: true
+    unknown_server_policy: quarantine
+    unknown_tool_policy: ESCALATE
+    require_schema_pin: true
 healthchecks:
-  - type: command
-    command: "hermes --version"
+    - type: command
+      command: helm-launchpad-openrouter-check
 risk_class: T1
 budget_ceiling:
-  usd_max: 0
-  api_calls_max: 0
-  time_ms_max: 0
+    usd_max: 0
+    api_calls_max: 0
+    time_ms_max: 0
 evidence_requirements:
-  - cpi_output
-  - kernel_verdict
-  - sandbox_grant
-  - launch_receipt
-  - install_receipt
-  - healthcheck_receipt
-  - teardown_receipt
-  - evidence_pack
-  - mcp_quarantine
-  - artifact_digest
-  - cosign_signature
-  - syft_sbom
-  - grype_vulnerability_scan
+    - cpi_output
+    - kernel_verdict
+    - sandbox_grant
+    - launch_receipt
+    - install_receipt
+    - healthcheck_receipt
+    - teardown_receipt
+    - evidence_pack
+    - mcp_quarantine
+    - artifact_digest
+    - cosign_signature
+    - syft_sbom
+    - grype_vulnerability_scan
+supply_chain_evidence:
+    artifact_digest: sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527
+    signature_tool: cosign
+    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527
+    sbom_tool: syft
+    sbom_ref: artifact://sbom-hermes.spdx.json
+    vulnerability_scan_tool: grype
+    vulnerability_scan_ref: artifact://grype-hermes.json
+promotion_evidence:
+    artifact_verification_ref: github-actions://26110916296/1/artifact-verification/hermes
+    live_e2e_run_id: github-actions://26110916296/1/live-e2e/hermes
+    evidence_pack_ref: github-actions://26110916296/1/evidencepack/hermes
+    teardown_receipt_ref: github-actions://26110916296/1/teardown/hermes
 conformance:
-  license_verified: true
-  artifact_verified: false
-  policy_pack_present: true
-  sandbox_verified: false
-  healthcheck_passing: false
-  e2e_passing: false
-  teardown_verified: false
-  receipt_verified: false
-  evidence_pack_verified: false
+    license_verified: true
+    artifact_verified: true
+    policy_pack_present: true
+    sandbox_verified: true
+    healthcheck_passing: true
+    e2e_passing: true
+    teardown_verified: true
+    receipt_verified: true
+    evidence_pack_verified: true
 metadata:
-  upstream_repo: https://github.com/NousResearch/hermes-agent
-  latest_release: v2026.5.16
-  release_published_at: "2026-05-16T09:59:15Z"
-  helm_oci_target: ghcr.io/mindburn-labs/helm-launchpad/hermes:v2026.5.16
-  helm_oci_status: "planned; no signed digest recorded in repo"
-  blocker: "Official license file is MIT and redistribution is allowed by the license. Promotion remains blocked until HELM-built OCI digest, cosign signature, syft SBOM, grype/trivy scan, live OpenRouter local-container e2e, teardown receipt, and offline EvidencePack verification are recorded."
+    helm_oci_status: promoted_from_signed_ci_artifact_manifest
+    helm_oci_target: ghcr.io/mindburn-labs/helm-launchpad/hermes:v2026.5.16
+    latest_release: v2026.5.16
+    promotion_provenance_ref: github-actions://26110916296/1
+    release_published_at: "2026-05-16T09:59:15Z"
+    upstream_commit: a91a57fa5a13d516c38b07a141a9ce8a3daabeb0
+    upstream_repo: https://github.com/NousResearch/hermes-agent

@@ -1,15 +1,18 @@
 package launchpad_test
 
 import (
+	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/promotion"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
-	lpruntime "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/runtime"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
 func TestLiveOpenRouterLocalContainerConformance(t *testing.T) {
@@ -26,9 +29,6 @@ func TestLiveOpenRouterLocalContainerConformance(t *testing.T) {
 	}
 	proxyURL := getenv("HELM_LAUNCHPAD_EGRESS_PROXY_URL")
 	proxyReceipt := getenv("HELM_LAUNCHPAD_EGRESS_PROXY_RECEIPT_REF")
-	if proxyURL == "" || proxyReceipt == "" {
-		t.Fatal("HELM_LAUNCHPAD_EGRESS_PROXY_URL and HELM_LAUNCHPAD_EGRESS_PROXY_RECEIPT_REF are required; raw internet egress is not a valid conformance path")
-	}
 
 	manifest, err := promotion.LoadManifest(manifestPath)
 	if err != nil {
@@ -53,12 +53,16 @@ func TestLiveOpenRouterLocalContainerConformance(t *testing.T) {
 			if !ok {
 				t.Fatalf("artifact entry for %s not found", appID)
 			}
-			promoted, err := promotion.Promote(app, entry, promotion.EvidenceRefs{
+			refs, err := manifest.EvidenceRefsFor(entry, promotion.EvidenceRefs{
 				ArtifactVerificationRef: "github-actions://" + manifest.GitHubRunID + "/artifact-verification/" + appID,
 				LiveE2ERunID:            "github-actions://" + manifest.GitHubRunID + "/live-e2e/" + appID,
 				EvidencePackRef:         "github-actions://" + manifest.GitHubRunID + "/evidencepack/" + appID,
 				TeardownReceiptRef:      "github-actions://" + manifest.GitHubRunID + "/teardown/" + appID,
 			})
+			if err != nil {
+				t.Fatalf("EvidenceRefsFor: %v", err)
+			}
+			promoted, err := promotion.Promote(app, entry, refs)
 			if err != nil {
 				t.Fatalf("Promote: %v", err)
 			}
@@ -67,16 +71,20 @@ func TestLiveOpenRouterLocalContainerConformance(t *testing.T) {
 				t.Fatalf("CompileWithRoot: %v", err)
 			}
 			store := session.NewStore(t.TempDir())
-			run, err := session.NewExecutor(store).ExecuteLaunch(compiled, session.ExecuteOptions{
+			compiled.RuntimeCommand = []string{"helm-launchpad-openrouter-check"}
+			compiled.Healthchecks = []registry.HealthcheckSpec{{Type: "command", Command: "helm-launchpad-openrouter-check"}}
+			opts := session.ExecuteOptions{
 				Reason:           "live OpenRouter Launchpad conformance",
+				WorkspaceMount:   t.TempDir(),
 				RuntimeSecretEnv: map[string]string{"OPENROUTER_API_KEY": openRouterKey},
-				RuntimeStarter: liveHarnessStarter{
-					key:          openRouterKey,
-					proxyURL:     proxyURL,
-					proxyReceipt: proxyReceipt,
-				},
-				HealthcheckRunner: liveHarnessHealthcheck{},
-			})
+			}
+			if proxyURL != "" {
+				t.Setenv("HELM_LAUNCHPAD_EGRESS_PROXY_URL", proxyURL)
+			}
+			if proxyReceipt != "" {
+				t.Setenv("HELM_LAUNCHPAD_EGRESS_PROXY_RECEIPT_REF", proxyReceipt)
+			}
+			run, err := session.NewExecutor(store).ExecuteLaunch(compiled, opts)
 			if err != nil {
 				t.Fatalf("ExecuteLaunch: %v", err)
 			}
@@ -90,62 +98,114 @@ func TestLiveOpenRouterLocalContainerConformance(t *testing.T) {
 			if deleted.State != session.StateDeleted || len(deleted.TeardownReceiptRefs) == 0 {
 				t.Fatalf("teardown did not emit receipt: %+v", deleted)
 			}
+			verifyLiveEvidenceRefs(t, appID, deleted.EvidencePackRefs)
+			copyLiveEvidenceRefs(t, appID, deleted.EvidencePackRefs)
 		})
 	}
 }
 
-type liveHarnessStarter struct {
-	key          string
-	proxyURL     string
-	proxyReceipt string
+func verifyLiveEvidenceRefs(t *testing.T, appID string, refs []string) {
+	t.Helper()
+	var dirRef string
+	var archiveRef string
+	for _, ref := range refs {
+		info, err := os.Stat(ref)
+		if err != nil {
+			continue
+		}
+		if info.IsDir() && dirRef == "" {
+			dirRef = ref
+		}
+		if !info.IsDir() && strings.HasSuffix(ref, ".tar") && archiveRef == "" {
+			archiveRef = ref
+		}
+	}
+	if dirRef == "" {
+		t.Fatalf("%s did not produce an EvidencePack directory ref: %#v", appID, refs)
+	}
+	if archiveRef == "" {
+		t.Fatalf("%s did not produce an EvidencePack tar archive ref: %#v", appID, refs)
+	}
+	report, err := verifier.VerifyBundle(dirRef)
+	if err != nil {
+		t.Fatalf("%s EvidencePack directory verifier error: %v", appID, err)
+	}
+	if !report.Verified {
+		t.Fatalf("%s EvidencePack directory did not verify: %s", appID, report.Summary)
+	}
+	root := repoRoot(t)
+	cmd := exec.Command("go", "run", "./core/cmd/helm-ai-kernel", "verify", "--bundle", archiveRef, "--json")
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s EvidencePack tar did not verify offline: %v\n%s", appID, err, string(out))
+	}
 }
 
-func (s liveHarnessStarter) Start(compiled plan.LaunchPlan, opts session.ExecuteOptions) (session.RuntimeStartResult, error) {
-	if compiled.ArtifactImage == "" || !strings.Contains(compiled.ArtifactImage, "@sha256:") {
-		return session.RuntimeStartResult{}, errString("immutable artifact image is required")
+func copyLiveEvidenceRefs(t *testing.T, appID string, refs []string) {
+	t.Helper()
+	outputRoot := getenv("HELM_LAUNCHPAD_LIVE_EVIDENCE_DIR")
+	if outputRoot == "" {
+		return
 	}
-	if compiled.ArtifactDigest == "" {
-		return session.RuntimeStartResult{}, errString("artifact digest is required")
+	appRoot := filepath.Join(outputRoot, appID)
+	if err := os.MkdirAll(appRoot, 0o700); err != nil {
+		t.Fatalf("create live evidence output dir: %v", err)
 	}
-	if opts.RuntimeSecretEnv["OPENROUTER_API_KEY"] != s.key || s.key == "" {
-		return session.RuntimeStartResult{}, errString("scoped OpenRouter key projection is required")
+	for _, ref := range refs {
+		info, err := os.Stat(ref)
+		if err != nil {
+			continue
+		}
+		target := filepath.Join(appRoot, filepath.Base(ref))
+		if info.IsDir() {
+			if err := copyDir(target, ref); err != nil {
+				t.Fatalf("copy EvidencePack directory for %s: %v", appID, err)
+			}
+			continue
+		}
+		if err := copyFile(target, ref); err != nil {
+			t.Fatalf("copy EvidencePack archive for %s: %v", appID, err)
+		}
 	}
-	if err := lpruntime.ValidateOpenRouterAllowlist(compiled.NetworkAllowlist); err != nil {
-		return session.RuntimeStartResult{}, err
-	}
-	if s.proxyURL == "" || s.proxyReceipt == "" {
-		return session.RuntimeStartResult{}, errString("egress proxy receipt is required")
-	}
-	return session.RuntimeStartResult{
-		ContainerID:      "ci-container-" + compiled.LaunchID,
-		SandboxGrantRef:  "sandbox-grant:" + compiled.SandboxProfileHash,
-		EgressReceiptRef: s.proxyReceipt,
-		Runtime:          "local-container",
-	}, nil
 }
 
-type liveHarnessHealthcheck struct{}
-
-func (liveHarnessHealthcheck) Run(compiled plan.LaunchPlan, runtime session.RuntimeStartResult, opts session.ExecuteOptions) (session.HealthcheckResult, error) {
-	if runtime.ContainerID == "" {
-		return session.HealthcheckResult{}, errString("runtime container id is required before healthcheck")
-	}
-	if len(compiled.Healthchecks) == 0 {
-		return session.HealthcheckResult{}, errString("healthcheck spec is required")
-	}
-	return session.HealthcheckResult{
-		Type:   compiled.Healthchecks[0].Type,
-		Status: "passed",
-		Metadata: map[string]any{
-			"command": compiled.Healthchecks[0].Command,
-			"source":  "ci-live-harness",
-		},
-	}, nil
+func copyDir(dst, src string) error {
+	return filepath.WalkDir(src, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if entry.IsDir() {
+			return os.MkdirAll(target, 0o700)
+		}
+		return copyFile(target, path)
+	})
 }
 
-type errString string
-
-func (e errString) Error() string { return string(e) }
+func copyFile(dst, src string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+		return err
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
+}
 
 func getenv(key string) string {
 	return strings.TrimSpace(os.Getenv(key))

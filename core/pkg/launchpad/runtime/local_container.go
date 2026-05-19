@@ -28,15 +28,19 @@ type ContainerRequest struct {
 	Args             []string
 	NetworkAllowlist []string
 	EgressProxy      EgressProxy
+	AutoCleanup      bool
 	Privileged       bool
 	RecursiveLaunch  bool
 }
 
 type ContainerHandle struct {
-	ContainerID      string            `json:"container_id"`
-	SandboxGrantRef  string            `json:"sandbox_grant_ref"`
-	EgressReceiptRef string            `json:"egress_receipt_ref,omitempty"`
-	ProjectedSecrets map[string]string `json:"projected_secrets"`
+	ContainerID       string            `json:"container_id"`
+	SandboxGrantRef   string            `json:"sandbox_grant_ref"`
+	EgressReceiptRef  string            `json:"egress_receipt_ref,omitempty"`
+	EgressNetworkName string            `json:"egress_network_name,omitempty"`
+	EgressProxyID     string            `json:"egress_proxy_id,omitempty"`
+	EgressProxyName   string            `json:"egress_proxy_name,omitempty"`
+	ProjectedSecrets  map[string]string `json:"projected_secrets"`
 }
 
 func NewLocalContainerRuntime() LocalContainerRuntime {
@@ -102,14 +106,7 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 			return ContainerHandle{}, fmt.Errorf("local-container egress proxy did not return proxy URL and receipt ref")
 		}
 	}
-	command := req.Command
-	if len(command) == 0 {
-		command = []string{"/bin/sh"}
-	}
-	args := req.Args
-	if len(args) == 0 {
-		args = []string{"-lc", "true"}
-	}
+	command, args := containerCommand(req.Command, req.Args)
 	env := map[string]string{}
 	for key, value := range req.Secrets {
 		env[key] = value
@@ -118,6 +115,11 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 		env["HTTPS_PROXY"] = proxyHandle.ProxyURL
 		env["HTTP_PROXY"] = proxyHandle.ProxyURL
 		env["NO_PROXY"] = "127.0.0.1,localhost"
+	}
+	network := sandbox.NetworkPolicy{Disabled: true, EgressAllowlist: req.NetworkAllowlist}
+	if proxyHandle.NetworkName != "" {
+		network.Disabled = false
+		network.NetworkName = proxyHandle.NetworkName
 	}
 	spec := &sandbox.SandboxSpec{
 		Image:   req.ImageDigest,
@@ -133,22 +135,67 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 			CPUMillis:    500,
 			MemoryMB:     512,
 			DiskMB:       1024,
-			Timeout:      30 * time.Second,
+			Timeout:      120 * time.Second,
 			MaxProcesses: 64,
 		},
-		Network: sandbox.NetworkPolicy{Disabled: true, EgressAllowlist: req.NetworkAllowlist},
+		Network: network,
 		WorkDir: "/workspace",
 	}
 	result, receipt, err := dockersandbox.NewDockerRunner().Run(spec)
 	if err != nil {
+		cleanupEgressProxy(proxyHandle)
 		return ContainerHandle{}, err
 	}
 	if !result.Success() {
+		cleanupEgressProxy(proxyHandle)
+		detail := redactedCommandOutput(result.Stdout, result.Stderr, req.Secrets)
+		if detail != "" {
+			return ContainerHandle{}, fmt.Errorf("local-container command failed: exit=%d timed_out=%t oom=%t output=%q", result.ExitCode, result.TimedOut, result.OOMKilled, detail)
+		}
 		return ContainerHandle{}, fmt.Errorf("local-container command failed: exit=%d timed_out=%t oom=%t", result.ExitCode, result.TimedOut, result.OOMKilled)
+	}
+	if req.AutoCleanup {
+		cleanupEgressProxy(proxyHandle)
 	}
 	handle.ContainerID = receipt.ExecutionID
 	handle.EgressReceiptRef = proxyHandle.ReceiptRef
+	handle.EgressNetworkName = proxyHandle.NetworkName
+	handle.EgressProxyID = proxyHandle.ProxyContainerID
+	handle.EgressProxyName = proxyHandle.ProxyContainerName
 	return handle, nil
+}
+
+func containerCommand(command, args []string) ([]string, []string) {
+	if len(command) > 0 {
+		return append([]string{}, command...), append([]string{}, args...)
+	}
+	if len(args) > 0 {
+		return []string{"/bin/sh"}, append([]string{}, args...)
+	}
+	return []string{"/bin/sh"}, []string{"-lc", "true"}
+}
+
+func redactedCommandOutput(stdout, stderr []byte, secrets map[string]string) string {
+	combined := strings.TrimSpace(string(append(append([]byte{}, stdout...), stderr...)))
+	if combined == "" {
+		return ""
+	}
+	for _, value := range secrets {
+		if value != "" {
+			combined = strings.ReplaceAll(combined, value, "[REDACTED]")
+		}
+	}
+	const maxDetail = 2048
+	if len(combined) > maxDetail {
+		combined = "...[truncated]\n" + combined[len(combined)-maxDetail:]
+	}
+	return combined
+}
+
+func cleanupEgressProxy(proxyHandle EgressProxyHandle) {
+	if proxyHandle.Stop != nil {
+		_ = proxyHandle.Stop()
+	}
 }
 
 func validateWorkspaceMount(mount string) error {

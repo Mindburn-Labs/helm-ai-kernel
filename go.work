@@ -7,4 +7,5 @@ use (
 	./sdk/go
 	./tests/conformance
 	./tests/launchpad
+	./tests/skills
 )

@@ -37,6 +37,23 @@ func TestPromoteRejectsMissingEvidenceRefs(t *testing.T) {
 	}
 }
 
+func TestManifestEvidenceRefsMustTieToWorkflowRun(t *testing.T) {
+	manifest := Manifest{SchemaVersion: ManifestSchemaVersion, GitHubRunID: "123", Artifacts: []ArtifactEntry{validArtifact("openclaw")}}
+	entry := manifest.Artifacts[0]
+	entry.ArtifactVerificationRef = "github-actions://123/1/artifact-verification/openclaw"
+	entry.LiveE2ERunID = "github-actions://123/1/live-e2e/openclaw"
+	entry.EvidencePackRef = "github-actions://123/1/evidencepack/openclaw"
+	entry.TeardownReceiptRef = "github-actions://123/1/teardown/openclaw"
+
+	if _, err := manifest.EvidenceRefsFor(entry, EvidenceRefs{}); err != nil {
+		t.Fatalf("EvidenceRefsFor: %v", err)
+	}
+	entry.LiveE2ERunID = "github-actions://999/1/live-e2e/openclaw"
+	if _, err := manifest.EvidenceRefsFor(entry, EvidenceRefs{}); err == nil || !strings.Contains(err.Error(), "current workflow run") {
+		t.Fatalf("EvidenceRefsFor error = %v, want run binding failure", err)
+	}
+}
+
 func TestValidateArtifactRejectsUnsupportedOrIncompleteManifest(t *testing.T) {
 	cases := []struct {
 		name    string

@@ -453,6 +453,7 @@ jobs:
         with:
           name: launchpad-live-evidence
           path: /tmp/launchpad-live-evidence
+          include-hidden-files: true
       - name: Write merged promotion manifest
         run: |
           set -euo pipefail

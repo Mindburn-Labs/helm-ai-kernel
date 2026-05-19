@@ -1,0 +1,88 @@
+# ArtifactHub package metadata for the helm-ai-kernel chart.
+# Lives alongside Chart.yaml so `helm package` ships it inside the chart .tgz;
+# ArtifactHub reads it from the OCI artifact on every scan and uses it to
+# populate the chart page (display name, changelog, container images, links).
+# Schema reference: https://artifacthub.io/docs/topics/repositories/helm-charts/
+version: 0.5.2
+appVersion: v0.5.2
+name: helm-ai-kernel
+displayName: HELM AI Kernel
+createdAt: "2026-05-19T00:00:00Z"
+description: |
+  Fail-closed AI execution firewall with cryptographic governance proofs.
+
+  The HELM AI Kernel is a Go execution boundary for autonomous agents and
+  LLM-driven workflows. Every tool call, network egress, and data access
+  passes through a Policy Enforcement Point that emits ed25519-signed
+  receipts and feeds an append-only ProofGraph; an exportable EvidencePack
+  captures policy version, lamport-ordered receipts, and the runtime
+  posture for downstream auditors.
+license: Apache-2.0
+homeURL: https://github.com/Mindburn-Labs/helm-ai-kernel
+keywords:
+  - ai
+  - governance
+  - firewall
+  - agent
+  - security
+  - compliance
+  - policy
+  - audit
+  - proofgraph
+  - evidence-pack
+  - kubernetes
+links:
+  - name: source
+    url: https://github.com/Mindburn-Labs/helm-ai-kernel
+  - name: documentation
+    url: https://github.com/Mindburn-Labs/helm-ai-kernel/tree/main/docs
+  - name: release notes
+    url: https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.2
+  - name: deployment guide
+    url: https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/KUBERNETES_DEPLOYMENT.md
+  - name: security policy
+    url: https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/SECURITY.md
+  - name: issue tracker
+    url: https://github.com/Mindburn-Labs/helm-ai-kernel/issues
+maintainers:
+  - name: Mindburn Labs
+    email: mindburnlabs@gmail.com
+  - name: Ivan Peychev
+    email: peycheff.com@gmail.com
+provider:
+  name: Mindburn Labs
+annotations:
+  artifacthub.io/category: security
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/containsSecurityUpdates: "true"
+  artifacthub.io/signKey: |
+    fingerprint: keyless (sigstore)
+    url: https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/VERIFICATION.md
+  artifacthub.io/images: |
+    - name: helm-ai-kernel
+      image: ghcr.io/mindburn-labs/helm-ai-kernel:v0.5.2
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    - name: helm-ai-kernel-slim
+      image: ghcr.io/mindburn-labs/helm-ai-kernel:v0.5.2-slim
+      platforms:
+        - linux/amd64
+        - linux/arm64
+  artifacthub.io/changes: |
+    - kind: security
+      description: Close the default boundary policy fail-open path where a version-mismatch silently disabled enforcement.
+      links:
+        - name: GitHub PR
+          url: https://github.com/Mindburn-Labs/helm-ai-kernel/pull/158
+    - kind: fixed
+      description: Anchor the KMS keystore on the runtime data directory so it survives readOnlyRootFilesystem pods.
+    - kind: fixed
+      description: Disable the phantom Prometheus metrics port by default until the backend handler ships.
+    - kind: added
+      description: Launchpad and Skill Packs production candidate with signed OCI artifact workflow support and live conformance promotion evidence.
+    - kind: added
+      description: Inject release image build metadata (version, commit, build_time) into the kernel binary via ldflags.
+    - kind: changed
+      description: Refresh ArtifactHub registration metadata and expose release asset export/verify logs.

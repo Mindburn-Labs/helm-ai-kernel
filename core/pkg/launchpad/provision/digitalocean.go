@@ -24,26 +24,29 @@ func (p DigitalOceanProvisioner) Plan(launchID, planHash string) Plan {
 }
 
 type DigitalOceanProvisioner struct {
-	DryRun     bool
-	Endpoint   string
-	Token      string
-	HTTPClient *http.Client
+	DryRun          bool
+	AllowLiveWrites bool
+	Endpoint        string
+	Token           string
+	HTTPClient      *http.Client
 }
 
 type DigitalOceanProvisionRequest struct {
-	LaunchID     string   `json:"launch_id"`
-	PlanHash     string   `json:"plan_hash"`
-	Name         string   `json:"name"`
-	Region       string   `json:"region"`
-	Size         string   `json:"size"`
-	Image        string   `json:"image"`
-	Tags         []string `json:"tags,omitempty"`
-	SSHKeys      []string `json:"ssh_keys,omitempty"`
-	FirewallName string   `json:"firewall_name,omitempty"`
+	LaunchID       string   `json:"launch_id"`
+	PlanHash       string   `json:"plan_hash"`
+	Name           string   `json:"name"`
+	Region         string   `json:"region"`
+	Size           string   `json:"size"`
+	Image          string   `json:"image"`
+	Tags           []string `json:"tags,omitempty"`
+	SSHKeys        []string `json:"ssh_keys,omitempty"`
+	SSHSourceCIDRs []string `json:"ssh_source_cidrs,omitempty"`
+	FirewallName   string   `json:"firewall_name,omitempty"`
 }
 
 type DigitalOceanProvisionResult struct {
 	Provider         string            `json:"provider"`
+	DryRun           bool              `json:"dry_run"`
 	IdempotencyKey   string            `json:"idempotency_key"`
 	DropletID        int64             `json:"droplet_id,omitempty"`
 	FirewallID       string            `json:"firewall_id,omitempty"`
@@ -83,11 +86,24 @@ func (p DigitalOceanProvisioner) Create(ctx context.Context, req DigitalOceanPro
 	if err := req.validate(); err != nil {
 		return nil, err
 	}
+	idempotencyKey := IdempotencyKey("digitalocean", req.LaunchID, req.PlanHash)
+	if p.DryRun || !p.AllowLiveWrites {
+		return &DigitalOceanProvisionResult{
+			Provider:       "digitalocean",
+			DryRun:         true,
+			IdempotencyKey: idempotencyKey,
+			ResourceRefs: map[string]string{
+				"droplet":  "planned",
+				"firewall": "planned",
+			},
+			ReceiptRefs:      []string{"receipt:digitalocean:" + req.LaunchID + ":dry-run"},
+			ReconcileOutcome: ReconcileBeforeRetry(false),
+		}, nil
+	}
 	client, endpoint, err := p.client()
 	if err != nil {
 		return nil, err
 	}
-	idempotencyKey := IdempotencyKey("digitalocean", req.LaunchID, req.PlanHash)
 	tags := digitalOceanTags(req)
 	dropletPayload := map[string]any{
 		"name":   req.Name,
@@ -112,15 +128,19 @@ func (p DigitalOceanProvisioner) Create(ctx context.Context, req DigitalOceanPro
 		return nil, &DigitalOceanError{Op: "decode droplet", Ambiguous: true, Outcome: ReconcileBeforeRetry(true)}
 	}
 
-	firewallPayload := map[string]any{
-		"name":        firstNonEmpty(req.FirewallName, req.Name+"-firewall"),
-		"droplet_ids": []int64{dropletResp.Droplet.ID},
-		"tags":        tags,
-		"inbound_rules": []map[string]any{{
+	inboundRules := []map[string]any{}
+	if len(req.SSHKeys) > 0 && len(req.SSHSourceCIDRs) > 0 {
+		inboundRules = append(inboundRules, map[string]any{
 			"protocol": "tcp",
 			"ports":    "22",
-			"sources":  map[string]any{"addresses": []string{"0.0.0.0/0", "::/0"}},
-		}},
+			"sources":  map[string]any{"addresses": uniqueStrings(req.SSHSourceCIDRs)},
+		})
+	}
+	firewallPayload := map[string]any{
+		"name":          firstNonEmpty(req.FirewallName, req.Name+"-firewall"),
+		"droplet_ids":   []int64{dropletResp.Droplet.ID},
+		"tags":          tags,
+		"inbound_rules": inboundRules,
 		"outbound_rules": []map[string]any{{
 			"protocol":     "tcp",
 			"ports":        "all",
@@ -157,6 +177,9 @@ func (p DigitalOceanProvisioner) Create(ctx context.Context, req DigitalOceanPro
 }
 
 func (p DigitalOceanProvisioner) Delete(ctx context.Context, req DigitalOceanDeleteRequest) (*TeardownResult, error) {
+	if p.DryRun || !p.AllowLiveWrites {
+		return &TeardownResult{ReceiptID: "receipt:digitalocean:" + req.LaunchID + ":teardown-dry-run", Status: "dry-run"}, nil
+	}
 	client, endpoint, err := p.client()
 	if err != nil {
 		return nil, err
@@ -265,6 +288,9 @@ func (req DigitalOceanProvisionRequest) validate() error {
 	}
 	if req.Name == "" || req.Region == "" || req.Size == "" || req.Image == "" {
 		return fmt.Errorf("digitalocean name, region, size, and image required")
+	}
+	if len(req.SSHSourceCIDRs) > 0 && len(req.SSHKeys) == 0 {
+		return fmt.Errorf("digitalocean ssh_source_cidrs require ssh_keys")
 	}
 	return nil
 }

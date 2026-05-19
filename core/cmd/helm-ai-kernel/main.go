@@ -214,8 +214,15 @@ func runServerWithOptions(opts serverOptions) {
 	artRegistry := artifacts.NewRegistry(artStore, verifier)
 
 	// === SUBSYSTEM WIRING ===
-	services, svcErr := NewServices(ctx, db, artStore, logger)
+	services, svcErr := NewServices(ctx, db, artStore, logger, dataDir)
 	if svcErr != nil {
+		// In production we refuse to start in a degraded state. Subsystems are
+		// allowed to fail in dev (e.g. observability without an OTLP endpoint),
+		// but the boundary enforcer and other safety-critical components must
+		// be present whenever HELM_PRODUCTION=1.
+		if envBool("HELM_PRODUCTION") {
+			log.Fatalf("Services init failed in production mode: %v", svcErr)
+		}
 		log.Printf("Services init (non-fatal, degraded mode): %v", svcErr)
 	}
 

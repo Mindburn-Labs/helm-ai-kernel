@@ -14,6 +14,7 @@ import (
 	lpregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 	lprepair "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/repair"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 
 func runLaunchCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel launch <matrix|apps|substrates|plan|status|logs|repair|delete|app> [args]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel launch <matrix|apps|substrates|plan|status|logs|repair|delete|evidence|promote|app> [args]")
 		return 2
 	}
 	catalog, err := lpregistry.LoadCatalog("")
@@ -51,11 +52,117 @@ func runLaunchCmd(args []string, stdout, stderr io.Writer) int {
 		return runLaunchRepair(args[1:], stdout, stderr)
 	case "delete":
 		return runLaunchDelete(args[1:], stdout, stderr)
+	case "evidence":
+		return runLaunchEvidence(args[1:], stdout, stderr)
 	case "promote":
 		return runLaunchPromote(args[1:], catalog, stdout, stderr)
 	default:
 		return runLaunchStart(args, catalog, stdout, stderr)
 	}
+}
+
+type launchEvidenceExport struct {
+	LaunchID         string                `json:"launch_id"`
+	EvidencePackRefs []string              `json:"evidence_pack_refs"`
+	Checks           []launchEvidenceCheck `json:"checks"`
+	State            session.State         `json:"state"`
+	KernelVerdict    string                `json:"kernel_verdict"`
+}
+
+type launchEvidenceCheck struct {
+	Ref      string `json:"ref"`
+	Exists   bool   `json:"exists"`
+	Verified bool   `json:"verified"`
+	Summary  string `json:"summary,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
+func runLaunchEvidence(args []string, stdout, stderr io.Writer) int {
+	export := false
+	jsonOut := false
+	rest := make([]string, 0, len(args))
+	for _, arg := range args {
+		switch arg {
+		case "--export":
+			export = true
+		case "--json":
+			jsonOut = true
+		default:
+			rest = append(rest, arg)
+		}
+	}
+	if len(rest) == 0 {
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel launch evidence <launch_id> --export --json")
+		return 2
+	}
+	if !export {
+		fmt.Fprintln(stderr, "launch evidence requires --export to avoid implying a new evidence mutation")
+		return 2
+	}
+	run, err := session.NewStore("").Get(rest[0])
+	if err != nil {
+		fmt.Fprintf(stderr, "launch evidence error: %v\n", err)
+		return 1
+	}
+	result := launchEvidenceExport{
+		LaunchID:         run.LaunchID,
+		EvidencePackRefs: run.EvidencePackRefs,
+		Checks:           verifyLaunchEvidenceRefs(run.EvidencePackRefs),
+		State:            run.State,
+		KernelVerdict:    run.KernelVerdict,
+	}
+	if jsonOut {
+		return writeLaunchJSON(stdout, result)
+	}
+	for _, ref := range result.EvidencePackRefs {
+		fmt.Fprintln(stdout, ref)
+	}
+	return 0
+}
+
+func verifyLaunchEvidenceRefs(refs []string) []launchEvidenceCheck {
+	checks := make([]launchEvidenceCheck, 0, len(refs))
+	for _, ref := range refs {
+		check := launchEvidenceCheck{Ref: ref}
+		info, err := os.Stat(ref)
+		if err != nil {
+			check.Error = err.Error()
+			checks = append(checks, check)
+			continue
+		}
+		check.Exists = true
+		verifyTarget := ref
+		var cleanup func()
+		if !info.IsDir() {
+			tempDir, err := os.MkdirTemp("", "helm-launch-evidence-*")
+			if err != nil {
+				check.Error = err.Error()
+				checks = append(checks, check)
+				continue
+			}
+			cleanup = func() { _ = os.RemoveAll(tempDir) }
+			if err := extractEvidenceArchive(ref, tempDir); err != nil {
+				cleanup()
+				check.Error = err.Error()
+				checks = append(checks, check)
+				continue
+			}
+			verifyTarget = tempDir
+		}
+		report, err := verifier.VerifyBundle(verifyTarget)
+		if cleanup != nil {
+			cleanup()
+		}
+		if err != nil {
+			check.Error = err.Error()
+			checks = append(checks, check)
+			continue
+		}
+		check.Verified = report.Verified
+		check.Summary = report.Summary
+		checks = append(checks, check)
+	}
+	return checks
 }
 
 func runLaunchPlan(args []string, catalog *lpregistry.Catalog, stdout, stderr io.Writer) int {

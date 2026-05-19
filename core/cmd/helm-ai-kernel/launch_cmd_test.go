@@ -8,7 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	lpreceipts "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
 	lpregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
 )
 
 func TestLaunchPromoteDryRunRequiresCompleteManifestAndRefs(t *testing.T) {
@@ -77,5 +79,45 @@ func TestLaunchPromoteDryRunRequiresCompleteManifestAndRefs(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), `"availability": "oss_supported"`) {
 		t.Fatalf("promotion dry run did not emit oss_supported app: %s", stdout.String())
+	}
+}
+
+func TestLaunchEvidenceExportVerifiesDirectoryAndArchive(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HELM_LAUNCHPAD_HOME", root)
+
+	packDir, err := lpreceipts.WriteEvidencePack(root, "launch-evidence-test", map[string][]byte{
+		"receipts/kernel-verdict.json": []byte(`{"receipt_id":"r1","decision_id":"d1","decision_hash":"sha256:test","status":"ALLOW","verdict":"ALLOW","lamport_clock":1}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive, err := lpreceipts.WriteEvidencePackArchive(packDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := session.NewStore(root)
+	if err := store.Save(session.LaunchRun{
+		LaunchID:            "launch-evidence-test",
+		AppID:               "openclaw",
+		SubstrateID:         "local-container",
+		State:               session.StateDeleted,
+		KernelVerdict:       "ALLOW",
+		TeardownReceiptRefs: []string{"launchpad.teardown:sha256:test"},
+		EvidencePackRefs:    []string{packDir, archive},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := runLaunchEvidence([]string{"launch-evidence-test", "--export", "--json"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("runLaunchEvidence code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"verified": true`) {
+		t.Fatalf("evidence export did not verify refs: %s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), `"verified": false`) {
+		t.Fatalf("evidence export had failed verification: %s", stdout.String())
 	}
 }

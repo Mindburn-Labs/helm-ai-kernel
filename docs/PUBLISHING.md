@@ -59,7 +59,7 @@ The repository retains packaging metadata for the kernel binaries, container ima
 | TypeScript SDK | `@mindburn/helm-ai-kernel` |
 | Python SDK | `helm-sdk` |
 | Rust SDK | `helm-sdk` |
-| Java SDK | Source-available local Maven build under `sdk/java`; source coordinate `org.mindburn.helm:helm-sdk`; public package coordinate not verified |
+| Java SDK | Source-available local Maven build under `sdk/java`; source coordinate `io.github.mindburnlabs:helm-sdk`; public package coordinate not verified |
 | Go SDK | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@main`; pin `@main` or a commit until tagged module releases are aligned |
 
 ## Release Inputs

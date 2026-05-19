@@ -8,7 +8,7 @@ The Java SDK is source-available in this repository. Do not publish a public
 Maven or JitPack coordinate in OSS docs until a release workflow has verified
 that coordinate.
 
-Package metadata declares coordinate `org.mindburn.helm:helm-sdk:0.5.2` in
+Package metadata declares coordinate `io.github.mindburnlabs:helm-sdk:0.5.2` in
 `pom.xml`; that is source metadata, not proof that a public package is
 available.
 

@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-05-05
+last_reviewed: 2026-05-19
 ---
 
 # Changelog
@@ -27,7 +27,6 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 
 | Symptom | First check |
 | --- | --- |
-| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
 | A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
 | A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
 
@@ -39,18 +38,63 @@ This scheme maps the main sections of HELM AI Kernel Changelog in reading order.
 flowchart LR
   Page["HELM AI Kernel Changelog"]
   A["[Unreleased]"]
-  B["[0.5.0] - 2026-05-13"]
-  C["[0.4.0] - 2026-04-25"]
-  D["Validation"]
+  B["[0.5.2] - 2026-05-19"]
+  C["[0.5.1] - 2026-05-18"]
+  D["[0.5.0] - 2026-05-13"]
+  E["[0.4.0] - 2026-04-25"]
+  F["Validation"]
   Page --> A
   A --> B
   B --> C
   C --> D
+  D --> E
+  E --> F
 ```
 
 All notable changes to the retained HELM AI Kernel surface are documented here. Public entries focus on developer-visible interfaces, compatibility, verification, SDKs, and security-relevant documentation.
 
 ## [Unreleased]
+
+## [0.5.2] - 2026-05-19
+
+Published at <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.2>
+on 2026-05-19T16:13:38Z.
+
+- Fixed default boundary policy initialization so the retained production
+  surface starts fail-closed when default policy material is missing or invalid.
+- Anchored KMS keystore state under the configured runtime data directory and
+  added regression coverage for that path.
+- Wired release build metadata into container builds and disabled the phantom
+  chart metrics port by default.
+- Refreshed Artifact Hub repository metadata and bumped the Helm chart release
+  contract to `0.5.2` / `v0.5.2`.
+- Kept release asset export and verification output visible during staging so
+  failing commands are diagnosable from workflow logs.
+
+## [0.5.1] - 2026-05-18
+
+Published at <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.1>.
+
+- Fixed tag-driven release asset staging so release binaries, SBOM, OpenVEX,
+  Homebrew formula metadata, and release attestations use the tag version
+  instead of falling back to `VERSION` when a tag is cut before the file is
+  bumped.
+- Fixed audit EvidencePack export so every file listed in `00_INDEX.json`,
+  including `01_SCORE.json.sha256`, is preserved in exported tar archives and
+  verified during `make release-assets`.
+- Added release staging diagnostics for exact failing commands and conformance
+  gate failures, and require exact OpenVEX documents for tag release assets.
+- Normalized pull-request Scorecard SARIF categories so GitHub code scanning
+  sees the same `supply-chain/branch-protection` configuration on PR refs as it
+  sees on `main`.
+- Moved first-party GitHub setup actions to Node 24-capable pinned SHAs and
+  configured Go workflow caching against `**/go.sum` for the monorepo layout.
+- Downgraded the local release-smoke missing-cosign message from a GitHub
+  warning annotation to a plain informational log unless cosign bundles are
+  explicitly required.
+- Bumped source, CLI fallback, SDK package manifests, Helm chart `appVersion`,
+  OpenAPI version metadata, generated SDK version comments, Console visible
+  version, and launch verification scripts to `0.5.1`.
 
 ## [0.5.0] - 2026-05-13
 

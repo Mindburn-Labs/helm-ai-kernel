@@ -23,6 +23,7 @@ jobs:
   publish:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    environment: npm-production
     permissions:
       contents: read
       id-token: write
@@ -36,13 +37,13 @@ jobs:
             test_command: "npm test -- --run"
             smoke_command: ""
           - path: packages/design-system-core
-            name: "@helm/design-system-core"
+            name: "@mindburn/ui-core"
             version_policy: package
             test_command: "npm test"
             smoke_command: "npm run smoke"
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: "22"
           registry-url: https://registry.npmjs.org
@@ -54,8 +55,10 @@ jobs:
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
           if [ "${{ matrix.package.version_policy }}" = "root" ]; then
             test "$REQUESTED" = "$FILE_VERSION"
+            test "$PACKAGE_VERSION" = "$REQUESTED"
+          else
+            test -n "$PACKAGE_VERSION"
           fi
-          test "$PACKAGE_VERSION" = "$REQUESTED"
       - name: Install, test, and build
         working-directory: ${{ matrix.package.path }}
         run: |
@@ -67,9 +70,25 @@ jobs:
           SMOKE_COMMAND='${{ matrix.package.smoke_command }}'
           if [ -n "$SMOKE_COMMAND" ]; then eval "$SMOKE_COMMAND"; fi
           npm pack --dry-run
+      - name: Check existing package version
+        id: package
+        working-directory: ${{ matrix.package.path }}
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          echo "name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Publish
-        if: github.event.inputs.dry_run != 'true'
+        if: github.event.inputs.dry_run != 'true' && steps.package.outputs.published != 'true'
         working-directory: ${{ matrix.package.path }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public --provenance
+      - name: Skip already published package
+        if: github.event.inputs.dry_run != 'true' && steps.package.outputs.published == 'true'
+        run: echo "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }} is already published"

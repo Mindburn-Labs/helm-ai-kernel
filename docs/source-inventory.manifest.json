@@ -11,6 +11,7 @@
       "classification": "public-hub",
       "source_patterns": [
         ".editorconfig",
+        ".bestpractices.json",
         ".gitignore",
         ".golangci.yml",
         ".goreleaser.yml",
@@ -105,6 +106,8 @@
         "protocols/*/**",
         "docs/LAUNCHPAD.md",
         "docs/launchpad/**",
+        "policies/launchpad/**",
+        "registry/launchpad/**",
         "schemas/README.md",
         "schemas/*.json",
         "schemas/*/**",

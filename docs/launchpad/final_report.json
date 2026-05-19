@@ -6,7 +6,7 @@
   "release_distribution_complete": false,
   "generated_at": "2026-05-19T17:10:00Z",
   "kernel_branch": "skill-launch-remediation",
-  "kernel_head": "2a04e2e0cbf45459a2f155bc51f79fb1d7dbbc1b",
+  "kernel_head": "bd2d954e470a028640ea0e492efb79905d5f438a",
   "enterprise_branch": "launchpad-final",
   "enterprise_quality_gate": "make quality-pr passed after approved OSS sync",
   "artifact_workflow": {
@@ -156,8 +156,12 @@
   "docs_updated": [
     "docs/launchpad/FINAL_IMPLEMENTATION_REPORT.md",
     "docs/launchpad/final_report.json",
+    "docs/LAUNCHPAD.md",
+    "docs/launchpad/APP_SPEC.md",
     "docs/launchpad/CONFORMANCE.md",
+    "docs/launchpad/POLICY_PACKS.md",
     "docs/launchpad/SECURITY_REVIEW.md",
+    "docs/launchpad/SUBSTRATE_SPEC.md",
     "docs/launch/LAUNCH_READINESS.md",
     "docs/skills/FLOW_CATALOG.md",
     "docs/launchpad/FLOW_CATALOG.md",

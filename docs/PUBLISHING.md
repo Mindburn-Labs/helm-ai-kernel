@@ -1,6 +1,6 @@
 ---
 title: Publishing
-last_reviewed: 2026-05-05
+last_reviewed: 2026-05-19
 ---
 
 # Publishing
@@ -29,9 +29,8 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 
 | Symptom | First check |
 | --- | --- |
-| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
-| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
-| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
+| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
+| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
 
 ## Diagram
 
@@ -80,6 +79,11 @@ Before tagging a release:
    and credentials for that release are available
 8. run `make release-binaries-reproducible` when validating that release binaries are reproducible from the checked-in source and pinned build metadata
 
+For tag-triggered release workflows, the Makefile derives `VERSION` from
+`GITHUB_REF_NAME` when `GITHUB_REF_TYPE=tag`. This keeps binaries, SBOM,
+OpenVEX, the Homebrew formula, and release metadata aligned with the release
+tag even when the repository `VERSION` file has not yet been bumped.
+
 ## Release Automation
 
 The retained workflow set under `.github/workflows/` covers:
@@ -90,8 +94,8 @@ The retained workflow set under `.github/workflows/` covers:
 - GHCR image publication for `latest`, version tag, and slim tag
 - manual publication workflows for npm, PyPI, crates.io, and Maven-compatible distribution
 
-Current public GitHub release: `v0.5.0`, published on 2026-05-13 at
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.0>.
+Current public GitHub release: `v0.5.2`, published on 2026-05-19 at
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.2>.
 
 There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
 actual release baseline when auditing the `v0.5.0` delta.
@@ -105,18 +109,19 @@ Its attached assets are:
 - `helm-ai-kernel-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.5.0.openvex.json`
+- `v0.5.2.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
 - `sample-policy-material.tar`
 - `helm-ai-kernel.mcpb`
 - `helm-ai-kernel.rb`
+- `v0.5.2.json`
 - matching `*.cosign.bundle` files for every primary asset
 
 `sample-policy-material.tar` includes the sample policy and its referenced EU
 AI Act high-risk reference pack. The Homebrew tap is
-`mindburnlabs/homebrew-tap`, and `mindburnlabs/tap/helm-ai-kernel` resolves to `0.5.0`.
+`mindburnlabs/homebrew-tap`, and `mindburnlabs/tap/helm-ai-kernel` resolves to `0.5.2`.
 
 The retained SDK package manifests are versioned with `VERSION`, but npm,
 PyPI, crates.io, and Maven publication require the corresponding registry
@@ -129,10 +134,15 @@ or is produced by a retained workflow and attached to that release.
 
 If a package or channel is not represented in the retained workflow set, it should not be described as a supported public publication channel in repository documentation.
 
+`make release-assets` stages only verifiable release material. On tag builds it
+requires `release/vex/v<version>.openvex.json`, exports the audit EvidencePack,
+runs `helm-ai-kernel verify` against the staged `evidence-pack.tar`, and then
+writes the final `SHA256SUMS.txt`.
+
 ## Verification
 
 Every public release must include enough material to verify what was downloaded.
-For `v0.5.0`, use `SHA256SUMS.txt`, `sbom.json`, `v0.5.0.openvex.json`,
+For `v0.5.2`, use `SHA256SUMS.txt`, `sbom.json`, `v0.5.2.openvex.json`,
 `release-attestation.json`, the platform binary assets, attached
 `*.cosign.bundle` files, and the offline `evidence-pack.tar`.
 

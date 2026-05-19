@@ -1,6 +1,19 @@
+---
+title: Launchpad Conformance
+last_reviewed: 2026-05-18
+---
+
 # Launchpad Conformance
 
 Status: partial gates only.
+
+## Audience
+
+Maintainers validating whether Launchpad app, substrate, registry, policy, and receipt claims are backed by source and tests.
+
+## Outcome
+
+You can see which fail-closed Launchpad checks are implemented, which live e2e evidence is still absent, and which source files own the conformance boundary.
 
 ## Source Truth
 
@@ -45,3 +58,10 @@ flowchart TD
 ```
 
 No app may move to `oss_supported` until the missing gates pass.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
+| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |

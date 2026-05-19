@@ -23,14 +23,6 @@ After this page you should know what this surface is for, which source files own
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
 
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| The public page and source behavior disagree | Treat the source path in `Source Truth` as canonical, then update the docs and source-inventory row in the same change. |
-| A link or route is missing from the docs website | Check `docs/public-docs.manifest.json`, `llms.txt`, search, and the per-page Markdown export before changing navigation. |
-| A claim is not backed by code or tests | Remove the claim or add the missing code, example, schema, or validation command before publishing. |
-
 Source: Qianlong Lan and Anuj Kaul, "The Cognitive Firewall: Securing Browser Based AI Agents Against Indirect Prompt Injection Via Hybrid Edge Cloud Defense", arXiv:2603.23791.
 
 The HELM AI Kernel mapping keeps the paper's three-stage split:
@@ -53,6 +45,13 @@ The split-compute guard should run before browser side effects are dispatched:
 4. Deployments that also use Guardian should pass the same destination as `destination`, the page text hash as evidence, and tainted browser content as `user_input`/`source_channel=TOOL_OUTPUT` so Guardian's threat scanner and egress checker can produce the final signed decision.
 
 This keeps semantic reasoning and execution authority split: the planner may propose, but the deterministic guard owns the last pre-dispatch decision.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
+| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
 
 ## Diagram
 

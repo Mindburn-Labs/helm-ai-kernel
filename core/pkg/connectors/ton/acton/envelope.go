@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 
@@ -218,4 +219,38 @@ func uint64Param(params map[string]any, key string, fallback uint64) uint64 {
 		}
 	}
 	return fallback
+}
+
+func intParam(params map[string]any, key string, fallback int) (int, bool) {
+	v, ok := params[key]
+	if !ok {
+		return fallback, true
+	}
+	switch n := v.(type) {
+	case int:
+		if n >= 0 {
+			return n, true
+		}
+	case int64:
+		if n >= 0 {
+			return parseNonNegativeIntString(strconv.FormatInt(n, 10))
+		}
+	case uint64:
+		return parseNonNegativeIntString(strconv.FormatUint(n, 10))
+	case float64:
+		if n >= 0 && math.Trunc(n) == n {
+			return parseNonNegativeIntString(strconv.FormatFloat(n, 'f', 0, 64))
+		}
+	case string:
+		return parseNonNegativeIntString(n)
+	}
+	return fallback, false
+}
+
+func parseNonNegativeIntString(value string) (int, bool) {
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
+		return 0, false
+	}
+	return parsed, true
 }

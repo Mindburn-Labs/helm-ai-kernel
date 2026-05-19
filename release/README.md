@@ -12,26 +12,26 @@ files. It is not a complete copy of any GitHub release.
 
 ## Current Public Release
 
-The current public GitHub release is `v0.5.0`, published on 2026-05-13. Its
+The current public GitHub release is `v0.5.1`, published on 2026-05-18. Its
 visible release assets are platform binaries for Darwin, Linux, and Windows,
 `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `SHA256SUMS.txt`, `sbom.json`,
-`v0.5.0.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
+`v0.5.1.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`, and matching
 `*.cosign.bundle` files for every primary asset.
 
 There is no public GitHub Release object for `v0.4.1`; the actual public
 baseline for the `v0.5.0` delta is `v0.4.0`.
 
-## v0.5.0 Asset Contract
+## v0.5.1 Asset Contract
 
-`make release-assets` stages the `v0.5.0` asset set under
+`make release-assets` stages the `v0.5.1` asset set under
 `dist/release-assets/`, and the release workflow attached that set to the
 GitHub release:
 
 - five CLI binaries
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.5.0.openvex.json`
+- `v0.5.1.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
@@ -53,6 +53,11 @@ make release-assets
 bash scripts/release/verify_cosign.sh ./downloaded-release
 make docs-coverage docs-truth
 ```
+
+For tag-triggered release jobs, `make release-assets` uses the tag version,
+requires the matching `release/vex/v<version>.openvex.json`, verifies the
+staged `evidence-pack.tar`, and fails before checksum publication if any
+indexed EvidencePack file is missing.
 
 Cosign verification requires matching `*.cosign.bundle` files in the release
 directory. OpenVEX consumption requires an OpenVEX file attached to that

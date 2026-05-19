@@ -38,7 +38,7 @@ Or run the binary directly with an explicit port:
 | --- | --- |
 | `python_sdk/` | First-class Python SDK example covering ALLOW, DENY, MCP fail-closed denial, receipt verification, sandbox preflight, and evidence verification | `make sdk-examples-smoke` |
 | `ts_sdk/` | First-class TypeScript SDK example covering ALLOW, DENY, MCP fail-closed denial, receipt verification, sandbox preflight, and evidence verification | `make sdk-examples-smoke` |
-| `go_client/` | Go SDK source example using `sdk/go/client` | Source example; the SDK itself is validated by `make test-sdk-go-standalone`. |
+| `go_client/` | Go SDK source example using `sdk/go/client` | `go test ./examples/go_client/... -run '^$'` |
 | `java_client/` | Java SDK source example using `sdk/java` | Requires `cd sdk/java && mvn -q test package` before compiling `Main.java`. |
 | `rust_client/` | Rust SDK source example using `sdk/rust` | Source example; the SDK itself is validated by `make test-sdk-rust`. |
 

@@ -56,6 +56,29 @@ func TestFileStore_LoadNotFound(t *testing.T) {
 	}
 }
 
+func TestFileStore_RejectsUnsafeSessionIDs(t *testing.T) {
+	dir := t.TempDir()
+	store, _ := NewFileStore(dir)
+	outsideName := "helm-ai-kernel-file-store-escape-sentinel"
+
+	for _, id := range []string{"", "../" + outsideName, `..\escape`, "nested/session"} {
+		t.Run(id, func(t *testing.T) {
+			session := NewDelegationSession(id, "delegator", "delegate", "nonce", "policy", "trust", 0,
+				time.Now().Add(1*time.Hour), false, nil)
+			if err := store.Store(session); err == nil {
+				t.Fatalf("expected Store to reject session ID %q", id)
+			}
+			if loaded, err := store.Load(id); err == nil || loaded != nil {
+				t.Fatalf("expected Load to reject session ID %q, loaded=%v err=%v", id, loaded, err)
+			}
+		})
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "..", outsideName+".json")); !os.IsNotExist(err) {
+		t.Fatalf("unsafe session path was created or stat failed unexpectedly: %v", err)
+	}
+}
+
 func TestFileStore_Revoke(t *testing.T) {
 	dir := t.TempDir()
 	store, _ := NewFileStore(dir)

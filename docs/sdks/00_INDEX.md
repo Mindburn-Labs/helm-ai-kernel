@@ -1,6 +1,6 @@
 ---
 title: SDK Index
-last_reviewed: 2026-05-12
+last_reviewed: 2026-05-19
 ---
 
 # SDK Index
@@ -51,11 +51,11 @@ distribution promises.
 
 | Language | Public package status | Source | Validation |
 | --- | --- | --- | --- |
-| Python SDK | Package name `helm-sdk`; source manifest currently declares `0.5.0`. Verify registry state before publishing pinned install claims. | `sdk/python/helm_sdk/client.py` | `make test-sdk-py` |
-| TypeScript | Package name `@mindburn/helm-ai-kernel`; source manifest currently declares `0.5.0`. Verify registry state before publishing pinned install claims. | `sdk/ts/src/client.ts` | `make test-sdk-ts` |
+| Python SDK | Package name `helm-sdk`; source manifest currently declares `0.5.1`. Verify registry state before publishing pinned install claims. | `sdk/python/helm_sdk/client.py` | `make test-sdk-py` |
+| TypeScript | Package name `@mindburn/helm-ai-kernel`; source manifest currently declares `0.5.1`. Verify registry state before publishing pinned install claims. | `sdk/ts/src/client.ts` | `make test-sdk-ts` |
 | JavaScript | Uses `@mindburn/helm-ai-kernel` or raw HTTP/fetch | `sdk/ts/src/client.ts`, `examples/js_openai_baseurl/` | `make test-sdk-ts` |
 | Go SDK | Source/module path only; pin `@main` or a commit until tagged SDK modules are aligned | `sdk/go/client/client.go` | `cd sdk/go && go test ./...` |
-| Rust SDK | Package name `helm-sdk`; source manifest currently declares `0.5.0`. Verify registry state before publishing pinned install claims. | `sdk/rust/src/client.rs` | `make test-sdk-rust` |
+| Rust SDK | Package name `helm-sdk`; source manifest currently declares `0.5.1`. Verify registry state before publishing pinned install claims. | `sdk/rust/src/client.rs` | `make test-sdk-rust` |
 | Java | Source-available local Maven build; public coordinate not verified | `sdk/java/pom.xml` | `make test-sdk-java` |
 
 Use `http://127.0.0.1:7714` for the local `helm-ai-kernel serve --policy` quickstart, `http://localhost:8080` for `helm-ai-kernel server` or the current Docker Compose mapping, and `http://localhost:9090/v1` only for the OpenAI-compatible proxy.

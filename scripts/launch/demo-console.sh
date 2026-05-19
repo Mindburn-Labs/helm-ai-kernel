@@ -65,15 +65,17 @@ BOOTSTRAP="$(curl -fsS \
   -H "X-Helm-Tenant-ID: launch-demo" \
   "http://127.0.0.1:$PORT/api/v1/console/bootstrap")"
 
-python3 - "$BOOTSTRAP" <<'PY'
+EXPECTED_VERSION="$(cat VERSION)" python3 - "$BOOTSTRAP" <<'PY'
 import json
+import os
 import sys
 
 payload = json.loads(sys.argv[1])
+expected = os.environ["EXPECTED_VERSION"]
 health = payload.get("health", {})
 if health.get("kernel") != "ready" or health.get("policy") != "ready" or health.get("store") != "ready":
     raise SystemExit(f"unexpected console health: {payload.get('health')}")
-if payload.get("version", {}).get("version") not in {"0.5.0", "v0.5.0"}:
+if payload.get("version", {}).get("version") not in {expected, f"v{expected}"}:
     raise SystemExit(f"unexpected console version: {payload.get('version')}")
 mcp = payload.get("mcp", {})
 if mcp.get("authorization") != "local" or not mcp.get("scopes"):

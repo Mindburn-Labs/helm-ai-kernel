@@ -38,14 +38,13 @@ Agent proposal -> HELM boundary -> ALLOW / DENY / ESCALATE -> signed receipt
 
 - Repository: `Mindburn-Labs/helm-ai-kernel`
 - Root package identity: `helm-ai-kernel-root`
-- Current public release: `v0.5.3`
+- Current public release: `v0.5.4`
 - License: Apache-2.0
 - Supported security line: `0.5.x`; `0.4.x` is best effort
 - Canonical docs: <https://helm.docs.mindburn.org/helm-ai-kernel>
 
-The current `v0.5.3` GitHub release was published on 2026-05-19 at
-22:23 UTC:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.3>. It includes
+The current `v0.5.4` GitHub release was published on 2026-05-20 at
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.4>. It includes
 CLI binaries, checksums, SBOM JSON, OpenVEX, release-attestation metadata,
 Cosign bundles, `evidence-pack.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, and sample policy
 material.
@@ -203,7 +202,7 @@ The complete diagram doctrine lives in
 | Python SDK | `pip install helm-sdk` |
 | TypeScript SDK | `npm install @mindburn/helm-ai-kernel` |
 | Rust SDK | `cargo add helm-sdk` |
-| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.2` |
+| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.4` |
 | Design system core | Workspace source; public npm registry publication is not verified in this repo |
 
 HTTP clients are generated from
@@ -232,8 +231,8 @@ Public OSS docs are sourced from this repo and published through
 
 ## Release Verification
 
-For `v0.5.3`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
-`v0.5.3.openvex.json`, `release-attestation.json`, the platform binary assets,
+For `v0.5.4`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
+`v0.5.4.openvex.json`, `release-attestation.json`, the platform binary assets,
 matching `*.cosign.bundle` files, and offline `evidence-pack.tar` verification.
 
 Current release tooling derives artifact versions from tag refs, requires an

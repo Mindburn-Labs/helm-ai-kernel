@@ -10,107 +10,176 @@
       "type": "integer",
       "minimum": 1,
       "default": 1,
-      "description": "Number of kernel pods to run."
+      "description": "Number of kernel pods to run. The kernel is stateless apart from its SQLite-backed receipts and ProofGraph store; horizontal scaling requires switching helm.storage.type to postgres."
     },
     "image": {
       "type": "object",
       "additionalProperties": false,
       "required": ["repository"],
+      "description": "Container image used by the kernel Deployment.",
       "properties": {
         "repository": {
           "type": "string",
           "minLength": 1,
-          "description": "Container image repository (without tag)."
+          "description": "Container image repository, without tag. Defaults to the public OCI image ghcr.io/mindburn-labs/helm-ai-kernel."
         },
         "pullPolicy": {
           "type": "string",
           "enum": ["Always", "IfNotPresent", "Never"],
-          "default": "IfNotPresent"
+          "default": "IfNotPresent",
+          "description": "Kubernetes image pull policy. Use IfNotPresent for pinned tags and Always when consuming the floating :latest tag."
         },
         "tag": {
           "type": "string",
-          "description": "Overrides the image tag whose default is the chart appVersion. Leave empty to use appVersion."
+          "description": "Overrides the image tag. Leave empty to inherit the chart's appVersion. Set explicitly when pinning to a digest-resolved release or to a development build."
         }
       }
     },
     "imagePullSecrets": {
       "type": "array",
+      "description": "References to Kubernetes Secrets used to pull the container image from a private registry. Each entry must be a {name: <secret>} object.",
       "items": {
         "type": "object",
         "additionalProperties": true,
         "required": ["name"],
         "properties": {
-          "name": { "type": "string" }
+          "name": {
+            "type": "string",
+            "description": "Name of the Secret of type kubernetes.io/dockerconfigjson in the release namespace."
+          }
         }
       }
     },
-    "nameOverride": { "type": "string" },
-    "fullnameOverride": { "type": "string" },
+    "nameOverride": {
+      "type": "string",
+      "description": "Override the chart name component used to build resource names. Leave empty to use the chart name verbatim."
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "description": "Override the full resource name prefix. When set, both the release name and chart name are ignored in resource naming."
+    },
     "serviceAccount": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Kubernetes ServiceAccount used by the kernel pod.",
       "properties": {
-        "create": { "type": "boolean", "default": true },
-        "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
-        "name": { "type": "string" }
+        "create": {
+          "type": "boolean",
+          "default": true,
+          "description": "Create a ServiceAccount for the kernel. Disable if you provide an externally managed one via .name."
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Annotations attached to the ServiceAccount, for example IRSA / Workload Identity bindings."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the ServiceAccount to use. If empty and create=true, a name is derived from the release fullname template."
+        }
       }
     },
     "podAnnotations": {
       "type": "object",
-      "additionalProperties": { "type": "string" }
+      "additionalProperties": { "type": "string" },
+      "description": "Annotations applied to the kernel Pod. Useful for Prometheus scrape annotations, Vault Agent Injector, eBPF instrumentation, etc."
     },
     "podLabels": {
       "type": "object",
-      "additionalProperties": { "type": "string" }
+      "additionalProperties": { "type": "string" },
+      "description": "Extra labels applied to the kernel Pod in addition to the chart's standard selector labels."
     },
     "podSecurityContext": {
       "type": "object",
-      "additionalProperties": true
+      "additionalProperties": true,
+      "description": "Pod-level securityContext. Defaults run the kernel as non-root (UID/GID 65534, nobody) with fsGroup so the data volume is writable."
     },
     "securityContext": {
       "type": "object",
-      "additionalProperties": true
+      "additionalProperties": true,
+      "description": "Container-level securityContext. Defaults drop ALL Linux capabilities, disable privilege escalation, and mount the root filesystem read-only; helm.dataDir is the only writable path."
     },
     "service": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Kubernetes Service that exposes the kernel HTTP ports.",
       "properties": {
         "type": {
           "type": "string",
           "enum": ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"],
-          "default": "ClusterIP"
+          "default": "ClusterIP",
+          "description": "Kubernetes Service type. ClusterIP is recommended for production; place an Ingress or service-mesh gateway in front for external traffic."
         },
-        "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 8080 },
-        "healthPort": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 8081 },
-        "metricsPort": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 9090 }
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 8080,
+          "description": "Service port that fronts the kernel HTTP API container port."
+        },
+        "healthPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 8081,
+          "description": "Service port that fronts the dedicated liveness/readiness HTTP endpoint container port."
+        },
+        "metricsPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 9090,
+          "description": "Service port reserved for the Prometheus handler. Bound only when helm.metrics.enabled=true; see the metrics block for status."
+        }
       }
     },
     "ingress": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Optional Kubernetes Ingress in front of the kernel Service. Disabled by default; production deployments typically use a service-mesh gateway or external load balancer.",
       "properties": {
-        "enabled": { "type": "boolean", "default": false },
-        "className": { "type": "string" },
-        "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Render the Ingress object."
+        },
+        "className": {
+          "type": "string",
+          "description": "IngressClass name (e.g. nginx, traefik, istio). Leave empty to use the cluster's default IngressClass."
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Ingress annotations. Typical entries: cert-manager.io/cluster-issuer, nginx.ingress.kubernetes.io/* options, alb.ingress.kubernetes.io/* options."
+        },
         "hosts": {
           "type": "array",
+          "description": "Hostnames and path mappings exposed by the Ingress.",
           "items": {
             "type": "object",
             "additionalProperties": false,
             "required": ["host"],
             "properties": {
-              "host": { "type": "string" },
+              "host": {
+                "type": "string",
+                "description": "Fully qualified hostname routed to the kernel Service."
+              },
               "paths": {
                 "type": "array",
+                "description": "Paths under the host that should reach the kernel.",
                 "items": {
                   "type": "object",
                   "additionalProperties": false,
                   "required": ["path", "pathType"],
                   "properties": {
-                    "path": { "type": "string" },
+                    "path": {
+                      "type": "string",
+                      "description": "HTTP path prefix or exact match."
+                    },
                     "pathType": {
                       "type": "string",
-                      "enum": ["Exact", "Prefix", "ImplementationSpecific"]
+                      "enum": ["Exact", "Prefix", "ImplementationSpecific"],
+                      "description": "Kubernetes Ingress pathType matching mode."
                     }
                   }
                 }
@@ -120,12 +189,20 @@
         },
         "tls": {
           "type": "array",
+          "description": "TLS configuration for the Ingress. Each entry binds a Secret containing a certificate to one or more hostnames.",
           "items": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "secretName": { "type": "string" },
-              "hosts": { "type": "array", "items": { "type": "string" } }
+              "secretName": {
+                "type": "string",
+                "description": "Name of the kubernetes.io/tls Secret holding the certificate and key."
+              },
+              "hosts": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Hostnames the certificate is valid for."
+              }
             }
           }
         }
@@ -134,21 +211,36 @@
     "resources": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Pod resource requests and limits. Defaults aim at a small production footprint; raise both for receipt-heavy workloads or when running the postgres storage backend in-cluster.",
       "properties": {
         "limits": {
           "type": "object",
           "additionalProperties": false,
+          "description": "Hard upper bounds enforced by the kubelet. Exceeding cpu throttles, exceeding memory OOM-kills the container.",
           "properties": {
-            "cpu": { "type": ["string", "number"] },
-            "memory": { "type": "string" }
+            "cpu": {
+              "type": ["string", "number"],
+              "description": "CPU limit expressed in cores (e.g. 0.5) or millicores (e.g. 500m)."
+            },
+            "memory": {
+              "type": "string",
+              "description": "Memory limit (e.g. 256Mi, 1Gi)."
+            }
           }
         },
         "requests": {
           "type": "object",
           "additionalProperties": false,
+          "description": "Guaranteed resources used by the Kubernetes scheduler to place the pod.",
           "properties": {
-            "cpu": { "type": ["string", "number"] },
-            "memory": { "type": "string" }
+            "cpu": {
+              "type": ["string", "number"],
+              "description": "CPU request in cores or millicores."
+            },
+            "memory": {
+              "type": "string",
+              "description": "Memory request (e.g. 128Mi, 512Mi)."
+            }
           }
         }
       }
@@ -156,97 +248,166 @@
     "helm": {
       "type": "object",
       "additionalProperties": true,
-      "description": "HELM-kernel-specific configuration block.",
+      "description": "HELM-kernel-specific configuration. This key is retained for one compatibility window while the chart identity and rendered resource names move to helm-ai-kernel.",
       "properties": {
         "bindAddr": {
           "type": "string",
           "default": "0.0.0.0",
-          "description": "Bind address used inside the pod. Kubernetes Services require 0.0.0.0."
+          "description": "Bind address used inside the pod. Kubernetes Services require 0.0.0.0; keep loopback only for sidecar topologies."
         },
         "dataDir": {
           "type": "string",
           "default": "/data",
-          "description": "Durable runtime directory for SQLite state, receipts, artifacts, and root keys."
+          "description": "Durable runtime directory for SQLite state, receipts, artifacts, and root keys. Matches the persistence volume mount path."
         },
         "production": {
           "type": "boolean",
           "default": false,
-          "description": "Production mode refuses to auto-generate a root signing key at startup."
+          "description": "Production mode refuses to auto-generate a root signing key at startup and forces auth/key material to be supplied explicitly. Enable for any non-demo deployment."
         },
         "proxy": {
           "type": "object",
           "additionalProperties": false,
+          "description": "Outbound proxy that forwards LLM traffic to an upstream provider. Disable when running fully air-gapped against an on-cluster model.",
           "properties": {
-            "enabled": { "type": "boolean", "default": true },
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable the egress proxy that forwards governed LLM calls to the configured upstream."
+            },
             "upstream": {
               "type": "string",
               "format": "uri",
-              "description": "Upstream LLM provider endpoint."
+              "description": "Upstream LLM provider endpoint, including scheme and version path (e.g. https://api.openai.com/v1)."
             }
           }
         },
-        "region": { "type": "string", "default": "us" },
-        "demoMode": { "type": "boolean", "default": false },
+        "region": {
+          "type": "string",
+          "default": "us",
+          "description": "Region identifier emitted into receipts and used for data-residency policy decisions."
+        },
+        "demoMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Demo mode disables real connectors and uses ephemeral signing keys. Useful for local trials; must be false in production."
+        },
         "auth": {
           "type": "object",
           "additionalProperties": false,
+          "description": "Runtime API authentication. Production rendering refuses to omit these keys because protected evidence, receipt, tenant, and service-internal routes fail closed without key material.",
           "properties": {
-            "adminAPIKey": { "type": "string" },
-            "serviceAPIKey": { "type": "string" },
-            "existingSecret": { "type": "string" },
-            "adminAPIKeySecretKey": { "type": "string", "default": "HELM_ADMIN_API_KEY" },
-            "serviceAPIKeySecretKey": { "type": "string", "default": "HELM_SERVICE_API_KEY" }
+            "adminAPIKey": {
+              "type": "string",
+              "description": "Admin API key written into the generated auth Secret. Used for receipts/evidence administration endpoints. Leave empty when supplying an existingSecret."
+            },
+            "serviceAPIKey": {
+              "type": "string",
+              "description": "Service API key for machine-to-machine integrations. Leave empty when supplying an existingSecret."
+            },
+            "existingSecret": {
+              "type": "string",
+              "description": "Name of an existing Secret containing the admin and service API keys. Takes precedence over inline values."
+            },
+            "adminAPIKeySecretKey": {
+              "type": "string",
+              "default": "HELM_ADMIN_API_KEY",
+              "description": "Key inside existingSecret that contains the admin API key."
+            },
+            "serviceAPIKeySecretKey": {
+              "type": "string",
+              "default": "HELM_SERVICE_API_KEY",
+              "description": "Key inside existingSecret that contains the service API key."
+            }
           }
         },
         "signing": {
           "type": "object",
           "additionalProperties": false,
+          "description": "Cryptographic signing key for ProofGraph receipts and evidence packs.",
           "properties": {
             "algorithm": {
               "type": "string",
               "enum": ["ed25519", "ml-dsa-65"],
-              "default": "ed25519"
+              "default": "ed25519",
+              "description": "Signature scheme. ed25519 is the default; ml-dsa-65 is the post-quantum option for environments that require NIST PQC."
             },
             "key": {
               "type": "string",
               "pattern": "^([0-9a-f]{64})?$",
-              "description": "Ed25519 root key seed as 64 lowercase hex chars (used only if existingSecret is not set)."
+              "description": "Ed25519 root key seed as exactly 64 lowercase hex characters. Used only when existingSecret is empty; leave blank for production and inject via existingSecret instead."
             },
-            "existingSecret": { "type": "string" }
+            "existingSecret": {
+              "type": "string",
+              "description": "Name of an existing Secret with a key named 'signing-key' containing the 64-char hex seed."
+            }
           }
         },
         "storage": {
           "type": "object",
           "additionalProperties": false,
+          "description": "Persistence backend for receipts, ProofGraph entries, and audit state.",
           "properties": {
             "type": {
               "type": "string",
               "enum": ["sqlite", "postgres"],
-              "default": "sqlite"
+              "default": "sqlite",
+              "description": "Storage backend. sqlite is single-pod-only and best for development or trial deployments; postgres is required for replicaCount>1 and any HA topology."
             },
             "sqlite": {
               "type": "object",
               "additionalProperties": false,
+              "description": "Configuration used when type=sqlite.",
               "properties": {
-                "path": { "type": "string" }
+                "path": {
+                  "type": "string",
+                  "description": "Filesystem path for the SQLite database file. Must live under helm.dataDir so it survives pod restarts on the persistent volume."
+                }
               }
             },
             "postgres": {
               "type": "object",
               "additionalProperties": false,
+              "description": "Connection details used when type=postgres.",
               "properties": {
-                "host": { "type": "string" },
-                "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 5432 },
-                "database": { "type": "string" },
-                "user": { "type": "string" },
-                "password": { "type": "string" },
+                "host": {
+                  "type": "string",
+                  "description": "PostgreSQL host or DNS name."
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535,
+                  "default": 5432,
+                  "description": "PostgreSQL TCP port."
+                },
+                "database": {
+                  "type": "string",
+                  "description": "Database name."
+                },
+                "user": {
+                  "type": "string",
+                  "description": "Database user."
+                },
+                "password": {
+                  "type": "string",
+                  "description": "Database password. Prefer existingSecret over inline values in production."
+                },
                 "sslMode": {
                   "type": "string",
                   "enum": ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"],
-                  "default": "disable"
+                  "default": "disable",
+                  "description": "libpq sslmode. Use verify-full against managed PostgreSQL services that ship a CA bundle."
                 },
-                "existingSecret": { "type": "string" },
-                "existingSecretKey": { "type": "string", "default": "DATABASE_URL" }
+                "existingSecret": {
+                  "type": "string",
+                  "description": "Existing Secret containing a DATABASE_URL entry; overrides inline host/port/database/user/password fields."
+                },
+                "existingSecretKey": {
+                  "type": "string",
+                  "default": "DATABASE_URL",
+                  "description": "Key inside existingSecret that contains the database URL."
+                }
               }
             }
           }
@@ -254,19 +415,33 @@
         "metrics": {
           "type": "object",
           "additionalProperties": false,
+          "description": "Prometheus metrics exposure. Disabled until the Prometheus handler is wired in the kernel (tracked as chart-metrics-backend-implementation).",
           "properties": {
             "enabled": {
               "type": "boolean",
               "default": false,
-              "description": "Disabled until the Prometheus handler is wired in the kernel (chart-metrics-backend-implementation)."
+              "description": "Bind the metrics container port and render the metrics Service entry. Keep off until the kernel ships a Prometheus handler; enabling produces unbound-port errors today."
             },
             "serviceMonitor": {
               "type": "object",
               "additionalProperties": false,
+              "description": "Prometheus Operator ServiceMonitor rendered when metrics.enabled=true.",
               "properties": {
-                "enabled": { "type": "boolean", "default": false },
-                "interval": { "type": "string", "default": "30s" },
-                "labels": { "type": "object", "additionalProperties": { "type": "string" } }
+                "enabled": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Render a ServiceMonitor object for prometheus-operator discovery."
+                },
+                "interval": {
+                  "type": "string",
+                  "default": "30s",
+                  "description": "Scrape interval (Go duration string, e.g. 30s, 1m)."
+                },
+                "labels": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" },
+                  "description": "Extra labels for the ServiceMonitor (e.g. team, prometheus instance selector labels)."
+                }
               }
             }
           }
@@ -274,35 +449,62 @@
         "policy": {
           "type": "object",
           "additionalProperties": true,
+          "description": "Policy reconciliation. The kernel verifies, compiles, and atomically swaps an EffectivePolicySnapshot at runtime; Kubernetes delivery is a policy-source backend, not runtime truth.",
           "properties": {
             "source": {
               "type": "object",
               "additionalProperties": false,
+              "description": "Where the runtime reconciler pulls policy bundles from.",
               "properties": {
                 "kind": {
                   "type": "string",
                   "enum": ["controlplane", "crd", "mountedFile"],
-                  "default": "mountedFile"
+                  "default": "mountedFile",
+                  "description": "Policy source backend. controlplane is recommended for production; crd suits Kubernetes-native self-hosting; mountedFile is for OSS/local/bootstrap/demo use."
                 },
-                "pollInterval": { "type": "string", "default": "10s" },
-                "initialReconcileTimeout": { "type": "string", "default": "30s" },
+                "pollInterval": {
+                  "type": "string",
+                  "default": "10s",
+                  "description": "Runtime reconciler polling interval. Lost reload hints are recovered by polling, so do not raise this above 60s for production."
+                },
+                "initialReconcileTimeout": {
+                  "type": "string",
+                  "default": "30s",
+                  "description": "How long the reconciler waits for the first valid snapshot before failing closed at startup."
+                },
                 "controlplane": {
                   "type": "object",
                   "additionalProperties": false,
+                  "description": "Used when kind=controlplane.",
                   "properties": {
-                    "url": { "type": "string" },
+                    "url": {
+                      "type": "string",
+                      "description": "Control-plane URL serving the policy bundle (HTTPS only in production)."
+                    },
                     "auth": {
                       "type": "object",
                       "additionalProperties": false,
+                      "description": "Authentication mode against the control plane.",
                       "properties": {
                         "mode": {
                           "type": "string",
                           "enum": ["serviceAccountJWT", "bearerToken"],
-                          "default": "serviceAccountJWT"
+                          "default": "serviceAccountJWT",
+                          "description": "serviceAccountJWT (recommended) projects the pod's Kubernetes ServiceAccount token; bearerToken uses a static token from existingSecret."
                         },
-                        "bearerToken": { "type": "string" },
-                        "existingSecret": { "type": "string" },
-                        "existingSecretKey": { "type": "string", "default": "HELM_POLICY_BEARER_TOKEN" }
+                        "bearerToken": {
+                          "type": "string",
+                          "description": "Static bearer token. Prefer existingSecret over inline values; required only when mode=bearerToken."
+                        },
+                        "existingSecret": {
+                          "type": "string",
+                          "description": "Existing Secret containing the bearer token."
+                        },
+                        "existingSecretKey": {
+                          "type": "string",
+                          "default": "HELM_POLICY_BEARER_TOKEN",
+                          "description": "Key inside existingSecret holding the bearer token."
+                        }
                       }
                     }
                   }
@@ -310,19 +512,40 @@
                 "crd": {
                   "type": "object",
                   "additionalProperties": false,
+                  "description": "Used when kind=crd.",
                   "properties": {
-                    "install": { "type": "boolean", "default": false },
-                    "apiGroup": { "type": "string" },
-                    "resource": { "type": "string" }
+                    "install": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Render the HelmPolicyBundle CRD and RBAC. Set false when the cluster operator installs the CRD out-of-band."
+                    },
+                    "apiGroup": {
+                      "type": "string",
+                      "description": "CRD API group (default policy.helm.ai)."
+                    },
+                    "resource": {
+                      "type": "string",
+                      "description": "CRD plural/kind name (default HelmPolicyBundle)."
+                    }
                   }
                 },
                 "mountedFile": {
                   "type": "object",
                   "additionalProperties": false,
+                  "description": "Used when kind=mountedFile. ConfigMap or Secret bytes are a delivery backend; runtime reconciliation still verifies hash, signature, and provenance.",
                   "properties": {
-                    "existingConfigMap": { "type": "string" },
-                    "existingSecret": { "type": "string" },
-                    "mountPath": { "type": "string" }
+                    "existingConfigMap": {
+                      "type": "string",
+                      "description": "Name of an existing ConfigMap containing the policy bundle."
+                    },
+                    "existingSecret": {
+                      "type": "string",
+                      "description": "Name of an existing Secret containing the policy bundle. Use when policy material contains references that warrant Secret-grade protection."
+                    },
+                    "mountPath": {
+                      "type": "string",
+                      "description": "Filesystem path the policy ConfigMap/Secret is mounted at inside the pod."
+                    }
                   }
                 }
               }
@@ -330,35 +553,70 @@
             "failClosed": {
               "type": "object",
               "additionalProperties": false,
+              "description": "Behavior when a snapshot is missing, stale, or invalid.",
               "properties": {
-                "requireInitialSnapshot": { "type": "boolean", "default": true },
+                "requireInitialSnapshot": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Refuse to serve traffic until the first valid policy snapshot is loaded."
+                },
                 "onMissingSnapshot": {
                   "type": "string",
                   "enum": ["deny", "allow", "keepLastKnownGood"],
-                  "default": "deny"
+                  "default": "deny",
+                  "description": "Action when no snapshot is available. Keep on deny for production; allow is for emergency degraded-mode operation only."
                 },
                 "onInvalidUpdate": {
                   "type": "string",
                   "enum": ["deny", "allow", "keepLastKnownGood"],
-                  "default": "keepLastKnownGood"
+                  "default": "keepLastKnownGood",
+                  "description": "Action when an updated bundle fails verification. keepLastKnownGood is the safe default; switch to deny for ultra-strict environments."
                 },
-                "lastKnownGoodMaxAge": { "type": "string", "default": "10m" }
+                "lastKnownGoodMaxAge": {
+                  "type": "string",
+                  "default": "10m",
+                  "description": "Maximum age of the last-known-good snapshot before the reconciler escalates to onMissingSnapshot behavior."
+                }
               }
             },
             "reloadHints": {
               "type": "object",
               "additionalProperties": false,
+              "description": "Out-of-band wake hints that trigger an immediate reconcile. The reconciler still polls — hints only reduce mean reconcile latency.",
               "properties": {
-                "enabled": { "type": "boolean", "default": true },
-                "httpWakeEndpoint": { "type": "string" },
-                "fsnotify": { "type": "boolean", "default": false },
-                "k8sWatch": { "type": "boolean", "default": false },
+                "enabled": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Accept wake hints. Disable to make polling the only reload trigger."
+                },
+                "httpWakeEndpoint": {
+                  "type": "string",
+                  "description": "Wake-only internal endpoint exposed for sidecars and operators (default /internal/policy/reconcile)."
+                },
+                "fsnotify": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Watch the mounted-file policy path with inotify. Useful for development; in Kubernetes ConfigMap atomic-symlink swaps may bypass this."
+                },
+                "k8sWatch": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Watch the source ConfigMap/Secret/CRD via the Kubernetes API. Requires extra RBAC."
+                },
                 "configReloaderSidecar": {
                   "type": "object",
                   "additionalProperties": false,
+                  "description": "Optional configmap-reload sidecar that hits httpWakeEndpoint on mounted-file changes.",
                   "properties": {
-                    "enabled": { "type": "boolean", "default": false },
-                    "image": { "type": "string" }
+                    "enabled": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Inject the sidecar."
+                    },
+                    "image": {
+                      "type": "string",
+                      "description": "Sidecar image reference (default ghcr.io/jimmidyson/configmap-reload:v0.13.1)."
+                    }
                   }
                 }
               }
@@ -366,22 +624,64 @@
             "signature": {
               "type": "object",
               "additionalProperties": false,
+              "description": "Bundle signature verification.",
               "properties": {
-                "required": { "type": "boolean", "default": false },
-                "publicKey": { "type": "string" },
-                "existingSecret": { "type": "string" },
-                "existingSecretKey": { "type": "string", "default": "HELM_POLICY_TRUST_PUBLIC_KEY" }
+                "required": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Reject unsigned policy heads during reconciliation. Production control-plane deployments must set this to true."
+                },
+                "publicKey": {
+                  "type": "string",
+                  "description": "Ed25519 public key (hex) used to verify canonical policy bundle bytes. Public keys are not secret, but existingSecret keeps values files free of key material."
+                },
+                "existingSecret": {
+                  "type": "string",
+                  "description": "Existing Secret containing the public key."
+                },
+                "existingSecretKey": {
+                  "type": "string",
+                  "default": "HELM_POLICY_TRUST_PUBLIC_KEY",
+                  "description": "Key inside existingSecret holding the public key bytes."
+                }
               }
             },
-            "configMap": { "type": "string" },
-            "mountPath": { "type": "string" },
-            "fileName": { "type": "string" },
-            "name": { "type": "string" },
-            "profile": { "type": "string" },
-            "referencePack": { "type": "string" },
-            "referencePackFileName": { "type": "string" },
-            "referencePackID": { "type": "string" },
-            "referencePackLabel": { "type": "string" }
+            "configMap": {
+              "type": "string",
+              "description": "Legacy alias for policy.source.mountedFile.existingConfigMap. Retained for one compatibility window."
+            },
+            "mountPath": {
+              "type": "string",
+              "description": "Legacy alias for policy.source.mountedFile.mountPath."
+            },
+            "fileName": {
+              "type": "string",
+              "description": "Filename used when mounting the policy bundle into the pod (default serve-policy.toml)."
+            },
+            "name": {
+              "type": "string",
+              "description": "Logical policy bundle name advertised in receipts."
+            },
+            "profile": {
+              "type": "string",
+              "description": "Runtime profile applied during policy compilation (default kubernetes)."
+            },
+            "referencePack": {
+              "type": "string",
+              "description": "Path to the reference pack used to derive default-deny fallback rules at startup."
+            },
+            "referencePackFileName": {
+              "type": "string",
+              "description": "Filename of the reference pack inside the chart artifacts."
+            },
+            "referencePackID": {
+              "type": "string",
+              "description": "Stable identifier for the reference pack, emitted into receipts for downstream verification."
+            },
+            "referencePackLabel": {
+              "type": "string",
+              "description": "Human-readable label for the reference pack."
+            }
           }
         }
       }
@@ -389,11 +689,20 @@
     "persistence": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Persistent storage for helm.dataDir. Required when storage.type=sqlite or when receipts and evidence packs need to survive pod restarts.",
       "properties": {
-        "enabled": { "type": "boolean", "default": true },
-        "storageClass": { "type": "string" },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Create a PersistentVolumeClaim for the data directory."
+        },
+        "storageClass": {
+          "type": "string",
+          "description": "StorageClass name. Leave empty to use the cluster default."
+        },
         "accessModes": {
           "type": "array",
+          "description": "PVC access modes. Use ReadWriteOnce for single-pod deployments; ReadWriteMany is only meaningful when also setting storage.type=postgres for the actual hot path.",
           "items": {
             "type": "string",
             "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"]
@@ -402,44 +711,82 @@
         "size": {
           "type": "string",
           "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)?$",
-          "default": "1Gi"
+          "default": "1Gi",
+          "description": "PVC size in Kubernetes resource notation (e.g. 1Gi, 10Gi). Receipt-heavy workloads should provision generously."
         },
-        "existingClaim": { "type": "string" }
+        "existingClaim": {
+          "type": "string",
+          "description": "Use an existing PVC instead of letting the chart create one. Useful when restoring from a snapshot or sharing a volume across releases."
+        }
       }
     },
     "probes": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Liveness and readiness probes. Defaults target the dedicated health port and tolerate a slow first reconcile.",
       "properties": {
-        "liveness": { "type": "object", "additionalProperties": true },
-        "readiness": { "type": "object", "additionalProperties": true }
+        "liveness": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Pod liveness probe. Failure restarts the container."
+        },
+        "readiness": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Pod readiness probe. Failure removes the pod from the Service backend pool."
+        }
       }
     },
     "nodeSelector": {
       "type": "object",
-      "additionalProperties": { "type": "string" }
+      "additionalProperties": { "type": "string" },
+      "description": "Node selector constraint for the kernel pod."
     },
     "tolerations": {
       "type": "array",
-      "items": { "type": "object", "additionalProperties": true }
+      "description": "Pod tolerations applied to allow scheduling on tainted nodes.",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "Single toleration entry; mirrors the Kubernetes Toleration object."
+      }
     },
     "affinity": {
       "type": "object",
-      "additionalProperties": true
+      "additionalProperties": true,
+      "description": "Pod affinity/anti-affinity rules. Useful to spread across zones or co-locate with control-plane components."
     },
     "postgresql": {
       "type": "object",
       "additionalProperties": true,
+      "description": "Optional bitnami/postgresql subchart values, enabled only when the dependency is declared and helm.storage.type=postgres.",
       "properties": {
-        "enabled": { "type": "boolean", "default": false },
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the bundled PostgreSQL subchart. Production deployments typically point to an externally managed PostgreSQL instead."
+        },
         "auth": {
           "type": "object",
           "additionalProperties": true,
+          "description": "PostgreSQL auth settings passed through to the subchart.",
           "properties": {
-            "database": { "type": "string" },
-            "username": { "type": "string" },
-            "password": { "type": "string" },
-            "existingSecret": { "type": "string" }
+            "database": {
+              "type": "string",
+              "description": "Database name created by the subchart."
+            },
+            "username": {
+              "type": "string",
+              "description": "Database user created by the subchart."
+            },
+            "password": {
+              "type": "string",
+              "description": "Database password. Prefer existingSecret over inline values."
+            },
+            "existingSecret": {
+              "type": "string",
+              "description": "Existing Secret containing the PostgreSQL password."
+            }
           }
         }
       }

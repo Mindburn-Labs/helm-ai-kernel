@@ -38,12 +38,13 @@ This scheme maps the main sections of HELM AI Kernel Changelog in reading order.
 flowchart LR
   Page["HELM AI Kernel Changelog"]
   A["[Unreleased]"]
-  B["[0.5.3] - 2026-05-19"]
-  C["[0.5.2] - 2026-05-19"]
-  D["[0.5.1] - 2026-05-18"]
-  E["[0.5.0] - 2026-05-13"]
-  F["[0.4.0] - 2026-04-25"]
-  G["Validation"]
+  B["[0.5.4] - 2026-05-20"]
+  C["[0.5.3] - 2026-05-19"]
+  D["[0.5.2] - 2026-05-19"]
+  E["[0.5.1] - 2026-05-18"]
+  F["[0.5.0] - 2026-05-13"]
+  G["[0.4.0] - 2026-04-25"]
+  H["Validation"]
   Page --> A
   A --> B
   B --> C
@@ -51,11 +52,31 @@ flowchart LR
   D --> E
   E --> F
   F --> G
+  G --> H
 ```
 
 All notable changes to the retained HELM AI Kernel surface are documented here. Public entries focus on developer-visible interfaces, compatibility, verification, SDKs, and security-relevant documentation.
 
 ## [Unreleased]
+
+## [0.5.4] - 2026-05-20
+
+Published at <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.4>.
+
+Chart page polish on ArtifactHub. No kernel binary or API changes;
+the v0.5.3 work landed three of four chart-page badges -- this release
+lights the fourth and makes the values reference panel useful.
+
+- Moved ArtifactHub package metadata (changes, images, links, license,
+  prerelease, containsSecurityUpdates, signKey, category) from
+  `deploy/helm-chart/artifacthub-pkg.yml` into `Chart.yaml` annotations,
+  which is the only file ArtifactHub reads for `kind=helm`. Lights the
+  Changelog badge that stayed grey under v0.5.3.
+- Annotated every field in `deploy/helm-chart/values.schema.json` with
+  a description. The "Values schema reference" panel on the chart's
+  ArtifactHub page now shows a one-line description per setting instead
+  of an empty pane.
+- Deleted the now-redundant `artifacthub-pkg.yml`.
 
 ## [0.5.3] - 2026-05-19
 

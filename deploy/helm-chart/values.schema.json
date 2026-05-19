@@ -1,0 +1,448 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://artifacthub.io/packages/helm/mindburn-labs/helm-ai-kernel/values.schema.json",
+  "title": "helm-ai-kernel chart values",
+  "description": "Configuration schema for the helm-ai-kernel Helm chart. Documents the shape of every supported value, enables IDE autocomplete, and lets `helm install` reject malformed values before reaching the cluster.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "Number of kernel pods to run."
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Container image repository (without tag)."
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"],
+          "default": "IfNotPresent"
+        },
+        "tag": {
+          "type": "string",
+          "description": "Overrides the image tag whose default is the chart appVersion. Leave empty to use appVersion."
+        }
+      }
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" }
+        }
+      }
+    },
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": { "type": "boolean", "default": true },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
+        "name": { "type": "string" }
+      }
+    },
+    "podAnnotations": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "podLabels": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "securityContext": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"],
+          "default": "ClusterIP"
+        },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 8080 },
+        "healthPort": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 8081 },
+        "metricsPort": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 9090 }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "className": { "type": "string" },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["host"],
+            "properties": {
+              "host": { "type": "string" },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["path", "pathType"],
+                  "properties": {
+                    "path": { "type": "string" },
+                    "pathType": {
+                      "type": "string",
+                      "enum": ["Exact", "Prefix", "ImplementationSpecific"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "secretName": { "type": "string" },
+              "hosts": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cpu": { "type": ["string", "number"] },
+            "memory": { "type": "string" }
+          }
+        },
+        "requests": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cpu": { "type": ["string", "number"] },
+            "memory": { "type": "string" }
+          }
+        }
+      }
+    },
+    "helm": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "HELM-kernel-specific configuration block.",
+      "properties": {
+        "bindAddr": {
+          "type": "string",
+          "default": "0.0.0.0",
+          "description": "Bind address used inside the pod. Kubernetes Services require 0.0.0.0."
+        },
+        "dataDir": {
+          "type": "string",
+          "default": "/data",
+          "description": "Durable runtime directory for SQLite state, receipts, artifacts, and root keys."
+        },
+        "production": {
+          "type": "boolean",
+          "default": false,
+          "description": "Production mode refuses to auto-generate a root signing key at startup."
+        },
+        "proxy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "upstream": {
+              "type": "string",
+              "format": "uri",
+              "description": "Upstream LLM provider endpoint."
+            }
+          }
+        },
+        "region": { "type": "string", "default": "us" },
+        "demoMode": { "type": "boolean", "default": false },
+        "auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "adminAPIKey": { "type": "string" },
+            "serviceAPIKey": { "type": "string" },
+            "existingSecret": { "type": "string" },
+            "adminAPIKeySecretKey": { "type": "string", "default": "HELM_ADMIN_API_KEY" },
+            "serviceAPIKeySecretKey": { "type": "string", "default": "HELM_SERVICE_API_KEY" }
+          }
+        },
+        "signing": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "algorithm": {
+              "type": "string",
+              "enum": ["ed25519", "ml-dsa-65"],
+              "default": "ed25519"
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^([0-9a-f]{64})?$",
+              "description": "Ed25519 root key seed as 64 lowercase hex chars (used only if existingSecret is not set)."
+            },
+            "existingSecret": { "type": "string" }
+          }
+        },
+        "storage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["sqlite", "postgres"],
+              "default": "sqlite"
+            },
+            "sqlite": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": { "type": "string" }
+              }
+            },
+            "postgres": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "host": { "type": "string" },
+                "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 5432 },
+                "database": { "type": "string" },
+                "user": { "type": "string" },
+                "password": { "type": "string" },
+                "sslMode": {
+                  "type": "string",
+                  "enum": ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"],
+                  "default": "disable"
+                },
+                "existingSecret": { "type": "string" },
+                "existingSecretKey": { "type": "string", "default": "DATABASE_URL" }
+              }
+            }
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Disabled until the Prometheus handler is wired in the kernel (chart-metrics-backend-implementation)."
+            },
+            "serviceMonitor": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean", "default": false },
+                "interval": { "type": "string", "default": "30s" },
+                "labels": { "type": "object", "additionalProperties": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "policy": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "source": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["controlplane", "crd", "mountedFile"],
+                  "default": "mountedFile"
+                },
+                "pollInterval": { "type": "string", "default": "10s" },
+                "initialReconcileTimeout": { "type": "string", "default": "30s" },
+                "controlplane": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "url": { "type": "string" },
+                    "auth": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": ["serviceAccountJWT", "bearerToken"],
+                          "default": "serviceAccountJWT"
+                        },
+                        "bearerToken": { "type": "string" },
+                        "existingSecret": { "type": "string" },
+                        "existingSecretKey": { "type": "string", "default": "HELM_POLICY_BEARER_TOKEN" }
+                      }
+                    }
+                  }
+                },
+                "crd": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "install": { "type": "boolean", "default": false },
+                    "apiGroup": { "type": "string" },
+                    "resource": { "type": "string" }
+                  }
+                },
+                "mountedFile": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "existingConfigMap": { "type": "string" },
+                    "existingSecret": { "type": "string" },
+                    "mountPath": { "type": "string" }
+                  }
+                }
+              }
+            },
+            "failClosed": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "requireInitialSnapshot": { "type": "boolean", "default": true },
+                "onMissingSnapshot": {
+                  "type": "string",
+                  "enum": ["deny", "allow", "keepLastKnownGood"],
+                  "default": "deny"
+                },
+                "onInvalidUpdate": {
+                  "type": "string",
+                  "enum": ["deny", "allow", "keepLastKnownGood"],
+                  "default": "keepLastKnownGood"
+                },
+                "lastKnownGoodMaxAge": { "type": "string", "default": "10m" }
+              }
+            },
+            "reloadHints": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean", "default": true },
+                "httpWakeEndpoint": { "type": "string" },
+                "fsnotify": { "type": "boolean", "default": false },
+                "k8sWatch": { "type": "boolean", "default": false },
+                "configReloaderSidecar": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": { "type": "boolean", "default": false },
+                    "image": { "type": "string" }
+                  }
+                }
+              }
+            },
+            "signature": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "required": { "type": "boolean", "default": false },
+                "publicKey": { "type": "string" },
+                "existingSecret": { "type": "string" },
+                "existingSecretKey": { "type": "string", "default": "HELM_POLICY_TRUST_PUBLIC_KEY" }
+              }
+            },
+            "configMap": { "type": "string" },
+            "mountPath": { "type": "string" },
+            "fileName": { "type": "string" },
+            "name": { "type": "string" },
+            "profile": { "type": "string" },
+            "referencePack": { "type": "string" },
+            "referencePackFileName": { "type": "string" },
+            "referencePackID": { "type": "string" },
+            "referencePackLabel": { "type": "string" }
+          }
+        }
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "storageClass": { "type": "string" },
+        "accessModes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"]
+          }
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)?$",
+          "default": "1Gi"
+        },
+        "existingClaim": { "type": "string" }
+      }
+    },
+    "probes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "liveness": { "type": "object", "additionalProperties": true },
+        "readiness": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "nodeSelector": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "tolerations": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "affinity": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "postgresql": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "auth": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "database": { "type": "string" },
+            "username": { "type": "string" },
+            "password": { "type": "string" },
+            "existingSecret": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

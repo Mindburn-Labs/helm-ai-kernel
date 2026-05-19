@@ -78,6 +78,7 @@ else
     if mvn deploy -P release -DskipTests \
         --settings ../../scripts/release/maven-settings.xml \
         -DaltDeploymentRepository=central::https://central.sonatype.com/api/v1/publisher/deployments/upload \
+        ${MAVEN_GPG_KEY_FINGERPRINT:+-Dgpg.keyname="$MAVEN_GPG_KEY_FINGERPRINT"} \
         -Dgpg.passphrase="$MAVEN_GPG_PASSPHRASE"; then
         echo "✅ Maven package published."
     else

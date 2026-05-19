@@ -8,8 +8,9 @@ The Java SDK is source-available in this repository. Do not publish a public
 Maven or JitPack coordinate in OSS docs until a release workflow has verified
 that coordinate.
 
-Package metadata declares version `0.5.1` in `pom.xml`; that is source metadata,
-not proof that a public package is available.
+Package metadata declares coordinate `org.mindburn.helm:helm-sdk:0.5.2` in
+`pom.xml`; that is source metadata, not proof that a public package is
+available.
 
 ## Local Development
 
@@ -55,4 +56,5 @@ authoritative.
 
 ## Release Notes
 
-`0.5.1` is the release-hardening patch with the retained OpenAPI client surface and protobuf message bindings.
+`0.5.2` is the release-hardening patch with the retained OpenAPI client surface
+and protobuf message bindings.

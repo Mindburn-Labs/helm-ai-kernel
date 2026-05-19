@@ -9,7 +9,11 @@ sources:
   - https://github.com/Mindburn-Labs/helm-ai-kernel
 maintainers:
   - name: Mindburn Labs
-    url: https://github.com/Mindburn-Labs/helm-ai-kernel
+    email: mindburnlabs@gmail.com
+    url: https://github.com/Mindburn-Labs
+  - name: Ivan Peychev
+    email: peycheff.com@gmail.com
+    url: https://github.com/peycheff
 keywords:
   - ai
   - governance
@@ -17,3 +21,51 @@ keywords:
   - agent
   - security
   - compliance
+  - policy
+  - audit
+  - proofgraph
+  - evidence-pack
+  - kubernetes
+# ArtifactHub-specific annotations. Documented at
+# https://artifacthub.io/docs/topics/annotations/helm/ — kept inline in
+# Chart.yaml because that is the only file ArtifactHub reads for Helm
+# charts (artifacthub-pkg.yml is ignored for kind=helm).
+annotations:
+  artifacthub.io/category: security
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/signKey: |
+    fingerprint: keyless (sigstore OIDC)
+    url: https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/VERIFICATION.md
+  artifacthub.io/links: |
+    - name: source
+      url: https://github.com/Mindburn-Labs/helm-ai-kernel
+    - name: documentation
+      url: https://github.com/Mindburn-Labs/helm-ai-kernel/tree/main/docs
+    - name: deployment guide
+      url: https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/KUBERNETES_DEPLOYMENT.md
+    - name: verification guide
+      url: https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/VERIFICATION.md
+    - name: security policy
+      url: https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/SECURITY.md
+    - name: support
+      url: https://github.com/Mindburn-Labs/helm-ai-kernel/issues
+  artifacthub.io/images: |
+    - name: helm-ai-kernel
+      image: ghcr.io/mindburn-labs/helm-ai-kernel:v0.5.3
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    - name: helm-ai-kernel-slim
+      image: ghcr.io/mindburn-labs/helm-ai-kernel:v0.5.3-slim
+      platforms:
+        - linux/amd64
+        - linux/arm64
+  artifacthub.io/changes: |
+    - kind: added
+      description: Annotate every field in values.schema.json so the ArtifactHub "Values schema reference" panel shows a description per setting instead of an empty pane.
+    - kind: changed
+      description: Move ArtifactHub package metadata (changes, images, links, license, signKey) from artifacthub-pkg.yml into Chart.yaml annotations, which is the only file ArtifactHub reads for Helm charts.
+    - kind: fixed
+      description: Light up the Changelog badge that stayed grey under v0.5.3 because annotations were placed in artifacthub-pkg.yml rather than Chart.yaml.

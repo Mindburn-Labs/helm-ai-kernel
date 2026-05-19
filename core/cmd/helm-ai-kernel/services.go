@@ -88,7 +88,12 @@ type Services struct {
 }
 
 // NewServices initializes all subsystems.
-func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logger *slog.Logger) (*Services, error) {
+//
+// dataDir is the runtime data directory (CLI --data-dir / HELM_DATA_DIR).
+// Subsystems that persist state under dataDir (e.g. the KMS keystore) must
+// receive it explicitly instead of resolving relative paths against the
+// container CWD, which on a distroless rootfs is `/` and therefore read-only.
+func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logger *slog.Logger, dataDir string) (*Services, error) {
 	s := &Services{}
 
 	// --- 1. Config ---
@@ -110,7 +115,7 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	logger.Info("subsystem ready", "component", " ReBAC Authorization Engine initialized")
 
 	// --- 4. Credentials (CRED-001: KMS-backed key management) ---
-	keystorePath := "data/keys/credentials.keystore.json"
+	keystorePath := kmsKeystorePath(dataDir)
 	keyManager, kmsErr := kms.NewLocalKMS(keystorePath)
 	if kmsErr != nil {
 		logger.Warn("KMS init failed — credentials store DISABLED", "error", kmsErr)
@@ -147,14 +152,19 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	logger.Info("subsystem ready", "component", " Sandbox initialized")
 
 	// --- 7. Boundary ---
-	defaultBoundaryPolicy := &boundary.PerimeterPolicy{
-		Version:  "1.0",
-		PolicyID: "default",
-		Name:     "HELM Default Perimeter",
-	}
-	perimEnforcer, err := boundary.NewPerimeterEnforcer(defaultBoundaryPolicy)
+	// The version string must match boundary.PolicyVersion exactly; LoadPolicy
+	// performs a strict equality check. A mismatch leaves BoundaryEnforcer nil,
+	// which causes every CheckNetwork / CheckTool / CheckData to silently pass
+	// (see subsystems.go: the /api/v1/boundary/check route returns
+	// {"status":"disabled"} when the enforcer is nil). In a fail-closed firewall
+	// that is the worst possible default, so production refuses to start when
+	// the default policy fails to load.
+	perimEnforcer, err := boundary.NewPerimeterEnforcer(defaultBoundaryPolicy())
 	if err != nil {
-		logger.Warn("Boundary enforcer init", "error", err)
+		if envBool("HELM_PRODUCTION") {
+			return nil, fmt.Errorf("boundary enforcer init (production): %w", err)
+		}
+		logger.Warn("Boundary enforcer init — running with enforcer DISABLED (dev mode)", "error", err)
 	} else {
 		s.BoundaryEnforcer = perimEnforcer
 	}
@@ -235,6 +245,32 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 
 	logger.Info("subsystem ready", "component", " All subsystems initialized successfully")
 	return s, nil
+}
+
+// kmsKeystorePath resolves the on-disk location of the KMS keystore. The path
+// is anchored on the runtime data directory (CLI --data-dir, falling back to
+// HELM_DATA_DIR, then "data"), never on the container CWD. On distroless the
+// CWD is `/`, which is read-only — so a relative path would break the KMS init
+// and silently disable the credentials store.
+func kmsKeystorePath(dataDir string) string {
+	if strings.TrimSpace(dataDir) == "" {
+		dataDir = strings.TrimSpace(os.Getenv("HELM_DATA_DIR"))
+	}
+	if strings.TrimSpace(dataDir) == "" {
+		dataDir = "data"
+	}
+	return filepath.Join(dataDir, "keys", "credentials.keystore.json")
+}
+
+// defaultBoundaryPolicy returns the policy template used at startup before any
+// runtime policy bundle is reconciled. Kept as a single source of truth so the
+// schema version stays in lockstep with boundary.PolicyVersion.
+func defaultBoundaryPolicy() *boundary.PerimeterPolicy {
+	return &boundary.PerimeterPolicy{
+		Version:  boundary.PolicyVersion,
+		PolicyID: "default",
+		Name:     "HELM Default Perimeter",
+	}
 }
 
 func defaultBoundaryRegistryPath() string {

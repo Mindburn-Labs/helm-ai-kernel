@@ -4,6 +4,11 @@
   "type": "module",
   "description": "Shared Mindburn UI foundation tokens, primitives, layouts, data, forms, feedback, and inspection components.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mindburn-Labs/helm-ai-kernel.git",
+    "directory": "packages/design-system-core"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",

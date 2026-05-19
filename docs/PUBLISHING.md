@@ -1,6 +1,6 @@
 ---
 title: Publishing
-last_reviewed: 2026-05-18
+last_reviewed: 2026-05-19
 ---
 
 # Publishing
@@ -59,7 +59,7 @@ The repository retains packaging metadata for the kernel binaries, container ima
 | TypeScript SDK | `@mindburn/helm-ai-kernel` |
 | Python SDK | `helm-sdk` |
 | Rust SDK | `helm-sdk` |
-| Java SDK | Source-available local Maven build under `sdk/java`; public package coordinate not verified |
+| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.2` |
 | Go SDK | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@main`; pin `@main` or a commit until tagged module releases are aligned |
 
 ## Release Inputs
@@ -94,8 +94,8 @@ The retained workflow set under `.github/workflows/` covers:
 - GHCR image publication for `latest`, version tag, and slim tag
 - manual publication workflows for npm, PyPI, crates.io, and Maven-compatible distribution
 
-Current public GitHub release: `v0.5.1`, published on 2026-05-18 at
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.1>.
+Current public GitHub release: `v0.5.2`, published on 2026-05-19 at
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.2>.
 
 There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
 actual release baseline when auditing the `v0.5.0` delta.
@@ -109,18 +109,19 @@ Its attached assets are:
 - `helm-ai-kernel-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.5.1.openvex.json`
+- `v0.5.2.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
 - `sample-policy-material.tar`
 - `helm-ai-kernel.mcpb`
 - `helm-ai-kernel.rb`
+- `v0.5.2.json`
 - matching `*.cosign.bundle` files for every primary asset
 
 `sample-policy-material.tar` includes the sample policy and its referenced EU
 AI Act high-risk reference pack. The Homebrew tap is
-`mindburnlabs/homebrew-tap`, and `mindburnlabs/tap/helm-ai-kernel` resolves to `0.5.1`.
+`mindburnlabs/homebrew-tap`, and `mindburnlabs/tap/helm-ai-kernel` resolves to `0.5.2`.
 
 The retained SDK package manifests are versioned with `VERSION`, but npm,
 PyPI, crates.io, and Maven publication require the corresponding registry
@@ -141,7 +142,7 @@ writes the final `SHA256SUMS.txt`.
 ## Verification
 
 Every public release must include enough material to verify what was downloaded.
-For `v0.5.1`, use `SHA256SUMS.txt`, `sbom.json`, `v0.5.1.openvex.json`,
+For `v0.5.2`, use `SHA256SUMS.txt`, `sbom.json`, `v0.5.2.openvex.json`,
 `release-attestation.json`, the platform binary assets, attached
 `*.cosign.bundle` files, and the offline `evidence-pack.tar`.
 

@@ -75,6 +75,8 @@ spec:
               protocol: TCP
             {{- end }}
           env:
+            - name: HELM_DATA_DIR
+              value: {{ .Values.helm.dataDir | quote }}
             - name: HELM_HEALTH_PORT
               value: {{ .Values.service.healthPort | quote }}
             - name: HELM_POLICY_SOURCE_KIND

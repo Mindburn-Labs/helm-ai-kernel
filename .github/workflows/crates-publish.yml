@@ -24,6 +24,7 @@ jobs:
   publish:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    environment: crates-production
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable

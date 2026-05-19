@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-05-18
+last_reviewed: 2026-05-19
 ---
 
 # Changelog
@@ -38,20 +38,38 @@ This scheme maps the main sections of HELM AI Kernel Changelog in reading order.
 flowchart LR
   Page["HELM AI Kernel Changelog"]
   A["[Unreleased]"]
-  B["[0.5.1] - 2026-05-18"]
-  C["[0.5.0] - 2026-05-13"]
-  D["[0.4.0] - 2026-04-25"]
-  E["Validation"]
+  B["[0.5.2] - 2026-05-19"]
+  C["[0.5.1] - 2026-05-18"]
+  D["[0.5.0] - 2026-05-13"]
+  E["[0.4.0] - 2026-04-25"]
+  F["Validation"]
   Page --> A
   A --> B
   B --> C
   C --> D
   D --> E
+  E --> F
 ```
 
 All notable changes to the retained HELM AI Kernel surface are documented here. Public entries focus on developer-visible interfaces, compatibility, verification, SDKs, and security-relevant documentation.
 
 ## [Unreleased]
+
+## [0.5.2] - 2026-05-19
+
+Published at <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.2>
+on 2026-05-19T16:13:38Z.
+
+- Fixed default boundary policy initialization so the retained production
+  surface starts fail-closed when default policy material is missing or invalid.
+- Anchored KMS keystore state under the configured runtime data directory and
+  added regression coverage for that path.
+- Wired release build metadata into container builds and disabled the phantom
+  chart metrics port by default.
+- Refreshed Artifact Hub repository metadata and bumped the Helm chart release
+  contract to `0.5.2` / `v0.5.2`.
+- Kept release asset export and verification output visible during staging so
+  failing commands are diagnosable from workflow logs.
 
 ## [0.5.1] - 2026-05-18
 

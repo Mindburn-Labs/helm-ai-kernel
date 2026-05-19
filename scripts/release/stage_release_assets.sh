@@ -132,8 +132,8 @@ if [ -z "$pack_root" ]; then
     echo "::error file=scripts/release/stage_release_assets.sh::conformance did not produce an EvidencePack directory" >&2
     exit 1
 fi
-"$ROOT/bin/helm-ai-kernel" export --audit --evidence "$pack_root" --out "$ASSETS_DIR/evidence-pack.tar" >/dev/null
-"$ROOT/bin/helm-ai-kernel" verify "$ASSETS_DIR/evidence-pack.tar" >/dev/null
+"$ROOT/bin/helm-ai-kernel" export --audit --evidence "$pack_root" --out "$ASSETS_DIR/evidence-pack.tar"
+"$ROOT/bin/helm-ai-kernel" verify "$ASSETS_DIR/evidence-pack.tar"
 
 (
     cd "$ASSETS_DIR"

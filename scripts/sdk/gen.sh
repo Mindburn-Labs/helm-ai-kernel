@@ -397,7 +397,7 @@ docker run --rm -v "$PROJECT_ROOT:/work" -w /work "$GENERATOR_IMAGE" generate \
     -i /work/api/openapi/helm.openapi.yaml \
     -g java \
     -o /work/.gen_tmp/java \
-    --additional-properties=artifactId=helm,groupId=ai.mindburn.helm,invokerPackage=labs.mindburn.helm,modelPackage=labs.mindburn.helm.models,library=native \
+    --additional-properties=artifactId=helm,groupId=io.github.mindburnlabs,invokerPackage=labs.mindburn.helm,modelPackage=labs.mindburn.helm.models,library=native \
     --global-property=models 2>/dev/null
 
 JAVA_OUT="$PROJECT_ROOT/sdk/java/src/main/java/labs/mindburn/helm"

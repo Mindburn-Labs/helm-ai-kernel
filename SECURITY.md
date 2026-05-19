@@ -57,9 +57,9 @@ The signing identity is the GitHub Actions workflow itself
 Verification commands and the recovery path are documented in
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
-The current public GitHub release, `v0.5.1` published on 2026-05-18, attaches
+The current public GitHub release, `v0.5.3` published on 2026-05-19 at 22:23 UTC, attaches
 OpenVEX and Cosign bundle material for every primary asset. Verify
-`SHA256SUMS.txt`, `sbom.json`, `v0.5.1.openvex.json`,
+`SHA256SUMS.txt`, `sbom.json`, `v0.5.3.openvex.json`,
 `release-attestation.json`, offline `evidence-pack.tar`, and matching
 `*.cosign.bundle` files.
 

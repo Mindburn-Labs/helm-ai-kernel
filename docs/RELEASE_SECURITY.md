@@ -1,6 +1,6 @@
 ---
 title: Release and Security Evidence
-last_reviewed: 2026-05-19
+last_reviewed: 2026-05-20
 ---
 
 # HELM AI Kernel Release and Security Evidence
@@ -33,13 +33,13 @@ flowchart LR
   optional --> verify
 ```
 
-Current public release: `v0.5.2`, published on 2026-05-19 at
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.2>. The release
+Current public release: `v0.5.3`, published on 2026-05-19 at 22:23 UTC:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.3>. The release
 assets visible on GitHub are Darwin/Linux/Windows binaries, `SHA256SUMS.txt`,
-`sbom.json`, `v0.5.2.openvex.json`, `release-attestation.json`,
+`sbom.json`, `v0.5.3.openvex.json`, `release-attestation.json`,
 `evidence-pack.tar`, `release.high_risk.v3.toml`,
 `sample-policy-material.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`,
-`v0.5.2.json`, and matching
+`v0.5.3.json`, and matching
 `*.cosign.bundle` files for each primary asset.
 
 ## Public Release Material
@@ -76,7 +76,7 @@ EvidencePack, verifies the staged `evidence-pack.tar`, and only then writes
 final checksums. A failed EvidencePack verification blocks release asset
 publication.
 
-For `v0.5.2`, use checksum verification, SBOM inspection, OpenVEX inspection,
+For `v0.5.3`, use checksum verification, SBOM inspection, OpenVEX inspection,
 release metadata inspection, offline EvidencePack verification,
 reproducible-build validation, and Cosign verification against the attached
 bundles.

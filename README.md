@@ -2,12 +2,22 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![CI](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/ci.yml)
+[![Documentation Gates](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/docs.yml/badge.svg?branch=main)](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/docs.yml)
 [![CodeQL](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mindburn-labs/helm-ai-kernel/badge)](https://scorecard.dev/viewer/?uri=github.com/mindburn-labs/helm-ai-kernel)
-[![OpenSSF Best Practices evidence](https://img.shields.io/badge/OpenSSF-Best%20Practices-evidence%20prepared-informational)](BEST_PRACTICES.md)
-[![Release checksums](https://img.shields.io/badge/release-checksums-success)](docs/VERIFICATION.md)
-[![Release attestations](https://img.shields.io/badge/release-attestations-informational)](docs/PUBLISHING.md)
-[![SBOM CycloneDX](https://img.shields.io/badge/SBOM-CycloneDX%201.5-orange)](docs/PUBLISHING.md)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Mindburn-Labs/helm-ai-kernel/badge)](https://scorecard.dev/viewer/?uri=github.com/Mindburn-Labs/helm-ai-kernel)
+[![OpenSSF Best Practices evidence](https://img.shields.io/badge/OpenSSF%20Best%20Practices-evidence%20prepared-informational)](BEST_PRACTICES.md)
+[![Release](https://img.shields.io/github/v/release/Mindburn-Labs/helm-ai-kernel?label=release)](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/latest)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.mindburnlabs/helm-sdk?label=maven%20central)](https://central.sonatype.com/artifact/io.github.mindburnlabs/helm-sdk)
+[![npm](https://img.shields.io/npm/v/%40mindburn%2Fhelm-ai-kernel?label=npm)](https://www.npmjs.com/package/@mindburn/helm-ai-kernel)
+[![PyPI](https://img.shields.io/pypi/v/helm-sdk?label=pypi)](https://pypi.org/project/helm-sdk/)
+[![crates.io](https://img.shields.io/crates/v/helm-sdk?label=crates.io)](https://crates.io/crates/helm-sdk)
+[![Go Reference](https://pkg.go.dev/badge/github.com/Mindburn-Labs/helm-ai-kernel/sdk/go.svg)](https://pkg.go.dev/github.com/Mindburn-Labs/helm-ai-kernel/sdk/go)
+[![Launchpad Artifacts](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/launchpad-artifacts.yml/badge.svg?branch=main)](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/launchpad-artifacts.yml)
+[![Release checksums](https://img.shields.io/badge/release%20checksums-available-success)](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/latest/download/SHA256SUMS.txt)
+[![Release attestations](https://img.shields.io/badge/release%20attestations-available-informational)](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/latest/download/release-attestation.json)
+[![SBOM CycloneDX](https://img.shields.io/badge/SBOM-CycloneDX%201.5-orange)](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/latest/download/sbom.json)
+[![SLSA provenance](https://img.shields.io/badge/SLSA-provenance-blue)](docs/RELEASE_SECURITY.md)
+[![Sigstore Cosign](https://img.shields.io/badge/Sigstore-Cosign-blue)](docs/VERIFICATION.md)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/mindburn-labs)](https://artifacthub.io/packages/search?repo=mindburn-labs)
 
 HELM AI Kernel is the fail-closed execution firewall for AI agents.
@@ -28,13 +38,14 @@ Agent proposal -> HELM boundary -> ALLOW / DENY / ESCALATE -> signed receipt
 
 - Repository: `Mindburn-Labs/helm-ai-kernel`
 - Root package identity: `helm-ai-kernel-root`
-- Current public release: `v0.5.2`
+- Current public release: `v0.5.3`
 - License: Apache-2.0
 - Supported security line: `0.5.x`; `0.4.x` is best effort
 - Canonical docs: <https://helm.docs.mindburn.org/helm-ai-kernel>
 
-The current `v0.5.2` GitHub release was published on 2026-05-19 at
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.2>. It includes
+The current `v0.5.3` GitHub release was published on 2026-05-19 at
+22:23 UTC:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.3>. It includes
 CLI binaries, checksums, SBOM JSON, OpenVEX, release-attestation metadata,
 Cosign bundles, `evidence-pack.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, and sample policy
 material.
@@ -185,7 +196,7 @@ The complete diagram doctrine lives in
 
 | Surface | Current install or status |
 | --- | --- |
-| CLI | `brew install mindburnlabs/tap/helm-ai-kernel`; release binaries are attached to GitHub Releases |
+| CLI | GitHub Release binaries; the latest release attaches a `helm-ai-kernel.rb` formula asset. Verify the public tap before relying on `brew install mindburnlabs/tap/helm-ai-kernel` for the latest version |
 | Go SDK | `go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@main`; tagged module versions are tracked as an OSS-readiness follow-up |
 | Python SDK | `pip install helm-sdk` |
 | TypeScript SDK | `npm install @mindburn/helm-ai-kernel` |
@@ -219,8 +230,8 @@ Public OSS docs are sourced from this repo and published through
 
 ## Release Verification
 
-For `v0.5.2`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
-`v0.5.2.openvex.json`, `release-attestation.json`, the platform binary assets,
+For `v0.5.3`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
+`v0.5.3.openvex.json`, `release-attestation.json`, the platform binary assets,
 matching `*.cosign.bundle` files, and offline `evidence-pack.tar` verification.
 
 Current release tooling derives artifact versions from tag refs, requires an

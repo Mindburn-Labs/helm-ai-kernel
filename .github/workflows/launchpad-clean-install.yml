@@ -33,7 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           brew update
-          brew install colima docker jq qemu
+          brew install colima docker jq qemu lima-additional-guestagents
 
       - name: Start Docker-compatible local-container runtime
         run: |

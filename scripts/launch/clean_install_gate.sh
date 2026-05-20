@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REPO="${HELM_LAUNCHPAD_GITHUB_REPO:-Mindburn-Labs/helm-ai-kernel}"
 RELEASE_TAG="v0.5.5"
-ARTIFACT_RUN_ID="26179980172"
+ARTIFACT_RUN_ID="26186959337"
 HOST_KIND="developer_macos"
 OUTPUT="$ROOT/docs/launchpad/clean_install_report.json"
 TRANSCRIPT_DIR="${TMPDIR:-/tmp}/helm-launchpad-clean-install"
@@ -18,7 +18,7 @@ Usage: scripts/launch/clean_install_gate.sh [options]
 
 Options:
   --release-tag <tag>       Release tag to validate (default: v0.5.5)
-  --artifact-run-id <id>    Launchpad artifact workflow run (default: 26179980172)
+  --artifact-run-id <id>    Launchpad artifact workflow run (default: 26186959337)
   --host-kind <kind>        developer_macos or github_macos_runner
   --output <path>           Redacted JSON report path
   --transcript-dir <path>   Directory for redacted command output and audit inputs

@@ -10,7 +10,7 @@ on:
       artifact_run_id:
         description: Launchpad artifact workflow run containing signed app and egress-proxy evidence
         required: true
-        default: "26179980172"
+        default: "26186959337"
 
 permissions:
   contents: read

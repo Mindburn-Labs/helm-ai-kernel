@@ -43,7 +43,7 @@ func TestLaunchpadClaimsMarketPromotedAppsAsSupported(t *testing.T) {
 	requireContains(t, cleanGate, "SUPPORTED_APPS=(openclaw hermes opencode kilocode)")
 	requireContains(t, cleanGate, "--include-candidates")
 	requireContains(t, cleanGate, `RELEASE_TAG="v0.5.5"`)
-	requireContains(t, cleanGate, `ARTIFACT_RUN_ID="26179980172"`)
+	requireContains(t, cleanGate, `ARTIFACT_RUN_ID="26186959337"`)
 	requireContains(t, cleanGate, "output, status, commands_path")
 	requireNotContains(t, cleanGate, "status = sys.stdin.read()", "scripts/launch/clean_install_gate.sh")
 	requireContains(t, cleanGate, `"supported_apps": ["openclaw", "hermes", "opencode", "kilocode"]`)
@@ -52,7 +52,7 @@ func TestLaunchpadClaimsMarketPromotedAppsAsSupported(t *testing.T) {
 
 	cleanWorkflow := readDoc(t, root, ".github/workflows/launchpad-clean-install.yml")
 	requireContains(t, cleanWorkflow, "default: v0.5.5")
-	requireContains(t, cleanWorkflow, `default: "26179980172"`)
+	requireContains(t, cleanWorkflow, `default: "26186959337"`)
 
 	artifactWorkflow := readDoc(t, root, ".github/workflows/launchpad-artifacts.yml")
 	requireContains(t, artifactWorkflow, "run_candidate_live_conformance")

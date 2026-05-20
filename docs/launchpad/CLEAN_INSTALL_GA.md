@@ -7,7 +7,7 @@ last_reviewed: 2026-05-20
 
 Status: v0.5.5 gate implemented; v1 promotes OpenClaw, Hermes, OpenCode, and
 Kilo Code into the supported-app clean-install set after workflow
-`26179980172` passed signed artifact, live conformance, teardown, receipts, and
+`26186959337` passed signed artifact, live conformance, teardown, receipts, and
 offline EvidencePack verification.
 
 Launchpad GA is a product-adoption gate for the `v0.5.5` release. It proves the
@@ -30,7 +30,8 @@ offline verification.
 ## Source Truth
 
 - Release target: `v0.5.5`
-- Current four-app Launchpad artifact workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26179980172>
+- Current four-app Launchpad artifact workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26186959337>
+- Current macOS Homebrew clean-install workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26192627823>
 - Current Launchpad v1 report: `docs/launchpad/v1_report.json`
 - Historical `v0.5.4` release report: `docs/launchpad/final_report.json`
 - Clean-install report: `docs/launchpad/clean_install_report.json`
@@ -76,7 +77,7 @@ Use the repo-native gate to collect redacted evidence:
 export HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY='<fresh CI-only key>'
 bash scripts/launch/clean_install_gate.sh \
   --release-tag v0.5.5 \
-  --artifact-run-id 26179980172 \
+  --artifact-run-id 26186959337 \
   --host-kind developer_macos \
   --output docs/launchpad/clean_install_report.json
 ```
@@ -109,11 +110,12 @@ Manual CI entrypoint:
 gh workflow run launchpad-clean-install.yml \
   --repo Mindburn-Labs/helm-ai-kernel \
   -f release_tag=v0.5.5 \
-  -f artifact_run_id=26179980172
+  -f artifact_run_id=26186959337
 ```
 
-The CI report is a repeatability signal. The separate clean Mac report remains
-the canonical GA evidence for developer experience.
+The CI report is the current repeatable macOS Homebrew gate. A separately
+operated clean Mac transcript can be attached as an additional adoption artifact
+when release owners need a non-CI workstation record.
 
 ## Troubleshooting
 

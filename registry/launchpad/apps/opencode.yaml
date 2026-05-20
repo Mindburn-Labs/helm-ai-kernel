@@ -1,14 +1,18 @@
 id: opencode
 name: OpenCode
-version: unverified-upstream
+version: v1.15.5
 license:
   status: verified
   spdx: MIT
   url: https://raw.githubusercontent.com/anomalyco/opencode/v1.15.5/LICENSE
-redistribution: unverified
+redistribution: allowed_by_MIT_with_upstream_notice
 availability: oss_candidate
 install:
-  strategy: signed_artifact_required
+  strategy: signed_oci
+  image: ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:fd3db72a2acfae066e455241f17800bd698070d2126e534e18a441f7910ed35b
+  digest: sha256:fd3db72a2acfae066e455241f17800bd698070d2126e534e18a441f7910ed35b
+  source: https://github.com/anomalyco/opencode
+  ref: v1.15.5
 runtime:
   command: ["opencode"]
 model_gateway_env: ["OPENROUTER_API_KEY"]
@@ -36,7 +40,7 @@ budget_ceiling:
 evidence_requirements: ["cpi_output", "kernel_verdict", "sandbox_grant", "launch_receipt", "install_receipt", "healthcheck_receipt", "teardown_receipt", "evidence_pack", "mcp_quarantine", "artifact_digest", "cosign_signature", "syft_sbom", "grype_vulnerability_scan"]
 conformance:
   license_verified: true
-  artifact_verified: false
+  artifact_verified: true
   policy_pack_present: true
   sandbox_verified: false
   healthcheck_passing: false
@@ -44,8 +48,17 @@ conformance:
   teardown_verified: false
   receipt_verified: false
   evidence_pack_verified: false
+supply_chain_evidence:
+  artifact_digest: sha256:fd3db72a2acfae066e455241f17800bd698070d2126e534e18a441f7910ed35b
+  signature_tool: cosign
+  signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:fd3db72a2acfae066e455241f17800bd698070d2126e534e18a441f7910ed35b
+  sbom_tool: syft
+  sbom_ref: artifact://sbom-opencode.spdx.json
+  vulnerability_scan_tool: grype
+  vulnerability_scan_ref: artifact://grype-opencode.json
 metadata:
   upstream_repo: https://github.com/anomalyco/opencode
   upstream_ref: v1.15.5
   upstream_commit: d7a6e1daaf2271bcd0b611fbb27d4956806e475a
-  blocker: "Official license file is MIT; v1.15.5 artifact signature/digest, healthcheck, sandbox e2e, receipts, and EvidencePack remain unverified until Launchpad artifact CI and live conformance complete."
+  artifact_workflow_run: github-actions://26140948099/1
+  blocker: "Official license file is MIT and v1.15.5 signed artifact/SBOM/scan evidence passed; live local-container healthcheck, sandbox e2e, teardown receipts, and offline EvidencePack verification remain unverified until live conformance completes."

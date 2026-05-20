@@ -39,7 +39,7 @@ func TestLiveOpenRouterLocalContainerConformance(t *testing.T) {
 		t.Fatalf("LoadCatalog: %v", err)
 	}
 
-	for _, appID := range []string{"openclaw", "hermes"} {
+	for _, appID := range []string{"openclaw", "hermes", "opencode", "kilocode"} {
 		t.Run(appID, func(t *testing.T) {
 			app, ok := catalog.App(appID)
 			if !ok {

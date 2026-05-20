@@ -24,6 +24,12 @@ surface for the `helm-ai-kernel` project.
 
 - `ci.yml` runs the retained per-surface jobs and the Make-first
   `quality-pr` summary job.
+- `launchpad-artifacts.yml` builds and signs Launchpad OpenClaw, Hermes, and
+  egress-proxy artifacts, then runs gated live local-container conformance when
+  manually dispatched with the scoped CI key.
+- `launchpad-clean-install.yml` validates the published Homebrew package on a
+  macOS runner, launches OpenClaw and Hermes through `local-container`, verifies
+  produced EvidencePacks, and uploads redacted GA evidence.
 - `nightly-quality.yml` runs advisory mutation, flake, vulnerability, runbook,
   migration, dependency hygiene, schema, and benchmark checks.
 - `release.yml` calls `make quality-release` before producing binaries,

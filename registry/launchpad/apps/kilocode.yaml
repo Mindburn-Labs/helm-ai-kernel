@@ -1,14 +1,18 @@
 id: kilocode
 name: Kilo Code
-version: unverified-upstream
+version: v7.3.1
 license:
   status: verified
   spdx: MIT
-  url: https://raw.githubusercontent.com/Kilo-Org/kilocode/main/LICENSE
-redistribution: unverified
+  url: https://raw.githubusercontent.com/Kilo-Org/kilocode/v7.3.1/LICENSE
+redistribution: allowed_by_MIT_with_upstream_notice
 availability: oss_candidate
 install:
-  strategy: signed_artifact_required
+  strategy: signed_oci
+  image: ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:f2d741249f09b2d5b6c512413fdeadba06e200652e10355287a7758b15cdbe69
+  digest: sha256:f2d741249f09b2d5b6c512413fdeadba06e200652e10355287a7758b15cdbe69
+  source: https://github.com/Kilo-Org/kilocode
+  ref: v7.3.1
 runtime:
   command: ["kilocode"]
 model_gateway_env: ["OPENROUTER_API_KEY"]
@@ -19,7 +23,8 @@ filesystem_policy:
   policy_ref: policies/launchpad/apps/kilocode.safe.toml
 network_policy:
   default: deny
-  allowlist: []
+  allowlist:
+    - https://openrouter.ai/api/v1
 mcp_policy:
   unknown_server_policy: quarantine
   unknown_tool_policy: ESCALATE
@@ -32,10 +37,10 @@ budget_ceiling:
   usd_max: 0
   api_calls_max: 0
   time_ms_max: 0
-evidence_requirements: ["cpi_output", "kernel_verdict", "sandbox_grant", "launch_receipt", "teardown_receipt", "evidence_pack"]
+evidence_requirements: ["cpi_output", "kernel_verdict", "sandbox_grant", "launch_receipt", "install_receipt", "healthcheck_receipt", "teardown_receipt", "evidence_pack", "mcp_quarantine", "artifact_digest", "cosign_signature", "syft_sbom", "grype_vulnerability_scan"]
 conformance:
   license_verified: true
-  artifact_verified: false
+  artifact_verified: true
   policy_pack_present: true
   sandbox_verified: false
   healthcheck_passing: false
@@ -43,6 +48,17 @@ conformance:
   teardown_verified: false
   receipt_verified: false
   evidence_pack_verified: false
+supply_chain_evidence:
+  artifact_digest: sha256:f2d741249f09b2d5b6c512413fdeadba06e200652e10355287a7758b15cdbe69
+  signature_tool: cosign
+  signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:f2d741249f09b2d5b6c512413fdeadba06e200652e10355287a7758b15cdbe69
+  sbom_tool: syft
+  sbom_ref: artifact://sbom-kilocode.spdx.json
+  vulnerability_scan_tool: grype
+  vulnerability_scan_ref: artifact://grype-kilocode.json
 metadata:
   upstream_repo: https://github.com/Kilo-Org/kilocode
-  blocker: "Official license file is MIT; release artifact signature/digest, healthcheck, sandbox e2e, receipts, and EvidencePack remain unverified."
+  upstream_ref: v7.3.1
+  upstream_commit: 64c60812ae730a30db1fa2226d9e446f7f10c127
+  artifact_workflow_run: github-actions://26140948099/1
+  blocker: "Official license file is MIT and v7.3.1 signed artifact/SBOM/scan evidence passed; live local-container healthcheck, sandbox e2e, teardown receipts, and offline EvidencePack verification remain unverified until live conformance completes."

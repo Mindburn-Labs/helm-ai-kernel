@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-20T00:00:00Z",
+  "milestone": "Launchpad v1.0 Governed App Execution + Cloud Beta",
+  "status": "signed_artifact_ci_passed_live_conformance_blocked",
+  "release_truth_base": {
+    "release_tag": "v0.5.4",
+    "release_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.4",
+    "artifact_workflow_run_id": "26110916296",
+    "release_workflow_run_id": "26131090671",
+    "v1_artifact_workflow_run_id": "26140948099",
+    "v1_artifact_workflow_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26140948099"
+  },
+  "developer_ga": {
+    "secret_binding_cli": "implemented",
+    "artifact_workflow_matrix": [
+      "openclaw",
+      "hermes",
+      "opencode",
+      "kilocode"
+    ],
+    "candidate_recipe_base_images_pinned": true,
+    "signed_artifact_ci_status": "passed",
+    "live_local_container_conformance_status": "blocked_missing_HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY",
+    "supported_command_shape": [
+      "helm-ai-kernel launch secrets set model_gateway --provider openrouter --value-env OPENROUTER_API_KEY",
+      "helm-ai-kernel launch secrets status",
+      "helm-ai-kernel launch matrix --json",
+      "helm-ai-kernel launch <app> local-container --headless --output json",
+      "helm-ai-kernel launch delete <launch_id> --cascade",
+      "helm-ai-kernel verify --bundle <pack>"
+    ],
+    "json_launch_response_fields": [
+      "launch_id",
+      "app_id",
+      "app_version",
+      "substrate_id",
+      "artifact_digest",
+      "kernel_verdict",
+      "launch_receipt_refs",
+      "evidence_pack_refs",
+      "verification_command",
+      "teardown_command"
+    ]
+  },
+  "apps": {
+    "openclaw": {
+      "availability": "oss_supported",
+      "local_container": "supported",
+      "ghcr_digest": "sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e",
+      "cloud_beta": "pending_controlled_live_launch"
+    },
+    "hermes": {
+      "availability": "oss_supported",
+      "local_container": "supported",
+      "ghcr_digest": "sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527",
+      "cloud_beta": "pending_controlled_live_launch"
+    },
+    "opencode": {
+      "availability": "oss_candidate",
+      "local_container": "signed_artifact_complete_live_conformance_pending",
+      "upstream_release": "v1.15.5",
+      "upstream_commit": "d7a6e1daaf2271bcd0b611fbb27d4956806e475a",
+      "ghcr_digest": "sha256:fd3db72a2acfae066e455241f17800bd698070d2126e534e18a441f7910ed35b",
+      "artifact_workflow_run_id": "26140948099",
+      "vulnerability_scan_status": "completed",
+      "cloud_beta": "blocked_until_local_container_promotion"
+    },
+    "kilocode": {
+      "availability": "oss_candidate",
+      "local_container": "signed_artifact_complete_live_conformance_pending",
+      "upstream_release": "v7.3.1",
+      "upstream_commit": "64c60812ae730a30db1fa2226d9e446f7f10c127",
+      "ghcr_digest": "sha256:f2d741249f09b2d5b6c512413fdeadba06e200652e10355287a7758b15cdbe69",
+      "artifact_workflow_run_id": "26140948099",
+      "vulnerability_scan_status": "completed",
+      "cloud_beta": "blocked_until_local_container_promotion"
+    },
+    "codex": {
+      "availability": "external_proprietary_adapter",
+      "local_container": "byo_only",
+      "ghcr_digest": "not_redistributed",
+      "cloud_beta": "not_supported"
+    }
+  },
+  "substrates": {
+    "local-container": {
+      "status": "supported",
+      "default": true
+    },
+    "digitalocean": {
+      "status": "opt_in_beta_gate",
+      "default_dry_run": true,
+      "requires_approval_receipt": true,
+      "requires_cost_ceiling_receipt": true,
+      "live_provisioner": "implemented"
+    },
+    "hetzner": {
+      "status": "opt_in_beta_gate",
+      "default_dry_run": true,
+      "requires_approval_receipt": true,
+      "requires_cost_ceiling_receipt": true,
+      "live_provisioner": "implemented"
+    }
+  },
+  "enterprise": {
+    "workspace_scoped_routes": "implemented",
+    "audit_export_route": "implemented",
+    "evidence_export_route": "implemented",
+    "route_openapi_parity": "passed",
+    "cloud_live_write_policy": "approval_cost_ceiling_idempotency_and_reconcile_required"
+  },
+  "secret_fragment_audit": {
+    "status": "gate_available",
+    "prints_secret_or_fragments": false
+  },
+  "public_claims": {
+    "status": "narrow_evidence_backed_only",
+    "allowed_phrases": [
+      "fail-closed execution firewall",
+      "signed receipts",
+      "MCP interceptor",
+      "local-container app launcher",
+      "opt-in cloud beta",
+      "offline EvidencePack verification"
+    ],
+    "blocked_claims": [
+      "cloud GA",
+      "Codex redistribution",
+      "automatic enterprise compliance",
+      "provider live writes by default"
+    ]
+  }
+}

@@ -1,6 +1,19 @@
+---
+title: HELM Skill Packs Flow Catalog
+last_reviewed: 2026-05-20
+---
+
 # HELM Skill Packs Flow Catalog
 
 HELM Skill Packs are signed, scoped procedural packages for agents. A skill can guide behavior, but it cannot grant tool permissions or execution authority.
+
+## Source Truth
+
+- Skill runtime commands: `core/cmd/helm-ai-kernel/skills_cmd.go`
+- Skill runtime packages: `core/pkg/skills/`
+- Skill registry: `registry/skills/`
+- Skill policy fixtures: `policies/skills/`
+- Skill docs: `docs/skills/`
 
 ## OSS Flows
 
@@ -72,4 +85,4 @@ Removes managed projection files, updates install state, and emits `SKILL_REVOKE
 
 ## Completion Gaps
 
-[DEFER] Remote GitHub skill fetch, key-backed signature verification, full plugin marketplace e2e, and Enterprise global rollout approvals remain outside this MVP slice.
+Deferred: remote GitHub skill fetch, key-backed signature verification, full plugin marketplace e2e, and Enterprise global rollout approvals remain outside this MVP slice.

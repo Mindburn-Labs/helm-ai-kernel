@@ -121,3 +121,34 @@ func TestLaunchEvidenceExportVerifiesDirectoryAndArchive(t *testing.T) {
 		t.Fatalf("evidence export had failed verification: %s", stdout.String())
 	}
 }
+
+func TestLaunchSecretsSetAndStatusUseLogicalBindingWithoutPrintingValue(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HELM_LAUNCHPAD_HOME", root)
+	t.Setenv("HELM_TEST_OPENROUTER", "sk-test-secret-value")
+
+	var stdout, stderr bytes.Buffer
+	code := runLaunchSecrets([]string{"set", "model_gateway", "--provider", "openrouter", "--value-env", "HELM_TEST_OPENROUTER", "--json"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("runLaunchSecrets set code=%d stderr=%s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "sk-test-secret-value") {
+		t.Fatalf("secret value leaked in set output: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), `"value_env": "HELM_TEST_OPENROUTER"`) {
+		t.Fatalf("binding output missing value env: %s", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = runLaunchSecrets([]string{"status"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("runLaunchSecrets status code=%d stderr=%s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "sk-test-secret-value") {
+		t.Fatalf("secret value leaked in status output: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), `"available": true`) {
+		t.Fatalf("status did not show available binding: %s", stdout.String())
+	}
+}

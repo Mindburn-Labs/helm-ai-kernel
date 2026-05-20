@@ -53,6 +53,7 @@ func TestLaunchpadClaimsDoNotMarketCandidateAppsAsSupported(t *testing.T) {
 	requireContains(t, artifactWorkflow, "openclaw,hermes")
 	requireContains(t, artifactWorkflow, "opencode,kilocode")
 	requireContains(t, artifactWorkflow, "artifact_only_no_live_conformance")
+	requireContains(t, artifactWorkflow, ".app_id as $appID")
 	requireContains(t, artifactWorkflow, "if: ${{ always() }}")
 }
 

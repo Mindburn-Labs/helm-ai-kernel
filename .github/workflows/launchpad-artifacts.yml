@@ -546,17 +546,18 @@ jobs:
             --arg live_apps "${LIVE_APPS}" \
             '($live_apps | split(",") | map(gsub("^\\s+|\\s+$"; ""))) as $liveApps
             | .artifacts |= map(
-              . + {
-                artifact_verification_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/artifact-verification/" + .app_id)
-              }
-              + if ($liveApps | index(.app_id)) then {
-                live_e2e_run_id: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/live-e2e/" + .app_id),
-                evidence_pack_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/evidencepack/" + .app_id),
-                teardown_receipt_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/teardown/" + .app_id),
+              .app_id as $appID
+              | (. + {
+                artifact_verification_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/artifact-verification/" + $appID)
+              })
+              + (if ($liveApps | index($appID)) then {
+                live_e2e_run_id: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/live-e2e/" + $appID),
+                evidence_pack_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/evidencepack/" + $appID),
+                teardown_receipt_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/teardown/" + $appID),
                 promotion_status: "live_conformance_passed"
               } else {
                 promotion_status: "artifact_only_no_live_conformance"
-              } end
+              } end)
             )' \
             /tmp/launchpad/launchpad-artifact-manifest.json > /tmp/launchpad-promotion/launchpad-promotion-manifest.json
           jq . /tmp/launchpad-promotion/launchpad-promotion-manifest.json

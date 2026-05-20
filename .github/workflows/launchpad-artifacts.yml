@@ -8,6 +8,11 @@ on:
         required: false
         default: false
         type: boolean
+      run_candidate_live_conformance:
+        description: Also run candidate OpenCode/Kilo Code live conformance
+        required: false
+        default: false
+        type: boolean
   push:
     branches: ["main"]
     paths:
@@ -468,12 +473,14 @@ jobs:
       - name: Run gated live conformance
         env:
           HELM_LAUNCHPAD_LIVE_E2E: "1"
+          HELM_LAUNCHPAD_LIVE_APPS: ${{ inputs.run_candidate_live_conformance && 'openclaw,hermes,opencode,kilocode' || 'openclaw,hermes' }}
           HELM_LAUNCHPAD_ARTIFACT_MANIFEST: /tmp/launchpad/launchpad-artifact-manifest.json
           HELM_LAUNCHPAD_LIVE_EVIDENCE_DIR: /tmp/launchpad-live-evidence
           HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
         run: go test ./tests/launchpad/... -run TestLiveOpenRouterLocalContainerConformance -count=1 -v
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: ${{ always() }}
         with:
           name: launchpad-live-evidence
           path: /tmp/launchpad-live-evidence
@@ -485,12 +492,19 @@ jobs:
           jq \
             --arg github_run_id "${GITHUB_RUN_ID}" \
             --arg github_run_attempt "${GITHUB_RUN_ATTEMPT}" \
-            '.artifacts |= map(. + {
-              artifact_verification_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/artifact-verification/" + .app_id),
-              live_e2e_run_id: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/live-e2e/" + .app_id),
-              evidence_pack_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/evidencepack/" + .app_id),
-              teardown_receipt_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/teardown/" + .app_id)
-            })' \
+            '.artifacts |= map(
+              . + {
+                artifact_verification_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/artifact-verification/" + .app_id)
+              }
+              + if (.app_id == "openclaw" or .app_id == "hermes") then {
+                live_e2e_run_id: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/live-e2e/" + .app_id),
+                evidence_pack_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/evidencepack/" + .app_id),
+                teardown_receipt_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/teardown/" + .app_id),
+                promotion_status: "live_conformance_passed"
+              } else {
+                promotion_status: "artifact_only_no_live_conformance"
+              } end
+            )' \
             /tmp/launchpad/launchpad-artifact-manifest.json > /tmp/launchpad-promotion/launchpad-promotion-manifest.json
           jq . /tmp/launchpad-promotion/launchpad-promotion-manifest.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

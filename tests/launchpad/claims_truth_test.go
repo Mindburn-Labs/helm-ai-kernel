@@ -45,6 +45,25 @@ func TestLaunchpadClaimsDoNotMarketCandidateAppsAsSupported(t *testing.T) {
 	requireContains(t, cleanGate, "SUPPORTED_APPS=(openclaw hermes)")
 	requireContains(t, cleanGate, "CANDIDATE_APPS=(opencode kilocode)")
 	requireContains(t, cleanGate, "--include-candidates")
+
+	artifactWorkflow := readDoc(t, root, ".github/workflows/launchpad-artifacts.yml")
+	requireContains(t, artifactWorkflow, "run_candidate_live_conformance")
+	requireContains(t, artifactWorkflow, "openclaw,hermes")
+	requireContains(t, artifactWorkflow, "opencode,kilocode")
+	requireContains(t, artifactWorkflow, "artifact_only_no_live_conformance")
+	requireContains(t, artifactWorkflow, "if: ${{ always() }}")
+}
+
+func TestLiveConformanceDefaultsToSupportedAppsOnly(t *testing.T) {
+	t.Setenv("HELM_LAUNCHPAD_LIVE_APPS", "")
+	t.Setenv("HELM_LAUNCHPAD_LIVE_INCLUDE_CANDIDATES", "")
+	assertStringList(t, liveConformanceAppIDs(), []string{"openclaw", "hermes"})
+
+	t.Setenv("HELM_LAUNCHPAD_LIVE_INCLUDE_CANDIDATES", "1")
+	assertStringList(t, liveConformanceAppIDs(), []string{"openclaw", "hermes", "opencode", "kilocode"})
+
+	t.Setenv("HELM_LAUNCHPAD_LIVE_APPS", " openclaw , hermes ")
+	assertStringList(t, liveConformanceAppIDs(), []string{"openclaw", "hermes"})
 }
 
 func TestLaunchpadClaimsDoNotOverstateIsolationEgressOrWebSocketMCP(t *testing.T) {
@@ -86,5 +105,17 @@ func requireContains(t *testing.T, content, want string) {
 	t.Helper()
 	if !strings.Contains(content, want) {
 		t.Fatalf("expected content to contain %q", want)
+	}
+}
+
+func assertStringList(t *testing.T, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("list length = %d (%v), want %d (%v)", len(got), got, len(want), want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("list[%d] = %q in %v, want %q in %v", i, got[i], got, want[i], want)
+		}
 	}
 }

@@ -238,13 +238,6 @@ func TestLaunchOwnedEgressProxyWritesReceiptAndAllowsOpenRouterConnect(t *testin
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", response.StatusCode)
 	}
-	entries, err := os.ReadDir(handle.ReceiptDir)
-	if err != nil {
-		t.Fatalf("read receipt dir: %v", err)
-	}
-	if len(entries) == 0 {
-		t.Fatal("expected egress proxy receipts")
-	}
 	assertEgressReceiptSubject(t, handle.ReceiptDir, "connect_allowed", map[string]any{
 		"payload_inspection":   "opaque_connect",
 		"network_proof":        "destination_allowlist_only",
@@ -336,6 +329,21 @@ func stopProxy(t *testing.T, handle EgressProxyHandle) {
 
 func assertEgressReceiptSubject(t *testing.T, dir, reason string, want map[string]any) {
 	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if receiptSubjectMatches(t, dir, reason, want) {
+			return
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("receipt reason %q not found in %s", reason, dir)
+}
+
+func receiptSubjectMatches(t *testing.T, dir, reason string, want map[string]any) bool {
+	t.Helper()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("read receipt dir: %v", err)
@@ -359,7 +367,7 @@ func assertEgressReceiptSubject(t *testing.T, dir, reason string, want map[strin
 				t.Fatalf("receipt %s = %#v, want %#v in subject %#v", key, receipt.Subject[key], expected, receipt.Subject)
 			}
 		}
-		return
+		return true
 	}
-	t.Fatalf("receipt reason %q not found in %s", reason, dir)
+	return false
 }

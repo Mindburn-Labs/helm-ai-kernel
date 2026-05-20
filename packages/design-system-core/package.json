@@ -161,6 +161,9 @@
     "vite": "^7.2.6",
     "vitest": "^4.0.18"
   },
+  "overrides": {
+    "ws": "8.20.1"
+  },
   "peerDependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

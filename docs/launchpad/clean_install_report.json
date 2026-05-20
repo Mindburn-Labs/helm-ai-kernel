@@ -1,0 +1,79 @@
+{
+  "artifact_workflow_run_id": "26110916296",
+  "canonical_user_machine": {
+    "evidence_artifact": null,
+    "status": "PENDING_MAINTAINER_RUN"
+  },
+  "ci_clean_install": {
+    "evidence_artifact": "launchpad-clean-install-report",
+    "status": "PENDING_WORKFLOW_DISPATCH",
+    "workflow": ".github/workflows/launchpad-clean-install.yml"
+  },
+  "commands": [
+    {
+      "command": "brew update",
+      "exit_code": null,
+      "name": "brew_update"
+    },
+    {
+      "command": "brew install mindburnlabs/tap/helm-ai-kernel",
+      "exit_code": null,
+      "name": "brew_install"
+    },
+    {
+      "command": "helm-ai-kernel launch matrix --json",
+      "exit_code": null,
+      "name": "launch_matrix"
+    },
+    {
+      "command": "helm-ai-kernel launch openclaw local-container --headless --output json",
+      "exit_code": null,
+      "name": "launch_openclaw"
+    },
+    {
+      "command": "helm-ai-kernel launch hermes local-container --headless --output json",
+      "exit_code": null,
+      "name": "launch_hermes"
+    },
+    {
+      "command": "helm-ai-kernel launch delete <launch_id> --cascade",
+      "exit_code": null,
+      "name": "delete_each_launch"
+    },
+    {
+      "command": "helm-ai-kernel verify --bundle <pack>",
+      "exit_code": null,
+      "name": "verify_each_evidence_pack"
+    }
+  ],
+  "evidence_packs": [],
+  "generated_at": "2026-05-20T00:00:00Z",
+  "ghcr_digest_confirmations": [
+    {
+      "app_id": "openclaw",
+      "availability": "oss_supported",
+      "digest": "sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e",
+      "image": "ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e"
+    },
+    {
+      "app_id": "hermes",
+      "availability": "oss_supported",
+      "digest": "sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527",
+      "image": "ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527"
+    }
+  ],
+  "host_kind": "pending",
+  "launch_ids": {},
+  "milestone": "Launchpad v0.5.5 Clean Install + Public Docs GA",
+  "redaction": {
+    "host_identifiers_committed": false,
+    "raw_logs_committed": false,
+    "secret_values_committed": false
+  },
+  "release_tag": "v0.5.4",
+  "schema_version": 1,
+  "secret_fragment_audit": {
+    "status": "PENDING_MAINTAINER_RUN"
+  },
+  "status": "PENDING_MAINTAINER_RUN"
+}

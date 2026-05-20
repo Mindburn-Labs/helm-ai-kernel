@@ -14,3 +14,7 @@ Promotion to `oss_supported` still requires a CI artifact manifest with:
 - live local-container e2e ref
 - teardown receipt ref
 - offline-verifiable EvidencePack ref
+
+OpenCode and Kilo Code recipes are included so CI can produce candidate
+manifests. They do not make those apps `oss_supported`; promotion still happens
+only through `helm-ai-kernel launch promote` with complete signed evidence.

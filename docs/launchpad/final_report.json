@@ -1,14 +1,19 @@
 {
-  "status": "release_candidate_ready",
-  "mission_scope": "HELM OSS Skill Packs MVP plus HELM Launchpad OpenClaw/Hermes local-container production release candidate, with HELM Commercial Launchpad/Skills governance surfaces",
+  "status": "production_release_published_homebrew_pr_open",
+  "mission_scope": "HELM OSS Skill Packs MVP plus HELM Launchpad OpenClaw/Hermes local-container production release, with HELM Commercial Launchpad/Skills governance surfaces merged",
   "production_ready": true,
-  "mission_100_percent_complete": true,
+  "mission_100_percent_complete": false,
   "release_distribution_complete": false,
-  "generated_at": "2026-05-19T17:10:00Z",
-  "kernel_branch": "skill-launch-remediation",
-  "kernel_head": "bd2d954e470a028640ea0e492efb79905d5f438a",
-  "enterprise_branch": "launchpad-final",
-  "enterprise_quality_gate": "make quality-pr passed after approved OSS sync",
+  "generated_at": "2026-05-20T01:06:39Z",
+  "kernel_branch": "main",
+  "kernel_head": "0b60353c50eda54454fbb90e3e5ccd9db952ef8b",
+  "kernel_release": "v0.5.4",
+  "kernel_release_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.4",
+  "kernel_release_workflow": "26131090671",
+  "enterprise_branch": "main",
+  "enterprise_merge_commit": "89f319bae0d2186acd76b7e5764ade881a8650e1",
+  "enterprise_pr": "https://github.com/Mindburn-Labs/helm-ai-enterprise/pull/30",
+  "enterprise_quality_gate": "PR #30 checks passed and merged after approved OSS sync",
   "artifact_workflow": {
     "run_id": "26110916296",
     "run_attempt": "1",
@@ -95,9 +100,9 @@
     "Enterprise Launchpad and Skills APIs, OpenAPI/route parity, migrations, durable store, Console Launchpad feature, Playwright coverage, and approved OSS boundary sync"
   ],
   "not_implemented": [
-    "Homebrew formula release update is intentionally blocked until PR merge and release tagging",
-    "Mindburn public website claims are intentionally blocked until merged release evidence lands on main",
-    "Live DigitalOcean and Hetzner writes are opt-in only and are not required for this release candidate",
+    "Homebrew tap merge is blocked on repository permissions; PR https://github.com/mindburnlabs/homebrew-tap/pull/2 is open with the v0.5.4 formula",
+    "Mindburn public website claims are intentionally blocked until docs-truth and owner review approve a public claims update",
+    "Live DigitalOcean and Hetzner writes are opt-in only and are not required for this production release",
     "OpenCode and Kilo Code are not promoted because they have not passed the OpenClaw/Hermes evidence bar",
     "Codex, Claude Code, Cursor, and Junie are not redistributed and remain external/BYO adapters"
   ],
@@ -143,16 +148,21 @@
     "helm-ai-enterprise pnpm --dir apps/console typecheck",
     "helm-ai-enterprise pnpm --dir apps/console test -- --run",
     "helm-ai-enterprise pnpm --dir apps/console build",
-    "helm-ai-enterprise pnpm --dir e2e exec playwright test tests/launchpad.spec.ts --project=chromium"
+    "helm-ai-enterprise pnpm --dir e2e exec playwright test tests/launchpad.spec.ts --project=chromium",
+    "kernel release workflow 26131090671",
+    "v0.5.4 release SHA256SUMS verification",
+    "v0.5.4 release EvidencePack offline verification",
+    "v0.5.4 release Cosign bundle verification for 14 assets",
+    "Enterprise PR #30 remote CI checks"
   ],
   "tests_failing": [],
   "risks_remaining": [
-    "release distribution is not complete until kernel and Enterprise PRs merge",
-    "Homebrew and website claims must remain blocked until release artifacts are available from merged main",
+    "Homebrew tap remains on v0.5.0 until https://github.com/mindburnlabs/homebrew-tap/pull/2 is merged by a tap maintainer",
+    "public website claims remain blocked until docs-truth and owner review approve concrete evidence-backed claims",
     "Live cloud writes are intentionally excluded from normal gates",
     "Node.js 20 deprecation warnings are emitted by pinned upstream actions forced to Node 24; they are warnings, not failed gates"
   ],
-  "security_review_result": "PASS for this release candidate: no app is promoted without signed OCI digest, cosign ref, SBOM ref, vulnerability scan ref, provenance ref, live e2e ref, teardown receipt ref, and offline EvidencePack verification; proprietary apps remain external/BYO; cloud live writes remain opt-in; logs and reports do not include the OpenRouter key.",
+  "security_review_result": "PASS for this production release: no app is promoted without signed OCI digest, cosign ref, SBOM ref, vulnerability scan ref, provenance ref, live e2e ref, teardown receipt ref, and offline EvidencePack verification; proprietary apps remain external/BYO; cloud live writes remain opt-in; logs and reports do not include the OpenRouter key.",
   "docs_updated": [
     "docs/launchpad/FINAL_IMPLEMENTATION_REPORT.md",
     "docs/launchpad/final_report.json",
@@ -168,15 +178,13 @@
     "docs/public-docs.manifest.json"
   ],
   "release_steps": [
-    "commit and push final kernel promotion/report updates",
-    "sync Enterprise lock to the final kernel commit through tools/sync-oss-kernel.sh",
-    "run Enterprise make quality-pr after final sync",
-    "open kernel release PR",
-    "open Enterprise release PR referencing the kernel PR/commit",
-    "merge only after PR CI is green",
-    "tag kernel release and publish release notes with exact image digests, cosign refs, SBOM refs, vuln scan refs, EvidencePack refs, and verifier commands",
-    "update Homebrew formula after merged release artifacts exist",
-    "update public website claims only after docs-truth passes on main"
+    "kernel PR #161 merged",
+    "kernel release v0.5.4 published from main",
+    "v0.5.4 release assets, checksums, Cosign bundles, SBOM, OpenVEX, release attestation, Homebrew formula asset, and EvidencePack are available",
+    "v0.5.4 release EvidencePack verifies offline",
+    "Enterprise PR #30 merged",
+    "Homebrew tap PR https://github.com/mindburnlabs/homebrew-tap/pull/2 is open and awaiting maintainer merge",
+    "public website claims remain blocked until docs-truth passes on main and owner review approves"
   ],
   "follow_up_prs": [
     "OpenCode signed OCI and live conformance promotion",

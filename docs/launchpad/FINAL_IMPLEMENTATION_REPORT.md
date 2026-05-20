@@ -1,8 +1,8 @@
 # Final Implementation Report
 
-Status: release-candidate ready for HELM OSS Skill Packs MVP, HELM Launchpad OpenClaw/Hermes local-container support, and HELM Commercial Launchpad/Skills governance surfaces.
+Status: production release published for HELM OSS Skill Packs MVP, HELM Launchpad OpenClaw/Hermes local-container support, and HELM Commercial Launchpad/Skills governance surfaces. Homebrew tap distribution remains blocked on maintainer merge.
 
-`mission_100_percent_complete` is true for this production deployment milestone. Distribution remains gated: Homebrew, public website claims, and release tags must wait until the kernel and Enterprise PRs merge and main-branch CI preserves the same evidence.
+`mission_100_percent_complete` is false until the public Homebrew tap update is merged. Kernel PR #161 and Enterprise PR #30 are merged. Kernel release `v0.5.4` is published from `main`, release workflow `26131090671` passed, and the release EvidencePack verifies offline. Homebrew PR https://github.com/mindburnlabs/homebrew-tap/pull/2 updates the tap to v0.5.4 but requires a tap maintainer to merge. Public website claims remain blocked until docs-truth and owner review approve a public claims update.
 
 ## What Was Implemented
 
@@ -14,7 +14,9 @@ Status: release-candidate ready for HELM OSS Skill Packs MVP, HELM Launchpad Ope
 - [KEEP] OpenCode and Kilo Code remain `oss_candidate`; Codex, Claude Code, Cursor, and Junie remain external/BYO adapters.
 - [KEEP] DigitalOcean and Hetzner remain dry-run by default; live mode requires explicit operator approval receipt and reconciliation.
 - [KEEP] OSS Skill Packs MVP, Codex plugin export, repo projection, scan/install/revoke receipts, and Skill Pack conformance tests remain in this release candidate.
-- [KEEP] Enterprise Launchpad and Skills APIs, route registry/OpenAPI parity, migrations, durable stores, Console Launchpad UI, Playwright coverage, and approved OSS boundary sync are included in the Enterprise release candidate.
+- [KEEP] Enterprise Launchpad and Skills APIs, route registry/OpenAPI parity, migrations, durable stores, Console Launchpad UI, Playwright coverage, and approved OSS boundary sync are merged through Enterprise PR #30.
+- [KEEP] Kernel release `v0.5.4` ships CLI binaries, checksums, SBOM JSON, OpenVEX, release attestation metadata, Cosign bundles, `evidence-pack.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, and sample policy material.
+- [KEEP] Release asset verification passed for `v0.5.4`: `SHA256SUMS.txt`, offline EvidencePack verification, and Cosign verification for all 14 signed assets.
 
 ## Exact Files Changed In This Final Pass
 
@@ -41,10 +43,14 @@ The full kernel branch diff also includes Launchpad runtime, promotion, receipts
 ## Evidence And Verification
 
 - Artifact workflow: `26110916296`, attempt `1`, head `2a04e2e0cbf45459a2f155bc51f79fb1d7dbbc1b`.
+- Kernel release: `v0.5.4`, workflow `26131090671`, source commit `0b60353c50eda54454fbb90e3e5ccd9db952ef8b`.
+- Enterprise merge: PR #30, merge commit `89f319bae0d2186acd76b7e5764ade881a8650e1`.
 - OpenClaw promotion refs: `github-actions://26110916296/1/artifact-verification/openclaw`, `github-actions://26110916296/1/live-e2e/openclaw`, `github-actions://26110916296/1/evidencepack/openclaw`, `github-actions://26110916296/1/teardown/openclaw`.
 - Hermes promotion refs: `github-actions://26110916296/1/artifact-verification/hermes`, `github-actions://26110916296/1/live-e2e/hermes`, `github-actions://26110916296/1/evidencepack/hermes`, `github-actions://26110916296/1/teardown/hermes`.
 - OpenClaw EvidencePack merkle root: `d309d1ab02b5238c5b7c6c6ee7ee5df8805fb42c994308919cdc94271199604c`.
 - Hermes EvidencePack merkle root: `2ca2efb22f3c936cac7b8a1a57e331fc2f3175a5a9eb704e02b97ed685af8dc3`.
+- Release EvidencePack verification: `helm-ai-kernel verify --bundle /tmp/helm-ai-kernel-v0.5.4-release/evidence-pack.tar` returned `VERIFIED`.
+- Release asset signature verification: `bash scripts/release/verify_cosign.sh /tmp/helm-ai-kernel-v0.5.4-release` returned `verified=14 failed=0`.
 
 ## Tests Passing
 
@@ -55,6 +61,10 @@ Kernel:
 - `bin/helm-ai-kernel verify --bundle` for Hermes downloaded EvidencePack directory and tar archive.
 - `go test ./core/pkg/skillpacks/... ./core/pkg/launchpad/... ./core/cmd/helm-ai-kernel/... ./core/pkg/mcp/... ./core/pkg/evidencepack/... ./core/pkg/verifier ./tests/skills/... ./tests/launchpad/...`
 - Prior gates on this branch: `make build`, `make test`, `make test-console`, `make test-platform`, `make launch-ready`, `make launch-security`.
+- Release workflow `26131090671`.
+- `shasum -a 256 -c SHA256SUMS.txt --ignore-missing` for downloaded v0.5.4 release assets.
+- `bin/helm-ai-kernel verify --bundle` for downloaded v0.5.4 `evidence-pack.tar`.
+- `bash scripts/release/verify_cosign.sh` for downloaded v0.5.4 release assets.
 
 Enterprise:
 
@@ -66,26 +76,25 @@ Enterprise:
 - `pnpm --dir apps/console test -- --run`
 - `pnpm --dir apps/console build`
 - `pnpm --dir e2e exec playwright test tests/launchpad.spec.ts --project=chromium`
+- Enterprise PR #30 remote CI checks, including `race-detector`, `Mutation Analysis`, `Boundary Verification`, `openapi-lint`, `evidence-pack`, `doccheck`, and JS typecheck/lint/test/build.
 
 ## Tests Failing
 
-None for this release-candidate evidence set.
+None for this production release evidence set.
 
 ## Security Review Result
 
-PASS for this release candidate. No app is promoted without signed OCI digest, cosign ref, SBOM ref, vulnerability scan ref, provenance ref, live e2e ref, teardown receipt ref, and offline EvidencePack verification. Proprietary apps remain external/BYO. Cloud live writes remain opt-in. Logs and reports do not include the OpenRouter key.
+PASS for this production release. No app is promoted without signed OCI digest, cosign ref, SBOM ref, vulnerability scan ref, provenance ref, live e2e ref, teardown receipt ref, and offline EvidencePack verification. Proprietary apps remain external/BYO. Cloud live writes remain opt-in. Logs and reports do not include the OpenRouter key.
 
-## Remaining Release Steps
+## Release Steps
 
-1. Commit and push the final kernel promotion/report updates.
-2. Sync Enterprise to the final kernel commit through `tools/sync-oss-kernel.sh`.
-3. Re-run Enterprise `make quality-pr` after final sync.
-4. Open the kernel release PR.
-5. Open the Enterprise release PR referencing the kernel PR/commit.
-6. Merge only after PR CI is green.
-7. Tag the kernel release and publish release notes with exact image digests, cosign refs, SBOM refs, vuln scan refs, EvidencePack refs, and verifier commands.
-8. Update Homebrew only after merged release artifacts exist.
-9. Update public website claims only after docs-truth passes on `main`.
+1. [KEEP] Kernel PR #161 merged.
+2. [KEEP] Kernel release `v0.5.4` published from `main`.
+3. [KEEP] Release assets, checksums, Cosign bundles, SBOM, OpenVEX, release attestation, Homebrew formula asset, and EvidencePack are available.
+4. [KEEP] Release EvidencePack verifies offline.
+5. [KEEP] Enterprise PR #30 merged.
+6. [DEFER] Homebrew tap PR https://github.com/mindburnlabs/homebrew-tap/pull/2 is open and awaiting maintainer merge.
+7. [DEFER] Public website claims remain blocked until docs-truth passes on `main` and owner review approves.
 
 ## Follow-Up PRs
 

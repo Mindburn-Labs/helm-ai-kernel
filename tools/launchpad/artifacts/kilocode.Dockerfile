@@ -5,6 +5,9 @@
 FROM oven/bun:1.3.13-debian@sha256:e95356cb8e1de62ad69ab3bd3584ba947013d27650a226804d2fc0af4e17dac2 AS build
 
 WORKDIR /src/kilocode
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates g++ git make python3 \
+    && rm -rf /var/lib/apt/lists/*
 COPY . .
 RUN bun install --frozen-lockfile
 RUN bun run --cwd packages/opencode build
@@ -27,7 +30,15 @@ COPY --from=build /licenses /licenses
 
 RUN <<'SH'
 set -eu
-ln -sf /opt/kilocode/packages/opencode/bin/kilo /usr/local/bin/kilocode
+cat > /usr/local/bin/kilocode <<'RUNNER'
+#!/bin/sh
+set -eu
+case "$(uname -m)" in
+  aarch64|arm64) target="/opt/kilocode/packages/opencode/dist/@kilocode/cli-linux-arm64/bin/kilo" ;;
+  *) target="/opt/kilocode/packages/opencode/dist/@kilocode/cli-linux-x64/bin/kilo" ;;
+esac
+exec "${target}" "$@"
+RUNNER
 cat > /usr/local/bin/helm-launchpad-openrouter-check <<'CHECK'
 #!/bin/sh
 set -eu
@@ -48,7 +59,7 @@ if [ "$status" != "200" ]; then
   exit 44
 fi
 CHECK
-chmod 0755 /usr/local/bin/helm-launchpad-openrouter-check
+chmod 0755 /usr/local/bin/kilocode /usr/local/bin/helm-launchpad-openrouter-check
 chown -R helm:helm /opt/kilocode /licenses
 SH
 

@@ -5,6 +5,9 @@
 FROM oven/bun:1.3.14-debian@sha256:9dba1a1b43ce28c9d7931bfc4eb00feb63b0114720a0277a8f939ae4dfc9db6f AS build
 
 WORKDIR /src/opencode
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates g++ git make python3 \
+    && rm -rf /var/lib/apt/lists/*
 COPY . .
 RUN bun install --frozen-lockfile
 RUN bun run --cwd packages/opencode build
@@ -27,7 +30,15 @@ COPY --from=build /licenses /licenses
 
 RUN <<'SH'
 set -eu
-ln -sf /opt/opencode/packages/opencode/bin/opencode /usr/local/bin/opencode
+cat > /usr/local/bin/opencode <<'RUNNER'
+#!/bin/sh
+set -eu
+case "$(uname -m)" in
+  aarch64|arm64) target="/opt/opencode/packages/opencode/dist/opencode-linux-arm64/bin/opencode" ;;
+  *) target="/opt/opencode/packages/opencode/dist/opencode-linux-x64/bin/opencode" ;;
+esac
+exec "${target}" "$@"
+RUNNER
 cat > /usr/local/bin/helm-launchpad-openrouter-check <<'CHECK'
 #!/bin/sh
 set -eu
@@ -48,7 +59,7 @@ if [ "$status" != "200" ]; then
   exit 44
 fi
 CHECK
-chmod 0755 /usr/local/bin/helm-launchpad-openrouter-check
+chmod 0755 /usr/local/bin/opencode /usr/local/bin/helm-launchpad-openrouter-check
 chown -R helm:helm /opt/opencode /licenses
 SH
 

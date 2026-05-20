@@ -48,6 +48,10 @@ func TestLaunchpadClaimsMarketPromotedAppsAsSupported(t *testing.T) {
 	requireContains(t, cleanGate, `"candidate_promotion_apps": []`)
 	requireContains(t, cleanGate, `"deprecated_include_candidates_flag": "accepted_noop_all_four_apps_are_supported"`)
 
+	cleanWorkflow := readDoc(t, root, ".github/workflows/launchpad-clean-install.yml")
+	requireContains(t, cleanWorkflow, "default: v0.5.5")
+	requireContains(t, cleanWorkflow, `default: "26179980172"`)
+
 	artifactWorkflow := readDoc(t, root, ".github/workflows/launchpad-artifacts.yml")
 	requireContains(t, artifactWorkflow, "run_candidate_live_conformance")
 	requireContains(t, artifactWorkflow, "include_candidate_artifacts")

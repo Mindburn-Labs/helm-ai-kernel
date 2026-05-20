@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 )
@@ -178,6 +179,20 @@ func TestContainerCommandDoesNotAddShellArgsToAppCommand(t *testing.T) {
 	command, args = containerCommand(nil, nil)
 	if got := strings.Join(append(command, args...), " "); got != "/bin/sh -lc true" {
 		t.Fatalf("default command = %q", got)
+	}
+}
+
+func TestLocalContainerCommandTimeoutCanBeRaisedForColdPulls(t *testing.T) {
+	t.Setenv("HELM_LAUNCHPAD_LOCAL_CONTAINER_TIMEOUT", "8m")
+
+	runtime := NewLocalContainerRuntime()
+	if got := runtime.commandTimeout(); got != 8*time.Minute {
+		t.Fatalf("command timeout = %s, want 8m", got)
+	}
+
+	runtime.CommandTimeout = 3 * time.Minute
+	if got := runtime.commandTimeout(); got != 3*time.Minute {
+		t.Fatalf("explicit command timeout = %s, want 3m", got)
 	}
 }
 

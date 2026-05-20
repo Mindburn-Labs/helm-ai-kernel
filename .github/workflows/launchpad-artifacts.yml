@@ -476,6 +476,7 @@ jobs:
           HELM_LAUNCHPAD_LIVE_APPS: ${{ inputs.run_candidate_live_conformance && 'openclaw,hermes,opencode,kilocode' || 'openclaw,hermes' }}
           HELM_LAUNCHPAD_ARTIFACT_MANIFEST: /tmp/launchpad/launchpad-artifact-manifest.json
           HELM_LAUNCHPAD_LIVE_EVIDENCE_DIR: /tmp/launchpad-live-evidence
+          HELM_LAUNCHPAD_LOCAL_CONTAINER_TIMEOUT: 8m
           HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
         run: go test ./tests/launchpad/... -run TestLiveOpenRouterLocalContainerConformance -count=1 -v
@@ -486,17 +487,21 @@ jobs:
           path: /tmp/launchpad-live-evidence
           include-hidden-files: true
       - name: Write merged promotion manifest
+        env:
+          LIVE_APPS: ${{ inputs.run_candidate_live_conformance && 'openclaw,hermes,opencode,kilocode' || 'openclaw,hermes' }}
         run: |
           set -euo pipefail
           mkdir -p /tmp/launchpad-promotion
           jq \
             --arg github_run_id "${GITHUB_RUN_ID}" \
             --arg github_run_attempt "${GITHUB_RUN_ATTEMPT}" \
-            '.artifacts |= map(
+            --arg live_apps "${LIVE_APPS}" \
+            '($live_apps | split(",") | map(gsub("^\\s+|\\s+$"; ""))) as $liveApps
+            | .artifacts |= map(
               . + {
                 artifact_verification_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/artifact-verification/" + .app_id)
               }
-              + if (.app_id == "openclaw" or .app_id == "hermes") then {
+              + if ($liveApps | index(.app_id)) then {
                 live_e2e_run_id: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/live-e2e/" + .app_id),
                 evidence_pack_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/evidencepack/" + .app_id),
                 teardown_receipt_ref: ("github-actions://" + $github_run_id + "/" + $github_run_attempt + "/teardown/" + .app_id),

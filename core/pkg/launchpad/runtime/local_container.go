@@ -3,6 +3,7 @@ package runtime
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -17,6 +18,7 @@ type LocalContainerRuntime struct {
 	NetworkDefault     string
 	FilesystemMode     string
 	IsolationMode      string
+	CommandTimeout     time.Duration
 	DockerBin          string
 	DockerInfoProvider DockerInfoProvider
 }
@@ -150,7 +152,7 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 			CPUMillis:    500,
 			MemoryMB:     512,
 			DiskMB:       1024,
-			Timeout:      120 * time.Second,
+			Timeout:      r.commandTimeout(),
 			MaxProcesses: 64,
 		},
 		Network:      network,
@@ -180,6 +182,23 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 	handle.EgressProxyName = proxyHandle.ProxyContainerName
 	handle.Isolation.TokenBrokerEnabled = req.TokenBroker || proxyHandle.TokenBrokerEnabled
 	return handle, nil
+}
+
+const defaultLocalContainerCommandTimeout = 120 * time.Second
+
+func (r LocalContainerRuntime) commandTimeout() time.Duration {
+	if r.CommandTimeout > 0 {
+		return r.CommandTimeout
+	}
+	raw := strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_LOCAL_CONTAINER_TIMEOUT"))
+	if raw == "" {
+		return defaultLocalContainerCommandTimeout
+	}
+	timeout, err := time.ParseDuration(raw)
+	if err != nil || timeout <= 0 {
+		return defaultLocalContainerCommandTimeout
+	}
+	return timeout
 }
 
 func (r LocalContainerRuntime) resolveIsolation(req ContainerRequest) (IsolationEvidence, error) {

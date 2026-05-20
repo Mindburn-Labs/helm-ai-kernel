@@ -86,7 +86,7 @@ func TestWriteEvidencePackRewriteKeepsEvidenceGraphHashCurrent(t *testing.T) {
 }
 
 func TestWriteEvidencePackRedactsSecretLikePayloads(t *testing.T) {
-	secret := "sk-or-v1-" + strings.Repeat("a", 24)
+	secret := strings.Join([]string{"sk", "or", "v1"}, "-") + "-" + strings.Repeat("a", 24)
 	packDir, err := WriteEvidencePack(t.TempDir(), "launch-redact", map[string][]byte{
 		"receipts/kernel-verdict.json": []byte(`{"receipt_id":"r1","type":"launchpad.kernel_verdict","decision_id":"d1","decision_hash":"sha256:test","status":"ALLOW","verdict":"ALLOW","lamport_clock":1}`),
 		"runtime_environment.json":     []byte(`{"OPENROUTER_API_KEY":"` + secret + `"}`),

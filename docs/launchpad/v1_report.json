@@ -1,16 +1,17 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-20T15:22:00Z",
+  "generated_at": "2026-05-20T16:58:24Z",
   "milestone": "Launchpad v1.0 Governed App Execution + Cloud Beta",
-  "status": "market_best_contracts_implemented_supported_live_passed_candidate_live_blocked",
+  "status": "market_best_contracts_implemented_digitalocean_live_passed_candidate_live_timeout_fixed_pending_rerun",
   "release_truth_base": {
     "release_tag": "v0.5.4",
     "release_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.4",
     "artifact_workflow_run_id": "26110916296",
     "release_workflow_run_id": "26131090671",
-    "v1_artifact_workflow_run_id": "26169820831",
-    "v1_artifact_workflow_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26169820831",
-    "v1_artifact_workflow_conclusion": "failed_before_patch_because_candidate_opencode_kilocode_live_start_timed_out"
+    "v1_artifact_workflow_run_id": "26171107990",
+    "v1_artifact_workflow_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26171107990",
+    "v1_artifact_workflow_conclusion": "signed_artifacts_passed_live_conformance_failed_because_candidate_opencode_kilocode_cold_image_pull_exceeded_120s_runtime_window",
+    "v1_artifact_workflow_fix": "local-container runtime timeout is now configurable and GitHub live conformance uses HELM_LAUNCHPAD_LOCAL_CONTAINER_TIMEOUT=8m; promotion manifest marks every live-tested app as promotion eligible"
   },
   "developer_ga": {
     "secret_binding_cli": "implemented",
@@ -22,8 +23,8 @@
     ],
     "candidate_recipe_base_images_pinned": true,
     "signed_artifact_ci_status": "passed",
-    "live_local_container_conformance_status": "github_actions_run_26169820831_openclaw_hermes_passed_opencode_kilocode_timed_out_on_container_pull_start",
-    "live_local_container_gate_patch": "workflow_default_live_apps_openclaw_hermes_candidate_apps_opt_in_only",
+    "live_local_container_conformance_status": "github_actions_run_26171107990_openclaw_hermes_passed_opencode_kilocode_timed_out_on_container_pull_start_before_timeout_patch",
+    "live_local_container_gate_patch": "workflow_default_live_apps_openclaw_hermes_candidate_apps_opt_in_only_with_configurable_timeout_for_candidate_cold_pulls",
     "homebrew_clean_install_status": "current_v0_5_4_failed_registry_root_missing_branch_fix_committed_for_next_release",
     "clean_install_supported_apps": [
       "openclaw",
@@ -69,7 +70,7 @@
     "openclaw": {
       "availability": "oss_supported",
       "local_container": "supported",
-      "ghcr_digest": "sha256:88d203f7dfb0f029d1ad5cf91aab57efabbf6e3294b75715ce79aba334ecfd46",
+      "ghcr_digest": "sha256:ae58d88964a159669cfdcc0080319d109914239d5d48d929a5aa1acdc9898e3e",
       "mcp_manifest": "openclaw.default",
       "model_gateway": "logical_binding_env_projection",
       "cloud_beta": "digitalocean_live_launch_delete_reconcile_verify_passed_hetzner_dry_run_until_token"
@@ -77,7 +78,7 @@
     "hermes": {
       "availability": "oss_supported",
       "local_container": "supported",
-      "ghcr_digest": "sha256:78476affafe65c33f8caf109731b1c276a5de8876ab28b4d2fdba223f5781ee4",
+      "ghcr_digest": "sha256:86127679630c81b9dfc557bdb6adf8af386f2df3de020cbab1440898e7a04ed8",
       "mcp_manifest": "hermes.default",
       "model_gateway": "logical_binding_env_projection",
       "cloud_beta": "digitalocean_live_launch_delete_reconcile_verify_passed_hetzner_dry_run_until_token"
@@ -87,10 +88,10 @@
       "local_container": "signed_artifact_complete_live_conformance_timed_out_on_container_pull_start_candidate_only",
       "upstream_release": "v1.15.5",
       "upstream_commit": "d7a6e1daaf2271bcd0b611fbb27d4956806e475a",
-      "ghcr_digest": "sha256:cb3244affc0c7ddb6de3bdbd042da97c3d57fb7c6056ca9410bbbcfd9eab73b7",
+      "ghcr_digest": "sha256:f4887f14dadfbbf659816b36b40a08110c7aaedd57306335cd891367c3d57aa1",
       "mcp_manifest": "opencode.default",
       "model_gateway": "logical_binding_env_projection",
-      "artifact_workflow_run_id": "26169820831",
+      "artifact_workflow_run_id": "26171107990",
       "vulnerability_scan_status": "completed",
       "cloud_beta": "blocked_until_local_container_promotion"
     },
@@ -99,10 +100,10 @@
       "local_container": "signed_artifact_complete_live_conformance_timed_out_on_container_pull_start_candidate_only",
       "upstream_release": "v7.3.1",
       "upstream_commit": "64c60812ae730a30db1fa2226d9e446f7f10c127",
-      "ghcr_digest": "sha256:2139fdc2b26afbd298f790cba0c3aca3707a661f51ba2a5dd509ca1a736d1bb7",
+      "ghcr_digest": "sha256:72e54717dab9a0f0402299770f5947682c0e426a9d8ad6c0c3a829610aabbbe5",
       "mcp_manifest": "kilocode.default",
       "model_gateway": "logical_binding_env_projection",
-      "artifact_workflow_run_id": "26169820831",
+      "artifact_workflow_run_id": "26171107990",
       "vulnerability_scan_status": "completed",
       "cloud_beta": "blocked_until_local_container_promotion"
     },
@@ -162,6 +163,12 @@
       "requires_post_delete_reconcile": true,
       "live_provisioner": "implemented",
       "controlled_live_smoke": "passed_for_openclaw_and_hermes",
+      "controlled_live_run_id": "20260520T165024Z",
+      "controlled_live_report": "docs/launchpad/cloud_beta_report.json",
+      "controlled_live_apps": [
+        "openclaw",
+        "hermes"
+      ],
       "post_delete_reconcile": "clean_no_launchpad_tagged_resources_remaining",
       "evidencepack_offline_verify": "passed"
     },
@@ -173,7 +180,9 @@
       "requires_idempotency_key": true,
       "requires_post_delete_reconcile": true,
       "live_provisioner": "implemented",
-      "live_status": "dry_run_until_HCLOUD_TOKEN_available"
+      "live_status": "fail_closed_missing_HCLOUD_TOKEN_or_HELM_LAUNCHPAD_HETZNER_TOKEN",
+      "controlled_live_report": "docs/launchpad/cloud_beta_report.json",
+      "provider_writes_performed": false
     }
   },
   "mcp_gateway": {
@@ -221,7 +230,7 @@
     },
     "docs_platform": {
       "helm_public_accuracy": "passed_with_market_best_worktree_overlay",
-      "full_validate": "in_progress_full_inventory_cleanup"
+      "full_validate": "passed"
     },
     "mindburn_public_site": {
       "public_claims": "passed",
@@ -230,9 +239,9 @@
     }
   },
   "blocked_live_evidence": [
-    "OpenCode and Kilo Code promotion await GitHub Actions live local-container conformance result from run 26171107990",
+    "OpenCode and Kilo Code promotion await GitHub Actions live local-container conformance rerun after configurable timeout patch",
     "published v0.5.4 Homebrew binary does not package Launchpad registry/policy data; branch fix adds packaged launchpad data for the next release/tap update",
-    "Hetzner live beta remains dry-run until HCLOUD_TOKEN is available"
+    "Hetzner live beta is fail-closed until HCLOUD_TOKEN or HELM_LAUNCHPAD_HETZNER_TOKEN is available"
   ],
   "public_claims": {
     "status": "narrow_evidence_backed_only",

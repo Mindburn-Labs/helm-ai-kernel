@@ -14,6 +14,18 @@ Homebrew package, signed Launchpad artifacts, local-container app launcher,
 MCP interceptor posture, signed receipts, teardown, and offline EvidencePack
 verification survive a machine that did not build the release.
 
+## Audience
+
+This page is for release owners, Launchpad maintainers, and operators who need
+to prove a supported app can be installed and removed from a clean workstation
+without relying on a developer checkout.
+
+## Outcome
+
+You should leave with the supported-app gate, the exact clean-machine command
+sequence, and the evidence files that prove install, launch, teardown, and
+offline verification.
+
 ## Source Truth
 
 - Release: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.4>
@@ -113,3 +125,12 @@ gh workflow run launchpad-clean-install.yml \
 
 The CI report is a repeatability signal. The separate clean Mac report remains
 the canonical GA evidence for developer experience.
+
+## Troubleshooting
+
+| Condition | Response |
+| --- | --- |
+| Homebrew package is unavailable | Recheck the release tag, tap PR, and release workflow before running app launch commands. |
+| Launch fails before receipts | Treat the gate as failed and inspect policy, sandbox, and provider readiness from the redacted report. |
+| EvidencePack verification fails | Do not promote the app; rerun with fresh artifacts and preserve the failed verification output. |
+| Teardown leaves resources | Reconcile local/container resources before declaring the machine clean. |

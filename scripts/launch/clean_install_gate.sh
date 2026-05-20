@@ -8,6 +8,9 @@ ARTIFACT_RUN_ID="26110916296"
 HOST_KIND="developer_macos"
 OUTPUT="$ROOT/docs/launchpad/clean_install_report.json"
 TRANSCRIPT_DIR="${TMPDIR:-/tmp}/helm-launchpad-clean-install"
+INCLUDE_CANDIDATES=0
+SUPPORTED_APPS=(openclaw hermes)
+CANDIDATE_APPS=(opencode kilocode)
 
 usage() {
   cat <<'USAGE'
@@ -19,6 +22,7 @@ Options:
   --host-kind <kind>        developer_macos or github_macos_runner
   --output <path>           Redacted JSON report path
   --transcript-dir <path>   Directory for redacted command output and audit inputs
+  --include-candidates      Also run candidate promotion probes for OpenCode/Kilo
 USAGE
 }
 
@@ -29,6 +33,7 @@ while [[ $# -gt 0 ]]; do
     --host-kind) HOST_KIND="$2"; shift 2 ;;
     --output) OUTPUT="$2"; shift 2 ;;
     --transcript-dir) TRANSCRIPT_DIR="$2"; shift 2 ;;
+    --include-candidates) INCLUDE_CANDIDATES=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -226,6 +231,7 @@ commands = read_jsonl(commands_path)
 evidence = read_jsonl(evidence_path)
 launch_ids = {item["app_id"]: item["launch_id"] for item in read_jsonl(launch_ids_path)}
 failed = [item["name"] for item in commands if item.get("exit_code") != 0]
+candidate_promotion_included = any(item["name"] in ("launch_opencode", "launch_kilocode") for item in commands)
 report = {
     "schema_version": 1,
     "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
@@ -234,6 +240,9 @@ report = {
     "artifact_workflow_run_id": artifact_run_id,
     "host_kind": host_kind,
     "status": status,
+    "supported_apps": ["openclaw", "hermes"],
+    "candidate_promotion_apps": ["opencode", "kilocode"],
+    "candidate_promotion_included": candidate_promotion_included,
     "commands": commands,
     "launch_ids": launch_ids,
     "ghcr_digest_confirmations": read_json(ghcr_path, []),
@@ -283,7 +292,12 @@ main() {
     final_status="FAIL"
   fi
 
-  for app in openclaw hermes opencode kilocode; do
+  local launch_apps=("${SUPPORTED_APPS[@]}")
+  if [[ "$INCLUDE_CANDIDATES" -eq 1 ]]; then
+    launch_apps+=("${CANDIDATE_APPS[@]}")
+  fi
+
+  for app in "${launch_apps[@]}"; do
     if run_step "launch_${app}" "helm-ai-kernel launch ${app} local-container --headless --output json" "helm-ai-kernel launch ${app} local-container --headless --output json"; then
       local launch_json="$TRANSCRIPT_DIR/commands/launch_${app}.stdout"
       collect_evidence_refs "$launch_json"

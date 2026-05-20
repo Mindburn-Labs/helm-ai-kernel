@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -29,6 +30,23 @@ type evidenceIndex struct {
 	Version string       `json:"version"`
 	Entries []indexEntry `json:"entries"`
 	Gates   []string     `json:"gates"`
+}
+
+type EvidenceGraph struct {
+	Version  string              `json:"version"`
+	LaunchID string              `json:"launch_id"`
+	RootHash string              `json:"root_hash"`
+	Nodes    []EvidenceGraphNode `json:"nodes"`
+}
+
+type EvidenceGraphNode struct {
+	ID           string `json:"id"`
+	Type         string `json:"type"`
+	Path         string `json:"path"`
+	Verdict      string `json:"verdict,omitempty"`
+	Hash         string `json:"hash"`
+	PreviousHash string `json:"previous_hash,omitempty"`
+	ChainHash    string `json:"chain_hash"`
 }
 
 func WriteEvidencePack(root, launchID string, artifacts map[string][]byte) (string, error) {
@@ -58,6 +76,12 @@ func WriteEvidencePack(root, launchID string, artifacts map[string][]byte) (stri
 		artifacts["receipts/launchpad-kernel-verdict.json"] = []byte(fmt.Sprintf(`{"receipt_id":"launchpad:%s","decision_id":"launchpad:%s","decision_hash":"%s","status":"ESCALATE","verdict":"ESCALATE","lamport_clock":1}`, launchID, launchID, HashBytes([]byte(launchID))))
 	}
 	addRequiredDirectoryPlaceholders(artifacts)
+	redactEvidenceArtifacts(artifacts)
+	graphData, err := buildEvidenceGraphArtifact(launchID, artifacts)
+	if err != nil {
+		return "", err
+	}
+	artifacts["launchpad_evidence_graph.json"] = graphData
 	manifest := EvidencePackManifest{
 		LaunchID:   launchID,
 		Version:    "1.0.0",
@@ -126,6 +150,84 @@ func WriteEvidencePack(root, launchID string, artifacts map[string][]byte) (stri
 	return dir, nil
 }
 
+func buildEvidenceGraphArtifact(launchID string, artifacts map[string][]byte) ([]byte, error) {
+	graph := EvidenceGraph{
+		Version:  "1.0.0",
+		LaunchID: launchID,
+		Nodes:    []EvidenceGraphNode{},
+	}
+	var receiptPaths []string
+	for name := range artifacts {
+		clean, err := cleanArtifactName(name)
+		if err != nil {
+			return nil, err
+		}
+		canonical := canonicalEvidencePath(clean)
+		if strings.HasPrefix(canonical, "02_PROOFGRAPH/receipts/") {
+			receiptPaths = append(receiptPaths, canonical)
+		}
+	}
+	sort.Strings(receiptPaths)
+	dataByPath := map[string][]byte{}
+	for name, data := range artifacts {
+		clean, err := cleanArtifactName(name)
+		if err != nil {
+			return nil, err
+		}
+		dataByPath[canonicalEvidencePath(clean)] = data
+	}
+	previous := ""
+	for _, path := range receiptPaths {
+		data := dataByPath[path]
+		var receipt Receipt
+		node := EvidenceGraphNode{
+			ID:   path,
+			Type: "receipt",
+			Path: path,
+			Hash: HashBytes(data),
+		}
+		if err := json.Unmarshal(data, &receipt); err == nil {
+			node.ID = receipt.ReceiptID
+			node.Type = receipt.Type
+			node.Verdict = receipt.Verdict
+		}
+		node.PreviousHash = previous
+		node.ChainHash = HashBytes([]byte(previous + "\n" + path + "\n" + node.Hash))
+		graph.Nodes = append(graph.Nodes, node)
+		previous = node.ChainHash
+	}
+	graph.RootHash = previous
+	data, err := json.MarshalIndent(graph, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(data, '\n'), nil
+}
+
+var evidenceSecretPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`sk-(?:or|proj|ant|live|test)-[A-Za-z0-9_\-=]{8,}`),
+	regexp.MustCompile(`ghp_[A-Za-z0-9_]{20,}`),
+	regexp.MustCompile(`github_pat_[A-Za-z0-9_]{20,}`),
+	regexp.MustCompile(`hf_[A-Za-z0-9]{20,}`),
+}
+
+var evidenceSecretAssignmentPattern = regexp.MustCompile(`(?i)(OPENROUTER_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY)(["']?\s*[:=]\s*["']?)[A-Za-z0-9_\-\.=]{8,}`)
+
+func redactEvidenceArtifacts(artifacts map[string][]byte) {
+	for name, data := range artifacts {
+		artifacts[name] = redactEvidenceBytes(data)
+	}
+}
+
+func redactEvidenceBytes(data []byte) []byte {
+	redacted := string(data)
+	for _, pattern := range evidenceSecretPatterns {
+		redacted = pattern.ReplaceAllString(redacted, "[REDACTED_SECRET]")
+	}
+	redacted = evidenceSecretAssignmentPattern.ReplaceAllString(redacted, "${1}${2}[REDACTED_SECRET]")
+	return []byte(redacted)
+}
+
 func addRequiredDirectoryPlaceholders(artifacts map[string][]byte) {
 	for _, path := range []string{
 		"03_TELEMETRY/.keep",
@@ -147,9 +249,10 @@ func mergeExistingArtifacts(dir string, artifacts map[string][]byte) error {
 		return nil
 	}
 	skip := map[string]struct{}{
-		"00_INDEX.json":                      {},
-		"01_SCORE.json":                      {},
-		"04_EXPORTS/launchpad_manifest.json": {},
+		"00_INDEX.json": {},
+		"01_SCORE.json": {},
+		"04_EXPORTS/launchpad_evidence_graph.json": {},
+		"04_EXPORTS/launchpad_manifest.json":       {},
 	}
 	return filepath.WalkDir(dir, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {

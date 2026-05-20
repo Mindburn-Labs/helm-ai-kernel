@@ -15,6 +15,11 @@ install:
   ref: v1.15.5
 runtime:
   command: ["opencode"]
+model_gateway:
+  logical_secret: model_gateway
+  provider: openrouter
+  mode: logical_binding_env_projection
+  raw_provider_key_projected: true
 model_gateway_env: ["OPENROUTER_API_KEY"]
 required_secrets: ["model_gateway"]
 filesystem_policy:
@@ -29,6 +34,8 @@ mcp_policy:
   unknown_server_policy: quarantine
   unknown_tool_policy: ESCALATE
   require_schema_pin: true
+mcp_manifests:
+  - opencode.default
 healthchecks:
   - type: command
     command: "opencode --version"
@@ -37,7 +44,7 @@ budget_ceiling:
   usd_max: 0
   api_calls_max: 0
   time_ms_max: 0
-evidence_requirements: ["cpi_output", "kernel_verdict", "sandbox_grant", "launch_receipt", "install_receipt", "healthcheck_receipt", "teardown_receipt", "evidence_pack", "mcp_quarantine", "artifact_digest", "cosign_signature", "syft_sbom", "grype_vulnerability_scan"]
+evidence_requirements: ["cpi_output", "kernel_verdict", "sandbox_grant", "launch_receipt", "install_receipt", "healthcheck_receipt", "teardown_receipt", "evidence_pack", "evidence_graph", "mcp_quarantine", "mcp_manifest", "model_gateway_broker", "artifact_digest", "cosign_signature", "syft_sbom", "grype_vulnerability_scan"]
 conformance:
   license_verified: true
   artifact_verified: true

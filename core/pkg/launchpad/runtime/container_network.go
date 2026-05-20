@@ -12,9 +12,12 @@ type EgressProxy interface {
 }
 
 type EgressProxyRequest struct {
-	LaunchID   string   `json:"launch_id"`
-	Allowlist  []string `json:"allowlist"`
-	ReceiptDir string   `json:"receipt_dir,omitempty"`
+	LaunchID           string   `json:"launch_id"`
+	Allowlist          []string `json:"allowlist"`
+	ReceiptDir         string   `json:"receipt_dir,omitempty"`
+	PayloadInspection  string   `json:"payload_inspection,omitempty"`
+	NetworkProof       string   `json:"network_proof,omitempty"`
+	TokenBrokerEnabled bool     `json:"token_broker_enabled"`
 }
 
 type EgressProxyHandle struct {
@@ -25,6 +28,9 @@ type EgressProxyHandle struct {
 	NetworkName        string       `json:"network_name,omitempty"`
 	ProxyContainerID   string       `json:"proxy_container_id,omitempty"`
 	ProxyContainerName string       `json:"proxy_container_name,omitempty"`
+	PayloadInspection  string       `json:"payload_inspection"`
+	NetworkProof       string       `json:"network_proof"`
+	TokenBrokerEnabled bool         `json:"token_broker_enabled"`
 	Stop               func() error `json:"-"`
 }
 
@@ -43,7 +49,14 @@ func (p StaticEgressProxy) Start(req EgressProxyRequest) (EgressProxyHandle, err
 	if err := ValidateOpenRouterAllowlist(req.Allowlist); err != nil {
 		return EgressProxyHandle{}, err
 	}
-	return EgressProxyHandle{ProxyURL: p.ProxyURL, ReceiptRef: p.ReceiptRef, Allowlist: append([]string{}, req.Allowlist...)}, nil
+	return EgressProxyHandle{
+		ProxyURL:           p.ProxyURL,
+		ReceiptRef:         p.ReceiptRef,
+		Allowlist:          append([]string{}, req.Allowlist...),
+		PayloadInspection:  payloadInspection(req.PayloadInspection),
+		NetworkProof:       networkProof(req.NetworkProof),
+		TokenBrokerEnabled: req.TokenBrokerEnabled,
+	}, nil
 }
 
 func NetworkAllowed(destination string, allowlist []string) bool {
@@ -54,6 +67,20 @@ func NetworkAllowed(destination string, allowlist []string) bool {
 		}
 	}
 	return false
+}
+
+func payloadInspection(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "opaque_connect"
+	}
+	return strings.TrimSpace(value)
+}
+
+func networkProof(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "destination_allowlist_only"
+	}
+	return strings.TrimSpace(value)
 }
 
 func ValidateOpenRouterAllowlist(allowlist []string) error {

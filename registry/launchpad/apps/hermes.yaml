@@ -16,6 +16,11 @@ install:
 runtime:
     command:
         - hermes
+model_gateway:
+    logical_secret: model_gateway
+    provider: openrouter
+    mode: logical_binding_env_projection
+    raw_provider_key_projected: true
 model_gateway_env:
     - OPENROUTER_API_KEY
 required_secrets:
@@ -34,6 +39,8 @@ mcp_policy:
     unknown_server_policy: quarantine
     unknown_tool_policy: ESCALATE
     require_schema_pin: true
+mcp_manifests:
+    - hermes.default
 healthchecks:
     - type: command
       command: helm-launchpad-openrouter-check
@@ -51,7 +58,10 @@ evidence_requirements:
     - healthcheck_receipt
     - teardown_receipt
     - evidence_pack
+    - evidence_graph
     - mcp_quarantine
+    - mcp_manifest
+    - model_gateway_broker
     - artifact_digest
     - cosign_signature
     - syft_sbom

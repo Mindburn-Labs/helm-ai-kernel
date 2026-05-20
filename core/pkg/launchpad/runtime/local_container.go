@@ -14,8 +14,11 @@ import (
 )
 
 type LocalContainerRuntime struct {
-	NetworkDefault string
-	FilesystemMode string
+	NetworkDefault     string
+	FilesystemMode     string
+	IsolationMode      string
+	DockerBin          string
+	DockerInfoProvider DockerInfoProvider
 }
 
 type ContainerRequest struct {
@@ -28,6 +31,8 @@ type ContainerRequest struct {
 	Args             []string
 	NetworkAllowlist []string
 	EgressProxy      EgressProxy
+	IsolationMode    string
+	TokenBroker      bool
 	AutoCleanup      bool
 	Privileged       bool
 	RecursiveLaunch  bool
@@ -40,6 +45,7 @@ type ContainerHandle struct {
 	EgressNetworkName string            `json:"egress_network_name,omitempty"`
 	EgressProxyID     string            `json:"egress_proxy_id,omitempty"`
 	EgressProxyName   string            `json:"egress_proxy_name,omitempty"`
+	Isolation         IsolationEvidence `json:"isolation"`
 	ProjectedSecrets  map[string]string `json:"projected_secrets"`
 }
 
@@ -75,9 +81,15 @@ func (r LocalContainerRuntime) Preflight(req ContainerRequest) (ContainerHandle,
 	if containsPrivilegeEscalation(req.Command) || containsPrivilegeEscalation(req.Args) {
 		return ContainerHandle{}, errors.New("local-container privilege escalation flag is denied")
 	}
+	isolation, err := r.resolveIsolation(req)
+	if err != nil {
+		return ContainerHandle{Isolation: isolation}, err
+	}
+	isolation.TokenBrokerEnabled = req.TokenBroker
 	return ContainerHandle{
 		ContainerID:      "dryrun-" + req.Plan.LaunchID,
 		SandboxGrantRef:  "sandbox-grant:" + req.Plan.SandboxProfileHash,
+		Isolation:        isolation,
 		ProjectedSecrets: ProjectSecrets(req.Secrets),
 	}, nil
 }
@@ -85,7 +97,7 @@ func (r LocalContainerRuntime) Preflight(req ContainerRequest) (ContainerHandle,
 func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, error) {
 	handle, err := r.Preflight(req)
 	if err != nil {
-		return ContainerHandle{}, err
+		return handle, err
 	}
 	if req.DryRun {
 		return handle, nil
@@ -93,17 +105,20 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 	proxyHandle := EgressProxyHandle{}
 	if len(req.NetworkAllowlist) > 0 {
 		if req.EgressProxy == nil {
-			return ContainerHandle{}, fmt.Errorf("local-container OpenRouter egress requires launch-scoped egress proxy receipt")
+			return handle, fmt.Errorf("local-container OpenRouter egress requires launch-scoped egress proxy receipt")
 		}
 		proxyHandle, err = req.EgressProxy.Start(EgressProxyRequest{
-			LaunchID:  req.Plan.LaunchID,
-			Allowlist: req.NetworkAllowlist,
+			LaunchID:           req.Plan.LaunchID,
+			Allowlist:          req.NetworkAllowlist,
+			PayloadInspection:  handle.Isolation.PayloadInspection,
+			NetworkProof:       handle.Isolation.NetworkProof,
+			TokenBrokerEnabled: req.TokenBroker,
 		})
 		if err != nil {
-			return ContainerHandle{}, err
+			return handle, err
 		}
 		if proxyHandle.ProxyURL == "" || proxyHandle.ReceiptRef == "" {
-			return ContainerHandle{}, fmt.Errorf("local-container egress proxy did not return proxy URL and receipt ref")
+			return handle, fmt.Errorf("local-container egress proxy did not return proxy URL and receipt ref")
 		}
 	}
 	command, args := containerCommand(req.Command, req.Args)
@@ -138,21 +153,22 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 			Timeout:      120 * time.Second,
 			MaxProcesses: 64,
 		},
-		Network: network,
-		WorkDir: "/workspace",
+		Network:      network,
+		WorkDir:      "/workspace",
+		RuntimeClass: handle.Isolation.RuntimeClass,
 	}
 	result, receipt, err := dockersandbox.NewDockerRunner().Run(spec)
 	if err != nil {
 		cleanupEgressProxy(proxyHandle)
-		return ContainerHandle{}, err
+		return handle, err
 	}
 	if !result.Success() {
 		cleanupEgressProxy(proxyHandle)
 		detail := redactedCommandOutput(result.Stdout, result.Stderr, req.Secrets)
 		if detail != "" {
-			return ContainerHandle{}, fmt.Errorf("local-container command failed: exit=%d timed_out=%t oom=%t output=%q", result.ExitCode, result.TimedOut, result.OOMKilled, detail)
+			return handle, fmt.Errorf("local-container command failed: exit=%d timed_out=%t oom=%t output=%q", result.ExitCode, result.TimedOut, result.OOMKilled, detail)
 		}
-		return ContainerHandle{}, fmt.Errorf("local-container command failed: exit=%d timed_out=%t oom=%t", result.ExitCode, result.TimedOut, result.OOMKilled)
+		return handle, fmt.Errorf("local-container command failed: exit=%d timed_out=%t oom=%t", result.ExitCode, result.TimedOut, result.OOMKilled)
 	}
 	if req.AutoCleanup {
 		cleanupEgressProxy(proxyHandle)
@@ -162,7 +178,20 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 	handle.EgressNetworkName = proxyHandle.NetworkName
 	handle.EgressProxyID = proxyHandle.ProxyContainerID
 	handle.EgressProxyName = proxyHandle.ProxyContainerName
+	handle.Isolation.TokenBrokerEnabled = req.TokenBroker || proxyHandle.TokenBrokerEnabled
 	return handle, nil
+}
+
+func (r LocalContainerRuntime) resolveIsolation(req ContainerRequest) (IsolationEvidence, error) {
+	mode := r.IsolationMode
+	if req.IsolationMode != "" {
+		mode = req.IsolationMode
+	}
+	dockerBin := strings.TrimSpace(r.DockerBin)
+	if dockerBin == "" {
+		dockerBin = "docker"
+	}
+	return ResolveIsolationProfile(mode, dockerBin, r.DockerInfoProvider)
 }
 
 func containerCommand(command, args []string) ([]string, []string) {

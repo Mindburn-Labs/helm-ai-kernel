@@ -32,6 +32,10 @@ type SandboxSpec struct {
 
 	// WorkDir is the working directory inside the container.
 	WorkDir string `json:"workdir"`
+
+	// RuntimeClass selects a configured container runtime such as runsc or kata.
+	// Empty uses the Docker daemon default.
+	RuntimeClass string `json:"runtime_class,omitempty"`
 }
 
 // Mount is a filesystem mount for the sandbox.

@@ -1,0 +1,31 @@
+id: daytona
+name: Daytona Hosted Sandbox
+kind: hosted-sandbox
+availability: experimental
+default_dry_run: true
+policy_pack: policies/launchpad/substrates/daytona.safe.toml
+provisioner: daytona
+supports_teardown: true
+requires_approval: true
+capabilities:
+  isolation_strength: hosted_sandbox
+  network_enforcement: provider_policy_allowlist
+  secret_mode: launch_secret_grant
+  receipt_support: required
+  teardown_proof: required
+  status: experimental
+  lifecycle: ["plan", "preflight", "launch", "healthcheck", "execute", "evidence_export", "reconcile", "delete", "post_delete_verify"]
+isolation:
+  mode: dedicated-vm
+  supported_modes: ["dedicated-vm", "gvisor"]
+  hardened_modes: ["dedicated-vm"]
+  runtime_class: hosted-sandbox
+  hostile_agent_grade: false
+network:
+  default: deny
+  allowlist: []
+filesystem:
+  mode: scoped_remote
+  mounts: []
+metadata:
+  status: "Experimental hosted sandbox adapter; remains below GA until receipts and teardown proof are proven."

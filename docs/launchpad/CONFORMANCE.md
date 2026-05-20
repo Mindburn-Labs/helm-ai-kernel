@@ -6,9 +6,10 @@ last_reviewed: 2026-05-20
 # Launchpad Conformance
 
 Status: OpenClaw and Hermes passed the `v0.5.4` release evidence bar. v1.0
-hardening adds logical secret binding, four-app artifact matrix support, and
-DigitalOcean/Hetzner opt-in beta provisioner gates; OpenCode and Kilo Code stay
-below support until their evidence is produced.
+hardening adds substrate capability metadata, signed MCP manifest refs, logical
+secret binding, hash-chained EvidencePack graphs, four-app artifact matrix
+support, and DigitalOcean/Hetzner opt-in beta gates; OpenCode and Kilo Code stay
+below support until their live conformance evidence is produced.
 
 ## Audience
 
@@ -44,8 +45,9 @@ Implemented checks currently prove:
   scan, live e2e run, teardown receipt, and EvidencePack refs are present and
   tied to the same workflow run.
 - OpenCode and Kilo Code are now eligible for promotion only through that same
-  complete signed-evidence path. The registry still blocks them as
-  `oss_candidate` until a promotion manifest supplies the missing refs.
+  complete signed-evidence path. The registry records signed artifact/SBOM/scan
+  refs but still blocks them as `oss_candidate` until live e2e, teardown,
+  receipts, and offline EvidencePack verification pass.
 - OpenClaw and Hermes are `oss_supported` in the registry from signed CI
   evidence, not from assertion.
 - OpenClaw image:
@@ -58,6 +60,14 @@ Implemented checks currently prove:
 - Installer tests reject missing digests, host `curl | bash`, mutable git
   update patterns, and package-manager mutation inside the current worktree.
 - MCP governance rejects unknown or revoked tools and requires schema pins.
+- Supported app specs must reference signed MCP manifests with pinned package
+  digest, schema hashes, tool effects, required secrets, and grants.
+- Substrate specs must declare capability metadata. `local-container` is the GA
+  baseline; Docker microVM and hosted sandbox substrates are registry-visible
+  but experimental until their adapters pass the same receipt/evidence/teardown
+  bar.
+- Generated Launchpad EvidencePacks include a hash-chained receipt graph at
+  `04_EXPORTS/launchpad_evidence_graph.json`.
 - Session store rejects `RUNNING` without launch receipt, healthcheck receipt,
   sandbox grant refs, and egress refs for networked launches.
 - Session store rejects `DELETED` without teardown receipt.
@@ -97,15 +107,20 @@ helm-ai-kernel launch matrix --json
 helm-ai-kernel launch secrets set model_gateway --provider openrouter --value-env OPENROUTER_API_KEY
 helm-ai-kernel launch openclaw local-container --headless --output json
 helm-ai-kernel launch hermes local-container --headless --output json
-helm-ai-kernel launch opencode local-container --headless --output json
-helm-ai-kernel launch kilocode local-container --headless --output json
 helm-ai-kernel launch delete <launch_id> --cascade
+helm-ai-kernel evidence inspect <pack>
+helm-ai-kernel evidence diff <pack-a> <pack-b>
 helm-ai-kernel verify --bundle <pack>
 ```
 
 `scripts/launch/clean_install_gate.sh` automates the command sequence, digest
 confirmation, EvidencePack verification, and secret-fragment audit. It writes
 redacted JSON only.
+
+OpenCode and Kilo Code are candidate promotion targets, not GA-supported clean
+install commands. Their promotion run must produce live local-container
+healthcheck, teardown receipt, receipt verification, and offline EvidencePack
+verification refs before either app can move to `oss_supported`.
 
 ## Troubleshooting
 

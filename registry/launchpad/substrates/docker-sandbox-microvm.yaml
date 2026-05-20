@@ -1,0 +1,32 @@
+id: docker-sandbox-microvm
+name: Docker Sandbox MicroVM
+kind: local-microvm
+availability: experimental
+default_dry_run: true
+policy_pack: policies/launchpad/substrates/docker-sandbox-microvm.safe.toml
+provisioner: docker-sandbox
+supports_teardown: true
+requires_approval: false
+capabilities:
+  isolation_strength: microvm
+  network_enforcement: launch_owned_egress_proxy
+  secret_mode: logical_binding_env_projection
+  receipt_support: required
+  teardown_proof: required
+  status: experimental
+  lifecycle: ["plan", "preflight", "launch", "healthcheck", "execute", "evidence_export", "reconcile", "delete", "post_delete_verify"]
+isolation:
+  mode: kata-firecracker
+  supported_modes: ["kata-firecracker"]
+  hardened_modes: ["kata-firecracker"]
+  runtime_class: microvm
+  hostile_agent_grade: true
+network:
+  default: deny
+  allowlist: []
+filesystem:
+  mode: deny_by_default
+  mounts:
+    - workspace:rw
+metadata:
+  status: "Experimental stronger local substrate; cannot graduate until runtime adapter conformance and teardown proof are complete."

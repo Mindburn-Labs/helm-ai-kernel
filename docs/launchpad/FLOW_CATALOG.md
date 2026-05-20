@@ -17,6 +17,17 @@ HELM Launchpad is the OSS local-container app launcher for AI agents. Launchpad 
 - Release truth: `docs/launchpad/final_report.json`
 - Clean-install truth: `docs/launchpad/clean_install_report.json`
 
+```mermaid
+flowchart TD
+  matrix["matrix"] --> plan["plan"]
+  plan --> launch["local-container launch"]
+  launch --> receipts["signed receipts"]
+  receipts --> evidence["EvidencePack export"]
+  evidence --> verify["offline verify"]
+  launch --> repair["repair plan"]
+  launch --> teardown["cascade teardown"]
+```
+
 ## Matrix
 
 `helm-ai-kernel launch matrix --json`

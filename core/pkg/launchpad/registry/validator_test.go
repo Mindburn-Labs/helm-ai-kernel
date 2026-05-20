@@ -18,6 +18,8 @@ id = "local-container"
 permission_bypass_forbidden = true
 recursive_launch_forbidden = true
 network_default = "deny"
+isolation_mode = "docker-default"
+hostile_agent_grade = false
 `)
 	app := catalog.Apps[0]
 
@@ -90,7 +92,7 @@ network_default = "deny"
 			mutate: func(app *AppSpec) {
 				app.EvidenceRequirements = []string{"cpi_output"}
 			},
-			wantErr: "cosign_signature",
+			wantErr: "mcp_manifest",
 		},
 		{
 			name: "missing promotion evidence",
@@ -129,6 +131,8 @@ id = "local-container"
 permission_bypass_forbidden = true
 recursive_launch_forbidden = true
 network_default = "deny"
+isolation_mode = "docker-default"
+hostile_agent_grade = false
 `)
 	catalog.Apps[0].Availability = AvailabilityExternalProprietaryAdapter
 	catalog.Apps[0].Install.Strategy = "signed_release_artifact"
@@ -148,6 +152,8 @@ id = "local-container"
 permission_bypass_forbidden = true
 recursive_launch_forbidden = true
 network_default = "deny"
+isolation_mode = "docker-default"
+hostile_agent_grade = false
 `)
 	catalog.Apps[0].Availability = AvailabilityOSSCandidate
 
@@ -165,12 +171,73 @@ id = "local-container"
 permission_bypass_forbidden = true
 recursive_launch_forbidden = true
 network_default = "deny"
+isolation_mode = "docker-default"
+hostile_agent_grade = false
 `)
 	catalog.Apps[0].Availability = AvailabilityOSSCandidate
 
 	err = catalog.Validate()
 	if err == nil || !strings.Contains(err.Error(), "recursive_launch_forbidden") {
 		t.Fatalf("Validate() error = %v, want recursive launch rejection", err)
+	}
+}
+
+func TestSubstrateIsolationPolicyBlocksDockerDefaultHostileClaim(t *testing.T) {
+	catalog := testCatalog(t, `[app]
+id = "test-app"
+permission_bypass_forbidden = true
+recursive_launch_forbidden = true
+network_default = "deny"
+`, `[substrate]
+id = "local-container"
+permission_bypass_forbidden = true
+recursive_launch_forbidden = true
+network_default = "deny"
+isolation_mode = "docker-default"
+hostile_agent_grade = false
+`)
+	catalog.Substrates[0].Isolation.HostileAgentGrade = true
+
+	err := catalog.Validate()
+	if err == nil || !strings.Contains(err.Error(), "hostile_agent_grade") {
+		t.Fatalf("Validate() error = %v, want hostile_agent_grade rejection", err)
+	}
+}
+
+func TestSubstratePolicyPackRequiresIsolationMode(t *testing.T) {
+	catalog := testCatalog(t, `[app]
+id = "test-app"
+permission_bypass_forbidden = true
+recursive_launch_forbidden = true
+network_default = "deny"
+`, `[substrate]
+id = "local-container"
+permission_bypass_forbidden = true
+recursive_launch_forbidden = true
+network_default = "deny"
+`)
+
+	err := catalog.Validate()
+	if err == nil || !strings.Contains(err.Error(), "isolation_mode") {
+		t.Fatalf("Validate() error = %v, want isolation_mode rejection", err)
+	}
+}
+
+func TestDiscoverRootUsesExplicitLaunchpadRegistryRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "registry", "launchpad"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "policies", "launchpad"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HELM_LAUNCHPAD_REGISTRY_ROOT", root)
+	discovered, err := DiscoverRoot()
+	if err != nil {
+		t.Fatalf("DiscoverRoot: %v", err)
+	}
+	if discovered != root {
+		t.Fatalf("DiscoverRoot = %s, want %s", discovered, root)
 	}
 }
 
@@ -200,6 +267,7 @@ func testCatalog(t *testing.T, appPolicy, substratePolicy string) *Catalog {
 				UnknownToolPolicy:   "ESCALATE",
 				RequireSchemaPin:    true,
 			},
+			MCPManifests: []string{"test-app.default"},
 			EvidenceRequirements: []string{
 				"cpi_output",
 				"kernel_verdict",
@@ -209,7 +277,9 @@ func testCatalog(t *testing.T, appPolicy, substratePolicy string) *Catalog {
 				"healthcheck_receipt",
 				"teardown_receipt",
 				"evidence_pack",
+				"evidence_graph",
 				"artifact_digest",
+				"mcp_manifest",
 				"cosign_signature",
 				"syft_sbom",
 				"grype_vulnerability_scan",
@@ -248,6 +318,36 @@ func testCatalog(t *testing.T, appPolicy, substratePolicy string) *Catalog {
 			Network:      NetworkPolicy{Default: "deny"},
 			Filesystem:   PolicyRef{Mode: "deny_by_default"},
 			Availability: "supported",
+			Isolation: IsolationPolicy{
+				Mode:              "docker-default",
+				SupportedModes:    []string{"docker-default", "docker-rootless-userns", "docker-eci", "gvisor", "kata-firecracker", "dedicated-vm"},
+				HardenedModes:     []string{"docker-rootless-userns", "docker-eci", "gvisor", "kata-firecracker", "dedicated-vm"},
+				HostileAgentGrade: false,
+			},
+			Capabilities: SubstrateCapabilities{
+				IsolationStrength:  "container_baseline",
+				NetworkEnforcement: "launch_owned_egress_proxy",
+				SecretMode:         "logical_binding_env_projection",
+				ReceiptSupport:     "required",
+				TeardownProof:      "required",
+				Status:             "ga",
+				Lifecycle:          []string{"plan", "preflight", "launch", "healthcheck", "execute", "evidence_export", "reconcile", "delete", "post_delete_verify"},
+			},
+		}},
+		MCPManifests: []MCPServerManifest{{
+			ID:            "test-app.default",
+			AppID:         "test-app",
+			ServerID:      "test-app-default",
+			Transport:     "stdio",
+			Command:       []string{"test-app", "mcp", "serve"},
+			PackageDigest: digest,
+			SignatureRef:  "oci://registry.example/test-app:1.0.0.sig",
+			SchemaHash:    "sha256:" + strings.Repeat("b", 64),
+			Tools: []MCPToolManifest{{
+				Name:       "test.read",
+				SchemaHash: "sha256:" + strings.Repeat("c", 64),
+				Effect:     "read",
+			}},
 		}},
 	}
 }

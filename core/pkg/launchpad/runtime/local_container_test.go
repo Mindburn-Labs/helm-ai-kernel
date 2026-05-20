@@ -3,6 +3,7 @@ package runtime
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -85,6 +86,61 @@ func TestPreflightRestrictsEgressAllowlistToOpenRouter(t *testing.T) {
 	req.NetworkAllowlist = []string{"https://openrouter.ai/api/v1"}
 	if _, err := NewLocalContainerRuntime().Preflight(req); err != nil {
 		t.Fatalf("OpenRouter egress allowlist rejected: %v", err)
+	}
+}
+
+func TestPreflightRecordsBaselineIsolation(t *testing.T) {
+	req := baseContainerRequest(t)
+
+	handle, err := NewLocalContainerRuntime().Preflight(req)
+	if err != nil {
+		t.Fatalf("Preflight: %v", err)
+	}
+	if handle.Isolation.Mode != IsolationModeDockerDefault {
+		t.Fatalf("isolation mode = %q", handle.Isolation.Mode)
+	}
+	if handle.Isolation.Hardened {
+		t.Fatal("docker-default must not be marked hardened")
+	}
+	if handle.Isolation.HostileAgentGrade {
+		t.Fatal("docker-default must not be marked hostile-agent grade")
+	}
+	if handle.Isolation.PayloadInspection != "opaque_connect" || handle.Isolation.NetworkProof != "destination_allowlist_only" {
+		t.Fatalf("unexpected isolation proof labels: %#v", handle.Isolation)
+	}
+}
+
+func TestPreflightRequiresConfiguredHardenedIsolation(t *testing.T) {
+	req := baseContainerRequest(t)
+	runtime := NewLocalContainerRuntime()
+	runtime.IsolationMode = IsolationModeDockerRootlessUser
+	runtime.DockerInfoProvider = func(string) (DockerIsolationInfo, error) {
+		return DockerIsolationInfo{}, nil
+	}
+
+	handle, err := runtime.Preflight(req)
+	if err == nil || !strings.Contains(err.Error(), "rootless") {
+		t.Fatalf("expected rootless/userns isolation rejection, got %v", err)
+	}
+	if handle.Isolation.Mode != IsolationModeDockerRootlessUser || handle.Isolation.DetectionStatus != "unsupported" {
+		t.Fatalf("denied isolation evidence missing: %#v", handle.Isolation)
+	}
+}
+
+func TestPreflightAllowsGVisorRuntimeClass(t *testing.T) {
+	req := baseContainerRequest(t)
+	runtime := NewLocalContainerRuntime()
+	runtime.IsolationMode = IsolationModeGVisor
+	runtime.DockerInfoProvider = func(string) (DockerIsolationInfo, error) {
+		return DockerIsolationInfo{Runtimes: []string{"runc", "runsc"}}, nil
+	}
+
+	handle, err := runtime.Preflight(req)
+	if err != nil {
+		t.Fatalf("Preflight: %v", err)
+	}
+	if handle.Isolation.RuntimeClass != "runsc" || !handle.Isolation.Hardened || !handle.Isolation.HostileAgentGrade {
+		t.Fatalf("unexpected gVisor isolation evidence: %#v", handle.Isolation)
 	}
 }
 
@@ -174,6 +230,11 @@ func TestLaunchOwnedEgressProxyWritesReceiptAndAllowsOpenRouterConnect(t *testin
 	if len(entries) == 0 {
 		t.Fatal("expected egress proxy receipts")
 	}
+	assertEgressReceiptSubject(t, handle.ReceiptDir, "connect_allowed", map[string]any{
+		"payload_inspection":   "opaque_connect",
+		"network_proof":        "destination_allowlist_only",
+		"token_broker_enabled": false,
+	})
 }
 
 func TestLaunchOwnedEgressProxyDeniesUnknownDestination(t *testing.T) {
@@ -256,4 +317,34 @@ func stopProxy(t *testing.T, handle EgressProxyHandle) {
 			t.Fatalf("stop proxy: %v", err)
 		}
 	}
+}
+
+func assertEgressReceiptSubject(t *testing.T, dir, reason string, want map[string]any) {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read receipt dir: %v", err)
+	}
+	for _, entry := range entries {
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			t.Fatalf("read receipt: %v", err)
+		}
+		var receipt struct {
+			Subject map[string]any `json:"subject"`
+		}
+		if err := json.Unmarshal(data, &receipt); err != nil {
+			t.Fatalf("decode receipt: %v", err)
+		}
+		if receipt.Subject["reason"] != reason {
+			continue
+		}
+		for key, expected := range want {
+			if receipt.Subject[key] != expected {
+				t.Fatalf("receipt %s = %#v, want %#v in subject %#v", key, receipt.Subject[key], expected, receipt.Subject)
+			}
+		}
+		return
+	}
+	t.Fatalf("receipt reason %q not found in %s", reason, dir)
 }

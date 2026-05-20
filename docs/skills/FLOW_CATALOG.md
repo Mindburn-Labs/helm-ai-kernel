@@ -15,6 +15,16 @@ HELM Skill Packs are signed, scoped procedural packages for agents. A skill can 
 - Skill policy fixtures: `policies/skills/`
 - Skill docs: `docs/skills/`
 
+```mermaid
+flowchart TD
+  search["search registry"] --> inspect["inspect skill"]
+  inspect --> scan["scan content and metadata"]
+  scan --> install["repo-scoped install"]
+  install --> receipts["install/projection receipts"]
+  scan --> export["Codex plugin export"]
+  install --> revoke["disable or revoke"]
+```
+
 ## OSS Flows
 
 ### Search

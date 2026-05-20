@@ -18,6 +18,8 @@
 [![SBOM CycloneDX](https://img.shields.io/badge/SBOM-CycloneDX%201.5-orange)](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/latest/download/sbom.json)
 [![SLSA provenance](https://img.shields.io/badge/SLSA-provenance-blue)](docs/RELEASE_SECURITY.md)
 [![Sigstore Cosign](https://img.shields.io/badge/Sigstore-Cosign-blue)](docs/VERIFICATION.md)
+[![GHCR kernel](https://img.shields.io/badge/ghcr.io-helm--ai--kernel-2496ED?logo=docker&logoColor=white)](https://github.com/Mindburn-Labs/helm-ai-kernel/pkgs/container/helm-ai-kernel)
+[![GHCR chart](https://img.shields.io/badge/ghcr.io-helm--ai--kernel%20chart-0F1689?logo=helm&logoColor=white)](https://github.com/Mindburn-Labs/helm-ai-kernel/pkgs/container/charts%2Fhelm-ai-kernel)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/mindburn-labs)](https://artifacthub.io/packages/search?repo=mindburn-labs)
 
 HELM AI Kernel is the fail-closed execution firewall for AI agents.

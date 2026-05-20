@@ -1,0 +1,6 @@
+{
+  "case_id": "allowed-bash",
+  "tool_class": "bash",
+  "expected_verdict": "ALLOW",
+  "must_bind_evidence": ["worker_image_digest", "skill_manifest_hash", "sandbox_grant_hash", "request_hash"]
+}

@@ -1,0 +1,9 @@
+{
+  "case_id": "denied-raw-mcp-tunnel",
+  "tool_class": "mcp_tool",
+  "route": "raw-upstream-mcp",
+  "expected_verdict": "DENY",
+  "expected_reason_code": "SANDBOX_VIOLATION",
+  "must_not_dispatch": true,
+  "must_bind_evidence": ["mcp_profile_hash", "tunnel_domain_hash"]
+}

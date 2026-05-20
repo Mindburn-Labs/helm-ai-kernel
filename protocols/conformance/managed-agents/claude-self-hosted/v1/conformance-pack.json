@@ -1,0 +1,71 @@
+{
+  "pack_id": "helm-claude-managed-agents-self-hosted-v1",
+  "version": "1.0.0",
+  "status": "preview",
+  "scope": "Claude Managed Agents self-hosted worker execution and private MCP tunnel governance",
+  "source_baseline": {
+    "anthropic_release_date": "2026-05-19",
+    "self_hosted_sandboxes": "public-beta",
+    "mcp_tunnels": "research-preview"
+  },
+  "modes": [
+    {
+      "id": "observe-only",
+      "requires": [
+        "managed_agent_execution_receipt.v1",
+        "worker image digest recorded",
+        "skill manifest hash recorded",
+        "sandbox grant hash recorded",
+        "tool action hashes recorded",
+        "no raw chat transcript dependency"
+      ]
+    },
+    {
+      "id": "enforceable-worker",
+      "requires": [
+        "observe-only",
+        "preflight fails closed for unsafe worker configuration",
+        "denied tool effects do not dispatch",
+        "filesystem paths are constrained to declared worker roots",
+        "egress changes are constrained to sandbox grants",
+        "memory writes are denied and receipted"
+      ]
+    },
+    {
+      "id": "tunneled-mcp-capable",
+      "requires": [
+        "enforceable-worker",
+        "MCP tunnel routes through HELM MCP Gateway",
+        "OAuth resource and required scopes recorded",
+        "tool schema hash pinned",
+        "tunnel domain hash and CA certificate reference hash recorded",
+        "raw upstream MCP tunnel bypass is denied"
+      ]
+    },
+    {
+      "id": "provider-verified",
+      "requires": [
+        "tunneled-mcp-capable",
+        "live provider fixture run",
+        "published EvidencePack",
+        "queue liveness evidence",
+        "worker stop evidence",
+        "provider-specific deployment attestation"
+      ]
+    }
+  ],
+  "fixtures": {
+    "allowed_bash": "fixtures/allowed-bash.json",
+    "allowed_file_write": "fixtures/allowed-file-write.json",
+    "denied_egress": "fixtures/denied-egress.json",
+    "denied_raw_mcp_tunnel": "fixtures/denied-raw-mcp-tunnel.json",
+    "denied_memory": "fixtures/denied-memory.json",
+    "denied_unpinned_skill": "fixtures/denied-unpinned-skill.json",
+    "stopped_ambiguous_session": "fixtures/stopped-ambiguous-session.json"
+  },
+  "commands": [
+    "go test ./pkg/connectors/sandbox/claudemanaged -count=1",
+    "go test ./pkg/conformance/sandbox ./pkg/mcp ./pkg/contracts/... -count=1",
+    "make verify-fixtures"
+  ]
+}

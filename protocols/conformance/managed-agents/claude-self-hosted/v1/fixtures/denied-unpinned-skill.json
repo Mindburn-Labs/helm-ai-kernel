@@ -1,0 +1,8 @@
+{
+  "case_id": "denied-unpinned-skill",
+  "preflight_check": "skill_manifest_pinned",
+  "expected_verdict": "DENY",
+  "expected_reason_code": "PROVENANCE_FAILURE",
+  "must_not_dispatch": true,
+  "must_bind_evidence": ["skill_manifest_hash"]
+}

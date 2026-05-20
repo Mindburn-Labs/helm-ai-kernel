@@ -1,0 +1,8 @@
+{
+  "case_id": "denied-memory",
+  "tool_class": "memory_write",
+  "expected_verdict": "DENY",
+  "expected_reason_code": "SESSION_RISK_MEMORY_DENY",
+  "must_not_dispatch": true,
+  "must_bind_evidence": ["session_id", "memory_effect_hash", "receipt_id"]
+}

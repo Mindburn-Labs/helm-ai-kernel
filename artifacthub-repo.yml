@@ -4,3 +4,10 @@ owners:
     email: peycheff.com@gmail.com
   - name: mindburnlabs
     email: mindburnlabs@gmail.com
+# Declared in support of the Official status request tracked in
+# artifacthub/hub#4806. The annotation alone does not light the badge --
+# ArtifactHub moderators verify ownership manually before flipping it
+# on -- but having it present means there is nothing to change in this
+# repository after approval.
+annotations:
+  io.artifacthub.repository.official: "true"

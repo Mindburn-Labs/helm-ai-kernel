@@ -181,6 +181,7 @@ jobs:
       - uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3
         with:
           version: "34.1"
+          repo-token: ${{ github.token }}
       - name: Install codegen tools
         run: |
           python -m pip install --require-hashes -r .github/codegen-requirements.txt

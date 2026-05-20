@@ -9,7 +9,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 )
 
-func TestLaunchpadClaimsDoNotMarketCandidateAppsAsSupported(t *testing.T) {
+func TestLaunchpadClaimsMarketPromotedAppsAsSupported(t *testing.T) {
 	root := repoRoot(t)
 	catalog, err := registry.LoadCatalog(root)
 	if err != nil {
@@ -20,8 +20,8 @@ func TestLaunchpadClaimsDoNotMarketCandidateAppsAsSupported(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s missing from catalog", appID)
 		}
-		if app.Availability == registry.AvailabilityOSSSupported {
-			t.Fatalf("%s must remain below oss_supported until live conformance and EvidencePack verification pass", appID)
+		if app.Availability != registry.AvailabilityOSSSupported {
+			t.Fatalf("%s availability = %s, want oss_supported after live conformance and EvidencePack verification", appID, app.Availability)
 		}
 	}
 
@@ -31,26 +31,23 @@ func TestLaunchpadClaimsDoNotMarketCandidateAppsAsSupported(t *testing.T) {
 		"docs/launchpad/CONFORMANCE.md",
 	} {
 		body := readDoc(t, root, doc)
-		for _, candidateCommand := range []string{
+		for _, supportedCommand := range []string{
 			"helm-ai-kernel launch opencode local-container --headless --output json",
 			"helm-ai-kernel launch kilocode local-container --headless --output json",
 		} {
-			if strings.Contains(body, candidateCommand) {
-				t.Fatalf("%s must not include candidate launch command %q as supported GA validation", doc, candidateCommand)
-			}
+			requireContains(t, body, supportedCommand)
 		}
 	}
 
 	cleanGate := readDoc(t, root, "scripts/launch/clean_install_gate.sh")
-	requireContains(t, cleanGate, "SUPPORTED_APPS=(openclaw hermes)")
-	requireContains(t, cleanGate, "CANDIDATE_APPS=(opencode kilocode)")
+	requireContains(t, cleanGate, "SUPPORTED_APPS=(openclaw hermes opencode kilocode)")
 	requireContains(t, cleanGate, "--include-candidates")
 
 	artifactWorkflow := readDoc(t, root, ".github/workflows/launchpad-artifacts.yml")
 	requireContains(t, artifactWorkflow, "run_candidate_live_conformance")
 	requireContains(t, artifactWorkflow, "include_candidate_artifacts")
 	requireContains(t, artifactWorkflow, "Resolve Launchpad artifact matrix")
-	requireContains(t, artifactWorkflow, "openclaw,hermes")
+	requireContains(t, artifactWorkflow, "openclaw,hermes,opencode,kilocode")
 	requireContains(t, artifactWorkflow, "opencode,kilocode")
 	requireContains(t, artifactWorkflow, "artifact_only_no_live_conformance")
 	requireContains(t, artifactWorkflow, ".app_id as $appID")
@@ -60,7 +57,7 @@ func TestLaunchpadClaimsDoNotMarketCandidateAppsAsSupported(t *testing.T) {
 func TestLiveConformanceDefaultsToSupportedAppsOnly(t *testing.T) {
 	t.Setenv("HELM_LAUNCHPAD_LIVE_APPS", "")
 	t.Setenv("HELM_LAUNCHPAD_LIVE_INCLUDE_CANDIDATES", "")
-	assertStringList(t, liveConformanceAppIDs(), []string{"openclaw", "hermes"})
+	assertStringList(t, liveConformanceAppIDs(), []string{"openclaw", "hermes", "opencode", "kilocode"})
 
 	t.Setenv("HELM_LAUNCHPAD_LIVE_INCLUDE_CANDIDATES", "1")
 	assertStringList(t, liveConformanceAppIDs(), []string{"openclaw", "hermes", "opencode", "kilocode"})

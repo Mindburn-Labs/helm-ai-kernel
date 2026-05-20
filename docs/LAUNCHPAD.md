@@ -5,12 +5,11 @@ last_reviewed: 2026-05-20
 
 # HELM Launchpad
 
-Status: OpenClaw and Hermes local-container support is release-backed in
-`v0.5.4`; v1.0 hardening adds substrate capability metadata, signed MCP
-manifest refs, hash-chained EvidencePack graphs, logical secret binding, and
-opt-in cloud beta gates. OpenCode and Kilo Code have signed artifact/SBOM/scan
-metadata but remain candidates until live conformance and offline verification
-match the OpenClaw/Hermes bar.
+Status: OpenClaw, Hermes, OpenCode, and Kilo Code are `oss_supported` for
+`local-container` after signed artifact, SBOM, vulnerability scan, live
+conformance, teardown, receipt, and offline EvidencePack verification in
+workflow `26179980172`. Codex, Claude Code, Cursor, and Junie remain external
+BYO adapters.
 
 Launchpad is the OSS local-container app launcher for HELM AI Kernel. It starts
 verified AI apps through a fail-closed execution firewall, preserves the MCP
@@ -50,6 +49,8 @@ helm-ai-kernel launch secrets status
 helm-ai-kernel launch plan openclaw local-container --json
 helm-ai-kernel launch openclaw local-container --headless --output json
 helm-ai-kernel launch hermes local-container --headless --output json
+helm-ai-kernel launch opencode local-container --headless --output json
+helm-ai-kernel launch kilocode local-container --headless --output json
 helm-ai-kernel launch openclaw digitalocean --live-cloud-beta --approval <approval_id> --cost-ceiling-usd <n> --headless --output json
 helm-ai-kernel launch hermes hetzner --live-cloud-beta --approval <approval_id> --cost-ceiling-usd <n> --headless --output json
 helm-ai-kernel launch status <launch_id> --json
@@ -67,10 +68,10 @@ helm-ai-kernel verify --bundle <pack>
 
 | App | Availability | Evidence |
 | --- | --- | --- |
-| OpenClaw | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e`; workflow `26110916296`; directory and tar EvidencePack verification passed |
-| Hermes | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527`; workflow `26110916296`; directory and tar EvidencePack verification passed |
-| OpenCode | `oss_candidate` | Signed artifact/SBOM/scan refs exist at `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:fd3db72a2acfae066e455241f17800bd698070d2126e534e18a441f7910ed35b`; not `oss_supported` until live e2e, teardown, receipts, and offline EvidencePack evidence pass |
-| Kilo Code | `oss_candidate` | Signed artifact/SBOM/scan refs exist at `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:f2d741249f09b2d5b6c512413fdeadba06e200652e10355287a7758b15cdbe69`; not `oss_supported` until live e2e, teardown, receipts, and offline EvidencePack evidence pass |
+| OpenClaw | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501`; workflow `26179980172`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
+| Hermes | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:11bb3893d8466b9abe2cea7f65c734647d86177908b38ea55edceb056944ee7f`; workflow `26179980172`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
+| OpenCode | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:c31aaef9b739f9ed870edd5c66f34f9a79efcfab132aaa2395f890f7bf5fb20f`; workflow `26179980172`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
+| Kilo Code | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:68a428e13c1b8cc1cb0338eb56c0e79610a609adc91a60b99b8f9a226c1621ba`; workflow `26179980172`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
 | Codex / Claude Code / Cursor / Junie | `external_proprietary_adapter` | BYO/external adapters only; HELM governs execution and does not redistribute them |
 
 ## Safety Model
@@ -133,6 +134,8 @@ brew install mindburnlabs/tap/helm-ai-kernel
 helm-ai-kernel launch matrix --json
 helm-ai-kernel launch openclaw local-container --headless --output json
 helm-ai-kernel launch hermes local-container --headless --output json
+helm-ai-kernel launch opencode local-container --headless --output json
+helm-ai-kernel launch kilocode local-container --headless --output json
 helm-ai-kernel launch delete <launch_id> --cascade
 helm-ai-kernel verify --bundle <pack>
 ```
@@ -141,15 +144,9 @@ The reusable gate is `scripts/launch/clean_install_gate.sh`. It writes only
 redacted JSON evidence to `docs/launchpad/clean_install_report.json`; raw logs,
 provider keys, key fragments, and host identifiers are not committed.
 
-Candidate promotion probes are separate from the supported-app clean-install
-gate:
-
-```bash
-scripts/launch/clean_install_gate.sh --include-candidates
-```
-
-That mode adds OpenCode and Kilo Code and is expected to fail until each app
-produces live e2e, teardown, receipt, and offline EvidencePack evidence.
+`--include-candidates` remains accepted for backward compatibility, but
+OpenCode and Kilo Code are part of the supported clean-install app set after
+workflow `26179980172`.
 
 For current source-backed details, use the Launchpad specs and conformance docs:
 `docs/launchpad/APP_SPEC.md`, `docs/launchpad/SUBSTRATE_SPEC.md`,

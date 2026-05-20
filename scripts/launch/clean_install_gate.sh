@@ -9,8 +9,8 @@ HOST_KIND="developer_macos"
 OUTPUT="$ROOT/docs/launchpad/clean_install_report.json"
 TRANSCRIPT_DIR="${TMPDIR:-/tmp}/helm-launchpad-clean-install"
 INCLUDE_CANDIDATES=0
-SUPPORTED_APPS=(openclaw hermes)
-CANDIDATE_APPS=(opencode kilocode)
+SUPPORTED_APPS=(openclaw hermes opencode kilocode)
+CANDIDATE_APPS=()
 
 usage() {
   cat <<'USAGE'
@@ -22,7 +22,7 @@ Options:
   --host-kind <kind>        developer_macos or github_macos_runner
   --output <path>           Redacted JSON report path
   --transcript-dir <path>   Directory for redacted command output and audit inputs
-  --include-candidates      Also run candidate promotion probes for OpenCode/Kilo
+  --include-candidates      Backward-compatible no-op; OpenCode/Kilo are supported by default
 USAGE
 }
 

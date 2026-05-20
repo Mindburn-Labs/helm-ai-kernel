@@ -70,19 +70,7 @@ jobs:
                 "upstream_ref": "v2026.5.16",
                 "dockerfile": "helm/tools/launchpad/artifacts/hermes.Dockerfile",
                 "license_spdx": "MIT"
-              }
-            ]
-          }
-          JSON
-          include_candidates=0
-          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
-            include_candidates=1
-          fi
-          if [[ "${{ inputs.include_candidate_artifacts }}" == "true" || "${{ inputs.run_candidate_live_conformance }}" == "true" ]]; then
-            include_candidates=1
-          fi
-          if [[ "${include_candidates}" -eq 1 ]]; then
-            jq '.include += [
+              },
               {
                 "app_id": "opencode",
                 "version": "v1.15.5",
@@ -99,9 +87,9 @@ jobs:
                 "dockerfile": "helm/tools/launchpad/artifacts/kilocode.Dockerfile",
                 "license_spdx": "MIT"
               }
-            ]' matrix.json > matrix-expanded.json
-            mv matrix-expanded.json matrix.json
-          fi
+            ]
+          }
+          JSON
           echo "matrix=$(jq -c . matrix.json)" >> "$GITHUB_OUTPUT"
 
   build:
@@ -521,7 +509,7 @@ jobs:
       - name: Run gated live conformance
         env:
           HELM_LAUNCHPAD_LIVE_E2E: "1"
-          HELM_LAUNCHPAD_LIVE_APPS: ${{ inputs.run_candidate_live_conformance && 'openclaw,hermes,opencode,kilocode' || 'openclaw,hermes' }}
+          HELM_LAUNCHPAD_LIVE_APPS: openclaw,hermes,opencode,kilocode
           HELM_LAUNCHPAD_ARTIFACT_MANIFEST: /tmp/launchpad/launchpad-artifact-manifest.json
           HELM_LAUNCHPAD_LIVE_EVIDENCE_DIR: /tmp/launchpad-live-evidence
           HELM_LAUNCHPAD_LOCAL_CONTAINER_TIMEOUT: 8m
@@ -536,7 +524,7 @@ jobs:
           include-hidden-files: true
       - name: Write merged promotion manifest
         env:
-          LIVE_APPS: ${{ inputs.run_candidate_live_conformance && 'openclaw,hermes,opencode,kilocode' || 'openclaw,hermes' }}
+          LIVE_APPS: openclaw,hermes,opencode,kilocode
         run: |
           set -euo pipefail
           mkdir -p /tmp/launchpad-promotion

@@ -105,8 +105,8 @@ func TestLiveOpenRouterLocalContainerConformance(t *testing.T) {
 }
 
 var (
-	defaultLiveConformanceApps   = []string{"openclaw", "hermes"}
-	candidateLiveConformanceApps = []string{"opencode", "kilocode"}
+	defaultLiveConformanceApps   = []string{"openclaw", "hermes", "opencode", "kilocode"}
+	candidateLiveConformanceApps = []string{}
 )
 
 func liveConformanceAppIDs() []string {

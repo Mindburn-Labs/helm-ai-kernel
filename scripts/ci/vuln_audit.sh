@@ -42,7 +42,7 @@ if command -v npm >/dev/null 2>&1; then
         if [ -f "$dir/package-lock.json" ]; then
             rel="${dir#"$ROOT"/}"
             run_step "npm audit $rel" \
-                bash -lc "cd '$dir' && npm audit --omit=dev --audit-level=high"
+                bash -lc "cd '$dir' && npm audit --audit-level=moderate"
         fi
     done
 else

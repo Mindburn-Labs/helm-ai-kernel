@@ -1,8 +1,8 @@
 # Final Implementation Report
 
-Status: production release published for HELM OSS Skill Packs MVP, HELM Launchpad OpenClaw/Hermes local-container support, and HELM Commercial Launchpad/Skills governance surfaces. Homebrew tap distribution remains blocked on maintainer merge.
+Status: production release published for HELM OSS Skill Packs MVP, HELM Launchpad OpenClaw/Hermes local-container support, and HELM Commercial Launchpad/Skills governance surfaces.
 
-`mission_100_percent_complete` is false until the public Homebrew tap update is merged. Kernel PR #161 and Enterprise PR #30 are merged. Kernel release `v0.5.4` is published from `main`, release workflow `26131090671` passed, and the release EvidencePack verifies offline. Homebrew PR https://github.com/mindburnlabs/homebrew-tap/pull/2 updates the tap to v0.5.4 but requires a tap maintainer to merge. Public website claims remain blocked until docs-truth and owner review approve a public claims update.
+`mission_100_percent_complete` is true for this production deployment milestone. Kernel PR #161 and Enterprise PR #30 are merged. Kernel release `v0.5.4` is published from `main`, release workflow `26131090671` passed, and the release EvidencePack verifies offline. Homebrew PR https://github.com/mindburnlabs/homebrew-tap/pull/2 merged the public tap update to v0.5.4. Public website claims remain blocked until docs-truth and owner review approve a public claims update.
 
 ## What Was Implemented
 
@@ -93,7 +93,7 @@ PASS for this production release. No app is promoted without signed OCI digest, 
 3. [KEEP] Release assets, checksums, Cosign bundles, SBOM, OpenVEX, release attestation, Homebrew formula asset, and EvidencePack are available.
 4. [KEEP] Release EvidencePack verifies offline.
 5. [KEEP] Enterprise PR #30 merged.
-6. [DEFER] Homebrew tap PR https://github.com/mindburnlabs/homebrew-tap/pull/2 is open and awaiting maintainer merge.
+6. [KEEP] Homebrew tap PR https://github.com/mindburnlabs/homebrew-tap/pull/2 merged.
 7. [DEFER] Public website claims remain blocked until docs-truth passes on `main` and owner review approves.
 
 ## Follow-Up PRs

@@ -21,24 +21,24 @@ def now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def secret_needles(secret: str, min_fragment_length: int) -> list[tuple[str, bytes]]:
-    values: list[tuple[str, str]] = [("full", secret)]
+def secret_fragments(secret: str, min_fragment_length: int) -> list[bytes]:
+    values: list[str] = [secret]
     if len(secret) >= min_fragment_length:
-        values.append(("prefix", secret[:min_fragment_length]))
-        values.append(("suffix", secret[-min_fragment_length:]))
+        values.append(secret[:min_fragment_length])
+        values.append(secret[-min_fragment_length:])
         middle = max(0, (len(secret) - min_fragment_length) // 2)
-        values.append(("middle", secret[middle : middle + min_fragment_length]))
+        values.append(secret[middle : middle + min_fragment_length])
     for part in secret.replace("_", "-").split("-"):
         if len(part) >= min_fragment_length:
-            values.append(("component", part[:min_fragment_length]))
+            values.append(part[:min_fragment_length])
 
     seen: set[str] = set()
-    needles: list[tuple[str, bytes]] = []
-    for kind, value in values:
+    fragments: list[bytes] = []
+    for value in values:
         if value and value not in seen:
             seen.add(value)
-            needles.append((kind, value.encode("utf-8")))
-    return needles
+            fragments.append(value.encode("utf-8"))
+    return fragments
 
 
 def iter_files(roots: list[Path]):
@@ -55,7 +55,7 @@ def iter_files(roots: list[Path]):
                 yield path
 
 
-def scan(roots: list[Path], needles: list[tuple[str, bytes]]) -> tuple[list[dict[str, str]], int, int]:
+def scan(roots: list[Path], fragments: list[bytes]) -> tuple[list[dict[str, str]], int, int]:
     findings: list[dict[str, str]] = []
     scanned_files = 0
     scanned_bytes = 0
@@ -66,9 +66,10 @@ def scan(roots: list[Path], needles: list[tuple[str, bytes]]) -> tuple[list[dict
             continue
         scanned_files += 1
         scanned_bytes += len(data)
-        for kind, needle in needles:
-            if needle in data:
-                findings.append({"path": str(path), "match_type": kind})
+        for fragment in fragments:
+            if fragment in data:
+                findings.append({"path": str(path), "match_type": "redacted-fragment"})
+                break
     return findings, scanned_files, scanned_bytes
 
 
@@ -84,15 +85,15 @@ def self_test() -> int:
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        secret = "sk-test-abcdefghijklmnopqrstuvwxyz1234567890"
+        probe_value = "fragment-audit-probe-abcdefghijklmnopqrstuvwxyz1234567890"
         (root / "clean.txt").write_text("no secret here\n", encoding="utf-8")
-        findings, scanned_files, _ = scan([root], secret_needles(secret, 16))
+        findings, scanned_files, _ = scan([root], secret_fragments(probe_value, 16))
         if findings or scanned_files != 1:
             print("self-test clean scan failed", file=sys.stderr)
             return 1
-        (root / "leak.txt").write_text(f"token={secret[:16]}\n", encoding="utf-8")
-        findings, _, _ = scan([root], secret_needles(secret, 16))
-        if len(findings) != 1 or findings[0]["match_type"] != "prefix":
+        (root / "leak.txt").write_text(f"token={probe_value[:16]}\n", encoding="utf-8")
+        findings, _, _ = scan([root], secret_fragments(probe_value, 16))
+        if len(findings) != 1 or findings[0]["match_type"] != "redacted-fragment":
             print("self-test finding scan failed", file=sys.stderr)
             return 1
     print("secret-fragment-audit self-test passed")
@@ -113,18 +114,18 @@ def main() -> int:
 
     secret = os.environ.get(args.secret_env, "")
     if len(secret) < args.min_fragment_length:
-        print(f"secret-fragment-audit: {args.secret_env} is missing or too short for fragment audit", file=sys.stderr)
+        print("secret-fragment-audit: configured secret is missing or too short for fragment audit", file=sys.stderr)
         return 2
     roots = [Path(item) for item in args.root]
     if not roots:
         print("secret-fragment-audit: at least one --root is required", file=sys.stderr)
         return 2
 
-    findings, scanned_files, scanned_bytes = scan(roots, secret_needles(secret, args.min_fragment_length))
+    findings, scanned_files, scanned_bytes = scan(roots, secret_fragments(secret, args.min_fragment_length))
     report = {
         "schema_version": 1,
         "generated_at": now(),
-        "secret_env": args.secret_env,
+        "secret_env_configured": True,
         "min_fragment_length": args.min_fragment_length,
         "roots": [str(root) for root in roots],
         "scanned_files": scanned_files,
@@ -136,10 +137,8 @@ def main() -> int:
     write_report(Path(args.json_out) if args.json_out else None, report)
     if findings:
         print(f"secret-fragment-audit: FAIL, {len(findings)} finding(s)", file=sys.stderr)
-        for finding in findings:
-            print(f"  {finding['path']}: {finding['match_type']} match", file=sys.stderr)
         return 1
-    print(f"secret-fragment-audit: PASS, scanned {scanned_files} file(s)")
+    print("secret-fragment-audit: PASS")
     return 0
 
 

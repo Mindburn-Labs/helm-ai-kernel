@@ -7,7 +7,7 @@ last_reviewed: 2026-05-20
 
 Status: OpenClaw, Hermes, OpenCode, and Kilo Code passed the v1.0 signed
 artifact, live local-container, teardown, receipt, and offline EvidencePack
-bar in workflow `26179980172`. DigitalOcean opt-in beta passed for all four
+bar in workflow `26186959337`. DigitalOcean opt-in beta passed for all four
 apps; Hetzner remains fail-closed until a scoped provider token is available.
 
 ## Audience
@@ -35,7 +35,7 @@ a clean machine.
 
 Implemented checks currently prove:
 
-- `launchpad-artifacts` workflow `26179980172` built pinned OpenClaw, Hermes,
+- `launchpad-artifacts` workflow `26186959337` built pinned OpenClaw, Hermes,
   OpenCode, and Kilo Code upstream refs into GHCR OCI images, signed them with
   GitHub OIDC keyless cosign, generated syft SBOMs, ran grype scans, and
   published a promotion manifest.

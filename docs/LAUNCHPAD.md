@@ -8,7 +8,7 @@ last_reviewed: 2026-05-20
 Status: OpenClaw, Hermes, OpenCode, and Kilo Code are `oss_supported` for
 `local-container` after signed artifact, SBOM, vulnerability scan, live
 conformance, teardown, receipt, and offline EvidencePack verification in
-workflow `26179980172`. Codex, Claude Code, Cursor, and Junie remain external
+workflow `26186959337`. Codex, Claude Code, Cursor, and Junie remain external
 BYO adapters.
 
 Launchpad is the OSS local-container app launcher for HELM AI Kernel. It starts
@@ -24,8 +24,8 @@ AI Kernel.
 ## Outcome
 
 You can identify the supported app matrix, the exact verifier commands, the
-GHCR digests promoted by CI, and the clean-install gate that must pass before
-public GA claims are broadened.
+GHCR digests promoted by CI, and the passing clean-install gate behind public
+GA claims.
 
 ## Source Truth
 
@@ -68,10 +68,10 @@ helm-ai-kernel verify --bundle <pack>
 
 | App | Availability | Evidence |
 | --- | --- | --- |
-| OpenClaw | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501`; workflow `26179980172`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
-| Hermes | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:11bb3893d8466b9abe2cea7f65c734647d86177908b38ea55edceb056944ee7f`; workflow `26179980172`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
-| OpenCode | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:c31aaef9b739f9ed870edd5c66f34f9a79efcfab132aaa2395f890f7bf5fb20f`; workflow `26179980172`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
-| Kilo Code | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:68a428e13c1b8cc1cb0338eb56c0e79610a609adc91a60b99b8f9a226c1621ba`; workflow `26179980172`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
+| OpenClaw | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501`; workflow `26186959337`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
+| Hermes | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:11bb3893d8466b9abe2cea7f65c734647d86177908b38ea55edceb056944ee7f`; workflow `26186959337`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
+| OpenCode | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:c31aaef9b739f9ed870edd5c66f34f9a79efcfab132aaa2395f890f7bf5fb20f`; workflow `26186959337`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
+| Kilo Code | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:68a428e13c1b8cc1cb0338eb56c0e79610a609adc91a60b99b8f9a226c1621ba`; workflow `26186959337`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
 | Codex / Claude Code / Cursor / Junie | `external_proprietary_adapter` | BYO/external adapters only; HELM governs execution and does not redistribute them |
 
 ## Safety Model
@@ -146,7 +146,7 @@ provider keys, key fragments, and host identifiers are not committed.
 
 `--include-candidates` remains accepted for backward compatibility, but
 OpenCode and Kilo Code are part of the supported clean-install app set after
-workflow `26179980172`.
+workflow `26186959337`.
 
 For current source-backed details, use the Launchpad specs and conformance docs:
 `docs/launchpad/APP_SPEC.md`, `docs/launchpad/SUBSTRATE_SPEC.md`,

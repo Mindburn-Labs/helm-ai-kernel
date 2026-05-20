@@ -1,0 +1,1123 @@
+// Package workstation imports local agent-run artifacts into observe-only HELM
+// Agent Run Receipts and deterministic ProofGraph nodes.
+package workstation
+
+import (
+	"bufio"
+	"bytes"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
+)
+
+const (
+	ManifestFile       = "run.manifest.json"
+	DiffSummaryFile    = "git.diff-summary.json"
+	ValidationFile     = "validation.json"
+	ToolEventsFile     = "tool-events.ndjson"
+	PolicyProfileFile  = "policy-profile.json"
+	defaultActorType   = "agent"
+	defaultSurface     = "codex"
+	defaultWorkspaceID = "local-workstation"
+)
+
+var observeOnlySigningSeed = sha256.Sum256([]byte("helm-workstation-observe-only-agent-run-receipt-v1"))
+
+type ImportOptions struct {
+	SigningSeed []byte
+}
+
+type ImportResult struct {
+	Receipt        *contracts.AgentRunReceipt `json:"receipt"`
+	ProofGraph     []*proofgraph.Node         `json:"proofgraph"`
+	PolicyProfile  contracts.WorkstationPolicyProfile
+	ReplayRootHash string `json:"replay_root_hash"`
+}
+
+type RunManifest struct {
+	RunID         string            `json:"run_id"`
+	Goal          string            `json:"goal"`
+	ActorID       string            `json:"actor_id"`
+	ActorType     string            `json:"actor_type"`
+	WorkspaceID   string            `json:"workspace_id"`
+	WorkspacePath string            `json:"workspace_path"`
+	Repository    string            `json:"repository"`
+	AgentSurface  string            `json:"agent_surface"`
+	PolicyProfile string            `json:"policy_profile"`
+	StartedAt     time.Time         `json:"started_at"`
+	CompletedAt   *time.Time        `json:"completed_at,omitempty"`
+	SourceRefs    []string          `json:"source_refs,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
+}
+
+type DiffSummary struct {
+	Repository   string                       `json:"repository,omitempty"`
+	BaseRef      string                       `json:"base_ref,omitempty"`
+	HeadRef      string                       `json:"head_ref,omitempty"`
+	ChangedFiles []contracts.AgentChangedFile `json:"changed_files"`
+}
+
+type ValidationArtifact struct {
+	Commands []contracts.AgentValidationResult `json:"commands"`
+}
+
+type ToolEvent struct {
+	EventID             string                              `json:"event_id"`
+	Type                string                              `json:"type"`
+	ToolID              string                              `json:"tool_id"`
+	Action              string                              `json:"action"`
+	EffectType          string                              `json:"effect_type"`
+	EffectMode          string                              `json:"effect_mode"`
+	Status              string                              `json:"status"`
+	Verdict             string                              `json:"verdict"`
+	ReasonCode          string                              `json:"reason_code"`
+	Reason              string                              `json:"reason"`
+	Target              string                              `json:"target"`
+	OccurredAt          time.Time                           `json:"occurred_at"`
+	Metadata            map[string]string                   `json:"metadata,omitempty"`
+	TaintLabels         []string                            `json:"taint_labels,omitempty"`
+	MemoryEffect        *contracts.AgentMemoryEffect        `json:"memory_effect,omitempty"`
+	RecurringLoopEffect *contracts.AgentRecurringLoopEffect `json:"recurring_loop_effect,omitempty"`
+}
+
+func ImportArtifactDir(dir string, opts ImportOptions) (*ImportResult, error) {
+	if strings.TrimSpace(dir) == "" {
+		return nil, errors.New("artifact directory is required")
+	}
+	manifest, artifactHashes, err := readManifest(dir)
+	if err != nil {
+		return nil, err
+	}
+	diff, err := readOptionalJSON[DiffSummary](filepath.Join(dir, DiffSummaryFile))
+	if err != nil {
+		return nil, err
+	}
+	validation, err := readOptionalJSON[ValidationArtifact](filepath.Join(dir, ValidationFile))
+	if err != nil {
+		return nil, err
+	}
+	events, err := readToolEvents(filepath.Join(dir, ToolEventsFile))
+	if err != nil {
+		return nil, err
+	}
+	if diff != nil {
+		artifactHashes[DiffSummaryFile] = mustHashFile(filepath.Join(dir, DiffSummaryFile))
+		sortChangedFiles(diff.ChangedFiles)
+	}
+	if validation != nil {
+		artifactHashes[ValidationFile] = mustHashFile(filepath.Join(dir, ValidationFile))
+		sortValidation(validation.Commands)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ToolEventsFile)); err == nil {
+		artifactHashes[ToolEventsFile] = mustHashFile(filepath.Join(dir, ToolEventsFile))
+	}
+	profile, err := readPolicyProfile(dir)
+	if err != nil {
+		return nil, err
+	}
+	return BuildReceipt(*manifest, optionalDiff(diff), optionalValidation(validation), events, profile, artifactHashes, opts)
+}
+
+func BuildReceipt(
+	manifest RunManifest,
+	diff DiffSummary,
+	validation ValidationArtifact,
+	events []ToolEvent,
+	profile contracts.WorkstationPolicyProfile,
+	artifactHashes map[string]string,
+	opts ImportOptions,
+) (*ImportResult, error) {
+	normalizeManifest(&manifest)
+	sortToolEvents(events)
+
+	toolActions, memoryEffects, recurringEffects, deniedEffects := normalizeEvents(profile, events)
+	changedFiles := append([]contracts.AgentChangedFile(nil), diff.ChangedFiles...)
+	sortChangedFiles(changedFiles)
+	for _, file := range changedFiles {
+		toolActions = append(toolActions, contracts.AgentToolAction{
+			ActionID:   deterministicID("file", manifest.RunID, file.Path, file.Status),
+			ToolID:     "git.diff",
+			Action:     "draft_file_change",
+			EffectType: contracts.EffectTypeWorkstationFileDraft,
+			EffectMode: contracts.WorkstationEffectModeDraft,
+			Status:     "observed",
+			Verdict:    contracts.WorkstationVerdictAllow,
+			Target:     file.Path,
+			OccurredAt: manifestTimestamp(manifest),
+		})
+	}
+	sortToolActions(toolActions)
+	sortMemoryEffects(memoryEffects)
+	sortRecurringEffects(recurringEffects)
+	sortDeniedEffects(deniedEffects)
+
+	nodes, err := buildProofGraph(manifest, artifactHashes, changedFiles, validation.Commands, toolActions, memoryEffects, recurringEffects, deniedEffects)
+	if err != nil {
+		return nil, err
+	}
+	proofRefs := make([]string, 0, len(nodes))
+	for _, node := range nodes {
+		proofRefs = append(proofRefs, node.NodeHash)
+	}
+
+	evidenceRefs := []string{
+		"artifact-root:" + canonicalHashOrPanic(artifactHashes),
+	}
+	receipt := &contracts.AgentRunReceipt{
+		ReceiptVersion:       contracts.AgentRunReceiptVersion,
+		ReceiptID:            deterministicID("arr", manifest.RunID, canonicalHashOrPanic(artifactHashes)),
+		RunID:                manifest.RunID,
+		Goal:                 manifest.Goal,
+		Actor:                contracts.AgentRunActor{ActorID: manifest.ActorID, ActorType: manifest.ActorType},
+		Workspace:            contracts.AgentRunWorkspace{WorkspaceID: manifest.WorkspaceID, Path: manifest.WorkspacePath, Repository: firstNonEmpty(manifest.Repository, diff.Repository)},
+		AgentSurface:         manifest.AgentSurface,
+		PolicyProfile:        firstNonEmpty(manifest.PolicyProfile, profile.ID),
+		ArtifactHashes:       sortedStringMap(artifactHashes),
+		ToolActions:          toolActions,
+		ChangedFiles:         changedFiles,
+		ValidationResults:    validation.Commands,
+		MemoryEffects:        memoryEffects,
+		RecurringLoopEffects: recurringEffects,
+		DeniedEffects:        deniedEffects,
+		ProofGraphRefs:       proofRefs,
+		EvidencePackRefs:     evidenceRefs,
+		CreatedAt:            manifestTimestamp(manifest),
+		CompletedAt:          manifest.CompletedAt,
+		SignerKeyID:          "workstation-observe-only-ed25519",
+	}
+	normalizeReceiptCollections(receipt)
+	if err := signReceipt(receipt, opts.SigningSeed); err != nil {
+		return nil, err
+	}
+
+	checkpoint, err := appendCheckpoint(nodes, manifest, receipt)
+	if err != nil {
+		return nil, err
+	}
+	nodes = append(nodes, checkpoint)
+
+	replayRoot, err := canonicalize.CanonicalHash(struct {
+		Receipt    *contracts.AgentRunReceipt `json:"receipt"`
+		ProofGraph []*proofgraph.Node         `json:"proofgraph"`
+	}{Receipt: receipt, ProofGraph: nodes})
+	if err != nil {
+		return nil, fmt.Errorf("compute replay root: %w", err)
+	}
+	return &ImportResult{Receipt: receipt, ProofGraph: nodes, PolicyProfile: profile, ReplayRootHash: replayRoot}, nil
+}
+
+func readManifest(dir string) (*RunManifest, map[string]string, error) {
+	path := filepath.Join(dir, ManifestFile)
+	manifest, err := readRequiredJSON[RunManifest](path)
+	if err != nil {
+		return nil, nil, err
+	}
+	return manifest, map[string]string{ManifestFile: mustHashFile(path)}, nil
+}
+
+func readPolicyProfile(dir string) (contracts.WorkstationPolicyProfile, error) {
+	path := filepath.Join(dir, PolicyProfileFile)
+	profile, err := readOptionalJSON[contracts.WorkstationPolicyProfile](path)
+	if err != nil {
+		return contracts.WorkstationPolicyProfile{}, err
+	}
+	if profile == nil {
+		p := DefaultObserveDraftProfile()
+		return p, nil
+	}
+	if profile.ID == "" {
+		return contracts.WorkstationPolicyProfile{}, fmt.Errorf("%s: id is required", PolicyProfileFile)
+	}
+	return *profile, nil
+}
+
+func readRequiredJSON[T any](path string) (*T, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", filepath.Base(path), err)
+	}
+	var out T
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&out); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", filepath.Base(path), err)
+	}
+	return &out, nil
+}
+
+func readOptionalJSON[T any](path string) (*T, error) {
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("stat %s: %w", filepath.Base(path), err)
+	}
+	return readRequiredJSON[T](path)
+}
+
+func readToolEvents(path string) ([]ToolEvent, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("open %s: %w", filepath.Base(path), err)
+	}
+	defer file.Close()
+
+	var events []ToolEvent
+	scanner := bufio.NewScanner(file)
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var event ToolEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			return nil, fmt.Errorf("%s:%d: %w", filepath.Base(path), lineNo, err)
+		}
+		events = append(events, event)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan %s: %w", filepath.Base(path), err)
+	}
+	return events, nil
+}
+
+func normalizeEvents(profile contracts.WorkstationPolicyProfile, events []ToolEvent) (
+	[]contracts.AgentToolAction,
+	[]contracts.AgentMemoryEffect,
+	[]contracts.AgentRecurringLoopEffect,
+	[]contracts.AgentDeniedEffect,
+) {
+	toolActions := make([]contracts.AgentToolAction, 0, len(events))
+	var memoryEffects []contracts.AgentMemoryEffect
+	var recurringEffects []contracts.AgentRecurringLoopEffect
+	var deniedEffects []contracts.AgentDeniedEffect
+
+	for i, event := range events {
+		normalizeEvent(&event, i)
+		verdict, reasonCode, reason := EvaluateEvent(profile, event)
+		if event.Verdict != "" {
+			verdict = strings.ToUpper(event.Verdict)
+		}
+		if event.ReasonCode != "" {
+			reasonCode = event.ReasonCode
+		}
+		action := contracts.AgentToolAction{
+			ActionID:    event.EventID,
+			ToolID:      event.ToolID,
+			Action:      event.Action,
+			EffectType:  event.EffectType,
+			EffectMode:  event.EffectMode,
+			Status:      firstNonEmpty(event.Status, "observed"),
+			Verdict:     verdict,
+			ReasonCode:  reasonCode,
+			Target:      event.Target,
+			OccurredAt:  event.OccurredAt,
+			Metadata:    event.Metadata,
+			TaintLabels: sortedStrings(event.TaintLabels),
+		}
+		toolActions = append(toolActions, action)
+		if event.MemoryEffect != nil {
+			mem := *event.MemoryEffect
+			if mem.EffectID == "" {
+				mem.EffectID = event.EventID
+			}
+			normalizeMemoryEffect(&mem, profile)
+			mem.Verdict = verdict
+			mem.ReasonCode = reasonCode
+			mem.ObservedOnly = true
+			mem.TaintLabels = sortedStrings(mem.TaintLabels)
+			memoryEffects = append(memoryEffects, mem)
+		}
+		if event.RecurringLoopEffect != nil {
+			loop := *event.RecurringLoopEffect
+			if loop.EffectID == "" {
+				loop.EffectID = event.EventID
+			}
+			loop.Verdict = verdict
+			loop.ReasonCode = reasonCode
+			loop.ObservedOnly = true
+			loop.ToolScope = sortedStrings(loop.ToolScope)
+			recurringEffects = append(recurringEffects, loop)
+		}
+		if verdict == contracts.WorkstationVerdictDeny {
+			deniedEffects = append(deniedEffects, contracts.AgentDeniedEffect{
+				EffectID:   event.EventID,
+				EffectType: event.EffectType,
+				ToolID:     event.ToolID,
+				Action:     event.Action,
+				ReasonCode: reasonCode,
+				Reason:     firstNonEmpty(event.Reason, reason),
+				OccurredAt: event.OccurredAt,
+			})
+		}
+	}
+	return toolActions, memoryEffects, recurringEffects, deniedEffects
+}
+
+func EvaluateEvent(profile contracts.WorkstationPolicyProfile, event ToolEvent) (verdict, reasonCode, reason string) {
+	if taintedOperateEvent(event) {
+		return contracts.WorkstationVerdictDeny, "TAINTED_CONTEXT_REQUIRES_DENY", "tainted context cannot authorize operate-class effects"
+	}
+	if event.EffectType == contracts.EffectTypeWorkstationFileWrite || event.EffectType == contracts.EffectTypeWorkstationFileDraft || event.Type == "file_write" || event.Type == "draft_edit" {
+		if !draftTargetAllowed(profile.Draft.WorkspaceRoots, event.Target) {
+			return contracts.WorkstationVerdictDeny, "DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE", "draft target is outside the configured workspace scope"
+		}
+		return contracts.WorkstationVerdictAllow, "", ""
+	}
+	if event.EffectType == contracts.EffectTypeWorkstationNetworkEgress || event.Type == "network_egress" {
+		if len(profile.Egress.Allowlist) == 0 {
+			return contracts.WorkstationVerdictDeny, "EGRESS_ALLOWLIST_EMPTY", "network egress allowlist is empty"
+		}
+		if !egressAllowed(profile.Egress.Allowlist, event.Target) {
+			return contracts.WorkstationVerdictDeny, "EGRESS_DESTINATION_NOT_ALLOWED", "network destination is outside the workstation allowlist"
+		}
+		return evaluateOperatePermission(profile, event)
+	}
+	if event.EffectType == contracts.EffectTypeWorkstationMemoryWrite || event.Type == "memory_write" {
+		if verdict, reasonCode, reason := evaluateOperatePermission(profile, event); verdict != contracts.WorkstationVerdictAllow {
+			return verdict, reasonCode, reason
+		}
+		if event.MemoryEffect != nil {
+			memoryClass := strings.TrimSpace(event.MemoryEffect.MemoryClass)
+			if memoryClass != "" && len(profile.Memory.AllowedClasses) > 0 && !containsFold(profile.Memory.AllowedClasses, memoryClass) {
+				return contracts.WorkstationVerdictDeny, "MEMORY_CLASS_DISALLOWED", "memory class is not allowed by workstation policy"
+			}
+			ttl := event.MemoryEffect.TTLDays
+			if ttl == 0 {
+				ttl = profile.Memory.DefaultTTLDays
+			}
+			if profile.Memory.MaxTTLDays > 0 && ttl > profile.Memory.MaxTTLDays {
+				return contracts.WorkstationVerdictDeny, "MEMORY_TTL_EXCEEDS_POLICY", "memory TTL exceeds workstation policy"
+			}
+		}
+		return contracts.WorkstationVerdictAllow, "", ""
+	}
+	if event.EffectType == contracts.EffectTypeWorkstationRecurringLoop || event.Type == "recurring_loop" {
+		if verdict, reasonCode, reason := evaluateOperatePermission(profile, event); verdict != contracts.WorkstationVerdictAllow {
+			return verdict, reasonCode, reason
+		}
+		if event.RecurringLoopEffect != nil {
+			if profile.Loops.RequireSchedule && strings.TrimSpace(event.RecurringLoopEffect.Schedule) == "" {
+				return contracts.WorkstationVerdictDeny, "RECURRING_LOOP_MISSING_SCHEDULE", "recurring loop requires schedule"
+			}
+			if profile.Loops.RequireMaxRuntime && strings.TrimSpace(event.RecurringLoopEffect.MaxRuntime) == "" {
+				return contracts.WorkstationVerdictDeny, "RECURRING_LOOP_MISSING_MAX_RUNTIME", "recurring loop requires max runtime"
+			}
+			if profile.Loops.RequireToolScope && len(event.RecurringLoopEffect.ToolScope) == 0 {
+				return contracts.WorkstationVerdictDeny, "RECURRING_LOOP_MISSING_TOOL_SCOPE", "recurring loop requires tool scope"
+			}
+			if profile.Loops.RequireExpiration && event.RecurringLoopEffect.ExpiresAt.IsZero() {
+				return contracts.WorkstationVerdictDeny, "RECURRING_LOOP_MISSING_EXPIRATION", "recurring loop requires expiration"
+			}
+		}
+		return contracts.WorkstationVerdictAllow, "", ""
+	}
+	if event.EffectMode == contracts.WorkstationEffectModeOperate || isOperateEffect(event.EffectType, event.Type) {
+		return evaluateOperatePermission(profile, event)
+	}
+	return contracts.WorkstationVerdictAllow, "", ""
+}
+
+func evaluateOperatePermission(profile contracts.WorkstationPolicyProfile, event ToolEvent) (verdict, reasonCode, reason string) {
+	if len(profile.Operate.Permissions) == 0 {
+		return contracts.WorkstationVerdictDeny, "OPERATE_PERMISSIONS_EMPTY", "operate permissions are empty"
+	}
+	required := workstationPermissionForEffect(event.EffectType, event.Type, event.Action)
+	if !permissionGranted(profile.Operate.Permissions, event.EffectType, required) {
+		return contracts.WorkstationVerdictDeny, "OPERATE_PERMISSION_NOT_GRANTED", "operate permission is not granted for effect"
+	}
+	return contracts.WorkstationVerdictAllow, "", ""
+}
+
+func normalizeMemoryEffect(effect *contracts.AgentMemoryEffect, profile contracts.WorkstationPolicyProfile) {
+	if effect.TTLDays == 0 {
+		effect.TTLDays = profile.Memory.DefaultTTLDays
+	}
+	if strings.TrimSpace(effect.Sensitivity) == "" {
+		effect.Sensitivity = firstNonEmpty(effect.DataClass, contracts.DataClassInternal)
+	}
+	if strings.TrimSpace(effect.DataClass) == "" {
+		effect.DataClass = dataClassForSensitivity(effect.Sensitivity)
+	}
+}
+
+func dataClassForSensitivity(sensitivity string) string {
+	switch strings.ToLower(strings.TrimSpace(sensitivity)) {
+	case "public":
+		return contracts.DataClassPublic
+	case "restricted", "secret", "credential", "credentials", "high":
+		return contracts.DataClassRestricted
+	case "confidential", "sensitive", "pii", "medium":
+		return contracts.DataClassConfidential
+	default:
+		return contracts.DataClassInternal
+	}
+}
+
+func DefaultObserveDraftProfile() contracts.WorkstationPolicyProfile {
+	return contracts.WorkstationPolicyProfile{
+		ID:   contracts.PolicyProfileWorkstationObserveDraftV1,
+		Mode: "observe_only",
+		Observe: contracts.WorkstationObservePolicy{AllowedActions: []string{
+			"git.status",
+			"git.diff",
+			"shell.read",
+			"shell.test",
+			"shell.build",
+		}},
+		Draft: contracts.WorkstationDraftPolicy{
+			WorkspaceRoots:          []string{"."},
+			AllowGeneratedArtifacts: true,
+		},
+		Operate: contracts.WorkstationOperatePolicy{Permissions: []string{}},
+		Egress:  contracts.WorkstationEgressPolicy{Allowlist: []contracts.WorkstationEgressDestination{}},
+		Memory: contracts.WorkstationMemoryPolicy{
+			DefaultTTLDays: 30,
+			MaxTTLDays:     30,
+			AllowedClasses: []string{
+				"M1_EPISODIC",
+				"M3_SEMANTIC",
+				"M4_PROCEDURAL",
+			},
+		},
+		Loops: contracts.WorkstationRecurringPolicy{
+			RequireSchedule:   true,
+			RequireMaxRuntime: true,
+			RequireToolScope:  true,
+			RequireExpiration: true,
+		},
+	}
+}
+
+func buildProofGraph(
+	manifest RunManifest,
+	artifactHashes map[string]string,
+	changedFiles []contracts.AgentChangedFile,
+	validation []contracts.AgentValidationResult,
+	toolActions []contracts.AgentToolAction,
+	memoryEffects []contracts.AgentMemoryEffect,
+	recurringEffects []contracts.AgentRecurringLoopEffect,
+	deniedEffects []contracts.AgentDeniedEffect,
+) ([]*proofgraph.Node, error) {
+	graph := proofgraph.NewGraph().WithClock(func() time.Time { return manifestTimestamp(manifest) })
+	principal := firstNonEmpty(manifest.ActorID, "agent")
+	seq := uint64(1)
+	var nodes []*proofgraph.Node
+	appendPayload := func(kind proofgraph.NodeType, payload any) error {
+		bytes, err := canonicalize.JCS(payload)
+		if err != nil {
+			return err
+		}
+		node, err := graph.Append(kind, bytes, principal, seq)
+		if err != nil {
+			return err
+		}
+		nodes = append(nodes, node)
+		seq++
+		return nil
+	}
+	if err := appendPayload(proofgraph.NodeTypeIntent, map[string]any{
+		"run_id":         manifest.RunID,
+		"goal":           manifest.Goal,
+		"agent_surface":  manifest.AgentSurface,
+		"policy_profile": manifest.PolicyProfile,
+	}); err != nil {
+		return nil, err
+	}
+	if err := appendPayload(proofgraph.NodeTypeAttestation, map[string]any{
+		"artifact_hashes": sortedStringMap(artifactHashes),
+	}); err != nil {
+		return nil, err
+	}
+	for _, file := range changedFiles {
+		if err := appendPayload(proofgraph.NodeTypeEffect, map[string]any{
+			"effect_type": contracts.EffectTypeWorkstationFileDraft,
+			"file":        file,
+			"verdict":     contracts.WorkstationVerdictAllow,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	for _, result := range validation {
+		if err := appendPayload(proofgraph.NodeTypeEffect, map[string]any{
+			"effect_type": contracts.EffectTypeWorkstationValidationRun,
+			"validation":  result,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	for _, action := range toolActions {
+		if err := appendPayload(proofgraph.NodeTypeEffect, map[string]any{
+			"effect_type": action.EffectType,
+			"tool_action": action,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	for _, effect := range memoryEffects {
+		if err := appendPayload(proofgraph.NodeTypeEffect, map[string]any{
+			"effect_type":   contracts.EffectTypeWorkstationMemoryWrite,
+			"memory_effect": effect,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	for _, effect := range recurringEffects {
+		if err := appendPayload(proofgraph.NodeTypeEffect, map[string]any{
+			"effect_type":           contracts.EffectTypeWorkstationRecurringLoop,
+			"recurring_loop_effect": effect,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	for _, effect := range deniedEffects {
+		if err := appendPayload(proofgraph.NodeTypeEffect, map[string]any{
+			"effect_type":   "WORKSTATION_DENIED_EFFECT",
+			"denied_effect": effect,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return nodes, nil
+}
+
+func appendCheckpoint(nodes []*proofgraph.Node, manifest RunManifest, receipt *contracts.AgentRunReceipt) (*proofgraph.Node, error) {
+	graph := proofgraph.NewGraph().WithClock(func() time.Time { return manifestTimestamp(manifest) })
+	var last *proofgraph.Node
+	for _, node := range nodes {
+		graphNode, err := graph.Append(node.Kind, node.Payload, node.Principal, node.PrincipalSeq)
+		if err != nil {
+			return nil, err
+		}
+		last = graphNode
+	}
+	_ = last
+	payload, err := canonicalize.JCS(map[string]any{
+		"receipt_id":         receipt.ReceiptID,
+		"receipt_hash":       receipt.ReceiptHash,
+		"evidence_pack_refs": receipt.EvidencePackRefs,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return graph.Append(proofgraph.NodeTypeCheckpoint, payload, firstNonEmpty(manifest.ActorID, "agent"), uint64(len(nodes)+1))
+}
+
+func signReceipt(receipt *contracts.AgentRunReceipt, seed []byte) error {
+	if len(seed) == 0 {
+		seed = observeOnlySigningSeed[:]
+	}
+	if len(seed) != ed25519.SeedSize {
+		return fmt.Errorf("signing seed must be %d bytes", ed25519.SeedSize)
+	}
+	priv := ed25519.NewKeyFromSeed(seed)
+	pub := priv.Public().(ed25519.PublicKey)
+	receipt.SignerKeyID = "ed25519:" + hex.EncodeToString(pub)
+	receipt.Signature = ""
+	receipt.ReceiptHash = ""
+	canonical, err := canonicalize.JCS(receipt)
+	if err != nil {
+		return fmt.Errorf("canonicalize agent run receipt: %w", err)
+	}
+	hash := sha256.Sum256(canonical)
+	receipt.ReceiptHash = hex.EncodeToString(hash[:])
+	receipt.Signature = hex.EncodeToString(ed25519.Sign(priv, canonical))
+	return nil
+}
+
+func VerifyReceiptSignature(receipt *contracts.AgentRunReceipt) (bool, error) {
+	if receipt == nil {
+		return false, errors.New("receipt is nil")
+	}
+	keyHex := strings.TrimPrefix(receipt.SignerKeyID, "ed25519:")
+	pub, err := hex.DecodeString(keyHex)
+	if err != nil {
+		return false, fmt.Errorf("decode signer key: %w", err)
+	}
+	if len(pub) != ed25519.PublicKeySize {
+		return false, fmt.Errorf("signer key must be %d bytes", ed25519.PublicKeySize)
+	}
+	sig, err := hex.DecodeString(receipt.Signature)
+	if err != nil {
+		return false, fmt.Errorf("decode signature: %w", err)
+	}
+	copyReceipt := *receipt
+	copyReceipt.Signature = ""
+	copyReceipt.ReceiptHash = ""
+	canonical, err := canonicalize.JCS(&copyReceipt)
+	if err != nil {
+		return false, fmt.Errorf("canonicalize receipt: %w", err)
+	}
+	hash := sha256.Sum256(canonical)
+	if hex.EncodeToString(hash[:]) != receipt.ReceiptHash {
+		return false, nil
+	}
+	return ed25519.Verify(ed25519.PublicKey(pub), canonical, sig), nil
+}
+
+func normalizeReceiptCollections(receipt *contracts.AgentRunReceipt) {
+	if receipt.ArtifactHashes == nil {
+		receipt.ArtifactHashes = map[string]string{}
+	}
+	if receipt.ToolActions == nil {
+		receipt.ToolActions = []contracts.AgentToolAction{}
+	}
+	if receipt.ChangedFiles == nil {
+		receipt.ChangedFiles = []contracts.AgentChangedFile{}
+	}
+	if receipt.ValidationResults == nil {
+		receipt.ValidationResults = []contracts.AgentValidationResult{}
+	}
+	if receipt.MemoryEffects == nil {
+		receipt.MemoryEffects = []contracts.AgentMemoryEffect{}
+	}
+	if receipt.RecurringLoopEffects == nil {
+		receipt.RecurringLoopEffects = []contracts.AgentRecurringLoopEffect{}
+	}
+	if receipt.DeniedEffects == nil {
+		receipt.DeniedEffects = []contracts.AgentDeniedEffect{}
+	}
+	if receipt.ProofGraphRefs == nil {
+		receipt.ProofGraphRefs = []string{}
+	}
+	if receipt.EvidencePackRefs == nil {
+		receipt.EvidencePackRefs = []string{}
+	}
+}
+
+func WriteResult(path string, result *ImportResult) error {
+	if result == nil {
+		return errors.New("result is nil")
+	}
+	data, err := canonicalize.JCS(result)
+	if err != nil {
+		return err
+	}
+	if path == "" {
+		_, err = io.Copy(io.Discard, bytes.NewReader(data))
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o600)
+}
+
+func Summary(receipt *contracts.AgentRunReceipt) map[string]any {
+	if receipt == nil {
+		return map[string]any{}
+	}
+	return map[string]any{
+		"receipt_id":       receipt.ReceiptID,
+		"run_id":           receipt.RunID,
+		"goal":             receipt.Goal,
+		"agent_surface":    receipt.AgentSurface,
+		"policy_profile":   receipt.PolicyProfile,
+		"tool_actions":     len(receipt.ToolActions),
+		"changed_files":    len(receipt.ChangedFiles),
+		"validation_count": len(receipt.ValidationResults),
+		"memory_effects":   len(receipt.MemoryEffects),
+		"recurring_loops":  len(receipt.RecurringLoopEffects),
+		"denied_effects":   len(receipt.DeniedEffects),
+		"proof_nodes":      len(receipt.ProofGraphRefs),
+		"receipt_hash":     receipt.ReceiptHash,
+	}
+}
+
+func LoadResult(path string) (*ImportResult, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var result ImportResult
+	if err := json.Unmarshal(data, &result); err == nil && result.Receipt != nil {
+		return &result, nil
+	}
+	var receipt contracts.AgentRunReceipt
+	if err := json.Unmarshal(data, &receipt); err != nil {
+		return nil, err
+	}
+	return &ImportResult{Receipt: &receipt}, nil
+}
+
+func normalizeManifest(manifest *RunManifest) {
+	if manifest.RunID == "" {
+		manifest.RunID = deterministicID("run", manifest.Goal, manifest.WorkspacePath, manifest.AgentSurface)
+	}
+	if manifest.ActorID == "" {
+		manifest.ActorID = "agent.local"
+	}
+	if manifest.ActorType == "" {
+		manifest.ActorType = defaultActorType
+	}
+	if manifest.WorkspaceID == "" {
+		manifest.WorkspaceID = defaultWorkspaceID
+	}
+	if manifest.AgentSurface == "" {
+		manifest.AgentSurface = defaultSurface
+	}
+	if manifest.PolicyProfile == "" {
+		manifest.PolicyProfile = contracts.PolicyProfileWorkstationObserveDraftV1
+	}
+}
+
+func normalizeEvent(event *ToolEvent, idx int) {
+	if event.EventID == "" {
+		event.EventID = deterministicID("event", fmt.Sprintf("%d", idx), event.Type, event.ToolID, event.Action, event.Target)
+	}
+	if event.ToolID == "" {
+		event.ToolID = firstNonEmpty(event.Type, "unknown")
+	}
+	if event.Action == "" {
+		event.Action = firstNonEmpty(event.Type, "observed")
+	}
+	if event.EffectType == "" {
+		event.EffectType = effectTypeForEvent(*event)
+	}
+	if event.EffectMode == "" {
+		event.EffectMode = effectModeForEvent(*event)
+	}
+	if event.OccurredAt.IsZero() {
+		event.OccurredAt = time.Unix(0, 0).UTC()
+	}
+}
+
+func effectTypeForEvent(event ToolEvent) string {
+	switch event.Type {
+	case "file_write", "draft_edit":
+		return contracts.EffectTypeWorkstationFileWrite
+	case "network_egress":
+		return contracts.EffectTypeWorkstationNetworkEgress
+	case "mcp_tool_call":
+		return contracts.EffectTypeWorkstationMCPToolCall
+	case "memory_write":
+		return contracts.EffectTypeWorkstationMemoryWrite
+	case "recurring_loop":
+		return contracts.EffectTypeWorkstationRecurringLoop
+	case "deploy_publish":
+		return contracts.EffectTypeWorkstationDeployPublish
+	case "secret_read":
+		return contracts.EffectTypeWorkstationSecretRead
+	case "payment_initiate":
+		return contracts.EffectTypeWorkstationPaymentInitiate
+	case "prompt_injection", "tainted_context":
+		return contracts.EffectTypeWorkstationTaintedContext
+	default:
+		return contracts.EffectTypeWorkstationShellCommand
+	}
+}
+
+func effectModeForEvent(event ToolEvent) string {
+	switch event.Type {
+	case "file_write", "draft_edit":
+		return contracts.WorkstationEffectModeDraft
+	case "network_egress", "mcp_tool_call", "memory_write", "recurring_loop", "deploy_publish", "secret_read", "payment_initiate":
+		return contracts.WorkstationEffectModeOperate
+	default:
+		return contracts.WorkstationEffectModeObserve
+	}
+}
+
+func isOperateEffect(effectType, eventType string) bool {
+	switch effectType {
+	case contracts.EffectTypeWorkstationNetworkEgress,
+		contracts.EffectTypeWorkstationMCPToolCall,
+		contracts.EffectTypeWorkstationMemoryWrite,
+		contracts.EffectTypeWorkstationRecurringLoop,
+		contracts.EffectTypeWorkstationDeployPublish,
+		contracts.EffectTypeWorkstationSecretRead,
+		contracts.EffectTypeWorkstationPaymentInitiate:
+		return true
+	}
+	switch eventType {
+	case "network_egress", "mcp_tool_call", "memory_write", "recurring_loop", "deploy_publish", "secret_read", "payment_initiate", "shell_operate":
+		return true
+	default:
+		return false
+	}
+}
+
+func taintedOperateEvent(event ToolEvent) bool {
+	if !isOperateEffect(event.EffectType, event.Type) && event.EffectMode != contracts.WorkstationEffectModeOperate {
+		return false
+	}
+	for _, label := range event.TaintLabels {
+		switch strings.ToLower(strings.TrimSpace(label)) {
+		case "prompt_injection", "tainted_context", "untrusted_tool_output":
+			return true
+		}
+	}
+	return false
+}
+
+func workstationPermissionForEffect(effectType, eventType, action string) string {
+	switch effectType {
+	case contracts.EffectTypeWorkstationNetworkEgress:
+		return contracts.WorkstationPermissionNetworkEgress
+	case contracts.EffectTypeWorkstationMCPToolCall:
+		return contracts.WorkstationPermissionMCPMutate
+	case contracts.EffectTypeWorkstationMemoryWrite:
+		return contracts.WorkstationPermissionMemoryWrite
+	case contracts.EffectTypeWorkstationRecurringLoop:
+		return contracts.WorkstationPermissionLoopRegister
+	case contracts.EffectTypeWorkstationDeployPublish:
+		return contracts.WorkstationPermissionDeployPublish
+	case contracts.EffectTypeWorkstationSecretRead:
+		return contracts.WorkstationPermissionSecretRead
+	case contracts.EffectTypeWorkstationPaymentInitiate:
+		return contracts.WorkstationPermissionPaymentInitiate
+	case contracts.EffectTypeWorkstationShellCommand:
+		if strings.EqualFold(eventType, "shell_operate") || strings.Contains(strings.ToLower(action), "operate") {
+			return contracts.WorkstationPermissionShellOperate
+		}
+	}
+	switch eventType {
+	case "network_egress":
+		return contracts.WorkstationPermissionNetworkEgress
+	case "mcp_tool_call":
+		return contracts.WorkstationPermissionMCPMutate
+	case "memory_write":
+		return contracts.WorkstationPermissionMemoryWrite
+	case "recurring_loop":
+		return contracts.WorkstationPermissionLoopRegister
+	case "deploy_publish":
+		return contracts.WorkstationPermissionDeployPublish
+	case "secret_read":
+		return contracts.WorkstationPermissionSecretRead
+	case "payment_initiate":
+		return contracts.WorkstationPermissionPaymentInitiate
+	case "shell_operate":
+		return contracts.WorkstationPermissionShellOperate
+	default:
+		return effectType
+	}
+}
+
+func permissionGranted(permissions []string, effectType, required string) bool {
+	for _, permission := range permissions {
+		if strings.EqualFold(permission, effectType) || strings.EqualFold(permission, required) {
+			return true
+		}
+	}
+	return false
+}
+
+func draftTargetAllowed(roots []string, target string) bool {
+	target = filepath.Clean(strings.TrimSpace(target))
+	if target == "." || target == "" {
+		return true
+	}
+	if filepath.IsAbs(target) {
+		for _, root := range roots {
+			root = filepath.Clean(strings.TrimSpace(root))
+			if root == "" || root == "." || !filepath.IsAbs(root) {
+				continue
+			}
+			if target == root || strings.HasPrefix(target, root+string(filepath.Separator)) {
+				return true
+			}
+		}
+		return false
+	}
+	if target == ".." || strings.HasPrefix(target, ".."+string(filepath.Separator)) {
+		return false
+	}
+	for _, root := range roots {
+		root = filepath.Clean(strings.TrimSpace(root))
+		if root == "." || root == "" {
+			return true
+		}
+		if !filepath.IsAbs(root) && (target == root || strings.HasPrefix(target, root+string(filepath.Separator))) {
+			return true
+		}
+	}
+	return false
+}
+
+func egressAllowed(allowlist []contracts.WorkstationEgressDestination, target string) bool {
+	host, proto := splitTarget(target)
+	for _, dest := range allowlist {
+		if strings.EqualFold(dest.Host, host) && (dest.Protocol == "" || strings.EqualFold(dest.Protocol, proto)) {
+			return true
+		}
+	}
+	return false
+}
+
+func splitTarget(target string) (host, proto string) {
+	proto = "https"
+	rest := strings.TrimSpace(target)
+	if before, after, ok := strings.Cut(rest, "://"); ok {
+		proto = before
+		rest = after
+	}
+	if before, _, ok := strings.Cut(rest, "/"); ok {
+		rest = before
+	}
+	if before, _, ok := strings.Cut(rest, ":"); ok {
+		rest = before
+	}
+	return strings.ToLower(rest), strings.ToLower(proto)
+}
+
+func manifestTimestamp(manifest RunManifest) time.Time {
+	if !manifest.StartedAt.IsZero() {
+		return manifest.StartedAt.UTC()
+	}
+	if manifest.CompletedAt != nil && !manifest.CompletedAt.IsZero() {
+		return manifest.CompletedAt.UTC()
+	}
+	return time.Unix(0, 0).UTC()
+}
+
+func optionalDiff(in *DiffSummary) DiffSummary {
+	if in == nil {
+		return DiffSummary{}
+	}
+	return *in
+}
+
+func optionalValidation(in *ValidationArtifact) ValidationArtifact {
+	if in == nil {
+		return ValidationArtifact{}
+	}
+	return *in
+}
+
+func mustHashFile(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		panic(err)
+	}
+	return hashBytes(data)
+}
+
+func hashBytes(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+func deterministicID(prefix string, parts ...string) string {
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return prefix + "_" + hex.EncodeToString(sum[:])[:24]
+}
+
+func canonicalHashOrPanic(v any) string {
+	hash, err := canonicalize.CanonicalHash(v)
+	if err != nil {
+		panic(err)
+	}
+	return hash
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func sortedStringMap(in map[string]string) map[string]string {
+	out := make(map[string]string, len(in))
+	keys := make([]string, 0, len(in))
+	for key := range in {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		out[key] = in[key]
+	}
+	return out
+}
+
+func sortedStrings(in []string) []string {
+	out := append([]string(nil), in...)
+	sort.Strings(out)
+	return out
+}
+
+func contains(values []string, value string) bool {
+	for _, candidate := range values {
+		if candidate == value {
+			return true
+		}
+	}
+	return false
+}
+
+func containsFold(values []string, value string) bool {
+	for _, candidate := range values {
+		if strings.EqualFold(candidate, value) {
+			return true
+		}
+	}
+	return false
+}
+
+func sortToolEvents(events []ToolEvent) {
+	sort.SliceStable(events, func(i, j int) bool {
+		if !events[i].OccurredAt.Equal(events[j].OccurredAt) {
+			return events[i].OccurredAt.Before(events[j].OccurredAt)
+		}
+		return events[i].EventID < events[j].EventID
+	})
+}
+
+func sortToolActions(actions []contracts.AgentToolAction) {
+	sort.SliceStable(actions, func(i, j int) bool {
+		if !actions[i].OccurredAt.Equal(actions[j].OccurredAt) {
+			return actions[i].OccurredAt.Before(actions[j].OccurredAt)
+		}
+		return actions[i].ActionID < actions[j].ActionID
+	})
+}
+
+func sortChangedFiles(files []contracts.AgentChangedFile) {
+	sort.SliceStable(files, func(i, j int) bool {
+		return files[i].Path < files[j].Path
+	})
+}
+
+func sortValidation(results []contracts.AgentValidationResult) {
+	sort.SliceStable(results, func(i, j int) bool {
+		return results[i].Command < results[j].Command
+	})
+}
+
+func sortMemoryEffects(effects []contracts.AgentMemoryEffect) {
+	sort.SliceStable(effects, func(i, j int) bool {
+		return effects[i].EffectID < effects[j].EffectID
+	})
+}
+
+func sortRecurringEffects(effects []contracts.AgentRecurringLoopEffect) {
+	sort.SliceStable(effects, func(i, j int) bool {
+		return effects[i].EffectID < effects[j].EffectID
+	})
+}
+
+func sortDeniedEffects(effects []contracts.AgentDeniedEffect) {
+	sort.SliceStable(effects, func(i, j int) bool {
+		if !effects[i].OccurredAt.Equal(effects[j].OccurredAt) {
+			return effects[i].OccurredAt.Before(effects[j].OccurredAt)
+		}
+		return effects[i].EffectID < effects[j].EffectID
+	})
+}

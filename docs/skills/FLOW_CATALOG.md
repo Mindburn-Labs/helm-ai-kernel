@@ -7,6 +7,27 @@ last_reviewed: 2026-05-20
 
 HELM Skill Packs are signed, scoped procedural packages for agents. A skill can guide behavior, but it cannot grant tool permissions or execution authority.
 
+## Audience
+
+Use this page if you are installing, exporting, reviewing, or disabling HELM-managed skill packs for Codex, Claude Code, or another supported agent surface.
+
+## Outcome
+
+After reading this page, you should know which CLI flows exist, what receipt each flow emits, and where the skill boundary prevents procedural guidance from becoming execution authority.
+
+## Flow
+
+```mermaid
+flowchart LR
+  search["Search registry"] --> inspect["Inspect skill"]
+  inspect --> scan["Scan content"]
+  scan --> install["Install projection"]
+  install --> receipt["Install receipts"]
+  scan --> export["Export plugin"]
+  install --> disable["Disable or revoke"]
+  disable --> receipt
+```
+
 ## Source Truth
 
 - Skill runtime commands: `core/cmd/helm-ai-kernel/skills_cmd.go`
@@ -86,3 +107,12 @@ Removes managed projection files, updates install state, and emits `SKILL_REVOKE
 ## Completion Gaps
 
 Deferred: remote GitHub skill fetch, key-backed signature verification, full plugin marketplace e2e, and Enterprise global rollout approvals remain outside this MVP slice.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| A skill appears to grant tool access | Re-check the policy bundle; skills guide behavior but do not grant permissions. |
+| Repo-scoped install fails | Run `skills scan` and inspect symlink, script, and MCP metadata findings. |
+| User or global install escalates | This is expected by default until Enterprise rollout approval exists. |
+| Plugin export includes MCP metadata | Confirm pending or quarantined MCP metadata remains off by default. |

@@ -1,0 +1,33 @@
+{
+  "id": "workstation.observe_draft.v1",
+  "mode": "enforceable",
+  "observe": {
+    "allowed_actions": ["git.status", "git.diff", "shell.read", "shell.test", "shell.build"]
+  },
+  "draft": {
+    "workspace_roots": ["docs", "examples"],
+    "allow_generated_artifacts": true
+  },
+  "operate": {
+    "permissions": ["network.egress"]
+  },
+  "egress": {
+    "allowlist": [
+      {
+        "host": "api.github.com",
+        "protocol": "https"
+      }
+    ]
+  },
+  "memory": {
+    "default_ttl_days": 7,
+    "max_ttl_days": 14,
+    "allowed_classes": ["M1_EPISODIC"]
+  },
+  "recurring_loops": {
+    "require_schedule": true,
+    "require_max_runtime": true,
+    "require_tool_scope": true,
+    "require_expiration": true
+  }
+}

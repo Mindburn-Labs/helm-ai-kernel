@@ -10,20 +10,22 @@ import (
 )
 
 var allowedEvidenceRequirements = map[string]struct{}{
-	"cpi_output":               {},
-	"kernel_verdict":           {},
-	"sandbox_grant":            {},
-	"launch_receipt":           {},
-	"install_receipt":          {},
-	"healthcheck_receipt":      {},
-	"teardown_receipt":         {},
-	"evidence_pack":            {},
-	"mcp_quarantine":           {},
-	"artifact_digest":          {},
-	"cosign_signature":         {},
-	"syft_sbom":                {},
-	"grype_vulnerability_scan": {},
-	"trivy_vulnerability_scan": {},
+	"cpi_output":                    {},
+	"kernel_verdict":                {},
+	"sandbox_grant":                 {},
+	"launch_receipt":                {},
+	"install_receipt":               {},
+	"healthcheck_receipt":           {},
+	"teardown_receipt":              {},
+	"evidence_pack":                 {},
+	"mcp_quarantine":                {},
+	"artifact_digest":               {},
+	"cosign_signature":              {},
+	"syft_sbom":                     {},
+	"grype_vulnerability_scan":      {},
+	"trivy_vulnerability_scan":      {},
+	"workstation_artifact_manifest": {},
+	"agent_run_receipt":             {},
 }
 
 var ossSupportedInstallStrategies = map[string]struct{}{

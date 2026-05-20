@@ -13,6 +13,26 @@ Homebrew package, signed Launchpad artifacts, local-container app launcher,
 MCP interceptor posture, signed receipts, teardown, and offline EvidencePack
 verification survive a machine that did not build the release.
 
+## Audience
+
+Use this page if you are release-managing Launchpad GA, reproducing a clean install on a developer Mac, or validating that signed artifacts and EvidencePacks survive outside the build machine.
+
+## Outcome
+
+After reading this page, you should know which commands prove clean-install readiness, where the canonical reports live, and what evidence is required before promoting Launchpad app support.
+
+## Gate Flow
+
+```mermaid
+flowchart LR
+  release["Signed release"] --> install["Clean Homebrew install"]
+  install --> matrix["Launch matrix"]
+  matrix --> apps["Launch supported apps"]
+  apps --> teardown["Cascade teardown"]
+  teardown --> verify["Offline EvidencePack verify"]
+  verify --> report["Clean-install report"]
+```
+
 ## Source Truth
 
 - Release: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.4>
@@ -91,3 +111,12 @@ gh workflow run launchpad-clean-install.yml \
 
 The CI report is a repeatability signal. The separate clean Mac report remains
 the canonical GA evidence for developer experience.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| Homebrew install fails | Confirm the tap PR and release tag in Source Truth still resolve. |
+| Launch cannot reach OpenRouter | Confirm `HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY` is present only in the live test environment. |
+| EvidencePack verification fails | Inspect the produced bundle before updating app support status. |
+| OpenCode or Kilo Code fail the gate | Treat them as expected failures until signed evidence promotes them from candidate status. |

@@ -1,0 +1,1 @@
+{"event_id":"evt_tainted_mcp","type":"mcp_tool_call","tool_id":"unknown.mcp.tool","action":"mutate","effect_mode":"operate","status":"blocked","target":"mcp://unknown-server/tool","occurred_at":"2026-05-20T14:00:20Z","taint_labels":["prompt_injection","untrusted_tool_output"]}

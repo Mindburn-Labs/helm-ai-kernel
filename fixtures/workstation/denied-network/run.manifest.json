@@ -1,0 +1,13 @@
+{
+  "run_id": "run_denied_network",
+  "goal": "Demonstrate observe-only denial recording for network egress.",
+  "actor_id": "agent.codex.local",
+  "actor_type": "agent",
+  "workspace_id": "workspace-demo",
+  "workspace_path": "/workspace/demo",
+  "repository": "helm-ai-kernel",
+  "agent_surface": "codex",
+  "policy_profile": "workstation.observe_draft.v1",
+  "started_at": "2026-05-20T11:00:00Z",
+  "completed_at": "2026-05-20T11:01:00Z"
+}

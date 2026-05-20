@@ -7,6 +7,27 @@ last_reviewed: 2026-05-20
 
 HELM Launchpad is the OSS local-container app launcher for AI agents. Launchpad starts apps; HELM governs execution.
 
+## Audience
+
+Use this page if you are planning, launching, repairing, or tearing down a Launchpad app through the local-container substrate.
+
+## Outcome
+
+After reading this page, you should know which CLI flows exist, what each flow proves, and where Launchpad stops so the HELM execution boundary can govern effects.
+
+## Flow
+
+```mermaid
+flowchart LR
+  matrix["Matrix"] --> plan["Plan"]
+  plan --> preflight["Policy and sandbox preflight"]
+  preflight --> launch["Launch local container"]
+  launch --> health["Healthcheck"]
+  health --> receipts["Receipts and EvidencePack"]
+  launch --> repair["Repair plan"]
+  launch --> teardown["Cascade teardown"]
+```
+
 ## Source Truth
 
 - CLI launch command: `core/cmd/helm-ai-kernel/launch_cmd.go`
@@ -72,3 +93,12 @@ EvidencePack verification.
 passes on both the macOS CI runner and a separate developer Mac.
 
 Deferred: DigitalOcean and Hetzner stay dry-run by default.
+
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| Matrix says an app is not available | Verify license, artifact, policy, sandbox, healthcheck, receipts, teardown, and EvidencePack proof. |
+| Launch fails before container start | Inspect CPI, PEP, sandbox preflight, and required secret projection. |
+| Repair proposes an external effect | Route the effect through CPI and PEP before applying it. |
+| Teardown leaves state behind | Re-run `launch delete <launch_id> --cascade` and inspect the teardown receipt. |

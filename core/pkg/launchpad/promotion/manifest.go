@@ -16,6 +16,8 @@ const ManifestSchemaVersion = "helm.launchpad.artifacts.v1"
 var promotableApps = map[string]struct{}{
 	"openclaw": {},
 	"hermes":   {},
+	"opencode": {},
+	"kilocode": {},
 }
 
 type Manifest struct {

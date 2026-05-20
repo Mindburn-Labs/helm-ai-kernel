@@ -1,0 +1,85 @@
+name: Launchpad Clean Install GA
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to validate
+        required: true
+        default: v0.5.4
+      artifact_run_id:
+        description: Launchpad artifact workflow run containing signed app and egress-proxy evidence
+        required: true
+        default: "26110916296"
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  clean-install-macos:
+    name: Clean macOS Homebrew install and local-container launch
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - name: Checkout HELM source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Install clean-install runtime dependencies
+        run: |
+          set -euo pipefail
+          brew update
+          brew install colima docker jq
+
+      - name: Start Docker-compatible local-container runtime
+        run: |
+          set -euo pipefail
+          if [[ "$(uname -m)" == "arm64" ]]; then
+            colima start --cpu 2 --memory 4 --disk 20 --arch x86_64 --vm-type=vz --vz-rosetta \
+              || colima start --cpu 2 --memory 4 --disk 20 --arch x86_64 \
+              || colima start --cpu 2 --memory 4 --disk 20
+          else
+            colima start --cpu 2 --memory 4 --disk 20
+          fi
+          docker version
+
+      - name: Log in to GHCR for Launchpad image pulls
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Run redacted clean-install gate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY}" ]]; then
+            echo "HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY is not configured" >&2
+            exit 1
+          fi
+          bash scripts/launch/clean_install_gate.sh \
+            --release-tag "${{ inputs.release_tag }}" \
+            --artifact-run-id "${{ inputs.artifact_run_id }}" \
+            --host-kind github_macos_runner \
+            --transcript-dir /tmp/helm-launchpad-clean-install \
+            --output /tmp/helm-launchpad-clean-install/clean_install_report.json
+
+      - name: Upload redacted clean-install evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: launchpad-clean-install-report
+          path: |
+            /tmp/helm-launchpad-clean-install/clean_install_report.json
+            /tmp/helm-launchpad-clean-install/secret_fragment_audit.json
+            /tmp/helm-launchpad-clean-install/remote_audit.json
+            /tmp/helm-launchpad-clean-install/ghcr_digest_confirmations.json

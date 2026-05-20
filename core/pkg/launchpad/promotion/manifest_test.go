@@ -30,6 +30,20 @@ func TestPromoteRequiresCompleteSignedArtifactEvidence(t *testing.T) {
 	}
 }
 
+func TestOpenCodeAndKiloCodeAreEligibleOnlyWithCompleteEvidence(t *testing.T) {
+	for _, appID := range []string{"opencode", "kilocode"} {
+		t.Run(appID, func(t *testing.T) {
+			promoted, err := Promote(candidateApp(appID), validArtifact(appID), validRefsFor(appID))
+			if err != nil {
+				t.Fatalf("Promote(%s): %v", appID, err)
+			}
+			if promoted.Availability != registry.AvailabilityOSSSupported || !promoted.Conformance.FullyVerified() {
+				t.Fatalf("promotion did not produce supported fully verified app: %#v", promoted)
+			}
+		})
+	}
+}
+
 func TestPromoteRejectsMissingEvidenceRefs(t *testing.T) {
 	_, err := Promote(candidateApp("openclaw"), validArtifact("openclaw"), EvidenceRefs{LiveE2ERunID: "run"})
 	if err == nil || !strings.Contains(err.Error(), "promotion requires") {
@@ -158,10 +172,14 @@ func validArtifact(appID string) ArtifactEntry {
 }
 
 func validRefs() EvidenceRefs {
+	return validRefsFor("openclaw")
+}
+
+func validRefsFor(appID string) EvidenceRefs {
 	return EvidenceRefs{
-		ArtifactVerificationRef: "evidence://artifact-verification/openclaw",
-		LiveE2ERunID:            "launch-run-openclaw",
-		EvidencePackRef:         "evidence://pack/openclaw-local-container",
-		TeardownReceiptRef:      "receipt://teardown/openclaw",
+		ArtifactVerificationRef: "evidence://artifact-verification/" + appID,
+		LiveE2ERunID:            "launch-run-" + appID,
+		EvidencePackRef:         "evidence://pack/" + appID + "-local-container",
+		TeardownReceiptRef:      "receipt://teardown/" + appID,
 	}
 }

@@ -1,6 +1,21 @@
+---
+title: HELM Launchpad Flow Catalog
+last_reviewed: 2026-05-20
+---
+
 # HELM Launchpad Flow Catalog
 
 HELM Launchpad is the OSS local-container app launcher for AI agents. Launchpad starts apps; HELM governs execution.
+
+## Source Truth
+
+- CLI launch command: `core/cmd/helm-ai-kernel/launch_cmd.go`
+- Launchpad runtime: `core/pkg/launchpad/`
+- App registry: `registry/launchpad/apps/`
+- Substrate registry: `registry/launchpad/substrates/`
+- App policies: `policies/launchpad/apps/`
+- Release truth: `docs/launchpad/final_report.json`
+- Clean-install truth: `docs/launchpad/clean_install_report.json`
 
 ## Matrix
 
@@ -47,10 +62,13 @@ Stops containers and proxy, revokes scoped secrets, revokes sandbox grants, quar
 
 ## Current Truth
 
-[KEEP] The fail-closed Launchpad registry/session/receipt/runtime base exists.
+[KEEP] OpenClaw and Hermes are `oss_supported` from signed `v0.5.4` CI
+artifacts, live local-container e2e, teardown receipts, and offline
+EvidencePack verification.
 
 [REFACTOR] The CPI/PEP/boundary path still needs deeper action-by-action authority binding.
 
-[REWRITE] OpenClaw and Hermes live conformance must run real containers before promotion.
+[REBUILD] Clean install GA is not complete until `scripts/launch/clean_install_gate.sh`
+passes on both the macOS CI runner and a separate developer Mac.
 
-[DEFER] DigitalOcean and Hetzner stay dry-run by default.
+Deferred: DigitalOcean and Hetzner stay dry-run by default.

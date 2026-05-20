@@ -35,6 +35,8 @@ type LaunchRun struct {
 	SubstrateID         string            `json:"substrate_id"`
 	Principal           string            `json:"principal"`
 	PlanHash            string            `json:"plan_hash"`
+	ArtifactImage       string            `json:"artifact_image,omitempty"`
+	ArtifactDigest      string            `json:"artifact_digest,omitempty"`
 	State               State             `json:"state"`
 	KernelVerdict       string            `json:"kernel_verdict"`
 	Reason              string            `json:"reason,omitempty"`
@@ -52,6 +54,8 @@ type LaunchRun struct {
 	EvidencePackRefs    []string          `json:"evidence_pack_refs"`
 	RuntimeHandles      RuntimeHandles    `json:"runtime_handles"`
 	IdempotencyKeys     map[string]string `json:"idempotency_keys"`
+	VerificationCommand string            `json:"verification_command,omitempty"`
+	TeardownCommand     string            `json:"teardown_command,omitempty"`
 	LogPath             string            `json:"log_path,omitempty"`
 }
 

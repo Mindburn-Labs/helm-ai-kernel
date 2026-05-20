@@ -14,8 +14,12 @@ on:
       - ".github/workflows/launchpad-artifacts.yml"
       - "registry/launchpad/apps/openclaw.yaml"
       - "registry/launchpad/apps/hermes.yaml"
+      - "registry/launchpad/apps/opencode.yaml"
+      - "registry/launchpad/apps/kilocode.yaml"
       - "policies/launchpad/apps/openclaw.safe.toml"
       - "policies/launchpad/apps/hermes.safe.toml"
+      - "policies/launchpad/apps/opencode.safe.toml"
+      - "policies/launchpad/apps/kilocode.safe.toml"
       - "core/pkg/launchpad/**"
       - "tests/launchpad/**"
       - "tools/launchpad/artifacts/**"
@@ -52,9 +56,23 @@ jobs:
             upstream_ref: v2026.5.16
             dockerfile: helm/tools/launchpad/artifacts/hermes.Dockerfile
             license_spdx: MIT
+          - app_id: opencode
+            version: v1.15.5
+            upstream_repo: anomalyco/opencode
+            upstream_ref: v1.15.5
+            dockerfile: helm/tools/launchpad/artifacts/opencode.Dockerfile
+            license_spdx: MIT
+          - app_id: kilocode
+            version: v7.3.1
+            upstream_repo: Kilo-Org/kilocode
+            upstream_ref: v7.3.1
+            dockerfile: helm/tools/launchpad/artifacts/kilocode.Dockerfile
+            license_spdx: MIT
     outputs:
       openclaw-digest: ${{ steps.digest.outputs.openclaw_digest }}
       hermes-digest: ${{ steps.digest.outputs.hermes_digest }}
+      opencode-digest: ${{ steps.digest.outputs.opencode_digest }}
+      kilocode-digest: ${{ steps.digest.outputs.kilocode_digest }}
     steps:
       - name: Checkout HELM source
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -240,6 +258,8 @@ jobs:
           case "${{ matrix.app_id }}" in
             openclaw) echo "openclaw_digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT" ;;
             hermes) echo "hermes_digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT" ;;
+            opencode) echo "opencode_digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT" ;;
+            kilocode) echo "kilocode_digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT" ;;
           esac
 
       - name: Upload Launchpad artifact evidence
@@ -388,12 +408,14 @@ jobs:
         run: |
           set -euo pipefail
           find launchpad-artifacts -maxdepth 4 -type f -print | sort
-          openclaw_manifest="$(find launchpad-artifacts -type f -name openclaw.json -print -quit)"
-          hermes_manifest="$(find launchpad-artifacts -type f -name hermes.json -print -quit)"
           egress_manifest="$(find launchpad-artifacts -type f -name launchpad-egress-proxy.json -print -quit)"
-          test -f "${openclaw_manifest}"
-          test -f "${hermes_manifest}"
           test -f "${egress_manifest}"
+          manifests=()
+          for app in openclaw hermes opencode kilocode; do
+            manifest="$(find launchpad-artifacts -type f -name "${app}.json" -print -quit)"
+            test -f "${manifest}"
+            manifests+=("${manifest}")
+          done
           jq -s \
             --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg github_run_id "${GITHUB_RUN_ID}" \
@@ -406,7 +428,7 @@ jobs:
               github_run_attempt: $github_run_attempt,
               egress_proxy: $egress_proxy[0],
               artifacts: .
-            }' "${openclaw_manifest}" "${hermes_manifest}" > launchpad-artifact-manifest.json
+            }' "${manifests[@]}" > launchpad-artifact-manifest.json
           jq . launchpad-artifact-manifest.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -448,7 +470,8 @@ jobs:
           HELM_LAUNCHPAD_LIVE_E2E: "1"
           HELM_LAUNCHPAD_ARTIFACT_MANIFEST: /tmp/launchpad/launchpad-artifact-manifest.json
           HELM_LAUNCHPAD_LIVE_EVIDENCE_DIR: /tmp/launchpad-live-evidence
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
         run: go test ./tests/launchpad/... -run TestLiveOpenRouterLocalContainerConformance -count=1 -v
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

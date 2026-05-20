@@ -1,0 +1,77 @@
+name: Claude Managed Agents Live Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      promote_registry:
+        description: "Attempt registry promotion after evidence verification"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: read
+
+jobs:
+  live-evidence:
+    name: Daytona live evidence pack
+    runs-on: ubuntu-latest
+    environment: claude-managed-agents-live
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: core/go.mod
+
+      - name: Materialize redacted live config
+        env:
+          LIVE_CONFIG_JSON: ${{ secrets.CLAUDE_MANAGED_AGENTS_LIVE_CONFIG_JSON }}
+        run: |
+          test -n "$LIVE_CONFIG_JSON"
+          mkdir -p artifacts/claude-managed-agents-live
+          printf '%s' "$LIVE_CONFIG_JSON" > artifacts/claude-managed-agents-live/live-config.json
+
+      - name: Build kernel CLI
+        run: make build
+
+      - name: Generate live evidence pack
+        env:
+          HELM_SIGNING_KEY_HEX: ${{ secrets.HELM_SIGNING_KEY_HEX }}
+          HELM_CANDIDATE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          args=(
+            conform managed-agents claude-self-hosted
+            --provider daytona
+            --live-config artifacts/claude-managed-agents-live/live-config.json
+            --out artifacts/claude-managed-agents-live
+            --sign
+          )
+          if [ "${{ inputs.promote_registry }}" = "true" ]; then
+            args+=(--promote-registry)
+          fi
+          ./bin/helm-ai-kernel "${args[@]}"
+
+      - name: Verify evidence pack offline
+        run: |
+          ./bin/helm-ai-kernel verify \
+            --bundle artifacts/claude-managed-agents-live/evidence-pack.tar \
+            --json \
+            --json-out artifacts/claude-managed-agents-live/verify.json
+
+      - name: Upload evidence artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: claude-managed-agents-live-evidence
+          path: |
+            artifacts/claude-managed-agents-live/evidence-pack.tar
+            artifacts/claude-managed-agents-live/live-evidence-report.json
+            artifacts/claude-managed-agents-live/live-evidence-report.sig.json
+            artifacts/claude-managed-agents-live/verify.json
+          if-no-files-found: error

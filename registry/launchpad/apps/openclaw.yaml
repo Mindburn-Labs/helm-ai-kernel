@@ -9,8 +9,8 @@ redistribution: allowed_by_MIT_with_upstream_notice
 availability: oss_supported
 install:
     strategy: signed_oci
-    image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501
-    digest: sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501
+    image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:c5b6d872798514cab6e1a27f9f168aa4c38adb7166d711d49fd2a501aec8b1f9
+    digest: sha256:c5b6d872798514cab6e1a27f9f168aa4c38adb7166d711d49fd2a501aec8b1f9
     source: https://github.com/openclaw/openclaw
     ref: v2026.5.12
 runtime:
@@ -67,18 +67,18 @@ evidence_requirements:
     - syft_sbom
     - grype_vulnerability_scan
 supply_chain_evidence:
-    artifact_digest: sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501
+    artifact_digest: sha256:c5b6d872798514cab6e1a27f9f168aa4c38adb7166d711d49fd2a501aec8b1f9
     signature_tool: cosign
-    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501
+    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:c5b6d872798514cab6e1a27f9f168aa4c38adb7166d711d49fd2a501aec8b1f9
     sbom_tool: syft
     sbom_ref: artifact://sbom-openclaw.spdx.json
     vulnerability_scan_tool: grype
     vulnerability_scan_ref: artifact://grype-openclaw.json
 promotion_evidence:
-    artifact_verification_ref: github-actions://26179980172/1/artifact-verification/openclaw
-    live_e2e_run_id: github-actions://26179980172/1/live-e2e/openclaw
-    evidence_pack_ref: github-actions://26179980172/1/evidencepack/openclaw
-    teardown_receipt_ref: github-actions://26179980172/1/teardown/openclaw
+    artifact_verification_ref: github-actions://26186959337/1/artifact-verification/openclaw
+    live_e2e_run_id: github-actions://26186959337/1/live-e2e/openclaw
+    evidence_pack_ref: github-actions://26186959337/1/evidencepack/openclaw
+    teardown_receipt_ref: github-actions://26186959337/1/teardown/openclaw
 conformance:
     license_verified: true
     artifact_verified: true
@@ -90,10 +90,11 @@ conformance:
     receipt_verified: true
     evidence_pack_verified: true
 metadata:
+    artifact_workflow_run: github-actions://26186959337/1
     helm_oci_status: promoted_from_signed_ci_artifact_manifest
     helm_oci_target: ghcr.io/mindburn-labs/helm-launchpad/openclaw:v2026.5.12
     latest_release: v2026.5.12
-    promotion_provenance_ref: github-actions://26179980172/1
+    promotion_provenance_ref: github-actions://26186959337/1
     release_published_at: "2026-05-14T18:28:04Z"
     upstream_commit: f066dd2f31c231f38fbcaacd6f6dfce0801143b3
     upstream_repo: https://github.com/openclaw/openclaw

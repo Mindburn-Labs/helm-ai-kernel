@@ -114,7 +114,7 @@ func TestHistoricalLaunchpadReportsDeclareSupersededTruth(t *testing.T) {
 	jsonReport := readDoc(t, root, "docs/launchpad/final_report.json")
 	requireContains(t, jsonReport, `"historical_report": true`)
 	requireContains(t, jsonReport, `"superseded_by": "docs/launchpad/v1_report.json"`)
-	requireContains(t, jsonReport, `"artifact_workflow_run_id": "26179980172"`)
+	requireContains(t, jsonReport, `"artifact_workflow_run_id": "26186959337"`)
 	requireContains(t, jsonReport, `"opencode"`)
 	requireContains(t, jsonReport, `"kilocode"`)
 }
@@ -126,9 +126,12 @@ func TestLaunchpadClaimsDoNotOverstateIsolationEgressOrWebSocketMCP(t *testing.T
 		"SECURITY_REVIEW.md",
 		"FINAL_IMPLEMENTATION_REPORT.md",
 		"THREAT_MODEL_ADDENDUM.md",
+		"v1_report.json",
 	} {
 		body := strings.ToLower(readLaunchpadDoc(t, root, rel))
 		for _, forbidden := range []string{
+			"market_best",
+			"best on market",
 			"no sensitive prompt data left",
 			"hostile-agent-grade docker",
 			"websocket mcp is supported",

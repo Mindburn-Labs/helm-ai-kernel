@@ -38,10 +38,11 @@ jobs:
       - name: Start Docker-compatible local-container runtime
         run: |
           set -euo pipefail
+          colima delete -f >/dev/null 2>&1 || true
           if [[ "$(uname -m)" == "arm64" ]]; then
             colima start --cpu 2 --memory 4 --disk 20 --arch x86_64 --vm-type=vz --vz-rosetta \
-              || colima start --cpu 2 --memory 4 --disk 20 --arch x86_64 \
-              || colima start --cpu 2 --memory 4 --disk 20
+              || { colima delete -f >/dev/null 2>&1 || true; colima start --cpu 2 --memory 4 --disk 20 --arch x86_64; } \
+              || { colima delete -f >/dev/null 2>&1 || true; colima start --cpu 2 --memory 4 --disk 20; }
           else
             colima start --cpu 2 --memory 4 --disk 20
           fi

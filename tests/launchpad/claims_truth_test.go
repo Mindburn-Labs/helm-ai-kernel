@@ -55,7 +55,8 @@ func TestLaunchpadClaimsMarketPromotedAppsAsSupported(t *testing.T) {
 	cleanWorkflow := readDoc(t, root, ".github/workflows/launchpad-clean-install.yml")
 	requireContains(t, cleanWorkflow, "default: v0.5.5")
 	requireContains(t, cleanWorkflow, `default: "26186959337"`)
-	requireContains(t, cleanWorkflow, "brew install colima docker jq qemu")
+	requireContains(t, cleanWorkflow, "brew install colima docker jq qemu lima-additional-guestagents")
+	requireContains(t, cleanWorkflow, "colima delete -f")
 
 	artifactWorkflow := readDoc(t, root, ".github/workflows/launchpad-artifacts.yml")
 	requireContains(t, artifactWorkflow, "run_candidate_live_conformance")

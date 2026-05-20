@@ -94,8 +94,8 @@ The retained workflow set under `.github/workflows/` covers:
 - GHCR image publication for `latest`, version tag, and slim tag
 - manual publication workflows for npm, PyPI, crates.io, and Maven-compatible distribution
 
-Current public GitHub release: `v0.5.3`, published on 2026-05-19 at
-22:23 UTC: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.3>.
+Current public GitHub release: `v0.5.4`, published on 2026-05-19 at
+23:50 UTC: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.4>.
 
 There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
 actual release baseline when auditing the `v0.5.0` delta.
@@ -109,19 +109,19 @@ Its attached assets are:
 - `helm-ai-kernel-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.5.3.openvex.json`
+- `v0.5.4.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
 - `sample-policy-material.tar`
 - `helm-ai-kernel.mcpb`
 - `helm-ai-kernel.rb`
-- `v0.5.3.json`
+- `v0.5.4.json`
 - matching `*.cosign.bundle` files for every primary asset
 
 `sample-policy-material.tar` includes the sample policy and its referenced EU
-AI Act high-risk reference pack. The `v0.5.3` release attaches a
-`helm-ai-kernel.rb` formula asset for version `0.5.3`; verify the public
+AI Act high-risk reference pack. The `v0.5.4` release attaches a
+`helm-ai-kernel.rb` formula asset for version `0.5.4`; verify the public
 `mindburnlabs/homebrew-tap` state before documenting
 `brew install mindburnlabs/tap/helm-ai-kernel` as current.
 
@@ -144,7 +144,7 @@ writes the final `SHA256SUMS.txt`.
 ## Verification
 
 Every public release must include enough material to verify what was downloaded.
-For `v0.5.3`, use `SHA256SUMS.txt`, `sbom.json`, `v0.5.3.openvex.json`,
+For `v0.5.4`, use `SHA256SUMS.txt`, `sbom.json`, `v0.5.4.openvex.json`,
 `release-attestation.json`, the platform binary assets, attached
 `*.cosign.bundle` files, and the offline `evidence-pack.tar`.
 

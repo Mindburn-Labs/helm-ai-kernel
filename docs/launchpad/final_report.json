@@ -1,15 +1,17 @@
 {
-  "status": "production_release_published_homebrew_pr_open",
+  "status": "production_release_published",
   "mission_scope": "HELM OSS Skill Packs MVP plus HELM Launchpad OpenClaw/Hermes local-container production release, with HELM Commercial Launchpad/Skills governance surfaces merged",
   "production_ready": true,
-  "mission_100_percent_complete": false,
-  "release_distribution_complete": false,
-  "generated_at": "2026-05-20T01:06:39Z",
+  "mission_100_percent_complete": true,
+  "release_distribution_complete": true,
+  "generated_at": "2026-05-20T01:31:09Z",
   "kernel_branch": "main",
   "kernel_head": "0b60353c50eda54454fbb90e3e5ccd9db952ef8b",
   "kernel_release": "v0.5.4",
   "kernel_release_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.4",
   "kernel_release_workflow": "26131090671",
+  "homebrew_tap_pr": "https://github.com/mindburnlabs/homebrew-tap/pull/2",
+  "homebrew_tap_merge_commit": "b0b6244170d867dececc7c5576c174914fc661d1",
   "enterprise_branch": "main",
   "enterprise_merge_commit": "89f319bae0d2186acd76b7e5764ade881a8650e1",
   "enterprise_pr": "https://github.com/Mindburn-Labs/helm-ai-enterprise/pull/30",
@@ -100,7 +102,6 @@
     "Enterprise Launchpad and Skills APIs, OpenAPI/route parity, migrations, durable store, Console Launchpad feature, Playwright coverage, and approved OSS boundary sync"
   ],
   "not_implemented": [
-    "Homebrew tap merge is blocked on repository permissions; PR https://github.com/mindburnlabs/homebrew-tap/pull/2 is open with the v0.5.4 formula",
     "Mindburn public website claims are intentionally blocked until docs-truth and owner review approve a public claims update",
     "Live DigitalOcean and Hetzner writes are opt-in only and are not required for this production release",
     "OpenCode and Kilo Code are not promoted because they have not passed the OpenClaw/Hermes evidence bar",
@@ -157,7 +158,6 @@
   ],
   "tests_failing": [],
   "risks_remaining": [
-    "Homebrew tap remains on v0.5.0 until https://github.com/mindburnlabs/homebrew-tap/pull/2 is merged by a tap maintainer",
     "public website claims remain blocked until docs-truth and owner review approve concrete evidence-backed claims",
     "Live cloud writes are intentionally excluded from normal gates",
     "Node.js 20 deprecation warnings are emitted by pinned upstream actions forced to Node 24; they are warnings, not failed gates"
@@ -183,7 +183,7 @@
     "v0.5.4 release assets, checksums, Cosign bundles, SBOM, OpenVEX, release attestation, Homebrew formula asset, and EvidencePack are available",
     "v0.5.4 release EvidencePack verifies offline",
     "Enterprise PR #30 merged",
-    "Homebrew tap PR https://github.com/mindburnlabs/homebrew-tap/pull/2 is open and awaiting maintainer merge",
+    "Homebrew tap PR https://github.com/mindburnlabs/homebrew-tap/pull/2 merged",
     "public website claims remain blocked until docs-truth passes on main and owner review approves"
   ],
   "follow_up_prs": [

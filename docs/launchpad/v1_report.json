@@ -24,7 +24,7 @@
     "candidate_recipe_base_images_pinned": true,
     "signed_artifact_ci_status": "passed",
     "live_local_container_conformance_status": "github_actions_run_26171107990_openclaw_hermes_passed_opencode_kilocode_timed_out_on_container_pull_start_before_timeout_patch",
-    "live_local_container_gate_patch": "workflow_default_live_apps_openclaw_hermes_candidate_apps_opt_in_only_with_configurable_timeout_for_candidate_cold_pulls",
+    "live_local_container_gate_patch": "workflow_default_live_apps_and_artifact_matrix_openclaw_hermes_candidate_apps_opt_in_only_with_configurable_timeout_for_candidate_cold_pulls",
     "homebrew_clean_install_status": "current_v0_5_4_failed_registry_root_missing_branch_fix_committed_for_next_release",
     "clean_install_supported_apps": [
       "openclaw",

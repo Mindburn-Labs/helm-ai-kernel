@@ -13,6 +13,11 @@ on:
         required: false
         default: false
         type: boolean
+      include_candidate_artifacts:
+        description: Also build artifact-only OpenCode/Kilo Code candidate images
+        required: false
+        default: false
+        type: boolean
   push:
     branches: ["main"]
     paths:
@@ -38,41 +43,78 @@ env:
   IMAGE_PREFIX: mindburn-labs/helm-launchpad
 
 jobs:
+  artifact-matrix:
+    name: Resolve Launchpad artifact matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - id: matrix
+        run: |
+          set -euo pipefail
+          cat > matrix.json <<'JSON'
+          {
+            "include": [
+              {
+                "app_id": "openclaw",
+                "version": "v2026.5.12",
+                "upstream_repo": "openclaw/openclaw",
+                "upstream_ref": "v2026.5.12",
+                "dockerfile": "helm/tools/launchpad/artifacts/openclaw.Dockerfile",
+                "license_spdx": "MIT"
+              },
+              {
+                "app_id": "hermes",
+                "version": "v2026.5.16",
+                "upstream_repo": "NousResearch/hermes-agent",
+                "upstream_ref": "v2026.5.16",
+                "dockerfile": "helm/tools/launchpad/artifacts/hermes.Dockerfile",
+                "license_spdx": "MIT"
+              }
+            ]
+          }
+          JSON
+          include_candidates=0
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
+            include_candidates=1
+          fi
+          if [[ "${{ inputs.include_candidate_artifacts }}" == "true" || "${{ inputs.run_candidate_live_conformance }}" == "true" ]]; then
+            include_candidates=1
+          fi
+          if [[ "${include_candidates}" -eq 1 ]]; then
+            jq '.include += [
+              {
+                "app_id": "opencode",
+                "version": "v1.15.5",
+                "upstream_repo": "anomalyco/opencode",
+                "upstream_ref": "v1.15.5",
+                "dockerfile": "helm/tools/launchpad/artifacts/opencode.Dockerfile",
+                "license_spdx": "MIT"
+              },
+              {
+                "app_id": "kilocode",
+                "version": "v7.3.1",
+                "upstream_repo": "Kilo-Org/kilocode",
+                "upstream_ref": "v7.3.1",
+                "dockerfile": "helm/tools/launchpad/artifacts/kilocode.Dockerfile",
+                "license_spdx": "MIT"
+              }
+            ]' matrix.json > matrix-expanded.json
+            mv matrix-expanded.json matrix.json
+          fi
+          echo "matrix=$(jq -c . matrix.json)" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build and sign ${{ matrix.app_id }}
     runs-on: ubuntu-latest
+    needs: artifact-matrix
     permissions:
       contents: read
       id-token: write
       packages: write
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - app_id: openclaw
-            version: v2026.5.12
-            upstream_repo: openclaw/openclaw
-            upstream_ref: v2026.5.12
-            dockerfile: helm/tools/launchpad/artifacts/openclaw.Dockerfile
-            license_spdx: MIT
-          - app_id: hermes
-            version: v2026.5.16
-            upstream_repo: NousResearch/hermes-agent
-            upstream_ref: v2026.5.16
-            dockerfile: helm/tools/launchpad/artifacts/hermes.Dockerfile
-            license_spdx: MIT
-          - app_id: opencode
-            version: v1.15.5
-            upstream_repo: anomalyco/opencode
-            upstream_ref: v1.15.5
-            dockerfile: helm/tools/launchpad/artifacts/opencode.Dockerfile
-            license_spdx: MIT
-          - app_id: kilocode
-            version: v7.3.1
-            upstream_repo: Kilo-Org/kilocode
-            upstream_ref: v7.3.1
-            dockerfile: helm/tools/launchpad/artifacts/kilocode.Dockerfile
-            license_spdx: MIT
+      matrix: ${{ fromJson(needs.artifact-matrix.outputs.matrix) }}
     outputs:
       openclaw-digest: ${{ steps.digest.outputs.openclaw_digest }}
       hermes-digest: ${{ steps.digest.outputs.hermes_digest }}
@@ -416,10 +458,16 @@ jobs:
           egress_manifest="$(find launchpad-artifacts -type f -name launchpad-egress-proxy.json -print -quit)"
           test -f "${egress_manifest}"
           manifests=()
-          for app in openclaw hermes opencode kilocode; do
+          for app in openclaw hermes; do
             manifest="$(find launchpad-artifacts -type f -name "${app}.json" -print -quit)"
             test -f "${manifest}"
             manifests+=("${manifest}")
+          done
+          for app in opencode kilocode; do
+            manifest="$(find launchpad-artifacts -type f -name "${app}.json" -print -quit)"
+            if [[ -n "${manifest}" ]]; then
+              manifests+=("${manifest}")
+            fi
           done
           jq -s \
             --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \

@@ -48,6 +48,8 @@ func TestLaunchpadClaimsDoNotMarketCandidateAppsAsSupported(t *testing.T) {
 
 	artifactWorkflow := readDoc(t, root, ".github/workflows/launchpad-artifacts.yml")
 	requireContains(t, artifactWorkflow, "run_candidate_live_conformance")
+	requireContains(t, artifactWorkflow, "include_candidate_artifacts")
+	requireContains(t, artifactWorkflow, "Resolve Launchpad artifact matrix")
 	requireContains(t, artifactWorkflow, "openclaw,hermes")
 	requireContains(t, artifactWorkflow, "opencode,kilocode")
 	requireContains(t, artifactWorkflow, "artifact_only_no_live_conformance")

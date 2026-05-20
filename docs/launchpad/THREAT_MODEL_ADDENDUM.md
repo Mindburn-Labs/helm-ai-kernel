@@ -46,12 +46,15 @@ side-effect tools without approval receipts, and unapproved servers.
 WebSocket MCP is not a supported Launchpad transport. Any future WebSocket path
 must be added to the mediation proof harness before it appears in public claims.
 
-## Candidate Apps
+## Supported App Claim Boundary
 
-OpenCode and Kilo Code remain `oss_candidate` until signed artifact evidence,
-live local-container healthcheck, teardown receipt, receipt verification, and
-offline EvidencePack verification all pass. They must not be marketed as
-supported before those refs are present in the registry.
+OpenClaw, Hermes, OpenCode, and Kilo Code are the current `oss_supported`
+local-container set after workflow `26179980172` passed signed artifact build,
+SBOM, vulnerability scan, live OpenRouter launch, teardown, and offline
+EvidencePack verification for all four apps.
+
+Any app outside that four-app set remains non-marketable as supported until the
+same evidence refs are present in the registry and the docs-truth gate passes.
 
 ## External Risk Frame
 

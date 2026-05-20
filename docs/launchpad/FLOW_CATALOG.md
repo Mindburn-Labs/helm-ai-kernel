@@ -25,7 +25,7 @@ available.
 - App registry: `registry/launchpad/apps/`
 - Substrate registry: `registry/launchpad/substrates/`
 - App policies: `policies/launchpad/apps/`
-- Release truth: `docs/launchpad/final_report.json`
+- Release truth: `docs/launchpad/v1_report.json`
 - Clean-install truth: `docs/launchpad/clean_install_report.json`
 
 ```mermaid
@@ -84,14 +84,14 @@ Stops containers and proxy, revokes scoped secrets, revokes sandbox grants, quar
 
 ## Current Truth
 
-[KEEP] OpenClaw and Hermes are `oss_supported` from signed `v0.5.4` CI
-artifacts, live local-container e2e, teardown receipts, and offline
-EvidencePack verification.
+[KEEP] OpenClaw, Hermes, OpenCode, and Kilo Code are `oss_supported` from
+workflow `26179980172`, with signed artifacts, live local-container e2e,
+teardown receipts, and offline EvidencePack verification.
 
 [REFACTOR] The CPI/PEP/boundary path still needs deeper action-by-action authority binding.
 
 [REBUILD] Clean install GA is not complete until `scripts/launch/clean_install_gate.sh`
-passes on both the macOS CI runner and a separate developer Mac.
+passes against `v0.5.5` on both the macOS CI runner and a separate developer Mac.
 
 Deferred: DigitalOcean and Hetzner stay dry-run by default.
 

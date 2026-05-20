@@ -3,8 +3,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REPO="${HELM_LAUNCHPAD_GITHUB_REPO:-Mindburn-Labs/helm-ai-kernel}"
-RELEASE_TAG="v0.5.4"
-ARTIFACT_RUN_ID="26110916296"
+RELEASE_TAG="v0.5.5"
+ARTIFACT_RUN_ID="26179980172"
 HOST_KIND="developer_macos"
 OUTPUT="$ROOT/docs/launchpad/clean_install_report.json"
 TRANSCRIPT_DIR="${TMPDIR:-/tmp}/helm-launchpad-clean-install"
@@ -17,8 +17,8 @@ usage() {
 Usage: scripts/launch/clean_install_gate.sh [options]
 
 Options:
-  --release-tag <tag>       Release tag to validate (default: v0.5.4)
-  --artifact-run-id <id>    Launchpad artifact workflow run (default: 26110916296)
+  --release-tag <tag>       Release tag to validate (default: v0.5.5)
+  --artifact-run-id <id>    Launchpad artifact workflow run (default: 26179980172)
   --host-kind <kind>        developer_macos or github_macos_runner
   --output <path>           Redacted JSON report path
   --transcript-dir <path>   Directory for redacted command output and audit inputs
@@ -231,7 +231,6 @@ commands = read_jsonl(commands_path)
 evidence = read_jsonl(evidence_path)
 launch_ids = {item["app_id"]: item["launch_id"] for item in read_jsonl(launch_ids_path)}
 failed = [item["name"] for item in commands if item.get("exit_code") != 0]
-candidate_promotion_included = any(item["name"] in ("launch_opencode", "launch_kilocode") for item in commands)
 report = {
     "schema_version": 1,
     "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
@@ -240,9 +239,10 @@ report = {
     "artifact_workflow_run_id": artifact_run_id,
     "host_kind": host_kind,
     "status": status,
-    "supported_apps": ["openclaw", "hermes"],
-    "candidate_promotion_apps": ["opencode", "kilocode"],
-    "candidate_promotion_included": candidate_promotion_included,
+    "supported_apps": ["openclaw", "hermes", "opencode", "kilocode"],
+    "candidate_promotion_apps": [],
+    "candidate_promotion_included": False,
+    "deprecated_include_candidates_flag": "accepted_noop_all_four_apps_are_supported",
     "commands": commands,
     "launch_ids": launch_ids,
     "ghcr_digest_confirmations": read_json(ghcr_path, []),

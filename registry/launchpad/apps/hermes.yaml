@@ -9,8 +9,8 @@ redistribution: allowed_by_MIT_with_upstream_notice
 availability: oss_supported
 install:
     strategy: signed_oci
-    image: ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527
-    digest: sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527
+    image: ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:11bb3893d8466b9abe2cea7f65c734647d86177908b38ea55edceb056944ee7f
+    digest: sha256:11bb3893d8466b9abe2cea7f65c734647d86177908b38ea55edceb056944ee7f
     source: https://github.com/NousResearch/hermes-agent
     ref: v2026.5.16
 runtime:
@@ -67,18 +67,18 @@ evidence_requirements:
     - syft_sbom
     - grype_vulnerability_scan
 supply_chain_evidence:
-    artifact_digest: sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527
+    artifact_digest: sha256:11bb3893d8466b9abe2cea7f65c734647d86177908b38ea55edceb056944ee7f
     signature_tool: cosign
-    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527
+    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:11bb3893d8466b9abe2cea7f65c734647d86177908b38ea55edceb056944ee7f
     sbom_tool: syft
     sbom_ref: artifact://sbom-hermes.spdx.json
     vulnerability_scan_tool: grype
     vulnerability_scan_ref: artifact://grype-hermes.json
 promotion_evidence:
-    artifact_verification_ref: github-actions://26110916296/1/artifact-verification/hermes
-    live_e2e_run_id: github-actions://26110916296/1/live-e2e/hermes
-    evidence_pack_ref: github-actions://26110916296/1/evidencepack/hermes
-    teardown_receipt_ref: github-actions://26110916296/1/teardown/hermes
+    artifact_verification_ref: github-actions://26179980172/1/artifact-verification/hermes
+    live_e2e_run_id: github-actions://26179980172/1/live-e2e/hermes
+    evidence_pack_ref: github-actions://26179980172/1/evidencepack/hermes
+    teardown_receipt_ref: github-actions://26179980172/1/teardown/hermes
 conformance:
     license_verified: true
     artifact_verified: true
@@ -93,7 +93,7 @@ metadata:
     helm_oci_status: promoted_from_signed_ci_artifact_manifest
     helm_oci_target: ghcr.io/mindburn-labs/helm-launchpad/hermes:v2026.5.16
     latest_release: v2026.5.16
-    promotion_provenance_ref: github-actions://26110916296/1
+    promotion_provenance_ref: github-actions://26179980172/1
     release_published_at: "2026-05-16T09:59:15Z"
     upstream_commit: a91a57fa5a13d516c38b07a141a9ce8a3daabeb0
     upstream_repo: https://github.com/NousResearch/hermes-agent

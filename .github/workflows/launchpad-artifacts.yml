@@ -9,12 +9,12 @@ on:
         default: false
         type: boolean
       run_candidate_live_conformance:
-        description: Also run candidate OpenCode/Kilo Code live conformance
+        description: Deprecated no-op; OpenCode/Kilo Code are in the supported live set
         required: false
         default: false
         type: boolean
       include_candidate_artifacts:
-        description: Also build artifact-only OpenCode/Kilo Code candidate images
+        description: Deprecated no-op; all four supported app artifacts are always built
         required: false
         default: false
         type: boolean

@@ -5,12 +5,12 @@ last_reviewed: 2026-05-20
 
 # Launchpad Clean Install GA
 
-Status: v0.5.5 gate implemented; v1.0 promotes OpenClaw, Hermes, OpenCode,
-and Kilo Code into the supported-app clean-install set after workflow
+Status: v0.5.5 gate implemented; v1 promotes OpenClaw, Hermes, OpenCode, and
+Kilo Code into the supported-app clean-install set after workflow
 `26179980172` passed signed artifact, live conformance, teardown, receipts, and
 offline EvidencePack verification.
 
-Launchpad GA is a product-adoption gate for the `v0.5.4` release. It proves the
+Launchpad GA is a product-adoption gate for the `v0.5.5` release. It proves the
 Homebrew package, signed Launchpad artifacts, local-container app launcher,
 MCP interceptor posture, signed receipts, teardown, and offline EvidencePack
 verification survive a machine that did not build the release.
@@ -29,11 +29,10 @@ offline verification.
 
 ## Source Truth
 
-- Release: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.4>
-- Launchpad artifact workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26110916296>
-- Release workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26131090671>
-- Homebrew tap PR: <https://github.com/mindburnlabs/homebrew-tap/pull/2>
-- Final release report: `docs/launchpad/final_report.json`
+- Release target: `v0.5.5`
+- Current four-app Launchpad artifact workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26179980172>
+- Current Launchpad v1 report: `docs/launchpad/v1_report.json`
+- Historical `v0.5.4` release report: `docs/launchpad/final_report.json`
 - Clean-install report: `docs/launchpad/clean_install_report.json`
 
 ```mermaid
@@ -76,8 +75,8 @@ Use the repo-native gate to collect redacted evidence:
 ```bash
 export HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY='<fresh CI-only key>'
 bash scripts/launch/clean_install_gate.sh \
-  --release-tag v0.5.4 \
-  --artifact-run-id 26110916296 \
+  --release-tag v0.5.5 \
+  --artifact-run-id 26179980172 \
   --host-kind developer_macos \
   --output docs/launchpad/clean_install_report.json
 ```
@@ -109,8 +108,8 @@ Manual CI entrypoint:
 ```bash
 gh workflow run launchpad-clean-install.yml \
   --repo Mindburn-Labs/helm-ai-kernel \
-  -f release_tag=v0.5.4 \
-  -f artifact_run_id=26110916296
+  -f release_tag=v0.5.5 \
+  -f artifact_run_id=26179980172
 ```
 
 The CI report is a repeatability signal. The separate clean Mac report remains

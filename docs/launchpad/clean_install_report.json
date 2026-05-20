@@ -1,5 +1,6 @@
 {
   "artifact_workflow_run_id": "26110916296",
+  "current_four_app_artifact_workflow_run_id": "26179980172",
   "canonical_user_machine": {
     "evidence_artifact": null,
     "status": "BLOCKED_CURRENT_V0_5_4_PACKAGE_REGISTRY_ROOT_MISSING"
@@ -76,6 +77,13 @@
     "status": "NOT_RUN_BECAUSE_CURRENT_PACKAGE_FAILED_BEFORE_LAUNCH"
   },
   "status": "FAILED_CURRENT_V0_5_4_HOMEBREW_PACKAGING_FIXED_FOR_NEXT_RELEASE",
+  "current_supported_apps": [
+    "openclaw",
+    "hermes",
+    "opencode",
+    "kilocode"
+  ],
+  "next_release_target": "v0.5.5",
   "digitalocean_clean_operator": {
     "status": "FAILED_CURRENT_V0_5_4_PACKAGE_REGISTRY_ROOT_MISSING",
     "region": "nyc3",

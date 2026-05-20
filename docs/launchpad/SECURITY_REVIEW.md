@@ -1,7 +1,8 @@
 # Launchpad Security Review
 
-Status: `v0.5.4` production release review passed for OpenClaw and Hermes
-local-container support; public GA remains gated on clean-install evidence.
+Status: Launchpad v1 local-container review passes for OpenClaw, Hermes,
+OpenCode, and Kilo Code from workflow `26179980172`. The `v0.5.5`
+clean-install gate remains the package/install release gate.
 
 ## Results
 
@@ -13,9 +14,10 @@ local-container support; public GA remains gated on clean-install evidence.
   SBOM, grype/trivy scan, provenance, live e2e, EvidencePack, and teardown refs.
 - [KEEP] Promotion refs must be tied to the same GitHub workflow run as the
   artifact manifest; stale or unrelated evidence refs are rejected.
-- [KEEP] OpenClaw and Hermes are promoted to `oss_supported` from signed CI
-  artifacts and live local-container evidence.
-- [KEEP] OpenCode and Kilo Code remain `oss_candidate`.
+- [KEEP] OpenClaw, Hermes, OpenCode, and Kilo Code are promoted to
+  `oss_supported` from signed CI artifacts, live local-container evidence,
+  teardown receipts, and offline EvidencePack verification in workflow
+  `26179980172`.
 - [KEEP] Codex, Claude Code, Cursor, and Junie remain external/BYO adapters; no
   proprietary redistribution claim is made.
 - [KEEP] CLI/API launch path returns `ESCALATE` for missing required secrets and
@@ -97,8 +99,7 @@ local-container support; public GA remains gated on clean-install evidence.
   reconciliation logic level only, not against real providers.
 - [DEFER] Network egress bypass and container escape need continued live
   container tests as the app catalog expands.
-- [DEFER] OpenCode and Kilo Code must pass the OpenClaw/Hermes evidence bar
-  before promotion.
+- [DEFER] Additional apps must pass the four-app evidence bar before promotion.
 - [DEFER] Third-party red-team and audit evidence is required before any
   category-leading public claim.
 
@@ -110,7 +111,10 @@ secrets, quarantines MCP by default, requires promotion evidence, validates
 skill metadata/policies, and emits signed receipts plus hash-chained
 EvidencePacks for the paths it exercises.
 
-[KEEP] OpenClaw and Hermes are release-backed for `local-container` in `v0.5.4`.
+[KEEP] OpenClaw, Hermes, OpenCode, and Kilo Code are artifact-backed for
+`local-container` Launchpad v1 support. The next package release must be
+`v0.5.5` because `v0.5.4` is already published and its clean-install Homebrew
+path lacked packaged Launchpad registry/policy data.
 
 [DEFER] Public GA claims remain blocked until the clean-install gate records a
 passing separate-Mac report and the public docs/website checks pass.

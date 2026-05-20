@@ -42,10 +42,16 @@ func TestLaunchpadClaimsMarketPromotedAppsAsSupported(t *testing.T) {
 	cleanGate := readDoc(t, root, "scripts/launch/clean_install_gate.sh")
 	requireContains(t, cleanGate, "SUPPORTED_APPS=(openclaw hermes opencode kilocode)")
 	requireContains(t, cleanGate, "--include-candidates")
+	requireContains(t, cleanGate, `RELEASE_TAG="v0.5.5"`)
+	requireContains(t, cleanGate, `ARTIFACT_RUN_ID="26179980172"`)
+	requireContains(t, cleanGate, `"supported_apps": ["openclaw", "hermes", "opencode", "kilocode"]`)
+	requireContains(t, cleanGate, `"candidate_promotion_apps": []`)
+	requireContains(t, cleanGate, `"deprecated_include_candidates_flag": "accepted_noop_all_four_apps_are_supported"`)
 
 	artifactWorkflow := readDoc(t, root, ".github/workflows/launchpad-artifacts.yml")
 	requireContains(t, artifactWorkflow, "run_candidate_live_conformance")
 	requireContains(t, artifactWorkflow, "include_candidate_artifacts")
+	requireContains(t, artifactWorkflow, "Deprecated no-op")
 	requireContains(t, artifactWorkflow, "Resolve Launchpad artifact matrix")
 	requireContains(t, artifactWorkflow, "openclaw,hermes,opencode,kilocode")
 	requireContains(t, artifactWorkflow, "opencode,kilocode")
@@ -64,6 +70,47 @@ func TestLiveConformanceDefaultsToSupportedAppsOnly(t *testing.T) {
 
 	t.Setenv("HELM_LAUNCHPAD_LIVE_APPS", " openclaw , hermes ")
 	assertStringList(t, liveConformanceAppIDs(), []string{"openclaw", "hermes"})
+}
+
+func TestLaunchpadCurrentDocsDoNotUseStaleCandidateLanguage(t *testing.T) {
+	root := repoRoot(t)
+	for _, doc := range []string{
+		"docs/LAUNCHPAD.md",
+		"docs/launchpad/APP_SPEC.md",
+		"docs/launchpad/CLEAN_INSTALL_GA.md",
+		"docs/launchpad/CONFORMANCE.md",
+		"docs/launchpad/FLOW_CATALOG.md",
+		"docs/launchpad/SECURITY_REVIEW.md",
+		"docs/launchpad/THREAT_MODEL_ADDENDUM.md",
+	} {
+		body := readDoc(t, root, doc)
+		for _, stale := range []string{
+			"OpenCode and Kilo Code remain `oss_candidate`",
+			"OpenCode and Kilo Code remain oss_candidate",
+			"OpenCode and Kilo Code must pass",
+			"OpenClaw and Hermes are release-backed",
+			"OpenClaw and Hermes are `oss_supported` from signed `v0.5.4`",
+		} {
+			requireNotContains(t, body, stale, doc)
+		}
+	}
+}
+
+func TestHistoricalLaunchpadReportsDeclareSupersededTruth(t *testing.T) {
+	root := repoRoot(t)
+	report := readDoc(t, root, "docs/launchpad/FINAL_IMPLEMENTATION_REPORT.md")
+	requireContains(t, report, "historical `v0.5.4` production report")
+	requireContains(t, report, "This file is not the current Launchpad GA support truth")
+	requireContains(t, report, "docs/launchpad/v1_report.json")
+	requireContains(t, report, "OpenClaw, Hermes,")
+	requireContains(t, report, "OpenCode, and Kilo Code are `oss_supported`")
+
+	jsonReport := readDoc(t, root, "docs/launchpad/final_report.json")
+	requireContains(t, jsonReport, `"historical_report": true`)
+	requireContains(t, jsonReport, `"superseded_by": "docs/launchpad/v1_report.json"`)
+	requireContains(t, jsonReport, `"artifact_workflow_run_id": "26179980172"`)
+	requireContains(t, jsonReport, `"opencode"`)
+	requireContains(t, jsonReport, `"kilocode"`)
 }
 
 func TestLaunchpadClaimsDoNotOverstateIsolationEgressOrWebSocketMCP(t *testing.T) {
@@ -105,6 +152,13 @@ func requireContains(t *testing.T, content, want string) {
 	t.Helper()
 	if !strings.Contains(content, want) {
 		t.Fatalf("expected content to contain %q", want)
+	}
+}
+
+func requireNotContains(t *testing.T, content, forbidden, doc string) {
+	t.Helper()
+	if strings.Contains(content, forbidden) {
+		t.Fatalf("%s contains stale claim %q", doc, forbidden)
 	}
 }
 

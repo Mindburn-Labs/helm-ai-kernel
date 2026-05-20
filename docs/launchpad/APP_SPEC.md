@@ -39,6 +39,8 @@ Supported means all of the following are present and registry-validated:
 - hash-chained EvidencePack graph;
 - offline `helm-ai-kernel verify --bundle <pack>` pass.
 
-OpenCode and Kilo Code remain `oss_candidate` even though their signed artifact
-metadata exists, because live local-container conformance and offline
-EvidencePack verification are still pending.
+OpenClaw, Hermes, OpenCode, and Kilo Code are the current `oss_supported`
+local-container set after workflow `26179980172` produced signed artifacts,
+live conformance, teardown receipts, and offline EvidencePack verification for
+all four. Any additional app remains non-supported until it meets the same
+registry-validated evidence bar.

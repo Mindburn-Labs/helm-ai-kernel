@@ -121,8 +121,15 @@ collect_remote_audit_inputs() {
       > "$TRANSCRIPT_DIR/audit/release-download.stdout" 2> "$TRANSCRIPT_DIR/audit/release-download.stderr" || status="FAIL"
     gh run view "$ARTIFACT_RUN_ID" --repo "$REPO" --log \
       > "$TRANSCRIPT_DIR/audit/logs/launchpad-artifacts.log" 2> "$TRANSCRIPT_DIR/audit/logs/launchpad-artifacts.stderr" || status="FAIL"
-    gh run view 26131090671 --repo "$REPO" --log \
-      > "$TRANSCRIPT_DIR/audit/logs/release.log" 2> "$TRANSCRIPT_DIR/audit/logs/release.stderr" || status="FAIL"
+    local release_run_id
+    release_run_id="$(gh run list --repo "$REPO" --workflow release.yml --branch "$RELEASE_TAG" --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)"
+    if [[ -n "$release_run_id" ]]; then
+      gh run view "$release_run_id" --repo "$REPO" --log \
+        > "$TRANSCRIPT_DIR/audit/logs/release.log" 2> "$TRANSCRIPT_DIR/audit/logs/release.stderr" || status="FAIL"
+    else
+      status="FAIL"
+      printf 'release workflow run not found for %s\n' "$RELEASE_TAG" > "$TRANSCRIPT_DIR/audit/logs/release.stderr"
+    fi
     gh run download "$ARTIFACT_RUN_ID" --repo "$REPO" -n launchpad-artifact-manifest \
       -D "$TRANSCRIPT_DIR/audit/artifact-manifest" \
       > "$TRANSCRIPT_DIR/audit/artifact-manifest.stdout" 2> "$TRANSCRIPT_DIR/audit/artifact-manifest.stderr" || status="FAIL"

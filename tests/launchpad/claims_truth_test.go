@@ -49,6 +49,8 @@ func TestLaunchpadClaimsMarketPromotedAppsAsSupported(t *testing.T) {
 	requireContains(t, cleanGate, `"supported_apps": ["openclaw", "hermes", "opencode", "kilocode"]`)
 	requireContains(t, cleanGate, `"candidate_promotion_apps": []`)
 	requireContains(t, cleanGate, `"deprecated_include_candidates_flag": "accepted_noop_all_four_apps_are_supported"`)
+	requireContains(t, cleanGate, "gh run list --repo \"$REPO\" --workflow release.yml --branch \"$RELEASE_TAG\"")
+	requireNotContains(t, cleanGate, "gh run view 26131090671", "scripts/launch/clean_install_gate.sh")
 
 	cleanWorkflow := readDoc(t, root, ".github/workflows/launchpad-clean-install.yml")
 	requireContains(t, cleanWorkflow, "default: v0.5.5")

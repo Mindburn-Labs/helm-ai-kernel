@@ -34,10 +34,27 @@ jobs:
           POM_VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\([^<]*\)<\/version>.*/\1/')
           test "$REQUESTED" = "$FILE_VERSION"
           test "$POM_VERSION" = "$FILE_VERSION"
+      - name: Check if version already published
+        id: precheck
+        working-directory: sdk/java
+        run: |
+          set -euo pipefail
+          VER=$(cat ../../VERSION)
+          URL="https://repo1.maven.org/maven2/io/github/mindburnlabs/helm-sdk/${VER}/helm-sdk-${VER}.pom"
+          code=$(curl -sS -o /dev/null -w "%{http_code}" "$URL")
+          if [ "$code" = "200" ]; then
+            echo "helm-sdk ${VER} is already in Maven Central — skipping publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "helm-sdk ${VER} not in Central yet (HTTP ${code}) — proceeding with publish."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build
+        if: steps.precheck.outputs.skip != 'true'
         working-directory: sdk/java
         run: mvn -q test package
       - name: Import GPG key
+        if: steps.precheck.outputs.skip != 'true'
         env:
           MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
         run: |
@@ -53,6 +70,7 @@ jobs:
           printf '%b' "$MAVEN_GPG_PRIVATE_KEY" > "${key_file}.escaped"
           gpg --batch --import "${key_file}.escaped"
       - name: Publish GPG public key
+        if: steps.precheck.outputs.skip != 'true'
         run: |
           set -euo pipefail
           fingerprint="$(gpg --batch --list-secret-keys --with-colons | awk -F: '$1 == "fpr" { print $10; exit }')"
@@ -61,7 +79,7 @@ jobs:
           gpg --batch --armor --export "$fingerprint" > "$RUNNER_TEMP/maven-public-key.asc"
 
           sent=0
-          for keyserver in hkps://keyserver.ubuntu.com hkps://keys.openpgp.org hkp://pgp.mit.edu; do
+          for keyserver in hkps://keyserver.ubuntu.com hkps://keys.openpgp.org; do
             if timeout 60s gpg --batch --keyserver "$keyserver" --send-keys "$fingerprint"; then
               sent=1
             else
@@ -81,6 +99,7 @@ jobs:
           done
           exit 1
       - name: Publish
+        if: steps.precheck.outputs.skip != 'true'
         working-directory: sdk/java
         env:
           MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}

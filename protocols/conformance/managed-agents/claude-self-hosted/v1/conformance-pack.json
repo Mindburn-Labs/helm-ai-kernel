@@ -63,9 +63,18 @@
     "denied_unpinned_skill": "fixtures/denied-unpinned-skill.json",
     "stopped_ambiguous_session": "fixtures/stopped-ambiguous-session.json"
   },
+  "live_evidence": {
+    "provider": "daytona",
+    "config_schema": "protocols/json-schemas/managed-agents/claude_self_hosted_live_config.v1.schema.json",
+    "redacted_example": "live-config.example.json",
+    "report": "live-evidence-report.json",
+    "promotion_guard": "helm-ai-kernel conform managed-agents claude-self-hosted --provider daytona --live-config <file> --out artifacts/claude-managed-agents-live --sign --promote-registry",
+    "claim_limit": "Provider-verified status requires a real live Anthropic self-hosted worker and HELM MCP Gateway evidence pack. Anthropic MCP tunnels remain research-preview."
+  },
   "commands": [
     "go test ./pkg/connectors/sandbox/claudemanaged -count=1",
     "go test ./pkg/conformance/sandbox ./pkg/mcp ./pkg/contracts/... -count=1",
-    "make verify-fixtures"
+    "make verify-fixtures",
+    "helm-ai-kernel conform managed-agents claude-self-hosted --provider daytona --live-config <file> --out artifacts/claude-managed-agents-live --sign"
   ]
 }

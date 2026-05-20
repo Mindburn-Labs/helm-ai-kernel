@@ -46,3 +46,34 @@ go test ./pkg/conformance/sandbox ./pkg/mcp ./pkg/contracts/... -count=1
 cd ..
 make verify-fixtures
 ```
+
+## Verified promotion gate
+
+The compatible preview implementation does not become verified until a live
+Daytona-backed self-hosted worker and Anthropic MCP tunnel path publish a signed
+evidence pack. The promotion command is intentionally fail-closed:
+
+```bash
+make build
+./bin/helm-ai-kernel conform managed-agents claude-self-hosted \
+  --provider daytona \
+  --live-config <redacted-live-config.json> \
+  --out artifacts/claude-managed-agents-live \
+  --sign
+./bin/helm-ai-kernel verify \
+  --bundle artifacts/claude-managed-agents-live/evidence-pack.tar \
+  --json \
+  --json-out artifacts/claude-managed-agents-live/verify.json
+```
+
+Use `--promote-registry` only after the live config binds the tested commit and
+tree hash, worker image digest, skill manifest hash, sandbox grant hash, MCP
+profile hashes, artifact URI, signer, and all allowed/denied scenario receipts.
+The guard refuses promotion when the worker exposes `ANTHROPIC_API_KEY`, the
+tunnel bypasses HELM MCP Gateway, denial receipts are missing, denied effects
+dispatched, or the evidence pack fails offline verification.
+
+The redacted config schema is
+`protocols/json-schemas/managed-agents/claude_self_hosted_live_config.v1.schema.json`.
+The example lives at
+`protocols/conformance/managed-agents/claude-self-hosted/v1/live-config.example.json`.

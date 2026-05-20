@@ -24,6 +24,11 @@ surface for the `helm-ai-kernel` project.
 
 - `ci.yml` runs the retained per-surface jobs and the Make-first
   `quality-pr` summary job.
+- `claude-managed-agents-live-evidence.yml` runs the protected Daytona live
+  evidence fixture for Claude Managed Agents self-hosted verification, writes a
+  signed evidence pack, verifies it offline, and uploads the redacted artifacts.
+  It requires the `claude-managed-agents-live` environment with
+  `CLAUDE_MANAGED_AGENTS_LIVE_CONFIG_JSON` and `HELM_SIGNING_KEY_HEX` secrets.
 - `launchpad-artifacts.yml` builds and signs Launchpad OpenClaw, Hermes, and
   egress-proxy artifacts, then runs gated live local-container conformance when
   manually dispatched with the scoped CI key.

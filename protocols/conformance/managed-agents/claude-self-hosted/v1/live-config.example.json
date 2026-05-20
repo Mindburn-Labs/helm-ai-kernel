@@ -1,0 +1,242 @@
+{
+  "schema_version": "claude_managed_agents_live_config.v1",
+  "provider": "daytona",
+  "artifact_uri": "gh-artifact://helm-ai-kernel/claude-managed-agents-live/evidence-pack.tar",
+  "last_verified": "2026-05-21",
+  "tested_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "tested_tree_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "signer": {
+    "key_id": "helm-live-evidence-signer"
+  },
+  "anthropic": {
+    "agent_id": "agent_redacted",
+    "agent_version": "2026-05-19",
+    "session_id": "session_redacted",
+    "environment_id": "env_redacted",
+    "work_id": "work_redacted"
+  },
+  "worker": {
+    "worker_id": "daytona-worker-redacted",
+    "worker_image_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "skill_manifest_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "sandbox_grant_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "workspace_root": "/workspace",
+    "outputs_root": "/mnt/session/outputs",
+    "environment_key_secret_ref": "secret://anthropic/environment-key",
+    "organization_api_key_present": false,
+    "egress_enforced": true,
+    "log_retention_enabled": true,
+    "tls_required": true
+  },
+  "daytona": {
+    "workspace_ref_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "worker_runtime_ref_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "deployment_attestation": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+    "queue_liveness_ref": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+    "worker_stop_ref": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+  },
+  "mcp": {
+    "route_through_helm_gateway": true,
+    "gateway_url_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+    "tunnel_domain_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "upstream_mcp_server_id": "mcp_server_redacted",
+    "oauth_resource": "https://mcp.example.internal",
+    "required_scopes": ["tools.read", "tools.call"],
+    "protocol_version": "2025-06-18",
+    "ca_cert_ref_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "allowed_upstream_host_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "schema_pin_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "raw_tunnel_targets_allowed": false
+  },
+  "scenario_results": [
+    {
+      "id": "allowed-bash",
+      "effect_type": "MANAGED_AGENT_BASH",
+      "verdict": "ALLOW",
+      "dispatched": true,
+      "receipt_id": "rec_allowed_bash_redacted",
+      "receipt_hash": "sha256:0101010101010101010101010101010101010101010101010101010101010101",
+      "evidence_ref": "sha256:0202020202020202020202020202020202020202020202020202020202020202",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "allowed-file-read",
+      "effect_type": "MANAGED_AGENT_FILE_READ",
+      "verdict": "ALLOW",
+      "dispatched": true,
+      "receipt_id": "rec_allowed_file_read_redacted",
+      "receipt_hash": "sha256:0303030303030303030303030303030303030303030303030303030303030303",
+      "evidence_ref": "sha256:0404040404040404040404040404040404040404040404040404040404040404",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "allowed-file-write",
+      "effect_type": "MANAGED_AGENT_FILE_WRITE",
+      "verdict": "ALLOW",
+      "dispatched": true,
+      "receipt_id": "rec_allowed_file_write_redacted",
+      "receipt_hash": "sha256:0505050505050505050505050505050505050505050505050505050505050505",
+      "evidence_ref": "sha256:0606060606060606060606060606060606060606060606060606060606060606",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "allowed-file-list",
+      "effect_type": "MANAGED_AGENT_FILE_LIST",
+      "verdict": "ALLOW",
+      "dispatched": true,
+      "receipt_id": "rec_allowed_file_list_redacted",
+      "receipt_hash": "sha256:0707070707070707070707070707070707070707070707070707070707070707",
+      "evidence_ref": "sha256:0808080808080808080808080808080808080808080808080808080808080808",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "allowed-artifact",
+      "effect_type": "MANAGED_AGENT_OUTPUT_ARTIFACT",
+      "verdict": "ALLOW",
+      "dispatched": true,
+      "receipt_id": "rec_allowed_artifact_redacted",
+      "receipt_hash": "sha256:0909090909090909090909090909090909090909090909090909090909090909",
+      "evidence_ref": "sha256:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "allowed-validation",
+      "effect_type": "MANAGED_AGENT_VALIDATION_RUN",
+      "verdict": "ALLOW",
+      "dispatched": true,
+      "receipt_id": "rec_allowed_validation_redacted",
+      "receipt_hash": "sha256:0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "evidence_ref": "sha256:0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "allowed-mcp-call",
+      "effect_type": "MANAGED_AGENT_MCP_TOOL_CALL",
+      "verdict": "ALLOW",
+      "dispatched": true,
+      "receipt_id": "rec_allowed_mcp_call_redacted",
+      "receipt_hash": "sha256:0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d",
+      "evidence_ref": "sha256:0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "queue-liveness",
+      "effect_type": "MANAGED_AGENT_QUEUE_LIVENESS",
+      "verdict": "ALLOW",
+      "dispatched": true,
+      "receipt_id": "rec_queue_liveness_redacted",
+      "receipt_hash": "sha256:0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "evidence_ref": "sha256:1010101010101010101010101010101010101010101010101010101010101010",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "worker-stop",
+      "effect_type": "MANAGED_AGENT_WORKER_STOP",
+      "verdict": "ALLOW",
+      "dispatched": true,
+      "receipt_id": "rec_worker_stop_redacted",
+      "receipt_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "evidence_ref": "sha256:1212121212121212121212121212121212121212121212121212121212121212",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "denied-egress",
+      "effect_type": "MANAGED_AGENT_EGRESS",
+      "verdict": "DENY",
+      "reason_code": "SANDBOX_VIOLATION",
+      "dispatched": false,
+      "receipt_id": "rec_denied_egress_redacted",
+      "receipt_hash": "sha256:1313131313131313131313131313131313131313131313131313131313131313",
+      "evidence_ref": "sha256:1414141414141414141414141414141414141414141414141414141414141414",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "denied-raw-mcp-tunnel",
+      "effect_type": "MANAGED_AGENT_MCP_TOOL_CALL",
+      "verdict": "DENY",
+      "reason_code": "SANDBOX_VIOLATION",
+      "dispatched": false,
+      "receipt_id": "rec_denied_raw_mcp_tunnel_redacted",
+      "receipt_hash": "sha256:1515151515151515151515151515151515151515151515151515151515151515",
+      "evidence_ref": "sha256:1616161616161616161616161616161616161616161616161616161616161616",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "denied-schema-drift",
+      "effect_type": "MANAGED_AGENT_MCP_TOOL_CALL",
+      "verdict": "DENY",
+      "reason_code": "SCHEMA_VIOLATION",
+      "dispatched": false,
+      "receipt_id": "rec_denied_schema_drift_redacted",
+      "receipt_hash": "sha256:1717171717171717171717171717171717171717171717171717171717171717",
+      "evidence_ref": "sha256:1818181818181818181818181818181818181818181818181818181818181818",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "denied-insufficient-oauth-scopes",
+      "effect_type": "MANAGED_AGENT_MCP_TOOL_CALL",
+      "verdict": "DENY",
+      "reason_code": "AUTHZ_DENIED",
+      "dispatched": false,
+      "receipt_id": "rec_denied_insufficient_oauth_scopes_redacted",
+      "receipt_hash": "sha256:1919191919191919191919191919191919191919191919191919191919191919",
+      "evidence_ref": "sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "denied-path-traversal",
+      "effect_type": "MANAGED_AGENT_FILE_READ",
+      "verdict": "DENY",
+      "reason_code": "SANDBOX_VIOLATION",
+      "dispatched": false,
+      "receipt_id": "rec_denied_path_traversal_redacted",
+      "receipt_hash": "sha256:1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b",
+      "evidence_ref": "sha256:1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "denied-symlink-escape",
+      "effect_type": "MANAGED_AGENT_FILE_READ",
+      "verdict": "DENY",
+      "reason_code": "SANDBOX_VIOLATION",
+      "dispatched": false,
+      "receipt_id": "rec_denied_symlink_escape_redacted",
+      "receipt_hash": "sha256:1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d",
+      "evidence_ref": "sha256:1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "denied-unpinned-skill",
+      "effect_type": "MANAGED_AGENT_SKILL_LOAD",
+      "verdict": "DENY",
+      "reason_code": "SANDBOX_VIOLATION",
+      "dispatched": false,
+      "receipt_id": "rec_denied_unpinned_skill_redacted",
+      "receipt_hash": "sha256:1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f",
+      "evidence_ref": "sha256:2020202020202020202020202020202020202020202020202020202020202020",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "denied-memory-write",
+      "effect_type": "MANAGED_AGENT_MEMORY_WRITE",
+      "verdict": "DENY",
+      "reason_code": "SESSION_RISK_DENY",
+      "dispatched": false,
+      "receipt_id": "rec_denied_memory_write_redacted",
+      "receipt_hash": "sha256:2121212121212121212121212121212121212121212121212121212121212121",
+      "evidence_ref": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "observed_at": "2026-05-21T00:00:00Z"
+    },
+    {
+      "id": "denied-missing-ambiguous-session",
+      "effect_type": "MANAGED_AGENT_SESSION",
+      "verdict": "DENY",
+      "reason_code": "SESSION_RISK_DENY",
+      "dispatched": false,
+      "receipt_id": "rec_denied_missing_ambiguous_session_redacted",
+      "receipt_hash": "sha256:2323232323232323232323232323232323232323232323232323232323232323",
+      "evidence_ref": "sha256:2424242424242424242424242424242424242424242424242424242424242424",
+      "observed_at": "2026-05-21T00:00:00Z"
+    }
+  ]
+}

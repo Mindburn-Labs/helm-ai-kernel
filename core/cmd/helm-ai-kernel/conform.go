@@ -24,6 +24,9 @@ import (
 //	1 = any gate failed
 //	2 = runtime error
 func runConform(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "managed-agents" {
+		return runConformManagedAgents(args[1:], stdout, stderr)
+	}
 	if len(args) > 0 && args[0] == "negative" {
 		return runConformNegative(args[1:], stdout, stderr)
 	}

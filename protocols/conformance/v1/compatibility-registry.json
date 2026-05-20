@@ -93,6 +93,13 @@
       "tier": "compatible",
       "status": "active",
       "tests": "sdk/ts/src/adapters/sandbox/"
+    },
+    {
+      "name": "Claude Managed Agents Self-Hosted",
+      "tier": "compatible",
+      "status": "preview",
+      "tests": "core/pkg/connectors/sandbox/claudemanaged",
+      "notes": "Certifies the customer-controlled self-hosted worker execution boundary. MCP tunnel support remains research-preview until live tunnel evidence packs are published."
     }
   ],
   "framework_adapters": [

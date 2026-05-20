@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.mindburn.run/receipts/managed_agent_execution_receipt.v1.schema.json",
+  "title": "HELM Managed Agent Execution Receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receipt_version",
+    "receipt_id",
+    "agent_id",
+    "agent_version",
+    "session_id",
+    "environment_id",
+    "work_id",
+    "worker",
+    "sandbox_grant_hash",
+    "tool_actions",
+    "denied_effects",
+    "artifact_hashes",
+    "created_at",
+    "receipt_hash",
+    "signature",
+    "signer_key_id"
+  ],
+  "properties": {
+    "receipt_version": { "const": "managed_agent_execution_receipt.v1" },
+    "receipt_id": { "type": "string", "minLength": 1 },
+    "agent_id": { "type": "string", "minLength": 1 },
+    "agent_version": { "type": "string", "minLength": 1 },
+    "session_id": { "type": "string", "minLength": 1 },
+    "environment_id": { "type": "string", "minLength": 1 },
+    "work_id": { "type": "string", "minLength": 1 },
+    "worker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["worker_id", "worker_image_digest", "skill_manifest_hash"],
+      "properties": {
+        "worker_id": { "type": "string", "minLength": 1 },
+        "worker_image_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "skill_manifest_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      }
+    },
+    "sandbox_grant_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "mcp_profiles": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/mcp_profile" }
+    },
+    "tool_actions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/tool_action" }
+    },
+    "denied_effects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/denied_effect" }
+    },
+    "artifact_hashes": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "receipt_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "signature": { "type": "string", "pattern": "^[a-f0-9]+$" },
+    "signer_key_id": { "type": "string", "minLength": 1 }
+  },
+  "$defs": {
+    "mcp_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mcp_profile_hash",
+        "tunnel_domain_hash",
+        "upstream_mcp_server_id",
+        "oauth_resource",
+        "required_scopes",
+        "protocol_version",
+        "ca_cert_ref_hash",
+        "allowed_upstream_host_hash",
+        "route"
+      ],
+      "properties": {
+        "mcp_profile_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "tunnel_domain_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "upstream_mcp_server_id": { "type": "string", "minLength": 1 },
+        "oauth_resource": { "type": "string", "minLength": 1 },
+        "required_scopes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "protocol_version": { "type": "string", "minLength": 1 },
+        "ca_cert_ref_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "allowed_upstream_host_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "route": { "const": "helm-mcp-gateway" }
+      }
+    },
+    "tool_action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action_id", "tool_id", "effect_type", "verdict", "receipt_ref", "occurred_at"],
+      "properties": {
+        "action_id": { "type": "string", "minLength": 1 },
+        "tool_id": { "type": "string", "minLength": 1 },
+        "effect_type": {
+          "enum": [
+            "MANAGED_AGENT_BASH",
+            "MANAGED_AGENT_CODE",
+            "MANAGED_AGENT_FILE_READ",
+            "MANAGED_AGENT_FILE_WRITE",
+            "MANAGED_AGENT_FILE_LIST",
+            "MANAGED_AGENT_VALIDATION_RUN",
+            "MANAGED_AGENT_OUTPUT_ARTIFACT",
+            "MANAGED_AGENT_MCP_TOOL_CALL",
+            "MANAGED_AGENT_MEMORY_WRITE",
+            "MANAGED_AGENT_UNKNOWN"
+          ]
+        },
+        "target": { "type": "string" },
+        "args_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+        "reason_code": { "type": "string" },
+        "receipt_ref": { "type": "string", "minLength": 1 },
+        "occurred_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "denied_effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effect_id", "effect_type", "reason_code", "receipt_ref", "occurred_at"],
+      "properties": {
+        "effect_id": { "type": "string", "minLength": 1 },
+        "effect_type": { "type": "string", "minLength": 1 },
+        "reason_code": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string" },
+        "receipt_ref": { "type": "string", "minLength": 1 },
+        "occurred_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

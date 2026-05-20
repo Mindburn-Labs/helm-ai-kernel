@@ -1,0 +1,9 @@
+{
+  "case_id": "denied-egress",
+  "tool_class": "network_egress",
+  "target": "https://example.com",
+  "expected_verdict": "DENY",
+  "expected_reason_code": "DATA_EGRESS_BLOCKED",
+  "must_not_dispatch": true,
+  "must_bind_evidence": ["sandbox_grant_hash", "network_log_ref"]
+}

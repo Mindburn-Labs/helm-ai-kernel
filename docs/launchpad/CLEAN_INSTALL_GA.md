@@ -95,10 +95,10 @@ accepted for backward compatibility.
 
 | App | Availability | Image |
 | --- | --- | --- |
-| OpenClaw | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501` |
-| Hermes | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:11bb3893d8466b9abe2cea7f65c734647d86177908b38ea55edceb056944ee7f` |
-| OpenCode | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:c31aaef9b739f9ed870edd5c66f34f9a79efcfab132aaa2395f890f7bf5fb20f` |
-| Kilo Code | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:68a428e13c1b8cc1cb0338eb56c0e79610a609adc91a60b99b8f9a226c1621ba` |
+| OpenClaw | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:c5b6d872798514cab6e1a27f9f168aa4c38adb7166d711d49fd2a501aec8b1f9` |
+| Hermes | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:807f96a9bcc831a810ac77a775dec8f8486ad7df68dd024feb3d75a0a148a03e` |
+| OpenCode | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:3e258a0b5424b6a141e0e71516754cd7598a71b5727443c9620a90152dcc0f38` |
+| Kilo Code | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:59d6eec39e1eb7f3ccdf218055b9590cffe55fd19ca58feb5944369c833c8f65` |
 
 Codex, Claude Code, Cursor, and Junie remain external/BYO adapters.
 

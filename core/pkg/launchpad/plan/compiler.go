@@ -26,30 +26,33 @@ func CompileWithRoot(app registry.AppSpec, substrate registry.SubstrateSpec, pri
 	policyHash := hashPolicyRefs(root, app.FilesystemPolicy.PolicyRef, substrate.PolicyPack)
 	sandboxHash := hashStrings(substrate.ID, substrate.Filesystem.Mode, substrate.Network.Default)
 	base := LaunchPlan{
-		LaunchID:             uuid.NewString(),
-		AppID:                app.ID,
-		AppVersion:           app.Version,
-		SubstrateID:          substrate.ID,
-		Principal:            principal,
-		ArtifactImage:        app.Install.Image,
-		ArtifactDigest:       app.Install.Digest,
-		RuntimeCommand:       cloneStrings(app.Runtime.Command),
-		Healthchecks:         cloneHealthchecks(app.Healthchecks),
-		ModelGatewayEnv:      cloneStrings(app.ModelGatewayEnv),
-		RiskClass:            app.RiskClass,
-		PolicyHash:           policyHash,
-		AppSpecHash:          appHash,
-		SubstrateSpecHash:    substrateHash,
-		SandboxProfileHash:   sandboxHash,
-		RequiredSecretRefs:   requiredSecretRefs(app),
-		NetworkAllowlist:     cloneStrings(app.NetworkPolicy.Allowlist),
-		FilesystemMounts:     cloneStrings(app.FilesystemPolicy.Mounts),
-		MCPPolicy:            app.MCPPolicy,
-		Budgets:              app.BudgetCeiling,
-		Nodes:                map[string]any{"plan": "launch", "app": app.ID, "substrate": substrate.ID},
-		Edges:                []any{},
-		TeardownPlan:         map[string]any{"required": true, "receipt": "teardown_receipt", "cascade_supported": substrate.SupportsTeardown},
-		EvidenceRequirements: cloneStrings(app.EvidenceRequirements),
+		LaunchID:                uuid.NewString(),
+		AppID:                   app.ID,
+		AppVersion:              app.Version,
+		SubstrateID:             substrate.ID,
+		Principal:               principal,
+		ArtifactImage:           app.Install.Image,
+		ArtifactDigest:          app.Install.Digest,
+		RuntimeCommand:          cloneStrings(app.Runtime.Command),
+		Healthchecks:            cloneHealthchecks(app.Healthchecks),
+		ModelGatewayEnv:         cloneStrings(app.ModelGatewayEnv),
+		ModelGatewayMode:        modelGatewayMode(app),
+		ModelGatewayProvider:    app.ModelGateway.Provider,
+		RawProviderKeyProjected: rawProviderKeyProjected(app),
+		RiskClass:               app.RiskClass,
+		PolicyHash:              policyHash,
+		AppSpecHash:             appHash,
+		SubstrateSpecHash:       substrateHash,
+		SandboxProfileHash:      sandboxHash,
+		RequiredSecretRefs:      requiredSecretRefs(app),
+		NetworkAllowlist:        cloneStrings(app.NetworkPolicy.Allowlist),
+		FilesystemMounts:        cloneStrings(app.FilesystemPolicy.Mounts),
+		MCPPolicy:               app.MCPPolicy,
+		Budgets:                 app.BudgetCeiling,
+		Nodes:                   map[string]any{"plan": "launch", "app": app.ID, "substrate": substrate.ID},
+		Edges:                   []any{},
+		TeardownPlan:            map[string]any{"required": true, "receipt": "teardown_receipt", "cascade_supported": substrate.SupportsTeardown},
+		EvidenceRequirements:    cloneStrings(app.EvidenceRequirements),
 	}
 	for _, secret := range requiredSecretEnvNames(app) {
 		if value, ok := os.LookupEnv(secret); !ok || value == "" {
@@ -206,6 +209,9 @@ func cloneHealthchecks(in []registry.HealthcheckSpec) []registry.HealthcheckSpec
 
 func requiredSecretRefs(app registry.AppSpec) []string {
 	refs := cloneStrings(app.RequiredSecrets)
+	if modelGatewayMode(app) == "token_broker" && !containsString(refs, "model_gateway_token") {
+		refs = append(refs, "model_gateway_token")
+	}
 	for _, envName := range app.ModelGatewayEnv {
 		if !containsString(refs, envName) {
 			refs = append(refs, envName)
@@ -215,10 +221,34 @@ func requiredSecretRefs(app registry.AppSpec) []string {
 }
 
 func requiredSecretEnvNames(app registry.AppSpec) []string {
+	if modelGatewayMode(app) == "token_broker" {
+		return []string{"HELM_MODEL_GATEWAY_TOKEN"}
+	}
 	if len(app.ModelGatewayEnv) > 0 {
 		return cloneStrings(app.ModelGatewayEnv)
 	}
 	return cloneStrings(app.RequiredSecrets)
+}
+
+func modelGatewayMode(app registry.AppSpec) string {
+	if app.ModelGateway.Mode != "" {
+		return app.ModelGateway.Mode
+	}
+	if len(app.ModelGatewayEnv) > 0 {
+		return "raw_provider_key"
+	}
+	return ""
+}
+
+func rawProviderKeyProjected(app registry.AppSpec) bool {
+	switch modelGatewayMode(app) {
+	case "token_broker":
+		return false
+	case "raw_provider_key":
+		return true
+	default:
+		return app.ModelGateway.RawProviderKeyProjected
+	}
 }
 
 func containsString(values []string, target string) bool {

@@ -9,24 +9,13 @@ HELM Skill Packs are signed, scoped procedural packages for agents. A skill can 
 
 ## Audience
 
-Use this page if you are installing, exporting, reviewing, or disabling HELM-managed skill packs for Codex, Claude Code, or another supported agent surface.
+This page is for developers and reviewers evaluating HELM-managed skill
+installation, projection, disable, revoke, and marketplace flows.
 
 ## Outcome
 
-After reading this page, you should know which CLI flows exist, what receipt each flow emits, and where the skill boundary prevents procedural guidance from becoming execution authority.
-
-## Flow
-
-```mermaid
-flowchart LR
-  search["Search registry"] --> inspect["Inspect skill"]
-  inspect --> scan["Scan content"]
-  scan --> install["Install projection"]
-  install --> receipt["Install receipts"]
-  scan --> export["Export plugin"]
-  install --> disable["Disable or revoke"]
-  disable --> receipt
-```
+You should leave with the command sequence for each skill-pack flow and the
+authority boundary that keeps skills from granting tools or execution rights.
 
 ## Source Truth
 
@@ -35,6 +24,16 @@ flowchart LR
 - Skill registry: `registry/skills/`
 - Skill policy fixtures: `policies/skills/`
 - Skill docs: `docs/skills/`
+
+```mermaid
+flowchart TD
+  search["search registry"] --> inspect["inspect skill"]
+  inspect --> scan["scan content and metadata"]
+  scan --> install["repo-scoped install"]
+  install --> receipts["install/projection receipts"]
+  scan --> export["Codex plugin export"]
+  install --> revoke["disable or revoke"]
+```
 
 ## OSS Flows
 
@@ -110,9 +109,9 @@ Deferred: remote GitHub skill fetch, key-backed signature verification, full plu
 
 ## Troubleshooting
 
-| Symptom | First check |
+| Condition | Response |
 | --- | --- |
-| A skill appears to grant tool access | Re-check the policy bundle; skills guide behavior but do not grant permissions. |
-| Repo-scoped install fails | Run `skills scan` and inspect symlink, script, and MCP metadata findings. |
-| User or global install escalates | This is expected by default until Enterprise rollout approval exists. |
-| Plugin export includes MCP metadata | Confirm pending or quarantined MCP metadata remains off by default. |
+| Scan returns `DENY` | Inspect the attestation and remove unsafe file, symlink, or payload content before install. |
+| User/global install escalates | Keep the install repo-scoped unless an operator approves the wider projection. |
+| Marketplace add fails | Confirm the plugin path stays inside the repo root and has stable source hashes. |
+| Revoke leaves files | Compare projection receipt paths with the working tree and remove only HELM-managed projections. |

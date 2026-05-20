@@ -9,13 +9,18 @@ redistribution: allowed_by_MIT_with_upstream_notice
 availability: oss_supported
 install:
     strategy: signed_oci
-    image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e
-    digest: sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e
+    image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501
+    digest: sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501
     source: https://github.com/openclaw/openclaw
     ref: v2026.5.12
 runtime:
     command:
         - openclaw
+model_gateway:
+    logical_secret: model_gateway
+    provider: openrouter
+    mode: logical_binding_env_projection
+    raw_provider_key_projected: true
 model_gateway_env:
     - OPENROUTER_API_KEY
 required_secrets:
@@ -34,6 +39,8 @@ mcp_policy:
     unknown_server_policy: quarantine
     unknown_tool_policy: ESCALATE
     require_schema_pin: true
+mcp_manifests:
+    - openclaw.default
 healthchecks:
     - type: command
       command: helm-launchpad-openrouter-check
@@ -51,24 +58,27 @@ evidence_requirements:
     - healthcheck_receipt
     - teardown_receipt
     - evidence_pack
+    - evidence_graph
     - mcp_quarantine
+    - mcp_manifest
+    - model_gateway_broker
     - artifact_digest
     - cosign_signature
     - syft_sbom
     - grype_vulnerability_scan
 supply_chain_evidence:
-    artifact_digest: sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e
+    artifact_digest: sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501
     signature_tool: cosign
-    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e
+    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501
     sbom_tool: syft
     sbom_ref: artifact://sbom-openclaw.spdx.json
     vulnerability_scan_tool: grype
     vulnerability_scan_ref: artifact://grype-openclaw.json
 promotion_evidence:
-    artifact_verification_ref: github-actions://26110916296/1/artifact-verification/openclaw
-    live_e2e_run_id: github-actions://26110916296/1/live-e2e/openclaw
-    evidence_pack_ref: github-actions://26110916296/1/evidencepack/openclaw
-    teardown_receipt_ref: github-actions://26110916296/1/teardown/openclaw
+    artifact_verification_ref: github-actions://26179980172/1/artifact-verification/openclaw
+    live_e2e_run_id: github-actions://26179980172/1/live-e2e/openclaw
+    evidence_pack_ref: github-actions://26179980172/1/evidencepack/openclaw
+    teardown_receipt_ref: github-actions://26179980172/1/teardown/openclaw
 conformance:
     license_verified: true
     artifact_verified: true
@@ -83,7 +93,7 @@ metadata:
     helm_oci_status: promoted_from_signed_ci_artifact_manifest
     helm_oci_target: ghcr.io/mindburn-labs/helm-launchpad/openclaw:v2026.5.12
     latest_release: v2026.5.12
-    promotion_provenance_ref: github-actions://26110916296/1
+    promotion_provenance_ref: github-actions://26179980172/1
     release_published_at: "2026-05-14T18:28:04Z"
     upstream_commit: f066dd2f31c231f38fbcaacd6f6dfce0801143b3
     upstream_repo: https://github.com/openclaw/openclaw

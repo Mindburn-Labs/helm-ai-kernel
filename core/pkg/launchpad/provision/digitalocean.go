@@ -143,7 +143,7 @@ func (p DigitalOceanProvisioner) Create(ctx context.Context, req DigitalOceanPro
 		"inbound_rules": inboundRules,
 		"outbound_rules": []map[string]any{{
 			"protocol":     "tcp",
-			"ports":        "all",
+			"ports":        "443",
 			"destinations": map[string]any{"addresses": []string{"0.0.0.0/0", "::/0"}},
 		}},
 	}

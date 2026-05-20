@@ -2,63 +2,97 @@ id: opencode
 name: OpenCode
 version: v1.15.5
 license:
-  status: verified
-  spdx: MIT
-  url: https://raw.githubusercontent.com/anomalyco/opencode/v1.15.5/LICENSE
+    status: verified
+    spdx: MIT
+    url: https://github.com/anomalyco/opencode/blob/v1.15.5/LICENSE
 redistribution: allowed_by_MIT_with_upstream_notice
-availability: oss_candidate
+availability: oss_supported
 install:
-  strategy: signed_oci
-  image: ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:fd3db72a2acfae066e455241f17800bd698070d2126e534e18a441f7910ed35b
-  digest: sha256:fd3db72a2acfae066e455241f17800bd698070d2126e534e18a441f7910ed35b
-  source: https://github.com/anomalyco/opencode
-  ref: v1.15.5
+    strategy: signed_oci
+    image: ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:c31aaef9b739f9ed870edd5c66f34f9a79efcfab132aaa2395f890f7bf5fb20f
+    digest: sha256:c31aaef9b739f9ed870edd5c66f34f9a79efcfab132aaa2395f890f7bf5fb20f
+    source: https://github.com/anomalyco/opencode
+    ref: v1.15.5
 runtime:
-  command: ["opencode"]
-model_gateway_env: ["OPENROUTER_API_KEY"]
-required_secrets: ["model_gateway"]
+    command:
+        - opencode
+model_gateway:
+    logical_secret: model_gateway
+    provider: openrouter
+    mode: logical_binding_env_projection
+    raw_provider_key_projected: true
+model_gateway_env:
+    - OPENROUTER_API_KEY
+required_secrets:
+    - model_gateway
 filesystem_policy:
-  mode: scoped_workspace
-  mounts: ["workspace:rw", "app_state:rw"]
-  policy_ref: policies/launchpad/apps/opencode.safe.toml
+    mode: scoped_workspace
+    mounts:
+        - workspace:rw
+        - app_state:rw
+    policy_ref: policies/launchpad/apps/opencode.safe.toml
 network_policy:
-  default: deny
-  allowlist:
-    - https://openrouter.ai/api/v1
+    default: deny
+    allowlist:
+        - https://openrouter.ai/api/v1
 mcp_policy:
-  unknown_server_policy: quarantine
-  unknown_tool_policy: ESCALATE
-  require_schema_pin: true
+    unknown_server_policy: quarantine
+    unknown_tool_policy: ESCALATE
+    require_schema_pin: true
+mcp_manifests:
+    - opencode.default
 healthchecks:
-  - type: command
-    command: "opencode --version"
+    - type: command
+      command: opencode --version
 risk_class: T1
 budget_ceiling:
-  usd_max: 0
-  api_calls_max: 0
-  time_ms_max: 0
-evidence_requirements: ["cpi_output", "kernel_verdict", "sandbox_grant", "launch_receipt", "install_receipt", "healthcheck_receipt", "teardown_receipt", "evidence_pack", "mcp_quarantine", "artifact_digest", "cosign_signature", "syft_sbom", "grype_vulnerability_scan"]
-conformance:
-  license_verified: true
-  artifact_verified: true
-  policy_pack_present: true
-  sandbox_verified: false
-  healthcheck_passing: false
-  e2e_passing: false
-  teardown_verified: false
-  receipt_verified: false
-  evidence_pack_verified: false
+    usd_max: 0
+    api_calls_max: 0
+    time_ms_max: 0
+evidence_requirements:
+    - cpi_output
+    - kernel_verdict
+    - sandbox_grant
+    - launch_receipt
+    - install_receipt
+    - healthcheck_receipt
+    - teardown_receipt
+    - evidence_pack
+    - evidence_graph
+    - mcp_quarantine
+    - mcp_manifest
+    - model_gateway_broker
+    - artifact_digest
+    - cosign_signature
+    - syft_sbom
+    - grype_vulnerability_scan
 supply_chain_evidence:
-  artifact_digest: sha256:fd3db72a2acfae066e455241f17800bd698070d2126e534e18a441f7910ed35b
-  signature_tool: cosign
-  signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:fd3db72a2acfae066e455241f17800bd698070d2126e534e18a441f7910ed35b
-  sbom_tool: syft
-  sbom_ref: artifact://sbom-opencode.spdx.json
-  vulnerability_scan_tool: grype
-  vulnerability_scan_ref: artifact://grype-opencode.json
+    artifact_digest: sha256:c31aaef9b739f9ed870edd5c66f34f9a79efcfab132aaa2395f890f7bf5fb20f
+    signature_tool: cosign
+    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:c31aaef9b739f9ed870edd5c66f34f9a79efcfab132aaa2395f890f7bf5fb20f
+    sbom_tool: syft
+    sbom_ref: artifact://sbom-opencode.spdx.json
+    vulnerability_scan_tool: grype
+    vulnerability_scan_ref: artifact://grype-opencode.json
+promotion_evidence:
+    artifact_verification_ref: github-actions://26179980172/1/artifact-verification/opencode
+    live_e2e_run_id: github-actions://26179980172/1/live-e2e/opencode
+    evidence_pack_ref: github-actions://26179980172/1/evidencepack/opencode
+    teardown_receipt_ref: github-actions://26179980172/1/teardown/opencode
+conformance:
+    license_verified: true
+    artifact_verified: true
+    policy_pack_present: true
+    sandbox_verified: true
+    healthcheck_passing: true
+    e2e_passing: true
+    teardown_verified: true
+    receipt_verified: true
+    evidence_pack_verified: true
 metadata:
-  upstream_repo: https://github.com/anomalyco/opencode
-  upstream_ref: v1.15.5
-  upstream_commit: d7a6e1daaf2271bcd0b611fbb27d4956806e475a
-  artifact_workflow_run: github-actions://26140948099/1
-  blocker: "Official license file is MIT and v1.15.5 signed artifact/SBOM/scan evidence passed; live local-container healthcheck, sandbox e2e, teardown receipts, and offline EvidencePack verification remain unverified until live conformance completes."
+    artifact_workflow_run: github-actions://26179980172/1
+    helm_oci_status: promoted_from_signed_ci_artifact_manifest
+    promotion_provenance_ref: github-actions://26179980172/1
+    upstream_commit: d7a6e1daaf2271bcd0b611fbb27d4956806e475a
+    upstream_ref: v1.15.5
+    upstream_repo: https://github.com/anomalyco/opencode

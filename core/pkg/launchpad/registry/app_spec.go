@@ -19,11 +19,13 @@ type AppSpec struct {
 	Availability         Availability            `json:"availability" yaml:"availability"`
 	Install              InstallSpec             `json:"install" yaml:"install"`
 	Runtime              RuntimeSpec             `json:"runtime" yaml:"runtime"`
+	ModelGateway         ModelGatewaySpec        `json:"model_gateway,omitempty" yaml:"model_gateway,omitempty"`
 	ModelGatewayEnv      []string                `json:"model_gateway_env" yaml:"model_gateway_env"`
 	RequiredSecrets      []string                `json:"required_secrets" yaml:"required_secrets"`
 	FilesystemPolicy     PolicyRef               `json:"filesystem_policy" yaml:"filesystem_policy"`
 	NetworkPolicy        NetworkPolicy           `json:"network_policy" yaml:"network_policy"`
 	MCPPolicy            MCPPolicy               `json:"mcp_policy" yaml:"mcp_policy"`
+	MCPManifests         []string                `json:"mcp_manifests,omitempty" yaml:"mcp_manifests,omitempty"`
 	Healthchecks         []HealthcheckSpec       `json:"healthchecks" yaml:"healthchecks"`
 	RiskClass            string                  `json:"risk_class" yaml:"risk_class"`
 	BudgetCeiling        BudgetCeiling           `json:"budget_ceiling" yaml:"budget_ceiling"`
@@ -53,6 +55,13 @@ type RuntimeSpec struct {
 	Ports   []int    `json:"ports,omitempty" yaml:"ports,omitempty"`
 }
 
+type ModelGatewaySpec struct {
+	LogicalSecret           string `json:"logical_secret,omitempty" yaml:"logical_secret,omitempty"`
+	Provider                string `json:"provider,omitempty" yaml:"provider,omitempty"`
+	Mode                    string `json:"mode,omitempty" yaml:"mode,omitempty"`
+	RawProviderKeyProjected bool   `json:"raw_provider_key_projected" yaml:"raw_provider_key_projected"`
+}
+
 type PolicyRef struct {
 	Mode      string   `json:"mode" yaml:"mode"`
 	Mounts    []string `json:"mounts,omitempty" yaml:"mounts,omitempty"`
@@ -68,6 +77,30 @@ type MCPPolicy struct {
 	UnknownServerPolicy string `json:"unknown_server_policy" yaml:"unknown_server_policy"`
 	UnknownToolPolicy   string `json:"unknown_tool_policy" yaml:"unknown_tool_policy"`
 	RequireSchemaPin    bool   `json:"require_schema_pin" yaml:"require_schema_pin"`
+}
+
+type MCPServerManifest struct {
+	ID               string            `json:"id" yaml:"id"`
+	AppID            string            `json:"app_id" yaml:"app_id"`
+	ServerID         string            `json:"server_id" yaml:"server_id"`
+	Transport        string            `json:"transport" yaml:"transport"`
+	Command          []string          `json:"command,omitempty" yaml:"command,omitempty"`
+	PackageDigest    string            `json:"package_digest" yaml:"package_digest"`
+	SignatureRef     string            `json:"signature_ref" yaml:"signature_ref"`
+	SchemaHash       string            `json:"schema_hash" yaml:"schema_hash"`
+	Tools            []MCPToolManifest `json:"tools" yaml:"tools"`
+	EffectLabels     []string          `json:"effect_labels,omitempty" yaml:"effect_labels,omitempty"`
+	RequiredSecrets  []string          `json:"required_secrets,omitempty" yaml:"required_secrets,omitempty"`
+	NetworkGrants    []string          `json:"network_grants,omitempty" yaml:"network_grants,omitempty"`
+	FilesystemGrants []string          `json:"filesystem_grants,omitempty" yaml:"filesystem_grants,omitempty"`
+}
+
+type MCPToolManifest struct {
+	Name        string   `json:"name" yaml:"name"`
+	SchemaHash  string   `json:"schema_hash" yaml:"schema_hash"`
+	Effect      string   `json:"effect" yaml:"effect"`
+	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
+	Labels      []string `json:"labels,omitempty" yaml:"labels,omitempty"`
 }
 
 type HealthcheckSpec struct {

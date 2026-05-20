@@ -363,8 +363,13 @@ func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, execut
 			return response, nil
 		}
 
-		if _, ok := catalog.Lookup(params.Name); !ok {
+		tool, ok := catalog.Lookup(params.Name)
+		if !ok {
 			response.Error = &mcpRPCError{Code: -32602, Message: fmt.Sprintf("tool %q not found", params.Name)}
+			return response, nil
+		}
+		if _, err := mcppkg.ValidateToolArguments(tool, params.Arguments); err != nil {
+			response.Error = &mcpRPCError{Code: -32602, Message: fmt.Sprintf("PEP validation failed: %v", err)}
 			return response, nil
 		}
 

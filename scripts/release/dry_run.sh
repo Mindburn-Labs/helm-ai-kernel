@@ -28,6 +28,7 @@ required=(
   release.high_risk.v3.toml
   sample-policy-material.tar
   evidence-pack.tar
+  helm-ai-kernel-launchpad-data.tar
   helm-ai-kernel.rb
   release-attestation.json
   SHA256SUMS.txt
@@ -68,6 +69,7 @@ required_names = {
     "release.high_risk.v3.toml",
     "sample-policy-material.tar",
     "evidence-pack.tar",
+    "helm-ai-kernel-launchpad-data.tar",
     "helm-ai-kernel.rb",
 }
 missing = sorted(required_names - names)
@@ -83,6 +85,8 @@ if version not in formula:
     raise SystemExit("Homebrew formula does not include the release version")
 if "Mindburn-Labs/helm-ai-kernel" not in formula:
     raise SystemExit("Homebrew formula does not point at Mindburn-Labs/helm-ai-kernel")
+if "helm-ai-kernel-launchpad-data.tar" not in formula or "launch matrix --json" not in formula:
+    raise SystemExit("Homebrew formula does not install or test Launchpad data")
 
 with tarfile.open(assets / "sample-policy-material.tar", "r") as tar:
     members = set(tar.getnames())

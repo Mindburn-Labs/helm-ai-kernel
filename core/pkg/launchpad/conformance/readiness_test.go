@@ -88,6 +88,10 @@ func localContainerFixture() registry.SubstrateSpec {
 		ID:           "local-container",
 		Availability: "supported",
 		Network:      registry.NetworkPolicy{Default: "deny"},
+		Isolation: registry.IsolationPolicy{
+			Mode:              "docker-default",
+			HostileAgentGrade: false,
+		},
 	}
 }
 

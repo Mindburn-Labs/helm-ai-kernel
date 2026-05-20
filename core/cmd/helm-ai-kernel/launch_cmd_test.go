@@ -3,11 +3,14 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	lpreceipts "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
 	lpregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
@@ -150,5 +153,158 @@ func TestLaunchSecretsSetAndStatusUseLogicalBindingWithoutPrintingValue(t *testi
 	}
 	if !strings.Contains(stdout.String(), `"available": true`) {
 		t.Fatalf("status did not show available binding: %s", stdout.String())
+	}
+}
+
+func TestLaunchCloudGateCreatesDigitalOceanProvisionedRun(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HELM_LAUNCHPAD_HOME", root)
+	t.Setenv("DIGITALOCEAN_TOKEN", "do-test-token")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer do-test-token" {
+			t.Fatalf("unexpected authorization header %q", r.Header.Get("Authorization"))
+		}
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v2/droplets":
+			_, _ = w.Write([]byte(`{"droplet":{"id":123}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v2/firewalls":
+			_, _ = w.Write([]byte(`{"firewall":{"id":"fw-123"}}`))
+		default:
+			t.Fatalf("unexpected provider call %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+	t.Setenv("HELM_LAUNCHPAD_DIGITALOCEAN_ENDPOINT", server.URL)
+
+	compiled := plan.LaunchPlan{
+		LaunchID:       "launch-cloud-create",
+		AppID:          "openclaw",
+		AppVersion:     "v2026.5.12",
+		SubstrateID:    "digitalocean",
+		Principal:      "test.operator",
+		PlanHash:       "sha256:" + strings.Repeat("a", 64),
+		ArtifactImage:  "ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:test",
+		ArtifactDigest: "sha256:test",
+		KernelVerdict:  "ALLOW",
+		Status:         "VALIDATED",
+	}
+	substrate := lpregistry.SubstrateSpec{ID: "digitalocean", Kind: "cloud", Provisioner: "digitalocean"}
+
+	var stdout, stderr bytes.Buffer
+	code := runLaunchCloudGate(compiled, substrate, true, "approval-1", 25, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("runLaunchCloudGate code=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	if strings.Contains(stdout.String(), "do-test-token") || strings.Contains(stderr.String(), "do-test-token") {
+		t.Fatalf("provider token leaked in cloud output")
+	}
+	var response launchCloudGateResponse
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Status != "PROVISIONED" || response.KernelVerdict != "ALLOW" {
+		t.Fatalf("unexpected cloud response: %+v", response)
+	}
+	if response.ProviderResourceRefs["droplet"] != "123" || response.ProviderResourceRefs["firewall"] != "fw-123" {
+		t.Fatalf("missing provider refs: %+v", response.ProviderResourceRefs)
+	}
+	if len(response.EvidencePackRefs) == 0 {
+		t.Fatalf("cloud response missing EvidencePack refs: %+v", response)
+	}
+	run, err := session.NewStore(root).Get("launch-cloud-create")
+	if err != nil {
+		t.Fatalf("cloud run not saved: %v", err)
+	}
+	if run.RuntimeHandles.CloudResourceIDs["provider"] != "digitalocean" {
+		t.Fatalf("cloud provider handle not saved: %+v", run.RuntimeHandles.CloudResourceIDs)
+	}
+}
+
+func TestLaunchCloudGateRequiresProviderSecret(t *testing.T) {
+	t.Setenv("DIGITALOCEAN_TOKEN", "")
+	t.Setenv("HELM_LAUNCHPAD_DIGITALOCEAN_TOKEN", "")
+	compiled := plan.LaunchPlan{
+		LaunchID:      "launch-cloud-missing-secret",
+		AppID:         "openclaw",
+		AppVersion:    "v2026.5.12",
+		SubstrateID:   "digitalocean",
+		Principal:     "test.operator",
+		PlanHash:      "sha256:" + strings.Repeat("b", 64),
+		KernelVerdict: "ALLOW",
+		Status:        "VALIDATED",
+	}
+	substrate := lpregistry.SubstrateSpec{ID: "digitalocean", Kind: "cloud", Provisioner: "digitalocean"}
+
+	var stdout, stderr bytes.Buffer
+	code := runLaunchCloudGate(compiled, substrate, true, "approval-1", 25, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected missing provider secret to fail")
+	}
+	if !strings.Contains(stdout.String(), "ERR_LAUNCHPAD_CLOUD_PROVIDER_SECRET_MISSING") {
+		t.Fatalf("missing provider secret reason not returned: %s", stdout.String())
+	}
+}
+
+func TestLaunchDeleteCascadesDigitalOceanResources(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HELM_LAUNCHPAD_HOME", root)
+	t.Setenv("DIGITALOCEAN_TOKEN", "do-delete-token")
+	var calls []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer do-delete-token" {
+			t.Fatalf("unexpected authorization header %q", r.Header.Get("Authorization"))
+		}
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		switch {
+		case r.Method == http.MethodDelete && r.URL.Path == "/v2/firewalls/fw-123":
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodDelete && r.URL.Path == "/v2/droplets/123":
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet && r.URL.Path == "/v2/droplets":
+			_, _ = w.Write([]byte(`{"droplets":[]}`))
+		default:
+			t.Fatalf("unexpected provider call %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+	t.Setenv("HELM_LAUNCHPAD_DIGITALOCEAN_ENDPOINT", server.URL)
+
+	store := session.NewStore(root)
+	if err := store.Save(session.LaunchRun{
+		LaunchID:          "launch-cloud-delete",
+		AppID:             "openclaw",
+		AppVersion:        "v2026.5.12",
+		SubstrateID:       "digitalocean",
+		Principal:         "test.operator",
+		PlanHash:          "sha256:" + strings.Repeat("c", 64),
+		State:             session.StateProvisioning,
+		KernelVerdict:     "ALLOW",
+		LaunchReceiptRefs: []string{"receipt:digitalocean:launch-cloud-delete:provision"},
+		RuntimeHandles: session.RuntimeHandles{CloudResourceIDs: map[string]string{
+			"provider": "digitalocean",
+			"droplet":  "123",
+			"firewall": "fw-123",
+		}},
+		IdempotencyKeys: map[string]string{"cloud": "digitalocean:test"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := runLaunchDelete([]string{"launch-cloud-delete", "--cascade"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("runLaunchDelete code=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	if strings.Contains(stdout.String(), "do-delete-token") || strings.Contains(stderr.String(), "do-delete-token") {
+		t.Fatalf("provider token leaked in delete output")
+	}
+	if strings.Join(calls, ",") != "DELETE /v2/firewalls/fw-123,DELETE /v2/droplets/123,GET /v2/droplets" {
+		t.Fatalf("unexpected provider calls: %#v", calls)
+	}
+	if !strings.Contains(stdout.String(), `"state": "DELETED"`) {
+		t.Fatalf("delete did not mark launch deleted: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), `receipt:digitalocean:launch-cloud-delete:teardown`) {
+		t.Fatalf("delete missing provider teardown receipt: %s", stdout.String())
 	}
 }

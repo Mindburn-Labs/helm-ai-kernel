@@ -104,6 +104,9 @@ func (r *DockerRunner) Run(spec *sandbox.SandboxSpec) (*sandbox.Result, *sandbox
 	if spec.WorkDir != "" {
 		args = append(args, "-w", spec.WorkDir)
 	}
+	if spec.RuntimeClass != "" {
+		args = append(args, "--runtime", spec.RuntimeClass)
+	}
 
 	// Image and command
 	args = append(args, spec.Image)

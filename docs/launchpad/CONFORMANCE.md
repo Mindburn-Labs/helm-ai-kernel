@@ -5,10 +5,10 @@ last_reviewed: 2026-05-20
 
 # Launchpad Conformance
 
-Status: OpenClaw and Hermes passed the `v0.5.4` release evidence bar. v1.0
-hardening adds logical secret binding, four-app artifact matrix support, and
-DigitalOcean/Hetzner opt-in beta provisioner gates; OpenCode and Kilo Code stay
-below support until their evidence is produced.
+Status: OpenClaw, Hermes, OpenCode, and Kilo Code passed the v1.0 signed
+artifact, live local-container, teardown, receipt, and offline EvidencePack
+bar in workflow `26179980172`. DigitalOcean opt-in beta passed for all four
+apps; Hetzner remains fail-closed until a scoped provider token is available.
 
 ## Audience
 
@@ -17,9 +17,9 @@ runtime, receipt, and public GA claims are backed by source and release evidence
 
 ## Outcome
 
-You can see which Launchpad checks are release-backed, which apps remain below
-promotion, and which commands prove the local-container app launcher and
-EvidencePacks on a clean machine.
+You can see which Launchpad checks are release-backed, which apps are promoted,
+and which commands prove the local-container app launcher and EvidencePacks on
+a clean machine.
 
 ## Source Truth
 
@@ -35,29 +35,39 @@ EvidencePacks on a clean machine.
 
 Implemented checks currently prove:
 
-- `launchpad-artifacts` workflow `26110916296` built pinned OpenClaw and Hermes
-  upstream refs into GHCR OCI images, signed them with GitHub OIDC keyless
-  cosign, generated syft SBOMs, ran grype scans, and published a promotion
-  manifest.
+- `launchpad-artifacts` workflow `26179980172` built pinned OpenClaw, Hermes,
+  OpenCode, and Kilo Code upstream refs into GHCR OCI images, signed them with
+  GitHub OIDC keyless cosign, generated syft SBOMs, ran grype scans, and
+  published a promotion manifest.
 - `helm-ai-kernel launch promote` refuses promotion unless the CI artifact
   manifest, immutable image digest, cosign signature, syft SBOM, grype/trivy
   scan, live e2e run, teardown receipt, and EvidencePack refs are present and
   tied to the same workflow run.
-- OpenCode and Kilo Code are now eligible for promotion only through that same
-  complete signed-evidence path. The registry still blocks them as
-  `oss_candidate` until a promotion manifest supplies the missing refs.
-- OpenClaw and Hermes are `oss_supported` in the registry from signed CI
-  evidence, not from assertion.
+- OpenClaw, Hermes, OpenCode, and Kilo Code are `oss_supported` in the registry
+  from signed CI evidence, live e2e, teardown, receipts, and offline
+  EvidencePack verification, not from assertion.
 - OpenClaw image:
-  `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e`.
+  `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501`.
 - Hermes image:
-  `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527`.
+  `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:11bb3893d8466b9abe2cea7f65c734647d86177908b38ea55edceb056944ee7f`.
+- OpenCode image:
+  `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:c31aaef9b739f9ed870edd5c66f34f9a79efcfab132aaa2395f890f7bf5fb20f`.
+- Kilo Code image:
+  `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:68a428e13c1b8cc1cb0338eb56c0e79610a609adc91a60b99b8f9a226c1621ba`.
 - Local-container OpenRouter egress requires a launch-scoped egress proxy
   receipt, can use the signed egress-proxy image from the artifact workflow, and
   rejects non-OpenRouter allowlists.
 - Installer tests reject missing digests, host `curl | bash`, mutable git
   update patterns, and package-manager mutation inside the current worktree.
 - MCP governance rejects unknown or revoked tools and requires schema pins.
+- Supported app specs must reference signed MCP manifests with pinned package
+  digest, schema hashes, tool effects, required secrets, and grants.
+- Substrate specs must declare capability metadata. `local-container` is the GA
+  baseline; Docker microVM and hosted sandbox substrates are registry-visible
+  but experimental until their adapters pass the same receipt/evidence/teardown
+  bar.
+- Generated Launchpad EvidencePacks include a hash-chained receipt graph at
+  `04_EXPORTS/launchpad_evidence_graph.json`.
 - Session store rejects `RUNNING` without launch receipt, healthcheck receipt,
   sandbox grant refs, and egress refs for networked launches.
 - Session store rejects `DELETED` without teardown receipt.
@@ -70,9 +80,7 @@ Implemented checks currently prove:
 Still gated:
 
 - Clean Homebrew install from a separate developer machine.
-- OpenCode and Kilo Code promotion runs.
-- Controlled live DigitalOcean and Hetzner app launches across the four-app
-  matrix.
+- Hetzner live app launches across the four-app matrix.
 - Codex redistribution; Codex remains external/BYO unless redistribution proof
   changes.
 
@@ -100,12 +108,18 @@ helm-ai-kernel launch hermes local-container --headless --output json
 helm-ai-kernel launch opencode local-container --headless --output json
 helm-ai-kernel launch kilocode local-container --headless --output json
 helm-ai-kernel launch delete <launch_id> --cascade
+helm-ai-kernel evidence inspect <pack>
+helm-ai-kernel evidence diff <pack-a> <pack-b>
 helm-ai-kernel verify --bundle <pack>
 ```
 
 `scripts/launch/clean_install_gate.sh` automates the command sequence, digest
 confirmation, EvidencePack verification, and secret-fragment audit. It writes
 redacted JSON only.
+
+OpenCode and Kilo Code are now part of the supported clean-install app set.
+`--include-candidates` remains accepted by the clean-install gate for backward
+compatibility only.
 
 ## Troubleshooting
 

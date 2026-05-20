@@ -1,6 +1,14 @@
-# Final Implementation Report
+# Historical Final Implementation Report
 
-Status: production release published for HELM OSS Skill Packs MVP, HELM Launchpad OpenClaw/Hermes local-container support, and HELM Commercial Launchpad/Skills governance surfaces.
+Status: historical `v0.5.4` production report for HELM OSS Skill Packs MVP,
+HELM Launchpad OpenClaw/Hermes local-container support, and HELM Commercial
+Launchpad/Skills governance surfaces.
+
+This file is not the current Launchpad GA support truth. Current Launchpad v1
+truth is recorded in `docs/launchpad/v1_report.json`: OpenClaw, Hermes,
+OpenCode, and Kilo Code are `oss_supported` after workflow `26179980172`
+passed signed artifact build, SBOM, vulnerability scan, live OpenRouter
+launch, teardown, and offline EvidencePack verification for all four.
 
 `mission_100_percent_complete` is true for this production deployment milestone. Kernel PR #161 and Enterprise PR #30 are merged. Kernel release `v0.5.4` is published from `main`, release workflow `26131090671` passed, and the release EvidencePack verifies offline. Homebrew PR https://github.com/mindburnlabs/homebrew-tap/pull/2 merged the public tap update to v0.5.4. Public website claims remain blocked until docs-truth and owner review approve a public claims update.
 

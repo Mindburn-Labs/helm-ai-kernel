@@ -7,6 +7,30 @@ policy_pack: policies/launchpad/substrates/local-container.safe.toml
 provisioner: docker
 supports_teardown: true
 requires_approval: false
+capabilities:
+  isolation_strength: container_baseline
+  network_enforcement: launch_owned_egress_proxy
+  secret_mode: logical_binding_env_projection
+  receipt_support: required
+  teardown_proof: required
+  status: ga
+  lifecycle: ["plan", "preflight", "launch", "healthcheck", "execute", "evidence_export", "reconcile", "delete", "post_delete_verify"]
+isolation:
+  mode: docker-default
+  supported_modes:
+    - docker-default
+    - docker-rootless-userns
+    - docker-eci
+    - gvisor
+    - kata-firecracker
+    - dedicated-vm
+  hardened_modes:
+    - docker-rootless-userns
+    - docker-eci
+    - gvisor
+    - kata-firecracker
+    - dedicated-vm
+  hostile_agent_grade: false
 network:
   default: deny
   allowlist: []
@@ -15,4 +39,4 @@ filesystem:
   mounts:
     - workspace:rw
 metadata:
-  status: "MVP default substrate; runtime side effects still blocked until conformance e2e lands."
+  status: "GA baseline substrate for trusted developer workloads; hostile-code claims require a stronger microVM or hosted sandbox substrate."

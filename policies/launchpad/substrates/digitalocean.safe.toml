@@ -2,6 +2,9 @@
 id = "digitalocean"
 permission_bypass_forbidden = true
 recursive_launch_forbidden = true
+network_default = "deny"
+isolation_mode = "dedicated-vm"
+hostile_agent_grade = false
 default_dry_run = true
 explicit_human_approval_required = true
 idempotency_key_required = true

@@ -3,17 +3,52 @@
   "$id": "https://schemas.mindburn.dev/helm/launchpad/substrate_spec.schema.json",
   "title": "HELM Launchpad SubstrateSpec",
   "type": "object",
-  "required": ["id", "name", "kind", "availability", "default_dry_run", "policy_pack", "provisioner", "supports_teardown", "requires_approval", "network", "filesystem"],
+  "required": ["id", "name", "kind", "availability", "default_dry_run", "policy_pack", "provisioner", "supports_teardown", "requires_approval", "capabilities", "isolation", "network", "filesystem"],
   "properties": {
     "id": { "type": "string" },
     "name": { "type": "string" },
-    "kind": { "enum": ["local-container", "cloud"] },
+    "kind": { "enum": ["local-container", "local-microvm", "hosted-sandbox", "cloud"] },
     "availability": { "type": "string" },
     "default_dry_run": { "type": "boolean" },
     "policy_pack": { "type": "string" },
     "provisioner": { "type": "string" },
     "supports_teardown": { "type": "boolean" },
     "requires_approval": { "type": "boolean" },
+    "capabilities": {
+      "type": "object",
+      "required": ["isolation_strength", "network_enforcement", "secret_mode", "receipt_support", "teardown_proof", "status", "lifecycle"],
+      "properties": {
+        "isolation_strength": { "type": "string" },
+        "network_enforcement": { "type": "string" },
+        "secret_mode": { "type": "string" },
+        "receipt_support": { "type": "string" },
+        "teardown_proof": { "type": "string" },
+        "status": { "type": "string" },
+        "lifecycle": {
+          "type": "array",
+          "items": { "enum": ["plan", "preflight", "launch", "healthcheck", "execute", "evidence_export", "reconcile", "delete", "post_delete_verify"] }
+        }
+      },
+      "additionalProperties": false
+    },
+    "isolation": {
+      "type": "object",
+      "required": ["mode", "hostile_agent_grade"],
+      "properties": {
+        "mode": { "enum": ["docker-default", "docker-rootless-userns", "docker-eci", "gvisor", "kata-firecracker", "dedicated-vm"] },
+        "supported_modes": {
+          "type": "array",
+          "items": { "enum": ["docker-default", "docker-rootless-userns", "docker-eci", "gvisor", "kata-firecracker", "dedicated-vm"] }
+        },
+        "hardened_modes": {
+          "type": "array",
+          "items": { "enum": ["docker-rootless-userns", "docker-eci", "gvisor", "kata-firecracker", "dedicated-vm"] }
+        },
+        "runtime_class": { "type": "string" },
+        "hostile_agent_grade": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
     "network": { "type": "object", "required": ["default"], "properties": { "default": { "const": "deny" }, "allowlist": { "type": "array", "items": { "type": "string" } } } },
     "filesystem": { "type": "object", "required": ["mode"], "properties": { "mode": { "type": "string" }, "mounts": { "type": "array", "items": { "type": "string" } } } }
   }

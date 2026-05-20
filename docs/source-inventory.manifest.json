@@ -122,7 +122,8 @@
         "helm-ai-kernel/conformance",
         "helm-ai-kernel/reference/execution-boundary",
         "helm-ai-kernel/launchpad",
-        "helm-ai-kernel/launchpad/conformance"
+        "helm-ai-kernel/launchpad/conformance",
+        "helm-ai-kernel/launchpad/clean-install-ga"
       ],
       "rationale": "Protocol and schema truth must be public and agent-readable, with detailed source ownership kept in protocol README files.",
       "validation_commands": [

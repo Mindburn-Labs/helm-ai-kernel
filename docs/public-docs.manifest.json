@@ -91,6 +91,15 @@
       "sensitivity": "public"
     },
     {
+      "slug": "helm-ai-kernel/launchpad/clean-install-ga",
+      "title": "Launchpad Clean Install GA",
+      "section": "start-here",
+      "source_path": "docs/launchpad/CLEAN_INSTALL_GA.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad/clean-install-ga",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "helm-ai-kernel/skills/flow-catalog",
       "title": "Skill Packs Flow Catalog",
       "section": "interfaces",

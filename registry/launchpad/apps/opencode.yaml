@@ -4,7 +4,7 @@ version: unverified-upstream
 license:
   status: verified
   spdx: MIT
-  url: https://raw.githubusercontent.com/sst/opencode/dev/LICENSE
+  url: https://raw.githubusercontent.com/anomalyco/opencode/v1.15.5/LICENSE
 redistribution: unverified
 availability: oss_candidate
 install:
@@ -19,7 +19,8 @@ filesystem_policy:
   policy_ref: policies/launchpad/apps/opencode.safe.toml
 network_policy:
   default: deny
-  allowlist: []
+  allowlist:
+    - https://openrouter.ai/api/v1
 mcp_policy:
   unknown_server_policy: quarantine
   unknown_tool_policy: ESCALATE
@@ -32,7 +33,7 @@ budget_ceiling:
   usd_max: 0
   api_calls_max: 0
   time_ms_max: 0
-evidence_requirements: ["cpi_output", "kernel_verdict", "sandbox_grant", "launch_receipt", "teardown_receipt", "evidence_pack"]
+evidence_requirements: ["cpi_output", "kernel_verdict", "sandbox_grant", "launch_receipt", "install_receipt", "healthcheck_receipt", "teardown_receipt", "evidence_pack", "mcp_quarantine", "artifact_digest", "cosign_signature", "syft_sbom", "grype_vulnerability_scan"]
 conformance:
   license_verified: true
   artifact_verified: false
@@ -44,5 +45,7 @@ conformance:
   receipt_verified: false
   evidence_pack_verified: false
 metadata:
-  upstream_repo: https://github.com/sst/opencode
-  blocker: "Official license file is MIT; release artifact signature/digest, healthcheck, sandbox e2e, receipts, and EvidencePack remain unverified."
+  upstream_repo: https://github.com/anomalyco/opencode
+  upstream_ref: v1.15.5
+  upstream_commit: d7a6e1daaf2271bcd0b611fbb27d4956806e475a
+  blocker: "Official license file is MIT; v1.15.5 artifact signature/digest, healthcheck, sandbox e2e, receipts, and EvidencePack remain unverified until Launchpad artifact CI and live conformance complete."

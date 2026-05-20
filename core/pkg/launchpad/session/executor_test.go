@@ -44,6 +44,9 @@ func TestExecutorRecordsRuntimeHandleBeforeRunning(t *testing.T) {
 	if len(run.HealthcheckRefs) == 0 || len(run.LaunchReceiptRefs) == 0 || len(run.SandboxGrantRefs) == 0 {
 		t.Fatalf("RUNNING missing required refs: %#v", run)
 	}
+	if run.ArtifactDigest == "" || run.VerificationCommand == "" || run.TeardownCommand == "" {
+		t.Fatalf("developer response fields missing: %#v", run)
+	}
 }
 
 func TestExecutorBlocksRunningWhenHealthcheckFails(t *testing.T) {

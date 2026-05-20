@@ -298,6 +298,9 @@ func (e Executor) persist(run LaunchRun, artifacts map[string][]byte) (LaunchRun
 	run.EvidencePackRefs = appendUnique(run.EvidencePackRefs, packRef)
 	if archiveRef, err := receipts.WriteEvidencePackArchive(packRef); err == nil {
 		run.EvidencePackRefs = appendUnique(run.EvidencePackRefs, archiveRef)
+		run.VerificationCommand = "helm-ai-kernel verify --bundle " + archiveRef
+	} else {
+		run.VerificationCommand = "helm-ai-kernel verify --bundle " + packRef
 	}
 	logPath, _ := e.Store.AppendLog(run.LaunchID, fmt.Sprintf("launchpad state %s verdict %s", run.State, run.KernelVerdict))
 	run.LogPath = logPath
@@ -324,6 +327,8 @@ func newLaunchRun(compiled plan.LaunchPlan, reason string) LaunchRun {
 		SubstrateID:      compiled.SubstrateID,
 		Principal:        compiled.Principal,
 		PlanHash:         compiled.PlanHash,
+		ArtifactImage:    compiled.ArtifactImage,
+		ArtifactDigest:   compiled.ArtifactDigest,
 		State:            state,
 		KernelVerdict:    compiled.KernelVerdict,
 		Reason:           reason,
@@ -332,6 +337,7 @@ func newLaunchRun(compiled plan.LaunchPlan, reason string) LaunchRun {
 		CPIRefs:          []string{},
 		SandboxGrantRefs: []string{},
 		MCPRefs:          []string{},
+		TeardownCommand:  "helm-ai-kernel launch delete " + compiled.LaunchID + " --cascade",
 	}
 }
 

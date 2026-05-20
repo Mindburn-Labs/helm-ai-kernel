@@ -1,0 +1,18 @@
+id: kilocode.default
+app_id: kilocode
+server_id: kilocode-default
+transport: stdio
+command: ["kilocode", "mcp", "serve"]
+package_digest: sha256:f2d741249f09b2d5b6c512413fdeadba06e200652e10355287a7758b15cdbe69
+signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:f2d741249f09b2d5b6c512413fdeadba06e200652e10355287a7758b15cdbe69
+schema_hash: sha256:4444444444444444444444444444444444444444444444444444444444444444
+tools:
+  - name: model_gateway.complete
+    schema_hash: sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+    effect: side_effect
+    description: Model gateway request mediated by HELM policy and receipts.
+    labels: ["model", "egress"]
+effect_labels: ["model", "egress", "side_effect"]
+required_secrets: ["model_gateway"]
+network_grants: ["https://openrouter.ai/api/v1"]
+filesystem_grants: ["workspace:rw", "app_state:rw"]

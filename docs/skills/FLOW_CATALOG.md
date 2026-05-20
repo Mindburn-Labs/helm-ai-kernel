@@ -7,6 +7,16 @@ last_reviewed: 2026-05-20
 
 HELM Skill Packs are signed, scoped procedural packages for agents. A skill can guide behavior, but it cannot grant tool permissions or execution authority.
 
+## Audience
+
+This page is for developers and reviewers evaluating HELM-managed skill
+installation, projection, disable, revoke, and marketplace flows.
+
+## Outcome
+
+You should leave with the command sequence for each skill-pack flow and the
+authority boundary that keeps skills from granting tools or execution rights.
+
 ## Source Truth
 
 - Skill runtime commands: `core/cmd/helm-ai-kernel/skills_cmd.go`
@@ -14,6 +24,16 @@ HELM Skill Packs are signed, scoped procedural packages for agents. A skill can 
 - Skill registry: `registry/skills/`
 - Skill policy fixtures: `policies/skills/`
 - Skill docs: `docs/skills/`
+
+```mermaid
+flowchart TD
+  search["search registry"] --> inspect["inspect skill"]
+  inspect --> scan["scan content and metadata"]
+  scan --> install["repo-scoped install"]
+  install --> receipts["install/projection receipts"]
+  scan --> export["Codex plugin export"]
+  install --> revoke["disable or revoke"]
+```
 
 ## OSS Flows
 
@@ -86,3 +106,12 @@ Removes managed projection files, updates install state, and emits `SKILL_REVOKE
 ## Completion Gaps
 
 Deferred: remote GitHub skill fetch, key-backed signature verification, full plugin marketplace e2e, and Enterprise global rollout approvals remain outside this MVP slice.
+
+## Troubleshooting
+
+| Condition | Response |
+| --- | --- |
+| Scan returns `DENY` | Inspect the attestation and remove unsafe file, symlink, or payload content before install. |
+| User/global install escalates | Keep the install repo-scoped unless an operator approves the wider projection. |
+| Marketplace add fails | Confirm the plugin path stays inside the repo root and has stable source hashes. |
+| Revoke leaves files | Compare projection receipt paths with the working tree and remove only HELM-managed projections. |

@@ -1,0 +1,13 @@
+[substrate]
+id = "modal"
+permission_bypass_forbidden = true
+recursive_launch_forbidden = true
+network_default = "deny"
+isolation_mode = "dedicated-vm"
+hostile_agent_grade = false
+default_dry_run = true
+explicit_human_approval_required = true
+idempotency_key_required = true
+reconcile_before_retry = true
+secret_log_redaction = true
+teardown_receipt_required = true

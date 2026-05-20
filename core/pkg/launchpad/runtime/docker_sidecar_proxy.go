@@ -88,6 +88,9 @@ func (p DockerSidecarEgressProxy) Start(req EgressProxyRequest) (EgressProxyHand
 		"proxy_container_name":  proxyName,
 		"proxy_image":           image,
 		"raw_app_egress_denied": true,
+		"payload_inspection":    payloadInspection(req.PayloadInspection),
+		"network_proof":         networkProof(req.NetworkProof),
+		"token_broker_enabled":  req.TokenBrokerEnabled,
 	})
 	return EgressProxyHandle{
 		ProxyURL:           "http://" + proxyName + ":8080",
@@ -97,6 +100,9 @@ func (p DockerSidecarEgressProxy) Start(req EgressProxyRequest) (EgressProxyHand
 		NetworkName:        networkName,
 		ProxyContainerID:   containerID,
 		ProxyContainerName: proxyName,
+		PayloadInspection:  payloadInspection(req.PayloadInspection),
+		NetworkProof:       networkProof(req.NetworkProof),
+		TokenBrokerEnabled: req.TokenBrokerEnabled,
 		Stop: func() error {
 			var stopErr error
 			if out, err := exec.Command(docker, "rm", "-f", proxyName).CombinedOutput(); err != nil {

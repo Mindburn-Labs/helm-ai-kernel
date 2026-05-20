@@ -61,6 +61,13 @@ func EvaluateMissionReadiness(app registry.AppSpec, substrate registry.Substrate
 	} else {
 		add("substrate.network_default_deny", GatePass, "substrate network default is deny")
 	}
+	if substrate.Isolation.Mode == "docker-default" && substrate.Isolation.HostileAgentGrade {
+		add("substrate.isolation_claim", GateFail, "docker-default cannot be claimed as hostile-agent-grade isolation")
+	} else if substrate.Isolation.Mode == "" {
+		add("substrate.isolation_claim", GateFail, "substrate isolation mode is required")
+	} else {
+		add("substrate.isolation_claim", GatePass, "substrate isolation mode is explicit")
+	}
 
 	requiredEnv := modelGatewayEnv(app)
 	for _, envName := range requiredEnv {

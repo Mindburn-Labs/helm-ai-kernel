@@ -1,0 +1,18 @@
+id: opencode.default
+app_id: opencode
+server_id: opencode-default
+transport: stdio
+command: ["opencode", "mcp", "serve"]
+package_digest: sha256:fd3db72a2acfae066e455241f17800bd698070d2126e534e18a441f7910ed35b
+signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:fd3db72a2acfae066e455241f17800bd698070d2126e534e18a441f7910ed35b
+schema_hash: sha256:3333333333333333333333333333333333333333333333333333333333333333
+tools:
+  - name: model_gateway.complete
+    schema_hash: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    effect: side_effect
+    description: Model gateway request mediated by HELM policy and receipts.
+    labels: ["model", "egress"]
+effect_labels: ["model", "egress", "side_effect"]
+required_secrets: ["model_gateway"]
+network_grants: ["https://openrouter.ai/api/v1"]
+filesystem_grants: ["workspace:rw", "app_state:rw"]

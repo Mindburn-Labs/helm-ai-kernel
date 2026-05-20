@@ -3,6 +3,7 @@ package runtime
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 )
@@ -88,6 +90,61 @@ func TestPreflightRestrictsEgressAllowlistToOpenRouter(t *testing.T) {
 	}
 }
 
+func TestPreflightRecordsBaselineIsolation(t *testing.T) {
+	req := baseContainerRequest(t)
+
+	handle, err := NewLocalContainerRuntime().Preflight(req)
+	if err != nil {
+		t.Fatalf("Preflight: %v", err)
+	}
+	if handle.Isolation.Mode != IsolationModeDockerDefault {
+		t.Fatalf("isolation mode = %q", handle.Isolation.Mode)
+	}
+	if handle.Isolation.Hardened {
+		t.Fatal("docker-default must not be marked hardened")
+	}
+	if handle.Isolation.HostileAgentGrade {
+		t.Fatal("docker-default must not be marked hostile-agent grade")
+	}
+	if handle.Isolation.PayloadInspection != "opaque_connect" || handle.Isolation.NetworkProof != "destination_allowlist_only" {
+		t.Fatalf("unexpected isolation proof labels: %#v", handle.Isolation)
+	}
+}
+
+func TestPreflightRequiresConfiguredHardenedIsolation(t *testing.T) {
+	req := baseContainerRequest(t)
+	runtime := NewLocalContainerRuntime()
+	runtime.IsolationMode = IsolationModeDockerRootlessUser
+	runtime.DockerInfoProvider = func(string) (DockerIsolationInfo, error) {
+		return DockerIsolationInfo{}, nil
+	}
+
+	handle, err := runtime.Preflight(req)
+	if err == nil || !strings.Contains(err.Error(), "rootless") {
+		t.Fatalf("expected rootless/userns isolation rejection, got %v", err)
+	}
+	if handle.Isolation.Mode != IsolationModeDockerRootlessUser || handle.Isolation.DetectionStatus != "unsupported" {
+		t.Fatalf("denied isolation evidence missing: %#v", handle.Isolation)
+	}
+}
+
+func TestPreflightAllowsGVisorRuntimeClass(t *testing.T) {
+	req := baseContainerRequest(t)
+	runtime := NewLocalContainerRuntime()
+	runtime.IsolationMode = IsolationModeGVisor
+	runtime.DockerInfoProvider = func(string) (DockerIsolationInfo, error) {
+		return DockerIsolationInfo{Runtimes: []string{"runc", "runsc"}}, nil
+	}
+
+	handle, err := runtime.Preflight(req)
+	if err != nil {
+		t.Fatalf("Preflight: %v", err)
+	}
+	if handle.Isolation.RuntimeClass != "runsc" || !handle.Isolation.Hardened || !handle.Isolation.HostileAgentGrade {
+		t.Fatalf("unexpected gVisor isolation evidence: %#v", handle.Isolation)
+	}
+}
+
 func TestStartRequiresEgressProxyReceiptForOpenRouterAllowlist(t *testing.T) {
 	req := baseContainerRequest(t)
 	req.DryRun = false
@@ -122,6 +179,20 @@ func TestContainerCommandDoesNotAddShellArgsToAppCommand(t *testing.T) {
 	command, args = containerCommand(nil, nil)
 	if got := strings.Join(append(command, args...), " "); got != "/bin/sh -lc true" {
 		t.Fatalf("default command = %q", got)
+	}
+}
+
+func TestLocalContainerCommandTimeoutCanBeRaisedForColdPulls(t *testing.T) {
+	t.Setenv("HELM_LAUNCHPAD_LOCAL_CONTAINER_TIMEOUT", "8m")
+
+	runtime := NewLocalContainerRuntime()
+	if got := runtime.commandTimeout(); got != 8*time.Minute {
+		t.Fatalf("command timeout = %s, want 8m", got)
+	}
+
+	runtime.CommandTimeout = 3 * time.Minute
+	if got := runtime.commandTimeout(); got != 3*time.Minute {
+		t.Fatalf("explicit command timeout = %s, want 3m", got)
 	}
 }
 
@@ -167,13 +238,11 @@ func TestLaunchOwnedEgressProxyWritesReceiptAndAllowsOpenRouterConnect(t *testin
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", response.StatusCode)
 	}
-	entries, err := os.ReadDir(handle.ReceiptDir)
-	if err != nil {
-		t.Fatalf("read receipt dir: %v", err)
-	}
-	if len(entries) == 0 {
-		t.Fatal("expected egress proxy receipts")
-	}
+	assertEgressReceiptSubject(t, handle.ReceiptDir, "connect_allowed", map[string]any{
+		"payload_inspection":   "opaque_connect",
+		"network_proof":        "destination_allowlist_only",
+		"token_broker_enabled": false,
+	})
 }
 
 func TestLaunchOwnedEgressProxyDeniesUnknownDestination(t *testing.T) {
@@ -256,4 +325,49 @@ func stopProxy(t *testing.T, handle EgressProxyHandle) {
 			t.Fatalf("stop proxy: %v", err)
 		}
 	}
+}
+
+func assertEgressReceiptSubject(t *testing.T, dir, reason string, want map[string]any) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if receiptSubjectMatches(t, dir, reason, want) {
+			return
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("receipt reason %q not found in %s", reason, dir)
+}
+
+func receiptSubjectMatches(t *testing.T, dir, reason string, want map[string]any) bool {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read receipt dir: %v", err)
+	}
+	for _, entry := range entries {
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			t.Fatalf("read receipt: %v", err)
+		}
+		var receipt struct {
+			Subject map[string]any `json:"subject"`
+		}
+		if err := json.Unmarshal(data, &receipt); err != nil {
+			t.Fatalf("decode receipt: %v", err)
+		}
+		if receipt.Subject["reason"] != reason {
+			continue
+		}
+		for key, expected := range want {
+			if receipt.Subject[key] != expected {
+				t.Fatalf("receipt %s = %#v, want %#v in subject %#v", key, receipt.Subject[key], expected, receipt.Subject)
+			}
+		}
+		return true
+	}
+	return false
 }

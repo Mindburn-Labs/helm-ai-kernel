@@ -1,6 +1,9 @@
 package session
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
@@ -61,6 +64,40 @@ func TestExecutorBlocksRunningWhenHealthcheckFails(t *testing.T) {
 	}
 	if run.State != StateRepairRequired {
 		t.Fatalf("expected REPAIR_REQUIRED when healthcheck fails, got %s", run.State)
+	}
+}
+
+func TestExecutorRecordsIsolationEvidenceOnRuntimeFailure(t *testing.T) {
+	store := NewStore(t.TempDir())
+	run, err := NewExecutor(store).ExecuteLaunch(allowPlan(), ExecuteOptions{
+		Reason:         "test",
+		RuntimeStarter: failingIsolationStarter{},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteLaunch: %v", err)
+	}
+	if run.State != StateRepairRequired {
+		t.Fatalf("expected REPAIR_REQUIRED when isolation is unsupported, got %s", run.State)
+	}
+	if len(run.EvidencePackRefs) == 0 {
+		t.Fatalf("evidence pack missing: %#v", run)
+	}
+
+	var runtimeEnv map[string]any
+	readJSON(t, filepath.Join(run.EvidencePackRefs[0], "04_EXPORTS/runtime_environment.json"), &runtimeEnv)
+	if runtimeEnv["isolation_mode"] != "gvisor" || runtimeEnv["isolation_detection_status"] != "unsupported" {
+		t.Fatalf("runtime environment missing isolation denial evidence: %#v", runtimeEnv)
+	}
+	if denied, _ := runtimeEnv["unsupported_mode_denial"].(bool); !denied {
+		t.Fatalf("runtime environment missing unsupported-mode denial marker: %#v", runtimeEnv)
+	}
+
+	var failureReceipt struct {
+		Subject map[string]any `json:"subject"`
+	}
+	readJSON(t, filepath.Join(run.EvidencePackRefs[0], "02_PROOFGRAPH/receipts/launchpad-runtime-failure.json"), &failureReceipt)
+	if failureReceipt.Subject["isolation_unsupported_reason"] == "" {
+		t.Fatalf("runtime failure receipt missing unsupported reason: %#v", failureReceipt.Subject)
 	}
 }
 
@@ -132,6 +169,22 @@ func (fakeNetworkStarter) Start(plan.LaunchPlan, ExecuteOptions) (RuntimeStartRe
 	}, nil
 }
 
+type failingIsolationStarter struct{}
+
+func (failingIsolationStarter) Start(plan.LaunchPlan, ExecuteOptions) (RuntimeStartResult, error) {
+	return RuntimeStartResult{
+		Runtime:                    "local-container",
+		IsolationMode:              "gvisor",
+		IsolationDetectionStatus:   "unsupported",
+		IsolationUnsupportedReason: "gvisor requires Docker runtime \"runsc\"",
+		RuntimeClass:               "runsc",
+		DockerRuntimes:             []string{"runc"},
+		PayloadInspection:          "opaque_connect",
+		NetworkProof:               "destination_allowlist_only",
+		TokenBrokerEnabled:         false,
+	}, testError("gvisor requires Docker runtime \"runsc\"")
+}
+
 func (f *fakeHealthcheck) Run(plan.LaunchPlan, RuntimeStartResult, ExecuteOptions) (HealthcheckResult, error) {
 	f.called = true
 	return HealthcheckResult{Type: "command", Status: "passed", Metadata: map[string]any{"source": "test"}}, nil
@@ -148,6 +201,18 @@ var errHealthcheckFailed = testError("healthcheck failed")
 type testError string
 
 func (e testError) Error() string { return string(e) }
+
+func readJSON(t *testing.T, path string, out any) {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+}
 
 func allowPlan() plan.LaunchPlan {
 	return plan.LaunchPlan{

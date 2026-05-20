@@ -139,9 +139,14 @@ fi
     cd "$ASSETS_DIR"
     shasum -a 256 helm-ai-kernel-darwin-amd64 helm-ai-kernel-darwin-arm64 helm-ai-kernel-linux-amd64 helm-ai-kernel-linux-arm64 helm-ai-kernel-windows-amd64.exe > "$TMP_DIR/binary-SHA256SUMS.txt"
 )
+tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='UTC 1970-01-01' \
+    -cf "$ASSETS_DIR/helm-ai-kernel-launchpad-data.tar" \
+    registry/launchpad policies/launchpad
+launchpad_data_sha="$(shasum -a 256 "$ASSETS_DIR/helm-ai-kernel-launchpad-data.tar" | awk '{print $1}')"
 ruby "$ROOT/scripts/release/homebrew_formula.rb" \
     --version "$VERSION" \
     --checksums "$TMP_DIR/binary-SHA256SUMS.txt" \
+    --launchpad-data-sha256 "$launchpad_data_sha" \
     --repo Mindburn-Labs/helm-ai-kernel > "$ASSETS_DIR/helm-ai-kernel.rb"
 
 python3 - "$ROOT" "$ASSETS_DIR" "$TAG" <<'PY'

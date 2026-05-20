@@ -1,17 +1,21 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	lppromotion "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/promotion"
 	lpprovision "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/provision"
+	lpreceipts "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
 	lpregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 	lprepair "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/repair"
 	lpsecrets "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/secrets"
@@ -304,12 +308,44 @@ func runLaunchCloudGate(compiled plan.LaunchPlan, substrate lpregistry.Substrate
 		}
 		return 1
 	}
-	response.ReasonCode = "ERR_LAUNCHPAD_CLOUD_RUNTIME_NOT_CONNECTED"
-	fmt.Fprintln(stderr, "cloud Launchpad beta gates passed locally, but app runtime handoff is not connected in this CLI path")
+	if costCeiling < response.EstimatedCostUSD {
+		response.ReasonCode = "ERR_LAUNCHPAD_CLOUD_COST_CEILING_TOO_LOW"
+		fmt.Fprintln(stderr, "cloud Launchpad beta cost ceiling is below the estimated cost")
+		if writeLaunchJSON(stdout, response) != 0 {
+			return 1
+		}
+		return 1
+	}
+	result, receiptRefs, err := createCloudLaunch(compiled, substrate, approvalID, costCeiling)
+	if err != nil {
+		response.ReasonCode = cloudGateReason(err)
+		response.Status = "ESCALATED"
+		fmt.Fprintf(stderr, "cloud Launchpad beta provisioning failed: %v\n", err)
+		if writeLaunchJSON(stdout, response) != 0 {
+			return 1
+		}
+		return 1
+	}
+	response.KernelVerdict = "ALLOW"
+	response.Status = "PROVISIONED"
+	response.ReasonCode = "LAUNCHPAD_CLOUD_BETA_PROVISIONED"
+	response.ProviderResourceRefs = result.ResourceRefs
+	response.IdempotencyKey = result.IdempotencyKey
+	response.ReconcileStatus = string(result.ReconcileStatus)
+	response.EvidencePackRefs = result.EvidencePackRefs
+	evidenceRefs, err := persistCloudLaunch(compiled, substrate, response, receiptRefs)
+	if err != nil {
+		fmt.Fprintf(stderr, "cloud Launchpad beta evidence error: %v\n", err)
+		if writeLaunchJSON(stdout, response) != 0 {
+			return 1
+		}
+		return 1
+	}
+	response.EvidencePackRefs = evidenceRefs
 	if writeLaunchJSON(stdout, response) != 0 {
 		return 1
 	}
-	return 1
+	return 0
 }
 
 func estimateCloudLaunchCost(substrateID string) float64 {
@@ -321,6 +357,233 @@ func estimateCloudLaunchCost(substrateID string) float64 {
 	default:
 		return 0
 	}
+}
+
+type cloudProvisionResult struct {
+	ResourceRefs     map[string]string
+	IdempotencyKey   string
+	ReconcileStatus  lpprovision.ReconcileStatus
+	EvidencePackRefs []string
+}
+
+func createCloudLaunch(compiled plan.LaunchPlan, substrate lpregistry.SubstrateSpec, approvalID string, costCeiling float64) (cloudProvisionResult, []string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	name := cloudResourceName(compiled)
+	switch substrate.Provisioner {
+	case "digitalocean":
+		token := firstEnv("DIGITALOCEAN_TOKEN", "HELM_LAUNCHPAD_DIGITALOCEAN_TOKEN")
+		if token == "" {
+			return cloudProvisionResult{}, nil, errCloudProviderSecretMissing("digitalocean")
+		}
+		provisioner := lpprovision.DigitalOceanProvisioner{
+			AllowLiveWrites: true,
+			Token:           token,
+			Endpoint:        os.Getenv("HELM_LAUNCHPAD_DIGITALOCEAN_ENDPOINT"),
+		}
+		result, err := provisioner.Create(ctx, lpprovision.DigitalOceanProvisionRequest{
+			LaunchID:     compiled.LaunchID,
+			PlanHash:     compiled.PlanHash,
+			Name:         name,
+			Region:       firstEnvValue("HELM_LAUNCHPAD_DO_REGION", "nyc3"),
+			Size:         firstEnvValue("HELM_LAUNCHPAD_DO_SIZE", "s-1vcpu-1gb"),
+			Image:        firstEnvValue("HELM_LAUNCHPAD_DO_IMAGE", "ubuntu-24-04-x64"),
+			Tags:         cloudTags(compiled, approvalID),
+			FirewallName: name + "-firewall",
+		})
+		if err != nil {
+			return cloudProvisionResult{}, nil, err
+		}
+		return cloudProvisionResult{
+			ResourceRefs:    result.ResourceRefs,
+			IdempotencyKey:  result.IdempotencyKey,
+			ReconcileStatus: result.ReconcileOutcome.Status,
+		}, result.ReceiptRefs, nil
+	case "hetzner":
+		token := firstEnv("HCLOUD_TOKEN", "HELM_LAUNCHPAD_HETZNER_TOKEN")
+		if token == "" {
+			return cloudProvisionResult{}, nil, errCloudProviderSecretMissing("hetzner")
+		}
+		provisioner := lpprovision.HetznerProvisioner{
+			AllowLiveWrites: true,
+			Token:           token,
+			Endpoint:        os.Getenv("HELM_LAUNCHPAD_HETZNER_ENDPOINT"),
+		}
+		result, err := provisioner.Create(ctx, lpprovision.HetznerProvisionRequest{
+			LaunchID:     compiled.LaunchID,
+			PlanHash:     compiled.PlanHash,
+			Name:         name,
+			Location:     firstEnvValue("HELM_LAUNCHPAD_HETZNER_LOCATION", "nbg1"),
+			ServerType:   firstEnvValue("HELM_LAUNCHPAD_HETZNER_SERVER_TYPE", "cx22"),
+			Image:        firstEnvValue("HELM_LAUNCHPAD_HETZNER_IMAGE", "ubuntu-24.04"),
+			Labels:       cloudLabels(compiled, approvalID, costCeiling),
+			FirewallName: name + "-firewall",
+		})
+		if err != nil {
+			return cloudProvisionResult{}, nil, err
+		}
+		return cloudProvisionResult{
+			ResourceRefs:    result.ResourceRefs,
+			IdempotencyKey:  result.IdempotencyKey,
+			ReconcileStatus: result.ReconcileOutcome.Status,
+		}, result.ReceiptRefs, nil
+	default:
+		return cloudProvisionResult{}, nil, fmt.Errorf("unsupported cloud provisioner %q", substrate.Provisioner)
+	}
+}
+
+func persistCloudLaunch(compiled plan.LaunchPlan, substrate lpregistry.SubstrateSpec, response launchCloudGateResponse, providerReceiptRefs []string) ([]string, error) {
+	store := session.NewStore("")
+	approvalReceipt := lpreceipts.NewReceipt("launchpad.cloud_approval", compiled.LaunchID, "ALLOW", map[string]any{
+		"approval_id":        response.ApprovalID,
+		"cost_ceiling_usd":   response.CostCeilingUSD,
+		"estimated_cost_usd": response.EstimatedCostUSD,
+		"provider":           response.Provider,
+		"substrate_id":       response.SubstrateID,
+	})
+	provisionReceipt := lpreceipts.NewReceipt("launchpad.cloud_provision", compiled.LaunchID, "ALLOW", map[string]any{
+		"provider":               response.Provider,
+		"resource_refs":          response.ProviderResourceRefs,
+		"idempotency_key":        response.IdempotencyKey,
+		"reconcile_status":       response.ReconcileStatus,
+		"teardown_required":      response.TeardownRequired,
+		"provider_receipt_refs":  providerReceiptRefs,
+		"runtime_handoff_status": "provider-vm-provisioned",
+	})
+	healthReceipt := lpreceipts.NewReceipt("launchpad.cloud_healthcheck", compiled.LaunchID, "ALLOW", map[string]any{
+		"status": "provider-resource-provisioned",
+		"type":   "cloud-beta-provisioner",
+	})
+	artifacts := map[string][]byte{}
+	addJSON(artifacts, "launch_plan.json", compiled)
+	addJSON(artifacts, "cloud_launch_response.json", response)
+	addJSON(artifacts, "cloud_provision_result.json", map[string]any{
+		"provider":              response.Provider,
+		"resource_refs":         response.ProviderResourceRefs,
+		"idempotency_key":       response.IdempotencyKey,
+		"reconcile_status":      response.ReconcileStatus,
+		"provider_receipt_refs": providerReceiptRefs,
+	})
+	addJSON(artifacts, "receipts/launchpad-cloud-approval.json", approvalReceipt)
+	addJSON(artifacts, "receipts/launchpad-cloud-provision.json", provisionReceipt)
+	addJSON(artifacts, "receipts/launchpad-cloud-healthcheck.json", healthReceipt)
+	run := session.LaunchRun{
+		LaunchID:            compiled.LaunchID,
+		AppID:               compiled.AppID,
+		AppVersion:          compiled.AppVersion,
+		SubstrateID:         compiled.SubstrateID,
+		Principal:           compiled.Principal,
+		PlanHash:            compiled.PlanHash,
+		ArtifactImage:       compiled.ArtifactImage,
+		ArtifactDigest:      compiled.ArtifactDigest,
+		State:               session.StateProvisioning,
+		KernelVerdict:       "ALLOW",
+		Reason:              "cloud beta provider resources provisioned behind approval and cost ceiling receipts",
+		BoundaryRecordRefs:  []string{"boundary://launchpad/" + compiled.LaunchID},
+		SandboxGrantRefs:    []string{provisionReceipt.ReceiptID},
+		LaunchReceiptRefs:   append(providerReceiptRefs, provisionReceipt.ReceiptID),
+		HealthcheckRefs:     []string{healthReceipt.ReceiptID},
+		EvidencePackRefs:    []string{},
+		RuntimeHandles:      session.RuntimeHandles{CloudResourceIDs: response.ProviderResourceRefs},
+		IdempotencyKeys:     map[string]string{"cloud": response.IdempotencyKey, "teardown": "teardown:" + response.IdempotencyKey},
+		VerificationCommand: "",
+		TeardownCommand:     "helm-ai-kernel launch delete " + compiled.LaunchID + " --cascade",
+	}
+	if run.RuntimeHandles.CloudResourceIDs == nil {
+		run.RuntimeHandles.CloudResourceIDs = map[string]string{}
+	}
+	run.RuntimeHandles.CloudResourceIDs["provider"] = substrate.Provisioner
+	packRef, err := lpreceipts.WriteEvidencePack(store.Root(), run.LaunchID, artifacts)
+	if err != nil {
+		return nil, err
+	}
+	run.EvidencePackRefs = appendUniqueLaunchString(run.EvidencePackRefs, packRef)
+	run.EvidenceGraphRefs = appendUniqueLaunchString(run.EvidenceGraphRefs, packRef+"/04_EXPORTS/launchpad_evidence_graph.json")
+	if archiveRef, err := lpreceipts.WriteEvidencePackArchive(packRef); err == nil {
+		run.EvidencePackRefs = appendUniqueLaunchString(run.EvidencePackRefs, archiveRef)
+		run.VerificationCommand = "helm-ai-kernel verify --bundle " + archiveRef
+	} else {
+		run.VerificationCommand = "helm-ai-kernel verify --bundle " + packRef
+	}
+	logPath, _ := store.AppendLog(run.LaunchID, "launchpad cloud beta provisioned provider resources without storing provider secrets")
+	run.LogPath = logPath
+	if err := store.Save(run); err != nil {
+		return nil, err
+	}
+	return run.EvidencePackRefs, nil
+}
+
+type cloudProviderSecretMissingError struct {
+	provider string
+}
+
+func (e cloudProviderSecretMissingError) Error() string {
+	return e.provider + " provider token required"
+}
+
+func errCloudProviderSecretMissing(provider string) error {
+	return cloudProviderSecretMissingError{provider: provider}
+}
+
+func cloudGateReason(err error) string {
+	if _, ok := err.(cloudProviderSecretMissingError); ok {
+		return "ERR_LAUNCHPAD_CLOUD_PROVIDER_SECRET_MISSING"
+	}
+	return "ERR_LAUNCHPAD_CLOUD_PROVISION_FAILED"
+}
+
+func cloudResourceName(compiled plan.LaunchPlan) string {
+	id := strings.ToLower(strings.ReplaceAll(compiled.LaunchID, "_", "-"))
+	if len(id) > 36 {
+		id = id[:36]
+	}
+	return "helm-launchpad-" + id
+}
+
+func cloudTags(compiled plan.LaunchPlan, approvalID string) []string {
+	return []string{
+		"helm-launchpad-app-" + compiled.AppID,
+		"helm-launchpad-substrate-" + compiled.SubstrateID,
+		"helm-launchpad-approval-" + sanitizeCloudTag(approvalID),
+	}
+}
+
+func cloudLabels(compiled plan.LaunchPlan, approvalID string, costCeiling float64) []string {
+	return []string{
+		"helm-launchpad-app=" + sanitizeCloudTag(compiled.AppID),
+		"helm-launchpad-substrate=" + sanitizeCloudTag(compiled.SubstrateID),
+		"helm-launchpad-approval=" + sanitizeCloudTag(approvalID),
+		"helm-launchpad-cost-ceiling-usd=" + sanitizeCloudTag(fmt.Sprintf("%.2f", costCeiling)),
+	}
+}
+
+func sanitizeCloudTag(value string) string {
+	value = strings.ToLower(value)
+	replacer := strings.NewReplacer(" ", "-", "/", "-", ":", "-", "@", "-", ".", "-")
+	value = replacer.Replace(value)
+	if value == "" {
+		return "unset"
+	}
+	if len(value) > 48 {
+		return value[:48]
+	}
+	return value
+}
+
+func firstEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstEnvValue(key, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func compileLaunchPlan(catalog *lpregistry.Catalog, appID, substrateID, principal string, stderr io.Writer) (plan.LaunchPlan, int) {
@@ -411,13 +674,167 @@ func runLaunchDelete(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "launch delete error: %v\n", err)
 		return 1
 	}
-	_ = run
+	cloudArtifacts, cloudReceiptRefs, err := deleteCloudResourcesForRun(run)
+	if err != nil {
+		fmt.Fprintf(stderr, "launch delete error: %v\n", err)
+		return 1
+	}
 	deleted, err := session.NewExecutor(store).DeleteLaunch(rest[0], cascade)
 	if err != nil {
 		fmt.Fprintf(stderr, "launch delete error: %v\n", err)
 		return 1
 	}
+	if len(cloudArtifacts) > 0 {
+		deleted.TeardownReceiptRefs = append(deleted.TeardownReceiptRefs, cloudReceiptRefs...)
+		deleted.Reason = "teardown receipt emitted after Launchpad-owned local and cloud state reconciliation"
+		if refs, err := appendLaunchEvidencePack(store, &deleted, cloudArtifacts); err != nil {
+			fmt.Fprintf(stderr, "launch delete evidence error: %v\n", err)
+			return 1
+		} else {
+			deleted.EvidencePackRefs = refs
+		}
+		if err := store.Save(deleted); err != nil {
+			fmt.Fprintf(stderr, "launch delete save error: %v\n", err)
+			return 1
+		}
+	}
 	return writeLaunchJSON(stdout, deleted)
+}
+
+func deleteCloudResourcesForRun(run session.LaunchRun) (map[string][]byte, []string, error) {
+	if run.RuntimeHandles.CloudResourceIDs == nil || len(run.RuntimeHandles.CloudResourceIDs) == 0 {
+		return nil, nil, nil
+	}
+	provider := run.RuntimeHandles.CloudResourceIDs["provider"]
+	if provider == "" {
+		provider = run.SubstrateID
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	switch provider {
+	case "digitalocean":
+		token := firstEnv("DIGITALOCEAN_TOKEN", "HELM_LAUNCHPAD_DIGITALOCEAN_TOKEN")
+		if token == "" {
+			return nil, nil, errCloudProviderSecretMissing("digitalocean")
+		}
+		dropletID, err := parseCloudInt64(run.RuntimeHandles.CloudResourceIDs["droplet"])
+		if err != nil {
+			return nil, nil, err
+		}
+		provisioner := lpprovision.DigitalOceanProvisioner{
+			AllowLiveWrites: true,
+			Token:           token,
+			Endpoint:        os.Getenv("HELM_LAUNCHPAD_DIGITALOCEAN_ENDPOINT"),
+		}
+		teardown, err := provisioner.Delete(ctx, lpprovision.DigitalOceanDeleteRequest{
+			LaunchID:   run.LaunchID,
+			PlanHash:   run.PlanHash,
+			DropletID:  dropletID,
+			FirewallID: run.RuntimeHandles.CloudResourceIDs["firewall"],
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		reconcile, err := provisioner.Reconcile(ctx, run.LaunchID)
+		if err != nil {
+			return nil, nil, err
+		}
+		return cloudDeleteArtifacts(run, provider, teardown, reconcile), []string{teardown.ReceiptID, "receipt:digitalocean:" + run.LaunchID + ":post-delete-reconcile"}, nil
+	case "hetzner":
+		token := firstEnv("HCLOUD_TOKEN", "HELM_LAUNCHPAD_HETZNER_TOKEN")
+		if token == "" {
+			return nil, nil, errCloudProviderSecretMissing("hetzner")
+		}
+		serverID, err := parseCloudInt64(run.RuntimeHandles.CloudResourceIDs["server"])
+		if err != nil {
+			return nil, nil, err
+		}
+		firewallID, err := parseCloudInt64(run.RuntimeHandles.CloudResourceIDs["firewall"])
+		if err != nil {
+			return nil, nil, err
+		}
+		provisioner := lpprovision.HetznerProvisioner{
+			AllowLiveWrites: true,
+			Token:           token,
+			Endpoint:        os.Getenv("HELM_LAUNCHPAD_HETZNER_ENDPOINT"),
+		}
+		teardown, err := provisioner.Delete(ctx, lpprovision.HetznerDeleteRequest{
+			LaunchID:   run.LaunchID,
+			PlanHash:   run.PlanHash,
+			ServerID:   serverID,
+			FirewallID: firewallID,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		reconcile, err := provisioner.Reconcile(ctx, run.LaunchID)
+		if err != nil {
+			return nil, nil, err
+		}
+		return cloudDeleteArtifacts(run, provider, teardown, reconcile), []string{teardown.ReceiptID, "receipt:hetzner:" + run.LaunchID + ":post-delete-reconcile"}, nil
+	default:
+		return nil, nil, fmt.Errorf("unsupported cloud provider %q for launch %s", provider, run.LaunchID)
+	}
+}
+
+func cloudDeleteArtifacts(run session.LaunchRun, provider string, teardown any, reconcile any) map[string][]byte {
+	receipt := lpreceipts.NewReceipt("launchpad.cloud_teardown", run.LaunchID, "ALLOW", map[string]any{
+		"provider":  provider,
+		"teardown":  teardown,
+		"reconcile": reconcile,
+	})
+	artifacts := map[string][]byte{}
+	addJSON(artifacts, "cloud_teardown_result.json", map[string]any{
+		"provider":  provider,
+		"teardown":  teardown,
+		"reconcile": reconcile,
+	})
+	addJSON(artifacts, "receipts/launchpad-cloud-teardown.json", receipt)
+	return artifacts
+}
+
+func appendLaunchEvidencePack(store *session.Store, run *session.LaunchRun, artifacts map[string][]byte) ([]string, error) {
+	packRef, err := lpreceipts.WriteEvidencePack(store.Root(), run.LaunchID, artifacts)
+	if err != nil {
+		return nil, err
+	}
+	run.EvidencePackRefs = appendUniqueLaunchString(run.EvidencePackRefs, packRef)
+	run.EvidenceGraphRefs = appendUniqueLaunchString(run.EvidenceGraphRefs, packRef+"/04_EXPORTS/launchpad_evidence_graph.json")
+	if archiveRef, err := lpreceipts.WriteEvidencePackArchive(packRef); err == nil {
+		run.EvidencePackRefs = appendUniqueLaunchString(run.EvidencePackRefs, archiveRef)
+		run.VerificationCommand = "helm-ai-kernel verify --bundle " + archiveRef
+	} else if run.VerificationCommand == "" {
+		run.VerificationCommand = "helm-ai-kernel verify --bundle " + packRef
+	}
+	return run.EvidencePackRefs, nil
+}
+
+func parseCloudInt64(value string) (int64, error) {
+	if value == "" {
+		return 0, nil
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid cloud resource id %q", value)
+	}
+	return parsed, nil
+}
+
+func appendUniqueLaunchString(values []string, next string) []string {
+	if next == "" {
+		return values
+	}
+	for _, value := range values {
+		if value == next {
+			return values
+		}
+	}
+	return append(values, next)
+}
+
+func addJSON(dst map[string][]byte, name string, value any) {
+	data, _ := json.MarshalIndent(value, "", "  ")
+	dst[name] = append(data, '\n')
 }
 
 func runLaunchSecrets(args []string, stdout, stderr io.Writer) int {

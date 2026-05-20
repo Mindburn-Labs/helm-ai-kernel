@@ -5,22 +5,45 @@ last_reviewed: 2026-05-20
 
 # Launchpad Clean Install GA
 
-Status: v0.5.5 gate implemented; v1.0 extends the gate to OpenCode and Kilo
-Code so the check fails closed until those apps have complete signed evidence.
+Status: v0.5.5 gate implemented; v1 promotes OpenClaw, Hermes, OpenCode, and
+Kilo Code into the supported-app clean-install set after workflow
+`26179980172` passed signed artifact, live conformance, teardown, receipts, and
+offline EvidencePack verification.
 
-Launchpad GA is a product-adoption gate for the `v0.5.4` release. It proves the
+Launchpad GA is a product-adoption gate for the `v0.5.5` release. It proves the
 Homebrew package, signed Launchpad artifacts, local-container app launcher,
 MCP interceptor posture, signed receipts, teardown, and offline EvidencePack
 verification survive a machine that did not build the release.
 
+## Audience
+
+This page is for release owners, Launchpad maintainers, and operators who need
+to prove a supported app can be installed and removed from a clean workstation
+without relying on a developer checkout.
+
+## Outcome
+
+You should leave with the supported-app gate, the exact clean-machine command
+sequence, and the evidence files that prove install, launch, teardown, and
+offline verification.
+
 ## Source Truth
 
-- Release: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.4>
-- Launchpad artifact workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26110916296>
-- Release workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26131090671>
-- Homebrew tap PR: <https://github.com/mindburnlabs/homebrew-tap/pull/2>
-- Final release report: `docs/launchpad/final_report.json`
+- Release target: `v0.5.5`
+- Current four-app Launchpad artifact workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26179980172>
+- Current Launchpad v1 report: `docs/launchpad/v1_report.json`
+- Historical `v0.5.4` release report: `docs/launchpad/final_report.json`
 - Clean-install report: `docs/launchpad/clean_install_report.json`
+
+```mermaid
+flowchart LR
+  brew["Homebrew install"] --> matrix["Launch matrix"]
+  matrix --> secret["Logical model_gateway secret"]
+  secret --> apps["OpenClaw / Hermes / OpenCode / Kilo"]
+  apps --> teardown["Cascade delete"]
+  teardown --> verify["Offline EvidencePack verify"]
+  verify --> audit["Secret-fragment audit"]
+```
 
 ## Required Secret
 
@@ -52,29 +75,29 @@ Use the repo-native gate to collect redacted evidence:
 ```bash
 export HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY='<fresh CI-only key>'
 bash scripts/launch/clean_install_gate.sh \
-  --release-tag v0.5.4 \
-  --artifact-run-id 26110916296 \
+  --release-tag v0.5.5 \
+  --artifact-run-id 26179980172 \
   --host-kind developer_macos \
   --output docs/launchpad/clean_install_report.json
 ```
 
 The script downloads the signed Launchpad artifact manifest, resolves the
-immutable egress-proxy image, confirms app GHCR digests, launches every v1 app
-through `local-container`, deletes each launch with `--cascade`, verifies every
+immutable egress-proxy image, confirms app GHCR digests, launches the selected
+app set through `local-container`, deletes each launch with `--cascade`, verifies every
 produced EvidencePack, and scans command output, GitHub logs, release
 notes/assets, reports, and EvidencePacks for the CI key and fixed-length key
-fragments without printing the secret. The v1 app set is OpenClaw, Hermes,
-OpenCode, and Kilo Code; the last two remain expected failures until promoted
-from signed evidence.
+fragments without printing the secret. The default supported app set is
+OpenClaw, Hermes, OpenCode, and Kilo Code. `--include-candidates` remains
+accepted for backward compatibility.
 
 ## Supported App Digests
 
 | App | Availability | Image |
 | --- | --- | --- |
-| OpenClaw | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e` |
-| Hermes | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527` |
-| OpenCode | `oss_candidate` | Pending signed CI artifact and promotion manifest |
-| Kilo Code | `oss_candidate` | Pending signed CI artifact and promotion manifest |
+| OpenClaw | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501` |
+| Hermes | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:11bb3893d8466b9abe2cea7f65c734647d86177908b38ea55edceb056944ee7f` |
+| OpenCode | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:c31aaef9b739f9ed870edd5c66f34f9a79efcfab132aaa2395f890f7bf5fb20f` |
+| Kilo Code | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:68a428e13c1b8cc1cb0338eb56c0e79610a609adc91a60b99b8f9a226c1621ba` |
 
 Codex, Claude Code, Cursor, and Junie remain external/BYO adapters.
 
@@ -85,9 +108,18 @@ Manual CI entrypoint:
 ```bash
 gh workflow run launchpad-clean-install.yml \
   --repo Mindburn-Labs/helm-ai-kernel \
-  -f release_tag=v0.5.4 \
-  -f artifact_run_id=26110916296
+  -f release_tag=v0.5.5 \
+  -f artifact_run_id=26179980172
 ```
 
 The CI report is a repeatability signal. The separate clean Mac report remains
 the canonical GA evidence for developer experience.
+
+## Troubleshooting
+
+| Condition | Response |
+| --- | --- |
+| Homebrew package is unavailable | Recheck the release tag, tap PR, and release workflow before running app launch commands. |
+| Launch fails before receipts | Treat the gate as failed and inspect policy, sandbox, and provider readiness from the redacted report. |
+| EvidencePack verification fails | Do not promote the app; rerun with fresh artifacts and preserve the failed verification output. |
+| Teardown leaves resources | Reconcile local/container resources before declaring the machine clean. |

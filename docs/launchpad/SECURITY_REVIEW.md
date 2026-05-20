@@ -1,7 +1,8 @@
 # Launchpad Security Review
 
-Status: `v0.5.4` production release review passed for OpenClaw and Hermes
-local-container support; public GA remains gated on clean-install evidence.
+Status: Launchpad v1 local-container review passes for OpenClaw, Hermes,
+OpenCode, and Kilo Code from workflow `26179980172`. The `v0.5.5`
+clean-install gate remains the package/install release gate.
 
 ## Results
 
@@ -13,9 +14,10 @@ local-container support; public GA remains gated on clean-install evidence.
   SBOM, grype/trivy scan, provenance, live e2e, EvidencePack, and teardown refs.
 - [KEEP] Promotion refs must be tied to the same GitHub workflow run as the
   artifact manifest; stale or unrelated evidence refs are rejected.
-- [KEEP] OpenClaw and Hermes are promoted to `oss_supported` from signed CI
-  artifacts and live local-container evidence.
-- [KEEP] OpenCode and Kilo Code remain `oss_candidate`.
+- [KEEP] OpenClaw, Hermes, OpenCode, and Kilo Code are promoted to
+  `oss_supported` from signed CI artifacts, live local-container evidence,
+  teardown receipts, and offline EvidencePack verification in workflow
+  `26179980172`.
 - [KEEP] Codex, Claude Code, Cursor, and Junie remain external/BYO adapters; no
   proprietary redistribution claim is made.
 - [KEEP] CLI/API launch path returns `ESCALATE` for missing required secrets and
@@ -29,18 +31,42 @@ local-container support; public GA remains gated on clean-install evidence.
   `git stash`, and package-manager mutation inside the current worktree.
 - [KEEP] Policy validation requires `permission_bypass_forbidden = true`,
   `recursive_launch_forbidden = true`, and network default `deny`.
+- [KEEP] Substrate validation now requires explicit capability metadata for
+  isolation strength, network enforcement, secret mode, receipt support,
+  teardown proof, status, and the full plan/preflight/launch/healthcheck/
+  execute/evidence/reconcile/delete/post-delete lifecycle.
+- [KEEP] `availability: supported` substrates must be GA and must require
+  receipts and teardown proof; microVM and hosted sandbox adapters remain
+  experimental until their runtime adapters pass conformance.
 - [KEEP] Runtime preflight tests block host filesystem escape, non-deny network
   defaults, privileged mode, privilege-escalation flags, recursive launch, and
   secret leakage through projected env handles.
+- [KEEP] Local-container Docker isolation is documented and receipted as a
+  baseline developer substrate. Hardened modes rootless/userns, Docker ECI,
+  gVisor, Kata/Firecracker, and dedicated VM are explicit isolation tiers and
+  fail closed when requested without matching runtime evidence.
 - [KEEP] Local-container OpenRouter egress is fail-closed: non-OpenRouter
   allowlists are rejected, OpenRouter allowlists use a launch-scoped proxy path,
   and runtime start requires an egress proxy receipt for networked `RUNNING`
   launches.
+- [KEEP] Egress receipts label CONNECT payloads as opaque and record that the
+  proxy proves destination allowlisting only unless token-broker mode is enabled.
 - [KEEP] Live conformance tests exercise Docker-backed runtime startup and app
   healthchecks.
 - [KEEP] MCP governance tests quarantine unknown servers/tools, require schema
   pins, deny schema drift, require approval receipts for side-effect tools, and
   block revoked tools.
+- [KEEP] MCP mediation proof tests cover stdio, HTTP JSON-RPC,
+  `/mcp/v1/execute`, SSE primer behavior, generated client configs, MCPB
+  packaging, pre-executor schema denial, side-effect approval denial,
+  unapproved-server denial, and fail-closed rejection for unsupported WebSocket
+  transport.
+- [KEEP] Supported app registry entries must reference signed MCP manifests
+  with pinned command, package digest, schema hash, tool schema hashes, effect
+  labels, required secrets, and network/filesystem grants.
+- [KEEP] Generated Launchpad EvidencePacks redact secret-like payloads before
+  disk writes and include `04_EXPORTS/launchpad_evidence_graph.json`, a
+  hash-chained receipt graph inspectable with `helm-ai-kernel evidence inspect`.
 - [KEEP] Session store tests reject unknown verdicts, reject side-effect states
   without `ALLOW`, reject `RUNNING` without launch/healthcheck/sandbox refs,
   reject networked `RUNNING` without egress refs, and reject `DELETED` without
@@ -61,6 +87,10 @@ local-container support; public GA remains gated on clean-install evidence.
   metadata fixture.
 - [REBUILD] Malicious AppSpec/SubstrateSpec schema attacks need fuzz or
   adversarial corpus coverage beyond strict schema validation.
+- [REBUILD] Proxy-only model gateway credentials are not yet connected for the
+  local-container runtime. Current supported apps use logical secret binding
+  with launch-process env projection and redaction; do not claim raw-provider
+  key elimination until the token/proxy broker lands.
 - [REBUILD] License spoofing needs tests against forged SPDX/license metadata
   and upstream-source mismatch.
 - [REBUILD] Public-key cryptographic Skill Pack signatures are not implemented;
@@ -69,18 +99,22 @@ local-container support; public GA remains gated on clean-install evidence.
   reconciliation logic level only, not against real providers.
 - [DEFER] Network egress bypass and container escape need continued live
   container tests as the app catalog expands.
-- [DEFER] OpenCode and Kilo Code must pass the OpenClaw/Hermes evidence bar
-  before promotion.
+- [DEFER] Additional apps must pass the four-app evidence bar before promotion.
+- [DEFER] Third-party red-team and audit evidence is required before any
+  category-leading public claim.
 
 ## Verdict
 
 [KEEP] The current Skill Packs + Launchpad slice is materially safer than a
 normal launcher: it fails closed, blocks host installer patterns, redacts scoped
 secrets, quarantines MCP by default, requires promotion evidence, validates
-skill metadata/policies, and emits signed receipts/EvidencePacks for the paths
-it exercises.
+skill metadata/policies, and emits signed receipts plus hash-chained
+EvidencePacks for the paths it exercises.
 
-[KEEP] OpenClaw and Hermes are release-backed for `local-container` in `v0.5.4`.
+[KEEP] OpenClaw, Hermes, OpenCode, and Kilo Code are artifact-backed for
+`local-container` Launchpad v1 support. The next package release must be
+`v0.5.5` because `v0.5.4` is already published and its clean-install Homebrew
+path lacked packaged Launchpad registry/policy data.
 
 [DEFER] Public GA claims remain blocked until the clean-install gate records a
 passing separate-Mac report and the public docs/website checks pass.

@@ -3,22 +3,26 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REPO="${HELM_LAUNCHPAD_GITHUB_REPO:-Mindburn-Labs/helm-ai-kernel}"
-RELEASE_TAG="v0.5.4"
-ARTIFACT_RUN_ID="26110916296"
+RELEASE_TAG="v0.5.5"
+ARTIFACT_RUN_ID="26179980172"
 HOST_KIND="developer_macos"
 OUTPUT="$ROOT/docs/launchpad/clean_install_report.json"
 TRANSCRIPT_DIR="${TMPDIR:-/tmp}/helm-launchpad-clean-install"
+INCLUDE_CANDIDATES=0
+SUPPORTED_APPS=(openclaw hermes opencode kilocode)
+CANDIDATE_APPS=()
 
 usage() {
   cat <<'USAGE'
 Usage: scripts/launch/clean_install_gate.sh [options]
 
 Options:
-  --release-tag <tag>       Release tag to validate (default: v0.5.4)
-  --artifact-run-id <id>    Launchpad artifact workflow run (default: 26110916296)
+  --release-tag <tag>       Release tag to validate (default: v0.5.5)
+  --artifact-run-id <id>    Launchpad artifact workflow run (default: 26179980172)
   --host-kind <kind>        developer_macos or github_macos_runner
   --output <path>           Redacted JSON report path
   --transcript-dir <path>   Directory for redacted command output and audit inputs
+  --include-candidates      Backward-compatible no-op; OpenCode/Kilo are supported by default
 USAGE
 }
 
@@ -29,6 +33,7 @@ while [[ $# -gt 0 ]]; do
     --host-kind) HOST_KIND="$2"; shift 2 ;;
     --output) OUTPUT="$2"; shift 2 ;;
     --transcript-dir) TRANSCRIPT_DIR="$2"; shift 2 ;;
+    --include-candidates) INCLUDE_CANDIDATES=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -234,6 +239,10 @@ report = {
     "artifact_workflow_run_id": artifact_run_id,
     "host_kind": host_kind,
     "status": status,
+    "supported_apps": ["openclaw", "hermes", "opencode", "kilocode"],
+    "candidate_promotion_apps": [],
+    "candidate_promotion_included": False,
+    "deprecated_include_candidates_flag": "accepted_noop_all_four_apps_are_supported",
     "commands": commands,
     "launch_ids": launch_ids,
     "ghcr_digest_confirmations": read_json(ghcr_path, []),
@@ -283,7 +292,12 @@ main() {
     final_status="FAIL"
   fi
 
-  for app in openclaw hermes opencode kilocode; do
+  local launch_apps=("${SUPPORTED_APPS[@]}")
+  if [[ "$INCLUDE_CANDIDATES" -eq 1 ]]; then
+    launch_apps+=("${CANDIDATE_APPS[@]}")
+  fi
+
+  for app in "${launch_apps[@]}"; do
     if run_step "launch_${app}" "helm-ai-kernel launch ${app} local-container --headless --output json" "helm-ai-kernel launch ${app} local-container --headless --output json"; then
       local launch_json="$TRANSCRIPT_DIR/commands/launch_${app}.stdout"
       collect_evidence_refs "$launch_json"

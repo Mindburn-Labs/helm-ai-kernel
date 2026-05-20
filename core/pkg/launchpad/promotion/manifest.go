@@ -209,6 +209,7 @@ func Promote(app registry.AppSpec, entry ArtifactEntry, refs EvidenceRefs) (regi
 		out.Metadata = map[string]string{}
 	}
 	out.Metadata["upstream_commit"] = entry.UpstreamCommit
+	out.Metadata["artifact_workflow_run"] = entry.ProvenanceRef
 	out.Metadata["helm_oci_status"] = "promoted_from_signed_ci_artifact_manifest"
 	out.Metadata["promotion_provenance_ref"] = entry.ProvenanceRef
 	delete(out.Metadata, "blocker")

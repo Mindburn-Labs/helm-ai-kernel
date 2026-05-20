@@ -11,6 +11,11 @@ install:
   strategy: byo_tool
 runtime:
   command: ["codex"]
+model_gateway:
+  logical_secret: openai_account_or_api_key
+  provider: openai
+  mode: external_byo
+  raw_provider_key_projected: true
 model_gateway_env: ["OPENAI_API_KEY"]
 required_secrets: ["openai_account_or_api_key"]
 filesystem_policy:

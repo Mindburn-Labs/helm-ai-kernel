@@ -1,28 +1,29 @@
 {
   "artifact_workflow_run_id": "26110916296",
+  "current_four_app_artifact_workflow_run_id": "26179980172",
   "canonical_user_machine": {
     "evidence_artifact": null,
-    "status": "PENDING_MAINTAINER_RUN"
+    "status": "BLOCKED_CURRENT_V0_5_4_PACKAGE_REGISTRY_ROOT_MISSING"
   },
   "ci_clean_install": {
     "evidence_artifact": "launchpad-clean-install-report",
-    "status": "PENDING_WORKFLOW_DISPATCH",
+    "status": "PENDING_UPDATED_WORKFLOW_RESULT",
     "workflow": ".github/workflows/launchpad-clean-install.yml"
   },
   "commands": [
     {
       "command": "brew update",
-      "exit_code": null,
+      "exit_code": 0,
       "name": "brew_update"
     },
     {
       "command": "brew install mindburnlabs/tap/helm-ai-kernel",
-      "exit_code": null,
+      "exit_code": 0,
       "name": "brew_install"
     },
     {
       "command": "helm-ai-kernel launch matrix --json",
-      "exit_code": null,
+      "exit_code": 1,
       "name": "launch_matrix"
     },
     {
@@ -47,7 +48,7 @@
     }
   ],
   "evidence_packs": [],
-  "generated_at": "2026-05-20T00:00:00Z",
+  "generated_at": "2026-05-20T15:05:00Z",
   "ghcr_digest_confirmations": [
     {
       "app_id": "openclaw",
@@ -62,7 +63,7 @@
       "image": "ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527"
     }
   ],
-  "host_kind": "pending",
+  "host_kind": "digitalocean_clean_operator",
   "launch_ids": {},
   "milestone": "Launchpad v0.5.5 Clean Install + Public Docs GA",
   "redaction": {
@@ -73,7 +74,21 @@
   "release_tag": "v0.5.4",
   "schema_version": 1,
   "secret_fragment_audit": {
-    "status": "PENDING_MAINTAINER_RUN"
+    "status": "NOT_RUN_BECAUSE_CURRENT_PACKAGE_FAILED_BEFORE_LAUNCH"
   },
-  "status": "PENDING_MAINTAINER_RUN"
+  "status": "FAILED_CURRENT_V0_5_4_HOMEBREW_PACKAGING_FIXED_FOR_NEXT_RELEASE",
+  "current_supported_apps": [
+    "openclaw",
+    "hermes",
+    "opencode",
+    "kilocode"
+  ],
+  "next_release_target": "v0.5.5",
+  "digitalocean_clean_operator": {
+    "status": "FAILED_CURRENT_V0_5_4_PACKAGE_REGISTRY_ROOT_MISSING",
+    "region": "nyc3",
+    "resource_teardown": "PASS",
+    "failure_summary": "brew install succeeded, but helm-ai-kernel launch matrix --json failed outside a source checkout because v0.5.4 does not package Launchpad registry and policy data with the binary.",
+    "fix_committed": "CLI now discovers HELM_LAUNCHPAD_REGISTRY_ROOT/Homebrew pkgshare, and release assets include helm-ai-kernel-launchpad-data.tar for the formula."
+  }
 }

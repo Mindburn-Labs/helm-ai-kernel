@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-20T18:44:16Z",
+  "milestone": "Launchpad v1.0 Governed App Execution + Cloud Beta",
+  "status": "DIGITALOCEAN_FOUR_APP_LIVE_PASSED_HETZNER_FAIL_CLOSED_MISSING_CREDENTIAL",
+  "redaction": {
+    "raw_logs_committed": false,
+    "secret_values_committed": false,
+    "secret_fragments_committed": false,
+    "provider_tokens_committed": false,
+    "user_machine_identifiers_committed": false
+  },
+  "control_requirements": {
+    "explicit_live_beta_flag_required": true,
+    "approval_receipt_required": true,
+    "cost_ceiling_required": true,
+    "idempotency_key_required": true,
+    "provider_secret_required": true,
+    "teardown_required": true,
+    "post_delete_reconcile_required": true
+  },
+  "digitalocean": {
+    "status": "FOUR_APP_LIVE_LAUNCH_DELETE_RECONCILE_VERIFY_PASSED",
+    "run_id": "20260520T184416Z",
+    "region": "nyc3",
+    "resource_shape": "s-1vcpu-1gb",
+    "image": "ubuntu-24-04-x64",
+    "total_cost_ceiling_usd": 4,
+    "token_handling": "doctl authenticated context; token injected into helm-ai-kernel process environment only",
+    "post_delete_reconcile": {
+      "status": "PASS",
+      "launchpad_tagged_droplets_remaining": 0,
+      "launchpad_firewalls_remaining": 0
+    },
+    "apps": [
+      {
+        "app_id": "openclaw",
+        "approval_id": "approval-launchpad-v1-do-openclaw-20260520T184416Z",
+        "launch_id": "91bdfd57-c471-4374-9f42-abbeb088212f",
+        "launch_status": "PROVISIONED",
+        "delete_state": "DELETED",
+        "cost_ceiling_usd": 1,
+        "estimated_cost_usd": 0.01,
+        "provider_resource_refs": {
+          "droplet": "572159143",
+          "firewall": "f1d1f0e4-a009-47a2-8ef9-491da52e9774"
+        },
+        "idempotency_key": "digitalocean:e7adad6fc20c4fa0fd224c04d068a7b9e5bbef0605e79381d38a70503589b406",
+        "evidence_pack_sha256": "9438939a62d948e5080415af139da68ba18e49a74932f5417b402d678b5b0a2d",
+        "offline_verify": "PASS"
+      },
+      {
+        "app_id": "hermes",
+        "approval_id": "approval-launchpad-v1-do-hermes-20260520T184416Z",
+        "launch_id": "e8737c72-9f5c-4c69-a058-7008aaf2b04f",
+        "launch_status": "PROVISIONED",
+        "delete_state": "DELETED",
+        "cost_ceiling_usd": 1,
+        "estimated_cost_usd": 0.01,
+        "provider_resource_refs": {
+          "droplet": "572159171",
+          "firewall": "e7a19eb6-4640-4cb4-8c12-a0627608d941"
+        },
+        "idempotency_key": "digitalocean:105b3e00607a4c8a106b745dacdfd8832c49d41647e866a55008788d2f7840e8",
+        "evidence_pack_sha256": "c2303094c4c6f82e373acf35028841f5c5bcdc5146f1ceb7124422d6ea89efe9",
+        "offline_verify": "PASS"
+      },
+      {
+        "app_id": "opencode",
+        "approval_id": "approval-launchpad-v1-do-opencode-20260520T184416Z",
+        "launch_id": "8fb2f3ab-84f0-4d49-b0b1-aa745f2834d0",
+        "launch_status": "PROVISIONED",
+        "delete_state": "DELETED",
+        "cost_ceiling_usd": 1,
+        "estimated_cost_usd": 0.01,
+        "provider_resource_refs": {
+          "droplet": "572159179",
+          "firewall": "f713eeb9-99f8-4354-ba59-9e90383c87e2"
+        },
+        "idempotency_key": "digitalocean:4578c82480f0b0c4a5b317e9075e0a351bfe7203c7c2920f9d85931d7e6bad2a",
+        "evidence_pack_sha256": "1afbcc2e9679db7d7166e881740b40b587903502311306832b7f9b3e7cbee8b5",
+        "offline_verify": "PASS"
+      },
+      {
+        "app_id": "kilocode",
+        "approval_id": "approval-launchpad-v1-do-kilocode-20260520T184416Z",
+        "launch_id": "7e801187-9bed-4f35-9135-2c5ff6e1f3b2",
+        "launch_status": "PROVISIONED",
+        "delete_state": "DELETED",
+        "cost_ceiling_usd": 1,
+        "estimated_cost_usd": 0.01,
+        "provider_resource_refs": {
+          "droplet": "572159183",
+          "firewall": "129e6550-7cbb-4a18-92df-2dd4513ab292"
+        },
+        "idempotency_key": "digitalocean:eeeb6edbf93e9870451c70116e5ea21314e360853c8396b5d2ba8262228b8b5d",
+        "evidence_pack_sha256": "4ddf48ee83e89e027a25ad0e9960dcdc5a1b77bd79d25125c9173741127121e9",
+        "offline_verify": "PASS"
+      }
+    ]
+  },
+  "hetzner": {
+    "status": "FAIL_CLOSED_MISSING_PROVIDER_CREDENTIAL",
+    "credential_metadata_checks": {
+      "env_names_checked": [
+        "HCLOUD_TOKEN",
+        "HELM_LAUNCHPAD_HETZNER_TOKEN"
+      ],
+      "github_secret_names_checked": true,
+      "local_hcloud_context_found": false,
+      "provider_token_value_read": false
+    },
+    "live_beta_attempt": {
+      "app_id": "openclaw",
+      "approval_id": "approval-launchpad-v1-hetzner-openclaw-missing-token",
+      "cost_ceiling_usd": 1,
+      "exit_code": 1,
+      "failure_code": "hetzner_provider_token_required",
+      "provider_resource_refs": {},
+      "provider_writes_performed": false
+    }
+  }
+}

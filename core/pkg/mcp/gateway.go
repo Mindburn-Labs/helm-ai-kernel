@@ -311,19 +311,15 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1. Validate and canonicalize args via PEP boundary
-	var argsHash string
-	if req.Params != nil {
-		result, err := manifest.ValidateAndCanonicalizeToolArgs(catalogSchemaToArgSchema(tool.Schema), req.Params)
-		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
-				Error:      fmt.Sprintf("PEP validation failed: %v", err),
-				ReasonCode: string(contracts.ReasonSchemaViolation),
-			})
-			return
-		}
-		argsHash = result.ArgsHash
+	argsHash, err := ValidateToolArguments(tool, req.Params)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
+			Error:      fmt.Sprintf("PEP validation failed: %v", err),
+			ReasonCode: string(contracts.ReasonSchemaViolation),
+		})
+		return
 	}
 
 	// 2. Governance via KernelBridge (if configured)
@@ -522,6 +518,9 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 		if !hasAllOAuthScopes(ctx, tool.RequiredScopes) {
 			return writeError(-32001, fmt.Sprintf("tool %q requires OAuth scopes: %s", req.Name, strings.Join(tool.RequiredScopes, ", ")))
 		}
+		if _, err := ValidateToolArguments(tool, req.Arguments); err != nil {
+			return writeError(-32602, fmt.Sprintf("PEP validation failed: %v", err))
+		}
 		if g.exec == nil {
 			return writeError(-32603, "tool executor is not configured")
 		}
@@ -565,6 +564,17 @@ func findToolRef(c Catalog, name string) (ToolRef, bool) {
 		}
 	}
 	return ToolRef{}, false
+}
+
+func ValidateToolArguments(tool ToolRef, args map[string]any) (string, error) {
+	if args == nil {
+		args = map[string]any{}
+	}
+	result, err := manifest.ValidateAndCanonicalizeToolArgs(catalogSchemaToArgSchema(tool.Schema), args)
+	if err != nil {
+		return "", err
+	}
+	return result.ArgsHash, nil
 }
 
 func catalogSchemaToArgSchema(raw any) *manifest.ToolArgSchema {

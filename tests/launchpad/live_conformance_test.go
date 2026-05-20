@@ -39,7 +39,7 @@ func TestLiveOpenRouterLocalContainerConformance(t *testing.T) {
 		t.Fatalf("LoadCatalog: %v", err)
 	}
 
-	for _, appID := range []string{"openclaw", "hermes", "opencode", "kilocode"} {
+	for _, appID := range liveConformanceAppIDs() {
 		t.Run(appID, func(t *testing.T) {
 			app, ok := catalog.App(appID)
 			if !ok {
@@ -101,6 +101,42 @@ func TestLiveOpenRouterLocalContainerConformance(t *testing.T) {
 			verifyLiveEvidenceRefs(t, appID, deleted.EvidencePackRefs)
 			copyLiveEvidenceRefs(t, appID, deleted.EvidencePackRefs)
 		})
+	}
+}
+
+var (
+	defaultLiveConformanceApps   = []string{"openclaw", "hermes", "opencode", "kilocode"}
+	candidateLiveConformanceApps = []string{}
+)
+
+func liveConformanceAppIDs() []string {
+	if override := getenv("HELM_LAUNCHPAD_LIVE_APPS"); override != "" {
+		return splitAppIDs(override)
+	}
+	apps := append([]string(nil), defaultLiveConformanceApps...)
+	if truthy(getenv("HELM_LAUNCHPAD_LIVE_INCLUDE_CANDIDATES")) {
+		apps = append(apps, candidateLiveConformanceApps...)
+	}
+	return apps
+}
+
+func splitAppIDs(value string) []string {
+	parts := strings.Split(value, ",")
+	apps := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if appID := strings.TrimSpace(part); appID != "" {
+			apps = append(apps, appID)
+		}
+	}
+	return apps
+}
+
+func truthy(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
 	}
 }
 

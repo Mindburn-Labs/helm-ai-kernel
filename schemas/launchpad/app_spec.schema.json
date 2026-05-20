@@ -13,9 +13,23 @@
     "redistribution": { "type": "string" },
     "install": { "type": "object", "required": ["strategy"], "properties": { "strategy": { "type": "string" }, "image": { "type": "string" }, "digest": { "type": "string" }, "source": { "type": "string" }, "ref": { "type": "string" } } },
     "runtime": { "type": "object", "required": ["command"], "properties": { "command": { "type": "array", "items": { "type": "string" } }, "ports": { "type": "array", "items": { "type": "integer" } } } },
+    "model_gateway": {
+      "type": "object",
+      "required": ["logical_secret", "provider", "mode", "raw_provider_key_projected"],
+      "properties": {
+        "logical_secret": { "type": "string" },
+        "provider": { "type": "string" },
+        "mode": { "enum": ["logical_binding_env_projection", "raw_provider_key", "token_broker", "external_byo"] },
+        "raw_provider_key_projected": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "model_gateway_env": { "type": "array", "items": { "type": "string" } },
+    "required_secrets": { "type": "array", "items": { "type": "string" } },
     "filesystem_policy": { "$ref": "#/$defs/policyRef" },
     "network_policy": { "$ref": "#/$defs/networkPolicy" },
     "mcp_policy": { "$ref": "#/$defs/mcpPolicy" },
+    "mcp_manifests": { "type": "array", "items": { "type": "string" } },
     "risk_class": { "type": "string" },
     "budget_ceiling": { "$ref": "#/$defs/budget" },
     "evidence_requirements": { "type": "array", "items": { "type": "string" } },

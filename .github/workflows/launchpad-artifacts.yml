@@ -527,7 +527,7 @@ jobs:
           HELM_LAUNCHPAD_LOCAL_CONTAINER_TIMEOUT: 8m
           HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
-        run: go test ./tests/launchpad/... -run TestLiveOpenRouterLocalContainerConformance -count=1 -v
+        run: go test ./tests/launchpad/... -run TestLiveOpenRouterLocalContainerConformance -count=1 -timeout 30m -v
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: ${{ always() }}
         with:

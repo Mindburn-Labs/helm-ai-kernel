@@ -158,6 +158,11 @@ func WithWarmLeaseManager(mgr *sandbox.WarmLeaseManager) GuardianOption {
 	return func(g *Guardian) { g.warmLeaseMgr = mgr }
 }
 
+// WithZeroIDInterceptor injects a custom ZeroIDInterceptor.
+func WithZeroIDInterceptor(z *ZeroIDInterceptor) GuardianOption {
+	return func(g *Guardian) { g.zeroidInterceptor = z }
+}
+
 // Guardian enforces the Proof Requirement Graph (PRG)
 type Guardian struct {
 	signer            crypto.Signer
@@ -185,6 +190,12 @@ type Guardian struct {
 	sessionRiskMemory *SessionRiskMemory           // Deterministic trajectory authorization gate
 	otel              *OTelInstrumentation         // Optional OTel tracing & metrics
 	warmLeaseMgr      *sandbox.WarmLeaseManager    // Warm lease manager for sandboxes
+	zeroidInterceptor *ZeroIDInterceptor           // ZeroID identity validator
+}
+
+// ZeroID returns the registered ZeroIDInterceptor.
+func (g *Guardian) ZeroID() *ZeroIDInterceptor {
+	return g.zeroidInterceptor
 }
 
 // NewGuardian creates a new Guardian instance. Optional dependencies can be injected
@@ -207,6 +218,10 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 
 	for _, opt := range opts {
 		opt(g)
+	}
+
+	if g.zeroidInterceptor == nil {
+		g.zeroidInterceptor = NewZeroIDInterceptor(g, nil)
 	}
 
 	if g.clock == nil {
@@ -858,6 +873,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 	}
 
 	chain := NewInterceptorChain([]BoundaryInterceptor{
+		g.zeroidInterceptor,
 		NewTemporalInterceptor(g),
 		NewFreezeInterceptor(g),
 		NewPDPInterceptor(g),

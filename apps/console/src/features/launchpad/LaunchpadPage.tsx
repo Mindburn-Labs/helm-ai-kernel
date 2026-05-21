@@ -36,7 +36,7 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
   const [detail, setDetail] = useState<LaunchpadRunDetail | null>(null);
   const [sandboxGrant, setSandboxGrant] = useState<SandboxGrantView | null>(null);
   const [receipts, setReceipts] = useState<string[]>([]);
-  const [runLog, setRunLog] = useState("");
+  const [, setRunLog] = useState("");
   const [inspector, setInspector] = useState<InspectorItem>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [busy, setBusy] = useState(false);

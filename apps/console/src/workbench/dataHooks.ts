@@ -211,7 +211,7 @@ export function useCapabilitiesData(authRevision: number, enabled = true) {
     setLoading(true);
     setSnapshots(DEFAULT_SURFACE_CONFIGS.map(loadingSnapshot));
     void (async () => {
-      let nextConfigs: readonly AdminSurfaceConfig[] = DEFAULT_SURFACE_CONFIGS;
+      let nextConfigs: readonly AdminSurfaceConfig[];
       try {
         const catalog = await loadConsoleSurfaceCatalog();
         nextConfigs = configsFromCatalog(catalog.surfaces.map((surface) => surface.id));

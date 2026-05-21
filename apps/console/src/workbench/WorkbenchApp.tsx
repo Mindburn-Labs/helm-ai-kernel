@@ -10,15 +10,11 @@ import {
   Command as CommandIcon,
   FileSearch,
   KeyRound,
-  Loader2,
   MessageSquareText,
   Play,
   Rocket,
-  Search,
   Settings,
   ShieldCheck,
-  Sparkles,
-  X,
 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import {
@@ -33,7 +29,6 @@ import {
   FormField,
   SelectField,
   TextInput,
-  TextareaField,
   WorkbenchActionSheetFrame,
   WorkbenchCommandSearch,
   WorkbenchComposer,

@@ -57,20 +57,20 @@ The verification path is local-first. `helm-ai-kernel verify <evidence-pack.tar|
 performs offline checks by default; `--online` is optional and only runs after
 offline checks pass.
 
-Current public release: `v0.5.4`, published on 2026-05-19 at 23:50 UTC:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.4>. The release
+Current public release: `v0.5.5`, published on 2026-05-20 at 21:13 UTC:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.5>. The release
 page attaches platform binaries, `SHA256SUMS.txt`, `sbom.json`,
-`v0.5.4.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
-`release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm-ai-kernel.mcpb`,
-`helm-ai-kernel.rb`, `v0.5.4.json`, and matching `*.cosign.bundle` files for
-each primary asset.
+`v0.5.5.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
+`release.high_risk.v3.toml`, `sample-policy-material.tar`,
+`helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`,
+`v0.5.5.json`, and matching `*.cosign.bundle` files for each primary asset.
 
 There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
 actual baseline when auditing the `v0.5.0` delta.
 
-## v0.5.4 Asset Contract
+## v0.5.5 Asset Contract
 
-The `v0.5.4` release attaches these primary assets:
+The `v0.5.5` release attaches these primary assets:
 
 - `helm-ai-kernel-darwin-amd64`
 - `helm-ai-kernel-darwin-arm64`
@@ -79,11 +79,12 @@ The `v0.5.4` release attaches these primary assets:
 - `helm-ai-kernel-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.5.4.openvex.json`
+- `v0.5.5.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
 - `sample-policy-material.tar`
+- `helm-ai-kernel-launchpad-data.tar`
 - `helm-ai-kernel.mcpb`
 - `helm-ai-kernel.rb`
 
@@ -192,7 +193,7 @@ The release staging path runs the same offline verification before publishing
 release checksums. If this step fails, the release must be treated as incomplete
 and the exported EvidencePack must be repaired before attaching assets.
 
-For `v0.5.4`, this command passes without network access. The verifier
+For `v0.5.5`, this command passes without network access. The verifier
 accepts both the legacy `receipts/` layout and the canonical
 `02_PROOFGRAPH/receipts/` layout.
 

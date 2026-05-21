@@ -1,5 +1,5 @@
 {
-  "artifact_workflow_run_id": "26186959337",
+  "artifact_workflow_run_id": "26198407296",
   "candidate_promotion_apps": [],
   "candidate_promotion_included": false,
   "commands": [
@@ -104,113 +104,113 @@
     {
       "command": "helm-ai-kernel verify --bundle <pack> --json",
       "exit_code": 0,
-      "name": "verify_669a7869-98d3-4c17-a8e8-6548862a05c5-",
-      "stderr_file": "verify_669a7869-98d3-4c17-a8e8-6548862a05c5-.stderr",
-      "stdout_file": "verify_669a7869-98d3-4c17-a8e8-6548862a05c5-.stdout"
+      "name": "verify_71eaad24-e800-4b32-a8b6-157e4566b691-",
+      "stderr_file": "verify_71eaad24-e800-4b32-a8b6-157e4566b691-.stderr",
+      "stdout_file": "verify_71eaad24-e800-4b32-a8b6-157e4566b691-.stdout"
     },
     {
       "command": "helm-ai-kernel verify --bundle <pack> --json",
       "exit_code": 0,
-      "name": "verify_669a7869-98d3-4c17-a8e8-6548862a05c5.tar-",
-      "stderr_file": "verify_669a7869-98d3-4c17-a8e8-6548862a05c5.tar-.stderr",
-      "stdout_file": "verify_669a7869-98d3-4c17-a8e8-6548862a05c5.tar-.stdout"
+      "name": "verify_71eaad24-e800-4b32-a8b6-157e4566b691.tar-",
+      "stderr_file": "verify_71eaad24-e800-4b32-a8b6-157e4566b691.tar-.stderr",
+      "stdout_file": "verify_71eaad24-e800-4b32-a8b6-157e4566b691.tar-.stdout"
     },
     {
       "command": "helm-ai-kernel verify --bundle <pack> --json",
       "exit_code": 0,
-      "name": "verify_8db8b084-ef38-4c2e-8cf4-7b88adb4743e-",
-      "stderr_file": "verify_8db8b084-ef38-4c2e-8cf4-7b88adb4743e-.stderr",
-      "stdout_file": "verify_8db8b084-ef38-4c2e-8cf4-7b88adb4743e-.stdout"
+      "name": "verify_7fe3610a-3971-4906-90d0-7ddb1242bccf-",
+      "stderr_file": "verify_7fe3610a-3971-4906-90d0-7ddb1242bccf-.stderr",
+      "stdout_file": "verify_7fe3610a-3971-4906-90d0-7ddb1242bccf-.stdout"
     },
     {
       "command": "helm-ai-kernel verify --bundle <pack> --json",
       "exit_code": 0,
-      "name": "verify_8db8b084-ef38-4c2e-8cf4-7b88adb4743e.tar-",
-      "stderr_file": "verify_8db8b084-ef38-4c2e-8cf4-7b88adb4743e.tar-.stderr",
-      "stdout_file": "verify_8db8b084-ef38-4c2e-8cf4-7b88adb4743e.tar-.stdout"
+      "name": "verify_7fe3610a-3971-4906-90d0-7ddb1242bccf.tar-",
+      "stderr_file": "verify_7fe3610a-3971-4906-90d0-7ddb1242bccf.tar-.stderr",
+      "stdout_file": "verify_7fe3610a-3971-4906-90d0-7ddb1242bccf.tar-.stdout"
     },
     {
       "command": "helm-ai-kernel verify --bundle <pack> --json",
       "exit_code": 0,
-      "name": "verify_a9423bdb-7a69-4ef1-8246-5063d6181b48-",
-      "stderr_file": "verify_a9423bdb-7a69-4ef1-8246-5063d6181b48-.stderr",
-      "stdout_file": "verify_a9423bdb-7a69-4ef1-8246-5063d6181b48-.stdout"
+      "name": "verify_9eebb477-c858-4ae5-9c6b-4ba5840f9667-",
+      "stderr_file": "verify_9eebb477-c858-4ae5-9c6b-4ba5840f9667-.stderr",
+      "stdout_file": "verify_9eebb477-c858-4ae5-9c6b-4ba5840f9667-.stdout"
     },
     {
       "command": "helm-ai-kernel verify --bundle <pack> --json",
       "exit_code": 0,
-      "name": "verify_a9423bdb-7a69-4ef1-8246-5063d6181b48.tar-",
-      "stderr_file": "verify_a9423bdb-7a69-4ef1-8246-5063d6181b48.tar-.stderr",
-      "stdout_file": "verify_a9423bdb-7a69-4ef1-8246-5063d6181b48.tar-.stdout"
+      "name": "verify_9eebb477-c858-4ae5-9c6b-4ba5840f9667.tar-",
+      "stderr_file": "verify_9eebb477-c858-4ae5-9c6b-4ba5840f9667.tar-.stderr",
+      "stdout_file": "verify_9eebb477-c858-4ae5-9c6b-4ba5840f9667.tar-.stdout"
     },
     {
       "command": "helm-ai-kernel verify --bundle <pack> --json",
       "exit_code": 0,
-      "name": "verify_d8e91fde-fcde-4748-a33e-4640f5b48f9d-",
-      "stderr_file": "verify_d8e91fde-fcde-4748-a33e-4640f5b48f9d-.stderr",
-      "stdout_file": "verify_d8e91fde-fcde-4748-a33e-4640f5b48f9d-.stdout"
+      "name": "verify_f842ae77-6bfb-459f-931c-fe655b724963-",
+      "stderr_file": "verify_f842ae77-6bfb-459f-931c-fe655b724963-.stderr",
+      "stdout_file": "verify_f842ae77-6bfb-459f-931c-fe655b724963-.stdout"
     },
     {
       "command": "helm-ai-kernel verify --bundle <pack> --json",
       "exit_code": 0,
-      "name": "verify_d8e91fde-fcde-4748-a33e-4640f5b48f9d.tar-",
-      "stderr_file": "verify_d8e91fde-fcde-4748-a33e-4640f5b48f9d.tar-.stderr",
-      "stdout_file": "verify_d8e91fde-fcde-4748-a33e-4640f5b48f9d.tar-.stdout"
+      "name": "verify_f842ae77-6bfb-459f-931c-fe655b724963.tar-",
+      "stderr_file": "verify_f842ae77-6bfb-459f-931c-fe655b724963.tar-.stderr",
+      "stdout_file": "verify_f842ae77-6bfb-459f-931c-fe655b724963.tar-.stdout"
     }
   ],
   "deprecated_include_candidates_flag": "accepted_noop_all_four_apps_are_supported",
   "evidence_packs": [
     {
       "kind": "directory",
-      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/669a7869-98d3-4c17-a8e8-6548862a05c5",
-      "sha256": "2eee99797dd04ac172bb00d534a35937c6fc60f86e28c46b33006c9564747c96",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/71eaad24-e800-4b32-a8b6-157e4566b691",
+      "sha256": "c8b0bf2a5ceffaa196a7275549e0f1c99394b3ada224b5a402bede0e2d26f739",
       "verify_status": "PASS"
     },
     {
       "kind": "file",
-      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/669a7869-98d3-4c17-a8e8-6548862a05c5.tar",
-      "sha256": "3ba8d96c6144903e5e32989fc5b2afa0713bbdcb5206486e94634dd7391df5ef",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/71eaad24-e800-4b32-a8b6-157e4566b691.tar",
+      "sha256": "a7f86dc59957f64cd83dca21a408ab52eeb122d6400639dc4ce14b98ed5a4f59",
       "verify_status": "PASS"
     },
     {
       "kind": "directory",
-      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/8db8b084-ef38-4c2e-8cf4-7b88adb4743e",
-      "sha256": "3116777399afab68305c37200c64f837f2322f571542ae2675eff0296ce5bbb3",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/7fe3610a-3971-4906-90d0-7ddb1242bccf",
+      "sha256": "03ff111d03d728b3291ad5d7a92154411de08dda36ac31bc6b70bedd3e9ba83d",
       "verify_status": "PASS"
     },
     {
       "kind": "file",
-      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/8db8b084-ef38-4c2e-8cf4-7b88adb4743e.tar",
-      "sha256": "bed97c16155d118ec87c9032a16b27d29dfe33f9b0fe782e7903e6a6ea1c0122",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/7fe3610a-3971-4906-90d0-7ddb1242bccf.tar",
+      "sha256": "31985646b7b63bdb1b2f40a2adc830c2038292bd66e51014be32e427c7aa0d66",
       "verify_status": "PASS"
     },
     {
       "kind": "directory",
-      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/a9423bdb-7a69-4ef1-8246-5063d6181b48",
-      "sha256": "185d02f45b7910ad29fa8febf054f21abd9c0b3d7bbf5795e6dc80b9eba873ec",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/9eebb477-c858-4ae5-9c6b-4ba5840f9667",
+      "sha256": "8d454da48eb0cac51c1e29c7e5576ab5308190bb158c1bf734a309cb9bb75f9d",
       "verify_status": "PASS"
     },
     {
       "kind": "file",
-      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/a9423bdb-7a69-4ef1-8246-5063d6181b48.tar",
-      "sha256": "75aa77350485966ad9dab80f695d94ea40756fdf5e54e2fef36144da8cff42c6",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/9eebb477-c858-4ae5-9c6b-4ba5840f9667.tar",
+      "sha256": "a75c6db661ae95fb63982b88d4ab18bc9d123de5b0b5393984599d81ad321d8e",
       "verify_status": "PASS"
     },
     {
       "kind": "directory",
-      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/d8e91fde-fcde-4748-a33e-4640f5b48f9d",
-      "sha256": "ceee23ab3d2ac63e169b7404ea242de1bf6ede55abc2f5eaef67750e714ee0b4",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/f842ae77-6bfb-459f-931c-fe655b724963",
+      "sha256": "fec40b87692d1319960c64658f7060ec7fb19401052676747825c4582125cc08",
       "verify_status": "PASS"
     },
     {
       "kind": "file",
-      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/d8e91fde-fcde-4748-a33e-4640f5b48f9d.tar",
-      "sha256": "252a9c5e2197244626dc55bc5f9bd12e0bddb523c3b57d47bf6fb8b0cd5fb0de",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/f842ae77-6bfb-459f-931c-fe655b724963.tar",
+      "sha256": "884fc8ce67b58880910d79c4a47150adee5f286a2dba251ae01ea697925876b2",
       "verify_status": "PASS"
     }
   ],
   "failed_steps": [],
-  "generated_at": "2026-05-20T22:17:33Z",
+  "generated_at": "2026-05-21T01:39:16Z",
   "ghcr_digest_confirmations": [
     {
       "app_id": "hermes",
@@ -243,10 +243,10 @@
   ],
   "host_kind": "github_macos_runner",
   "launch_ids": {
-    "hermes": "a9423bdb-7a69-4ef1-8246-5063d6181b48",
-    "kilocode": "d8e91fde-fcde-4748-a33e-4640f5b48f9d",
-    "openclaw": "669a7869-98d3-4c17-a8e8-6548862a05c5",
-    "opencode": "8db8b084-ef38-4c2e-8cf4-7b88adb4743e"
+    "hermes": "7fe3610a-3971-4906-90d0-7ddb1242bccf",
+    "kilocode": "71eaad24-e800-4b32-a8b6-157e4566b691",
+    "openclaw": "9eebb477-c858-4ae5-9c6b-4ba5840f9667",
+    "opencode": "f842ae77-6bfb-459f-931c-fe655b724963"
   },
   "milestone": "Launchpad v0.5.5 Clean Install + Public Docs GA",
   "redaction": {
@@ -263,14 +263,14 @@
   "secret_fragment_audit": {
     "findings": [],
     "findings_count": 0,
-    "generated_at": "2026-05-20T22:17:30Z",
+    "generated_at": "2026-05-21T01:39:13Z",
     "min_fragment_length": 16,
     "roots": [
       "/tmp/helm-launchpad-clean-install/commands",
       "/tmp/helm-launchpad-clean-install/audit",
       "/tmp/helm-launchpad-clean-install/launchpad-home"
     ],
-    "scanned_bytes": 3842022,
+    "scanned_bytes": 3980778,
     "scanned_files": 183,
     "schema_version": 1,
     "secret_env_configured": true,

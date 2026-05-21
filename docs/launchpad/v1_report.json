@@ -1,23 +1,23 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-20T22:17:30Z",
+  "generated_at": "2026-05-21T01:39:16Z",
   "milestone": "Launchpad v1.0 Governed App Execution + Cloud Beta",
   "status": "ga_hardening_contracts_implemented_four_app_local_container_clean_install_and_digitalocean_live_passed_hetzner_blocked",
   "release_truth_base": {
     "release_tag": "v0.5.5",
     "release_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.5",
-    "artifact_workflow_run_id": "26110916296",
+    "artifact_workflow_run_id": "26198407296",
     "release_workflow_run_id": "26188554059",
-    "v1_artifact_workflow_run_id": "26186959337",
-    "v1_artifact_workflow_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26186959337",
-    "v1_artifact_workflow_head_sha": "176e4528bbda4b464b1f9a9df9ac8ba196171d3c",
+    "v1_artifact_workflow_run_id": "26198407296",
+    "v1_artifact_workflow_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26198407296",
+    "v1_artifact_workflow_head_sha": "7d9f0a2b1bf6b33c17b9319cee1b80d73f72cd47",
     "v1_artifact_workflow_conclusion": "success_four_app_signed_artifact_sbom_vuln_scan_live_conformance_teardown_offline_evidencepack_verify",
     "v1_artifact_workflow_fix": "local-container live conformance uses configurable runtime timeout and 30m Go test timeout for cold four-app pulls",
     "release_workflow_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26188554059",
     "homebrew_tap_commit": "de44092",
     "homebrew_tap_url": "https://github.com/mindburnlabs/homebrew-tap/commit/de44092",
-    "clean_install_workflow_run_id": "26192627823",
-    "clean_install_workflow_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26192627823",
+    "clean_install_workflow_run_id": "26199878246",
+    "clean_install_workflow_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26199878246",
     "clean_install_workflow_conclusion": "success_v0_5_5_homebrew_four_app_local_container_teardown_offline_evidencepack_verify_secret_audit_passed"
   },
   "developer_ga": {
@@ -31,9 +31,9 @@
     "candidate_artifact_workflow_matrix": [],
     "candidate_recipe_base_images_pinned": true,
     "signed_artifact_ci_status": "passed",
-    "live_local_container_conformance_status": "github_actions_run_26186959337_openclaw_hermes_opencode_kilocode_passed_with_teardown_and_offline_evidencepack_verification",
+    "live_local_container_conformance_status": "github_actions_run_26198407296_openclaw_hermes_opencode_kilocode_passed_with_teardown_and_offline_evidencepack_verification",
     "live_local_container_gate_patch": "workflow_default_live_apps_and_artifact_matrix_openclaw_hermes_opencode_kilocode_with_configurable_timeout_for_cold_pulls",
-    "homebrew_clean_install_status": "github_actions_run_26192627823_v0_5_5_homebrew_install_openclaw_hermes_opencode_kilocode_launch_delete_offline_verify_secret_audit_passed",
+    "homebrew_clean_install_status": "github_actions_run_26199878246_v0_5_5_homebrew_install_openclaw_hermes_opencode_kilocode_launch_delete_offline_verify_secret_audit_passed",
     "clean_install_supported_apps": [
       "openclaw",
       "hermes",
@@ -41,7 +41,7 @@
       "kilocode"
     ],
     "candidate_promotion_apps": [],
-    "candidate_promotion_gate": "not_applicable_all_four_supported_after_run_26186959337",
+    "candidate_promotion_gate": "not_applicable_all_four_supported_after_run_26198407296",
     "supported_command_shape": [
       "helm-ai-kernel launch secrets set model_gateway --provider openrouter --value-env OPENROUTER_API_KEY",
       "helm-ai-kernel launch secrets status",
@@ -72,15 +72,15 @@
     "proxy_only_secretless_model_gateway": "not_yet_claimed",
     "connect_payload_inspection": "opaque_connect",
     "egress_claim": "OpenRouter destination allowlist with receipt-backed proxy enforcement",
-    "clean_install_workflow_run_id": "26192627823",
+    "clean_install_workflow_run_id": "26199878246",
     "clean_install_report": "docs/launchpad/clean_install_report.json"
   },
   "apps": {
     "openclaw": {
       "availability": "oss_supported",
       "local_container": "supported",
-      "ghcr_digest": "sha256:c5b6d872798514cab6e1a27f9f168aa4c38adb7166d711d49fd2a501aec8b1f9",
-      "evidence_pack_ref": "github-actions://26186959337/1/evidencepack/openclaw",
+      "ghcr_digest": "sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995",
+      "evidence_pack_ref": "github-actions://26198407296/1/evidencepack/openclaw",
       "mcp_manifest": "openclaw.default",
       "model_gateway": "logical_binding_env_projection",
       "cloud_beta": "digitalocean_live_launch_delete_reconcile_verify_passed_hetzner_fail_closed_until_token"
@@ -88,8 +88,8 @@
     "hermes": {
       "availability": "oss_supported",
       "local_container": "supported",
-      "ghcr_digest": "sha256:807f96a9bcc831a810ac77a775dec8f8486ad7df68dd024feb3d75a0a148a03e",
-      "evidence_pack_ref": "github-actions://26186959337/1/evidencepack/hermes",
+      "ghcr_digest": "sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652",
+      "evidence_pack_ref": "github-actions://26198407296/1/evidencepack/hermes",
       "mcp_manifest": "hermes.default",
       "model_gateway": "logical_binding_env_projection",
       "cloud_beta": "digitalocean_live_launch_delete_reconcile_verify_passed_hetzner_fail_closed_until_token"
@@ -99,11 +99,11 @@
       "local_container": "supported",
       "upstream_release": "v1.15.5",
       "upstream_commit": "d7a6e1daaf2271bcd0b611fbb27d4956806e475a",
-      "ghcr_digest": "sha256:3e258a0b5424b6a141e0e71516754cd7598a71b5727443c9620a90152dcc0f38",
-      "evidence_pack_ref": "github-actions://26186959337/1/evidencepack/opencode",
+      "ghcr_digest": "sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550",
+      "evidence_pack_ref": "github-actions://26198407296/1/evidencepack/opencode",
       "mcp_manifest": "opencode.default",
       "model_gateway": "logical_binding_env_projection",
-      "artifact_workflow_run_id": "26186959337",
+      "artifact_workflow_run_id": "26198407296",
       "vulnerability_scan_status": "completed",
       "cloud_beta": "digitalocean_live_launch_delete_reconcile_verify_passed_hetzner_fail_closed_until_token"
     },
@@ -112,11 +112,11 @@
       "local_container": "supported",
       "upstream_release": "v7.3.1",
       "upstream_commit": "64c60812ae730a30db1fa2226d9e446f7f10c127",
-      "ghcr_digest": "sha256:59d6eec39e1eb7f3ccdf218055b9590cffe55fd19ca58feb5944369c833c8f65",
-      "evidence_pack_ref": "github-actions://26186959337/1/evidencepack/kilocode",
+      "ghcr_digest": "sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6",
+      "evidence_pack_ref": "github-actions://26198407296/1/evidencepack/kilocode",
       "mcp_manifest": "kilocode.default",
       "model_gateway": "logical_binding_env_projection",
-      "artifact_workflow_run_id": "26186959337",
+      "artifact_workflow_run_id": "26198407296",
       "vulnerability_scan_status": "completed",
       "cloud_beta": "digitalocean_live_launch_delete_reconcile_verify_passed_hetzner_fail_closed_until_token"
     },
@@ -224,7 +224,7 @@
     "cloud_live_write_policy": "approval_cost_ceiling_idempotency_and_reconcile_required"
   },
   "secret_fragment_audit": {
-    "status": "passed_clean_install_run_26192627823_zero_findings",
+    "status": "passed_clean_install_run_26199878246_zero_findings",
     "prints_secret_or_fragments": false,
     "scanned_files": 183,
     "scanned_bytes": 3842022,
@@ -239,8 +239,8 @@
       "docs_truth": "passed",
       "launch_security": "passed",
       "launch_api_truth": "passed",
-      "clean_install_homebrew": "passed_github_actions_run_26192627823",
-      "secret_fragment_audit": "passed_zero_findings_run_26192627823"
+      "clean_install_homebrew": "passed_github_actions_run_26199878246",
+      "secret_fragment_audit": "passed_zero_findings_run_26199878246"
     },
     "enterprise": {
       "controlplane_console_tests": "passed",

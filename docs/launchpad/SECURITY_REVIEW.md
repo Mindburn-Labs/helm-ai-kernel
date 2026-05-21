@@ -1,7 +1,7 @@
 # Launchpad Security Review
 
 Status: Launchpad v1 local-container review passes for OpenClaw, Hermes,
-OpenCode, and Kilo Code from workflow `26186959337`. The `v0.5.5`
+OpenCode, and Kilo Code from workflow `26198407296`. The `v0.5.5`
 clean-install gate remains the package/install release gate.
 
 ## Results
@@ -17,7 +17,7 @@ clean-install gate remains the package/install release gate.
 - [KEEP] OpenClaw, Hermes, OpenCode, and Kilo Code are promoted to
   `oss_supported` from signed CI artifacts, live local-container evidence,
   teardown receipts, and offline EvidencePack verification in workflow
-  `26186959337`.
+  `26198407296`.
 - [KEEP] Codex, Claude Code, Cursor, and Junie remain external/BYO adapters; no
   proprietary redistribution claim is made.
 - [KEEP] CLI/API launch path returns `ESCALATE` for missing required secrets and

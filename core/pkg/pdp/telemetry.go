@@ -65,7 +65,7 @@ func (t *TelemetryPDP) Evaluate(ctx context.Context, req *DecisionRequest) (*Dec
 		// In Shadow Mode, we log it as *_shadow but permit the operation (Allow = true)
 		metricVerdict = strings.ToLower(actualVerdict) + "_shadow"
 		resp.Allow = true
-		
+
 		// Update the decision hash because we altered the 'Allow' field
 		hash, hashErr := ComputeDecisionHash(resp)
 		if hashErr == nil {

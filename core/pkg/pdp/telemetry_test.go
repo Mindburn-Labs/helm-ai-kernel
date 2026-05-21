@@ -54,11 +54,11 @@ func TestTelemetryPDP_ShadowMode(t *testing.T) {
 		Timestamp: time.Now(),
 	})
 	assert.NoError(t, err)
-	
+
 	// Should be allowed in shadow mode!
 	assert.True(t, resp.Allow)
 	assert.Equal(t, "PDP_DENY", resp.ReasonCode) // Reason code is preserved
-	
+
 	// Verify decision hash was recomputed successfully
 	expectedHash, _ := ComputeDecisionHash(resp)
 	assert.Equal(t, expectedHash, resp.DecisionHash)

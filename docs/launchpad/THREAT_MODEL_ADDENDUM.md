@@ -49,7 +49,7 @@ must be added to the mediation proof harness before it appears in public claims.
 ## Supported App Claim Boundary
 
 OpenClaw, Hermes, OpenCode, and Kilo Code are the current `oss_supported`
-local-container set after workflow `26186959337` passed signed artifact build,
+local-container set after workflow `26198407296` passed signed artifact build,
 SBOM, vulnerability scan, live OpenRouter launch, teardown, and offline
 EvidencePack verification for all four apps.
 

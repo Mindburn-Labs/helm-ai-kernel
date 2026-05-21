@@ -40,7 +40,7 @@ Supported means all of the following are present and registry-validated:
 - offline `helm-ai-kernel verify --bundle <pack>` pass.
 
 OpenClaw, Hermes, OpenCode, and Kilo Code are the current `oss_supported`
-local-container set after workflow `26186959337` produced signed artifacts,
+local-container set after workflow `26198407296` produced signed artifacts,
 live conformance, teardown receipts, and offline EvidencePack verification for
 all four. Any additional app remains non-supported until it meets the same
 registry-validated evidence bar.

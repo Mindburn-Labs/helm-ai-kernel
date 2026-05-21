@@ -1,0 +1,13 @@
+network:
+  default: deny
+  allow:
+    - https://openrouter.ai/api/v1
+filesystem:
+  default: deny
+  allow:
+    - workspace:rw
+    - app_state:rw
+mcp:
+  unknown_server_policy: quarantine
+  unknown_tool_policy: ESCALATE
+  require_schema_pin: true

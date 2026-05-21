@@ -1,0 +1,1 @@
+{"event_id":"evt_loop_deny","type":"recurring_loop","tool_id":"heartbeat","action":"register","effect_mode":"operate","status":"blocked","occurred_at":"2026-05-20T13:00:10Z","recurring_loop_effect":{"effect_id":"loop_001","schedule":"FREQ=MINUTELY;INTERVAL=30","max_runtime":"10m","tool_scope":["gmail.read","slack.read"],"expires_at":"2026-05-21T13:00:00Z"}}

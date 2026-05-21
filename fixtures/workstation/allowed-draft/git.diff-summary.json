@@ -1,0 +1,13 @@
+{
+  "repository": "helm-ai-kernel",
+  "base_ref": "abc123",
+  "head_ref": "def456",
+  "changed_files": [
+    {
+      "path": "docs/workstation-governance.md",
+      "status": "modified",
+      "additions": 12,
+      "deletions": 0
+    }
+  ]
+}

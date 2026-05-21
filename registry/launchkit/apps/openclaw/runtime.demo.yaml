@@ -1,0 +1,8 @@
+mode: demo
+side_effects: disabled
+runtime_dry_run: true
+command:
+  - openclaw
+healthcheck:
+  type: command
+  command: helm-launchpad-openrouter-check

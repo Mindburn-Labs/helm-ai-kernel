@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.mindburn.run/workstation/workstation_policy_decision_receipt.v1.schema.json",
+  "title": "HELM Workstation Policy Decision Receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receipt_version",
+    "decision_id",
+    "request",
+    "policy_profile",
+    "verdict",
+    "observed_only",
+    "created_at",
+    "receipt_hash",
+    "signature",
+    "signer_key_id"
+  ],
+  "properties": {
+    "receipt_version": { "const": "agent_run_receipt.v1" },
+    "decision_id": { "type": "string", "minLength": 1 },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "tool_id", "action", "effect_type", "effect_mode", "occurred_at"],
+      "properties": {
+        "request_id": { "type": "string", "minLength": 1 },
+        "run_id": { "type": "string" },
+        "actor_id": { "type": "string" },
+        "workspace_id": { "type": "string" },
+        "agent_surface": { "type": "string" },
+        "tool_id": { "type": "string", "minLength": 1 },
+        "action": { "type": "string", "minLength": 1 },
+        "effect_type": {
+          "enum": [
+            "WORKSTATION_FILE_DRAFT",
+            "WORKSTATION_FILE_WRITE",
+            "WORKSTATION_SHELL_COMMAND",
+            "WORKSTATION_NETWORK_EGRESS",
+            "WORKSTATION_MCP_TOOL_CALL",
+            "WORKSTATION_MEMORY_WRITE",
+            "WORKSTATION_RECURRING_LOOP",
+            "WORKSTATION_VALIDATION_RUN",
+            "WORKSTATION_TAINTED_CONTEXT"
+          ]
+        },
+        "effect_mode": { "enum": ["observe", "draft", "operate"] },
+        "target": { "type": "string" },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "occurred_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "policy_profile": { "const": "workstation.observe_draft.v1" },
+    "verdict": { "enum": ["ALLOW", "DENY"] },
+    "reason_code": { "type": "string" },
+    "reason": { "type": "string" },
+    "observed_only": { "type": "boolean" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "receipt_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "signature": { "type": "string", "pattern": "^[a-f0-9]{128}$" },
+    "signer_key_id": { "type": "string", "minLength": 1 }
+  }
+}

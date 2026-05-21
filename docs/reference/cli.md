@@ -39,6 +39,7 @@ flowchart LR
 
 | Command | Purpose | Source truth |
 | --- | --- | --- |
+| `helm up <app>` / `helm-ai-kernel up <app>` | Launch any supported AppSpec through HELM LaunchKit with environment preflight, supply-chain checks, policy/CPI compile, scoped secrets, sandbox grants, MCP quarantine, receipts, EvidencePack export, offline verify command, and Console deep link. | [`up_cmd.go`](../../core/cmd/helm-ai-kernel/up_cmd.go), [`core/pkg/launchkit`](../../core/pkg/launchkit) |
 | `helm-ai-kernel serve` | Start the local execution boundary from a policy file. | [`server_cmd.go`](../../core/cmd/helm-ai-kernel/server_cmd.go), [`serve_policy.go`](../../core/cmd/helm-ai-kernel/serve_policy.go) |
 | `helm-ai-kernel server` | Start the default Guardian API and proxy services. | [`main.go`](../../core/cmd/helm-ai-kernel/main.go), [`subsystems.go`](../../core/cmd/helm-ai-kernel/subsystems.go) |
 | `helm-ai-kernel proxy` | Run the OpenAI-compatible governance proxy. | [`proxy_cmd.go`](../../core/cmd/helm-ai-kernel/proxy_cmd.go) |
@@ -72,6 +73,7 @@ This table documents registered top-level `helm-ai-kernel` command families and 
 
 | Command | Contract |
 | --- | --- |
+| `helm up <app>` | Defaults to `--target local --mode auto`; accepts `--target local|cloud|cloud:helm|cloud:aws|cloud:kubernetes`, `--demo`, `--verify-only`, `--live`, `--resume <run_id>`, `--yes`, `--no-open`, and `--json`. `--verify-only` never starts runtime. `--live` never falls back to demo. Cloud targets escalate before paid resources unless provider auth and explicit approval are present. |
 | `helm-ai-kernel serve --policy <path>` | `--policy` is required. Optional flags are `--addr`, `--port`, `--data-dir`, `--console`, `--console-dir`, and `--json`. If the policy does not override bind or port, `serve` uses `127.0.0.1:7714`. |
 | `helm-ai-kernel server` | Starts without `--policy` and defaults to `127.0.0.1:8080` unless flags, env, or config override it. `HELM_BIND_ADDR` overrides the bind address when no explicit flag is set. `HELM_PORT` overrides the API port when no explicit flag is set. The separate health server uses `HELM_HEALTH_PORT` and defaults to `8081`. |
 | `helm-ai-kernel proxy` | Defaults to `--upstream https://api.openai.com/v1`, `--port 9090`, and `--receipts-dir ./helm-receipts`. `--websocket` is explicitly unsupported in the OSS proxy runtime. |

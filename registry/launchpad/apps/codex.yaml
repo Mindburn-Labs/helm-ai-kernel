@@ -37,7 +37,27 @@ budget_ceiling:
   usd_max: 0
   api_calls_max: 0
   time_ms_max: 0
-evidence_requirements: ["cpi_output", "kernel_verdict", "sandbox_grant", "launch_receipt", "teardown_receipt", "evidence_pack"]
+evidence_requirements:
+  - cpi_output
+  - kernel_verdict
+  - sandbox_grant
+  - launch_receipt
+  - teardown_receipt
+  - evidence_pack
+  - workstation_artifact_manifest
+  - agent_run_receipt
+metadata:
+  workstation_governance_mode: selected_effect_enforceable
+  workstation_policy_profile: workstation.observe_draft.v1
+  workstation_adapter_strategy: manifest_first_with_cli_hook
+  workstation_required_artifacts: run.manifest.json,git.diff-summary.json,validation.json
+  workstation_optional_artifacts: tool-events.ndjson,policy-profile.json
+  workstation_receipt_schema: workstation/agent_run_receipt.v1
+  workstation_decision_receipt_schema: workstation/workstation_policy_decision_receipt.v1
+  workstation_enforcement_claim: selected_effect_wrapper_only
+  workstation_adapter_docs: helm-ai-kernel/examples/workstation/README.md
+  workstation_adapter_script: helm-ai-kernel/examples/workstation/codex/run-capture.sh
+  workstation_supported_certification_level: high-risk-effect-capable
 conformance:
   license_verified: true
   artifact_verified: false

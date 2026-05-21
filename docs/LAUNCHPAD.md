@@ -11,10 +11,19 @@ conformance, teardown, receipt, and offline EvidencePack verification in
 workflow `26198407296`. Codex, Claude Code, Cursor, and Junie remain external
 BYO adapters.
 
-Launchpad is the OSS local-container app launcher for HELM AI Kernel. It starts
+LaunchKit is the product entrypoint for one-command app bootstrap. It uses the
+existing Launchpad registry/runtime/receipt implementation as the compatibility
+foundation, then exposes the Tier-1 operator command:
+
+```bash
+helm up openclaw
+helm up hermes --target cloud:aws --verify-only
+```
+
+Launchpad remains the OSS local-container implementation layer. LaunchKit starts
 verified AI apps through a fail-closed execution firewall, preserves the MCP
-interceptor posture, records signed receipts, and emits EvidencePacks that verify
-offline.
+interceptor posture, records signed receipts, emits EvidencePacks that verify
+offline, and opens the Console at the receipt-backed run URL.
 
 ## Audience
 
@@ -41,6 +50,12 @@ GA claims.
 ## Current CLI
 
 ```bash
+helm up openclaw
+helm up hermes --target local
+helm up openclaw --demo
+helm up hermes --verify-only
+helm up hermes --target cloud:aws --yes
+helm up openclaw --resume <run_id>
 helm-ai-kernel launch matrix --json
 helm-ai-kernel launch apps --json
 helm-ai-kernel launch substrates --json
@@ -63,6 +78,9 @@ helm-ai-kernel evidence inspect <pack>
 helm-ai-kernel evidence diff <pack-a> <pack-b>
 helm-ai-kernel verify --bundle <pack>
 ```
+
+`helm-ai-kernel` remains the backwards-compatible binary and command namespace.
+Release builds also ship `helm` as the primary product command.
 
 ## App Classification
 

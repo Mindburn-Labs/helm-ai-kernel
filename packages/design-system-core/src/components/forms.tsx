@@ -11,6 +11,7 @@ import {
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
+  type Ref,
   type ReactNode,
 } from "react";
 
@@ -162,6 +163,7 @@ export function TextInput({
 }
 
 export interface TextareaFieldProps {
+  readonly ref?: Ref<HTMLTextAreaElement>;
   readonly value?: string;
   readonly defaultValue?: string;
   readonly onChange?: (event: ChangeEvent<HTMLTextAreaElement>) => void;
@@ -176,6 +178,7 @@ export interface TextareaFieldProps {
 }
 
 export function TextareaField({
+  ref,
   value,
   defaultValue,
   onChange,
@@ -199,6 +202,7 @@ export function TextareaField({
     : ({ defaultValue: defaultValue ?? value } as const);
   return (
     <textarea
+      ref={ref}
       className="textarea-input"
       placeholder={placeholder}
       disabled={disabled}

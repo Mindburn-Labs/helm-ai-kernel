@@ -39,6 +39,12 @@ type EvidencePack struct {
 	// Threat Scan Evidence
 	ThreatScan *ThreatScanRef `json:"threat_scan,omitempty"`
 
+	// Verification scope records what the verification did and did not cover.
+	VerificationScopes []VerificationScope `json:"verification_scopes,omitempty"`
+
+	// HarnessTraceRefs link telemetry that influenced execution or replay.
+	HarnessTraceRefs []HarnessTraceRef `json:"harness_trace_refs,omitempty"`
+
 	// Attestation
 	Attestation EvidencePackAttestation `json:"attestation"`
 
@@ -48,6 +54,32 @@ type EvidencePack struct {
 	PortExposures  []PortExposureRef  `json:"port_exposures,omitempty"`
 	GitDiffs       []GitDiffRef       `json:"git_diffs,omitempty"`
 	ReplayManifest *ReplayManifestRef `json:"replay_manifest,omitempty"`
+}
+
+// VerificationScope records verification coverage and residual risk.
+type VerificationScope struct {
+	VerificationScopeID string    `json:"verification_scope_id"`
+	SubjectHash         string    `json:"subject_hash"`
+	RiskClass           string    `json:"risk_class,omitempty"`
+	ChecksPerformed     []string  `json:"checks_performed"`
+	Assumptions         []string  `json:"assumptions,omitempty"`
+	UntestedRegions     []string  `json:"untested_regions,omitempty"`
+	KnownLimits         []string  `json:"known_limits,omitempty"`
+	RemainingRisks      []string  `json:"remaining_risks,omitempty"`
+	RequiredFollowup    []string  `json:"required_followup,omitempty"`
+	VerifierHash        string    `json:"verifier_hash"`
+	PolicyHash          string    `json:"policy_hash"`
+	CreatedAt           time.Time `json:"created_at,omitempty"`
+	ScopeHash           string    `json:"scope_hash,omitempty"`
+}
+
+// HarnessTraceRef points to a canonical harness trace artifact.
+type HarnessTraceRef struct {
+	TraceID string    `json:"trace_id"`
+	Hash    string    `json:"hash"`
+	URI     string    `json:"uri,omitempty"`
+	Kind    string    `json:"kind,omitempty"`
+	At      time.Time `json:"at,omitempty"`
 }
 
 // NetworkLogRef references a network activity log captured during execution.

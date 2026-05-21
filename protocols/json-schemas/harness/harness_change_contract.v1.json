@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/harness/harness_change_contract.v1.json",
+  "title": "HarnessChangeContract v1",
+  "description": "Controlled mutation contract for connector, tool, sandbox, verifier, evidence, policy, and routing harness changes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "change_contract_id",
+    "component_modified",
+    "failure_mode_targeted",
+    "predicted_improvement",
+    "invariants_preserved",
+    "safety_properties",
+    "regression_suite_refs",
+    "rollback_plan",
+    "approval_required",
+    "created_at",
+    "contract_hash"
+  ],
+  "properties": {
+    "change_contract_id": { "type": "string", "minLength": 1 },
+    "component_modified": {
+      "type": "string",
+      "enum": ["connector_contract", "tool_schema", "sandbox_grant", "mcp_approval", "policy_overlay", "verifier", "evidence_template", "routing_rule"]
+    },
+    "failure_mode_targeted": { "type": "string", "minLength": 1 },
+    "predicted_improvement": { "type": "string", "minLength": 1 },
+    "invariants_preserved": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "safety_properties": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "regression_suite_refs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "simulation_evidence_refs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "canary_scope": { "type": "object", "additionalProperties": true },
+    "rollback_plan": { "type": "object", "additionalProperties": true },
+    "approval_required": { "type": "boolean" },
+    "activation_receipt_ref": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "contract_hash": { "type": "string", "pattern": "^sha256:" }
+  }
+}

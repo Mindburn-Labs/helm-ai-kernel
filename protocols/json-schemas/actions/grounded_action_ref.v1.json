@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/actions/grounded_action_ref.v1.json",
+  "title": "GroundedActionRef v1",
+  "description": "Visual, DOM/accessibility, target, and verifier grounding for a GUI or computer-use action.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "grounded_action_id",
+    "screenshot_hash",
+    "dom_or_ax_snapshot_hash",
+    "target_ref",
+    "bbox_or_element_id",
+    "action_type",
+    "precondition",
+    "postcondition",
+    "verification_scope_ref",
+    "policy_hash",
+    "created_at",
+    "grounding_hash"
+  ],
+  "properties": {
+    "grounded_action_id": { "type": "string", "minLength": 1 },
+    "screenshot_hash": { "type": "string", "pattern": "^sha256:" },
+    "dom_or_ax_snapshot_hash": { "type": "string", "pattern": "^sha256:" },
+    "target_ref": { "type": "string", "minLength": 1 },
+    "bbox_or_element_id": { "type": "string", "minLength": 1 },
+    "action_type": { "type": "string", "enum": ["click", "type", "select", "submit", "navigate"] },
+    "precondition": { "type": "string", "minLength": 1 },
+    "postcondition": { "type": "string", "minLength": 1 },
+    "verification_scope_ref": { "type": "string", "minLength": 1 },
+    "policy_hash": { "type": "string", "pattern": "^sha256:" },
+    "sandbox_grant_hash": { "type": "string", "pattern": "^sha256:" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "grounding_hash": { "type": "string", "pattern": "^sha256:" }
+  }
+}

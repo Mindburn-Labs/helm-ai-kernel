@@ -1,0 +1,13 @@
+{
+  "commands": [
+    {
+      "command": "go test ./pkg/workstation",
+      "exit_code": 0,
+      "status": "passed",
+      "stdout_hash": "sha256:demo-stdout",
+      "stderr_hash": "sha256:demo-stderr",
+      "started_at": "2026-05-20T15:04:00Z",
+      "completed_at": "2026-05-20T15:05:00Z"
+    }
+  ]
+}

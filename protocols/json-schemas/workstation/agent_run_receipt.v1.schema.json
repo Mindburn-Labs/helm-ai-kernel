@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.mindburn.run/workstation/agent_run_receipt.v1.schema.json",
+  "title": "HELM Agent Run Receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receipt_version",
+    "receipt_id",
+    "run_id",
+    "goal",
+    "actor",
+    "workspace",
+    "agent_surface",
+    "policy_profile",
+    "artifact_hashes",
+    "tool_actions",
+    "changed_files",
+    "validation_results",
+    "memory_effects",
+    "recurring_loop_effects",
+    "denied_effects",
+    "proofgraph_refs",
+    "evidence_pack_refs",
+    "created_at",
+    "receipt_hash",
+    "signature",
+    "signer_key_id"
+  ],
+  "properties": {
+    "receipt_version": { "const": "agent_run_receipt.v1" },
+    "receipt_id": { "type": "string", "minLength": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "goal": { "type": "string", "minLength": 1 },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor_id", "actor_type"],
+      "properties": {
+        "actor_id": { "type": "string", "minLength": 1 },
+        "actor_type": { "type": "string", "minLength": 1 }
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspace_id"],
+      "properties": {
+        "workspace_id": { "type": "string", "minLength": 1 },
+        "path": { "type": "string" },
+        "repository": { "type": "string" }
+      }
+    },
+    "agent_surface": { "type": "string", "minLength": 1 },
+    "policy_profile": { "type": "string", "minLength": 1 },
+    "artifact_hashes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "tool_actions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/tool_action" }
+    },
+    "changed_files": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/changed_file" }
+    },
+    "validation_results": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/validation_result" }
+    },
+    "memory_effects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/memory_effect" }
+    },
+    "recurring_loop_effects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/recurring_loop_effect" }
+    },
+    "denied_effects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/denied_effect" }
+    },
+    "proofgraph_refs": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "evidence_pack_refs": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "receipt_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "signature": { "type": "string", "pattern": "^[a-f0-9]+$" },
+    "signer_key_id": { "type": "string", "minLength": 1 }
+  },
+  "$defs": {
+    "tool_action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id",
+        "tool_id",
+        "action",
+        "effect_type",
+        "effect_mode",
+        "status",
+        "verdict",
+        "occurred_at"
+      ],
+      "properties": {
+        "action_id": { "type": "string", "minLength": 1 },
+        "tool_id": { "type": "string", "minLength": 1 },
+        "action": { "type": "string", "minLength": 1 },
+        "effect_type": { "type": "string", "minLength": 1 },
+        "effect_mode": { "enum": ["observe", "draft", "operate"] },
+        "status": { "type": "string", "minLength": 1 },
+        "verdict": { "enum": ["ALLOW", "DENY"] },
+        "reason_code": { "type": "string" },
+        "target": { "type": "string" },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "taint_labels": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "changed_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "status"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "minLength": 1 },
+        "additions": { "type": "integer", "minimum": 0 },
+        "deletions": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "validation_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "exit_code", "status"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "exit_code": { "type": "integer" },
+        "status": { "type": "string", "minLength": 1 },
+        "stdout_hash": { "type": "string" },
+        "stderr_hash": { "type": "string" },
+        "started_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "memory_effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "effect_id",
+        "memory_class",
+        "data_class",
+        "sensitivity",
+        "ttl_days",
+        "content_hash",
+        "verdict",
+        "observed_only"
+      ],
+      "properties": {
+        "effect_id": { "type": "string", "minLength": 1 },
+        "memory_class": { "type": "string", "minLength": 1 },
+        "data_class": { "type": "string", "minLength": 1 },
+        "sensitivity": { "type": "string", "minLength": 1 },
+        "ttl_days": { "type": "integer", "minimum": 1 },
+        "content_hash": { "type": "string", "minLength": 1 },
+        "content_ref": { "type": "string" },
+        "purpose": { "type": "string" },
+        "review_state": { "type": "string" },
+        "verdict": { "enum": ["ALLOW", "DENY"] },
+        "reason_code": { "type": "string" },
+        "taint_labels": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "observed_only": { "type": "boolean" }
+      }
+    },
+    "recurring_loop_effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "effect_id",
+        "schedule",
+        "max_runtime",
+        "tool_scope",
+        "expires_at",
+        "verdict",
+        "observed_only"
+      ],
+      "properties": {
+        "effect_id": { "type": "string", "minLength": 1 },
+        "schedule": { "type": "string", "minLength": 1 },
+        "max_runtime": { "type": "string", "minLength": 1 },
+        "tool_scope": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "verdict": { "enum": ["ALLOW", "DENY"] },
+        "reason_code": { "type": "string" },
+        "observed_only": { "type": "boolean" }
+      }
+    },
+    "denied_effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effect_id", "effect_type", "reason_code", "occurred_at"],
+      "properties": {
+        "effect_id": { "type": "string", "minLength": 1 },
+        "effect_type": { "type": "string", "minLength": 1 },
+        "tool_id": { "type": "string" },
+        "action": { "type": "string" },
+        "reason_code": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string" },
+        "occurred_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

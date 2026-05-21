@@ -45,6 +45,8 @@ tags:
     description: HELM AI Kernel Console platform state
   - name: agent
     description: Self-hosted AG-UI runtime for the HELM AI Kernel Console assistant
+  - name: launchpad
+    description: HELM Launchpad plan, run, repair, and teardown cockpit
   - name: demo
     description: Public HELM AI Kernel sandbox proof scenario
 
@@ -456,6 +458,23 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+  /api/v1/console/diagnostics:
+    get:
+      operationId: getConsoleDiagnostics
+      tags: [console, system]
+      summary: Read redacted Console runtime and persistence diagnostics
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Redacted runtime, store, route, and access diagnostics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsoleDiagnostics'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
   /api/v1/console/surfaces:
     get:
       operationId: listConsoleSurfaces
@@ -491,7 +510,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [overview, agents, actions, approvals, policies, replay, audit, developer, settings]
+            enum: [overview, agents, actions, approvals, policies, boundary, mcp, sandbox, authz, budgets, connectors, receipts, evidence, replay, conformance, proofgraph, harness, launchpad, trust, telemetry, coexistence, audit, developer, settings, diagnostics]
       responses:
         '200':
           description: Console surface state
@@ -573,6 +592,567 @@ paths:
         '400':
           $ref: '#/components/responses/HelmError'
         '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/apps:
+    get:
+      operationId: listLaunchpadApps
+      tags: [launchpad]
+      summary: List Launchpad app specs
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Launchpad apps
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apps]
+                properties:
+                  apps:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LaunchpadApp'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/substrates:
+    get:
+      operationId: listLaunchpadSubstrates
+      tags: [launchpad]
+      summary: List Launchpad substrate specs
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Launchpad substrates
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [substrates]
+                properties:
+                  substrates:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LaunchpadSubstrate'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/matrix:
+    get:
+      operationId: getLaunchpadMatrix
+      tags: [launchpad]
+      summary: Read Launchpad app/substrate compatibility matrix
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Launchpad matrix
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [matrix]
+                properties:
+                  matrix:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LaunchpadMatrixCell'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/plan:
+    post:
+      operationId: planLaunchpadRun
+      tags: [launchpad]
+      summary: Compile a Launchpad plan without starting side effects
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LaunchpadPlanRequest'
+      responses:
+        '202':
+          description: Compiled Launchpad plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaunchpadPlanResponse'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/launch:
+    post:
+      operationId: createLaunchpadRun
+      tags: [launchpad]
+      summary: Start a governed Launchpad run
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LaunchpadPlanRequest'
+      responses:
+        '202':
+          description: Launchpad run state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaunchpadRun'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/runs:
+    get:
+      operationId: listLaunchpadRuns
+      tags: [launchpad]
+      summary: List HELM runtime instances
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Launchpad runs and runtime instances
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  runs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LaunchpadRun'
+                  instances:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LaunchpadRuntimeInstance'
+        '401':
+          $ref: '#/components/responses/HelmError'
+    post:
+      operationId: createLaunchpadRuntimeRun
+      tags: [launchpad]
+      summary: Compile gates and launch only after fail-closed boundary ALLOW
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LaunchpadPlanRequest'
+      responses:
+        '202':
+          description: Receipt-backed run detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaunchpadRunDetail'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/runs/{run_id}:
+    get:
+      operationId: getLaunchpadRuntimeRun
+      tags: [launchpad]
+      summary: Read receipt-backed Launchpad run detail
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Receipt-backed run detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaunchpadRunDetail'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/runs/{run_id}/events:
+    get:
+      operationId: listLaunchpadRunEvents
+      tags: [launchpad]
+      summary: List backend-emitted run events for timeline rendering
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Run event timeline
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LaunchpadRunEvent'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/runs/{run_id}/receipts:
+    get:
+      operationId: listLaunchpadRunReceipts
+      tags: [launchpad]
+      summary: List receipt refs for a Launchpad run
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Receipt refs and CLI equivalent
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/runs/{run_id}/logs:
+    get:
+      operationId: getLaunchpadRunLogs
+      tags: [launchpad]
+      summary: Read redacted run log text
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Redacted run log
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/runs/{run_id}/evidence/export:
+    post:
+      operationId: exportLaunchpadRunEvidence
+      tags: [launchpad]
+      summary: Export EvidencePack refs and offline verify command for a run
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '202':
+          description: EvidencePack export metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/runs/{run_id}/teardown:
+    post:
+      operationId: teardownLaunchpadRuntimeRun
+      tags: [launchpad]
+      summary: Cascade teardown a Launchpad runtime instance
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cascade: { type: boolean, default: true }
+      responses:
+        '202':
+          description: Receipt-backed run detail after teardown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaunchpadRunDetail'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/policy/simulate:
+    post:
+      operationId: simulateLaunchpadPolicy
+      tags: [launchpad]
+      summary: Simulate least-privilege Launchpad policy for an app
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LaunchpadPlanRequest'
+      responses:
+        '202':
+          description: Policy simulation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaunchpadPolicySimulation'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/sandbox/{run_id}:
+    get:
+      operationId: inspectLaunchpadSandbox
+      tags: [launchpad]
+      summary: Inspect the backend-computed sandbox grant for a run
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sandbox grant details
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/mcp/threat-reviews:
+    get:
+      operationId: listLaunchpadMcpThreatReviews
+      tags: [launchpad]
+      summary: List MCP threat reviews and quarantine state
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: MCP threat reviews
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/mcp/approvals:
+    post:
+      operationId: approveLaunchpadMcpTools
+      tags: [launchpad]
+      summary: Create a scoped MCP approval receipt record
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server_id, tools, reason]
+              properties:
+                server_id: { type: string }
+                tools:
+                  type: array
+                  items: { type: string }
+                ttl: { type: string }
+                reason: { type: string }
+                approver: { type: string }
+      responses:
+        '201':
+          description: MCP approval receipt
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/secrets:
+    get:
+      operationId: listLaunchpadSecretGrants
+      tags: [launchpad]
+      summary: List env-backed Launchpad secret grant statuses without secret values
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Secret grant statuses
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secrets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LaunchpadSecretGrant'
+        '401':
+          $ref: '#/components/responses/HelmError'
+    post:
+      operationId: bindLaunchpadSecretGrant
+      tags: [launchpad]
+      summary: Bind a logical Launchpad secret to an environment variable
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, provider, value_env]
+              properties:
+                name: { type: string }
+                provider: { type: string }
+                value_env: { type: string }
+      responses:
+        '201':
+          description: Secret grant binding status
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/launches/{launch_id}:
+    get:
+      operationId: getLaunchpadRun
+      tags: [launchpad]
+      summary: Read a Launchpad run
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: launch_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Launchpad run state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaunchpadRun'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/launches/{launch_id}/repair:
+    post:
+      operationId: repairLaunchpadRun
+      tags: [launchpad]
+      summary: Build a deterministic repair plan for a Launchpad run
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: launch_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '202':
+          description: Repair plan
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/launches/{launch_id}/delete:
+    post:
+      operationId: deleteLaunchpadRun
+      tags: [launchpad]
+      summary: Record Launchpad teardown for a run
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: launch_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cascade: { type: boolean, default: true }
+      responses:
+        '202':
+          description: Deleted Launchpad run state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaunchpadRun'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
           $ref: '#/components/responses/HelmError'
 
   /api/ag-ui/info:
@@ -1091,6 +1671,392 @@ paths:
                   policy_compliance: "PASS"
                 errors: []
         '400':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/evidence/verification-scopes:
+    get:
+      operationId: listVerificationScopes
+      tags: [evidence]
+      summary: List verification scopes
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Verification scopes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VerificationScope'
+        '401':
+          $ref: '#/components/responses/HelmError'
+    post:
+      operationId: createVerificationScope
+      tags: [evidence]
+      summary: Create a sealed verification scope
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerificationScope'
+      responses:
+        '201':
+          description: Sealed verification scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationScope'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/evidence/verification-scopes/{scope_id}:
+    get:
+      operationId: getVerificationScope
+      tags: [evidence]
+      summary: Get a verification scope
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: scope_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Verification scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationScope'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/evidence/verification-scopes/{scope_id}/verify:
+    post:
+      operationId: verifyVerificationScope
+      tags: [evidence]
+      summary: Verify a verification scope hash
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: scope_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/telemetry/harness-traces:
+    get:
+      operationId: listHarnessTraces
+      tags: [telemetry]
+      summary: List harness traces
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Harness traces
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HarnessTrace'
+        '401':
+          $ref: '#/components/responses/HelmError'
+    post:
+      operationId: createHarnessTrace
+      tags: [telemetry]
+      summary: Create a sealed harness trace
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HarnessTrace'
+      responses:
+        '201':
+          description: Sealed harness trace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HarnessTrace'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/telemetry/harness-traces/{trace_id}:
+    get:
+      operationId: getHarnessTrace
+      tags: [telemetry]
+      summary: Get a harness trace
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: trace_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Harness trace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HarnessTrace'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/telemetry/harness-traces/{trace_id}/verify:
+    post:
+      operationId: verifyHarnessTrace
+      tags: [telemetry]
+      summary: Verify a harness trace hash
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: trace_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/plans/transactions:
+    get:
+      operationId: listPlanTransactions
+      tags: [plans]
+      summary: List plan transactions
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Plan transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlanTransaction'
+        '401':
+          $ref: '#/components/responses/HelmError'
+    post:
+      operationId: createPlanTransaction
+      tags: [plans]
+      summary: Create a sealed plan transaction
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanTransaction'
+      responses:
+        '201':
+          description: Sealed plan transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanTransaction'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/plans/transactions/{transaction_id}:
+    get:
+      operationId: getPlanTransaction
+      tags: [plans]
+      summary: Get a plan transaction
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: transaction_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Plan transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanTransaction'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/plans/transactions/{transaction_id}/verify:
+    post:
+      operationId: verifyPlanTransaction
+      tags: [plans]
+      summary: Verify a plan transaction hash
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: transaction_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/harness/change-contracts:
+    get:
+      operationId: listHarnessChangeContracts
+      tags: [harness]
+      summary: List harness change contracts
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Harness change contracts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HarnessChangeContract'
+        '401':
+          $ref: '#/components/responses/HelmError'
+    post:
+      operationId: createHarnessChangeContract
+      tags: [harness]
+      summary: Create a sealed harness change contract
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HarnessChangeContract'
+      responses:
+        '201':
+          description: Sealed harness change contract
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HarnessChangeContract'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/harness/change-contracts/{change_id}:
+    get:
+      operationId: getHarnessChangeContract
+      tags: [harness]
+      summary: Get a harness change contract
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: change_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Harness change contract
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HarnessChangeContract'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/harness/change-contracts/{change_id}/approve:
+    post:
+      operationId: approveHarnessChangeContract
+      tags: [harness]
+      summary: Bind approval evidence to a harness change contract
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: change_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Updated harness change contract
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HarnessChangeContract'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/harness/change-contracts/{change_id}/verify:
+    post:
+      operationId: verifyHarnessChangeContract
+      tags: [harness]
+      summary: Verify a harness change contract hash
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: change_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/gui/receipts/verify:
+    post:
+      operationId: verifyGUIActionReceipt
+      tags: [gui]
+      summary: Verify a grounded GUI action receipt
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GUIActionReceipt'
+      responses:
+        '200':
+          description: GUI action receipt verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
           $ref: '#/components/responses/HelmError'
 
   /api/v1/evidence/envelopes:
@@ -2435,6 +3401,188 @@ components:
         next_cursor: { type: string }
         has_more: { type: boolean }
 
+    VerificationScope:
+      type: object
+      required: [verification_scope_id, subject_hash, checks_performed, verifier_hash, policy_hash, created_at]
+      properties:
+        verification_scope_id: { type: string }
+        subject_hash: { type: string }
+        risk_class:
+          type: string
+          enum: [T0, T1, T2, T3]
+        checks_performed:
+          type: array
+          items: { type: string }
+        assumptions:
+          type: array
+          items: { type: string }
+        untested_regions:
+          type: array
+          items: { type: string }
+        known_limits:
+          type: array
+          items: { type: string }
+        remaining_risks:
+          type: array
+          items: { type: string }
+        required_followup:
+          type: array
+          items: { type: string }
+        verifier_hash: { type: string }
+        policy_hash: { type: string }
+        created_at: { type: string, format: date-time }
+        scope_hash: { type: string }
+
+    HarnessTrace:
+      type: object
+      required: [trace_id, plan_hash, policy_hash, receipt_refs, created_at]
+      properties:
+        trace_id: { type: string }
+        plan_hash: { type: string }
+        context_refs:
+          type: array
+          items: { type: string }
+        memory_reads:
+          type: array
+          items: { type: string }
+        memory_writes:
+          type: array
+          items: { type: string }
+        tool_schema_hashes:
+          type: array
+          items: { type: string }
+        permission_requests:
+          type: array
+          items: { type: string }
+        sandbox_grant_hash: { type: string }
+        mcp_approval_ref: { type: string }
+        connector_contract_hash: { type: string }
+        policy_hash: { type: string }
+        cpi_output_hash: { type: string }
+        verifier_outputs:
+          type: array
+          items: { type: string }
+        human_interventions:
+          type: array
+          items: { type: string }
+        state_updates:
+          type: array
+          items: { type: string }
+        receipt_refs:
+          type: array
+          items: { type: string }
+        created_at: { type: string, format: date-time }
+        trace_hash: { type: string }
+
+    PlanTransaction:
+      type: object
+      required: [plan_transaction_id, plan_hash, read_set, write_set, assumption_set, verification_obligations, conflict_policy]
+      properties:
+        plan_transaction_id: { type: string }
+        plan_hash: { type: string }
+        read_set:
+          type: array
+          items: { type: string }
+        write_set:
+          type: array
+          items: { type: string }
+        assumption_set:
+          type: array
+          items: { type: string }
+        version_dependencies:
+          type: array
+          items: { type: string }
+        verification_obligations:
+          type: array
+          items: { type: string }
+        conflict_policy:
+          type: string
+          enum: [deny, escalate, last_writer_forbidden]
+        rollback_policy:
+          type: object
+          additionalProperties: true
+        rollback_or_compensation_policy: { type: string }
+        approval_state:
+          type: string
+          enum: [none, required, approved, denied, expired]
+        human_review_state: { type: string }
+        transaction_hash: { type: string }
+
+    HarnessChangeContract:
+      type: object
+      required: [change_contract_id, component_modified, failure_mode_targeted, predicted_improvement, invariants_preserved, safety_properties, regression_suite_refs, rollback_plan, approval_required, created_at]
+      properties:
+        change_contract_id: { type: string }
+        component_modified:
+          type: string
+          enum: [connector_contract, tool_schema, sandbox_grant, mcp_approval, policy_overlay, verifier, evidence_template, routing_rule]
+        failure_mode_targeted: { type: string }
+        predicted_improvement: { type: string }
+        invariants_preserved:
+          type: array
+          items: { type: string }
+        safety_properties:
+          type: array
+          items: { type: string }
+        regression_suite_refs:
+          type: array
+          items: { type: string }
+        simulation_evidence_refs:
+          type: array
+          items: { type: string }
+        canary_scope:
+          type: object
+          additionalProperties: true
+        rollback_plan:
+          type: object
+          additionalProperties: true
+        approval_required: { type: boolean }
+        activation_receipt_ref: { type: string }
+        created_at: { type: string, format: date-time }
+        contract_hash: { type: string }
+
+    GroundedActionRef:
+      type: object
+      required: [grounded_action_id, screenshot_hash, dom_or_ax_snapshot_hash, target_ref, bbox_or_element_id, action_type, precondition, postcondition, verification_scope_ref, policy_hash]
+      properties:
+        grounded_action_id: { type: string }
+        screenshot_hash: { type: string }
+        dom_or_ax_snapshot_hash: { type: string }
+        target_ref: { type: string }
+        bbox_or_element_id: { type: string }
+        action_type:
+          type: string
+          enum: [click, type, select, submit, navigate]
+        precondition: { type: string }
+        postcondition: { type: string }
+        verification_scope_ref: { type: string }
+        policy_hash: { type: string }
+        sandbox_grant_hash: { type: string }
+        created_at: { type: string, format: date-time }
+        grounding_hash: { type: string }
+
+    GUIActionReceipt:
+      type: object
+      required: [receipt_id, grounded_action_ref, screenshot_hash, dom_or_ax_snapshot_hash, target_ref, bbox_or_element_id, action_type, precondition, postcondition, postcondition_verified, verification_scope_ref, policy_hash]
+      properties:
+        receipt_id: { type: string }
+        grounded_action_ref: { type: string }
+        screenshot_hash: { type: string }
+        dom_or_ax_snapshot_hash: { type: string }
+        target_ref: { type: string }
+        bbox_or_element_id: { type: string }
+        action_type:
+          type: string
+          enum: [click, type, select, submit, navigate]
+        precondition: { type: string }
+        postcondition: { type: string }
+        postcondition_verified: { type: boolean }
+        verification_scope_ref: { type: string }
+        policy_hash: { type: string }
+        sandbox_grant_hash: { type: string }
+        created_at: { type: string, format: date-time }
+        receipt_hash: { type: string }
+
     DecisionRequest:
       type: object
       required: [action, resource]
@@ -2513,7 +3661,17 @@ components:
       required: [id, source]
       properties:
         id: { type: string }
+        label: { type: string }
+        group: { type: string }
         source: { type: string }
+        auth: { type: string }
+        contract_status: { type: string }
+        status: { type: string }
+        unsupported_reason: { type: string }
+        routes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsoleRouteDiagnostic'
 
     ConsoleSurfaceState:
       type: object
@@ -2531,6 +3689,383 @@ components:
           items:
             type: object
             additionalProperties: true
+
+    ConsoleDiagnostics:
+      type: object
+      required: [generated_at, runtime, stores, routes, access]
+      properties:
+        generated_at: { type: string, format: date-time }
+        runtime:
+          type: object
+          additionalProperties: true
+        access:
+          type: object
+          additionalProperties: true
+        stores:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsoleStoreDiagnostic'
+        routes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsoleRouteDiagnostic'
+
+    ConsoleStoreDiagnostic:
+      type: object
+      required: [id, label, status, backend]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        status: { type: string }
+        backend: { type: string }
+        source: { type: string }
+        path: { type: string }
+        detail: { type: string }
+
+    ConsoleRouteDiagnostic:
+      type: object
+      required: [method, path, auth, contract_status, operation_id, owner, group]
+      properties:
+        method: { type: string }
+        path: { type: string }
+        mux_pattern: { type: string }
+        auth: { type: string }
+        rate_limit: { type: string }
+        contract_status: { type: string }
+        operation_id: { type: string }
+        owner: { type: string }
+        group: { type: string }
+        ui_coverage: { type: string }
+        unsupported_reason: { type: string }
+
+    LaunchpadPlanRequest:
+      type: object
+      required: [app_id, substrate_id]
+      properties:
+        app_id: { type: string }
+        substrate_id: { type: string }
+        principal: { type: string, default: console }
+
+    LaunchpadApp:
+      type: object
+      required: [id, name]
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        app_id: { type: string }
+        name: { type: string }
+        version: { type: string }
+        oci_ref: { type: string }
+        immutable_digest: { type: string }
+        oss_supported: { type: boolean }
+        availability: { type: string }
+        redistribution: { type: string }
+        install_strategy: { type: string }
+        risk_class: { type: string }
+        blocked_reason: { type: string }
+        required_secrets:
+          type: array
+          items: { type: string }
+        model_gateway_env:
+          type: array
+          items: { type: string }
+        declared_capabilities:
+          type: array
+          items: { type: string }
+        mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/LaunchpadMCPServer'
+        filesystem_needs:
+          type: array
+          items: { type: string }
+        network_needs:
+          type: array
+          items: { type: string }
+        healthcheck:
+          type: object
+          additionalProperties: true
+        teardown_recipe:
+          type: object
+          additionalProperties: true
+        evidence_profile:
+          type: object
+          additionalProperties: true
+        policy_ref: { type: string }
+        status:
+          $ref: '#/components/schemas/LaunchpadAppStatus'
+
+    LaunchpadAppStatus:
+      type: object
+      additionalProperties: true
+      properties:
+        state: { type: string }
+        verdict: { type: string }
+        reason_code: { type: string }
+        human_summary: { type: string }
+        missing_secrets:
+          type: array
+          items: { type: string }
+        quarantined_mcp:
+          type: integer
+        last_run_id: { type: string }
+        last_evidencepack_ref: { type: string }
+        proof_status: { type: string }
+
+    LaunchpadMCPServer:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        endpoint: { type: string }
+        transport: { type: string }
+        status: { type: string }
+        risk_class: { type: string }
+        tools:
+          type: array
+          items: { type: string }
+        receipt_ref: { type: string }
+
+    LaunchpadSubstrate:
+      type: object
+      required: [id, name]
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { type: string }
+        availability: { type: string }
+        default_dry_run: { type: boolean }
+        blocked_reason: { type: string }
+
+    LaunchpadMatrixCell:
+      type: object
+      required: [app_id, substrate_id, launchable, verdict, reason, availability]
+      additionalProperties: true
+      properties:
+        app_id: { type: string }
+        substrate_id: { type: string }
+        launchable: { type: boolean }
+        verdict: { type: string }
+        reason: { type: string }
+        availability: { type: string }
+
+    LaunchpadPlanResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        launch_id: { type: string }
+        app_id: { type: string }
+        substrate_id: { type: string }
+        state: { type: string }
+        kernel_verdict: { type: string }
+        reason: { type: string }
+        reason_code: { type: string }
+        plan_hash: { type: string }
+
+    LaunchpadRun:
+      type: object
+      additionalProperties: true
+      properties:
+        launch_id: { type: string }
+        run_id: { type: string }
+        app_id: { type: string }
+        substrate_id: { type: string }
+        state: { type: string }
+        kernel_verdict: { type: string }
+        reason: { type: string }
+        reason_code: { type: string }
+        plan_hash: { type: string }
+        launchplan_hash: { type: string }
+        install_receipt_ref: { type: string }
+        launch_receipt_ref: { type: string }
+        health_receipt_ref: { type: string }
+        teardown_receipt_ref: { type: string }
+        evidence_pack_refs:
+          type: array
+          items: { type: string }
+        secret_grant_refs:
+          type: array
+          items: { type: string }
+        start_receipt_refs:
+          type: array
+          items: { type: string }
+        verification_command: { type: string }
+        teardown_command: { type: string }
+        runtime_handles:
+          type: object
+          additionalProperties: true
+
+    LaunchpadGateResult:
+      type: object
+      required: [id, group, label, verdict, proof_status]
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        group: { type: string }
+        label: { type: string }
+        verdict: { type: string }
+        reason_code: { type: string }
+        receipt_ref: { type: string }
+        proofgraph_node: { type: string }
+        evidence_refs:
+          type: array
+          items: { type: string }
+        summary: { type: string }
+        why: { type: string }
+        proof_status: { type: string }
+        raw_detail_ref: { type: string }
+        raw_proof_ref: { type: string }
+        receipt_required: { type: boolean }
+        cli_equivalent: { type: string }
+        fix_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/LaunchpadFixAction'
+
+    LaunchpadRunEvent:
+      type: object
+      required: [run_id, stage, verdict, proof_status]
+      additionalProperties: true
+      properties:
+        run_id: { type: string }
+        stage: { type: string }
+        verdict: { type: string }
+        reason_code: { type: string }
+        receipt_ref: { type: string }
+        proofgraph_node: { type: string }
+        evidence_refs:
+          type: array
+          items: { type: string }
+        raw_payload_ref: { type: string }
+        human_summary: { type: string }
+        why: { type: string }
+        proof_status: { type: string }
+        receipt_required: { type: boolean }
+        cli_equivalent: { type: string }
+        fix_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/LaunchpadFixAction'
+        created_at: { type: string, format: date-time }
+
+    LaunchpadRuntimeInstance:
+      type: object
+      required: [run_id, state]
+      additionalProperties: true
+      properties:
+        run_id: { type: string }
+        container_id: { type: string }
+        launchplan_hash: { type: string }
+        state: { type: string }
+        verdict: { type: string }
+        active_grants:
+          type: array
+          items: { type: string }
+        receipt_refs:
+          type: array
+          items: { type: string }
+        evidencepack_ref: { type: string }
+        offline_verify_command: { type: string }
+        teardown_command: { type: string }
+        sandbox_grant:
+          $ref: '#/components/schemas/LaunchpadSandboxGrant'
+        cli_equivalent: { type: string }
+
+    LaunchpadFixAction:
+      type: object
+      additionalProperties: true
+      properties:
+        label: { type: string }
+        cli: { type: string }
+        description: { type: string }
+
+    LaunchpadSandboxGrant:
+      type: object
+      additionalProperties: true
+      properties:
+        backend_profile: { type: string }
+        runtime: { type: string }
+        runtime_version: { type: string }
+        image_digest: { type: string }
+        filesystem_preopens:
+          type: array
+          items: { type: string }
+        network_policy:
+          type: array
+          items: { type: string }
+        env:
+          type: array
+          items: { type: string }
+        resource_limits:
+          type: object
+          additionalProperties: { type: string }
+        policy_epoch: { type: string }
+        grant_hash: { type: string }
+        proof_status: { type: string }
+
+    LaunchpadPolicySimulation:
+      type: object
+      additionalProperties: true
+      properties:
+        app_id: { type: string }
+        verdict: { type: string }
+        reason_code: { type: string }
+        plain_english: { type: string }
+        structured:
+          type: object
+          additionalProperties: true
+        diff:
+          type: array
+          items: { type: string }
+        raw:
+          type: object
+          additionalProperties: true
+        receipt_ref: { type: string }
+        proof_status: { type: string }
+        cli_equivalent: { type: string }
+        fix_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/LaunchpadFixAction'
+
+    LaunchpadRunDetail:
+      type: object
+      required: [run, instance, gates, events]
+      additionalProperties: true
+      properties:
+        run:
+          $ref: '#/components/schemas/LaunchpadRun'
+        app:
+          $ref: '#/components/schemas/LaunchpadApp'
+        instance:
+          $ref: '#/components/schemas/LaunchpadRuntimeInstance'
+        gates:
+          type: array
+          items:
+            $ref: '#/components/schemas/LaunchpadGateResult'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/LaunchpadRunEvent'
+        offline_verification:
+          type: object
+          additionalProperties: true
+
+    LaunchpadSecretGrant:
+      type: object
+      required: [name, status]
+      additionalProperties: true
+      properties:
+        name: { type: string }
+        required: { type: boolean }
+        provider: { type: string }
+        scope: { type: string }
+        status: { type: string }
+        launch_impact: { type: string }
+        grant_ref: { type: string }
+        receipt_ref: { type: string }
+        value_env: { type: string }
 
     Session:
       type: object

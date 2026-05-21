@@ -42,6 +42,19 @@ func TestEvidencePackProducer_Produce(t *testing.T) {
 		RetryCount:  0,
 		StartedAt:   time.Now().Add(-100 * time.Millisecond),
 		CompletedAt: time.Now(),
+
+		VerificationScopes: []contracts.VerificationScope{
+			{
+				VerificationScopeID: "scope-1",
+				SubjectHash:         "sha256:subject",
+				ChecksPerformed:     []string{"unit tests"},
+				VerifierHash:        "sha256:verifier",
+				PolicyHash:          "sha256:policy",
+			},
+		},
+		HarnessTraceRefs: []contracts.HarnessTraceRef{
+			{TraceID: "trace-1", Hash: "sha256:trace", Kind: "harness_trace.v1"},
+		},
 	}
 
 	pack, err := producer.Produce(ctx, input)
@@ -86,6 +99,12 @@ func TestEvidencePackProducer_Produce(t *testing.T) {
 	}
 	if pack.Attestation.KernelVersion != "1.0.0-test" {
 		t.Errorf("kernel_version mismatch: got %s, want 1.0.0-test", pack.Attestation.KernelVersion)
+	}
+	if len(pack.VerificationScopes) != 1 || pack.VerificationScopes[0].VerificationScopeID != "scope-1" {
+		t.Fatalf("verification scopes mismatch: %#v", pack.VerificationScopes)
+	}
+	if len(pack.HarnessTraceRefs) != 1 || pack.HarnessTraceRefs[0].TraceID != "trace-1" {
+		t.Fatalf("harness trace refs mismatch: %#v", pack.HarnessTraceRefs)
 	}
 }
 
@@ -134,6 +153,58 @@ func TestEvidencePackProducer_HashIntegrity(t *testing.T) {
 	}
 
 	_ = hashTampered // Use variable to avoid unused error
+}
+
+func TestEvidencePackProducer_VerificationScopeHashDeterminism(t *testing.T) {
+	startedAt := time.Date(2026, 5, 20, 10, 0, 0, 0, time.UTC)
+	pack := &contracts.EvidencePack{
+		PackID:         "pack-scope-1",
+		FormatVersion:  "1.0.0",
+		CreatedAt:      startedAt,
+		Identity:       contracts.EvidencePackIdentity{ActorID: "agent-1", ActorType: "agent"},
+		Policy:         contracts.EvidencePackPolicy{DecisionID: "decision-1", PolicyVersion: "v1", RulesFired: []string{}, EvaluationGraphHash: "sha256:graph"},
+		Effect:         contracts.EvidencePackEffect{EffectID: "effect-1", EffectType: "RUN_SANDBOXED_CODE", EffectPayloadHash: "sha256:payload"},
+		Context:        contracts.EvidencePackContext{},
+		Execution:      contracts.EvidencePackExecution{ExecutionID: "exec-1", Status: "success", RetryCount: 0, StartedAt: startedAt},
+		Receipts:       contracts.EvidencePackReceipts{},
+		Reconciliation: contracts.EvidencePackReconciliation{},
+		VerificationScopes: []contracts.VerificationScope{
+			{
+				VerificationScopeID: "scope-1",
+				SubjectHash:         "sha256:subject",
+				ChecksPerformed:     []string{"go test ./core/pkg/executor"},
+				Assumptions:         []string{"network denied"},
+				UntestedRegions:     []string{"external connector dispatch"},
+				RemainingRisks:      []string{"policy overlay not exercised"},
+				VerifierHash:        "sha256:verifier",
+				PolicyHash:          "sha256:policy",
+			},
+		},
+		HarnessTraceRefs: []contracts.HarnessTraceRef{
+			{TraceID: "trace-1", Hash: "sha256:trace", Kind: "harness_trace.v1", At: startedAt},
+		},
+	}
+
+	first, err := computeEvidencePackHash(pack)
+	if err != nil {
+		t.Fatalf("first hash: %v", err)
+	}
+	second, err := computeEvidencePackHash(pack)
+	if err != nil {
+		t.Fatalf("second hash: %v", err)
+	}
+	if first != second {
+		t.Fatalf("hash not deterministic: %s != %s", first, second)
+	}
+
+	pack.VerificationScopes[0].RemainingRisks = append(pack.VerificationScopes[0].RemainingRisks, "new risk")
+	changed, err := computeEvidencePackHash(pack)
+	if err != nil {
+		t.Fatalf("changed hash: %v", err)
+	}
+	if changed == first {
+		t.Fatal("verification scope changes must affect evidence pack hash")
+	}
 }
 
 func TestEvidencePackValidation_RequiredFields(t *testing.T) {

@@ -3,9 +3,9 @@ import type { LaunchpadApp, LaunchpadSubstrate } from "./types";
 export function PolicyPackPanel({ app, substrate }: { app?: LaunchpadApp; substrate?: LaunchpadSubstrate }) {
   return (
     <section className="launchpad-panel">
-      <div className="panel-head">
+      <div className="panel-header">
         <div>
-          <span className="eyebrow">policy</span>
+          <span className="panel-kicker">policy</span>
           <h2>Pack posture</h2>
         </div>
       </div>

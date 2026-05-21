@@ -7,6 +7,20 @@ policy_pack: policies/launchpad/substrates/digitalocean.safe.toml
 provisioner: digitalocean
 supports_teardown: true
 requires_approval: true
+capabilities:
+  isolation_strength: provider_vm_beta
+  network_enforcement: provider_firewall_allowlist
+  secret_mode: launch_secret_grant
+  receipt_support: required
+  teardown_proof: required
+  status: beta_dry_run
+  lifecycle: ["plan", "preflight", "launch", "healthcheck", "execute", "evidence_export", "reconcile", "delete", "post_delete_verify"]
+isolation:
+  mode: dedicated-vm
+  supported_modes: ["dedicated-vm"]
+  hardened_modes: ["dedicated-vm"]
+  runtime_class: provider-vm
+  hostile_agent_grade: false
 network:
   default: deny
   allowlist: []

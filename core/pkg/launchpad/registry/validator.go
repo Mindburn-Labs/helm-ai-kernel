@@ -18,12 +18,17 @@ var allowedEvidenceRequirements = map[string]struct{}{
 	"healthcheck_receipt":           {},
 	"teardown_receipt":              {},
 	"evidence_pack":                 {},
+	"evidence_graph":                {},
 	"mcp_quarantine":                {},
+	"mcp_manifest":                  {},
+	"model_gateway_broker":          {},
 	"artifact_digest":               {},
 	"cosign_signature":              {},
 	"syft_sbom":                     {},
 	"grype_vulnerability_scan":      {},
 	"trivy_vulnerability_scan":      {},
+	"slsa_provenance":               {},
+	"rebuild_attestation":           {},
 	"workstation_artifact_manifest": {},
 	"agent_run_receipt":             {},
 }
@@ -44,6 +49,16 @@ func (c *Catalog) Validate() error {
 		return fmt.Errorf("no launchpad substrates registered")
 	}
 	appIDs := map[string]struct{}{}
+	manifestByID := map[string]MCPServerManifest{}
+	for _, manifest := range c.MCPManifests {
+		if manifest.ID == "" {
+			return fmt.Errorf("MCP manifest id is required")
+		}
+		if _, ok := manifestByID[manifest.ID]; ok {
+			return fmt.Errorf("duplicate MCP manifest id %q", manifest.ID)
+		}
+		manifestByID[manifest.ID] = manifest
+	}
 	for _, app := range c.Apps {
 		if app.ID == "" {
 			return fmt.Errorf("app id is required")
@@ -65,6 +80,12 @@ func (c *Catalog) Validate() error {
 			return fmt.Errorf("app %s MCP policy must quarantine unknown servers and require schema pins", app.ID)
 		}
 		if err := validateEvidenceRequirements(app.ID, app.EvidenceRequirements); err != nil {
+			return err
+		}
+		if err := validateModelGateway(app); err != nil {
+			return err
+		}
+		if err := validateAppMCPManifestRefs(app, manifestByID); err != nil {
 			return err
 		}
 		if app.FilesystemPolicy.PolicyRef == "" {
@@ -97,12 +118,29 @@ func (c *Catalog) Validate() error {
 		if substrate.Network.Default != "deny" {
 			return fmt.Errorf("substrate %s network default must be deny", substrate.ID)
 		}
+		if !validIsolationMode(substrate.Isolation.Mode) {
+			return fmt.Errorf("substrate %s has unknown isolation mode %q", substrate.ID, substrate.Isolation.Mode)
+		}
+		if substrate.Isolation.Mode == "docker-default" && substrate.Isolation.HostileAgentGrade {
+			return fmt.Errorf("substrate %s cannot claim hostile_agent_grade on docker-default isolation", substrate.ID)
+		}
+		for _, mode := range append(append([]string{}, substrate.Isolation.SupportedModes...), substrate.Isolation.HardenedModes...) {
+			if !validIsolationMode(mode) {
+				return fmt.Errorf("substrate %s has unknown isolation mode %q", substrate.ID, mode)
+			}
+		}
 		if substrate.PolicyPack == "" {
 			return fmt.Errorf("substrate %s policy_pack is required", substrate.ID)
+		}
+		if err := validateSubstrateCapabilities(substrate); err != nil {
+			return err
 		}
 		if err := c.validatePolicyPack(substrate.ID, substrate.PolicyPack); err != nil {
 			return err
 		}
+	}
+	if err := validateMCPManifests(c.MCPManifests, appIDs); err != nil {
+		return err
 	}
 	return nil
 }
@@ -118,11 +156,170 @@ func validAvailability(a Availability) bool {
 
 func validSubstrateKind(kind string) bool {
 	switch kind {
-	case "local-container", "cloud":
+	case "local-container", "local-microvm", "hosted-sandbox", "cloud":
 		return true
 	default:
 		return false
 	}
+}
+
+func validIsolationMode(mode string) bool {
+	switch mode {
+	case "docker-default", "docker-rootless-userns", "docker-eci", "gvisor", "kata-firecracker", "dedicated-vm":
+		return true
+	default:
+		return false
+	}
+}
+
+func validateModelGateway(app AppSpec) error {
+	requiresGateway := hasEvidenceRequirement(app.EvidenceRequirements, "model_gateway_broker") ||
+		contains(app.RequiredSecrets, "model_gateway") ||
+		len(app.ModelGatewayEnv) > 0
+	if !requiresGateway {
+		return nil
+	}
+	if app.ModelGateway.LogicalSecret == "" {
+		return fmt.Errorf("app %s model_gateway.logical_secret is required", app.ID)
+	}
+	if app.ModelGateway.Provider == "" {
+		return fmt.Errorf("app %s model_gateway.provider is required", app.ID)
+	}
+	if app.ModelGateway.Mode == "" {
+		return fmt.Errorf("app %s model_gateway.mode is required", app.ID)
+	}
+	switch app.ModelGateway.Mode {
+	case "logical_binding_env_projection", "raw_provider_key", "external_byo":
+		if !app.ModelGateway.RawProviderKeyProjected && len(app.ModelGatewayEnv) > 0 {
+			return fmt.Errorf("app %s model_gateway mode %s must mark raw_provider_key_projected when runtime env keys are projected", app.ID, app.ModelGateway.Mode)
+		}
+	case "token_broker":
+		if app.ModelGateway.RawProviderKeyProjected {
+			return fmt.Errorf("app %s token_broker mode cannot project raw provider keys", app.ID)
+		}
+	default:
+		return fmt.Errorf("app %s has unknown model_gateway.mode %q", app.ID, app.ModelGateway.Mode)
+	}
+	if app.ModelGateway.LogicalSecret != "model_gateway" && contains(app.RequiredSecrets, "model_gateway") {
+		return fmt.Errorf("app %s model_gateway.logical_secret must match required secret model_gateway", app.ID)
+	}
+	if app.Availability == AvailabilityOSSSupported && !hasEvidenceRequirement(app.EvidenceRequirements, "model_gateway_broker") {
+		return fmt.Errorf("app %s cannot be oss_supported without model_gateway_broker evidence requirement", app.ID)
+	}
+	return nil
+}
+
+func validateAppMCPManifestRefs(app AppSpec, manifests map[string]MCPServerManifest) error {
+	if app.Availability == AvailabilityOSSSupported && len(app.MCPManifests) == 0 {
+		return fmt.Errorf("app %s cannot be oss_supported without signed MCP manifest refs", app.ID)
+	}
+	for _, ref := range app.MCPManifests {
+		manifest, ok := manifests[ref]
+		if !ok {
+			return fmt.Errorf("app %s references missing MCP manifest %q", app.ID, ref)
+		}
+		if manifest.AppID != app.ID {
+			return fmt.Errorf("app %s references MCP manifest %q for app %q", app.ID, ref, manifest.AppID)
+		}
+	}
+	if app.Availability == AvailabilityOSSSupported && !hasEvidenceRequirement(app.EvidenceRequirements, "mcp_manifest") {
+		return fmt.Errorf("app %s cannot be oss_supported without mcp_manifest evidence requirement", app.ID)
+	}
+	return nil
+}
+
+func validateMCPManifests(manifests []MCPServerManifest, appIDs map[string]struct{}) error {
+	for _, manifest := range manifests {
+		if _, ok := appIDs[manifest.AppID]; !ok {
+			return fmt.Errorf("MCP manifest %s references unknown app %q", manifest.ID, manifest.AppID)
+		}
+		if manifest.ServerID == "" {
+			return fmt.Errorf("MCP manifest %s server_id is required", manifest.ID)
+		}
+		if !validMCPTransport(manifest.Transport) {
+			return fmt.Errorf("MCP manifest %s has unsupported transport %q", manifest.ID, manifest.Transport)
+		}
+		if manifest.Transport == "stdio" && len(manifest.Command) == 0 {
+			return fmt.Errorf("MCP manifest %s stdio transport requires pinned command", manifest.ID)
+		}
+		if !sha256DigestPattern.MatchString(manifest.PackageDigest) {
+			return fmt.Errorf("MCP manifest %s package_digest must be sha256:<64 lowercase hex>", manifest.ID)
+		}
+		if manifest.SignatureRef == "" {
+			return fmt.Errorf("MCP manifest %s signature_ref is required", manifest.ID)
+		}
+		if !sha256DigestPattern.MatchString(manifest.SchemaHash) {
+			return fmt.Errorf("MCP manifest %s schema_hash must be sha256:<64 lowercase hex>", manifest.ID)
+		}
+		if len(manifest.Tools) == 0 {
+			return fmt.Errorf("MCP manifest %s must declare at least one tool", manifest.ID)
+		}
+		for _, tool := range manifest.Tools {
+			if tool.Name == "" {
+				return fmt.Errorf("MCP manifest %s has tool without name", manifest.ID)
+			}
+			if !sha256DigestPattern.MatchString(tool.SchemaHash) {
+				return fmt.Errorf("MCP manifest %s tool %s schema_hash must be sha256:<64 lowercase hex>", manifest.ID, tool.Name)
+			}
+			if !validMCPToolEffect(tool.Effect) {
+				return fmt.Errorf("MCP manifest %s tool %s has unsupported effect %q", manifest.ID, tool.Name, tool.Effect)
+			}
+		}
+	}
+	return nil
+}
+
+func validMCPTransport(transport string) bool {
+	switch transport {
+	case "stdio", "http_sse", "websocket":
+		return true
+	default:
+		return false
+	}
+}
+
+func validMCPToolEffect(effect string) bool {
+	switch effect {
+	case "read", "side_effect", "destructive":
+		return true
+	default:
+		return false
+	}
+}
+
+func validateSubstrateCapabilities(substrate SubstrateSpec) error {
+	caps := substrate.Capabilities
+	required := map[string]string{
+		"isolation_strength":  caps.IsolationStrength,
+		"network_enforcement": caps.NetworkEnforcement,
+		"secret_mode":         caps.SecretMode,
+		"receipt_support":     caps.ReceiptSupport,
+		"teardown_proof":      caps.TeardownProof,
+		"status":              caps.Status,
+	}
+	for name, value := range required {
+		if value == "" {
+			return fmt.Errorf("substrate %s capabilities.%s is required", substrate.ID, name)
+		}
+	}
+	requiredLifecycle := []string{"plan", "preflight", "launch", "healthcheck", "execute", "evidence_export", "reconcile", "delete", "post_delete_verify"}
+	for _, step := range requiredLifecycle {
+		if !contains(caps.Lifecycle, step) {
+			return fmt.Errorf("substrate %s capabilities.lifecycle must include %s", substrate.ID, step)
+		}
+	}
+	if substrate.Availability == "supported" {
+		if caps.Status != "ga" {
+			return fmt.Errorf("substrate %s cannot be supported unless capabilities.status is ga", substrate.ID)
+		}
+		if caps.ReceiptSupport != "required" {
+			return fmt.Errorf("substrate %s cannot be supported unless receipt_support is required", substrate.ID)
+		}
+		if caps.TeardownProof != "required" {
+			return fmt.Errorf("substrate %s cannot be supported unless teardown_proof is required", substrate.ID)
+		}
+	}
+	return nil
 }
 
 func validateEvidenceRequirements(appID string, requirements []string) error {
@@ -205,6 +402,15 @@ func hasEvidenceRequirement(requirements []string, target string) bool {
 	return false
 }
 
+func contains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
 type policyPack struct {
 	App       map[string]any `toml:"app"`
 	Substrate map[string]any `toml:"substrate"`
@@ -234,6 +440,17 @@ func (c *Catalog) validatePolicyPack(id, ref string) error {
 	}
 	if value, ok := body["network_default"].(string); ok && strings.ToLower(value) != "deny" {
 		return fmt.Errorf("policy pack %s network_default must be deny", ref)
+	}
+	if len(pack.Substrate) > 0 {
+		isolationMode, ok := body["isolation_mode"].(string)
+		if !ok || !validIsolationMode(isolationMode) {
+			return fmt.Errorf("policy pack %s must set a valid isolation_mode", ref)
+		}
+		if isolationMode == "docker-default" {
+			if hostile, ok := body["hostile_agent_grade"].(bool); ok && hostile {
+				return fmt.Errorf("policy pack %s cannot mark docker-default as hostile_agent_grade", ref)
+			}
+		}
 	}
 	return nil
 }

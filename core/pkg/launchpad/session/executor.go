@@ -27,13 +27,28 @@ type ExecuteOptions struct {
 }
 
 type RuntimeStartResult struct {
-	ContainerID       string
-	SandboxGrantRef   string
-	EgressReceiptRef  string
-	EgressNetworkName string
-	EgressProxyID     string
-	EgressProxyName   string
-	Runtime           string
+	ContainerID                string
+	SandboxGrantRef            string
+	EgressReceiptRef           string
+	EgressNetworkName          string
+	EgressProxyID              string
+	EgressProxyName            string
+	Runtime                    string
+	IsolationMode              string
+	IsolationHardened          bool
+	IsolationDetectionStatus   string
+	IsolationUnsupportedReason string
+	RuntimeClass               string
+	DockerRootless             bool
+	DockerUserns               bool
+	DockerECI                  bool
+	DedicatedVM                bool
+	DockerRuntimes             []string
+	DefaultRuntime             string
+	HostileAgentGrade          bool
+	PayloadInspection          string
+	NetworkProof               string
+	TokenBrokerEnabled         bool
 }
 
 type RuntimeStarter interface {
@@ -67,15 +82,28 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		"state":        run.State,
 	})
 	sandboxReceipt := receipts.NewReceipt("launchpad.sandbox_preflight", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
-		"sandbox_profile_hash": compiled.SandboxProfileHash,
-		"network_default":      "deny",
-		"filesystem_default":   "deny",
+		"sandbox_profile_hash":       compiled.SandboxProfileHash,
+		"network_default":            "deny",
+		"filesystem_default":         "deny",
+		"model_gateway_mode":         compiled.ModelGatewayMode,
+		"raw_provider_key_projected": compiled.RawProviderKeyProjected,
+		"payload_inspection":         "opaque_connect",
+		"network_proof":              "destination_allowlist_only",
 	})
 	mcpReceipt := receipts.NewReceipt("launchpad.mcp_quarantine", compiled.LaunchID, "ALLOW", map[string]any{
 		"unknown_server_policy": compiled.MCPPolicy.UnknownServerPolicy,
 		"unknown_tool_policy":   compiled.MCPPolicy.UnknownToolPolicy,
 		"require_schema_pin":    compiled.MCPPolicy.RequireSchemaPin,
 		"effect":                "unknown MCP servers and tools remain quarantined until approval receipt exists",
+	})
+	modelGatewayReceipt := receipts.NewReceipt("launchpad.model_gateway_grant", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
+		"provider":                   compiled.ModelGatewayProvider,
+		"mode":                       compiled.ModelGatewayMode,
+		"required_secret_refs":       compiled.RequiredSecretRefs,
+		"runtime_env_names":          compiled.ModelGatewayEnv,
+		"raw_provider_key_projected": compiled.RawProviderKeyProjected,
+		"network_allowlist":          compiled.NetworkAllowlist,
+		"budget_ceiling":             compiled.Budgets,
 	})
 
 	run.BoundaryRecordRefs = append(run.BoundaryRecordRefs, "boundary://launchpad/"+compiled.LaunchID)
@@ -84,6 +112,9 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	}
 	run.SandboxGrantRefs = append(run.SandboxGrantRefs, sandboxReceipt.ReceiptID)
 	run.MCPRefs = append(run.MCPRefs, mcpReceipt.ReceiptID)
+	if compiled.ModelGatewayMode != "" || len(compiled.ModelGatewayEnv) > 0 {
+		run.ModelGatewayGrantRefs = append(run.ModelGatewayGrantRefs, modelGatewayReceipt.ReceiptID)
+	}
 	run.LaunchReceiptRefs = append(run.LaunchReceiptRefs, launchReceipt.ReceiptID)
 	run.IdempotencyKeys["launch"] = compiled.PlanHash
 	run.IdempotencyKeys["teardown"] = "teardown:" + compiled.PlanHash
@@ -93,6 +124,10 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	addJSON(artifacts, "kernel_verdict.json", kernelReceipt)
 	addJSON(artifacts, "sandbox_grant.json", sandboxReceipt)
 	addJSON(artifacts, "mcp_quarantine.json", mcpReceipt)
+	if compiled.ModelGatewayMode != "" || len(compiled.ModelGatewayEnv) > 0 {
+		addJSON(artifacts, "model_gateway_grant.json", modelGatewayReceipt)
+		addJSON(artifacts, "receipts/launchpad-model-gateway-grant.json", modelGatewayReceipt)
+	}
 	addJSON(artifacts, "receipts/launchpad-kernel-verdict.json", kernelReceipt)
 	addJSON(artifacts, "receipts/launchpad-launch.json", launchReceipt)
 	addJSON(artifacts, "receipts/launchpad-sandbox-preflight.json", sandboxReceipt)
@@ -146,14 +181,18 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	}
 	runtimeResult, err := starter.Start(compiled, opts)
 	if err != nil {
-		failureReceipt := receipts.NewReceipt("launchpad.runtime_failure", compiled.LaunchID, "ALLOW", map[string]any{
+		failureSubject := map[string]any{
 			"status": "repair_required",
 			"error":  err.Error(),
-		})
+		}
+		addRuntimeStartEvidence(failureSubject, runtimeResult)
+		failureReceipt := receipts.NewReceipt("launchpad.runtime_failure", compiled.LaunchID, "ALLOW", failureSubject)
 		run.State = StateRepairRequired
 		run.Reason = "runtime start failed after ALLOW; repair required before RUNNING: " + err.Error()
 		addJSON(artifacts, "receipts/launchpad-runtime-failure.json", failureReceipt)
-		addJSON(artifacts, "runtime_environment.json", map[string]any{"runtime": "local-container", "state": "REPAIR_REQUIRED", "error": err.Error()})
+		runtimeEnvironment := map[string]any{"runtime": "local-container", "state": "REPAIR_REQUIRED", "error": err.Error()}
+		addRuntimeStartEvidence(runtimeEnvironment, runtimeResult)
+		addJSON(artifacts, "runtime_environment.json", runtimeEnvironment)
 		return e.persist(run, artifacts)
 	}
 	if runtimeResult.ContainerID == "" || runtimeResult.SandboxGrantRef == "" {
@@ -185,12 +224,27 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	run.SandboxGrantRefs = appendUnique(run.SandboxGrantRefs, runtimeResult.SandboxGrantRef)
 	run.EgressReceiptRefs = appendUnique(run.EgressReceiptRefs, runtimeResult.EgressReceiptRef)
 	startReceipt := receipts.NewReceipt("launchpad.start", compiled.LaunchID, "ALLOW", map[string]any{
-		"runtime":            runtimeResult.Runtime,
-		"container_id":       runtimeResult.ContainerID,
-		"network":            "deny",
-		"filesystem":         "scoped_workspace",
-		"side_effects":       "policy-authorized",
-		"egress_receipt_ref": runtimeResult.EgressReceiptRef,
+		"runtime":                      runtimeResult.Runtime,
+		"container_id":                 runtimeResult.ContainerID,
+		"network":                      "deny",
+		"filesystem":                   "scoped_workspace",
+		"side_effects":                 "policy-authorized",
+		"egress_receipt_ref":           runtimeResult.EgressReceiptRef,
+		"isolation_mode":               runtimeResult.IsolationMode,
+		"isolation_hardened":           runtimeResult.IsolationHardened,
+		"isolation_detection_status":   runtimeResult.IsolationDetectionStatus,
+		"isolation_unsupported_reason": runtimeResult.IsolationUnsupportedReason,
+		"runtime_class":                runtimeResult.RuntimeClass,
+		"docker_rootless":              runtimeResult.DockerRootless,
+		"docker_userns":                runtimeResult.DockerUserns,
+		"docker_eci":                   runtimeResult.DockerECI,
+		"dedicated_vm":                 runtimeResult.DedicatedVM,
+		"docker_runtimes":              runtimeResult.DockerRuntimes,
+		"default_runtime":              runtimeResult.DefaultRuntime,
+		"hostile_agent_grade":          runtimeResult.HostileAgentGrade,
+		"payload_inspection":           runtimeResult.PayloadInspection,
+		"network_proof":                runtimeResult.NetworkProof,
+		"token_broker_enabled":         runtimeResult.TokenBrokerEnabled,
 	})
 	run.StartReceiptRefs = append(run.StartReceiptRefs, startReceipt.ReceiptID)
 	addJSON(artifacts, "receipts/launchpad-start.json", startReceipt)
@@ -225,7 +279,26 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 
 	run.State = StateRunning
 	run.Reason = "launch reached RUNNING after policy, CPI, sandbox preflight, MCP quarantine, install, start, and healthcheck receipts"
-	addJSON(artifacts, "runtime_environment.json", map[string]any{"runtime": runtimeResult.Runtime, "state": "RUNNING", "container_id": runtimeResult.ContainerID})
+	addJSON(artifacts, "runtime_environment.json", map[string]any{
+		"runtime":                      runtimeResult.Runtime,
+		"state":                        "RUNNING",
+		"container_id":                 runtimeResult.ContainerID,
+		"isolation_mode":               runtimeResult.IsolationMode,
+		"isolation_hardened":           runtimeResult.IsolationHardened,
+		"isolation_detection_status":   runtimeResult.IsolationDetectionStatus,
+		"isolation_unsupported_reason": runtimeResult.IsolationUnsupportedReason,
+		"runtime_class":                runtimeResult.RuntimeClass,
+		"docker_rootless":              runtimeResult.DockerRootless,
+		"docker_userns":                runtimeResult.DockerUserns,
+		"docker_eci":                   runtimeResult.DockerECI,
+		"dedicated_vm":                 runtimeResult.DedicatedVM,
+		"docker_runtimes":              runtimeResult.DockerRuntimes,
+		"default_runtime":              runtimeResult.DefaultRuntime,
+		"hostile_agent_grade":          runtimeResult.HostileAgentGrade,
+		"payload_inspection":           runtimeResult.PayloadInspection,
+		"network_proof":                runtimeResult.NetworkProof,
+		"token_broker_enabled":         runtimeResult.TokenBrokerEnabled,
+	})
 	return e.persist(run, artifacts)
 }
 
@@ -308,6 +381,7 @@ func (e Executor) persist(run LaunchRun, artifacts map[string][]byte) (LaunchRun
 		return LaunchRun{}, err
 	}
 	run.EvidencePackRefs = appendUnique(run.EvidencePackRefs, packRef)
+	run.EvidenceGraphRefs = appendUnique(run.EvidenceGraphRefs, packRef+"/04_EXPORTS/launchpad_evidence_graph.json")
 	if archiveRef, err := receipts.WriteEvidencePackArchive(packRef); err == nil {
 		run.EvidencePackRefs = appendUnique(run.EvidencePackRefs, archiveRef)
 		run.VerificationCommand = "helm evidence verify " + archiveRef + " --offline"
@@ -357,6 +431,34 @@ func newLaunchRun(compiled plan.LaunchPlan, reason string) LaunchRun {
 func addJSON(dst map[string][]byte, name string, value any) {
 	data, _ := json.MarshalIndent(value, "", "  ")
 	dst[name] = append(data, '\n')
+}
+
+func addRuntimeStartEvidence(dst map[string]any, result RuntimeStartResult) {
+	if result.Runtime != "" {
+		dst["runtime"] = result.Runtime
+	}
+	if result.IsolationMode != "" {
+		dst["isolation_mode"] = result.IsolationMode
+		dst["isolation_hardened"] = result.IsolationHardened
+		dst["isolation_detection_status"] = result.IsolationDetectionStatus
+		dst["isolation_unsupported_reason"] = result.IsolationUnsupportedReason
+		dst["unsupported_mode_denial"] = result.IsolationDetectionStatus == "unsupported" || result.IsolationUnsupportedReason != ""
+		dst["runtime_class"] = result.RuntimeClass
+		dst["docker_rootless"] = result.DockerRootless
+		dst["docker_userns"] = result.DockerUserns
+		dst["docker_eci"] = result.DockerECI
+		dst["dedicated_vm"] = result.DedicatedVM
+		dst["docker_runtimes"] = result.DockerRuntimes
+		dst["default_runtime"] = result.DefaultRuntime
+		dst["hostile_agent_grade"] = result.HostileAgentGrade
+	}
+	if result.PayloadInspection != "" {
+		dst["payload_inspection"] = result.PayloadInspection
+	}
+	if result.NetworkProof != "" {
+		dst["network_proof"] = result.NetworkProof
+	}
+	dst["token_broker_enabled"] = result.TokenBrokerEnabled
 }
 
 func appendUnique(values []string, next string) []string {

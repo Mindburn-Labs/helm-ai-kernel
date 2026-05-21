@@ -57,11 +57,14 @@ func (p LaunchOwnedEgressProxy) Start(req EgressProxyRequest) (EgressProxyHandle
 		return EgressProxyHandle{}, fmt.Errorf("start egress proxy listener: %w", err)
 	}
 	proxy := &egressProxyServer{
-		launchID:    req.LaunchID,
-		allowlist:   append([]string{}, req.Allowlist...),
-		receiptDir:  receiptDir,
-		dialTimeout: p.DialTimeout,
-		dialContext: p.dialContext,
+		launchID:           req.LaunchID,
+		allowlist:          append([]string{}, req.Allowlist...),
+		receiptDir:         receiptDir,
+		dialTimeout:        p.DialTimeout,
+		dialContext:        p.dialContext,
+		payloadInspection:  payloadInspection(req.PayloadInspection),
+		networkProof:       networkProof(req.NetworkProof),
+		tokenBrokerEnabled: req.TokenBrokerEnabled,
 	}
 	if proxy.dialTimeout == 0 {
 		proxy.dialTimeout = 10 * time.Second
@@ -83,10 +86,13 @@ func (p LaunchOwnedEgressProxy) Start(req EgressProxyRequest) (EgressProxyHandle
 		"listen_addr": listener.Addr().String(),
 	})
 	return EgressProxyHandle{
-		ProxyURL:   "http://" + listener.Addr().String(),
-		ReceiptRef: startReceipt,
-		ReceiptDir: receiptDir,
-		Allowlist:  append([]string{}, req.Allowlist...),
+		ProxyURL:           "http://" + listener.Addr().String(),
+		ReceiptRef:         startReceipt,
+		ReceiptDir:         receiptDir,
+		Allowlist:          append([]string{}, req.Allowlist...),
+		PayloadInspection:  proxy.payloadInspection,
+		NetworkProof:       proxy.networkProof,
+		TokenBrokerEnabled: proxy.tokenBrokerEnabled,
 		Stop: func() error {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -98,11 +104,14 @@ func (p LaunchOwnedEgressProxy) Start(req EgressProxyRequest) (EgressProxyHandle
 }
 
 type egressProxyServer struct {
-	launchID    string
-	allowlist   []string
-	receiptDir  string
-	dialTimeout time.Duration
-	dialContext func(context.Context, string, string) (net.Conn, error)
+	launchID           string
+	allowlist          []string
+	receiptDir         string
+	dialTimeout        time.Duration
+	dialContext        func(context.Context, string, string) (net.Conn, error)
+	payloadInspection  string
+	networkProof       string
+	tokenBrokerEnabled bool
 }
 
 func (p *egressProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -166,9 +175,12 @@ func tunnel(a net.Conn, b net.Conn) {
 
 func (p *egressProxyServer) writeReceipt(verdict, destination, reason string, extra map[string]any) string {
 	subject := map[string]any{
-		"destination": destination,
-		"reason":      reason,
-		"allowlist":   append([]string{}, p.allowlist...),
+		"destination":          destination,
+		"reason":               reason,
+		"allowlist":            append([]string{}, p.allowlist...),
+		"payload_inspection":   payloadInspection(p.payloadInspection),
+		"network_proof":        networkProof(p.networkProof),
+		"token_broker_enabled": p.tokenBrokerEnabled,
 	}
 	for key, value := range extra {
 		subject[key] = value

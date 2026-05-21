@@ -9,24 +9,14 @@ HELM Launchpad is the OSS local-container app launcher for AI agents. Launchpad 
 
 ## Audience
 
-Use this page if you are planning, launching, repairing, or tearing down a Launchpad app through the local-container substrate.
+This page is for developers, operators, and reviewers validating the OSS
+Launchpad matrix, plan, local-container launch, repair, and teardown flows.
 
 ## Outcome
 
-After reading this page, you should know which CLI flows exist, what each flow proves, and where Launchpad stops so the HELM execution boundary can govern effects.
-
-## Flow
-
-```mermaid
-flowchart LR
-  matrix["Matrix"] --> plan["Plan"]
-  plan --> preflight["Policy and sandbox preflight"]
-  preflight --> launch["Launch local container"]
-  launch --> health["Healthcheck"]
-  health --> receipts["Receipts and EvidencePack"]
-  launch --> repair["Repair plan"]
-  launch --> teardown["Cascade teardown"]
-```
+You should leave with the supported Launchpad command path and the receipts,
+EvidencePack, sandbox, and policy checks required before an app is considered
+available.
 
 ## Source Truth
 
@@ -35,8 +25,19 @@ flowchart LR
 - App registry: `registry/launchpad/apps/`
 - Substrate registry: `registry/launchpad/substrates/`
 - App policies: `policies/launchpad/apps/`
-- Release truth: `docs/launchpad/final_report.json`
+- Release truth: `docs/launchpad/v1_report.json`
 - Clean-install truth: `docs/launchpad/clean_install_report.json`
+
+```mermaid
+flowchart TD
+  matrix["matrix"] --> plan["plan"]
+  plan --> launch["local-container launch"]
+  launch --> receipts["signed receipts"]
+  receipts --> evidence["EvidencePack export"]
+  evidence --> verify["offline verify"]
+  launch --> repair["repair plan"]
+  launch --> teardown["cascade teardown"]
+```
 
 ## Matrix
 
@@ -83,22 +84,22 @@ Stops containers and proxy, revokes scoped secrets, revokes sandbox grants, quar
 
 ## Current Truth
 
-[KEEP] OpenClaw and Hermes are `oss_supported` from signed `v0.5.4` CI
-artifacts, live local-container e2e, teardown receipts, and offline
-EvidencePack verification.
+[KEEP] OpenClaw, Hermes, OpenCode, and Kilo Code are `oss_supported` from
+workflow `26179980172`, with signed artifacts, live local-container e2e,
+teardown receipts, and offline EvidencePack verification.
 
 [REFACTOR] The CPI/PEP/boundary path still needs deeper action-by-action authority binding.
 
 [REBUILD] Clean install GA is not complete until `scripts/launch/clean_install_gate.sh`
-passes on both the macOS CI runner and a separate developer Mac.
+passes against `v0.5.5` on both the macOS CI runner and a separate developer Mac.
 
 Deferred: DigitalOcean and Hetzner stay dry-run by default.
 
 ## Troubleshooting
 
-| Symptom | First check |
+| Condition | Response |
 | --- | --- |
-| Matrix says an app is not available | Verify license, artifact, policy, sandbox, healthcheck, receipts, teardown, and EvidencePack proof. |
-| Launch fails before container start | Inspect CPI, PEP, sandbox preflight, and required secret projection. |
-| Repair proposes an external effect | Route the effect through CPI and PEP before applying it. |
-| Teardown leaves state behind | Re-run `launch delete <launch_id> --cascade` and inspect the teardown receipt. |
+| App is not `AVAILABLE` | Check license, artifact, policy, sandbox, healthcheck, e2e, receipt, teardown, and EvidencePack proof. |
+| Launch is denied | Treat the policy verdict as final and inspect the action IR and policy pack hashes. |
+| Repair proposes side effects | Re-run CPI/PEP checks before accepting any repair action. |
+| Teardown is incomplete | Keep the launch non-promotable until container, proxy, secret, MCP, and evidence state reconcile. |

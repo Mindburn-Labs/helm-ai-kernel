@@ -35,7 +35,9 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 	}
 	secrets := runtimeSecrets(compiled, opts)
 	egressProxy := egressProxyFromEnv(compiled.NetworkAllowlist)
-	handle, err := lpruntime.NewLocalContainerRuntime().Start(lpruntime.ContainerRequest{
+	runtime := lpruntime.NewLocalContainerRuntime()
+	runtime.IsolationMode = isolationModeFromEnv()
+	handle, err := runtime.Start(lpruntime.ContainerRequest{
 		Plan:             compiled,
 		ImageDigest:      imageRef,
 		WorkspaceMount:   workspace,
@@ -44,19 +46,50 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 		Command:          compiled.RuntimeCommand,
 		NetworkAllowlist: compiled.NetworkAllowlist,
 		EgressProxy:      egressProxy,
+		TokenBroker:      compiled.ModelGatewayMode == "token_broker",
 	})
 	if err != nil {
-		return RuntimeStartResult{}, err
+		result := runtimeStartResultFromHandle(handle)
+		if result.IsolationMode == "" {
+			if evidence, ok := lpruntime.IsolationEvidenceFromError(err); ok {
+				result = runtimeStartResultFromIsolation(evidence)
+			}
+		}
+		return result, err
 	}
+	return runtimeStartResultFromHandle(handle), nil
+}
+
+func runtimeStartResultFromHandle(handle lpruntime.ContainerHandle) RuntimeStartResult {
+	result := runtimeStartResultFromIsolation(handle.Isolation)
+	result.ContainerID = handle.ContainerID
+	result.SandboxGrantRef = handle.SandboxGrantRef
+	result.EgressReceiptRef = handle.EgressReceiptRef
+	result.EgressNetworkName = handle.EgressNetworkName
+	result.EgressProxyID = handle.EgressProxyID
+	result.EgressProxyName = handle.EgressProxyName
+	return result
+}
+
+func runtimeStartResultFromIsolation(isolation lpruntime.IsolationEvidence) RuntimeStartResult {
 	return RuntimeStartResult{
-		ContainerID:       handle.ContainerID,
-		SandboxGrantRef:   handle.SandboxGrantRef,
-		EgressReceiptRef:  handle.EgressReceiptRef,
-		EgressNetworkName: handle.EgressNetworkName,
-		EgressProxyID:     handle.EgressProxyID,
-		EgressProxyName:   handle.EgressProxyName,
-		Runtime:           "local-container",
-	}, nil
+		Runtime:                    "local-container",
+		IsolationMode:              isolation.Mode,
+		IsolationHardened:          isolation.Hardened,
+		IsolationDetectionStatus:   isolation.DetectionStatus,
+		IsolationUnsupportedReason: isolation.UnsupportedReason,
+		RuntimeClass:               isolation.RuntimeClass,
+		DockerRootless:             isolation.DockerRootless,
+		DockerUserns:               isolation.DockerUserns,
+		DockerECI:                  isolation.DockerECI,
+		DedicatedVM:                isolation.DedicatedVM,
+		DockerRuntimes:             append([]string{}, isolation.DockerRuntimes...),
+		DefaultRuntime:             isolation.DefaultRuntime,
+		HostileAgentGrade:          isolation.HostileAgentGrade,
+		PayloadInspection:          isolation.PayloadInspection,
+		NetworkProof:               isolation.NetworkProof,
+		TokenBrokerEnabled:         isolation.TokenBrokerEnabled,
+	}
 }
 
 func egressProxyFromEnv(allowlist []string) lpruntime.EgressProxy {
@@ -83,6 +116,19 @@ func egressProxyFromEnv(allowlist []string) lpruntime.EgressProxy {
 
 func runtimeSecrets(compiled plan.LaunchPlan, opts ExecuteOptions) map[string]string {
 	secrets := map[string]string{}
+	if compiled.ModelGatewayMode == "token_broker" {
+		if value := opts.RuntimeSecretEnv["HELM_MODEL_GATEWAY_TOKEN"]; value != "" {
+			secrets["HELM_MODEL_GATEWAY_TOKEN"] = value
+		} else if value, ok := os.LookupEnv("HELM_MODEL_GATEWAY_TOKEN"); ok && value != "" {
+			secrets["HELM_MODEL_GATEWAY_TOKEN"] = value
+		}
+		if value := opts.RuntimeSecretEnv["HELM_MODEL_GATEWAY_URL"]; value != "" {
+			secrets["HELM_MODEL_GATEWAY_URL"] = value
+		} else if value, ok := os.LookupEnv("HELM_MODEL_GATEWAY_URL"); ok && value != "" {
+			secrets["HELM_MODEL_GATEWAY_URL"] = value
+		}
+		return secrets
+	}
 	for _, envName := range compiled.ModelGatewayEnv {
 		if value := opts.RuntimeSecretEnv[envName]; value != "" {
 			secrets[envName] = value
@@ -93,4 +139,8 @@ func runtimeSecrets(compiled plan.LaunchPlan, opts ExecuteOptions) map[string]st
 		}
 	}
 	return secrets
+}
+
+func isolationModeFromEnv() string {
+	return lpruntime.ResolveIsolationMode(os.Getenv("HELM_LAUNCHPAD_ISOLATION_MODE"))
 }

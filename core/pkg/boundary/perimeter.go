@@ -338,8 +338,13 @@ func (pe *PerimeterEnforcer) enforce(ctx context.Context, err error, reason stri
 	pe.mu.RUnlock()
 
 	if handler != nil {
-		// Non-blocking invocation for telemetry / audit log writes
-		go handler(ctx, err, reason, policyID)
+		// Non-blocking invocation for telemetry / audit log writes with panic recovery
+		go func() {
+			defer func() {
+				_ = recover() // Isolate panic to protect main kernel thread
+			}()
+			handler(ctx, err, reason, policyID)
+		}()
 	}
 
 	if mode == ModeAudit {

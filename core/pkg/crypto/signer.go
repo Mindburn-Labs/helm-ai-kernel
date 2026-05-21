@@ -11,7 +11,14 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
-var verifyCache sync.Map
+var (
+	verifyCache = NewShardedCache()
+	sha256Pool  = sync.Pool{
+		New: func() any {
+			return sha256.New()
+		},
+	}
+)
 
 // Signer defines the interface for cryptographic signing operations.
 // For verification, use the separate Verifier interface.
@@ -69,15 +76,18 @@ func (s *Ed25519Signer) PublicKeyBytes() []byte {
 
 // Verify verifies a signature against a public key.
 func Verify(pubKeyHex, sigHex string, data []byte) (bool, error) {
-	// Compute a unique cache key for the tuple (pubKeyHex, sigHex, data)
-	hasher := sha256.New()
-	hasher.Write([]byte(pubKeyHex))
-	hasher.Write([]byte(sigHex))
-	hasher.Write(data)
-	cacheKey := string(hasher.Sum(nil))
+	hasher := GetHasher(&sha256Pool)
+	defer PutHasher(&sha256Pool, hasher)
 
-	if val, ok := verifyCache.Load(cacheKey); ok {
-		return val.(bool), nil
+	WriteStringToHasher(hasher, pubKeyHex)
+	WriteStringToHasher(hasher, sigHex)
+	hasher.Write(data)
+
+	var cacheKey [32]byte
+	hasher.Sum(cacheKey[:0])
+
+	if val, ok := verifyCache.Lookup(cacheKey); ok {
+		return val, nil
 	}
 
 	pubKey, err := hex.DecodeString(pubKeyHex)

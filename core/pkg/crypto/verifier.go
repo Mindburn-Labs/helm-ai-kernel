@@ -2,10 +2,8 @@ package crypto
 
 import (
 	"crypto/ed25519"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"sync"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
@@ -21,7 +19,7 @@ type Verifier interface {
 // Ed25519Verifier implements Verifier using Ed25519.
 type Ed25519Verifier struct {
 	PublicKey ed25519.PublicKey
-	cache     sync.Map
+	cache     *ShardedCache
 }
 
 // NewEd25519Verifier creates a new verifier.
@@ -29,21 +27,28 @@ func NewEd25519Verifier(pubKeyBytes []byte) (*Ed25519Verifier, error) {
 	if len(pubKeyBytes) != ed25519.PublicKeySize {
 		return nil, fmt.Errorf("invalid public key size: %d", len(pubKeyBytes))
 	}
-	return &Ed25519Verifier{PublicKey: ed25519.PublicKey(pubKeyBytes)}, nil
+	return &Ed25519Verifier{
+		PublicKey: ed25519.PublicKey(pubKeyBytes),
+		cache:     NewShardedCache(),
+	}, nil
 }
 
 func (v *Ed25519Verifier) Verify(message []byte, signature []byte) bool {
-	hasher := sha256.New()
+	hasher := GetHasher(&sha256Pool)
+	defer PutHasher(&sha256Pool, hasher)
+
 	hasher.Write(message)
 	hasher.Write(signature)
-	key := string(hasher.Sum(nil))
 
-	if val, ok := v.cache.Load(key); ok {
-		return val.(bool)
+	var cacheKey [32]byte
+	hasher.Sum(cacheKey[:0])
+
+	if val, ok := v.cache.Lookup(cacheKey); ok {
+		return val
 	}
 
 	res := ed25519.Verify(v.PublicKey, message, signature)
-	v.cache.Store(key, res)
+	v.cache.Store(cacheKey, res)
 	return res
 }
 

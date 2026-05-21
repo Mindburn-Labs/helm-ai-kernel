@@ -49,15 +49,16 @@ func (m *MockRunner) Validate(spec *SandboxSpec) error {
 
 // WarmLeaseManager manages active, idle container runtimes.
 type WarmLeaseManager struct {
-	mu           sync.Mutex
-	idleRunners  chan Runner
-	poolSize     int
-	imageDigest  string
-	fallbackMock bool
+	mu            sync.Mutex
+	idleRunners   chan Runner
+	poolSize      int
+	imageDigest   string
+	fallbackMock  bool
+	RunnerFactory func(id string) Runner
 }
 
 // NewWarmLeaseManager creates and pre-warms a WarmLeaseManager.
-func NewWarmLeaseManager(poolSize int, imageDigest string, fallbackMock bool) *WarmLeaseManager {
+func NewWarmLeaseManager(poolSize int, imageDigest string, fallbackMock bool, factory ...func(id string) Runner) *WarmLeaseManager {
 	if poolSize <= 0 {
 		poolSize = 4
 	}
@@ -69,6 +70,10 @@ func NewWarmLeaseManager(poolSize int, imageDigest string, fallbackMock bool) *W
 		fallbackMock: fallbackMock,
 	}
 
+	if len(factory) > 0 && factory[0] != nil {
+		w.RunnerFactory = factory[0]
+	}
+
 	w.PreWarm()
 
 	return w
@@ -78,11 +83,11 @@ func NewWarmLeaseManager(poolSize int, imageDigest string, fallbackMock bool) *W
 func (w *WarmLeaseManager) PreWarm() {
 	for i := 0; i < w.poolSize; i++ {
 		var runner Runner
-		if w.fallbackMock {
-			runner = &MockRunner{id: fmt.Sprintf("mock-warm-%d-%d", i, time.Now().UnixNano())}
+		id := fmt.Sprintf("warm-%d-%d", i, time.Now().UnixNano())
+		if w.fallbackMock || w.RunnerFactory == nil {
+			runner = &MockRunner{id: "mock-" + id}
 		} else {
-			// In standard CI environments or where Docker is absent, we default to the mock runner.
-			runner = &MockRunner{id: fmt.Sprintf("mock-warm-%d-%d", i, time.Now().UnixNano())}
+			runner = w.RunnerFactory(id)
 		}
 		w.idleRunners <- runner
 	}

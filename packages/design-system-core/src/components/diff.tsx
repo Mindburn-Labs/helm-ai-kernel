@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Columns, List, Check } from 'lucide-react';
+import { Columns, List } from 'lucide-react';
 
 export interface VisualCodeDiffProps {
   readonly diffLines: readonly string[];

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Check, AlertTriangle, ArrowRight, Loader2 } from 'lucide-react';
+import { Sparkles, Check, ArrowRight, Loader2 } from 'lucide-react';
 
 export interface CodeAnnotation {
   readonly line: number;

@@ -45,7 +45,6 @@ export function CanvasElement({
 
   useEffect(() => {
     let isMounted = true;
-    let animFrameId: number;
     let dashOffset = 0;
     
     const initPixi = async () => {

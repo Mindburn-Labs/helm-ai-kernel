@@ -346,6 +346,21 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Sync chart version with release tag
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Bumping deploy/helm-chart/Chart.yaml to version ${VERSION}"
+          yq -i ".version = \"${VERSION}\"" deploy/helm-chart/Chart.yaml
+          yq -i ".appVersion = \"v${VERSION}\"" deploy/helm-chart/Chart.yaml
+          # The artifacthub.io/images annotation is a YAML block scalar with
+          # image refs (incl. the -slim variant); patch tags in place with sed.
+          sed -i.bak -E \
+            "s|(ghcr\\.io/mindburn-labs/helm-ai-kernel:)v[0-9]+\\.[0-9]+\\.[0-9]+(-slim)?|\\1v${VERSION}\\2|g" \
+            deploy/helm-chart/Chart.yaml
+          rm -f deploy/helm-chart/Chart.yaml.bak
+          echo "--- updated Chart.yaml (head) ---"
+          head -16 deploy/helm-chart/Chart.yaml
       - name: Package chart
         run: |
           mkdir -p dist/chart

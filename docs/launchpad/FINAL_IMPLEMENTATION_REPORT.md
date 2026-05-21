@@ -6,7 +6,7 @@ Launchpad/Skills governance surfaces.
 
 This file is not the current Launchpad GA support truth. Current Launchpad v1
 truth is recorded in `docs/launchpad/v1_report.json`: OpenClaw, Hermes,
-OpenCode, and Kilo Code are `oss_supported` after workflow `26179980172`
+OpenCode, and Kilo Code are `oss_supported` after workflow `26186959337`
 passed signed artifact build, SBOM, vulnerability scan, live OpenRouter
 launch, teardown, and offline EvidencePack verification for all four.
 

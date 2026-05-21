@@ -3,7 +3,7 @@
   "historical_report": true,
   "superseded_by": "docs/launchpad/v1_report.json",
   "current_launchpad_ga_truth": {
-    "artifact_workflow_run_id": "26179980172",
+    "artifact_workflow_run_id": "26186959337",
     "supported_apps": [
       "openclaw",
       "hermes",

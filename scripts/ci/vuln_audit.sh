@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 STRICT="${QUALITY_STRICT:-0}"
+GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-v1.3.0}"
 STATUS=0
 
 mark_failure() {
@@ -31,11 +32,7 @@ run_step() {
     fi
 }
 
-if command -v govulncheck >/dev/null 2>&1; then
-    run_step "Go govulncheck" bash -lc "cd '$ROOT/core' && govulncheck ./..."
-else
-    warn_missing "govulncheck" "Install with: go install golang.org/x/vuln/cmd/govulncheck@latest"
-fi
+run_step "Go govulncheck" bash -c "cd '$ROOT/core' && go run 'golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}' ./..."
 
 if command -v npm >/dev/null 2>&1; then
     for dir in "$ROOT/sdk/ts" "$ROOT/apps/console" "$ROOT/packages/design-system-core"; do

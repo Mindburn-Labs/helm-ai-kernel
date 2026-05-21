@@ -9,8 +9,8 @@ redistribution: allowed_by_MIT_with_upstream_notice
 availability: oss_supported
 install:
     strategy: signed_oci
-    image: ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:3e258a0b5424b6a141e0e71516754cd7598a71b5727443c9620a90152dcc0f38
-    digest: sha256:3e258a0b5424b6a141e0e71516754cd7598a71b5727443c9620a90152dcc0f38
+    image: ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550
+    digest: sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550
     source: https://github.com/anomalyco/opencode
     ref: v1.15.5
 runtime:
@@ -67,18 +67,18 @@ evidence_requirements:
     - syft_sbom
     - grype_vulnerability_scan
 supply_chain_evidence:
-    artifact_digest: sha256:3e258a0b5424b6a141e0e71516754cd7598a71b5727443c9620a90152dcc0f38
+    artifact_digest: sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550
     signature_tool: cosign
-    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:3e258a0b5424b6a141e0e71516754cd7598a71b5727443c9620a90152dcc0f38
+    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550
     sbom_tool: syft
     sbom_ref: artifact://sbom-opencode.spdx.json
     vulnerability_scan_tool: grype
     vulnerability_scan_ref: artifact://grype-opencode.json
 promotion_evidence:
-    artifact_verification_ref: github-actions://26186959337/1/artifact-verification/opencode
-    live_e2e_run_id: github-actions://26186959337/1/live-e2e/opencode
-    evidence_pack_ref: github-actions://26186959337/1/evidencepack/opencode
-    teardown_receipt_ref: github-actions://26186959337/1/teardown/opencode
+    artifact_verification_ref: github-actions://26198407296/1/artifact-verification/opencode
+    live_e2e_run_id: github-actions://26198407296/1/live-e2e/opencode
+    evidence_pack_ref: github-actions://26198407296/1/evidencepack/opencode
+    teardown_receipt_ref: github-actions://26198407296/1/teardown/opencode
 conformance:
     license_verified: true
     artifact_verified: true
@@ -90,9 +90,9 @@ conformance:
     receipt_verified: true
     evidence_pack_verified: true
 metadata:
-    artifact_workflow_run: github-actions://26186959337/1
+    artifact_workflow_run: github-actions://26198407296/1
     helm_oci_status: promoted_from_signed_ci_artifact_manifest
-    promotion_provenance_ref: github-actions://26186959337/1
+    promotion_provenance_ref: github-actions://26198407296/1
     upstream_commit: d7a6e1daaf2271bcd0b611fbb27d4956806e475a
     upstream_ref: v1.15.5
     upstream_repo: https://github.com/anomalyco/opencode

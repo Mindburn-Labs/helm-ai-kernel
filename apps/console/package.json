@@ -2,6 +2,7 @@
   "name": "@helm/console",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@11.14.1",
   "type": "module",
   "description": "Self-hostable HELM AI Kernel Console frontend.",
   "scripts": {

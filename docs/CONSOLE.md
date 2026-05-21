@@ -82,6 +82,14 @@ Build the design-system package and Console:
 make build-console
 ```
 
+Console installs are locked to the public npm registry. The npm path is pinned
+to npm `11.14.1` and uses `apps/console/.npmrc` for registry pinning, strict
+TLS, audit-on-install, and a two-day release-age floor. The pnpm compatibility
+path uses `apps/console/pnpm-workspace.yaml` for the same registry and a
+2,880-minute release-age floor. Use `npm audit signatures` as the report-only
+signature and provenance check for packages whose registry metadata exposes
+signatures or attestations.
+
 Start the kernel with the Console enabled:
 
 ```bash

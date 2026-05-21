@@ -21,4 +21,10 @@ export * from "./components/inspect";
 export * from "./components/primitives";
 export * from "./components/slot";
 export * from "./components/workbench";
+export * from "./components/canvas";
+export * from "./components/diff";
+export * from "./components/annotation";
 export * from "./primitives/catalog";
+
+
+

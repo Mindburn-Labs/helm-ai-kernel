@@ -10,11 +10,12 @@ export interface WorkbenchShellProps {
   readonly children: ReactNode;
   readonly drawer?: ReactNode;
   readonly mobileNav?: ReactNode;
+  readonly securityStance?: "allow" | "deny" | "escalate" | "pending";
 }
 
-export function WorkbenchShell({ rail, header, children, drawer, mobileNav }: WorkbenchShellProps) {
+export function WorkbenchShell({ rail, header, children, drawer, mobileNav, securityStance = "pending" }: WorkbenchShellProps) {
   return (
-    <div className="cockpit-shell">
+    <div className={`cockpit-shell stance-${securityStance}`} data-security-stance={securityStance}>
       {rail}
       <main className="cockpit-main">
         {header}

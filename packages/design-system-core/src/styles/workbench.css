@@ -20,6 +20,9 @@
   --color-danger-soft: var(--helm-verdict-deny-bg);
   --color-code: var(--helm-bg-inset);
   --color-panel-glass: color-mix(in oklab, var(--color-panel), transparent 8%);
+  --color-glass-bg: var(--helm-glass-bg);
+  --color-glass-border: var(--helm-glass-border);
+  --glass-blur: var(--helm-glass-blur, 20px);
   --color-mobile-glass: color-mix(in oklab, var(--color-panel), transparent 6%);
   --color-on-accent: var(--helm-text-on-accent);
   --color-good-border: color-mix(in oklab, var(--color-good), var(--color-border) 58%);
@@ -123,6 +126,76 @@ a {
   min-height: 100vh;
   display: grid;
   grid-template-columns: var(--rail-width) minmax(0, 1fr);
+  position: relative;
+  transition: box-shadow var(--helm-dur-slow) var(--helm-ease), border-color var(--helm-dur-slow) var(--helm-ease);
+}
+
+.cockpit-shell::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  border: 0px solid transparent;
+  box-shadow: inset 0 0 0 0 transparent;
+  transition: border-width var(--helm-dur-slow) var(--helm-ease), border-color var(--helm-dur-slow) var(--helm-ease), box-shadow var(--helm-dur-slow) var(--helm-ease);
+}
+
+/* Stance glows */
+.cockpit-shell.stance-allow::after {
+  box-shadow: inset 0 0 32px hsla(155, 70%, 50%, 0.08);
+  border: 1px solid hsla(155, 70%, 50%, 0.15);
+  animation: glow-allow 4s ease-in-out infinite alternate;
+}
+
+@keyframes glow-allow {
+  0% {
+    box-shadow: inset 0 0 24px hsla(155, 70%, 50%, 0.05);
+    border-color: hsla(155, 70%, 50%, 0.10);
+  }
+  100% {
+    box-shadow: inset 0 0 40px hsla(155, 70%, 50%, 0.12);
+    border-color: hsla(155, 70%, 50%, 0.25);
+  }
+}
+
+.cockpit-shell.stance-escalate::after {
+  box-shadow: inset 0 0 32px hsla(38, 90%, 50%, 0.10);
+  border: 1px solid hsla(38, 90%, 50%, 0.20);
+  animation: glow-escalate 3s ease-in-out infinite alternate;
+}
+
+@keyframes glow-escalate {
+  0% {
+    box-shadow: inset 0 0 20px hsla(38, 90%, 50%, 0.06);
+    border-color: hsla(38, 90%, 50%, 0.12);
+  }
+  100% {
+    box-shadow: inset 0 0 48px hsla(38, 90%, 50%, 0.18);
+    border-color: hsla(38, 90%, 50%, 0.35);
+  }
+}
+
+.cockpit-shell.stance-deny::after {
+  box-shadow: inset 0 0 48px hsla(358, 80%, 50%, 0.15);
+  border: 2px solid hsla(358, 80%, 50%, 0.35);
+  animation: glow-deny 2s ease-in-out infinite alternate;
+}
+
+@keyframes glow-deny {
+  0% {
+    box-shadow: inset 0 0 32px hsla(358, 80%, 50%, 0.10);
+    border-color: hsla(358, 80%, 50%, 0.25);
+  }
+  100% {
+    box-shadow: inset 0 0 64px hsla(358, 80%, 50%, 0.25);
+    border-color: hsla(358, 80%, 50%, 0.50);
+  }
+}
+
+.cockpit-shell.stance-pending::after {
+  box-shadow: inset 0 0 20px hsla(215, 10%, 50%, 0.02);
+  border: 1px solid hsla(215, 10%, 50%, 0.06);
 }
 
 .cockpit-rail {
@@ -130,12 +203,14 @@ a {
   top: 0;
   height: 100vh;
   padding: 18px 14px;
-  border-right: 1px solid var(--color-border);
-  background: var(--color-rail);
+  border-right: 1px solid var(--color-glass-border);
+  background: var(--color-glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
   color: var(--color-text);
   display: flex;
   flex-direction: column;
   gap: 24px;
+  z-index: 25;
 }
 
 .rail-brand {
@@ -219,9 +294,9 @@ a {
   align-items: center;
   gap: 14px;
   padding: 12px 22px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-panel-glass);
-  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--color-glass-border);
+  background: var(--color-glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
 }
 
 .header-title {
@@ -988,10 +1063,12 @@ label span {
   max-height: calc(100vh - 116px);
   overflow: auto;
   padding: 14px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-glass-border);
   border-radius: var(--radius);
-  background: var(--color-panel);
-  box-shadow: var(--shadow-hairline);
+  background: var(--color-glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  box-shadow: var(--shadow-hairline), var(--shadow-soft);
+  transition: transform var(--helm-dur-base) var(--helm-ease), opacity var(--helm-dur-base) var(--helm-ease);
 }
 
 .detail-drawer > header {
@@ -1606,4 +1683,59 @@ label span {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+/* --- SOTA SPA Transitions & View Transitions API Support --- */
+@keyframes sota-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes sota-fade-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+    filter: blur(4px);
+  }
+}
+
+@keyframes sota-slide-in-right {
+  from {
+    transform: translateX(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+::view-transition-old(root) {
+  animation: var(--helm-dur-fast) var(--helm-ease-out-quart) both sota-fade-out;
+}
+
+::view-transition-new(root) {
+  animation: var(--helm-dur-base) var(--helm-ease-out-quart) both sota-fade-in;
+}
+
+.flow-page {
+  view-transition-name: flow-page;
+  animation: sota-fade-in var(--helm-dur-slow) var(--helm-ease-out-quart) both;
+}
+
+.detail-drawer.is-open {
+  animation: sota-slide-in-right var(--helm-dur-base) var(--helm-ease-out-quart) both;
 }

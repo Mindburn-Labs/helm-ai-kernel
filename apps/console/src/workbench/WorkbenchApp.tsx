@@ -2,35 +2,64 @@
 
 import {
   AlertCircle,
+  Archive,
+  Boxes,
   CheckCircle2,
   ChevronRight,
   Circle,
+  Command as CommandIcon,
   FileSearch,
+  KeyRound,
   MessageSquareText,
+  Play,
+  Rocket,
+  Settings,
+  ShieldCheck,
 } from "lucide-react";
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import {
   ErrorBoundary,
+  HashText,
   I18nProvider,
   TelemetryProvider,
   ThemeProvider,
+  VerdictBadge,
+  VerificationStatus,
   Button,
   FormField,
   SelectField,
   TextInput,
+  WorkbenchActionSheetFrame,
   WorkbenchCommandSearch,
+  WorkbenchComposer,
+  WorkbenchDrawerFrame,
   WorkbenchHealthSummary,
   WorkbenchHeader,
   WorkbenchIntegrationCard,
+  WorkbenchMobileNav,
+  WorkbenchMobileNavButton,
+  WorkbenchQuickAction,
+  WorkbenchQuickActions,
+  WorkbenchRail,
+  WorkbenchRailLink,
+  WorkbenchProofSection,
+  WorkbenchRecordExplorer,
   WorkbenchRecordRow,
+  WorkbenchRouteCoverageTable,
   WorkbenchSectionHeader,
   WorkbenchShell,
+  WorkbenchStoreHealthList,
   WorkbenchStatusFact,
   WorkbenchTimelineStep,
+  type VerificationState,
+  type VerdictState,
 } from "@mindburn/ui-core";
 import {
+  evaluateIntent,
   getConsoleTenantID,
   hasConsoleAdminKey,
+  loadReceipts,
+  replayVerifyCurrentEvidence,
   runPublicDemo,
   setConsoleAdminKey,
   setConsoleTenantID,
@@ -43,33 +72,56 @@ import {
 } from "../api/client";
 import { HelmAiKernelAssistantDrawer } from "../agent/drawer";
 import { HelmAiKernelAgentProvider } from "../agent/provider";
+import { buildAiKernelAgentState } from "../agent/state";
 import { LaunchpadPage } from "../features/launchpad/LaunchpadPage";
-import { useWorkbenchState } from "./hooks/useWorkbenchState";
-import { Navigation, MobileNav } from "./components/SideRailNavigation";
-import { UniversalComposer } from "./components/UniversalComposer";
-import { DetailDrawer } from "./components/HELMInspector";
+import type { AdminActionValues } from "../admin/surfaces";
+import { mergeReceipts, useCapabilitiesData, useConsoleData, type ConsoleAccessState } from "./dataHooks";
 import {
+  buildOperatorTasks,
+  buildWorkbenchSnapshot,
+  isRecord,
   normalizeState,
+  parseGovernedCommand,
   receiptAction,
   receiptKey,
   receiptResource,
+  routeForCapability,
   shortId,
 } from "./viewModels";
 import type {
   Capability,
   CapabilityGroup,
+  CommandSource,
   FlowRoute,
+  GovernedCommand,
   OperatorTask,
   QuickAction,
+  RecordSummary,
   TaskSeverity,
   TaskTimelineStep,
+  WorkbenchAction,
+  WorkbenchDiagnostic,
   WorkbenchSnapshot,
-  DrawerItem,
-  SearchResult,
 } from "./types";
-import type { ConsoleAccessState } from "./dataHooks";
 
 const ConsoleBoundary = ErrorBoundary as unknown as ComponentType<{ readonly children: ReactNode }>;
+
+const FLOW_NAV: readonly {
+  readonly id: FlowRoute;
+  readonly label: string;
+  readonly icon: ComponentType<{ readonly size?: number; readonly "aria-hidden"?: boolean }>;
+}[] = [
+  { id: "launch", label: "Launch", icon: Rocket },
+  { id: "runs", label: "Runs", icon: Play },
+  { id: "mcp", label: "MCP Firewall", icon: Boxes },
+  { id: "policies", label: "Policies", icon: ShieldCheck },
+  { id: "secrets", label: "Secrets", icon: KeyRound },
+  { id: "sandbox", label: "Sandbox", icon: FileSearch },
+  { id: "evidence", label: "Evidence", icon: Archive },
+  { id: "receipts", label: "Receipts", icon: CommandIcon },
+  { id: "registry", label: "Registry", icon: CommandIcon },
+  { id: "settings", label: "Settings", icon: Settings },
+];
 
 const WORK_CAPABILITY_IDS = new Set(["approvals", "mcp", "connectors", "sandbox", "authz", "budgets", "trust"]);
 const LEDGER_CAPABILITY_IDS = new Set(["receipts", "evidence", "replay", "conformance", "audit", "boundary", "proofgraph"]);
@@ -84,31 +136,101 @@ const PROOF_DEMO_ACTIONS = [
   { id: "modify_policy", label: "Modify policy" },
 ] as const;
 
-function routeLabel(route: FlowRoute): string {
-  switch (route) {
-    case "launch":
-      return "Launch";
-    case "runs":
-      return "Runs";
-    case "mcp":
-      return "MCP Firewall";
-    case "policies":
-      return "Policies";
-    case "secrets":
-      return "Secrets";
-    case "sandbox":
-      return "Sandbox";
-    case "evidence":
-      return "Evidence";
-    case "receipts":
-      return "Receipts";
-    case "registry":
-      return "Registry";
-    case "settings":
-      return "Settings";
+type DrawerItem =
+  | { readonly kind: "task"; readonly task: OperatorTask }
+  | { readonly kind: "receipt"; readonly receipt: Receipt }
+  | { readonly kind: "capability"; readonly capability: Capability }
+  | { readonly kind: "record"; readonly capability: Capability; readonly record: RecordSummary }
+  | { readonly kind: "action"; readonly capability: Capability; readonly action: WorkbenchAction }
+  | { readonly kind: "diagnostics"; readonly diagnostics: readonly WorkbenchDiagnostic[] }
+  | { readonly kind: "timeline"; readonly step: TaskTimelineStep };
+
+interface SearchResult {
+  readonly id: string;
+  readonly label: string;
+  readonly detail: string;
+  readonly route: FlowRoute;
+  readonly item?: DrawerItem;
+}
+
+function normalizeVerdict(value: string | undefined): VerdictState {
+  switch ((value ?? "").toLowerCase()) {
+    case "allow":
+    case "allowed":
+    case "pass":
+      return "allow";
+    case "deny":
+    case "denied":
+    case "fail":
+      return "deny";
+    case "escalate":
+    case "escalated":
+      return "escalate";
     default:
-      return "Workbench";
+      return "pending";
   }
+}
+
+function normalizeVerificationState(value: unknown): VerificationState | null {
+  const normalized = String(value ?? "").toLowerCase();
+  switch (normalized) {
+    case "pass":
+    case "passed":
+    case "verified":
+    case "valid":
+      return "verified";
+    case "fail":
+    case "failed":
+    case "invalid":
+      return "failed";
+    case "pending":
+    case "checking":
+      return "pending";
+    case "exported":
+      return "exported";
+    case "expired":
+      return "expired";
+    case "unavailable":
+      return "unavailable";
+    default:
+      return null;
+  }
+}
+
+function verificationState(receipt: Receipt | null | undefined): VerificationState {
+  if (!receipt) return "pending";
+  const explicitState = normalizeVerificationState(receipt.metadata?.verification_status ?? receipt.metadata?.verification_state);
+  if (explicitState) return explicitState;
+  const verification = receipt.metadata?.verification;
+  if (typeof verification === "object" && verification !== null && !Array.isArray(verification)) {
+    const record = verification as Record<string, unknown>;
+    return normalizeVerificationState(record.verdict ?? record.status ?? record.state) ?? "pending";
+  }
+  return "pending";
+}
+
+function signatureSummary(receipt: Receipt | null): string {
+  if (!receipt?.signature) return "not emitted";
+  const state = verificationState(receipt);
+  if (state === "verified") return "verified";
+  if (state === "failed") return "verification failed";
+  return "present; verification pending";
+}
+
+function routeLabel(route: FlowRoute): string {
+  return FLOW_NAV.find((item) => item.id === route)?.label ?? "Workbench";
+}
+
+function initialRouteFromLocation(): { route: FlowRoute; runId: string } {
+  if (typeof window === "undefined") return { route: "launch", runId: "" };
+  const pathname = window.location.pathname.replace(/\/+$/, "");
+  const runMatch = pathname.match(/^\/runs\/([^/]+)$/);
+  if (runMatch?.[1]) return { route: "runs", runId: decodeURIComponent(runMatch[1]) };
+  const firstSegment = pathname.split("/").filter(Boolean)[0] as FlowRoute | undefined;
+  if (firstSegment && FLOW_NAV.some((item) => item.id === firstSegment)) {
+    return { route: firstSegment, runId: "" };
+  }
+  return { route: "launch", runId: "" };
 }
 
 export function WorkbenchApp() {
@@ -126,48 +248,191 @@ export function WorkbenchApp() {
 }
 
 function ConsoleApp() {
-  const {
-    initialRoute,
-    bootstrap,
-    receipts,
-    streamState,
-    accessState,
-    refreshing,
-    refresh,
-    active,
-    capabilities,
-    capabilitiesLoading,
-    refreshOne,
-    refreshAll,
-    query,
-    setQuery,
-    drawerItem,
-    setDrawerItem,
-    commandText,
-    setCommandText,
-    principal,
-    setPrincipal,
-    submitting,
-    actionError,
-    replayStatus,
-    assistantOpen,
-    setAssistantOpen,
-    composerRef,
-    authChanged,
-    selectedReceipt,
-    tasks,
-    snapshot,
-    agentState,
-    filteredReceipts,
-    searchResults,
-    navigate,
-    runReplayProbe,
-    submitCommand,
-    runQuickAction,
-    openSearchResult,
-    navigateFromAssistant,
-    selectReceiptFromAssistant,
-  } = useWorkbenchState();
+  const initialRoute = useMemo(() => initialRouteFromLocation(), []);
+  const [authRevision, setAuthRevision] = useState(0);
+  const { bootstrap, receipts, error, streamState, accessState, refreshing, refresh, setReceipts } = useConsoleData(authRevision);
+  const [active, setActive] = useState<FlowRoute>(initialRoute.route);
+  const needsCapabilityData = active === "developer" || active === "workbench" || active === "work" || active === "ledger" || active === "capabilities" || active === "settings";
+  const { capabilities, loading: capabilitiesLoading, refreshOne, refreshAll } = useCapabilitiesData(authRevision, needsCapabilityData);
+  const [query, setQuery] = useState("");
+  const [drawerItem, setDrawerItem] = useState<DrawerItem | null>(null);
+  const [commandText, setCommandText] = useState("LLM_INFERENCE gpt-4.1-mini");
+  const [principal, setPrincipal] = useState("operator@local");
+  const [currentCommand, setCurrentCommand] = useState<GovernedCommand | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [replayStatus, setReplayStatus] = useState("not checked");
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const authChanged = useCallback(() => {
+    setAuthRevision((value) => value + 1);
+  }, []);
+
+  const selectedReceipt = useMemo(() => {
+    if (drawerItem?.kind === "receipt") return drawerItem.receipt;
+    return receipts[0] ?? null;
+  }, [drawerItem, receipts]);
+
+  const tasks = useMemo(
+    () => buildOperatorTasks({ bootstrap, receipts, capabilities, accessState, error, streamState }),
+    [accessState, bootstrap, capabilities, error, receipts, streamState],
+  );
+
+  const snapshot = useMemo(
+    () => buildWorkbenchSnapshot({ bootstrap, receipts, capabilities, accessState, error, streamState, command: currentCommand, busy: submitting, replayStatus }),
+    [accessState, bootstrap, capabilities, currentCommand, error, receipts, replayStatus, streamState, submitting],
+  );
+
+  const agentState = useMemo(
+    () =>
+      buildAiKernelAgentState({
+        bootstrap,
+        active,
+        selectedReceipt,
+        query,
+        receipts,
+        demoAction: "sandbox-lab",
+        replayStatus,
+      }),
+    [active, bootstrap, query, receipts, replayStatus, selectedReceipt],
+  );
+
+  const filteredReceipts = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return receipts;
+    return receipts.filter((receipt) => {
+      const haystack = [
+        receipt.receipt_id,
+        receipt.decision_id,
+        receipt.effect_id,
+        receipt.status,
+        receipt.executor_id,
+        receiptAction(receipt),
+        receiptResource(receipt),
+        receipt.blob_hash,
+        receipt.output_hash,
+      ].join(" ").toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [query, receipts]);
+
+  const searchResults = useMemo(
+    () => buildSearchResults(query, tasks, capabilities, receipts),
+    [capabilities, query, receipts, tasks],
+  );
+
+  const navigate = useCallback((route: FlowRoute, item?: DrawerItem) => {
+    setActive(route);
+    if (item) setDrawerItem(item);
+  }, []);
+
+  const runReplayProbe = useCallback(async (receipt: Receipt | null) => {
+    setReplayStatus("checking");
+    try {
+      const payload = await replayVerifyCurrentEvidence(receipt?.executor_id ?? "");
+      const replayCheck = payload.checks?.replay ?? payload.checks?.causal_chain;
+      setReplayStatus(payload.verdict ?? replayCheck ?? "verified");
+    } catch (err) {
+      setReplayStatus(err instanceof Error ? err.message : "replay unavailable");
+    }
+  }, []);
+
+  const submitCommand = useCallback(async (textOverride?: string, source: CommandSource = "composer") => {
+    const text = (textOverride ?? commandText).trim();
+    if (!text || submitting) return;
+    const command = parseGovernedCommand(text, source, principal);
+    setCurrentCommand(command);
+    setCommandText(text);
+    setActionError(null);
+
+    if (command.mode === "approve") {
+      setActive("policies");
+      return;
+    }
+    if (command.mode === "verify") {
+      setActive("evidence");
+      if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
+      return;
+    }
+    if (command.mode === "replay") {
+      setActive("evidence");
+      if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
+      await runReplayProbe(receipts[0] ?? null);
+      return;
+    }
+    if (command.mode === "inspect") {
+      if (text.includes("sandbox")) {
+        setActive("sandbox");
+      } else if (text.includes("mcp")) {
+        setActive("mcp");
+      } else {
+        setActive("registry");
+      }
+      return;
+    }
+    if (command.mode === "launch") {
+      setActive("launch");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await evaluateIntent({
+        principal,
+        action: command.parsedAction ?? "LLM_INFERENCE",
+        resource: command.parsedResource ?? "unspecified",
+        context: {
+          source: "console.workbench",
+          workspace: bootstrap?.workspace,
+          entered_at: new Date().toISOString(),
+        },
+      });
+      const updated = await loadReceipts(100);
+      setReceipts((current) => mergeReceipts(current, updated));
+      setActive("evidence");
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Intent evaluation failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }, [bootstrap?.workspace, commandText, principal, receipts, runReplayProbe, setReceipts, submitting]);
+
+  const runQuickAction = useCallback((action: QuickAction) => {
+    if (action.id === "evaluate-intent") {
+      setActive("developer");
+      setCommandText(action.command);
+      composerRef.current?.focus();
+      return;
+    }
+    if (action.id === "scan-mcp") {
+      setActive("mcp");
+      return;
+    }
+    if (action.id === "inspect-sandbox") {
+      setActive("sandbox");
+      return;
+    }
+    void submitCommand(action.command, "quick_action");
+  }, [submitCommand]);
+
+  const openSearchResult = (result: SearchResult) => {
+    setActive(result.route);
+    if (result.item) setDrawerItem(result.item);
+  };
+
+  const navigateFromAssistant = useCallback((surface: string) => {
+    const route = FLOW_NAV.find((item) => item.id === surface)?.id;
+    if (route) setActive(route);
+  }, []);
+
+  const selectReceiptFromAssistant = useCallback((receiptId: string) => {
+    const receipt = receipts.find((item) => item.receipt_id === receiptId || item.decision_id === receiptId);
+    if (receipt) {
+      setDrawerItem({ kind: "receipt", receipt });
+      setActive("receipts");
+    }
+  }, [receipts]);
 
   return (
     <HelmAiKernelAgentProvider enabled state={agentState}>
@@ -211,70 +476,170 @@ function ConsoleApp() {
         }
         mobileNav={<MobileNav active={active} onNavigate={(route) => navigate(route)} />}
       >
-        {active === "launch" || active === "apps" ? <LaunchpadFlow surface="launch" /> : null}
-        {active === "runs" ? <LaunchpadFlow surface="runs" initialRunId={initialRoute.runId} /> : null}
-        {active === "policies" ? <LaunchpadFlow surface="policies" /> : null}
-        {active === "mcp" ? <LaunchpadFlow surface="mcp" /> : null}
-        {active === "secrets" ? <LaunchpadFlow surface="secrets" /> : null}
-        {active === "evidence" ? <LaunchpadFlow surface="evidence" /> : null}
-        {active === "receipts" ? <LaunchpadFlow surface="receipts" /> : null}
-        {active === "sandbox" ? <LaunchpadFlow surface="sandbox" /> : null}
-        {active === "registry" ? <LaunchpadFlow surface="registry" /> : null}
-        {active === "developer" || active === "workbench" ? (
-          <WorkbenchFlow
-            snapshot={snapshot}
-            bootstrap={bootstrap}
-            receipts={receipts}
-            capabilities={capabilities}
-            commandText={commandText}
-            principal={principal}
-            submitting={submitting}
-            actionError={actionError}
-            refreshing={refreshing}
-            composerRef={composerRef}
-            onCommandChange={setCommandText}
-            onPrincipalChange={setPrincipal}
-            onSubmit={() => void submitCommand(undefined, "composer")}
-            onQuickAction={runQuickAction}
-            onRefresh={refresh}
-            onOpen={(item) => setDrawerItem(item)}
-            onNavigate={navigate}
-          />
-        ) : null}
-        {active === "work" ? (
-          <WorkFlow tasks={tasks} capabilities={capabilities} onOpen={(item) => setDrawerItem(item)} onNavigate={navigate} />
-        ) : null}
-        {active === "ledger" ? (
-          <LedgerFlow
-            receipts={filteredReceipts}
-            capabilities={capabilities}
-            refreshing={refreshing}
-            onRefresh={refresh}
-            onOpen={(item) => setDrawerItem(item)}
-          />
-        ) : null}
-        {active === "capabilities" ? (
-          <CapabilitiesFlow
-            capabilities={capabilities}
-            loading={capabilitiesLoading}
-            query={query}
-            onOpen={(item) => setDrawerItem(item)}
-            onRefreshAll={refreshAll}
-          />
-        ) : null}
-        {active === "launchpad" ? <LaunchpadFlow surface="launch" /> : null}
-        {active === "settings" ? (
-          <SettingsFlow
-            bootstrap={bootstrap}
-            accessState={accessState}
-            streamState={streamState}
-            snapshot={snapshot}
-            onAuthChanged={authChanged}
-            onOpenDiagnostics={() => setDrawerItem({ kind: "diagnostics", diagnostics: snapshot.diagnostics })}
-          />
-        ) : null}
+              {active === "launch" || active === "apps" ? <LaunchpadFlow surface="launch" /> : null}
+              {active === "runs" ? <LaunchpadFlow surface="runs" initialRunId={initialRoute.runId} /> : null}
+              {active === "policies" ? <LaunchpadFlow surface="policies" /> : null}
+              {active === "mcp" ? <LaunchpadFlow surface="mcp" /> : null}
+              {active === "secrets" ? <LaunchpadFlow surface="secrets" /> : null}
+              {active === "evidence" ? <LaunchpadFlow surface="evidence" /> : null}
+              {active === "receipts" ? <LaunchpadFlow surface="receipts" /> : null}
+              {active === "sandbox" ? <LaunchpadFlow surface="sandbox" /> : null}
+              {active === "registry" ? <LaunchpadFlow surface="registry" /> : null}
+              {active === "developer" || active === "workbench" ? (
+                <WorkbenchFlow
+                  snapshot={snapshot}
+                  bootstrap={bootstrap}
+                  receipts={receipts}
+                  capabilities={capabilities}
+                  commandText={commandText}
+                  principal={principal}
+                  submitting={submitting}
+                  actionError={actionError}
+                  refreshing={refreshing}
+                  composerRef={composerRef}
+                  onCommandChange={setCommandText}
+                  onPrincipalChange={setPrincipal}
+                  onSubmit={() => void submitCommand(undefined, "composer")}
+                  onQuickAction={runQuickAction}
+                  onRefresh={refresh}
+                  onOpen={(item) => setDrawerItem(item)}
+                  onNavigate={navigate}
+                />
+              ) : null}
+              {active === "work" ? (
+                <WorkFlow tasks={tasks} capabilities={capabilities} onOpen={(item) => setDrawerItem(item)} onNavigate={navigate} />
+              ) : null}
+              {active === "ledger" ? (
+                <LedgerFlow
+                  receipts={filteredReceipts}
+                  capabilities={capabilities}
+                  refreshing={refreshing}
+                  onRefresh={refresh}
+                  onOpen={(item) => setDrawerItem(item)}
+                />
+              ) : null}
+              {active === "capabilities" ? (
+                <CapabilitiesFlow
+                  capabilities={capabilities}
+                  loading={capabilitiesLoading}
+                  query={query}
+                  onOpen={(item) => setDrawerItem(item)}
+                  onRefreshAll={refreshAll}
+                />
+              ) : null}
+              {active === "launchpad" ? <LaunchpadFlow surface="launch" /> : null}
+              {active === "settings" ? (
+                <SettingsFlow
+                  bootstrap={bootstrap}
+                  accessState={accessState}
+                  streamState={streamState}
+                  snapshot={snapshot}
+                  onAuthChanged={authChanged}
+                  onOpenDiagnostics={() => setDrawerItem({ kind: "diagnostics", diagnostics: snapshot.diagnostics })}
+                />
+              ) : null}
       </WorkbenchShell>
     </HelmAiKernelAgentProvider>
+  );
+}
+
+function buildSearchResults(
+  query: string,
+  tasks: readonly OperatorTask[],
+  capabilities: readonly Capability[],
+  receipts: readonly Receipt[],
+): readonly SearchResult[] {
+  const term = query.trim().toLowerCase();
+  if (term.length < 2) return [];
+  const results: SearchResult[] = [];
+  for (const task of tasks) {
+    const text = `${task.title} ${task.summary} ${task.source} ${task.state}`.toLowerCase();
+    if (text.includes(term)) {
+      results.push({ id: `task-${task.id}`, label: task.title, detail: `${task.state} · ${task.source}`, route: task.route, item: { kind: "task", task } });
+    }
+  }
+  for (const capability of capabilities) {
+    const text = `${capability.label} ${capability.group} ${capability.sourceEndpoint} ${capability.status}`.toLowerCase();
+    if (text.includes(term)) {
+      results.push({
+        id: `capability-${capability.id}`,
+        label: capability.label,
+        detail: `${capability.group} · ${capability.sourceEndpoint}`,
+        route: routeForCapability(capability.id),
+        item: { kind: "capability", capability },
+      });
+    }
+    for (const action of capability.actions) {
+      const actionText = `${action.label} ${action.endpoint} ${action.risk}`.toLowerCase();
+      if (actionText.includes(term)) {
+        results.push({
+          id: `action-${action.id}`,
+          label: action.label,
+          detail: `${capability.label} · ${action.method}`,
+          route: routeForCapability(capability.id),
+          item: { kind: "action", capability, action },
+        });
+      }
+    }
+  }
+  for (const receipt of receipts.slice(0, 60)) {
+    const text = `${receipt.receipt_id} ${receipt.status} ${receiptAction(receipt)} ${receiptResource(receipt)} ${receipt.executor_id}`.toLowerCase();
+    if (text.includes(term)) {
+      results.push({
+        id: `receipt-${receiptKey(receipt)}`,
+        label: shortId(receipt.receipt_id),
+        detail: `${receiptAction(receipt)} · ${normalizeState(receipt.status, "pending")}`,
+        route: "ledger",
+        item: { kind: "receipt", receipt },
+      });
+    }
+  }
+  return results.slice(0, 10);
+}
+
+function Navigation({
+  active,
+  tasks,
+  onNavigate,
+}: {
+  readonly active: FlowRoute;
+  readonly tasks: readonly OperatorTask[];
+  readonly onNavigate: (route: FlowRoute) => void;
+}) {
+  const workCount = tasks.filter((task) => task.route === "work" || task.kind === "approval" || task.kind === "connector" || task.kind === "sandbox").length;
+  const ledgerCount = tasks.filter((task) => task.route === "ledger").length;
+  const counts: Partial<Record<FlowRoute, number>> = { work: workCount, ledger: ledgerCount };
+  return (
+    <WorkbenchRail brand="HELM" mark="H" onBrandClick={() => onNavigate("workbench")}>
+      {FLOW_NAV.map((item) => (
+        <WorkbenchRailLink
+          key={item.id}
+          active={active === item.id}
+          label={item.label}
+          count={counts[item.id]}
+          icon={item.icon}
+          onClick={() => onNavigate(item.id)}
+        />
+      ))}
+    </WorkbenchRail>
+  );
+}
+
+function MobileNav({ active, onNavigate }: { readonly active: FlowRoute; readonly onNavigate: (route: FlowRoute) => void }) {
+  return (
+    <WorkbenchMobileNav>
+      {FLOW_NAV.map((item) => {
+        return (
+          <WorkbenchMobileNavButton
+            key={item.id}
+            active={active === item.id}
+            label={item.label}
+            icon={item.icon}
+            onClick={() => onNavigate(item.id)}
+          />
+        );
+      })}
+    </WorkbenchMobileNav>
   );
 }
 
@@ -315,32 +680,24 @@ function ConsoleHeader({
             else if (query.trim()) onRunCommand(query);
           }}
           results={results.length > 0 ? (
-            <div className="command-menu" role="listbox" aria-label="Search results">
-              {results.map((result) => (
-                <button key={result.id} type="button" role="option" onClick={() => onOpenResult(result)}>
-                  <span>{result.label}</span>
-                  <small>{result.detail}</small>
-                </button>
-              ))}
-            </div>
+          <div className="command-menu" role="listbox" aria-label="Search results">
+            {results.map((result) => (
+              <button key={result.id} type="button" role="option" onClick={() => onOpenResult(result)}>
+                <span>{result.label}</span>
+                <small>{result.detail}</small>
+              </button>
+            ))}
+          </div>
           ) : null}
         />
       }
       facts={
         <>
-          <StatusPill label="tenant" value={getConsoleTenantID()} />
-          <StatusPill
-            label="access"
-            value={accessState === "authorized" ? "ready" : accessState}
-            tone={accessState === "authorized" ? "good" : "warn"}
-          />
-          <StatusPill
-            label="stream"
-            value={streamState}
-            tone={streamState === "live" ? "good" : "warn"}
-          />
-          <StatusPill label="env" value={bootstrap?.workspace.environment ?? "pending"} />
-          {assistant}
+        <StatusPill label="tenant" value={getConsoleTenantID()} />
+        <StatusPill label="access" value={accessState === "authorized" ? "ready" : accessState} tone={accessState === "authorized" ? "good" : "warn"} />
+        <StatusPill label="stream" value={streamState} tone={streamState === "live" ? "good" : "warn"} />
+        <StatusPill label="env" value={bootstrap?.workspace.environment ?? "pending"} />
+        {assistant}
         </>
       }
     />
@@ -386,36 +743,36 @@ function WorkbenchFlow({
 }) {
   return (
     <div className="flow-page workbench-page">
-      <UniversalComposer
-        snapshot={snapshot}
-        commandText={commandText}
+      <WorkbenchComposer
+        title="Governed agent cockpit"
+        body="Start with one intent. HELM evaluates policy, records proof, and exposes approvals, replay, evidence, and runtime capabilities only when they matter."
         principal={principal}
-        submitting={submitting}
-        actionError={actionError}
-        refreshing={refreshing}
-        composerRef={composerRef}
-        onCommandChange={onCommandChange}
+        command={commandText}
+        busy={submitting}
+        commandRef={composerRef}
+        error={actionError ? <InlineError message={actionError} /> : null}
         onPrincipalChange={onPrincipalChange}
+        onCommandChange={onCommandChange}
         onSubmit={onSubmit}
-        onQuickAction={onQuickAction}
-        onRefresh={onRefresh}
+        secondaryAction={<Button variant="secondary" disabled={refreshing} onClick={onRefresh}>{refreshing ? "Refreshing" : "Refresh"}</Button>}
       />
+
+      <WorkbenchQuickActions>
+        {snapshot.quickActions.map((action) => (
+          <WorkbenchQuickAction key={action.id} label={action.label} hint={action.hint} onClick={() => onQuickAction(action)} />
+        ))}
+      </WorkbenchQuickActions>
 
       <section className="health-strip" aria-label="Console health">
         <WorkbenchHealthSummary
           state={snapshot.healthSummary.state}
           label={snapshot.healthSummary.label}
           message={snapshot.healthSummary.message}
-          action={
-            snapshot.diagnostics.length > 0 ? (
-              <Button
-                variant="secondary"
-                onClick={() => onOpen({ kind: "diagnostics", diagnostics: snapshot.diagnostics })}
-              >
-                Open diagnostics
-              </Button>
-            ) : null
-          }
+          action={snapshot.diagnostics.length > 0 ? (
+            <Button variant="secondary" onClick={() => onOpen({ kind: "diagnostics", diagnostics: snapshot.diagnostics })}>
+              Open diagnostics
+            </Button>
+          ) : null}
         />
         <StatusPill label="receipts" value={String(bootstrap?.counts.receipts ?? receipts.length)} />
         <StatusPill label="MCP tools" value={String(bootstrap?.counts.mcp_tools ?? 0)} />
@@ -469,25 +826,13 @@ function WorkFlow({
   readonly onOpen: (item: DrawerItem) => void;
   readonly onNavigate: (route: FlowRoute, item?: DrawerItem) => void;
 }) {
-  const workTasks = tasks.filter(
-    (task) =>
-      task.route === "work" ||
-      task.kind === "approval" ||
-      task.kind === "connector" ||
-      task.kind === "sandbox"
-  );
+  const workTasks = tasks.filter((task) => task.route === "work" || task.kind === "approval" || task.kind === "connector" || task.kind === "sandbox");
   const workCapabilities = capabilities.filter((capability) => WORK_CAPABILITY_IDS.has(capability.id));
   return (
     <div className="flow-page">
-      <FlowHeader
-        title="Work"
-        body="Approvals, escalations, MCP quarantine, sandbox grants, authz checks, and budget ceilings that require operator attention."
-      />
+      <FlowHeader title="Work" body="Approvals, escalations, MCP quarantine, sandbox grants, authz checks, and budget ceilings that require operator attention." />
       <section className="list-section">
-        <SectionHead
-          title="Actionable Work"
-          meta={`${workTasks.length} task${workTasks.length === 1 ? "" : "s"}`}
-        />
+        <SectionHead title="Actionable Work" meta={`${workTasks.length} task${workTasks.length === 1 ? "" : "s"}`} />
         <TaskRows tasks={workTasks} onOpen={(task) => onOpen({ kind: "task", task })} onNavigate={onNavigate} />
       </section>
       <section className="list-section">
@@ -515,14 +860,8 @@ function LedgerFlow({
   const ledgerCapabilities = capabilities.filter((capability) => LEDGER_CAPABILITY_IDS.has(capability.id));
   const visibleReceipts = receipts.filter((receipt) => {
     if (filter === "all") return true;
-    if (filter === "verified") {
-      const explicitState = receipt.metadata?.verification_status ?? receipt.metadata?.verification_state;
-      return String(explicitState ?? "").toLowerCase() === "pass" || String(explicitState ?? "").toLowerCase() === "passed" || String(explicitState ?? "").toLowerCase() === "verified";
-    }
-    if (filter === "failed") {
-      const explicitState = receipt.metadata?.verification_status ?? receipt.metadata?.verification_state;
-      return String(explicitState ?? "").toLowerCase() === "fail" || String(explicitState ?? "").toLowerCase() === "failed" || normalizeState(receipt.status).includes("fail");
-    }
+    if (filter === "verified") return verificationState(receipt) === "verified";
+    if (filter === "failed") return verificationState(receipt) === "failed" || normalizeState(receipt.status).includes("fail");
     return normalizeState(receipt.status).includes(filter);
   });
   return (
@@ -530,16 +869,7 @@ function LedgerFlow({
       <FlowHeader
         title="Ledger"
         body="Receipts, replay, evidence export, conformance reports, vectors, and negative gates."
-        action={
-          <button
-            type="button"
-            className="secondary-action"
-            disabled={refreshing}
-            onClick={onRefresh}
-          >
-            {refreshing ? "Refreshing" : "Refresh receipts"}
-          </button>
-        }
+        action={<button type="button" className="secondary-action" disabled={refreshing} onClick={onRefresh}>{refreshing ? "Refreshing" : "Refresh receipts"}</button>}
       />
       <section className="list-section">
         <SectionHead title="Receipts" meta={`${visibleReceipts.length} rows`} />
@@ -575,11 +905,7 @@ function CapabilitiesFlow({
   const term = query.trim().toLowerCase();
   const visible = capabilities.filter((capability) => {
     const groupMatch = group === "All" || capability.group === group;
-    const queryMatch =
-      !term ||
-      `${capability.label} ${capability.group} ${capability.sourceEndpoint}`
-        .toLowerCase()
-        .includes(term);
+    const queryMatch = !term || `${capability.label} ${capability.group} ${capability.sourceEndpoint}`.toLowerCase().includes(term);
     return groupMatch && queryMatch;
   });
   return (
@@ -587,22 +913,9 @@ function CapabilitiesFlow({
       <FlowHeader
         title="Capabilities"
         body="A simple directory for MCP, sandbox, authz, budgets, boundary, telemetry, coexistence, and developer contracts."
-        action={
-          <button
-            type="button"
-            className="secondary-action"
-            disabled={loading}
-            onClick={onRefreshAll}
-          >
-            {loading ? "Loading" : "Refresh all"}
-          </button>
-        }
+        action={<button type="button" className="secondary-action" disabled={loading} onClick={onRefreshAll}>{loading ? "Loading" : "Refresh all"}</button>}
       />
-      <Segmented
-        value={group}
-        options={CAPABILITY_GROUPS}
-        onChange={(value) => setGroup(value as "All" | CapabilityGroup)}
-      />
+      <Segmented value={group} options={CAPABILITY_GROUPS} onChange={(value) => setGroup(value as "All" | CapabilityGroup)} />
       <section className="integration-grid" aria-label="Capability directory">
         {visible.map((capability) => (
           <WorkbenchIntegrationCard
@@ -686,28 +999,13 @@ function DeveloperSandboxLab() {
             onValueChange={(value) => setDemoAction(value as typeof demoAction)}
           />
         </FormField>
-        <button
-          type="button"
-          className="secondary-action"
-          disabled={busy !== null}
-          onClick={() => void runDemoScenario()}
-        >
+        <button type="button" className="secondary-action" disabled={busy !== null} onClick={() => void runDemoScenario()}>
           {busy === "run" ? "Running" : "Run sample"}
         </button>
-        <button
-          type="button"
-          className="secondary-action"
-          disabled={!demoResult || busy !== null}
-          onClick={() => void verifyDemoScenario()}
-        >
+        <button type="button" className="secondary-action" disabled={!demoResult || busy !== null} onClick={() => void verifyDemoScenario()}>
           Verify
         </button>
-        <button
-          type="button"
-          className="secondary-action"
-          disabled={!demoResult || busy !== null}
-          onClick={() => void tamperDemoScenario()}
-        >
+        <button type="button" className="secondary-action" disabled={!demoResult || busy !== null} onClick={() => void tamperDemoScenario()}>
           Tamper
         </button>
       </div>
@@ -727,57 +1025,20 @@ function LaunchpadFlow({
   surface,
   initialRunId = "",
 }: {
-  readonly surface:
-    | "launch"
-    | "apps"
-    | "runs"
-    | "policies"
-    | "mcp"
-    | "secrets"
-    | "evidence"
-    | "sandbox"
-    | "receipts"
-    | "registry";
+  readonly surface: "launch" | "apps" | "runs" | "policies" | "mcp" | "secrets" | "evidence" | "sandbox" | "receipts" | "registry";
   readonly initialRunId?: string;
 }) {
   const titles = {
-    launch: [
-      "Launch",
-      "Default proof workbench: choose any AppSpec, compile gates, and inspect the run timeline.",
-    ],
-    apps: [
-      "Launch",
-      "Select any agentic app and launch only through HELM's fail-closed execution boundary.",
-    ],
-    runs: [
-      "Runs",
-      "Receipt-backed runtime instances, launch decisions, healthchecks, EvidencePacks, and teardown.",
-    ],
-    policies: [
-      "Policies",
-      "Policy workbench with plain English, structured grants, and raw canonical references.",
-    ],
-    mcp: [
-      "MCP Firewall",
-      "Quarantined MCP servers and tools stay blocked until receipt-backed approval.",
-    ],
-    secrets: [
-      "Secrets",
-      "Secret grants show presence, scope, grant hash, and launch impact without raw values.",
-    ],
-    evidence: [
-      "Evidence",
-      "EvidencePacks, offline verification commands, and proof status for local verification.",
-    ],
-    sandbox: [
-      "Sandbox",
-      "Runtime filesystem, env, network, resources, and grant hash as execution-boundary truth.",
-    ],
+    launch: ["Launch", "Default proof workbench: choose any AppSpec, compile gates, and inspect the run timeline."],
+    apps: ["Launch", "Select any agentic app and launch only through HELM's fail-closed execution boundary."],
+    runs: ["Runs", "Receipt-backed runtime instances, launch decisions, healthchecks, EvidencePacks, and teardown."],
+    policies: ["Policies", "Policy workbench with plain English, structured grants, and raw canonical references."],
+    mcp: ["MCP Firewall", "Quarantined MCP servers and tools stay blocked until receipt-backed approval."],
+    secrets: ["Secrets", "Secret grants show presence, scope, grant hash, and launch impact without raw values."],
+    evidence: ["Evidence", "EvidencePacks, offline verification commands, and proof status for local verification."],
+    sandbox: ["Sandbox", "Runtime filesystem, env, network, resources, and grant hash as execution-boundary truth."],
     receipts: ["Receipts", "Signed receipt refs for run state. Missing receipt means unproven."],
-    registry: [
-      "Registry",
-      "Raw registry, substrates, and compatibility matrix that drive every Console screen.",
-    ],
+    registry: ["Registry", "Raw registry, substrates, and compatibility matrix that drive every Console screen."],
   } as const;
   const [title, body] = titles[surface];
   return (
@@ -807,10 +1068,7 @@ function SettingsFlow({
   const [tenant, setTenant] = useState(getConsoleTenantID());
   return (
     <div className="flow-page">
-      <FlowHeader
-        title="Settings"
-        body="Session credentials, tenant routing, runtime health, and protected API recovery."
-      />
+      <FlowHeader title="Settings" body="Session credentials, tenant routing, runtime health, and protected API recovery." />
       <section className="settings-layout">
         <form
           className="settings-panel"
@@ -831,9 +1089,7 @@ function SettingsFlow({
             />
           </FormField>
           <div className="button-row">
-            <button type="submit" className="primary-action" disabled={adminKey.trim() === ""}>
-              Use key
-            </button>
+            <button type="submit" className="primary-action" disabled={adminKey.trim() === ""}>Use key</button>
             <button
               type="button"
               className="secondary-action"
@@ -859,9 +1115,7 @@ function SettingsFlow({
           <FormField label="tenant id">
             <TextInput value={tenant} onValueChange={setTenant} />
           </FormField>
-          <button type="submit" className="primary-action">
-            Save tenant
-          </button>
+          <button type="submit" className="primary-action">Save tenant</button>
         </form>
       </section>
       <section className="list-section">
@@ -871,16 +1125,359 @@ function SettingsFlow({
           <StatusPill label="environment" value={bootstrap?.workspace.environment ?? "pending"} />
           <StatusPill label="kernel" value={bootstrap?.health.kernel ?? "pending"} />
           <StatusPill label="policy" value={bootstrap?.health.policy ?? "pending"} />
-          <StatusPill
-            label="diagnostics"
-            value={String(snapshot.diagnostics.length)}
-            tone={snapshot.diagnostics.length ? "warn" : "good"}
-          />
-          <button type="button" className="secondary-action" onClick={onOpenDiagnostics}>
-            Open diagnostics
-          </button>
+          <StatusPill label="diagnostics" value={String(snapshot.diagnostics.length)} tone={snapshot.diagnostics.length ? "warn" : "good"} />
+          <button type="button" className="secondary-action" onClick={onOpenDiagnostics}>Open diagnostics</button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function DetailDrawer({
+  item,
+  fallbackReceipt,
+  replayStatus,
+  onClose,
+  onNavigate,
+  onOpen,
+  onReplay,
+  onRefresh,
+}: {
+  readonly item: DrawerItem | null;
+  readonly fallbackReceipt: Receipt | null;
+  readonly replayStatus: string;
+  readonly onClose: () => void;
+  readonly onNavigate: (route: FlowRoute, item?: DrawerItem) => void;
+  readonly onOpen: (item: DrawerItem) => void;
+  readonly onReplay: () => void;
+  readonly onRefresh: (id: string) => Promise<void>;
+}) {
+  const visibleItem = item ?? (fallbackReceipt ? { kind: "receipt" as const, receipt: fallbackReceipt } : null);
+  return (
+    <WorkbenchDrawerFrame open={Boolean(item)} title="Context" onClose={onClose}>
+      {!visibleItem ? (
+        <EmptyLine title="No selection" body="Select work, proof, capability, or diagnostics to inspect details." />
+      ) : visibleItem.kind === "task" ? (
+        <TaskDetail task={visibleItem.task} onNavigate={onNavigate} />
+      ) : visibleItem.kind === "receipt" ? (
+        <ReceiptDetail receipt={visibleItem.receipt} replayStatus={replayStatus} onReplay={onReplay} />
+      ) : visibleItem.kind === "capability" ? (
+        <CapabilityDetail capability={visibleItem.capability} onOpen={onOpen} />
+      ) : visibleItem.kind === "record" ? (
+        <RecordDetail capability={visibleItem.capability} record={visibleItem.record} onOpen={onOpen} />
+      ) : visibleItem.kind === "action" ? (
+        <ActionSheet capability={visibleItem.capability} action={visibleItem.action} onRefresh={onRefresh} />
+      ) : visibleItem.kind === "diagnostics" ? (
+        <DiagnosticsDetail diagnostics={visibleItem.diagnostics} onNavigate={onNavigate} />
+      ) : (
+        <TimelineDetail step={visibleItem.step} />
+      )}
+    </WorkbenchDrawerFrame>
+  );
+}
+
+function TaskDetail({ task, onNavigate }: { readonly task: OperatorTask; readonly onNavigate: (route: FlowRoute, item?: DrawerItem) => void }) {
+  return (
+    <div className="drawer-stack">
+      <StateMarker state={task.state} severity={task.severity} />
+      <h2>{task.title}</h2>
+      <p>{task.summary}</p>
+      <dl className="fact-grid">
+        <Fact label="source" value={task.source} />
+        <Fact label="state" value={task.state} />
+        <Fact label="receipts" value={task.relatedReceiptIds.length ? task.relatedReceiptIds.map(shortId).join(", ") : "none"} />
+      </dl>
+      <button type="button" className="primary-action" onClick={() => onNavigate(task.route)}>
+        {task.actionLabel}
+      </button>
+    </div>
+  );
+}
+
+function ReceiptDetail({ receipt, replayStatus, onReplay }: { readonly receipt: Receipt; readonly replayStatus: string; readonly onReplay: () => void }) {
+  return (
+    <div className="drawer-stack">
+      <div className="drawer-title-row">
+        <VerdictBadge state={normalizeVerdict(receipt.status)} />
+        <VerificationStatus state={verificationState(receipt)} />
+      </div>
+      <h2>{shortId(receipt.receipt_id)}</h2>
+      <p>{receiptAction(receipt)} · {receiptResource(receipt)}</p>
+      <WorkbenchProofSection title="Lifecycle">
+        <div className="proof-chain" aria-label="Receipt proof chain">
+          {["intent", "policy", "decision", "receipt", "evidence"].map((node) => (
+            <span key={node}>{node}</span>
+          ))}
+        </div>
+      </WorkbenchProofSection>
+      <WorkbenchProofSection title="Proof facts">
+        <dl className="fact-grid">
+          <Fact label="executor" value={receipt.executor_id ?? "anonymous"} />
+          <Fact label="signature" value={signatureSummary(receipt)} />
+          <Fact label="blob hash" value={receipt.blob_hash ? <HashText value={receipt.blob_hash} /> : "not emitted"} />
+          <Fact label="output hash" value={receipt.output_hash ? <HashText value={receipt.output_hash} kind="policy" /> : "not emitted"} />
+          <Fact label="replay" value={replayStatus} />
+        </dl>
+      </WorkbenchProofSection>
+      <div className="button-row">
+        <button type="button" className="primary-action" onClick={onReplay}>Replay</button>
+        <span className="secondary-link secondary-link--static">Evidence export: Ledger action</span>
+      </div>
+      <RawJson title="Raw receipt" value={receipt} />
+    </div>
+  );
+}
+
+function CapabilityDetail({ capability, onOpen }: { readonly capability: Capability; readonly onOpen: (item: DrawerItem) => void }) {
+  return (
+    <div className="drawer-stack">
+      <StateMarker state={capability.status} severity={capability.status === "unavailable" || capability.status === "unauthorized" ? "medium" : "low"} />
+      <h2>{capability.label}</h2>
+      <p>{capability.sourceEndpoint}</p>
+      {capability.readState.message ? <InlineNotice message={capability.readState.message} /> : null}
+      <dl className="fact-grid">
+        <Fact label="group" value={capability.group} />
+        <Fact label="records" value={String(capability.records.length)} />
+        <Fact label="actions" value={String(capability.actions.length)} />
+      </dl>
+      <div className="drawer-actions">
+        {capability.actions.length === 0 ? <InlineNotice message={capability.unsupportedReason ?? "Unsupported by current OSS API."} /> : null}
+        {capability.actions.map((action) => (
+          <button
+            key={action.id}
+            type="button"
+            disabled={Boolean(action.disabledReason)}
+            title={action.disabledReason}
+            onClick={() => onOpen({ kind: "action", capability, action })}
+          >
+            <span>{action.label}</span>
+            <small>{action.method}</small>
+          </button>
+        ))}
+      </div>
+      {capability.id === "diagnostics" ? <RuntimeDiagnostics raw={capability.raw} /> : null}
+      <RecordMiniList capability={capability} onOpen={onOpen} />
+      <RawJson title="Raw response" value={capability.raw ?? capability.readState} />
+    </div>
+  );
+}
+
+function RuntimeDiagnostics({ raw }: { readonly raw: unknown }) {
+  const stores = diagnosticsStores(raw);
+  const routes = diagnosticsRoutes(raw);
+  if (stores.length === 0 && routes.length === 0) return null;
+  return (
+    <>
+      {stores.length ? (
+        <WorkbenchProofSection title="Runtime stores">
+          <WorkbenchStoreHealthList stores={stores} />
+        </WorkbenchProofSection>
+      ) : null}
+      {routes.length ? (
+        <WorkbenchProofSection title="Route coverage">
+          <WorkbenchRouteCoverageTable routes={routes} />
+        </WorkbenchProofSection>
+      ) : null}
+    </>
+  );
+}
+
+function diagnosticsStores(raw: unknown) {
+  if (!isRecord(raw) || !Array.isArray(raw.stores)) return [];
+  return raw.stores.filter(isRecord).map((store, index) => ({
+    id: stringValue(store.id, `store-${index}`),
+    label: stringValue(store.label, stringValue(store.id, "Store")),
+    status: stringValue(store.status, "unknown"),
+    backend: stringValue(store.backend, "unknown"),
+    source: optionalString(store.source),
+    path: optionalString(store.path),
+    detail: optionalString(store.detail),
+  }));
+}
+
+function diagnosticsRoutes(raw: unknown) {
+  if (!isRecord(raw) || !Array.isArray(raw.routes)) return [];
+  return raw.routes.filter(isRecord).map((route) => ({
+    method: stringValue(route.method, "GET"),
+    path: stringValue(route.path, "/"),
+    auth: stringValue(route.auth, "unknown"),
+    contract_status: stringValue(route.contract_status, "unknown"),
+    group: stringValue(route.group, "Developer"),
+    ui_coverage: stringValue(route.ui_coverage, "missing"),
+    unsupported_reason: optionalString(route.unsupported_reason),
+  }));
+}
+
+function stringValue(value: unknown, fallback: string): string {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function optionalString(value: unknown): string | undefined {
+  const text = String(value ?? "").trim();
+  return text || undefined;
+}
+
+function RecordDetail({ capability, record, onOpen }: { readonly capability: Capability; readonly record: RecordSummary; readonly onOpen: (item: DrawerItem) => void }) {
+  return (
+    <div className="drawer-stack">
+      <StateMarker state={record.state} severity="low" />
+      <h2>{record.label}</h2>
+      <p>{record.source}</p>
+      <dl className="fact-grid">
+        <Fact label="state" value={record.state} />
+        <Fact label="receipts" value={record.receiptRefs.length ? record.receiptRefs.map(shortId).join(", ") : "none"} />
+        {record.facts.map((fact) => {
+          const [label, ...rest] = fact.split(": ");
+          return <Fact key={fact} label={label} value={rest.join(": ")} />;
+        })}
+      </dl>
+      <div className="drawer-actions">
+        {capability.actions.slice(0, 4).map((action) => (
+          <button key={action.id} type="button" onClick={() => onOpen({ kind: "action", capability, action })}>
+            <span>{action.label}</span>
+            <small>{action.method}</small>
+          </button>
+        ))}
+      </div>
+      <RawJson title="Raw record" value={record.raw} />
+    </div>
+  );
+}
+
+function ActionSheet({ capability, action, onRefresh }: { readonly capability: Capability; readonly action: WorkbenchAction; readonly onRefresh: (id: string) => Promise<void> }) {
+  const [values, setValues] = useState<AdminActionValues>(() => {
+    const defaults: Record<string, string> = {};
+    for (const field of action.fields) defaults[field.id] = field.defaultValue ?? "";
+    return defaults;
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<unknown>(null);
+  const [humanConfirmed, setHumanConfirmed] = useState(false);
+  const sideEffectful = action.method.toUpperCase() !== "GET";
+  const cliEquivalent = cliForAdminAction(action);
+  const receiptRefs = result ? receiptRefsFromUnknown(result) : [];
+
+  const runAction = async () => {
+    if (sideEffectful && !humanConfirmed) {
+      setError("A human operator confirmation is required before this side effect can run.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await action.run(values);
+      setResult(next);
+      await Promise.all(action.refreshTargets.map((target) => onRefresh(target)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      className="drawer-stack action-sheet"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void runAction();
+      }}
+    >
+      <StateMarker state={action.method} severity="medium" />
+      <WorkbenchActionSheetFrame title={action.label} method={action.method} endpoint={action.endpoint} risk={action.risk}>
+        <p>{capability.label}</p>
+        <section className="human-action-boundary" aria-label="Human-only action boundary">
+          <strong>{sideEffectful ? "Human-only side effect" : "Read-only browser action"}</strong>
+          <p>HELM AI can explain, draft, summarize, and simulate. HELM AI cannot approve, weaken, bypass, launch, inject secrets, or delete evidence.</p>
+          <dl className="fact-grid">
+            <Fact label="permission" value={`${action.method} ${action.endpoint}`} />
+            <Fact label="CLI equivalent" value={cliEquivalent} />
+            <Fact label="expected receipt" value={sideEffectful ? "required after successful mutation" : "not required for read-only inspection"} />
+          </dl>
+          {sideEffectful ? (
+            <label className="human-confirm-check">
+              <input type="checkbox" checked={humanConfirmed} onChange={(event) => setHumanConfirmed(event.target.checked)} />
+              <span>I am the human operator authorizing this Console side effect.</span>
+            </label>
+          ) : null}
+        </section>
+        {action.disabledReason ? <InlineNotice message={action.disabledReason} /> : null}
+        {action.fields.length === 0 ? <InlineNotice message="This action sends no request body fields." /> : null}
+        {action.fields.map((field) => (
+          <label key={field.id}>
+            <span>{field.label}{field.required ? " *" : ""}</span>
+            {field.kind === "textarea" ? (
+              <textarea
+                value={values[field.id] ?? ""}
+                placeholder={field.placeholder}
+                required={field.required}
+                onChange={(event) => setValues((current) => ({ ...current, [field.id]: event.target.value }))}
+              />
+            ) : field.kind === "select" ? (
+              <select
+                value={values[field.id] ?? ""}
+                required={field.required}
+                onChange={(event) => setValues((current) => ({ ...current, [field.id]: event.target.value }))}
+              >
+                <option value="">Select...</option>
+                {(field.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            ) : (
+              <input
+                value={values[field.id] ?? ""}
+                placeholder={field.placeholder}
+                required={field.required}
+                onChange={(event) => setValues((current) => ({ ...current, [field.id]: event.target.value }))}
+              />
+            )}
+          </label>
+        ))}
+        {error ? <InlineError message={error} /> : null}
+        <button type="submit" className="primary-action" disabled={busy || Boolean(action.disabledReason) || (sideEffectful && !humanConfirmed)}>
+          {busy ? "Running" : `Run ${action.label}`}
+        </button>
+        {result ? (
+          <>
+            <dl className="fact-grid">
+              <Fact label="receipt postcondition" value={receiptRefs.length ? receiptRefs.map(shortId).join(", ") : "unproven"} />
+            </dl>
+            <RawJson title="Action result" value={result} />
+          </>
+        ) : null}
+      </WorkbenchActionSheetFrame>
+    </form>
+  );
+}
+
+function DiagnosticsDetail({ diagnostics, onNavigate }: { readonly diagnostics: readonly WorkbenchDiagnostic[]; readonly onNavigate: (route: FlowRoute) => void }) {
+  return (
+    <div className="drawer-stack">
+      <StateMarker state={`${diagnostics.length} diagnostics`} severity={diagnostics.length ? "medium" : "low"} />
+      <h2>Diagnostics</h2>
+      <p>Fail-closed API states are condensed here so the workbench stays focused.</p>
+      {diagnostics.length === 0 ? <EmptyLine title="No diagnostics" body="No unavailable protected route is currently visible." /> : null}
+      <div className="record-list">
+        {diagnostics.map((item) => (
+          <WorkbenchRecordRow key={item.id} title={item.label} detail={item.message} meta={item.source} onClick={() => onNavigate(item.route)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TimelineDetail({ step }: { readonly step: TaskTimelineStep }) {
+  return (
+    <div className="drawer-stack">
+      <StateMarker state={step.state} severity={step.state === "failed" || step.state === "blocked" ? "high" : step.state === "running" ? "medium" : "low"} />
+      <h2>{step.label}</h2>
+      <p>{step.summary}</p>
+      <dl className="fact-grid">
+        <Fact label="source" value={step.sourceEndpoint ?? "frontend view model"} />
+        <Fact label="receipts" value={step.receiptRefs.length ? step.receiptRefs.map(shortId).join(", ") : "none"} />
+        <Fact label="artifacts" value={step.artifactRefs.length ? step.artifactRefs.map(shortId).join(", ") : "none"} />
+      </dl>
     </div>
   );
 }
@@ -894,14 +1491,7 @@ function TaskRows({
   readonly onOpen: (task: OperatorTask) => void;
   readonly onNavigate: (route: FlowRoute, item?: DrawerItem) => void;
 }) {
-  if (tasks.length === 0) {
-    return (
-      <EmptyLine
-        title="No operator work"
-        body="Approvals, quarantines, denied receipts, and blocked grants will appear here from live API state."
-      />
-    );
-  }
+  if (tasks.length === 0) return <EmptyLine title="No operator work" body="Approvals, quarantines, denied receipts, and blocked grants will appear here from live API state." />;
   return (
     <div className="task-list">
       {tasks.map((task) => (
@@ -913,11 +1503,7 @@ function TaskRows({
               <small>{task.summary}</small>
             </span>
           </button>
-          <button
-            type="button"
-            className="row-action"
-            onClick={() => onNavigate(task.route, { kind: "task", task })}
-          >
+          <button type="button" className="row-action" onClick={() => onNavigate(task.route, { kind: "task", task })}>
             {task.actionLabel}
           </button>
         </article>
@@ -926,21 +1512,8 @@ function TaskRows({
   );
 }
 
-function CapabilityRows({
-  capabilities,
-  onOpen,
-}: {
-  readonly capabilities: readonly Capability[];
-  readonly onOpen: (item: DrawerItem) => void;
-}) {
-  if (capabilities.length === 0) {
-    return (
-      <EmptyLine
-        title="No capabilities"
-        body="No matching API-backed capability is currently registered."
-      />
-    );
-  }
+function CapabilityRows({ capabilities, onOpen }: { readonly capabilities: readonly Capability[]; readonly onOpen: (item: DrawerItem) => void }) {
+  if (capabilities.length === 0) return <EmptyLine title="No capabilities" body="No matching API-backed capability is currently registered." />;
   return (
     <div className="record-list">
       {capabilities.map((capability) => (
@@ -956,30 +1529,12 @@ function CapabilityRows({
   );
 }
 
-function ReceiptRows({
-  receipts,
-  onOpen,
-}: {
-  readonly receipts: readonly Receipt[];
-  readonly onOpen: (receipt: Receipt) => void;
-}) {
-  if (receipts.length === 0) {
-    return (
-      <EmptyLine
-        title="No receipts"
-        body="Evaluate a governed intent or connect a runtime to start the ledger."
-      />
-    );
-  }
+function ReceiptRows({ receipts, onOpen }: { readonly receipts: readonly Receipt[]; readonly onOpen: (receipt: Receipt) => void }) {
+  if (receipts.length === 0) return <EmptyLine title="No receipts" body="Evaluate a governed intent or connect a runtime to start the ledger." />;
   return (
     <div className="receipt-list">
       {receipts.map((receipt) => (
-        <button
-          key={receiptKey(receipt)}
-          type="button"
-          className="receipt-row"
-          onClick={() => onOpen(receipt)}
-        >
+        <button key={receiptKey(receipt)} type="button" className="receipt-row" onClick={() => onOpen(receipt)}>
           <span className={`receipt-state state-${normalizeState(receipt.status, "pending")}`} />
           <strong>{receiptAction(receipt)}</strong>
           <span>{receiptResource(receipt)}</span>
@@ -990,13 +1545,7 @@ function ReceiptRows({
   );
 }
 
-function Timeline({
-  steps,
-  onOpen,
-}: {
-  readonly steps: readonly TaskTimelineStep[];
-  readonly onOpen: (step: TaskTimelineStep) => void;
-}) {
+function Timeline({ steps, onOpen }: { readonly steps: readonly TaskTimelineStep[]; readonly onOpen: (step: TaskTimelineStep) => void }) {
   return (
     <div className="timeline-list">
       {steps.map((step) => (
@@ -1013,15 +1562,26 @@ function Timeline({
   );
 }
 
-function FlowHeader({
-  title,
-  body,
-  action,
-}: {
-  readonly title: string;
-  readonly body: string;
-  readonly action?: ReactNode;
-}) {
+function RecordMiniList({ capability, onOpen }: { readonly capability: Capability; readonly onOpen: (item: DrawerItem) => void }) {
+  if (capability.records.length === 0) return <EmptyLine title="No records" body={capability.readState.message ?? "This capability returned an explicit empty state."} />;
+  const records = capability.records.slice(0, 8);
+  return (
+    <WorkbenchRecordExplorer
+      records={records.map((record) => ({
+        id: record.id,
+        label: record.label,
+        state: record.state,
+        detail: record.facts[0] ?? record.source,
+      }))}
+      onOpen={(id) => {
+        const record = records.find((item) => item.id === id);
+        if (record) onOpen({ kind: "record", capability, record });
+      }}
+    />
+  );
+}
+
+function FlowHeader({ title, body, action }: { readonly title: string; readonly body: string; readonly action?: ReactNode }) {
   return (
     <header className="flow-header">
       <div>
@@ -1049,14 +1609,7 @@ function Segmented({
   return (
     <div className="segmented-control" role="tablist">
       {options.map((option) => (
-        <button
-          key={option}
-          type="button"
-          role="tab"
-          aria-selected={option === value}
-          className={option === value ? "is-active" : ""}
-          onClick={() => onChange(option)}
-        >
+        <button key={option} type="button" role="tab" aria-selected={option === value} className={option === value ? "is-active" : ""} onClick={() => onChange(option)}>
           {option}
         </button>
       ))}
@@ -1064,30 +1617,53 @@ function Segmented({
   );
 }
 
-function StatusPill({
-  label,
-  value,
-  tone = "neutral",
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly tone?: "neutral" | "good" | "warn";
-}) {
+function StatusPill({ label, value, tone = "neutral" }: { readonly label: string; readonly value: string; readonly tone?: "neutral" | "good" | "warn" }) {
   return <WorkbenchStatusFact label={label} value={value} tone={tone} />;
 }
 
-function StateMarker({
-  state,
-  severity,
-}: {
-  readonly state: string;
-  readonly severity: TaskSeverity;
-}) {
+function StateMarker({ state, severity }: { readonly state: string; readonly severity: TaskSeverity }) {
   return (
     <span className={`state-marker severity-${severity}`}>
       <Circle size={8} aria-hidden />
       {state}
     </span>
+  );
+}
+
+function cliForAdminAction(action: WorkbenchAction): string {
+  const base = `curl -X ${action.method.toUpperCase()} "$HELM_CONSOLE_URL${action.endpoint}" -H "X-HELM-Admin-Key: $HELM_ADMIN_API_KEY"`;
+  if (action.method.toUpperCase() === "GET" || action.fields.length === 0) return base;
+  return `${base} -H "Content-Type: application/json" --data @payload.json`;
+}
+
+function receiptRefsFromUnknown(value: unknown): string[] {
+  const refs = new Set<string>();
+  const visit = (item: unknown) => {
+    if (typeof item === "string") {
+      if (/^(rcpt|receipt|sha256:|evp_|mcp_|approval)/i.test(item)) refs.add(item);
+      return;
+    }
+    if (Array.isArray(item)) {
+      item.forEach(visit);
+      return;
+    }
+    if (!isRecord(item)) return;
+    for (const [key, nested] of Object.entries(item)) {
+      if (/receipt(_id|_ref|s|Refs|Refs)?$/i.test(key) || /receipt/i.test(key)) visit(nested);
+      if (key === "ref") visit(nested);
+      if (Array.isArray(nested) || isRecord(nested)) visit(nested);
+    }
+  };
+  visit(value);
+  return [...refs].slice(0, 8);
+}
+
+function Fact({ label, value }: { readonly label: string; readonly value: ReactNode }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
   );
 }
 

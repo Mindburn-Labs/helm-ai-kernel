@@ -44,7 +44,7 @@ func TestEvaluate_GeneratesArgsHash(t *testing.T) {
 	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/receipts/"+resp.ReceiptID, nil)
 	w2 := httptest.NewRecorder()
 	srv.ServeHTTP(w2, req2)
-	var receipt Receipt
+	var receipt ReceiptDTO
 	_ = json.NewDecoder(w2.Body).Decode(&receipt)
 	if receipt.ArgsHash == "" {
 		t.Error("ArgsHash should be set on the receipt")

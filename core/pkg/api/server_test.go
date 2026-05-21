@@ -114,7 +114,7 @@ func TestGetReceipt(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 
-	var receipt Receipt
+	var receipt ReceiptDTO
 	json.NewDecoder(w.Body).Decode(&receipt)
 	if receipt.ReceiptID != evalResp.ReceiptID {
 		t.Error("receipt ID mismatch")

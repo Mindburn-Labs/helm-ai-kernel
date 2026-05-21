@@ -1,2 +1,7 @@
+minimumReleaseAge: 2880
+
+registries:
+  default: https://registry.npmjs.org/
+
 allowBuilds:
   esbuild: set this to true or false

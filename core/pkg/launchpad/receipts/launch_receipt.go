@@ -5,21 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
-type Receipt struct {
-	ReceiptID    string         `json:"receipt_id"`
-	Type         string         `json:"type"`
-	LaunchID     string         `json:"launch_id"`
-	DecisionID   string         `json:"decision_id"`
-	DecisionHash string         `json:"decision_hash"`
-	Verdict      string         `json:"verdict"`
-	Status       string         `json:"status"`
-	Subject      map[string]any `json:"subject"`
-	CreatedAt    time.Time      `json:"created_at"`
-	LamportClock int64          `json:"lamport_clock"`
-	Hash         string         `json:"hash"`
-}
+type Receipt = contracts.Receipt
 
 type LaunchReceipt struct {
 	LaunchID string `json:"launch_id"`

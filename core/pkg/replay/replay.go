@@ -7,21 +7,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
-// Receipt is the minimal structure needed from a proxy receipt for replay.
-type Receipt struct {
-	ID           string `json:"receipt_id"`
-	ToolName     string `json:"tool_name"`
-	ArgsHash     string `json:"args_hash"`
-	PrevHash     string `json:"prev_hash"`
-	Timestamp    string `json:"timestamp"`
-	Status       string `json:"status"`
-	ReasonCode   string `json:"reason_code"`
-	LamportClock uint64 `json:"lamport_clock"`
-	Signature    string `json:"signature,omitempty"`
-}
+// Receipt is an alias to the canonical contracts.Receipt type.
+type Receipt = contracts.Receipt
 
 // ReplayResult holds the outcome of replaying a receipt chain.
 type ReplayResult struct {
@@ -104,16 +95,18 @@ func Replay(receipts []Receipt, opts ...ReplayOption) (*ReplayResult, error) {
 	// Check for duplicate IDs
 	idSeen := make(map[string]bool, len(receipts))
 	for _, r := range receipts {
-		if idSeen[r.ID] {
-			result.DuplicateIDs = append(result.DuplicateIDs, r.ID)
+		id := getID(r)
+		if idSeen[id] {
+			result.DuplicateIDs = append(result.DuplicateIDs, id)
 		}
-		idSeen[r.ID] = true
+		idSeen[id] = true
 	}
 
 	// Verify causal chain via prevHash linking + Lamport monotonicity
 	prevHash := ""
 	var prevLamport uint64
 	for i, r := range receipts {
+		id := getID(r)
 		// Count reason codes
 		if r.ReasonCode != "" {
 			result.Summary[r.ReasonCode]++
@@ -125,14 +118,14 @@ func Replay(receipts []Receipt, opts ...ReplayOption) (*ReplayResult, error) {
 			if r.PrevHash != "" && r.PrevHash != "GENESIS" &&
 				r.PrevHash != "0000000000000000000000000000000000000000000000000000000000000000" {
 				result.ChainBreaks = append(result.ChainBreaks,
-					fmt.Sprintf("receipt[0] %s: expected genesis prevHash, got %s", r.ID, r.PrevHash))
+					fmt.Sprintf("receipt[0] %s: expected genesis prevHash, got %s", id, r.PrevHash))
 				result.ValidChain = false
 			}
 		} else {
 			if r.PrevHash != prevHash {
 				result.ChainBreaks = append(result.ChainBreaks,
 					fmt.Sprintf("receipt[%d] %s: prevHash mismatch (expected %s, got %s)",
-						i, r.ID, prevHash, r.PrevHash))
+						i, id, prevHash, r.PrevHash))
 				result.ValidChain = false
 			}
 		}
@@ -142,7 +135,7 @@ func Replay(receipts []Receipt, opts ...ReplayOption) (*ReplayResult, error) {
 			result.LamportValid = false
 			result.ChainBreaks = append(result.ChainBreaks,
 				fmt.Sprintf("receipt[%d] %s: Lamport clock not monotonic (%d <= %d)",
-					i, r.ID, r.LamportClock, prevLamport))
+					i, id, r.LamportClock, prevLamport))
 			result.ValidChain = false
 		}
 		prevLamport = r.LamportClock
@@ -156,12 +149,11 @@ func Replay(receipts []Receipt, opts ...ReplayOption) (*ReplayResult, error) {
 			if err := cfg.verifier(canonical, r.Signature); err != nil {
 				result.SignaturesFailed++
 				result.ChainBreaks = append(result.ChainBreaks,
-					fmt.Sprintf("receipt[%d] %s: signature invalid: %v", i, r.ID, err))
+					fmt.Sprintf("receipt[%d] %s: signature invalid: %v", i, id, err))
 				result.ValidChain = false
 			}
 			result.SignaturesChecked++
 		}
-
 		// Compute this receipt's hash for next iteration
 		receiptBytes, _ := json.Marshal(r)
 		h := sha256.Sum256(receiptBytes)
@@ -170,13 +162,19 @@ func Replay(receipts []Receipt, opts ...ReplayOption) (*ReplayResult, error) {
 	}
 
 	// Verify ordering (timestamps should be monotonic)
-	timestamps := make([]string, len(receipts))
-	for i, r := range receipts {
-		timestamps[i] = r.Timestamp
-	}
-	if !sort.StringsAreSorted(timestamps) {
-		result.OrderValid = false
+	for i := 1; i < len(receipts); i++ {
+		if receipts[i].Timestamp.Before(receipts[i-1].Timestamp) {
+			result.OrderValid = false
+			break
+		}
 	}
 
 	return result, nil
+}
+
+func getID(r Receipt) string {
+	if r.ReceiptID != "" {
+		return r.ReceiptID
+	}
+	return r.ID
 }

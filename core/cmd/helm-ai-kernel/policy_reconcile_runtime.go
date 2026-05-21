@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
@@ -20,6 +21,10 @@ func compileServePolicySnapshot(ctx context.Context, head policyreconcile.Policy
 		return nil, err
 	}
 	scope := head.Scope.Normalize()
+
+	shadowMode := os.Getenv("HELM_SHADOW_MODE") == "true" || os.Getenv("HELM_DRY_RUN") == "true"
+	innerPDP := pdp.NewHelmPDP(runtimePolicy.Policy.Name, runtimePolicy.AllowMap())
+
 	return &policyreconcile.EffectivePolicySnapshot{
 		TenantID:        scope.TenantID,
 		WorkspaceID:     scope.WorkspaceID,
@@ -31,6 +36,6 @@ func compileServePolicySnapshot(ctx context.Context, head policyreconcile.Policy
 		SourceRefs:      append([]string(nil), head.SourceRefs...),
 		Validation:      policyreconcile.ValidationStatus{Status: policyreconcile.StatusActive, Hash: head.PolicyHash},
 		Graph:           runtimePolicy.Graph,
-		PDP:             pdp.NewHelmPDP(runtimePolicy.Policy.Name, runtimePolicy.AllowMap()),
+		PDP:             pdp.NewTelemetryPDP(innerPDP, shadowMode),
 	}, nil
 }

@@ -8,7 +8,7 @@ import (
 )
 
 // EffectType represents the category of effect being executed.
-type EffectType string
+type EffectType = string
 
 const (
 	EffectTypeDataWrite        EffectType = "DATA_WRITE"

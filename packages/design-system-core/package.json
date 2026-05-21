@@ -115,6 +115,18 @@
       "types": "./dist/components/workbench.d.ts",
       "import": "./dist/components/workbench.js"
     },
+    "./components/canvas": {
+      "types": "./dist/components/canvas.d.ts",
+      "import": "./dist/components/canvas.js"
+    },
+    "./components/diff": {
+      "types": "./dist/components/diff.d.ts",
+      "import": "./dist/components/diff.js"
+    },
+    "./components/annotation": {
+      "types": "./dist/components/annotation.d.ts",
+      "import": "./dist/components/annotation.js"
+    },
     "./primitives/catalog": {
       "types": "./dist/primitives/catalog.d.ts",
       "import": "./dist/primitives/catalog.js"

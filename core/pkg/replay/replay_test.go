@@ -9,11 +9,11 @@ import (
 )
 
 func TestReplay_ValidChain(t *testing.T) {
-	r1 := Receipt{ID: "r1", ToolName: "calc", Timestamp: "2026-01-01T00:00:00Z", ReasonCode: "TOOL_ALLOWED", LamportClock: 1}
+	r1 := Receipt{ID: "r1", ToolName: "calc", Timestamp: parseTime("2026-01-01T00:00:00Z"), ReasonCode: "TOOL_ALLOWED", LamportClock: 1}
 	data1, _ := json.Marshal(r1)
 	h1 := sha256.Sum256(data1)
 
-	r2 := Receipt{ID: "r2", ToolName: "calc", PrevHash: hex.EncodeToString(h1[:]), Timestamp: "2026-01-01T00:00:01Z", ReasonCode: "TOOL_ALLOWED", LamportClock: 2}
+	r2 := Receipt{ID: "r2", ToolName: "calc", PrevHash: hex.EncodeToString(h1[:]), Timestamp: parseTime("2026-01-01T00:00:01Z"), ReasonCode: "TOOL_ALLOWED", LamportClock: 2}
 
 	result, err := Replay([]Receipt{r1, r2})
 	if err != nil {
@@ -34,8 +34,8 @@ func TestReplay_ValidChain(t *testing.T) {
 }
 
 func TestReplay_BrokenChain(t *testing.T) {
-	r1 := Receipt{ID: "r1", ToolName: "calc", Timestamp: "2026-01-01T00:00:00Z", LamportClock: 1}
-	r2 := Receipt{ID: "r2", ToolName: "calc", PrevHash: "wrong_hash", Timestamp: "2026-01-01T00:00:01Z", LamportClock: 2}
+	r1 := Receipt{ID: "r1", ToolName: "calc", Timestamp: parseTime("2026-01-01T00:00:00Z"), LamportClock: 1}
+	r2 := Receipt{ID: "r2", ToolName: "calc", PrevHash: "wrong_hash", Timestamp: parseTime("2026-01-01T00:00:01Z"), LamportClock: 2}
 
 	result, err := Replay([]Receipt{r1, r2})
 	if err != nil {
@@ -50,11 +50,11 @@ func TestReplay_BrokenChain(t *testing.T) {
 }
 
 func TestReplay_LamportViolation(t *testing.T) {
-	r1 := Receipt{ID: "r1", ToolName: "calc", Timestamp: "2026-01-01T00:00:00Z", LamportClock: 5}
+	r1 := Receipt{ID: "r1", ToolName: "calc", Timestamp: parseTime("2026-01-01T00:00:00Z"), LamportClock: 5}
 	data1, _ := json.Marshal(r1)
 	h1 := sha256.Sum256(data1)
 	// Lamport goes backwards: 5 → 3 (violation)
-	r2 := Receipt{ID: "r2", ToolName: "calc", PrevHash: hex.EncodeToString(h1[:]), Timestamp: "2026-01-01T00:00:01Z", LamportClock: 3}
+	r2 := Receipt{ID: "r2", ToolName: "calc", PrevHash: hex.EncodeToString(h1[:]), Timestamp: parseTime("2026-01-01T00:00:01Z"), LamportClock: 3}
 
 	result, err := Replay([]Receipt{r1, r2})
 	if err != nil {
@@ -69,8 +69,8 @@ func TestReplay_LamportViolation(t *testing.T) {
 }
 
 func TestReplay_DuplicateIDs(t *testing.T) {
-	r1 := Receipt{ID: "dup", ToolName: "calc", Timestamp: "2026-01-01T00:00:00Z", LamportClock: 1}
-	r2 := Receipt{ID: "dup", ToolName: "calc", Timestamp: "2026-01-01T00:00:01Z", LamportClock: 2}
+	r1 := Receipt{ID: "dup", ToolName: "calc", Timestamp: parseTime("2026-01-01T00:00:00Z"), LamportClock: 1}
+	r2 := Receipt{ID: "dup", ToolName: "calc", Timestamp: parseTime("2026-01-01T00:00:01Z"), LamportClock: 2}
 
 	result, err := Replay([]Receipt{r1, r2})
 	if err != nil {
@@ -82,11 +82,11 @@ func TestReplay_DuplicateIDs(t *testing.T) {
 }
 
 func TestReplayFromReader_JSONL(t *testing.T) {
-	r1 := Receipt{ID: "r1", ToolName: "calc", Timestamp: "2026-01-01T00:00:00Z", LamportClock: 1}
+	r1 := Receipt{ID: "r1", ToolName: "calc", Timestamp: parseTime("2026-01-01T00:00:00Z"), LamportClock: 1}
 	data1, _ := json.Marshal(r1)
 	h1 := sha256.Sum256(data1)
 
-	r2 := Receipt{ID: "r2", ToolName: "calc", PrevHash: hex.EncodeToString(h1[:]), Timestamp: "2026-01-01T00:00:01Z", LamportClock: 2}
+	r2 := Receipt{ID: "r2", ToolName: "calc", PrevHash: hex.EncodeToString(h1[:]), Timestamp: parseTime("2026-01-01T00:00:01Z"), LamportClock: 2}
 
 	line1, _ := json.Marshal(r1)
 	line2, _ := json.Marshal(r2)
@@ -104,7 +104,7 @@ func TestReplayFromReader_JSONL(t *testing.T) {
 
 func TestReplay_GenesisMarkers(t *testing.T) {
 	// GENESIS is a valid first-receipt prevHash (matches executor output)
-	r1 := Receipt{ID: "r1", ToolName: "calc", PrevHash: "GENESIS", Timestamp: "2026-01-01T00:00:00Z", LamportClock: 1}
+	r1 := Receipt{ID: "r1", ToolName: "calc", PrevHash: "GENESIS", Timestamp: parseTime("2026-01-01T00:00:00Z"), LamportClock: 1}
 	result, err := Replay([]Receipt{r1})
 	if err != nil {
 		t.Fatalf("Replay: %v", err)

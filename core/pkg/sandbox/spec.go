@@ -41,6 +41,12 @@ type SandboxSpec struct {
 	// discovery and cleanup (e.g. teardown by launch_id).
 	Labels map[string]string `json:"labels,omitempty"`
 
+	// Detached signals the runner to use `docker run -d` and return as
+	// soon as the container starts (instead of blocking until it exits).
+	// Used for daemon-style apps whose readiness is verified out-of-band
+	// via healthchecks rather than by their exit code.
+	Detached bool `json:"detached,omitempty"`
+
 	// SandboxLeaseID binds the execution to a pre-warmed sandbox lease.
 	SandboxLeaseID string `json:"sandbox_lease_id,omitempty"`
 

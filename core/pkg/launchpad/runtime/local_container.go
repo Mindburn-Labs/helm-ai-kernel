@@ -4,12 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
 	dockersandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox/docker"
 )
@@ -38,6 +40,12 @@ type ContainerRequest struct {
 	AutoCleanup      bool
 	Privileged       bool
 	RecursiveLaunch  bool
+	// Detached marks daemon-style runs (docker run -d). When set, runtime
+	// returns as soon as the container is up and the healthcheck passes
+	// (or times out into REPAIR_REQUIRED), instead of blocking until the
+	// container exits.
+	Detached         bool
+	ReadinessTimeout time.Duration
 }
 
 type ContainerHandle struct {
@@ -172,6 +180,7 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 		Network:      network,
 		WorkDir:      "/workspace",
 		RuntimeClass: handle.Isolation.RuntimeClass,
+		Detached:     req.Detached,
 	}
 	result, receipt, err := dockersandbox.NewDockerRunner().Run(spec)
 	if err != nil {
@@ -191,6 +200,18 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 	}
 	handle.ContainerID = receipt.ExecutionID
 	handle.EgressReceiptRef = proxyHandle.ReceiptRef
+	// Daemon-style readiness: container started (docker run -d returned),
+	// now poll the AppSpec healthcheck commands via `docker exec` until
+	// one passes or ReadinessTimeout elapses. Failure here means the
+	// daemon never came up healthy; kill the container and surface the
+	// last error to the caller (translates to REPAIR_REQUIRED).
+	if req.Detached {
+		if err := waitForReadiness(receipt.ExecutionID, req.Plan.Healthchecks, req.ReadinessTimeout, req.Secrets); err != nil {
+			_ = exec.Command("docker", "rm", "-f", receipt.ExecutionID).Run()
+			cleanupEgressProxy(proxyHandle)
+			return handle, fmt.Errorf("local-container daemon never became ready: %w", err)
+		}
+	}
 	handle.EgressNetworkName = proxyHandle.NetworkName
 	handle.EgressProxyID = proxyHandle.ProxyContainerID
 	handle.EgressProxyName = proxyHandle.ProxyContainerName
@@ -276,6 +297,55 @@ func appStateRoot(launchID string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(home, ".helm", "launchpad", "state", launchID), nil
+}
+
+// waitForReadiness polls the AppSpec healthcheck commands inside a detached
+// container via `docker exec`, retrying with a fixed 6-second interval until
+// one passes or timeout elapses. Returns nil on the first successful check.
+func waitForReadiness(containerID string, checks []registry.HealthcheckSpec, timeout time.Duration, secrets map[string]string) error {
+	if timeout <= 0 {
+		timeout = 8 * time.Minute
+	}
+	if len(checks) == 0 {
+		// No healthcheck declared: best-effort, just verify the container
+		// is still up after a short grace period.
+		time.Sleep(5 * time.Second)
+		if !containerRunning(containerID) {
+			return errors.New("container exited before grace period")
+		}
+		return nil
+	}
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		if !containerRunning(containerID) {
+			return errors.New("container exited during readiness wait")
+		}
+		for _, hc := range checks {
+			cmd := strings.TrimSpace(hc.Command)
+			if cmd == "" {
+				continue
+			}
+			out, err := exec.Command("docker", "exec", containerID, "sh", "-lc", cmd).CombinedOutput()
+			if err == nil {
+				return nil
+			}
+			lastErr = fmt.Errorf("healthcheck %q failed: %v (%s)", cmd, err, strings.TrimSpace(redactedCommandOutput(out, nil, secrets)))
+		}
+		time.Sleep(6 * time.Second)
+	}
+	if lastErr == nil {
+		lastErr = errors.New("readiness timeout with no successful healthcheck")
+	}
+	return lastErr
+}
+
+func containerRunning(containerID string) bool {
+	out, err := exec.Command("docker", "inspect", "--format", "{{.State.Running}}", containerID).CombinedOutput()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "true"
 }
 
 const defaultLocalContainerCommandTimeout = 600 * time.Second

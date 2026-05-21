@@ -53,6 +53,15 @@ type InstallSpec struct {
 type RuntimeSpec struct {
 	Command []string `json:"command" yaml:"command"`
 	Ports   []int    `json:"ports,omitempty" yaml:"ports,omitempty"`
+	// Detached marks the app as a long-running daemon: kernel issues
+	// `docker run -d`, returns the container ID immediately, and treats
+	// healthcheck-based readiness as the gate to RUNNING state instead
+	// of waiting for the container to exit. Required for gateway-style
+	// apps like openclaw that never terminate on their own.
+	Detached bool `json:"detached,omitempty" yaml:"detached,omitempty"`
+	// ReadinessTimeout caps how long kernel polls healthcheck before
+	// declaring REPAIR_REQUIRED for a detached run. Default 8 minutes.
+	ReadinessTimeout string `json:"readiness_timeout,omitempty" yaml:"readiness_timeout,omitempty"`
 }
 
 type ModelGatewaySpec struct {

@@ -25,6 +25,8 @@ runtime:
         - none
         - --bind
         - loopback
+    detached: true
+    readiness_timeout: 8m
 model_gateway:
     logical_secret: model_gateway
     provider: openrouter

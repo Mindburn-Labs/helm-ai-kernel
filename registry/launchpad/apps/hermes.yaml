@@ -15,9 +15,14 @@ install:
     ref: v2026.5.16
 runtime:
     command:
-        - /bin/sh
-        - -c
-        - hermes --query "healthcheck ping" --provider openrouter --max_turns 1 --quiet --ignore_user_config
+        - /opt/hermes/hermes
+        - -z
+        - "healthcheck ping"
+        - --provider
+        - openrouter
+        - --model
+        - openai/gpt-4o-mini
+        - --ignore-user-config
 model_gateway:
     logical_secret: model_gateway
     provider: openrouter

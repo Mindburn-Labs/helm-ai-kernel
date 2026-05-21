@@ -139,9 +139,42 @@ fi
     cd "$ASSETS_DIR"
     shasum -a 256 helm-ai-kernel-darwin-amd64 helm-ai-kernel-darwin-arm64 helm-ai-kernel-linux-amd64 helm-ai-kernel-linux-arm64 helm-ai-kernel-windows-amd64.exe > "$TMP_DIR/binary-SHA256SUMS.txt"
 )
-tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='UTC 1970-01-01' \
-    -cf "$ASSETS_DIR/helm-ai-kernel-launchpad-data.tar" \
-    registry/launchpad policies/launchpad
+python3 - "$ROOT" "$ASSETS_DIR/helm-ai-kernel-launchpad-data.tar" <<'PY'
+import pathlib
+import sys
+import tarfile
+
+root = pathlib.Path(sys.argv[1])
+out = pathlib.Path(sys.argv[2])
+
+targets = ["registry/launchpad", "registry/launchkit", "policies/launchpad"]
+paths = []
+
+for target in targets:
+    tpath = root / target
+    if tpath.exists():
+        paths.append(pathlib.Path(target))
+        for p in tpath.rglob("*"):
+            paths.append(p.relative_to(root))
+
+paths = sorted(list(set(paths)), key=lambda p: p.as_posix())
+
+with tarfile.open(out, "w") as tar:
+    for rel in paths:
+        src = root / rel
+        info = tar.gettarinfo(str(src), arcname=rel.as_posix())
+        info.uid = info.gid = 0
+        info.uname = info.gname = "root"
+        info.mtime = 0
+        if src.is_dir():
+            info.mode = 0o755
+            tar.addfile(info)
+        elif src.is_file():
+            is_exe = (src.stat().st_mode & 0o111) != 0
+            info.mode = 0o755 if is_exe else 0o644
+            with src.open("rb") as fh:
+                tar.addfile(info, fh)
+PY
 launchpad_data_sha="$(shasum -a 256 "$ASSETS_DIR/helm-ai-kernel-launchpad-data.tar" | awk '{print $1}')"
 ruby "$ROOT/scripts/release/homebrew_formula.rb" \
     --version "$VERSION" \

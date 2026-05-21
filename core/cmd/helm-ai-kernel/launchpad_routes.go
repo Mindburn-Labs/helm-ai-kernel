@@ -532,6 +532,13 @@ func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
+func firstNonEmpty(left, right string) string {
+	if left != "" {
+		return left
+	}
+	return right
+}
+
 func writeLaunchpadJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-05-21T11:23:02Z
-# Commit: ff6fc08385cb00f23cf88b29a5a97c84e0b4d7b0
+# Generated: 2026-05-21T11:29:52Z
+# Commit: ec60351d8b35454ce43a26139b59669d5dbf1966
 # Format: SHA256  PATH
 #
 35f52200c0e4e3c843591122ad01ce2c7d544b4405c013432ffb4662756dd7e6  core/pkg/api/api_behavior_coverage_test.go

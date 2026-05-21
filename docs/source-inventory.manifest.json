@@ -109,6 +109,7 @@
         "docs/skills/**",
         "policies/launchpad/**",
         "policies/skills/**",
+        "registry/launchkit/**",
         "registry/launchpad/**",
         "registry/skills/**",
         "schemas/README.md",

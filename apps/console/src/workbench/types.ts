@@ -148,3 +148,23 @@ export interface WorkbenchSnapshot {
   readonly latestProof: LatestProof;
   readonly diagnostics: readonly WorkbenchDiagnostic[];
 }
+
+import type { Receipt } from "../api/client";
+
+export type DrawerItem =
+  | { readonly kind: "task"; readonly task: OperatorTask }
+  | { readonly kind: "receipt"; readonly receipt: Receipt }
+  | { readonly kind: "capability"; readonly capability: Capability }
+  | { readonly kind: "record"; readonly capability: Capability; readonly record: RecordSummary }
+  | { readonly kind: "action"; readonly capability: Capability; readonly action: WorkbenchAction }
+  | { readonly kind: "diagnostics"; readonly diagnostics: readonly WorkbenchDiagnostic[] }
+  | { readonly kind: "timeline"; readonly step: TaskTimelineStep };
+
+export interface SearchResult {
+  readonly id: string;
+  readonly label: string;
+  readonly detail: string;
+  readonly route: FlowRoute;
+  readonly item?: DrawerItem;
+}
+

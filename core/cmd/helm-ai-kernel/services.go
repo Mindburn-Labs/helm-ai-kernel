@@ -49,6 +49,7 @@ type Services struct {
 	// --- Infrastructure ---
 	Config        *config.Config
 	Observability *observability.Provider
+	AuditStore    *store.AuditStore
 
 	// --- Authorization ---
 	Authz *authz.Engine
@@ -110,6 +111,7 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 		SQLitePath:        filepath.Join(dataDir, "helm.db"),
 		ArtifactStorePath: filepath.Join(dataDir, "artifacts"),
 		LaunchpadStore:    launchsession.NewStore(launchpadStoreRoot(dataDir)),
+		AuditStore:        store.NewAuditStore(),
 	}
 
 	// --- 1. Config ---
@@ -183,6 +185,17 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 		logger.Warn("Boundary enforcer init — running with enforcer DISABLED (dev mode)", "error", err)
 	} else {
 		s.BoundaryEnforcer = perimEnforcer
+		s.BoundaryEnforcer.SetViolationHandler(func(ctx context.Context, err error, reason string, policyID string) {
+			logger.Warn("Boundary violation", "error", err, "reason", reason, "policy_id", policyID)
+			metadata := map[string]string{
+				"policy_id": policyID,
+				"reason":    reason,
+			}
+			_, appendErr := s.AuditStore.Append(store.EntryTypeViolation, "boundary", "violation", err.Error(), metadata)
+			if appendErr != nil {
+				logger.Error("Failed to append boundary violation to audit store", "error", appendErr)
+			}
+		})
 	}
 	surfaces, surfaceErr := boundary.NewSQLSurfaceRegistry(ctx, db, time.Now)
 	if surfaceErr != nil {

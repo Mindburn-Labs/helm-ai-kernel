@@ -10,13 +10,18 @@ package policybundles
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policybundles/cedar"
 	regopkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policybundles/rego"
 )
+
+var compileCache sync.Map
 
 // Language tags supported by the registry. Bundle manifests carry one of
 // these in a `language` field (default: "cel" for backward compatibility).
@@ -88,6 +93,22 @@ func Compile(ctx context.Context, language, source string, opts CompileOptions) 
 	if !IsSupportedLanguage(language) {
 		return nil, fmt.Errorf("policybundles: unsupported language %q (supported: %v)", language, SupportedLanguages())
 	}
+
+	// Calculate cache key
+	hasher := sha256.New()
+	hasher.Write([]byte(language))
+	hasher.Write([]byte(source))
+	hasher.Write([]byte(opts.BundleID))
+	hasher.Write([]byte(opts.Name))
+	hasher.Write([]byte(fmt.Sprintf("%d", opts.Version)))
+	hasher.Write([]byte(opts.EntitiesDoc))
+	key := hex.EncodeToString(hasher.Sum(nil))
+
+	if val, ok := compileCache.Load(key); ok {
+		return val.(*CompileResult), nil
+	}
+
+	var result *CompileResult
 	switch language {
 	case LanguageRego:
 		b, err := regopkg.Compile(source, regopkg.CompileOptions{
@@ -98,7 +119,7 @@ func Compile(ctx context.Context, language, source string, opts CompileOptions) 
 		if err != nil {
 			return nil, err
 		}
-		return &CompileResult{Language: language, Hash: b.Hash, Rego: b}, nil
+		result = &CompileResult{Language: language, Hash: b.Hash, Rego: b}
 	case LanguageCedar:
 		b, err := cedar.Compile(source, cedar.CompileOptions{
 			BundleID:    opts.BundleID,
@@ -109,15 +130,19 @@ func Compile(ctx context.Context, language, source string, opts CompileOptions) 
 		if err != nil {
 			return nil, err
 		}
-		return &CompileResult{Language: language, Hash: b.Hash, Cedar: b}, nil
+		result = &CompileResult{Language: language, Hash: b.Hash, Cedar: b}
 	case LanguageCEL:
 		// CEL routes through the existing builtin / celcheck pipeline.
 		// The registry advertises CEL as supported but does not yet own
 		// its compile path; callers should keep using the existing entry
 		// point until a follow-up migration unifies them.
 		return nil, fmt.Errorf("policybundles: language=cel is not yet routed through the registry; use the existing celcheck path")
+	default:
+		return nil, fmt.Errorf("policybundles: unreachable language dispatch")
 	}
-	return nil, fmt.Errorf("policybundles: unreachable language dispatch")
+
+	compileCache.Store(key, result)
+	return result, nil
 }
 
 // DetectLanguage chooses a language tag for the given source path. When

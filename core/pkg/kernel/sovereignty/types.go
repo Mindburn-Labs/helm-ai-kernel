@@ -1,6 +1,10 @@
 package sovereignty
 
-import "time"
+import (
+	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+)
 
 // DecisionRecord represents a kernel-signed approval for an action.
 // Schema: schemas/core/evidence_pack.schema.json
@@ -25,12 +29,4 @@ type AuthorizedExecutionIntent struct {
 }
 
 // Receipt represents proof of execution.
-type Receipt struct {
-	ReceiptID      string    `json:"receipt_id"`
-	ExecutionID    string    `json:"execution_id"`
-	EffectDigest   string    `json:"effect_digest"`
-	Timestamp      time.Time `json:"timestamp"`
-	Status         string    `json:"status"` // "SUCCESS", "FAILURE"
-	Payload        string    `json:"payload,omitempty"`
-	IdempotencyKey string    `json:"idempotency_key"`
-}
+type Receipt = contracts.Receipt

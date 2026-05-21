@@ -41,6 +41,47 @@ type Receipt struct {
 	PortExposures     []PortExposureEvent `json:"port_exposures,omitempty"`       // Port exposure events during execution
 	SandboxLeaseID    string              `json:"sandbox_lease_id,omitempty"`     // Execution lease that governed this receipt
 	EffectGraphNodeID string              `json:"effect_graph_node_id,omitempty"` // Which DAG node produced this receipt
+
+	// Unified Sub-package Compatibility Fields
+	Type             string            `json:"type,omitempty"`
+	LaunchID         string            `json:"launch_id,omitempty"`
+	DecisionHash     string            `json:"decision_hash,omitempty"`
+	Verdict          string            `json:"verdict,omitempty"`
+	Subject          any               `json:"subject,omitempty"`
+	CreatedAt        time.Time         `json:"created_at,omitempty"`
+	Hash             string            `json:"hash,omitempty"`
+	PackID           string            `json:"pack_id,omitempty"`
+	PackName         string            `json:"pack_name,omitempty"`
+	PackVersion      string            `json:"pack_version,omitempty"`
+	PackHash         string            `json:"pack_hash,omitempty"`
+	Action           string            `json:"action,omitempty"`
+	InstalledBy      string            `json:"installed_by,omitempty"`
+	InstalledAt      time.Time         `json:"installed_at,omitempty"`
+	PrevReceiptID    string            `json:"prev_receipt_id,omitempty"`
+	ContentHash      string            `json:"content_hash,omitempty"`
+	ID               string            `json:"id,omitempty"`
+	RiskTier         RiskTier          `json:"risk_tier,omitempty"`
+	EffectType       string            `json:"effect_type,omitempty"`
+	ToolFingerprint  string            `json:"tool_fingerprint,omitempty"`
+	Evidence         map[string]string `json:"evidence,omitempty"`
+	RetryCount       int               `json:"retry_count,omitempty"`
+	IdempotencyKey   string            `json:"idempotency_key,omitempty"`
+	ToolName         string            `json:"tool_name,omitempty"`
+	ReasonCode       string            `json:"reason_code,omitempty"`
+	SkillID          string            `json:"skill_id,omitempty"`
+	SkillContentHash string            `json:"skill_content_hash,omitempty"`
+	PolicyHash       string            `json:"policy_hash,omitempty"`
+	ProjectionPaths  []Projection      `json:"projection_paths,omitempty"`
+	Direction        string            `json:"direction,omitempty"`
+	Counterparty     string            `json:"counterparty,omitempty"`
+	SessionID        string            `json:"session_id,omitempty"`
+	ScopeHash        string            `json:"scope_hash,omitempty"`
+	IssuedAt         time.Time         `json:"issued_at,omitempty"`
+}
+
+type Projection struct {
+	Agent string `json:"agent"`
+	Path  string `json:"path"`
 }
 
 // PortExposureEvent records a port being exposed or accessed during sandbox execution.

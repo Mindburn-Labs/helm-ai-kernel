@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // KernelRuntime is the sole gateway for effecting change or reading state.
@@ -57,12 +59,7 @@ type Identity struct {
 }
 
 // Receipt is the proof of submission (async) or execution (sync).
-type Receipt struct {
-	ID        string
-	TenantID  string
-	Status    string
-	Timestamp int64
-}
+type Receipt = contracts.Receipt
 
 // CanonicalHash returns the deterministic hash of the ActorContext.
 func (c *ActorContext) CanonicalHash() (string, error) {

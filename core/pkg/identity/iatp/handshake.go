@@ -41,6 +41,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/did"
@@ -86,15 +87,7 @@ type Capability struct {
 // Receipt is the audit-log entry both sides emit after a successful handshake.
 // It cites the DIDs as `subject` and `counterparty` so receipts can be joined
 // with proofgraph nodes by DID.
-type Receipt struct {
-	ReceiptID    string    `json:"receipt_id"`
-	Direction    string    `json:"direction"` // "outgoing" or "incoming"
-	Subject      string    `json:"subject"`
-	Counterparty string    `json:"counterparty"`
-	SessionID    string    `json:"session_id"`
-	ScopeHash    string    `json:"scope_hash"`
-	IssuedAt     time.Time `json:"issued_at"`
-}
+type Receipt = contracts.Receipt
 
 // Participant runs the local end of an IATP handshake. A Participant is an
 // in-memory object; it does not persist sessions or receipts on its own.

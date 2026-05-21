@@ -3,10 +3,21 @@ package crypto
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"sync"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+)
+
+var (
+	verifyCache = NewShardedCache()
+	sha256Pool  = sync.Pool{
+		New: func() any {
+			return sha256.New()
+		},
+	}
 )
 
 // Signer defines the interface for cryptographic signing operations.
@@ -65,6 +76,20 @@ func (s *Ed25519Signer) PublicKeyBytes() []byte {
 
 // Verify verifies a signature against a public key.
 func Verify(pubKeyHex, sigHex string, data []byte) (bool, error) {
+	hasher := GetHasher(&sha256Pool)
+	defer PutHasher(&sha256Pool, hasher)
+
+	WriteStringToHasher(hasher, pubKeyHex)
+	WriteStringToHasher(hasher, sigHex)
+	hasher.Write(data)
+
+	var cacheKey [32]byte
+	hasher.Sum(cacheKey[:0])
+
+	if val, ok := verifyCache.Lookup(cacheKey); ok {
+		return val, nil
+	}
+
 	pubKey, err := hex.DecodeString(pubKeyHex)
 	if err != nil {
 		return false, fmt.Errorf("invalid public key hex: %w", err)
@@ -78,7 +103,9 @@ func Verify(pubKeyHex, sigHex string, data []byte) (bool, error) {
 		return false, fmt.Errorf("invalid public key size")
 	}
 
-	return ed25519.Verify(ed25519.PublicKey(pubKey), data, sig), nil
+	res := ed25519.Verify(ed25519.PublicKey(pubKey), data, sig)
+	verifyCache.Store(cacheKey, res)
+	return res, nil
 }
 
 func (s *Ed25519Signer) Verify(message []byte, signature []byte) bool {

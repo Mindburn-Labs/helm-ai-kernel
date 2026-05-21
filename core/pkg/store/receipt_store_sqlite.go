@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -14,11 +15,24 @@ import (
 )
 
 type SQLiteReceiptStore struct {
-	db *sql.DB
+	db      *sql.DB
+	writeMu sync.Mutex
 }
 
 func NewSQLiteReceiptStore(db *sql.DB) (*SQLiteReceiptStore, error) {
 	s := &SQLiteReceiptStore{db: db}
+
+	// Database connection pool tuning for extreme concurrent workloads
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(1 * time.Hour)
+
+	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		return nil, fmt.Errorf("enable WAL: %w", err)
+	}
+	if _, err := db.Exec("PRAGMA busy_timeout=5000;"); err != nil {
+		return nil, fmt.Errorf("set busy timeout: %w", err)
+	}
 	if err := s.migrate(); err != nil {
 		return nil, err
 	}
@@ -199,6 +213,8 @@ func (s *SQLiteReceiptStore) ListSince(ctx context.Context, since uint64, limit 
 }
 
 func (s *SQLiteReceiptStore) Store(ctx context.Context, r *contracts.Receipt) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	return insertSQLiteReceipt(ctx, s.db, r)
 }
 
@@ -229,6 +245,9 @@ func (s *SQLiteReceiptStore) AppendCausal(ctx context.Context, sessionID string,
 	if sessionID == "" {
 		return fmt.Errorf("session id is required")
 	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return fmt.Errorf("open receipt connection: %w", err)

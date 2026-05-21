@@ -67,10 +67,10 @@ func (r *Runtime) SubmitIntent(ctx context.Context, intent *SignedIntent) (*Rece
 
 	// Return Receipt
 	return &Receipt{
-		ID:        fmt.Sprintf("rcpt-intent-%d", ev.SequenceID),
-		TenantID:  intent.TenantID,
+		ReceiptID: fmt.Sprintf("rcpt-intent-%d", ev.SequenceID),
 		Status:    "ACCEPTED",
-		Timestamp: ev.Timestamp.UnixNano(),
+		Timestamp: ev.Timestamp,
+		Metadata:  map[string]any{"tenant_id": intent.TenantID},
 	}, nil
 }
 

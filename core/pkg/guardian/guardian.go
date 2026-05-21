@@ -22,6 +22,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/threatscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust"
 	"go.opentelemetry.io/otel"
@@ -152,6 +153,16 @@ func WithSessionRiskMemory(srm *SessionRiskMemory) GuardianOption {
 	return func(g *Guardian) { g.sessionRiskMemory = srm }
 }
 
+// WithWarmLeaseManager injects the warm sandbox leasing manager.
+func WithWarmLeaseManager(mgr *sandbox.WarmLeaseManager) GuardianOption {
+	return func(g *Guardian) { g.warmLeaseMgr = mgr }
+}
+
+// WithZeroIDInterceptor injects a custom ZeroIDInterceptor.
+func WithZeroIDInterceptor(z *ZeroIDInterceptor) GuardianOption {
+	return func(g *Guardian) { g.zeroidInterceptor = z }
+}
+
 // Guardian enforces the Proof Requirement Graph (PRG)
 type Guardian struct {
 	signer            crypto.Signer
@@ -178,6 +189,13 @@ type Guardian struct {
 	privilegeResolver PrivilegeResolver            // Privilege tier resolver
 	sessionRiskMemory *SessionRiskMemory           // Deterministic trajectory authorization gate
 	otel              *OTelInstrumentation         // Optional OTel tracing & metrics
+	warmLeaseMgr      *sandbox.WarmLeaseManager    // Warm lease manager for sandboxes
+	zeroidInterceptor *ZeroIDInterceptor           // ZeroID identity validator
+}
+
+// ZeroID returns the registered ZeroIDInterceptor.
+func (g *Guardian) ZeroID() *ZeroIDInterceptor {
+	return g.zeroidInterceptor
 }
 
 // NewGuardian creates a new Guardian instance. Optional dependencies can be injected
@@ -200,6 +218,10 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 
 	for _, opt := range opts {
 		opt(g)
+	}
+
+	if g.zeroidInterceptor == nil {
+		g.zeroidInterceptor = NewZeroIDInterceptor(g, nil)
 	}
 
 	if g.clock == nil {
@@ -575,8 +597,6 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 	var activeSnapshot *policyreconcile.EffectivePolicySnapshot
 
 	// GOV-001: Content-addressed policy version derived from PRG rule hash.
-	// When a runtime snapshot store is configured, snapshot policy_hash/epoch
-	// becomes the signed decision authority boundary for every decision path.
 	policyVersion := "v1.0.0" // fallback
 	if g.prg != nil {
 		if hash, err := g.prg.ContentHash(); err == nil && hash != "" {
@@ -626,333 +646,8 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			activePDP = snapshot.PDP
 		}
 	}
-	signDecision := func(decision *contracts.DecisionRecord) error {
-		bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
-		return g.signer.SignDecision(decision)
-	}
-
-	// ── Pre-PDP enforcement gates (fail-closed, checked before policy) ──
-
-	// Gate 0: Global freeze check — if frozen, deny everything immediately
-	if g.freezeCtrl != nil && g.freezeCtrl.IsFrozen() {
-		now := g.clock.Now()
-		decision := &contracts.DecisionRecord{
-			ID:         newDecisionID(),
-			Timestamp:  now,
-			Verdict:    string(contracts.VerdictDeny),
-			Reason:     string(contracts.ReasonSystemFrozen),
-			ReasonCode: string(contracts.ReasonSystemFrozen),
-		}
-		if signErr := signDecision(decision); signErr != nil {
-			return nil, fmt.Errorf("failed to sign freeze-deny decision: %w", signErr)
-		}
-		return decision, nil
-	}
-
-	// Gate 0.5: Per-agent kill switch — if agent is killed, deny immediately
-	if g.agentKillSwitch != nil && g.agentKillSwitch.IsKilled(req.Principal) {
-		now := g.clock.Now()
-		decision := &contracts.DecisionRecord{
-			ID:         newDecisionID(),
-			Timestamp:  now,
-			Verdict:    string(contracts.VerdictDeny),
-			Reason:     string(contracts.ReasonAgentKilled),
-			ReasonCode: string(contracts.ReasonAgentKilled),
-		}
-		if signErr := signDecision(decision); signErr != nil {
-			return nil, fmt.Errorf("failed to sign agent-killed decision: %w", signErr)
-		}
-		return decision, nil
-	}
-
-	// Gate 1: Context mismatch guard — deny if environment fingerprint changed
-	if g.contextGuard != nil {
-		if err := g.contextGuard.ValidateCurrent(); err != nil {
-			now := g.clock.Now()
-			decision := &contracts.DecisionRecord{
-				ID:         newDecisionID(),
-				Timestamp:  now,
-				Verdict:    string(contracts.VerdictDeny),
-				Reason:     fmt.Sprintf("CONTEXT_MISMATCH: %v", err),
-				ReasonCode: string(contracts.ReasonContextMismatch),
-			}
-			if signErr := signDecision(decision); signErr != nil {
-				return nil, fmt.Errorf("failed to sign context-mismatch decision: %w", signErr)
-			}
-			return decision, nil
-		}
-	}
-
-	// Gate 2: Agent identity isolation — deny if credential reuse detected
-	if g.isolationChecker != nil && req.Principal != "" {
-		credHash := ""
-		if ch, ok := req.Context["credential_hash"].(string); ok {
-			credHash = ch
-		}
-		if credHash != "" {
-			sessionID := ""
-			if sid, ok := req.Context["session_id"].(string); ok {
-				sessionID = sid
-			}
-			if err := g.isolationChecker.ValidateAgentIdentity(req.Principal, credHash, sessionID); err != nil {
-				now := g.clock.Now()
-				decision := &contracts.DecisionRecord{
-					ID:         newDecisionID(),
-					Timestamp:  now,
-					Verdict:    string(contracts.VerdictDeny),
-					Reason:     fmt.Sprintf("IDENTITY_ISOLATION_VIOLATION: %v", err),
-					ReasonCode: string(contracts.ReasonIdentityIsolationViolation),
-				}
-				if signErr := signDecision(decision); signErr != nil {
-					return nil, fmt.Errorf("failed to sign isolation-violation decision: %w", signErr)
-				}
-				return decision, nil
-			}
-		}
-	}
-
-	// Gate 3: Egress control — deny if destination is blocked
-	if g.egressChecker != nil {
-		if dest, ok := req.Context["destination"].(string); ok && dest != "" {
-			var payloadSize int64
-			if ps, ok := req.Context["payload_size"].(float64); ok {
-				payloadSize = int64(ps)
-			}
-			result := g.egressChecker.CheckEgress(dest, "https", payloadSize)
-			if !result.Allowed {
-				now := g.clock.Now()
-				decision := &contracts.DecisionRecord{
-					ID:         newDecisionID(),
-					Timestamp:  now,
-					Verdict:    string(contracts.VerdictDeny),
-					Reason:     fmt.Sprintf("DATA_EGRESS_BLOCKED: %s", result.ReasonCode),
-					ReasonCode: string(contracts.ReasonDataEgressBlocked),
-				}
-				if signErr := signDecision(decision); signErr != nil {
-					return nil, fmt.Errorf("failed to sign egress-blocked decision: %w", signErr)
-				}
-				g.recordBehavioralEvent(req.Principal, trust.EventEgressBlocked, fmt.Sprintf("egress blocked: %s", result.ReasonCode))
-				return decision, nil
-			}
-		}
-	}
-
-	// ── End egress gate ──
-
-	taintLabels := contracts.TaintLabelsFromContext(req.Context)
-	if len(taintLabels) > 0 {
-		if req.Context == nil {
-			req.Context = make(map[string]interface{})
-		}
-		req.Context["taint"] = taintLabels
-	}
-	if taintTrackingEnabled() && taintedEgressDenied(req.Context, taintLabels) {
-		now := g.clock.Now()
-		decision := &contracts.DecisionRecord{
-			ID:         newDecisionID(),
-			Timestamp:  now,
-			Verdict:    string(contracts.VerdictDeny),
-			Reason:     "TAINTED_DATA_EGRESS_DENY: sensitive taint cannot leave the trust boundary without explicit approval",
-			ReasonCode: string(contracts.ReasonTaintedEgressDeny),
-			InputContext: map[string]any{
-				"taint": taintLabels,
-			},
-		}
-		if signErr := signDecision(decision); signErr != nil {
-			return nil, fmt.Errorf("failed to sign tainted-egress decision: %w", signErr)
-		}
-		g.recordBehavioralEvent(req.Principal, trust.EventEgressBlocked, "tainted egress blocked")
-		return decision, nil
-	}
-
-	// Gate 4: Threat signal scan — scan untrusted textual inputs
-	var scanResult *contracts.ThreatScanResult
-	if g.threatScanner != nil {
-		// Determine source channel and trust level from context
-		channel := contracts.SourceChannelUnknown
-		if ch, ok := req.Context["source_channel"].(string); ok {
-			channel = contracts.SourceChannel(ch)
-		}
-		trustLevel := contracts.InputTrustInternalUnverified
-		if tl, ok := req.Context["trust_level"].(string); ok {
-			trustLevel = contracts.InputTrustLevel(tl)
-		}
-
-		// Extract text to scan from context
-		var textToScan string
-		if input, ok := req.Context["user_input"].(string); ok {
-			textToScan = input
-		} else if input, ok := req.Context["text"].(string); ok {
-			textToScan = input
-		} else if input, ok := req.Context["content"].(string); ok {
-			textToScan = input
-		}
-
-		if textToScan != "" {
-			scanResult = g.threatScanner.ScanInput(textToScan, channel, trustLevel)
-
-			// Critical/High findings from tainted sources → deterministic deny
-			if scanResult.FindingCount > 0 && trustLevel.IsTainted() && threatscan.ContainsHighRiskFindings(scanResult) {
-				now := g.clock.Now()
-
-				// Determine the most specific reason code
-				reasonCode := contracts.ReasonTaintedInputDeny
-				for _, f := range scanResult.Findings {
-					switch f.Class {
-					case contracts.ThreatClassPromptInjection:
-						reasonCode = contracts.ReasonPromptInjectionDetected
-					case contracts.ThreatClassUnicodeObfuscation:
-						reasonCode = contracts.ReasonUnicodeObfuscationDetected
-					case contracts.ThreatClassCredentialExposure:
-						reasonCode = contracts.ReasonTaintedCredentialDeny
-					case contracts.ThreatClassSoftwarePublish:
-						reasonCode = contracts.ReasonTaintedPublishDeny
-					case contracts.ThreatClassSuspiciousFetch:
-						reasonCode = contracts.ReasonTaintedEgressDeny
-					}
-				}
-
-				decision := &contracts.DecisionRecord{
-					ID:         newDecisionID(),
-					Timestamp:  now,
-					Verdict:    string(contracts.VerdictDeny),
-					ReasonCode: string(reasonCode),
-					Reason:     fmt.Sprintf("%s: %d findings (max=%s) from %s source", reasonCode, scanResult.FindingCount, scanResult.MaxSeverity, trustLevel),
-					InputContext: map[string]any{
-						"threat_scan": scanResult.Ref(),
-					},
-				}
-				if signErr := signDecision(decision); signErr != nil {
-					return nil, fmt.Errorf("failed to sign threat-deny decision: %w", signErr)
-				}
-				if g.auditLog != nil {
-					decisionBytes, _ := canonicalize.JCS(decision)
-					_, _ = g.auditLog.Append("guardian", "THREAT_DENY", decision.ID, string(decisionBytes))
-				}
-				g.recordBehavioralEvent(req.Principal, trust.EventThreatDetected, fmt.Sprintf("threat scan: %d findings", scanResult.FindingCount))
-				return decision, nil
-			}
-		}
-	}
-
-	// Gate 5: Delegation session validation — if principal is a delegate,
-	// validate session and intersect capabilities with policy stack.
-	// Expired/invalid/scope-violated → DENY with canonical reason code.
-	// Per ARCHITECTURE.md §2.1: sessions compile into P2-equivalent narrowing.
-	if g.delegationStore != nil {
-		if sessionID, ok := req.Context["delegation_session_id"].(string); ok && sessionID != "" {
-			now := g.clock.Now()
-
-			// Load session from store
-			session, loadErr := g.delegationStore.Load(sessionID)
-			if loadErr != nil {
-				decision := &contracts.DecisionRecord{
-					ID:         newDecisionID(),
-					Timestamp:  now,
-					Verdict:    string(contracts.VerdictDeny),
-					Reason:     fmt.Sprintf("DELEGATION_INVALID: %v", loadErr),
-					ReasonCode: string(contracts.ReasonDelegationInvalid),
-				}
-				if signErr := signDecision(decision); signErr != nil {
-					return nil, fmt.Errorf("failed to sign delegation-invalid decision: %w", signErr)
-				}
-				return decision, nil
-			}
-			if session == nil {
-				decision := &contracts.DecisionRecord{
-					ID:         newDecisionID(),
-					Timestamp:  now,
-					Verdict:    string(contracts.VerdictDeny),
-					Reason:     "DELEGATION_INVALID: session not found",
-					ReasonCode: string(contracts.ReasonDelegationInvalid),
-				}
-				if signErr := signDecision(decision); signErr != nil {
-					return nil, fmt.Errorf("failed to sign delegation-invalid decision: %w", signErr)
-				}
-				return decision, nil
-			}
-
-			// Validate session (expiry, nonce, verifier, policy hash)
-			verifier, _ := req.Context["delegation_verifier"].(string)
-			nonceChecker := g.delegationStore.IsNonceUsed
-			if validErr := identity.ValidateSession(session, verifier, now, nonceChecker); validErr != nil {
-				decision := &contracts.DecisionRecord{
-					ID:         newDecisionID(),
-					Timestamp:  now,
-					Verdict:    string(contracts.VerdictDeny),
-					Reason:     fmt.Sprintf("DELEGATION_INVALID: %v", validErr),
-					ReasonCode: string(contracts.ReasonDelegationInvalid),
-				}
-				if signErr := signDecision(decision); signErr != nil {
-					return nil, fmt.Errorf("failed to sign delegation-invalid decision: %w", signErr)
-				}
-				return decision, nil
-			}
-
-			// Mark nonce as used (anti-replay)
-			g.delegationStore.MarkNonceUsed(session.SessionNonce)
-
-			// Scope check: is the requested tool/resource within session scope?
-			if req.Resource != "" && !session.IsToolAllowed(req.Resource) {
-				decision := &contracts.DecisionRecord{
-					ID:         newDecisionID(),
-					Timestamp:  now,
-					Verdict:    string(contracts.VerdictDeny),
-					Reason:     fmt.Sprintf("DELEGATION_SCOPE_VIOLATION: tool %q not in session scope", req.Resource),
-					ReasonCode: string(contracts.ReasonDelegationScopeViolation),
-				}
-				if signErr := signDecision(decision); signErr != nil {
-					return nil, fmt.Errorf("failed to sign delegation-scope decision: %w", signErr)
-				}
-				if g.auditLog != nil {
-					decisionBytes, _ := canonicalize.JCS(decision)
-					_, _ = g.auditLog.Append("guardian", "DELEGATION_SCOPE_DENY", decision.ID, string(decisionBytes))
-				}
-				return decision, nil
-			}
-
-			// Action scope check
-			if req.Resource != "" && req.Action != "" && len(session.Capabilities) > 0 {
-				if !session.IsActionAllowed(req.Resource, req.Action) {
-					decision := &contracts.DecisionRecord{
-						ID:         newDecisionID(),
-						Timestamp:  now,
-						Verdict:    string(contracts.VerdictDeny),
-						Reason:     fmt.Sprintf("DELEGATION_SCOPE_VIOLATION: action %q on %q not granted", req.Action, req.Resource),
-						ReasonCode: string(contracts.ReasonDelegationScopeViolation),
-					}
-					if signErr := signDecision(decision); signErr != nil {
-						return nil, fmt.Errorf("failed to sign delegation-scope decision: %w", signErr)
-					}
-					if g.auditLog != nil {
-						decisionBytes, _ := canonicalize.JCS(decision)
-						_, _ = g.auditLog.Append("guardian", "DELEGATION_SCOPE_DENY", decision.ID, string(decisionBytes))
-					}
-					return decision, nil
-				}
-			}
-
-			// Delegation validated — annotate context for downstream
-			if req.Context == nil {
-				req.Context = make(map[string]interface{})
-			}
-			req.Context["delegation_validated"] = true
-			req.Context["delegation_delegator"] = session.DelegatorPrincipal
-			req.Context["delegation_delegate"] = session.DelegatePrincipal
-
-			span.SetAttributes(
-				attribute.String("delegation.session_id", sessionID),
-				attribute.String("delegation.delegator", session.DelegatorPrincipal),
-				attribute.String("delegation.delegate", session.DelegatePrincipal),
-			)
-		}
-	}
-
-	// ── End pre-PDP gates ──
 
 	// ── Session history enrichment (arXiv 2603.16586: path-aware policies) ──
-	// Inject session history into the request context so CEL/WASM policies
-	// can evaluate the full execution path, not just the current action.
 	if len(req.SessionHistory) > 0 {
 		if req.Context == nil {
 			req.Context = make(map[string]interface{})
@@ -960,7 +655,6 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		req.Context["session_history"] = req.SessionHistory
 		req.Context["session_action_count"] = len(req.SessionHistory)
 
-		// Compute session risk: count of DENY verdicts in history
 		denyCount := 0
 		for _, sa := range req.SessionHistory {
 			if sa.Verdict == "DENY" {
@@ -996,7 +690,8 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				SessionCentroidHash:    snapshot.SessionCentroidHash,
 				RiskAccumulationWindow: snapshot.RiskAccumulationWindow,
 			}
-			if signErr := signDecision(decision); signErr != nil {
+			bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
+			if signErr := g.signer.SignDecision(decision); signErr != nil {
 				return nil, fmt.Errorf("failed to sign session-risk decision: %w", signErr)
 			}
 			if g.auditLog != nil {
@@ -1008,238 +703,185 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		}
 	}
 
-	// ── Behavioral trust score enrichment ──
-	// Inject trust_score (float64) and trust_tier (string) into context
-	// so CEL policies can reference them (e.g., input["trust_score"] > 0.6).
-	if g.behavioralScorer != nil {
-		trustScore := g.behavioralScorer.GetScore(req.Principal)
-		if req.Context == nil {
-			req.Context = make(map[string]interface{})
-		}
-		req.Context["trust_score"] = trustScore.Normalized()
-		req.Context["trust_tier"] = string(trustScore.Tier)
-
-		span.SetAttributes(
-			attribute.Float64("behavioral_trust.score", trustScore.Normalized()),
-			attribute.String("behavioral_trust.tier", string(trustScore.Tier)),
-		)
+	evalCtx := &EvaluationContext{
+		Request:             req,
+		ActiveSnapshot:      activeSnapshot,
+		PolicyVersion:       policyVersion,
+		ActiveGraph:         activeGraph,
+		ActivePDP:           activePDP,
+		SessionRiskSnapshot: sessionRiskSnapshot,
 	}
 
-	// ── Privilege tier enforcement ──
-	// Check that the agent's assigned (or effective) privilege tier
-	// permits the requested effect type.
-	if g.privilegeResolver != nil {
-		assignedTier, tierErr := g.privilegeResolver.ResolveTier(ctx, req.Principal)
-		if tierErr != nil {
-			slog.Warn("[guardian] privilege tier resolution failed", "principal", req.Principal, "error", tierErr)
-			// Fail-closed: treat as restricted on resolver error
-			assignedTier = TierRestricted
-		}
+	finalHandler := func(ctx context.Context, eCtx *EvaluationContext) (*contracts.DecisionRecord, error) {
+		req := eCtx.Request
 
-		// Apply trust-based downgrade if behavioral scorer is available
-		effectiveTier := assignedTier
+		// ── Behavioral trust score enrichment ──
 		if g.behavioralScorer != nil {
 			trustScore := g.behavioralScorer.GetScore(req.Principal)
-			effectiveTier = EffectiveTier(assignedTier, trustScore.Tier)
-		}
+			if req.Context == nil {
+				req.Context = make(map[string]interface{})
+			}
+			req.Context["trust_score"] = trustScore.Normalized()
+			req.Context["trust_tier"] = string(trustScore.Tier)
 
-		requiredTier := RequiredTierForEffect(req.Action)
-		if effectiveTier < requiredTier {
-			now := g.clock.Now()
-			decision := &contracts.DecisionRecord{
-				ID:         newDecisionID(),
-				Timestamp:  now,
-				Verdict:    string(contracts.VerdictDeny),
-				ReasonCode: string(contracts.ReasonInsufficientPrivilege),
-				Reason:     fmt.Sprintf("INSUFFICIENT_PRIVILEGE: agent tier %s < required %s for %s", effectiveTier, requiredTier, req.Action),
-			}
-			if signErr := signDecision(decision); signErr != nil {
-				return nil, fmt.Errorf("failed to sign privilege-deny decision: %w", signErr)
-			}
 			span.SetAttributes(
-				attribute.String("privilege.assigned", assignedTier.String()),
-				attribute.String("privilege.effective", effectiveTier.String()),
-				attribute.String("privilege.required", requiredTier.String()),
+				attribute.Float64("behavioral_trust.score", trustScore.Normalized()),
+				attribute.String("behavioral_trust.tier", string(trustScore.Tier)),
 			)
-			return decision, nil
 		}
 
-		// Inject privilege context for CEL policies
-		if req.Context == nil {
-			req.Context = make(map[string]interface{})
-		}
-		req.Context["privilege_tier"] = effectiveTier.String()
-
-		span.SetAttributes(
-			attribute.String("privilege.effective", effectiveTier.String()),
-		)
-	}
-
-	// 1. Construct Effect from Request
-	effect := &contracts.Effect{
-		EffectID:   fmt.Sprintf("eff-%d", g.clock.Now().UnixNano()),
-		EffectType: req.Action, // e.g. "EXECUTE_TOOL"
-		Params:     req.Context,
-		Taint:      contracts.TaintLabelsFromContext(req.Context),
-	}
-	// Add tool name to params if not present but resource is tool
-	if req.Action == "EXECUTE_TOOL" {
-		if effect.Params == nil {
-			effect.Params = make(map[string]interface{})
-		}
-		effect.Params["tool_name"] = req.Resource
-	}
-
-	// 2. Prepare Decision Record
-	// Calculate Effect Digest for binding
-	effectBytes, _ := canonicalize.JCS(effect)
-	effectDigest := canonicalize.HashBytes(effectBytes)
-
-	// F5: use the configured EnvFingerprint when provided.
-	envFP := g.envFprint
-	if envFP == "" {
-		envFP = "sha256:unconfigured"
-	}
-
-	decision := &contracts.DecisionRecord{
-		ID:             newDecisionID(),
-		Timestamp:      g.clock.Now(),
-		Verdict:        string(contracts.VerdictDeny), // Default deny
-		EffectDigest:   effectDigest,
-		InputContext:   req.Context,
-		EnvFingerprint: envFP,
-		PolicyVersion:  policyVersion,
-	}
-	bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
-	if sessionRiskSnapshot != nil {
-		decision.TrajectoryRiskScore = sessionRiskSnapshot.TrajectoryRiskScore
-		decision.SessionCentroidHash = sessionRiskSnapshot.SessionCentroidHash
-		decision.RiskAccumulationWindow = sessionRiskSnapshot.RiskAccumulationWindow
-	}
-
-	// Attach threat scan results to decision context if available
-	if scanResult != nil && scanResult.FindingCount > 0 {
-		if decision.InputContext == nil {
-			decision.InputContext = make(map[string]any)
-		}
-		decision.InputContext["threat_scan"] = scanResult.Ref()
-	}
-
-	// 2.5: Delegate to active PDP if configured (P0.1 competitive defense)
-	if activePDP != nil {
-		pdpReq := &pdp.DecisionRequest{
-			Principal: req.Principal,
-			Action:    req.Action,
-			Resource:  req.Resource,
-			Context:   req.Context,
-			Timestamp: g.clock.Now(),
-		}
-		pdpResp, pdpErr := activePDP.Evaluate(ctx, pdpReq)
-		if pdpErr != nil {
-			// Fail-closed: PDP error → DENY
-			decision.Verdict = string(contracts.VerdictDeny)
-			decision.ReasonCode = string(contracts.ReasonPDPError)
-			decision.Reason = fmt.Sprintf("%s: %v", contracts.ReasonPDPError, pdpErr)
-			decision.PolicyBackend = string(activePDP.Backend())
-			if signErr := signDecision(decision); signErr != nil {
-				return nil, fmt.Errorf("failed to sign PDP-error decision: %w", signErr)
+		// ── Privilege tier enforcement ──
+		if g.privilegeResolver != nil {
+			assignedTier, tierErr := g.privilegeResolver.ResolveTier(ctx, req.Principal)
+			if tierErr != nil {
+				slog.Warn("[guardian] privilege tier resolution failed", "principal", req.Principal, "error", tierErr)
+				assignedTier = TierRestricted
 			}
-			return decision, nil
+
+			effectiveTier := assignedTier
+			if g.behavioralScorer != nil {
+				trustScore := g.behavioralScorer.GetScore(req.Principal)
+				effectiveTier = EffectiveTier(assignedTier, trustScore.Tier)
+			}
+
+			requiredTier := RequiredTierForEffect(req.Action)
+			if effectiveTier < requiredTier {
+				now := g.clock.Now()
+				decision := &contracts.DecisionRecord{
+					ID:         newDecisionID(),
+					Timestamp:  now,
+					Verdict:    string(contracts.VerdictDeny),
+					ReasonCode: string(contracts.ReasonInsufficientPrivilege),
+					Reason:     fmt.Sprintf("INSUFFICIENT_PRIVILEGE: agent tier %s < required %s for %s", effectiveTier, requiredTier, req.Action),
+				}
+				if signErr := g.signDecisionWithContext(decision, eCtx); signErr != nil {
+					return nil, fmt.Errorf("failed to sign privilege-deny decision: %w", signErr)
+				}
+				span.SetAttributes(
+					attribute.String("privilege.assigned", assignedTier.String()),
+					attribute.String("privilege.effective", effectiveTier.String()),
+					attribute.String("privilege.required", requiredTier.String()),
+				)
+				return decision, nil
+			}
+
+			if req.Context == nil {
+				req.Context = make(map[string]interface{})
+			}
+			req.Context["privilege_tier"] = effectiveTier.String()
+
+			span.SetAttributes(
+				attribute.String("privilege.effective", effectiveTier.String()),
+			)
 		}
 
-		// Bind PDP metadata into DecisionRecord for receipt chain
-		decision.PolicyBackend = string(activePDP.Backend())
-		if activeSnapshot == nil {
-			decision.PolicyContentHash = activePDP.PolicyHash()
+		// 1. Construct Effect from Request
+		effect := &contracts.Effect{
+			EffectID:   fmt.Sprintf("eff-%d", g.clock.Now().UnixNano()),
+			EffectType: req.Action,
+			Params:     req.Context,
+			Taint:      contracts.TaintLabelsFromContext(req.Context),
 		}
-		decision.PolicyDecisionHash = pdpResp.DecisionHash
-
-		if !pdpResp.Allow {
-			reasonCode := pdpResp.ReasonCode
-			if reasonCode == "" {
-				reasonCode = string(contracts.ReasonPDPDeny)
+		if req.Action == "EXECUTE_TOOL" {
+			if effect.Params == nil {
+				effect.Params = make(map[string]interface{})
 			}
-			decision.Verdict = string(contracts.VerdictDeny)
-			decision.ReasonCode = reasonCode
-			decision.Reason = fmt.Sprintf("%s (ref=%s)", reasonCode, pdpResp.PolicyRef)
-			if signErr := signDecision(decision); signErr != nil {
-				return nil, fmt.Errorf("failed to sign PDP-deny decision: %w", signErr)
-			}
-			// Audit log for PDP denials
-			if g.auditLog != nil {
-				decisionBytes, _ := canonicalize.JCS(decision)
-				_, _ = g.auditLog.Append("guardian", "PDP_DENY", decision.ID, string(decisionBytes))
-			}
-			return decision, nil
+			effect.Params["tool_name"] = req.Resource
 		}
-		// PDP allowed — fall through to existing PRG + temporal checks
-	}
 
-	// 3. F3: Evaluate Temporal Guardian if wired
-	var intervention *contracts.InterventionMetadata
-	if g.temporal != nil {
-		resp := g.temporal.Evaluate(ctx)
-		if resp.Level >= ResponseInterrupt {
-			intervention = &contracts.InterventionMetadata{
-				Type:         responseToIntervention(resp.Level),
-				ReasonCode:   string(contracts.ReasonTemporalIntervene),
-				WaitDuration: resp.Duration,
+		// 2. Prepare Decision Record
+		effectBytes, _ := canonicalize.JCS(effect)
+		effectDigest := canonicalize.HashBytes(effectBytes)
+
+		envFP := g.envFprint
+		if envFP == "" {
+			envFP = "sha256:unconfigured"
+		}
+
+		decision := &contracts.DecisionRecord{
+			ID:             newDecisionID(),
+			Timestamp:      g.clock.Now(),
+			Verdict:        string(contracts.VerdictDeny), // Default deny
+			EffectDigest:   effectDigest,
+			InputContext:   req.Context,
+			EnvFingerprint: envFP,
+			PolicyVersion:  eCtx.PolicyVersion,
+		}
+		bindRuntimePolicyDecision(decision, eCtx.ActiveSnapshot, eCtx.PolicyVersion)
+		if eCtx.SessionRiskSnapshot != nil {
+			decision.TrajectoryRiskScore = eCtx.SessionRiskSnapshot.TrajectoryRiskScore
+			decision.SessionCentroidHash = eCtx.SessionRiskSnapshot.SessionCentroidHash
+			decision.RiskAccumulationWindow = eCtx.SessionRiskSnapshot.RiskAccumulationWindow
+		}
+
+		if eCtx.ThreatScanResult != nil && eCtx.ThreatScanResult.FindingCount > 0 {
+			if decision.InputContext == nil {
+				decision.InputContext = make(map[string]any)
 			}
-		} else if resp.Level == ResponseThrottle {
-			intervention = &contracts.InterventionMetadata{
-				Type:         contracts.InterventionThrottle,
-				ReasonCode:   string(contracts.ReasonTemporalThrottle),
-				WaitDuration: resp.Duration,
+			decision.InputContext["threat_scan"] = eCtx.ThreatScanResult.Ref()
+		}
+
+		if eCtx.PDPBackend != "" {
+			decision.PolicyBackend = eCtx.PDPBackend
+			decision.PolicyContentHash = eCtx.PDPHash
+			decision.PolicyDecisionHash = eCtx.PDPDecisionHash
+		}
+
+		// 3.5: Compliance check
+		if g.complianceChecker != nil {
+			compResult, compErr := g.complianceChecker.CheckCompliance(ctx, req.Principal, req.Action, req.Context)
+			if compErr != nil {
+				decision.Verdict = string(contracts.VerdictDeny)
+				decision.ReasonCode = "COMPLIANCE_ERROR"
+				decision.Reason = fmt.Sprintf("compliance check error: %v", compErr)
+				if signErr := g.signer.SignDecision(decision); signErr != nil {
+					return nil, fmt.Errorf("failed to sign compliance-error decision: %w", signErr)
+				}
+				return decision, nil
+			}
+			if !compResult.Compliant {
+				decision.Verdict = string(contracts.VerdictDeny)
+				decision.ReasonCode = "COMPLIANCE_VIOLATION"
+				decision.Reason = fmt.Sprintf("compliance violation: %s (obligations: %v)", compResult.Reason, compResult.ViolatedObligations)
+				if signErr := g.signer.SignDecision(decision); signErr != nil {
+					return nil, fmt.Errorf("failed to sign compliance-deny decision: %w", signErr)
+				}
+				g.recordBehavioralEvent(req.Principal, trust.EventPolicyViolate, "compliance violation")
+				return decision, nil
 			}
 		}
-	}
 
-	// 3.5: Compliance check — evaluate against active obligations
-	if g.complianceChecker != nil {
-		compResult, compErr := g.complianceChecker.CheckCompliance(ctx, req.Principal, req.Action, req.Context)
-		if compErr != nil {
-			// Fail-closed: compliance check error → DENY
-			decision.Verdict = string(contracts.VerdictDeny)
-			decision.ReasonCode = "COMPLIANCE_ERROR"
-			decision.Reason = fmt.Sprintf("compliance check error: %v", compErr)
-			if signErr := g.signer.SignDecision(decision); signErr != nil {
-				return nil, fmt.Errorf("failed to sign compliance-error decision: %w", signErr)
+		err := g.signDecisionWithGraph(ctx, decision, effect, []string{}, eCtx.Intervention, eCtx.ActiveGraph)
+		if err != nil {
+			return nil, err
+		}
+
+		if decision.Verdict == string(contracts.VerdictAllow) {
+			g.recordBehavioralEvent(req.Principal, trust.EventPolicyComply, "decision allowed")
+		} else if decision.Verdict == string(contracts.VerdictDeny) {
+			g.recordBehavioralEvent(req.Principal, trust.EventPolicyViolate, "decision denied: "+decision.ReasonCode)
+		}
+
+		if g.auditLog != nil {
+			decisionBytes, _ := canonicalize.JCS(decision)
+			if _, logErr := g.auditLog.Append("guardian", "DECISION_MADE", decision.ID, string(decisionBytes)); logErr != nil {
+				return nil, fmt.Errorf("audit failure for decision %s: %w", decision.ID, logErr)
 			}
-			return decision, nil
 		}
-		if !compResult.Compliant {
-			decision.Verdict = string(contracts.VerdictDeny)
-			decision.ReasonCode = "COMPLIANCE_VIOLATION"
-			decision.Reason = fmt.Sprintf("compliance violation: %s (obligations: %v)", compResult.Reason, compResult.ViolatedObligations)
-			if signErr := g.signer.SignDecision(decision); signErr != nil {
-				return nil, fmt.Errorf("failed to sign compliance-deny decision: %w", signErr)
-			}
-			g.recordBehavioralEvent(req.Principal, trust.EventPolicyViolate, "compliance violation")
-			return decision, nil
-		}
+
+		return decision, nil
 	}
 
-	err := g.signDecisionWithGraph(ctx, decision, effect, []string{}, intervention, activeGraph)
-	if err != nil {
-		return nil, err
-	}
+	chain := NewInterceptorChain([]BoundaryInterceptor{
+		g.zeroidInterceptor,
+		NewTemporalInterceptor(g),
+		NewFreezeInterceptor(g),
+		NewPDPInterceptor(g),
+		NewTaintEgressInterceptor(g),
+		NewSandboxAllocationInterceptor(g),
+	}, finalHandler)
 
-	// 3.7: Record behavioral event based on final verdict
-	if decision.Verdict == string(contracts.VerdictAllow) {
-		g.recordBehavioralEvent(req.Principal, trust.EventPolicyComply, "decision allowed")
-	} else if decision.Verdict == string(contracts.VerdictDeny) {
-		g.recordBehavioralEvent(req.Principal, trust.EventPolicyViolate, "decision denied: "+decision.ReasonCode)
-	}
-
-	// 4. F2: Persistence — audit failure is a hard error
-	if g.auditLog != nil {
-		decisionBytes, _ := canonicalize.JCS(decision)
-		if _, logErr := g.auditLog.Append("guardian", "DECISION_MADE", decision.ID, string(decisionBytes)); logErr != nil {
-			return nil, fmt.Errorf("audit failure for decision %s: %w", decision.ID, logErr)
-		}
-	}
-
-	return decision, nil
+	return chain.Execute(ctx, evalCtx)
 }
 
 // responseToIntervention maps TemporalGuardian ResponseLevel to InterventionType.

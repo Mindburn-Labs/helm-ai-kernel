@@ -3,6 +3,8 @@ package policies
 import (
 	"fmt"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // Effect represents an effect to be executed.
@@ -25,22 +27,11 @@ type Approval struct {
 	Signature  string    `json:"signature,omitempty"`
 }
 
-// Receipt represents the result of an executed effect.
-type Receipt struct {
-	ReceiptID       string            `json:"receipt_id"`
-	EffectID        string            `json:"effect_id"`
-	EffectType      EffectType        `json:"effect_type"`
-	Status          ReceiptStatus     `json:"status"`
-	ToolFingerprint string            `json:"tool_fingerprint,omitempty"`
-	Evidence        map[string]string `json:"evidence"`
-	ContentHash     string            `json:"content_hash"`
-	Timestamp       time.Time         `json:"timestamp"`
-	IdempotencyKey  string            `json:"idempotency_key,omitempty"`
-	RetryCount      int               `json:"retry_count"`
-}
+// Receipt is an alias to the canonical contracts.Receipt type.
+type Receipt = contracts.Receipt
 
 // ReceiptStatus represents the outcome of an effect.
-type ReceiptStatus string
+type ReceiptStatus = string
 
 const (
 	ReceiptStatusSuccess ReceiptStatus = "SUCCESS"

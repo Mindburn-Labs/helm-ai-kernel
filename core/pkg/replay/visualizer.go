@@ -95,16 +95,15 @@ func BuildTimeline(viewID string, receipts []Receipt) (*TimelineView, error) {
 
 	events := make([]TimelineEvent, 0, len(receipts))
 	for _, r := range receipts {
-		ts, _ := time.Parse(time.RFC3339, r.Timestamp)
 		evt := TimelineEvent{
-			EventID:    r.ID,
-			Timestamp:  ts,
+			EventID:    getID(r),
+			Timestamp:  r.Timestamp,
 			Type:       classifyEvent(r),
 			Actor:      "", // derived from receipt context
 			Action:     r.ToolName,
 			Verdict:    r.Status,
 			ReasonCode: r.ReasonCode,
-			ReceiptID:  r.ID,
+			ReceiptID:  getID(r),
 			Depth:      0,
 		}
 		events = append(events, evt)

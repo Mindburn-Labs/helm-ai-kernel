@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 )
 
@@ -30,15 +31,15 @@ import (
 type Server struct {
 	mu             sync.RWMutex
 	pdp            pdp.PolicyDecisionPoint
-	receipts       map[string]*Receipt
+	receipts       map[string]*contracts.Receipt
 	sessions       map[string][]string // sessionID → []receiptID
 	lamport        uint64
 	mux            *http.ServeMux
 	allowedOrigins []string // CORS allowed origins (nil = no CORS headers)
 }
 
-// Receipt stored in-memory.
-type Receipt struct {
+// ReceiptDTO stored in-memory / external schema.
+type ReceiptDTO struct {
 	ReceiptID    string         `json:"receipt_id"`
 	DecisionID   string         `json:"decision_id"`
 	EffectID     string         `json:"effect_id"`
@@ -51,6 +52,32 @@ type Receipt struct {
 	DecisionHash string         `json:"decision_hash"`
 	ArgsHash     string         `json:"args_hash,omitempty"`
 	Metadata     map[string]any `json:"metadata,omitempty"`
+}
+
+func FromCanonical(r *contracts.Receipt) *ReceiptDTO {
+	if r == nil {
+		return nil
+	}
+	decHash := ""
+	if r.Metadata != nil {
+		if val, ok := r.Metadata["decision_hash"].(string); ok {
+			decHash = val
+		}
+	}
+	return &ReceiptDTO{
+		ReceiptID:    r.ReceiptID,
+		DecisionID:   r.DecisionID,
+		EffectID:     r.EffectID,
+		Status:       r.Status,
+		Timestamp:    r.Timestamp.Format(time.RFC3339),
+		ExecutorID:   r.ExecutorID,
+		Signature:    r.Signature,
+		PrevHash:     r.PrevHash,
+		LamportClock: r.LamportClock,
+		DecisionHash: decHash,
+		ArgsHash:     r.ArgsHash,
+		Metadata:     r.Metadata,
+	}
 }
 
 // EvaluateRequest is the JSON body sent by SDKs.
@@ -86,7 +113,7 @@ type ServerConfig struct {
 func NewServer(cfg ServerConfig) *Server {
 	s := &Server{
 		pdp:            cfg.PDP,
-		receipts:       make(map[string]*Receipt),
+		receipts:       make(map[string]*contracts.Receipt),
 		sessions:       make(map[string][]string),
 		mux:            http.NewServeMux(),
 		allowedOrigins: cfg.AllowedOrigins,
@@ -179,7 +206,7 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	prevHash := "sha256:genesis"
 	if sessionReceipts, ok := s.sessions[req.SessionID]; ok && len(sessionReceipts) > 0 {
 		lastID := sessionReceipts[len(sessionReceipts)-1]
-		if lastReceipt, ok := s.receipts[lastID]; ok {
+		if lastReceipt, ok := s.receipts[lastID]; ok && len(lastReceipt.Signature) >= 64 {
 			prevHash = "sha256:" + lastReceipt.Signature[:64]
 		}
 	}
@@ -200,18 +227,18 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 
 	sig := sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%s:%d", receiptID, status, prevHash, lamport)))
 
-	receipt := &Receipt{
+	receipt := &contracts.Receipt{
 		ReceiptID:    receiptID,
 		DecisionID:   decisionID,
 		EffectID:     req.Tool,
 		Status:       status,
-		Timestamp:    time.Now().UTC().Format(time.RFC3339),
+		Timestamp:    time.Now().UTC(),
 		ExecutorID:   req.AgentID,
 		Signature:    hex.EncodeToString(sig[:]),
 		PrevHash:     prevHash,
 		LamportClock: lamport,
-		DecisionHash: decResp.DecisionHash,
 		ArgsHash:     "sha256:" + hex.EncodeToString(argsHash[:]),
+		Metadata:     map[string]any{"decision_hash": decResp.DecisionHash},
 	}
 
 	s.receipts[receiptID] = receipt
@@ -262,16 +289,16 @@ func (s *Server) handleReceipts(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "receipt not found", http.StatusNotFound)
 			return
 		}
-		writeJSON(w, http.StatusOK, receipt)
+		writeJSON(w, http.StatusOK, FromCanonical(receipt))
 		return
 	}
 
 	// GET /api/v1/receipts/ — list all
 	if r.Method == http.MethodGet {
 		s.mu.RLock()
-		all := make([]*Receipt, 0, len(s.receipts))
+		all := make([]*ReceiptDTO, 0, len(s.receipts))
 		for _, r := range s.receipts {
-			all = append(all, r)
+			all = append(all, FromCanonical(r))
 		}
 		s.mu.RUnlock()
 		writeJSON(w, http.StatusOK, all)
@@ -300,10 +327,10 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var receipts []*Receipt
+	var receipts []*ReceiptDTO
 	for _, id := range receiptIDs {
 		if r, ok := s.receipts[id]; ok {
-			receipts = append(receipts, r)
+			receipts = append(receipts, FromCanonical(r))
 		}
 	}
 	s.mu.RUnlock()

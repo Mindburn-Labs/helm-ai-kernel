@@ -2,8 +2,10 @@ package crypto
 
 import (
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"sync"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
@@ -19,6 +21,7 @@ type Verifier interface {
 // Ed25519Verifier implements Verifier using Ed25519.
 type Ed25519Verifier struct {
 	PublicKey ed25519.PublicKey
+	cache     sync.Map
 }
 
 // NewEd25519Verifier creates a new verifier.
@@ -30,7 +33,18 @@ func NewEd25519Verifier(pubKeyBytes []byte) (*Ed25519Verifier, error) {
 }
 
 func (v *Ed25519Verifier) Verify(message []byte, signature []byte) bool {
-	return ed25519.Verify(v.PublicKey, message, signature)
+	hasher := sha256.New()
+	hasher.Write(message)
+	hasher.Write(signature)
+	key := string(hasher.Sum(nil))
+
+	if val, ok := v.cache.Load(key); ok {
+		return val.(bool)
+	}
+
+	res := ed25519.Verify(v.PublicKey, message, signature)
+	v.cache.Store(key, res)
+	return res
 }
 
 func (v *Ed25519Verifier) VerifyDecision(d *contracts.DecisionRecord) (bool, error) {

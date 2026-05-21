@@ -72,7 +72,7 @@ func TestStress_Replay100Receipts(t *testing.T) {
 			ID:           fmt.Sprintf("r-%d", i),
 			ToolName:     "tool",
 			ArgsHash:     fmt.Sprintf("args-%d", i),
-			Timestamp:    fmt.Sprintf("2025-01-01T00:00:%02dZ", i%60),
+			Timestamp:    parseTime(fmt.Sprintf("2025-01-01T00:00:%02dZ", i%60)),
 			Status:       "SUCCESS",
 			ReasonCode:   "ok",
 			LamportClock: uint64(i + 1),
@@ -105,8 +105,8 @@ func TestStress_ReplayEmpty(t *testing.T) {
 
 func TestStress_ReplayDuplicateIDs(t *testing.T) {
 	receipts := []Receipt{
-		{ID: "same", ToolName: "t", PrevHash: "GENESIS", LamportClock: 1, Timestamp: "2025-01-01T00:00:00Z"},
-		{ID: "same", ToolName: "t", PrevHash: "x", LamportClock: 2, Timestamp: "2025-01-01T00:00:01Z"},
+		{ID: "same", ToolName: "t", PrevHash: "GENESIS", LamportClock: 1, Timestamp: parseTime("2025-01-01T00:00:00Z")},
+		{ID: "same", ToolName: "t", PrevHash: "x", LamportClock: 2, Timestamp: parseTime("2025-01-01T00:00:01Z")},
 	}
 	result, _ := Replay(receipts)
 	if len(result.DuplicateIDs) != 1 {
@@ -116,8 +116,8 @@ func TestStress_ReplayDuplicateIDs(t *testing.T) {
 
 func TestStress_ReplayLamportNotMonotonic(t *testing.T) {
 	receipts := []Receipt{
-		{ID: "r1", PrevHash: "GENESIS", LamportClock: 5, Timestamp: "2025-01-01T00:00:00Z"},
-		{ID: "r2", PrevHash: "x", LamportClock: 3, Timestamp: "2025-01-01T00:00:01Z"},
+		{ID: "r1", PrevHash: "GENESIS", LamportClock: 5, Timestamp: parseTime("2025-01-01T00:00:00Z")},
+		{ID: "r2", PrevHash: "x", LamportClock: 3, Timestamp: parseTime("2025-01-01T00:00:01Z")},
 	}
 	result, _ := Replay(receipts)
 	if result.LamportValid {
@@ -127,7 +127,7 @@ func TestStress_ReplayLamportNotMonotonic(t *testing.T) {
 
 func TestStress_ReplayGenesisNonStandard(t *testing.T) {
 	receipts := []Receipt{
-		{ID: "r1", PrevHash: "unexpected-value", LamportClock: 1, Timestamp: "2025-01-01T00:00:00Z"},
+		{ID: "r1", PrevHash: "unexpected-value", LamportClock: 1, Timestamp: parseTime("2025-01-01T00:00:00Z")},
 	}
 	result, _ := Replay(receipts)
 	if result.ValidChain {
@@ -138,7 +138,7 @@ func TestStress_ReplayGenesisNonStandard(t *testing.T) {
 func TestStress_ReplayFromReaderJSONL(t *testing.T) {
 	var buf bytes.Buffer
 	for i := 0; i < 10; i++ {
-		r := Receipt{ID: fmt.Sprintf("r-%d", i), PrevHash: "GENESIS", LamportClock: uint64(i + 1), Timestamp: fmt.Sprintf("2025-01-01T00:00:%02dZ", i)}
+		r := Receipt{ID: fmt.Sprintf("r-%d", i), PrevHash: "GENESIS", LamportClock: uint64(i + 1), Timestamp: parseTime(fmt.Sprintf("2025-01-01T00:00:%02dZ", i))}
 		data, _ := json.Marshal(r)
 		buf.Write(data)
 		buf.WriteByte('\n')
@@ -151,9 +151,9 @@ func TestStress_ReplayFromReaderJSONL(t *testing.T) {
 
 func TestStress_ReplayReasonCodeSummary(t *testing.T) {
 	receipts := []Receipt{
-		{ID: "r1", PrevHash: "GENESIS", LamportClock: 1, ReasonCode: "ok", Timestamp: "a"},
-		{ID: "r2", PrevHash: "x", LamportClock: 2, ReasonCode: "ok", Timestamp: "b"},
-		{ID: "r3", PrevHash: "y", LamportClock: 3, ReasonCode: "deny", Timestamp: "c"},
+		{ID: "r1", PrevHash: "GENESIS", LamportClock: 1, ReasonCode: "ok", Timestamp: parseTime("a")},
+		{ID: "r2", PrevHash: "x", LamportClock: 2, ReasonCode: "ok", Timestamp: parseTime("b")},
+		{ID: "r3", PrevHash: "y", LamportClock: 3, ReasonCode: "deny", Timestamp: parseTime("c")},
 	}
 	result, _ := Replay(receipts)
 	if result.Summary["ok"] != 2 || result.Summary["deny"] != 1 {
@@ -163,7 +163,7 @@ func TestStress_ReplayReasonCodeSummary(t *testing.T) {
 
 func TestStress_ReplayWithSignatureVerifier(t *testing.T) {
 	receipts := []Receipt{
-		{ID: "r1", PrevHash: "GENESIS", LamportClock: 1, Signature: "sig", Timestamp: "a"},
+		{ID: "r1", PrevHash: "GENESIS", LamportClock: 1, Signature: "sig", Timestamp: parseTime("a")},
 	}
 	result, _ := Replay(receipts, WithSignatureVerifier(func(data []byte, sig string) error {
 		return fmt.Errorf("invalid signature")
@@ -444,8 +444,8 @@ func (s *fakeReplayEngine) Replay(_ context.Context, _ *contracts.ReplayScriptRe
 
 func TestStress_ReplayTimestampsNotSorted(t *testing.T) {
 	receipts := []Receipt{
-		{ID: "r1", PrevHash: "GENESIS", LamportClock: 1, Timestamp: "2025-01-01T00:00:02Z"},
-		{ID: "r2", PrevHash: "x", LamportClock: 2, Timestamp: "2025-01-01T00:00:01Z"},
+		{ID: "r1", PrevHash: "GENESIS", LamportClock: 1, Timestamp: parseTime("2025-01-01T00:00:02Z")},
+		{ID: "r2", PrevHash: "x", LamportClock: 2, Timestamp: parseTime("2025-01-01T00:00:01Z")},
 	}
 	result, _ := Replay(receipts)
 	if result.OrderValid {
@@ -455,8 +455,8 @@ func TestStress_ReplayTimestampsNotSorted(t *testing.T) {
 
 func TestStress_ReplayTimestampsSorted(t *testing.T) {
 	receipts := []Receipt{
-		{ID: "r1", PrevHash: "GENESIS", LamportClock: 1, Timestamp: "2025-01-01T00:00:00Z"},
-		{ID: "r2", PrevHash: "x", LamportClock: 2, Timestamp: "2025-01-01T00:00:01Z"},
+		{ID: "r1", PrevHash: "GENESIS", LamportClock: 1, Timestamp: parseTime("2025-01-01T00:00:00Z")},
+		{ID: "r2", PrevHash: "x", LamportClock: 2, Timestamp: parseTime("2025-01-01T00:00:01Z")},
 	}
 	result, _ := Replay(receipts)
 	if !result.OrderValid {
@@ -466,7 +466,7 @@ func TestStress_ReplayTimestampsSorted(t *testing.T) {
 
 func TestStress_ReplaySignatureVerifierPass(t *testing.T) {
 	receipts := []Receipt{
-		{ID: "r1", PrevHash: "GENESIS", LamportClock: 1, Signature: "sig", Timestamp: "a"},
+		{ID: "r1", PrevHash: "GENESIS", LamportClock: 1, Signature: "sig", Timestamp: parseTime("a")},
 	}
 	result, _ := Replay(receipts, WithSignatureVerifier(func(data []byte, sig string) error {
 		return nil
@@ -478,7 +478,7 @@ func TestStress_ReplaySignatureVerifierPass(t *testing.T) {
 
 func TestStress_ReplayNoSignatureNoVerify(t *testing.T) {
 	receipts := []Receipt{
-		{ID: "r1", PrevHash: "GENESIS", LamportClock: 1, Timestamp: "a"},
+		{ID: "r1", PrevHash: "GENESIS", LamportClock: 1, Timestamp: parseTime("a")},
 	}
 	result, _ := Replay(receipts, WithSignatureVerifier(func(data []byte, sig string) error {
 		return fmt.Errorf("should not be called")
@@ -490,8 +490,8 @@ func TestStress_ReplayNoSignatureNoVerify(t *testing.T) {
 
 func TestStress_ReplayHashesVerified(t *testing.T) {
 	receipts := []Receipt{
-		{ID: "r1", PrevHash: "GENESIS", LamportClock: 1, Timestamp: "a"},
-		{ID: "r2", PrevHash: "x", LamportClock: 2, Timestamp: "b"},
+		{ID: "r1", PrevHash: "GENESIS", LamportClock: 1, Timestamp: parseTime("a")},
+		{ID: "r2", PrevHash: "x", LamportClock: 2, Timestamp: parseTime("b")},
 	}
 	result, _ := Replay(receipts)
 	if result.HashesVerified != 2 {

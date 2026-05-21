@@ -221,7 +221,7 @@ func TestFinal_BuildTimelineEmpty(t *testing.T) {
 }
 
 func TestFinal_BuildTimelineSingle(t *testing.T) {
-	tv, err := BuildTimeline("v1", []Receipt{{ID: "r1", Status: "ALLOW", Timestamp: time.Now().Format(time.RFC3339)}})
+	tv, err := BuildTimeline("v1", []Receipt{{ID: "r1", Status: "ALLOW", Timestamp: time.Now()}})
 	if err != nil {
 		t.Fatal(err)
 	}

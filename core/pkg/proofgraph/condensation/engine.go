@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // ── Errors ───────────────────────────────────────────────────────────
@@ -26,20 +28,16 @@ var (
 // ── Types ────────────────────────────────────────────────────────────
 
 // RiskTier classifies the evidence retention requirement.
-type RiskTier int
+type RiskTier = contracts.RiskTier
 
 const (
-	RiskLow    RiskTier = 0 // T0–T1: condensable after checkpoint
-	RiskMedium RiskTier = 1 // T2: full receipts + periodic checkpoints
-	RiskHigh   RiskTier = 2 // T3+: full retention, no condensation
+	RiskLow    RiskTier = contracts.RiskTierLow    // T0–T1: condensable after checkpoint
+	RiskMedium RiskTier = contracts.RiskTierMedium // T2: full receipts + periodic checkpoints
+	RiskHigh   RiskTier = contracts.RiskTierHigh   // T3+: full retention, no condensation
 )
 
 // Receipt is a minimal receipt representation for condensation.
-type Receipt struct {
-	ID       string   `json:"id"`
-	Hash     string   `json:"hash"` // SHA-256 of canonical receipt content
-	RiskTier RiskTier `json:"risk_tier"`
-}
+type Receipt = contracts.Receipt
 
 // Checkpoint represents a condensation checkpoint over a window of receipts.
 type Checkpoint struct {

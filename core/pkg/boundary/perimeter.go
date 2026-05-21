@@ -116,11 +116,22 @@ type Metadata struct {
 	Tags      []string  `json:"tags,omitempty"`
 }
 
+// ViolationHandler is a callback function for perimeter violations.
+type ViolationHandler func(ctx context.Context, err error, reason string, policyID string)
+
 // PerimeterEnforcer enforces the policy.
 type PerimeterEnforcer struct {
 	mu           sync.RWMutex
 	policy       *PerimeterPolicy
 	compiledHost []*regexp.Regexp // Compiled regex for wildcard hosts
+	onViolation  ViolationHandler
+}
+
+// SetViolationHandler sets the callback for policy violations.
+func (pe *PerimeterEnforcer) SetViolationHandler(handler ViolationHandler) {
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
+	pe.onViolation = handler
 }
 
 // NewPerimeterEnforcer creates a new enforcer.
@@ -189,13 +200,13 @@ func (pe *PerimeterEnforcer) CheckNetwork(ctx context.Context, targetURL string)
 
 	// 1. Check TLS
 	if nc.RequireTLS && u.Scheme != "https" {
-		return pe.enforce(ErrNetworkDenied, "TLS required")
+		return pe.enforce(ctx, ErrNetworkDenied, "TLS required")
 	}
 
 	// 2. Check explicitly denied hosts
 	for _, denied := range nc.DeniedHosts {
 		if matchHost(denied, host) {
-			return pe.enforce(ErrNetworkDenied, "host explicitly denied: "+host)
+			return pe.enforce(ctx, ErrNetworkDenied, "host explicitly denied: "+host)
 		}
 	}
 
@@ -209,7 +220,7 @@ func (pe *PerimeterEnforcer) CheckNetwork(ctx context.Context, targetURL string)
 			}
 		}
 		if !allowed {
-			return pe.enforce(ErrNetworkDenied, "host not in allowlist: "+host)
+			return pe.enforce(ctx, ErrNetworkDenied, "host not in allowlist: "+host)
 		}
 	}
 
@@ -225,7 +236,7 @@ func (pe *PerimeterEnforcer) CheckNetwork(ctx context.Context, targetURL string)
 			}
 		}
 		if !allowed {
-			return pe.enforce(ErrNetworkDenied, "port not allowed: "+port)
+			return pe.enforce(ctx, ErrNetworkDenied, "port not allowed: "+port)
 		}
 	}
 
@@ -248,13 +259,13 @@ func (pe *PerimeterEnforcer) CheckTool(ctx context.Context, toolID string, attes
 
 	// 1. Check attestation
 	if tc.RequireAttestation && !attested {
-		return pe.enforce(ErrAttestationNeeded, "tool not attested: "+toolID)
+		return pe.enforce(ctx, ErrAttestationNeeded, "tool not attested: "+toolID)
 	}
 
 	// 2. Check denied tools
 	for _, denied := range tc.DeniedTools {
 		if denied == toolID {
-			return pe.enforce(ErrToolDenied, "tool explicitly denied: "+toolID)
+			return pe.enforce(ctx, ErrToolDenied, "tool explicitly denied: "+toolID)
 		}
 	}
 
@@ -268,7 +279,7 @@ func (pe *PerimeterEnforcer) CheckTool(ctx context.Context, toolID string, attes
 			}
 		}
 		if !allowed {
-			return pe.enforce(ErrToolDenied, "tool not in allowlist: "+toolID)
+			return pe.enforce(ctx, ErrToolDenied, "tool not in allowlist: "+toolID)
 		}
 	}
 
@@ -292,7 +303,7 @@ func (pe *PerimeterEnforcer) CheckData(ctx context.Context, dataClass string) er
 	// 1. Check denied classes
 	for _, denied := range dc.DeniedClasses {
 		if denied == dataClass {
-			return pe.enforce(ErrDataDenied, "data class denied: "+dataClass)
+			return pe.enforce(ctx, ErrDataDenied, "data class denied: "+dataClass)
 		}
 	}
 
@@ -306,7 +317,7 @@ func (pe *PerimeterEnforcer) CheckData(ctx context.Context, dataClass string) er
 			}
 		}
 		if !allowed {
-			return pe.enforce(ErrDataDenied, "data class not allowed: "+dataClass)
+			return pe.enforce(ctx, ErrDataDenied, "data class not allowed: "+dataClass)
 		}
 	}
 
@@ -315,9 +326,23 @@ func (pe *PerimeterEnforcer) CheckData(ctx context.Context, dataClass string) er
 
 // CheckTemporal removed - was dead code
 
-func (pe *PerimeterEnforcer) enforce(err error, reason string) error {
-	if pe.policy.Enforcement.Mode == ModeAudit {
-		// NOTE: Audit-mode violations are silently permitted. Structured audit logging is intentionally not wired into this path.
+func (pe *PerimeterEnforcer) enforce(ctx context.Context, err error, reason string) error {
+	pe.mu.RLock()
+	handler := pe.onViolation
+	policyID := ""
+	mode := ModeEnforce
+	if pe.policy != nil {
+		policyID = pe.policy.PolicyID
+		mode = pe.policy.Enforcement.Mode
+	}
+	pe.mu.RUnlock()
+
+	if handler != nil {
+		// Non-blocking invocation for telemetry / audit log writes
+		go handler(ctx, err, reason, policyID)
+	}
+
+	if mode == ModeAudit {
 		return nil
 	}
 	return fmt.Errorf("%w: %s", err, reason)

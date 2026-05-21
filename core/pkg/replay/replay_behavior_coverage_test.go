@@ -126,10 +126,10 @@ func TestManifest_FullModeCompletes(t *testing.T) {
 // --- Replay Receipt Chain ---
 
 func TestReplay_ValidChainTwoReceipts(t *testing.T) {
-	r1 := replay.Receipt{ID: "r1", ToolName: "t", Timestamp: "2026-01-01T00:00:00Z", LamportClock: 1}
+	r1 := replay.Receipt{ID: "r1", ToolName: "t", Timestamp: parseTime("2026-01-01T00:00:00Z"), LamportClock: 1}
 	data1, _ := json.Marshal(r1)
 	h1 := sha256.Sum256(data1)
-	r2 := replay.Receipt{ID: "r2", ToolName: "t", PrevHash: hex.EncodeToString(h1[:]), Timestamp: "2026-01-01T00:00:01Z", LamportClock: 2}
+	r2 := replay.Receipt{ID: "r2", ToolName: "t", PrevHash: hex.EncodeToString(h1[:]), Timestamp: parseTime("2026-01-01T00:00:01Z"), LamportClock: 2}
 	result, _ := replay.Replay([]replay.Receipt{r1, r2})
 	if !result.ValidChain || !result.LamportValid {
 		t.Fatalf("chain should be valid: %+v", result)
@@ -144,10 +144,10 @@ func TestReplay_EmptyChainValid(t *testing.T) {
 }
 
 func TestReplay_DuplicateIDsDetected(t *testing.T) {
-	r1 := replay.Receipt{ID: "dup", ToolName: "t", Timestamp: "2026-01-01T00:00:00Z", LamportClock: 1}
+	r1 := replay.Receipt{ID: "dup", ToolName: "t", Timestamp: parseTime("2026-01-01T00:00:00Z"), LamportClock: 1}
 	data1, _ := json.Marshal(r1)
 	h1 := sha256.Sum256(data1)
-	r2 := replay.Receipt{ID: "dup", ToolName: "t", PrevHash: hex.EncodeToString(h1[:]), Timestamp: "2026-01-01T00:00:01Z", LamportClock: 2}
+	r2 := replay.Receipt{ID: "dup", ToolName: "t", PrevHash: hex.EncodeToString(h1[:]), Timestamp: parseTime("2026-01-01T00:00:01Z"), LamportClock: 2}
 	result, _ := replay.Replay([]replay.Receipt{r1, r2})
 	if len(result.DuplicateIDs) == 0 {
 		t.Fatal("duplicate IDs should be detected")
@@ -155,10 +155,10 @@ func TestReplay_DuplicateIDsDetected(t *testing.T) {
 }
 
 func TestReplay_LamportViolationDetected(t *testing.T) {
-	r1 := replay.Receipt{ID: "r1", ToolName: "t", Timestamp: "2026-01-01T00:00:00Z", LamportClock: 5}
+	r1 := replay.Receipt{ID: "r1", ToolName: "t", Timestamp: parseTime("2026-01-01T00:00:00Z"), LamportClock: 5}
 	data1, _ := json.Marshal(r1)
 	h1 := sha256.Sum256(data1)
-	r2 := replay.Receipt{ID: "r2", ToolName: "t", PrevHash: hex.EncodeToString(h1[:]), Timestamp: "2026-01-01T00:00:01Z", LamportClock: 3}
+	r2 := replay.Receipt{ID: "r2", ToolName: "t", PrevHash: hex.EncodeToString(h1[:]), Timestamp: parseTime("2026-01-01T00:00:01Z"), LamportClock: 3}
 	result, _ := replay.Replay([]replay.Receipt{r1, r2})
 	if result.LamportValid {
 		t.Fatal("Lamport violation should be detected")
@@ -166,10 +166,10 @@ func TestReplay_LamportViolationDetected(t *testing.T) {
 }
 
 func TestReplay_TimestampOrderChecked(t *testing.T) {
-	r1 := replay.Receipt{ID: "r1", ToolName: "t", Timestamp: "2026-01-01T00:00:02Z", LamportClock: 1}
+	r1 := replay.Receipt{ID: "r1", ToolName: "t", Timestamp: parseTime("2026-01-01T00:00:02Z"), LamportClock: 1}
 	data1, _ := json.Marshal(r1)
 	h1 := sha256.Sum256(data1)
-	r2 := replay.Receipt{ID: "r2", ToolName: "t", PrevHash: hex.EncodeToString(h1[:]), Timestamp: "2026-01-01T00:00:01Z", LamportClock: 2}
+	r2 := replay.Receipt{ID: "r2", ToolName: "t", PrevHash: hex.EncodeToString(h1[:]), Timestamp: parseTime("2026-01-01T00:00:01Z"), LamportClock: 2}
 	result, _ := replay.Replay([]replay.Receipt{r1, r2})
 	if result.OrderValid {
 		t.Fatal("out-of-order timestamps should be detected")
@@ -208,8 +208,8 @@ func TestVerifyReplayIntegrity_DivergedSession(t *testing.T) {
 
 func TestBuildTimeline_ProducesEvents(t *testing.T) {
 	receipts := []replay.Receipt{
-		{ID: "r1", ToolName: "calc", Timestamp: "2026-01-01T00:00:00Z", Status: "ALLOW"},
-		{ID: "r2", ToolName: "read", Timestamp: "2026-01-01T00:00:01Z", Status: "DENY"},
+		{ID: "r1", ToolName: "calc", Timestamp: parseTime("2026-01-01T00:00:00Z"), Status: "ALLOW"},
+		{ID: "r2", ToolName: "read", Timestamp: parseTime("2026-01-01T00:00:01Z"), Status: "DENY"},
 	}
 	tl, err := replay.BuildTimeline("view-1", receipts)
 	if err != nil || tl.Summary.TotalEvents != 2 {
@@ -253,4 +253,12 @@ func (d *divergingExecutor) ReplayEvent(_ context.Context, event replay.RunEvent
 		return d.wrongHash, nil
 	}
 	return event.OutputHash, nil
+}
+
+func parseTime(s string) time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }

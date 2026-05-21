@@ -29,13 +29,3 @@ type ExecutionIntent struct {
 	DecisionID       string `json:"decision_id"`
 	Signature        []byte `json:"signature"` // Signed by Governance Key
 }
-
-// Receipt is the proof of execution.
-type Receipt struct {
-	ID                string    `json:"id"`
-	ExecutionIntentID string    `json:"execution_intent_id"`
-	Status            string    `json:"status"` // SUCCESS, FAILURE
-	Result            []byte    `json:"result"`
-	Timestamp         time.Time `json:"timestamp"`
-	ExecutorID        string    `json:"executor_id"`
-}

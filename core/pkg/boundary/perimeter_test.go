@@ -2,7 +2,9 @@ package boundary
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestPerimeterEnforcer_Network(t *testing.T) {
@@ -147,5 +149,89 @@ func TestPerimeterEnforcer_Data(t *testing.T) {
 
 	if err := pe.CheckData(ctx, "restricted"); err == nil {
 		t.Errorf("Denied data class accepted")
+	}
+}
+
+func TestPerimeterAuditModeLogging(t *testing.T) {
+	policy := &PerimeterPolicy{
+		Version:  PolicyVersion,
+		PolicyID: "audit-test-01",
+		Enforcement: Enforcement{
+			Mode: ModeAudit,
+		},
+		Constraints: Constraints{
+			Tools: &ToolConstraints{
+				AllowedTools: []string{"allowed-tool"},
+			},
+		},
+	}
+
+	pe, err := NewPerimeterEnforcer(policy)
+	if err != nil {
+		t.Fatalf("Failed to create enforcer: %v", err)
+	}
+
+	ctx := context.Background()
+
+	var called bool
+	var callbackErr error
+	var callbackReason string
+	var callbackPolicy string
+
+	pe.SetViolationHandler(func(c context.Context, err error, reason string, policyID string) {
+		called = true
+		callbackErr = err
+		callbackReason = reason
+		callbackPolicy = policyID
+	})
+
+	// Check a tool that is not in the allowlist. Since it's ModeAudit, this should NOT return an error.
+	err = pe.CheckTool(ctx, "unauthorized-tool", true)
+	if err != nil {
+		t.Fatalf("CheckTool returned error %v in audit mode, expected nil", err)
+	}
+
+	// We must wait a tiny bit because the handler is called in a background goroutine "go handler(...)".
+	for i := 0; i < 50; i++ {
+		if called {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if !called {
+		t.Fatal("Violation handler callback was not invoked")
+	}
+
+	if callbackErr != ErrToolDenied {
+		t.Errorf("Expected ErrToolDenied, got %v", callbackErr)
+	}
+	if callbackPolicy != "audit-test-01" {
+		t.Errorf("Expected policyID audit-test-01, got %q", callbackPolicy)
+	}
+	if !strings.Contains(callbackReason, "unauthorized-tool") {
+		t.Errorf("Expected reason to contain unauthorized-tool, got %q", callbackReason)
+	}
+}
+
+func TestMatchHost(t *testing.T) {
+	tests := []struct {
+		pattern string
+		host    string
+		match   bool
+	}{
+		{"*", "example.com", true},
+		{"*.example.com", "api.example.com", true},
+		{"*.example.com", "example.com", true},
+		{"*.example.com", "another.domain.com", false},
+		{"api.example.com", "api.example.com", true},
+		{"api.example.com", "example.com", false},
+	}
+
+	for _, tc := range tests {
+		res := matchHost(tc.pattern, tc.host)
+		if res != tc.match {
+			t.Errorf("matchHost(%q, %q) = %t, expected %t", tc.pattern, tc.host, res, tc.match)
+		}
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // Receipt is a proof-carrying record of a pack install lifecycle event
@@ -17,18 +19,7 @@ import (
 // against tampering within a single trust domain (the operator's local
 // store). Signed distribution is a commercial concern and is added by
 // wrapping this receipt in a commercial envelope.
-type Receipt struct {
-	ReceiptID     string    `json:"receipt_id"`
-	PackID        string    `json:"pack_id"`
-	PackName      string    `json:"pack_name"`
-	PackVersion   string    `json:"pack_version"`
-	PackHash      string    `json:"pack_hash"`
-	Action        string    `json:"action"`
-	InstalledBy   string    `json:"installed_by"`
-	InstalledAt   time.Time `json:"installed_at"`
-	PrevReceiptID string    `json:"prev_receipt_id,omitempty"`
-	ContentHash   string    `json:"content_hash"`
-}
+type Receipt = contracts.Receipt
 
 // issueReceipt produces a new receipt that chains to prevReceiptID (may
 // be empty for a pack's first receipt). The ContentHash is derived from

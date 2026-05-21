@@ -1,6 +1,10 @@
 package skillpacks
 
-import "time"
+import (
+	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+)
 
 const (
 	VerdictAllow    = "ALLOW"
@@ -79,22 +83,9 @@ type InstallRequest struct {
 	RepoRoot string `json:"repo_root"`
 }
 
-type Projection struct {
-	Agent string `json:"agent"`
-	Path  string `json:"path"`
-}
+type Projection = contracts.Projection
 
-type Receipt struct {
-	ID               string       `json:"id"`
-	Type             string       `json:"type"`
-	SkillID          string       `json:"skill_id"`
-	Verdict          string       `json:"verdict"`
-	ReasonCode       string       `json:"reason_code,omitempty"`
-	SkillContentHash string       `json:"skill_content_hash,omitempty"`
-	PolicyHash       string       `json:"policy_hash,omitempty"`
-	ProjectionPaths  []Projection `json:"projection_paths,omitempty"`
-	CreatedAt        time.Time    `json:"created_at"`
-}
+type Receipt = contracts.Receipt
 
 type InstallResult struct {
 	SkillID           string       `json:"skill_id"`

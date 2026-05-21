@@ -24,7 +24,7 @@ import (
 //	2 = config error
 func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel mcp <serve|install|pack|print-config|scan|wrap|list|get|approve|revoke|auth-profile|authorize-call> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel mcp <serve|install|pack|print-config|scan|wrap|list|get|quarantine|approve|revoke|auth-profile|authorize-call> [flags]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Subcommands:")
 		fmt.Fprintln(stderr, "  serve         Start the HELM MCP server (stdio or remote HTTP)")
@@ -35,6 +35,7 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "  wrap          Emit a clean-room execution-firewall wrapper profile for an upstream MCP server")
 		fmt.Fprintln(stderr, "  list          List local MCP registry records")
 		fmt.Fprintln(stderr, "  get           Get one MCP registry record")
+		fmt.Fprintln(stderr, "  quarantine    List Launchpad MCP threat reviews and quarantined tools")
 		fmt.Fprintln(stderr, "  approve       Create a receipt-backed MCP server approval record")
 		fmt.Fprintln(stderr, "  revoke        Revoke a local MCP server approval")
 		fmt.Fprintln(stderr, "  auth-profile  Manage MCP OAuth protected-resource profiles")
@@ -59,6 +60,8 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 		return runMCPList(args[1:], stdout, stderr)
 	case "get":
 		return runMCPGet(args[1:], stdout, stderr)
+	case "quarantine":
+		return runMCPQuarantine(args[1:], stdout, stderr)
 	case "approve":
 		return runMCPApprove(args[1:], stdout, stderr)
 	case "revoke":
@@ -68,7 +71,7 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 	case "authorize-call":
 		return runMCPAuthorizeCall(args[1:], stdout, stderr)
 	case "--help", "-h":
-		fmt.Fprintln(stdout, "Usage: helm-ai-kernel mcp <serve|install|pack|print-config|scan|wrap|list|get|approve|revoke|auth-profile|authorize-call> [flags]")
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel mcp <serve|install|pack|print-config|scan|wrap|list|get|quarantine|approve|revoke|auth-profile|authorize-call> [flags]")
 		fmt.Fprintln(stdout, "")
 		fmt.Fprintln(stdout, "Subcommands:")
 		fmt.Fprintln(stdout, "  serve         Start the HELM MCP server (stdio or remote HTTP)")
@@ -79,6 +82,7 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "  wrap          Emit a clean-room execution-firewall wrapper profile for an upstream MCP server")
 		fmt.Fprintln(stdout, "  list          List local MCP registry records")
 		fmt.Fprintln(stdout, "  get           Get one MCP registry record")
+		fmt.Fprintln(stdout, "  quarantine    List Launchpad MCP threat reviews and quarantined tools")
 		fmt.Fprintln(stdout, "  approve       Create a receipt-backed MCP server approval record")
 		fmt.Fprintln(stdout, "  revoke        Revoke a local MCP server approval")
 		fmt.Fprintln(stdout, "  auth-profile  Manage MCP OAuth protected-resource profiles")

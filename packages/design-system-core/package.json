@@ -111,6 +111,10 @@
       "types": "./dist/components/telemetry.d.ts",
       "import": "./dist/components/telemetry.js"
     },
+    "./components/workbench": {
+      "types": "./dist/components/workbench.d.ts",
+      "import": "./dist/components/workbench.js"
+    },
     "./primitives/catalog": {
       "types": "./dist/primitives/catalog.d.ts",
       "import": "./dist/primitives/catalog.js"

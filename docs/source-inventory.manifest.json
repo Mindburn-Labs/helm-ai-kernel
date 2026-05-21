@@ -456,6 +456,26 @@
       ]
     },
     {
+      "id": "skills-registry-and-policies",
+      "label": "Skill pack registry, first-party skill content, and skill policy fixtures",
+      "classification": "public-hub",
+      "source_patterns": [
+        "registry/skills/**",
+        "policies/skills/**",
+        "docs/skills/**"
+      ],
+      "owner_doc_path": "docs/skills/FLOW_CATALOG.md",
+      "public_doc_slugs": [
+        "helm-ai-kernel/skills/flow-catalog",
+        "helm-ai-kernel/compatibility"
+      ],
+      "rationale": "Skill packs are source-backed procedural guidance. Public docs expose the flow catalog and authority boundary while registry internals remain source-owned.",
+      "validation_commands": [
+        "cd core && go test ./cmd/helm-ai-kernel -run TestSkill -count=1",
+        "make docs-truth"
+      ]
+    },
+    {
       "id": "public-docs-and-research",
       "label": "Public docs, compliance notes, architecture notes, internal strategy notes, and generated docs ledgers",
       "classification": "public-hub",

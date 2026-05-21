@@ -31,11 +31,12 @@ func init() {
 //
 // Subcommands:
 //
-//	compile  — Compile task descriptions into a PlanSpec DAG
-//	evaluate — Evaluate a PlanSpec DAG against policy
+//	compile      — Compile task descriptions into a PlanSpec DAG
+//	evaluate     — Evaluate a PlanSpec DAG against policy
+//	transactions — Inspect local PlanTransaction evidence
 func runPlanCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel plan <compile|evaluate> [options]")
+		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel plan <compile|evaluate|transactions> [options]")
 		return 2
 	}
 
@@ -44,9 +45,11 @@ func runPlanCmd(args []string, stdout, stderr io.Writer) int {
 		return runPlanCompile(args[1:], stdout, stderr)
 	case "evaluate":
 		return runPlanEvaluate(args[1:], stdout, stderr)
+	case "transactions":
+		return runPlanTransactions(args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "Unknown plan subcommand: %s\n", args[0])
-		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel plan <compile|evaluate> [options]")
+		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel plan <compile|evaluate|transactions> [options]")
 		return 2
 	}
 }

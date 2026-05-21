@@ -773,6 +773,154 @@
         "failure_reason": "hash_mismatch",
         "failure_at_receipt": 2
       }
+    },
+    {
+      "id": "HARNESS-001",
+      "description": "Agent-authored mapper executes as pure data transform and records output hash",
+      "input": {
+        "effect": {"effect_type": "exec", "effect_id": "eff-harness-001", "params": {"sandbox": "wasi", "code_hash": "sha256:mapper", "network": "deny-all", "filesystem_preopens": []}},
+        "principal": "agent:mapper",
+        "context": {"generated_code_grant": true}
+      },
+      "expected": {
+        "verdict": "ALLOW",
+        "receipt_present": true,
+        "wasm_output_hash_recorded": true
+      }
+    },
+    {
+      "id": "HARNESS-002",
+      "description": "Agent-authored mapper attempting socket access is denied",
+      "input": {
+        "effect": {"effect_type": "exec", "effect_id": "eff-harness-002", "params": {"sandbox": "wasi", "code_hash": "sha256:mapper-socket", "attempt": "socket_connect"}},
+        "principal": "agent:mapper",
+        "context": {"generated_code_grant": true, "network": "deny-all"}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "SANDBOX_VIOLATION",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "HARNESS-003",
+      "description": "Agent-authored mapper reading an unmounted file is denied",
+      "input": {
+        "effect": {"effect_type": "exec", "effect_id": "eff-harness-003", "params": {"sandbox": "wasi", "code_hash": "sha256:mapper-file", "attempt": "read", "path": "/etc/passwd"}},
+        "principal": "agent:mapper",
+        "context": {"generated_code_grant": true, "filesystem_preopens": []}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "SANDBOX_VIOLATION",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "HARNESS-004",
+      "description": "High-risk GeneratedSpec with missing verification scope escalates before side effect",
+      "input": {
+        "effect": {"effect_type": "generated_spec_execute", "effect_id": "eff-harness-004", "params": {"effect_class": "E3", "verification_scope": null}},
+        "principal": "agent:planner",
+        "context": {"read_set": ["artifact:policy"], "write_set": ["system:cloud"], "assumption_set": ["artifact:policy"]}
+      },
+      "expected": {
+        "verdict": "ESCALATE",
+        "reason_code": "MISSING_REQUIREMENT",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "HARNESS-005",
+      "description": "Stale memory dependency attempts side effect and escalates",
+      "input": {
+        "effect": {"effect_type": "generated_spec_execute", "effect_id": "eff-harness-005", "params": {"effect_class": "E2", "stale_dependency_refs": ["artifact:customer-promise@old"]}},
+        "principal": "agent:planner",
+        "context": {"write_set": ["system:billing"]}
+      },
+      "expected": {
+        "verdict": "ESCALATE",
+        "reason_code": "CONTEXT_MISMATCH",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "HARNESS-006",
+      "description": "Unapproved harness mutation is denied",
+      "input": {
+        "effect": {"effect_type": "harness_mutation", "effect_id": "eff-harness-006", "params": {"target": "sandbox_grant", "human_review_state": "not_required"}},
+        "principal": "agent:evolution",
+        "context": {"risk_class": "E4", "approval_ref": ""}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "APPROVAL_REQUIRED",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "HARNESS-007",
+      "description": "Simultaneous GeneratedSpecs with overlapping write_set conflict before execution",
+      "input": {
+        "effect": {"effect_type": "generated_spec_execute", "effect_id": "eff-harness-007", "params": {"write_set": ["system:connector-policy"]}},
+        "principal": "agent:planner",
+        "context": {"open_generated_specs": [{"id": "spec-open-1", "write_set": ["system:connector-policy"]}]}
+      },
+      "expected": {
+        "verdict": "ESCALATE",
+        "reason_code": "CONTEXT_MISMATCH",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "HARNESS-008",
+      "description": "Agent-authored mapper exceeding WASI fuel is denied before output trust",
+      "input": {
+        "effect": {"effect_type": "exec", "effect_id": "eff-harness-008", "params": {"sandbox": "wasi", "code_hash": "sha256:mapper-loop", "attempt": "fuel_exhaustion"}},
+        "principal": "agent:mapper",
+        "context": {"generated_code_grant": true, "fuel_limit": 1000000}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "BUDGET_EXCEEDED",
+        "receipt_present": true,
+        "intent_present": false
+      }
+    },
+    {
+      "id": "HARNESS-009",
+      "description": "Unknown MCP tool remains quarantined and cannot dispatch side effects",
+      "input": {
+        "effect": {"effect_type": "mcp_tool_call", "effect_id": "eff-harness-009", "params": {"server_id": "mcp:unknown", "tool": "unknown.deploy"}},
+        "principal": "agent:planner",
+        "context": {"server_approved": false, "tool_discovered": false}
+      },
+      "expected": {
+        "verdict": "DENY",
+        "reason_code": "MISSING_REQUIREMENT",
+        "receipt_present": true,
+        "intent_present": false,
+        "quarantined": true
+      }
+    },
+    {
+      "id": "REPLAY-003",
+      "description": "WASI replay — same input and grant produces same output hash",
+      "input": {
+        "replay_from": "wasm-mapper-session-001",
+        "code_hash": "sha256:mapper",
+        "sandbox_grant_hash": "sha256:grant"
+      },
+      "expected": {
+        "wasm_replay_same_output": true,
+        "wasm_output_hash_recorded": true
+      }
     }
   ],
   "receipt_invariants": {

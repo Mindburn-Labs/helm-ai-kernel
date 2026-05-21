@@ -3,11 +3,19 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+const segmentAnalyticsNodeShim = fileURLToPath(
+  new URL("./src/shims/segment-analytics-node.ts", import.meta.url),
+);
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    "process.env.COPILOTKIT_TELEMETRY_DISABLED": JSON.stringify("true"),
+    "process.env.DO_NOT_TRACK": JSON.stringify("true"),
+  },
   resolve: {
     alias: {
+      "@segment/analytics-node": segmentAnalyticsNodeShim,
       "lucide-react": fileURLToPath(
         new URL("./node_modules/lucide-react/dist/esm/lucide-react.js", import.meta.url),
       ),

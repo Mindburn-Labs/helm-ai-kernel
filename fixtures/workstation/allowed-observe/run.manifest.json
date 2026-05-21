@@ -1,0 +1,13 @@
+{
+  "run_id": "run_allowed_observe",
+  "goal": "Inspect the workspace and run focused validation.",
+  "actor_id": "agent.codex.local",
+  "actor_type": "agent",
+  "workspace_id": "workspace-demo",
+  "workspace_path": "/workspace/demo",
+  "repository": "helm-ai-kernel",
+  "agent_surface": "codex",
+  "policy_profile": "workstation.observe_draft.v1",
+  "started_at": "2026-05-20T09:00:00Z",
+  "completed_at": "2026-05-20T09:01:00Z"
+}

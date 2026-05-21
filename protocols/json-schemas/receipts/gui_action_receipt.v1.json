@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/receipts/gui_action_receipt.v1.json",
+  "title": "GUIActionReceipt v1",
+  "description": "Receipt for a grounded GUI or computer-use action.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receipt_id",
+    "grounded_action_ref",
+    "screenshot_hash",
+    "dom_or_ax_snapshot_hash",
+    "target_ref",
+    "bbox_or_element_id",
+    "action_type",
+    "precondition",
+    "postcondition",
+    "postcondition_verified",
+    "verification_scope_ref",
+    "policy_hash",
+    "created_at",
+    "receipt_hash"
+  ],
+  "properties": {
+    "receipt_id": { "type": "string", "minLength": 1 },
+    "grounded_action_ref": { "type": "string", "minLength": 1 },
+    "screenshot_hash": { "type": "string", "pattern": "^sha256:" },
+    "dom_or_ax_snapshot_hash": { "type": "string", "pattern": "^sha256:" },
+    "target_ref": { "type": "string", "minLength": 1 },
+    "bbox_or_element_id": { "type": "string", "minLength": 1 },
+    "action_type": { "type": "string", "enum": ["click", "type", "select", "submit", "navigate"] },
+    "precondition": { "type": "string", "minLength": 1 },
+    "postcondition": { "type": "string", "minLength": 1 },
+    "postcondition_verified": { "type": "boolean", "const": true },
+    "verification_scope_ref": { "type": "string", "minLength": 1 },
+    "policy_hash": { "type": "string", "pattern": "^sha256:" },
+    "sandbox_grant_hash": { "type": "string", "pattern": "^sha256:" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "receipt_hash": { "type": "string", "pattern": "^sha256:" }
+  }
+}

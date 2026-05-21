@@ -24,6 +24,32 @@ func TestExecutorRequiresRuntimeBeforeRunning(t *testing.T) {
 	}
 }
 
+func TestExecutorBlocksSideEffectsForNonAllowPlan(t *testing.T) {
+	store := NewStore(t.TempDir())
+	starter := &fakeStarter{}
+	p := allowPlan()
+	p.KernelVerdict = "ESCALATE"
+	p.Status = "ESCALATED"
+	p.ReasonCode = "ERR_LAUNCHPAD_REQUIRED_SECRET_MISSING"
+	p.RequiredSecretRefs = []string{"OPENAI_API_KEY"}
+	run, err := NewExecutor(store).ExecuteLaunch(p, ExecuteOptions{Reason: "test", RuntimeStarter: starter})
+	if err != nil {
+		t.Fatalf("ExecuteLaunch: %v", err)
+	}
+	if starter.called {
+		t.Fatal("runtime starter must not be called for non-ALLOW plan")
+	}
+	if run.State != StateEscalated {
+		t.Fatalf("expected ESCALATED, got %s", run.State)
+	}
+	if run.RuntimeHandles.ContainerID != "" {
+		t.Fatalf("container must not start for non-ALLOW plan: %#v", run.RuntimeHandles)
+	}
+	if len(run.SecretGrantRefs) != 0 || len(run.StartReceiptRefs) != 0 {
+		t.Fatalf("non-ALLOW plan must not issue runtime secret/start grants: %#v", run)
+	}
+}
+
 func TestExecutorRecordsRuntimeHandleBeforeRunning(t *testing.T) {
 	store := NewStore(t.TempDir())
 	starter := &fakeStarter{}

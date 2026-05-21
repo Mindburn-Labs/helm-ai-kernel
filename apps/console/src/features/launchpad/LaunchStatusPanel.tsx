@@ -5,9 +5,9 @@ export function LaunchStatusPanel({ plan, run }: { plan: LaunchpadPlanResponse |
   const verdict = run?.kernel_verdict ?? plan?.kernel_verdict ?? "ESCALATE";
   return (
     <section className="launchpad-panel">
-      <div className="panel-head">
+      <div className="panel-header">
         <div>
-          <span className="eyebrow">status</span>
+          <span className="panel-kicker">status</span>
           <h2>{state}</h2>
         </div>
         <span className={`launchpad-verdict verdict-${verdict.toLowerCase()}`}>{verdict}</span>

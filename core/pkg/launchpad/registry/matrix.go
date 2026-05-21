@@ -5,6 +5,7 @@ type MatrixCell struct {
 	SubstrateID  string       `json:"substrate_id"`
 	Availability Availability `json:"availability"`
 	Launchable   bool         `json:"launchable"`
+	Verdict      string       `json:"verdict"`
 	Reason       string       `json:"reason"`
 }
 
@@ -17,6 +18,7 @@ func (c *Catalog) Matrix() []MatrixCell {
 				SubstrateID:  substrate.ID,
 				Availability: app.Availability,
 				Launchable:   false,
+				Verdict:      "ESCALATE",
 				Reason:       "blocked_conformance_not_verified",
 			}
 			if app.Availability == AvailabilityExternalProprietaryAdapter {
@@ -24,12 +26,14 @@ func (c *Catalog) Matrix() []MatrixCell {
 			}
 			if app.Availability == AvailabilityBlockedLicense {
 				cell.Reason = "blocked_license_or_redistribution"
+				cell.Verdict = "DENY"
 			}
 			if app.Availability == AvailabilityOSSCandidate {
 				cell.Reason = "experimental_candidate_requires_e2e"
 			}
 			if app.Availability == AvailabilityOSSSupported && app.Conformance.FullyVerified() && substrate.Availability == "supported" {
 				cell.Launchable = true
+				cell.Verdict = "ALLOW"
 				cell.Reason = "verified"
 			}
 			cells = append(cells, cell)

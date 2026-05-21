@@ -3,9 +3,9 @@ import type { LaunchpadApp, LaunchpadSubstrate } from "./types";
 export function GrantReviewPanel({ app, substrate }: { app?: LaunchpadApp; substrate?: LaunchpadSubstrate }) {
   return (
     <section className="launchpad-panel">
-      <div className="panel-head">
+      <div className="panel-header">
         <div>
-          <span className="eyebrow">grants</span>
+          <span className="panel-kicker">grants</span>
           <h2>Secrets, filesystem, network</h2>
         </div>
       </div>

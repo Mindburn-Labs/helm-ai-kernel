@@ -1,0 +1,13 @@
+{
+  "run_id": "run_prompt_injection_tainted",
+  "goal": "Demonstrate tainted context in a workstation receipt.",
+  "actor_id": "agent.codex.local",
+  "actor_type": "agent",
+  "workspace_id": "workspace-demo",
+  "workspace_path": "/workspace/demo",
+  "repository": "helm-ai-kernel",
+  "agent_surface": "codex",
+  "policy_profile": "workstation.observe_draft.v1",
+  "started_at": "2026-05-20T14:00:00Z",
+  "completed_at": "2026-05-20T14:01:00Z"
+}

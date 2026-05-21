@@ -1,6 +1,9 @@
 package contracts
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // PlanSpec represents an execution plan as a contract.
 // It matches schemas/orchestration/PlanSpec.v2.json
@@ -24,7 +27,25 @@ type PlanSpec struct {
 	PolicyConstraints *PolicyConstraints `json:"policy_constraints,omitempty"`
 
 	// Truth Discipline — plan-level epistemic metadata.
-	Truth *TruthAnnotation `json:"truth,omitempty"`
+	Truth       *TruthAnnotation `json:"truth,omitempty"`
+	Transaction *PlanTransaction `json:"transaction,omitempty"`
+}
+
+// PlanTransaction records the read/write and verification contract for a plan.
+type PlanTransaction struct {
+	PlanTransactionID            string          `json:"plan_transaction_id,omitempty"`
+	PlanHash                     string          `json:"plan_hash,omitempty"`
+	ReadSet                      []string        `json:"read_set,omitempty"`
+	WriteSet                     []string        `json:"write_set,omitempty"`
+	AssumptionSet                []string        `json:"assumption_set,omitempty"`
+	VersionDependencies          []string        `json:"version_dependencies,omitempty"`
+	VerificationObligations      []string        `json:"verification_obligations,omitempty"`
+	ConflictPolicy               string          `json:"conflict_policy,omitempty"`
+	RollbackPolicy               json.RawMessage `json:"rollback_policy,omitempty"`
+	RollbackOrCompensationPolicy string          `json:"rollback_or_compensation_policy,omitempty"`
+	ApprovalState                string          `json:"approval_state,omitempty"`
+	HumanReviewState             string          `json:"human_review_state,omitempty"`
+	TransactionHash              string          `json:"transaction_hash,omitempty"`
 }
 
 // PlanArtifactRef points to external resources in a plan.

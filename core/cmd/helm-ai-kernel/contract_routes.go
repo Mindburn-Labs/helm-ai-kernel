@@ -238,7 +238,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusConflict, "No receipts available", "evidence export requires at least one receipt")
 			return
 		}
-		bundle, err := buildEvidenceBundle(req.SessionID, receipts)
+		bundle, err := buildEvidenceBundle(req.SessionID, receipts, surfaces)
 		if err != nil {
 			api.WriteInternal(w, err)
 			return
@@ -258,6 +258,227 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		result := verifyEvidenceRequest(r)
 		writeContractJSON(w, http.StatusOK, result)
 	})
+
+	mux.HandleFunc("/api/v1/evidence/verification-scopes", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeContractJSON(w, http.StatusOK, surfaces.ListVerificationScopes())
+		case http.MethodPost:
+			var scope contracts.VerificationScope
+			if err := json.NewDecoder(r.Body).Decode(&scope); err != nil {
+				api.WriteBadRequest(w, "Invalid verification scope JSON")
+				return
+			}
+			sealed, err := surfaces.PutVerificationScope(scope)
+			if err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
+			writeContractJSON(w, http.StatusCreated, sealed)
+		default:
+			api.WriteMethodNotAllowed(w)
+		}
+	}))
+	mux.HandleFunc("/api/v1/evidence/verification-scopes/", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		id, verify := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/evidence/verification-scopes/"), "/verify")
+		if id == "" || strings.Contains(id, "/") {
+			api.WriteBadRequest(w, "Invalid verification scope id")
+			return
+		}
+		if verify {
+			if r.Method != http.MethodPost {
+				api.WriteMethodNotAllowed(w)
+				return
+			}
+			writeContractJSON(w, http.StatusOK, surfaces.VerifyVerificationScope(id))
+			return
+		}
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		scope, ok := surfaces.GetVerificationScope(id)
+		if !ok {
+			api.WriteNotFound(w, "verification scope not found")
+			return
+		}
+		writeContractJSON(w, http.StatusOK, scope)
+	}))
+
+	mux.HandleFunc("/api/v1/telemetry/harness-traces", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeContractJSON(w, http.StatusOK, surfaces.ListHarnessTraces())
+		case http.MethodPost:
+			var trace contracts.HarnessTrace
+			if err := json.NewDecoder(r.Body).Decode(&trace); err != nil {
+				api.WriteBadRequest(w, "Invalid harness trace JSON")
+				return
+			}
+			sealed, err := surfaces.PutHarnessTrace(trace)
+			if err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
+			writeContractJSON(w, http.StatusCreated, sealed)
+		default:
+			api.WriteMethodNotAllowed(w)
+		}
+	}))
+	mux.HandleFunc("/api/v1/telemetry/harness-traces/", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		id, verify := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/telemetry/harness-traces/"), "/verify")
+		if id == "" || strings.Contains(id, "/") {
+			api.WriteBadRequest(w, "Invalid harness trace id")
+			return
+		}
+		if verify {
+			if r.Method != http.MethodPost {
+				api.WriteMethodNotAllowed(w)
+				return
+			}
+			writeContractJSON(w, http.StatusOK, surfaces.VerifyHarnessTrace(id))
+			return
+		}
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		trace, ok := surfaces.GetHarnessTrace(id)
+		if !ok {
+			api.WriteNotFound(w, "harness trace not found")
+			return
+		}
+		writeContractJSON(w, http.StatusOK, trace)
+	}))
+
+	mux.HandleFunc("/api/v1/plans/transactions", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeContractJSON(w, http.StatusOK, surfaces.ListPlanTransactions())
+		case http.MethodPost:
+			var tx contracts.PlanTransaction
+			if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
+				api.WriteBadRequest(w, "Invalid plan transaction JSON")
+				return
+			}
+			sealed, err := surfaces.PutPlanTransaction(tx)
+			if err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
+			writeContractJSON(w, http.StatusCreated, sealed)
+		default:
+			api.WriteMethodNotAllowed(w)
+		}
+	}))
+	mux.HandleFunc("/api/v1/plans/transactions/", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		id, verify := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/plans/transactions/"), "/verify")
+		if id == "" || strings.Contains(id, "/") {
+			api.WriteBadRequest(w, "Invalid plan transaction id")
+			return
+		}
+		if verify {
+			if r.Method != http.MethodPost {
+				api.WriteMethodNotAllowed(w)
+				return
+			}
+			writeContractJSON(w, http.StatusOK, surfaces.VerifyPlanTransaction(id))
+			return
+		}
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		tx, ok := surfaces.GetPlanTransaction(id)
+		if !ok {
+			api.WriteNotFound(w, "plan transaction not found")
+			return
+		}
+		writeContractJSON(w, http.StatusOK, tx)
+	}))
+
+	mux.HandleFunc("/api/v1/harness/change-contracts", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeContractJSON(w, http.StatusOK, surfaces.ListHarnessChanges())
+		case http.MethodPost:
+			var contract contracts.HarnessChangeContract
+			if err := json.NewDecoder(r.Body).Decode(&contract); err != nil {
+				api.WriteBadRequest(w, "Invalid harness change contract JSON")
+				return
+			}
+			sealed, err := surfaces.PutHarnessChange(contract)
+			if err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
+			writeContractJSON(w, http.StatusCreated, sealed)
+		default:
+			api.WriteMethodNotAllowed(w)
+		}
+	}))
+	mux.HandleFunc("/api/v1/harness/change-contracts/", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/harness/change-contracts/")
+		id, verify := strings.CutSuffix(suffix, "/verify")
+		if verify {
+			if id == "" || strings.Contains(id, "/") || r.Method != http.MethodPost {
+				api.WriteMethodNotAllowed(w)
+				return
+			}
+			writeContractJSON(w, http.StatusOK, surfaces.VerifyHarnessChange(id))
+			return
+		}
+		id, approve := strings.CutSuffix(suffix, "/approve")
+		if approve {
+			if id == "" || strings.Contains(id, "/") || r.Method != http.MethodPost {
+				api.WriteMethodNotAllowed(w)
+				return
+			}
+			var req struct {
+				ReceiptRef string `json:"receipt_ref"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			contract, err := surfaces.ApproveHarnessChange(id, req.ReceiptRef)
+			if err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
+			writeContractJSON(w, http.StatusOK, contract)
+			return
+		}
+		if id == "" || strings.Contains(id, "/") {
+			api.WriteBadRequest(w, "Invalid harness change contract id")
+			return
+		}
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		contract, ok := surfaces.GetHarnessChange(id)
+		if !ok {
+			api.WriteNotFound(w, "harness change contract not found")
+			return
+		}
+		writeContractJSON(w, http.StatusOK, contract)
+	}))
+
+	mux.HandleFunc("/api/v1/gui/receipts/verify", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		var receipt contracts.GUIActionReceipt
+		if err := json.NewDecoder(r.Body).Decode(&receipt); err != nil {
+			api.WriteBadRequest(w, "Invalid GUI action receipt JSON")
+			return
+		}
+		sealed, err := receipt.Seal()
+		if err != nil {
+			writeContractJSON(w, http.StatusOK, map[string]any{"verified": false, "verdict": "FAIL", "errors": []string{err.Error()}})
+			return
+		}
+		writeContractJSON(w, http.StatusOK, map[string]any{"verified": true, "verdict": "PASS", "receipt": sealed})
+	}))
 
 	mux.HandleFunc("/api/v1/evidence/envelopes", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
@@ -1281,7 +1502,7 @@ func findReceiptByReference(ctx context.Context, svc *Services, ref string) (*co
 	return nil, fmt.Errorf("receipt not found")
 }
 
-func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt) ([]byte, error) {
+func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt, surfaces *boundarypkg.SurfaceRegistry) ([]byte, error) {
 	files := make(map[string][]byte)
 	for _, receipt := range receipts {
 		data, err := json.Marshal(receipt)
@@ -1289,6 +1510,26 @@ func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt) ([]byt
 			return nil, fmt.Errorf("marshal receipt %s: %w", receipt.ReceiptID, err)
 		}
 		files["receipts/"+receipt.ReceiptID+".json"] = data
+	}
+	if surfaces != nil {
+		if err := addEvidenceArtifactFiles(files, "verification_scopes", "verification_scope_id", surfaces.ListVerificationScopes()); err != nil {
+			return nil, err
+		}
+		if err := addEvidenceArtifactFiles(files, "harness_traces", "trace_id", surfaces.ListHarnessTraces()); err != nil {
+			return nil, err
+		}
+		if err := addEvidenceArtifactFiles(files, "plan_transactions", "plan_transaction_id", surfaces.ListPlanTransactions()); err != nil {
+			return nil, err
+		}
+		if err := addEvidenceArtifactFiles(files, "harness_change_contracts", "change_contract_id", surfaces.ListHarnessChanges()); err != nil {
+			return nil, err
+		}
+		if err := addEvidenceArtifactFiles(files, "grounded_action_refs", "grounded_action_id", surfaces.ListGroundedActions()); err != nil {
+			return nil, err
+		}
+		if err := addEvidenceArtifactFiles(files, "gui_action_receipts", "receipt_id", surfaces.ListGUIReceipts()); err != nil {
+			return nil, err
+		}
 	}
 	fileHashes := make(map[string]string, len(files))
 	for name, data := range files {
@@ -1330,6 +1571,25 @@ func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt) ([]byt
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func addEvidenceArtifactFiles[T any](files map[string][]byte, dir, idField string, values []T) error {
+	for i, value := range values {
+		data, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Errorf("marshal %s artifact: %w", dir, err)
+		}
+		var probe map[string]any
+		if err := json.Unmarshal(data, &probe); err != nil {
+			return fmt.Errorf("probe %s artifact: %w", dir, err)
+		}
+		id, _ := probe[idField].(string)
+		if strings.TrimSpace(id) == "" {
+			id = fmt.Sprintf("%06d", i+1)
+		}
+		files[dir+"/"+id+".json"] = data
+	}
+	return nil
 }
 
 func writeTarEntry(tw *tar.Writer, name string, data []byte) error {
@@ -1459,6 +1719,7 @@ func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt) 
 	if len(receipts) == 0 {
 		errors = append(errors, "no receipts in evidence bundle")
 	}
+	errors = append(errors, verifyHarnessEvidenceRequirements(bundle, receipts)...)
 	sort.Slice(receipts, func(i, j int) bool {
 		if receipts[i].ExecutorID == receipts[j].ExecutorID {
 			return receipts[i].LamportClock < receipts[j].LamportClock
@@ -1494,6 +1755,83 @@ func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt) 
 		prevByExecutor[executor] = receipt
 	}
 	return errors
+}
+
+func verifyHarnessEvidenceRequirements(bundle *evidenceBundle, receipts []*contracts.Receipt) []string {
+	var errs []string
+	hasScopes := bundleHasDir(bundle, "verification_scopes/")
+	hasTraces := bundleHasDir(bundle, "harness_traces/")
+	hasTransactions := bundleHasDir(bundle, "plan_transactions/")
+	hasChanges := bundleHasDir(bundle, "harness_change_contracts/")
+	hasGroundedActions := bundleHasDir(bundle, "grounded_action_refs/")
+	for _, receipt := range receipts {
+		if receiptRequiresVerificationScope(receipt) && !hasScopes {
+			errs = append(errs, fmt.Sprintf("%s missing verification scope", receipt.ReceiptID))
+		}
+		if receiptRequiresHarnessTrace(receipt) && !hasTraces {
+			errs = append(errs, fmt.Sprintf("%s missing harness trace", receipt.ReceiptID))
+		}
+		if receiptRequiresPlanTransaction(receipt) && !hasTransactions {
+			errs = append(errs, fmt.Sprintf("%s missing plan transaction", receipt.ReceiptID))
+		}
+		if receiptRequiresHarnessChange(receipt) && !hasChanges {
+			errs = append(errs, fmt.Sprintf("%s missing harness change contract", receipt.ReceiptID))
+		}
+		if receiptRequiresGroundedAction(receipt) && !hasGroundedActions {
+			errs = append(errs, fmt.Sprintf("%s missing grounded action ref", receipt.ReceiptID))
+		}
+	}
+	return errs
+}
+
+func bundleHasDir(bundle *evidenceBundle, prefix string) bool {
+	for name := range bundle.Files {
+		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, ".json") {
+			return true
+		}
+	}
+	return false
+}
+
+func receiptRequiresVerificationScope(receipt *contracts.Receipt) bool {
+	risk := strings.ToUpper(receiptMetadataString(receipt, "risk_class"))
+	effect := strings.ToUpper(receiptMetadataString(receipt, "effect_class"))
+	return risk == "T2" || risk == "T3" || effect == "E2" || effect == "E3" || effect == "E4"
+}
+
+func receiptRequiresHarnessTrace(receipt *contracts.Receipt) bool {
+	return receiptMetadataBool(receipt, "side_effectful") || receiptMetadataBool(receipt, "requires_harness_trace")
+}
+
+func receiptRequiresPlanTransaction(receipt *contracts.Receipt) bool {
+	if receipt == nil || receipt.Metadata == nil {
+		return false
+	}
+	return receiptMetadataBool(receipt, "requires_plan_transaction") || receipt.Metadata["write_set"] != nil
+}
+
+func receiptRequiresHarnessChange(receipt *contracts.Receipt) bool {
+	return receiptMetadataBool(receipt, "requires_harness_change_contract") || receiptMetadataString(receipt, "harness_mutation_component") != ""
+}
+
+func receiptRequiresGroundedAction(receipt *contracts.Receipt) bool {
+	return receiptMetadataBool(receipt, "requires_grounded_action_ref") || strings.EqualFold(receiptMetadataString(receipt, "action_type"), "gui")
+}
+
+func receiptMetadataString(receipt *contracts.Receipt, key string) string {
+	if receipt == nil || receipt.Metadata == nil {
+		return ""
+	}
+	value, _ := receipt.Metadata[key].(string)
+	return strings.TrimSpace(value)
+}
+
+func receiptMetadataBool(receipt *contracts.Receipt, key string) bool {
+	if receipt == nil || receipt.Metadata == nil {
+		return false
+	}
+	value, _ := receipt.Metadata[key].(bool)
+	return value
 }
 
 func isGenesisPrevHash(value string) bool {

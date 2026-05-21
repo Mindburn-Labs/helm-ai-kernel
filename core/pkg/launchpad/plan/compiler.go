@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -53,6 +54,17 @@ func CompileWithRoot(app registry.AppSpec, substrate registry.SubstrateSpec, pri
 		Edges:                   []any{},
 		TeardownPlan:            map[string]any{"required": true, "receipt": "teardown_receipt", "cascade_supported": substrate.SupportsTeardown},
 		EvidenceRequirements:    cloneStrings(app.EvidenceRequirements),
+	}
+	if reason := artifactVerificationFailure(app); reason != "" {
+		base.KernelVerdict = "DENY"
+		base.Status = "DENIED"
+		base.ReasonCode = reason
+		base.Nodes["blocked"] = "artifact_verification_failed"
+		finalizeStableIR(&base)
+		cpiOutput, _ := EvaluateActions(base, base.ActionIR)
+		base.CPIOutput = &cpiOutput
+		finalizeStableIR(&base)
+		return base, fmt.Errorf("app %s artifact verification failed: %s", app.ID, reason)
 	}
 	for _, secret := range requiredSecretEnvNames(app) {
 		if value, ok := os.LookupEnv(secret); !ok || value == "" {
@@ -258,4 +270,31 @@ func containsString(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func artifactVerificationFailure(app registry.AppSpec) string {
+	if app.Availability != registry.AvailabilityOSSSupported {
+		return ""
+	}
+	if app.Install.Digest == "" || !strings.HasPrefix(app.Install.Digest, "sha256:") {
+		return "ERR_LAUNCHPAD_ARTIFACT_DIGEST_NOT_PINNED"
+	}
+	if app.Install.Strategy == "signed_oci" && !strings.Contains(app.Install.Image, "@sha256:") {
+		return "ERR_LAUNCHPAD_ARTIFACT_DIGEST_NOT_PINNED"
+	}
+	evidence := app.SupplyChainEvidence
+	if evidence.ArtifactDigest == "" || evidence.ArtifactDigest != app.Install.Digest {
+		return "ERR_LAUNCHPAD_ARTIFACT_DIGEST_MISMATCH"
+	}
+	if strings.ToLower(evidence.SignatureTool) != "cosign" || evidence.SignatureRef == "" {
+		return "ERR_LAUNCHPAD_COSIGN_SIGNATURE_REQUIRED"
+	}
+	if strings.ToLower(evidence.SBOMTool) != "syft" || evidence.SBOMRef == "" {
+		return "ERR_LAUNCHPAD_SBOM_REQUIRED"
+	}
+	scanTool := strings.ToLower(evidence.VulnerabilityScanTool)
+	if (scanTool != "grype" && scanTool != "trivy") || evidence.VulnerabilityScanRef == "" {
+		return "ERR_LAUNCHPAD_VULNERABILITY_SCAN_REQUIRED"
+	}
+	return ""
 }

@@ -10,6 +10,7 @@ QUALITY := python3 scripts/ci/quality.py
 
 build:
 	cd core && go build -ldflags "$(LDFLAGS)" -o ../bin/helm-ai-kernel ./cmd/helm-ai-kernel/
+	cp bin/helm-ai-kernel bin/helm
 
 test:
 	cd core && go test ./pkg/... -count=1
@@ -233,7 +234,12 @@ release-binaries:
 	cd core && GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/helm-ai-kernel-darwin-amd64 ./cmd/helm-ai-kernel/
 	cd core && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/helm-ai-kernel-darwin-arm64 ./cmd/helm-ai-kernel/
 	cd core && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/helm-ai-kernel-windows-amd64.exe ./cmd/helm-ai-kernel/
-	cd bin && shasum -a 256 helm-ai-kernel-* > SHA256SUMS.txt
+	cp bin/helm-ai-kernel-linux-amd64 bin/helm-linux-amd64
+	cp bin/helm-ai-kernel-linux-arm64 bin/helm-linux-arm64
+	cp bin/helm-ai-kernel-darwin-amd64 bin/helm-darwin-amd64
+	cp bin/helm-ai-kernel-darwin-arm64 bin/helm-darwin-arm64
+	cp bin/helm-ai-kernel-windows-amd64.exe bin/helm-windows-amd64.exe
+	cd bin && shasum -a 256 helm-ai-kernel-* helm-linux-* helm-darwin-* helm-windows-* > SHA256SUMS.txt
 
 release-assets: release-binaries-reproducible mcp-pack sbom vex
 	bash scripts/release/stage_release_assets.sh
@@ -258,7 +264,12 @@ release-binaries-reproducible:
 	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-ai-kernel-darwin-amd64      ./cmd/helm-ai-kernel/
 	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-ai-kernel-darwin-arm64      ./cmd/helm-ai-kernel/
 	cd core && SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build $(REPRO_GOFLAGS) -ldflags="$(REPRO_LDFLAGS)" -o ../bin/helm-ai-kernel-windows-amd64.exe ./cmd/helm-ai-kernel/
-	cd bin && shasum -a 256 helm-ai-kernel-* > SHA256SUMS.txt
+	cp bin/helm-ai-kernel-linux-amd64 bin/helm-linux-amd64
+	cp bin/helm-ai-kernel-linux-arm64 bin/helm-linux-arm64
+	cp bin/helm-ai-kernel-darwin-amd64 bin/helm-darwin-amd64
+	cp bin/helm-ai-kernel-darwin-arm64 bin/helm-darwin-arm64
+	cp bin/helm-ai-kernel-windows-amd64.exe bin/helm-windows-amd64.exe
+	cd bin && shasum -a 256 helm-ai-kernel-* helm-linux-* helm-darwin-* helm-windows-* > SHA256SUMS.txt
 
 # Generate OpenVEX statements for every CVE listed in the current SBOM.
 vex:

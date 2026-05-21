@@ -1,4 +1,4 @@
-import { useComponent } from "@copilotkit/react-core/v2/headless";
+import { useComponent } from "@copilotkit/react-core/v2";
 import { z } from "zod";
 import { Badge, EmptyState } from "@mindburn/ui-core";
 import type { AiKernelAgentToolResult } from "./state";

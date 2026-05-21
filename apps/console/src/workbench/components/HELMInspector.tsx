@@ -2,7 +2,6 @@ import { useState, type ReactNode } from "react";
 import {
   AlertCircle,
   CheckCircle2,
-  ChevronRight,
   Circle,
   MessageSquareText,
 } from "lucide-react";
@@ -25,7 +24,6 @@ import {
 } from "../../api/client";
 import {
   isRecord,
-  normalizeState,
   receiptAction,
   receiptResource,
   shortId,

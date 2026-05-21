@@ -437,6 +437,7 @@ function ConsoleApp() {
   return (
     <HelmAiKernelAgentProvider enabled state={agentState}>
       <WorkbenchShell
+        securityStance={receipts[0] ? normalizeVerdict(receipts[0].status) : "pending"}
         rail={<Navigation active={active} tasks={tasks} onNavigate={(route) => navigate(route)} />}
         header={
           <ConsoleHeader

@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, Clipboard, Download, Loader2, Play, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { launchpadApi } from "./api";
+import { CanvasElement, VisualCodeDiff, AnnotatedCodeBlock, type CodeAnnotation } from "@mindburn/ui-core";
 import type {
   FixAction,
   GateResult,
@@ -229,6 +230,22 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
     }
   };
 
+  const applyFix = async (cli: string) => {
+    if (!currentRunId) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await launchpadApi.repair(currentRunId);
+      setNotice({ tone: "success", message: `Successfully executed fix: ${cli}` });
+      await openRun(currentRunId);
+      await load();
+    } catch (err) {
+      setNotice({ tone: "error", message: err instanceof Error ? err.message : "Repair action failed" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="launchpad-surface" aria-busy={loading || busy}>
       <section className="launchpad-panel launchpad-hero">
@@ -289,7 +306,14 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
       {surface === "receipts" ? <ReceiptsSurface receipts={receipts.length ? receipts : detail?.instance.receipts ?? []} detail={detail} /> : null}
       {surface === "registry" ? <RegistrySurface apps={apps} substrates={substrates} matrix={matrix} /> : null}
 
-      <RunDetail detail={detail} inspector={inspector} onInspect={setInspector} onTeardown={() => void teardown()} onExport={() => void exportEvidence()} />
+      <RunDetail
+        detail={detail}
+        inspector={inspector}
+        onInspect={setInspector}
+        onTeardown={() => void teardown()}
+        onExport={() => void exportEvidence()}
+        onApplyFix={applyFix}
+      />
     </div>
   );
 }
@@ -435,10 +459,52 @@ function RunsSurface({ runs, detail, busy, onOpenRun, onTeardown }: { readonly r
   );
 }
 
-function RunDetail({ detail, inspector, onInspect, onTeardown, onExport }: { readonly detail: LaunchpadRunDetail | null; readonly inspector: InspectorItem; readonly onInspect: (item: InspectorItem) => void; readonly onTeardown: () => void; readonly onExport: () => void }) {
+function RunDetail({ detail, inspector, onInspect, onTeardown, onExport, onApplyFix }: { readonly detail: LaunchpadRunDetail | null; readonly inspector: InspectorItem; readonly onInspect: (item: InspectorItem) => void; readonly onTeardown: () => void; readonly onExport: () => void; readonly onApplyFix?: (cli: string) => Promise<void> | void }) {
   if (!detail) return null;
   const instance = detail.instance;
   const receiptRefs = instance.receipts ?? receiptRefStrings(detail.run.receipt_refs) ?? [];
+
+  const canvasNodes = useMemo(() => {
+    const gates = detail.gates.map((g) => ({
+      id: g.id,
+      label: g.label,
+      group: g.group,
+      verdict: g.verdict,
+      proofStatus: g.proof_status,
+      summary: g.summary,
+    }));
+    const events = detail.events.map((e) => ({
+      id: e.id,
+      label: e.label,
+      group: e.stage,
+      verdict: e.verdict,
+      proofStatus: e.proof_status,
+      summary: e.human_summary,
+    }));
+    return [...gates, ...events];
+  }, [detail.gates, detail.events]);
+
+  const canvasEdges = useMemo(() => {
+    return canvasNodes.slice(1).map((node, i) => ({
+      from: canvasNodes[i].id,
+      to: node.id,
+    }));
+  }, [canvasNodes]);
+
+  const handleSelectNode = (id: string) => {
+    const gate = detail.gates.find((g) => g.id === id);
+    if (gate) {
+      onInspect({ kind: "gate", value: gate });
+      return;
+    }
+    const event = detail.events.find((e) => e.id === id);
+    if (event) {
+      onInspect({ kind: "event", value: event });
+    }
+  };
+
+  const selectedNodeId = inspector?.value?.id;
+
   return (
     <section className="run-detail-grid">
       <div className="launchpad-panel run-detail-main">
@@ -470,6 +536,20 @@ function RunDetail({ detail, inspector, onInspect, onTeardown, onExport }: { rea
             onConfirm={onTeardown}
           />
         </div>
+        
+        {canvasNodes.length > 0 ? (
+          <div style={{ marginTop: '16px', marginBottom: '16px' }}>
+            <CanvasElement
+              nodes={canvasNodes}
+              edges={canvasEdges}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={handleSelectNode}
+              width={780}
+              height={320}
+            />
+          </div>
+        ) : null}
+
         <div className="gate-timeline" aria-label="Gate chain">
           {detail.gates.map((gate) => (
             <button key={gate.id} type="button" className={`gate-row proof-${gate.proof_status}`} onClick={() => onInspect({ kind: "gate", value: gate })}>
@@ -491,18 +571,70 @@ function RunDetail({ detail, inspector, onInspect, onTeardown, onExport }: { rea
           ))}
         </div>
       </div>
-      <Inspector item={inspector} />
+      <Inspector item={inspector} onApplyFix={onApplyFix} />
     </section>
   );
 }
 
-function Inspector({ item }: { readonly item: InspectorItem }) {
+function Inspector({ item, onApplyFix }: { readonly item: InspectorItem; readonly onApplyFix?: (cli: string) => Promise<void> | void }) {
   const value = item?.value;
   const summary = item?.kind === "event" ? item.value.human_summary : item?.kind === "gate" ? item.value.summary : "";
   const why = item?.kind === "event" ? item.value.why : item?.kind === "gate" ? item.value.why : "";
   const raw = item?.kind === "event" ? item.value.raw_payload_ref : item?.kind === "gate" ? item.value.raw_detail_ref : "";
   const receipt = item?.kind === "event" ? item.value.receipt_ref || "unproven" : item?.kind === "gate" ? item.value.receipt_refs?.join(", ") || "unproven" : "unproven";
   const fixes = value?.fix_actions ?? [];
+
+  const annotations = useMemo<readonly CodeAnnotation[]>(() => {
+    if (!value) return [];
+    const annList: CodeAnnotation[] = [];
+    const jsonStr = JSON.stringify(value, null, 2);
+    const lines = jsonStr.split("\n");
+
+    let verdictLine = 1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes('"verdict"')) {
+        verdictLine = i + 1;
+        break;
+      }
+    }
+
+    if (value.verdict !== "ALLOW") {
+      const errorText = ("actionable_error" in value && value.actionable_error) || why || "Security Boundary block: verdict is not ALLOW.";
+      const firstFix = fixes[0];
+      annList.push({
+        line: verdictLine,
+        text: errorText,
+        type: "error",
+        fixSuggestion: firstFix?.cli,
+        fixLabel: firstFix?.label,
+      });
+    }
+
+    let proofLine = 1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes('"proof_status"')) {
+        proofLine = i + 1;
+        break;
+      }
+    }
+
+    if (value.proof_status !== "proven" && value.proof_status !== "ALLOW") {
+      annList.push({
+        line: proofLine,
+        text: "Unproven boundary state detected. No cryptographic proof receipt exists for this transition.",
+        type: "warning",
+      });
+    }
+
+    return annList;
+  }, [value, why, fixes]);
+
+  const handleApplyInlineFix = async (ann: CodeAnnotation) => {
+    if (ann.fixSuggestion && onApplyFix) {
+      await onApplyFix(ann.fixSuggestion);
+    }
+  };
+
   return (
     <aside className="launchpad-panel inspector-panel">
       <PanelHeader kicker="Inspector" title={value?.label ?? "No event selected"} description="Summary -> Why -> Raw proof -> Fix -> CLI equivalent." />
@@ -522,10 +654,14 @@ function Inspector({ item }: { readonly item: InspectorItem }) {
           {"actionable_error" in value && value.actionable_error ? <div className="inline-error"><AlertTriangle size={14} /> {value.actionable_error}</div> : null}
           <FixList fixes={fixes} />
           <div className="cli-equivalent">CLI: {value.cli_equivalent ?? "unproven"}</div>
-          <details>
-            <summary>Raw backend payload</summary>
-            <pre className="launchpad-code">{JSON.stringify(value, null, 2)}</pre>
-          </details>
+          <div style={{ marginTop: '16px' }}>
+            <AnnotatedCodeBlock
+              code={JSON.stringify(value, null, 2)}
+              language="json"
+              annotations={annotations}
+              onApplyFix={handleApplyInlineFix}
+            />
+          </div>
         </>
       ) : null}
     </aside>
@@ -543,7 +679,14 @@ function PolicySurface({ app, simulation, plan, busy, onSimulate }: { readonly a
       <div className="policy-layers">
         <PolicyLayer title="Plain English" value={simulation?.plain_english ?? "unproven - run policy simulation before trusting this state."} />
         <PolicyLayer title="Structured controls" value={simulation ? JSON.stringify(simulation.structured ?? {}, null, 2) : "unproven"} code />
-        <PolicyLayer title="Diff" value={simulation ? (simulation.diff ?? []).join("\n") || "no diff returned" : "unproven"} code />
+        {simulation ? (
+          <section style={{ gridColumn: '1 / -1' }}>
+            <h3>Visual Code Diff</h3>
+            <VisualCodeDiff diffLines={simulation.diff ?? []} filename={`${appId}_policy.toml`} title="Policy Simulation Dry-run" />
+          </section>
+        ) : (
+          <PolicyLayer title="Diff" value="unproven" code />
+        )}
         <details>
           <summary>Raw canonical payload</summary>
           <pre className="launchpad-code">{JSON.stringify(simulation?.raw ?? { proof_status: "unproven", policy_ref: app?.policy_ref ?? "unproven", plan_hash: plan?.plan_hash ?? "unproven" }, null, 2)}</pre>

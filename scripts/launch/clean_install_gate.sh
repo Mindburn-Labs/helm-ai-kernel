@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REPO="${HELM_LAUNCHPAD_GITHUB_REPO:-Mindburn-Labs/helm-ai-kernel}"
 RELEASE_TAG="v0.5.5"
-ARTIFACT_RUN_ID="26179980172"
+ARTIFACT_RUN_ID="26198407296"
 HOST_KIND="developer_macos"
 OUTPUT="$ROOT/docs/launchpad/clean_install_report.json"
 TRANSCRIPT_DIR="${TMPDIR:-/tmp}/helm-launchpad-clean-install"
@@ -18,7 +18,7 @@ Usage: scripts/launch/clean_install_gate.sh [options]
 
 Options:
   --release-tag <tag>       Release tag to validate (default: v0.5.5)
-  --artifact-run-id <id>    Launchpad artifact workflow run (default: 26179980172)
+  --artifact-run-id <id>    Launchpad artifact workflow run (default: 26198407296)
   --host-kind <kind>        developer_macos or github_macos_runner
   --output <path>           Redacted JSON report path
   --transcript-dir <path>   Directory for redacted command output and audit inputs
@@ -121,8 +121,15 @@ collect_remote_audit_inputs() {
       > "$TRANSCRIPT_DIR/audit/release-download.stdout" 2> "$TRANSCRIPT_DIR/audit/release-download.stderr" || status="FAIL"
     gh run view "$ARTIFACT_RUN_ID" --repo "$REPO" --log \
       > "$TRANSCRIPT_DIR/audit/logs/launchpad-artifacts.log" 2> "$TRANSCRIPT_DIR/audit/logs/launchpad-artifacts.stderr" || status="FAIL"
-    gh run view 26131090671 --repo "$REPO" --log \
-      > "$TRANSCRIPT_DIR/audit/logs/release.log" 2> "$TRANSCRIPT_DIR/audit/logs/release.stderr" || status="FAIL"
+    local release_run_id
+    release_run_id="$(gh run list --repo "$REPO" --workflow release.yml --branch "$RELEASE_TAG" --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)"
+    if [[ -n "$release_run_id" ]]; then
+      gh run view "$release_run_id" --repo "$REPO" --log \
+        > "$TRANSCRIPT_DIR/audit/logs/release.log" 2> "$TRANSCRIPT_DIR/audit/logs/release.stderr" || status="FAIL"
+    else
+      status="FAIL"
+      printf 'release workflow run not found for %s\n' "$RELEASE_TAG" > "$TRANSCRIPT_DIR/audit/logs/release.stderr"
+    fi
     gh run download "$ARTIFACT_RUN_ID" --repo "$REPO" -n launchpad-artifact-manifest \
       -D "$TRANSCRIPT_DIR/audit/artifact-manifest" \
       > "$TRANSCRIPT_DIR/audit/artifact-manifest.stdout" 2> "$TRANSCRIPT_DIR/audit/artifact-manifest.stderr" || status="FAIL"
@@ -206,14 +213,13 @@ redact_transcripts() {
 
 write_final_report() {
   local status="$1"
-  python3 - "$OUTPUT" "$COMMANDS_JSONL" "$EVIDENCE_JSONL" "$LAUNCH_IDS_JSONL" "$GHCR_JSON" "$SECRET_AUDIT_JSON" "$REMOTE_AUDIT_JSON" "$RELEASE_TAG" "$HOST_KIND" "$ARTIFACT_RUN_ID" <<'PY'
+  python3 - "$OUTPUT" "$status" "$COMMANDS_JSONL" "$EVIDENCE_JSONL" "$LAUNCH_IDS_JSONL" "$GHCR_JSON" "$SECRET_AUDIT_JSON" "$REMOTE_AUDIT_JSON" "$RELEASE_TAG" "$HOST_KIND" "$ARTIFACT_RUN_ID" <<'PY'
 import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-output, commands_path, evidence_path, launch_ids_path, ghcr_path, secret_path, remote_path, release_tag, host_kind, artifact_run_id = sys.argv[1:]
-status = sys.stdin.read().strip() or "FAIL"
+output, status, commands_path, evidence_path, launch_ids_path, ghcr_path, secret_path, remote_path, release_tag, host_kind, artifact_run_id = sys.argv[1:]
 
 def read_jsonl(path):
     p = Path(path)
@@ -331,7 +337,7 @@ main() {
 
   redact_transcripts
 
-  write_final_report "$final_status" <<<"$final_status"
+  write_final_report "$final_status"
   printf 'clean-install: wrote redacted report to %s\n' "$OUTPUT"
   [[ "$final_status" == "PASS" ]]
 }

@@ -1,0 +1,7 @@
+{
+  "case_id": "allowed-file-write",
+  "tool_class": "file_write",
+  "target": "/workspace/allowed/result.txt",
+  "expected_verdict": "ALLOW",
+  "must_bind_evidence": ["sandbox_grant_hash", "path_hash", "artifact_hash"]
+}

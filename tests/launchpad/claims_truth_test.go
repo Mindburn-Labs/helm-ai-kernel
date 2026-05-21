@@ -43,14 +43,20 @@ func TestLaunchpadClaimsMarketPromotedAppsAsSupported(t *testing.T) {
 	requireContains(t, cleanGate, "SUPPORTED_APPS=(openclaw hermes opencode kilocode)")
 	requireContains(t, cleanGate, "--include-candidates")
 	requireContains(t, cleanGate, `RELEASE_TAG="v0.5.5"`)
-	requireContains(t, cleanGate, `ARTIFACT_RUN_ID="26179980172"`)
+	requireContains(t, cleanGate, `ARTIFACT_RUN_ID="26198407296"`)
+	requireContains(t, cleanGate, "output, status, commands_path")
+	requireNotContains(t, cleanGate, "status = sys.stdin.read()", "scripts/launch/clean_install_gate.sh")
 	requireContains(t, cleanGate, `"supported_apps": ["openclaw", "hermes", "opencode", "kilocode"]`)
 	requireContains(t, cleanGate, `"candidate_promotion_apps": []`)
 	requireContains(t, cleanGate, `"deprecated_include_candidates_flag": "accepted_noop_all_four_apps_are_supported"`)
+	requireContains(t, cleanGate, "gh run list --repo \"$REPO\" --workflow release.yml --branch \"$RELEASE_TAG\"")
+	requireNotContains(t, cleanGate, "gh run view 26131090671", "scripts/launch/clean_install_gate.sh")
 
 	cleanWorkflow := readDoc(t, root, ".github/workflows/launchpad-clean-install.yml")
 	requireContains(t, cleanWorkflow, "default: v0.5.5")
-	requireContains(t, cleanWorkflow, `default: "26179980172"`)
+	requireContains(t, cleanWorkflow, `default: "26198407296"`)
+	requireContains(t, cleanWorkflow, "brew install colima docker jq qemu lima-additional-guestagents")
+	requireContains(t, cleanWorkflow, "colima delete -f")
 
 	artifactWorkflow := readDoc(t, root, ".github/workflows/launchpad-artifacts.yml")
 	requireContains(t, artifactWorkflow, "run_candidate_live_conformance")
@@ -112,7 +118,7 @@ func TestHistoricalLaunchpadReportsDeclareSupersededTruth(t *testing.T) {
 	jsonReport := readDoc(t, root, "docs/launchpad/final_report.json")
 	requireContains(t, jsonReport, `"historical_report": true`)
 	requireContains(t, jsonReport, `"superseded_by": "docs/launchpad/v1_report.json"`)
-	requireContains(t, jsonReport, `"artifact_workflow_run_id": "26179980172"`)
+	requireContains(t, jsonReport, `"artifact_workflow_run_id": "26186959337"`)
 	requireContains(t, jsonReport, `"opencode"`)
 	requireContains(t, jsonReport, `"kilocode"`)
 }
@@ -124,9 +130,12 @@ func TestLaunchpadClaimsDoNotOverstateIsolationEgressOrWebSocketMCP(t *testing.T
 		"SECURITY_REVIEW.md",
 		"FINAL_IMPLEMENTATION_REPORT.md",
 		"THREAT_MODEL_ADDENDUM.md",
+		"v1_report.json",
 	} {
 		body := strings.ToLower(readLaunchpadDoc(t, root, rel))
 		for _, forbidden := range []string{
+			"market_best",
+			"best on market",
 			"no sensitive prompt data left",
 			"hostile-agent-grade docker",
 			"websocket mcp is supported",

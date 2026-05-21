@@ -1,0 +1,7 @@
+{
+  "case_id": "stopped-ambiguous-session",
+  "event": "work.stop force=true during in-flight tool call",
+  "expected_verdict": "DENY",
+  "expected_reason_code": "VERIFICATION_FAILURE",
+  "must_bind_evidence": ["work_id", "session_id", "receipt_id"]
+}

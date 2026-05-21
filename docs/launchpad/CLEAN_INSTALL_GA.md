@@ -7,7 +7,7 @@ last_reviewed: 2026-05-20
 
 Status: v0.5.5 gate implemented; v1 promotes OpenClaw, Hermes, OpenCode, and
 Kilo Code into the supported-app clean-install set after workflow
-`26179980172` passed signed artifact, live conformance, teardown, receipts, and
+`26198407296` passed signed artifact, live conformance, teardown, receipts, and
 offline EvidencePack verification.
 
 Launchpad GA is a product-adoption gate for the `v0.5.5` release. It proves the
@@ -30,7 +30,8 @@ offline verification.
 ## Source Truth
 
 - Release target: `v0.5.5`
-- Current four-app Launchpad artifact workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26179980172>
+- Current four-app Launchpad artifact workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26198407296>
+- Current macOS Homebrew clean-install workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26199878246>
 - Current Launchpad v1 report: `docs/launchpad/v1_report.json`
 - Historical `v0.5.4` release report: `docs/launchpad/final_report.json`
 - Clean-install report: `docs/launchpad/clean_install_report.json`
@@ -76,7 +77,7 @@ Use the repo-native gate to collect redacted evidence:
 export HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY='<fresh CI-only key>'
 bash scripts/launch/clean_install_gate.sh \
   --release-tag v0.5.5 \
-  --artifact-run-id 26179980172 \
+  --artifact-run-id 26198407296 \
   --host-kind developer_macos \
   --output docs/launchpad/clean_install_report.json
 ```
@@ -94,10 +95,10 @@ accepted for backward compatibility.
 
 | App | Availability | Image |
 | --- | --- | --- |
-| OpenClaw | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501` |
-| Hermes | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:11bb3893d8466b9abe2cea7f65c734647d86177908b38ea55edceb056944ee7f` |
-| OpenCode | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:c31aaef9b739f9ed870edd5c66f34f9a79efcfab132aaa2395f890f7bf5fb20f` |
-| Kilo Code | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:68a428e13c1b8cc1cb0338eb56c0e79610a609adc91a60b99b8f9a226c1621ba` |
+| OpenClaw | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995` |
+| Hermes | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652` |
+| OpenCode | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550` |
+| Kilo Code | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6` |
 
 Codex, Claude Code, Cursor, and Junie remain external/BYO adapters.
 
@@ -109,11 +110,12 @@ Manual CI entrypoint:
 gh workflow run launchpad-clean-install.yml \
   --repo Mindburn-Labs/helm-ai-kernel \
   -f release_tag=v0.5.5 \
-  -f artifact_run_id=26179980172
+  -f artifact_run_id=26198407296
 ```
 
-The CI report is a repeatability signal. The separate clean Mac report remains
-the canonical GA evidence for developer experience.
+The CI report is the current repeatable macOS Homebrew gate. A separately
+operated clean Mac transcript can be attached as an additional adoption artifact
+when release owners need a non-CI workstation record.
 
 ## Troubleshooting
 

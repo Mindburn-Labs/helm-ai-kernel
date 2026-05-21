@@ -1,94 +1,286 @@
 {
-  "artifact_workflow_run_id": "26110916296",
-  "current_four_app_artifact_workflow_run_id": "26179980172",
-  "canonical_user_machine": {
-    "evidence_artifact": null,
-    "status": "BLOCKED_CURRENT_V0_5_4_PACKAGE_REGISTRY_ROOT_MISSING"
-  },
-  "ci_clean_install": {
-    "evidence_artifact": "launchpad-clean-install-report",
-    "status": "PENDING_UPDATED_WORKFLOW_RESULT",
-    "workflow": ".github/workflows/launchpad-clean-install.yml"
-  },
+  "artifact_workflow_run_id": "26198407296",
+  "candidate_promotion_apps": [],
+  "candidate_promotion_included": false,
   "commands": [
     {
       "command": "brew update",
       "exit_code": 0,
-      "name": "brew_update"
+      "name": "brew_update",
+      "stderr_file": "brew_update.stderr",
+      "stdout_file": "brew_update.stdout"
     },
     {
       "command": "brew install mindburnlabs/tap/helm-ai-kernel",
       "exit_code": 0,
-      "name": "brew_install"
+      "name": "brew_install",
+      "stderr_file": "brew_install.stderr",
+      "stdout_file": "brew_install.stdout"
+    },
+    {
+      "command": "docker version",
+      "exit_code": 0,
+      "name": "docker_version",
+      "stderr_file": "docker_version.stderr",
+      "stdout_file": "docker_version.stdout"
+    },
+    {
+      "command": "helm-ai-kernel --version",
+      "exit_code": 0,
+      "name": "helm_version",
+      "stderr_file": "helm_version.stderr",
+      "stdout_file": "helm_version.stdout"
     },
     {
       "command": "helm-ai-kernel launch matrix --json",
-      "exit_code": 1,
-      "name": "launch_matrix"
+      "exit_code": 0,
+      "name": "launch_matrix",
+      "stderr_file": "launch_matrix.stderr",
+      "stdout_file": "launch_matrix.stdout"
+    },
+    {
+      "command": "helm-ai-kernel launch apps --json",
+      "exit_code": 0,
+      "name": "launch_apps",
+      "stderr_file": "launch_apps.stderr",
+      "stdout_file": "launch_apps.stdout"
     },
     {
       "command": "helm-ai-kernel launch openclaw local-container --headless --output json",
-      "exit_code": null,
-      "name": "launch_openclaw"
-    },
-    {
-      "command": "helm-ai-kernel launch hermes local-container --headless --output json",
-      "exit_code": null,
-      "name": "launch_hermes"
+      "exit_code": 0,
+      "name": "launch_openclaw",
+      "stderr_file": "launch_openclaw.stderr",
+      "stdout_file": "launch_openclaw.stdout"
     },
     {
       "command": "helm-ai-kernel launch delete <launch_id> --cascade",
-      "exit_code": null,
-      "name": "delete_each_launch"
+      "exit_code": 0,
+      "name": "delete_openclaw",
+      "stderr_file": "delete_openclaw.stderr",
+      "stdout_file": "delete_openclaw.stdout"
     },
     {
-      "command": "helm-ai-kernel verify --bundle <pack>",
-      "exit_code": null,
-      "name": "verify_each_evidence_pack"
+      "command": "helm-ai-kernel launch hermes local-container --headless --output json",
+      "exit_code": 0,
+      "name": "launch_hermes",
+      "stderr_file": "launch_hermes.stderr",
+      "stdout_file": "launch_hermes.stdout"
+    },
+    {
+      "command": "helm-ai-kernel launch delete <launch_id> --cascade",
+      "exit_code": 0,
+      "name": "delete_hermes",
+      "stderr_file": "delete_hermes.stderr",
+      "stdout_file": "delete_hermes.stdout"
+    },
+    {
+      "command": "helm-ai-kernel launch opencode local-container --headless --output json",
+      "exit_code": 0,
+      "name": "launch_opencode",
+      "stderr_file": "launch_opencode.stderr",
+      "stdout_file": "launch_opencode.stdout"
+    },
+    {
+      "command": "helm-ai-kernel launch delete <launch_id> --cascade",
+      "exit_code": 0,
+      "name": "delete_opencode",
+      "stderr_file": "delete_opencode.stderr",
+      "stdout_file": "delete_opencode.stdout"
+    },
+    {
+      "command": "helm-ai-kernel launch kilocode local-container --headless --output json",
+      "exit_code": 0,
+      "name": "launch_kilocode",
+      "stderr_file": "launch_kilocode.stderr",
+      "stdout_file": "launch_kilocode.stdout"
+    },
+    {
+      "command": "helm-ai-kernel launch delete <launch_id> --cascade",
+      "exit_code": 0,
+      "name": "delete_kilocode",
+      "stderr_file": "delete_kilocode.stderr",
+      "stdout_file": "delete_kilocode.stdout"
+    },
+    {
+      "command": "helm-ai-kernel verify --bundle <pack> --json",
+      "exit_code": 0,
+      "name": "verify_71eaad24-e800-4b32-a8b6-157e4566b691-",
+      "stderr_file": "verify_71eaad24-e800-4b32-a8b6-157e4566b691-.stderr",
+      "stdout_file": "verify_71eaad24-e800-4b32-a8b6-157e4566b691-.stdout"
+    },
+    {
+      "command": "helm-ai-kernel verify --bundle <pack> --json",
+      "exit_code": 0,
+      "name": "verify_71eaad24-e800-4b32-a8b6-157e4566b691.tar-",
+      "stderr_file": "verify_71eaad24-e800-4b32-a8b6-157e4566b691.tar-.stderr",
+      "stdout_file": "verify_71eaad24-e800-4b32-a8b6-157e4566b691.tar-.stdout"
+    },
+    {
+      "command": "helm-ai-kernel verify --bundle <pack> --json",
+      "exit_code": 0,
+      "name": "verify_7fe3610a-3971-4906-90d0-7ddb1242bccf-",
+      "stderr_file": "verify_7fe3610a-3971-4906-90d0-7ddb1242bccf-.stderr",
+      "stdout_file": "verify_7fe3610a-3971-4906-90d0-7ddb1242bccf-.stdout"
+    },
+    {
+      "command": "helm-ai-kernel verify --bundle <pack> --json",
+      "exit_code": 0,
+      "name": "verify_7fe3610a-3971-4906-90d0-7ddb1242bccf.tar-",
+      "stderr_file": "verify_7fe3610a-3971-4906-90d0-7ddb1242bccf.tar-.stderr",
+      "stdout_file": "verify_7fe3610a-3971-4906-90d0-7ddb1242bccf.tar-.stdout"
+    },
+    {
+      "command": "helm-ai-kernel verify --bundle <pack> --json",
+      "exit_code": 0,
+      "name": "verify_9eebb477-c858-4ae5-9c6b-4ba5840f9667-",
+      "stderr_file": "verify_9eebb477-c858-4ae5-9c6b-4ba5840f9667-.stderr",
+      "stdout_file": "verify_9eebb477-c858-4ae5-9c6b-4ba5840f9667-.stdout"
+    },
+    {
+      "command": "helm-ai-kernel verify --bundle <pack> --json",
+      "exit_code": 0,
+      "name": "verify_9eebb477-c858-4ae5-9c6b-4ba5840f9667.tar-",
+      "stderr_file": "verify_9eebb477-c858-4ae5-9c6b-4ba5840f9667.tar-.stderr",
+      "stdout_file": "verify_9eebb477-c858-4ae5-9c6b-4ba5840f9667.tar-.stdout"
+    },
+    {
+      "command": "helm-ai-kernel verify --bundle <pack> --json",
+      "exit_code": 0,
+      "name": "verify_f842ae77-6bfb-459f-931c-fe655b724963-",
+      "stderr_file": "verify_f842ae77-6bfb-459f-931c-fe655b724963-.stderr",
+      "stdout_file": "verify_f842ae77-6bfb-459f-931c-fe655b724963-.stdout"
+    },
+    {
+      "command": "helm-ai-kernel verify --bundle <pack> --json",
+      "exit_code": 0,
+      "name": "verify_f842ae77-6bfb-459f-931c-fe655b724963.tar-",
+      "stderr_file": "verify_f842ae77-6bfb-459f-931c-fe655b724963.tar-.stderr",
+      "stdout_file": "verify_f842ae77-6bfb-459f-931c-fe655b724963.tar-.stdout"
     }
   ],
-  "evidence_packs": [],
-  "generated_at": "2026-05-20T15:05:00Z",
-  "ghcr_digest_confirmations": [
+  "deprecated_include_candidates_flag": "accepted_noop_all_four_apps_are_supported",
+  "evidence_packs": [
     {
-      "app_id": "openclaw",
-      "availability": "oss_supported",
-      "digest": "sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e",
-      "image": "ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e"
+      "kind": "directory",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/71eaad24-e800-4b32-a8b6-157e4566b691",
+      "sha256": "c8b0bf2a5ceffaa196a7275549e0f1c99394b3ada224b5a402bede0e2d26f739",
+      "verify_status": "PASS"
     },
+    {
+      "kind": "file",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/71eaad24-e800-4b32-a8b6-157e4566b691.tar",
+      "sha256": "a7f86dc59957f64cd83dca21a408ab52eeb122d6400639dc4ce14b98ed5a4f59",
+      "verify_status": "PASS"
+    },
+    {
+      "kind": "directory",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/7fe3610a-3971-4906-90d0-7ddb1242bccf",
+      "sha256": "03ff111d03d728b3291ad5d7a92154411de08dda36ac31bc6b70bedd3e9ba83d",
+      "verify_status": "PASS"
+    },
+    {
+      "kind": "file",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/7fe3610a-3971-4906-90d0-7ddb1242bccf.tar",
+      "sha256": "31985646b7b63bdb1b2f40a2adc830c2038292bd66e51014be32e427c7aa0d66",
+      "verify_status": "PASS"
+    },
+    {
+      "kind": "directory",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/9eebb477-c858-4ae5-9c6b-4ba5840f9667",
+      "sha256": "8d454da48eb0cac51c1e29c7e5576ab5308190bb158c1bf734a309cb9bb75f9d",
+      "verify_status": "PASS"
+    },
+    {
+      "kind": "file",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/9eebb477-c858-4ae5-9c6b-4ba5840f9667.tar",
+      "sha256": "a75c6db661ae95fb63982b88d4ab18bc9d123de5b0b5393984599d81ad321d8e",
+      "verify_status": "PASS"
+    },
+    {
+      "kind": "directory",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/f842ae77-6bfb-459f-931c-fe655b724963",
+      "sha256": "fec40b87692d1319960c64658f7060ec7fb19401052676747825c4582125cc08",
+      "verify_status": "PASS"
+    },
+    {
+      "kind": "file",
+      "path": "$TRANSCRIPT_DIR/launchpad-home/evidencepacks/f842ae77-6bfb-459f-931c-fe655b724963.tar",
+      "sha256": "884fc8ce67b58880910d79c4a47150adee5f286a2dba251ae01ea697925876b2",
+      "verify_status": "PASS"
+    }
+  ],
+  "failed_steps": [],
+  "generated_at": "2026-05-21T01:39:16Z",
+  "ghcr_digest_confirmations": [
     {
       "app_id": "hermes",
       "availability": "oss_supported",
-      "digest": "sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527",
-      "image": "ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527"
+      "digest": "sha256:11bb3893d8466b9abe2cea7f65c734647d86177908b38ea55edceb056944ee7f",
+      "image": "ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:11bb3893d8466b9abe2cea7f65c734647d86177908b38ea55edceb056944ee7f",
+      "signature_ref": "cosign://ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:11bb3893d8466b9abe2cea7f65c734647d86177908b38ea55edceb056944ee7f"
+    },
+    {
+      "app_id": "kilocode",
+      "availability": "oss_supported",
+      "digest": "sha256:68a428e13c1b8cc1cb0338eb56c0e79610a609adc91a60b99b8f9a226c1621ba",
+      "image": "ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:68a428e13c1b8cc1cb0338eb56c0e79610a609adc91a60b99b8f9a226c1621ba",
+      "signature_ref": "cosign://ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:68a428e13c1b8cc1cb0338eb56c0e79610a609adc91a60b99b8f9a226c1621ba"
+    },
+    {
+      "app_id": "openclaw",
+      "availability": "oss_supported",
+      "digest": "sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501",
+      "image": "ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501",
+      "signature_ref": "cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501"
+    },
+    {
+      "app_id": "opencode",
+      "availability": "oss_supported",
+      "digest": "sha256:c31aaef9b739f9ed870edd5c66f34f9a79efcfab132aaa2395f890f7bf5fb20f",
+      "image": "ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:c31aaef9b739f9ed870edd5c66f34f9a79efcfab132aaa2395f890f7bf5fb20f",
+      "signature_ref": "cosign://ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:c31aaef9b739f9ed870edd5c66f34f9a79efcfab132aaa2395f890f7bf5fb20f"
     }
   ],
-  "host_kind": "digitalocean_clean_operator",
-  "launch_ids": {},
+  "host_kind": "github_macos_runner",
+  "launch_ids": {
+    "hermes": "7fe3610a-3971-4906-90d0-7ddb1242bccf",
+    "kilocode": "71eaad24-e800-4b32-a8b6-157e4566b691",
+    "openclaw": "9eebb477-c858-4ae5-9c6b-4ba5840f9667",
+    "opencode": "f842ae77-6bfb-459f-931c-fe655b724963"
+  },
   "milestone": "Launchpad v0.5.5 Clean Install + Public Docs GA",
   "redaction": {
     "host_identifiers_committed": false,
     "raw_logs_committed": false,
     "secret_values_committed": false
   },
-  "release_tag": "v0.5.4",
+  "release_tag": "v0.5.5",
+  "remote_audit": {
+    "detail": "remote release assets and workflow logs collected",
+    "status": "PASS"
+  },
   "schema_version": 1,
   "secret_fragment_audit": {
-    "status": "NOT_RUN_BECAUSE_CURRENT_PACKAGE_FAILED_BEFORE_LAUNCH"
+    "findings": [],
+    "findings_count": 0,
+    "generated_at": "2026-05-21T01:39:13Z",
+    "min_fragment_length": 16,
+    "roots": [
+      "/tmp/helm-launchpad-clean-install/commands",
+      "/tmp/helm-launchpad-clean-install/audit",
+      "/tmp/helm-launchpad-clean-install/launchpad-home"
+    ],
+    "scanned_bytes": 3980778,
+    "scanned_files": 183,
+    "schema_version": 1,
+    "secret_env_configured": true,
+    "status": "PASS"
   },
-  "status": "FAILED_CURRENT_V0_5_4_HOMEBREW_PACKAGING_FIXED_FOR_NEXT_RELEASE",
-  "current_supported_apps": [
+  "status": "PASS",
+  "supported_apps": [
     "openclaw",
     "hermes",
     "opencode",
     "kilocode"
-  ],
-  "next_release_target": "v0.5.5",
-  "digitalocean_clean_operator": {
-    "status": "FAILED_CURRENT_V0_5_4_PACKAGE_REGISTRY_ROOT_MISSING",
-    "region": "nyc3",
-    "resource_teardown": "PASS",
-    "failure_summary": "brew install succeeded, but helm-ai-kernel launch matrix --json failed outside a source checkout because v0.5.4 does not package Launchpad registry and policy data with the binary.",
-    "fix_committed": "CLI now discovers HELM_LAUNCHPAD_REGISTRY_ROOT/Homebrew pkgshare, and release assets include helm-ai-kernel-launchpad-data.tar for the formula."
-  }
+  ]
 }

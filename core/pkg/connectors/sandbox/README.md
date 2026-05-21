@@ -25,6 +25,7 @@ backward compatibility with the legacy `sandbox.Runner` interface.
 | `opensandbox/` | OpenSandbox REST API | Yes               | Runtime  |
 | `e2b/`         | E2B API              | Yes (persistence) | Template |
 | `daytona/`     | Daytona SDK API      | No (stateless)    | Config   |
+| `claudemanaged/` | Claude Managed Agents self-hosted worker | No (session-scoped) | HELM grant + worker/VPC |
 
 ## Usage
 
@@ -33,6 +34,7 @@ import (
     "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox/opensandbox"
     "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox/e2b"
     "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox/daytona"
+    "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox/claudemanaged"
 )
 
 // Pick a provider:
@@ -40,4 +42,5 @@ var actuator actuators.SandboxActuator
 actuator = opensandbox.New(opensandbox.Config{...})
 actuator = e2b.New(e2b.Config{...})
 actuator = daytona.New(daytona.Config{...})
+actuator = claudemanaged.New(claudemanaged.Config{...})
 ```

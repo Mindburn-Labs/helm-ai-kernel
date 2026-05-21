@@ -10,7 +10,7 @@ on:
       artifact_run_id:
         description: Launchpad artifact workflow run containing signed app and egress-proxy evidence
         required: true
-        default: "26179980172"
+        default: "26198407296"
 
 permissions:
   contents: read
@@ -33,15 +33,16 @@ jobs:
         run: |
           set -euo pipefail
           brew update
-          brew install colima docker jq
+          brew install colima docker jq qemu lima-additional-guestagents
 
       - name: Start Docker-compatible local-container runtime
         run: |
           set -euo pipefail
+          colima delete -f >/dev/null 2>&1 || true
           if [[ "$(uname -m)" == "arm64" ]]; then
             colima start --cpu 2 --memory 4 --disk 20 --arch x86_64 --vm-type=vz --vz-rosetta \
-              || colima start --cpu 2 --memory 4 --disk 20 --arch x86_64 \
-              || colima start --cpu 2 --memory 4 --disk 20
+              || { colima delete -f >/dev/null 2>&1 || true; colima start --cpu 2 --memory 4 --disk 20 --arch x86_64; } \
+              || { colima delete -f >/dev/null 2>&1 || true; colima start --cpu 2 --memory 4 --disk 20; }
           else
             colima start --cpu 2 --memory 4 --disk 20
           fi

@@ -7,7 +7,7 @@ last_reviewed: 2026-05-20
 
 Status: OpenClaw, Hermes, OpenCode, and Kilo Code passed the v1.0 signed
 artifact, live local-container, teardown, receipt, and offline EvidencePack
-bar in workflow `26179980172`. DigitalOcean opt-in beta passed for all four
+bar in workflow `26198407296`. DigitalOcean opt-in beta passed for all four
 apps; Hetzner remains fail-closed until a scoped provider token is available.
 
 ## Audience
@@ -35,7 +35,7 @@ a clean machine.
 
 Implemented checks currently prove:
 
-- `launchpad-artifacts` workflow `26179980172` built pinned OpenClaw, Hermes,
+- `launchpad-artifacts` workflow `26198407296` built pinned OpenClaw, Hermes,
   OpenCode, and Kilo Code upstream refs into GHCR OCI images, signed them with
   GitHub OIDC keyless cosign, generated syft SBOMs, ran grype scans, and
   published a promotion manifest.
@@ -47,13 +47,13 @@ Implemented checks currently prove:
   from signed CI evidence, live e2e, teardown, receipts, and offline
   EvidencePack verification, not from assertion.
 - OpenClaw image:
-  `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:789c7eb17ad74e0c40da4372a8397cc46c64cdb4b50901ed6ad4f7d18dad5501`.
+  `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995`.
 - Hermes image:
-  `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:11bb3893d8466b9abe2cea7f65c734647d86177908b38ea55edceb056944ee7f`.
+  `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652`.
 - OpenCode image:
-  `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:c31aaef9b739f9ed870edd5c66f34f9a79efcfab132aaa2395f890f7bf5fb20f`.
+  `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550`.
 - Kilo Code image:
-  `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:68a428e13c1b8cc1cb0338eb56c0e79610a609adc91a60b99b8f9a226c1621ba`.
+  `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6`.
 - Local-container OpenRouter egress requires a launch-scoped egress proxy
   receipt, can use the signed egress-proxy image from the artifact workflow, and
   rejects non-OpenRouter allowlists.

@@ -66,10 +66,17 @@
 | `canonical_semantic_receipt.schema.json`  | L1          | normative | Canonical semantic receipt        |
 | `model_invocation_receipt.v1.schema.json` | L1          | normative | Model invocation receipt          |
 | `tool_invocation_receipt.v1.schema.json`  | L1          | normative | Tool invocation receipt           |
+| `managed_agent_execution_receipt.v1.schema.json` | L2 | preview | Managed Agent self-hosted worker execution receipt |
 | `deployment_receipt.v1.json`              | L2          | normative | Deployment receipt                |
 | `raw_record_layer.schema.json`            | L2          | normative | Raw record layer                  |
 | `corroborated_receipt/v1.json`            | L2          | normative | Multi-source corroborated receipt |
 | `deletion_receipt/v1.json`                | L2          | normative | Data deletion receipt             |
+
+### Managed Agents (`managed-agents/`)
+
+| Schema                                             | Conformance | Status  | Description                                        |
+| -------------------------------------------------- | ----------- | ------- | -------------------------------------------------- |
+| `claude_self_hosted_live_config.v1.schema.json`    | L2          | preview | Redacted live evidence config for Claude workers   |
 
 ### Effects (`effects/`)
 

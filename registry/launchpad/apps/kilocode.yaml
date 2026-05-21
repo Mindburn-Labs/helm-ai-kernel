@@ -9,8 +9,8 @@ redistribution: allowed_by_MIT_with_upstream_notice
 availability: oss_supported
 install:
     strategy: signed_oci
-    image: ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:68a428e13c1b8cc1cb0338eb56c0e79610a609adc91a60b99b8f9a226c1621ba
-    digest: sha256:68a428e13c1b8cc1cb0338eb56c0e79610a609adc91a60b99b8f9a226c1621ba
+    image: ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6
+    digest: sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6
     source: https://github.com/Kilo-Org/kilocode
     ref: v7.3.1
 runtime:
@@ -67,18 +67,18 @@ evidence_requirements:
     - syft_sbom
     - grype_vulnerability_scan
 supply_chain_evidence:
-    artifact_digest: sha256:68a428e13c1b8cc1cb0338eb56c0e79610a609adc91a60b99b8f9a226c1621ba
+    artifact_digest: sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6
     signature_tool: cosign
-    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:68a428e13c1b8cc1cb0338eb56c0e79610a609adc91a60b99b8f9a226c1621ba
+    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6
     sbom_tool: syft
     sbom_ref: artifact://sbom-kilocode.spdx.json
     vulnerability_scan_tool: grype
     vulnerability_scan_ref: artifact://grype-kilocode.json
 promotion_evidence:
-    artifact_verification_ref: github-actions://26179980172/1/artifact-verification/kilocode
-    live_e2e_run_id: github-actions://26179980172/1/live-e2e/kilocode
-    evidence_pack_ref: github-actions://26179980172/1/evidencepack/kilocode
-    teardown_receipt_ref: github-actions://26179980172/1/teardown/kilocode
+    artifact_verification_ref: github-actions://26198407296/1/artifact-verification/kilocode
+    live_e2e_run_id: github-actions://26198407296/1/live-e2e/kilocode
+    evidence_pack_ref: github-actions://26198407296/1/evidencepack/kilocode
+    teardown_receipt_ref: github-actions://26198407296/1/teardown/kilocode
 conformance:
     license_verified: true
     artifact_verified: true
@@ -90,9 +90,9 @@ conformance:
     receipt_verified: true
     evidence_pack_verified: true
 metadata:
-    artifact_workflow_run: github-actions://26179980172/1
+    artifact_workflow_run: github-actions://26198407296/1
     helm_oci_status: promoted_from_signed_ci_artifact_manifest
-    promotion_provenance_ref: github-actions://26179980172/1
+    promotion_provenance_ref: github-actions://26198407296/1
     upstream_commit: 64c60812ae730a30db1fa2226d9e446f7f10c127
     upstream_ref: v7.3.1
     upstream_repo: https://github.com/Kilo-Org/kilocode

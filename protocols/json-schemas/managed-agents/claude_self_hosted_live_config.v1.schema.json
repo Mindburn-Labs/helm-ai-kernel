@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.mindburn.run/managed-agents/claude_self_hosted_live_config.v1.schema.json",
+  "title": "Claude Managed Agents Self-Hosted Live Evidence Config v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "provider",
+    "artifact_uri",
+    "last_verified",
+    "tested_commit",
+    "tested_tree_hash",
+    "signer",
+    "anthropic",
+    "worker",
+    "daytona",
+    "mcp",
+    "scenario_results"
+  ],
+  "properties": {
+    "schema_version": { "const": "claude_managed_agents_live_config.v1" },
+    "provider": { "const": "daytona" },
+    "artifact_uri": { "type": "string", "minLength": 1 },
+    "last_verified": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "tested_commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "tested_tree_hash": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "signer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key_id"],
+      "properties": {
+        "key_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "anthropic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_id", "agent_version", "session_id", "environment_id", "work_id"],
+      "properties": {
+        "agent_id": { "type": "string", "minLength": 1 },
+        "agent_version": { "type": "string", "minLength": 1 },
+        "session_id": { "type": "string", "minLength": 1 },
+        "environment_id": { "type": "string", "minLength": 1 },
+        "work_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "worker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "worker_id",
+        "worker_image_digest",
+        "skill_manifest_hash",
+        "sandbox_grant_hash",
+        "workspace_root",
+        "outputs_root",
+        "environment_key_secret_ref",
+        "organization_api_key_present",
+        "egress_enforced",
+        "log_retention_enabled",
+        "tls_required"
+      ],
+      "properties": {
+        "worker_id": { "type": "string", "minLength": 1 },
+        "worker_image_digest": { "$ref": "#/$defs/sha256" },
+        "skill_manifest_hash": { "$ref": "#/$defs/sha256" },
+        "sandbox_grant_hash": { "$ref": "#/$defs/sha256" },
+        "workspace_root": { "const": "/workspace" },
+        "outputs_root": { "const": "/mnt/session/outputs" },
+        "environment_key_secret_ref": { "type": "string", "minLength": 1 },
+        "organization_api_key_present": { "const": false },
+        "egress_enforced": { "const": true },
+        "log_retention_enabled": { "const": true },
+        "tls_required": { "const": true }
+      }
+    },
+    "daytona": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_ref_hash",
+        "worker_runtime_ref_hash",
+        "deployment_attestation",
+        "queue_liveness_ref",
+        "worker_stop_ref"
+      ],
+      "properties": {
+        "workspace_ref_hash": { "$ref": "#/$defs/sha256" },
+        "worker_runtime_ref_hash": { "$ref": "#/$defs/sha256" },
+        "deployment_attestation": { "$ref": "#/$defs/sha256" },
+        "queue_liveness_ref": { "$ref": "#/$defs/sha256" },
+        "worker_stop_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "route_through_helm_gateway",
+        "gateway_url_hash",
+        "tunnel_domain_hash",
+        "upstream_mcp_server_id",
+        "oauth_resource",
+        "required_scopes",
+        "protocol_version",
+        "ca_cert_ref_hash",
+        "allowed_upstream_host_hash",
+        "schema_pin_hash",
+        "raw_tunnel_targets_allowed"
+      ],
+      "properties": {
+        "route_through_helm_gateway": { "const": true },
+        "gateway_url_hash": { "$ref": "#/$defs/sha256" },
+        "tunnel_domain_hash": { "$ref": "#/$defs/sha256" },
+        "upstream_mcp_server_id": { "type": "string", "minLength": 1 },
+        "oauth_resource": { "type": "string", "minLength": 1 },
+        "required_scopes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "protocol_version": { "type": "string", "minLength": 1 },
+        "ca_cert_ref_hash": { "$ref": "#/$defs/sha256" },
+        "allowed_upstream_host_hash": { "$ref": "#/$defs/sha256" },
+        "schema_pin_hash": { "$ref": "#/$defs/sha256" },
+        "raw_tunnel_targets_allowed": { "const": false }
+      }
+    },
+    "scenario_results": {
+      "type": "array",
+      "minItems": 18,
+      "items": { "$ref": "#/$defs/scenario_result" }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "scenario_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "effect_type",
+        "verdict",
+        "dispatched",
+        "receipt_id",
+        "receipt_hash",
+        "evidence_ref",
+        "observed_at"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "effect_type": { "type": "string", "minLength": 1 },
+        "verdict": { "enum": ["ALLOW", "DENY"] },
+        "reason_code": { "type": "string" },
+        "dispatched": { "type": "boolean" },
+        "receipt_id": { "type": "string", "minLength": 1 },
+        "receipt_hash": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          ]
+        },
+        "evidence_ref": { "type": "string", "minLength": 1 },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "artifact_hash": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

@@ -128,7 +128,6 @@ export function WorkbenchApp() {
 function ConsoleApp() {
   const {
     initialRoute,
-    authRevision,
     bootstrap,
     receipts,
     streamState,

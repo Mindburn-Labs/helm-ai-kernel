@@ -168,12 +168,6 @@ const numberValue = (values: AdminActionValues, key: string): number | undefined
   return numeric;
 };
 
-const csvValue = (values: AdminActionValues, key: string): readonly string[] | undefined => {
-  const value = optionalValue(values, key);
-  if (!value) return undefined;
-  return value.split(",").map((item) => item.trim()).filter(Boolean);
-};
-
 const compact = (record: AdminRecord): AdminRecord => {
   const entries = Object.entries(record).filter(([, value]) => {
     if (value === undefined || value === null) return false;

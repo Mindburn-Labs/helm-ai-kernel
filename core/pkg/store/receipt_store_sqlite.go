@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -14,7 +15,8 @@ import (
 )
 
 type SQLiteReceiptStore struct {
-	db *sql.DB
+	db      *sql.DB
+	writeMu sync.Mutex
 }
 
 func NewSQLiteReceiptStore(db *sql.DB) (*SQLiteReceiptStore, error) {
@@ -211,6 +213,8 @@ func (s *SQLiteReceiptStore) ListSince(ctx context.Context, since uint64, limit 
 }
 
 func (s *SQLiteReceiptStore) Store(ctx context.Context, r *contracts.Receipt) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	return insertSQLiteReceipt(ctx, s.db, r)
 }
 
@@ -241,6 +245,9 @@ func (s *SQLiteReceiptStore) AppendCausal(ctx context.Context, sessionID string,
 	if sessionID == "" {
 		return fmt.Errorf("session id is required")
 	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return fmt.Errorf("open receipt connection: %w", err)

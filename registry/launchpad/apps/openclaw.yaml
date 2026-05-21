@@ -16,6 +16,15 @@ install:
 runtime:
     command:
         - openclaw
+        - gateway
+        - run
+        - --port
+        - "18789"
+        - --allow-unconfigured
+        - --auth
+        - none
+        - --bind
+        - loopback
 model_gateway:
     logical_secret: model_gateway
     provider: openrouter

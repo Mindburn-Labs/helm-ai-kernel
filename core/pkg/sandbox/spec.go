@@ -37,6 +37,10 @@ type SandboxSpec struct {
 	// Empty uses the Docker daemon default.
 	RuntimeClass string `json:"runtime_class,omitempty"`
 
+	// Labels are docker labels propagated to the container for downstream
+	// discovery and cleanup (e.g. teardown by launch_id).
+	Labels map[string]string `json:"labels,omitempty"`
+
 	// SandboxLeaseID binds the execution to a pre-warmed sandbox lease.
 	SandboxLeaseID string `json:"sandbox_lease_id,omitempty"`
 

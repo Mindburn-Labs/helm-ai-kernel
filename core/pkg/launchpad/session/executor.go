@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -497,6 +498,53 @@ func teardownRuntimeHandles(run LaunchRun) map[string]any {
 			result["container_cleanup"] = "removed_or_absent"
 		}
 	}
+	// Orphan cleanup: containers labelled with this launch_id that never
+	// got their ID recorded (e.g. early failure before docker run returned).
+	if launchID != "" {
+		filter := "label=launchpad-launch-id=" + launchID
+		if out, err := exec.Command(docker, "ps", "-aq", "--filter", filter).CombinedOutput(); err == nil {
+			ids := strings.Fields(strings.TrimSpace(string(out)))
+			if len(ids) > 0 {
+				result["attempted"] = true
+				result["orphan_container_ids"] = ids
+				rmArgs := append([]string{"rm", "-f"}, ids...)
+				if rmOut, rmErr := exec.Command(docker, rmArgs...).CombinedOutput(); rmErr != nil {
+					result["orphan_container_cleanup"] = strings.TrimSpace(string(rmOut))
+				} else {
+					result["orphan_container_cleanup"] = "removed_or_absent"
+				}
+			}
+		}
+		// Deterministic sidecar resources by launch_id (handles partial-save
+		// failures where EgressNetworkName / EgressProxyName never landed
+		// in LaunchRun state).
+		expectedProxy := "helm-lp-" + launchID + "-proxy"
+		expectedNet := "helm-lp-" + launchID + "-net"
+		// State-dir cleanup (gap #19). Mirror of runtime.appStateRoot.
+		stateDir := ""
+		if override := strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_HOME")); override != "" {
+			stateDir = filepath.Join(override, "state", launchID)
+		} else if home, err := os.UserHomeDir(); err == nil {
+			stateDir = filepath.Join(home, ".helm", "launchpad", "state", launchID)
+		}
+		if stateDir != "" {
+			if err := os.RemoveAll(stateDir); err == nil {
+				result["state_dir_cleanup"] = "removed_or_absent"
+			} else {
+				result["state_dir_cleanup"] = err.Error()
+			}
+		}
+		if out, err := exec.Command(docker, "rm", "-f", expectedProxy).CombinedOutput(); err == nil {
+			if trimmed := strings.TrimSpace(string(out)); trimmed != "" {
+				result["orphan_proxy_cleanup"] = trimmed
+			}
+		}
+		if out, err := exec.Command(docker, "network", "rm", expectedNet).CombinedOutput(); err == nil {
+			if trimmed := strings.TrimSpace(string(out)); trimmed != "" {
+				result["orphan_network_cleanup"] = trimmed
+			}
+		}
+	}
 	if handles.EgressProxyName != "" {
 		result["attempted"] = true
 		result["egress_proxy_name"] = handles.EgressProxyName
@@ -527,9 +575,9 @@ func (e Executor) persist(run LaunchRun, artifacts map[string][]byte) (LaunchRun
 	run.EvidenceGraphRefs = appendUnique(run.EvidenceGraphRefs, packRef+"/04_EXPORTS/launchpad_evidence_graph.json")
 	if archiveRef, err := receipts.WriteEvidencePackArchive(packRef); err == nil {
 		run.EvidencePackRefs = appendUnique(run.EvidencePackRefs, archiveRef)
-		run.VerificationCommand = "helm evidence verify " + archiveRef + " --offline"
+		run.VerificationCommand = "helm-ai-kernel verify --bundle " + archiveRef
 	} else {
-		run.VerificationCommand = "helm evidence verify " + packRef + " --offline"
+		run.VerificationCommand = "helm-ai-kernel verify --bundle " + packRef
 	}
 	logPath, _ := e.Store.AppendLog(run.LaunchID, fmt.Sprintf("launchpad state %s verdict %s", run.State, run.KernelVerdict))
 	run.LogPath = logPath

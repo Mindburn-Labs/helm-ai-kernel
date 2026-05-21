@@ -84,7 +84,13 @@ func (r *DockerRunner) Run(spec *sandbox.SandboxSpec) (*sandbox.Result, *sandbox
 		"--cap-drop", "ALL",
 		"--security-opt", "no-new-privileges",
 		"--read-only",
+		"--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
 	)
+
+	// Labels for downstream discovery / teardown (e.g. by launch_id).
+	for k, v := range spec.Labels {
+		args = append(args, "--label", fmt.Sprintf("%s=%s", k, v))
+	}
 
 	// Environment
 	for k, v := range spec.Env {

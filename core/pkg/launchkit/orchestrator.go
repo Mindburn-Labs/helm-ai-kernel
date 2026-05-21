@@ -291,7 +291,7 @@ func canonicalGates() []Gate {
 		gate("healthcheck", "Healthcheck", "helm run logs <run_id>"),
 		gate("receipts.emit", "Receipts", "helm run receipts <run_id>"),
 		gate("evidence.export", "EvidencePack export", "helm evidence export <run_id>"),
-		gate("offline.verify", "Offline verify command", "helm evidence verify <file> --offline"),
+		gate("offline.verify", "Offline verify command", "helm-ai-kernel verify --bundle <file>"),
 		gate("console.deeplink", "Console deep link", "helm run open <run_id>"),
 	}
 }

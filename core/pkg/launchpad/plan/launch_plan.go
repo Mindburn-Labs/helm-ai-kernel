@@ -24,6 +24,7 @@ type LaunchPlan struct {
 	RequiredSecretRefs      []string                   `json:"required_secret_refs"`
 	NetworkAllowlist        []string                   `json:"network_allowlist"`
 	FilesystemMounts        []string                   `json:"filesystem_mounts"`
+	StateDirEnv             string                     `json:"state_dir_env,omitempty"`
 	MCPPolicy               registry.MCPPolicy         `json:"mcp_policy"`
 	Budgets                 registry.BudgetCeiling     `json:"budgets"`
 	Nodes                   map[string]any             `json:"nodes"`

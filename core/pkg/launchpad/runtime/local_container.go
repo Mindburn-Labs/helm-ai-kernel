@@ -138,16 +138,30 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 		network.Disabled = false
 		network.NetworkName = proxyHandle.NetworkName
 	}
+	mounts := []sandbox.Mount{{
+		Source:   req.WorkspaceMount,
+		Target:   "/workspace",
+		ReadOnly: false,
+	}}
+	stateMounts, stateEnv, err := projectAppStateMounts(req.Plan)
+	if err != nil {
+		cleanupEgressProxy(proxyHandle)
+		return handle, err
+	}
+	mounts = append(mounts, stateMounts...)
+	for k, v := range stateEnv {
+		env[k] = v
+	}
 	spec := &sandbox.SandboxSpec{
 		Image:   req.ImageDigest,
 		Command: command,
 		Args:    args,
 		Env:     env,
-		Mounts: []sandbox.Mount{{
-			Source:   req.WorkspaceMount,
-			Target:   "/workspace",
-			ReadOnly: false,
-		}},
+		Labels: map[string]string{
+			"launchpad-launch-id": req.Plan.LaunchID,
+			"launchpad-app-id":    req.Plan.AppID,
+		},
+		Mounts: mounts,
 		Limits: sandbox.ResourceLimits{
 			CPUMillis:    500,
 			MemoryMB:     512,
@@ -184,7 +198,87 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 	return handle, nil
 }
 
-const defaultLocalContainerCommandTimeout = 120 * time.Second
+// projectAppStateMounts materializes the non-workspace mounts declared in
+// AppSpec.FilesystemPolicy.Mounts (e.g. "app_state:rw") into actual host
+// directories under ~/.helm/launchpad/state/<launch_id>/<name>/ and a
+// container target at /var/lib/<app_id>/<name>. If StateDirEnv is set on
+// the plan, an env var pointing at the first such mount is exported into
+// the container, so apps (hermes, openclaw) can discover their state
+// directory without baking the path into their YAML command.
+func projectAppStateMounts(p plan.LaunchPlan) ([]sandbox.Mount, map[string]string, error) {
+	if len(p.FilesystemMounts) == 0 {
+		return nil, nil, nil
+	}
+	root, err := appStateRoot(p.LaunchID)
+	if err != nil {
+		return nil, nil, err
+	}
+	var mounts []sandbox.Mount
+	var firstTarget string
+	for _, raw := range p.FilesystemMounts {
+		name, mode := parseFilesystemMount(raw)
+		if name == "" || strings.EqualFold(name, "workspace") {
+			continue
+		}
+		hostDir := filepath.Join(root, name)
+		if err := os.MkdirAll(hostDir, 0o700); err != nil {
+			return nil, nil, fmt.Errorf("create state dir for %s: %w", name, err)
+		}
+		// Workaround for container-side UID mismatch: kernel runs as the
+		// host user (often UID 501 on macOS), apps inside the container
+		// run as their own UID (hermes=999, openclaw=nonroot). Loosen
+		// dir perms so the in-container user can write. Outer parent
+		// (~/.helm/launchpad/) stays 0700, so this is not externally
+		// reachable.
+		_ = os.Chmod(hostDir, 0o777)
+		target := filepath.Join("/var/lib", p.AppID, name)
+		mounts = append(mounts, sandbox.Mount{
+			Source:   hostDir,
+			Target:   target,
+			ReadOnly: !strings.EqualFold(mode, "rw"),
+		})
+		if firstTarget == "" {
+			firstTarget = target
+		}
+	}
+	env := map[string]string{}
+	if firstTarget != "" && p.StateDirEnv != "" {
+		env[p.StateDirEnv] = firstTarget
+	}
+	return mounts, env, nil
+}
+
+// parseFilesystemMount splits entries like "app_state:rw" into name + mode.
+func parseFilesystemMount(raw string) (string, string) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", ""
+	}
+	parts := strings.SplitN(trimmed, ":", 2)
+	name := strings.TrimSpace(parts[0])
+	mode := "ro"
+	if len(parts) == 2 {
+		mode = strings.TrimSpace(parts[1])
+	}
+	return name, mode
+}
+
+// appStateRoot resolves ~/.helm/launchpad/state/<launch_id>/.
+func appStateRoot(launchID string) (string, error) {
+	if launchID == "" {
+		return "", errors.New("launch id required for app state root")
+	}
+	if override := strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_HOME")); override != "" {
+		return filepath.Join(override, "state", launchID), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".helm", "launchpad", "state", launchID), nil
+}
+
+const defaultLocalContainerCommandTimeout = 600 * time.Second
 
 func (r LocalContainerRuntime) commandTimeout() time.Duration {
 	if r.CommandTimeout > 0 {

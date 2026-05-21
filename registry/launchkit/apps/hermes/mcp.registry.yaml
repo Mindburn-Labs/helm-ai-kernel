@@ -1,0 +1,7 @@
+servers: []
+defaults:
+  unknown_server_policy: quarantine
+  unknown_tool_policy: ESCALATE
+  side_effects_require_approval_receipt: true
+  approval_ttl_required: true
+  revocation_required: true

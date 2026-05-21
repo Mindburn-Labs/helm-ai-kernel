@@ -24,13 +24,25 @@ func TestSOTA2026NegativeBoundaryVectorsAreConformanceGates(t *testing.T) {
 		"sandbox-overgrant",
 		"blocked-egress",
 		"deny-receipt-emission",
+		"verification-scope-missing-t2",
+		"green-tests-without-scope",
+		"plan-transaction-missing-for-write",
+		"plan-transaction-conflict",
+		"stale-assumption-side-effect",
+		"unapproved-harness-mutation",
+		"harness-change-contract-missing-regression",
+		"agent-authored-code-network-attempt",
+		"agent-authored-code-unmounted-file-read",
+		"wasm-fuel-exhaustion",
+		"gui-action-missing-grounding-ref",
+		"gui-action-postcondition-unverified",
 	}
 	vectors := conformance.DefaultNegativeBoundaryVectors()
 	seen := map[string]conformance.NegativeBoundaryVector{}
 	for _, vector := range vectors {
 		seen[vector.ID] = vector
-		if vector.ExpectedVerdict != contracts.VerdictDeny {
-			t.Fatalf("%s expected verdict = %s, want DENY", vector.ID, vector.ExpectedVerdict)
+		if vector.ExpectedVerdict != contracts.VerdictDeny && vector.ExpectedVerdict != contracts.VerdictEscalate {
+			t.Fatalf("%s expected verdict = %s, want DENY or ESCALATE", vector.ID, vector.ExpectedVerdict)
 		}
 		if !vector.MustEmitReceipt || !vector.MustNotDispatch {
 			t.Fatalf("%s must emit receipt and block dispatch", vector.ID)

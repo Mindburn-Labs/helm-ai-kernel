@@ -1,0 +1,9 @@
+mode: live
+target: local-container
+command:
+  - hermes
+requires:
+  - local.docker
+  - scoped_secret_grant
+teardown:
+  cascade: true

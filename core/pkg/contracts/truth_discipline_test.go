@@ -234,6 +234,44 @@ func TestPlanSpec_TruthAnnotation_Roundtrip(t *testing.T) {
 	}
 }
 
+func TestPlanSpec_Transaction_Roundtrip(t *testing.T) {
+	plan := contracts.PlanSpec{
+		ID:      "plan-transaction-1",
+		Version: "1.0.0",
+		Hash:    "sha256:plan",
+		Transaction: &contracts.PlanTransaction{
+			ReadSet:                      []string{"artifact:roadmap"},
+			WriteSet:                     []string{"service:billing"},
+			AssumptionSet:                []string{"customer commitment remains current"},
+			VersionDependencies:          []string{"artifact:roadmap@sha256:aaa"},
+			VerificationObligations:      []string{"go test ./..."},
+			ConflictPolicy:               "deny",
+			RollbackOrCompensationPolicy: "restore previous billing rule",
+			HumanReviewState:             "required",
+		},
+	}
+
+	data, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var decoded contracts.PlanSpec
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if decoded.Transaction == nil {
+		t.Fatal("expected transaction")
+	}
+	if len(decoded.Transaction.ReadSet) != 1 || decoded.Transaction.ReadSet[0] != "artifact:roadmap" {
+		t.Fatalf("read_set mismatch: %v", decoded.Transaction.ReadSet)
+	}
+	if decoded.Transaction.ConflictPolicy != "deny" {
+		t.Fatalf("conflict_policy mismatch: %s", decoded.Transaction.ConflictPolicy)
+	}
+}
+
 func TestPlanSpec_NoTruth_BackwardCompat(t *testing.T) {
 	oldJSON := `{"id": "plan-1", "version": "1.0.0", "hash": "sha256:abc"}`
 	var plan contracts.PlanSpec
@@ -242,6 +280,9 @@ func TestPlanSpec_NoTruth_BackwardCompat(t *testing.T) {
 	}
 	if plan.Truth != nil {
 		t.Fatal("expected nil truth for old JSON")
+	}
+	if plan.Transaction != nil {
+		t.Fatal("expected nil transaction for old JSON")
 	}
 }
 

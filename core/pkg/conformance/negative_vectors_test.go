@@ -16,6 +16,18 @@ func TestDefaultNegativeBoundaryVectorsContainRequiredGates(t *testing.T) {
 		"sandbox-overgrant",
 		"blocked-egress",
 		"deny-receipt-emission",
+		"verification-scope-missing-t2",
+		"green-tests-without-scope",
+		"plan-transaction-missing-for-write",
+		"plan-transaction-conflict",
+		"stale-assumption-side-effect",
+		"unapproved-harness-mutation",
+		"harness-change-contract-missing-regression",
+		"agent-authored-code-network-attempt",
+		"agent-authored-code-unmounted-file-read",
+		"wasm-fuel-exhaustion",
+		"gui-action-missing-grounding-ref",
+		"gui-action-postcondition-unverified",
 	}
 	vectors := DefaultNegativeBoundaryVectors()
 	seen := map[string]NegativeBoundaryVector{}
@@ -38,8 +50,8 @@ func TestDefaultNegativeBoundaryVectorsContainRequiredGates(t *testing.T) {
 func TestDefaultNegativeBoundaryVectorsFailClosed(t *testing.T) {
 	for _, vector := range DefaultNegativeBoundaryVectors() {
 		t.Run(vector.ID, func(t *testing.T) {
-			if vector.ExpectedVerdict != "DENY" {
-				t.Fatalf("expected verdict = %s, want DENY", vector.ExpectedVerdict)
+			if vector.ExpectedVerdict != "DENY" && vector.ExpectedVerdict != "ESCALATE" {
+				t.Fatalf("expected verdict = %s, want DENY or ESCALATE", vector.ExpectedVerdict)
 			}
 			if vector.ExpectedReasonCode == "" {
 				t.Fatal("expected reason code is required")

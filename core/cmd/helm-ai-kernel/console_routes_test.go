@@ -26,7 +26,7 @@ func TestConsoleReservedPathsDoNotFallThroughToSPA(t *testing.T) {
 }
 
 func TestConsoleApplicationRoutesFallThroughToSPA(t *testing.T) {
-	appRoutes := []string{"/", "/command", "/receipts/rcpt_123", "/settings"}
+	appRoutes := []string{"/", "/command", "/receipts/rcpt_123", "/runs/run_123", "/settings"}
 	for _, path := range appRoutes {
 		if isReservedConsolePath(path) {
 			t.Fatalf("%s should be handled by console SPA", path)
@@ -79,6 +79,33 @@ func TestConsoleReplaySurfaceUsesVerifierContract(t *testing.T) {
 	}
 	if payload["source"] != "/api/v1/replay/verify" {
 		t.Fatalf("replay surface source = %v", payload["source"])
+	}
+}
+
+func TestConsoleDiagnosticsExposeRedactedRuntimeStores(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv("DATABASE_URL", "postgres://helm:secret@db.example/helm")
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	svc.DataDir = "/tmp/helm-test-data"
+	svc.DatabaseMode = "postgres"
+	svc.DatabaseStatus = "ready"
+	mux := http.NewServeMux()
+	RegisterConsoleRoutes(mux, svc, serverOptions{Mode: "serve"})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/console/diagnostics", nil)
+	authorizeTestRequest(req)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("console diagnostics status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "secret@") || strings.Contains(body, "postgres://helm") {
+		t.Fatalf("console diagnostics leaked DATABASE_URL: %s", body)
+	}
+	if !strings.Contains(body, "launchpad_store") || !strings.Contains(body, "route") {
+		t.Fatalf("console diagnostics missing store/route detail: %s", body)
 	}
 }
 

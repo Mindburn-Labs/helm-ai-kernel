@@ -469,6 +469,76 @@
       "domain": "compute",
       "description": "Sandboxed execution exceeded the configured wall-clock time budget",
       "since": "1.3.0"
+    },
+    {
+      "code": "ERR_VERIFICATION_SCOPE_REQUIRED",
+      "applies_to": ["DENY"],
+      "domain": "harness",
+      "description": "Medium or high risk execution is missing a VerificationScope",
+      "since": "1.4.0"
+    },
+    {
+      "code": "ERR_HARNESS_TRACE_REQUIRED",
+      "applies_to": ["DENY"],
+      "domain": "harness",
+      "description": "Side-effectful execution is missing a hash-linked HarnessTrace",
+      "since": "1.4.0"
+    },
+    {
+      "code": "ERR_PLAN_TRANSACTION_REQUIRED",
+      "applies_to": ["DENY"],
+      "domain": "harness",
+      "description": "Multi-artifact or write-bearing execution is missing a PlanTransaction",
+      "since": "1.4.0"
+    },
+    {
+      "code": "ERR_PLAN_TRANSACTION_CONFLICT",
+      "applies_to": ["DENY", "ESCALATE"],
+      "domain": "harness",
+      "description": "PlanTransaction read/write sets conflict with another open transaction",
+      "since": "1.4.0"
+    },
+    {
+      "code": "ERR_ASSUMPTION_STALE",
+      "applies_to": ["DENY", "ESCALATE"],
+      "domain": "harness",
+      "description": "A declared plan assumption or dependency is stale before side-effect dispatch",
+      "since": "1.4.0"
+    },
+    {
+      "code": "ERR_HARNESS_MUTATION_REQUIRES_APPROVAL",
+      "applies_to": ["ESCALATE"],
+      "domain": "harness",
+      "description": "Mutation of connector, tool, sandbox, policy, verifier, evidence, or routing state requires explicit approval",
+      "since": "1.4.0"
+    },
+    {
+      "code": "ERR_HARNESS_CHANGE_CONTRACT_INVALID",
+      "applies_to": ["DENY"],
+      "domain": "harness",
+      "description": "Harness mutation lacks a valid HarnessChangeContract",
+      "since": "1.4.0"
+    },
+    {
+      "code": "ERR_GREEN_TEST_SCOPE_MISSING",
+      "applies_to": ["DENY"],
+      "domain": "harness",
+      "description": "Passing tests were submitted without a declared verification scope",
+      "since": "1.4.0"
+    },
+    {
+      "code": "ERR_GROUNDED_ACTION_REF_REQUIRED",
+      "applies_to": ["DENY"],
+      "domain": "gui-action",
+      "description": "GUI or computer-use action is missing grounded screenshot and DOM/accessibility evidence",
+      "since": "1.4.0"
+    },
+    {
+      "code": "ERR_GUI_POSTCONDITION_UNVERIFIED",
+      "applies_to": ["DENY"],
+      "domain": "gui-action",
+      "description": "GUI or computer-use action postcondition was not verified",
+      "since": "1.4.0"
     }
   ]
 }

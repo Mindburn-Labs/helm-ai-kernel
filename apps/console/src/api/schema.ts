@@ -214,6 +214,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/console/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read redacted Console runtime and persistence diagnostics */
+        get: operations["getConsoleDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/console/surfaces": {
         parameters: {
             query?: never;
@@ -276,6 +293,348 @@ export interface paths {
         put?: never;
         /** Run the OSS read-only Agent UI assistant */
         post: operations["runAgentUIRuntime"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/apps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Launchpad app specs */
+        get: operations["listLaunchpadApps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/substrates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Launchpad substrate specs */
+        get: operations["listLaunchpadSubstrates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/matrix": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Launchpad app/substrate compatibility matrix */
+        get: operations["getLaunchpadMatrix"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Compile a Launchpad plan without starting side effects */
+        post: operations["planLaunchpadRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/launch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start a governed Launchpad run */
+        post: operations["createLaunchpadRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List HELM runtime instances */
+        get: operations["listLaunchpadRuns"];
+        put?: never;
+        /** Compile gates and launch only after fail-closed boundary ALLOW */
+        post: operations["createLaunchpadRuntimeRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read receipt-backed Launchpad run detail */
+        get: operations["getLaunchpadRuntimeRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/runs/{run_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List backend-emitted run events for timeline rendering */
+        get: operations["listLaunchpadRunEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/runs/{run_id}/receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List receipt refs for a Launchpad run */
+        get: operations["listLaunchpadRunReceipts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/runs/{run_id}/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read redacted run log text */
+        get: operations["getLaunchpadRunLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/runs/{run_id}/evidence/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export EvidencePack refs and offline verify command for a run */
+        post: operations["exportLaunchpadRunEvidence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/runs/{run_id}/teardown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cascade teardown a Launchpad runtime instance */
+        post: operations["teardownLaunchpadRuntimeRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/policy/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Simulate least-privilege Launchpad policy for an app */
+        post: operations["simulateLaunchpadPolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/sandbox/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect the backend-computed sandbox grant for a run */
+        get: operations["inspectLaunchpadSandbox"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/mcp/threat-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List MCP threat reviews and quarantine state */
+        get: operations["listLaunchpadMcpThreatReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/mcp/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a scoped MCP approval receipt record */
+        post: operations["approveLaunchpadMcpTools"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List env-backed Launchpad secret grant statuses without secret values */
+        get: operations["listLaunchpadSecretGrants"];
+        put?: never;
+        /** Bind a logical Launchpad secret to an environment variable */
+        post: operations["bindLaunchpadSecretGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/launches/{launch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a Launchpad run */
+        get: operations["getLaunchpadRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/launches/{launch_id}/repair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Build a deterministic repair plan for a Launchpad run */
+        post: operations["repairLaunchpadRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/launches/{launch_id}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Launchpad teardown for a run */
+        post: operations["deleteLaunchpadRun"];
         delete?: never;
         options?: never;
         head?: never;
@@ -617,6 +976,248 @@ export interface paths {
          *     Works offline — no network calls made during verification.
          */
         post: operations["verifyEvidence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/evidence/verification-scopes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List verification scopes */
+        get: operations["listVerificationScopes"];
+        put?: never;
+        /** Create a sealed verification scope */
+        post: operations["createVerificationScope"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/evidence/verification-scopes/{scope_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a verification scope */
+        get: operations["getVerificationScope"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/evidence/verification-scopes/{scope_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify a verification scope hash */
+        post: operations["verifyVerificationScope"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/harness-traces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List harness traces */
+        get: operations["listHarnessTraces"];
+        put?: never;
+        /** Create a sealed harness trace */
+        post: operations["createHarnessTrace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/harness-traces/{trace_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a harness trace */
+        get: operations["getHarnessTrace"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/harness-traces/{trace_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify a harness trace hash */
+        post: operations["verifyHarnessTrace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plans/transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List plan transactions */
+        get: operations["listPlanTransactions"];
+        put?: never;
+        /** Create a sealed plan transaction */
+        post: operations["createPlanTransaction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plans/transactions/{transaction_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a plan transaction */
+        get: operations["getPlanTransaction"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plans/transactions/{transaction_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify a plan transaction hash */
+        post: operations["verifyPlanTransaction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/harness/change-contracts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List harness change contracts */
+        get: operations["listHarnessChangeContracts"];
+        put?: never;
+        /** Create a sealed harness change contract */
+        post: operations["createHarnessChangeContract"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/harness/change-contracts/{change_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a harness change contract */
+        get: operations["getHarnessChangeContract"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/harness/change-contracts/{change_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bind approval evidence to a harness change contract */
+        post: operations["approveHarnessChangeContract"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/harness/change-contracts/{change_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify a harness change contract hash */
+        post: operations["verifyHarnessChangeContract"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/gui/receipts/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify a grounded GUI action receipt */
+        post: operations["verifyGUIActionReceipt"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1488,6 +2089,121 @@ export interface components {
             next_cursor?: string;
             has_more?: boolean;
         };
+        VerificationScope: {
+            verification_scope_id: string;
+            subject_hash: string;
+            /** @enum {string} */
+            risk_class?: "T0" | "T1" | "T2" | "T3";
+            checks_performed: string[];
+            assumptions?: string[];
+            untested_regions?: string[];
+            known_limits?: string[];
+            remaining_risks?: string[];
+            required_followup?: string[];
+            verifier_hash: string;
+            policy_hash: string;
+            /** Format: date-time */
+            created_at: string;
+            scope_hash?: string;
+        };
+        HarnessTrace: {
+            trace_id: string;
+            plan_hash: string;
+            context_refs?: string[];
+            memory_reads?: string[];
+            memory_writes?: string[];
+            tool_schema_hashes?: string[];
+            permission_requests?: string[];
+            sandbox_grant_hash?: string;
+            mcp_approval_ref?: string;
+            connector_contract_hash?: string;
+            policy_hash: string;
+            cpi_output_hash?: string;
+            verifier_outputs?: string[];
+            human_interventions?: string[];
+            state_updates?: string[];
+            receipt_refs: string[];
+            /** Format: date-time */
+            created_at: string;
+            trace_hash?: string;
+        };
+        PlanTransaction: {
+            plan_transaction_id: string;
+            plan_hash: string;
+            read_set: string[];
+            write_set: string[];
+            assumption_set: string[];
+            version_dependencies?: string[];
+            verification_obligations: string[];
+            /** @enum {string} */
+            conflict_policy: "deny" | "escalate" | "last_writer_forbidden";
+            rollback_policy?: {
+                [key: string]: unknown;
+            };
+            rollback_or_compensation_policy?: string;
+            /** @enum {string} */
+            approval_state?: "none" | "required" | "approved" | "denied" | "expired";
+            human_review_state?: string;
+            transaction_hash?: string;
+        };
+        HarnessChangeContract: {
+            change_contract_id: string;
+            /** @enum {string} */
+            component_modified: "connector_contract" | "tool_schema" | "sandbox_grant" | "mcp_approval" | "policy_overlay" | "verifier" | "evidence_template" | "routing_rule";
+            failure_mode_targeted: string;
+            predicted_improvement: string;
+            invariants_preserved: string[];
+            safety_properties: string[];
+            regression_suite_refs: string[];
+            simulation_evidence_refs?: string[];
+            canary_scope?: {
+                [key: string]: unknown;
+            };
+            rollback_plan: {
+                [key: string]: unknown;
+            };
+            approval_required: boolean;
+            activation_receipt_ref?: string;
+            /** Format: date-time */
+            created_at: string;
+            contract_hash?: string;
+        };
+        GroundedActionRef: {
+            grounded_action_id: string;
+            screenshot_hash: string;
+            dom_or_ax_snapshot_hash: string;
+            target_ref: string;
+            bbox_or_element_id: string;
+            /** @enum {string} */
+            action_type: "click" | "type" | "select" | "submit" | "navigate";
+            precondition: string;
+            postcondition: string;
+            verification_scope_ref: string;
+            policy_hash: string;
+            sandbox_grant_hash?: string;
+            /** Format: date-time */
+            created_at?: string;
+            grounding_hash?: string;
+        };
+        GUIActionReceipt: {
+            receipt_id: string;
+            grounded_action_ref: string;
+            screenshot_hash: string;
+            dom_or_ax_snapshot_hash: string;
+            target_ref: string;
+            bbox_or_element_id: string;
+            /** @enum {string} */
+            action_type: "click" | "type" | "select" | "submit" | "navigate";
+            precondition: string;
+            postcondition: string;
+            postcondition_verified: boolean;
+            verification_scope_ref: string;
+            policy_hash: string;
+            sandbox_grant_hash?: string;
+            /** Format: date-time */
+            created_at?: string;
+            receipt_hash?: string;
+        };
         DecisionRequest: {
             principal?: string;
             action: string;
@@ -1539,7 +2255,14 @@ export interface components {
         };
         ConsoleSurfaceRef: {
             id: string;
+            label?: string;
+            group?: string;
             source: string;
+            auth?: string;
+            contract_status?: string;
+            status?: string;
+            unsupported_reason?: string;
+            routes?: components["schemas"]["ConsoleRouteDiagnostic"][];
         };
         ConsoleSurfaceState: {
             id: string;
@@ -1553,6 +2276,285 @@ export interface components {
             records?: {
                 [key: string]: unknown;
             }[];
+        };
+        ConsoleDiagnostics: {
+            /** Format: date-time */
+            generated_at: string;
+            runtime: {
+                [key: string]: unknown;
+            };
+            access: {
+                [key: string]: unknown;
+            };
+            stores: components["schemas"]["ConsoleStoreDiagnostic"][];
+            routes: components["schemas"]["ConsoleRouteDiagnostic"][];
+        };
+        ConsoleStoreDiagnostic: {
+            id: string;
+            label: string;
+            status: string;
+            backend: string;
+            source?: string;
+            path?: string;
+            detail?: string;
+        };
+        ConsoleRouteDiagnostic: {
+            method: string;
+            path: string;
+            mux_pattern?: string;
+            auth: string;
+            rate_limit?: string;
+            contract_status: string;
+            operation_id: string;
+            owner: string;
+            group: string;
+            ui_coverage?: string;
+            unsupported_reason?: string;
+        };
+        LaunchpadPlanRequest: {
+            app_id: string;
+            substrate_id: string;
+            /** @default console */
+            principal: string;
+        };
+        LaunchpadApp: {
+            id: string;
+            app_id?: string;
+            name: string;
+            version?: string;
+            oci_ref?: string;
+            immutable_digest?: string;
+            oss_supported?: boolean;
+            availability?: string;
+            redistribution?: string;
+            install_strategy?: string;
+            risk_class?: string;
+            blocked_reason?: string;
+            required_secrets?: string[];
+            model_gateway_env?: string[];
+            declared_capabilities?: string[];
+            mcp_servers?: components["schemas"]["LaunchpadMCPServer"][];
+            filesystem_needs?: string[];
+            network_needs?: string[];
+            healthcheck?: {
+                [key: string]: unknown;
+            };
+            teardown_recipe?: {
+                [key: string]: unknown;
+            };
+            evidence_profile?: {
+                [key: string]: unknown;
+            };
+            policy_ref?: string;
+            status?: components["schemas"]["LaunchpadAppStatus"];
+        } & {
+            [key: string]: unknown;
+        };
+        LaunchpadAppStatus: {
+            state?: string;
+            verdict?: string;
+            reason_code?: string;
+            human_summary?: string;
+            missing_secrets?: string[];
+            quarantined_mcp?: number;
+            last_run_id?: string;
+            last_evidencepack_ref?: string;
+            proof_status?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        LaunchpadMCPServer: {
+            id?: string;
+            endpoint?: string;
+            transport?: string;
+            status?: string;
+            risk_class?: string;
+            tools?: string[];
+            receipt_ref?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        LaunchpadSubstrate: {
+            id: string;
+            name: string;
+            kind?: string;
+            availability?: string;
+            default_dry_run?: boolean;
+            blocked_reason?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        LaunchpadMatrixCell: {
+            app_id: string;
+            substrate_id: string;
+            launchable: boolean;
+            verdict: string;
+            reason: string;
+            availability: string;
+        } & {
+            [key: string]: unknown;
+        };
+        LaunchpadPlanResponse: {
+            launch_id?: string;
+            app_id?: string;
+            substrate_id?: string;
+            state?: string;
+            kernel_verdict?: string;
+            reason?: string;
+            reason_code?: string;
+            plan_hash?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        LaunchpadRun: {
+            launch_id?: string;
+            run_id?: string;
+            app_id?: string;
+            substrate_id?: string;
+            state?: string;
+            kernel_verdict?: string;
+            reason?: string;
+            reason_code?: string;
+            plan_hash?: string;
+            launchplan_hash?: string;
+            install_receipt_ref?: string;
+            launch_receipt_ref?: string;
+            health_receipt_ref?: string;
+            teardown_receipt_ref?: string;
+            evidence_pack_refs?: string[];
+            secret_grant_refs?: string[];
+            start_receipt_refs?: string[];
+            verification_command?: string;
+            teardown_command?: string;
+            runtime_handles?: {
+                [key: string]: unknown;
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        LaunchpadGateResult: {
+            id: string;
+            group: string;
+            label: string;
+            verdict: string;
+            reason_code?: string;
+            receipt_ref?: string;
+            proofgraph_node?: string;
+            evidence_refs?: string[];
+            summary?: string;
+            why?: string;
+            proof_status: string;
+            raw_detail_ref?: string;
+            raw_proof_ref?: string;
+            receipt_required?: boolean;
+            cli_equivalent?: string;
+            fix_actions?: components["schemas"]["LaunchpadFixAction"][];
+        } & {
+            [key: string]: unknown;
+        };
+        LaunchpadRunEvent: {
+            run_id: string;
+            stage: string;
+            verdict: string;
+            reason_code?: string;
+            receipt_ref?: string;
+            proofgraph_node?: string;
+            evidence_refs?: string[];
+            raw_payload_ref?: string;
+            human_summary?: string;
+            why?: string;
+            proof_status: string;
+            receipt_required?: boolean;
+            cli_equivalent?: string;
+            fix_actions?: components["schemas"]["LaunchpadFixAction"][];
+            /** Format: date-time */
+            created_at?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        LaunchpadRuntimeInstance: {
+            run_id: string;
+            container_id?: string;
+            launchplan_hash?: string;
+            state: string;
+            verdict?: string;
+            active_grants?: string[];
+            receipt_refs?: string[];
+            evidencepack_ref?: string;
+            offline_verify_command?: string;
+            teardown_command?: string;
+            sandbox_grant?: components["schemas"]["LaunchpadSandboxGrant"];
+            cli_equivalent?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        LaunchpadFixAction: {
+            label?: string;
+            cli?: string;
+            description?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        LaunchpadSandboxGrant: {
+            backend_profile?: string;
+            runtime?: string;
+            runtime_version?: string;
+            image_digest?: string;
+            filesystem_preopens?: string[];
+            network_policy?: string[];
+            env?: string[];
+            resource_limits?: {
+                [key: string]: string;
+            };
+            policy_epoch?: string;
+            grant_hash?: string;
+            proof_status?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        LaunchpadPolicySimulation: {
+            app_id?: string;
+            verdict?: string;
+            reason_code?: string;
+            plain_english?: string;
+            structured?: {
+                [key: string]: unknown;
+            };
+            diff?: string[];
+            raw?: {
+                [key: string]: unknown;
+            };
+            receipt_ref?: string;
+            proof_status?: string;
+            cli_equivalent?: string;
+            fix_actions?: components["schemas"]["LaunchpadFixAction"][];
+        } & {
+            [key: string]: unknown;
+        };
+        LaunchpadRunDetail: {
+            run: components["schemas"]["LaunchpadRun"];
+            app?: components["schemas"]["LaunchpadApp"];
+            instance: components["schemas"]["LaunchpadRuntimeInstance"];
+            gates: components["schemas"]["LaunchpadGateResult"][];
+            events: components["schemas"]["LaunchpadRunEvent"][];
+            offline_verification?: {
+                [key: string]: unknown;
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        LaunchpadSecretGrant: {
+            name: string;
+            required?: boolean;
+            provider?: string;
+            scope?: string;
+            status: string;
+            launch_impact?: string;
+            grant_ref?: string;
+            receipt_ref?: string;
+            value_env?: string;
+        } & {
+            [key: string]: unknown;
         };
         Session: {
             session_id?: string;
@@ -2569,6 +3571,27 @@ export interface operations {
             401: components["responses"]["HelmError"];
         };
     };
+    getConsoleDiagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redacted runtime, store, route, and access diagnostics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleDiagnostics"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
     listConsoleSurfaces: {
         parameters: {
             query?: never;
@@ -2597,7 +3620,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                surface_id: "overview" | "agents" | "actions" | "approvals" | "policies" | "replay" | "audit" | "developer" | "settings";
+                surface_id: "overview" | "agents" | "actions" | "approvals" | "policies" | "boundary" | "mcp" | "sandbox" | "authz" | "budgets" | "connectors" | "receipts" | "evidence" | "replay" | "conformance" | "proofgraph" | "harness" | "launchpad" | "trust" | "telemetry" | "coexistence" | "audit" | "developer" | "settings" | "diagnostics";
             };
             cookie?: never;
         };
@@ -2689,6 +3712,581 @@ export interface operations {
             };
             400: components["responses"]["HelmError"];
             401: components["responses"]["HelmError"];
+        };
+    };
+    listLaunchpadApps: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Launchpad apps */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        apps: components["schemas"]["LaunchpadApp"][];
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    listLaunchpadSubstrates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Launchpad substrates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        substrates: components["schemas"]["LaunchpadSubstrate"][];
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    getLaunchpadMatrix: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Launchpad matrix */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        matrix: components["schemas"]["LaunchpadMatrixCell"][];
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    planLaunchpadRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LaunchpadPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Compiled Launchpad plan */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LaunchpadPlanResponse"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
+    createLaunchpadRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LaunchpadPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Launchpad run state */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LaunchpadRun"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
+    listLaunchpadRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Launchpad runs and runtime instances */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        runs?: components["schemas"]["LaunchpadRun"][];
+                        instances?: components["schemas"]["LaunchpadRuntimeInstance"][];
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    createLaunchpadRuntimeRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LaunchpadPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Receipt-backed run detail */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LaunchpadRunDetail"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
+    getLaunchpadRuntimeRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Receipt-backed run detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LaunchpadRunDetail"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    listLaunchpadRunEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Run event timeline */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        events?: components["schemas"]["LaunchpadRunEvent"][];
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    listLaunchpadRunReceipts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Receipt refs and CLI equivalent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    getLaunchpadRunLogs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redacted run log */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    exportLaunchpadRunEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description EvidencePack export metadata */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    teardownLaunchpadRuntimeRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @default true */
+                    cascade?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Receipt-backed run detail after teardown */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LaunchpadRunDetail"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    simulateLaunchpadPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LaunchpadPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Policy simulation result */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LaunchpadPolicySimulation"];
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
+    inspectLaunchpadSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sandbox grant details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    listLaunchpadMcpThreatReviews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description MCP threat reviews */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    approveLaunchpadMcpTools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    server_id: string;
+                    tools: string[];
+                    ttl?: string;
+                    reason: string;
+                    approver?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description MCP approval receipt */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
+    listLaunchpadSecretGrants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secret grant statuses */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        secrets?: components["schemas"]["LaunchpadSecretGrant"][];
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    bindLaunchpadSecretGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    provider: string;
+                    value_env: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Secret grant binding status */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
+    getLaunchpadRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Launchpad run state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LaunchpadRun"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    repairLaunchpadRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Repair plan */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    deleteLaunchpadRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @default true */
+                    cascade?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Deleted Launchpad run state */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LaunchpadRun"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
         };
     };
     getAGUIRuntimeInfoCompat: {
@@ -3262,6 +4860,432 @@ export interface operations {
                 };
             };
             400: components["responses"]["HelmError"];
+        };
+    };
+    listVerificationScopes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verification scopes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificationScope"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    createVerificationScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerificationScope"];
+            };
+        };
+        responses: {
+            /** @description Sealed verification scope */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificationScope"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    getVerificationScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scope_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verification scope */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificationScope"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    verifyVerificationScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scope_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verification result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    listHarnessTraces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Harness traces */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessTrace"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    createHarnessTrace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HarnessTrace"];
+            };
+        };
+        responses: {
+            /** @description Sealed harness trace */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessTrace"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    getHarnessTrace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Harness trace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessTrace"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    verifyHarnessTrace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verification result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    listPlanTransactions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Plan transactions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanTransaction"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    createPlanTransaction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanTransaction"];
+            };
+        };
+        responses: {
+            /** @description Sealed plan transaction */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanTransaction"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    getPlanTransaction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transaction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Plan transaction */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanTransaction"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    verifyPlanTransaction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transaction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verification result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    listHarnessChangeContracts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Harness change contracts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessChangeContract"][];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    createHarnessChangeContract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HarnessChangeContract"];
+            };
+        };
+        responses: {
+            /** @description Sealed harness change contract */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessChangeContract"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    getHarnessChangeContract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                change_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Harness change contract */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessChangeContract"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    approveHarnessChangeContract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                change_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Updated harness change contract */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessChangeContract"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    verifyHarnessChangeContract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                change_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verification result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    verifyGUIActionReceipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GUIActionReceipt"];
+            };
+        };
+        responses: {
+            /** @description GUI action receipt verification result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
         };
     };
     listEvidenceEnvelopeManifests: {

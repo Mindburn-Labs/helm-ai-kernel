@@ -20,4 +20,5 @@ export * from "./components/feedback";
 export * from "./components/inspect";
 export * from "./components/primitives";
 export * from "./components/slot";
+export * from "./components/workbench";
 export * from "./primitives/catalog";

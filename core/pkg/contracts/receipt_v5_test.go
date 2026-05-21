@@ -169,4 +169,10 @@ func TestEvidencePack_V2Fields_BackwardCompat(t *testing.T) {
 	if pack.ReplayManifest != nil {
 		t.Fatalf("expected nil replay_manifest, got %v", pack.ReplayManifest)
 	}
+	if len(pack.VerificationScopes) != 0 {
+		t.Fatalf("expected no verification scopes, got %v", pack.VerificationScopes)
+	}
+	if len(pack.HarnessTraceRefs) != 0 {
+		t.Fatalf("expected no harness trace refs, got %v", pack.HarnessTraceRefs)
+	}
 }

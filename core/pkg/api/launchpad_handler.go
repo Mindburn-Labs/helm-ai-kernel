@@ -7,8 +7,10 @@ import (
 	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/readmodel"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/repair"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/secrets"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
 )
 
@@ -31,7 +33,9 @@ func (s *Server) handleLaunchpad(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case path == "apps" && r.Method == http.MethodGet:
-		writeJSON(w, http.StatusOK, map[string]any{"apps": catalog.Apps})
+		secretStatuses, _ := secrets.NewStore("").Statuses()
+		runs, _ := session.NewStore("").List()
+		writeJSON(w, http.StatusOK, map[string]any{"apps": readmodel.RegistryApps(catalog, secretStatuses, runs)})
 	case path == "substrates" && r.Method == http.MethodGet:
 		writeJSON(w, http.StatusOK, map[string]any{"substrates": catalog.Substrates})
 	case path == "matrix" && r.Method == http.MethodGet:

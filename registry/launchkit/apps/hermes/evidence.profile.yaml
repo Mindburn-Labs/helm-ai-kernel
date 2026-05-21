@@ -1,0 +1,14 @@
+required:
+  - cpi_output
+  - kernel_verdict
+  - sandbox_grant
+  - launch_receipt
+  - install_receipt
+  - healthcheck_receipt
+  - teardown_receipt
+  - evidence_pack
+  - mcp_quarantine
+  - artifact_digest
+  - cosign_signature
+  - syft_sbom
+  - grype_vulnerability_scan

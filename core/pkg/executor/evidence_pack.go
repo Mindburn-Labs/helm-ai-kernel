@@ -77,6 +77,10 @@ type EvidencePackInput struct {
 	OutboxID       string
 	DeniedAttempts []contracts.DeniedAttemptRecord
 	FailedAttempts []contracts.FailedAttemptRecord
+
+	// Verification and harness-state evidence
+	VerificationScopes []contracts.VerificationScope
+	HarnessTraceRefs   []contracts.HarnessTraceRef
 }
 
 // Produce creates an EvidencePack from the input.
@@ -164,9 +168,11 @@ func (p *EvidencePackProducer) Produce(ctx context.Context, input *EvidencePackI
 			FailedAttempts: failedAttempts,
 		},
 
-		ReplayScript:     input.ReplayScript,
-		Provenance:       input.Provenance,
-		BundledArtifacts: input.BundledArtifacts,
+		ReplayScript:       input.ReplayScript,
+		Provenance:         input.Provenance,
+		BundledArtifacts:   input.BundledArtifacts,
+		VerificationScopes: input.VerificationScopes,
+		HarnessTraceRefs:   input.HarnessTraceRefs,
 
 		Attestation: contracts.EvidencePackAttestation{
 			KernelVersion: p.kernelVersion,
@@ -193,33 +199,37 @@ func (p *EvidencePackProducer) Produce(ctx context.Context, input *EvidencePackI
 func computeEvidencePackHash(pack *contracts.EvidencePack) (string, error) {
 	// Create copy without attestation for hashing
 	hashable := struct {
-		PackID           string                               `json:"pack_id"`
-		FormatVersion    string                               `json:"format_version"`
-		CreatedAt        time.Time                            `json:"created_at"`
-		Identity         contracts.EvidencePackIdentity       `json:"identity"`
-		Policy           contracts.EvidencePackPolicy         `json:"policy"`
-		Effect           contracts.EvidencePackEffect         `json:"effect"`
-		Context          contracts.EvidencePackContext        `json:"context"`
-		Execution        contracts.EvidencePackExecution      `json:"execution"`
-		Receipts         contracts.EvidencePackReceipts       `json:"receipts"`
-		Reconciliation   contracts.EvidencePackReconciliation `json:"reconciliation"`
-		ReplayScript     *contracts.ReplayScriptRef           `json:"replay_script,omitempty"`
-		Provenance       *contracts.ReceiptProvenance         `json:"provenance,omitempty"`
-		BundledArtifacts []contracts.ParsedArtifact           `json:"bundled_artifacts,omitempty"`
+		PackID             string                               `json:"pack_id"`
+		FormatVersion      string                               `json:"format_version"`
+		CreatedAt          time.Time                            `json:"created_at"`
+		Identity           contracts.EvidencePackIdentity       `json:"identity"`
+		Policy             contracts.EvidencePackPolicy         `json:"policy"`
+		Effect             contracts.EvidencePackEffect         `json:"effect"`
+		Context            contracts.EvidencePackContext        `json:"context"`
+		Execution          contracts.EvidencePackExecution      `json:"execution"`
+		Receipts           contracts.EvidencePackReceipts       `json:"receipts"`
+		Reconciliation     contracts.EvidencePackReconciliation `json:"reconciliation"`
+		ReplayScript       *contracts.ReplayScriptRef           `json:"replay_script,omitempty"`
+		Provenance         *contracts.ReceiptProvenance         `json:"provenance,omitempty"`
+		BundledArtifacts   []contracts.ParsedArtifact           `json:"bundled_artifacts,omitempty"`
+		VerificationScopes []contracts.VerificationScope        `json:"verification_scopes,omitempty"`
+		HarnessTraceRefs   []contracts.HarnessTraceRef          `json:"harness_trace_refs,omitempty"`
 	}{
-		PackID:           pack.PackID,
-		FormatVersion:    pack.FormatVersion,
-		CreatedAt:        pack.CreatedAt,
-		Identity:         pack.Identity,
-		Policy:           pack.Policy,
-		Effect:           pack.Effect,
-		Context:          pack.Context,
-		Execution:        pack.Execution,
-		Receipts:         pack.Receipts,
-		Reconciliation:   pack.Reconciliation,
-		ReplayScript:     pack.ReplayScript,
-		Provenance:       pack.Provenance,
-		BundledArtifacts: pack.BundledArtifacts,
+		PackID:             pack.PackID,
+		FormatVersion:      pack.FormatVersion,
+		CreatedAt:          pack.CreatedAt,
+		Identity:           pack.Identity,
+		Policy:             pack.Policy,
+		Effect:             pack.Effect,
+		Context:            pack.Context,
+		Execution:          pack.Execution,
+		Receipts:           pack.Receipts,
+		Reconciliation:     pack.Reconciliation,
+		ReplayScript:       pack.ReplayScript,
+		Provenance:         pack.Provenance,
+		BundledArtifacts:   pack.BundledArtifacts,
+		VerificationScopes: pack.VerificationScopes,
+		HarnessTraceRefs:   pack.HarnessTraceRefs,
 	}
 
 	data, err := canonicalize.JCS(hashable)

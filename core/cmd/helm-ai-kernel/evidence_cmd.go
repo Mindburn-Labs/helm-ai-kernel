@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -13,16 +14,20 @@ import (
 
 func runEvidenceCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel evidence <export|envelope> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel evidence <export|envelope|scopes> [flags]")
 		return 2
 	}
 	switch args[0] {
 	case "export":
 		return runEvidenceExport(args[1:], stdout, stderr)
+	case "verify":
+		return runEvidenceVerify(args[1:], stdout, stderr)
 	case "envelope":
 		return runEvidenceEnvelope(args[1:], stdout, stderr)
+	case "scopes":
+		return runEvidenceScopes(args[1:], stdout, stderr)
 	case "--help", "-h":
-		fmt.Fprintln(stdout, "Usage: helm-ai-kernel evidence <export|envelope> [flags]")
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel evidence <export|envelope|scopes> [flags]")
 		return 0
 	default:
 		fmt.Fprintf(stderr, "Unknown evidence subcommand: %s\n", args[0])
@@ -31,6 +36,9 @@ func runEvidenceCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func runEvidenceExport(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		return runLaunchEvidence(append([]string{args[0], "--export", "--json"}, args[1:]...), stdout, stderr)
+	}
 	cmd := flag.NewFlagSet("evidence export", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 
@@ -80,6 +88,17 @@ func runEvidenceExport(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "  Hash:     %s\n", manifest.ManifestHash)
 	fmt.Fprintf(stdout, "  Payload:  %s\n", manifest.PayloadHash)
 	return 0
+}
+
+func runEvidenceVerify(args []string, stdout, stderr io.Writer) int {
+	normalized := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "--offline" {
+			continue
+		}
+		normalized = append(normalized, arg)
+	}
+	return runVerifyCmd(normalized, stdout, stderr)
 }
 
 func buildEvidenceEnvelope(manifestID, envelope, nativeHash, subject string, experimental bool) (contracts.EvidenceEnvelopeManifest, contracts.EvidenceEnvelopePayload, error) {

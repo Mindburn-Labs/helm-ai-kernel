@@ -71,10 +71,11 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		"network_default":      "deny",
 		"filesystem_default":   "deny",
 	})
-	mcpReceipt := receipts.NewReceipt("launchpad.mcp_quarantine", compiled.LaunchID, "ESCALATE", map[string]any{
+	mcpReceipt := receipts.NewReceipt("launchpad.mcp_quarantine", compiled.LaunchID, "ALLOW", map[string]any{
 		"unknown_server_policy": compiled.MCPPolicy.UnknownServerPolicy,
 		"unknown_tool_policy":   compiled.MCPPolicy.UnknownToolPolicy,
 		"require_schema_pin":    compiled.MCPPolicy.RequireSchemaPin,
+		"effect":                "unknown MCP servers and tools remain quarantined until approval receipt exists",
 	})
 
 	run.BoundaryRecordRefs = append(run.BoundaryRecordRefs, "boundary://launchpad/"+compiled.LaunchID)
@@ -116,6 +117,16 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	run.State = StateProvisioning
 	if err := e.Store.Save(run); err != nil {
 		return LaunchRun{}, err
+	}
+	if len(compiled.RequiredSecretRefs) > 0 || len(compiled.ModelGatewayEnv) > 0 {
+		secretReceipt := receipts.NewReceipt("launchpad.secret_grants", compiled.LaunchID, "ALLOW", map[string]any{
+			"required_secret_refs": compiled.RequiredSecretRefs,
+			"runtime_env_names":    compiled.ModelGatewayEnv,
+			"redacted":             true,
+			"grant_mode":           "just-in-time",
+		})
+		run.SecretGrantRefs = append(run.SecretGrantRefs, secretReceipt.ReceiptID)
+		addJSON(artifacts, "receipts/launchpad-secret-grants.json", secretReceipt)
 	}
 	run.State = StateInstalling
 	installReceipt := receipts.NewReceipt("launchpad.install", compiled.LaunchID, "ALLOW", map[string]any{
@@ -181,6 +192,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		"side_effects":       "policy-authorized",
 		"egress_receipt_ref": runtimeResult.EgressReceiptRef,
 	})
+	run.StartReceiptRefs = append(run.StartReceiptRefs, startReceipt.ReceiptID)
 	addJSON(artifacts, "receipts/launchpad-start.json", startReceipt)
 
 	run.State = StateHealthchecking
@@ -298,9 +310,9 @@ func (e Executor) persist(run LaunchRun, artifacts map[string][]byte) (LaunchRun
 	run.EvidencePackRefs = appendUnique(run.EvidencePackRefs, packRef)
 	if archiveRef, err := receipts.WriteEvidencePackArchive(packRef); err == nil {
 		run.EvidencePackRefs = appendUnique(run.EvidencePackRefs, archiveRef)
-		run.VerificationCommand = "helm-ai-kernel verify --bundle " + archiveRef
+		run.VerificationCommand = "helm evidence verify " + archiveRef + " --offline"
 	} else {
-		run.VerificationCommand = "helm-ai-kernel verify --bundle " + packRef
+		run.VerificationCommand = "helm evidence verify " + packRef + " --offline"
 	}
 	logPath, _ := e.Store.AppendLog(run.LaunchID, fmt.Sprintf("launchpad state %s verdict %s", run.State, run.KernelVerdict))
 	run.LogPath = logPath
@@ -331,13 +343,14 @@ func newLaunchRun(compiled plan.LaunchPlan, reason string) LaunchRun {
 		ArtifactDigest:   compiled.ArtifactDigest,
 		State:            state,
 		KernelVerdict:    compiled.KernelVerdict,
+		ReasonCode:       compiled.ReasonCode,
 		Reason:           reason,
 		RuntimeHandles:   RuntimeHandles{CloudResourceIDs: map[string]string{}},
 		IdempotencyKeys:  map[string]string{},
 		CPIRefs:          []string{},
 		SandboxGrantRefs: []string{},
 		MCPRefs:          []string{},
-		TeardownCommand:  "helm-ai-kernel launch delete " + compiled.LaunchID + " --cascade",
+		TeardownCommand:  "helm teardown " + compiled.LaunchID + " --cascade",
 	}
 }
 

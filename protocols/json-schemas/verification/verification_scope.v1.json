@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/verification/verification_scope.v1.json",
+  "title": "VerificationScope v1",
+  "description": "Verification coverage metadata for an EvidencePack or plan obligation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verification_scope_id", "subject_hash", "risk_class", "checks_performed", "verifier_hash", "policy_hash", "created_at", "scope_hash"],
+  "properties": {
+    "verification_scope_id": { "type": "string", "minLength": 1 },
+    "subject_hash": { "type": "string", "pattern": "^sha256:" },
+    "risk_class": { "type": "string", "enum": ["T0", "T1", "T2", "T3"] },
+    "checks_performed": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "assumptions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "untested_regions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "known_limits": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "remaining_risks": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "required_followup": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "verifier_hash": { "type": "string", "pattern": "^sha256:" },
+    "policy_hash": { "type": "string", "pattern": "^sha256:" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "scope_hash": { "type": "string", "pattern": "^sha256:" }
+  }
+}

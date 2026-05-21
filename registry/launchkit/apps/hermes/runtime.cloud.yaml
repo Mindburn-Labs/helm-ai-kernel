@@ -1,0 +1,11 @@
+mode: live
+targets:
+  - cloud:helm
+  - cloud:aws
+  - cloud:kubernetes
+requires:
+  - authenticated_provider
+  - explicit_cost_approval
+  - scoped_secret_grant
+teardown:
+  cascade: true

@@ -62,6 +62,9 @@ The code, command output, and verification artifacts override marketing language
 4. Pick an integration:
    - [OpenAI-compatible proxy](INTEGRATIONS/openai_baseurl.md)
    - [MCP integration](INTEGRATIONS/mcp.md)
+   - [Highflame ZeroID Integration](INTEGRATIONS/zeroid.md)
+   - [Vaultak State Transaction Bridge](INTEGRATIONS/vaultak.md)
+   - [BGT Labs Sentinel Authorization Gateway](INTEGRATIONS/sentinel.md)
    - [SDK index](sdks/00_INDEX.md)
 5. Verify an output: [Verification](VERIFICATION.md).
 6. Add conformance checks: [Conformance](CONFORMANCE.md).

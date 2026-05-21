@@ -28,6 +28,8 @@
     "execution": { "$ref": "#/$defs/execution" },
     "receipts": { "$ref": "#/$defs/receipts" },
     "reconciliation": { "$ref": "#/$defs/reconciliation" },
+    "verification_scopes": { "type": "array", "items": { "$ref": "#/$defs/verification_scope" } },
+    "harness_trace_refs": { "type": "array", "items": { "$ref": "#/$defs/harness_trace_ref" } },
     "attestation": { "$ref": "#/$defs/attestation" }
   },
   "$defs": {
@@ -123,6 +125,38 @@
         "signature": { "type": "string" },
         "signer_id": { "type": "string" },
         "kernel_version": { "type": "string" }
+      }
+    },
+    "verification_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verification_scope_id", "subject_hash", "checks_performed", "verifier_hash", "policy_hash"],
+      "properties": {
+        "verification_scope_id": { "type": "string" },
+        "subject_hash": { "type": "string" },
+        "risk_class": { "type": "string", "enum": ["T0", "T1", "T2", "T3"] },
+        "checks_performed": { "type": "array", "items": { "type": "string" } },
+        "assumptions": { "type": "array", "items": { "type": "string" } },
+        "untested_regions": { "type": "array", "items": { "type": "string" } },
+        "known_limits": { "type": "array", "items": { "type": "string" } },
+        "remaining_risks": { "type": "array", "items": { "type": "string" } },
+        "required_followup": { "type": "array", "items": { "type": "string" } },
+        "verifier_hash": { "type": "string" },
+        "policy_hash": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "scope_hash": { "type": "string" }
+      }
+    },
+    "harness_trace_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trace_id", "hash"],
+      "properties": {
+        "trace_id": { "type": "string" },
+        "hash": { "type": "string" },
+        "uri": { "type": "string" },
+        "kind": { "type": "string" },
+        "at": { "type": "string", "format": "date-time" }
       }
     },
     "pal_receipt": {

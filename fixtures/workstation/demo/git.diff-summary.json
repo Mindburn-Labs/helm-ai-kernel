@@ -1,0 +1,11 @@
+{
+  "repository": "helm-ai-kernel",
+  "changed_files": [
+    {
+      "path": "docs/workstation-demo.md",
+      "status": "modified",
+      "additions": 12,
+      "deletions": 1
+    }
+  ]
+}

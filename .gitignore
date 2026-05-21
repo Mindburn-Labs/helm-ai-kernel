@@ -44,6 +44,7 @@ coverage.html
 *.pprof
 *.prof
 core/helm
+core/helm-ai-kernel
 core/bootstrap
 core/firewall.out
 core/governance.out
@@ -73,6 +74,12 @@ tmp/
 *.tmp
 *.log
 *.bak
+.hallmark/
+.playwright-mcp/
+apps/console/test-results/
+helm-console-hallmark-*.png
+helm-oss-console-apps-smoke.png
+tokens.css
 
 # ─── Data directory (Lite Mode DBs) ──────────────────────────────────────────
 data/

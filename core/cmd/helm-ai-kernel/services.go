@@ -25,6 +25,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernelruntime"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kms"
+	launchsession "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/memory"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/merkle"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
@@ -37,6 +38,14 @@ import (
 
 // Services holds all initialized subsystems for the HELM runtime.
 type Services struct {
+	// --- Runtime metadata ---
+	DataDir           string
+	DatabaseMode      string
+	DatabaseStatus    string
+	SQLitePath        string
+	ArtifactStorePath string
+	LaunchpadStore    *launchsession.Store
+
 	// --- Infrastructure ---
 	Config        *config.Config
 	Observability *observability.Provider
@@ -94,7 +103,14 @@ type Services struct {
 // receive it explicitly instead of resolving relative paths against the
 // container CWD, which on a distroless rootfs is `/` and therefore read-only.
 func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logger *slog.Logger, dataDir string) (*Services, error) {
-	s := &Services{}
+	dataDir = normalizedDataDir(dataDir)
+	s := &Services{
+		DataDir:           dataDir,
+		DatabaseStatus:    "unknown",
+		SQLitePath:        filepath.Join(dataDir, "helm.db"),
+		ArtifactStorePath: filepath.Join(dataDir, "artifacts"),
+		LaunchpadStore:    launchsession.NewStore(launchpadStoreRoot(dataDir)),
+	}
 
 	// --- 1. Config ---
 	s.Config = config.Load()
@@ -253,13 +269,25 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 // CWD is `/`, which is read-only — so a relative path would break the KMS init
 // and silently disable the credentials store.
 func kmsKeystorePath(dataDir string) string {
+	dataDir = normalizedDataDir(dataDir)
+	return filepath.Join(dataDir, "keys", "credentials.keystore.json")
+}
+
+func normalizedDataDir(dataDir string) string {
 	if strings.TrimSpace(dataDir) == "" {
 		dataDir = strings.TrimSpace(os.Getenv("HELM_DATA_DIR"))
 	}
 	if strings.TrimSpace(dataDir) == "" {
 		dataDir = "data"
 	}
-	return filepath.Join(dataDir, "keys", "credentials.keystore.json")
+	return dataDir
+}
+
+func launchpadStoreRoot(dataDir string) string {
+	if override := strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_HOME")); override != "" {
+		return override
+	}
+	return filepath.Join(normalizedDataDir(dataDir), "launchpad")
 }
 
 // defaultBoundaryPolicy returns the policy template used at startup before any

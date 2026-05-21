@@ -1,0 +1,1 @@
+{"event_id":"evt_observe_test","type":"shell_command","tool_id":"shell","action":"go test ./pkg/contracts","effect_mode":"observe","status":"success","target":"./pkg/contracts","occurred_at":"2026-05-20T09:00:05Z"}

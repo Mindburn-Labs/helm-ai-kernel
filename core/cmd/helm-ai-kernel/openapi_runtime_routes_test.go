@@ -98,6 +98,7 @@ func TestProtectedRuntimeHandlersAreDeclaredInRouteRegistry(t *testing.T) {
 		"receipt_routes.go",
 		"console_routes.go",
 		"console_agui_routes.go",
+		"launchpad_routes.go",
 		"contract_routes.go",
 		"policy_reconcile_routes.go",
 	}
@@ -231,6 +232,7 @@ func representativeRuntimePath(openAPIPath string) string {
 		"{session_id}":   "agent.test",
 		"{surface_id}":   "overview",
 		"{report_id}":    "conf_test",
+		"{launch_id}":    "launch-test",
 	}
 	path := openAPIPath
 	for token, value := range replacements {

@@ -1,11 +1,15 @@
 import celGrammar from "../grammars/cel.tmLanguage.json";
+import { createHighlighterCore } from "shiki/core";
+import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
+import darkPlus from "shiki/themes/dark-plus.mjs";
+import lightPlus from "shiki/themes/light-plus.mjs";
 
 /**
  * Lazy Shiki singleton for CEL highlighting.
  *
- * Why lazy: Shiki's wasm + grammars cost ~80kb gzip. We only pay that cost
- * the first time `<CodeBlock language="cel">` mounts. Consumers that never
- * see CEL never download the highlighter chunk.
+ * Why lazy: Shiki still has a meaningful parser/theme cost. We only pay that
+ * cost the first time `<CodeBlock language="cel">` mounts. Consumers that
+ * never see CEL never download the highlighter chunk.
  *
  * Why a singleton: each `getHighlighter()` call instantiates a Shiki engine.
  * Reusing one across all CodeBlocks keeps memory + repeat-mount cost low.
@@ -23,17 +27,10 @@ let highlighterPromise: Promise<HighlighterInstance> | null = null;
 export function getHighlighter(): Promise<HighlighterInstance> {
   if (!highlighterPromise) {
     highlighterPromise = (async () => {
-      const shiki = (await import("shiki")) as unknown as {
-        getHighlighter?: (opts: { themes: string[]; langs: unknown[] }) => Promise<HighlighterInstance>;
-        createHighlighter?: (opts: { themes: string[]; langs: unknown[] }) => Promise<HighlighterInstance>;
-      };
-      const factory = shiki.getHighlighter ?? shiki.createHighlighter;
-      if (!factory) {
-        throw new Error("Shiki: neither getHighlighter nor createHighlighter exported.");
-      }
-      return factory({
-        themes: ["dark-plus", "light-plus"],
+      return createHighlighterCore({
+        themes: [darkPlus, lightPlus],
         langs: [celGrammar],
+        engine: createJavaScriptRegexEngine(),
       });
     })();
   }

@@ -5,7 +5,10 @@ last_reviewed: 2026-05-20
 
 # Quickstart
 
-This is the shortest current HELM AI Kernel path: build or install the CLI, start a local fail-closed execution boundary, run the built-in proof demo, inspect receipts, and run the docs truth gates.
+This is the shortest current HELM AI Kernel path: build or install the CLI, run
+a LaunchKit app through `helm up`, inspect the receipt-backed Console run, and
+verify the exported EvidencePack offline. The lower-level boundary demo remains
+available for integration testing.
 
 ## Audience
 
@@ -13,13 +16,15 @@ This quickstart is for developers, security reviewers, and integration owners wh
 
 ## Outcome
 
-By the end you should have a local `helm-ai-kernel serve` boundary on `127.0.0.1:7714`, a demo receipt, an offline verification command, and the narrow docs and route tests that prove this page still matches the CLI.
+By the end you should have a LaunchKit run URL under `/runs/<run_id>`, a demo or
+live receipt chain, an offline verification command, and the narrow docs and
+route tests that prove this page still matches the CLI.
 
 ```mermaid
 flowchart LR
-  Install["install or build helm-ai-kernel"] --> Serve["helm-ai-kernel serve :7714"]
-  Serve --> Demo["demo run and verify"]
-  Serve --> Receipts["signed receipts"]
+  Install["install or build helm"] --> Up["helm up openclaw"]
+  Up --> Console["Console /runs/<run_id>"]
+  Up --> Receipts["signed receipts"]
   Receipts --> Verify["offline verification"]
 ```
 
@@ -56,6 +61,7 @@ git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
 cd helm-ai-kernel
 make build
 ./bin/helm-ai-kernel --version
+./bin/helm --version
 ```
 
 Use Docker when you want a clean local runtime:
@@ -65,7 +71,41 @@ docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:local .
 docker compose up -d
 ```
 
-## 2. Start A Local Boundary
+## 2. Launch A Supported App
+
+For the instant no-secret path, run demo mode:
+
+```bash
+./bin/helm up openclaw --demo --no-open
+```
+
+For live mode, bind a scoped model secret first:
+
+```bash
+export OPENROUTER_API_KEY='<key>'
+./bin/helm secret set model_gateway --provider openrouter --value-env OPENROUTER_API_KEY
+./bin/helm up openclaw --live
+```
+
+The command prints a Console URL like:
+
+```text
+http://127.0.0.1:7714/runs/<run_id>
+```
+
+It also prints an offline verifier command:
+
+```bash
+helm evidence verify <evidence-pack> --offline
+```
+
+Use `--verify-only` to compile and verify gates without starting runtime:
+
+```bash
+./bin/helm up hermes --verify-only
+```
+
+## 3. Optional: Start A Local Boundary
 
 ```bash
 ./bin/helm-ai-kernel serve --policy ./release.high_risk.v3.toml
@@ -90,7 +130,7 @@ Run the basic boundary checks in another shell:
 
 The MCP authorization example should fail closed until the server identity, tool schema, scopes, and policy state are approved.
 
-## 3. Run The Built-In Proof Demo
+## 4. Run The Built-In Proof Demo
 
 The local demo routes are implemented in the CLI server and exercise receipt verification without requiring a hosted service.
 
@@ -116,7 +156,7 @@ curl http://127.0.0.1:7714/api/demo/tamper \
   -d '{"receipt":{...},"expected_receipt_hash":"<receipt_hash>","mutation":"flip_verdict"}'
 ```
 
-## 4. Optional OpenAI-Compatible Proxy
+## 5. Optional OpenAI-Compatible Proxy
 
 Start the proxy only when an existing client can set an OpenAI-style base URL:
 
@@ -141,7 +181,7 @@ http://localhost:9090/v1
 
 The retained source examples under `examples/*_openai_baseurl/` are HELM HTTP/SDK examples, not verified OpenAI SDK examples. Use [OpenAI-Compatible Proxy Integration](INTEGRATIONS/openai_baseurl.md) for the proxy contract.
 
-## 5. Inspect Receipts
+## 6. Inspect Receipts
 
 The CLI receipt tail requires an agent id:
 
@@ -155,7 +195,7 @@ For an unfiltered local list, use the HTTP API:
 curl 'http://127.0.0.1:7714/api/v1/receipts?limit=20'
 ```
 
-## 6. Verify Evidence
+## 7. Verify Evidence
 
 `helm-ai-kernel verify` is offline-first and succeeds only when the EvidencePack contains the required roots, proof material, and receipts.
 
@@ -166,7 +206,7 @@ curl 'http://127.0.0.1:7714/api/v1/receipts?limit=20'
 
 Use the `v0.5.5` release `evidence-pack.tar` or an operator-generated pack known to contain ProofGraph and receipt material. Do not treat the local onboarding demo export as verified unless it includes those records.
 
-## 7. Validate The Checkout
+## 8. Validate The Checkout
 
 ```bash
 make docs-coverage

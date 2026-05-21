@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Loader2, MessageSquareMore, X } from "lucide-react";
 import { Badge, Button, EmptyState } from "@mindburn/ui-core";
-import { useHelmAiKernelAgentProvider } from "./provider";
+import { helmCopilotKitBuildEnabled, useHelmAiKernelAgentProvider } from "./provider";
 import { useAiKernelAgentRenderers } from "./renderers";
 import { runAiKernelAgent, type AiKernelAgentMessage } from "./runtime";
 import type { HelmAiKernelAgentState, AiKernelAgentToolResult } from "./state";
@@ -43,9 +43,6 @@ export function HelmAiKernelAssistantDrawer({
     }),
     [onDemoActionChange, onNavigate, onSearchChange, onSelectReceipt],
   );
-  useAiKernelAgentRenderers();
-  useAiKernelFrontendTools(frontendToolHandlers);
-
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const submit = async () => {
@@ -121,15 +118,21 @@ export function HelmAiKernelAssistantDrawer({
       </Button>
       {open ? (
         <aside className="assistant-drawer" aria-label="HELM AI Kernel assistant">
+          {helmCopilotKitBuildEnabled ? <CopilotAgentRegistration handlers={frontendToolHandlers} /> : null}
           <header>
             <div>
-              <Badge label="read-only" tone="proof" />
+              <Badge label="non-authoritative" tone="proof" />
               <h2>HELM AI Kernel Agent</h2>
             </div>
             <button type="button" className="icon-button" aria-label="Close assistant" onClick={() => onOpenChange(false)}>
               <X size={16} aria-hidden="true" />
             </button>
           </header>
+          <section className="assistant-authority-banner" aria-label="HELM AI authority boundary">
+            <strong>HELM AI is visibly non-authoritative.</strong>
+            <p>Can: explain, draft, summarize, and simulate.</p>
+            <p>Cannot: approve, weaken, bypass, launch, inject secrets, or delete evidence.</p>
+          </section>
           <div className="assistant-thread" aria-live="polite">
             {visibleMessages.length ? (
               visibleMessages.map((message) => (
@@ -155,7 +158,7 @@ export function HelmAiKernelAssistantDrawer({
               void submit();
             }}
           >
-            <textarea value={draft} rows={3} onChange={(event) => setDraft(event.target.value)} />
+            <textarea aria-label="Agent prompt" value={draft} rows={3} onChange={(event) => setDraft(event.target.value)} />
             <div>
               <Button
                 type="submit"
@@ -172,6 +175,12 @@ export function HelmAiKernelAssistantDrawer({
       ) : null}
     </>
   );
+}
+
+function CopilotAgentRegistration({ handlers }: { readonly handlers: Parameters<typeof useAiKernelFrontendTools>[0] }) {
+  useAiKernelAgentRenderers();
+  useAiKernelFrontendTools(handlers);
+  return null;
 }
 
 function parseResult(content: string): AiKernelAgentToolResult {

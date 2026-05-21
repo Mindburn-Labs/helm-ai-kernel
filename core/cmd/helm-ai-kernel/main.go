@@ -152,6 +152,7 @@ func runServerWithOptions(opts serverOptions) {
 		db           *sql.DB
 		receiptStore store.ReceiptStore
 		err          error
+		databaseMode = "sqlite"
 	)
 
 	// 0.2 Connect to Database (Infrastructure)
@@ -168,6 +169,7 @@ func runServerWithOptions(opts serverOptions) {
 			log.Fatalf("Failed to setup Lite Mode: %v", err)
 		}
 	} else {
+		databaseMode = "postgres"
 		db, err = sql.Open("postgres", dbURL)
 		if err != nil {
 			log.Fatalf("Failed to connect to DB: %v", err)
@@ -224,6 +226,13 @@ func runServerWithOptions(opts serverOptions) {
 			log.Fatalf("Services init failed in production mode: %v", svcErr)
 		}
 		log.Printf("Services init (non-fatal, degraded mode): %v", svcErr)
+	}
+	if services != nil {
+		services.DatabaseMode = databaseMode
+		services.DatabaseStatus = "ready"
+		if opts.SQLitePath != "" && databaseMode == "sqlite" {
+			services.SQLitePath = opts.SQLitePath
+		}
 	}
 
 	// 2.5 PRG & Guardian. --policy remains bootstrap/source configuration;

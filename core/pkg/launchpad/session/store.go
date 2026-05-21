@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 )
 
@@ -39,6 +40,7 @@ type LaunchRun struct {
 	ArtifactDigest        string            `json:"artifact_digest,omitempty"`
 	State                 State             `json:"state"`
 	KernelVerdict         string            `json:"kernel_verdict"`
+	ReasonCode            string            `json:"reason_code,omitempty"`
 	Reason                string            `json:"reason,omitempty"`
 	CreatedAt             time.Time         `json:"created_at"`
 	UpdatedAt             time.Time         `json:"updated_at"`
@@ -47,9 +49,11 @@ type LaunchRun struct {
 	SandboxGrantRefs      []string          `json:"sandbox_grant_refs"`
 	EgressReceiptRefs     []string          `json:"egress_receipt_refs,omitempty"`
 	MCPRefs               []string          `json:"mcp_refs"`
+	SecretGrantRefs       []string          `json:"secret_grant_refs,omitempty"`
 	ModelGatewayGrantRefs []string          `json:"model_gateway_grant_refs,omitempty"`
 	InstallReceiptRefs    []string          `json:"install_receipt_refs"`
 	LaunchReceiptRefs     []string          `json:"launch_receipt_refs"`
+	StartReceiptRefs      []string          `json:"start_receipt_refs,omitempty"`
 	HealthcheckRefs       []string          `json:"healthcheck_receipt_refs"`
 	TeardownReceiptRefs   []string          `json:"teardown_receipt_refs"`
 	EvidencePackRefs      []string          `json:"evidence_pack_refs"`
@@ -133,6 +137,35 @@ func (s *Store) Get(launchID string) (LaunchRun, error) {
 		return LaunchRun{}, err
 	}
 	return run, nil
+}
+
+func (s *Store) List() ([]LaunchRun, error) {
+	entries, err := os.ReadDir(s.runsDir())
+	if errors.Is(err, os.ErrNotExist) {
+		return []LaunchRun{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]LaunchRun, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(s.runsDir(), entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		var run LaunchRun
+		if err := json.Unmarshal(data, &run); err != nil {
+			return nil, err
+		}
+		runs = append(runs, run)
+	}
+	sort.SliceStable(runs, func(i, j int) bool {
+		return runs[i].UpdatedAt.After(runs[j].UpdatedAt)
+	})
+	return runs, nil
 }
 
 func (s *Store) AppendLog(launchID, line string) (string, error) {

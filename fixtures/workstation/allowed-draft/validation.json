@@ -1,0 +1,9 @@
+{
+  "commands": [
+    {
+      "command": "markdownlint docs/workstation-governance.md",
+      "exit_code": 0,
+      "status": "passed"
+    }
+  ]
+}

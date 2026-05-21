@@ -108,10 +108,31 @@
 | Schema                      | Conformance | Status    | Description                                |
 | --------------------------- | ----------- | --------- | ------------------------------------------ |
 | `PlanSpec.v2.json`          | L2          | normative | Plan specification                         |
+| `plan_transaction.v1.json`  | L2          | normative | Plan read/write and verification contract  |
 | `StepRun.v2.json`           | L2          | normative | Step execution record                      |
 | `SignedEnvelope.v1.json`    | L1          | normative | Signed envelope wrapper                    |
 | `Checkpoint.v1.json`        | L2          | normative | Orchestration checkpoint                   |
 | Other orchestration schemas | L2          | normative | Escalation, Triage, Context, Lineage, etc. |
+
+### Verification (`verification/`)
+
+| Schema                       | Conformance | Status    | Description                          |
+| ---------------------------- | ----------- | --------- | ------------------------------------ |
+| `verification_scope.v1.json` | L2          | normative | Verification coverage and risk scope |
+
+### Telemetry (`telemetry/`)
+
+| Schema                  | Conformance | Status    | Description                    |
+| ----------------------- | ----------- | --------- | ------------------------------ |
+| `harness_trace.v1.json` | L2          | normative | Hash-linked harness trace data |
+
+### Harness (`harness/`, `actions/`, `receipts/`)
+
+| Schema                              | Conformance | Status    | Description                                      |
+| ----------------------------------- | ----------- | --------- | ------------------------------------------------ |
+| `harness_change_contract.v1.json`   | L2          | normative | Controlled harness mutation contract            |
+| `grounded_action_ref.v1.json`       | L3          | normative | Visual and DOM/AX grounding for GUI actions     |
+| `gui_action_receipt.v1.json`        | L3          | normative | Receipt for grounded GUI/computer-use execution |
 
 ### Organization & Governance (`orgdna/`, `profiles/`, `jurisdiction/`)
 

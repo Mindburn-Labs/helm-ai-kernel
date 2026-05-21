@@ -1,0 +1,53 @@
+{
+  "pack_id": "helm-workstation-governance-v1",
+  "version": "1.0.0",
+  "scope": "Codex and Claude Code-style workstation governance adapters",
+  "modes": [
+    {
+      "id": "observe-only",
+      "requires": [
+        "manifest import",
+        "signed Agent Run Receipt",
+        "deterministic ProofGraph replay",
+        "artifact hash binding",
+        "no raw chat transcript dependency"
+      ]
+    },
+    {
+      "id": "enforceable",
+      "requires": [
+        "observe-only",
+        "policy decision receipt API",
+        "CLI or hook bridge that refuses denied selected effects",
+        "forbidden network destination denied and recorded",
+        "forbidden durable memory write denied and recorded",
+        "allowed draft edit permitted and recorded"
+      ]
+    },
+    {
+      "id": "high-risk-effect-capable",
+      "requires": [
+        "enforceable",
+        "memory write effects with ttl_days and sensitivity",
+        "recurring loop effects with schedule, max_runtime, tool_scope, and expires_at",
+        "prompt-injection taint preserved through receipt import",
+        "reference EvidencePack export"
+      ]
+    }
+  ],
+  "fixtures": {
+    "allowed_observe": "fixtures/workstation/allowed-observe",
+    "allowed_draft": "fixtures/workstation/allowed-draft",
+    "denied_network": "fixtures/workstation/denied-network",
+    "denied_memory": "fixtures/workstation/denied-memory",
+    "denied_recurring_loop": "fixtures/workstation/denied-recurring-loop",
+    "prompt_injection_tainted": "fixtures/workstation/prompt-injection-tainted"
+  },
+  "commands": [
+    "helm-ai-kernel workstation import --artifacts fixtures/workstation/allowed-draft --out /tmp/workstation-run.json",
+    "helm-ai-kernel workstation enforce --class network --target https://forbidden.example --out /tmp/workstation-deny.json",
+    "helm-ai-kernel workstation decide --class file --target docs/example.md --out /tmp/workstation-draft.json",
+    "helm-ai-kernel workstation evidence --receipt /tmp/workstation-run.json --out /tmp/workstation-evidencepack",
+    "helm-ai-kernel workstation certify --fixtures fixtures/workstation --mode high-risk-effect-capable"
+  ]
+}

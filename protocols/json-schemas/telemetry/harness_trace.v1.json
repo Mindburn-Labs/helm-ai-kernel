@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/telemetry/harness_trace.v1.json",
+  "title": "HarnessTrace v1",
+  "description": "Hash-linkable telemetry projection for code-as-harness execution state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["trace_id", "plan_hash", "policy_hash", "receipt_refs", "created_at", "trace_hash"],
+  "properties": {
+    "trace_id": { "type": "string", "minLength": 1 },
+    "plan_hash": { "type": "string", "pattern": "^sha256:" },
+    "context_refs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "memory_reads": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "memory_writes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "tool_schema_hashes": { "type": "array", "items": { "type": "string", "pattern": "^sha256:" } },
+    "permission_requests": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "sandbox_grant_hash": { "type": "string", "pattern": "^sha256:" },
+    "mcp_approval_ref": { "type": "string" },
+    "connector_contract_hash": { "type": "string", "pattern": "^sha256:" },
+    "policy_hash": { "type": "string", "pattern": "^sha256:" },
+    "cpi_output_hash": { "type": "string", "pattern": "^sha256:" },
+    "verifier_outputs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "human_interventions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "state_updates": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "receipt_refs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "created_at": { "type": "string", "format": "date-time" },
+    "trace_hash": { "type": "string", "pattern": "^sha256:" }
+  }
+}

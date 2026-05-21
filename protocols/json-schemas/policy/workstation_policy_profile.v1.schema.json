@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.mindburn.run/policy/workstation_policy_profile.v1.schema.json",
+  "title": "HELM Workstation Policy Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "mode", "observe", "draft", "operate", "egress", "memory", "recurring_loops"],
+  "properties": {
+    "id": { "const": "workstation.observe_draft.v1" },
+    "mode": { "enum": ["observe_only", "enforceable", "high_risk_effect_capable"] },
+    "observe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed_actions"],
+      "properties": {
+        "allowed_actions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "draft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspace_roots", "allow_generated_artifacts"],
+      "properties": {
+        "workspace_roots": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "allow_generated_artifacts": { "type": "boolean" }
+      }
+    },
+    "operate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["permissions"],
+      "properties": {
+        "permissions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "egress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowlist"],
+      "properties": {
+        "allowlist": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["host"],
+            "properties": {
+              "host": { "type": "string", "minLength": 1 },
+              "protocol": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default_ttl_days", "allowed_classes"],
+      "properties": {
+        "default_ttl_days": { "type": "integer", "minimum": 1 },
+        "max_ttl_days": { "type": "integer", "minimum": 1 },
+        "allowed_classes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "recurring_loops": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["require_schedule", "require_max_runtime", "require_tool_scope", "require_expiration"],
+      "properties": {
+        "require_schedule": { "type": "boolean" },
+        "require_max_runtime": { "type": "boolean" },
+        "require_tool_scope": { "type": "boolean" },
+        "require_expiration": { "type": "boolean" }
+      }
+    }
+  }
+}

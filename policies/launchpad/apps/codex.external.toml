@@ -10,3 +10,5 @@ mcp_unknown_tool_policy = "ESCALATE"
 require_schema_pin = true
 receipt_required = true
 evidencepack_required = true
+workstation_policy_profile = "workstation.observe_draft.v1"
+workstation_adapter_mode = "selected_effect_enforceable"

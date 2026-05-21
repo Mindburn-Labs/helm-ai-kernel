@@ -224,6 +224,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	approveHandler := api.NewApproveHandler(csvEnv("HELM_APPROVER_PUBLIC_KEYS"))
 	mux.HandleFunc("/api/v1/kernel/approve", protectRuntimeHandler(RouteAuthService, approveHandler.HandleApprove))
 	registerContractRoutes(mux, svc)
+	RegisterLaunchpadRoutes(mux, svc)
 
 	// --- Obligation ---
 	mux.HandleFunc("/api/v1/obligation/create", func(w http.ResponseWriter, r *http.Request) {

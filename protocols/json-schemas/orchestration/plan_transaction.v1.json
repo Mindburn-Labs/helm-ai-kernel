@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/orchestration/plan_transaction.v1.json",
+  "title": "PlanTransaction v1",
+  "description": "Transactional read/write and verification contract for a HELM plan.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["plan_transaction_id", "plan_hash", "read_set", "write_set", "assumption_set", "verification_obligations", "conflict_policy", "approval_state", "transaction_hash"],
+  "properties": {
+    "plan_transaction_id": { "type": "string", "minLength": 1 },
+    "plan_hash": { "type": "string", "pattern": "^sha256:" },
+    "read_set": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "write_set": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "assumption_set": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "version_dependencies": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "verification_obligations": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "conflict_policy": { "type": "string", "enum": ["deny", "escalate", "last_writer_forbidden"] },
+    "rollback_policy": { "type": "object", "additionalProperties": true },
+    "rollback_or_compensation_policy": { "type": "string" },
+    "approval_state": { "type": "string", "enum": ["none", "required", "approved", "denied", "expired"] },
+    "human_review_state": { "type": "string", "enum": ["not_required", "required", "requested", "approved", "rejected"] },
+    "transaction_hash": { "type": "string", "pattern": "^sha256:" }
+  }
+}

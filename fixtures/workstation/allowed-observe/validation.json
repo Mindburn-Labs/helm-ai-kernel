@@ -1,0 +1,13 @@
+{
+  "commands": [
+    {
+      "command": "go test ./pkg/contracts",
+      "exit_code": 0,
+      "status": "passed",
+      "stdout_hash": "sha256:observe-stdout",
+      "stderr_hash": "sha256:observe-stderr",
+      "started_at": "2026-05-20T09:00:05Z",
+      "completed_at": "2026-05-20T09:00:45Z"
+    }
+  ]
+}

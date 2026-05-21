@@ -1,0 +1,1 @@
+{"event_id":"evt_network_deny","type":"network_egress","tool_id":"web.fetch","action":"GET","effect_mode":"operate","status":"blocked","target":"https://pastebin.com/raw/example","occurred_at":"2026-05-20T11:00:15Z"}

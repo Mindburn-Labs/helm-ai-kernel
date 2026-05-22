@@ -30,14 +30,35 @@ available.
 
 ```mermaid
 flowchart TD
-  matrix["matrix"] --> plan["plan"]
-  plan --> launch["local-container launch"]
-  launch --> receipts["signed receipts"]
-  receipts --> evidence["EvidencePack export"]
-  evidence --> verify["offline verify"]
-  launch --> repair["repair plan"]
-  launch --> teardown["cascade teardown"]
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        matrix["matrix"]
+        plan["plan"]
+        launch["local-container launch"]
+        repair["repair plan"]
+        teardown["cascade teardown"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        receipts["signed receipts"]
+        evidence["EvidencePack export"]
+        verify["offline verify"]
+    end
+
+    %% Operational Flow Edges
+    matrix --> plan
+    plan --> launch
+    launch --> receipts
+    receipts --> evidence
+    evidence --> verify
+    launch --> repair
+    launch --> teardown
+
+    %% Premium Styling Rules
+    style receipts fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style evidence fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 ## Matrix
 

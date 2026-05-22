@@ -24,6 +24,7 @@ func TestWriteEvidencePackMaterializesRequiredDirectories(t *testing.T) {
 		"07_ATTESTATIONS/.keep",
 		"08_TAPES/.keep",
 		"09_SCHEMAS/.keep",
+		"11_HOST_EVIDENCE/.keep",
 		"12_REPORTS/.keep",
 	} {
 		if _, err := os.Stat(filepath.Join(packDir, keep)); err != nil {

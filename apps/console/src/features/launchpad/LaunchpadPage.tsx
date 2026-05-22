@@ -1,6 +1,10 @@
-import { AlertTriangle, CheckCircle2, Clipboard, Download, Loader2, Play, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clipboard, Download, Loader2, Play, RefreshCw, Trash2, Shield, ShieldCheck, ShieldAlert, Key, Globe, FolderOpen, FileText, Check, ArrowRight, ArrowLeft, Lock, Unlock, Cpu } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { launchpadApi } from "./api";
+import { AppCard } from "./AppCard";
+import { ProofPanel } from "./ProofPanel";
+import { RunTimeline } from "./RunTimeline";
+import { SimpleLaunchHome } from "./SimpleLaunchHome";
 import { CanvasElement, VisualCodeDiff, AnnotatedCodeBlock, type CodeAnnotation } from "@mindburn/ui-core";
 import type {
   FixAction,
@@ -24,6 +28,10 @@ type Notice = { tone: "success" | "error" | "info"; message: string } | null;
 type SecretRequirement = { logical: string; env: string; present: boolean; cli: string; grant?: LaunchpadSecretGrant };
 
 export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { readonly surface?: LaunchpadSurface; readonly initialRunId?: string }) {
+  const [viewMode, setViewMode] = useState<"simple" | "pro">(() => {
+    const stored = localStorage.getItem("helm-console-viewmode");
+    return stored === "pro" ? "pro" : "simple";
+  });
   const [apps, setApps] = useState<LaunchpadApp[]>([]);
   const [substrates, setSubstrates] = useState<LaunchpadSubstrate[]>([]);
   const [matrix, setMatrix] = useState<LaunchpadMatrixCell[]>([]);
@@ -248,11 +256,40 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
 
   return (
     <div className="launchpad-surface" aria-busy={loading || busy}>
+      <div className="view-mode-switcher-container">
+        <div className="view-mode-switcher" role="radiogroup" aria-label="Dashboard presentation depth">
+          <button
+            type="button"
+            className={`view-mode-btn ${viewMode === "simple" ? "active" : ""}`}
+            onClick={() => {
+              setViewMode("simple");
+              localStorage.setItem("helm-console-viewmode", "simple");
+            }}
+          >
+            Simple
+          </button>
+          <button
+            type="button"
+            className={`view-mode-btn ${viewMode === "pro" ? "active" : ""}`}
+            onClick={() => {
+              setViewMode("pro");
+              localStorage.setItem("helm-console-viewmode", "pro");
+            }}
+          >
+            Developer
+          </button>
+        </div>
+      </div>
+
       <section className="launchpad-panel launchpad-hero">
         <PanelHeader
-          kicker="HELM Console"
-          title="Launch / Run Timeline"
-          description="Universal execution boundary: AppSpec -> Preflight -> LaunchPlan -> policy -> grants -> MCP quarantine -> runtime -> receipts -> EvidencePack -> offline verify."
+          kicker={viewMode === "simple" ? "HELM Shield" : "HELM Console"}
+          title={viewMode === "simple" ? "Deploy & Run Safely" : "Launch / Run Timeline"}
+          description={
+            viewMode === "simple"
+              ? "Select an AppSpec and run backend preflight before any Launchpad runtime starts."
+              : "Universal execution boundary: AppSpec -> Preflight -> LaunchPlan -> policy -> grants -> MCP quarantine -> runtime -> receipts -> EvidencePack -> offline verify."
+          }
         />
         <button className="launchpad-action" type="button" disabled={loading || busy} onClick={() => void load()}>
           {loading ? <Loader2 className="spin" size={14} aria-hidden="true" /> : <RefreshCw size={14} aria-hidden="true" />}
@@ -269,7 +306,7 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
         <div className="launchpad-metrics" aria-label="HELM Console counts">
           <span><strong>{apps.length}</strong> apps</span>
           <span><strong>{runs.length}</strong> runs</span>
-          <span><strong>{threatReviews.length}</strong> MCP reviews</span>
+          {viewMode === "pro" && <span><strong>{threatReviews.length}</strong> MCP reviews</span>}
         </div>
       </section>
 
@@ -281,10 +318,14 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
 
       {surface === "launch" || surface === "apps" ? (
         <LaunchSurface
+          viewMode={viewMode}
+          setViewMode={setViewMode}
           apps={apps}
           matrix={matrix}
           secrets={secrets}
           threatReviews={threatReviews}
+          plan={plan}
+          detail={detail}
           selectedApp={selectedApp}
           selectedSubstrate={selectedSubstrate}
           substrates={substrates}
@@ -297,16 +338,18 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
         />
       ) : null}
 
-      {surface === "runs" ? <RunsSurface runs={runs} detail={detail} busy={busy} onOpenRun={(id) => void openRun(id)} onTeardown={() => void teardown()} /> : null}
-      {surface === "policies" ? <PolicySurface app={app} simulation={policySimulation} plan={plan} busy={busy} onSimulate={() => void simulatePolicy()} /> : null}
-      {surface === "mcp" ? <McpSurface reviews={threatReviews} busy={busy} onApprove={(review) => void approveMcpReview(review)} /> : null}
-      {surface === "secrets" ? <SecretsSurface secrets={secrets} apps={apps} busy={busy} onBindSecret={(requirement) => void bindSecret(requirement)} /> : null}
-      {surface === "evidence" ? <EvidenceSurface runs={runs} detail={detail} onExport={() => void exportEvidence()} /> : null}
-      {surface === "sandbox" ? <SandboxSurface grant={sandboxGrant ?? detail?.instance.sandbox_grant ?? null} detail={detail} /> : null}
-      {surface === "receipts" ? <ReceiptsSurface receipts={receipts.length ? receipts : detail?.instance.receipts ?? []} detail={detail} /> : null}
+      {surface === "runs" ? <RunsSurface viewMode={viewMode} setViewMode={setViewMode} runs={runs} detail={detail} busy={busy} onOpenRun={(id) => void openRun(id)} onTeardown={() => void teardown()} onExportEvidence={() => void exportEvidence()} /> : null}
+      {surface === "policies" ? <PolicySurface viewMode={viewMode} setViewMode={setViewMode} app={app} simulation={policySimulation} plan={plan} busy={busy} onSimulate={() => void simulatePolicy()} /> : null}
+      {surface === "mcp" ? <McpSurface viewMode={viewMode} reviews={threatReviews} busy={busy} onApprove={(review) => void approveMcpReview(review)} /> : null}
+      {surface === "secrets" ? <SecretsSurface viewMode={viewMode} secrets={secrets} apps={apps} busy={busy} onBindSecret={(requirement) => void bindSecret(requirement)} /> : null}
+      {surface === "evidence" ? <EvidenceSurface viewMode={viewMode} runs={runs} detail={detail} onExport={() => void exportEvidence()} /> : null}
+      {surface === "sandbox" ? <SandboxSurface viewMode={viewMode} grant={sandboxGrant ?? detail?.instance.sandbox_grant ?? null} detail={detail} /> : null}
+      {surface === "receipts" ? <ReceiptsSurface viewMode={viewMode} receipts={receipts.length ? receipts : detail?.instance.receipts ?? []} detail={detail} /> : null}
       {surface === "registry" ? <RegistrySurface apps={apps} substrates={substrates} matrix={matrix} /> : null}
 
       <RunDetail
+        viewMode={viewMode}
+        setViewMode={setViewMode}
         detail={detail}
         inspector={inspector}
         onInspect={setInspector}
@@ -329,10 +372,14 @@ function PanelHeader({ kicker, title, description }: { readonly kicker: string; 
 }
 
 function LaunchSurface({
+  viewMode,
+  setViewMode,
   apps,
   matrix,
   secrets,
   threatReviews,
+  plan,
+  detail,
   substrates,
   selectedApp,
   selectedSubstrate,
@@ -343,10 +390,14 @@ function LaunchSurface({
   onLaunch,
   onBindSecret,
 }: {
+  readonly viewMode: "simple" | "pro";
+  readonly setViewMode: (mode: "simple" | "pro") => void;
   readonly apps: readonly LaunchpadApp[];
   readonly matrix: readonly LaunchpadMatrixCell[];
   readonly secrets: readonly LaunchpadSecretGrant[];
   readonly threatReviews: readonly MCPThreatReview[];
+  readonly plan: LaunchpadPlanResponse | null;
+  readonly detail: LaunchpadRunDetail | null;
   readonly substrates: readonly LaunchpadSubstrate[];
   readonly selectedApp: string;
   readonly selectedSubstrate: string;
@@ -357,6 +408,28 @@ function LaunchSurface({
   readonly onLaunch: (id: string) => void;
   readonly onBindSecret: (requirement: SecretRequirement) => void;
 }) {
+  if (viewMode === "simple") {
+    return (
+      <SimpleLaunchHome
+        apps={apps}
+        substrates={substrates}
+        matrix={matrix}
+        secrets={secrets}
+        threatReviews={threatReviews}
+        selectedApp={selectedApp}
+        selectedSubstrate={selectedSubstrate}
+        plan={plan}
+        detail={detail}
+        busy={busy}
+        onSelectApp={onSelectApp}
+        onSelectSubstrate={onSelectSubstrate}
+        onPreflight={onPreflight}
+        onLaunch={onLaunch}
+        onBindSecret={onBindSecret}
+      />
+    );
+  }
+
   return (
     <>
       <section className="launchpad-panel launch-toolbar">
@@ -371,56 +444,23 @@ function LaunchSurface({
       <section className="appspec-grid" aria-label="Registry applications">
         {apps.map((item) => {
           const appId = item.app_id ?? item.id;
-          const status = item.status;
           const cell = matrix.find((entry) => entry.app_id === appId && entry.substrate_id === selectedSubstrate);
-          const requirements = secretRequirements(item, secrets);
-          const missingRequirements = requirements.filter((requirement) => !requirement.present || status?.missing_secrets?.includes(requirement.env) || status?.missing_secrets?.includes(requirement.logical));
           const appReviews = threatReviews.filter((review) => review.app_id === appId);
-          const blockedReasons = launchBlockedReasons(item, cell, missingRequirements, appReviews);
-          const canLaunch = blockedReasons.length === 0 && selectedSubstrate !== "";
-          const launchCli = `helm app run ${appId}${selectedSubstrate ? ` --substrate ${selectedSubstrate}` : ""}`;
           return (
-            <article key={appId} className={`appspec-card status-${status?.state ?? "unknown"}`}>
-              <button type="button" className="appspec-main" aria-pressed={selectedApp === appId} onClick={() => onSelectApp(appId)}>
-                <span className="appspec-title-row">
-                  <strong>{item.name}</strong>
-                  <span className={`launchpad-verdict verdict-${(status?.verdict ?? "ESCALATE").toLowerCase()}`}>{status?.verdict ?? "ESCALATE"}</span>
-                </span>
-                <code>{item.oci_ref ?? item.immutable_digest ?? "artifact unproven"}</code>
-                <span>{status?.summary ?? item.blocked_reason ?? "No backend status returned."}</span>
-              </button>
-              <dl className="launchpad-facts">
-                <Fact label="Status" value={status?.state ?? "unknown"} />
-                <Fact label="Matrix" value={cell ? `${cell.verdict} - ${cell.reason}` : "unproven"} />
-                <Fact label="Policy" value={item.policy_ref ?? "unproven"} />
-                <Fact label="Secrets" value={`${requirements.length} required, ${missingRequirements.length} missing`} />
-                <Fact label="MCP" value={`${item.mcp_servers?.length ?? 0} declared, ${appReviews.length} reviewed`} />
-                <Fact label="Filesystem" value={item.filesystem_needs?.join(", ") || "deny by default"} />
-                <Fact label="Network" value={item.network_needs?.join(", ") || "deny by default"} />
-                <Fact label="Model env" value={item.model_gateway_env?.join(", ") || "none"} />
-                <Fact label="Sandbox" value={sandboxSummary(item)} />
-                <Fact label="Healthcheck" value={item.healthcheck?.length ? `${item.healthcheck.length} declared` : "unproven"} />
-                <Fact label="Teardown" value={item.teardown_recipe ? "cascade recipe declared" : "unproven"} />
-                <Fact label="EvidencePack" value={status?.last_evidence_pack ? "available" : "unproven"} />
-              </dl>
-              {missingRequirements.length > 0 ? <SecretFixPanel requirements={missingRequirements} busy={busy} onBindSecret={onBindSecret} /> : null}
-              {blockedReasons.length > 0 ? <InlineBlock title="Launch blocked" items={blockedReasons} /> : null}
-              <div className="cli-equivalent">Preflight CLI: helm app preflight {appId}{selectedSubstrate ? ` --substrate ${selectedSubstrate}` : ""}</div>
-              <div className="cli-equivalent">Launch CLI: {launchCli}</div>
-              <div className="launchpad-actions">
-                <button type="button" className="launchpad-action" disabled={busy} onClick={() => onPreflight(appId)}>Preflight</button>
-                <HumanOnlyActionButton
-                  label="Launch"
-                  icon={<Play size={14} aria-hidden="true" />}
-                  cli={launchCli}
-                  disabled={busy || !canLaunch}
-                  disabledReason={blockedReasons[0]}
-                  primary
-                  onConfirm={() => onLaunch(appId)}
-                />
-              </div>
-              {selectedApp === appId ? <span className="launchpad-ready"><CheckCircle2 size={13} aria-hidden="true" /> selected</span> : null}
-            </article>
+            <AppCard
+              key={appId}
+              app={item}
+              selected={selectedApp === appId}
+              substrate={substrates.find((substrate) => substrate.id === selectedSubstrate)}
+              cell={cell}
+              secrets={secrets}
+              reviews={appReviews}
+              busy={busy}
+              onSelect={onSelectApp}
+              onPreflight={onPreflight}
+              onLaunch={onLaunch}
+              onBindSecret={onBindSecret}
+            />
           );
         })}
       </section>
@@ -428,8 +468,40 @@ function LaunchSurface({
   );
 }
 
-function RunsSurface({ runs, detail, busy, onOpenRun, onTeardown }: { readonly runs: readonly LaunchpadRun[]; readonly detail: LaunchpadRunDetail | null; readonly busy: boolean; readonly onOpenRun: (id: string) => void; readonly onTeardown: () => void }) {
+function RunsSurface({
+  viewMode,
+  setViewMode,
+  runs,
+  detail,
+  busy,
+  onOpenRun,
+  onTeardown,
+  onExportEvidence,
+}: {
+  readonly viewMode: "simple" | "pro";
+  readonly setViewMode: (mode: "simple" | "pro") => void;
+  readonly runs: readonly LaunchpadRun[];
+  readonly detail: LaunchpadRunDetail | null;
+  readonly busy: boolean;
+  readonly onOpenRun: (id: string) => void;
+  readonly onTeardown: () => void;
+  readonly onExportEvidence?: () => void;
+}) {
   const runId = detail?.instance.run_id ?? detail?.run.launch_id ?? "<run_id>";
+
+  if (viewMode === "simple") {
+    return (
+      <RunTimeline
+        runs={runs}
+        detail={detail}
+        busy={busy}
+        onOpenRun={onOpenRun}
+        onTeardown={onTeardown}
+        onExportEvidence={onExportEvidence}
+      />
+    );
+  }
+
   return (
     <section className="launchpad-panel">
       <div className="panel-head">
@@ -459,7 +531,26 @@ function RunsSurface({ runs, detail, busy, onOpenRun, onTeardown }: { readonly r
   );
 }
 
-function RunDetail({ detail, inspector, onInspect, onTeardown, onExport, onApplyFix }: { readonly detail: LaunchpadRunDetail | null; readonly inspector: InspectorItem; readonly onInspect: (item: InspectorItem) => void; readonly onTeardown: () => void; readonly onExport: () => void; readonly onApplyFix?: (cli: string) => Promise<void> | void }) {
+function RunDetail({
+  viewMode,
+  setViewMode,
+  detail,
+  inspector,
+  onInspect,
+  onTeardown,
+  onExport,
+  onApplyFix,
+}: {
+  readonly viewMode: "simple" | "pro";
+  readonly setViewMode: (mode: "simple" | "pro") => void;
+  readonly detail: LaunchpadRunDetail | null;
+  readonly inspector: InspectorItem;
+  readonly onInspect: (item: InspectorItem) => void;
+  readonly onTeardown: () => void;
+  readonly onExport: () => void;
+  readonly onApplyFix?: (cli: string) => Promise<void> | void;
+}) {
+  if (viewMode === "simple") return null;
   if (!detail) return null;
   const instance = detail.instance;
   const receiptRefs = instance.receipts ?? receiptRefStrings(detail.run.receipt_refs) ?? [];
@@ -507,6 +598,7 @@ function RunDetail({ detail, inspector, onInspect, onTeardown, onExport, onApply
 
   return (
     <section className="run-detail-grid">
+      <ProofPanel detail={detail} onExport={onExport} />
       <div className="launchpad-panel run-detail-main">
         <div className="panel-head">
           <PanelHeader kicker="Run Detail" title={`${detail.run.app_id} run`} description="Every state below is backed by a backend event or shown as unproven." />
@@ -668,8 +760,82 @@ function Inspector({ item, onApplyFix }: { readonly item: InspectorItem; readonl
   );
 }
 
-function PolicySurface({ app, simulation, plan, busy, onSimulate }: { readonly app?: LaunchpadApp; readonly simulation: PolicySimulation | null; readonly plan: LaunchpadPlanResponse | null; readonly busy: boolean; readonly onSimulate: () => void }) {
+function PolicySurface({
+  viewMode,
+  setViewMode,
+  app,
+  simulation,
+  plan,
+  busy,
+  onSimulate,
+}: {
+  readonly viewMode: "simple" | "pro";
+  readonly setViewMode: (mode: "simple" | "pro") => void;
+  readonly app?: LaunchpadApp;
+  readonly simulation: PolicySimulation | null;
+  readonly plan: LaunchpadPlanResponse | null;
+  readonly busy: boolean;
+  readonly onSimulate: () => void;
+}) {
   const appId = app?.app_id ?? app?.id ?? "<app>";
+  const [selectedSafetyMode, setSelectedSafetyMode] = useState<"safe" | "ask">("safe");
+
+  if (viewMode === "simple") {
+    return (
+      <section className="launchpad-panel" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+        <PanelHeader
+          kicker="Policy"
+          title="Safety Profiles"
+          description="These controls explain the current policy posture. Runtime authority still comes from backend preflight and receipts."
+        />
+        
+        <div className="simple-option-grid" style={{ marginTop: '24px' }} aria-label="Select safety profile">
+          <button
+            type="button"
+            className={`simple-option-card ${selectedSafetyMode === "safe" ? "selected" : ""}`}
+            onClick={() => setSelectedSafetyMode("safe")}
+          >
+            <strong>Deny by default</strong>
+            <span>Use the AppSpec, policy pack, matrix, and LaunchPlan verdict to decide which actions can start.</span>
+            <em>{simulation?.verdict ?? plan?.kernel_verdict ?? "unproven"}</em>
+          </button>
+
+          <button
+            type="button"
+            className={`simple-option-card ${selectedSafetyMode === "ask" ? "selected" : ""}`}
+            onClick={() => setSelectedSafetyMode("ask")}
+          >
+            <strong>Operator approval</strong>
+            <span>Approval prompts are valid only when the backend returns approval or escalation state for a concrete gate.</span>
+            <em>{simulation?.reason_code ?? plan?.reason_code ?? "no reason code"}</em>
+          </button>
+
+          <button
+            type="button"
+            className="simple-option-card"
+            onClick={() => setViewMode("pro")}
+          >
+            <strong>Developer Mode</strong>
+            <span>Inspect raw policy simulation, LaunchPlan hash, backend payloads, and CLI equivalents.</span>
+            <em>Developer Mode</em>
+          </button>
+        </div>
+
+        <div className="simple-checklist" style={{ marginTop: '32px' }}>
+          <div className="simple-checklist-item">
+            <CheckCircle2 size={16} /> Runtime verdicts remain ALLOW, DENY, or ESCALATE.
+          </div>
+          <div className="simple-checklist-item">
+            <CheckCircle2 size={16} /> Proof must come from Launchpad receipts and EvidencePack refs.
+          </div>
+          <div className="simple-checklist-item">
+            <CheckCircle2 size={16} /> Missing backend facts stay visible as unproven.
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="launchpad-panel">
       <div className="panel-head">
@@ -705,7 +871,99 @@ function PolicyLayer({ title, value, code }: { readonly title: string; readonly 
   return <section><h3>{title}</h3>{code ? <pre className="launchpad-code">{value}</pre> : <p>{value}</p>}</section>;
 }
 
-function McpSurface({ reviews, busy, onApprove }: { readonly reviews: readonly MCPThreatReview[]; readonly busy: boolean; readonly onApprove: (review: MCPThreatReview) => void }) {
+function McpSurface({
+  viewMode,
+  reviews,
+  busy,
+  onApprove,
+}: {
+  readonly viewMode: "simple" | "pro";
+  readonly reviews: readonly MCPThreatReview[];
+  readonly busy: boolean;
+  readonly onApprove: (review: MCPThreatReview) => void;
+}) {
+  if (viewMode === "simple") {
+    return (
+      <section className="launchpad-panel" style={{ border: '0.5px solid var(--color-border-subtle)' }}>
+        <PanelHeader
+          kicker="MCP Firewall"
+          title="AI Tool Firewall"
+          description="MCP state is loaded from Launchpad threat-review APIs. Unknown or unproven tools remain visibly quarantined."
+        />
+        <div style={{ display: 'grid', gap: '20px', marginTop: '24px' }}>
+          {reviews.map((review) => {
+            const isApproved = review.state === "approved";
+            const tools = readOnlyTools(review);
+            return (
+              <article key={review.server_id} className="quarantine-card" style={{ border: `1px solid ${isApproved ? 'var(--color-success)' : 'var(--color-warning)'}`, display: 'grid', gap: '16px', background: 'rgba(21, 23, 27, 0.4)', padding: '24px', borderRadius: '8px', position: 'relative', overflow: 'hidden' }}>
+                {!isApproved && <div className="scan-line" />}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <Cpu size={24} style={{ color: isApproved ? 'var(--color-success)' : 'var(--color-warning)' }} />
+                    <div>
+                      <strong style={{ fontSize: '16px', color: 'var(--color-text-primary)' }}>{review.server_id} Tool Pack</strong>
+                      {!isApproved && <span style={{ marginLeft: '12px', fontSize: '9px', fontFamily: 'monospace', padding: '2px 6px', background: 'rgba(255,205,91,0.1)', color: 'var(--color-warning)', border: '0.5px solid rgba(255,205,91,0.3)', borderRadius: '4px' }}>{review.risk_class || "unproven risk"}</span>}
+                    </div>
+                  </div>
+                  <span className={`sota-badge ${isApproved ? "badge-success" : "badge-warning"}`}>
+                    {isApproved ? "Approved" : "Quarantined"}
+                  </span>
+                </div>
+                <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: '1.5' }}>
+                  {review.summary || "No backend summary returned for this MCP review."}
+                </p>
+                <div className="confidence-container" style={{ margin: '8px 0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                    <span>Proof status</span>
+                    <span>{review.proof_status}</span>
+                  </div>
+                  <div style={{ width: '100%', height: '4px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{ width: review.proof_status === "proven" ? '100%' : '24%', height: '100%', background: isApproved ? 'var(--color-success)' : 'var(--color-warning)' }} />
+                  </div>
+                </div>
+                <div style={{ background: 'rgba(0, 0, 0, 0.2)', padding: '16px', borderRadius: '6px', border: '0.5px solid var(--color-border-subtle)' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Declared Tools inside this pack:</span>
+                  <div style={{ display: 'grid', gap: '10px', marginTop: '12px' }}>
+                    {review.tools.map((tool) => (
+                      <div key={tool.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input type="checkbox" className="quarantine-checkbox" checked={isApproved || tool.side_effect_class === "read" || tool.side_effect_class === "readonly"} disabled readOnly />
+                          <strong>{tool.name}</strong>
+                        </div>
+                        <span style={{ color: tool.side_effect_class === "read" || tool.side_effect_class === "readonly" ? 'var(--color-success)' : 'var(--color-warning)', fontSize: '11px', fontFamily: 'monospace' }}>
+                          {tool.side_effect_class === "read" || tool.side_effect_class === "readonly" ? "Read-only" : "Requires approval"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {!isApproved && tools.length > 0 && (
+                  <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <button
+                      type="button"
+                      className="lp-btn-primary"
+                      disabled={busy}
+                      onClick={() => onApprove(review)}
+                    >
+                      Approve scoped read-only
+                    </button>
+                    <p style={{ margin: 0, fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                      HELM can approve scoped read-only tools when the backend returns an approval path. Other tools remain blocked.
+                    </p>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+        {reviews.length === 0 ? (
+          <div className="launchpad-empty" style={{ textAlign: 'center', padding: '24px 0' }}>
+            No MCP tool packages configured or reviewed yet.
+          </div>
+        ) : null}
+      </section>
+    );
+  }
   return (
     <section className="launchpad-panel">
       <PanelHeader kicker="MCP Firewall" title="Threat reviews" description="Unknown MCP servers and tools remain quarantined. Side effects require a scoped approval receipt." />
@@ -744,8 +1002,73 @@ function McpSurface({ reviews, busy, onApprove }: { readonly reviews: readonly M
   );
 }
 
-function SecretsSurface({ secrets, apps, busy, onBindSecret }: { readonly secrets: readonly LaunchpadSecretGrant[]; readonly apps: readonly LaunchpadApp[]; readonly busy: boolean; readonly onBindSecret: (requirement: SecretRequirement) => void }) {
+function SecretsSurface({
+  viewMode,
+  secrets,
+  apps,
+  busy,
+  onBindSecret,
+}: {
+  readonly viewMode: "simple" | "pro";
+  readonly secrets: readonly LaunchpadSecretGrant[];
+  readonly apps: readonly LaunchpadApp[];
+  readonly busy: boolean;
+  readonly onBindSecret: (requirement: SecretRequirement) => void;
+}) {
   const required = apps.flatMap((item) => secretRequirements(item, secrets).map((requirement) => ({ app: item.name, requirement })));
+
+  if (viewMode === "simple") {
+    return (
+      <section className="launchpad-panel">
+        <PanelHeader
+          kicker="Secrets"
+          title="Environment-backed secret grants"
+          description="Launchpad secret routes bind logical secret names to environment variable names. This Console does not collect raw secret values."
+        />
+        <div className="simple-safety-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px", marginTop: "16px" }}>
+          {required.map((item) => {
+            const req = item.requirement;
+            return (
+              <div key={`${item.app}:${req.logical}:${req.env}`} className="simple-safety-card" style={{ padding: "20px", display: "grid", gap: "12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontWeight: "bold", fontSize: "var(--font-size-md)", color: "var(--lp-text)" }}>{req.logical}</span>
+                  {req.present ? (
+                    <span className="badge" style={{ backgroundColor: "rgba(34, 197, 94, 0.1)", color: "var(--lp-allow)", padding: "4px 8px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px", fontSize: "var(--font-size-xs)" }}>
+                      <CheckCircle2 size={12} /> Present
+                    </span>
+                  ) : (
+                    <span className="badge" style={{ backgroundColor: "rgba(239, 68, 68, 0.1)", color: "var(--lp-escalate)", padding: "4px 8px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px", fontSize: "var(--font-size-xs)" }}>
+                      <Key size={12} /> Needs Activation
+                    </span>
+                  )}
+                </div>
+                <p style={{ margin: 0, color: "var(--lp-text-dim)", fontSize: "var(--font-size-sm)", lineHeight: "1.4" }}>
+                  {req.present 
+                    ? `Backend status reports ${req.env} is available for launch-scoped projection.`
+                    : `The Kernel process does not expose ${req.env}. Set it in the environment, then bind the env name.`}
+                </p>
+                {!req.present && (
+                  <button
+                    type="button"
+                    className="launchpad-action-primary"
+                    style={{ width: "100%", padding: "8px", justifySelf: "start", marginTop: "4px" }}
+                    disabled={busy}
+                    onClick={() => onBindSecret(req)}
+                  >
+                    Activate Connection ({req.env})
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {required.length === 0 && (
+            <div className="launchpad-empty" style={{ gridColumn: "1 / -1" }}>No security integration keys are required by your current apps.</div>
+          )}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="launchpad-panel">
       <PanelHeader kicker="Secret Grants" title="Required runtime grants" description="Raw secret values never cross this API or UI." />
@@ -768,12 +1091,27 @@ function SecretsSurface({ secrets, apps, busy, onBindSecret }: { readonly secret
   );
 }
 
-function EvidenceSurface({ runs, detail, onExport }: { readonly runs: readonly LaunchpadRun[]; readonly detail: LaunchpadRunDetail | null; readonly onExport: () => void }) {
+function EvidenceSurface({
+  viewMode,
+  runs,
+  detail,
+  onExport,
+}: {
+  readonly viewMode: "simple" | "pro";
+  readonly runs: readonly LaunchpadRun[];
+  readonly detail: LaunchpadRunDetail | null;
+  readonly onExport: () => void;
+}) {
   const refs = uniqueStrings([
     ...runs.flatMap((run) => run.evidence_pack_refs ?? []),
     detail?.instance.evidencepack_ref ?? "",
     ...(detail?.instance.evidencepack_refs ?? []),
   ]);
+
+  if (viewMode === "simple") {
+    return <ProofPanel detail={detail} onExport={onExport} />;
+  }
+
   return (
     <section className="launchpad-panel">
       <div className="panel-head">
@@ -812,7 +1150,77 @@ function EvidenceSurface({ runs, detail, onExport }: { readonly runs: readonly L
   );
 }
 
-function SandboxSurface({ grant, detail }: { readonly grant: SandboxGrantView | null; readonly detail: LaunchpadRunDetail | null }) {
+function SandboxSurface({
+  viewMode,
+  grant,
+  detail,
+}: {
+  readonly viewMode: "simple" | "pro";
+  readonly grant: SandboxGrantView | null;
+  readonly detail: LaunchpadRunDetail | null;
+}) {
+  if (viewMode === "simple") {
+    const folders = grant?.filesystem_preopens ?? [];
+    const domains = grant?.network_policy ?? [];
+    
+    return (
+      <section className="launchpad-panel">
+        <PanelHeader
+          kicker="Sandbox"
+          title="Runtime boundary facts"
+          description="Sandbox details are shown from backend grant data. Missing grant data stays unproven."
+        />
+        <div style={{ display: "grid", gap: "16px", marginTop: "20px" }}>
+          <div className="simple-safety-card" style={{ padding: "20px" }}>
+            <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "12px" }}>
+              <FolderOpen size={20} style={{ color: "var(--lp-allow)" }} />
+              <strong style={{ fontSize: "var(--font-size-md)" }}>Allowed Folders</strong>
+            </div>
+            <p style={{ margin: "0 0 12px 0", color: "var(--lp-text-dim)", fontSize: "var(--font-size-sm)", lineHeight: "1.4" }}>
+              Filesystem preopens are the backend-reported paths for the selected run.
+            </p>
+            {folders.length > 0 ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                {folders.map((f) => (
+                  <code key={f} style={{ background: "rgba(255,255,255,0.05)", padding: "4px 8px", borderRadius: "4px", fontSize: "var(--font-size-xs)" }}>{f}</code>
+                ))}
+              </div>
+            ) : (
+              <span style={{ color: "var(--lp-text-dim)", fontStyle: "italic", fontSize: "var(--font-size-sm)" }}>No folder pre-opens active. Isolated from filesystem.</span>
+            )}
+          </div>
+
+          <div className="simple-safety-card" style={{ padding: "20px" }}>
+            <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "12px" }}>
+              <Globe size={20} style={{ color: "var(--lp-allow)" }} />
+              <strong style={{ fontSize: "var(--font-size-md)" }}>Allowed API Networks</strong>
+            </div>
+            <p style={{ margin: "0 0 12px 0", color: "var(--lp-text-dim)", fontSize: "var(--font-size-sm)", lineHeight: "1.4" }}>
+              Network entries are the backend-reported allowlist for the selected run.
+            </p>
+            {domains.length > 0 ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                {domains.map((d) => (
+                  <code key={d} style={{ background: "rgba(255,255,255,0.05)", padding: "4px 8px", borderRadius: "4px", fontSize: "var(--font-size-xs)" }}>{d}</code>
+                ))}
+              </div>
+            ) : (
+              <span style={{ color: "var(--lp-text-dim)", fontStyle: "italic", fontSize: "var(--font-size-sm)" }}>All outbound network requests are entirely blocked by default.</span>
+            )}
+          </div>
+
+          <div className="simple-safety-card" style={{ padding: "20px", display: "flex", gap: "12px", alignItems: "center" }}>
+            <ShieldCheck size={24} style={{ color: "var(--lp-allow)", flexShrink: 0 }} />
+            <div>
+              <strong style={{ fontSize: "var(--font-size-sm)", display: "block" }}>Hardware Sandbox</strong>
+              <span style={{ color: "var(--lp-text-dim)", fontSize: "var(--font-size-xs)" }}>Hardened Dedicated Virtual Machine (gVisor isolated)</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="launchpad-panel">
       <PanelHeader kicker="Sandbox" title="Runtime grant" description="Backend-computed grant for the selected run. No app fallback is inferred by the UI." />
@@ -830,7 +1238,46 @@ function SandboxSurface({ grant, detail }: { readonly grant: SandboxGrantView | 
   );
 }
 
-function ReceiptsSurface({ receipts, detail }: { readonly receipts: readonly string[]; readonly detail: LaunchpadRunDetail | null }) {
+function ReceiptsSurface({
+  viewMode,
+  receipts,
+  detail,
+}: {
+  readonly viewMode: "simple" | "pro";
+  readonly receipts: readonly string[];
+  readonly detail: LaunchpadRunDetail | null;
+}) {
+  if (viewMode === "simple") {
+    const hasReceipts = receipts.length > 0;
+    
+    return (
+      <section className="launchpad-panel">
+        <PanelHeader
+          kicker="Receipts"
+          title="Run receipt refs"
+          description="Receipt refs are listed only when returned by the Launchpad backend."
+        />
+        <div style={{ display: "grid", gap: "16px", marginTop: "20px" }}>
+          {hasReceipts ? (
+            <div className="simple-safety-card" style={{ padding: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+                <ShieldCheck size={20} style={{ color: "var(--lp-allow)" }} />
+                <strong style={{ fontSize: "var(--font-size-md)" }}>{receipts.length} receipt ref(s) returned</strong>
+              </div>
+              <ul className="launchpad-list">
+                {receipts.map((receipt) => <li key={receipt}><span>receipt</span><code>{receipt}</code></li>)}
+              </ul>
+            </div>
+          ) : (
+            <div className="launchpad-empty">
+              No receipt refs returned yet.
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="launchpad-panel">
       <PanelHeader kicker="Receipts" title="Run receipts" description="No receipt means unproven." />

@@ -407,7 +407,7 @@
     {
       "id": "console-typecheck",
       "title": "Console typecheck",
-      "command": "cd packages/design-system-core && npm ci && npm run build && cd ../../apps/console && npm ci && npm run generate:api && npm run typecheck",
+      "command": "cd packages/design-system-core && npm ci && npm run build && cd ../../apps/console && npm ci --ignore-scripts && npm run generate:api && npm run typecheck",
       "timeout_seconds": 900,
       "paths": [
         "apps/console/**",

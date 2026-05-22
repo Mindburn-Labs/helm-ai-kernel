@@ -35,17 +35,29 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 This scheme maps the main sections of Conformance in reading order.
 
 ```mermaid
-flowchart LR
-  Page["Conformance"]
-  A["Run the Kernel Conformance Command"]
-  B["Run the Conformance Test Suite"]
-  C["Profile Material"]
-  D["What L1 and L2 Mean in This Repo"]
-  Page --> A
-  A --> B
-  B --> C
-  C --> D
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Page["Conformance"]
+        C["Profile Material"]
+        D["What L1 and L2 Mean in This Repo"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        A["Run the Kernel Conformance Command"]
+        B["Run the Conformance Test Suite"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+    C --> D
+
+    %% Premium Styling Rules
+    style A fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style B fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
 ```
+
 
 HELM keeps a retained conformance profile under `tests/conformance/profile-v1/`. The profile describes the minimum checks an implementation must pass to match the public OSS kernel behavior documented in this repository.
 

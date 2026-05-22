@@ -129,6 +129,7 @@ Evidence packs use path prefixes to categorize entries:
 | `policy/`       | INTENT         | Policy evaluation documents           |
 | `transcripts/`  | EFFECT         | Tool execution transcripts            |
 | `network/`      | EFFECT         | Network activity logs                 |
+| `host_evidence/`| EFFECT         | Externally signed host/network evidence chains |
 | `diffs/`        | EFFECT         | Git diffs and code changes            |
 | `secrets/`      | TRUST_EVENT    | Secret access audit logs              |
 | `ports/`        | EFFECT         | Port exposure events                  |
@@ -137,6 +138,10 @@ Evidence packs use path prefixes to categorize entries:
 
 Implementations MAY define additional path prefixes. Unrecognized prefixes
 MUST NOT cause verification failure.
+
+Launchpad numbered EvidencePacks map native host evidence to
+`11_HOST_EVIDENCE/`. Verifiers MUST accept both `host_evidence/<source>/...`
+and `11_HOST_EVIDENCE/<source>/...` when validating imported host evidence.
 
 ## 4. Entry Types
 
@@ -177,6 +182,15 @@ REQUIRED fields:
 Plaintext logs of network activity during execution. MUST use `text/plain`
 content type. Each line SHOULD contain: timestamp, source, destination,
 protocol, and verdict.
+
+### 4.4.1 External Host Evidence (EFFECT)
+
+Externally produced host and network receipt chains MAY be included under
+`host_evidence/` or, for Launchpad numbered packs, `11_HOST_EVIDENCE/`. These
+chains follow the External Evidence Receipt Profile v0.1 and can be verified
+offline without trusting HELM infrastructure. Hardware-rooted fields are stored
+and structurally checked; cryptographic TPM or TEE validation is only successful
+when a tested verifier for that root type is available.
 
 ### 4.5 Secret Access Logs (TRUST_EVENT)
 

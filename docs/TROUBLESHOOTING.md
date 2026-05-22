@@ -35,19 +35,30 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 This scheme maps the main sections of Troubleshooting in reading order.
 
 ```mermaid
-flowchart LR
-  Page["Troubleshooting"]
-  A["First Diagnostic"]
-  B["Auth Errors"]
-  C["Egress / Network"]
-  D["Timeouts"]
-  E["Conformance Failures"]
-  Page --> A
-  A --> B
-  B --> C
-  C --> D
-  D --> E
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Page["Troubleshooting"]
+        A["First Diagnostic"]
+        B["Auth Errors"]
+        D["Timeouts"]
+        E["Conformance Failures"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        C["Egress / Network"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+
+    %% Premium Styling Rules
+    style C fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
 ```
+
 
 Common issues and solutions for HELM.
 

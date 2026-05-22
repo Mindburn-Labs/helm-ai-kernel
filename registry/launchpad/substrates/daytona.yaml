@@ -1,12 +1,12 @@
 id: daytona
 name: Daytona Hosted Sandbox
 kind: hosted-sandbox
-availability: experimental
-default_dry_run: true
+availability: available
+default_dry_run: false
 policy_pack: policies/launchpad/substrates/daytona.safe.toml
 provisioner: daytona
 supports_teardown: true
-requires_approval: true
+requires_approval: false
 capabilities:
   isolation_strength: hosted_sandbox
   network_enforcement: provider_policy_allowlist

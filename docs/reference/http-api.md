@@ -22,14 +22,38 @@ This page is source-backed by [`api/openapi/helm.openapi.yaml`](../../api/openap
 ## Contract Flow
 
 ```mermaid
-flowchart LR
-  OpenAPI["api/openapi/helm.openapi.yaml"] --> Registry["RuntimeRouteSpecs"]
-  Registry --> Auth["route_auth.go"]
-  Auth --> Mux["serve/server mux"]
-  Mux --> Handlers["contract, receipt, console, subsystem handlers"]
-  Handlers --> Stores["receipts, boundary registry, services"]
-  Stores --> Response["JSON, SSE, or EvidencePack bytes"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        OpenAPI["api/openapi/helm.openapi.yaml"]
+        Auth["route_auth.go"]
+        Mux["serve/server mux"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        Registry["RuntimeRouteSpecs"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        Handlers["contract, receipt, console, subsystem handlers"]
+        Stores["receipts, boundary registry, services"]
+        Response["JSON, SSE, or EvidencePack bytes"]
+    end
+
+    %% Operational Flow Edges
+    OpenAPI --> Registry
+    Registry --> Auth
+    Auth --> Mux
+    Mux --> Handlers
+    Handlers --> Stores
+    Stores --> Response
+
+    %% Premium Styling Rules
+    style Registry fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style Handlers fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Stores fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Response fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 ## Runtime Auth Classes
 

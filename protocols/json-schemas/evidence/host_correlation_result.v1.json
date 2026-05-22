@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/evidence/host_correlation_result.v1.json",
+  "title": "HELM Host Correlation Result v1",
+  "type": "object",
+  "required": ["status"],
+  "properties": {
+    "schema_version": { "const": "host_correlation_result.v1" },
+    "status": {
+      "type": "string",
+      "enum": [
+        "CORRELATED",
+        "PARTIALLY_CORRELATED",
+        "UNCORRELATED_HOST_EGRESS",
+        "MISSING_HOST_RECEIPT",
+        "MISSING_HELM_INTENT",
+        "POLICY_ALLOWED_BUT_HOST_BLOCKED",
+        "POLICY_DENIED_BUT_HOST_OBSERVED_EGRESS"
+      ]
+    },
+    "reason_code": { "type": "string" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "helm_receipt_id": { "type": "string" },
+    "helm_decision_id": { "type": "string" },
+    "helm_sandbox_lease_id": { "type": "string" },
+    "host_receipt_id": { "type": "string" },
+    "host_receipt_hash": { "type": "string" },
+    "observed_event": { "$ref": "network_egress_event.v1.json" },
+    "boundary_drift": { "type": "object" },
+    "correlation_method": { "type": "string" },
+    "details": { "type": "string" },
+    "correlated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

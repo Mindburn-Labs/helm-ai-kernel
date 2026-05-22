@@ -157,12 +157,34 @@ The `helm-ai-kernel bundle build` subcommand auto-detects from file extension wh
 ## Diagram
 
 ```mermaid
-flowchart LR
-  input["Canonical policy input"] --> cel["CEL"]
-  input --> rego["Rego"]
-  input --> cedar["Cedar"]
-  cel --> decision["Normalized decision"]
-  rego --> decision
-  cedar --> decision
-  decision --> receipt["Signed receipt"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        cel["CEL"]
+        rego["Rego"]
+        cedar["Cedar"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        input["Canonical policy input"]
+        decision["Normalized decision"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        receipt["Signed receipt"]
+    end
+
+    %% Operational Flow Edges
+    input --> cel
+    input --> rego
+    input --> cedar
+    cel --> decision
+    rego --> decision
+    cedar --> decision
+    decision --> receipt
+
+    %% Premium Styling Rules
+    style input fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style decision fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+

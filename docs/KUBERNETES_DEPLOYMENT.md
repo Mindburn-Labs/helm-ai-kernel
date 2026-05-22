@@ -22,22 +22,56 @@ The chart source is [`deploy/helm-chart`](../deploy/helm-chart). Runtime contain
 ## Deployment Topology
 
 ```mermaid
-flowchart LR
-  Values["values.yaml"] --> Source["policy.source config"]
-  Source --> Runtime["runtime reconciler"]
-  ControlPlane["controlplane source"] --> Runtime
-  CRD["HelmPolicyBundle CRD"] --> Runtime
-  Mounted["ConfigMap/Secret mounted file"] --> Runtime
-  Runtime --> Snapshot["verified EffectivePolicySnapshot"]
-  Values --> Secrets["signing and API-key Secrets"]
-  Values --> PVC["persistent /data PVC"]
-  Snapshot --> Pod["helm-ai-kernel serve pod"]
-  Secrets --> Pod
-  PVC --> Pod
-  Pod --> Service["ClusterIP service"]
-  Service --> Ingress["optional ingress TLS"]
-  Pod --> Metrics["metrics port / ServiceMonitor"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Values["values.yaml"]
+        ControlPlane["controlplane source"]
+        Mounted["ConfigMap/Secret mounted file"]
+        PVC["persistent /data PVC"]
+        Pod["helm-ai-kernel serve pod"]
+        Service["ClusterIP service"]
+        Ingress["optional ingress TLS"]
+        Metrics["metrics port / ServiceMonitor"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        Source["policy.source config"]
+        CRD["HelmPolicyBundle CRD"]
+        Snapshot["verified EffectivePolicySnapshot"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        Runtime["runtime reconciler"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        Secrets["signing and API-key Secrets"]
+    end
+
+    %% Operational Flow Edges
+    Values --> Source
+    Source --> Runtime
+    ControlPlane --> Runtime
+    CRD --> Runtime
+    Mounted --> Runtime
+    Runtime --> Snapshot
+    Values --> Secrets
+    Values --> PVC
+    Snapshot --> Pod
+    Secrets --> Pod
+    PVC --> Pod
+    Pod --> Service
+    Service --> Ingress
+    Pod --> Metrics
+
+    %% Premium Styling Rules
+    style Source fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style Runtime fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style CRD fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style Snapshot fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style Secrets fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 ## Validate The Chart
 
@@ -101,7 +135,7 @@ helm upgrade --install helm-ai-kernel deploy/helm-chart \
 | Value | Default | Source-backed behavior |
 | --- | --- | --- |
 | `image.repository` | `ghcr.io/mindburn-labs/helm-ai-kernel` | Container image used by the Deployment. |
-| `image.tag` | chart `appVersion` | Defaults to `v0.5.4` from `Chart.yaml`. |
+| `image.tag` | chart `appVersion` | Defaults to `v0.5.5` from `Chart.yaml`. |
 | `helm.bindAddr` | `0.0.0.0` | Required because the pod must bind beyond loopback. |
 | `service.port` | `8080` | Runtime HTTP port passed to `helm-ai-kernel serve --port`. |
 | `service.healthPort` | `8081` | Health probe port via `HELM_HEALTH_PORT`. |

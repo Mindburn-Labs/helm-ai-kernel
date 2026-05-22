@@ -43,6 +43,9 @@ GA claims.
 - App and substrate registry: `registry/launchpad/`
 - Policy packs: `policies/launchpad/`
 - Contract schemas: `schemas/launchpad/`
+- UX architecture: `docs/launchpad/UX_ARCHITECTURE.md`
+- Hosted account/entitlement target contract:
+  `docs/launchpad/MINDBURN_ACCOUNT_ENTITLEMENTS_SPEC.md`
 - Release report: `docs/launchpad/final_report.json`
 - Clean-install GA gate: `docs/launchpad/CLEAN_INSTALL_GA.md`
 - v1.0 redacted evidence report: `docs/launchpad/v1_report.json`
@@ -82,6 +85,16 @@ helm-ai-kernel verify --bundle <pack>
 `helm-ai-kernel` remains the backwards-compatible binary and command namespace.
 Release builds also ship `helm` as the primary product command.
 
+## Account and Entitlement Boundary
+
+The Kernel repo currently exposes one self-hostable Launchpad surface backed by
+the existing Launchpad APIs. Free, Individual, and Enterprise hosted account
+entitlements are target architecture, not production Kernel behavior in this
+repo. Console must not infer account tier or invent entitlement state; it may
+only render explicit backend fields or clearly labeled test fixtures. The
+hosted integration contract lives in
+`docs/launchpad/MINDBURN_ACCOUNT_ENTITLEMENTS_SPEC.md`.
+
 ## App Classification
 
 | App | Availability | Evidence |
@@ -120,13 +133,39 @@ Release builds also ship `helm` as the primary product command.
   inside the current worktree are denied by installer tests.
 
 ```mermaid
-flowchart LR
-  Registry["Registry entry"] --> Policy["Policy pack"]
-  Policy --> Plan["Deterministic launch plan"]
-  Plan --> Gate["ALLOW / DENY / ESCALATE"]
-  Gate --> Receipt["Signed receipt"]
-  Receipt --> Evidence["Offline EvidencePack"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Registry["Registry entry"]
+        Plan["Deterministic launch plan"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        Policy["Policy pack"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        Gate["ALLOW / DENY / ESCALATE"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        Receipt["Signed receipt"]
+        Evidence["Offline EvidencePack"]
+    end
+
+    %% Operational Flow Edges
+    Registry --> Policy
+    Policy --> Plan
+    Plan --> Gate
+    Gate --> Receipt
+    Receipt --> Evidence
+
+    %% Premium Styling Rules
+    style Policy fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style Gate fill:#e53e3e,stroke:#9b2c2c,stroke-width:2px,color:#fff
+    style Receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Evidence fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 ## Evidence Inspection
 

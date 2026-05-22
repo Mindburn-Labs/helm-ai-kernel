@@ -35,17 +35,28 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 This scheme maps the main sections of MCP Integration in reading order.
 
 ```mermaid
-flowchart LR
-  Page["MCP Integration"]
-  A["Run the Server"]
-  B["OAuth Resource and Scope Enforcement"]
-  C["Build a Bundle"]
-  D["Install a Local Client Configuration"]
-  Page --> A
-  A --> B
-  B --> C
-  C --> D
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Page["MCP Integration"]
+        B["OAuth Resource and Scope Enforcement"]
+        C["Build a Bundle"]
+        D["Install a Local Client Configuration"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        A["Run the Server"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+    C --> D
+
+    %% Premium Styling Rules
+    style A fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
 ```
+
 
 HELM retains an MCP surface for governed tool access.
 

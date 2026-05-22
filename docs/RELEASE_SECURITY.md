@@ -21,17 +21,35 @@ vulnerabilities, and which evidence files support supply-chain review.
 ## Release Evidence Chain
 
 ```mermaid
-flowchart LR
-  tag["Version tag"] --> ci["Release workflow"]
-  ci --> binaries["Binaries and packages"]
-  ci --> sbom["SBOM"]
-  ci --> attestation["Release metadata / attestation when present"]
-  ci --> optional["Optional Cosign / OpenVEX assets"]
-  binaries --> verify["Artifact verification"]
-  sbom --> verify
-  attestation --> verify
-  optional --> verify
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        tag["Version tag"]
+        ci["Release workflow"]
+        binaries["Binaries and packages"]
+        sbom["SBOM"]
+        attestation["Release metadata / attestation when present"]
+        optional["Optional Cosign / OpenVEX assets"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        verify["Artifact verification"]
+    end
+
+    %% Operational Flow Edges
+    tag --> ci
+    ci --> binaries
+    ci --> sbom
+    ci --> attestation
+    ci --> optional
+    binaries --> verify
+    sbom --> verify
+    attestation --> verify
+    optional --> verify
+
+    %% Premium Styling Rules
+    style verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 Current public release: `v0.5.5`, published on 2026-05-20 at 21:13 UTC:
 <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.5>. The release

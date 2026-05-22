@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel JSON Schema Reference
-last_reviewed: 2026-05-05
+last_reviewed: 2026-05-21
 ---
 
 # HELM AI Kernel JSON Schema Reference
@@ -17,18 +17,35 @@ After this page you should know where public schema files live, how schema famil
 
 ## Source Truth
 
-The schema source is [`protocols/json-schemas`](../../protocols/json-schemas), with the generated index at [`protocols/json-schemas/SCHEMA_INDEX.md`](../../protocols/json-schemas/SCHEMA_INDEX.md). The current tree contains 187 schema-related files across the public schema families listed below. Legacy compatibility schemas under [`schemas`](../../schemas) remain source-owned and are referenced from the protocol hub when they back public receipt examples.
+The schema source is [`protocols/json-schemas`](../../protocols/json-schemas), with the generated index at [`protocols/json-schemas/SCHEMA_INDEX.md`](../../protocols/json-schemas/SCHEMA_INDEX.md). The current tree contains 192 schema-related files across the public schema families listed below. Legacy compatibility schemas under [`schemas`](../../schemas) remain source-owned and are referenced from the protocol hub when they back public receipt examples.
 
 ## Schema Family Flow
 
 ```mermaid
-flowchart LR
-  Schemas["protocols/json-schemas"] --> Index["SCHEMA_INDEX.md"]
-  Index --> Docs["public schema reference"]
-  Schemas --> Tests["docs-truth and conformance"]
-  Tests --> SDKs["generated types and SDK examples"]
-  SDKs --> Receipts["receipt and EvidencePack validation"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Schemas["protocols/json-schemas"]
+        Index["SCHEMA_INDEX.md"]
+        Docs["public schema reference"]
+        Tests["docs-truth and conformance"]
+        SDKs["generated types and SDK examples"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        Receipts["receipt and EvidencePack validation"]
+    end
+
+    %% Operational Flow Edges
+    Schemas --> Index
+    Index --> Docs
+    Schemas --> Tests
+    Tests --> SDKs
+    SDKs --> Receipts
+
+    %% Premium Styling Rules
+    style Receipts fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 ## Public Families
 
@@ -40,7 +57,7 @@ flowchart LR
 | cli | [`protocols/json-schemas/cli`](../../protocols/json-schemas/cli) | CLI schema snapshots |
 | compliance | [`protocols/json-schemas/compliance`](../../protocols/json-schemas/compliance) | control mappings |
 | core | [`protocols/json-schemas/core`](../../protocols/json-schemas/core) | envelopes, effects, EvidencePacks, receipts, and error IR |
-| effects | [`protocols/json-schemas/effects`](../../protocols/json-schemas/effects) | governed action effects |
+| effects / evidence | [`protocols/json-schemas/effects`](../../protocols/json-schemas/effects), [`protocols/json-schemas/evidence`](../../protocols/json-schemas/evidence) | governed action effects and external host evidence receipts |
 | identity | [`protocols/json-schemas/identity`](../../protocols/json-schemas/identity) | agent and principal identity envelopes |
 | packs | [`protocols/json-schemas/packs`](../../protocols/json-schemas/packs) | policy and reference pack manifests |
 | policy | [`protocols/json-schemas/policy`](../../protocols/json-schemas/policy) | policy bundles and rule inputs |

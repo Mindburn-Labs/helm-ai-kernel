@@ -10,7 +10,7 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$ROOT/apps/console"
-npm ci
+npm ci --ignore-scripts
 
 GENERATED="$TMP_DIR/schema.ts"
 ./node_modules/.bin/openapi-typescript ../../api/openapi/helm.openapi.yaml -o "$GENERATED"

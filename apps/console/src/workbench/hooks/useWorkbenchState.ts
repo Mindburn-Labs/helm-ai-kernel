@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
+  MessageSquareText,
   Rocket,
   Play,
   Boxes,
@@ -42,7 +43,8 @@ import type {
 } from "../types";
 
 export const FLOW_NAV = [
-  { id: "launch", label: "Launch", icon: Rocket },
+  { id: "workbench", label: "Chat Workspace", icon: MessageSquareText },
+  { id: "apps", label: "App Hub", icon: Rocket },
   { id: "runs", label: "Runs", icon: Play },
   { id: "mcp", label: "MCP Firewall", icon: Boxes },
   { id: "policies", label: "Policies", icon: ShieldCheck },
@@ -55,7 +57,7 @@ export const FLOW_NAV = [
 ] as const;
 
 function initialRouteFromLocation(): { route: FlowRoute; runId: string } {
-  if (typeof window === "undefined") return { route: "launch", runId: "" };
+  if (typeof window === "undefined") return { route: "workbench", runId: "" };
   const pathname = window.location.pathname.replace(/\/+$/, "");
   const runMatch = pathname.match(/^\/runs\/([^/]+)$/);
   if (runMatch?.[1]) return { route: "runs", runId: decodeURIComponent(runMatch[1]) };
@@ -63,7 +65,7 @@ function initialRouteFromLocation(): { route: FlowRoute; runId: string } {
   if (firstSegment && FLOW_NAV.some((item) => item.id === firstSegment)) {
     return { route: firstSegment, runId: "" };
   }
-  return { route: "launch", runId: "" };
+  return { route: "workbench", runId: "" };
 }
 
 function buildSearchResults(
@@ -136,6 +138,8 @@ export function useWorkbenchState() {
   } = useConsoleData(authRevision);
 
   const [active, setActive] = useState<FlowRoute>(initialRoute.route);
+  const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(false);
+  const [inspectorTab, setInspectorTab] = useState<"activity" | "boundary" | "mcp" | "runtime" | "evidence" | "raw">("activity");
 
   const needsCapabilityData =
     active === "developer" ||
@@ -255,33 +259,44 @@ export function useWorkbenchState() {
     setCommandText(text);
     setActionError(null);
 
+    // Keep active route strictly on "workbench" to ensure zero cockpit redirection
+    setActive("workbench");
+
     if (command.mode === "approve") {
-      setActive("policies");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("boundary");
+      if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
       return;
     }
     if (command.mode === "verify") {
-      setActive("evidence");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("evidence");
       if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
       return;
     }
     if (command.mode === "replay") {
-      setActive("evidence");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("evidence");
       if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
       await runReplayProbe(receipts[0] ?? null);
       return;
     }
     if (command.mode === "inspect") {
+      setIsInspectorCollapsed(false);
       if (text.includes("sandbox")) {
-        setActive("sandbox");
+        setInspectorTab("boundary");
       } else if (text.includes("mcp")) {
-        setActive("mcp");
+        setInspectorTab("mcp");
       } else {
-        setActive("registry");
+        setInspectorTab("runtime");
       }
+      if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
       return;
     }
     if (command.mode === "launch") {
-      setActive("launch");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("activity");
+      if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
       return;
     }
 
@@ -299,7 +314,12 @@ export function useWorkbenchState() {
       });
       const updated = await loadReceipts(100);
       setReceipts((current) => mergeReceipts(current, updated));
-      setActive("evidence");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("activity");
+      const targetReceipt = updated[0] ?? receipts[0];
+      if (targetReceipt) {
+        setDrawerItem({ kind: "receipt", receipt: targetReceipt });
+      }
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Intent evaluation failed");
     } finally {
@@ -309,21 +329,27 @@ export function useWorkbenchState() {
 
   const runQuickAction = useCallback((action: QuickAction) => {
     if (action.id === "evaluate-intent") {
-      setActive("developer");
+      setActive("workbench");
       setCommandText(action.command);
       composerRef.current?.focus();
       return;
     }
     if (action.id === "scan-mcp") {
-      setActive("mcp");
+      setActive("workbench");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("mcp");
+      if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
       return;
     }
     if (action.id === "inspect-sandbox") {
-      setActive("sandbox");
+      setActive("workbench");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("boundary");
+      if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
       return;
     }
     void submitCommand(action.command, "quick_action");
-  }, [submitCommand]);
+  }, [submitCommand, receipts]);
 
   const openSearchResult = (result: SearchResult) => {
     setActive(result.route);
@@ -339,11 +365,20 @@ export function useWorkbenchState() {
     const receipt = receipts.find((item) => item.receipt_id === receiptId || item.decision_id === receiptId);
     if (receipt) {
       setDrawerItem({ kind: "receipt", receipt });
-      setActive("receipts");
+      setActive("workbench");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("activity");
     }
   }, [receipts]);
 
+  const onNewSession = useCallback(() => {
+    setCommandText("");
+    setDrawerItem(null);
+    setActive("workbench");
+  }, []);
+
   return {
+    onNewSession,
     initialRoute,
     authRevision,
     bootstrap,
@@ -355,6 +390,10 @@ export function useWorkbenchState() {
     refresh,
     active,
     setActive,
+    isInspectorCollapsed,
+    setIsInspectorCollapsed,
+    inspectorTab,
+    setInspectorTab,
     needsCapabilityData,
     capabilities,
     capabilitiesLoading,

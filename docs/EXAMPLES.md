@@ -22,14 +22,41 @@ Example source lives under [`examples`](../examples). SDK package docs live unde
 ## Example Flow
 
 ```mermaid
-flowchart LR
-  Reader["developer"] --> Pick["choose example"]
-  Pick --> Server["start helm-ai-kernel serve or helm-ai-kernel proxy"]
-  Server --> Run["run language/framework code"]
-  Run --> Receipt["capture receipt or decision"]
-  Receipt --> Verify["verify receipt/EvidencePack"]
-  Verify --> Gate["docs and example validation"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Reader["developer"]
+        Pick["choose example"]
+        Server["start helm-ai-kernel serve or helm-ai-kernel proxy"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        Gate["docs and example validation"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        Run["run language/framework code"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        Receipt["capture receipt or decision"]
+        Verify["verify receipt/EvidencePack"]
+    end
+
+    %% Operational Flow Edges
+    Reader --> Pick
+    Pick --> Server
+    Server --> Run
+    Run --> Receipt
+    Receipt --> Verify
+    Verify --> Gate
+
+    %% Premium Styling Rules
+    style Run fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style Receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Gate fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
 ```
+
 
 ## Runnable Matrix
 

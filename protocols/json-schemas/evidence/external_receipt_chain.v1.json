@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/evidence/external_receipt_chain.v1.json",
+  "title": "HELM External Receipt Chain v1",
+  "type": "object",
+  "required": ["receipts"],
+  "properties": {
+    "schema_version": { "const": "external_receipt_chain.v1" },
+    "chain_id": { "type": "string" },
+    "source_vendor": { "type": "string" },
+    "source_profile": { "type": "string" },
+    "event_schema_hash": { "type": "string" },
+    "receipt_chain_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "verification_hint": { "type": "string" },
+    "verification_command": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "public_keys": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key_id", "public_key_hex"],
+        "properties": {
+          "key_id": { "type": "string" },
+          "algorithm": { "type": "string" },
+          "public_key_hex": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "receipts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "external_host_receipt.v1.json" }
+    },
+    "verification_notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

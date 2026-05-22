@@ -27,13 +27,35 @@ authority boundary that keeps skills from granting tools or execution rights.
 
 ```mermaid
 flowchart TD
-  search["search registry"] --> inspect["inspect skill"]
-  inspect --> scan["scan content and metadata"]
-  scan --> install["repo-scoped install"]
-  install --> receipts["install/projection receipts"]
-  scan --> export["Codex plugin export"]
-  install --> revoke["disable or revoke"]
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        search["search registry"]
+        scan["scan content and metadata"]
+        install["repo-scoped install"]
+        export["Codex plugin export"]
+        revoke["disable or revoke"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        inspect["inspect skill"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        receipts["install/projection receipts"]
+    end
+
+    %% Operational Flow Edges
+    search --> inspect
+    inspect --> scan
+    scan --> install
+    install --> receipts
+    scan --> export
+    install --> revoke
+
+    %% Premium Styling Rules
+    style inspect fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style receipts fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 ## OSS Flows
 

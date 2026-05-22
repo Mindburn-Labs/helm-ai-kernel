@@ -21,14 +21,39 @@ and which public route explains the behavior.
 ## Protocol Topology
 
 ```mermaid
-flowchart LR
-  request["PDP request"] --> policy["Policy bundle"]
-  policy --> decision["Policy decision"]
-  decision --> receipt["Receipt v2"]
-  receipt --> evidence["Evidence pack"]
-  evidence --> conformance["Conformance profile"]
-  conformance --> registry["Compatibility registry"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        conformance["Conformance profile"]
+        registry["Compatibility registry"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        request["PDP request"]
+        policy["Policy bundle"]
+        decision["Policy decision"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        receipt["Receipt v2"]
+        evidence["Evidence pack"]
+    end
+
+    %% Operational Flow Edges
+    request --> policy
+    policy --> decision
+    decision --> receipt
+    receipt --> evidence
+    evidence --> conformance
+    conformance --> registry
+
+    %% Premium Styling Rules
+    style request fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style policy fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style decision fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style evidence fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 ## Protocol Families
 

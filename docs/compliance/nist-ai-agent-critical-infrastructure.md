@@ -35,17 +35,24 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 This scheme maps the main sections of NIST AI Agent Critical Infrastructure Alignment in reading order.
 
 ```mermaid
-flowchart LR
-  Page["NIST AI Agent Critical Infrastructure Alignment"]
-  A["Source Status"]
-  B["Control Crosswalk"]
-  C["Reference Pack Semantics"]
-  D["Operator Notes"]
-  Page --> A
-  A --> B
-  B --> C
-  C --> D
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Page["NIST AI Agent Critical Infrastructure Alignment"]
+        A["Source Status"]
+        B["Control Crosswalk"]
+        C["Reference Pack Semantics"]
+        D["Operator Notes"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+    C --> D
+
+    %% Premium Styling Rules
 ```
+
 
 This page maps current NIST AI-agent and critical-infrastructure work to HELM AI Kernel controls.
 

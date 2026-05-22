@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/evidence/external_host_receipt.v1.json",
+  "title": "HELM External Host Receipt v1",
+  "type": "object",
+  "required": ["receipt_id", "host_id", "event", "receipt_hash"],
+  "properties": {
+    "schema_version": { "const": "external_host_receipt.v1" },
+    "receipt_id": { "type": "string" },
+    "source_vendor": { "type": "string" },
+    "source_profile": { "type": "string" },
+    "host_id": { "type": "string" },
+    "process_identity": { "type": "string" },
+    "process_ancestry": { "type": "array", "items": { "type": "string" } },
+    "agent_id": { "type": "string" },
+    "workload_id": { "type": "string" },
+    "sandbox_lease_id": { "type": "string" },
+    "event": { "$ref": "network_egress_event.v1.json" },
+    "receipt_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "prev_receipt_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "signing_key_id": { "type": "string" },
+    "signature_algorithm": { "type": "string" },
+    "signature": { "type": "string" },
+    "public_key_ref": { "type": "string" },
+    "hardware_root": { "$ref": "hardware_root_claim.v1.json" },
+    "verifier_profile": { "type": "string" },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}

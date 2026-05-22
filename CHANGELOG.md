@@ -35,29 +35,41 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 This scheme maps the main sections of HELM AI Kernel Changelog in reading order.
 
 ```mermaid
-flowchart LR
-  Page["HELM AI Kernel Changelog"]
-  A["[Unreleased]"]
-  B["[0.5.4] - 2026-05-20"]
-  C["[0.5.3] - 2026-05-19"]
-  D["[0.5.2] - 2026-05-19"]
-  E["[0.5.1] - 2026-05-18"]
-  F["[0.5.0] - 2026-05-13"]
-  G["[0.4.0] - 2026-04-25"]
-  H["Validation"]
-  Page --> A
-  A --> B
-  B --> C
-  C --> D
-  D --> E
-  E --> F
-  F --> G
-  G --> H
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Page["HELM AI Kernel Changelog"]
+        A["[Unreleased]"]
+        B["[0.5.4] - 2026-05-20"]
+        C["[0.5.3] - 2026-05-19"]
+        D["[0.5.2] - 2026-05-19"]
+        E["[0.5.1] - 2026-05-18"]
+        F["[0.5.0] - 2026-05-13"]
+        G["[0.4.0] - 2026-04-25"]
+        H["Validation"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+
+    %% Premium Styling Rules
 ```
+
 
 All notable changes to the retained HELM AI Kernel surface are documented here. Public entries focus on developer-visible interfaces, compatibility, verification, SDKs, and security-relevant documentation.
 
 ## [Unreleased]
+
+### Added
+- **UCS v1.5 Super-Sovereign Execution Standard**: Scaffolded zero-knowledge execution proof boundaries and Trusted Execution Environment (TEE) sealed secrets vault.
+- **zkVM Guest Safety Checker**: Introduced the `ZKVMGuestSafetyChecker` and `SafetyGuestProgram` inside `pkg/crypto/zk` to simulate AST static analysis inside zero-knowledge execution enclaves.
+- **TEE Secrets Enclave**: Introduced `SovereignKMSVault` and `SecretProxyFilter` inside `pkg/crypto/tee` to enforce hardware-sealed secrets isolation and inline proxy token injection with constant-time verification.
 
 ## [0.5.4] - 2026-05-20
 

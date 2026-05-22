@@ -37,14 +37,37 @@ offline verification.
 - Clean-install report: `docs/launchpad/clean_install_report.json`
 
 ```mermaid
-flowchart LR
-  brew["Homebrew install"] --> matrix["Launch matrix"]
-  matrix --> secret["Logical model_gateway secret"]
-  secret --> apps["OpenClaw / Hermes / OpenCode / Kilo"]
-  apps --> teardown["Cascade delete"]
-  teardown --> verify["Offline EvidencePack verify"]
-  verify --> audit["Secret-fragment audit"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        brew["Homebrew install"]
+        matrix["Launch matrix"]
+        apps["OpenClaw / Hermes / OpenCode / Kilo"]
+        teardown["Cascade delete"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        secret["Logical model_gateway secret"]
+        audit["Secret-fragment audit"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        verify["Offline EvidencePack verify"]
+    end
+
+    %% Operational Flow Edges
+    brew --> matrix
+    matrix --> secret
+    secret --> apps
+    apps --> teardown
+    teardown --> verify
+    verify --> audit
+
+    %% Premium Styling Rules
+    style secret fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style audit fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
 ```
+
 
 ## Required Secret
 

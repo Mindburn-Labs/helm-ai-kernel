@@ -37,21 +37,38 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 This scheme maps the main sections of Verification in reading order.
 
 ```mermaid
-flowchart LR
-  Page["Verification"]
-  A["Offline Verification"]
-  B["Online Proof Check"]
-  C["Export and Verify"]
-  D["Release Asset Verification"]
-  F["Optional Cosign / VEX Verification"]
-  E["Run the Maintained Validation Targets"]
-  Page --> A
-  A --> B
-  B --> C
-  C --> D
-  D --> F
-  F --> E
+flowchart TD
+    subgraph Execution["3. Execution & Verdict Plane"]
+        E["Run the Maintained Validation Targets"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        Page["Verification"]
+        A["Offline Verification"]
+        B["Online Proof Check"]
+        C["Export and Verify"]
+        D["Release Asset Verification"]
+        F["Optional Cosign / VEX Verification"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+    C --> D
+    D --> F
+    F --> E
+
+    %% Premium Styling Rules
+    style Page fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style A fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style B fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style C fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style D fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style F fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style E fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
 ```
+
 
 The verification path is local-first. `helm-ai-kernel verify <evidence-pack.tar|dir>`
 performs offline checks by default; `--online` is optional and only runs after

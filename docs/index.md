@@ -26,16 +26,40 @@ After this page you should know which public HELM AI Kernel surface to use:
 ## OSS Boundary Map
 
 ```mermaid
-flowchart LR
-  Dev["Developer app"] --> Proxy["OpenAI-compatible proxy"]
-  Agent["MCP or agent client"] --> MCP["MCP integration"]
-  Proxy --> Kernel["HELM AI Kernel kernel"]
-  MCP --> Kernel
-  Kernel --> Policy["Policy bundle"]
-  Kernel --> Receipt["Receipt and evidence pack"]
-  Receipt --> Verify["Offline verifier"]
-  Policy --> Verify
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Dev["Developer app"]
+        Proxy["OpenAI-compatible proxy"]
+        Agent["MCP or agent client"]
+        MCP["MCP integration"]
+        Kernel["HELM AI Kernel kernel"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        Policy["Policy bundle"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        Receipt["Receipt and evidence pack"]
+        Verify["Offline verifier"]
+    end
+
+    %% Operational Flow Edges
+    Dev --> Proxy
+    Agent --> MCP
+    Proxy --> Kernel
+    MCP --> Kernel
+    Kernel --> Policy
+    Kernel --> Receipt
+    Receipt --> Verify
+    Policy --> Verify
+
+    %% Premium Styling Rules
+    style Policy fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style Receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 ## Source Truth
 

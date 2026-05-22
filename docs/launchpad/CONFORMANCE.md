@@ -86,13 +86,41 @@ Still gated:
 
 ```mermaid
 flowchart TD
-  Candidate["Candidate app"] --> Registry["Registry and policy validation"]
-  Registry --> SupplyChain["Signed OCI, SBOM, vuln scan, license proof"]
-  SupplyChain --> Runtime["Live local-container e2e"]
-  Runtime --> Teardown["Cascade teardown receipt"]
-  Teardown --> Evidence["Offline EvidencePack verification"]
-  Evidence --> Supported["oss_supported"]
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Candidate["Candidate app"]
+        Supported["oss_supported"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        Registry["Registry and policy validation"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        Runtime["Live local-container e2e"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        SupplyChain["Signed OCI, SBOM, vuln scan, license proof"]
+        Teardown["Cascade teardown receipt"]
+        Evidence["Offline EvidencePack verification"]
+    end
+
+    %% Operational Flow Edges
+    Candidate --> Registry
+    Registry --> SupplyChain
+    SupplyChain --> Runtime
+    Runtime --> Teardown
+    Teardown --> Evidence
+    Evidence --> Supported
+
+    %% Premium Styling Rules
+    style Registry fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style SupplyChain fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Runtime fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style Teardown fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Evidence fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 No additional app may move to `oss_supported` until it passes the same bar.
 

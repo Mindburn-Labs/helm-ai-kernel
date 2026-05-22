@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/evidence/network_egress_event.v1.json",
+  "title": "HELM Network Egress Event v1",
+  "type": "object",
+  "required": ["destination_port", "protocol", "timestamp"],
+  "properties": {
+    "event_id": { "type": "string" },
+    "attempt_id": { "type": "string" },
+    "action_id": { "type": "string" },
+    "direction": { "type": "string" },
+    "source_ip": { "type": "string" },
+    "destination_ip": { "type": "string" },
+    "destination_host": { "type": "string" },
+    "destination_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "protocol": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "bytes_sent": { "type": "integer", "minimum": 0 },
+    "bytes_received": { "type": "integer", "minimum": 0 },
+    "verdict": { "type": "string" },
+    "observed_by": { "type": "string" },
+    "correlation_hints": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  },
+  "anyOf": [
+    { "required": ["destination_ip"] },
+    { "required": ["destination_host"] }
+  ],
+  "additionalProperties": false
+}

@@ -35,17 +35,32 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 This scheme maps the main sections of HELM AI Kernel Console in reading order.
 
 ```mermaid
-flowchart LR
-  Page["HELM AI Kernel Console"]
-  A["What It Covers"]
-  B["Running Locally"]
-  C["Production Boundary"]
-  D["Verification"]
-  Page --> A
-  A --> B
-  B --> C
-  C --> D
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Page["HELM AI Kernel Console"]
+        A["What It Covers"]
+        C["Production Boundary"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        B["Running Locally"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        D["Verification"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+    C --> D
+
+    %% Premium Styling Rules
+    style B fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style D fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 HELM AI Kernel ships one browser frontend: `apps/console`.
 

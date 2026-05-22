@@ -71,15 +71,41 @@ Use `session_id` or `delegation_session_id` in `DecisionRequest.Context` to scop
 ## Diagram
 
 ```mermaid
-flowchart LR
-  event["Session event"] --> score["Risk score"]
-  score --> memory["Session risk memory"]
-  memory --> policy["Policy evaluation"]
-  policy --> action{"Allow action?"}
-  action -->|yes| receipt["Receipt"]
-  action -->|no| intervention["Intervention"]
-  intervention --> receipt
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        event["Session event"]
+        score["Risk score"]
+        memory["Session risk memory"]
+        intervention["Intervention"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        policy["Policy evaluation"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        action{"Allow action?"}
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        receipt["Receipt"]
+    end
+
+    %% Operational Flow Edges
+    event --> score
+    score --> memory
+    memory --> policy
+    policy --> action
+    action -->|yes| receipt
+    action -->|no| intervention
+    intervention --> receipt
+
+    %% Premium Styling Rules
+    style policy fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style action fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 <!-- docs-depth-final-pass -->
 

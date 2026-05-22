@@ -35,15 +35,22 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 This scheme maps the main sections of EU AI Act High-Risk Pack in reading order.
 
 ```mermaid
-flowchart LR
-  Page["EU AI Act High-Risk Pack"]
-  A["Source Status"]
-  B["Pack Coverage"]
-  C["Validation"]
-  Page --> A
-  A --> B
-  B --> C
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Page["EU AI Act High-Risk Pack"]
+        A["Source Status"]
+        B["Pack Coverage"]
+        C["Validation"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+
+    %% Premium Styling Rules
 ```
+
 
 The HELM AI Kernel EU AI Act reference pack is `reference_packs/eu_ai_act_high_risk.v1.json`.
 

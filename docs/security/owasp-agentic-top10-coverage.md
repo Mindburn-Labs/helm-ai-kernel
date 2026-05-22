@@ -35,15 +35,26 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 This scheme maps the main sections of OWASP Agentic Top 10 Mapping in reading order.
 
 ```mermaid
-flowchart LR
-  Page["OWASP Agentic Top 10 Mapping"]
-  A["Source truth"]
-  B["Reader action"]
-  C["Validation"]
-  Page --> A
-  A --> B
-  B --> C
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Page["OWASP Agentic Top 10 Mapping"]
+        A["Source truth"]
+        C["Validation"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        B["Reader action"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+
+    %% Premium Styling Rules
+    style B fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
 ```
+
 
 This file is a code-oriented inventory of retained control points in the OSS kernel.
 

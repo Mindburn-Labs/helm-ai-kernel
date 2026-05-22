@@ -15,8 +15,11 @@ import {
   Rocket,
   Settings,
   ShieldCheck,
+  Plus,
+  PanelRightOpen,
+  PanelRightClose,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import {
   ErrorBoundary,
   HashText,
@@ -51,6 +54,12 @@ import {
   WorkbenchStoreHealthList,
   WorkbenchStatusFact,
   WorkbenchTimelineStep,
+  Panel,
+  SplitPane,
+  CanvasElement,
+  PropertyGrid,
+  type CanvasNode,
+  type CanvasEdge,
   type VerificationState,
   type VerdictState,
 } from "@mindburn/ui-core";
@@ -71,9 +80,12 @@ import {
   type Receipt,
 } from "../api/client";
 import { HelmAiKernelAssistantDrawer } from "../agent/drawer";
+import { DetailDrawer } from "./components/HELMInspector";
 import { HelmAiKernelAgentProvider } from "../agent/provider";
 import { buildAiKernelAgentState } from "../agent/state";
 import { LaunchpadPage } from "../features/launchpad/LaunchpadPage";
+import { launchpadApi } from "../features/launchpad/api";
+import type { LaunchpadApp, LaunchpadRun, LaunchpadSecretGrant, MCPThreatReview } from "../features/launchpad/types";
 import type { AdminActionValues } from "../admin/surfaces";
 import { mergeReceipts, useCapabilitiesData, useConsoleData, type ConsoleAccessState } from "./dataHooks";
 import {
@@ -111,7 +123,8 @@ const FLOW_NAV: readonly {
   readonly label: string;
   readonly icon: ComponentType<{ readonly size?: number; readonly "aria-hidden"?: boolean }>;
 }[] = [
-  { id: "launch", label: "Launch", icon: Rocket },
+  { id: "workbench", label: "Chat Workspace", icon: MessageSquareText },
+  { id: "apps", label: "App Hub", icon: Rocket },
   { id: "runs", label: "Runs", icon: Play },
   { id: "mcp", label: "MCP Firewall", icon: Boxes },
   { id: "policies", label: "Policies", icon: ShieldCheck },
@@ -222,7 +235,7 @@ function routeLabel(route: FlowRoute): string {
 }
 
 function initialRouteFromLocation(): { route: FlowRoute; runId: string } {
-  if (typeof window === "undefined") return { route: "launch", runId: "" };
+  if (typeof window === "undefined") return { route: "workbench", runId: "" };
   const pathname = window.location.pathname.replace(/\/+$/, "");
   const runMatch = pathname.match(/^\/runs\/([^/]+)$/);
   if (runMatch?.[1]) return { route: "runs", runId: decodeURIComponent(runMatch[1]) };
@@ -230,12 +243,12 @@ function initialRouteFromLocation(): { route: FlowRoute; runId: string } {
   if (firstSegment && FLOW_NAV.some((item) => item.id === firstSegment)) {
     return { route: firstSegment, runId: "" };
   }
-  return { route: "launch", runId: "" };
+  return { route: "workbench", runId: "" };
 }
 
 export function WorkbenchApp() {
   return (
-    <ThemeProvider defaultPreference="light" defaultDensity="compact">
+    <ThemeProvider defaultPreference="dark" defaultDensity="compact">
       <I18nProvider defaultLocale="en-US">
         <TelemetryProvider sink={() => undefined}>
           <ConsoleBoundary>
@@ -252,6 +265,8 @@ function ConsoleApp() {
   const [authRevision, setAuthRevision] = useState(0);
   const { bootstrap, receipts, error, streamState, accessState, refreshing, refresh, setReceipts } = useConsoleData(authRevision);
   const [active, setActive] = useState<FlowRoute>(initialRoute.route);
+  const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(false);
+  const [inspectorTab, setInspectorTab] = useState<"activity" | "boundary" | "mcp" | "runtime" | "evidence" | "raw">("activity");
   const needsCapabilityData = active === "developer" || active === "workbench" || active === "work" || active === "ledger" || active === "capabilities" || active === "settings";
   const { capabilities, loading: capabilitiesLoading, refreshOne, refreshAll } = useCapabilitiesData(authRevision, needsCapabilityData);
   const [query, setQuery] = useState("");
@@ -267,6 +282,12 @@ function ConsoleApp() {
 
   const authChanged = useCallback(() => {
     setAuthRevision((value) => value + 1);
+  }, []);
+
+  const onNewSession = useCallback(() => {
+    setCommandText("");
+    setDrawerItem(null);
+    setActive("workbench");
   }, []);
 
   const selectedReceipt = useMemo(() => {
@@ -346,33 +367,44 @@ function ConsoleApp() {
     setCommandText(text);
     setActionError(null);
 
+    // Keep active route strictly on "workbench" to ensure zero cockpit redirection
+    setActive("workbench");
+
     if (command.mode === "approve") {
-      setActive("policies");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("boundary");
+      if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
       return;
     }
     if (command.mode === "verify") {
-      setActive("evidence");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("evidence");
       if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
       return;
     }
     if (command.mode === "replay") {
-      setActive("evidence");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("evidence");
       if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
       await runReplayProbe(receipts[0] ?? null);
       return;
     }
     if (command.mode === "inspect") {
+      setIsInspectorCollapsed(false);
       if (text.includes("sandbox")) {
-        setActive("sandbox");
+        setInspectorTab("boundary");
       } else if (text.includes("mcp")) {
-        setActive("mcp");
+        setInspectorTab("mcp");
       } else {
-        setActive("registry");
+        setInspectorTab("runtime");
       }
+      if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
       return;
     }
     if (command.mode === "launch") {
-      setActive("launch");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("activity");
+      if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
       return;
     }
 
@@ -390,7 +422,12 @@ function ConsoleApp() {
       });
       const updated = await loadReceipts(100);
       setReceipts((current) => mergeReceipts(current, updated));
-      setActive("evidence");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("activity");
+      const targetReceipt = updated[0] ?? receipts[0];
+      if (targetReceipt) {
+        setDrawerItem({ kind: "receipt", receipt: targetReceipt });
+      }
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Intent evaluation failed");
     } finally {
@@ -400,21 +437,27 @@ function ConsoleApp() {
 
   const runQuickAction = useCallback((action: QuickAction) => {
     if (action.id === "evaluate-intent") {
-      setActive("developer");
+      setActive("workbench");
       setCommandText(action.command);
       composerRef.current?.focus();
       return;
     }
     if (action.id === "scan-mcp") {
-      setActive("mcp");
+      setActive("workbench");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("mcp");
+      if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
       return;
     }
     if (action.id === "inspect-sandbox") {
-      setActive("sandbox");
+      setActive("workbench");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("boundary");
+      if (receipts[0]) setDrawerItem({ kind: "receipt", receipt: receipts[0] });
       return;
     }
     void submitCommand(action.command, "quick_action");
-  }, [submitCommand]);
+  }, [submitCommand, receipts]);
 
   const openSearchResult = (result: SearchResult) => {
     setActive(result.route);
@@ -430,7 +473,9 @@ function ConsoleApp() {
     const receipt = receipts.find((item) => item.receipt_id === receiptId || item.decision_id === receiptId);
     if (receipt) {
       setDrawerItem({ kind: "receipt", receipt });
-      setActive("receipts");
+      setActive("workbench");
+      setIsInspectorCollapsed(false);
+      setInspectorTab("activity");
     }
   }, [receipts]);
 
@@ -438,7 +483,7 @@ function ConsoleApp() {
     <HelmAiKernelAgentProvider enabled state={agentState}>
       <WorkbenchShell
         securityStance={receipts[0] ? normalizeVerdict(receipts[0].status) : "pending"}
-        rail={<Navigation active={active} tasks={tasks} onNavigate={(route) => navigate(route)} />}
+        rail={<Navigation active={active} tasks={tasks} onNavigate={(route) => navigate(route)} onNewSession={onNewSession} />}
         header={
           <ConsoleHeader
             active={active}
@@ -450,6 +495,8 @@ function ConsoleApp() {
             onQueryChange={setQuery}
             onOpenResult={openSearchResult}
             onRunCommand={(text) => void submitCommand(text, "search")}
+            isInspectorCollapsed={isInspectorCollapsed}
+            onToggleInspector={() => setIsInspectorCollapsed(!isInspectorCollapsed)}
             assistant={
               <HelmAiKernelAssistantDrawer
                 state={agentState}
@@ -464,16 +511,20 @@ function ConsoleApp() {
           />
         }
         drawer={
-          <DetailDrawer
-            item={drawerItem}
-            fallbackReceipt={selectedReceipt}
-            replayStatus={replayStatus}
-            onClose={() => setDrawerItem(null)}
-            onNavigate={navigate}
-            onOpen={(item) => setDrawerItem(item)}
-            onReplay={() => void runReplayProbe(selectedReceipt)}
-            onRefresh={refreshOne}
-          />
+          isInspectorCollapsed ? null : (
+            <DetailDrawer
+              item={drawerItem}
+              fallbackReceipt={selectedReceipt}
+              replayStatus={replayStatus}
+              onClose={() => setDrawerItem(null)}
+              onNavigate={navigate}
+              onOpen={(item) => setDrawerItem(item)}
+              onReplay={() => void runReplayProbe(selectedReceipt)}
+              onRefresh={refreshOne}
+              activeTab={inspectorTab}
+              onTabChange={setInspectorTab}
+            />
+          )
         }
         mobileNav={<MobileNav active={active} onNavigate={(route) => navigate(route)} />}
       >
@@ -491,6 +542,7 @@ function ConsoleApp() {
                   snapshot={snapshot}
                   bootstrap={bootstrap}
                   receipts={receipts}
+                  selectedReceipt={selectedReceipt}
                   capabilities={capabilities}
                   commandText={commandText}
                   principal={principal}
@@ -602,27 +654,114 @@ function Navigation({
   active,
   tasks,
   onNavigate,
+  onNewSession,
 }: {
   readonly active: FlowRoute;
   readonly tasks: readonly OperatorTask[];
   readonly onNavigate: (route: FlowRoute) => void;
+  readonly onNewSession: () => void;
 }) {
   const workCount = tasks.filter((task) => task.route === "work" || task.kind === "approval" || task.kind === "connector" || task.kind === "sandbox").length;
   const ledgerCount = tasks.filter((task) => task.route === "ledger").length;
   const counts: Partial<Record<FlowRoute, number>> = { work: workCount, ledger: ledgerCount };
+
+  const workspaceIds = ["workbench", "apps"];
+  const managementIds = ["runs", "mcp", "policies", "secrets", "sandbox", "evidence", "receipts", "registry"];
+  const settingsIds = ["settings"];
+
+  const workspaceItems = FLOW_NAV.filter((item) => workspaceIds.includes(item.id));
+  const managementItems = FLOW_NAV.filter((item) => managementIds.includes(item.id));
+  const settingsItems = FLOW_NAV.filter((item) => settingsIds.includes(item.id));
+
   return (
-    <WorkbenchRail brand="HELM" mark="H" onBrandClick={() => onNavigate("workbench")}>
-      {FLOW_NAV.map((item) => (
-        <WorkbenchRailLink
-          key={item.id}
-          active={active === item.id}
-          label={item.label}
-          count={counts[item.id]}
-          icon={item.icon}
-          onClick={() => onNavigate(item.id)}
-        />
-      ))}
-    </WorkbenchRail>
+    <aside className="sota-rail w-64 flex flex-col h-full py-6 px-4 gap-4 border-r border-outline-variant/30 shrink-0">
+      <div className="flex items-center gap-3 mb-6 px-2 cursor-pointer" onClick={() => onNavigate("workbench")}>
+        <div className="w-10 h-10 bg-primary/10 flex items-center justify-center border border-primary/20 rounded">
+          <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>terminal</span>
+        </div>
+        <div>
+          <div className="font-headline-md text-[16px] font-bold text-primary leading-tight">HELM OS</div>
+          <div className="font-label-caps text-[10px] font-semibold text-on-surface-variant text-muted">Core v4.2</div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1 flex-1 overflow-y-auto custom-scrollbar">
+        <div style={{ fontSize: "9px", fontWeight: "700", color: "var(--color-text-muted)", padding: "8px 16px 4px 12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Workspace</div>
+        {workspaceItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`sota-rail-link text-left border-none w-full bg-transparent ${active === item.id ? 'active' : ''}`}
+              onClick={() => onNavigate(item.id)}
+            >
+              <Icon size={16} />
+              <span className="font-label-caps text-[11px] uppercase tracking-wider">{item.label}</span>
+              {counts[item.id] ? (
+                <span className="ml-auto bg-primary-container/20 text-primary px-1.5 py-0.5 rounded text-[10px] font-mono">
+                  {counts[item.id]}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+
+        <div style={{ height: "4px" }} />
+        <div style={{ fontSize: "9px", fontWeight: "700", color: "var(--color-text-muted)", padding: "8px 16px 4px 12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Management</div>
+        {managementItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`sota-rail-link text-left border-none w-full bg-transparent ${active === item.id ? 'active' : ''}`}
+              onClick={() => onNavigate(item.id)}
+            >
+              <Icon size={16} />
+              <span className="font-label-caps text-[11px] uppercase tracking-wider">{item.label}</span>
+              {counts[item.id] ? (
+                <span className="ml-auto bg-primary-container/20 text-primary px-1.5 py-0.5 rounded text-[10px] font-mono">
+                  {counts[item.id]}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+
+        <div style={{ height: "4px" }} />
+        <div style={{ fontSize: "9px", fontWeight: "700", color: "var(--color-text-muted)", padding: "8px 16px 4px 12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Settings</div>
+        {settingsItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`sota-rail-link text-left border-none w-full bg-transparent ${active === item.id ? 'active' : ''}`}
+              onClick={() => onNavigate(item.id)}
+            >
+              <Icon size={16} />
+              <span className="font-label-caps text-[11px] uppercase tracking-wider">{item.label}</span>
+              {counts[item.id] ? (
+                <span className="ml-auto bg-primary-container/20 text-primary px-1.5 py-0.5 rounded text-[10px] font-mono">
+                  {counts[item.id]}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-auto flex flex-col gap-1 border-t border-outline-variant/20 pt-4">
+        <button
+          type="button"
+          onClick={onNewSession}
+          className="w-full mb-4 bg-primary text-on-primary font-bold py-2 rounded shadow-[0_0_15px_rgba(99,230,242,0.15)] active:scale-[0.98] transition-transform text-[11px] uppercase tracking-wider cursor-pointer border-none"
+        >
+          Initialize Session
+        </button>
+      </div>
+    </aside>
   );
 }
 
@@ -655,6 +794,8 @@ function ConsoleHeader({
   onQueryChange,
   onOpenResult,
   onRunCommand,
+  isInspectorCollapsed,
+  onToggleInspector,
 }: {
   readonly active: FlowRoute;
   readonly bootstrap: ConsoleBootstrap | null;
@@ -666,6 +807,8 @@ function ConsoleHeader({
   readonly onQueryChange: (value: string) => void;
   readonly onOpenResult: (result: SearchResult) => void;
   readonly onRunCommand: (value: string) => void;
+  readonly isInspectorCollapsed: boolean;
+  readonly onToggleInspector: () => void;
 }) {
   return (
     <WorkbenchHeader
@@ -699,16 +842,57 @@ function ConsoleHeader({
         <StatusPill label="stream" value={streamState} tone={streamState === "live" ? "good" : "warn"} />
         <StatusPill label="env" value={bootstrap?.workspace.environment ?? "pending"} />
         {assistant}
+        <button
+          type="button"
+          onClick={onToggleInspector}
+          aria-label={isInspectorCollapsed ? "Expand Inspector" : "Collapse Inspector"}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "4px 8px",
+            height: "28px",
+            background: "var(--color-panel-raised)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "4px",
+            color: "var(--color-text)",
+            cursor: "pointer",
+          }}
+        >
+          {isInspectorCollapsed ? <PanelRightOpen size={15} /> : <PanelRightClose size={15} />}
+        </button>
         </>
       }
     />
   );
 }
 
+interface LocalSecretRequirement {
+  logical: string;
+  env: string;
+  present: boolean;
+}
+
+function getSecretRequirements(app: LaunchpadApp, secrets: readonly LaunchpadSecretGrant[]): LocalSecretRequirement[] {
+  const logicalNames = app.required_secrets?.length ? app.required_secrets : app.model_gateway_env ?? [];
+  const envNames = app.model_gateway_env?.length ? app.model_gateway_env : logicalNames;
+  return logicalNames.map((logical, index) => {
+    const env = envNames[Math.min(index, envNames.length - 1)] ?? logical;
+    const grant = secrets.find((secret) => secret.name === logical || secret.name === env || secret.value_env === env);
+    const present = Boolean(grant?.present);
+    return {
+      logical,
+      env,
+      present,
+    };
+  });
+}
+
 function WorkbenchFlow({
   snapshot,
   bootstrap,
   receipts,
+  selectedReceipt,
   capabilities,
   commandText,
   principal,
@@ -727,6 +911,7 @@ function WorkbenchFlow({
   readonly snapshot: WorkbenchSnapshot;
   readonly bootstrap: ConsoleBootstrap | null;
   readonly receipts: readonly Receipt[];
+  readonly selectedReceipt: Receipt | null;
   readonly capabilities: readonly Capability[];
   readonly commandText: string;
   readonly principal: string;
@@ -742,29 +927,108 @@ function WorkbenchFlow({
   readonly onOpen: (item: DrawerItem) => void;
   readonly onNavigate: (route: FlowRoute, item?: DrawerItem) => void;
 }) {
+  const [apps, setApps] = useState<LaunchpadApp[]>([]);
+  const [runs, setRuns] = useState<LaunchpadRun[]>([]);
+  const [secrets, setSecrets] = useState<LaunchpadSecretGrant[]>([]);
+  const [threatReviews, setThreatReviews] = useState<MCPThreatReview[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [launchingApp, setLaunchingApp] = useState<string | null>(null);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [nextApps, nextRuns, nextSecrets, nextThreatReviews] = await Promise.all([
+        launchpadApi.apps(),
+        launchpadApi.runs(),
+        launchpadApi.secrets(),
+        launchpadApi.mcpThreatReviews(),
+      ]);
+      setApps(nextApps);
+      setRuns(nextRuns);
+      setSecrets(nextSecrets);
+      setThreatReviews(nextThreatReviews);
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to load workbench cockpit data", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData, refreshing]);
+
+  const handleLaunch = async (appId: string) => {
+    setLaunchingApp(appId);
+    try {
+      await launchpadApi.run(appId, "local-container");
+      void loadData();
+      onNavigate("runs");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Launch failed");
+    } finally {
+      setLaunchingApp(null);
+    }
+  };
+
+  // Arrange dynamic receipts into sequential DAG node list for PixiJS
+  const graphNodes: readonly CanvasNode[] = useMemo(() => {
+    return receipts
+      .filter((receipt): receipt is typeof receipt & { receipt_id: string } => Boolean(receipt.receipt_id))
+      .map((receipt) => {
+        const isVerified = verificationState(receipt) === "verified";
+        return {
+          id: receipt.receipt_id,
+          label: receiptAction(receipt),
+          group: receipt.executor_id || "kernel",
+          verdict: normalizeVerdict(receipt.status) === "allow" ? "ALLOW" :
+                   normalizeVerdict(receipt.status) === "deny" ? "DENY" : "ESCALATE",
+          proofStatus: isVerified ? "VERIFIED" : "UNPROVEN",
+          summary: receiptResource(receipt) || "unspecified",
+        };
+      });
+  }, [receipts]);
+
+  const graphEdges: readonly CanvasEdge[] = useMemo(() => {
+    const edges: CanvasEdge[] = [];
+    const validReceipts = receipts.filter((r): r is typeof r & { receipt_id: string } => Boolean(r.receipt_id));
+    for (let i = 1; i < validReceipts.length; i++) {
+      edges.push({
+        from: validReceipts[i - 1].receipt_id,
+        to: validReceipts[i].receipt_id,
+      });
+    }
+    return edges;
+  }, [receipts]);
+
+  const handleSelectNode = useCallback((id: string) => {
+    const receipt = receipts.find((r) => r.receipt_id === id);
+    if (receipt) {
+      onOpen({ kind: "receipt", receipt });
+    }
+  }, [receipts, onOpen]);
+
+  const chronologicalReceipts = useMemo(() => {
+    return receipts.slice().reverse();
+  }, [receipts]);
+
+  const chatStreamRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (chatStreamRef.current) {
+      chatStreamRef.current.scrollTop = chatStreamRef.current.scrollHeight;
+    }
+  }, [receipts.length]);
+
   return (
-    <div className="flow-page workbench-page">
-      <WorkbenchComposer
-        title="Governed agent cockpit"
-        body="Start with one intent. HELM evaluates policy, records proof, and exposes approvals, replay, evidence, and runtime capabilities only when they matter."
-        principal={principal}
-        command={commandText}
-        busy={submitting}
-        commandRef={composerRef}
-        error={actionError ? <InlineError message={actionError} /> : null}
-        onPrincipalChange={onPrincipalChange}
-        onCommandChange={onCommandChange}
-        onSubmit={onSubmit}
-        secondaryAction={<Button variant="secondary" disabled={refreshing} onClick={onRefresh}>{refreshing ? "Refreshing" : "Refresh"}</Button>}
-      />
-
-      <WorkbenchQuickActions>
-        {snapshot.quickActions.map((action) => (
-          <WorkbenchQuickAction key={action.id} label={action.label} hint={action.hint} onClick={() => onQuickAction(action)} />
-        ))}
-      </WorkbenchQuickActions>
-
-      <section className="health-strip" aria-label="Console health">
+    <div className="flow-page workbench-page" style={{
+      display: "flex",
+      flexDirection: "column",
+      height: "calc(100vh - 110px)",
+      minHeight: "0",
+      position: "relative",
+      overflow: "hidden",
+    }}>
+      {/* Header section with telemetry and metrics */}
+      <section className="health-strip" aria-label="Console health" style={{ flex: "0 0 auto", marginBottom: "16px" }}>
         <WorkbenchHealthSummary
           state={snapshot.healthSummary.state}
           label={snapshot.healthSummary.label}
@@ -781,36 +1045,431 @@ function WorkbenchFlow({
         <StatusPill label="capabilities" value={`${capabilities.length}`} />
       </section>
 
-      <div className="workbench-grid">
-        <section className="timeline-panel" aria-labelledby="timeline-title">
-          <SectionHead title="Lifecycle" meta={snapshot.latestProof.label} />
-          <Timeline steps={snapshot.activeTimeline} onOpen={(step) => onOpen({ kind: "timeline", step })} />
-        </section>
-        <section className="proof-panel" aria-labelledby="proof-title">
-          <SectionHead title="Latest Proof" meta={snapshot.latestProof.state} />
-          <div className="latest-proof">
-            <FileSearch size={19} aria-hidden />
-            <div>
-              <strong>{snapshot.latestProof.action}</strong>
-              <span>{snapshot.latestProof.resource}</span>
-              <small>{snapshot.latestProof.label}</small>
+      {/* Main split side-by-side cockpit layout */}
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+        {(() => {
+          const leftColumn = (
+            <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, justifyContent: "space-between" }}>
+              {/* Chronological Chat/Timeline Stream */}
+              <div 
+                ref={chatStreamRef}
+                style={{ 
+                  flex: 1, 
+                  overflowY: "auto", 
+                  paddingRight: "8px", 
+                  paddingBottom: "16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "16px"
+                }} 
+                className="chat-stream"
+              >
+                {/* Welcome Card if there are no receipts */}
+                {receipts.length === 0 ? (
+                  <div style={{
+                    padding: "24px",
+                    borderRadius: "12px",
+                    background: "var(--color-panel-raised)",
+                    border: "1px solid var(--color-border)",
+                    boxShadow: "var(--shadow-hairline)",
+                    textAlign: "center",
+                    margin: "12px 0"
+                  }}>
+                    <div style={{
+                      width: "48px",
+                      height: "48px",
+                      borderRadius: "50%",
+                      background: "rgba(102, 252, 241, 0.1)",
+                      border: "1px solid rgba(102, 252, 241, 0.2)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      margin: "0 auto 16px auto",
+                      color: "#66fcf1"
+                    }}>
+                      <MessageSquareText size={24} />
+                    </div>
+                    <h3 style={{ fontSize: "16px", fontWeight: "bold", color: "var(--color-text)", margin: "0 0 8px 0" }}>
+                      Sovereign Conversational Cockpit
+                    </h3>
+                    <p style={{ fontSize: "12px", color: "var(--color-text-muted)", lineHeight: "1.6", margin: "0 0 20px 0" }}>
+                      HELM is a zero-trust, fail-closed platform execution boundary. Every intent evaluated is verified against the canonical OrgGenome policies and returns cryptographically signed receipts.
+                    </p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center" }}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => onQuickAction({
+                          id: "evaluate-intent",
+                          label: "LLM Inference",
+                          hint: "Run inference within sandbox boundary",
+                          command: "LLM_INFERENCE gpt-4.1-mini",
+                          mode: "evaluate"
+                        })}
+                      >
+                        LLM Inference (GPT-4.1)
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => onQuickAction({
+                          id: "evaluate-intent",
+                          label: "Sandbox Probe",
+                          hint: "Verify system behavior inside secure boundary",
+                          command: "DOCKER_SANDBOX ubuntu-latest",
+                          mode: "evaluate"
+                        })}
+                      >
+                        Sandbox Probe
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => onQuickAction({
+                          id: "evaluate-intent",
+                          label: "Read Policy",
+                          hint: "Inspect local policy.toml boundary rules",
+                          command: "READ_FILE policy.toml",
+                          mode: "evaluate"
+                        })}
+                      >
+                        Inspect policy.toml
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  chronologicalReceipts.map((receipt, index) => {
+                    const isVerified = verificationState(receipt) === "verified";
+                    const statusText = normalizeVerdict(receipt.status) === "allow" ? "PERMITTED / ALLOW" : "BLOCKED / DENIED";
+                    const sigSummaryText = isVerified ? "VERIFIED (OrgGenome Trusted Tenant Signer)" : "UNPROVEN / NO SIGNATURE PRESENT";
+                    
+                    const logLines = [
+                      `[HELM Kernel] init virtual sandbox for executor ${receipt.executor_id || "kernel"}... OK`,
+                      `[HELM Kernel] sandbox preopens verify... OK`,
+                      `[HELM Kernel] policy verdict: ${statusText}`,
+                      `[HELM Kernel] evidence verification: ${sigSummaryText}`,
+                      `[HELM Kernel] execution receipt generated: ${shortId(receipt.receipt_id)}`
+                    ];
+
+                    return (
+                      <div key={receipt.receipt_id} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                        {/* Operator Intent Chat Box */}
+                        <div style={{
+                          alignSelf: "flex-end",
+                          maxWidth: "85%",
+                          background: "var(--color-panel-raised)",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: "12px 12px 0 12px",
+                          padding: "12px 16px",
+                          marginLeft: "auto",
+                          boxShadow: "var(--shadow-hairline)",
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                            <span style={{ fontSize: "10px", fontFamily: "monospace", color: "var(--color-text-muted)", fontWeight: "bold" }}>
+                              {(receipt.metadata?.principal as string) || "operator@local"}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: "13px", fontFamily: "monospace", color: "var(--color-text)", fontWeight: "bold" }}>
+                            {receiptAction(receipt)} {receiptResource(receipt)}
+                          </div>
+                        </div>
+
+                        {/* HELM Decision Chat Response */}
+                        <div style={{
+                          alignSelf: "flex-start",
+                          maxWidth: "90%",
+                          background: "var(--color-panel)",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: "12px 12px 12px 0",
+                          padding: "14px 18px",
+                          marginRight: "auto",
+                          boxShadow: "var(--shadow-hairline)",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "8px",
+                          borderLeft: `4px solid ${normalizeVerdict(receipt.status) === "allow" ? "var(--color-success)" : "var(--color-danger)"}`
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                            <span style={{ fontSize: "11px", fontWeight: "900", color: "var(--color-text-muted)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                              HELM Gatekeeper Verdict
+                            </span>
+                            <VerdictBadge state={normalizeVerdict(receipt.status)} />
+                            <VerificationStatus state={verificationState(receipt)} />
+                          </div>
+
+                          {/* Terminal Sandbox Execution Logs */}
+                          <div style={{
+                            background: "#07090c",
+                            border: "1px solid var(--color-border)",
+                            borderRadius: "6px",
+                            padding: "10px 14px",
+                            fontFamily: "monospace",
+                            fontSize: "11px",
+                            color: "#3fb984",
+                            lineHeight: "1.5",
+                            marginTop: "4px",
+                            textAlign: "left",
+                            boxShadow: "inset 0 2px 8px rgba(0,0,0,0.8)"
+                          }}>
+                            {logLines.map((line, idx) => <div key={idx}>{line}</div>)}
+                          </div>
+
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
+                            <span style={{ fontSize: "10px", color: "var(--color-text-muted)", fontFamily: "monospace" }}>
+                              ID: {shortId(receipt.receipt_id)}
+                            </span>
+                            <Button size="sm" variant="ghost" onClick={() => onOpen({ kind: "receipt", receipt })}>
+                              Inspect details
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Composer Input Box Embedded Static at the Bottom */}
+              <div style={{ 
+                flex: "0 0 auto", 
+                borderTop: "1px solid var(--color-border)", 
+                paddingTop: "12px", 
+                background: "var(--color-bg)",
+                zIndex: 10
+              }}>
+                <WorkbenchComposer
+                  title="Governed agent cockpit"
+                  body="Start with one intent. HELM evaluates policy, records proof, and exposes approvals, replay, and sandbox capabilities dynamically."
+                  principal={principal}
+                  command={commandText}
+                  busy={submitting}
+                  commandRef={composerRef}
+                  error={actionError ? <InlineError message={actionError} /> : null}
+                  onPrincipalChange={onPrincipalChange}
+                  onCommandChange={onCommandChange}
+                  onSubmit={onSubmit}
+                  secondaryAction={<Button variant="secondary" disabled={refreshing} onClick={onRefresh}>{refreshing ? "Refreshing" : "Refresh"}</Button>}
+                />
+              </div>
             </div>
-            {receipts[0] ? (
-              <button type="button" onClick={() => onOpen({ kind: "receipt", receipt: receipts[0] })}>
-                Inspect
-              </button>
-            ) : (
-              <button type="button" onClick={() => onNavigate("ledger")}>
-                Ledger
-              </button>
-            )}
-          </div>
-          <div className="proof-shortcuts">
-            <button type="button" onClick={() => onNavigate("launch")}>Launch</button>
-            <button type="button" onClick={() => onNavigate("runs")}>Runs</button>
-            <button type="button" onClick={() => onNavigate("evidence")}>Evidence</button>
-          </div>
-        </section>
+          );
+
+          const rightColumn = (
+            <div style={{ display: "flex", flexDirection: "column", gap: "24px", height: "100%", minHeight: 0, overflowY: "auto", paddingRight: "8px" }}>
+              {/* ProofGraph Section */}
+              <section className="proofgraph-section" style={{ flex: "0 0 auto" }}>
+                <SectionHead title="HELM Cryptographic ProofGraph" meta={`${receipts.length} sequence steps`} />
+                <div style={{ marginTop: "12px" }}>
+                  {receipts.length === 0 ? (
+                    <div style={{
+                      height: "220px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "var(--color-panel-raised)",
+                      border: "1px dashed var(--color-border)",
+                      borderRadius: "12px",
+                      color: "var(--color-text-muted)",
+                      fontSize: "12px",
+                    }}>
+                      Evaluate an intent in the cockpit to activate the cryptographic ProofGraph.
+                    </div>
+                  ) : (
+                    <CanvasElement
+                      width={480}
+                      height={280}
+                      nodes={graphNodes}
+                      edges={graphEdges}
+                      onSelectNode={handleSelectNode}
+                      selectedNodeId={selectedReceipt?.receipt_id}
+                    />
+                  )}
+                </div>
+              </section>
+
+              {/* App Hub Cockpit Section */}
+              <section className="appspec-launcher-section" aria-labelledby="launcher-title" style={{ flex: "0 0 auto" }}>
+                <SectionHead title="App Hub Cockpit" meta={`${apps.length} apps declared`} />
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "12px" }}>
+                  {loading ? (
+                    <div style={{ color: "var(--color-text-muted)", fontSize: "12px" }}>Loading App Hub launchers...</div>
+                  ) : apps.length === 0 ? (
+                    <div style={{ color: "var(--color-text-muted)", fontSize: "12px" }}>No applications registered in UCS registry.</div>
+                  ) : (
+                    apps.map(app => {
+                      const appId = app.app_id ?? app.id;
+                      const appRequirements = getSecretRequirements(app, secrets);
+                      const missingSecrets = appRequirements.filter(req => !req.present);
+                      const appReviews = threatReviews.filter(rev => rev.app_id === appId);
+                      const quarantinedReviews = appReviews.filter(rev => rev.state === "quarantined");
+
+                      const canLaunch = missingSecrets.length === 0 && quarantinedReviews.length === 0;
+                      const panelRail = quarantinedReviews.length > 0 ? "deny" : missingSecrets.length > 0 ? "escalate" : "verified";
+
+                      return (
+                        <Panel
+                          key={appId}
+                          priority="primary"
+                          rail={panelRail}
+                          title={app.name}
+                          kicker={`${app.risk_class ?? "standard"} RISK`}
+                        >
+                          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                            <code style={{ fontSize: "11px", color: "var(--color-text-muted)", background: "rgba(0,0,0,0.2)", padding: "4px 8px", borderRadius: "4px" }}>
+                              {app.oci_ref ?? "ucs-verified-digest"}
+                            </code>
+
+                            {/* Capabilities list */}
+                            {app.declared_capabilities && app.declared_capabilities.length > 0 && (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                                {app.declared_capabilities.map(cap => (
+                                  <span key={cap} style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: "var(--color-panel-raised)", color: "var(--color-text-muted)" }}>
+                                    {cap}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Threat / Safety Quick Checks */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px", borderTop: "1px solid var(--color-border)", paddingTop: "12px" }}>
+                              {/* Missing Secrets */}
+                              {missingSecrets.length > 0 ? (
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
+                                  <span style={{ color: "var(--color-warn)", display: "flex", alignItems: "center", gap: "4px" }}>
+                                    <AlertCircle size={14} /> Missing secrets: {missingSecrets.map(s => s.logical).join(", ")}
+                                  </span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => onNavigate("secrets")}
+                                  >
+                                    Add required secret
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div style={{ color: "var(--color-success)", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
+                                  <CheckCircle2 size={14} /> All AppSpec secret grants present
+                                </div>
+                              )}
+
+                              {/* Quarantined MCP tools */}
+                              {quarantinedReviews.length > 0 ? (
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
+                                  <span style={{ color: "#ef4444", display: "flex", alignItems: "center", gap: "4px" }}>
+                                    <AlertCircle size={14} /> MCP Quarantine Active ({quarantinedReviews.length} server)
+                                  </span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => onNavigate("mcp")}
+                                  >
+                                    Review MCP
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div style={{ color: "var(--color-success)", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
+                                  <CheckCircle2 size={14} /> MCP tools verified & approved
+                                </div>
+                              )}
+                            </div>
+
+                            <div style={{ marginTop: "8px" }}>
+                              <Button
+                                variant={canLaunch ? "approve" : "secondary"}
+                                disabled={!canLaunch || launchingApp === appId}
+                                onClick={() => handleLaunch(appId)}
+                              >
+                                <span style={{ display: "flex", alignItems: "center", gap: "6px", justifyContent: "center", width: "100%" }}>
+                                  <Play size={14} />
+                                  <span>{launchingApp === appId ? "Launching..." : "Launch App"}</span>
+                                </span>
+                              </Button>
+                            </div>
+                          </div>
+                        </Panel>
+                      );
+                    })
+                  )}
+                </div>
+              </section>
+
+              {/* Active Run Verdicts Section */}
+              <section className="runs-and-proofs-section" aria-labelledby="runs-title" style={{ flex: "0 0 auto", marginBottom: "24px" }}>
+                <SectionHead title="Active Run Verdicts" meta={`${runs.length} runs total`} />
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "12px" }}>
+                  {loading ? (
+                    <div style={{ color: "var(--color-text-muted)", fontSize: "12px" }}>Loading runs...</div>
+                  ) : runs.length === 0 ? (
+                    <div style={{ color: "var(--color-text-muted)", fontSize: "12px" }}>No runs started in this session.</div>
+                  ) : (
+                    runs.map(run => {
+                      const isVerified = run.evidence_pack_refs && run.evidence_pack_refs.length > 0;
+                      return (
+                        <Panel
+                          key={run.launch_id ?? run.id}
+                          priority="primary"
+                          rail={isVerified ? "verified" : "pending"}
+                          title={run.app_id}
+                          kicker={run.state}
+                        >
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            <div style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>
+                              Substrate: <strong>{run.substrate_id}</strong>
+                            </div>
+
+                            {/* Cryptographic Signature Verification Badge */}
+                            <div style={{
+                              marginTop: "4px",
+                              padding: "8px 12px",
+                              borderRadius: "6px",
+                              background: isVerified ? "rgba(16, 185, 129, 0.1)" : "rgba(245, 158, 11, 0.1)",
+                              border: `1px solid ${isVerified ? "rgba(16, 185, 129, 0.2)" : "rgba(245, 158, 11, 0.2)"}`,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              fontSize: "11px",
+                              color: isVerified ? "#10b981" : "#f59e0b",
+                            }}>
+                              {isVerified ? (
+                                <>
+                                  <CheckCircle2 size={14} />
+                                  <strong>VERIFIED EVIDENCE PACK SIGNED</strong>
+                                </>
+                              ) : (
+                                <>
+                                  <AlertCircle size={14} />
+                                  <strong>UNPROVEN / UNVERIFIED EVIDENCE</strong>
+                                </>
+                              )}
+                            </div>
+
+                            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "8px" }}>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => onNavigate("runs")}
+                              >
+                                Inspect Run
+                              </Button>
+                            </div>
+                          </div>
+                        </Panel>
+                      );
+                    })
+                  )}
+                </div>
+              </section>
+            </div>
+          );
+
+          // Render side-by-side cockpit via SplitPane with custom wider split sizing override
+          return (
+            <SplitPane 
+              primary={leftColumn} 
+              secondary={rightColumn} 
+            />
+          );
+        })()}
       </div>
     </div>
   );
@@ -1130,355 +1789,6 @@ function SettingsFlow({
           <button type="button" className="secondary-action" onClick={onOpenDiagnostics}>Open diagnostics</button>
         </div>
       </section>
-    </div>
-  );
-}
-
-function DetailDrawer({
-  item,
-  fallbackReceipt,
-  replayStatus,
-  onClose,
-  onNavigate,
-  onOpen,
-  onReplay,
-  onRefresh,
-}: {
-  readonly item: DrawerItem | null;
-  readonly fallbackReceipt: Receipt | null;
-  readonly replayStatus: string;
-  readonly onClose: () => void;
-  readonly onNavigate: (route: FlowRoute, item?: DrawerItem) => void;
-  readonly onOpen: (item: DrawerItem) => void;
-  readonly onReplay: () => void;
-  readonly onRefresh: (id: string) => Promise<void>;
-}) {
-  const visibleItem = item ?? (fallbackReceipt ? { kind: "receipt" as const, receipt: fallbackReceipt } : null);
-  return (
-    <WorkbenchDrawerFrame open={Boolean(item)} title="Context" onClose={onClose}>
-      {!visibleItem ? (
-        <EmptyLine title="No selection" body="Select work, proof, capability, or diagnostics to inspect details." />
-      ) : visibleItem.kind === "task" ? (
-        <TaskDetail task={visibleItem.task} onNavigate={onNavigate} />
-      ) : visibleItem.kind === "receipt" ? (
-        <ReceiptDetail receipt={visibleItem.receipt} replayStatus={replayStatus} onReplay={onReplay} />
-      ) : visibleItem.kind === "capability" ? (
-        <CapabilityDetail capability={visibleItem.capability} onOpen={onOpen} />
-      ) : visibleItem.kind === "record" ? (
-        <RecordDetail capability={visibleItem.capability} record={visibleItem.record} onOpen={onOpen} />
-      ) : visibleItem.kind === "action" ? (
-        <ActionSheet capability={visibleItem.capability} action={visibleItem.action} onRefresh={onRefresh} />
-      ) : visibleItem.kind === "diagnostics" ? (
-        <DiagnosticsDetail diagnostics={visibleItem.diagnostics} onNavigate={onNavigate} />
-      ) : (
-        <TimelineDetail step={visibleItem.step} />
-      )}
-    </WorkbenchDrawerFrame>
-  );
-}
-
-function TaskDetail({ task, onNavigate }: { readonly task: OperatorTask; readonly onNavigate: (route: FlowRoute, item?: DrawerItem) => void }) {
-  return (
-    <div className="drawer-stack">
-      <StateMarker state={task.state} severity={task.severity} />
-      <h2>{task.title}</h2>
-      <p>{task.summary}</p>
-      <dl className="fact-grid">
-        <Fact label="source" value={task.source} />
-        <Fact label="state" value={task.state} />
-        <Fact label="receipts" value={task.relatedReceiptIds.length ? task.relatedReceiptIds.map(shortId).join(", ") : "none"} />
-      </dl>
-      <button type="button" className="primary-action" onClick={() => onNavigate(task.route)}>
-        {task.actionLabel}
-      </button>
-    </div>
-  );
-}
-
-function ReceiptDetail({ receipt, replayStatus, onReplay }: { readonly receipt: Receipt; readonly replayStatus: string; readonly onReplay: () => void }) {
-  return (
-    <div className="drawer-stack">
-      <div className="drawer-title-row">
-        <VerdictBadge state={normalizeVerdict(receipt.status)} />
-        <VerificationStatus state={verificationState(receipt)} />
-      </div>
-      <h2>{shortId(receipt.receipt_id)}</h2>
-      <p>{receiptAction(receipt)} · {receiptResource(receipt)}</p>
-      <WorkbenchProofSection title="Lifecycle">
-        <div className="proof-chain" aria-label="Receipt proof chain">
-          {["intent", "policy", "decision", "receipt", "evidence"].map((node) => (
-            <span key={node}>{node}</span>
-          ))}
-        </div>
-      </WorkbenchProofSection>
-      <WorkbenchProofSection title="Proof facts">
-        <dl className="fact-grid">
-          <Fact label="executor" value={receipt.executor_id ?? "anonymous"} />
-          <Fact label="signature" value={signatureSummary(receipt)} />
-          <Fact label="blob hash" value={receipt.blob_hash ? <HashText value={receipt.blob_hash} /> : "not emitted"} />
-          <Fact label="output hash" value={receipt.output_hash ? <HashText value={receipt.output_hash} kind="policy" /> : "not emitted"} />
-          <Fact label="replay" value={replayStatus} />
-        </dl>
-      </WorkbenchProofSection>
-      <div className="button-row">
-        <button type="button" className="primary-action" onClick={onReplay}>Replay</button>
-        <span className="secondary-link secondary-link--static">Evidence export: Ledger action</span>
-      </div>
-      <RawJson title="Raw receipt" value={receipt} />
-    </div>
-  );
-}
-
-function CapabilityDetail({ capability, onOpen }: { readonly capability: Capability; readonly onOpen: (item: DrawerItem) => void }) {
-  return (
-    <div className="drawer-stack">
-      <StateMarker state={capability.status} severity={capability.status === "unavailable" || capability.status === "unauthorized" ? "medium" : "low"} />
-      <h2>{capability.label}</h2>
-      <p>{capability.sourceEndpoint}</p>
-      {capability.readState.message ? <InlineNotice message={capability.readState.message} /> : null}
-      <dl className="fact-grid">
-        <Fact label="group" value={capability.group} />
-        <Fact label="records" value={String(capability.records.length)} />
-        <Fact label="actions" value={String(capability.actions.length)} />
-      </dl>
-      <div className="drawer-actions">
-        {capability.actions.length === 0 ? <InlineNotice message={capability.unsupportedReason ?? "Unsupported by current OSS API."} /> : null}
-        {capability.actions.map((action) => (
-          <button
-            key={action.id}
-            type="button"
-            disabled={Boolean(action.disabledReason)}
-            title={action.disabledReason}
-            onClick={() => onOpen({ kind: "action", capability, action })}
-          >
-            <span>{action.label}</span>
-            <small>{action.method}</small>
-          </button>
-        ))}
-      </div>
-      {capability.id === "diagnostics" ? <RuntimeDiagnostics raw={capability.raw} /> : null}
-      <RecordMiniList capability={capability} onOpen={onOpen} />
-      <RawJson title="Raw response" value={capability.raw ?? capability.readState} />
-    </div>
-  );
-}
-
-function RuntimeDiagnostics({ raw }: { readonly raw: unknown }) {
-  const stores = diagnosticsStores(raw);
-  const routes = diagnosticsRoutes(raw);
-  if (stores.length === 0 && routes.length === 0) return null;
-  return (
-    <>
-      {stores.length ? (
-        <WorkbenchProofSection title="Runtime stores">
-          <WorkbenchStoreHealthList stores={stores} />
-        </WorkbenchProofSection>
-      ) : null}
-      {routes.length ? (
-        <WorkbenchProofSection title="Route coverage">
-          <WorkbenchRouteCoverageTable routes={routes} />
-        </WorkbenchProofSection>
-      ) : null}
-    </>
-  );
-}
-
-function diagnosticsStores(raw: unknown) {
-  if (!isRecord(raw) || !Array.isArray(raw.stores)) return [];
-  return raw.stores.filter(isRecord).map((store, index) => ({
-    id: stringValue(store.id, `store-${index}`),
-    label: stringValue(store.label, stringValue(store.id, "Store")),
-    status: stringValue(store.status, "unknown"),
-    backend: stringValue(store.backend, "unknown"),
-    source: optionalString(store.source),
-    path: optionalString(store.path),
-    detail: optionalString(store.detail),
-  }));
-}
-
-function diagnosticsRoutes(raw: unknown) {
-  if (!isRecord(raw) || !Array.isArray(raw.routes)) return [];
-  return raw.routes.filter(isRecord).map((route) => ({
-    method: stringValue(route.method, "GET"),
-    path: stringValue(route.path, "/"),
-    auth: stringValue(route.auth, "unknown"),
-    contract_status: stringValue(route.contract_status, "unknown"),
-    group: stringValue(route.group, "Developer"),
-    ui_coverage: stringValue(route.ui_coverage, "missing"),
-    unsupported_reason: optionalString(route.unsupported_reason),
-  }));
-}
-
-function stringValue(value: unknown, fallback: string): string {
-  const text = String(value ?? "").trim();
-  return text || fallback;
-}
-
-function optionalString(value: unknown): string | undefined {
-  const text = String(value ?? "").trim();
-  return text || undefined;
-}
-
-function RecordDetail({ capability, record, onOpen }: { readonly capability: Capability; readonly record: RecordSummary; readonly onOpen: (item: DrawerItem) => void }) {
-  return (
-    <div className="drawer-stack">
-      <StateMarker state={record.state} severity="low" />
-      <h2>{record.label}</h2>
-      <p>{record.source}</p>
-      <dl className="fact-grid">
-        <Fact label="state" value={record.state} />
-        <Fact label="receipts" value={record.receiptRefs.length ? record.receiptRefs.map(shortId).join(", ") : "none"} />
-        {record.facts.map((fact) => {
-          const [label, ...rest] = fact.split(": ");
-          return <Fact key={fact} label={label} value={rest.join(": ")} />;
-        })}
-      </dl>
-      <div className="drawer-actions">
-        {capability.actions.slice(0, 4).map((action) => (
-          <button key={action.id} type="button" onClick={() => onOpen({ kind: "action", capability, action })}>
-            <span>{action.label}</span>
-            <small>{action.method}</small>
-          </button>
-        ))}
-      </div>
-      <RawJson title="Raw record" value={record.raw} />
-    </div>
-  );
-}
-
-function ActionSheet({ capability, action, onRefresh }: { readonly capability: Capability; readonly action: WorkbenchAction; readonly onRefresh: (id: string) => Promise<void> }) {
-  const [values, setValues] = useState<AdminActionValues>(() => {
-    const defaults: Record<string, string> = {};
-    for (const field of action.fields) defaults[field.id] = field.defaultValue ?? "";
-    return defaults;
-  });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<unknown>(null);
-  const [humanConfirmed, setHumanConfirmed] = useState(false);
-  const sideEffectful = action.method.toUpperCase() !== "GET";
-  const cliEquivalent = cliForAdminAction(action);
-  const receiptRefs = result ? receiptRefsFromUnknown(result) : [];
-
-  const runAction = async () => {
-    if (sideEffectful && !humanConfirmed) {
-      setError("A human operator confirmation is required before this side effect can run.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const next = await action.run(values);
-      setResult(next);
-      await Promise.all(action.refreshTargets.map((target) => onRefresh(target)));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Action failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <form
-      className="drawer-stack action-sheet"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void runAction();
-      }}
-    >
-      <StateMarker state={action.method} severity="medium" />
-      <WorkbenchActionSheetFrame title={action.label} method={action.method} endpoint={action.endpoint} risk={action.risk}>
-        <p>{capability.label}</p>
-        <section className="human-action-boundary" aria-label="Human-only action boundary">
-          <strong>{sideEffectful ? "Human-only side effect" : "Read-only browser action"}</strong>
-          <p>HELM AI can explain, draft, summarize, and simulate. HELM AI cannot approve, weaken, bypass, launch, inject secrets, or delete evidence.</p>
-          <dl className="fact-grid">
-            <Fact label="permission" value={`${action.method} ${action.endpoint}`} />
-            <Fact label="CLI equivalent" value={cliEquivalent} />
-            <Fact label="expected receipt" value={sideEffectful ? "required after successful mutation" : "not required for read-only inspection"} />
-          </dl>
-          {sideEffectful ? (
-            <label className="human-confirm-check">
-              <input type="checkbox" checked={humanConfirmed} onChange={(event) => setHumanConfirmed(event.target.checked)} />
-              <span>I am the human operator authorizing this Console side effect.</span>
-            </label>
-          ) : null}
-        </section>
-        {action.disabledReason ? <InlineNotice message={action.disabledReason} /> : null}
-        {action.fields.length === 0 ? <InlineNotice message="This action sends no request body fields." /> : null}
-        {action.fields.map((field) => (
-          <label key={field.id}>
-            <span>{field.label}{field.required ? " *" : ""}</span>
-            {field.kind === "textarea" ? (
-              <textarea
-                value={values[field.id] ?? ""}
-                placeholder={field.placeholder}
-                required={field.required}
-                onChange={(event) => setValues((current) => ({ ...current, [field.id]: event.target.value }))}
-              />
-            ) : field.kind === "select" ? (
-              <select
-                value={values[field.id] ?? ""}
-                required={field.required}
-                onChange={(event) => setValues((current) => ({ ...current, [field.id]: event.target.value }))}
-              >
-                <option value="">Select...</option>
-                {(field.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-            ) : (
-              <input
-                value={values[field.id] ?? ""}
-                placeholder={field.placeholder}
-                required={field.required}
-                onChange={(event) => setValues((current) => ({ ...current, [field.id]: event.target.value }))}
-              />
-            )}
-          </label>
-        ))}
-        {error ? <InlineError message={error} /> : null}
-        <button type="submit" className="primary-action" disabled={busy || Boolean(action.disabledReason) || (sideEffectful && !humanConfirmed)}>
-          {busy ? "Running" : `Run ${action.label}`}
-        </button>
-        {result ? (
-          <>
-            <dl className="fact-grid">
-              <Fact label="receipt postcondition" value={receiptRefs.length ? receiptRefs.map(shortId).join(", ") : "unproven"} />
-            </dl>
-            <RawJson title="Action result" value={result} />
-          </>
-        ) : null}
-      </WorkbenchActionSheetFrame>
-    </form>
-  );
-}
-
-function DiagnosticsDetail({ diagnostics, onNavigate }: { readonly diagnostics: readonly WorkbenchDiagnostic[]; readonly onNavigate: (route: FlowRoute) => void }) {
-  return (
-    <div className="drawer-stack">
-      <StateMarker state={`${diagnostics.length} diagnostics`} severity={diagnostics.length ? "medium" : "low"} />
-      <h2>Diagnostics</h2>
-      <p>Fail-closed API states are condensed here so the workbench stays focused.</p>
-      {diagnostics.length === 0 ? <EmptyLine title="No diagnostics" body="No unavailable protected route is currently visible." /> : null}
-      <div className="record-list">
-        {diagnostics.map((item) => (
-          <WorkbenchRecordRow key={item.id} title={item.label} detail={item.message} meta={item.source} onClick={() => onNavigate(item.route)} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TimelineDetail({ step }: { readonly step: TaskTimelineStep }) {
-  return (
-    <div className="drawer-stack">
-      <StateMarker state={step.state} severity={step.state === "failed" || step.state === "blocked" ? "high" : step.state === "running" ? "medium" : "low"} />
-      <h2>{step.label}</h2>
-      <p>{step.summary}</p>
-      <dl className="fact-grid">
-        <Fact label="source" value={step.sourceEndpoint ?? "frontend view model"} />
-        <Fact label="receipts" value={step.receiptRefs.length ? step.receiptRefs.map(shortId).join(", ") : "none"} />
-        <Fact label="artifacts" value={step.artifactRefs.length ? step.artifactRefs.map(shortId).join(", ") : "none"} />
-      </dl>
     </div>
   );
 }

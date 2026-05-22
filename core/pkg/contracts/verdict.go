@@ -137,6 +137,15 @@ const (
 	ReasonGreenTestScopeMissing           ReasonCode = "ERR_GREEN_TEST_SCOPE_MISSING"
 	ReasonGroundedActionRefRequired       ReasonCode = "ERR_GROUNDED_ACTION_REF_REQUIRED"
 	ReasonGUIPostconditionUnverified      ReasonCode = "ERR_GUI_POSTCONDITION_UNVERIFIED"
+
+	// ── Host Evidence / Boundary Drift Reasons (v1.6) ─────────────────────
+	ReasonHostEgressWithoutIntent        ReasonCode = "ERR_HOST_EGRESS_WITHOUT_INTENT"
+	ReasonHostEgressAfterDeny            ReasonCode = "ERR_HOST_EGRESS_AFTER_DENY"
+	ReasonHostReceiptMissing             ReasonCode = "ERR_HOST_RECEIPT_MISSING"
+	ReasonHostDestinationMismatch        ReasonCode = "ERR_HOST_DESTINATION_MISMATCH"
+	ReasonHostVolumeExceeded             ReasonCode = "ERR_HOST_VOLUME_EXCEEDED"
+	ReasonHostProcessUnbound             ReasonCode = "ERR_HOST_PROCESS_UNBOUND"
+	ReasonPolicyDeniedHostObservedEgress ReasonCode = "ERR_POLICY_DENIED_BUT_HOST_OBSERVED_EGRESS"
 )
 
 // CanonicalVerdicts returns the full normative verdict vocabulary.
@@ -228,6 +237,13 @@ func CoreReasonCodes() []ReasonCode {
 		ReasonGreenTestScopeMissing,
 		ReasonGroundedActionRefRequired,
 		ReasonGUIPostconditionUnverified,
+		ReasonHostEgressWithoutIntent,
+		ReasonHostEgressAfterDeny,
+		ReasonHostReceiptMissing,
+		ReasonHostDestinationMismatch,
+		ReasonHostVolumeExceeded,
+		ReasonHostProcessUnbound,
+		ReasonPolicyDeniedHostObservedEgress,
 	}
 }
 

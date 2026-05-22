@@ -24,13 +24,30 @@ the larger HELM AI Kernel developer journey.
 ## Surface Model
 
 ```mermaid
-flowchart LR
-  console["HELM AI Kernel Console"] --> package["packages/design-system-core"]
-  package --> docs["docs/design-system/*"]
-  docs --> tests["package tests and CI gates"]
-  tests --> public["Public console docs"]
-  public --> release["Self-hostable OSS release"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        console["HELM AI Kernel Console"]
+        package["packages/design-system-core"]
+        docs["docs/design-system/*"]
+        public["Public console docs"]
+        release["Self-hostable OSS release"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        tests["package tests and CI gates"]
+    end
+
+    %% Operational Flow Edges
+    console --> package
+    package --> docs
+    docs --> tests
+    tests --> public
+    public --> release
+
+    %% Premium Styling Rules
+    style tests fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
 ```
+
 
 ## Source Families
 

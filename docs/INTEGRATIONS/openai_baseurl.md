@@ -14,12 +14,28 @@ Developers who already use OpenAI-shaped clients and want requests to cross the 
 After this integration you should have a local OpenAI-compatible base URL at `http://127.0.0.1:9090/v1`, a HELM AI Kernel boundary on `127.0.0.1:7714`, and a receipt inspection path that proves the application did not bypass HELM.
 
 ```mermaid
-flowchart LR
-  Client["OpenAI-compatible client"] --> Proxy["helm-ai-kernel proxy :9090/v1"]
-  Proxy --> Boundary["HELM execution boundary"]
-  Boundary --> Upstream["configured upstream"]
-  Boundary --> Receipts["signed receipts"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Client["OpenAI-compatible client"]
+        Proxy["helm-ai-kernel proxy :9090/v1"]
+        Boundary["HELM execution boundary"]
+        Upstream["configured upstream"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        Receipts["signed receipts"]
+    end
+
+    %% Operational Flow Edges
+    Client --> Proxy
+    Proxy --> Boundary
+    Boundary --> Upstream
+    Boundary --> Receipts
+
+    %% Premium Styling Rules
+    style Receipts fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 ## Source Truth
 

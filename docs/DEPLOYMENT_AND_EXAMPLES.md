@@ -21,13 +21,31 @@ know which command validates the path before relying on it.
 ## Deployment Path
 
 ```mermaid
-flowchart LR
-  source["Source checkout"] --> local["Local CLI / proxy"]
-  local --> compose["Docker Compose"]
-  compose --> chart["Kubernetes Helm chart"]
-  chart --> receipt["Receipt and evidence export"]
-  receipt --> verify["Offline verification"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        source["Source checkout"]
+        local["Local CLI / proxy"]
+        compose["Docker Compose"]
+        chart["Kubernetes Helm chart"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        receipt["Receipt and evidence export"]
+        verify["Offline verification"]
+    end
+
+    %% Operational Flow Edges
+    source --> local
+    local --> compose
+    compose --> chart
+    chart --> receipt
+    receipt --> verify
+
+    %% Premium Styling Rules
+    style receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 ## Deployment Targets
 

@@ -16,14 +16,39 @@ This journey is for developers and platform teams evaluating HELM AI Kernel beyo
 After completing the path you should know which local command owns each public claim, how to route OpenAI-compatible and MCP traffic through the execution boundary, how to inspect receipts, and which validation commands keep docs aligned with code.
 
 ```mermaid
-flowchart LR
-  Install["install or build helm-ai-kernel"] --> Serve["helm-ai-kernel serve --policy"]
-  Serve --> Demo["local proof demo"]
-  Serve --> Proxy["optional helm-ai-kernel proxy"]
-  Serve --> Receipts["receipts and boundary records"]
-  Receipts --> Verify["offline verification"]
-  Verify --> Gates["docs and conformance gates"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Install["install or build helm-ai-kernel"]
+        Proxy["optional helm-ai-kernel proxy"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        Serve["helm-ai-kernel serve --policy"]
+        Gates["docs and conformance gates"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        Demo["local proof demo"]
+        Receipts["receipts and boundary records"]
+        Verify["offline verification"]
+    end
+
+    %% Operational Flow Edges
+    Install --> Serve
+    Serve --> Demo
+    Serve --> Proxy
+    Serve --> Receipts
+    Receipts --> Verify
+    Verify --> Gates
+
+    %% Premium Styling Rules
+    style Serve fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style Demo fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Receipts fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Gates fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
 ```
+
 
 ## Source Truth
 

@@ -35,15 +35,22 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 This scheme maps the main sections of Prompt Injection Watchlist - April 2026 in reading order.
 
 ```mermaid
-flowchart LR
-  Page["Prompt Injection Watchlist - April 2026"]
-  A["Source Verification"]
-  B["HELM Mapping"]
-  C["No-Go Criteria"]
-  Page --> A
-  A --> B
-  B --> C
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Page["Prompt Injection Watchlist - April 2026"]
+        A["Source Verification"]
+        B["HELM Mapping"]
+        C["No-Go Criteria"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+
+    %% Premium Styling Rules
 ```
+
 
 This note records the source verification and implementation decision for the April 2026 HOSS radar items on upstream prompt-injection defenses. It is not a production commitment; HELM remains the deterministic downstream execution boundary.
 

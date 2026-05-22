@@ -37,19 +37,34 @@ Use [Canonical diagrams](architecture/canonical-diagrams.md) for public
 execution-boundary, MCP quarantine, evidence, drift, and long-horizon visuals.
 
 ```mermaid
-flowchart LR
-  Page["Architecture"]
-  A["1. Policy Boundary"]
-  B["2. Execution and Proxy Surface"]
-  C["3. Receipts and Evidence"]
-  D["4. Contracts and Schemas"]
-  E["5. SDKs"]
-  Page --> A
-  A --> B
-  B --> C
-  C --> D
-  D --> E
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Page["Architecture"]
+        B["2. Execution and Proxy Surface"]
+        D["4. Contracts and Schemas"]
+        E["5. SDKs"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        A["1. Policy Boundary"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        C["3. Receipts and Evidence"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+
+    %% Premium Styling Rules
+    style A fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style C fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 HELM is organized around an execution boundary rather than around model prompting. The retained OSS implementation has five main pieces.
 

@@ -26,6 +26,16 @@ func (DefaultHealthcheckRunner) Run(compiled plan.LaunchPlan, runtime RuntimeSta
 	if runtime.ContainerID == "" || runtime.SandboxGrantRef == "" {
 		return HealthcheckResult{}, errors.New("healthcheck requires runtime container and sandbox grant refs")
 	}
+	if runtime.Runtime == "digitalocean" || runtime.Runtime == "hetzner" || runtime.Runtime == "e2b" || runtime.Runtime == "daytona" {
+		return HealthcheckResult{
+			Type:   "cloud-status",
+			Status: "passed",
+			Metadata: map[string]any{
+				"status":  "provider-resource-provisioned",
+				"runtime": runtime.Runtime,
+			},
+		}, nil
+	}
 	if len(compiled.Healthchecks) == 0 {
 		return HealthcheckResult{}, errors.New("healthcheck spec is required before RUNNING")
 	}

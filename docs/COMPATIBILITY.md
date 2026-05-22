@@ -18,14 +18,32 @@ After this page you should know which surfaces are supported, example-only, or o
 ## Surface Map
 
 ```mermaid
-flowchart LR
-  Kernel["Go kernel and CLI"] --> API["HTTP API and proxy"]
-  API --> Console["self-hostable HELM AI Kernel Console"]
-  API --> SDKs["SDKs and adapters"]
-  SDKs --> Starters["provider starters"]
-  Kernel --> Policy["CEL, Rego, Cedar bundles"]
-  Policy --> Deploy["Docker and Kubernetes"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Kernel["Go kernel and CLI"]
+        API["HTTP API and proxy"]
+        Console["self-hostable HELM AI Kernel Console"]
+        SDKs["SDKs and adapters"]
+        Starters["provider starters"]
+        Deploy["Docker and Kubernetes"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        Policy["CEL, Rego, Cedar bundles"]
+    end
+
+    %% Operational Flow Edges
+    Kernel --> API
+    API --> Console
+    API --> SDKs
+    SDKs --> Starters
+    Kernel --> Policy
+    Policy --> Deploy
+
+    %% Premium Styling Rules
+    style Policy fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
 ```
+
 
 ## Source Truth
 

@@ -1,4 +1,4 @@
-.PHONY: build test test-race test-sdk-go-standalone test-sdk-ts test-design-system build-console test-console test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets launch-security launch-api-truth launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
+.PHONY: build test test-race test-sdk-go-standalone test-sdk-ts test-design-system build-console test-console test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke sbom vex provenance onboard demo-cli console demo-console mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets launch-security launch-api-truth launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 
 # Tag-triggered release builds should embed the tag version even if VERSION has
 # not been bumped in the repository yet.
@@ -29,11 +29,11 @@ test-design-system:
 
 build-console:
 	cd packages/design-system-core && npm ci && npm run build
-	cd apps/console && npm ci && npm run build && npm run smoke
+	cd apps/console && npm ci --ignore-scripts && npm run build && npm run smoke
 
 test-console:
 	cd packages/design-system-core && npm ci && npm run build
-	cd apps/console && npm ci && npm run generate:api && npm run typecheck && npm test && npm run build && npm run smoke
+	cd apps/console && npm ci --ignore-scripts && npm run generate:api && npm run typecheck && npm test && npm run build && npm run smoke
 
 test-sdk-py:
 	cd sdk/python && python -m pip install -q '.[dev]' && pytest -v --tb=short
@@ -187,6 +187,9 @@ demo-mcp: build
 
 demo-openai-proxy: build
 	bash scripts/launch/demo-openai-proxy.sh
+
+console: build
+	bash scripts/launch/console.sh
 
 demo-console: build
 	bash scripts/launch/demo-console.sh

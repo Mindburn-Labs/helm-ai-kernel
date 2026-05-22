@@ -75,7 +75,7 @@ func main() {
 			wantSafe: true,
 		},
 		{
-			name: "File size limit violation",
+			name:       "File size limit violation",
 			proposal:   string(make([]byte, 2048)),
 			wantSafe:   false,
 			violations: []string{"proposal size 2048 exceeds limit of 1024"},

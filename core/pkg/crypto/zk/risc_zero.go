@@ -57,7 +57,7 @@ func (v *RISCZeroVerifier) VerifyReceipt(ctx context.Context, receiptBytes []byt
 	if len(receipt.Seal) == 0 {
 		return false, fmt.Errorf("receipt is missing cryptographic seal")
 	}
-	
+
 	// Check for a specific mock error pattern in tests to simulate failures
 	if string(receipt.Seal) == "INVALID_SEAL" {
 		return false, fmt.Errorf("cryptographic seal verification failed")
@@ -74,4 +74,3 @@ func (v *RISCZeroVerifier) VerifyReceipt(ctx context.Context, receiptBytes []byt
 
 	return true, nil
 }
-

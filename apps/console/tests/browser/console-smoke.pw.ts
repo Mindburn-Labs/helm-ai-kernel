@@ -234,9 +234,12 @@ test.beforeEach(async ({ page }) => {
 for (const width of HALLMARK_WIDTHS) {
   test(`Launch proof workbench is stable at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 920 });
-    await page.goto(`/?smoke_width=${width}`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: "Launch / Run Timeline" })).toBeVisible();
+    await page.goto(`/apps?smoke_width=${width}`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Deploy & Run Safely" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Choose an app" })).toBeVisible();
     await expect(page.getByText("OpenClaw", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Developer" }).click();
+    await expect(page.getByRole("heading", { name: "Launch / Run Timeline" })).toBeVisible();
     await expect(page.getByText("Launch CLI: helm app run openclaw --substrate local-container")).toBeVisible();
 
     const layout = await measureLayout(page);

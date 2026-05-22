@@ -1,4 +1,22 @@
 export type LaunchpadVerdict = "ALLOW" | "DENY" | "ESCALATE";
+export type LaunchpadUserState =
+  | "available"
+  | "needs_setup"
+  | "upgrade_required"
+  | "enterprise_controlled"
+  | "blocked"
+  | "unsupported"
+  | string;
+
+export interface LaunchpadEntitlementDecision {
+  action: string;
+  allowed: boolean;
+  required_capability?: string;
+  reason?: string;
+  upgrade_reason?: string;
+  fixture_only?: boolean;
+}
+
 export type LaunchpadState =
   | "PLANNED"
   | "VALIDATED"
@@ -38,6 +56,11 @@ export interface LaunchpadApp {
   policy_ref?: string;
   status?: LaunchpadAppStatus;
   blocked_reason?: string;
+  user_state?: LaunchpadUserState;
+  required_capability?: string;
+  upgrade_reason?: string;
+  entitlement_decision?: LaunchpadEntitlementDecision;
+  action_states?: Record<string, LaunchpadEntitlementDecision>;
 }
 
 export interface LaunchpadAppStatus {
@@ -76,6 +99,10 @@ export interface LaunchpadMatrixCell {
   verdict: LaunchpadVerdict;
   reason: string;
   availability: string;
+  user_state?: LaunchpadUserState;
+  required_capability?: string;
+  upgrade_reason?: string;
+  entitlement_decision?: LaunchpadEntitlementDecision;
 }
 
 export interface LaunchpadPlanResponse {

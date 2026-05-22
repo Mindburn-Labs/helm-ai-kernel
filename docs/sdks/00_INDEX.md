@@ -16,12 +16,29 @@ This page is for developers who need a typed client for the HELM AI Kernel HTTP 
 You should leave with the current SDK matrix, local validation command for each language, and the right base URL for direct HELM boundary calls versus the OpenAI-compatible proxy.
 
 ```mermaid
-flowchart LR
-  OpenAPI["OpenAPI contract"] --> SDKs["Python SDK / TypeScript / Go SDK / Rust SDK / Java"]
-  SDKs --> Boundary["HELM HTTP boundary"]
-  Boundary --> Receipts["signed receipts"]
-  Receipts --> Verify["offline verification"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        OpenAPI["OpenAPI contract"]
+        SDKs["Python SDK / TypeScript / Go SDK / Rust SDK / Java"]
+        Boundary["HELM HTTP boundary"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        Receipts["signed receipts"]
+        Verify["offline verification"]
+    end
+
+    %% Operational Flow Edges
+    OpenAPI --> SDKs
+    SDKs --> Boundary
+    Boundary --> Receipts
+    Receipts --> Verify
+
+    %% Premium Styling Rules
+    style Receipts fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 ## Source Truth
 

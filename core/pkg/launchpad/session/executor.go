@@ -1,13 +1,20 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"strconv"
 	"strings"
+	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox/daytona"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox/e2b"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
+	lpprovision "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/provision"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
 )
 
@@ -49,6 +56,7 @@ type RuntimeStartResult struct {
 	PayloadInspection          string
 	NetworkProof               string
 	TokenBrokerEnabled         bool
+	CloudResourceIDs           map[string]string
 }
 
 type RuntimeStarter interface {
@@ -221,6 +229,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	run.RuntimeHandles.EgressNetworkName = runtimeResult.EgressNetworkName
 	run.RuntimeHandles.EgressProxyID = runtimeResult.EgressProxyID
 	run.RuntimeHandles.EgressProxyName = runtimeResult.EgressProxyName
+	run.RuntimeHandles.CloudResourceIDs = runtimeResult.CloudResourceIDs
 	run.SandboxGrantRefs = appendUnique(run.SandboxGrantRefs, runtimeResult.SandboxGrantRef)
 	run.EgressReceiptRefs = appendUnique(run.EgressReceiptRefs, runtimeResult.EgressReceiptRef)
 	startReceipt := receipts.NewReceipt("launchpad.start", compiled.LaunchID, "ALLOW", map[string]any{
@@ -313,7 +322,7 @@ func (e Executor) DeleteLaunch(launchID string, cascade bool) (LaunchRun, error)
 	if err := e.Store.Save(run); err != nil {
 		return LaunchRun{}, err
 	}
-	runtimeTeardown := teardownRuntimeHandles(run.RuntimeHandles)
+	runtimeTeardown := teardownRuntimeHandles(run)
 	teardown := receipts.NewReceipt("launchpad.teardown", run.LaunchID, "ALLOW", map[string]any{
 		"cascade":        cascade,
 		"previous_state": previousState,
@@ -337,8 +346,142 @@ func (e Executor) DeleteLaunch(launchID string, cascade bool) (LaunchRun, error)
 	return e.persist(run, artifacts)
 }
 
-func teardownRuntimeHandles(handles RuntimeHandles) map[string]any {
+func teardownRuntimeHandles(run LaunchRun) map[string]any {
 	result := map[string]any{"attempted": false}
+	handles := run.RuntimeHandles
+	provider := handles.CloudResourceIDs["provider"]
+	if provider == "" {
+		provider = run.SubstrateID
+	}
+
+	if provider == "e2b" {
+		result["attempted"] = true
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		apiKey := strings.TrimSpace(os.Getenv("E2B_API_KEY"))
+		if apiKey == "" {
+			apiKey = strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_E2B_API_KEY"))
+		}
+		if apiKey != "" && handles.ContainerID != "" && !strings.Contains(handles.ContainerID, "dry-run") {
+			cfg := e2b.DefaultConfig()
+			cfg.APIKey = apiKey
+			if apiURL := os.Getenv("HELM_LAUNCHPAD_E2B_API_URL"); apiURL != "" {
+				cfg.APIURL = apiURL
+			}
+			adapter := e2b.New(cfg)
+			err := adapter.Terminate(ctx, handles.ContainerID)
+			if err == nil {
+				result["cloud_cleanup"] = "deleted"
+				result["receipt_id"] = "receipt:e2b:" + run.LaunchID + ":teardown"
+			} else {
+				result["cloud_cleanup_error"] = err.Error()
+			}
+		} else {
+			result["cloud_cleanup"] = "dry-run-or-key-missing"
+			result["receipt_id"] = "receipt:e2b:" + run.LaunchID + ":teardown-dry-run"
+		}
+		return result
+	}
+
+	if provider == "daytona" {
+		result["attempted"] = true
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		apiKey := strings.TrimSpace(os.Getenv("DAYTONA_API_KEY"))
+		if apiKey == "" {
+			apiKey = strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_DAYTONA_API_KEY"))
+		}
+		if apiKey != "" && handles.ContainerID != "" && !strings.Contains(handles.ContainerID, "dry-run") {
+			cfg := daytona.DefaultConfig()
+			cfg.APIKey = apiKey
+			if baseURL := os.Getenv("HELM_LAUNCHPAD_DAYTONA_BASE_URL"); baseURL != "" {
+				cfg.BaseURL = baseURL
+			}
+			adapter := daytona.New(cfg)
+			err := adapter.Terminate(ctx, handles.ContainerID)
+			if err == nil {
+				result["cloud_cleanup"] = "deleted"
+				result["receipt_id"] = "receipt:daytona:" + run.LaunchID + ":teardown"
+			} else {
+				result["cloud_cleanup_error"] = err.Error()
+			}
+		} else {
+			result["cloud_cleanup"] = "dry-run-or-key-missing"
+			result["receipt_id"] = "receipt:daytona:" + run.LaunchID + ":teardown-dry-run"
+		}
+		return result
+	}
+
+	if provider == "digitalocean" || provider == "hetzner" {
+		if handles.CloudResourceIDs["teardown_reconciled"] == "true" {
+			result["attempted"] = true
+			result["provider"] = provider
+			result["cloud_cleanup"] = "already-reconciled"
+			return result
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		if provider == "digitalocean" {
+			token := strings.TrimSpace(os.Getenv("DIGITALOCEAN_TOKEN"))
+			if token == "" {
+				token = strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_DIGITALOCEAN_TOKEN"))
+			}
+			if token != "" {
+				dropletID, _ := strconv.ParseInt(handles.CloudResourceIDs["droplet"], 10, 64)
+				provisioner := lpprovision.DigitalOceanProvisioner{
+					AllowLiveWrites: true,
+					Token:           token,
+					Endpoint:        os.Getenv("HELM_LAUNCHPAD_DIGITALOCEAN_ENDPOINT"),
+				}
+				td, err := provisioner.Delete(ctx, lpprovision.DigitalOceanDeleteRequest{
+					LaunchID:   run.LaunchID,
+					PlanHash:   run.PlanHash,
+					DropletID:  dropletID,
+					FirewallID: handles.CloudResourceIDs["firewall"],
+				})
+				if err == nil {
+					result["attempted"] = true
+					result["cloud_cleanup"] = "deleted"
+					result["receipt_id"] = td.ReceiptID
+				} else {
+					result["cloud_cleanup_error"] = err.Error()
+				}
+			} else {
+				result["cloud_cleanup_error"] = "DIGITALOCEAN_TOKEN missing"
+			}
+		} else if provider == "hetzner" {
+			token := strings.TrimSpace(os.Getenv("HCLOUD_TOKEN"))
+			if token == "" {
+				token = strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_HETZNER_TOKEN"))
+			}
+			if token != "" {
+				serverID, _ := strconv.ParseInt(handles.CloudResourceIDs["server"], 10, 64)
+				firewallID, _ := strconv.ParseInt(handles.CloudResourceIDs["firewall"], 10, 64)
+				provisioner := lpprovision.HetznerProvisioner{
+					AllowLiveWrites: true,
+					Token:           token,
+					Endpoint:        os.Getenv("HELM_LAUNCHPAD_HETZNER_ENDPOINT"),
+				}
+				td, err := provisioner.Delete(ctx, lpprovision.HetznerDeleteRequest{
+					LaunchID:   run.LaunchID,
+					PlanHash:   run.PlanHash,
+					ServerID:   serverID,
+					FirewallID: firewallID,
+				})
+				if err == nil {
+					result["attempted"] = true
+					result["cloud_cleanup"] = "deleted"
+					result["receipt_id"] = td.ReceiptID
+				} else {
+					result["cloud_cleanup_error"] = err.Error()
+				}
+			} else {
+				result["cloud_cleanup_error"] = "HCLOUD_TOKEN missing"
+			}
+		}
+		return result
+	}
+
 	docker, err := exec.LookPath("docker")
 	if err != nil {
 		result["docker_available"] = false

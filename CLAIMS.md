@@ -5,10 +5,10 @@
 - Public/private: Public OSS repo.
 - HELM normative status: Canonical HELM AI Kernel under UCS v1.3.
 - Current status: Active implementation with Go server, guardian evaluation, receipt storage/verification paths, console app, Dockerfile, Helm chart, tests, and docs.
-- Implemented capabilities: Guardian decision evaluation, API/server wiring, receipt persistence and verification primitives, console app, deployment assets, conformance/test scaffolding.
-- Not implemented: No live public proof console until `kernel.mindburn.org` DNS/deployment passes smoke; no claim of full L2/L3 conformance; no production customer deployment claim.
-- Public claims: HELM AI Kernel is the fail-closed execution firewall for AI agents; dangerous actions must be denied or escalated before dispatch; receipts can be verified and tampering must fail.
-- Claim evidence: `core/cmd/helm-ai-kernel`, `core/pkg/guardian`, `core/pkg/receipt`, `apps/console`, `Dockerfile`, `charts/helm-ai-kernel`, `README.md`.
+- Implemented capabilities: Guardian decision evaluation, API/server wiring, receipt persistence and verification primitives, external host evidence ingestion/verification/correlation, console app, deployment assets, conformance/test scaffolding.
+- Not implemented: No live public proof console until `kernel.mindburn.org` DNS/deployment passes smoke; no claim of full L2/L3 conformance; no production customer deployment claim; no eBPF, seccomp, TPM, TEE, or packet-blocking enforcement claim unless a tested code path proves it.
+- Public claims: HELM AI Kernel is the fail-closed execution firewall for AI agents; dangerous actions must be denied or escalated before dispatch; receipts can be verified and tampering must fail; HELM can consume and correlate external host/network evidence without claiming host-level enforcement.
+- Claim evidence: `core/cmd/helm-ai-kernel`, `core/pkg/guardian`, `core/pkg/receipt`, `core/pkg/evidence/externalhost`, `core/pkg/correlation/hostaction`, `core/pkg/verifier/externalreceipt`, `apps/console`, `Dockerfile`, `charts/helm-ai-kernel`, `README.md`.
 - Tests that prove each claim: `go test ./...`, console tests where present, demo receipt smoke tests after API routes are enabled.
 - Docs that mention each claim: `README.md`, `docs/`, `examples/`, deployment/runbook docs.
 - Stale claims removed: Any unsupported live-console or production-conformance claim must remain absent until smoke-tested.

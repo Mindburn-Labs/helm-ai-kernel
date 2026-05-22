@@ -21,12 +21,33 @@ live receipt chain, an offline verification command, and the narrow docs and
 route tests that prove this page still matches the CLI.
 
 ```mermaid
-flowchart LR
-  Install["install or build helm"] --> Up["helm up openclaw"]
-  Up --> Console["Console /runs/<run_id>"]
-  Up --> Receipts["signed receipts"]
-  Receipts --> Verify["offline verification"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Install["install or build helm"]
+        Up["helm up openclaw"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        Console["Console /runs/<run_id>"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        Receipts["signed receipts"]
+        Verify["offline verification"]
+    end
+
+    %% Operational Flow Edges
+    Install --> Up
+    Up --> Console
+    Up --> Receipts
+    Receipts --> Verify
+
+    %% Premium Styling Rules
+    style Console fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style Receipts fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 ## Source Truth
 

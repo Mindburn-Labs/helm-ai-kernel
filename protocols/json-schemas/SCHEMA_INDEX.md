@@ -88,6 +88,16 @@
 | Infrastructure effects            | L3          | normative     | `create_droplet`, `scale_cluster`, `deploy_release`, etc. |
 | Chaos effects                     | L3          | informational | `chaos_kill_node`, `chaos_network_delay`                  |
 
+### Evidence (`evidence/`)
+
+| Schema | Conformance | Status | Description |
+| --- | --- | --- | --- |
+| `external_host_receipt.v1.json` | L2 | preview | Vendor-neutral host-observed event receipt |
+| `external_receipt_chain.v1.json` | L2 | preview | Signed external host receipt chain envelope |
+| `network_egress_event.v1.json` | L2 | preview | Host-observed outbound network event |
+| `hardware_root_claim.v1.json` | L3 | preview | Structural hardware root-of-trust claim |
+| `host_correlation_result.v1.json` | L2 | preview | HELM authority to host evidence correlation result |
+
 ### Compliance (`compliance/`)
 
 | Schema                      | Conformance | Status    | Description                   |
@@ -197,8 +207,8 @@
 
 ---
 
-**Total schemas**: 132 files across 25 domains.
+**Total schemas**: 137 files across 26 domains.
 **L1 (Core)**: 41 schemas
-**L2 (Extended)**: 67 schemas
-**L3 (Optional)**: 18 schemas
+**L2 (Extended)**: 71 schemas
+**L3 (Optional)**: 19 schemas
 **Informational**: 6 schemas

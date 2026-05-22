@@ -3,6 +3,7 @@ package evidencepack
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -99,6 +100,23 @@ func (b *Builder) AddNetworkLog(name string, log []byte) error {
 	return nil
 }
 
+// AddHostEvidence adds an externally signed host/network evidence artifact.
+func (b *Builder) AddHostEvidence(source, name string, evidence []byte) error {
+	if len(evidence) == 0 {
+		return fmt.Errorf("empty host evidence: %s", name)
+	}
+	source = safeEvidenceName(source)
+	name = safeEvidenceName(name)
+	if source == "" || name == "" {
+		return fmt.Errorf("host evidence source and name are required")
+	}
+	b.entries["host_evidence/"+source+"/"+name] = entryData{
+		content:     evidence,
+		contentType: "application/json",
+	}
+	return nil
+}
+
 // AddSecretAccessLog adds a secret access audit log to the pack.
 func (b *Builder) AddSecretAccessLog(name string, events interface{}) error {
 	data, err := json.MarshalIndent(events, "", "  ")
@@ -148,6 +166,15 @@ func (b *Builder) AddReplayManifest(name string, manifest interface{}) error {
 		contentType: "application/json",
 	}
 	return nil
+}
+
+func safeEvidenceName(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.Trim(value, "/")
+	value = strings.ReplaceAll(value, "\\", "_")
+	value = strings.ReplaceAll(value, "/", "_")
+	value = strings.ReplaceAll(value, "..", "_")
+	return value
 }
 
 // Build constructs the manifest and returns all entries ready for archiving.

@@ -1,0 +1,356 @@
+// Package externalhost parses and verifies vendor-neutral host evidence chains.
+package externalhost
+
+import (
+	"bufio"
+	"bytes"
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+)
+
+type VerifyOptions struct {
+	PublicKeyHex string
+	RequireKey   bool
+}
+
+type CheckResult struct {
+	Name   string `json:"name"`
+	Pass   bool   `json:"pass"`
+	Detail string `json:"detail,omitempty"`
+	Reason string `json:"reason,omitempty"`
+}
+
+type VerificationReport struct {
+	Verified      bool          `json:"verified"`
+	ChainID       string        `json:"chain_id,omitempty"`
+	ChainHash     string        `json:"chain_hash,omitempty"`
+	ReceiptCount  int           `json:"receipt_count"`
+	PublicKeyUsed string        `json:"public_key_used,omitempty"`
+	Checks        []CheckResult `json:"checks"`
+}
+
+func ParseFile(path string) (*contracts.ExternalReceiptChain, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return Parse(data)
+}
+
+func Parse(data []byte) (*contracts.ExternalReceiptChain, error) {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return nil, fmt.Errorf("external host evidence is empty")
+	}
+
+	var chain contracts.ExternalReceiptChain
+	if err := json.Unmarshal(trimmed, &chain); err == nil && len(chain.Receipts) > 0 {
+		normalizeChain(&chain)
+		return &chain, nil
+	}
+
+	var receipts []contracts.ExternalHostReceipt
+	if err := json.Unmarshal(trimmed, &receipts); err == nil && len(receipts) > 0 {
+		chain = contracts.ExternalReceiptChain{SchemaVersion: contracts.ExternalReceiptChainVersion, Receipts: receipts}
+		normalizeChain(&chain)
+		return &chain, nil
+	}
+
+	var receipt contracts.ExternalHostReceipt
+	if err := json.Unmarshal(trimmed, &receipt); err == nil && receipt.ReceiptID != "" {
+		chain = contracts.ExternalReceiptChain{SchemaVersion: contracts.ExternalReceiptChainVersion, Receipts: []contracts.ExternalHostReceipt{receipt}}
+		normalizeChain(&chain)
+		return &chain, nil
+	}
+
+	parsed, err := parseJSONL(trimmed)
+	if err != nil {
+		return nil, err
+	}
+	normalizeChain(parsed)
+	return parsed, nil
+}
+
+func VerifyFile(path string, opts VerifyOptions) (*VerificationReport, error) {
+	chain, err := ParseFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return VerifyChain(chain, opts)
+}
+
+func VerifyChain(chain *contracts.ExternalReceiptChain, opts VerifyOptions) (*VerificationReport, error) {
+	report := &VerificationReport{Verified: true, Checks: []CheckResult{}}
+	if chain == nil {
+		report.add(CheckResult{Name: "external_host:parse", Pass: false, Reason: "chain is nil"})
+		report.finalize()
+		return report, nil
+	}
+	normalizeChain(chain)
+	report.ChainID = chain.ChainID
+	report.ReceiptCount = len(chain.Receipts)
+
+	if len(chain.Receipts) == 0 {
+		report.add(CheckResult{Name: "external_host:receipts", Pass: false, Reason: "chain contains no receipts"})
+		report.finalize()
+		return report, nil
+	}
+	report.add(CheckResult{Name: "external_host:receipts", Pass: true, Detail: fmt.Sprintf("%d host receipts", len(chain.Receipts))})
+
+	keyHex := strings.TrimSpace(opts.PublicKeyHex)
+	if keyHex == "" {
+		keyHex = firstChainPublicKey(chain)
+	}
+	if keyHex == "" && opts.RequireKey {
+		report.add(CheckResult{Name: "external_host:public_key", Pass: false, Reason: "missing Ed25519 public key"})
+	}
+	if keyHex != "" {
+		report.PublicKeyUsed = keyHex
+	}
+
+	receiptHashes := make([]string, 0, len(chain.Receipts))
+	var prevHash string
+	for i := range chain.Receipts {
+		r := &chain.Receipts[i]
+		if err := validateReceipt(r); err != nil {
+			report.add(CheckResult{Name: "external_host:receipt_schema", Pass: false, Reason: fmt.Sprintf("%s: %v", r.ReceiptID, err)})
+			continue
+		}
+		report.add(CheckResult{Name: "external_host:receipt_schema", Pass: true, Detail: r.ReceiptID})
+
+		computed, err := ComputeReceiptHash(*r)
+		if err != nil {
+			report.add(CheckResult{Name: "external_host:receipt_hash", Pass: false, Reason: fmt.Sprintf("%s: %v", r.ReceiptID, err)})
+			continue
+		}
+		receiptHashes = append(receiptHashes, computed)
+		if r.ReceiptHash != computed {
+			report.add(CheckResult{Name: "external_host:receipt_hash", Pass: false, Reason: fmt.Sprintf("%s hash mismatch: expected %s, computed %s", r.ReceiptID, r.ReceiptHash, computed)})
+		} else {
+			report.add(CheckResult{Name: "external_host:receipt_hash", Pass: true, Detail: fmt.Sprintf("%s %s", r.ReceiptID, computed)})
+		}
+
+		if i > 0 {
+			if prevHash == "" {
+				report.add(CheckResult{Name: "external_host:prev_hash", Pass: false, Reason: fmt.Sprintf("%s previous receipt hash unavailable", r.ReceiptID)})
+			} else if r.PrevReceiptHash != prevHash {
+				report.add(CheckResult{Name: "external_host:prev_hash", Pass: false, Reason: fmt.Sprintf("%s prev_receipt_hash=%q, want %q", r.ReceiptID, r.PrevReceiptHash, prevHash)})
+			} else {
+				report.add(CheckResult{Name: "external_host:prev_hash", Pass: true, Detail: r.ReceiptID})
+			}
+		}
+		prevHash = computed
+
+		report.add(verifySignatureCheck(*r, keyHex, opts.RequireKey || keyHex != ""))
+		report.add(verifyHardwareRootCheck(*r))
+	}
+
+	chainHash := ComputeChainHash(receiptHashes)
+	report.ChainHash = chainHash
+	if chain.ReceiptChainHash != "" {
+		if chain.ReceiptChainHash != chainHash {
+			report.add(CheckResult{Name: "external_host:chain_hash", Pass: false, Reason: fmt.Sprintf("receipt_chain_hash=%q, computed %q", chain.ReceiptChainHash, chainHash)})
+		} else {
+			report.add(CheckResult{Name: "external_host:chain_hash", Pass: true, Detail: chainHash})
+		}
+	} else {
+		report.add(CheckResult{Name: "external_host:chain_hash", Pass: true, Detail: chainHash})
+	}
+
+	report.finalize()
+	return report, nil
+}
+
+func ComputeReceiptHash(receipt contracts.ExternalHostReceipt) (string, error) {
+	hashable := receipt
+	hashable.ReceiptHash = ""
+	hashable.Signature = ""
+	data, err := CanonicalReceiptBytes(hashable)
+	if err != nil {
+		return "", err
+	}
+	return "sha256:" + canonicalize.HashBytes(data), nil
+}
+
+func CanonicalReceiptBytes(receipt contracts.ExternalHostReceipt) ([]byte, error) {
+	return canonicalize.JCS(receipt)
+}
+
+func SignReceipt(receipt contracts.ExternalHostReceipt, privateKey ed25519.PrivateKey) (contracts.ExternalHostReceipt, error) {
+	if receipt.SignatureAlgorithm == "" {
+		receipt.SignatureAlgorithm = "Ed25519"
+	}
+	hash, err := ComputeReceiptHash(receipt)
+	if err != nil {
+		return receipt, err
+	}
+	receipt.ReceiptHash = hash
+	hashable := receipt
+	hashable.Signature = ""
+	data, err := CanonicalReceiptBytes(hashable)
+	if err != nil {
+		return receipt, err
+	}
+	receipt.Signature = hex.EncodeToString(ed25519.Sign(privateKey, data))
+	return receipt, nil
+}
+
+func ComputeChainHash(receiptHashes []string) string {
+	return "sha256:" + canonicalize.HashBytes([]byte(strings.Join(receiptHashes, "\n")))
+}
+
+func parseJSONL(data []byte) (*contracts.ExternalReceiptChain, error) {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	var receipts []contracts.ExternalHostReceipt
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var receipt contracts.ExternalHostReceipt
+		if err := json.Unmarshal(line, &receipt); err != nil {
+			return nil, fmt.Errorf("parse JSONL line %d: %w", lineNo, err)
+		}
+		receipts = append(receipts, receipt)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	if len(receipts) == 0 {
+		return nil, fmt.Errorf("no JSONL host receipts found")
+	}
+	return &contracts.ExternalReceiptChain{SchemaVersion: contracts.ExternalReceiptChainVersion, Receipts: receipts}, nil
+}
+
+func normalizeChain(chain *contracts.ExternalReceiptChain) {
+	if chain.SchemaVersion == "" {
+		chain.SchemaVersion = contracts.ExternalReceiptChainVersion
+	}
+	for i := range chain.Receipts {
+		if chain.Receipts[i].SchemaVersion == "" {
+			chain.Receipts[i].SchemaVersion = contracts.ExternalHostReceiptVersion
+		}
+		if chain.Receipts[i].SourceVendor == "" {
+			chain.Receipts[i].SourceVendor = chain.SourceVendor
+		}
+		if chain.Receipts[i].SourceProfile == "" {
+			chain.Receipts[i].SourceProfile = chain.SourceProfile
+		}
+	}
+}
+
+func validateReceipt(r *contracts.ExternalHostReceipt) error {
+	switch {
+	case r.ReceiptID == "":
+		return fmt.Errorf("receipt_id is required")
+	case r.HostID == "":
+		return fmt.Errorf("host_id is required")
+	case r.Event.DestinationIP == "" && r.Event.DestinationHost == "":
+		return fmt.Errorf("event destination is required")
+	case r.Event.DestinationPort <= 0:
+		return fmt.Errorf("event.destination_port must be positive")
+	case strings.TrimSpace(r.Event.Protocol) == "":
+		return fmt.Errorf("event.protocol is required")
+	case r.Event.Timestamp.IsZero():
+		return fmt.Errorf("event.timestamp is required")
+	case r.ReceiptHash == "":
+		return fmt.Errorf("receipt_hash is required")
+	}
+	return nil
+}
+
+func verifySignatureCheck(receipt contracts.ExternalHostReceipt, keyHex string, require bool) CheckResult {
+	if strings.TrimSpace(receipt.Signature) == "" {
+		if require {
+			return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s missing signature", receipt.ReceiptID)}
+		}
+		return CheckResult{Name: "external_host:signature", Pass: true, Detail: fmt.Sprintf("%s unsigned; signature verification skipped", receipt.ReceiptID)}
+	}
+	if keyHex == "" {
+		return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s has signature but no public key", receipt.ReceiptID)}
+	}
+	if alg := strings.TrimSpace(receipt.SignatureAlgorithm); alg != "" && !strings.EqualFold(alg, "Ed25519") {
+		return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s unsupported signature_algorithm=%q", receipt.ReceiptID, alg)}
+	}
+	pub, err := hex.DecodeString(strings.TrimPrefix(keyHex, "ed25519:"))
+	if err != nil || len(pub) != ed25519.PublicKeySize {
+		return CheckResult{Name: "external_host:signature", Pass: false, Reason: "invalid Ed25519 public key"}
+	}
+	sig, err := decodeSignature(receipt.Signature)
+	if err != nil {
+		return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s invalid signature encoding: %v", receipt.ReceiptID, err)}
+	}
+	hashable := receipt
+	hashable.Signature = ""
+	data, err := CanonicalReceiptBytes(hashable)
+	if err != nil {
+		return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s canonicalization failed: %v", receipt.ReceiptID, err)}
+	}
+	if !ed25519.Verify(ed25519.PublicKey(pub), data, sig) {
+		return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s Ed25519 signature mismatch", receipt.ReceiptID)}
+	}
+	return CheckResult{Name: "external_host:signature", Pass: true, Detail: receipt.ReceiptID}
+}
+
+func verifyHardwareRootCheck(receipt contracts.ExternalHostReceipt) CheckResult {
+	if receipt.HardwareRoot == nil || strings.TrimSpace(receipt.HardwareRoot.HardwareRootType) == "" {
+		return CheckResult{Name: "external_host:hardware_root", Pass: true, Detail: fmt.Sprintf("%s no hardware root claim", receipt.ReceiptID)}
+	}
+	rootType := strings.ToUpper(strings.TrimSpace(receipt.HardwareRoot.HardwareRootType))
+	switch rootType {
+	case "TPM2", "AWS_NITRO", "AMD_SEV_SNP", "INTEL_TDX", "APPLE_SEP", "OTHER":
+	default:
+		return CheckResult{Name: "external_host:hardware_root", Pass: false, Reason: fmt.Sprintf("%s unsupported hardware_root_type=%q", receipt.ReceiptID, receipt.HardwareRoot.HardwareRootType)}
+	}
+	if receipt.HardwareRoot.QuoteBlobB64 != "" {
+		if _, err := base64.StdEncoding.DecodeString(receipt.HardwareRoot.QuoteBlobB64); err != nil {
+			return CheckResult{Name: "external_host:hardware_root", Pass: false, Reason: fmt.Sprintf("%s invalid quote_blob_b64: %v", receipt.ReceiptID, err)}
+		}
+	}
+	return CheckResult{
+		Name:   "external_host:hardware_root",
+		Pass:   false,
+		Reason: fmt.Sprintf("%s hardware root %s structurally present but not cryptographically verified in this verifier", receipt.ReceiptID, rootType),
+	}
+}
+
+func decodeSignature(value string) ([]byte, error) {
+	value = strings.TrimSpace(value)
+	if decoded, err := hex.DecodeString(value); err == nil {
+		return decoded, nil
+	}
+	return base64.StdEncoding.DecodeString(value)
+}
+
+func firstChainPublicKey(chain *contracts.ExternalReceiptChain) string {
+	for _, key := range chain.PublicKeys {
+		if key.PublicKeyHex != "" && (key.Algorithm == "" || strings.EqualFold(key.Algorithm, "Ed25519")) {
+			return key.PublicKeyHex
+		}
+	}
+	return ""
+}
+
+func (r *VerificationReport) add(check CheckResult) {
+	r.Checks = append(r.Checks, check)
+}
+
+func (r *VerificationReport) finalize() {
+	r.Verified = true
+	for _, check := range r.Checks {
+		if !check.Pass {
+			r.Verified = false
+			return
+		}
+	}
+}

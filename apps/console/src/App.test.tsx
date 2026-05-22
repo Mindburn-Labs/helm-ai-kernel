@@ -142,6 +142,14 @@ vi.mock("@copilotkit/react-core/v2", () => ({
   useRenderTool: vi.fn(),
 }));
 
+vi.mock("@mindburn/ui-core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@mindburn/ui-core")>();
+  return {
+    ...actual,
+    CanvasElement: () => <div data-testid="mock-canvas" />,
+  };
+});
+
 import { App, mergeReceipts } from "./App";
 
 type ReceiptFixture = ReturnType<typeof bootstrapFixture>["receipts"][number];
@@ -295,6 +303,7 @@ describe("HELM Console workbench", () => {
   });
 
   beforeEach(() => {
+    window.history.pushState({}, "", "/apps");
     window.localStorage.clear();
     window.sessionStorage.clear();
     vi.clearAllMocks();
@@ -453,12 +462,13 @@ describe("HELM Console workbench", () => {
 
   it("renders the universal Launch-first Console navigation", async () => {
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Launch / Run Timeline" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Deploy & Run Safely" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Choose an app" })).toBeInTheDocument();
     expect(screen.getByText("OpenClaw")).toBeInTheDocument();
     expect(screen.getByText("Ready to compile LaunchPlan.")).toBeInTheDocument();
 
     const nav = screen.getAllByLabelText("Primary flows")[0];
-    for (const label of ["Launch", "Runs", "MCP Firewall", "Policies", "Secrets", "Sandbox", "Evidence", "Receipts", "Registry", "Settings"]) {
+    for (const label of ["Chat Workspace", "App Hub", "Runs", "MCP Firewall", "Policies", "Secrets", "Sandbox", "Evidence", "Receipts", "Registry", "Settings"]) {
       expect(within(nav).getByRole("button", { name: label })).toBeInTheDocument();
     }
     expect(within(nav).queryByRole("button", { name: /Workbench/i })).not.toBeInTheDocument();
@@ -466,9 +476,21 @@ describe("HELM Console workbench", () => {
     expect(within(nav).queryByRole("button", { name: /^Approvals$/i })).not.toBeInTheDocument();
   });
 
+  it("renders simple and developer modes on the same Launchpad route", async () => {
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Deploy & Run Safely" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Choose an app" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Developer" }));
+
+    expect(await screen.findByRole("heading", { name: "Launch / Run Timeline" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Universal AppSpec launch" })).toBeInTheDocument();
+    expect(screen.getByText("Developer facts")).toBeInTheDocument();
+  });
+
   it("evaluates a governed command and refreshes receipts", async () => {
     render(<App />);
-    fireEvent.click((await screen.findAllByRole("button", { name: /HELM/i }))[0]);
+    fireEvent.click((await screen.findAllByRole("button", { name: "Chat Workspace" }))[0]);
     expect(await screen.findByRole("heading", { name: "Governed agent cockpit" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Command"), { target: { value: "HTTP_POST https://example.test/hook" } });
@@ -483,16 +505,17 @@ describe("HELM Console workbench", () => {
   it("opens MCP Firewall from primary navigation", async () => {
     render(<App />);
     fireEvent.click((await screen.findAllByRole("button", { name: "MCP Firewall" }))[0]);
-    expect(await screen.findByRole("heading", { name: "Threat reviews" })).toBeInTheDocument();
-    expect(screen.getByText("openclaw-tools")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "AI Tool Firewall" })).toBeInTheDocument();
+    expect(screen.getByText(/openclaw-tools/)).toBeInTheDocument();
     expect(screen.getByText("read_file")).toBeInTheDocument();
     expect(screen.getByText("execute_shell")).toBeInTheDocument();
-    expect(screen.getByText("T2")).toBeInTheDocument();
-    expect(screen.getAllByText(/HELM AI cannot authorize this side effect/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("quarantined").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Requires approval").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Other tools remain blocked/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/quarantined/i).length).toBeGreaterThan(0);
   });
 
   it("blocks launch when an AppSpec secret is missing and shows one exact fix", async () => {
+    window.localStorage.setItem("helm-console-viewmode", "pro");
     apiMock.listLaunchpadApps.mockResolvedValueOnce([{
       ...launchpadAppFixture(),
       status: {
@@ -514,6 +537,195 @@ describe("HELM Console workbench", () => {
     expect(within(card as HTMLElement).getByText("Missing secret blocks launch")).toBeInTheDocument();
     expect(within(card as HTMLElement).getByText("helm secret set model_gateway --provider env --value-env OPENROUTER_API_KEY")).toBeInTheDocument();
     expect(within(card as HTMLElement).getByRole("button", { name: /^Launch$/i })).toBeDisabled();
+  });
+
+  it("uses one app card for backend states and fixture-only entitlement states", async () => {
+    window.localStorage.setItem("helm-console-viewmode", "pro");
+    const ready = launchpadAppFixture();
+    const needsSetup = {
+      ...launchpadAppFixture(),
+      id: "needs_setup",
+      app_id: "needs_setup",
+      name: "Needs Setup",
+      required_secrets: ["needs_model"],
+      model_gateway_env: ["NEEDS_MODEL_KEY"],
+      status: {
+        state: "needs_setup",
+        verdict: "ESCALATE",
+        summary: "Backend reports a missing env-backed secret.",
+        missing_secrets: ["NEEDS_MODEL_KEY"],
+      },
+    };
+    const mcpReview = {
+      ...launchpadAppFixture(),
+      id: "mcp_review",
+      app_id: "mcp_review",
+      name: "MCP Review",
+      required_secrets: [],
+      model_gateway_env: [],
+      status: undefined,
+    };
+    const blocked = {
+      ...launchpadAppFixture(),
+      id: "blocked_app",
+      app_id: "blocked_app",
+      name: "Blocked App",
+      required_secrets: [],
+      model_gateway_env: [],
+      status: {
+        state: "blocked",
+        verdict: "DENY",
+        summary: "Backend policy blocked launch.",
+        missing_secrets: [],
+      },
+    };
+    const unsupported = {
+      ...launchpadAppFixture(),
+      id: "unsupported_app",
+      app_id: "unsupported_app",
+      name: "Unsupported App",
+      availability: "unsupported",
+      required_secrets: [],
+      model_gateway_env: [],
+      status: undefined,
+    };
+    const upgradeFixture = {
+      ...launchpadAppFixture(),
+      id: "upgrade_fixture",
+      app_id: "upgrade_fixture",
+      name: "Upgrade Fixture",
+      required_secrets: [],
+      model_gateway_env: [],
+      user_state: "upgrade_required",
+      required_capability: "cloud_launch",
+      upgrade_reason: "Fixture-only cloud launch gate.",
+      entitlement_decision: {
+        action: "launch",
+        allowed: false,
+        required_capability: "cloud_launch",
+        reason: "Fixture-only cloud launch gate.",
+        fixture_only: true,
+      },
+    };
+    const apps = [ready, needsSetup, mcpReview, blocked, unsupported, upgradeFixture];
+    apiMock.listLaunchpadApps.mockResolvedValueOnce(apps);
+    apiMock.loadLaunchpadMatrix.mockResolvedValueOnce(apps.map((app) => ({
+      app_id: app.app_id,
+      substrate_id: "local-container",
+      launchable: app.app_id !== "blocked_app",
+      verdict: app.app_id === "blocked_app" ? "DENY" : "ALLOW",
+      reason: app.app_id === "blocked_app" ? "Policy denied." : "OSS supported",
+      availability: "available",
+    })));
+    apiMock.listLaunchpadSecretGrants.mockResolvedValueOnce({ secrets: [{ name: "model_gateway", value_env: "OPENROUTER_API_KEY", present: true, scope: "runtime env", grant_mode: "env-backed", launch_impact: "required" }] });
+    apiMock.loadLaunchpadMcpThreatReviews.mockResolvedValueOnce({
+      threat_reviews: [{
+        server_id: "fixture-mcp",
+        app_id: "mcp_review",
+        transport: "stdio",
+        endpoint: "stdio://fixture-mcp",
+        tools: [],
+        unknown_tools: true,
+        state: "quarantined",
+        risk_class: "T1",
+        proof_status: "proven",
+        summary: "Backend MCP review is quarantined.",
+      }],
+    });
+
+    render(<App />);
+
+    const needsSetupCard = (await screen.findByText("Needs Setup")).closest("article") as HTMLElement;
+    const mcpCard = (await screen.findByText("MCP Review")).closest("article") as HTMLElement;
+    const blockedCard = (await screen.findByText("Blocked App")).closest("article") as HTMLElement;
+    const unsupportedCard = (await screen.findByText("Unsupported App")).closest("article") as HTMLElement;
+    const upgradeCard = (await screen.findByText("Upgrade Fixture")).closest("article") as HTMLElement;
+
+    expect(within(needsSetupCard).getByText("NEEDS SETUP")).toBeInTheDocument();
+    expect(within(needsSetupCard).getByText("helm secret set needs_model --provider env --value-env NEEDS_MODEL_KEY")).toBeInTheDocument();
+    expect(within(mcpCard).getByText("MCP REVIEW")).toBeInTheDocument();
+    expect(within(blockedCard).getByText("BLOCKED")).toBeInTheDocument();
+    expect(within(blockedCard).getByRole("button", { name: /^Launch$/i })).toBeDisabled();
+    expect(within(unsupportedCard).getByText("UNSUPPORTED")).toBeInTheDocument();
+    expect(within(upgradeCard).getByText("FIXTURE UPGRADE REQUIRED")).toBeInTheDocument();
+    expect(within(upgradeCard).getAllByText(/Fixture-only cloud launch gate/).length).toBeGreaterThan(0);
+    expect(within(upgradeCard).getByText(/Fixture-only entitlement state/)).toBeInTheDocument();
+    expect(within(upgradeCard).getByRole("button", { name: /^Launch$/i })).toBeDisabled();
+  });
+
+  it("renders the universal proof panel from backend run refs only", async () => {
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole("button", { name: "Runs" }))[0]);
+    fireEvent.click(await screen.findByRole("button", { name: /openclaw/i }));
+
+    expect(await screen.findByRole("heading", { name: "Receipts and EvidencePack" })).toBeInTheDocument();
+    expect(screen.getAllByText("sha256:plan").length).toBeGreaterThan(0);
+    expect(screen.getByText("rcp_launch")).toBeInTheDocument();
+    expect(screen.getByText("rcp_healthcheck")).toBeInTheDocument();
+    expect(screen.getAllByText("evp_openclaw").length).toBeGreaterThan(0);
+    expect(screen.getByText("helm evidence verify ./openclaw.evidencepack --offline")).toBeInTheDocument();
+    expect(screen.queryByText(/Cryptographically Proven|Validated by HELM Cloud|Sovereign Shield/i)).not.toBeInTheDocument();
+  });
+
+  it("requires a current ALLOW preflight and clears stale proof when selection changes", async () => {
+    const hermes = {
+      ...launchpadAppFixture(),
+      id: "hermes",
+      app_id: "hermes",
+      name: "Hermes",
+      oci_ref: "ghcr.io/mindburn-labs/hermes@sha256:def",
+      immutable_digest: "sha256:def",
+      required_secrets: [],
+      model_gateway_env: [],
+      status: {
+        state: "ready",
+        verdict: "ALLOW",
+        summary: "Hermes is ready to compile LaunchPlan.",
+        missing_secrets: [],
+      },
+    };
+    apiMock.listLaunchpadApps.mockResolvedValueOnce([launchpadAppFixture(), hermes]);
+    apiMock.loadLaunchpadMatrix.mockResolvedValueOnce([
+      { app_id: "openclaw", substrate_id: "local-container", launchable: true, verdict: "ALLOW", reason: "OSS supported", availability: "available" },
+      { app_id: "hermes", substrate_id: "local-container", launchable: true, verdict: "ALLOW", reason: "OSS supported", availability: "available" },
+    ]);
+    apiMock.planLaunchpad.mockImplementation(async (appId: string, substrateId: string) => ({
+      launch_id: `${appId}_plan`,
+      app_id: appId,
+      substrate_id: substrateId,
+      state: "PLANNED",
+      kernel_verdict: "ALLOW",
+      reason: "LaunchPlan compiled.",
+      plan_hash: `sha256:${appId}-plan`,
+    }));
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Choose an app" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Run preflight" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Preflight" }));
+    expect(await screen.findByText("sha256:openclaw-plan")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("button", { name: /Launch Safely/i })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: /Hermes/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(screen.getByRole("heading", { name: "Run preflight" })).toBeInTheDocument();
+    expect(screen.queryByText("sha256:openclaw-plan")).not.toBeInTheDocument();
+    expect(screen.getAllByText("not compiled").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("Run preflight and receive ALLOW before launch.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Launch Safely/i })).toBeDisabled();
   });
 
   it("shows the HELM AI assistant as non-authoritative", async () => {
@@ -548,7 +760,7 @@ describe("HELM Console workbench", () => {
     apiMock.loadBootstrap.mockRejectedValueOnce({ status: 401 });
     render(<App />);
 
-    fireEvent.click((await screen.findAllByRole("button", { name: /HELM/i }))[0]);
+    fireEvent.click((await screen.findAllByRole("button", { name: "Chat Workspace" }))[0]);
     expect(await screen.findByText("Admin key required")).toBeInTheDocument();
     expect(screen.getAllByText(/Protected Console APIs require HELM_ADMIN_API_KEY/i).length).toBeGreaterThan(0);
 
@@ -561,7 +773,7 @@ describe("HELM Console workbench", () => {
 
   it("keeps the proof demo out of primary Console surfaces", async () => {
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Launch / Run Timeline" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Deploy & Run Safely" })).toBeInTheDocument();
     expect(screen.queryByText("Developer / Sandbox Lab (sample only)")).not.toBeInTheDocument();
     const nav = screen.getAllByLabelText("Primary flows")[0];
     expect(within(nav).queryByRole("button", { name: /Capabilities/i })).not.toBeInTheDocument();

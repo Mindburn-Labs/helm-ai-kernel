@@ -190,12 +190,31 @@ The invariant is simple: OSS must stay fully useful on its own as a developer-fi
 ## Diagram
 
 ```mermaid
-flowchart LR
-  kernel["Kernel scope"] --> retain["Retained public surfaces"]
-  retain --> cli["CLI and proxy"]
-  retain --> sdk["SDKs and examples"]
-  retain --> protocol["Protocols and schemas"]
-  retain --> verify["Receipts and verification"]
-  kernel --> exclude["Excluded hosted surfaces"]
-  exclude --> commercial["HELM commercial docs"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        kernel["Kernel scope"]
+        retain["Retained public surfaces"]
+        cli["CLI and proxy"]
+        sdk["SDKs and examples"]
+        protocol["Protocols and schemas"]
+        exclude["Excluded hosted surfaces"]
+        commercial["HELM commercial docs"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        verify["Receipts and verification"]
+    end
+
+    %% Operational Flow Edges
+    kernel --> retain
+    retain --> cli
+    retain --> sdk
+    retain --> protocol
+    retain --> verify
+    kernel --> exclude
+    exclude --> commercial
+
+    %% Premium Styling Rules
+    style verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+

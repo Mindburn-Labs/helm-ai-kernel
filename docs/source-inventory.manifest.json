@@ -510,6 +510,20 @@
         "make docs-coverage",
         "make docs-truth"
       ]
+    },
+    {
+      "id": "internal-development-generated-and-scratch",
+      "label": "Internal development, agent workspaces, generated locks, scratch data, and operator commands",
+      "classification": "generated-or-config",
+      "source_patterns": [
+        ".agents/**",
+        "HELM Console.command",
+        "pnpm-lock.yaml",
+        "scratch/**",
+        "skills-lock.json"
+      ],
+      "rationale": "Internal tools, agent skills environments, and database scratch pads are excluded from public docs coverage as they belong to sandbox state or developer tooling."
     }
   ]
 }
+

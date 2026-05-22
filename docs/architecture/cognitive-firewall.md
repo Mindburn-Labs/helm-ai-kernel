@@ -56,16 +56,48 @@ This keeps semantic reasoning and execution authority split: the planner may pro
 ## Diagram
 
 ```mermaid
-flowchart LR
-  intent["Agent intent"] --> normalize["Normalize context"]
-  normalize --> policy["Policy decision"]
-  policy --> permit{"Permit?"}
-  permit -->|allow| execute["Execute tool"]
-  permit -->|deny| block["Block effect"]
-  execute --> receipt["Receipt"]
-  block --> receipt
-  receipt --> verify["Verification"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        intent["Agent intent"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        normalize["Normalize context"]
+        policy["Policy decision"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        permit{"Permit?"}
+        execute["Execute tool"]
+        block["Block effect"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        receipt["Receipt"]
+        verify["Verification"]
+    end
+
+    %% Operational Flow Edges
+    intent --> normalize
+    normalize --> policy
+    policy --> permit
+    permit -->|allow| execute
+    permit -->|deny| block
+    execute --> receipt
+    block --> receipt
+    receipt --> verify
+
+    %% Premium Styling Rules
+    style normalize fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style policy fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style permit fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style execute fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style block fill:#e53e3e,stroke:#9b2c2c,stroke-width:2px,color:#fff
+    style receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
+
 
 <!-- docs-depth-final-pass -->
 

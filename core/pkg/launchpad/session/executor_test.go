@@ -265,3 +265,117 @@ func allowPlan() plan.LaunchPlan {
 		PlanHash:      "sha256:plan",
 	}
 }
+
+func TestExecutorMultiCloudLaunchDryRun(t *testing.T) {
+	store := NewStore(t.TempDir())
+	t.Setenv("DIGITALOCEAN_TOKEN", "mock-do-token")
+	t.Setenv("HCLOUD_TOKEN", "mock-hcloud-token")
+
+	executor := NewExecutor(store)
+
+	// Test DigitalOcean
+	doPlan := allowPlan()
+	doPlan.SubstrateID = "digitalocean"
+	runDO, err := executor.ExecuteLaunch(doPlan, ExecuteOptions{
+		Reason:        "test-do",
+		RuntimeDryRun: true,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteLaunch DO: %v", err)
+	}
+	if runDO.State != StateRunning {
+		t.Fatalf("expected StateRunning for DO dry run, got %s", runDO.State)
+	}
+	if runDO.RuntimeHandles.CloudResourceIDs["provider"] != "digitalocean" {
+		t.Fatalf("expected cloud resource provider to be digitalocean, got %v", runDO.RuntimeHandles.CloudResourceIDs)
+	}
+
+	// Test Hetzner
+	hPlan := allowPlan()
+	hPlan.SubstrateID = "hetzner"
+	runH, err := executor.ExecuteLaunch(hPlan, ExecuteOptions{
+		Reason:        "test-h",
+		RuntimeDryRun: true,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteLaunch Hetzner: %v", err)
+	}
+	if runH.State != StateRunning {
+		t.Fatalf("expected StateRunning for Hetzner dry run, got %s", runH.State)
+	}
+	if runH.RuntimeHandles.CloudResourceIDs["provider"] != "hetzner" {
+		t.Fatalf("expected cloud resource provider to be hetzner, got %v", runH.RuntimeHandles.CloudResourceIDs)
+	}
+
+	// Test delete DO
+	deletedDO, err := executor.DeleteLaunch(runDO.LaunchID, true)
+	if err != nil {
+		t.Fatalf("DeleteLaunch DO: %v", err)
+	}
+	if deletedDO.State != StateDeleted {
+		t.Fatalf("expected deleted DO StateDeleted, got %s", deletedDO.State)
+	}
+
+	// Test delete Hetzner
+	deletedH, err := executor.DeleteLaunch(runH.LaunchID, true)
+	if err != nil {
+		t.Fatalf("DeleteLaunch Hetzner: %v", err)
+	}
+	if deletedH.State != StateDeleted {
+		t.Fatalf("expected deleted Hetzner StateDeleted, got %s", deletedH.State)
+	}
+
+	// Test E2B
+	e2bPlan := allowPlan()
+	e2bPlan.LaunchID = "launch-allow-e2b"
+	e2bPlan.SubstrateID = "e2b"
+	runE2B, err := executor.ExecuteLaunch(e2bPlan, ExecuteOptions{
+		Reason:        "test-e2b",
+		RuntimeDryRun: true,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteLaunch E2B: %v", err)
+	}
+	if runE2B.State != StateRunning {
+		t.Fatalf("expected StateRunning for E2B dry run, got %s", runE2B.State)
+	}
+	if runE2B.RuntimeHandles.CloudResourceIDs["provider"] != "e2b" {
+		t.Fatalf("expected cloud resource provider to be e2b, got %v", runE2B.RuntimeHandles.CloudResourceIDs)
+	}
+
+	// Test Daytona
+	daytonaPlan := allowPlan()
+	daytonaPlan.LaunchID = "launch-allow-daytona"
+	daytonaPlan.SubstrateID = "daytona"
+	runDaytona, err := executor.ExecuteLaunch(daytonaPlan, ExecuteOptions{
+		Reason:        "test-daytona",
+		RuntimeDryRun: true,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteLaunch Daytona: %v", err)
+	}
+	if runDaytona.State != StateRunning {
+		t.Fatalf("expected StateRunning for Daytona dry run, got %s", runDaytona.State)
+	}
+	if runDaytona.RuntimeHandles.CloudResourceIDs["provider"] != "daytona" {
+		t.Fatalf("expected cloud resource provider to be daytona, got %v", runDaytona.RuntimeHandles.CloudResourceIDs)
+	}
+
+	// Test delete E2B
+	deletedE2B, err := executor.DeleteLaunch(runE2B.LaunchID, true)
+	if err != nil {
+		t.Fatalf("DeleteLaunch E2B: %v", err)
+	}
+	if deletedE2B.State != StateDeleted {
+		t.Fatalf("expected deleted E2B StateDeleted, got %s", deletedE2B.State)
+	}
+
+	// Test delete Daytona
+	deletedDaytona, err := executor.DeleteLaunch(runDaytona.LaunchID, true)
+	if err != nil {
+		t.Fatalf("DeleteLaunch Daytona: %v", err)
+	}
+	if deletedDaytona.State != StateDeleted {
+		t.Fatalf("expected deleted Daytona StateDeleted, got %s", deletedDaytona.State)
+	}
+}

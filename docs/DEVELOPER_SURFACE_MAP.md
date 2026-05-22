@@ -23,15 +23,43 @@ verification, release integrity, and troubleshooting.
 ## Surface Flow
 
 ```mermaid
-flowchart LR
-  install["Install / build"] --> boundary["Run HELM boundary"]
-  boundary --> integrate["Integrate SDK or proxy"]
-  integrate --> policy["Evaluate policy"]
-  policy --> receipt["Capture receipt"]
-  receipt --> verify["Verify evidence"]
-  verify --> deploy["Deploy or publish"]
-  deploy --> operate["Debug and conform"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        install["Install / build"]
+        integrate["Integrate SDK or proxy"]
+        deploy["Deploy or publish"]
+        operate["Debug and conform"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        policy["Evaluate policy"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        boundary["Run HELM boundary"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        receipt["Capture receipt"]
+        verify["Verify evidence"]
+    end
+
+    %% Operational Flow Edges
+    install --> boundary
+    boundary --> integrate
+    integrate --> policy
+    policy --> receipt
+    receipt --> verify
+    verify --> deploy
+    deploy --> operate
+
+    %% Premium Styling Rules
+    style boundary fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style policy fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 ## Developer Surfaces
 

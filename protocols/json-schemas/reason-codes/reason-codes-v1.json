@@ -177,6 +177,55 @@
       "since": "1.1.0"
     },
     {
+      "code": "ERR_HOST_EGRESS_WITHOUT_INTENT",
+      "applies_to": ["DENY"],
+      "domain": "host_evidence",
+      "description": "Host-observed egress has no corresponding HELM intent or authority receipt",
+      "since": "1.6.0"
+    },
+    {
+      "code": "ERR_HOST_EGRESS_AFTER_DENY",
+      "applies_to": ["DENY"],
+      "domain": "host_evidence",
+      "description": "Host-observed egress occurred after HELM denied the corresponding action",
+      "since": "1.6.0"
+    },
+    {
+      "code": "ERR_HOST_RECEIPT_MISSING",
+      "applies_to": ["DENY"],
+      "domain": "host_evidence",
+      "description": "A HELM network-authority receipt has no matching host evidence receipt",
+      "since": "1.6.0"
+    },
+    {
+      "code": "ERR_HOST_DESTINATION_MISMATCH",
+      "applies_to": ["DENY"],
+      "domain": "host_evidence",
+      "description": "Host-observed egress destination differs from HELM authority metadata",
+      "since": "1.6.0"
+    },
+    {
+      "code": "ERR_HOST_VOLUME_EXCEEDED",
+      "applies_to": ["DENY"],
+      "domain": "host_evidence",
+      "description": "Host-observed egress byte volume exceeds the HELM authority ceiling",
+      "since": "1.6.0"
+    },
+    {
+      "code": "ERR_HOST_PROCESS_UNBOUND",
+      "applies_to": ["DENY"],
+      "domain": "host_evidence",
+      "description": "Host receipt process identity cannot be bound to a HELM workload identity",
+      "since": "1.6.0"
+    },
+    {
+      "code": "ERR_POLICY_DENIED_BUT_HOST_OBSERVED_EGRESS",
+      "applies_to": ["DENY"],
+      "domain": "host_evidence",
+      "description": "Host evidence contradicts a HELM policy denial for network egress",
+      "since": "1.6.0"
+    },
+    {
       "code": "IDENTITY_ISOLATION_VIOLATION",
       "applies_to": ["DENY"],
       "domain": "identity",

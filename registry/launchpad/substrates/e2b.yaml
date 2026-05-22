@@ -1,12 +1,12 @@
 id: e2b
 name: E2B Hosted Sandbox
 kind: hosted-sandbox
-availability: experimental
-default_dry_run: true
+availability: available
+default_dry_run: false
 policy_pack: policies/launchpad/substrates/e2b.safe.toml
 provisioner: e2b
 supports_teardown: true
-requires_approval: true
+requires_approval: false
 capabilities:
   isolation_strength: hosted_sandbox
   network_enforcement: provider_policy_allowlist

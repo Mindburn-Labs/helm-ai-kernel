@@ -19,6 +19,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/externalreceipt"
 )
 
 // VerifyReport is the structured output of offline verification.
@@ -100,6 +102,19 @@ func VerifyBundle(bundlePath string) (*VerifyReport, error) {
 
 	// 7. Replay determinism verdict
 	report.addCheck(checkReplayDeterminism(bundlePath))
+
+	// 8. Optional external host evidence verification.
+	hostEvidence := externalreceipt.VerifyBundle(bundlePath)
+	if hostEvidence.Found {
+		for _, check := range hostEvidence.Checks {
+			report.addCheck(CheckResult{
+				Name:   check.Name,
+				Pass:   check.Pass,
+				Detail: check.Detail,
+				Reason: check.Reason,
+			})
+		}
+	}
 
 	enrichReportMetadata(bundlePath, report)
 

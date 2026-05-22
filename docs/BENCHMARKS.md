@@ -35,19 +35,26 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 This scheme maps the main sections of Benchmarks in reading order.
 
 ```mermaid
-flowchart LR
-  Page["Benchmarks"]
-  A["Targets"]
-  B["What the Harness Covers"]
-  C["Output"]
-  D["Test-case count (referenced by pitch decks)"]
-  E["Machine-readable output"]
-  Page --> A
-  A --> B
-  B --> C
-  C --> D
-  D --> E
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Page["Benchmarks"]
+        A["Targets"]
+        B["What the Harness Covers"]
+        C["Output"]
+        D["Test-case count (referenced by pitch decks)"]
+        E["Machine-readable output"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+
+    %% Premium Styling Rules
 ```
+
 
 The benchmark harness measures retained kernel paths locally. This page documents how to run the harness, not a frozen set of numbers.
 

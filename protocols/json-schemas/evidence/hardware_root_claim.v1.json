@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/evidence/hardware_root_claim.v1.json",
+  "title": "HELM Hardware Root Claim v1",
+  "type": "object",
+  "properties": {
+    "kernel_measurement_sha256": { "type": "string" },
+    "execution_profile": {
+      "type": "string",
+      "enum": ["TEE_ATTESTED", "TPM_ATTESTED", "SOFTWARE_ONLY", "TPM_PLUS_TEE"]
+    },
+    "hardware_root_type": {
+      "type": "string",
+      "enum": ["TPM2", "AWS_NITRO", "AMD_SEV_SNP", "INTEL_TDX", "APPLE_SEP", "OTHER"]
+    },
+    "quote_format": { "type": "string" },
+    "quote_blob_b64": { "type": "string", "contentEncoding": "base64" },
+    "quote_verifier": { "type": "string" },
+    "signing_key_nonexportable": { "type": ["boolean", "null"] },
+    "measurement_time": { "type": "string", "format": "date-time" },
+    "boot_sequence_ref": { "type": "string" },
+    "verification_status": {
+      "type": "string",
+      "enum": ["not_verified", "verified", "unsupported", "structural_only"]
+    }
+  },
+  "additionalProperties": false
+}

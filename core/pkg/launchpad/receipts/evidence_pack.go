@@ -54,7 +54,7 @@ func WriteEvidencePack(root, launchID string, artifacts map[string][]byte) (stri
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
-	for _, sub := range []string{"02_PROOFGRAPH", "03_TELEMETRY", "04_EXPORTS", "05_DIFFS", "06_LOGS", "07_ATTESTATIONS", "08_TAPES", "09_SCHEMAS", "12_REPORTS"} {
+	for _, sub := range []string{"02_PROOFGRAPH", "03_TELEMETRY", "04_EXPORTS", "05_DIFFS", "06_LOGS", "07_ATTESTATIONS", "08_TAPES", "09_SCHEMAS", "11_HOST_EVIDENCE", "12_REPORTS"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o700); err != nil {
 			return "", err
 		}
@@ -236,6 +236,7 @@ func addRequiredDirectoryPlaceholders(artifacts map[string][]byte) {
 		"07_ATTESTATIONS/.keep",
 		"08_TAPES/.keep",
 		"09_SCHEMAS/.keep",
+		"11_HOST_EVIDENCE/.keep",
 		"12_REPORTS/.keep",
 	} {
 		if _, exists := artifacts[path]; !exists {
@@ -388,8 +389,11 @@ func canonicalEvidencePath(clean string) string {
 		strings.HasPrefix(clean, "07_ATTESTATIONS/"),
 		strings.HasPrefix(clean, "08_TAPES/"),
 		strings.HasPrefix(clean, "09_SCHEMAS/"),
+		strings.HasPrefix(clean, "11_HOST_EVIDENCE/"),
 		strings.HasPrefix(clean, "12_REPORTS/"):
 		return clean
+	case strings.HasPrefix(clean, "host_evidence/"):
+		return "11_HOST_EVIDENCE/" + strings.TrimPrefix(clean, "host_evidence/")
 	default:
 		return "04_EXPORTS/" + clean
 	}

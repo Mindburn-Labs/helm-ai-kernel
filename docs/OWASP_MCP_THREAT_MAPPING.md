@@ -35,15 +35,30 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 This scheme maps the main sections of OWASP MCP Threat Mapping in reading order.
 
 ```mermaid
-flowchart LR
-  Page["OWASP MCP Threat Mapping"]
-  A["Source truth"]
-  B["Reader action"]
-  C["Validation"]
-  Page --> A
-  A --> B
-  B --> C
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        A["Source truth"]
+        C["Validation"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        Page["OWASP MCP Threat Mapping"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        B["Reader action"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+
+    %% Premium Styling Rules
+    style Page fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style B fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
 ```
+
 
 This page maps retained HELM AI Kernel control points to OWASP-style MCP and agent-tooling threat areas. It is a public engineering map, not a certification statement.
 

@@ -1,6 +1,6 @@
 ---
 title: Execution Boundary Reference
-last_reviewed: 2026-05-05
+last_reviewed: 2026-05-21
 ---
 
 # Execution Boundary Reference
@@ -18,17 +18,48 @@ After this page you should know the public boundary surfaces, their CLI and HTTP
 ## Boundary Flow
 
 ```mermaid
-flowchart LR
-  Request["tool, proxy, MCP, or sandbox request"] --> Normalize["normalize and validate"]
-  Normalize --> PDP["fail-closed PEP/PDP"]
-  PDP -->|allow| Record["seal boundary record"]
-  PDP -->|deny| Deny["seal deny record"]
-  Record --> Dispatch["dispatch governed action"]
-  Deny --> Receipt["emit receipt"]
-  Dispatch --> Receipt
-  Receipt --> Checkpoint["boundary checkpoint"]
-  Checkpoint --> Evidence["EvidencePack / offline verification"]
+flowchart TD
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        Normalize["normalize and validate"]
+        PDP["fail-closed PEP/PDP"]
+        Checkpoint["boundary checkpoint"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        Request["tool, proxy, MCP, or sandbox request"]
+        Record["seal boundary record"]
+        Deny["seal deny record"]
+        Dispatch["dispatch governed action"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        Receipt["emit receipt"]
+        Evidence["EvidencePack / offline verification"]
+    end
+
+    %% Operational Flow Edges
+    Request --> Normalize
+    Normalize --> PDP
+    PDP -->|allow| Record
+    PDP -->|deny| Deny
+    Record --> Dispatch
+    Deny --> Receipt
+    Dispatch --> Receipt
+    Receipt --> Checkpoint
+    Checkpoint --> Evidence
+
+    %% Premium Styling Rules
+    style Request fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style Normalize fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style PDP fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style Record fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style Deny fill:#e53e3e,stroke:#9b2c2c,stroke-width:2px,color:#fff
+    style Dispatch fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style Receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Checkpoint fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style Evidence fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 ## Source Truth
 
@@ -53,6 +84,7 @@ flowchart LR
 | Authz snapshots | `helm-ai-kernel identity agents`, `helm-ai-kernel authz health`, `helm-ai-kernel authz check`, `helm-ai-kernel authz snapshots`, `helm-ai-kernel authz get` | `/api/v1/identity/agents`, `/api/v1/authz/health`, `/api/v1/authz/check`, `/api/v1/authz/snapshots` | ReBAC snapshot hash and relationship freshness. |
 | Approvals and budgets | `helm-ai-kernel approvals *`, `helm-ai-kernel budget *` | `/api/v1/approvals`, `/api/v1/budgets` | Local approval ceremonies and spend/tool/egress ceilings. |
 | Evidence envelopes | `helm-ai-kernel evidence export --envelope`, `helm-ai-kernel evidence envelope *` | `/api/v1/evidence/envelopes`, `/api/v1/evidence/export`, `/api/v1/evidence/verify`, `/api/v1/replay/verify` | Native EvidencePack roots; external envelopes are wrappers. |
+| External host evidence | `helm-ai-kernel verify external-receipt --chain <path> --public-key <hex|file>`, `helm-ai-kernel evidence attach-host-chain --bundle <bundle> --chain <path> --out <bundle> --source <name>`, `helm-ai-kernel evidence correlate-host --bundle <bundle>` | none | Vendor-neutral host/network evidence import, offline verification, and Boundary Drift correlation. |
 | Telemetry and coexistence | `helm-ai-kernel telemetry otel-config`, `helm-ai-kernel coexistence manifest`, `helm-ai-kernel integrate scaffold` | `/api/v1/telemetry/otel/config`, `/api/v1/telemetry/export`, `/api/v1/coexistence/capabilities` | Non-authoritative export and integration metadata. |
 
 ## Durable State
@@ -79,6 +111,18 @@ Deny paths are still proof paths: they produce a boundary record and receipt rat
 ## Native Evidence Authority
 
 External envelopes can help auditors and procurement teams move evidence between systems, but they do not become the source of truth. Verification starts with HELM receipts, grant or snapshot hashes, boundary record hashes, checkpoints, and the EvidencePack manifest.
+
+HELM can consume and correlate external host evidence produced by independent
+recorders. Imported host chains can prove that a host observed outbound network
+behavior; HELM correlation then checks whether that behavior aligns with HELM
+authority receipts, policy verdicts, sandbox leases, and egress ceilings. A
+host event with no matching HELM intent, a host event after a HELM deny, a
+destination mismatch, or a byte-volume excess is reported as Boundary Drift.
+
+This OSS kernel does not claim eBPF, seccomp, TPM, or packet-blocking network
+enforcement unless a specific code path and verifier prove it. Hardware-rooted
+claims in imported host evidence are retained and structurally checked; unknown
+or unsupported roots are reported as not verified.
 
 ## Validation
 

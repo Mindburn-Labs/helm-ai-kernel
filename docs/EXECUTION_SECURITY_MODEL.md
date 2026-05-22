@@ -35,19 +35,35 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 This scheme maps the main sections of Execution Security Model in reading order.
 
 ```mermaid
-flowchart LR
-  Page["Execution Security Model"]
-  A["Overview"]
-  B["Layer A — Surface Containment"]
-  C["Layer B — Dispatch Enforcement"]
-  D["Layer C — Verifiable Receipts"]
-  E["Why Three Layers"]
-  Page --> A
-  A --> B
-  B --> C
-  C --> D
-  D --> E
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Page["Execution Security Model"]
+        A["Overview"]
+        E["Why Three Layers"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        B["Layer A — Surface Containment"]
+        C["Layer B — Dispatch Enforcement"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        D["Layer C — Verifiable Receipts"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+
+    %% Premium Styling Rules
+    style B fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style C fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style D fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 > **Canonical** · v1.0 · Normative
 >
@@ -162,6 +178,8 @@ every individual call. No call reaches an executor without a signed
 | **Deny-by-default** | Unknown tools → `DENY_TOOL_NOT_FOUND`. Unknown args → `DENY`. Policy error → `FAIL_CLOSED_ERROR` |
 | **Delegation session enforcement** | Session capabilities ⊆ delegator's policy; expired/invalid sessions → `DELEGATION_INVALID` |
 | **Threat scan** | TCB scanner detects prompt injection / command injection signals → `THREAT_SIGNAL_DETECTED` |
+| **zkVM Safety Attestation** | Compiles and verifies agent safety assertions (AST static analysis) in ZK (RISC Zero zkVM) generating verifiable execution receipts |
+| **TEE Enclave Secrets** | Silicon-sealed KMS vault wrapping (`SovereignKMSVault`) and inline token replacement proxy (`SecretProxyFilter`), preventing credentials from leaking to host memory/logs |
 
 ### Architectural Property
 
@@ -197,6 +215,8 @@ signed `DENY` verdict with a deterministic reason code.
 | Gated execution | `core/pkg/executor/` |
 | Canonicalization | `core/pkg/canonicalize/` |
 | Approval ceremonies | `core/pkg/escalation/ceremony/` |
+| zkVM Safety Checker | `core/pkg/crypto/zk/` |
+| TEE Secrets Enclave | `core/pkg/crypto/tee/` |
 
 ---
 
@@ -306,4 +326,4 @@ Each layer protects against failures in the other two.
 | [core/pkg/trust/registry](../core/pkg/trust/registry/) | TCB boundary and trust-registry rules |
 | [CONFORMANCE.md](CONFORMANCE.md) | Gate definitions, levels |
 
-_Canonical revision: 2026-03-21 · HELM UCS v1.3_
+_Canonical revision: 2026-05-21 · HELM UCS v1.5_

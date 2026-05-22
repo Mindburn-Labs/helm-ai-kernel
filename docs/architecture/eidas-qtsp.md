@@ -205,10 +205,37 @@ loaded packs, not a runtime flag the operator can forget.
 ## Diagram
 
 ```mermaid
-flowchart LR
-  action["Governed action"] --> receipt["HELM receipt"]
-  receipt --> evidence["Evidence pack"]
-  evidence --> auditor["Auditor / verifier"]
-  evidence --> qtsp["Optional QTSP workflow"]
-  qtsp --> legal["Legal signature layer"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        qtsp["Optional QTSP workflow"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        auditor["Auditor / verifier"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        action["Governed action"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        receipt["HELM receipt"]
+        evidence["Evidence pack"]
+        legal["Legal signature layer"]
+    end
+
+    %% Operational Flow Edges
+    action --> receipt
+    receipt --> evidence
+    evidence --> auditor
+    evidence --> qtsp
+    qtsp --> legal
+
+    %% Premium Styling Rules
+    style action fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style evidence fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style auditor fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style legal fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+

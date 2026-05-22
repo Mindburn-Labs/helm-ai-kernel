@@ -35,19 +35,26 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 This scheme maps the main sections of NIST AI RMF to ISO 42001 Crosswalk in reading order.
 
 ```mermaid
-flowchart LR
-  Page["NIST AI RMF to ISO 42001 Crosswalk"]
-  A["Source Status"]
-  B["Important Limit"]
-  C["Pack Semantics"]
-  D["Operator Use"]
-  E["Sales Language"]
-  Page --> A
-  A --> B
-  B --> C
-  C --> D
-  D --> E
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Page["NIST AI RMF to ISO 42001 Crosswalk"]
+        A["Source Status"]
+        B["Important Limit"]
+        C["Pack Semantics"]
+        D["Operator Use"]
+        E["Sales Language"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+
+    %% Premium Styling Rules
 ```
+
 
 This page maps the HELM AI Kernel `reference_packs/iso_42001.v1.json` pack to NIST AI RMF 1.0 functions. The goal is one runtime evidence set that can support ISO 42001 AI management system audit readiness and NIST AI RMF reporting.
 

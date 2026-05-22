@@ -679,6 +679,16 @@ func runLaunchDelete(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "launch delete error: %v\n", err)
 		return 1
 	}
+	if len(cloudArtifacts) > 0 {
+		if run.RuntimeHandles.CloudResourceIDs == nil {
+			run.RuntimeHandles.CloudResourceIDs = map[string]string{}
+		}
+		run.RuntimeHandles.CloudResourceIDs["teardown_reconciled"] = "true"
+		if err := store.Save(run); err != nil {
+			fmt.Fprintf(stderr, "launch delete save error: %v\n", err)
+			return 1
+		}
+	}
 	deleted, err := session.NewExecutor(store).DeleteLaunch(rest[0], cascade)
 	if err != nil {
 		fmt.Fprintf(stderr, "launch delete error: %v\n", err)

@@ -37,17 +37,28 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 This scheme maps the main sections of Publishing in reading order.
 
 ```mermaid
-flowchart LR
-  Page["Publishing"]
-  A["Package Identities"]
-  B["Release Inputs"]
-  C["Release Automation"]
-  D["Verification"]
-  Page --> A
-  A --> B
-  B --> C
-  C --> D
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        Page["Publishing"]
+        A["Package Identities"]
+        B["Release Inputs"]
+        C["Release Automation"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        D["Verification"]
+    end
+
+    %% Operational Flow Edges
+    Page --> A
+    A --> B
+    B --> C
+    C --> D
+
+    %% Premium Styling Rules
+    style D fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 The repository retains packaging metadata for the kernel binaries, container image, and the public SDKs.
 

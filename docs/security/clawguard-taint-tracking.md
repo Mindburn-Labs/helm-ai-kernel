@@ -76,15 +76,42 @@ The shorthand is rewritten to the explicit form inside the PRG evaluator. Policy
 ## Diagram
 
 ```mermaid
-flowchart LR
-  input["Untrusted input"] --> taint["Taint label"]
-  taint --> transform["Transform / sanitize"]
-  transform --> check["Boundary check"]
-  check -->|safe| effect["Permitted effect"]
-  check -->|unsafe| deny["Denied effect"]
-  effect --> receipt["Receipt evidence"]
-  deny --> receipt
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        input["Untrusted input"]
+        taint["Taint label"]
+        transform["Transform / sanitize"]
+    end
+
+    subgraph Evaluation["2. Evaluation & Policy Plane"]
+        check["Boundary check"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        effect["Permitted effect"]
+        deny["Denied effect"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        receipt["Receipt evidence"]
+    end
+
+    %% Operational Flow Edges
+    input --> taint
+    taint --> transform
+    transform --> check
+    check -->|safe| effect
+    check -->|unsafe| deny
+    effect --> receipt
+    deny --> receipt
+
+    %% Premium Styling Rules
+    style check fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    style effect fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style deny fill:#e53e3e,stroke:#9b2c2c,stroke-width:2px,color:#fff
+    style receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 <!-- docs-depth-final-pass -->
 

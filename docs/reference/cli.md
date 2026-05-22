@@ -22,18 +22,45 @@ This page is generated from the active CLI implementation and must stay aligned 
 ## Runtime Map
 
 ```mermaid
-flowchart LR
-  User["operator or client"] --> CLI["helm-ai-kernel command"]
-  CLI --> Registry["command registry"]
-  Registry --> Server["serve / server"]
-  Registry --> Proxy["proxy"]
-  Registry --> Boundary["boundary / mcp / sandbox / authz"]
-  Registry --> Evidence["receipts / evidence / verify"]
-  Server --> API["HTTP API"]
-  Proxy --> Upstream["OpenAI-compatible upstream"]
-  Boundary --> State["boundary surface registry"]
-  Evidence --> Pack["EvidencePack or receipt stream"]
+flowchart TD
+    subgraph Ingestion["1. Ingestion & Context Plane"]
+        User["operator or client"]
+        CLI["helm-ai-kernel command"]
+        Registry["command registry"]
+        Server["serve / server"]
+        Proxy["proxy"]
+        API["HTTP API"]
+        Upstream["OpenAI-compatible upstream"]
+        State["boundary surface registry"]
+    end
+
+    subgraph Execution["3. Execution & Verdict Plane"]
+        Boundary["boundary / mcp / sandbox / authz"]
+    end
+
+    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
+        Evidence["receipts / evidence / verify"]
+        Pack["EvidencePack or receipt stream"]
+    end
+
+    %% Operational Flow Edges
+    User --> CLI
+    CLI --> Registry
+    Registry --> Server
+    Registry --> Proxy
+    Registry --> Boundary
+    Registry --> Evidence
+    Server --> API
+    Proxy --> Upstream
+    Boundary --> State
+    Evidence --> Pack
+
+    %% Premium Styling Rules
+    style Boundary fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style Evidence fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Pack fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
+
 
 ## Primary Commands
 

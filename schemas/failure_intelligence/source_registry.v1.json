@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/failure_intelligence/source_registry.v1.json",
+  "title": "HELM Failure Intelligence Source Registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_id", "source_type", "authority_level", "fetch_mode", "base_url_hash", "update_cadence", "robots_policy", "confidence_weight", "stores_raw_html", "redaction_required", "live_polling_enabled"],
+  "properties": {
+    "source_id": { "type": "string", "minLength": 1 },
+    "source_type": { "type": "string", "minLength": 1 },
+    "authority_level": { "type": "string", "minLength": 1 },
+    "fetch_mode": { "enum": ["RSS", "API", "JSON", "SCRAPE", "SNAPSHOT", "MANUAL_SEED"] },
+    "base_url": { "type": "string" },
+    "base_url_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "update_cadence": { "type": "string", "minLength": 1 },
+    "robots_policy": { "type": "string", "minLength": 1 },
+    "confidence_weight": { "type": "number", "minimum": 0, "maximum": 1 },
+    "stores_raw_html": { "type": "boolean" },
+    "redaction_required": { "type": "boolean" },
+    "live_polling_enabled": { "type": "boolean" },
+    "rate_limit": { "type": "string" },
+    "timeout": { "type": "string" },
+    "retry_policy": { "type": "string" }
+  }
+}

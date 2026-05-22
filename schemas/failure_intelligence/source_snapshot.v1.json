@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/failure_intelligence/source_snapshot.v1.json",
+  "title": "HELM Failure Intelligence Source Snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "source_id", "source_url", "source_url_hash", "claim_hash", "snapshot_hash", "retrieved_at", "stores_raw", "redacted"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "source_id": { "type": "string", "minLength": 1 },
+    "source_url": { "type": "string", "format": "uri" },
+    "source_url_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "claim_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "snapshot_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "artifact_ref": { "type": "string" },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "stores_raw": { "const": false },
+    "redacted": { "const": true }
+  }
+}

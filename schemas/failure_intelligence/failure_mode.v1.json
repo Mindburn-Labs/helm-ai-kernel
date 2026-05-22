@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/failure_intelligence/failure_mode.v1.json",
+  "title": "HELM Failure Mode v1",
+  "type": "string",
+  "enum": [
+    "PROMPT_INJECTION_TOOL_HIJACK",
+    "UNAUTHORIZED_TOOL_EXECUTION",
+    "MCP_SERVER_EXPOSURE",
+    "DATA_EGRESS_ATTEMPT",
+    "SECRET_OR_CREDENTIAL_EXPOSURE",
+    "AGENT_IDENTITY_BYPASS",
+    "APPROVAL_BYPASS",
+    "CONNECTOR_CONTRACT_DRIFT",
+    "MODEL_SUBSTITUTION",
+    "SUPPLY_CHAIN_AGENT_COMPROMISE",
+    "RUNAWAY_LOOP_OR_RESOURCE_ABUSE",
+    "UNAUTHORIZED_INFRASTRUCTURE_MUTATION",
+    "UNAUTHORIZED_FINANCIAL_ACTION",
+    "REGULATED_COMMUNICATION_WITHOUT_APPROVAL",
+    "ANALOG_PROXY_ABUSE",
+    "KINETIC_EXECUTOR_RISK",
+    "PUBLIC_PROOF_LEAK_RISK"
+  ]
+}

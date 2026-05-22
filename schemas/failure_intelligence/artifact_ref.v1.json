@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/failure_intelligence/artifact_ref.v1.json",
+  "title": "HELM Failure Intelligence Artifact Reference v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "artifact_ref", "artifact_kind", "sha256", "size_bytes", "content_type", "retention_class", "public_safe", "created_at"],
+  "properties": {
+    "id": { "type": "string" },
+    "artifact_ref": { "type": "string" },
+    "artifact_kind": { "type": "string" },
+    "hpr_id": { "type": "string" },
+    "source_id": { "type": "string" },
+    "sha256": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "size_bytes": { "type": "integer", "minimum": 0 },
+    "content_type": { "type": "string" },
+    "retention_class": { "type": "string" },
+    "public_safe": { "type": "boolean" },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

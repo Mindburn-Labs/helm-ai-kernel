@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/failure_intelligence/source_health.v1.json",
+  "title": "HELM Failure Intelligence Source Health v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_id", "source_type", "authority_level", "live_polling_enabled", "candidate_count", "dedupe_count"],
+  "properties": {
+    "source_id": { "type": "string" },
+    "source_type": { "type": "string" },
+    "authority_level": { "type": "string" },
+    "live_polling_enabled": { "type": "boolean" },
+    "last_successful_poll": { "type": "string", "format": "date-time" },
+    "last_error": { "type": "string" },
+    "candidate_count": { "type": "integer" },
+    "dedupe_count": { "type": "integer" },
+    "confidence_distribution": {
+      "type": "object",
+      "additionalProperties": { "type": "integer" }
+    }
+  }
+}

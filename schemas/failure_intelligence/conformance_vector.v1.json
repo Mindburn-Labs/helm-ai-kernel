@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/failure_intelligence/conformance_vector.v1.json",
+  "title": "HELM Failure Intelligence Conformance Vector v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "candidate_id", "hpr_id", "failure_mode", "title", "template", "level", "policy_profile", "input", "expected", "negative_assertions", "expected_verdict", "expected_reason_code", "must_emit_receipt", "must_not_dispatch", "must_bind_evidence"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^HCV-[0-9]{4}-[0-9]{5}(-[0-9]{2})?$" },
+    "vector_id": { "type": "string", "pattern": "^HCV-[0-9]{4}-[0-9]{5}(-[0-9]{2})?$" },
+    "candidate_id": { "type": "string" },
+    "hpr_id": { "type": "string", "pattern": "^HPR-[0-9]{4}-[0-9]{5}$" },
+    "failure_mode": { "$ref": "failure_mode.v1.json" },
+    "failure_modes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "failure_mode.v1.json" }
+    },
+    "title": { "type": "string" },
+    "template": { "type": "string" },
+    "level": { "enum": ["L1", "L2", "L3", "L4"] },
+    "policy_profile": { "const": "public_replay_v1" },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_ir", "policy", "fixtures"],
+      "properties": {
+        "plan_ir": { "type": "string" },
+        "policy": { "type": "string" },
+        "fixtures": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict", "reason_code", "receipt_required", "evidencepack_required"],
+      "properties": {
+        "verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+        "reason_code": { "type": "string" },
+        "receipt_required": { "const": true },
+        "evidencepack_required": { "const": true }
+      }
+    },
+    "negative_assertions": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "expected_verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+    "expected_reason_code": { "type": "string" },
+    "must_emit_receipt": { "const": true },
+    "must_not_dispatch": { "const": true },
+    "must_bind_evidence": { "const": true },
+    "generated_at": { "type": "string", "format": "date-time" }
+  }
+}

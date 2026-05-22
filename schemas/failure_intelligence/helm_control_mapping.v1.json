@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/failure_intelligence/helm_control_mapping.v1.json",
+  "title": "HELM Control Mapping v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "candidate_id", "failure_modes", "side_effect_type", "missing_authority_layer", "helm_controls", "required_verdict", "counterfactual_verdict", "reason_codes", "evidence_requirements", "vector_templates", "mapping_hash"],
+  "properties": {
+    "id": { "type": "string" },
+    "candidate_id": { "type": "string" },
+    "failure_modes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "failure_mode.v1.json" }
+    },
+    "side_effect_type": { "type": "string" },
+    "missing_authority_layer": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "helm_controls": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "required_verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+    "counterfactual_verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+    "reason_codes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "evidence_requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "vector_templates": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "policy_patch_suggestions": { "type": "array", "items": { "type": "string" } },
+    "connector_suggestions": { "type": "array", "items": { "type": "string" } },
+    "sandbox_patch_suggestions": { "type": "array", "items": { "type": "string" } },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "mapping_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+  }
+}

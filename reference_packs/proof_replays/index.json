@@ -1,0 +1,12 @@
+{
+  "version": "proof-replays.index.v1",
+  "generated_at": "2026-05-22T09:00:00Z",
+  "entries": [
+    {
+      "hpr_id": "HPR-2026-00001",
+      "title": "Prompt Injection Caused Tool Hijack in Public Agent Demo",
+      "path": "HPR-2026-00001/replay.json",
+      "vectors": ["HCV-2026-00001"]
+    }
+  ]
+}

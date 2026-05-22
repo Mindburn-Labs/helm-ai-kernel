@@ -1,10 +1,11 @@
-import { AlertTriangle, CheckCircle2, Clipboard, Download, Loader2, Play, RefreshCw, Trash2, Shield, ShieldCheck, ShieldAlert, Key, Globe, FolderOpen, FileText, Check, ArrowRight, ArrowLeft, Lock, Unlock, Cpu } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clipboard, Download, Loader2, RefreshCw, Trash2, ShieldCheck, Key, Globe, FolderOpen, Cpu } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { launchpadApi } from "./api";
 import { AppCard } from "./AppCard";
 import { ProofPanel } from "./ProofPanel";
 import { RunTimeline } from "./RunTimeline";
 import { SimpleLaunchHome } from "./SimpleLaunchHome";
+import { detailMatchesSelection, planMatchesSelection } from "./model";
 import { CanvasElement, VisualCodeDiff, AnnotatedCodeBlock, type CodeAnnotation } from "@mindburn/ui-core";
 import type {
   FixAction,
@@ -87,8 +88,37 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
   }, []);
 
   const app = useMemo(() => apps.find((item) => (item.app_id ?? item.id) === selectedApp), [apps, selectedApp]);
+  const selectionPlan = useMemo(() => {
+    return planMatchesSelection(plan, selectedApp, selectedSubstrate) ? plan : null;
+  }, [plan, selectedApp, selectedSubstrate]);
+  const selectionDetail = useMemo(() => {
+    return detailMatchesSelection(detail, selectedApp, selectedSubstrate) ? detail : null;
+  }, [detail, selectedApp, selectedSubstrate]);
+  const selectionPolicySimulation = useMemo(() => {
+    return policySimulation?.app_id === selectedApp ? policySimulation : null;
+  }, [policySimulation, selectedApp]);
   const currentRunId = detail?.instance.run_id ?? detail?.run.launch_id ?? "";
   const canAct = !busy && !loading && Boolean(selectedApp) && Boolean(selectedSubstrate);
+
+  const clearSelectionProof = () => {
+    setPlan(null);
+    setPolicySimulation(null);
+    setDetail(null);
+    setSandboxGrant(null);
+    setReceipts([]);
+    setRunLog("");
+    setInspector(null);
+  };
+
+  const selectApp = (id: string) => {
+    if (id !== selectedApp) clearSelectionProof();
+    setSelectedApp(id);
+  };
+
+  const selectSubstrate = (id: string) => {
+    if (id !== selectedSubstrate) clearSelectionProof();
+    setSelectedSubstrate(id);
+  };
 
   const openRun = async (runId: string) => {
     if (!runId) return;
@@ -125,6 +155,10 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
 
   const runPreflight = async (targetApp = selectedApp) => {
     if (!targetApp || !selectedSubstrate) return;
+    if (targetApp !== selectedApp) {
+      clearSelectionProof();
+      setSelectedApp(targetApp);
+    }
     setBusy(true);
     setNotice(null);
     try {
@@ -140,6 +174,14 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
 
   const createRun = async (targetApp = selectedApp) => {
     if (!targetApp || !selectedSubstrate) return;
+    if (!planMatchesSelection(plan, targetApp, selectedSubstrate) || plan?.kernel_verdict !== "ALLOW") {
+      setNotice({ tone: "error", message: "Run preflight and receive ALLOW before launch." });
+      return;
+    }
+    if (targetApp !== selectedApp) {
+      clearSelectionProof();
+      setSelectedApp(targetApp);
+    }
     setBusy(true);
     setNotice(null);
     try {
@@ -325,13 +367,13 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
           secrets={secrets}
           threatReviews={threatReviews}
           plan={plan}
-          detail={detail}
+          detail={selectionDetail}
           selectedApp={selectedApp}
           selectedSubstrate={selectedSubstrate}
           substrates={substrates}
           busy={!canAct}
-          onSelectApp={setSelectedApp}
-          onSelectSubstrate={setSelectedSubstrate}
+          onSelectApp={selectApp}
+          onSelectSubstrate={selectSubstrate}
           onPreflight={(appId) => void runPreflight(appId)}
           onLaunch={(appId) => void createRun(appId)}
           onBindSecret={(requirement) => void bindSecret(requirement)}
@@ -339,7 +381,7 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
       ) : null}
 
       {surface === "runs" ? <RunsSurface viewMode={viewMode} setViewMode={setViewMode} runs={runs} detail={detail} busy={busy} onOpenRun={(id) => void openRun(id)} onTeardown={() => void teardown()} onExportEvidence={() => void exportEvidence()} /> : null}
-      {surface === "policies" ? <PolicySurface viewMode={viewMode} setViewMode={setViewMode} app={app} simulation={policySimulation} plan={plan} busy={busy} onSimulate={() => void simulatePolicy()} /> : null}
+      {surface === "policies" ? <PolicySurface viewMode={viewMode} setViewMode={setViewMode} app={app} simulation={selectionPolicySimulation} plan={selectionPlan} busy={busy} onSimulate={() => void simulatePolicy()} /> : null}
       {surface === "mcp" ? <McpSurface viewMode={viewMode} reviews={threatReviews} busy={busy} onApprove={(review) => void approveMcpReview(review)} /> : null}
       {surface === "secrets" ? <SecretsSurface viewMode={viewMode} secrets={secrets} apps={apps} busy={busy} onBindSecret={(requirement) => void bindSecret(requirement)} /> : null}
       {surface === "evidence" ? <EvidenceSurface viewMode={viewMode} runs={runs} detail={detail} onExport={() => void exportEvidence()} /> : null}
@@ -418,7 +460,7 @@ function LaunchSurface({
         threatReviews={threatReviews}
         selectedApp={selectedApp}
         selectedSubstrate={selectedSubstrate}
-        plan={plan}
+        plan={planMatchesSelection(plan, selectedApp, selectedSubstrate) ? plan : null}
         detail={detail}
         busy={busy}
         onSelectApp={onSelectApp}
@@ -453,6 +495,7 @@ function LaunchSurface({
               selected={selectedApp === appId}
               substrate={substrates.find((substrate) => substrate.id === selectedSubstrate)}
               cell={cell}
+              plan={plan}
               secrets={secrets}
               reviews={appReviews}
               busy={busy}

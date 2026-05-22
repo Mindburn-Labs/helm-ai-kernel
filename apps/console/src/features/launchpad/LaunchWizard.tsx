@@ -5,6 +5,7 @@ import {
   appKey,
   entitlementAllows,
   launchBlockedReasons,
+  planAllowsLaunch,
   secretRequirements,
   type SecretRequirement,
 } from "./model";
@@ -62,7 +63,8 @@ export function LaunchWizard({
   const appReviews = useMemo(() => app ? threatReviews.filter((review) => review.app_id === appKey(app)) : [], [app, threatReviews]);
   const cell = useMemo(() => app && substrate ? matrix.find((entry) => entry.app_id === appKey(app) && entry.substrate_id === substrate.id) : undefined, [app, substrate, matrix]);
   const blocked = app ? launchBlockedReasons(app, cell, missing, appReviews) : ["No app selected."];
-  const canLaunch = Boolean(app && substrate && blocked.length === 0 && entitlementAllows(app, "launch"));
+  const hasAllowPreflight = Boolean(app && substrate && planAllowsLaunch(plan, appKey(app), substrate.id));
+  const canLaunch = Boolean(app && substrate && blocked.length === 0 && entitlementAllows(app, "launch") && hasAllowPreflight);
   const appName = app?.name ?? "Select an app";
 
   return (
@@ -162,6 +164,7 @@ export function LaunchWizard({
         {step === 5 ? (
           <>
             <Header title="Launch and verify" body="Runtime starts only when backend gates permit it. Proof remains visible for every result." />
+            {!hasAllowPreflight ? <div className="inline-error">Run preflight and receive ALLOW before launch.</div> : null}
             <button className="primary-action launchpad-action" type="button" disabled={busy || !canLaunch || !app} onClick={() => app && onLaunch(appKey(app))}>
               <Play size={18} aria-hidden="true" /> Launch Safely
             </button>

@@ -7,17 +7,19 @@ import {
   entitlementReason,
   isFixtureOnly,
   launchBlockedReasons,
+  planAllowsLaunch,
   sandboxSummary,
   secretRequirements,
   type SecretRequirement,
 } from "./model";
-import type { LaunchpadApp, LaunchpadMatrixCell, LaunchpadSecretGrant, LaunchpadSubstrate, MCPThreatReview } from "./types";
+import type { LaunchpadApp, LaunchpadMatrixCell, LaunchpadPlanResponse, LaunchpadSecretGrant, LaunchpadSubstrate, MCPThreatReview } from "./types";
 
 export function AppCard({
   app,
   selected,
   substrate,
   cell,
+  plan,
   secrets,
   reviews,
   busy,
@@ -30,6 +32,7 @@ export function AppCard({
   readonly selected: boolean;
   readonly substrate?: LaunchpadSubstrate;
   readonly cell?: LaunchpadMatrixCell;
+  readonly plan?: LaunchpadPlanResponse | null;
   readonly secrets: readonly LaunchpadSecretGrant[];
   readonly reviews: readonly MCPThreatReview[];
   readonly busy: boolean;
@@ -46,9 +49,12 @@ export function AppCard({
   const blockedReasons = launchBlockedReasons(app, cell, missing, reviews);
   const launchAllowedByEntitlement = entitlementAllows(app, "launch");
   const launchReason = entitlementReason(app, "launch");
-  const canLaunch = blockedReasons.length === 0 && Boolean(substrate?.id) && launchAllowedByEntitlement;
+  const hasAllowPreflight = Boolean(substrate?.id && planAllowsLaunch(plan, id, substrate.id));
+  const canLaunch = blockedReasons.length === 0 && Boolean(substrate?.id) && launchAllowedByEntitlement && hasAllowPreflight;
   const state = app.user_state ?? stateFromBackend(app, missing, reviews, cell);
   const decision = app.action_states?.launch ?? app.entitlement_decision;
+  const preflightReason = "Run preflight and receive ALLOW before launch.";
+  const launchDisabledReason = blockedReasons[0] ?? launchReason ?? (!hasAllowPreflight ? preflightReason : "Launch is not available.");
 
   return (
     <article className={`appspec-card status-${app.status?.state ?? state}`}>
@@ -75,6 +81,7 @@ export function AppCard({
       {missing.length > 0 ? <SecretSetupPanel requirements={missing} busy={busy} onBindSecret={onBindSecret} /> : null}
       {blockedReasons.length > 0 ? <InlineBlock title="Launch blocked" items={blockedReasons} /> : null}
       {launchReason && !launchAllowedByEntitlement ? <InlineBlock title="Access decision" items={[launchReason]} /> : null}
+      {!hasAllowPreflight && blockedReasons.length === 0 && launchAllowedByEntitlement ? <InlineBlock title="Preflight required" items={[preflightReason]} /> : null}
       <div className="cli-equivalent">Preflight CLI: helm app preflight {id}{substrate?.id ? ` --substrate ${substrate.id}` : ""}</div>
       <div className="cli-equivalent">Launch CLI: helm app run {id}{substrate?.id ? ` --substrate ${substrate.id}` : ""}</div>
       <div className="launchpad-actions">
@@ -84,7 +91,7 @@ export function AppCard({
             type="button"
             className="launchpad-action launchpad-action-primary"
             disabled={busy || !canLaunch}
-            title={!canLaunch ? blockedReasons[0] ?? launchReason ?? "Launch is not available." : undefined}
+            title={!canLaunch ? launchDisabledReason : undefined}
             onClick={() => onLaunch(id)}
           >
             <Play size={14} aria-hidden="true" /> Launch

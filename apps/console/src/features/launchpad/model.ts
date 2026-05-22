@@ -1,7 +1,9 @@
 import type {
   LaunchpadApp,
   LaunchpadMatrixCell,
+  LaunchpadPlanResponse,
   LaunchpadRun,
+  LaunchpadRunDetail,
   LaunchpadSecretGrant,
   MCPThreatReview,
 } from "./types";
@@ -42,7 +44,8 @@ export function launchBlockedReasons(
   reviews: readonly MCPThreatReview[],
 ): string[] {
   const reasons: string[] = [];
-  if ((app.status?.verdict ?? "ESCALATE") !== "ALLOW") reasons.push(app.status?.summary ?? app.blocked_reason ?? "App status is not ALLOW.");
+  if (!app.status?.verdict) reasons.push(app.status?.summary ?? app.blocked_reason ?? "App status verdict is unproven.");
+  if (app.status?.verdict && app.status.verdict !== "ALLOW") reasons.push(app.status.summary ?? app.blocked_reason ?? "App status is not ALLOW.");
   if (!cell) reasons.push("Compatibility matrix cell is unproven.");
   if (cell && (!cell.launchable || cell.verdict !== "ALLOW")) reasons.push(cell.reason || "Compatibility matrix blocks launch.");
   if (missing.length > 0) reasons.push(`Missing secret: ${missing.map((item) => `${item.logical} from ${item.env}`).join(", ")}.`);
@@ -72,6 +75,21 @@ export function entitlementReason(app: LaunchpadApp, action: string): string | u
 export function isFixtureOnly(app: LaunchpadApp, action: string): boolean {
   const decision = app.action_states?.[action] ?? app.entitlement_decision;
   return Boolean(decision?.fixture_only);
+}
+
+export function planMatchesSelection(plan: LaunchpadPlanResponse | null | undefined, appId: string, substrateId: string): boolean {
+  return Boolean(plan && plan.app_id === appId && plan.substrate_id === substrateId);
+}
+
+export function planAllowsLaunch(plan: LaunchpadPlanResponse | null | undefined, appId: string, substrateId: string): boolean {
+  return planMatchesSelection(plan, appId, substrateId) && plan?.kernel_verdict === "ALLOW";
+}
+
+export function detailMatchesSelection(detail: LaunchpadRunDetail | null | undefined, appId: string, substrateId: string): boolean {
+  if (!detail) return false;
+  const runApp = detail.instance.app_id || detail.run.app_id;
+  const runSubstrate = detail.instance.substrate_id || detail.run.substrate_id;
+  return runApp === appId && runSubstrate === substrateId;
 }
 
 export function receiptRefStrings(refs: LaunchpadRun["receipt_refs"] | undefined): string[] | undefined {

@@ -667,6 +667,67 @@ describe("HELM Console workbench", () => {
     expect(screen.queryByText(/Cryptographically Proven|Validated by HELM Cloud|Sovereign Shield/i)).not.toBeInTheDocument();
   });
 
+  it("requires a current ALLOW preflight and clears stale proof when selection changes", async () => {
+    const hermes = {
+      ...launchpadAppFixture(),
+      id: "hermes",
+      app_id: "hermes",
+      name: "Hermes",
+      oci_ref: "ghcr.io/mindburn-labs/hermes@sha256:def",
+      immutable_digest: "sha256:def",
+      required_secrets: [],
+      model_gateway_env: [],
+      status: {
+        state: "ready",
+        verdict: "ALLOW",
+        summary: "Hermes is ready to compile LaunchPlan.",
+        missing_secrets: [],
+      },
+    };
+    apiMock.listLaunchpadApps.mockResolvedValueOnce([launchpadAppFixture(), hermes]);
+    apiMock.loadLaunchpadMatrix.mockResolvedValueOnce([
+      { app_id: "openclaw", substrate_id: "local-container", launchable: true, verdict: "ALLOW", reason: "OSS supported", availability: "available" },
+      { app_id: "hermes", substrate_id: "local-container", launchable: true, verdict: "ALLOW", reason: "OSS supported", availability: "available" },
+    ]);
+    apiMock.planLaunchpad.mockImplementation(async (appId: string, substrateId: string) => ({
+      launch_id: `${appId}_plan`,
+      app_id: appId,
+      substrate_id: substrateId,
+      state: "PLANNED",
+      kernel_verdict: "ALLOW",
+      reason: "LaunchPlan compiled.",
+      plan_hash: `sha256:${appId}-plan`,
+    }));
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Choose an app" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Run preflight" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Preflight" }));
+    expect(await screen.findByText("sha256:openclaw-plan")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("button", { name: /Launch Safely/i })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: /Hermes/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(screen.getByRole("heading", { name: "Run preflight" })).toBeInTheDocument();
+    expect(screen.queryByText("sha256:openclaw-plan")).not.toBeInTheDocument();
+    expect(screen.getAllByText("not compiled").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("Run preflight and receive ALLOW before launch.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Launch Safely/i })).toBeDisabled();
+  });
+
   it("shows the HELM AI assistant as non-authoritative", async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /Open HELM AI Kernel assistant/i }));

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/failure_intelligence/export_batch.v1.json",
+  "title": "HELM Failure Intelligence Export Batch v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "kind", "status", "artifact_refs", "artifact_hash", "created_at"],
+  "properties": {
+    "id": { "type": "string" },
+    "kind": { "type": "string" },
+    "status": { "type": "string" },
+    "artifact_refs": {
+      "type": "array",
+      "items": { "$ref": "artifact_ref.v1.json" }
+    },
+    "artifact_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "error_summary": { "type": "string" }
+  }
+}

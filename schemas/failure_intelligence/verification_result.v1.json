@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/failure_intelligence/verification_result.v1.json",
+  "title": "HELM Failure Intelligence Verification Result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "replay_id", "hpr_id", "status", "verifier_command", "evidencepack_hash", "verified_at", "offline_verified", "conformance_passed"],
+  "properties": {
+    "id": { "type": "string" },
+    "replay_id": { "type": "string" },
+    "hpr_id": { "type": "string", "pattern": "^HPR-[0-9]{4}-[0-9]{5}$" },
+    "status": { "enum": ["pending", "passed", "failed"] },
+    "verifier_command": { "type": "string" },
+    "evidencepack_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "verified_at": { "type": "string", "format": "date-time" },
+    "failure_reason": { "type": "string" },
+    "offline_verified": { "type": "boolean" },
+    "conformance_passed": { "type": "boolean" }
+  }
+}

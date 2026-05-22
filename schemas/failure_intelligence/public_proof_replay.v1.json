@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/failure_intelligence/public_proof_replay.v1.json",
+  "title": "HELM Public Proof Replay v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "title", "status", "source_confidence", "failure_modes", "missing_authority", "helm_controls", "counterfactual_verdict", "reason_codes", "evidence", "verification", "limits", "generated_vectors", "counterfactual_claim"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^HPR-[0-9]{4}-[0-9]{5}$" },
+    "title": { "type": "string" },
+    "status": { "enum": ["confirmed", "probable", "emerging", "watchlist", "rejected_not_helm_boundary"] },
+    "source_confidence": { "enum": ["high", "medium", "low"] },
+    "risk_level": { "enum": ["low", "medium", "high", "blocked"] },
+    "failure_modes": { "type": "array", "minItems": 1, "items": { "$ref": "failure_mode.v1.json" } },
+    "missing_authority": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "helm_controls": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "counterfactual_verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+    "reason_codes": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "evidence": {
+      "type": "object",
+      "required": ["replay_policy_hash", "synthetic_plan_hash", "receipt_hash", "evidencepack_hash"],
+      "properties": {
+        "replay_policy_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "synthetic_plan_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "receipt_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "evidencepack_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "required": ["command"],
+      "properties": { "command": { "type": "string" } }
+    },
+    "limits": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "generated_vectors": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "pattern": "^HCV-[0-9]{4}-[0-9]{5}(-[0-9]{2})?$" }
+    },
+    "vector_status": { "enum": ["draft", "exported", "approved_export_pending_merge", "validated_in_kernel", "rejected"] },
+    "evidencepack_ref": { "type": "string" },
+    "published_artifact_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "counterfactual_claim": {
+      "type": "string",
+      "pattern": "^Under this published HELM replay policy, the modeled action produced (ALLOW|DENY|ESCALATE) before side-effect dispatch\\.$"
+    }
+  }
+}

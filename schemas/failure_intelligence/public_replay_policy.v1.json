@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/failure_intelligence/public_replay_policy.v1.json",
+  "title": "HELM Public Replay Policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "version", "title", "failure_modes", "helm_controls", "rules", "limits", "policy_hash"],
+  "properties": {
+    "id": { "type": "string" },
+    "version": { "const": "failure-intelligence.replay-policy.v1" },
+    "title": { "type": "string" },
+    "failure_modes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "failure_mode.v1.json" }
+    },
+    "helm_controls": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "control", "when", "verdict", "reason_code", "before_dispatch"],
+        "properties": {
+          "id": { "type": "string" },
+          "control": { "type": "string" },
+          "when": { "type": "string" },
+          "verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+          "reason_code": { "type": "string" },
+          "before_dispatch": { "const": true }
+        }
+      }
+    },
+    "limits": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "policy_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+  }
+}

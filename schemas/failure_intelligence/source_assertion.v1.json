@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/failure_intelligence/source_assertion.v1.json",
+  "title": "HELM Failure Intelligence Source Assertion v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "source", "source_url", "title", "claim", "confidence", "content_hash"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "candidate_id": { "type": "string" },
+    "source": { "type": "string", "minLength": 1 },
+    "source_id": { "type": "string" },
+    "source_url": { "type": "string", "format": "uri" },
+    "source_url_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "publisher": { "type": "string" },
+    "title": { "type": "string", "minLength": 1 },
+    "claim": { "type": "string", "minLength": 1 },
+    "claim_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "raw_snapshot_ref": { "type": "string" },
+    "source_type": { "type": "string" },
+    "published_at": { "type": "string", "format": "date-time" },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "confidence": { "enum": ["high", "medium", "low"] },
+    "content_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+  }
+}

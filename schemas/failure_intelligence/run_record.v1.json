@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/failure_intelligence/run_record.v1.json",
+  "title": "HELM Failure Intelligence Run Record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run_id", "mode", "status", "started_at", "completed_at", "shadow_mode", "auto_publish_enabled", "candidates_imported", "replays_generated", "network_polling"],
+  "properties": {
+    "run_id": { "type": "string" },
+    "mode": { "enum": ["seed", "live", "shadow"] },
+    "source_set": { "type": "array", "items": { "type": "string" } },
+    "status": { "enum": ["running", "completed", "failed"] },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "stage_counts": { "type": "object", "additionalProperties": { "type": "integer" } },
+    "error_summary": { "type": "string" },
+    "gate_failures": { "type": "array", "items": { "type": "string" } },
+    "shadow_mode": { "type": "boolean" },
+    "auto_publish_enabled": { "type": "boolean" },
+    "candidates_imported": { "type": "integer" },
+    "replays_generated": { "type": "integer" },
+    "candidates_merged": { "type": "integer" },
+    "verification_passed": { "type": "integer" },
+    "vectors_exported": { "type": "integer" },
+    "archive_artifacts_exported": { "type": "integer" },
+    "source_registries_registered": { "type": "integer" },
+    "source_snapshots_captured": { "type": "integer" },
+    "generated_specs_drafted": { "type": "integer" },
+    "network_polling": { "type": "boolean" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}

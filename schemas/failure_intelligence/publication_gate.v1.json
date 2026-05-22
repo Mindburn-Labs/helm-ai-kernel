@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/failure_intelligence/publication_gate.v1.json",
+  "title": "HELM Failure Intelligence Publication Gate v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_quality", "helm_relevance", "safe_replay", "proof_verification", "publication_language"],
+  "properties": {
+    "source_quality": { "const": "PASS" },
+    "helm_relevance": { "const": "PASS" },
+    "safe_replay": { "const": "PASS" },
+    "proof_verification": { "const": "PASS" },
+    "publication_language": { "const": "PASS" },
+    "review_required": { "type": "boolean" },
+    "review_approved": { "type": "boolean" }
+  }
+}

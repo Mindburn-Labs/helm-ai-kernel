@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -10,6 +11,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform/gates"
@@ -45,6 +49,10 @@ func runConform(args []string, stdout, stderr io.Writer) int {
 		signed       bool
 		gateFilter   multiFlag
 		level        string
+		vectorPath   string
+		manifestPath string
+		evidencePack string
+		kernelCommit string
 	)
 
 	cmd.StringVar(&profile, "profile", "", "Conformance profile (REQUIRED unless --level): SMB, CORE, ENTERPRISE, REGULATED_FINANCE, REGULATED_HEALTH, AGENTIC_WEB_ROUTER")
@@ -54,9 +62,22 @@ func runConform(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&signed, "signed", false, "Emit signed report artifacts (conform_report.json + .sha256 + .sig)")
 	cmd.Var(&gateFilter, "gate", "Run only specific gate(s) (repeatable)")
 	cmd.StringVar(&level, "level", "", "Conformance level shortcut: L1 (deterministic bytes, ProofGraph, EvidencePack) or L2 (L1 + budget, HITL, replay, tenant, envelope)")
+	cmd.StringVar(&vectorPath, "vector", "", "Run a single external failure conformance vector JSON")
+	cmd.StringVar(&manifestPath, "validation-manifest", "", "Write signed external failure HCV validation manifest JSON")
+	cmd.StringVar(&evidencePack, "evidencepack", "", "EvidencePack tar or directory bound into the validation manifest")
+	cmd.StringVar(&kernelCommit, "kernel-commit", "", "Kernel commit SHA to include in the validation manifest")
 
 	if err := cmd.Parse(args); err != nil {
 		return 2
+	}
+
+	if vectorPath != "" {
+		return runExternalFailureVector(vectorPath, externalFailureVectorOptions{
+			JSONOutput:             jsonOutput,
+			ValidationManifestPath: manifestPath,
+			EvidencePackPath:       evidencePack,
+			KernelCommit:           kernelCommit,
+		}, stdout, stderr)
 	}
 
 	// Map --level to profile + gate filter
@@ -192,6 +213,299 @@ func runConform(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+type externalFailureVector struct {
+	ID                 string `json:"id"`
+	VectorID           string `json:"vector_id"`
+	HPRID              string `json:"hpr_id"`
+	FailureMode        string `json:"failure_mode"`
+	ExpectedVerdict    string `json:"expected_verdict"`
+	ExpectedReasonCode string `json:"expected_reason_code"`
+	MustEmitReceipt    bool   `json:"must_emit_receipt"`
+	MustNotDispatch    bool   `json:"must_not_dispatch"`
+	MustBindEvidence   bool   `json:"must_bind_evidence"`
+	Expected           struct {
+		Verdict              string `json:"verdict"`
+		ReasonCode           string `json:"reason_code"`
+		ReceiptRequired      bool   `json:"receipt_required"`
+		EvidencePackRequired bool   `json:"evidencepack_required"`
+	} `json:"expected"`
+	NegativeAssertions []string `json:"negative_assertions"`
+}
+
+type externalFailureVectorOptions struct {
+	JSONOutput             bool
+	ValidationManifestPath string
+	EvidencePackPath       string
+	KernelCommit           string
+}
+
+type externalFailureValidationManifest struct {
+	ID                    string    `json:"id"`
+	HPRID                 string    `json:"hpr_id"`
+	HCVIDs                []string  `json:"hcv_ids"`
+	ExpectedVerdicts      []string  `json:"expected_verdicts"`
+	EvidencePackHash      string    `json:"evidencepack_hash"`
+	ConformanceResultHash string    `json:"conformance_result_hash"`
+	KernelCommit          string    `json:"kernel_commit"`
+	IssuedAt              time.Time `json:"issued_at"`
+	Signer                string    `json:"signer"`
+	Signature             string    `json:"signature"`
+}
+
+func runExternalFailureVector(path string, opts externalFailureVectorOptions, stdout, stderr io.Writer) int {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: read vector: %v\n", err)
+		return 2
+	}
+	var vector externalFailureVector
+	if err := json.Unmarshal(raw, &vector); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: parse vector: %v\n", err)
+		return 2
+	}
+	issues := validateExternalFailureVector(vector)
+	result := map[string]any{
+		"vector_id": vector.ID,
+		"hpr_id":    vector.HPRID,
+		"status":    "PASS",
+		"issues":    issues,
+	}
+	if len(issues) > 0 {
+		result["status"] = "FAIL"
+	}
+	if opts.ValidationManifestPath != "" {
+		if len(issues) > 0 {
+			_, _ = fmt.Fprintln(stderr, "Error: validation manifest requires a passing external failure vector")
+			return 1
+		}
+		if err := writeExternalFailureValidationManifest(opts.ValidationManifestPath, vector, result, opts); err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: write validation manifest: %v\n", err)
+			return 2
+		}
+		result["validation_manifest"] = opts.ValidationManifestPath
+	}
+	if opts.JSONOutput {
+		payload, _ := json.MarshalIndent(result, "", "  ")
+		_, _ = fmt.Fprintln(stdout, string(payload))
+	} else if len(issues) == 0 {
+		_, _ = fmt.Fprintf(stdout, "External failure vector %s PASS (%s)\n", vector.ID, vector.ExpectedVerdict)
+	} else {
+		_, _ = fmt.Fprintf(stdout, "External failure vector %s FAIL\n", vector.ID)
+		for _, issue := range issues {
+			_, _ = fmt.Fprintf(stdout, "  - %s\n", issue)
+		}
+	}
+	if len(issues) > 0 {
+		return 1
+	}
+	return 0
+}
+
+func writeExternalFailureValidationManifest(path string, vector externalFailureVector, result map[string]any, opts externalFailureVectorOptions) error {
+	if opts.EvidencePackPath == "" {
+		return fmt.Errorf("--evidencepack is required when --validation-manifest is set")
+	}
+	evidenceBytes, err := os.ReadFile(opts.EvidencePackPath)
+	if err != nil {
+		return fmt.Errorf("read evidencepack: %w", err)
+	}
+	evidenceHash := sha256.Sum256(evidenceBytes)
+	resultBytes, err := canonicalJSON(result)
+	if err != nil {
+		return fmt.Errorf("canonicalize vector result: %w", err)
+	}
+	resultHash := sha256.Sum256(resultBytes)
+	kernelCommit := strings.TrimSpace(opts.KernelCommit)
+	if kernelCommit == "" {
+		kernelCommit = strings.TrimSpace(os.Getenv("HELM_KERNEL_COMMIT"))
+	}
+	if kernelCommit == "" {
+		kernelCommit = "working-tree"
+	}
+	issuedAt := time.Now().UTC().Truncate(time.Second)
+	if fixed := strings.TrimSpace(os.Getenv("HELM_FIXED_TIME_RFC3339")); fixed != "" {
+		parsed, err := time.Parse(time.RFC3339, fixed)
+		if err != nil {
+			return fmt.Errorf("parse HELM_FIXED_TIME_RFC3339: %w", err)
+		}
+		issuedAt = parsed.UTC()
+	}
+	privateKey, signer, err := externalFailureSigningKey()
+	if err != nil {
+		return err
+	}
+	manifest := externalFailureValidationManifest{
+		ID:                    "KVM-" + vector.HPRID,
+		HPRID:                 vector.HPRID,
+		HCVIDs:                []string{vector.ID},
+		ExpectedVerdicts:      []string{vector.ExpectedVerdict},
+		EvidencePackHash:      "sha256:" + hex.EncodeToString(evidenceHash[:]),
+		ConformanceResultHash: "sha256:" + hex.EncodeToString(resultHash[:]),
+		KernelCommit:          kernelCommit,
+		IssuedAt:              issuedAt,
+		Signer:                signer,
+	}
+	signingBytes, err := canonicalJSON(manifest)
+	if err != nil {
+		return fmt.Errorf("canonicalize manifest: %w", err)
+	}
+	manifest.Signature = hex.EncodeToString(ed25519.Sign(privateKey, signingBytes))
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o600)
+}
+
+func externalFailureSigningKey() (ed25519.PrivateKey, string, error) {
+	keyHex := strings.TrimSpace(os.Getenv("HELM_SIGNING_KEY_HEX"))
+	if keyHex == "" {
+		return nil, "", fmt.Errorf("HELM_SIGNING_KEY_HEX is required for signed Kernel validation manifests")
+	}
+	keyBytes, err := hex.DecodeString(keyHex)
+	if err != nil {
+		return nil, "", fmt.Errorf("invalid HELM_SIGNING_KEY_HEX: %w", err)
+	}
+	var privateKey ed25519.PrivateKey
+	switch len(keyBytes) {
+	case ed25519.SeedSize:
+		privateKey = ed25519.NewKeyFromSeed(keyBytes)
+	case ed25519.PrivateKeySize:
+		privateKey = ed25519.PrivateKey(keyBytes)
+	default:
+		return nil, "", fmt.Errorf("HELM_SIGNING_KEY_HEX must be a 32-byte seed or 64-byte private key")
+	}
+	publicKey := privateKey.Public().(ed25519.PublicKey)
+	return privateKey, hex.EncodeToString(publicKey), nil
+}
+
+func canonicalJSON(v any) ([]byte, error) {
+	intermediate, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var generic any
+	decoder := json.NewDecoder(bytes.NewReader(intermediate))
+	decoder.UseNumber()
+	if err := decoder.Decode(&generic); err != nil {
+		return nil, err
+	}
+	return marshalCanonical(generic)
+}
+
+func marshalCanonical(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	switch value := v.(type) {
+	case nil:
+		return []byte("null"), nil
+	case bool:
+		if value {
+			return []byte("true"), nil
+		}
+		return []byte("false"), nil
+	case json.Number:
+		return []byte(value.String()), nil
+	case string:
+		if err := enc.Encode(value); err != nil {
+			return nil, err
+		}
+		return bytes.TrimSuffix(buf.Bytes(), []byte{'\n'}), nil
+	case []any:
+		buf.WriteByte('[')
+		for i, item := range value {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			data, err := marshalCanonical(item)
+			if err != nil {
+				return nil, err
+			}
+			buf.Write(data)
+		}
+		buf.WriteByte(']')
+		return buf.Bytes(), nil
+	case map[string]any:
+		keys := make([]string, 0, len(value))
+		for key := range value {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		buf.WriteByte('{')
+		for i, key := range keys {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			keyBytes, err := marshalCanonical(key)
+			if err != nil {
+				return nil, err
+			}
+			valueBytes, err := marshalCanonical(value[key])
+			if err != nil {
+				return nil, err
+			}
+			buf.Write(keyBytes)
+			buf.WriteByte(':')
+			buf.Write(valueBytes)
+		}
+		buf.WriteByte('}')
+		return buf.Bytes(), nil
+	default:
+		if err := enc.Encode(value); err != nil {
+			return nil, err
+		}
+		return bytes.TrimSuffix(buf.Bytes(), []byte{'\n'}), nil
+	}
+}
+
+func validateExternalFailureVector(vector externalFailureVector) []string {
+	var issues []string
+	if !strings.HasPrefix(vector.ID, "HCV-") {
+		issues = append(issues, "vector id must use HCV prefix")
+	}
+	if vector.VectorID != "" && vector.VectorID != vector.ID {
+		issues = append(issues, "vector_id must match id")
+	}
+	if !strings.HasPrefix(vector.HPRID, "HPR-") {
+		issues = append(issues, "source replay id must use HPR prefix")
+	}
+	if vector.FailureMode == "" {
+		issues = append(issues, "failure mode is required")
+	}
+	if vector.ExpectedVerdict != "ALLOW" && vector.ExpectedVerdict != "DENY" && vector.ExpectedVerdict != "ESCALATE" {
+		issues = append(issues, "expected verdict must be ALLOW, DENY, or ESCALATE")
+	}
+	if vector.Expected.Verdict != "" && vector.Expected.Verdict != vector.ExpectedVerdict {
+		issues = append(issues, "expected.verdict must match expected_verdict")
+	}
+	if vector.Expected.ReasonCode != "" && vector.ExpectedReasonCode != "" && vector.Expected.ReasonCode != vector.ExpectedReasonCode {
+		issues = append(issues, "expected.reason_code must match expected_reason_code")
+	}
+	if !vector.MustEmitReceipt || !vector.Expected.ReceiptRequired {
+		issues = append(issues, "receipt must be required")
+	}
+	if !vector.MustNotDispatch || !contains(vector.NegativeAssertions, "must_not_dispatch_connector") {
+		issues = append(issues, "vector must assert no connector dispatch")
+	}
+	if !vector.MustBindEvidence || !vector.Expected.EvidencePackRequired {
+		issues = append(issues, "EvidencePack binding must be required")
+	}
+	return issues
+}
+
+func contains(values []string, needle string) bool {
+	for _, value := range values {
+		if value == needle {
+			return true
+		}
+	}
+	return false
 }
 
 func runConformNegative(args []string, stdout, stderr io.Writer) int {

@@ -12,8 +12,16 @@ env:
   IMAGE_NAME: mindburn-labs/helm-ai-kernel
 
 jobs:
+  version-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - name: Check tag and lockstep source versions
+        run: python3 scripts/release/check_version_drift.py local --tag "${GITHUB_REF_NAME}"
+
   validate:
     runs-on: ubuntu-latest
+    needs: version-contract
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
@@ -316,8 +324,8 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
-            echo "HOMEBREW_TAP_TOKEN not configured; skipping tap push."
-            exit 0
+            echo "::error::HOMEBREW_TAP_TOKEN not configured; cannot publish a complete lockstep release."
+            exit 1
           fi
           git config --global user.name "mindburn-release-bot"
           git config --global user.email "release@mindburn.org"
@@ -346,21 +354,8 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-      - name: Sync chart version with release tag
-        run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "Bumping deploy/helm-chart/Chart.yaml to version ${VERSION}"
-          yq -i ".version = \"${VERSION}\"" deploy/helm-chart/Chart.yaml
-          yq -i ".appVersion = \"v${VERSION}\"" deploy/helm-chart/Chart.yaml
-          # The artifacthub.io/images annotation is a YAML block scalar with
-          # image refs (incl. the -slim variant); patch tags in place with sed.
-          sed -i.bak -E \
-            "s|(ghcr\\.io/mindburn-labs/helm-ai-kernel:)v[0-9]+\\.[0-9]+\\.[0-9]+(-slim)?|\\1v${VERSION}\\2|g" \
-            deploy/helm-chart/Chart.yaml
-          rm -f deploy/helm-chart/Chart.yaml.bak
-          echo "--- updated Chart.yaml (head) ---"
-          head -16 deploy/helm-chart/Chart.yaml
+      - name: Verify chart source version
+        run: make version-drift
       - name: Package chart
         run: |
           mkdir -p dist/chart
@@ -370,7 +365,7 @@ jobs:
         run: |
           # `helm push` prints the OCI digest to stderr; capture both
           # streams so we can pin cosign signing to an immutable digest
-          # rather than the mutable :0.5.2 tag.
+          # rather than a mutable chart tag.
           helm push dist/chart/helm-ai-kernel-*.tgz oci://ghcr.io/mindburn-labs/charts 2>&1 | tee push.log
           digest=$(grep -oE 'sha256:[0-9a-f]{64}' push.log | head -n 1)
           if [ -z "${digest}" ]; then
@@ -430,9 +425,324 @@ jobs:
           cosign sign --yes \
             "ghcr.io/mindburn-labs/charts/helm-ai-kernel@${{ needs.chart.outputs.chart-digest }}"
 
+  npm-sdk:
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: npm-production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+      - name: Version checks
+        run: make version-drift
+      - name: Install, test, build, and pack
+        working-directory: sdk/ts
+        run: |
+          npm ci
+          npm test -- --run
+          npm run build
+          npm pack --dry-run
+      - name: Check existing package version
+        id: package
+        working-directory: sdk/ts
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          echo "name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          published_version="$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version 2>/dev/null || true)"
+          if [ -n "$published_version" ]; then
+            if [ "$published_version" != "$PACKAGE_VERSION" ]; then
+              echo "::error::Registry metadata mismatch for ${PACKAGE_NAME}@${PACKAGE_VERSION}: got ${published_version}"
+              exit 1
+            fi
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Publish
+        if: steps.package.outputs.published != 'true'
+        working-directory: sdk/ts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance
+      - name: Skip already published package
+        if: steps.package.outputs.published == 'true'
+        run: echo "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }} is already published"
+
+  python-sdk:
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: pypi-production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.12"
+      - name: Version checks
+        run: make version-drift
+      - name: Check existing package version
+        id: package
+        working-directory: sdk/python
+        run: |
+          PACKAGE_VERSION=$(python - <<'PY'
+          from pathlib import Path
+          import tomllib
+          data = tomllib.loads(Path("pyproject.toml").read_text())
+          print(data["project"]["version"])
+          PY
+          )
+          echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          status=$(python - "$PACKAGE_VERSION" <<'PY'
+          import json
+          import sys
+          import urllib.error
+          import urllib.request
+
+          expected = sys.argv[1]
+          url = f"https://pypi.org/pypi/helm-sdk/{expected}/json"
+          try:
+              with urllib.request.urlopen(url, timeout=30) as response:
+                  payload = json.loads(response.read().decode("utf-8"))
+          except urllib.error.HTTPError as exc:
+              if exc.code == 404:
+                  print("missing")
+                  raise SystemExit(0)
+              raise
+
+          actual = payload.get("info", {}).get("version")
+          if actual != expected:
+              print(f"mismatch:{actual}")
+              raise SystemExit(1)
+          print("published")
+          PY
+          )
+          if [ "$status" = "published" ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build and validate
+        if: steps.package.outputs.published != 'true'
+        working-directory: sdk/python
+        run: |
+          python -m pip install --require-hashes -r ../../.github/python-build-requirements.txt
+          python -m build
+          twine check dist/*
+      - name: Publish
+        if: steps.package.outputs.published != 'true'
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
+        with:
+          password: ${{ secrets.PYPI_TOKEN }}
+          packages-dir: sdk/python/dist/
+          skip-existing: true
+      - name: Skip already published package
+        if: steps.package.outputs.published == 'true'
+        run: echo "helm-sdk@${{ steps.package.outputs.version }} is already published"
+
+  crates-sdk:
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: crates-production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Version checks
+        run: make version-drift
+      - name: Check existing crate version
+        id: crate
+        working-directory: sdk/rust
+        run: |
+          CARGO_VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
+          echo "version=$CARGO_VERSION" >> "$GITHUB_OUTPUT"
+          status=$(python - "$CARGO_VERSION" <<'PY'
+          import json
+          import sys
+          import urllib.error
+          import urllib.request
+
+          expected = sys.argv[1]
+          req = urllib.request.Request(
+              f"https://crates.io/api/v1/crates/helm-sdk/{expected}",
+              headers={"User-Agent": "MindburnLabs-VersionDriftGuard/1.0"},
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  payload = json.loads(response.read().decode("utf-8"))
+          except urllib.error.HTTPError as exc:
+              if exc.code == 404:
+                  print("missing")
+                  raise SystemExit(0)
+              raise
+
+          actual = payload.get("version", {}).get("num")
+          if actual != expected:
+              print(f"mismatch:{actual}")
+              raise SystemExit(1)
+          print("published")
+          PY
+          )
+          if [ "$status" = "published" ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build, test, and dry run
+        if: steps.crate.outputs.published != 'true'
+        working-directory: sdk/rust
+        run: |
+          cargo test
+          cargo publish --dry-run
+      - name: Publish
+        if: steps.crate.outputs.published != 'true'
+        working-directory: sdk/rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_TOKEN }}
+        run: cargo publish
+      - name: Skip already published crate
+        if: steps.crate.outputs.published == 'true'
+        run: echo "helm-sdk@${{ steps.crate.outputs.version }} is already published"
+
+  maven-sdk:
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: maven-central
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Version checks
+        run: make version-drift
+      - name: Check if version already published
+        id: precheck
+        working-directory: sdk/java
+        run: |
+          set -euo pipefail
+          VER=$(cat ../../VERSION)
+          URL="https://repo1.maven.org/maven2/io/github/mindburnlabs/helm-sdk/${VER}/helm-sdk-${VER}.pom"
+          code=$(curl -sS -o /dev/null -w "%{http_code}" "$URL")
+          if [ "$code" = "200" ]; then
+            pom="$(curl -fsS "$URL")"
+            if ! grep -q "<artifactId>helm-sdk</artifactId>" <<< "$pom" || ! grep -q "<version>${VER}</version>" <<< "$pom"; then
+              echo "::error::Maven Central metadata mismatch for helm-sdk ${VER}"
+              exit 1
+            fi
+            echo "helm-sdk ${VER} is already in Maven Central; skipping publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "helm-sdk ${VER} not in Central yet (HTTP ${code}); proceeding with publish."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build
+        if: steps.precheck.outputs.skip != 'true'
+        working-directory: sdk/java
+        run: mvn -q test package
+      - name: Import GPG key
+        if: steps.precheck.outputs.skip != 'true'
+        env:
+          MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          key_file="$RUNNER_TEMP/maven-gpg-private-key"
+          printf '%s' "$MAVEN_GPG_PRIVATE_KEY" > "$key_file"
+          if gpg --batch --import "$key_file"; then
+            exit 0
+          fi
+          if base64 --decode "$key_file" > "${key_file}.decoded" 2>/dev/null && gpg --batch --import "${key_file}.decoded"; then
+            exit 0
+          fi
+          printf '%b' "$MAVEN_GPG_PRIVATE_KEY" > "${key_file}.escaped"
+          gpg --batch --import "${key_file}.escaped"
+      - name: Publish GPG public key
+        if: steps.precheck.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          fingerprint="$(gpg --batch --list-secret-keys --with-colons | awk -F: '$1 == "fpr" { print $10; exit }')"
+          test -n "$fingerprint"
+          echo "MAVEN_GPG_KEY_FINGERPRINT=$fingerprint" >> "$GITHUB_ENV"
+          gpg --batch --armor --export "$fingerprint" > "$RUNNER_TEMP/maven-public-key.asc"
+
+          sent=0
+          for keyserver in hkps://keyserver.ubuntu.com hkps://keys.openpgp.org; do
+            if timeout 60s gpg --batch --keyserver "$keyserver" --send-keys "$fingerprint"; then
+              sent=1
+            else
+              echo "::warning::Could not upload Maven public key to $keyserver"
+            fi
+          done
+          test "$sent" = "1"
+
+          verify_home="$RUNNER_TEMP/gpg-keyserver-verify"
+          mkdir -p "$verify_home"
+          chmod 700 "$verify_home"
+          for attempt in 1 2 3; do
+            if GNUPGHOME="$verify_home" timeout 60s gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys "$fingerprint"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
+      - name: Publish
+        if: steps.precheck.outputs.skip != 'true'
+        working-directory: sdk/java
+        env:
+          MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+          OSSRH_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+          OSSRH_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+          MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: >
+          mvn --batch-mode deploy
+          --settings ../../scripts/release/maven-settings.xml
+          -Dgpg.keyname="$MAVEN_GPG_KEY_FINGERPRINT"
+          -Dgpg.passphrase="$MAVEN_GPG_PASSPHRASE"
+
+  version-status:
+    runs-on: ubuntu-latest
+    needs:
+      - container
+      - chart
+      - artifacthub-repo
+      - cosign-chart
+      - homebrew
+      - npm-sdk
+      - python-sdk
+      - crates-sdk
+      - maven-sdk
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - name: Check published lockstep channels before GitHub Release
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist/version-status
+          python3 scripts/release/check_version_drift.py \
+            --expected-version "$VERSION" \
+            --write-status dist/version-status/version-status.json \
+            published \
+            --skip github-release
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: version-status
+          path: dist/version-status/version-status.json
+
   github-release:
     runs-on: ubuntu-latest
-    needs: [binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, homebrew, chart, deployment-smoke, kind-smoke, release-smoke]
+    needs: [binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, homebrew, chart, artifacthub-repo, cosign-chart, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke]
     permissions:
       actions: read
       contents: write
@@ -449,6 +759,10 @@ jobs:
         with:
           name: benchmark-snapshot
           path: benchmarks-release/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: version-status
+          path: version-status/
       - name: Create GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
@@ -456,3 +770,23 @@ jobs:
             dist/*
             cosign/**/*.cosign.bundle
             benchmarks-release/*.json
+            version-status/version-status.json
+
+  post-release-version-drift:
+    runs-on: ubuntu-latest
+    needs: github-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - name: Check full published version status
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          python3 scripts/release/check_version_drift.py \
+            --expected-version "$VERSION" \
+            --write-status version-status.json \
+            published
+      - name: Replace release version status with full post-release status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${GITHUB_REF_NAME}" version-status.json --clobber

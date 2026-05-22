@@ -9,3 +9,10 @@
 
 /sdk/ @Mindburn-Labs/helm-core
 /deploy/helm-chart/ @Mindburn-Labs/helm-core
+
+# Release lockstep surfaces require release-owner review through helm-core.
+/VERSION @Mindburn-Labs/helm-core
+/release/version-surfaces.yaml @Mindburn-Labs/helm-core
+/docs/PUBLISHING.md @Mindburn-Labs/helm-core
+/docs/VERIFICATION.md @Mindburn-Labs/helm-core
+/docs/RELEASE_SECURITY.md @Mindburn-Labs/helm-core

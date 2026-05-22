@@ -1,0 +1,66 @@
+name: Version Drift Monitor
+
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  published-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - id: drift
+        name: Check published registry lockstep
+        continue-on-error: true
+        run: |
+          VERSION="$(cat VERSION)"
+          python3 scripts/release/check_version_drift.py \
+            --expected-version "$VERSION" \
+            --write-status version-status.json \
+            published
+      - name: Upload version status
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: version-status
+          path: version-status.json
+      - name: Open or update drift issue
+        if: steps.drift.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title="Version drift monitor: published channels out of lockstep"
+          issue_number="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          {
+            echo "Published version drift was detected for expected version \`$(cat VERSION)\`."
+            echo
+            echo "Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo
+            echo '```json'
+            cat version-status.json
+            echo '```'
+          } > issue-body.md
+          if [ -n "$issue_number" ]; then
+            gh issue edit "$issue_number" --body-file issue-body.md
+          else
+            gh issue create --title "$title" --body-file issue-body.md
+          fi
+      - name: Close resolved drift issue
+        if: steps.drift.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title="Version drift monitor: published channels out of lockstep"
+          issue_number="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [ -n "$issue_number" ]; then
+            gh issue close "$issue_number" --comment "Published version drift is resolved for $(cat VERSION)."
+          fi

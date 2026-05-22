@@ -51,14 +51,15 @@ flowchart TD
 ```
 
 
-Current public release: `v0.5.5`, published on 2026-05-20 at 21:13 UTC:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.5>. The release
-assets visible on GitHub are Darwin/Linux/Windows binaries, `SHA256SUMS.txt`,
-`sbom.json`, `v0.5.5.openvex.json`, `release-attestation.json`,
-`evidence-pack.tar`, `release.high_risk.v3.toml`,
+Current source release target: `v0.5.6`:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.6>. The
+release is complete only when GitHub shows Darwin/Linux/Windows binaries,
+`SHA256SUMS.txt`, `sbom.json`, `v0.5.6.openvex.json`,
+`release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`,
 `sample-policy-material.tar`, `helm-ai-kernel-launchpad-data.tar`,
-`helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.5.json`, and matching
-`*.cosign.bundle` files for each primary asset.
+`helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.6.json`,
+`version-status.json`, and matching `*.cosign.bundle` files for each primary
+asset.
 
 ## Public Release Material
 
@@ -88,13 +89,13 @@ downloaded from a release page. Verify checksums, release metadata,
 receipt/evidence material, reproducible-build behavior, and signatures when
 signature bundles are attached.
 
-For tag-triggered releases, the workflow derives the release version from the
-tag ref, requires an exact `v<version>.openvex.json`, exports the audit
-EvidencePack, verifies the staged `evidence-pack.tar`, and only then writes
-final checksums. A failed EvidencePack verification blocks release asset
+For tag-triggered releases, the workflow requires the tag ref to match the
+checked-in `VERSION` file, requires an exact `v<version>.openvex.json`, exports
+the audit EvidencePack, verifies the staged `evidence-pack.tar`, and only then
+writes final checksums. A failed EvidencePack verification blocks release asset
 publication.
 
-For `v0.5.5`, use checksum verification, SBOM inspection, OpenVEX inspection,
+For `v0.5.6`, use checksum verification, SBOM inspection, OpenVEX inspection,
 release metadata inspection, offline EvidencePack verification,
 reproducible-build validation, and Cosign verification against the attached
 bundles.

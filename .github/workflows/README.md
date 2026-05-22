@@ -38,21 +38,25 @@ surface for the `helm-ai-kernel` project.
 - `nightly-quality.yml` runs advisory mutation, flake, vulnerability, runbook,
   migration, dependency hygiene, schema, and benchmark checks.
 - `release.yml` calls `make quality-release` before producing binaries,
-  container images, SBOM, VEX, attestations, and signatures.
+  container images, SBOM, VEX, attestations, SDK packages, signatures, and
+  `version-status.json`.
 - `scorecard.yml` uploads OpenSSF Scorecard SARIF for `main` and pull requests;
   PR SARIF is normalized so GitHub code scanning sees the same branch-protection
   category that exists on `main`.
 - `slsa-provenance.yml` builds reproducible release binaries before generating
   provenance subjects.
+- `version-drift.yml` runs the published registry drift check daily and opens or
+  updates one issue when any public channel falls behind `VERSION`.
 
 Pinned first-party setup actions should stay on Node 24-capable majors
 (`checkout` v5, `setup-go` v6, `setup-python` v6, `setup-node` v6, and
 `setup-java` v5). Go setup steps use `cache-dependency-path: "**/go.sum"` so
 monorepo jobs do not look for a nonexistent root `go.sum`.
 
-Tag-triggered release jobs rely on the Makefile's `GITHUB_REF_TYPE=tag`
-version inference. Do not override `VERSION` with the repository `VERSION` file
-when building release assets for a `v*` tag.
+Tag-triggered release jobs treat the repository `VERSION` file as release
+truth. The first release job fails when `GITHUB_REF_NAME` is not exactly
+`v$(cat VERSION)`, and release jobs must not patch chart or SDK package
+versions in CI.
 
 ## Documentation Contract
 

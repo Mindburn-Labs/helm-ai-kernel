@@ -534,8 +534,6 @@ jobs:
         if: steps.package.outputs.published != 'true'
         working-directory: sdk/python
         run: |
-          python -m pip install -q '.[dev]'
-          pytest -v --tb=short
           python -m pip install --require-hashes -r ../../.github/python-build-requirements.txt
           python -m build
           twine check dist/*

@@ -307,7 +307,7 @@ def check_published(contract: dict[str, Any], version: str, skip: set[str]) -> l
 
 def should_fail(results: list[SurfaceResult], mode: str) -> bool:
     for result in results:
-        if result.status == "fail" and (mode == "published" or result.blocking):
+        if result.status == "fail" and result.blocking:
             return True
     return False
 

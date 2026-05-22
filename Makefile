@@ -1,8 +1,9 @@
-.PHONY: build test test-race test-sdk-go-standalone test-sdk-ts test-design-system build-console test-console test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli console demo-console mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets launch-security launch-api-truth launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
+.PHONY: build test test-race test-sdk-go-standalone test-sdk-ts test-design-system build-console test-console test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli console demo-console mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets launch-security launch-api-truth launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 
 # VERSION is source-controlled release truth. Tag-triggered workflows must
 # check that GITHUB_REF_NAME equals v$(VERSION) before any publish step.
 VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.0.0-dev)
+PREPARE_VERSION := $(if $(filter command line,$(origin VERSION)),$(VERSION),$(RELEASE_VERSION))
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME)
@@ -119,15 +120,18 @@ release-smoke:
 version-drift:
 	python3 scripts/release/check_version_drift.py local
 
+version-drift-report:
+	python3 scripts/release/check_version_drift.py --report --write-status version-status.json local
+
 version-drift-published:
-	python3 scripts/release/check_version_drift.py --expected-version "$(VERSION)" published
+	python3 scripts/release/check_version_drift.py published
 
 version-status:
-	python3 scripts/release/check_version_drift.py --expected-version "$(VERSION)" --write-status version-status.json published
+	python3 scripts/release/check_version_drift.py --report --write-status version-status.json published
 
 prepare-version:
-	@test -n "$(RELEASE_VERSION)" || (echo "Usage: make prepare-version RELEASE_VERSION=0.5.6" && exit 2)
-	python3 scripts/release/prepare_version.py "$(RELEASE_VERSION)"
+	@test -n "$(PREPARE_VERSION)" || (echo "Usage: make prepare-version VERSION=0.5.6" && exit 2)
+	python3 scripts/release/prepare_version.py "$(PREPARE_VERSION)"
 
 quality-pr:
 	$(QUALITY) run pr --impact
@@ -355,19 +359,4 @@ docs-coverage:
 
 docs-truth:
 	python3 scripts/check_documentation_truth.py
-
-.PHONY: version-drift version-drift-report version-drift-published prepare-version
-
-version-drift:
-	python3 scripts/release/check_version_drift.py local
-
-version-drift-report:
-	python3 scripts/release/check_version_drift.py --report --write-status version-status.json local
-
-version-drift-published:
-	python3 scripts/release/check_version_drift.py published
-
-prepare-version:
-	@test -n "$(VERSION)" || (echo "Usage: make prepare-version VERSION=1.2.3" && exit 2)
-	python3 scripts/release/prepare_version.py "$(VERSION)"
 

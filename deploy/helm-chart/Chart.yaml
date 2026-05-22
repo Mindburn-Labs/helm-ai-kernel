@@ -2,8 +2,8 @@ apiVersion: v2
 name: helm-ai-kernel
 description: HELM — Fail-closed AI execution firewall with cryptographic governance proofs
 type: application
-version: 0.5.5
-appVersion: "v0.5.5"
+version: 0.5.6
+appVersion: "v0.5.6"
 home: https://github.com/Mindburn-Labs/helm-ai-kernel
 sources:
   - https://github.com/Mindburn-Labs/helm-ai-kernel
@@ -53,17 +53,17 @@ annotations:
       url: https://github.com/Mindburn-Labs/helm-ai-kernel/issues
   artifacthub.io/images: |
     - name: helm-ai-kernel
-      image: ghcr.io/mindburn-labs/helm-ai-kernel:v0.5.5
+      image: ghcr.io/mindburn-labs/helm-ai-kernel:v0.5.6
       platforms:
         - linux/amd64
         - linux/arm64
     - name: helm-ai-kernel-slim
-      image: ghcr.io/mindburn-labs/helm-ai-kernel:v0.5.5-slim
+      image: ghcr.io/mindburn-labs/helm-ai-kernel:v0.5.6-slim
       platforms:
         - linux/amd64
         - linux/arm64
   artifacthub.io/changes: |
     - kind: added
-      description: Publish the v0.5.5 Launchpad clean-install release metadata so ArtifactHub indexes the current kernel release.
+      description: Publish the v0.5.6 Launchpad clean-install release metadata so ArtifactHub indexes the current kernel release.
     - kind: changed
-      description: Bump the chart version, appVersion, and container image annotations from v0.5.4 to v0.5.5.
+      description: Bump the chart version, appVersion, and container image annotations to v0.5.6.

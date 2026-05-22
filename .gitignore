@@ -116,3 +116,4 @@ helm.yaml
 # build artifacts
 *.tgz
 sdk/ts/*.tgz
+version-status.json

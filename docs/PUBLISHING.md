@@ -1,6 +1,6 @@
 ---
 title: Publishing
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-22
 ---
 
 # Publishing
@@ -66,34 +66,35 @@ The repository retains packaging metadata for the kernel binaries, container ima
 
 | Surface | Package Identity |
 | --- | --- |
-| CLI/Homebrew | GitHub Release binaries and attached `helm-ai-kernel.rb`; verify `mindburnlabs/tap/helm-ai-kernel` before relying on it for the latest version |
+| CLI/Homebrew | GitHub Release binaries, attached `helm-ai-kernel.rb`, and `mindburnlabs/tap/helm-ai-kernel` |
 | TypeScript SDK | `@mindburn/helm-ai-kernel` |
 | Python SDK | `helm-sdk` |
 | Rust SDK | `helm-sdk` |
-| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.2` |
+| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.6` |
 | Go SDK | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@main`; pin `@main` or a commit until tagged module releases are aligned |
 
 ## Release Inputs
 
 Before tagging a release:
 
-1. update `VERSION`
+1. run `python3 scripts/release/prepare_version.py <version>` and review the
+   coordinated bump across `VERSION`, chart metadata, SDK manifests, OpenAPI
+   metadata, generated SDK headers, and release docs
 2. update `CHANGELOG.md`
-3. run `make build`, `make test`, `make test-console`,
+3. run `make version-drift`
+4. run `make build`, `make test`, `make test-console`,
    `make test-platform`, `make test-all`, `make crucible`, and
    `make launch-smoke`
-4. run `make sdk-openapi-check` and `make sdk-examples-smoke`
-5. run `make release-assets`
-6. verify that SDK package versions match `VERSION`
+5. run `make sdk-openapi-check` and `make sdk-examples-smoke`
+6. run `make release-assets`
 7. verify `helm-ai-kernel verify evidence-pack.tar`; run
    `helm-ai-kernel verify evidence-pack.tar --online` only when the public proof endpoint
    and credentials for that release are available
 8. run `make release-binaries-reproducible` when validating that release binaries are reproducible from the checked-in source and pinned build metadata
 
-For tag-triggered release workflows, the Makefile derives `VERSION` from
-`GITHUB_REF_NAME` when `GITHUB_REF_TYPE=tag`. This keeps binaries, SBOM,
-OpenVEX, the Homebrew formula, and release metadata aligned with the release
-tag even when the repository `VERSION` file has not yet been bumped.
+Tag-triggered release workflows fail if the tag `v<version>` does not match
+the checked-in `VERSION` file. The chart and SDK package manifests are not
+patched in CI; source-controlled release metadata is the authority.
 
 ## Release Automation
 
@@ -103,15 +104,18 @@ The retained workflow set under `.github/workflows/` covers:
 - GitHub Release creation for tagged versions
 - Homebrew formula generation for `mindburnlabs/homebrew-tap`
 - GHCR image publication for `latest`, version tag, and slim tag
-- manual publication workflows for npm, PyPI, crates.io, and Maven-compatible distribution
+- tag-triggered npm, PyPI, crates.io, and Maven-compatible SDK publication
+- daily published registry drift monitoring through `make version-drift-published`
 
-Current public GitHub release: `v0.5.5`, published on 2026-05-20 at
-21:13 UTC: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.5>.
+Release target: `v0.5.6`. The release is complete only after the tagged
+workflow publishes every lockstep channel, attaches `version-status.json` to
+the GitHub Release, and `make version-drift-published` passes for that version:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.6>.
 
 There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
 actual release baseline when auditing the `v0.5.0` delta.
 
-Its attached assets are:
+The release workflow attaches these assets:
 
 - `helm-ai-kernel-darwin-amd64`
 - `helm-ai-kernel-darwin-arm64`
@@ -120,7 +124,7 @@ Its attached assets are:
 - `helm-ai-kernel-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.5.5.openvex.json`
+- `v0.5.6.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
@@ -128,20 +132,22 @@ Its attached assets are:
 - `helm-ai-kernel-launchpad-data.tar`
 - `helm-ai-kernel.mcpb`
 - `helm-ai-kernel.rb`
-- `v0.5.5.json`
+- `v0.5.6.json`
 - matching `*.cosign.bundle` files for every primary asset
 
 `sample-policy-material.tar` includes the sample policy and its referenced EU
-AI Act high-risk reference pack. The `v0.5.5` release attaches a
-`helm-ai-kernel.rb` formula asset for version `0.5.5`; verify the public
-`mindburnlabs/homebrew-tap` state before documenting
+AI Act high-risk reference pack. The `v0.5.6` release attaches a
+`helm-ai-kernel.rb` formula asset for version `0.5.6` and publishes the same
+version to `mindburnlabs/homebrew-tap`; `version-status.json` must include a
+passing `homebrew-tap` surface before documenting
 `brew install mindburnlabs/tap/helm-ai-kernel` as current.
 
-SDK package manifests and registry versions can lag the GitHub release tag.
-npm, PyPI, crates.io, and Maven publication require the corresponding registry
-secrets. If `NPM_TOKEN`, `PYPI_TOKEN`, `CRATES_TOKEN`, or Maven credentials are
-absent, that registry channel is not published for the release and must not be
-documented as published.
+SDK package manifests and registry versions must remain lockstep with the
+GitHub release tag. npm, PyPI, crates.io, Maven, and Homebrew publication
+require the corresponding registry secrets. If `NPM_TOKEN`, `PYPI_TOKEN`,
+`CRATES_TOKEN`, `HOMEBREW_TAP_TOKEN`, or Maven credentials are absent, the
+release workflow must fail instead of documenting a partial release as
+complete.
 
 Do not document an asset as published unless it appears on the GitHub release
 or is produced by a retained workflow and attached to that release.
@@ -156,7 +162,7 @@ writes the final `SHA256SUMS.txt`.
 ## Verification
 
 Every public release must include enough material to verify what was downloaded.
-For `v0.5.5`, use `SHA256SUMS.txt`, `sbom.json`, `v0.5.5.openvex.json`,
+For `v0.5.6`, use `SHA256SUMS.txt`, `sbom.json`, `v0.5.6.openvex.json`,
 `release-attestation.json`, the platform binary assets, attached
 `*.cosign.bundle` files, and the offline `evidence-pack.tar`.
 

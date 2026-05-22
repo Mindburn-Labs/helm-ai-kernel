@@ -8,7 +8,7 @@ Typed Go client for the HELM kernel HTTP API.
 go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@main
 ```
 
-Version truth is the repository `VERSION` file (`0.5.1` for this release).
+Version truth is the repository `VERSION` file (`0.5.6` for this release).
 Go consumers should pin by commit or `@main` until SDK module release tags are
 realigned with the repository release version.
 
@@ -95,4 +95,4 @@ func main() {
 
 ## Release Notes
 
-`0.5.1` is the release-hardening patch with the public HTTP client surface, conformance entrypoints, and evidence verification helpers.
+`0.5.6` is the release-hardening patch with the public HTTP client surface, conformance entrypoints, and evidence verification helpers.

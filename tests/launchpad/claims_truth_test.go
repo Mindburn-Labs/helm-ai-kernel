@@ -42,7 +42,7 @@ func TestLaunchpadClaimsMarketPromotedAppsAsSupported(t *testing.T) {
 	cleanGate := readDoc(t, root, "scripts/launch/clean_install_gate.sh")
 	requireContains(t, cleanGate, "SUPPORTED_APPS=(openclaw hermes opencode kilocode)")
 	requireContains(t, cleanGate, "--include-candidates")
-	requireContains(t, cleanGate, `RELEASE_TAG="v0.5.5"`)
+	requireContains(t, cleanGate, `RELEASE_TAG="v0.5.6"`)
 	requireContains(t, cleanGate, `ARTIFACT_RUN_ID="26198407296"`)
 	requireContains(t, cleanGate, "output, status, commands_path")
 	requireNotContains(t, cleanGate, "status = sys.stdin.read()", "scripts/launch/clean_install_gate.sh")
@@ -53,7 +53,7 @@ func TestLaunchpadClaimsMarketPromotedAppsAsSupported(t *testing.T) {
 	requireNotContains(t, cleanGate, "gh run view 26131090671", "scripts/launch/clean_install_gate.sh")
 
 	cleanWorkflow := readDoc(t, root, ".github/workflows/launchpad-clean-install.yml")
-	requireContains(t, cleanWorkflow, "default: v0.5.5")
+	requireContains(t, cleanWorkflow, "default: v0.5.6")
 	requireContains(t, cleanWorkflow, `default: "26198407296"`)
 	requireContains(t, cleanWorkflow, "brew install colima docker jq qemu lima-additional-guestagents")
 	requireContains(t, cleanWorkflow, "colima delete -f")

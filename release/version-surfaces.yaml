@@ -1,0 +1,527 @@
+{
+  "schema_version": 1,
+  "source_version_file": "VERSION",
+  "tag_prefix": "v",
+  "local_surfaces": [
+    {
+      "id": "root-version",
+      "path": "VERSION",
+      "kind": "exact",
+      "expected": "{version}"
+    },
+    {
+      "id": "helm-chart-version",
+      "path": "deploy/helm-chart/Chart.yaml",
+      "kind": "regex",
+      "pattern": "^version: (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)$",
+      "replacement": "version: {version}"
+    },
+    {
+      "id": "helm-chart-app-version",
+      "path": "deploy/helm-chart/Chart.yaml",
+      "kind": "regex",
+      "pattern": "^appVersion: \"v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\"$",
+      "replacement": "appVersion: \"v{version}\""
+    },
+    {
+      "id": "helm-chart-image-tags",
+      "path": "deploy/helm-chart/Chart.yaml",
+      "kind": "regex",
+      "pattern": "(ghcr\\.io/mindburn-labs/helm-ai-kernel:)v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)(?P<suffix>-slim)?",
+      "replacement": "\\g<1>v{version}\\g<suffix>"
+    },
+    {
+      "id": "helm-chart-version-claims",
+      "path": "deploy/helm-chart/Chart.yaml",
+      "kind": "regex",
+      "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "v{version}"
+    },
+    {
+      "id": "java-sdk-manifest",
+      "path": "sdk/java/pom.xml",
+      "kind": "regex",
+      "pattern": "(<artifactId>helm-sdk</artifactId>\\n    <version>)(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)(</version>)",
+      "replacement": "\\g<1>{version}\\g<3>"
+    },
+    {
+      "id": "python-sdk-manifest",
+      "path": "sdk/python/pyproject.toml",
+      "kind": "regex",
+      "pattern": "^version = \"(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\"$",
+      "replacement": "version = \"{version}\""
+    },
+    {
+      "id": "rust-sdk-manifest",
+      "path": "sdk/rust/Cargo.toml",
+      "kind": "regex",
+      "pattern": "^version = \"(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\"$",
+      "replacement": "version = \"{version}\"",
+      "max_replacements": 1
+    },
+    {
+      "id": "rust-sdk-lock",
+      "path": "sdk/rust/Cargo.lock",
+      "kind": "regex",
+      "pattern": "(name = \"helm-sdk\"\\nversion = \")(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)(\")",
+      "replacement": "\\g<1>{version}\\g<3>"
+    },
+    {
+      "id": "typescript-sdk-manifest",
+      "path": "sdk/ts/package.json",
+      "kind": "json",
+      "field": "version"
+    },
+    {
+      "id": "openapi-version",
+      "path": "api/openapi/helm.openapi.yaml",
+      "kind": "regex",
+      "pattern": "^  version: (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)$",
+      "replacement": "  version: {version}"
+    },
+    {
+      "id": "go-sdk-readme-version-truth",
+      "path": "sdk/go/README.md",
+      "kind": "regex",
+      "pattern": "VERSION` file \\(`(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)` for this release\\)",
+      "replacement": "VERSION` file (`{version}` for this release)"
+    },
+    {
+      "id": "sdk-readme-package-versions",
+      "path": "sdk",
+      "kind": "tree_regex",
+      "glob": "*/README.md",
+      "pattern": "(?<![0-9.])(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)(?![0-9.])",
+      "replacement": "{version}"
+    },
+    {
+      "id": "generated-openapi-typescript-version",
+      "path": "sdk/ts/src/types.gen.ts",
+      "kind": "regex",
+      "pattern": "The version of the OpenAPI document: (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "The version of the OpenAPI document: {version}"
+    },
+    {
+      "id": "generated-openapi-python-version",
+      "path": "sdk/python/helm_sdk/types_gen.py",
+      "kind": "regex",
+      "pattern": "The version of the OpenAPI document: (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "The version of the OpenAPI document: {version}"
+    },
+    {
+      "id": "generated-openapi-rust-version",
+      "path": "sdk/rust/src/types_gen.rs",
+      "kind": "regex",
+      "pattern": "The version of the OpenAPI document: (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "The version of the OpenAPI document: {version}"
+    },
+    {
+      "id": "generated-openapi-java-version",
+      "path": "sdk/java/src/main/java/labs/mindburn/helm/TypesGen.java",
+      "kind": "regex",
+      "pattern": "The version of the OpenAPI document: (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "The version of the OpenAPI document: {version}"
+    },
+    {
+      "id": "generated-openapi-go-version",
+      "path": "sdk/go/client/types_gen.go",
+      "kind": "regex",
+      "pattern": "API version: (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "API version: {version}"
+    },
+    {
+      "id": "publishing-doc-current-release",
+      "path": "docs/PUBLISHING.md",
+      "kind": "regex",
+      "pattern": "Release target: `v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)`",
+      "replacement": "Release target: `v{version}`"
+    },
+    {
+      "id": "publishing-doc-release-url",
+      "path": "docs/PUBLISHING.md",
+      "kind": "regex",
+      "pattern": "releases/tag/v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "releases/tag/v{version}"
+    },
+    {
+      "id": "publishing-doc-openvex-asset",
+      "path": "docs/PUBLISHING.md",
+      "kind": "regex",
+      "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.openvex\\.json",
+      "replacement": "v{version}.openvex.json"
+    },
+    {
+      "id": "publishing-doc-json-asset",
+      "path": "docs/PUBLISHING.md",
+      "kind": "regex",
+      "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.json",
+      "replacement": "v{version}.json"
+    },
+    {
+      "id": "publishing-doc-formula-version",
+      "path": "docs/PUBLISHING.md",
+      "kind": "regex",
+      "pattern": "formula asset for version `(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)`",
+      "replacement": "formula asset for version `{version}`"
+    },
+    {
+      "id": "publishing-doc-java-coordinate",
+      "path": "docs/PUBLISHING.md",
+      "kind": "regex",
+      "pattern": "io\\.github\\.mindburnlabs:helm-sdk:(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "io.github.mindburnlabs:helm-sdk:{version}"
+    },
+    {
+      "id": "verification-doc-current-release",
+      "path": "docs/VERIFICATION.md",
+      "kind": "regex",
+      "pattern": "Current source release target: `v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)`",
+      "replacement": "Current source release target: `v{version}`"
+    },
+    {
+      "id": "verification-doc-release-url",
+      "path": "docs/VERIFICATION.md",
+      "kind": "regex",
+      "pattern": "releases/tag/v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "releases/tag/v{version}"
+    },
+    {
+      "id": "verification-doc-asset-contract",
+      "path": "docs/VERIFICATION.md",
+      "kind": "regex",
+      "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+) Asset Contract",
+      "replacement": "v{version} Asset Contract"
+    },
+    {
+      "id": "verification-doc-openvex-asset",
+      "path": "docs/VERIFICATION.md",
+      "kind": "regex",
+      "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.openvex\\.json",
+      "replacement": "v{version}.openvex.json"
+    },
+    {
+      "id": "verification-doc-json-asset",
+      "path": "docs/VERIFICATION.md",
+      "kind": "regex",
+      "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.json",
+      "replacement": "v{version}.json"
+    },
+    {
+      "id": "release-security-doc-current-release",
+      "path": "docs/RELEASE_SECURITY.md",
+      "kind": "regex",
+      "pattern": "Current source release target: `v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)`",
+      "replacement": "Current source release target: `v{version}`"
+    },
+    {
+      "id": "release-security-doc-release-url",
+      "path": "docs/RELEASE_SECURITY.md",
+      "kind": "regex",
+      "pattern": "releases/tag/v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "releases/tag/v{version}"
+    },
+    {
+      "id": "release-security-doc-openvex-asset",
+      "path": "docs/RELEASE_SECURITY.md",
+      "kind": "regex",
+      "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.openvex\\.json",
+      "replacement": "v{version}.openvex.json"
+    },
+    {
+      "id": "release-security-doc-json-asset",
+      "path": "docs/RELEASE_SECURITY.md",
+      "kind": "regex",
+      "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.json",
+      "replacement": "v{version}.json"
+    },
+    {
+      "id": "readme-current-tag",
+      "path": "README.md",
+      "kind": "regex",
+      "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "v{version}"
+    },
+    {
+      "id": "readme-current-java-coordinate",
+      "path": "README.md",
+      "kind": "regex",
+      "pattern": "io\\.github\\.mindburnlabs:helm-sdk:(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "io.github.mindburnlabs:helm-sdk:{version}"
+    },
+    {
+      "id": "developer-journey-current-release-target",
+      "path": "docs/DEVELOPER_JOURNEY.md",
+      "kind": "regex",
+      "pattern": "Current source release target: `v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)`",
+      "replacement": "Current source release target: `v{version}`"
+    },
+    {
+      "id": "developer-journey-release-url",
+      "path": "docs/DEVELOPER_JOURNEY.md",
+      "kind": "regex",
+      "pattern": "releases/tag/v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "releases/tag/v{version}"
+    },
+    {
+      "id": "developer-journey-release-assets",
+      "path": "docs/DEVELOPER_JOURNEY.md",
+      "kind": "regex",
+      "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.(openvex\\.json|json)",
+      "replacement": "v{version}.\\g<2>"
+    },
+    {
+      "id": "kubernetes-deployment-chart-default",
+      "path": "docs/KUBERNETES_DEPLOYMENT.md",
+      "kind": "regex",
+      "pattern": "Defaults to `v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)` from `Chart.yaml`",
+      "replacement": "Defaults to `v{version}` from `Chart.yaml`"
+    },
+    {
+      "id": "quickstart-release-evidence-pack",
+      "path": "docs/QUICKSTART.md",
+      "kind": "regex",
+      "pattern": "Use the `v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)` release `evidence-pack.tar`",
+      "replacement": "Use the `v{version}` release `evidence-pack.tar`"
+    },
+    {
+      "id": "launchpad-clean-install-script-default",
+      "path": "scripts/launch/clean_install_gate.sh",
+      "kind": "regex",
+      "pattern": "RELEASE_TAG=\"v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\"",
+      "replacement": "RELEASE_TAG=\"v{version}\""
+    },
+    {
+      "id": "launchpad-clean-install-workflow-default",
+      "path": ".github/workflows/launchpad-clean-install.yml",
+      "kind": "regex",
+      "pattern": "default: v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "default: v{version}"
+    },
+    {
+      "id": "agents-skills-hallmark-package-json",
+      "path": ".agents/skills/hallmark/package.json",
+      "kind": "json",
+      "field": "version",
+      "expected": "{version}",
+      "blocking": false,
+      "replacement_note": "first-party manifest version"
+    },
+    {
+      "id": "api-openapi-helm-openapi-yaml-openapi-version",
+      "path": "api/openapi/helm.openapi.yaml",
+      "kind": "regex",
+      "pattern": "^  version:\\s*(?P<version>[^\\n]+)$",
+      "replacement": "  version: {version}",
+      "expected": "{version}",
+      "blocking": false
+    },
+    {
+      "id": "apps-console-package-json",
+      "path": "apps/console/package.json",
+      "kind": "json",
+      "field": "version",
+      "expected": "{version}",
+      "blocking": false,
+      "replacement_note": "first-party manifest version"
+    },
+    {
+      "id": "deploy-helm-chart-chart-yaml-chart-version",
+      "path": "deploy/helm-chart/Chart.yaml",
+      "kind": "regex",
+      "pattern": "^version:\\s*[\"\\']?(?P<version>[^\"\\'\\n]+)[\"\\']?$",
+      "replacement": "version: {version}",
+      "expected": "{version}",
+      "blocking": false
+    },
+    {
+      "id": "deploy-helm-chart-chart-yaml-app-version",
+      "path": "deploy/helm-chart/Chart.yaml",
+      "kind": "regex",
+      "pattern": "^appVersion:\\s*[\"\\']?(?P<version>[^\"\\'\\n]+)[\"\\']?$",
+      "replacement": "appVersion: \"v{version}\"",
+      "expected": "v{version}",
+      "blocking": false
+    },
+    {
+      "id": "packages-design-system-core-package-json",
+      "path": "packages/design-system-core/package.json",
+      "kind": "json",
+      "field": "version",
+      "expected": "{version}",
+      "blocking": false,
+      "replacement_note": "first-party manifest version"
+    },
+    {
+      "id": "packages-design-system-core-compat-package-json",
+      "path": "packages/design-system-core-compat/package.json",
+      "kind": "json",
+      "field": "version",
+      "expected": "{version}",
+      "blocking": false,
+      "replacement_note": "first-party manifest version"
+    },
+    {
+      "id": "protocols-specs-effects-openapi-yaml-openapi-version",
+      "path": "protocols/specs/effects/openapi.yaml",
+      "kind": "regex",
+      "pattern": "^  version:\\s*(?P<version>[^\\n]+)$",
+      "replacement": "  version: {version}",
+      "expected": "{version}",
+      "blocking": false
+    },
+    {
+      "id": "sdk-java-pom-xml-version",
+      "path": "sdk/java/pom.xml",
+      "kind": "regex",
+      "pattern": "(<artifactId>[^<]+</artifactId>\\s*\\n\\s*<version>)(?P<version>[^<]+)(</version>)",
+      "replacement": "\\g<1>{version}\\g<3>",
+      "expected": "{version}",
+      "blocking": false
+    },
+    {
+      "id": "sdk-python-pyproject-toml-version",
+      "path": "sdk/python/pyproject.toml",
+      "kind": "regex",
+      "pattern": "^version = \"(?P<version>[^\"]+)\"$",
+      "replacement": "version = \"{version}\"",
+      "expected": "{version}",
+      "blocking": false
+    },
+    {
+      "id": "sdk-rust-cargo-toml-manifest",
+      "path": "sdk/rust/Cargo.toml",
+      "kind": "regex",
+      "pattern": "^version = \"(?P<version>[^\"]+)\"$",
+      "replacement": "version = \"{version}\"",
+      "expected": "{version}",
+      "blocking": false
+    },
+    {
+      "id": "sdk-ts-package-json",
+      "path": "sdk/ts/package.json",
+      "kind": "json",
+      "field": "version",
+      "expected": "{version}",
+      "blocking": false,
+      "replacement_note": "first-party manifest version"
+    },
+    {
+      "id": "release-version-surfaces-yaml-generated-openapi",
+      "path": "release/version-surfaces.yaml",
+      "kind": "regex",
+      "pattern": "The version of the OpenAPI document: (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "The version of the OpenAPI document: {version}",
+      "expected": "{version}",
+      "blocking": false
+    },
+    {
+      "id": "sdk-go-client-types-gen-go-generated-openapi",
+      "path": "sdk/go/client/types_gen.go",
+      "kind": "regex",
+      "pattern": "API version: (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "API version: {version}",
+      "expected": "{version}",
+      "blocking": false
+    },
+    {
+      "id": "sdk-java-src-main-java-labs-mindburn-helm-typesgen-java-generated-openapi",
+      "path": "sdk/java/src/main/java/labs/mindburn/helm/TypesGen.java",
+      "kind": "regex",
+      "pattern": "The version of the OpenAPI document: (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "The version of the OpenAPI document: {version}",
+      "expected": "{version}",
+      "blocking": false
+    },
+    {
+      "id": "sdk-python-helm-sdk-types-gen-py-generated-openapi",
+      "path": "sdk/python/helm_sdk/types_gen.py",
+      "kind": "regex",
+      "pattern": "The version of the OpenAPI document: (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "The version of the OpenAPI document: {version}",
+      "expected": "{version}",
+      "blocking": false
+    },
+    {
+      "id": "sdk-rust-src-types-gen-rs-generated-openapi",
+      "path": "sdk/rust/src/types_gen.rs",
+      "kind": "regex",
+      "pattern": "The version of the OpenAPI document: (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "The version of the OpenAPI document: {version}",
+      "expected": "{version}",
+      "blocking": false
+    },
+    {
+      "id": "sdk-ts-src-types-gen-ts-generated-openapi",
+      "path": "sdk/ts/src/types.gen.ts",
+      "kind": "regex",
+      "pattern": "The version of the OpenAPI document: (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "The version of the OpenAPI document: {version}",
+      "expected": "{version}",
+      "blocking": false
+    }
+  ],
+  "published_surfaces": [
+    {
+      "id": "github-release",
+      "kind": "github_release",
+      "url": "https://api.github.com/repos/Mindburn-Labs/helm-ai-kernel/releases/tags/v{version}",
+      "human_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v{version}"
+    },
+    {
+      "id": "ghcr-image",
+      "kind": "ghcr_tags",
+      "repository": "mindburn-labs/helm-ai-kernel",
+      "required_tags": [
+        "v{version}",
+        "v{version}-slim"
+      ],
+      "human_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/pkgs/container/helm-ai-kernel"
+    },
+    {
+      "id": "ghcr-chart",
+      "kind": "ghcr_tags",
+      "repository": "mindburn-labs/charts/helm-ai-kernel",
+      "required_tags": [
+        "{version}"
+      ],
+      "human_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/pkgs/container/charts%2Fhelm-ai-kernel"
+    },
+    {
+      "id": "artifacthub-chart",
+      "kind": "artifacthub",
+      "url": "https://artifacthub.io/api/v1/packages/helm/mindburn-labs/helm-ai-kernel",
+      "human_url": "https://artifacthub.io/packages/helm/mindburn-labs/helm-ai-kernel"
+    },
+    {
+      "id": "npm-sdk",
+      "kind": "npm",
+      "url": "https://registry.npmjs.org/%40mindburn%2Fhelm-ai-kernel",
+      "human_url": "https://www.npmjs.com/package/@mindburn/helm-ai-kernel"
+    },
+    {
+      "id": "pypi-sdk",
+      "kind": "pypi",
+      "url": "https://pypi.org/pypi/helm-sdk/json",
+      "human_url": "https://pypi.org/project/helm-sdk/"
+    },
+    {
+      "id": "crates-sdk",
+      "kind": "crates",
+      "url": "https://crates.io/api/v1/crates/helm-sdk",
+      "human_url": "https://crates.io/crates/helm-sdk"
+    },
+    {
+      "id": "maven-sdk",
+      "kind": "maven",
+      "url": "https://repo1.maven.org/maven2/io/github/mindburnlabs/helm-sdk/maven-metadata.xml",
+      "human_url": "https://central.sonatype.com/artifact/io.github.mindburnlabs/helm-sdk"
+    },
+    {
+      "id": "homebrew-tap",
+      "kind": "homebrew_formula",
+      "url": "https://raw.githubusercontent.com/mindburnlabs/homebrew-tap/main/Formula/helm-ai-kernel.rb",
+      "human_url": "https://github.com/mindburnlabs/homebrew-tap/blob/main/Formula/helm-ai-kernel.rb"
+    }
+  ],
+  "normalization_enabled": true
+}

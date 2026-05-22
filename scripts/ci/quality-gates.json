@@ -5,6 +5,7 @@
       "description": "Fast pull request profile with core gates and impacted package checks.",
       "gates": [
         "docs-truth",
+        "version-drift",
         "presentation-hygiene",
         "tracked-file-hygiene",
         "go-lint",
@@ -26,6 +27,7 @@
       "description": "Full merge gate for retained OSS surfaces.",
       "gates": [
         "docs-truth",
+        "version-drift",
         "presentation-hygiene",
         "tracked-file-hygiene",
         "go-lint",
@@ -58,6 +60,7 @@
       "gates": [
         "quality-self-test",
         "docs-truth",
+        "version-drift",
         "presentation-hygiene",
         "tracked-file-hygiene",
         "go-lint",
@@ -116,6 +119,7 @@
     "contracts": {
       "description": "Contract, schema, and generated-type drift checks.",
       "gates": [
+        "version-drift",
         "json-schemas",
         "openapi-console-drift",
         "codegen-drift",
@@ -182,6 +186,29 @@
         "scripts/check_documentation_*.py",
         ".github/**",
         "Makefile"
+      ]
+    },
+    {
+      "id": "version-drift",
+      "title": "Release version lockstep",
+      "description": "Ensures VERSION, chart metadata, SDK manifests, OpenAPI metadata, generated SDK headers, and release docs agree.",
+      "command": "make version-drift",
+      "timeout_seconds": 120,
+      "paths": [
+        "VERSION",
+        "Makefile",
+        "release/version-surfaces.yaml",
+        "scripts/release/check_version_drift.py",
+        "scripts/release/prepare_version.py",
+        ".github/workflows/release.yml",
+        ".github/workflows/version-drift.yml",
+        "deploy/helm-chart/Chart.yaml",
+        "api/openapi/helm.openapi.yaml",
+        "sdk/**",
+        "docs/PUBLISHING.md",
+        "docs/VERIFICATION.md",
+        "docs/RELEASE_SECURITY.md",
+        "README.md"
       ]
     },
     {

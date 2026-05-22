@@ -76,8 +76,9 @@
       "id": "openapi-version",
       "path": "api/openapi/helm.openapi.yaml",
       "kind": "regex",
-      "pattern": "^  version: (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)$",
-      "replacement": "  version: {version}"
+      "pattern": "^  version:\\s*[\"\\']?(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)[\"\\']?\\s*$",
+      "replacement": "  version: \"{version}\"",
+      "expected": "{version}"
     },
     {
       "id": "go-sdk-readme-version-truth",
@@ -310,8 +311,8 @@
       "id": "api-openapi-helm-openapi-yaml-openapi-version",
       "path": "api/openapi/helm.openapi.yaml",
       "kind": "regex",
-      "pattern": "^  version:\\s*(?P<version>[^\\n]+)$",
-      "replacement": "  version: {version}",
+      "pattern": "^  version:\\s*[\"\\']?(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)[\"\\']?\\s*$",
+      "replacement": "  version: \"{version}\"",
       "expected": "{version}",
       "blocking": false
     },
@@ -364,17 +365,8 @@
       "id": "protocols-specs-effects-openapi-yaml-openapi-version",
       "path": "protocols/specs/effects/openapi.yaml",
       "kind": "regex",
-      "pattern": "^  version:\\s*(?P<version>[^\\n]+)$",
-      "replacement": "  version: {version}",
-      "expected": "{version}",
-      "blocking": false
-    },
-    {
-      "id": "sdk-java-pom-xml-version",
-      "path": "sdk/java/pom.xml",
-      "kind": "regex",
-      "pattern": "(<artifactId>[^<]+</artifactId>\\s*\\n\\s*<version>)(?P<version>[^<]+)(</version>)",
-      "replacement": "\\g<1>{version}\\g<3>",
+      "pattern": "^  version:\\s*[\"\\']?(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)[\"\\']?\\s*$",
+      "replacement": "  version: \"{version}\"",
       "expected": "{version}",
       "blocking": false
     },
@@ -404,15 +396,6 @@
       "expected": "{version}",
       "blocking": false,
       "replacement_note": "first-party manifest version"
-    },
-    {
-      "id": "release-version-surfaces-yaml-generated-openapi",
-      "path": "release/version-surfaces.yaml",
-      "kind": "regex",
-      "pattern": "The version of the OpenAPI document: (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
-      "replacement": "The version of the OpenAPI document: {version}",
-      "expected": "{version}",
-      "blocking": false
     },
     {
       "id": "sdk-go-client-types-gen-go-generated-openapi",

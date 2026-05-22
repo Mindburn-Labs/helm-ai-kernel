@@ -1,6 +1,6 @@
 {
   "name": "hallmark",
-  "version": "1.0.0",
+  "version": "0.5.6",
   "description": "A design skill for AI coding assistants. Makes the UIs they generate look made, not generated. Powered by Together AI.",
   "keywords": [
     "claude",

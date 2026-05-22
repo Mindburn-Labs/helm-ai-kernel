@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-05-22T19:53:25Z
-# Commit: d0fcca68329996e12e6010a8e487fcdb9cad21fc
+# Generated: 2026-05-22T20:09:35Z
+# Commit: 94afb79ef82faca139d4d3b976eedbd1a683baf5
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -268,9 +268,9 @@ f334e13d4f0a3619666b49106b36ce460c0ff32f1314a38f46bcbb4d7ca34d4e  core/pkg/crypt
 6202b7faae2cdc990787d2457edda7b54a44db843394d8e42eef34845a007ec9  core/pkg/crypto/tls/tls_legacy.go
 2bcacc08c3a99c49df03c5605b91353924b87c11b2cb889b9267a35dfaec6191  core/pkg/crypto/tls/tls_legacy_test.go
 9d56bdefa8f7db5b2e5d76db2ef143e2534a553418fe7563b4faac1269eac714  core/pkg/crypto/verifier.go
-f28873dad7a9b159b79e2a47cfc41cc9156dac8d34e9ee098d6dee6e89b79dc0  core/pkg/crypto/zk/risc_zero.go
+8f7b4ad962ff543400acf8468ab496abce4d56e93aaeaa8762d53949596cb950  core/pkg/crypto/zk/risc_zero.go
 8b4fe47a20909223b180c7163ef7257e4f43d938741d6b5739cc0c1991c3e661  core/pkg/crypto/zk/safety_checker.go
-fe193891ac817e3f55fd76b4ffba98122c728b137a3c7dd7dcb07165f8284550  core/pkg/crypto/zk/safety_checker_test.go
+11f4c04186a4be87d2afc4da53d193c632ce7c10c4a2878030e96df6b21be7b2  core/pkg/crypto/zk/safety_checker_test.go
 8739c7e4d2df1d7752b28e89d5b590705959f9be623a783182720d86db6bdb4a  core/pkg/evidencepack/README.md
 3d6a8c4c2a29d59f9d37df6ca68c90c5afe8d0525aa36530fdb2ad5dd01b76d8  core/pkg/evidencepack/archive.go
 c0f76426794df735cf5b7728c8079ce030e8343a9f85370af440ec393946b0f6  core/pkg/evidencepack/builder.go

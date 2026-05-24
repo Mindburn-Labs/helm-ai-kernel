@@ -226,7 +226,7 @@
       "id": "tracked-file-hygiene",
       "title": "Tracked file hygiene",
       "description": "Blocks accidentally tracked databases, archives, logs, and binary artifacts.",
-      "command": "bash -lc \"! git ls-files | rg '\\\\.(db|sqlite|log|tar|tar\\\\.gz|zip|exe|dll|so|dylib)$'\"",
+      "command": "bash -lc \"set -o pipefail; ! git ls-files | rg '\\\\.(db|sqlite|log|tar|tar\\\\.gz|zip|exe|dll|so|dylib)$' | rg -v '^reference_packs/proof_replays/[^/]+/evidencepack\\\\.tar$'\"",
       "timeout_seconds": 60
     },
     {

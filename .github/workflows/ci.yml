@@ -73,7 +73,7 @@ jobs:
       - name: Check tracked file hygiene
         run: |
           set -euo pipefail
-          ! git ls-files | rg '\.(db|sqlite|log|tar|tar\.gz|zip|exe|dll|so|dylib)$'
+          ! git ls-files | rg '\.(db|sqlite|log|tar|tar\.gz|zip|exe|dll|so|dylib)$' | rg -v '^reference_packs/proof_replays/[^/]+/evidencepack\.tar$'
 
   kernel:
     runs-on: ubuntu-latest

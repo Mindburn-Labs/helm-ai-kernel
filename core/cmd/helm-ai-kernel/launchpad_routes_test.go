@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	launchsession "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
@@ -63,12 +62,20 @@ func TestLaunchpadImportRoutesAnalyzeLocalRepoAndBlockUnsafeLaunch(t *testing.T)
 	svc.LaunchpadStore = launchsession.NewStore(storeRoot)
 
 	repoRoot := t.TempDir()
+	t.Setenv("HELM_LAUNCHPAD_LOCAL_IMPORT_ROOT", filepath.Dir(repoRoot))
 	writeLaunchpadImportFixture(t, repoRoot)
 
 	mux := http.NewServeMux()
 	RegisterSubsystemRoutes(mux, svc)
 
-	importReq := httptest.NewRequest(http.MethodPost, "/api/v1/launchpad/imports", strings.NewReader(`{"repo_url":`+quoteJSON(repoRoot)+`,"desired_target":"local"}`))
+	importBody, err := json.Marshal(map[string]string{
+		"repo_url":       filepath.Base(repoRoot),
+		"desired_target": "local",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	importReq := httptest.NewRequest(http.MethodPost, "/api/v1/launchpad/imports", bytes.NewReader(importBody))
 	authorizeTestRequest(importReq)
 	importRec := httptest.NewRecorder()
 	mux.ServeHTTP(importRec, importReq)
@@ -156,11 +163,6 @@ func writeFixtureFile(t *testing.T, root, rel, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func quoteJSON(value string) string {
-	data, _ := json.Marshal(value)
-	return string(data)
 }
 
 func containsString(items []string, value string) bool {

@@ -215,19 +215,51 @@ func localPath(raw string) string {
 	if raw == "" {
 		return ""
 	}
+	root := strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_LOCAL_IMPORT_ROOT"))
+	if root == "" {
+		return ""
+	}
+	requested := raw
 	if strings.HasPrefix(raw, "file://") {
 		u, err := url.Parse(raw)
 		if err == nil {
-			return u.Path
+			requested = u.Path
 		}
 	}
 	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") || strings.HasPrefix(raw, "git@") {
 		return ""
 	}
-	if info, err := os.Stat(raw); err == nil && info.IsDir() {
-		return raw
+	candidate, err := scopedLocalPath(root, requested)
+	if err != nil {
+		return ""
+	}
+	if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+		return candidate
 	}
 	return ""
+}
+
+func scopedLocalPath(root, requested string) (string, error) {
+	base, err := filepath.Abs(filepath.Clean(root))
+	if err != nil {
+		return "", err
+	}
+	rel := requested
+	if filepath.IsAbs(requested) {
+		absRequested, err := filepath.Abs(filepath.Clean(requested))
+		if err != nil {
+			return "", err
+		}
+		rel, err = filepath.Rel(base, absRequested)
+		if err != nil {
+			return "", err
+		}
+	}
+	rel = filepath.Clean(rel)
+	if rel == "." || !filepath.IsLocal(rel) {
+		return "", fmt.Errorf("local import path must stay under configured root")
+	}
+	return filepath.Join(base, rel), nil
 }
 
 func fetchLocalSource(root string, req ImportRequest) (SourceSnapshot, error) {

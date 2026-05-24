@@ -10,7 +10,8 @@ import (
 
 func TestAnalyzerImportBuildsOpenHumanStyleHybridGraph(t *testing.T) {
 	root := writeHybridRepo(t)
-	record, err := NewAnalyzer(DefaultAdapters(), nil).Import(context.Background(), ImportRequest{RepoURL: root, Ref: "test"}, time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC))
+	t.Setenv("HELM_LAUNCHPAD_LOCAL_IMPORT_ROOT", filepath.Dir(root))
+	record, err := NewAnalyzer(DefaultAdapters(), nil).Import(context.Background(), ImportRequest{RepoURL: filepath.Base(root), Ref: "test"}, time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("import: %v", err)
 	}

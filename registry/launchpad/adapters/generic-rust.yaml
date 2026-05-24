@@ -1,0 +1,23 @@
+apiVersion: helm.platform/v1alpha1
+kind: FrameworkAdapter
+metadata:
+  id: generic-rust
+  version: 1.0.0
+  priority: 50
+match:
+  filesAny: ["Cargo.toml"]
+  confidenceThreshold: 0.6
+capabilities: ["rust"]
+entrypoints:
+  local:
+    - name: run
+      command: ["cargo", "run"]
+build:
+  strategy: native
+dependencies:
+  files: ["Cargo.toml", "Cargo.lock"]
+tests:
+  smoke:
+    - ["cargo", "test"]
+rollback:
+  strategy: teardown

@@ -63,6 +63,171 @@ export interface LaunchpadApp {
   action_states?: Record<string, LaunchpadEntitlementDecision>;
 }
 
+export type LaunchpadImportState = "IMPORTED" | "PREFLIGHTED" | "PROMOTABLE" | "BLOCKED" | "LAUNCHED" | "TORN_DOWN" | string;
+
+export interface LaunchpadImportRequest {
+  repo_url: string;
+  ref?: string;
+  desired_target?: string;
+}
+
+export interface SourceSnapshot {
+  repo_url: string;
+  provider: string;
+  owner?: string;
+  repo?: string;
+  ref?: string;
+  commit?: string;
+  license_spdx?: string;
+  license_state: string;
+  fetched_at?: string;
+  files: SourceFileSummary[];
+  api_source?: string;
+}
+
+export interface SourceFileSummary {
+  path: string;
+  kind: string;
+  size?: number;
+  sha?: string;
+  language?: string;
+  content?: string;
+}
+
+export interface CapabilityGraph {
+  capabilities: string[];
+  modules: DetectedModule[];
+  frameworks: DetectedFramework[];
+  secrets: SecretContract[];
+  oauth: OAuthRequirement[];
+  ports: number[];
+  build_signals: string[];
+  runtime_signals: string[];
+  policy_signals: string[];
+  security_signals: string[];
+  adapter_matches: AdapterMatch[];
+  confidence: number;
+  confidence_reason: string;
+}
+
+export interface DetectedModule {
+  path: string;
+  kind: string;
+  manifests: string[];
+  entrypoints?: string[];
+  build_strategy?: string;
+}
+
+export interface DetectedFramework {
+  id: string;
+  name: string;
+  confidence: number;
+  evidence: string[];
+}
+
+export interface SecretContract {
+  name: string;
+  source: string;
+  required: boolean;
+  reason?: string;
+  targets?: string[];
+}
+
+export interface OAuthRequirement {
+  provider: string;
+  scopes?: string[];
+  source: string;
+}
+
+export interface AdapterMatch {
+  adapter_id: string;
+  confidence: number;
+  evidence: string[];
+}
+
+export interface BuildStrategy {
+  strategy: string;
+  confidence: number;
+  reason: string;
+  commands?: string[][];
+  manifest_sources?: string[];
+}
+
+export interface TargetPlan {
+  target_id: string;
+  kind: string;
+  substrate_id?: string;
+  deployable: boolean;
+  requires_approval: boolean;
+  commands?: string[][];
+  artifacts?: string[];
+  secrets_backend?: string;
+  healthcheck?: Record<string, string>;
+  rollback?: string[];
+  risk: string;
+  reason: string;
+}
+
+export interface GeneratedAppSpecCandidate {
+  candidate_id: string;
+  trusted: boolean;
+  app_spec: LaunchpadApp;
+  promotion_requirements: string[];
+}
+
+export interface LaunchRecipe {
+  import_id: string;
+  generated_at?: string;
+  detection_order: string[];
+  build_strategy: BuildStrategy;
+  target_plans: TargetPlan[];
+  generated_app_specs: GeneratedAppSpecCandidate[];
+  promotion_state: string;
+  promotion_requirements: string[];
+  cli_equivalent: string;
+}
+
+export interface ImportEvidenceLedger {
+  status: string;
+  receipt_refs?: string[];
+  evidence_pack_refs?: string[];
+  sbom_ref?: string;
+  vulnerability_scan_ref?: string;
+  provenance_ref?: string;
+  license_ref?: string;
+  policy_refs?: string[];
+  offline_verify_command?: string;
+}
+
+export interface PreflightCheck {
+  id: string;
+  status: string;
+  summary: string;
+  evidence_ref?: string;
+  fix_actions?: string[];
+}
+
+export interface ImportPreflightResult {
+  import_id: string;
+  status: string;
+  checks: PreflightCheck[];
+  blocked_reasons?: string[];
+  evidence_ledger: ImportEvidenceLedger;
+}
+
+export interface LaunchpadImportRecord {
+  id: string;
+  state: LaunchpadImportState;
+  created_at?: string;
+  updated_at?: string;
+  request: LaunchpadImportRequest;
+  source_snapshot: SourceSnapshot;
+  capability_graph: CapabilityGraph;
+  launch_recipe: LaunchRecipe;
+  preflight?: ImportPreflightResult;
+  evidence_ledger: ImportEvidenceLedger;
+}
+
 export interface LaunchpadAppStatus {
   state: string;
   verdict: LaunchpadVerdict;

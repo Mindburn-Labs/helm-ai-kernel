@@ -1,6 +1,6 @@
 ---
 title: Launchpad UX Architecture
-last_reviewed: 2026-05-22
+last_reviewed: 2026-05-24
 ---
 
 # Launchpad UX Architecture
@@ -14,6 +14,12 @@ Launchpad is one product surface:
 
 ```text
 App catalog -> preflight -> setup secrets -> launch safely -> run timeline -> proof -> teardown
+```
+
+The same surface now includes a Universal Importer entry point:
+
+```text
+Paste repo URL -> inspect source -> capability graph -> generated target plans -> import preflight -> evidence-gated promotion
 ```
 
 Simple Mode and Developer Mode are depth controls on the same backend facts.
@@ -33,6 +39,8 @@ The Console renders only:
 - receipt refs
 - EvidencePack refs and offline verify commands
 - teardown state
+- SourceSnapshot, CapabilityGraph, LaunchRecipe, target plans, generated
+  AppSpec candidates, and import preflight records
 - explicit backend-returned or test-fixture entitlement fields
 
 Missing data is shown as `unproven`. The Console does not invent a fallback
@@ -50,6 +58,10 @@ catalog, mock launch success, raw secret binding, or proof state.
 - `ProofPanel.tsx`: universal receipts / EvidencePack / verify command panel.
 - `DeveloperModePanel.tsx`: raw backend payload disclosure.
 - `EntitlementGate.tsx`: passive rendering of explicit entitlement decisions.
+
+The Universal Importer panel is part of `LaunchpadPage.tsx` in this pass. It
+renders only `/api/v1/launchpad/imports` data and keeps generated AppSpecs
+visibly `generated/untrusted` until backend evidence exists.
 
 ## Entitlement Boundary
 

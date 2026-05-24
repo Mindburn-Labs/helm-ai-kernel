@@ -1,6 +1,6 @@
 ---
 title: HELM Launchpad
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-24
 ---
 
 # HELM Launchpad
@@ -43,6 +43,8 @@ GA claims.
 - App and substrate registry: `registry/launchpad/`
 - Policy packs: `policies/launchpad/`
 - Contract schemas: `schemas/launchpad/`
+- Universal importer: `core/pkg/launchpad/importer`
+- Universal importer docs: `docs/launchpad/UNIVERSAL_IMPORTER.md`
 - UX architecture: `docs/launchpad/UX_ARCHITECTURE.md`
 - Hosted account/entitlement target contract:
   `docs/launchpad/MINDBURN_ACCOUNT_ENTITLEMENTS_SPEC.md`
@@ -94,6 +96,31 @@ repo. Console must not infer account tier or invent entitlement state; it may
 only render explicit backend fields or clearly labeled test fixtures. The
 hosted integration contract lives in
 `docs/launchpad/MINDBURN_ACCOUNT_ENTITLEMENTS_SPEC.md`.
+
+## Universal Importer
+
+Launchpad now has an additive repo-to-runtime importer for GitHub URLs and
+local paths. It generates SourceSnapshot, CapabilityGraph, LaunchRecipe,
+TargetPlan, untrusted AppSpec candidates, preflight checks, and import evidence
+ledger records.
+
+```text
+POST /api/v1/launchpad/imports
+GET  /api/v1/launchpad/imports
+GET  /api/v1/launchpad/imports/{id}
+POST /api/v1/launchpad/imports/{id}/preflight
+POST /api/v1/launchpad/imports/{id}/promote
+POST /api/v1/launchpad/imports/{id}/launch
+POST /api/v1/launchpad/imports/{id}/teardown
+```
+
+Current boundary: the importer inspects and plans; it does not execute unknown
+repository code. Generated AppSpecs remain `oss_candidate`,
+`generated_untrusted`, and `trusted=false` until sandbox build, SBOM,
+vulnerability scan, license review, smoke test, teardown, and evidence refs are
+complete. `launch` blocks before LaunchKit execution for unpromoted imports.
+
+See `docs/launchpad/UNIVERSAL_IMPORTER.md` for adapter and promotion details.
 
 ## App Classification
 

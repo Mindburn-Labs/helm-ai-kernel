@@ -92,6 +92,13 @@ const apiMock = vi.hoisted(() => ({
   loadLaunchpadMatrix: vi.fn(),
   planLaunchpad: vi.fn(),
   launchLaunchpad: vi.fn(),
+  listLaunchpadImports: vi.fn(),
+  createLaunchpadImport: vi.fn(),
+  loadLaunchpadImport: vi.fn(),
+  preflightLaunchpadImport: vi.fn(),
+  promoteLaunchpadImport: vi.fn(),
+  launchImportedApp: vi.fn(),
+  teardownLaunchpadImport: vi.fn(),
   listLaunchpadRuns: vi.fn(),
   createLaunchpadRuntimeRun: vi.fn(),
   loadLaunchpadRunDetail: vi.fn(),
@@ -241,6 +248,64 @@ function launchpadAppFixture() {
       quarantined_mcp: 1,
       last_evidence_pack: "evp_openclaw",
       offline_verifiable: true,
+    },
+  };
+}
+
+function launchpadImportFixture() {
+  return {
+    id: "imp_openhuman",
+    state: "IMPORTED",
+    request: { repo_url: "https://github.com/tinyhumansai/openhuman", ref: "main", desired_target: "local" },
+    source_snapshot: {
+      repo_url: "https://github.com/tinyhumansai/openhuman",
+      provider: "github",
+      owner: "tinyhumansai",
+      repo: "openhuman",
+      ref: "main",
+      license_spdx: "MIT",
+      license_state: "detected",
+      files: [{ path: "package.json", kind: "file" }, { path: "docker-compose.yml", kind: "file" }],
+    },
+    capability_graph: {
+      capabilities: ["desktopUI", "compose", "mcpTools", "agui", "secrets"],
+      modules: [{ path: ".", kind: "node", manifests: ["package.json"], build_strategy: "native" }],
+      frameworks: [],
+      secrets: [{ name: "OPENAI_API_KEY", source: ".env.example", required: true }],
+      oauth: [],
+      ports: [3000],
+      build_signals: ["package.json", "docker-compose.yml"],
+      runtime_signals: ["src/mcp.ts"],
+      policy_signals: ["license:MIT"],
+      security_signals: [],
+      adapter_matches: [{ adapter_id: "generic-tauri-electron", confidence: 0.8, evidence: ["package.json"] }],
+      confidence: 0.85,
+      confidence_reason: "high-confidence adapter match from deterministic manifests",
+    },
+    launch_recipe: {
+      import_id: "imp_openhuman",
+      detection_order: ["framework-native manifest", "deterministic project manifests", "container or compose runtime"],
+      build_strategy: { strategy: "compose", confidence: 0.86, reason: "repo declares Compose runtime", commands: [["docker", "compose", "up", "--build"]], manifest_sources: ["docker-compose.yml"] },
+      target_plans: [
+        { target_id: "local", kind: "desktop", substrate_id: "desktop-local", deployable: true, requires_approval: false, commands: [["npm", "run", "dev"]], risk: "quarantined", reason: "Desktop UI detected." },
+        { target_id: "cloud", kind: "kubernetes-gitops", substrate_id: "kubernetes", deployable: true, requires_approval: true, commands: [["helm", "upgrade", "--install", "openhuman", "./charts/openhuman"]], risk: "requires_policy_gate", reason: "Cloud target is portable OCI + Helm + GitOps." },
+        { target_id: "hosted-sandbox", kind: "hosted-sandbox", substrate_id: "e2b-daytona-modal", deployable: true, requires_approval: false, commands: [["helm-ai-kernel", "sandbox", "exec"]], risk: "untrusted_code_quarantine", reason: "Disposable sandbox first." },
+      ],
+      generated_app_specs: [{ candidate_id: "generated-appspec-imp_openhuman", trusted: false, app_spec: { ...launchpadAppFixture(), id: "imported-openhuman", app_id: "imported-openhuman", name: "openhuman", availability: "oss_candidate" }, promotion_requirements: ["sandbox preflight PASS", "SBOM generated"] }],
+      promotion_state: "generated_untrusted",
+      promotion_requirements: ["sandbox preflight PASS", "SBOM generated"],
+      cli_equivalent: "helm-ai-kernel launchpad import 'https://github.com/tinyhumansai/openhuman'",
+    },
+    evidence_ledger: {
+      status: "generated_untrusted",
+      receipt_refs: ["receipt:launchpad-import:imp_openhuman:source"],
+      evidence_pack_refs: ["evidencepack:launchpad-import:imp_openhuman:preflight"],
+      sbom_ref: "pending:sbom:imp_openhuman",
+      vulnerability_scan_ref: "pending:vulnerability-scan:imp_openhuman",
+      provenance_ref: "pending:provenance:imp_openhuman",
+      license_ref: "MIT",
+      policy_refs: ["policy:launchpad-import:quarantine:v1"],
+      offline_verify_command: "helm-ai-kernel verify evidencepack:launchpad-import:imp_openhuman:preflight --offline",
     },
   };
 }
@@ -398,6 +463,26 @@ describe("HELM Console workbench", () => {
     apiMock.loadLaunchpadMatrix.mockResolvedValue([{ app_id: "openclaw", substrate_id: "local-container", launchable: true, verdict: "ALLOW", reason: "OSS supported", availability: "available" }]);
     apiMock.planLaunchpad.mockResolvedValue({ launch_id: "plan_1", app_id: "openclaw", substrate_id: "local-container", state: "PLANNED", kernel_verdict: "ALLOW", reason: "LaunchPlan compiled.", plan_hash: "sha256:plan" });
     apiMock.launchLaunchpad.mockResolvedValue({ launch_id: "launch_1" });
+    apiMock.listLaunchpadImports.mockResolvedValue([]);
+    apiMock.createLaunchpadImport.mockResolvedValue(launchpadImportFixture());
+    apiMock.loadLaunchpadImport.mockResolvedValue(launchpadImportFixture());
+    apiMock.preflightLaunchpadImport.mockResolvedValue({
+      ...launchpadImportFixture(),
+      state: "PREFLIGHTED",
+      preflight: {
+        import_id: "imp_openhuman",
+        status: "ESCALATE",
+        checks: [
+          { id: "source_snapshot", status: "PASS", summary: "Repository metadata and deterministic file signals were captured before full launch." },
+          { id: "sbom", status: "PENDING", summary: "SBOM generation is planned for build execution." },
+        ],
+        blocked_reasons: ["SBOM generation is planned for build execution."],
+        evidence_ledger: launchpadImportFixture().evidence_ledger,
+      },
+    });
+    apiMock.promoteLaunchpadImport.mockRejectedValue(new Error("promotion requires evidence"));
+    apiMock.launchImportedApp.mockRejectedValue(new Error("generated imports must be promoted"));
+    apiMock.teardownLaunchpadImport.mockResolvedValue({ ...launchpadImportFixture(), state: "TORN_DOWN" });
     apiMock.listLaunchpadRuns.mockResolvedValue({ runs: [{ launch_id: "run_1", app_id: "openclaw", substrate_id: "local-container", state: "RUNNING", kernel_verdict: "ALLOW", plan_hash: "sha256:plan", evidence_pack_refs: ["evp_openclaw"] }] });
     apiMock.createLaunchpadRuntimeRun.mockResolvedValue(launchpadRunDetailFixture());
     apiMock.loadLaunchpadRunDetail.mockResolvedValue(launchpadRunDetailFixture());
@@ -486,6 +571,29 @@ describe("HELM Console workbench", () => {
     expect(await screen.findByRole("heading", { name: "Launch / Run Timeline" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Universal AppSpec launch" })).toBeInTheDocument();
     expect(screen.getByText("Developer facts")).toBeInTheDocument();
+  });
+
+  it("imports a repository through backend facts and keeps generated apps untrusted", async () => {
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Paste a repo" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("GitHub URL or local path"), { target: { value: "https://github.com/tinyhumansai/openhuman" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Import$/i }));
+
+    await waitFor(() => expect(apiMock.createLaunchpadImport).toHaveBeenCalledWith({
+      repo_url: "https://github.com/tinyhumansai/openhuman",
+      ref: undefined,
+      desired_target: "local",
+    }));
+    expect(await screen.findByText("openhuman")).toBeInTheDocument();
+    expect(screen.getByText("generated/untrusted")).toBeInTheDocument();
+    expect(screen.getByText("desktopUI")).toBeInTheDocument();
+    expect(screen.getByText("kubernetes-gitops")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Launch after promotion/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /Run import preflight/i }));
+    expect(await screen.findByText("SBOM generation is planned for build execution.")).toBeInTheDocument();
+    expect(screen.getByText("PENDING")).toBeInTheDocument();
   });
 
   it("evaluates a governed command and refreshes receipts", async () => {

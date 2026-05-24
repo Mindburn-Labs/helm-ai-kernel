@@ -5,14 +5,14 @@ Typed Java client for the retained HELM kernel API.
 ## Package Status
 
 The Java SDK is published on Maven Central as
-`io.github.mindburnlabs:helm-sdk:0.5.6`. Remote Maven resolution and repo1
+`io.github.mindburnlabs:helm-sdk:0.5.7`. Remote Maven resolution and repo1
 artifacts were verified for this coordinate.
 
 ```xml
 <dependency>
   <groupId>io.github.mindburnlabs</groupId>
   <artifactId>helm-sdk</artifactId>
-  <version>0.5.6</version>
+  <version>0.5.7</version>
 </dependency>
 ```
 
@@ -60,5 +60,5 @@ authoritative.
 
 ## Release Notes
 
-`0.5.6` is the release-hardening patch with the retained OpenAPI client surface
+`0.5.7` is the release-hardening patch with the retained OpenAPI client surface
 and protobuf message bindings.

@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckCircle2, Clipboard, Download, Loader2, RefreshCw, Trash2, ShieldCheck, Key, Globe, FolderOpen, Cpu } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { launchpadApi } from "./api";
 import { AppCard } from "./AppCard";
 import { ProofPanel } from "./ProofPanel";
@@ -11,6 +11,7 @@ import type {
   FixAction,
   GateResult,
   LaunchpadApp,
+  LaunchpadImportRecord,
   LaunchpadMatrixCell,
   LaunchpadPlanResponse,
   LaunchpadRun,
@@ -37,6 +38,8 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
   const [substrates, setSubstrates] = useState<LaunchpadSubstrate[]>([]);
   const [matrix, setMatrix] = useState<LaunchpadMatrixCell[]>([]);
   const [runs, setRuns] = useState<LaunchpadRun[]>([]);
+  const [imports, setImports] = useState<LaunchpadImportRecord[]>([]);
+  const [activeImport, setActiveImport] = useState<LaunchpadImportRecord | null>(null);
   const [secrets, setSecrets] = useState<LaunchpadSecretGrant[]>([]);
   const [threatReviews, setThreatReviews] = useState<MCPThreatReview[]>([]);
   const [selectedApp, setSelectedApp] = useState("");
@@ -74,6 +77,10 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
       }),
       loadPiece("matrix", launchpadApi.matrix, setMatrix),
       loadPiece("runs", launchpadApi.runs, setRuns),
+      loadPiece("imports", launchpadApi.imports, (nextImports) => {
+        setImports(nextImports);
+        setActiveImport((current) => current ?? nextImports[0] ?? null);
+      }),
       loadPiece("secrets", launchpadApi.secrets, setSecrets),
       loadPiece("MCP reviews", launchpadApi.mcpThreatReviews, setThreatReviews),
     ]);
@@ -296,6 +303,40 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
     }
   };
 
+  const importRepo = async (repoUrl: string, ref: string, desiredTarget: string) => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const record = await launchpadApi.importRepo({
+        repo_url: repoUrl,
+        ref: ref || undefined,
+        desired_target: desiredTarget || undefined,
+      });
+      setActiveImport(record);
+      setImports((current) => [record, ...current.filter((item) => item.id !== record.id)]);
+      setNotice({ tone: "success", message: `Import ${record.id} generated from backend repo inspection.` });
+    } catch (err) {
+      setNotice({ tone: "error", message: err instanceof Error ? err.message : "Repository import failed" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const preflightImport = async (importId: string) => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const record = await launchpadApi.preflightImport(importId);
+      setActiveImport(record);
+      setImports((current) => current.map((item) => item.id === record.id ? record : item));
+      setNotice({ tone: record.preflight?.status === "PASS" ? "success" : "info", message: `${record.preflight?.status ?? record.state}: import preflight recorded.` });
+    } catch (err) {
+      setNotice({ tone: "error", message: err instanceof Error ? err.message : "Import preflight failed" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="launchpad-surface" aria-busy={loading || busy}>
       <div className="view-mode-switcher-container">
@@ -347,6 +388,7 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
         />
         <div className="launchpad-metrics" aria-label="HELM Console counts">
           <span><strong>{apps.length}</strong> apps</span>
+          <span><strong>{imports.length}</strong> imports</span>
           <span><strong>{runs.length}</strong> runs</span>
           {viewMode === "pro" && <span><strong>{threatReviews.length}</strong> MCP reviews</span>}
         </div>
@@ -374,6 +416,11 @@ export function LaunchpadPage({ surface = "launch", initialRunId = "" }: { reado
           busy={!canAct}
           onSelectApp={selectApp}
           onSelectSubstrate={selectSubstrate}
+          imports={imports}
+          activeImport={activeImport}
+          onSelectImport={setActiveImport}
+          onImportRepo={(repoUrl, ref, desiredTarget) => void importRepo(repoUrl, ref, desiredTarget)}
+          onPreflightImport={(importId) => void preflightImport(importId)}
           onPreflight={(appId) => void runPreflight(appId)}
           onLaunch={(appId) => void createRun(appId)}
           onBindSecret={(requirement) => void bindSecret(requirement)}
@@ -413,6 +460,148 @@ function PanelHeader({ kicker, title, description }: { readonly kicker: string; 
   );
 }
 
+function ImportRepoPanel({
+  viewMode,
+  imports,
+  activeImport,
+  busy,
+  onSelectImport,
+  onImportRepo,
+  onPreflightImport,
+}: {
+  readonly viewMode: "simple" | "pro";
+  readonly imports: readonly LaunchpadImportRecord[];
+  readonly activeImport: LaunchpadImportRecord | null;
+  readonly busy: boolean;
+  readonly onSelectImport: (record: LaunchpadImportRecord) => void;
+  readonly onImportRepo: (repoUrl: string, ref: string, desiredTarget: string) => void;
+  readonly onPreflightImport: (id: string) => void;
+}) {
+  const [repoUrl, setRepoUrl] = useState("");
+  const [ref, setRef] = useState("");
+  const [target, setTarget] = useState("local");
+  const confidence = Math.round((activeImport?.capability_graph.confidence ?? 0) * 100);
+  const generated = activeImport?.launch_recipe.generated_app_specs[0];
+  const canImport = !busy && repoUrl.trim().length > 0;
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canImport) return;
+    onImportRepo(repoUrl.trim(), ref.trim(), target);
+  };
+
+  return (
+    <section className="launchpad-panel import-repo-panel">
+      <div className="panel-head">
+        <PanelHeader
+          kicker="Universal Importer"
+          title="Paste a repo"
+          description="HELM reads deterministic repo facts first and keeps generated AppSpecs untrusted until evidence is complete."
+        />
+        {activeImport ? <span className={`launchpad-verdict verdict-${importVerdictTone(activeImport)}`}>{activeImport.state}</span> : null}
+      </div>
+      <form className="import-repo-form" onSubmit={submit}>
+        <label className="launchpad-field import-repo-url">
+          <span>GitHub URL or local path</span>
+          <input
+            value={repoUrl}
+            disabled={busy}
+            onChange={(event) => setRepoUrl(event.target.value)}
+            placeholder="https://github.com/tinyhumansai/openhuman"
+            autoComplete="off"
+          />
+        </label>
+        <label className="launchpad-field">
+          <span>Ref</span>
+          <input value={ref} disabled={busy} onChange={(event) => setRef(event.target.value)} placeholder="main" autoComplete="off" />
+        </label>
+        <label className="launchpad-field">
+          <span>Target</span>
+          <select value={target} disabled={busy} onChange={(event) => setTarget(event.target.value)}>
+            <option value="local">Local</option>
+            <option value="cloud">Cloud</option>
+            <option value="hosted-sandbox">Hosted sandbox</option>
+          </select>
+        </label>
+        <button className="launchpad-action" type="submit" disabled={!canImport}>
+          <FolderOpen size={14} aria-hidden="true" /> Import
+        </button>
+      </form>
+
+      {activeImport ? (
+        <div className="import-record-grid">
+          <div className="import-summary">
+            <div>
+              <strong>{activeImport.source_snapshot.repo || generated?.app_spec.name || activeImport.id}</strong>
+              <span>{activeImport.source_snapshot.provider} · {activeImport.source_snapshot.ref ?? "unproven ref"} · {activeImport.source_snapshot.license_spdx ?? "NOASSERTION"}</span>
+            </div>
+            <div className="import-confidence" aria-label="import confidence">
+              <span style={{ width: `${Math.max(4, confidence)}%` }} />
+            </div>
+            <small>{confidence}% · {activeImport.capability_graph.confidence_reason}</small>
+          </div>
+          <dl className="launchpad-facts">
+            <Fact label="Build" value={activeImport.launch_recipe.build_strategy.strategy} />
+            <Fact label="Promotion" value={activeImport.launch_recipe.promotion_state} />
+            <Fact label="Proof" value={activeImport.evidence_ledger.status} />
+            <Fact label="AppSpec" value={generated?.trusted ? "trusted" : "generated/untrusted"} />
+          </dl>
+          <div className="import-chip-row" aria-label="detected capabilities">
+            {activeImport.capability_graph.capabilities.slice(0, 10).map((capability) => <span key={capability}>{capability}</span>)}
+            {activeImport.capability_graph.capabilities.length === 0 ? <span>no capabilities proven</span> : null}
+          </div>
+          <div className="import-target-grid">
+            {activeImport.launch_recipe.target_plans.map((plan) => (
+              <article key={plan.target_id} className={`import-target-card ${plan.deployable ? "deployable" : "blocked"}`}>
+                <strong>{plan.kind}</strong>
+                <span>{plan.deployable ? "planned" : "gated"}</span>
+                <p>{plan.reason}</p>
+                <code>{firstCommand(plan.commands) || "no command"}</code>
+              </article>
+            ))}
+          </div>
+          <div className="launchpad-actions">
+            <button className="launchpad-action" type="button" disabled={busy} onClick={() => onPreflightImport(activeImport.id)}>
+              <ShieldCheck size={14} aria-hidden="true" /> Run import preflight
+            </button>
+            <button className="launchpad-action" type="button" disabled>
+              <Globe size={14} aria-hidden="true" /> Launch after promotion
+            </button>
+          </div>
+          {activeImport.preflight ? (
+            <div className="import-preflight">
+              {activeImport.preflight.checks.map((check) => (
+                <div key={check.id} className={`import-check check-${check.status.toLowerCase()}`}>
+                  <strong>{check.status}</strong>
+                  <span>{check.summary}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {viewMode === "pro" ? (
+            <details className="developer-disclosure">
+              <summary>Capability graph and LaunchRecipe</summary>
+              <pre className="launchpad-code">{JSON.stringify({ capability_graph: activeImport.capability_graph, launch_recipe: activeImport.launch_recipe, evidence_ledger: activeImport.evidence_ledger, preflight: activeImport.preflight ?? null }, null, 2)}</pre>
+            </details>
+          ) : null}
+        </div>
+      ) : (
+        <div className="launchpad-empty">No imported repositories yet.</div>
+      )}
+      {imports.length > 1 ? (
+        <div className="import-history" aria-label="import history">
+          {imports.slice(0, 6).map((record) => (
+            <button key={record.id} type="button" className={record.id === activeImport?.id ? "active" : ""} onClick={() => onSelectImport(record)}>
+              <strong>{record.source_snapshot.repo || record.id}</strong>
+              <span>{record.state}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function LaunchSurface({
   viewMode,
   setViewMode,
@@ -425,9 +614,14 @@ function LaunchSurface({
   substrates,
   selectedApp,
   selectedSubstrate,
+  imports,
+  activeImport,
   busy,
   onSelectApp,
   onSelectSubstrate,
+  onSelectImport,
+  onImportRepo,
+  onPreflightImport,
   onPreflight,
   onLaunch,
   onBindSecret,
@@ -443,37 +637,62 @@ function LaunchSurface({
   readonly substrates: readonly LaunchpadSubstrate[];
   readonly selectedApp: string;
   readonly selectedSubstrate: string;
+  readonly imports: readonly LaunchpadImportRecord[];
+  readonly activeImport: LaunchpadImportRecord | null;
   readonly busy: boolean;
   readonly onSelectApp: (id: string) => void;
   readonly onSelectSubstrate: (id: string) => void;
+  readonly onSelectImport: (record: LaunchpadImportRecord) => void;
+  readonly onImportRepo: (repoUrl: string, ref: string, desiredTarget: string) => void;
+  readonly onPreflightImport: (id: string) => void;
   readonly onPreflight: (id: string) => void;
   readonly onLaunch: (id: string) => void;
   readonly onBindSecret: (requirement: SecretRequirement) => void;
 }) {
   if (viewMode === "simple") {
     return (
-      <SimpleLaunchHome
-        apps={apps}
-        substrates={substrates}
-        matrix={matrix}
-        secrets={secrets}
-        threatReviews={threatReviews}
-        selectedApp={selectedApp}
-        selectedSubstrate={selectedSubstrate}
-        plan={planMatchesSelection(plan, selectedApp, selectedSubstrate) ? plan : null}
-        detail={detail}
-        busy={busy}
-        onSelectApp={onSelectApp}
-        onSelectSubstrate={onSelectSubstrate}
-        onPreflight={onPreflight}
-        onLaunch={onLaunch}
-        onBindSecret={onBindSecret}
-      />
+      <>
+        <ImportRepoPanel
+          viewMode={viewMode}
+          imports={imports}
+          activeImport={activeImport}
+          busy={busy}
+          onSelectImport={onSelectImport}
+          onImportRepo={onImportRepo}
+          onPreflightImport={onPreflightImport}
+        />
+        <SimpleLaunchHome
+          apps={apps}
+          substrates={substrates}
+          matrix={matrix}
+          secrets={secrets}
+          threatReviews={threatReviews}
+          selectedApp={selectedApp}
+          selectedSubstrate={selectedSubstrate}
+          plan={planMatchesSelection(plan, selectedApp, selectedSubstrate) ? plan : null}
+          detail={detail}
+          busy={busy}
+          onSelectApp={onSelectApp}
+          onSelectSubstrate={onSelectSubstrate}
+          onPreflight={onPreflight}
+          onLaunch={onLaunch}
+          onBindSecret={onBindSecret}
+        />
+      </>
     );
   }
 
   return (
     <>
+      <ImportRepoPanel
+        viewMode={viewMode}
+        imports={imports}
+        activeImport={activeImport}
+        busy={busy}
+        onSelectImport={onSelectImport}
+        onImportRepo={onImportRepo}
+        onPreflightImport={onPreflightImport}
+      />
       <section className="launchpad-panel launch-toolbar">
         <PanelHeader kicker="Entry Point" title="Universal AppSpec launch" description="Launch compiles preflight gates first. Runtime starts only after mandatory gates resolve ALLOW." />
         <label className="launchpad-field">
@@ -1489,6 +1708,16 @@ function ProvenFact({ label, value, proven }: { readonly label: string; readonly
 
 function Fact({ label, value }: { readonly label: string; readonly value: string }) {
   return <div><dt>{label}</dt><dd>{value}</dd></div>;
+}
+
+function firstCommand(commands: readonly string[][] | undefined): string {
+  return commands?.[0]?.join(" ") ?? "";
+}
+
+function importVerdictTone(record: LaunchpadImportRecord): "allow" | "deny" | "escalate" {
+  if (record.state === "TORN_DOWN") return "deny";
+  if (record.preflight?.status === "PASS") return "allow";
+  return "escalate";
 }
 
 async function copyText(value: string) {

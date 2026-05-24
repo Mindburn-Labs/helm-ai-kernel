@@ -182,6 +182,13 @@
 | `memory/*.json`              | L3          | normative | Memory retrieval schemas       |
 | `packs/*.schema.json`        | L2          | normative | Pack manifest and type schemas |
 
+### Authority (`authority/`)
+
+| Schema                                             | Conformance | Status    | Description                             |
+| -------------------------------------------------- | ----------- | --------- | --------------------------------------- |
+| `authority_evaluation.v1.schema.json`              | L2          | normative | Authority evaluation request/decision   |
+| `side_effect_authority_record.schema.json`         | L2          | preview   | Registered side-effect authority record |
+
 ### Reason Codes (`reason-codes/`)
 
 | Schema                        | Conformance | Status    | Description                   |
@@ -207,8 +214,8 @@
 
 ---
 
-**Total schemas**: 137 files across 26 domains.
+**Total schemas**: 138 files across 27 domains.
 **L1 (Core)**: 41 schemas
-**L2 (Extended)**: 71 schemas
+**L2 (Extended)**: 72 schemas
 **L3 (Optional)**: 19 schemas
 **Informational**: 6 schemas

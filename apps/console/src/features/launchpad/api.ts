@@ -1,23 +1,30 @@
 import {
   bindLaunchpadSecretGrant,
   approveLaunchpadMcpTools,
+  createLaunchpadImport,
   createLaunchpadRuntimeRun,
   deleteLaunchpadRun,
   exportLaunchpadRunEvidence,
   inspectLaunchpadSandbox,
+  launchImportedApp,
   launchLaunchpad,
   listLaunchpadApps,
+  listLaunchpadImports,
   loadLaunchpadMcpThreatReviews,
   listLaunchpadRuns,
   listLaunchpadSecretGrants,
   listLaunchpadSubstrates,
+  loadLaunchpadImport,
   loadLaunchpadRunLogs,
   loadLaunchpadRunReceipts,
   loadLaunchpadRunDetail,
   loadLaunchpadMatrix,
   planLaunchpad,
+  preflightLaunchpadImport,
+  promoteLaunchpadImport,
   repairLaunchpadRun,
   simulateLaunchpadPolicy,
+  teardownLaunchpadImport,
   teardownLaunchpadRuntimeRun,
 } from "../../api/client";
 import type {
@@ -27,6 +34,7 @@ import type {
   MCPThreatReview,
   PolicySimulation,
   LaunchpadPlanResponse,
+  LaunchpadImportRecord,
   LaunchpadRun,
   LaunchpadRunDetail,
   LaunchpadSubstrate,
@@ -89,6 +97,27 @@ export const launchpadApi = {
   },
   launch(appId: string, substrateId: string): Promise<LaunchpadRun> {
     return launchLaunchpad(appId, substrateId) as Promise<LaunchpadRun>;
+  },
+  async imports(): Promise<LaunchpadImportRecord[]> {
+    return [...await listLaunchpadImports()] as unknown as LaunchpadImportRecord[];
+  },
+  importRepo(body: { repo_url: string; ref?: string; desired_target?: string }): Promise<LaunchpadImportRecord> {
+    return createLaunchpadImport(body) as unknown as Promise<LaunchpadImportRecord>;
+  },
+  importDetail(importId: string): Promise<LaunchpadImportRecord> {
+    return loadLaunchpadImport(importId) as unknown as Promise<LaunchpadImportRecord>;
+  },
+  preflightImport(importId: string): Promise<LaunchpadImportRecord> {
+    return preflightLaunchpadImport(importId) as unknown as Promise<LaunchpadImportRecord>;
+  },
+  promoteImport(importId: string): Promise<unknown> {
+    return promoteLaunchpadImport(importId);
+  },
+  launchImport(importId: string): Promise<LaunchpadRun> {
+    return launchImportedApp(importId) as unknown as Promise<LaunchpadRun>;
+  },
+  teardownImport(importId: string): Promise<LaunchpadImportRecord> {
+    return teardownLaunchpadImport(importId) as unknown as Promise<LaunchpadImportRecord>;
   },
   repair(launchId: string): Promise<unknown> {
     return repairLaunchpadRun(launchId);

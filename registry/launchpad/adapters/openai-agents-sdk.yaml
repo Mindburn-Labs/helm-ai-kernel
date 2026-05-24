@@ -1,0 +1,24 @@
+apiVersion: helm.platform/v1alpha1
+kind: FrameworkAdapter
+metadata:
+  id: openai-agents-sdk
+  version: 1.0.0
+  priority: 80
+match:
+  filesAny: ["pyproject.toml", "requirements.txt", "package.json"]
+  readmeRegex: ["openai agents", "openai-agents", "agents sdk"]
+  confidenceThreshold: 0.7
+capabilities: ["agentFramework", "libraryFramework", "tracing"]
+entrypoints:
+  local: []
+build:
+  strategy: native
+dependencies:
+  files: ["pyproject.toml", "requirements.txt", "package.json"]
+secrets:
+  required: ["OPENAI_API_KEY"]
+tests:
+  smoke:
+    - ["helm-ai-kernel", "launchpad", "import", "preflight"]
+rollback:
+  strategy: teardown

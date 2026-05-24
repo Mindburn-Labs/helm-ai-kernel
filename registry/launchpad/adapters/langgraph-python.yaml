@@ -1,0 +1,33 @@
+apiVersion: helm.platform/v1alpha1
+kind: FrameworkAdapter
+metadata:
+  id: langgraph-python
+  version: 1.0.0
+  priority: 100
+match:
+  filesAny: ["langgraph.json"]
+  confidenceThreshold: 0.85
+capabilities: ["agentFramework", "apiServer", "telemetry"]
+entrypoints:
+  local:
+    - name: dev
+      command: ["langgraph", "dev"]
+  cloud:
+    - name: deploy
+      command: ["langgraph", "deploy"]
+build:
+  strategy: native
+dependencies:
+  files: ["langgraph.json", "pyproject.toml", ".env.example"]
+secrets:
+  required: ["LANGSMITH_API_KEY"]
+network:
+  ports: [2024]
+  healthcheck:
+    type: http
+    path: /docs
+tests:
+  smoke:
+    - ["curl", "-f", "http://127.0.0.1:2024/docs"]
+rollback:
+  strategy: gitops

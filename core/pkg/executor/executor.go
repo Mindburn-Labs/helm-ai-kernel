@@ -13,6 +13,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/interfaces"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receipts/policies"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/safedep"
 )
 
 // UsageMeter is an optional interface for recording execution usage events.
@@ -41,6 +42,10 @@ type OutputSchemaRegistry interface {
 	LookupOutput(toolName string) *manifest.ToolOutputSchema
 }
 
+type SafeDepGate interface {
+	Gate(ctx context.Context, req safedep.GateRequest) (safedep.GateResult, error)
+}
+
 // SafeExecutor enforces strict gating and authorized execution.
 // Per Section 1.4: Receipt policy enforcement is fail-closed.
 // Per KERNEL_TCB §3: uses injected authority clock, never wall-clock time.Now().
@@ -56,6 +61,7 @@ type SafeExecutor struct {
 	policyEnforcer       *policies.PolicyEnforcer
 	meter                UsageMeter
 	outputSchemaRegistry OutputSchemaRegistry
+	safeDepGate          SafeDepGate
 	clock                func() time.Time // Authority clock (KERNEL_TCB §3)
 }
 
@@ -77,6 +83,7 @@ func NewSafeExecutor(verifier crypto.Verifier, signer crypto.Signer, driver Tool
 		policyEnforcer:       policies.NewPolicyEnforcer(true), // Strict mode enabled
 		meter:                meter,
 		outputSchemaRegistry: outputRegistry,
+		safeDepGate:          safedep.NewController(safedep.ControllerConfig{Clock: clock}),
 		clock:                clock,
 	}
 }
@@ -85,6 +92,11 @@ func NewSafeExecutor(verifier crypto.Verifier, signer crypto.Signer, driver Tool
 // Per KERNEL_TCB §3: the kernel MUST NOT use wall-clock time.Now().
 func (e *SafeExecutor) WithClock(clock func() time.Time) *SafeExecutor {
 	e.clock = clock
+	return e
+}
+
+func (e *SafeExecutor) WithSafeDepGate(gate SafeDepGate) *SafeExecutor {
+	e.safeDepGate = gate
 	return e
 }
 
@@ -132,6 +144,33 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 	if intent.AllowedTool != "" && intent.AllowedTool != toolName {
 		return nil, nil, fmt.Errorf("intent violation: allowed_tool '%s' does not match requested '%s'", intent.AllowedTool, toolName)
 	}
+
+	var safeDepResult *safedep.GateResult
+	req := safedep.GateRequestFromContext(decision.InputContext)
+	if e.safeDepGate == nil {
+		return nil, nil, fmt.Errorf("%w: %s: safe deprecation gate unavailable", safedep.ErrDispatchBlocked, contracts.ReasonAttestationResultRequired)
+	}
+	req.Intent = intent
+	req.DecisionID = decision.ID
+	req.EffectID = effect.EffectID
+	req.EffectType = effect.EffectType
+	req.Action = decision.Action
+	req.ToolName = toolName
+	if req.ConnectorID == "" {
+		req.ConnectorID = toolName
+	}
+	gateResult, err := e.safeDepGate.Gate(ctx, req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %v", safedep.ErrDispatchBlocked, err)
+	}
+	if !gateResult.DispatchAllowed {
+		reason := gateResult.Reason
+		if reason == "" {
+			reason = string(gateResult.ReasonCode)
+		}
+		return nil, nil, fmt.Errorf("%w: %s", safedep.ErrDispatchBlocked, reason)
+	}
+	safeDepResult = &gateResult
 
 	// 4. Tool verification
 	// Check against dynamic policy enforcer
@@ -193,7 +232,7 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 
 	// 8. Persistence, Metering & Audit
 	// Fail-closed: if receipt signing fails, execution is considered failed.
-	receipt, err := e.createReceipt(ctx, decision, effect, blobHash, artifact.Digest)
+	receipt, err := e.createReceipt(ctx, decision, intent, effect, blobHash, artifact.Digest, safeDepResult)
 	if err != nil {
 		return nil, nil, fmt.Errorf("receipt creation failed: %w", err)
 	}
@@ -296,7 +335,7 @@ func (e *SafeExecutor) verifySnapshot(ctx context.Context, decision *contracts.D
 	return blobHash, nil
 }
 
-func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, blobHash string, outputHash string) (*contracts.Receipt, error) {
+func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.DecisionRecord, intent *contracts.AuthorizedExecutionIntent, effect *contracts.Effect, blobHash string, outputHash string, safeDepResult *safedep.GateResult) (*contracts.Receipt, error) {
 	// ProofGraph DAG: query previous receipt to build causal chain
 	prevHash := "GENESIS"
 	lamportClock := uint64(1)
@@ -327,6 +366,19 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 		Timestamp:    e.clock(),
 		PrevHash:     prevHash,
 		LamportClock: lamportClock,
+	}
+	if intent != nil {
+		receipt.EmergencyActivationID = intent.EmergencyActivationID
+		receipt.EmergencyDelegationSessionID = intent.EmergencyDelegationSessionID
+		receipt.EmergencyScopeHash = intent.EmergencyScopeHash
+	}
+	if safeDepResult != nil && safeDepResult.Classification.HazardCode != "" {
+		receipt.SafeDepState = string(safeDepResult.Classification.State)
+		receipt.SafeDepReasonCode = string(safeDepResult.ReasonCode)
+		if safeDepResult.ActivationReceipt != nil && receipt.EmergencyActivationID == "" {
+			receipt.EmergencyActivationID = safeDepResult.ActivationReceipt.ActivationID
+			receipt.EmergencyDelegationSessionID = safeDepResult.ActivationReceipt.DelegationSessionID
+		}
 	}
 	// Sign Receipt — Fail-Closed: unsigned receipts are never emitted.
 	// Every receipt MUST be signed per the HELM standard.

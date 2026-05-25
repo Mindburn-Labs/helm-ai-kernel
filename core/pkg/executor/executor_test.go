@@ -7,6 +7,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/safedep"
 )
 
 // MockDriver implements ToolDriver
@@ -46,6 +47,12 @@ func (s *MemoryReceiptStore) Store(ctx context.Context, r *contracts.Receipt) er
 
 func (s *MemoryReceiptStore) GetLastForSession(ctx context.Context, sessionID string) (*contracts.Receipt, error) {
 	return nil, nil // Test mock: no causal chain
+}
+
+type safeDepGateFunc func(context.Context, safedep.GateRequest) (safedep.GateResult, error)
+
+func (f safeDepGateFunc) Gate(ctx context.Context, req safedep.GateRequest) (safedep.GateResult, error) {
+	return f(ctx, req)
 }
 
 func TestSafeExecutor_Gating(t *testing.T) {
@@ -107,6 +114,100 @@ func TestSafeExecutor_Gating(t *testing.T) {
 	}
 	if mockDriver.Called {
 		t.Error("Driver called despite mismatch")
+	}
+}
+
+func TestSafeExecutorSafeDepGateBlocksBeforeOutboxAndDispatch(t *testing.T) {
+	signer, _ := crypto.NewEd25519Signer("test-key")
+	mockDriver := &MockDriver{}
+	executor := NewSafeExecutor(signer, signer, mockDriver, NewMemoryReceiptStore(), nil, nil, "", nil, nil, nil, nil).
+		WithSafeDepGate(safeDepGateFunc(func(context.Context, safedep.GateRequest) (safedep.GateResult, error) {
+			return safedep.GateResult{
+				DispatchAllowed: false,
+				ReasonCode:      contracts.ReasonSafeDepTerminalFreeze,
+				Classification: contracts.HazardClassification{
+					HazardCode: contracts.HazardDeadManExpired,
+					State:      contracts.SafeDepTerminalFreeze,
+				},
+			}, nil
+		}))
+	decision := &contracts.DecisionRecord{ID: "dec-safedep-block", Verdict: string(contracts.VerdictAllow)}
+	if err := signer.SignDecision(decision); err != nil {
+		t.Fatal(err)
+	}
+	intent := &contracts.AuthorizedExecutionIntent{DecisionID: decision.ID, ExpiresAt: time.Now().Add(time.Hour)}
+	if err := signer.SignIntent(intent); err != nil {
+		t.Fatal(err)
+	}
+	effect := &contracts.Effect{EffectID: "eff-safedep-block", Params: map[string]any{"tool_name": "ls"}}
+	if _, _, err := executor.Execute(context.Background(), effect, decision, intent); err == nil {
+		t.Fatal("expected SafeDep gate denial")
+	}
+	if mockDriver.Called {
+		t.Fatal("driver dispatched before SafeDep gate allowed execution")
+	}
+}
+
+func TestSafeExecutorSafeDepGateRequired(t *testing.T) {
+	signer, _ := crypto.NewEd25519Signer("test-key")
+	mockDriver := &MockDriver{}
+	executor := NewSafeExecutor(signer, signer, mockDriver, NewMemoryReceiptStore(), nil, nil, "", nil, nil, nil, nil).
+		WithSafeDepGate(nil)
+	decision := &contracts.DecisionRecord{
+		ID:      "dec-safedep-gate-required",
+		Verdict: string(contracts.VerdictAllow),
+	}
+	if err := signer.SignDecision(decision); err != nil {
+		t.Fatal(err)
+	}
+	intent := &contracts.AuthorizedExecutionIntent{DecisionID: decision.ID, ExpiresAt: time.Now().Add(time.Hour)}
+	if err := signer.SignIntent(intent); err != nil {
+		t.Fatal(err)
+	}
+	effect := &contracts.Effect{EffectID: "eff-safedep-gate-required", Params: map[string]any{"tool_name": "ls"}}
+	if _, _, err := executor.Execute(context.Background(), effect, decision, intent); err == nil {
+		t.Fatal("expected missing SafeDep gate to fail closed")
+	}
+	if mockDriver.Called {
+		t.Fatal("driver dispatched without SafeDep gate")
+	}
+}
+
+func TestSafeExecutorCopiesEmergencyAuthorityToReceipt(t *testing.T) {
+	signer, _ := crypto.NewEd25519Signer("test-key")
+	mockDriver := &MockDriver{}
+	executor := NewSafeExecutor(signer, signer, mockDriver, NewMemoryReceiptStore(), nil, nil, "", nil, nil, nil, nil).
+		WithSafeDepGate(safeDepGateFunc(func(_ context.Context, req safedep.GateRequest) (safedep.GateResult, error) {
+			req.Intent.EmergencyActivationID = "act-1"
+			req.Intent.EmergencyDelegationSessionID = "session-1"
+			req.Intent.EmergencyScopeHash = "sha256:scope"
+			return safedep.GateResult{
+				DispatchAllowed: true,
+				ReasonCode:      contracts.ReasonSafeDepDegradedNarrowing,
+				Classification: contracts.HazardClassification{
+					HazardCode: contracts.HazardCredentialExpired,
+					State:      contracts.SafeDepDegradedNarrowing,
+				},
+			}, nil
+		}))
+	decision := &contracts.DecisionRecord{ID: "dec-safedep-allow", Verdict: string(contracts.VerdictAllow)}
+	if err := signer.SignDecision(decision); err != nil {
+		t.Fatal(err)
+	}
+	intent := &contracts.AuthorizedExecutionIntent{DecisionID: decision.ID, ExpiresAt: time.Now().Add(time.Hour)}
+	if err := signer.SignIntent(intent); err != nil {
+		t.Fatal(err)
+	}
+	effect := &contracts.Effect{EffectID: "eff-safedep-allow", Params: map[string]any{"tool_name": "ls"}}
+	receipt, _, err := executor.Execute(context.Background(), effect, decision, intent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipt.EmergencyActivationID != "act-1" || receipt.EmergencyDelegationSessionID != "session-1" || receipt.EmergencyScopeHash != "sha256:scope" {
+		t.Fatalf("receipt missing emergency authority fields: %+v", receipt)
+	}
+	if receipt.SafeDepState != string(contracts.SafeDepDegradedNarrowing) || receipt.SafeDepReasonCode != string(contracts.ReasonSafeDepDegradedNarrowing) {
+		t.Fatalf("receipt missing SafeDep state: %+v", receipt)
 	}
 }
 

@@ -173,16 +173,15 @@ func TestPerimeterAuditModeLogging(t *testing.T) {
 
 	ctx := context.Background()
 
-	var called bool
-	var callbackErr error
-	var callbackReason string
-	var callbackPolicy string
+	type violationCallback struct {
+		err      error
+		reason   string
+		policyID string
+	}
+	callbacks := make(chan violationCallback, 1)
 
 	pe.SetViolationHandler(func(c context.Context, err error, reason string, policyID string) {
-		called = true
-		callbackErr = err
-		callbackReason = reason
-		callbackPolicy = policyID
+		callbacks <- violationCallback{err: err, reason: reason, policyID: policyID}
 	})
 
 	// Check a tool that is not in the allowlist. Since it's ModeAudit, this should NOT return an error.
@@ -191,26 +190,21 @@ func TestPerimeterAuditModeLogging(t *testing.T) {
 		t.Fatalf("CheckTool returned error %v in audit mode, expected nil", err)
 	}
 
-	// We must wait a tiny bit because the handler is called in a background goroutine "go handler(...)".
-	for i := 0; i < 50; i++ {
-		if called {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	if !called {
+	var callback violationCallback
+	select {
+	case callback = <-callbacks:
+	case <-time.After(500 * time.Millisecond):
 		t.Fatal("Violation handler callback was not invoked")
 	}
 
-	if callbackErr != ErrToolDenied {
-		t.Errorf("Expected ErrToolDenied, got %v", callbackErr)
+	if callback.err != ErrToolDenied {
+		t.Errorf("Expected ErrToolDenied, got %v", callback.err)
 	}
-	if callbackPolicy != "audit-test-01" {
-		t.Errorf("Expected policyID audit-test-01, got %q", callbackPolicy)
+	if callback.policyID != "audit-test-01" {
+		t.Errorf("Expected policyID audit-test-01, got %q", callback.policyID)
 	}
-	if !strings.Contains(callbackReason, "unauthorized-tool") {
-		t.Errorf("Expected reason to contain unauthorized-tool, got %q", callbackReason)
+	if !strings.Contains(callback.reason, "unauthorized-tool") {
+		t.Errorf("Expected reason to contain unauthorized-tool, got %q", callback.reason)
 	}
 }
 

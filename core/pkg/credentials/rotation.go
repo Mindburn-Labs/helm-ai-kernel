@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // CredentialState tracks the lifecycle state of a credential.
@@ -31,6 +33,20 @@ type ManagedCredential struct {
 	ExpiresAt    time.Time       `json:"expires_at"`
 	RotatedAt    *time.Time      `json:"rotated_at,omitempty"`
 	RotationGen  int             `json:"rotation_gen"` // generation counter
+}
+
+type CredentialDecayError struct {
+	CredentialID string
+	State        CredentialState
+	ExpiredAt    time.Time
+}
+
+func (e *CredentialDecayError) Error() string {
+	return fmt.Sprintf("credential %q decayed: state=%s expired_at=%s", e.CredentialID, e.State, e.ExpiredAt.UTC().Format(time.RFC3339))
+}
+
+func (e *CredentialDecayError) SafeDepHazardCode() contracts.SafeDepHazardCode {
+	return contracts.HazardCredentialExpired
 }
 
 // RotationPolicy defines rotation rules.
@@ -177,4 +193,17 @@ func (m *RotationManager) IsValid(credentialID string) bool {
 		return false
 	}
 	return m.clock().Before(cred.ExpiresAt)
+}
+
+func (m *RotationManager) ValidateForSafeDep(credentialID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cred, ok := m.credentials[credentialID]
+	if !ok {
+		return fmt.Errorf("credential %q not found", credentialID)
+	}
+	if cred.State != CredentialActive || !m.clock().Before(cred.ExpiresAt) {
+		return &CredentialDecayError{CredentialID: credentialID, State: cred.State, ExpiredAt: cred.ExpiresAt}
+	}
+	return nil
 }

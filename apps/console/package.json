@@ -1,6 +1,6 @@
 {
   "name": "@helm/console",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "private": true,
   "packageManager": "npm@11.14.1",
   "type": "module",

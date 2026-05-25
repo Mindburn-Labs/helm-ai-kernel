@@ -1,6 +1,6 @@
 {
   "name": "@helm/design-system-core",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "type": "module",
   "description": "Deprecated compatibility wrapper for @mindburn/ui-core.",
   "license": "Apache-2.0",

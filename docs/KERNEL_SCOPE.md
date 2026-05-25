@@ -198,7 +198,7 @@ flowchart TD
         sdk["SDKs and examples"]
         protocol["Protocols and schemas"]
         exclude["Excluded hosted surfaces"]
-        commercial["HELM commercial docs"]
+        commercial["HELM AI Enterprise docs"]
     end
 
     subgraph Ledger["4. Tamper-Evident Ledger Plane"]
@@ -217,4 +217,3 @@ flowchart TD
     %% Premium Styling Rules
     style verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
-

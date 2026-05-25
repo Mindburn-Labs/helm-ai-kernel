@@ -9,7 +9,7 @@ cd sdk/python
 python -m pip install .
 ```
 
-Package metadata declares version `0.5.6` in `pyproject.toml`; this README does
+Package metadata declares version `0.5.8` in `pyproject.toml`; this README does
 not claim that a registry package has been published.
 
 ## Local Development
@@ -55,4 +55,4 @@ EvidencePack roots stay authoritative.
 
 ## Release Notes
 
-`0.5.6` is the release-hardening patch with the retained OpenAPI client surface and local test coverage.
+`0.5.8` is the release-hardening patch with the retained OpenAPI client surface and local test coverage.

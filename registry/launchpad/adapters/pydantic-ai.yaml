@@ -1,0 +1,24 @@
+apiVersion: helm.platform/v1alpha1
+kind: FrameworkAdapter
+metadata:
+  id: pydantic-ai
+  version: 1.0.0
+  priority: 82
+match:
+  filesAny: ["pyproject.toml", "requirements.txt"]
+  readmeRegex: ["pydantic ai", "pydantic-ai"]
+  confidenceThreshold: 0.7
+capabilities: ["agentFramework", "mcpTools", "python"]
+entrypoints:
+  local: []
+build:
+  strategy: native
+dependencies:
+  files: ["pyproject.toml", "requirements.txt", "uv.lock", "poetry.lock"]
+secrets:
+  required: ["OPENAI_API_KEY"]
+tests:
+  smoke:
+    - ["helm-ai-kernel", "launchpad", "import", "preflight"]
+rollback:
+  strategy: teardown

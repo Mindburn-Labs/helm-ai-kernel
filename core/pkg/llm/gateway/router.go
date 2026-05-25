@@ -12,6 +12,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // GatewayRouter normalizes capability requests across providers.
@@ -20,17 +22,36 @@ type GatewayRouter struct {
 	client        *http.Client
 }
 
+type EnginePinMismatchError struct {
+	Field string
+	Got   string
+	Want  string
+}
+
+func (e *EnginePinMismatchError) Error() string {
+	return fmt.Sprintf("lig: engine pin mismatch: %s %q != %q", e.Field, e.Got, e.Want)
+}
+
+func (e *EnginePinMismatchError) SafeDepHazardCode() contracts.SafeDepHazardCode {
+	return contracts.HazardEnginePinMismatch
+}
+
 // NewGatewayRouter creates a new Local Inference Gateway router.
 func NewGatewayRouter() *GatewayRouter {
 	return &GatewayRouter{client: &http.Client{Timeout: 30 * time.Second}}
 }
 
 type RouteConfig struct {
-	Provider  ProviderType
-	BaseURL   string
-	ModelName string
-	ModelHash string
-	ProfileID string
+	Provider            ProviderType
+	BaseURL             string
+	ModelName           string
+	ModelHash           string
+	ProfileID           string
+	RuntimeVersion      string
+	VerifierProfileID   string
+	AttestedMeasurement string
+	AlternateProfileID  string
+	EnginePin           *EnginePin
 }
 
 // Route binds one of the built-in provider profiles.
@@ -73,11 +94,16 @@ func (r *GatewayRouter) RouteWithConfig(_ context.Context, cfg RouteConfig) erro
 	}
 
 	profile := Profile{
-		ID:        cfg.ProfileID,
-		Provider:  cfg.Provider,
-		BaseURL:   normalized,
-		ModelName: cfg.ModelName,
-		ModelHash: cfg.ModelHash,
+		ID:                  cfg.ProfileID,
+		Provider:            cfg.Provider,
+		BaseURL:             normalized,
+		ModelName:           cfg.ModelName,
+		ModelHash:           cfg.ModelHash,
+		RuntimeVersion:      cfg.RuntimeVersion,
+		VerifierProfileID:   cfg.VerifierProfileID,
+		AttestedMeasurement: cfg.AttestedMeasurement,
+		AlternateProfileID:  cfg.AlternateProfileID,
+		EnginePin:           cfg.EnginePin,
 		Capabilities: Capabilities{
 			SupportsStreaming: true,
 			SupportsJSONMode:  true,
@@ -155,6 +181,9 @@ func (r *GatewayRouter) Execute(ctx context.Context, req ExecContext) (*ExecResu
 	if err != nil {
 		return nil, err
 	}
+	if err := validateEnginePin(*r.activeProfile, version, modelHash); err != nil {
+		return nil, err
+	}
 	content, err := r.executeProvider(ctx, *r.activeProfile, req)
 	if err != nil {
 		return nil, err
@@ -194,6 +223,48 @@ func normalizeBaseURL(raw string) (string, error) {
 		return "", fmt.Errorf("lig: invalid base URL %q", raw)
 	}
 	return strings.TrimRight(u.String(), "/"), nil
+}
+
+func validateEnginePin(profile Profile, runtimeVersion string, modelHash string) error {
+	pin := profile.EnginePin
+	if pin == nil {
+		return nil
+	}
+	if pin.Provider != "" && pin.Provider != profile.Provider {
+		return enginePinMismatch("provider", string(profile.Provider), string(pin.Provider))
+	}
+	if pin.BaseURL != "" {
+		normalized, err := normalizeBaseURL(pin.BaseURL)
+		if err != nil {
+			return err
+		}
+		if normalized != profile.BaseURL {
+			return enginePinMismatch("base_url", profile.BaseURL, normalized)
+		}
+	}
+	if pin.ModelName != "" && pin.ModelName != profile.ModelName {
+		return enginePinMismatch("model", profile.ModelName, pin.ModelName)
+	}
+	if pin.ModelHash != "" && pin.ModelHash != modelHash {
+		return enginePinMismatch("model_hash", modelHash, pin.ModelHash)
+	}
+	if pin.RuntimeVersion != "" && pin.RuntimeVersion != runtimeVersion {
+		return enginePinMismatch("runtime_version", runtimeVersion, pin.RuntimeVersion)
+	}
+	if pin.VerifierProfileID != "" && pin.VerifierProfileID != profile.VerifierProfileID {
+		return enginePinMismatch("verifier_profile_id", profile.VerifierProfileID, pin.VerifierProfileID)
+	}
+	if pin.AttestedMeasurement != "" && pin.AttestedMeasurement != profile.AttestedMeasurement {
+		return enginePinMismatch("attested_measurement", profile.AttestedMeasurement, pin.AttestedMeasurement)
+	}
+	if pin.ApprovedAlternateProfileID != "" && pin.ApprovedAlternateProfileID != profile.AlternateProfileID {
+		return enginePinMismatch("alternate_profile_id", profile.AlternateProfileID, pin.ApprovedAlternateProfileID)
+	}
+	return nil
+}
+
+func enginePinMismatch(field string, got string, want string) error {
+	return &EnginePinMismatchError{Field: field, Got: got, Want: want}
 }
 
 func (r *GatewayRouter) runtimeVersion(ctx context.Context, profile Profile) (string, error) {

@@ -260,6 +260,160 @@ body {
   background-color: var(--color-surface-2);
 }
 
+.import-repo-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.import-repo-form {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(120px, 180px) minmax(140px, 180px) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.import-repo-url input,
+.import-repo-form input,
+.import-repo-form select {
+  width: 100%;
+}
+
+.import-record-grid {
+  display: grid;
+  gap: 16px;
+  border: 0.5px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  background: rgba(21, 23, 27, 0.36);
+}
+
+.import-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.import-summary > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.import-summary strong {
+  color: var(--color-text-primary);
+}
+
+.import-summary span,
+.import-summary small {
+  color: var(--color-text-secondary);
+}
+
+.import-confidence {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.import-confidence span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent-cyan);
+}
+
+.import-chip-row,
+.import-history {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.import-chip-row span {
+  border: 0.5px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12px;
+}
+
+.import-target-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.import-target-card {
+  display: grid;
+  gap: 8px;
+  border: 0.5px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.import-target-card.deployable {
+  border-color: rgba(81, 207, 102, 0.35);
+}
+
+.import-target-card.blocked {
+  border-color: rgba(255, 205, 91, 0.35);
+}
+
+.import-target-card code {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.import-preflight {
+  display: grid;
+  gap: 8px;
+}
+
+.import-check {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 10px;
+  align-items: start;
+  border: 0.5px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+}
+
+.import-check strong {
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.import-check.check-pass strong {
+  color: var(--color-success);
+}
+
+.import-check.check-escalate strong,
+.import-check.check-pending strong {
+  color: var(--color-warning);
+}
+
+.import-history button {
+  border: 0.5px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-text-secondary);
+}
+
+.import-history button.active {
+  color: var(--color-text-primary);
+  border-color: var(--color-accent-cyan);
+}
+
+@media (max-width: 920px) {
+  .import-repo-form {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* SOTA Timeline & Messages */
 .message-card {
   display: flex;

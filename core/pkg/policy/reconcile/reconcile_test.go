@@ -9,8 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/safedep"
 )
 
 type mutableSource struct {
@@ -38,6 +40,26 @@ type rejectingVerifier struct{}
 
 func (rejectingVerifier) VerifyPolicyBundle(context.Context, PolicyHead, []byte) error {
 	return errors.New("bad signature")
+}
+
+type testEmergencyVerifier struct {
+	now time.Time
+}
+
+func (v testEmergencyVerifier) VerifyEmergencyCapsule(_ context.Context, head PolicyHead, capsule contracts.EmergencyCapsule) error {
+	if err := safedep.ValidateEmergencyCapsule(capsule, safedep.CapsuleExpectation{
+		HazardCode:     capsule.HazardCode,
+		State:          contracts.SafeDepDegradedNarrowing,
+		PolicyEpoch:    head.PolicyEpoch,
+		PolicyHash:     head.PolicyHash,
+		P0CeilingsHash: head.P0CeilingsHash,
+		P1BundleHash:   head.P1BundleHash,
+		Now:            v.now,
+		MaxTTL:         time.Hour,
+	}); err != nil {
+		return err
+	}
+	return safedep.ValidateHardwareCeremony(capsule.Ceremony, safedep.CeremonyExpectation{RequiredQuorum: 3, PolicyEpoch: head.PolicyEpoch, Now: v.now})
 }
 
 func testCompiler(_ context.Context, head PolicyHead, _ []byte) (*EffectivePolicySnapshot, error) {
@@ -367,5 +389,163 @@ func TestReconcilerInitialSnapshotRequired(t *testing.T) {
 	}
 	if status.SnapshotStatus != StatusNoPolicy {
 		t.Fatalf("unexpected status for missing snapshot: %+v", status)
+	}
+}
+
+func TestReconcilerRequiresEmergencyCapsuleVerifier(t *testing.T) {
+	scope := DefaultScope
+	now := time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC)
+	bundle := []byte("policy-with-emergency-capsule")
+	capsule := testEmergencyCapsule(now, HashBytes(bundle))
+	source := &mutableSource{
+		head: PolicyHead{
+			Scope:            scope,
+			PolicyEpoch:      7,
+			PolicyHash:       HashBytes(bundle),
+			P0CeilingsHash:   "sha256:p0",
+			P1BundleHash:     "sha256:p1",
+			EmergencyCapsule: &capsule,
+		},
+		bundle: bundle,
+	}
+	store := NewAtomicSnapshotStore()
+	reconciler, err := NewReconciler(ReconcilerConfig{Source: source, Store: store, Compiler: testCompiler})
+	if err != nil {
+		t.Fatalf("new reconciler: %v", err)
+	}
+	status, err := reconciler.Reconcile(context.Background(), scope)
+	if err == nil || !errors.Is(err, ErrEmergencyCapsuleInvalid) {
+		t.Fatalf("expected missing emergency verifier rejection, got status=%+v err=%v", status, err)
+	}
+	if _, ok := store.Get(scope); ok {
+		t.Fatal("emergency capsule installed without verifier")
+	}
+}
+
+func TestReconcilerInstallsVerifiedEmergencyCapsuleMetadata(t *testing.T) {
+	scope := DefaultScope
+	now := time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC)
+	bundle := []byte("policy-with-emergency-capsule")
+	capsule := testEmergencyCapsule(now, HashBytes(bundle))
+	source := &mutableSource{
+		head: PolicyHead{
+			Scope:            scope,
+			PolicyEpoch:      7,
+			PolicyHash:       HashBytes(bundle),
+			P0CeilingsHash:   "sha256:p0",
+			P1BundleHash:     "sha256:p1",
+			EmergencyCapsule: &capsule,
+		},
+		bundle: bundle,
+	}
+	store := NewAtomicSnapshotStore()
+	reconciler, err := NewReconciler(ReconcilerConfig{
+		Source:            source,
+		Store:             store,
+		Compiler:          testCompiler,
+		EmergencyVerifier: testEmergencyVerifier{now: now},
+	})
+	if err != nil {
+		t.Fatalf("new reconciler: %v", err)
+	}
+	status, err := reconciler.Reconcile(context.Background(), scope)
+	if err != nil {
+		t.Fatalf("reconcile emergency capsule: status=%+v err=%v", status, err)
+	}
+	current, ok := store.Get(scope)
+	if !ok {
+		t.Fatal("policy snapshot not installed")
+	}
+	if current.EmergencyCapsuleHash == "" || current.EmergencyApertureID != "rotate-credential" || !current.EmergencyExpiresAt.Equal(capsule.ExpiresAt) {
+		t.Fatalf("snapshot missing emergency metadata: %+v", current)
+	}
+}
+
+func TestReconcilerRejectsInvalidEmergencyCapsule(t *testing.T) {
+	scope := DefaultScope
+	now := time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC)
+	bundle := []byte("policy-with-invalid-emergency-capsule")
+	capsule := testEmergencyCapsule(now, HashBytes(bundle))
+	capsule.SubsetProofHash = ""
+	source := &mutableSource{
+		head: PolicyHead{
+			Scope:            scope,
+			PolicyEpoch:      7,
+			PolicyHash:       HashBytes(bundle),
+			P0CeilingsHash:   "sha256:p0",
+			P1BundleHash:     "sha256:p1",
+			EmergencyCapsule: &capsule,
+		},
+		bundle: bundle,
+	}
+	store := NewAtomicSnapshotStore()
+	reconciler, err := NewReconciler(ReconcilerConfig{
+		Source:            source,
+		Store:             store,
+		Compiler:          testCompiler,
+		EmergencyVerifier: testEmergencyVerifier{now: now},
+	})
+	if err != nil {
+		t.Fatalf("new reconciler: %v", err)
+	}
+	status, err := reconciler.Reconcile(context.Background(), scope)
+	if err == nil || !errors.Is(err, ErrEmergencyCapsuleInvalid) {
+		t.Fatalf("expected invalid emergency capsule rejection, got status=%+v err=%v", status, err)
+	}
+	if _, ok := store.Get(scope); ok {
+		t.Fatal("invalid emergency capsule installed")
+	}
+}
+
+func testEmergencyCapsule(now time.Time, policyHash string) contracts.EmergencyCapsule {
+	return contracts.EmergencyCapsule{
+		CapsuleID:       "capsule-1",
+		Version:         1,
+		ApertureID:      "rotate-credential",
+		HazardCode:      contracts.HazardCredentialExpired,
+		State:           contracts.SafeDepDegradedNarrowing,
+		PolicyEpoch:     7,
+		PolicyHash:      policyHash,
+		P0CeilingsHash:  "sha256:p0",
+		P1BundleHash:    "sha256:p1",
+		SubsetProofHash: "sha256:subset",
+		SubsetProofKind: "cpi-narrowing-v1",
+		TTLSeconds:      600,
+		NotBefore:       now.Add(-time.Minute),
+		ExpiresAt:       now.Add(10 * time.Minute),
+		Signatures: []contracts.ThresholdSignature{
+			{SignerID: "alice", Role: "founder", DeviceID: "yubi-a", KeyID: "k1", Signature: "sig-a"},
+			{SignerID: "bob", Role: "security", DeviceID: "yubi-b", KeyID: "k2", Signature: "sig-b"},
+			{SignerID: "carol", Role: "ops", DeviceID: "yubi-c", KeyID: "k3", Signature: "sig-c"},
+		},
+		Ceremony: contracts.HardwareCeremonyTranscript{
+			CeremonyID:          "ceremony-1",
+			RequiredQuorum:      3,
+			EnrolledSignerCount: 5,
+			StartedAt:           now.Add(-time.Minute),
+			ExpiresAt:           now.Add(5 * time.Minute),
+			TranscriptHash:      "sha256:ceremony",
+			Approvals: []contracts.HardwareApproval{
+				{SignerID: "alice", Role: "founder", DeviceID: "yubi-a", AssertionHash: "sha256:a", SignedAt: now},
+				{SignerID: "bob", Role: "security", DeviceID: "yubi-b", AssertionHash: "sha256:b", SignedAt: now},
+				{SignerID: "carol", Role: "ops", DeviceID: "yubi-c", AssertionHash: "sha256:c", SignedAt: now},
+			},
+		},
+		Delegation: contracts.EmergencyDelegationChain{
+			SessionID:      "session-1",
+			HumanSubjectID: "alice",
+			MaxHops:        1,
+			NotBefore:      now.Add(-time.Minute),
+			ExpiresAt:      now.Add(10 * time.Minute),
+		},
+		Attestation: contracts.AttestationResultEnvelope{
+			EnvelopeID: "attestation-1",
+			ProfileID:  "nitro-prod",
+			TrustTier:  "verified",
+			PolicyHash: "sha256:appraisal",
+			Nonce:      "nonce-1",
+			ExpiresAt:  now.Add(time.Minute),
+			Signature:  "sig-attestation",
+		},
 	}
 }

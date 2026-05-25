@@ -1,0 +1,23 @@
+apiVersion: helm.platform/v1alpha1
+kind: FrameworkAdapter
+metadata:
+  id: generic-node
+  version: 1.0.0
+  priority: 55
+match:
+  filesAny: ["package.json"]
+  confidenceThreshold: 0.6
+capabilities: ["node"]
+entrypoints:
+  local:
+    - name: start
+      command: ["npm", "start"]
+build:
+  strategy: buildpacks
+dependencies:
+  files: ["package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"]
+tests:
+  smoke:
+    - ["npm", "test", "--", "--runInBand"]
+rollback:
+  strategy: teardown

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	lpimporter "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/importer"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/readmodel"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
@@ -50,6 +51,12 @@ func RegisterLaunchpadRoutes(mux *http.ServeMux, svc *Services) {
 			handleLaunchpadPlan(w, r, catalog, store)
 		case path == "launch" && r.Method == http.MethodPost:
 			handleLaunchpadLaunch(w, r, catalog, store)
+		case path == "imports" && r.Method == http.MethodGet:
+			handleLaunchpadImportsList(w, store)
+		case path == "imports" && r.Method == http.MethodPost:
+			handleLaunchpadImportCreate(w, r, catalog, store)
+		case strings.HasPrefix(path, "imports/"):
+			handleLaunchpadImportPath(w, r, strings.TrimPrefix(path, "imports/"), store)
 		case path == "runs" && r.Method == http.MethodGet:
 			handleLaunchpadRunsList(w, store)
 		case path == "runs" && r.Method == http.MethodPost:
@@ -116,6 +123,118 @@ func handleLaunchpadLaunch(w http.ResponseWriter, r *http.Request, catalog *regi
 		return
 	}
 	writeLaunchpadJSON(w, http.StatusAccepted, run)
+}
+
+func handleLaunchpadImportsList(w http.ResponseWriter, store *launchsession.Store) {
+	records, err := lpimporter.NewStore(store.Root()).List()
+	if err != nil {
+		api.WriteInternal(w, err)
+		return
+	}
+	writeLaunchpadJSON(w, http.StatusOK, map[string]any{
+		"imports":        records,
+		"cli_equivalent": "helm-ai-kernel launchpad imports list",
+	})
+}
+
+func handleLaunchpadImportCreate(w http.ResponseWriter, r *http.Request, catalog *registry.Catalog, store *launchsession.Store) {
+	var req lpimporter.ImportRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		api.WriteBadRequest(w, "invalid launchpad import request")
+		return
+	}
+	adapters, err := lpimporter.LoadAdapters(catalog.Root)
+	if err != nil {
+		api.WriteInternal(w, err)
+		return
+	}
+	record, err := lpimporter.NewAnalyzer(adapters, nil).Import(r.Context(), req, time.Now().UTC())
+	if err != nil {
+		api.WriteBadRequest(w, err.Error())
+		return
+	}
+	if err := lpimporter.NewStore(store.Root()).Save(record); err != nil {
+		api.WriteInternal(w, err)
+		return
+	}
+	writeLaunchpadJSON(w, http.StatusAccepted, map[string]any{
+		"import":         record,
+		"cli_equivalent": record.LaunchRecipe.CLIEquivalent,
+	})
+}
+
+func handleLaunchpadImportPath(w http.ResponseWriter, r *http.Request, rest string, store *launchsession.Store) {
+	parts := strings.Split(strings.Trim(rest, "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		api.WriteBadRequest(w, "import id required")
+		return
+	}
+	importStore := lpimporter.NewStore(store.Root())
+	record, err := importStore.Get(parts[0])
+	if err != nil {
+		api.WriteError(w, http.StatusNotFound, "Import not found", err.Error())
+		return
+	}
+	if len(parts) == 1 && r.Method == http.MethodGet {
+		writeLaunchpadJSON(w, http.StatusOK, map[string]any{"import": record})
+		return
+	}
+	if len(parts) != 2 || r.Method != http.MethodPost {
+		api.WriteMethodNotAllowed(w)
+		return
+	}
+	switch parts[1] {
+	case "preflight":
+		record = lpimporter.Preflight(record, time.Now().UTC())
+		if err := importStore.Save(record); err != nil {
+			api.WriteInternal(w, err)
+			return
+		}
+		writeLaunchpadJSON(w, http.StatusAccepted, map[string]any{
+			"import":         record,
+			"preflight":      record.Preflight,
+			"cli_equivalent": "helm-ai-kernel launchpad imports " + record.ID + " preflight",
+		})
+	case "promote":
+		handleLaunchpadImportPromote(w, record)
+	case "launch":
+		handleLaunchpadImportLaunch(w, record)
+	case "teardown":
+		record.State = lpimporter.StateTornDown
+		record.EvidenceLedger.Status = "teardown_recorded"
+		if err := importStore.Save(record); err != nil {
+			api.WriteInternal(w, err)
+			return
+		}
+		writeLaunchpadJSON(w, http.StatusAccepted, map[string]any{
+			"import":         record,
+			"cli_equivalent": "helm-ai-kernel launchpad imports " + record.ID + " teardown",
+		})
+	default:
+		api.WriteMethodNotAllowed(w)
+	}
+}
+
+func handleLaunchpadImportPromote(w http.ResponseWriter, record lpimporter.ImportRecord) {
+	status := ""
+	if record.Preflight != nil {
+		status = record.Preflight.Status
+	}
+	if record.State != lpimporter.StatePromotable || status != "PASS" {
+		api.WriteError(w, http.StatusConflict, "Import is not promotable", "promotion requires sandbox preflight PASS, SBOM, vulnerability scan, license review, smoke test, and teardown evidence")
+		return
+	}
+	writeLaunchpadJSON(w, http.StatusAccepted, map[string]any{
+		"promotion_state":        record.LaunchRecipe.PromotionState,
+		"generated_app_specs":    record.LaunchRecipe.GeneratedAppSpecs,
+		"promotion_requirements": record.LaunchRecipe.PromotionRequirements,
+		"message":                "Promotion is evidence-gated. This endpoint returns the generated AppSpec candidate but does not write a trusted registry entry.",
+		"cli_equivalent":         "helm-ai-kernel launchpad imports " + record.ID + " promote",
+	})
+}
+
+func handleLaunchpadImportLaunch(w http.ResponseWriter, record lpimporter.ImportRecord) {
+	api.WriteError(w, http.StatusConflict, "Imported app is not launchable yet", "generated imports must be promoted to the registry with preflight evidence before LaunchKit execution")
 }
 
 func handleLaunchpadRunsList(w http.ResponseWriter, store *launchsession.Store) {

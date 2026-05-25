@@ -1,0 +1,21 @@
+apiVersion: helm.platform/v1alpha1
+kind: FrameworkAdapter
+metadata:
+  id: generic-python
+  version: 1.0.0
+  priority: 55
+match:
+  filesAny: ["pyproject.toml", "requirements.txt"]
+  confidenceThreshold: 0.6
+capabilities: ["python"]
+entrypoints:
+  local: []
+build:
+  strategy: buildpacks
+dependencies:
+  files: ["pyproject.toml", "requirements.txt", "uv.lock", "poetry.lock"]
+tests:
+  smoke:
+    - ["python", "-m", "pytest"]
+rollback:
+  strategy: teardown

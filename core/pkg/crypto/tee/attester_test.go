@@ -3,6 +3,9 @@ package tee
 import (
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 func TestQuoteValidateBasic(t *testing.T) {
@@ -77,6 +80,41 @@ func TestPlatformConstants(t *testing.T) {
 		if string(p) == "" {
 			t.Fatalf("platform constant is empty")
 		}
+	}
+}
+
+func TestNewAttestationResultEnvelopeRequiresSignedVerifierResult(t *testing.T) {
+	now := time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC)
+	result := &VerifyResult{
+		Platform:    PlatformNitro,
+		Measurement: []byte{1, 2, 3},
+		Nonce:       []byte{4, 5, 6},
+	}
+	profile := contracts.VerifierProfile{ProfileID: "nitro-prod", AppraisalPolicyHash: "sha256:policy"}
+	if _, err := NewAttestationResultEnvelope(AppraisalInput{
+		Result:     result,
+		Profile:    profile,
+		EnvelopeID: "attestation-1",
+		Subject:    "verifier",
+		IssuedAt:   now,
+		ExpiresAt:  now.Add(time.Minute),
+	}); err == nil {
+		t.Fatal("expected unsigned appraisal result rejection")
+	}
+	env, err := NewAttestationResultEnvelope(AppraisalInput{
+		Result:     result,
+		Profile:    profile,
+		EnvelopeID: "attestation-1",
+		Subject:    "verifier",
+		Signature:  "sig",
+		IssuedAt:   now,
+		ExpiresAt:  now.Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env.ProfileID != "nitro-prod" || env.Platform != string(PlatformNitro) || env.TrustTier != "verified" || env.Synthetic {
+		t.Fatalf("unexpected attestation result envelope: %+v", env)
 	}
 }
 

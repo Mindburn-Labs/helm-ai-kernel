@@ -1,7 +1,7 @@
 openapi: "3.1.0"
 info:
   title: HELM Kernel API
-  version: 0.5.6
+  version: "0.5.8"
   description: |
     Deterministic execution kernel for AI tool calls.
     Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
@@ -711,6 +711,199 @@ paths:
         '400':
           $ref: '#/components/responses/HelmError'
         '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/imports:
+    get:
+      operationId: listLaunchpadImports
+      tags: [launchpad]
+      summary: List universal repo-to-runtime imports
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Launchpad imports
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [imports]
+                properties:
+                  imports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LaunchpadImportRecord'
+                  cli_equivalent: { type: string }
+        '401':
+          $ref: '#/components/responses/HelmError'
+    post:
+      operationId: createLaunchpadImport
+      tags: [launchpad]
+      summary: Inspect a GitHub or local repository and generate untrusted launch candidates
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LaunchpadImportRequest'
+      responses:
+        '202':
+          description: Generated import record
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [import]
+                properties:
+                  import:
+                    $ref: '#/components/schemas/LaunchpadImportRecord'
+                  cli_equivalent: { type: string }
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/imports/{import_id}:
+    get:
+      operationId: getLaunchpadImport
+      tags: [launchpad]
+      summary: Read a generated repo-to-runtime import record
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: import_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Launchpad import record
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [import]
+                properties:
+                  import:
+                    $ref: '#/components/schemas/LaunchpadImportRecord'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/imports/{import_id}/preflight:
+    post:
+      operationId: preflightLaunchpadImport
+      tags: [launchpad]
+      summary: Run non-executing import preflight and evidence checks
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: import_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '202':
+          description: Import preflight result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [import, preflight]
+                properties:
+                  import:
+                    $ref: '#/components/schemas/LaunchpadImportRecord'
+                  preflight:
+                    $ref: '#/components/schemas/ImportPreflightResult'
+                  cli_equivalent: { type: string }
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/imports/{import_id}/promote:
+    post:
+      operationId: promoteLaunchpadImport
+      tags: [launchpad]
+      summary: Return promotion requirements for a generated AppSpec candidate
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: import_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '202':
+          description: Promotion candidate metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+        '409':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/imports/{import_id}/launch:
+    post:
+      operationId: launchImportedApp
+      tags: [launchpad]
+      summary: Launch a promoted import through the normal LaunchKit boundary
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: import_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '202':
+          description: Launchpad run state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaunchpadRun'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
+          $ref: '#/components/responses/HelmError'
+        '409':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/launchpad/imports/{import_id}/teardown:
+    post:
+      operationId: teardownLaunchpadImport
+      tags: [launchpad]
+      summary: Record cleanup for a generated import
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: import_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '202':
+          description: Import record after teardown
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [import]
+                properties:
+                  import:
+                    $ref: '#/components/schemas/LaunchpadImportRecord'
+                  cli_equivalent: { type: string }
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '404':
           $ref: '#/components/responses/HelmError'
 
   /api/v1/launchpad/runs:
@@ -3745,6 +3938,318 @@ components:
         app_id: { type: string }
         substrate_id: { type: string }
         principal: { type: string, default: console }
+
+    LaunchpadImportRequest:
+      type: object
+      required: [repo_url]
+      properties:
+        repo_url: { type: string }
+        ref: { type: string }
+        desired_target: { type: string }
+
+    LaunchpadImportRecord:
+      type: object
+      required: [id, state, request, source_snapshot, capability_graph, launch_recipe, evidence_ledger]
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        state: { type: string, enum: [IMPORTED, PREFLIGHTED, PROMOTABLE, BLOCKED, LAUNCHED, TORN_DOWN] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        request:
+          $ref: '#/components/schemas/LaunchpadImportRequest'
+        source_snapshot:
+          $ref: '#/components/schemas/SourceSnapshot'
+        capability_graph:
+          $ref: '#/components/schemas/CapabilityGraph'
+        launch_recipe:
+          $ref: '#/components/schemas/LaunchRecipe'
+        preflight:
+          $ref: '#/components/schemas/ImportPreflightResult'
+        evidence_ledger:
+          $ref: '#/components/schemas/ImportEvidenceLedger'
+
+    SourceSnapshot:
+      type: object
+      required: [repo_url, provider, license_state, files]
+      additionalProperties: true
+      properties:
+        repo_url: { type: string }
+        provider: { type: string }
+        owner: { type: string }
+        repo: { type: string }
+        ref: { type: string }
+        commit: { type: string }
+        license_spdx: { type: string }
+        license_state: { type: string }
+        fetched_at: { type: string, format: date-time }
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceFileSummary'
+        api_source: { type: string }
+
+    SourceFileSummary:
+      type: object
+      required: [path, kind]
+      properties:
+        path: { type: string }
+        kind: { type: string }
+        size: { type: integer }
+        sha: { type: string }
+        language: { type: string }
+        content: { type: string }
+
+    CapabilityGraph:
+      type: object
+      additionalProperties: true
+      properties:
+        capabilities:
+          type: array
+          items: { type: string }
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/DetectedModule'
+        frameworks:
+          type: array
+          items:
+            $ref: '#/components/schemas/DetectedFramework'
+        secrets:
+          type: array
+          items:
+            $ref: '#/components/schemas/SecretContract'
+        oauth:
+          type: array
+          items:
+            $ref: '#/components/schemas/OAuthRequirement'
+        ports:
+          type: array
+          items: { type: integer }
+        build_signals:
+          type: array
+          items: { type: string }
+        runtime_signals:
+          type: array
+          items: { type: string }
+        policy_signals:
+          type: array
+          items: { type: string }
+        security_signals:
+          type: array
+          items: { type: string }
+        adapter_matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdapterMatch'
+        confidence: { type: number }
+        confidence_reason: { type: string }
+
+    DetectedModule:
+      type: object
+      additionalProperties: true
+      properties:
+        path: { type: string }
+        kind: { type: string }
+        manifests:
+          type: array
+          items: { type: string }
+        entrypoints:
+          type: array
+          items: { type: string }
+        build_strategy: { type: string }
+
+    DetectedFramework:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        confidence: { type: number }
+        evidence:
+          type: array
+          items: { type: string }
+
+    SecretContract:
+      type: object
+      properties:
+        name: { type: string }
+        source: { type: string }
+        required: { type: boolean }
+        reason: { type: string }
+        targets:
+          type: array
+          items: { type: string }
+
+    OAuthRequirement:
+      type: object
+      properties:
+        provider: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        source: { type: string }
+
+    AdapterMatch:
+      type: object
+      properties:
+        adapter_id: { type: string }
+        confidence: { type: number }
+        evidence:
+          type: array
+          items: { type: string }
+
+    FrameworkAdapter:
+      type: object
+      additionalProperties: true
+      properties:
+        apiVersion: { type: string }
+        kind: { type: string }
+        metadata:
+          type: object
+          additionalProperties: true
+        match:
+          type: object
+          additionalProperties: true
+        capabilities:
+          type: array
+          items: { type: string }
+        entrypoints:
+          type: object
+          additionalProperties: true
+        build:
+          type: object
+          additionalProperties: true
+
+    BuildStrategy:
+      type: object
+      properties:
+        strategy: { type: string }
+        confidence: { type: number }
+        reason: { type: string }
+        commands:
+          type: array
+          items:
+            type: array
+            items: { type: string }
+        manifest_sources:
+          type: array
+          items: { type: string }
+
+    TargetPlan:
+      type: object
+      required: [target_id, kind, deployable, risk, reason]
+      additionalProperties: true
+      properties:
+        target_id: { type: string }
+        kind: { type: string }
+        substrate_id: { type: string }
+        deployable: { type: boolean }
+        requires_approval: { type: boolean }
+        commands:
+          type: array
+          items:
+            type: array
+            items: { type: string }
+        artifacts:
+          type: array
+          items: { type: string }
+        secrets_backend: { type: string }
+        healthcheck:
+          type: object
+          additionalProperties: { type: string }
+        rollback:
+          type: array
+          items: { type: string }
+        risk: { type: string }
+        reason: { type: string }
+
+    LaunchRecipe:
+      type: object
+      required: [import_id, detection_order, build_strategy, target_plans, generated_app_specs, promotion_state]
+      additionalProperties: true
+      properties:
+        import_id: { type: string }
+        generated_at: { type: string, format: date-time }
+        detection_order:
+          type: array
+          items: { type: string }
+        build_strategy:
+          $ref: '#/components/schemas/BuildStrategy'
+        target_plans:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetPlan'
+        generated_app_specs:
+          type: array
+          items:
+            $ref: '#/components/schemas/GeneratedAppSpecCandidate'
+        promotion_state: { type: string }
+        promotion_requirements:
+          type: array
+          items: { type: string }
+        cli_equivalent: { type: string }
+
+    GeneratedAppSpecCandidate:
+      type: object
+      required: [candidate_id, trusted, app_spec, promotion_requirements]
+      additionalProperties: true
+      properties:
+        candidate_id: { type: string }
+        trusted: { type: boolean }
+        app_spec:
+          $ref: '#/components/schemas/LaunchpadApp'
+        promotion_requirements:
+          type: array
+          items: { type: string }
+
+    ImportPreflightResult:
+      type: object
+      required: [import_id, status, checks, evidence_ledger]
+      additionalProperties: true
+      properties:
+        import_id: { type: string }
+        status: { type: string }
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreflightCheck'
+        blocked_reasons:
+          type: array
+          items: { type: string }
+        evidence_ledger:
+          $ref: '#/components/schemas/ImportEvidenceLedger'
+
+    PreflightCheck:
+      type: object
+      required: [id, status, summary]
+      properties:
+        id: { type: string }
+        status: { type: string }
+        summary: { type: string }
+        evidence_ref: { type: string }
+        fix_actions:
+          type: array
+          items: { type: string }
+
+    ImportEvidenceLedger:
+      type: object
+      additionalProperties: true
+      properties:
+        status: { type: string }
+        receipt_refs:
+          type: array
+          items: { type: string }
+        evidence_pack_refs:
+          type: array
+          items: { type: string }
+        sbom_ref: { type: string }
+        vulnerability_scan_ref: { type: string }
+        provenance_ref: { type: string }
+        license_ref: { type: string }
+        policy_refs:
+          type: array
+          items: { type: string }
+        offline_verify_command: { type: string }
 
     LaunchpadApp:
       type: object

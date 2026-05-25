@@ -588,6 +588,62 @@
       "domain": "gui-action",
       "description": "GUI or computer-use action postcondition was not verified",
       "since": "1.4.0"
+    },
+    {
+      "code": "SAFEDEP_TERMINAL_FREEZE",
+      "applies_to": ["DENY"],
+      "domain": "safe-deprecation",
+      "description": "Safe Deprecation classified the hazard as terminal freeze",
+      "since": "1.7.0"
+    },
+    {
+      "code": "SAFEDEP_DEGRADED_NARROWING",
+      "applies_to": ["ESCALATE"],
+      "domain": "safe-deprecation",
+      "description": "Safe Deprecation classified the hazard as recoverable degraded narrowing",
+      "since": "1.7.0"
+    },
+    {
+      "code": "SAFEDEP_DEPRECATED_READONLY",
+      "applies_to": ["DENY"],
+      "domain": "safe-deprecation",
+      "description": "Safe Deprecation classified the hazard as read-only deprecation",
+      "since": "1.7.0"
+    },
+    {
+      "code": "ERR_CONTINUITY_STALE",
+      "applies_to": ["DENY"],
+      "domain": "safe-deprecation",
+      "description": "Safe Deprecation continuity checkpoint is stale, replayed, expired, or rollbacked",
+      "since": "1.7.0"
+    },
+    {
+      "code": "ERR_EMERGENCY_CAPSULE_INVALID",
+      "applies_to": ["DENY"],
+      "domain": "safe-deprecation",
+      "description": "Emergency capsule failed binding, expiry, subset-proof, or delegation validation",
+      "since": "1.7.0"
+    },
+    {
+      "code": "ERR_HARDWARE_QUORUM_UNBOUND",
+      "applies_to": ["DENY"],
+      "domain": "safe-deprecation",
+      "description": "Hardware-bound emergency quorum is missing, duplicated, unauthorized, or revoked",
+      "since": "1.7.0"
+    },
+    {
+      "code": "ERR_ATTESTATION_RESULT_REQUIRED",
+      "applies_to": ["DENY"],
+      "domain": "safe-deprecation",
+      "description": "Signed verifier-issued attestation result is required for emergency authorization",
+      "since": "1.7.0"
+    },
+    {
+      "code": "ERR_DEV_FALLBACK_PRESENT",
+      "applies_to": ["DENY"],
+      "domain": "safe-deprecation",
+      "description": "Dev, audit, mock, software-key, env-fallback, or unsigned overlay path is enabled",
+      "since": "1.7.0"
     }
   ]
 }

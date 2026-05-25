@@ -384,6 +384,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/launchpad/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List universal repo-to-runtime imports */
+        get: operations["listLaunchpadImports"];
+        put?: never;
+        /** Inspect a GitHub or local repository and generate untrusted launch candidates */
+        post: operations["createLaunchpadImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/imports/{import_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a generated repo-to-runtime import record */
+        get: operations["getLaunchpadImport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/imports/{import_id}/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run non-executing import preflight and evidence checks */
+        post: operations["preflightLaunchpadImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/imports/{import_id}/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Return promotion requirements for a generated AppSpec candidate */
+        post: operations["promoteLaunchpadImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/imports/{import_id}/launch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Launch a promoted import through the normal LaunchKit boundary */
+        post: operations["launchImportedApp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launchpad/imports/{import_id}/teardown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record cleanup for a generated import */
+        post: operations["teardownLaunchpadImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/launchpad/runs": {
         parameters: {
             query?: never;
@@ -2317,6 +2420,196 @@ export interface components {
             /** @default console */
             principal: string;
         };
+        LaunchpadImportRequest: {
+            repo_url: string;
+            ref?: string;
+            desired_target?: string;
+        };
+        LaunchpadImportRecord: {
+            id: string;
+            /** @enum {string} */
+            state: "IMPORTED" | "PREFLIGHTED" | "PROMOTABLE" | "BLOCKED" | "LAUNCHED" | "TORN_DOWN";
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+            request: components["schemas"]["LaunchpadImportRequest"];
+            source_snapshot: components["schemas"]["SourceSnapshot"];
+            capability_graph: components["schemas"]["CapabilityGraph"];
+            launch_recipe: components["schemas"]["LaunchRecipe"];
+            preflight?: components["schemas"]["ImportPreflightResult"];
+            evidence_ledger: components["schemas"]["ImportEvidenceLedger"];
+        } & {
+            [key: string]: unknown;
+        };
+        SourceSnapshot: {
+            repo_url: string;
+            provider: string;
+            owner?: string;
+            repo?: string;
+            ref?: string;
+            commit?: string;
+            license_spdx?: string;
+            license_state: string;
+            /** Format: date-time */
+            fetched_at?: string;
+            files: components["schemas"]["SourceFileSummary"][];
+            api_source?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        SourceFileSummary: {
+            path: string;
+            kind: string;
+            size?: number;
+            sha?: string;
+            language?: string;
+            content?: string;
+        };
+        CapabilityGraph: {
+            capabilities?: string[];
+            modules?: components["schemas"]["DetectedModule"][];
+            frameworks?: components["schemas"]["DetectedFramework"][];
+            secrets?: components["schemas"]["SecretContract"][];
+            oauth?: components["schemas"]["OAuthRequirement"][];
+            ports?: number[];
+            build_signals?: string[];
+            runtime_signals?: string[];
+            policy_signals?: string[];
+            security_signals?: string[];
+            adapter_matches?: components["schemas"]["AdapterMatch"][];
+            confidence?: number;
+            confidence_reason?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        DetectedModule: {
+            path?: string;
+            kind?: string;
+            manifests?: string[];
+            entrypoints?: string[];
+            build_strategy?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        DetectedFramework: {
+            id?: string;
+            name?: string;
+            confidence?: number;
+            evidence?: string[];
+        };
+        SecretContract: {
+            name?: string;
+            source?: string;
+            required?: boolean;
+            reason?: string;
+            targets?: string[];
+        };
+        OAuthRequirement: {
+            provider?: string;
+            scopes?: string[];
+            source?: string;
+        };
+        AdapterMatch: {
+            adapter_id?: string;
+            confidence?: number;
+            evidence?: string[];
+        };
+        FrameworkAdapter: {
+            apiVersion?: string;
+            kind?: string;
+            metadata?: {
+                [key: string]: unknown;
+            };
+            match?: {
+                [key: string]: unknown;
+            };
+            capabilities?: string[];
+            entrypoints?: {
+                [key: string]: unknown;
+            };
+            build?: {
+                [key: string]: unknown;
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        BuildStrategy: {
+            strategy?: string;
+            confidence?: number;
+            reason?: string;
+            commands?: string[][];
+            manifest_sources?: string[];
+        };
+        TargetPlan: {
+            target_id: string;
+            kind: string;
+            substrate_id?: string;
+            deployable: boolean;
+            requires_approval?: boolean;
+            commands?: string[][];
+            artifacts?: string[];
+            secrets_backend?: string;
+            healthcheck?: {
+                [key: string]: string;
+            };
+            rollback?: string[];
+            risk: string;
+            reason: string;
+        } & {
+            [key: string]: unknown;
+        };
+        LaunchRecipe: {
+            import_id: string;
+            /** Format: date-time */
+            generated_at?: string;
+            detection_order: string[];
+            build_strategy: components["schemas"]["BuildStrategy"];
+            target_plans: components["schemas"]["TargetPlan"][];
+            generated_app_specs: components["schemas"]["GeneratedAppSpecCandidate"][];
+            promotion_state: string;
+            promotion_requirements?: string[];
+            cli_equivalent?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        GeneratedAppSpecCandidate: {
+            candidate_id: string;
+            trusted: boolean;
+            app_spec: components["schemas"]["LaunchpadApp"];
+            promotion_requirements: string[];
+        } & {
+            [key: string]: unknown;
+        };
+        ImportPreflightResult: {
+            import_id: string;
+            status: string;
+            checks: components["schemas"]["PreflightCheck"][];
+            blocked_reasons?: string[];
+            evidence_ledger: components["schemas"]["ImportEvidenceLedger"];
+        } & {
+            [key: string]: unknown;
+        };
+        PreflightCheck: {
+            id: string;
+            status: string;
+            summary: string;
+            evidence_ref?: string;
+            fix_actions?: string[];
+        };
+        ImportEvidenceLedger: {
+            status?: string;
+            receipt_refs?: string[];
+            evidence_pack_refs?: string[];
+            sbom_ref?: string;
+            vulnerability_scan_ref?: string;
+            provenance_ref?: string;
+            license_ref?: string;
+            policy_refs?: string[];
+            offline_verify_command?: string;
+        } & {
+            [key: string]: unknown;
+        };
         LaunchpadApp: {
             id: string;
             app_id?: string;
@@ -3833,6 +4126,192 @@ export interface operations {
             };
             400: components["responses"]["HelmError"];
             401: components["responses"]["HelmError"];
+        };
+    };
+    listLaunchpadImports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Launchpad imports */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        imports: components["schemas"]["LaunchpadImportRecord"][];
+                        cli_equivalent?: string;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+        };
+    };
+    createLaunchpadImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LaunchpadImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Generated import record */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        import: components["schemas"]["LaunchpadImportRecord"];
+                        cli_equivalent?: string;
+                    };
+                };
+            };
+            400: components["responses"]["HelmError"];
+            401: components["responses"]["HelmError"];
+        };
+    };
+    getLaunchpadImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Launchpad import record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        import: components["schemas"]["LaunchpadImportRecord"];
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    preflightLaunchpadImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Import preflight result */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        import: components["schemas"]["LaunchpadImportRecord"];
+                        preflight: components["schemas"]["ImportPreflightResult"];
+                        cli_equivalent?: string;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+        };
+    };
+    promoteLaunchpadImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Promotion candidate metadata */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+            409: components["responses"]["HelmError"];
+        };
+    };
+    launchImportedApp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Launchpad run state */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LaunchpadRun"];
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
+            409: components["responses"]["HelmError"];
+        };
+    };
+    teardownLaunchpadImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Import record after teardown */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        import: components["schemas"]["LaunchpadImportRecord"];
+                        cli_equivalent?: string;
+                    };
+                };
+            };
+            401: components["responses"]["HelmError"];
+            404: components["responses"]["HelmError"];
         };
     };
     listLaunchpadRuns: {

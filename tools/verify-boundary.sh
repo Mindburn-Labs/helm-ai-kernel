@@ -91,6 +91,7 @@ if [ "$MODE" = "commercial" ]; then
     core/pkg/kernel core/pkg/contracts core/pkg/crypto
     core/pkg/evidencepack core/pkg/proofgraph core/pkg/receipts
     core/pkg/verifier core/pkg/connectors/sandbox core/pkg/conformance
+    core/pkg/safedep
     core/pkg/incubator/audit core/pkg/integrations/receipts
     core/pkg/integrations/capgraph core/pkg/integrations/manifest
     core/pkg/api core/pkg/trust/registry core/pkg/guardian

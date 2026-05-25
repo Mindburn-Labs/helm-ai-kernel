@@ -1,0 +1,28 @@
+apiVersion: helm.platform/v1alpha1
+kind: FrameworkAdapter
+metadata:
+  id: generic-tauri-electron
+  version: 1.0.0
+  priority: 68
+match:
+  filesAny: ["package.json", "tauri.conf.json", "Cargo.toml"]
+  readmeRegex: ["tauri", "electron", "desktop"]
+  confidenceThreshold: 0.7
+capabilities: ["desktopUI", "node", "rust"]
+entrypoints:
+  local:
+    - name: dev
+      command: ["npm", "run", "dev"]
+build:
+  strategy: native
+dependencies:
+  files: ["package.json", "Cargo.toml", "src-tauri/tauri.conf.json"]
+network:
+  healthcheck:
+    type: command
+    path: npm run dev -- --help
+tests:
+  smoke:
+    - ["npm", "run", "dev", "--", "--help"]
+rollback:
+  strategy: teardown

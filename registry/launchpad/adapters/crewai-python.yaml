@@ -1,0 +1,28 @@
+apiVersion: helm.platform/v1alpha1
+kind: FrameworkAdapter
+metadata:
+  id: crewai-python
+  version: 1.0.0
+  priority: 90
+match:
+  filesAny: ["pyproject.toml"]
+  readmeRegex: ["crewai", "crew", "flow"]
+  confidenceThreshold: 0.7
+capabilities: ["agentFramework", "worker", "python"]
+entrypoints:
+  local:
+    - name: run
+      command: ["crewai", "run"]
+build:
+  strategy: native
+dependencies:
+  files: ["pyproject.toml", "uv.lock", ".env.example"]
+network:
+  healthcheck:
+    type: command
+    path: crewai run --help
+tests:
+  smoke:
+    - ["crewai", "run", "--help"]
+rollback:
+  strategy: teardown

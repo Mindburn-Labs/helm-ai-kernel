@@ -1,7 +1,7 @@
 # Historical Final Implementation Report
 
-Status: historical `v0.5.4` production report for HELM OSS Skill Packs MVP,
-HELM Launchpad OpenClaw/Hermes local-container support, and HELM Commercial
+Status: historical `v0.5.4` production report for HELM AI Kernel Skill Packs MVP,
+HELM Launchpad OpenClaw/Hermes local-container support, and HELM AI Enterprise
 Launchpad/Skills governance surfaces.
 
 This file is not the current Launchpad GA support truth. Current Launchpad v1

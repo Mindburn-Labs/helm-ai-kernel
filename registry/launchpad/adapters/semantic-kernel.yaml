@@ -1,0 +1,22 @@
+apiVersion: helm.platform/v1alpha1
+kind: FrameworkAdapter
+metadata:
+  id: semantic-kernel
+  version: 1.0.0
+  priority: 78
+match:
+  filesAny: ["pyproject.toml", "requirements.txt", "package.json", "pom.xml", "build.gradle", "build.gradle.kts", "*.csproj"]
+  readmeRegex: ["semantic kernel", "semantic-kernel", "microsoft semantic kernel"]
+  confidenceThreshold: 0.7
+capabilities: ["agentFramework", "libraryFramework"]
+entrypoints:
+  local: []
+build:
+  strategy: native
+dependencies:
+  files: ["pyproject.toml", "requirements.txt", "package.json", "pom.xml", "build.gradle", "build.gradle.kts"]
+tests:
+  smoke:
+    - ["helm-ai-kernel", "launchpad", "import", "preflight"]
+rollback:
+  strategy: teardown

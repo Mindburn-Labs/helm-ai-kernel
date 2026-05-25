@@ -77,6 +77,13 @@ type Receipt struct {
 	SessionID        string            `json:"session_id,omitempty"`
 	ScopeHash        string            `json:"scope_hash,omitempty"`
 	IssuedAt         time.Time         `json:"issued_at,omitempty"`
+
+	// Safe Deprecation Mode emergency authority bindings.
+	EmergencyActivationID        string `json:"emergency_activation_id,omitempty"`
+	EmergencyDelegationSessionID string `json:"emergency_delegation_session_id,omitempty"`
+	EmergencyScopeHash           string `json:"emergency_scope_hash,omitempty"`
+	SafeDepState                 string `json:"safe_dep_state,omitempty"`
+	SafeDepReasonCode            string `json:"safe_dep_reason_code,omitempty"`
 }
 
 type Projection struct {

@@ -6,7 +6,7 @@ info:
     the same semantics as the gRPC EffectBoundaryService defined in
     `protocols/proto/helm/kernel/v1/helm.proto`, but using JSON over HTTP for
     non-gRPC consumers.
-  version: "0.5.6"
+  version: "0.5.8"
   contact:
     name: HELM Core Team
     url: https://github.com/Mindburn-Labs/helm-ai-kernel

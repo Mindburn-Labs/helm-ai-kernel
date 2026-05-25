@@ -1,0 +1,29 @@
+apiVersion: helm.platform/v1alpha1
+kind: FrameworkAdapter
+metadata:
+  id: openhands
+  version: 1.0.0
+  priority: 95
+match:
+  filesAny: ["Dockerfile", "docker-compose.yml", "docker-compose.yaml"]
+  readmeRegex: ["openhands", "openhands serve"]
+  confidenceThreshold: 0.75
+capabilities: ["agentFramework", "apiServer", "sandbox", "container"]
+entrypoints:
+  local:
+    - name: serve
+      command: ["openhands", "serve"]
+build:
+  strategy: compose
+dependencies:
+  files: ["Dockerfile", "docker-compose.yml", ".env.example"]
+network:
+  ports: [3000]
+  healthcheck:
+    type: http
+    path: /
+tests:
+  smoke:
+    - ["curl", "-f", "http://127.0.0.1:3000/"]
+rollback:
+  strategy: teardown

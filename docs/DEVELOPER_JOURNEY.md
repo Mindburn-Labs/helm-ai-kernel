@@ -243,9 +243,9 @@ If the `helm` command on your machine resolves to this HELM AI Kernel binary, us
 
 ## Release And Conformance Gates
 
-Current source release target: `v0.5.6`: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.6>.
+Current source release target: `v0.5.8`: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.8>.
 
-The release is complete only after the release page includes Darwin/Linux/Windows binaries, `SHA256SUMS.txt`, `sbom.json`, `v0.5.6.openvex.json`, `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.6.json`, `version-status.json`, and matching `*.cosign.bundle` files for each primary asset.
+The release is complete only after the release page includes Darwin/Linux/Windows binaries, `SHA256SUMS.txt`, `sbom.json`, `v0.5.8.openvex.json`, `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.8.json`, `version-status.json`, and matching `*.cosign.bundle` files for each primary asset.
 
 Run conformance and docs gates:
 

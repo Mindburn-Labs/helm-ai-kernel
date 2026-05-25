@@ -27,6 +27,7 @@ PROTECTED_DIRS=(
   core/pkg/api
   core/pkg/trust/registry
   core/pkg/guardian
+  core/pkg/packs
   protocols
   schemas
 )

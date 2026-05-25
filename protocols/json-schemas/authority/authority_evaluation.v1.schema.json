@@ -25,7 +25,7 @@
       "properties": {
         "decision_id": { "type": "string" },
         "request_id": { "type": "string" },
-        "result": { "type": "string", "enum": ["ALLOW", "DENY", "REQUIRE_APPROVAL", "REQUIRE_EVIDENCE", "DEFER"] },
+        "result": { "type": "string", "enum": ["ALLOW", "DENY", "ESCALATE"] },
         "reason_codes": { "type": "array", "items": { "type": "string" } },
         "policy_epoch": { "type": "string" },
         "issued_at": { "type": "string", "format": "date-time" },

@@ -191,7 +191,27 @@ func (p *egressProxyServer) writeReceipt(verdict, destination, reason string, ex
 		return receipt.ReceiptID
 	}
 	path := filepath.Join(p.receiptDir, safeFileComponent(receipt.Hash)+".json")
-	if writeErr := os.WriteFile(path, append(data, '\n'), 0o600); writeErr != nil {
+	tmp, writeErr := os.CreateTemp(p.receiptDir, ".egress-receipt-*.tmp")
+	if writeErr != nil {
+		return receipt.ReceiptID
+	}
+	tmpPath := tmp.Name()
+	if _, writeErr = tmp.Write(append(data, '\n')); writeErr != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return receipt.ReceiptID
+	}
+	if writeErr = tmp.Chmod(0o600); writeErr != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return receipt.ReceiptID
+	}
+	if writeErr = tmp.Close(); writeErr != nil {
+		_ = os.Remove(tmpPath)
+		return receipt.ReceiptID
+	}
+	if writeErr = os.Rename(tmpPath, path); writeErr != nil {
+		_ = os.Remove(tmpPath)
 		return receipt.ReceiptID
 	}
 	return receipt.ReceiptID

@@ -71,6 +71,14 @@ type VerifyResult struct {
 	// "amd-kds", "intel-pcs", "aws-nitro", "azure-mhsm", or "mock".
 	ChainTrustedTo string
 
+	// PCRs carries vendor platform configuration registers when the platform
+	// exposes them. Nitro appraisal policy uses PCR0-4 and PCR8.
+	PCRs map[uint][]byte
+
+	// IssuedAt is the attested creation time of the quote/document when the
+	// vendor format carries one.
+	IssuedAt int64
+
 	// Warnings carries non-fatal advisories (e.g. older quote version) that
 	// the operator may want to log but that do not fail verification.
 	Warnings []string
@@ -178,6 +186,9 @@ func verifyTDX(raw []byte, expectedNonce []byte, roots TrustRoots) (*VerifyResul
 }
 
 func verifyNitro(raw []byte, expectedNonce []byte, roots TrustRoots) (*VerifyResult, error) {
+	if roots.RequireSignedChain {
+		return verifyNitroCOSE(raw, expectedNonce, roots)
+	}
 	d, err := ParseNitroDocument(raw)
 	if err != nil {
 		return nil, err
@@ -189,14 +200,7 @@ func verifyNitro(raw []byte, expectedNonce []byte, roots TrustRoots) (*VerifyRes
 		Platform:    PlatformNitro,
 		Measurement: d.Measurement(),
 		Nonce:       d.Nonce,
-	}
-	if roots.RequireSignedChain {
-		if len(roots.AWSNitroRoots) == 0 {
-			return nil, fmt.Errorf("%w: no AWS Nitro roots configured", ErrChainUntrusted)
-		}
-		// Follow-up: real COSE_Sign1 validation of d.Signature against the AWS
-		// Nitro Attestation PKI rooted in roots.AWSNitroRoots.
-		return nil, fmt.Errorf("%w: Nitro chain validation pending hardware test surface", ErrChainUntrusted)
+		PCRs:        clonePCRs(d.PCRs),
 	}
 	res.Warnings = append(res.Warnings, "tee/nitro: chain validation skipped (RequireSignedChain=false)")
 	res.ChainTrustedTo = "aws-nitro-unverified"

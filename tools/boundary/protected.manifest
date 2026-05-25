@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-05-25T08:30:19Z
-# Commit: 4c7f8c170919c69c0e9aae0d20d8ded3448edea4
+# Generated: 2026-05-25T14:07:27Z
+# Commit: 65591588898e15fdcae60450ab24a35b2a197831
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -258,6 +258,9 @@ a2b467f5ed33f5e03bf90ff5de9e6953cae12dae7d46cd34177a6137f0a62e31  core/pkg/crypt
 a4c57e5ca9553c035866f77f10872602c709b2ae6c122e11dc62c62d36508322  core/pkg/crypto/tee/appraisal.go
 6a2a3b4c0f68f2635cb1dc2cdfbf36ca05a1c8daff9be2e57a674a6f204eeecf  core/pkg/crypto/tee/attester.go
 555da6fa1bd3efa19fe0f78033530513f33112f4d59ac015ee6e63cc5f3f1694  core/pkg/crypto/tee/attester_test.go
+3549cfb8ce924ef7c9d4be966cc5a8f1ba1ce9488871f0c2d0331d7e2f8e9058  core/pkg/crypto/tee/collateral/bundle.go
+b212a8fce0fb1f9ea164099fb99064ee557e6bae403bc3c4ba1bbb6afc623359  core/pkg/crypto/tee/collateral/bundle_test.go
+fe2c35d586db08dca1a498bd1f161a512c8ed5880a561dea7a07030019e85afe  core/pkg/crypto/tee/collateral/testdata/offline_bundle.json
 87b91c83a5ca13dd474b3586635fd063d259e2edb3b015b01849a094a8e33c30  core/pkg/crypto/tee/mock.go
 ed5daa3e357d0517dc4ca5fb79f288e4902b4385d3e58a1771b33ae5c498f39d  core/pkg/crypto/tee/nitro.go
 13f210654cbe49edde1da08254edcc183c687f3df794a7eb932d278845bcbe4b  core/pkg/crypto/tee/nitro_cose.go
@@ -328,10 +331,10 @@ b8123470896abecc65fc98784d67c616735a3fd53656b86e18b2189b12a8ed8c  core/pkg/proof
 6533fe7c9f226c59ccedb9e203a8c041a62e9d5c818f726543b72ca6d7879855  core/pkg/proofgraph/crdt/store_test.go
 82e22295be9afa6deeb944343246dc1918ee499e996f1ca82a3ab7897ce991da  core/pkg/proofgraph/crdt/sync.go
 c83111f000be88d9ceac8831ff543986bd25eabc0cd1291fc03cc257ac13cbce  core/pkg/proofgraph/crdt/sync_test.go
-ce92596a157448cfc33dd84a5fd3ef8349bd26480a7c99bd9d4661c009fdde69  core/pkg/proofgraph/graph.go
+b7933de844f3a25c198960aeb7289b61d0d33eabd08cc9e32ae1cb6a8b490021  core/pkg/proofgraph/graph.go
 47b3dc7eec6ff8617b8d01cf1218df806766c1df30c4023be8e05148f0310fb8  core/pkg/proofgraph/graph_test.go
 7f09632020df618c72d66e23b0bc8d686dc6fb6a9d6ff136b9cdd72f6ed11bbb  core/pkg/proofgraph/graphql/engine.go
-85321b25a440844bd3bdbfc1c268bb45df23d67514a4baf28fe1395942e83f15  core/pkg/proofgraph/node.go
+bdc1b9c5fd115765de026e54c56f7a8330772594286cc28015f2ab987495e6da  core/pkg/proofgraph/node.go
 a0ce2c70c164e914c3e1263b16af027232924994a9f96298340f0b00e67ec642  core/pkg/proofgraph/node_fuzz_test.go
 78cbe6924975c660f8a3c65e8676fcb9ab40a56b7a0821d359a310b059324814  core/pkg/proofgraph/proofgraph_behavior_coverage_test.go
 abe6eeeaa87fb5c2901e7a3640f2cb3bdc150b4813c3d37ea1644805497f554e  core/pkg/proofgraph/proofgraph_contracts_test.go
@@ -339,6 +342,7 @@ a38232b4d48b3df82ae6b2b9253f70a11db48e636f6f443678676ad65d4efd2e  core/pkg/proof
 4aca7431d2449154fcc5f88347b30ec8a92843a1eaaf81cb471d9594c64346c9  core/pkg/proofgraph/proofgraph_regression_test.go
 7ebbe76e4d635b6729d4e3ba101c4e443c3a6e72f9182356ad5cb15ed65c0265  core/pkg/proofgraph/proofgraph_stress_coverage_test.go
 3a707ad1e8f3b5bcd410dbba03b304dca17441a431cc0f40bde5ec98ea20b900  core/pkg/proofgraph/research_nodes.go
+227c371def8b4bc40d9fe40b4704ee298705e007e7537dcbf6ef46516c777aae  core/pkg/proofgraph/signature_purpose_test.go
 f9bc4d741b6b6d3e87c44aee173b19bc10e13b389ef61af100a1512a51626f91  core/pkg/proofgraph/store.go
 9774c3fdb26d50f0029e3406be94ad24b66c51dabf91020d2496eb08fefdd01d  core/pkg/receipts/conformance_test.go
 b5ee6af6ed178f55f3120b176d7d004dc238df58d4b04fc3fcf326dff24e4cd9  core/pkg/receipts/doc.go

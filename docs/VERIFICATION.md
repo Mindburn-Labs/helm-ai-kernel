@@ -74,20 +74,20 @@ The verification path is local-first. `helm-ai-kernel verify <evidence-pack.tar|
 performs offline checks by default; `--online` is optional and only runs after
 offline checks pass.
 
-Current source release target: `v0.5.6`:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.6>. The
+Current source release target: `v0.5.7`:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.7>. The
 release is complete only when the page attaches platform binaries,
-`SHA256SUMS.txt`, `sbom.json`, `v0.5.6.openvex.json`,
+`SHA256SUMS.txt`, `sbom.json`, `v0.5.7.openvex.json`,
 `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
 `helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`,
-`helm-ai-kernel.rb`, `v0.5.6.json`, `version-status.json`, and matching
+`helm-ai-kernel.rb`, `v0.5.7.json`, `version-status.json`, and matching
 `*.cosign.bundle` files for each primary asset.
 
 There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
 actual baseline when auditing the `v0.5.0` delta.
 
-## v0.5.6 Asset Contract
+## v0.5.7 Asset Contract
 
 The `v0.5.6` release attaches these primary assets:
 
@@ -98,7 +98,7 @@ The `v0.5.6` release attaches these primary assets:
 - `helm-ai-kernel-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.5.6.openvex.json`
+- `v0.5.7.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`

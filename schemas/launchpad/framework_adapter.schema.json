@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/launchpad/framework_adapter.schema.json",
+  "title": "HELM Launchpad FrameworkAdapter",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "match", "capabilities", "build"],
+  "properties": {
+    "apiVersion": { "const": "helm.platform/v1alpha1" },
+    "kind": { "const": "FrameworkAdapter" },
+    "metadata": {
+      "type": "object",
+      "required": ["id", "version", "priority"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$" },
+        "version": { "type": "string" },
+        "priority": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "match": {
+      "type": "object",
+      "properties": {
+        "filesAny": { "type": "array", "items": { "type": "string" } },
+        "filesAll": { "type": "array", "items": { "type": "string" } },
+        "readmeRegex": { "type": "array", "items": { "type": "string" } },
+        "repoTopics": { "type": "array", "items": { "type": "string" } },
+        "confidenceThreshold": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "entrypoints": {
+      "type": "object",
+      "properties": {
+        "local": { "$ref": "#/$defs/commands" },
+        "cloud": { "$ref": "#/$defs/commands" }
+      },
+      "additionalProperties": false
+    },
+    "build": {
+      "type": "object",
+      "required": ["strategy"],
+      "properties": {
+        "strategy": { "enum": ["native", "compose", "dockerfile", "buildpacks", "nixpacks", "generated_wrapper"] }
+      },
+      "additionalProperties": false
+    },
+    "dependencies": {
+      "type": "object",
+      "properties": {
+        "files": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "required": { "type": "array", "items": { "type": "string" } },
+        "optional": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "network": {
+      "type": "object",
+      "properties": {
+        "ports": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 65535 } },
+        "healthcheck": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string" },
+            "path": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "tests": {
+      "type": "object",
+      "properties": {
+        "smoke": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "rollback": {
+      "type": "object",
+      "properties": {
+        "strategy": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "command"],
+        "properties": {
+          "name": { "type": "string" },
+          "command": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

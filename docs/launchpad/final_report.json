@@ -12,7 +12,7 @@
     ],
     "status": "four_app_local_container_support_after_signed_artifact_live_conformance_teardown_receipts_and_offline_evidencepack_verification"
   },
-  "mission_scope": "HELM OSS Skill Packs MVP plus HELM Launchpad OpenClaw/Hermes local-container production release, with HELM Commercial Launchpad/Skills governance surfaces merged",
+  "mission_scope": "HELM AI Kernel Skill Packs MVP plus HELM Launchpad OpenClaw/Hermes local-container production release, with HELM AI Enterprise Launchpad/Skills governance surfaces merged",
   "production_ready": true,
   "mission_100_percent_complete": true,
   "release_distribution_complete": true,

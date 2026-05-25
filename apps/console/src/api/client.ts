@@ -244,6 +244,25 @@ export interface LaunchpadRunDetail {
   readonly events: readonly Record<string, unknown>[];
 }
 
+export interface LaunchpadImportRequest {
+  readonly repo_url: string;
+  readonly ref?: string;
+  readonly desired_target?: string;
+}
+
+export interface LaunchpadImportRecord {
+  readonly id: string;
+  readonly state: string;
+  readonly request: LaunchpadImportRequest;
+  readonly source_snapshot: Record<string, unknown>;
+  readonly capability_graph: Record<string, unknown>;
+  readonly launch_recipe: Record<string, unknown>;
+  readonly preflight?: Record<string, unknown>;
+  readonly evidence_ledger: Record<string, unknown>;
+  readonly created_at?: string;
+  readonly updated_at?: string;
+}
+
 const client = createClient<paths>({
   baseUrl: "",
   fetch: (request) => {
@@ -1041,6 +1060,77 @@ export async function launchLaunchpad(appId: string, substrateId: string): Promi
     { app_id: appId, substrate_id: substrateId, principal: "console" },
     "Launchpad launch failed",
   );
+}
+
+export async function listLaunchpadImports(): Promise<readonly LaunchpadImportRecord[]> {
+  const body = await getAdminJson<{ readonly imports?: readonly LaunchpadImportRecord[] }>(
+    "/api/v1/launchpad/imports",
+    "Launchpad imports load failed",
+  );
+  return body.imports ?? [];
+}
+
+export async function createLaunchpadImport(body: LaunchpadImportRequest): Promise<LaunchpadImportRecord> {
+  const result = await postAdminJson<{ readonly import?: LaunchpadImportRecord }>(
+    "/api/v1/launchpad/imports",
+    body as unknown as AdminRecord,
+    "Launchpad import failed",
+  );
+  if (!result.import) {
+    throw new ConsoleApiError("Launchpad import failed", 502, "Backend response did not include an import record");
+  }
+  return result.import;
+}
+
+export async function loadLaunchpadImport(importId: string): Promise<LaunchpadImportRecord> {
+  const result = await getAdminJson<{ readonly import?: LaunchpadImportRecord }>(
+    `/api/v1/launchpad/imports/${enc(importId)}`,
+    "Launchpad import load failed",
+  );
+  if (!result.import) {
+    throw new ConsoleApiError("Launchpad import load failed", 502, "Backend response did not include an import record");
+  }
+  return result.import;
+}
+
+export async function preflightLaunchpadImport(importId: string): Promise<LaunchpadImportRecord> {
+  const result = await postAdminJson<{ readonly import?: LaunchpadImportRecord }>(
+    `/api/v1/launchpad/imports/${enc(importId)}/preflight`,
+    {},
+    "Launchpad import preflight failed",
+  );
+  if (!result.import) {
+    throw new ConsoleApiError("Launchpad import preflight failed", 502, "Backend response did not include an import record");
+  }
+  return result.import;
+}
+
+export async function promoteLaunchpadImport(importId: string): Promise<AdminResult> {
+  return postAdminJson(
+    `/api/v1/launchpad/imports/${enc(importId)}/promote`,
+    {},
+    "Launchpad import promotion failed",
+  );
+}
+
+export async function launchImportedApp(importId: string): Promise<LaunchpadRun> {
+  return postAdminJson<LaunchpadRun>(
+    `/api/v1/launchpad/imports/${enc(importId)}/launch`,
+    {},
+    "Imported app launch failed",
+  );
+}
+
+export async function teardownLaunchpadImport(importId: string): Promise<LaunchpadImportRecord> {
+  const result = await postAdminJson<{ readonly import?: LaunchpadImportRecord }>(
+    `/api/v1/launchpad/imports/${enc(importId)}/teardown`,
+    {},
+    "Launchpad import teardown failed",
+  );
+  if (!result.import) {
+    throw new ConsoleApiError("Launchpad import teardown failed", 502, "Backend response did not include an import record");
+  }
+  return result.import;
 }
 
 export async function createLaunchpadRuntimeRun(appId: string, substrateId: string): Promise<LaunchpadRunDetail> {

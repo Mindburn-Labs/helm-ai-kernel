@@ -1,0 +1,23 @@
+apiVersion: helm.platform/v1alpha1
+kind: FrameworkAdapter
+metadata:
+  id: generic-docker-compose
+  version: 1.0.0
+  priority: 70
+match:
+  filesAny: ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"]
+  confidenceThreshold: 0.7
+capabilities: ["compose", "localRuntime", "container"]
+entrypoints:
+  local:
+    - name: compose-up
+      command: ["docker", "compose", "up", "--build"]
+build:
+  strategy: compose
+dependencies:
+  files: ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"]
+tests:
+  smoke:
+    - ["docker", "compose", "config"]
+rollback:
+  strategy: teardown

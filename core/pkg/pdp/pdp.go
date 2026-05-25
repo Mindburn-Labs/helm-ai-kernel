@@ -14,6 +14,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -27,6 +28,11 @@ type Backend string
 const (
 	BackendHELM Backend = "helm"
 )
+
+// ErrPDPHashFailure marks infrastructure failures while binding a policy
+// response to its deterministic receipt hash. Callers must fail closed when
+// this error is returned, even when a deny response is also present.
+var ErrPDPHashFailure = errors.New("pdp: decision hash failure")
 
 // DecisionRequest is the canonical structured input to a policy evaluation.
 type DecisionRequest struct {
@@ -63,6 +69,10 @@ type PolicyDecisionPoint interface {
 // ComputeDecisionHash produces a deterministic SHA-256 hash of the decision
 // using JCS canonicalization. This hash is bound into receipts.
 func ComputeDecisionHash(resp *DecisionResponse) (string, error) {
+	if resp == nil {
+		return "", fmt.Errorf("%w: nil decision response", ErrPDPHashFailure)
+	}
+
 	// Exclude the hash field itself from the canonical form
 	hashInput := struct {
 		Allow      bool   `json:"allow"`
@@ -76,11 +86,38 @@ func ComputeDecisionHash(resp *DecisionResponse) (string, error) {
 
 	canonical, err := canonicalize.JCS(hashInput)
 	if err != nil {
-		return "", fmt.Errorf("pdp: decision hash canonicalization failed: %w", err)
+		return "", fmt.Errorf("%w: canonicalization failed: %v", ErrPDPHashFailure, err)
 	}
 
 	sum := sha256.Sum256(canonical)
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+var computeDecisionHash = ComputeDecisionHash
+
+func attachDecisionHash(resp *DecisionResponse) error {
+	hash, err := computeDecisionHash(resp)
+	if err != nil {
+		if errors.Is(err, ErrPDPHashFailure) {
+			return err
+		}
+		return fmt.Errorf("%w: %v", ErrPDPHashFailure, err)
+	}
+	resp.DecisionHash = hash
+	return nil
+}
+
+func denyForHashFailure(policyRef string, err error) (*DecisionResponse, error) {
+	if err == nil {
+		err = ErrPDPHashFailure
+	} else if !errors.Is(err, ErrPDPHashFailure) {
+		err = fmt.Errorf("%w: %v", ErrPDPHashFailure, err)
+	}
+	return &DecisionResponse{
+		Allow:      false,
+		ReasonCode: string(contracts.ReasonPDPError),
+		PolicyRef:  policyRef,
+	}, err
 }
 
 func normalizeDecisionReasonCode(allow bool, candidate string) string {

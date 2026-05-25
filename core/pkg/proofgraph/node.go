@@ -36,18 +36,40 @@ const (
 	NodeTypeDecentralizedProof NodeType = "DECENTRALIZED_PROOF"
 )
 
+// SignaturePurpose domain-separates ProofGraph signatures by how they are
+// intended to be used. These values are part of the public ProofGraph contract.
+type SignaturePurpose string
+
+const (
+	SignaturePurposeAuthor      SignaturePurpose = "author"
+	SignaturePurposeWitness     SignaturePurpose = "witness"
+	SignaturePurposeCountersign SignaturePurpose = "countersign"
+	SignaturePurposeAudit       SignaturePurpose = "audit"
+)
+
 // Node is a single vertex in the ProofGraph DAG.
 // Aligned with HELM Standard v1.2 Appendix B.1
 type Node struct {
-	NodeHash     string          `json:"node_hash"`
-	Kind         NodeType        `json:"kind"`
-	Parents      []string        `json:"parents"`
-	Lamport      uint64          `json:"lamport"`
-	Principal    string          `json:"principal"`
-	PrincipalSeq uint64          `json:"principal_seq"`
-	Payload      json.RawMessage `json:"payload"`
-	Sig          string          `json:"sig"`
-	Timestamp    int64           `json:"ts_unix_ms,omitempty"`
+	NodeHash     string           `json:"node_hash"`
+	Kind         NodeType         `json:"kind"`
+	Parents      []string         `json:"parents"`
+	Lamport      uint64           `json:"lamport"`
+	Principal    string           `json:"principal"`
+	PrincipalSeq uint64           `json:"principal_seq"`
+	Payload      json.RawMessage  `json:"payload"`
+	Sig          string           `json:"sig"`
+	SigPurpose   SignaturePurpose `json:"sig_purpose,omitempty"`
+	Timestamp    int64            `json:"ts_unix_ms,omitempty"`
+}
+
+// ValidateSignaturePurpose enforces the ProofGraph signature domain contract.
+func ValidateSignaturePurpose(purpose SignaturePurpose) error {
+	switch purpose {
+	case SignaturePurposeAuthor, SignaturePurposeWitness, SignaturePurposeCountersign, SignaturePurposeAudit:
+		return nil
+	default:
+		return fmt.Errorf("proofgraph: invalid signature purpose %q", purpose)
+	}
 }
 
 // ComputeNodeHash computes the deterministic hash of the node (excluding NodeHash itself).
@@ -56,13 +78,14 @@ type Node struct {
 func (n *Node) ComputeNodeHashE() (string, error) {
 	// Create a temporary structure for hashing that excludes NodeHash and Timestamp for determinism
 	type NodeJCS struct {
-		Kind         NodeType        `json:"kind"`
-		Parents      []string        `json:"parents"`
-		Lamport      uint64          `json:"lamport"`
-		Principal    string          `json:"principal"`
-		PrincipalSeq uint64          `json:"principal_seq"`
-		Payload      json.RawMessage `json:"payload"`
-		Sig          string          `json:"sig"`
+		Kind         NodeType         `json:"kind"`
+		Parents      []string         `json:"parents"`
+		Lamport      uint64           `json:"lamport"`
+		Principal    string           `json:"principal"`
+		PrincipalSeq uint64           `json:"principal_seq"`
+		Payload      json.RawMessage  `json:"payload"`
+		Sig          string           `json:"sig"`
+		SigPurpose   SignaturePurpose `json:"sig_purpose,omitempty"`
 	}
 
 	temp := NodeJCS{
@@ -73,6 +96,7 @@ func (n *Node) ComputeNodeHashE() (string, error) {
 		PrincipalSeq: n.PrincipalSeq,
 		Payload:      n.Payload,
 		Sig:          n.Sig,
+		SigPurpose:   n.SigPurpose,
 	}
 
 	// RFC 8785 (JCS): sorted keys, no HTML escaping, compact format, deterministic.
@@ -98,10 +122,36 @@ func (n *Node) ComputeNodeHash() string {
 
 // Validate checks the node hash integrity.
 func (n *Node) Validate() error {
+	if err := n.validateSignaturePurpose(); err != nil {
+		return err
+	}
 	expected := n.ComputeNodeHash()
 	if n.NodeHash != expected {
 		return fmt.Errorf("node hash mismatch: got %s, want %s", n.NodeHash, expected)
 	}
+	return nil
+}
+
+func (n *Node) validateSignaturePurpose() error {
+	if n.Sig == "" || n.SigPurpose == "" {
+		return nil
+	}
+	return ValidateSignaturePurpose(n.SigPurpose)
+}
+
+// SetSignature is the only non-test write path for Node.Sig. It validates the
+// signature purpose before mutating the node and rebinds the node hash after the
+// signature fields change.
+func (n *Node) SetSignature(signature string, purpose SignaturePurpose) error {
+	if signature == "" {
+		return fmt.Errorf("proofgraph: signature is required")
+	}
+	if err := ValidateSignaturePurpose(purpose); err != nil {
+		return err
+	}
+	n.Sig = signature
+	n.SigPurpose = purpose
+	n.NodeHash = n.ComputeNodeHash()
 	return nil
 }
 

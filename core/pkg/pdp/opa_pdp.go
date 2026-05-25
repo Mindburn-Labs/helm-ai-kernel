@@ -92,7 +92,7 @@ type opaResult struct {
 // Evaluate implements PolicyDecisionPoint. Fail-closed on all errors.
 func (o *OpaPDP) Evaluate(ctx context.Context, req *DecisionRequest) (*DecisionResponse, error) {
 	if req == nil {
-		return o.denyResponse(string(contracts.ReasonSchemaViolation)), nil
+		return o.denyResponse(string(contracts.ReasonSchemaViolation))
 	}
 
 	// Map HELM request to OPA input.
@@ -108,54 +108,53 @@ func (o *OpaPDP) Evaluate(ctx context.Context, req *DecisionRequest) (*DecisionR
 
 	body, err := json.Marshal(input)
 	if err != nil {
-		return o.denyResponse(string(contracts.ReasonPDPError)), nil
+		return o.denyResponse(string(contracts.ReasonPDPError))
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, o.endpoint, bytes.NewReader(body))
 	if err != nil {
-		return o.denyResponse(string(contracts.ReasonPDPError)), nil
+		return o.denyResponse(string(contracts.ReasonPDPError))
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	httpResp, err := o.client.Do(httpReq)
 	if err != nil {
 		// Fail-closed: network error → DENY
-		return o.denyResponse(string(contracts.ReasonPDPError)), nil
+		return o.denyResponse(string(contracts.ReasonPDPError))
 	}
 	defer httpResp.Body.Close()
 
 	if httpResp.StatusCode != http.StatusOK {
-		return o.denyResponse(string(contracts.ReasonPDPError)), nil
+		return o.denyResponse(string(contracts.ReasonPDPError))
 	}
 
 	respBody, err := io.ReadAll(io.LimitReader(httpResp.Body, 1<<20)) // 1MB max
 	if err != nil {
-		return o.denyResponse(string(contracts.ReasonPDPError)), nil
+		return o.denyResponse(string(contracts.ReasonPDPError))
 	}
 
 	var opaResp opaResponse
 	if err := json.Unmarshal(respBody, &opaResp); err != nil {
-		return o.denyResponse(string(contracts.ReasonPDPError)), nil
+		return o.denyResponse(string(contracts.ReasonPDPError))
 	}
 
 	if opaResp.Result == nil {
 		// No result from OPA → fail-closed DENY
-		return o.denyResponse(string(contracts.ReasonPDPDeny)), nil
+		return o.denyResponse(string(contracts.ReasonPDPDeny))
 	}
 
 	reasonCode := normalizeDecisionReasonCode(opaResp.Result.Allow, opaResp.Result.ReasonCode)
+	policyRef := fmt.Sprintf("opa:%s", o.policyRef)
 
 	resp := &DecisionResponse{
 		Allow:      opaResp.Result.Allow,
 		ReasonCode: reasonCode,
-		PolicyRef:  fmt.Sprintf("opa:%s", o.policyRef),
+		PolicyRef:  policyRef,
 	}
 
-	hash, err := ComputeDecisionHash(resp)
-	if err != nil {
-		return o.denyResponse(string(contracts.ReasonPDPError)), nil
+	if err := attachDecisionHash(resp); err != nil {
+		return denyForHashFailure(policyRef, err)
 	}
-	resp.DecisionHash = hash
 
 	return resp, nil
 }
@@ -166,14 +165,17 @@ func (o *OpaPDP) Backend() Backend { return BackendOPA }
 // PolicyHash implements PolicyDecisionPoint.
 func (o *OpaPDP) PolicyHash() string { return o.policyCache }
 
-func (o *OpaPDP) denyResponse(reasonCode string) *DecisionResponse {
+func (o *OpaPDP) denyResponse(reasonCode string) (*DecisionResponse, error) {
+	policyRef := fmt.Sprintf("opa:%s", o.policyRef)
 	resp := &DecisionResponse{
 		Allow:      false,
 		ReasonCode: reasonCode,
-		PolicyRef:  fmt.Sprintf("opa:%s", o.policyRef),
+		PolicyRef:  policyRef,
 	}
-	resp.DecisionHash, _ = ComputeDecisionHash(resp)
-	return resp
+	if err := attachDecisionHash(resp); err != nil {
+		return denyForHashFailure(policyRef, err)
+	}
+	return resp, nil
 }
 
 func (o *OpaPDP) computePolicyHash() string {

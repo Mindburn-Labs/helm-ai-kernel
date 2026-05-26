@@ -11,6 +11,7 @@ type LaunchPlan struct {
 	ArtifactImage           string                     `json:"artifact_image,omitempty"`
 	ArtifactDigest          string                     `json:"artifact_digest,omitempty"`
 	RuntimeCommand          []string                   `json:"runtime_command,omitempty"`
+	RuntimeTimeout          string                     `json:"runtime_timeout,omitempty"`
 	Healthchecks            []registry.HealthcheckSpec `json:"healthchecks,omitempty"`
 	ModelGatewayEnv         []string                   `json:"model_gateway_env,omitempty"`
 	ModelGatewayMode        string                     `json:"model_gateway_mode,omitempty"`

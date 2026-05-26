@@ -38,6 +38,22 @@ type ContainerRequest struct {
 	AutoCleanup      bool
 	Privileged       bool
 	RecursiveLaunch  bool
+	// AdditionalMounts attaches host paths to the container in addition to
+	// the canonical /workspace mount. Populated from
+	// `filesystem_policy.mounts` in the AppSpec (e.g. `app_state:rw[:target]`).
+	// Each entry is bind-mounted at the requested target inside the container.
+	AdditionalMounts []LaunchpadMount
+}
+
+// LaunchpadMount is a host-to-container bind mount derived from an AppSpec
+// `filesystem_policy.mounts` entry. The launchpad runner creates Source on
+// the host (typically under `<launchpad_home>/state/<launch_id>/<name>/`)
+// and bind-mounts it at Target inside the workload.
+type LaunchpadMount struct {
+	Name     string
+	Source   string
+	Target   string
+	ReadOnly bool
 }
 
 type ContainerHandle struct {
@@ -138,21 +154,29 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 		network.Disabled = false
 		network.NetworkName = proxyHandle.NetworkName
 	}
+	mounts := []sandbox.Mount{{
+		Source:   req.WorkspaceMount,
+		Target:   "/workspace",
+		ReadOnly: false,
+	}}
+	for _, am := range req.AdditionalMounts {
+		mounts = append(mounts, sandbox.Mount{
+			Source:   am.Source,
+			Target:   am.Target,
+			ReadOnly: am.ReadOnly,
+		})
+	}
 	spec := &sandbox.SandboxSpec{
 		Image:   req.ImageDigest,
 		Command: command,
 		Args:    args,
 		Env:     env,
-		Mounts: []sandbox.Mount{{
-			Source:   req.WorkspaceMount,
-			Target:   "/workspace",
-			ReadOnly: false,
-		}},
+		Mounts:  mounts,
 		Limits: sandbox.ResourceLimits{
 			CPUMillis:    500,
 			MemoryMB:     512,
 			DiskMB:       1024,
-			Timeout:      r.commandTimeout(),
+			Timeout:      r.commandTimeout(req),
 			MaxProcesses: 64,
 		},
 		Network:      network,
@@ -186,19 +210,27 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 
 const defaultLocalContainerCommandTimeout = 120 * time.Second
 
-func (r LocalContainerRuntime) commandTimeout() time.Duration {
+// commandTimeout resolves the per-launch container timeout. Precedence:
+// explicit AppSpec runtime.timeout (req.Plan.RuntimeTimeout) → struct field
+// CommandTimeout (set programmatically, e.g. by a custom substrate adapter
+// or a test) → operator env HELM_LAUNCHPAD_LOCAL_CONTAINER_TIMEOUT → default
+// 120s. Yaml wins because the AppSpec author knows the app's warm-up profile;
+// env stays as a deployment-wide escape hatch when no spec/field is set.
+func (r LocalContainerRuntime) commandTimeout(req ContainerRequest) time.Duration {
+	if raw := strings.TrimSpace(req.Plan.RuntimeTimeout); raw != "" {
+		if timeout, err := time.ParseDuration(raw); err == nil && timeout > 0 {
+			return timeout
+		}
+	}
 	if r.CommandTimeout > 0 {
 		return r.CommandTimeout
 	}
-	raw := strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_LOCAL_CONTAINER_TIMEOUT"))
-	if raw == "" {
-		return defaultLocalContainerCommandTimeout
+	if raw := strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_LOCAL_CONTAINER_TIMEOUT")); raw != "" {
+		if timeout, err := time.ParseDuration(raw); err == nil && timeout > 0 {
+			return timeout
+		}
 	}
-	timeout, err := time.ParseDuration(raw)
-	if err != nil || timeout <= 0 {
-		return defaultLocalContainerCommandTimeout
-	}
-	return timeout
+	return defaultLocalContainerCommandTimeout
 }
 
 func (r LocalContainerRuntime) resolveIsolation(req ContainerRequest) (IsolationEvidence, error) {

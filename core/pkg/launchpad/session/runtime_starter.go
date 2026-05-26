@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -288,6 +289,10 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 	if err != nil && !opts.RuntimeDryRun {
 		return RuntimeStartResult{}, err
 	}
+	additionalMounts, err := materializeFilesystemMounts(compiled, opts)
+	if err != nil && !opts.RuntimeDryRun {
+		return RuntimeStartResult{}, err
+	}
 	runtime := lpruntime.NewLocalContainerRuntime()
 	runtime.IsolationMode = isolationModeFromEnv()
 	handle, err := runtime.Start(lpruntime.ContainerRequest{
@@ -300,6 +305,7 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 		NetworkAllowlist: compiled.NetworkAllowlist,
 		EgressProxy:      egressProxy,
 		TokenBroker:      compiled.ModelGatewayMode == "token_broker",
+		AdditionalMounts: additionalMounts,
 	})
 	if err != nil {
 		result := runtimeStartResultFromHandle(handle)
@@ -343,6 +349,106 @@ func runtimeStartResultFromIsolation(isolation lpruntime.IsolationEvidence) Runt
 		NetworkProof:               isolation.NetworkProof,
 		TokenBrokerEnabled:         isolation.TokenBrokerEnabled,
 	}
+}
+
+// launchpadStateRoot resolves the host directory under which per-launch
+// state mounts (`<root>/state/<launch_id>/<name>/`) are materialized.
+// Mirrors the resolution rule in services.go::launchpadStoreRoot so a
+// session package consumer does not have to depend on the cmd/ wiring.
+func launchpadStateRoot() string {
+	if v := strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_HOME")); v != "" {
+		return v
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".helm", "launchpad")
+}
+
+// parsedMount represents an AppSpec `filesystem_policy.mounts` entry in the
+// supported `<name>[:<mode>[:<target>]]` syntax. `mode` defaults to "rw" and
+// `target` defaults to `/var/lib/<app_id>/<name>` when the AppSpec leaves it
+// implicit.
+type parsedMount struct {
+	Name     string
+	ReadOnly bool
+	Target   string
+}
+
+func parseFilesystemMount(raw, appID string) (parsedMount, error) {
+	parts := strings.SplitN(raw, ":", 3)
+	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
+		return parsedMount{}, fmt.Errorf("invalid filesystem mount %q: empty name", raw)
+	}
+	m := parsedMount{Name: strings.TrimSpace(parts[0])}
+	mode := "rw"
+	if len(parts) >= 2 && strings.TrimSpace(parts[1]) != "" {
+		mode = strings.TrimSpace(parts[1])
+	}
+	switch mode {
+	case "rw":
+		m.ReadOnly = false
+	case "ro":
+		m.ReadOnly = true
+	default:
+		return parsedMount{}, fmt.Errorf("invalid filesystem mount %q: mode must be rw or ro", raw)
+	}
+	if len(parts) >= 3 && strings.TrimSpace(parts[2]) != "" {
+		target := strings.TrimSpace(parts[2])
+		if !filepath.IsAbs(target) || strings.Contains(target, "..") {
+			return parsedMount{}, fmt.Errorf("invalid filesystem mount %q: target must be absolute and not contain '..'", raw)
+		}
+		m.Target = target
+	} else {
+		m.Target = "/var/lib/" + appID + "/" + m.Name
+	}
+	return m, nil
+}
+
+// materializeFilesystemMounts walks compiled.FilesystemMounts and, for every
+// non-workspace entry, creates the host state directory and prepares a
+// runtime LaunchpadMount that the local-container runner will bind into the
+// workload. The workspace mount is excluded because it is handled separately
+// via ContainerRequest.WorkspaceMount.
+func materializeFilesystemMounts(compiled plan.LaunchPlan, opts ExecuteOptions) ([]lpruntime.LaunchpadMount, error) {
+	if len(compiled.FilesystemMounts) == 0 {
+		return nil, nil
+	}
+	stateRoot := launchpadStateRoot()
+	var mounts []lpruntime.LaunchpadMount
+	for _, raw := range compiled.FilesystemMounts {
+		m, err := parseFilesystemMount(raw, compiled.AppID)
+		if err != nil {
+			return nil, err
+		}
+		if m.Name == "workspace" {
+			continue
+		}
+		if opts.RuntimeDryRun {
+			mounts = append(mounts, lpruntime.LaunchpadMount{
+				Name:     m.Name,
+				Source:   "",
+				Target:   m.Target,
+				ReadOnly: m.ReadOnly,
+			})
+			continue
+		}
+		if stateRoot == "" {
+			return nil, fmt.Errorf("cannot materialize filesystem mount %q: HELM_LAUNCHPAD_HOME unset and user home directory not resolvable", m.Name)
+		}
+		hostDir := filepath.Join(stateRoot, "state", compiled.LaunchID, m.Name)
+		if err := os.MkdirAll(hostDir, 0o755); err != nil {
+			return nil, fmt.Errorf("create host state dir %s: %w", hostDir, err)
+		}
+		mounts = append(mounts, lpruntime.LaunchpadMount{
+			Name:     m.Name,
+			Source:   hostDir,
+			Target:   m.Target,
+			ReadOnly: m.ReadOnly,
+		})
+	}
+	return mounts, nil
 }
 
 // substratesWithNetworkNamespace lists substrates whose workloads run in an

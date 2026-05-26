@@ -186,13 +186,20 @@ func TestLocalContainerCommandTimeoutCanBeRaisedForColdPulls(t *testing.T) {
 	t.Setenv("HELM_LAUNCHPAD_LOCAL_CONTAINER_TIMEOUT", "8m")
 
 	runtime := NewLocalContainerRuntime()
-	if got := runtime.commandTimeout(); got != 8*time.Minute {
-		t.Fatalf("command timeout = %s, want 8m", got)
+	if got := runtime.commandTimeout(ContainerRequest{}); got != 8*time.Minute {
+		t.Fatalf("env-only timeout = %s, want 8m", got)
 	}
 
 	runtime.CommandTimeout = 3 * time.Minute
-	if got := runtime.commandTimeout(); got != 3*time.Minute {
-		t.Fatalf("explicit command timeout = %s, want 3m", got)
+	if got := runtime.commandTimeout(ContainerRequest{}); got != 3*time.Minute {
+		t.Fatalf("explicit struct-field timeout = %s, want 3m (struct field beats env)", got)
+	}
+
+	// AppSpec runtime.timeout (req.Plan.RuntimeTimeout) wins over everything
+	// else — the workload author has the most context about its warm-up.
+	req := ContainerRequest{Plan: plan.LaunchPlan{RuntimeTimeout: "5m"}}
+	if got := runtime.commandTimeout(req); got != 5*time.Minute {
+		t.Fatalf("AppSpec runtime.timeout precedence broke; got = %s, want 5m", got)
 	}
 }
 

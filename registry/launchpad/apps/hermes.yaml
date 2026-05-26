@@ -20,10 +20,14 @@ runtime:
     # rootfs). Wrap in `sh -c` to bypass kernel-level exec'ing of the broken
     # shebang. HOME is redirected to /tmp (tmpfs) because $HOME=/opt/hermes
     # is read-only on the rootfs and hermes wants to write `.hermes/` there.
+    # The current image (sha256:4ec024dd) ships a Python Fire CLI (cli.py)
+    # where the old `-z 'healthcheck ping'` is gone; use `--q ping` for the
+    # canonical single-query healthcheck — gpt-4o-mini answers in <2s through
+    # the launch-scoped egress proxy and exits 0.
     command:
         - /bin/sh
         - -c
-        - HOME=/tmp/hermes-home hermes -z 'healthcheck ping' --provider openrouter --model openai/gpt-4o-mini --ignore-user-config
+        - HOME=/var/lib/hermes hermes --q ping --provider openrouter --model openai/gpt-4o-mini --ignore_user_config --quiet
 model_gateway:
     logical_secret: model_gateway
     provider: openrouter
@@ -37,7 +41,11 @@ filesystem_policy:
     mode: scoped_workspace
     mounts:
         - workspace:rw
-        - app_state:rw
+        # hermes writes config / sessions / node toolchain under $HOME/.hermes.
+        # /var/lib/hermes is the convention for the launch-scoped state root;
+        # runtime.command sets HOME=/var/lib/hermes so the python config code
+        # finds the writable .hermes directory inside this mount.
+        - app_state:rw:/var/lib/hermes
     policy_ref: policies/launchpad/apps/hermes.safe.toml
 network_policy:
     default: deny

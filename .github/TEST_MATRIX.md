@@ -21,7 +21,7 @@ Systems that contribute to HELM AI Kernel execution truth must enforce:
 | SDKs | Language-specific SDK gates and generated-type parity |
 | ProofGraph and EvidencePack | Offline fixture verification and tamper checks |
 | MCP and sandbox | Negative vectors for unknown server/tool/schema, missing grants, and authorization failures |
-| Console | Static build, unit tests, and smoke check against generated API schema |
+| External client contract | OpenAPI SDK parity, route contract tests, and generated-type parity |
 | Deployment | Docker, Docker Compose, chart, and release smoke checks where environment support exists |
 | Documentation | `make docs-coverage`, `make docs-truth`, docs-platform manifest/source checks |
 

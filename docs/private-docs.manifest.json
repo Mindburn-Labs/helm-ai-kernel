@@ -28,15 +28,6 @@
       "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/api/readme"
     },
     {
-      "slug": "internal/helm-ai-kernel/apps/console/readme",
-      "title": "HELM AI Kernel Console Source Owner",
-      "section": "internal",
-      "source_path": "apps/console/README.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/apps/console/readme"
-    },
-    {
       "slug": "internal/helm-ai-kernel/artifacts/golden/readme",
       "title": "Golden Artifacts",
       "section": "internal",
@@ -226,123 +217,6 @@
       "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/deploy/readme"
     },
     {
-      "slug": "internal/helm-ai-kernel/docs/design-system/accessibility",
-      "title": "Accessibility",
-      "section": "internal",
-      "source_path": "docs/design-system/accessibility.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/accessibility"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/docs/design-system/architecture",
-      "title": "Architecture",
-      "section": "internal",
-      "source_path": "docs/design-system/architecture.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/architecture"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/docs/design-system/ci-gates",
-      "title": "CI Gates",
-      "section": "internal",
-      "source_path": "docs/design-system/ci-gates.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/ci-gates"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/docs/design-system/contrast-table",
-      "title": "Contrast Table",
-      "section": "internal",
-      "source_path": "docs/design-system/contrast-table.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/contrast-table"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/docs/design-system/decisions/0001-monorepo-layout",
-      "title": "0001 — OSS Design System Package Layout",
-      "section": "internal",
-      "source_path": "docs/design-system/decisions/0001-monorepo-layout.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/decisions/0001-monorepo-layout"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/docs/design-system/decisions/0002-token-sourcing",
-      "title": "0002 — Two Source Of Truth Tokens With Parity Tests",
-      "section": "internal",
-      "source_path": "docs/design-system/decisions/0002-token-sourcing.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/decisions/0002-token-sourcing"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/docs/design-system/decisions/0003-aschild-pattern",
-      "title": "0003 — AsChild Composition Over Polymorphic As Prop",
-      "section": "internal",
-      "source_path": "docs/design-system/decisions/0003-asChild-pattern.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/decisions/0003-aschild-pattern"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/docs/design-system/decisions/0004-no-css-in-js-runtime",
-      "title": "0004 — No CSS In JS Runtime; Static .Css + Tokens",
-      "section": "internal",
-      "source_path": "docs/design-system/decisions/0004-no-css-in-js-runtime.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/decisions/0004-no-css-in-js-runtime"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/docs/design-system/decisions/0005-locale-defaults",
-      "title": "0005 — Locale Defaults & RTL Detection",
-      "section": "internal",
-      "source_path": "docs/design-system/decisions/0005-locale-defaults.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/decisions/0005-locale-defaults"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/docs/design-system/decisions/readme",
-      "title": "Architecture Decision Records (ADRs)",
-      "section": "internal",
-      "source_path": "docs/design-system/decisions/README.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/decisions/readme"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/docs/design-system/library-adoption",
-      "title": "Library Adoption",
-      "section": "internal",
-      "source_path": "docs/design-system/library-adoption.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/library-adoption"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/docs/design-system/primitive-coverage",
-      "title": "Primitive Coverage",
-      "section": "internal",
-      "source_path": "docs/design-system/primitive-coverage.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/primitive-coverage"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/docs/design-system/theming",
-      "title": "Theming",
-      "section": "internal",
-      "source_path": "docs/design-system/theming.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/docs/design-system/theming"
-    },
-    {
       "slug": "internal/helm-ai-kernel/docs/documentation-coverage",
       "title": "Documentation Coverage",
       "section": "internal",
@@ -407,7 +281,7 @@
     },
     {
       "slug": "internal/helm-ai-kernel/examples/js_openai_baseurl/readme",
-      "title": "JavaScript — OpenAI Baseurl Example",
+      "title": "JavaScript \u2014 OpenAI Baseurl Example",
       "section": "internal",
       "source_path": "examples/js_openai_baseurl/README.md",
       "access": "staff",
@@ -452,7 +326,7 @@
     },
     {
       "slug": "internal/helm-ai-kernel/examples/python_openai_baseurl/readme",
-      "title": "Python — OpenAI Baseurl Example",
+      "title": "Python \u2014 OpenAI Baseurl Example",
       "section": "internal",
       "source_path": "examples/python_openai_baseurl/README.md",
       "access": "staff",
@@ -488,7 +362,7 @@
     },
     {
       "slug": "internal/helm-ai-kernel/examples/starters/anthropic/readme",
-      "title": "Anthropic Starter — HELM AI Kernel Governed AI",
+      "title": "Anthropic Starter \u2014 HELM AI Kernel Governed AI",
       "section": "internal",
       "source_path": "examples/starters/anthropic/README.md",
       "access": "staff",
@@ -497,7 +371,7 @@
     },
     {
       "slug": "internal/helm-ai-kernel/examples/starters/codex/readme",
-      "title": "Codex Starter — HELM AI Kernel Governed AI",
+      "title": "Codex Starter \u2014 HELM AI Kernel Governed AI",
       "section": "internal",
       "source_path": "examples/starters/codex/README.md",
       "access": "staff",
@@ -506,7 +380,7 @@
     },
     {
       "slug": "internal/helm-ai-kernel/examples/starters/google/readme",
-      "title": "Google ADK Starter — HELM AI Kernel Governed AI",
+      "title": "Google ADK Starter \u2014 HELM AI Kernel Governed AI",
       "section": "internal",
       "source_path": "examples/starters/google/README.md",
       "access": "staff",
@@ -515,7 +389,7 @@
     },
     {
       "slug": "internal/helm-ai-kernel/examples/starters/openai/readme",
-      "title": "OpenAI Starter — HELM AI Kernel Governed AI",
+      "title": "OpenAI Starter \u2014 HELM AI Kernel Governed AI",
       "section": "internal",
       "source_path": "examples/starters/openai/README.md",
       "access": "staff",
@@ -533,7 +407,7 @@
     },
     {
       "slug": "internal/helm-ai-kernel/examples/ts_openai_baseurl/readme",
-      "title": "TypeScript — OpenAI SDK Example",
+      "title": "TypeScript \u2014 OpenAI SDK Example",
       "section": "internal",
       "source_path": "examples/ts_openai_baseurl/README.md",
       "access": "staff",
@@ -584,15 +458,6 @@
       "access": "staff",
       "sensitivity": "internal",
       "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/oss-fuzz/readme"
-    },
-    {
-      "slug": "internal/helm-ai-kernel/packages/design-system-core/readme",
-      "title": "@Helm/Design System Core",
-      "section": "internal",
-      "source_path": "packages/design-system-core/README.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/packages/design-system-core/readme"
     },
     {
       "slug": "internal/helm-ai-kernel/packages/readme",

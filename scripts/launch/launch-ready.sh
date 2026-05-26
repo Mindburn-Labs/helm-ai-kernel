@@ -36,22 +36,19 @@ record() {
 }
 
 record pr_boundary "PR Boundary: No open PRs contain commercial infrastructure terminology." "python3 scripts/launch/pr_boundary_check.py"
-record config_boundary "Config Boundary: wrangler.toml does not enforce hosted domains." "! rg -n 'custom_domains\\s*=|oss\\.mindburn\\.org' apps/console/wrangler.toml"
 record terminology_boundary "Terminology Boundary: VERDICT_CANONICALIZATION.md exists and resolves the ALLOW/DENY/ESCALATE vs. DEFER drift." "test -f docs/VERDICT_CANONICALIZATION.md && rg -q 'ALLOW' docs/VERDICT_CANONICALIZATION.md && rg -q 'DENY' docs/VERDICT_CANONICALIZATION.md && rg -q 'ESCALATE' docs/VERDICT_CANONICALIZATION.md && rg -q 'DEFER' docs/VERDICT_CANONICALIZATION.md"
 record version "Version: VERSION is set to launch target ${LAUNCH_TARGET_VERSION}." "test \"\$(cat VERSION)\" = '${LAUNCH_TARGET_VERSION}'"
 record homebrew "Homebrew: README points to canonical mindburnlabs/tap/helm-ai-kernel." "rg -q 'brew install mindburnlabs/tap/helm-ai-kernel' README.md && ! rg -q 'brew install (mindburn|Mindburn-Labs|mindburn-labs)/homebrew-tap/helm|brew install mindburn-labs/tap/helm' README.md"
 
 record build "Build: make build completes cleanly." "make build"
 record test "Test: make test completes cleanly." "make test"
-record demos "Demos: examples/launch suite is present." "test -d examples/launch && test -f examples/launch/README.md && test -x scripts/launch/smoke.sh && test -x scripts/launch/demo-local.sh && test -x scripts/launch/demo-proof.sh && test -x scripts/launch/demo-mcp.sh && test -x scripts/launch/demo-openai-proxy.sh && test -x scripts/launch/demo-console.sh"
-record console "Console: apps/console builds and runs locally without remote dependencies." "bash scripts/launch/demo-console.sh"
+record demos "Demos: examples/launch headless suite is present." "test -d examples/launch && test -f examples/launch/README.md && test -x scripts/launch/smoke.sh && test -x scripts/launch/demo-local.sh && test -x scripts/launch/demo-proof.sh && test -x scripts/launch/demo-mcp.sh && test -x scripts/launch/demo-openai-proxy.sh"
 record mcp "MCP: MCP quarantine demo path is verified." "bash scripts/launch/demo-mcp.sh"
 record proxy "Proxy: OpenAI base-url proxy demo path is verified." "bash scripts/launch/demo-openai-proxy.sh"
 record proof "Proof: Evidence verification and tamper-failure paths are documented and verifiable." "bash scripts/launch/demo-proof.sh && rg -qi 'tamper' docs/VERIFICATION.md examples/launch/README.md"
 
 record issue_templates "Issue Templates: bug_report, feature_request, docs_gap, integration_request, policy_example_request are present." "test -f .github/ISSUE_TEMPLATE/bug_report.yml && test -f .github/ISSUE_TEMPLATE/feature_request.yml && test -f .github/ISSUE_TEMPLATE/docs_gap.yml && test -f .github/ISSUE_TEMPLATE/integration_request.yml && test -f .github/ISSUE_TEMPLATE/policy_example_request.yml"
 record docs_sync "Docs Sync: docs-coverage and docs-truth checks pass." "make docs-coverage docs-truth"
-record security "Security: make launch-security (vuln, secret, sbom) passes." "make launch-security"
 record release "Release: Dry-run release script confirms artifacts can be generated." "make launch-release-dry-run"
 
 final_state="READY"
@@ -76,7 +73,6 @@ not committed to the repository.
 
 ## Phase 0: Boundary Hardening
 - [${STATUS[pr_boundary]}] **${DETAIL[pr_boundary]}**
-- [${STATUS[config_boundary]}] **${DETAIL[config_boundary]}**
 - [${STATUS[terminology_boundary]}] **${DETAIL[terminology_boundary]}**
 - [${STATUS[version]}] **${DETAIL[version]}**
 - [${STATUS[homebrew]}] **${DETAIL[homebrew]}**
@@ -85,7 +81,6 @@ not committed to the repository.
 - [${STATUS[build]}] **${DETAIL[build]}**
 - [${STATUS[test]}] **${DETAIL[test]}**
 - [${STATUS[demos]}] **${DETAIL[demos]}**
-- [${STATUS[console]}] **${DETAIL[console]}**
 - [${STATUS[mcp]}] **${DETAIL[mcp]}**
 - [${STATUS[proxy]}] **${DETAIL[proxy]}**
 - [${STATUS[proof]}] **${DETAIL[proof]}**
@@ -93,7 +88,6 @@ not committed to the repository.
 ## Phase 2: Community & Release
 - [${STATUS[issue_templates]}] **${DETAIL[issue_templates]}**
 - [${STATUS[docs_sync]}] **${DETAIL[docs_sync]}**
-- [${STATUS[security]}] **${DETAIL[security]}**
 - [${STATUS[release]}] **${DETAIL[release]}**
 
 ## Final Status

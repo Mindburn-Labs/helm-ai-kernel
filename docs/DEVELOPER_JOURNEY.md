@@ -99,11 +99,10 @@ Expected ready line:
 helm-edge-local - listening :7714 - ready
 ```
 
-Open the self-hostable Console by adding `--console`:
+Point an external Console or API client at the local kernel endpoint:
 
 ```bash
-make build-console
-./bin/helm-ai-kernel serve --policy ./release.high_risk.v3.toml --console
+http://127.0.0.1:7714
 ```
 
 ## First Proof
@@ -260,7 +259,6 @@ Run release checks when release docs or packaging behavior changes:
 
 ```bash
 make test
-make test-console
 make test-platform
 make test-all
 make crucible

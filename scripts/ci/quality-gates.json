@@ -17,8 +17,6 @@
         "boundary-manifest",
         "python-sdk",
         "ts-sdk",
-        "design-system",
-        "console",
         "rust-sdk",
         "java-sdk"
       ]
@@ -42,12 +40,10 @@
         "go-sdk",
         "python-sdk",
         "ts-sdk",
-        "design-system",
-        "console",
         "rust-sdk",
         "java-sdk",
         "json-schemas",
-        "openapi-console-drift",
+        "sdk-openapi-check",
         "codegen-drift",
         "proto-lint",
         "proto-breaking",
@@ -74,12 +70,10 @@
         "go-sdk",
         "python-sdk",
         "ts-sdk",
-        "design-system",
-        "console",
         "rust-sdk",
         "java-sdk",
         "json-schemas",
-        "openapi-console-drift",
+        "sdk-openapi-check",
         "codegen-drift",
         "proto-lint",
         "proto-breaking",
@@ -111,9 +105,7 @@
       "description": "Focused type and compile checks.",
       "gates": [
         "go-lint",
-        "ts-sdk-typecheck",
-        "design-system-typecheck",
-        "console-typecheck"
+        "ts-sdk-typecheck"
       ]
     },
     "contracts": {
@@ -121,7 +113,7 @@
       "gates": [
         "version-drift",
         "json-schemas",
-        "openapi-console-drift",
+        "sdk-openapi-check",
         "codegen-drift",
         "proto-lint",
         "proto-breaking"
@@ -159,8 +151,6 @@
       "gates": [
         "python-sdk",
         "ts-sdk",
-        "design-system",
-        "console",
         "rust-sdk",
         "java-sdk"
       ]
@@ -391,28 +381,6 @@
       ]
     },
     {
-      "id": "design-system",
-      "title": "Design system package gate",
-      "command": "make test-design-system",
-      "timeout_seconds": 1200,
-      "paths": [
-        "packages/design-system-core/**",
-        "packages/design-system-core-compat/**",
-        "docs/design-system/**"
-      ]
-    },
-    {
-      "id": "console",
-      "title": "Console package gate",
-      "command": "make test-console",
-      "timeout_seconds": 1200,
-      "paths": [
-        "apps/console/**",
-        "packages/design-system-core/**",
-        "api/openapi/**"
-      ]
-    },
-    {
       "id": "ts-sdk-typecheck",
       "title": "TypeScript SDK typecheck",
       "command": "cd sdk/ts && npm ci && npm run build",
@@ -420,26 +388,6 @@
       "paths": [
         "sdk/ts/**",
         "protocols/proto/**"
-      ]
-    },
-    {
-      "id": "design-system-typecheck",
-      "title": "Design system typecheck",
-      "command": "cd packages/design-system-core && npm ci && npm run typecheck",
-      "timeout_seconds": 600,
-      "paths": [
-        "packages/design-system-core/**"
-      ]
-    },
-    {
-      "id": "console-typecheck",
-      "title": "Console typecheck",
-      "command": "cd packages/design-system-core && npm ci && npm run build && cd ../../apps/console && npm ci --ignore-scripts && npm run generate:api && npm run typecheck",
-      "timeout_seconds": 900,
-      "paths": [
-        "apps/console/**",
-        "packages/design-system-core/**",
-        "api/openapi/**"
       ]
     },
     {
@@ -456,15 +404,15 @@
       ]
     },
     {
-      "id": "openapi-console-drift",
-      "title": "OpenAPI generated console type drift",
-      "command": "bash scripts/ci/check_openapi_console_drift.sh",
-      "timeout_seconds": 600,
+      "id": "sdk-openapi-check",
+      "title": "OpenAPI SDK contract drift",
+      "command": "make sdk-openapi-check",
+      "timeout_seconds": 1200,
       "paths": [
         "api/openapi/**",
-        "apps/console/src/api/schema.ts",
-        "apps/console/package*.json",
-        "scripts/ci/check_openapi_console_drift.sh"
+        "sdk/**",
+        "scripts/sdk/**",
+        "Makefile"
       ]
     },
     {
@@ -513,8 +461,6 @@
         "docker-compose.yml",
         "deploy/**",
         "core/**",
-        "apps/console/**",
-        "packages/design-system-core/**",
         "scripts/ci/*smoke*.sh"
       ]
     },
@@ -596,9 +542,7 @@
       "paths": [
         "core/go.mod",
         "core/go.sum",
-        "sdk/**",
-        "apps/console/package*.json",
-        "packages/design-system-core/package*.json"
+        "sdk/**"
       ]
     },
     {
@@ -657,9 +601,7 @@
         ".github/dependabot.yml",
         "go.work",
         "core/go.mod",
-        "sdk/**",
-        "apps/console/package*.json",
-        "packages/design-system-core/package*.json"
+        "sdk/**"
       ]
     },
     {

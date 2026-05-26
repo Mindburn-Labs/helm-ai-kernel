@@ -122,6 +122,7 @@ func RuntimeRouteSpecs() []RuntimeRouteSpec {
 		{Method: http.MethodPost, Path: "/mcp/v1/execute", MuxPattern: "/mcp/v1/execute", Auth: RouteAuthPublic, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "executeMCPTool", Owner: "core/pkg/mcp"},
 		{Method: http.MethodGet, Path: "/healthz", MuxPattern: "/healthz", Auth: RouteAuthPublic, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "healthCheck", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: "/version", MuxPattern: "/version", Auth: RouteAuthPublic, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "getVersion", Owner: "core/cmd/helm-ai-kernel"},
+		{Method: http.MethodGet, Path: "/v1/meta/capabilities", MuxPattern: "/v1/meta/capabilities", Auth: RouteAuthPublic, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "getCanonicalMetaCapabilities", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: "/api/v1/meta/capabilities", MuxPattern: "/api/v1/meta/capabilities", Auth: RouteAuthPublic, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "getMetaCapabilities", Owner: "core/cmd/helm-ai-kernel"},
 
 		{Method: http.MethodGet, Path: "/api/v1/boundary/status", MuxPattern: "/api/v1/boundary/status", Auth: RouteAuthTenant, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "getBoundaryStatus", Owner: "core/cmd/helm-ai-kernel"},

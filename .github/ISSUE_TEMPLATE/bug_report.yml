@@ -45,7 +45,7 @@ body:
       label: Affected surface
       options:
         - CLI/kernel
-        - Console
+        - API/client contract
         - SDK
         - Protocol/schema
         - Deployment

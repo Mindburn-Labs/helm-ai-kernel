@@ -76,7 +76,7 @@ tmp/
 *.bak
 .hallmark/
 .playwright-mcp/
-apps/console/test-results/
+app-helm-console/test-results/
 helm-console-hallmark-*.png
 helm-oss-console-apps-smoke.png
 tokens.css

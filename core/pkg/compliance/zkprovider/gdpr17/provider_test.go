@@ -122,6 +122,9 @@ func TestKeyPathLoadingAndExpiry(t *testing.T) {
 
 func generateKeys(t *testing.T) *KeyPair {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("Skipping heavy Groth16 trusted setup/key generation in short mode")
+	}
 	keys, err := GenerateKeys()
 	require.NoError(t, err)
 	return keys

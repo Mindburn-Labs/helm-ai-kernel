@@ -1,12 +1,12 @@
 ---
-title: Launchpad UX Architecture
+title: Launchpad External Client Contract
 last_reviewed: 2026-05-24
 ---
 
-# Launchpad UX Architecture
+# Launchpad External Client Contract
 
-Status: implemented Console direction for the Kernel repo, with hosted
-entitlements documented as a future integration contract.
+Status: API contract for a standalone Console or other external client. The
+Kernel repo owns the backend facts and proof states, not browser components.
 
 ## Product Shape
 
@@ -27,7 +27,7 @@ They are not Free / Individual / Enterprise variants.
 
 ## Source Of Truth
 
-The Console renders only:
+External clients render only:
 
 - app and substrate registry fields
 - compatibility matrix cells
@@ -43,25 +43,16 @@ The Console renders only:
   AppSpec candidates, and import preflight records
 - explicit backend-returned or test-fixture entitlement fields
 
-Missing data is shown as `unproven`. The Console does not invent a fallback
+Missing data is shown as `unproven`. External clients do not invent a fallback
 catalog, mock launch success, raw secret binding, or proof state.
 
-## Component Roles
+## Client Responsibilities
 
-- `LaunchpadPage.tsx`: route orchestration and API calls.
-- `SimpleLaunchHome.tsx`: normal-user entry surface.
-- `LaunchWizard.tsx`: select app, select substrate, setup, preflight, launch,
-  and proof.
-- `AppCard.tsx`: shared app card for ready, setup-needed, blocked, unsupported,
-  and fixture-only gated states.
-- `RunTimeline.tsx`: run list, event timeline, escalation notice, and proof.
-- `ProofPanel.tsx`: universal receipts / EvidencePack / verify command panel.
-- `DeveloperModePanel.tsx`: raw backend payload disclosure.
-- `EntitlementGate.tsx`: passive rendering of explicit entitlement decisions.
-
-The Universal Importer panel is part of `LaunchpadPage.tsx` in this pass. It
-renders only `/api/v1/launchpad/imports` data and keeps generated AppSpecs
-visibly `generated/untrusted` until backend evidence exists.
+External clients may compose app catalog, setup, run timeline, proof, and
+import flows in any framework, but must treat `/api/v1/launchpad/*`,
+`/api/v1/console/*`, `/api/v1/agent-ui/*`, receipts, and EvidencePack refs as
+the source of truth. Generated AppSpecs remain `generated/untrusted` until
+backend evidence exists.
 
 ## Entitlement Boundary
 

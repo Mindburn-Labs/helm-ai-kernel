@@ -211,7 +211,10 @@ func TestOpaPDP_NilRequest(t *testing.T) {
 
 func TestOpaPDP_FailClosed_ContextCancelled(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(5 * time.Second) // slow server
+		select {
+		case <-r.Context().Done():
+		case <-time.After(1 * time.Second):
+		}
 	}))
 	defer server.Close()
 

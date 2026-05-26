@@ -318,7 +318,7 @@
     },
     {
       "id": "apps-console-package-json",
-      "path": "apps/console/package.json",
+      "path": "app-helm-console/package.json",
       "kind": "json",
       "field": "version",
       "expected": "{version}",

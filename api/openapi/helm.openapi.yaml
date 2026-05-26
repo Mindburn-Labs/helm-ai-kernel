@@ -458,6 +458,39 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+  /v1/meta/capabilities:
+    get:
+      operationId: getCanonicalMetaCapabilities
+      tags: [console, system]
+      summary: Read canonical Console capability metadata
+      description: |
+        Public read-only capability discovery endpoint used by app-helm-console to
+        choose OSS Launchpad versus commercial UX states. Authorization decisions
+        remain backend-enforced.
+      responses:
+        '200':
+          description: Console capability metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsoleCapabilities'
+
+  /api/v1/meta/capabilities:
+    get:
+      operationId: getMetaCapabilities
+      tags: [console, system]
+      summary: Read legacy Console capability metadata
+      description: |
+        Compatibility alias for local transition checkouts. New clients should use
+        /v1/meta/capabilities.
+      responses:
+        '200':
+          description: Console capability metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsoleCapabilities'
+
   /api/v1/console/diagnostics:
     get:
       operationId: getConsoleDiagnostics
@@ -3798,6 +3831,18 @@ components:
         policy_version: { type: string }
         policy_decision_hash: { type: string }
         signature: { type: string }
+
+    ConsoleCapabilities:
+      type: object
+      required: [entitlements, version]
+      properties:
+        entitlements:
+          type: array
+          items: { type: string }
+        version: { type: string }
+        source: { type: string }
+        tier_gate: { type: string }
+      additionalProperties: true
 
     ConsoleBootstrap:
       type: object

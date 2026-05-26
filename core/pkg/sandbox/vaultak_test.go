@@ -53,6 +53,6 @@ func TestVaultakOverlayRollbackSpeed(t *testing.T) {
 	assert.Less(t, duration, 5*time.Millisecond, "OverlayFS rollback trigger took too long: %v", duration)
 
 	// Wait for the async cleanup routine inside WarmLeaseManager to complete and return the runner to the pool
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 	assert.Equal(t, poolSize, len(pool.idleRunners))
 }

@@ -23,7 +23,7 @@ helm up hermes --target cloud:aws --verify-only
 Launchpad remains the OSS local-container implementation layer. LaunchKit starts
 verified AI apps through a fail-closed execution firewall, preserves the MCP
 interceptor posture, records signed receipts, emits EvidencePacks that verify
-offline, and opens the Console at the receipt-backed run URL.
+offline, and returns receipt-backed run URLs for external clients.
 
 ## Audience
 
@@ -89,12 +89,11 @@ Release builds also ship `helm` as the primary product command.
 
 ## Account and Entitlement Boundary
 
-The Kernel repo currently exposes one self-hostable Launchpad surface backed by
-the existing Launchpad APIs. Free, Individual, and Enterprise hosted account
-entitlements are target architecture, not production Kernel behavior in this
-repo. Console must not infer account tier or invent entitlement state; it may
-only render explicit backend fields or clearly labeled test fixtures. The
-hosted integration contract lives in
+The Kernel repo exposes headless Launchpad APIs. Free, Individual, and
+Enterprise hosted account entitlements are target architecture, not production
+Kernel behavior in this repo. External clients must not infer account tier or
+invent entitlement state; they may only render explicit backend fields or
+clearly labeled test fixtures. The hosted integration contract lives in
 `docs/launchpad/MINDBURN_ACCOUNT_ENTITLEMENTS_SPEC.md`.
 
 ## Universal Importer

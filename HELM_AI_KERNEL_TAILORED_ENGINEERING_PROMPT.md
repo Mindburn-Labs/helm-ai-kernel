@@ -132,7 +132,7 @@ Known OSS non-goals verified from README/docs:
 - The repository does not ship the managed Mindburn hosted service.
 - It does not ship billing, private operational tooling, proprietary connector
   programs, or generated HTML report surfaces.
-- It ships exactly one browser UI: `apps/console`.
+- It ships exactly one browser UI: `app-helm-console`.
 
 Do not use these non-goals to weaken quality requirements. Use them only to
 avoid inventing features that are outside OSS scope.
@@ -242,7 +242,7 @@ Analyze at minimum:
 - SQLite/Postgres schema creation and migrations
 - Authentication and authorization flow, including whether middleware is wired
   to the runtime routes being changed
-- State management and API calls in `apps/console`
+- State management and API calls in `app-helm-console`
 - Design-system package usage and token/CSS contracts
 - SDK generation and package boundaries for Go, Python, TypeScript, Rust, and
   Java
@@ -452,7 +452,7 @@ contract discipline.
 
 Review:
 
-- Component structure in `apps/console/src/App.tsx`
+- Component structure in `app-helm-console/src/App.tsx`
 - Console page/surface organization
 - Navigation and command-first workflow
 - State management for bootstrap data, receipts, SSE tailing, active surface,
@@ -579,7 +579,7 @@ Evaluate whether HELM uses a coherent design system.
 The verified design-system architecture is:
 
 - `packages/design-system-core` is the public React/token package.
-- `apps/console` consumes it.
+- `app-helm-console` consumes it.
 - The Console must not create a second component system, Tailwind layer,
   private package, or styling fork.
 

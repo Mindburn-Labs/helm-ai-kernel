@@ -82,8 +82,8 @@ Before tagging a release:
    metadata, generated SDK headers, and release docs
 2. update `CHANGELOG.md`
 3. run `make version-drift`
-4. run `make build`, `make test`, `make test-console`,
-   `make test-platform`, `make test-all`, `make crucible`, and
+4. run `make build`, `make test`, `make test-platform`, `make test-all`,
+   `make crucible`, and
    `make launch-smoke`
 5. run `make sdk-openapi-check` and `make sdk-examples-smoke`
 6. run `make release-assets`

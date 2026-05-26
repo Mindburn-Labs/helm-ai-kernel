@@ -238,8 +238,8 @@ cd core && go test ./cmd/helm-ai-kernel -run 'Test.*Route|Test.*OpenAPI|Test.*Re
 Run broader targets when you changed their surface:
 
 ```bash
-make test-console
-make test-design-system
+make test-platform
+make sdk-openapi-check
 make verify-fixtures
 ```
 

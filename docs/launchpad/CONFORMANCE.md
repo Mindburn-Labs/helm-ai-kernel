@@ -73,9 +73,9 @@ Implemented checks currently prove:
 - Session store rejects `DELETED` without teardown receipt.
 - Generated and static Launchpad EvidencePacks verify offline through
   `helm-ai-kernel verify --bundle`.
-- Enterprise Launchpad route tests, route registry/OpenAPI parity, Console
-  Playwright coverage, evidence refs, teardown receipt, and EvidencePack
-  visibility passed in PR #30.
+- Enterprise Launchpad route tests, route registry/OpenAPI parity, evidence
+  refs, teardown receipt, and EvidencePack visibility passed in PR #30. Browser
+  coverage belongs to the standalone Console repository.
 
 Still gated:
 

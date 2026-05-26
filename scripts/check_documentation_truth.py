@@ -220,7 +220,12 @@ def main() -> int:
         text = read_text(architecture)
         for marker in OSS_CONSOLE_CONTRADICTIONS:
             if marker in text:
-                failures.append(f'docs/ARCHITECTURE.md contradicts shipped apps/console with marker {marker!r}')
+                failures.append(f'docs/ARCHITECTURE.md contradicts a shipped browser UI with marker {marker!r}')
+    elif architecture.exists():
+        text = read_text(architecture)
+        for marker in ('ships no bundled browser client', 'headless kernel and API'):
+            if marker not in text:
+                failures.append(f'docs/ARCHITECTURE.md is missing headless browser-split marker {marker!r}')
 
     kernel_scope = ROOT / 'docs' / 'KERNEL_SCOPE.md'
     if kernel_scope.exists():

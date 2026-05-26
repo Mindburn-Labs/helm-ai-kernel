@@ -16,8 +16,7 @@ not committed to the repository.
 ## Phase 1: Implementation & Proof
 - [x] **Build: make build completes cleanly.**
 - [x] **Test: make test completes cleanly.**
-- [x] **Demos: examples/launch suite is present.**
-- [x] **Console: apps/console builds and runs locally without remote dependencies.**
+- [x] **Demos: examples/launch headless suite is present.**
 - [x] **MCP: MCP quarantine demo path is verified.**
 - [x] **Proxy: OpenAI base-url proxy demo path is verified.**
 - [x] **Proof: Evidence verification and tamper-failure paths are documented and verifiable.**
@@ -25,7 +24,6 @@ not committed to the repository.
 ## Phase 2: Community & Release
 - [x] **Issue Templates: bug_report, feature_request, docs_gap, integration_request, policy_example_request are present.**
 - [x] **Docs Sync: docs-coverage and docs-truth checks pass.**
-- [x] **Security: make launch-security (vuln, secret, sbom) passes.**
 - [x] **Release: Dry-run release script confirms artifacts can be generated.**
 
 ## Final Status

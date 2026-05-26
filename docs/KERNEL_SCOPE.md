@@ -27,7 +27,7 @@ Do not expand this page with unsupported product, SDK, deployment, compliance, o
 > normative trust boundary model and TCB definition. For the canonical
 > 8-package TCB inventory, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-HELM AI Kernel is the **open execution kernel and self-hostable Console** of the HELM stack.
+HELM AI Kernel is the **open, headless execution kernel and API contract** of the HELM stack.
 
 It exists to keep the deterministic boundary small, portable, and independently trustworthy. Downstream HELM layers must extend this kernel through public contracts, not replace it.
 
@@ -105,9 +105,11 @@ The following names appear in strategy, standard, or roadmap material but are no
 
 ### Product Surfaces
 
-The OSS boundary ships exactly one browser UI: `apps/console`, the HELM AI Kernel Console. It is a self-hostable operator surface over the local kernel and uses `@mindburn/ui-core` for all product UI primitives and styling. The repository does not ship a second browser UI, a static report viewer, a Node CLI wrapper, a Next starter, or generated HTML report surface.
-
-`@mindburn/ui-core` remains a reusable React/token package. The Console consumes it through public package entrypoints so package integrity, app fidelity, and OSS boundary truth are tested together.
+The OSS boundary is headless. It ships the kernel CLI, HTTP APIs, OpenAPI
+schema, Protobuf contracts, SDKs, receipts, conformance fixtures, and deployment
+packaging that an external Console can consume. Browser UI source, design-system
+packages, static viewers, Next/Vite starters, and generated HTML report
+surfaces are outside this repository's trusted computing base.
 
 ## Removed from TCB (Enterprise)
 
@@ -165,7 +167,7 @@ OSS includes:
 - **Verifiable receipts** — signed receipts, ProofGraph, replay
 - **MCP interceptor** — first-class governed MCP surface
 - **OpenAI proxy** — governed proxy for OpenAI-compatible SDKs
-- **HELM AI Kernel Console** — one self-hostable browser UI for command, receipts, policy, MCP, evidence, replay, ProofGraph, conformance, trust, incidents, audit, developer, and settings workflows
+- **Headless API contract** — HTTP routes, schemas, receipts, SDKs, and conformance fixtures for external clients
 - Adapters and integration surfaces
 
 OSS does not include:
@@ -178,7 +180,7 @@ OSS does not include:
 - Private entitlement, seat management, usage metering, or account-management systems
 - Non-OSS connector certification programs
 
-The invariant is simple: OSS must stay fully useful on its own as a developer-first execution kernel and self-hostable Console: Go CLI, HTTP/API contracts, SDKs, evidence export, offline verification, replay, conformance, Console assets, and release artifacts. Hosted or organization-specific operations live outside this repository and integrate through those public contracts.
+The invariant is simple: OSS must stay fully useful on its own as a developer-first execution kernel: Go CLI, HTTP/API contracts, SDKs, evidence export, offline verification, replay, conformance, and release artifacts. Hosted, organization-specific, and browser UI operations live outside this repository and integrate through those public contracts.
 
 ## Troubleshooting
 

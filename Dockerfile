@@ -33,17 +33,15 @@ FROM gcr.io/distroless/static-debian12:nonroot@sha256:a9329520abc449e3b14d5bc3a6
 
 COPY --from=builder /helm-ai-kernel /usr/local/bin/helm-ai-kernel
 COPY --from=builder --chown=65532:65532 /runtime-data/ /var/lib/helm-ai-kernel/
-COPY apps/console/dist/ /usr/share/helm-ai-kernel/console/
 COPY release.high_risk.v3.toml /etc/helm-ai-kernel/release.high_risk.v3.toml
 COPY reference_packs/ /etc/helm-ai-kernel/reference_packs/
 
 EXPOSE 8080
 EXPOSE 8081
 
-ENV HELM_CONSOLE_DIR=/usr/share/helm-ai-kernel/console
 ENV HELM_DATA_DIR=/var/lib/helm-ai-kernel
 
 USER nonroot:nonroot
 
 ENTRYPOINT ["helm-ai-kernel"]
-CMD ["serve", "--policy", "/etc/helm-ai-kernel/release.high_risk.v3.toml", "--addr", "0.0.0.0", "--port", "8080", "--data-dir", "/var/lib/helm-ai-kernel", "--console", "--console-dir", "/usr/share/helm-ai-kernel/console"]
+CMD ["serve", "--policy", "/etc/helm-ai-kernel/release.high_risk.v3.toml", "--addr", "0.0.0.0", "--port", "8080", "--data-dir", "/var/lib/helm-ai-kernel"]

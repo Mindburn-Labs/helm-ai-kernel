@@ -27,7 +27,7 @@ EXPECTED_GATE_IDS = {
     "codegen-drift",
     "proto-breaking",
     "json-schemas",
-    "openapi-console-drift",
+    "sdk-openapi-check",
     "release-smoke",
     "deployment-smoke",
     "secrets",

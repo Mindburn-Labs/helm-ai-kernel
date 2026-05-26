@@ -62,9 +62,6 @@ jobs:
         with:
           go-version: "1.25.10"
           cache-dependency-path: "**/go.sum"
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version: "22"
       - name: Docker, Compose, and chart smoke
         run: |
           make docker-smoke
@@ -80,9 +77,6 @@ jobs:
         with:
           go-version: "1.25.10"
           cache-dependency-path: "**/go.sum"
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version: "22"
       - uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
         with:
           cluster_name: helm-ai-kernel-smoke
@@ -207,11 +201,6 @@ jobs:
       slim-digest: ${{ steps.push-slim.outputs.digest }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version: "22"
-      - name: Build console assets for main image
-        run: make build-console
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}

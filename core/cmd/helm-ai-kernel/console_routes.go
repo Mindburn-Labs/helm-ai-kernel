@@ -111,7 +111,7 @@ type consoleSurfaceDefinition struct {
 // the HELM AI Kernel Console. The handler is read-only and derives state from kernel
 // services; it does not create demonstration data.
 func RegisterConsoleRoutes(mux *http.ServeMux, svc *Services, opts serverOptions) {
-	mux.HandleFunc("/api/v1/meta/capabilities", func(w http.ResponseWriter, r *http.Request) {
+	metaCapabilitiesHandler := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -121,7 +121,9 @@ func RegisterConsoleRoutes(mux *http.ServeMux, svc *Services, opts serverOptions
 			"entitlements": []string{"OSS_CORE"},
 			"version":      "1.25",
 		})
-	})
+	}
+	mux.HandleFunc("/v1/meta/capabilities", metaCapabilitiesHandler)
+	mux.HandleFunc("/api/v1/meta/capabilities", metaCapabilitiesHandler)
 
 	mux.HandleFunc("/api/v1/console/bootstrap", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

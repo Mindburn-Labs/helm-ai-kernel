@@ -17,9 +17,6 @@ services:
       - "8080"
       - --data-dir
       - /var/lib/helm-ai-kernel
-      - --console
-      - --console-dir
-      - /usr/share/helm-ai-kernel/console
     environment:
       HELM_REGION: "us"
       HELM_ENABLE_OPENAI_PROXY: "1"

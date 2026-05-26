@@ -34,7 +34,7 @@ Demo artifacts:
   receipt:      $receipt_out
   evidencepack: $evidence_dir
 
-Console import example:
+External client import example:
   curl -X POST \\
     -H 'Content-Type: application/json' \\
     --data-binary @$receipt_out \\

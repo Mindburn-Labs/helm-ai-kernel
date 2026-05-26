@@ -19,7 +19,7 @@ Active tooling surface for the `helm-ai-kernel` project.
   `scripts/ci/quality-gates.json`.
 - `make quality-list` lists registered quality profiles and gates.
 - `make quality-explain CHECK=<gate-id>` explains one registered check.
-- `make docker-smoke` builds the Console/image and verifies the Docker runtime
+- `make docker-smoke` builds the headless image and verifies the Docker runtime
   can evaluate, persist receipts, export/verify evidence, replay-verify, and
   survive restart with a stable root key.
 - `make compose-smoke` runs the same runtime checks through `docker-compose.yml`.

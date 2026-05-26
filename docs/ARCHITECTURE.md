@@ -7,7 +7,7 @@ last_reviewed: 2026-05-05
 
 ## Audience
 
-Maintainers and operators who need the current HELM AI Kernel execution-boundary model before changing kernel, Console, API, or integration docs.
+Maintainers and operators who need the current HELM AI Kernel execution-boundary model before changing kernel, API, or integration docs.
 
 ## Outcome
 
@@ -88,7 +88,7 @@ The kernel exposes:
 - a Go CLI in `core/cmd/helm-ai-kernel`
 - an HTTP API and OpenAI-compatible proxy surface
 - an MCP server surface for governed tool access
-- route-backed Console workspaces for boundary records, MCP registry/auth profiles, sandbox grants, approvals, budgets, conformance, evidence envelopes, telemetry exports, and coexistence manifests
+- route-backed API workspaces for boundary records, MCP registry/auth profiles, sandbox grants, approvals, budgets, conformance, evidence envelopes, telemetry exports, and coexistence manifests
 
 The proxy path is the easiest way to insert HELM into an existing client without changing application control flow. Framework adapters and coexistence manifests must call HELM before dispatch; passive tracing is non-authoritative.
 
@@ -124,7 +124,11 @@ The public client surface is:
 - Rust SDK in `sdk/rust`
 - Java SDK in `sdk/java`
 
-The repository ships one bundled interactive client: `apps/console`, the HELM AI Kernel Console. It is a self-hostable operator surface over the kernel contracts, CLI/API JSON output, SDKs, evidence bundles, and conformance reports. No second browser UI, hosted SaaS control plane, static viewer, Node CLI wrapper, or generated browser-rendered report is shipped from this repository.
+The repository ships no bundled browser client. It is a headless kernel and API
+engine over the kernel contracts, CLI/API JSON output, SDKs, evidence bundles,
+and conformance reports. External frontends must integrate through the retained
+HTTP routes, OpenAPI schema, SDKs, CORS controls, receipts, and conformance
+fixtures.
 
 ## Directory Layout
 
@@ -139,4 +143,7 @@ The repository ships one bundled interactive client: `apps/console`, the HELM AI
 
 ## Non-Goals of the OSS Repo
 
-This repository does not present a hosted SaaS control plane, a second product UI surface, a bundled viewer, or private operational material. The OSS shape is a kernel, its CLI, its contracts, its SDKs, and the self-hostable `apps/console` operator surface.
+This repository does not present a hosted SaaS control plane, product UI
+surface, bundled viewer, or private operational material. The OSS shape is a
+kernel, its CLI, its API contracts, its SDKs, and release/conformance evidence
+for external clients.

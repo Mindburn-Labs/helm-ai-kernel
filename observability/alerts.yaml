@@ -1,0 +1,10 @@
+groups:
+  - name: helm-ai-kernel-observability-alerts
+    rules:
+      - alert: HighErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High HTTP error rate detected on helm-ai-kernel"

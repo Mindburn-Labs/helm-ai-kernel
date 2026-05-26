@@ -14,7 +14,7 @@ HELM AI Kernel is implemented as the proof-bearing execution boundary for agent 
 - Evidence export wrappers: `helm-ai-kernel evidence export --envelope`, `helm-ai-kernel evidence envelope list|create|get|verify`, `/api/v1/evidence/envelopes`, `/api/v1/evidence/export`, `/api/v1/evidence/verify`, and `/api/v1/replay/verify`.
 - Non-authoritative telemetry and coexistence: `helm-ai-kernel telemetry otel-config`, `helm-ai-kernel coexistence manifest`, `helm-ai-kernel integrate scaffold --framework <name>`, `/api/v1/telemetry/otel/config`, `/api/v1/telemetry/export`, and `/api/v1/coexistence/capabilities`.
 - Public SDK coverage: Go, Python, TypeScript, Rust, and Java expose the new route families as typed or structured clients.
-- Console coverage: the HELM AI Kernel Console shows route-backed boundary, MCP, sandbox, authz, approvals, budgets, evidence, conformance, telemetry, and coexistence workspaces without private-only state.
+- External client contract: route-backed boundary, MCP, sandbox, authz, approvals, budgets, evidence, conformance, telemetry, and coexistence workspaces are exposed through headless APIs without private-only state.
 
 ## Durable State
 
@@ -50,8 +50,8 @@ cd sdk/rust && cargo test
 cd sdk/java && mvn test -q
 ```
 
-Console verification:
+API contract verification:
 
 ```sh
-make test-console
+make sdk-openapi-check
 ```

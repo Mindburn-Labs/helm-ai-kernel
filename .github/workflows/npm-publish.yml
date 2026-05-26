@@ -36,11 +36,6 @@ jobs:
             version_policy: root
             test_command: "npm test -- --run"
             smoke_command: ""
-          - path: packages/design-system-core
-            name: "@mindburn/ui-core"
-            version_policy: package
-            test_command: "npm test"
-            smoke_command: "npm run smoke"
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6

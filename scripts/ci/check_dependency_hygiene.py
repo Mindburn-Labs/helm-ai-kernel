@@ -18,10 +18,6 @@ REQUIRED_FILES = [
     "sdk/rust/Cargo.toml",
     "sdk/rust/Cargo.lock",
     "sdk/java/pom.xml",
-    "packages/design-system-core/package.json",
-    "packages/design-system-core/package-lock.json",
-    "apps/console/package.json",
-    "apps/console/package-lock.json",
 ]
 DEPENDABOT_DIRS = [
     "/core",
@@ -29,8 +25,6 @@ DEPENDABOT_DIRS = [
     "/tests/conformance",
     "/sdk/python",
     "/sdk/ts",
-    "/packages/design-system-core",
-    "/apps/console",
     "/sdk/rust",
     "/sdk/java",
 ]

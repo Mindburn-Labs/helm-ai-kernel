@@ -1555,6 +1555,226 @@ public static class A2AAgentCardSkillsInner {
 
 
 /**
+ * AdapterMatch
+ */
+@JsonPropertyOrder({
+  AdapterMatch.JSON_PROPERTY_ADAPTER_ID,
+  AdapterMatch.JSON_PROPERTY_CONFIDENCE,
+  AdapterMatch.JSON_PROPERTY_EVIDENCE
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class AdapterMatch {
+  public static final String JSON_PROPERTY_ADAPTER_ID = "adapter_id";
+  private String adapterId;
+
+  public static final String JSON_PROPERTY_CONFIDENCE = "confidence";
+  private BigDecimal confidence;
+
+  public static final String JSON_PROPERTY_EVIDENCE = "evidence";
+  private List<String> evidence;
+
+  public AdapterMatch() {
+  }
+
+  public AdapterMatch adapterId(String adapterId) {
+    this.adapterId = adapterId;
+    return this;
+  }
+
+   /**
+   * Get adapterId
+   * @return adapterId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ADAPTER_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getAdapterId() {
+    return adapterId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ADAPTER_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setAdapterId(String adapterId) {
+    this.adapterId = adapterId;
+  }
+
+
+  public AdapterMatch confidence(BigDecimal confidence) {
+    this.confidence = confidence;
+    return this;
+  }
+
+   /**
+   * Get confidence
+   * @return confidence
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CONFIDENCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public BigDecimal getConfidence() {
+    return confidence;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CONFIDENCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setConfidence(BigDecimal confidence) {
+    this.confidence = confidence;
+  }
+
+
+  public AdapterMatch evidence(List<String> evidence) {
+    this.evidence = evidence;
+    return this;
+  }
+
+  public AdapterMatch addEvidenceItem(String evidenceItem) {
+    if (this.evidence == null) {
+      this.evidence = new ArrayList<>();
+    }
+    this.evidence.add(evidenceItem);
+    return this;
+  }
+
+   /**
+   * Get evidence
+   * @return evidence
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EVIDENCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getEvidence() {
+    return evidence;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EVIDENCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEvidence(List<String> evidence) {
+    this.evidence = evidence;
+  }
+
+
+  /**
+   * Return true if this AdapterMatch object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    AdapterMatch adapterMatch = (AdapterMatch) o;
+    return Objects.equals(this.adapterId, adapterMatch.adapterId) &&
+        Objects.equals(this.confidence, adapterMatch.confidence) &&
+        Objects.equals(this.evidence, adapterMatch.evidence);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(adapterId, confidence, evidence);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class AdapterMatch {\n");
+    sb.append("    adapterId: ").append(toIndentedString(adapterId)).append("\n");
+    sb.append("    confidence: ").append(toIndentedString(confidence)).append("\n");
+    sb.append("    evidence: ").append(toIndentedString(evidence)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `adapter_id` to the URL query string
+    if (getAdapterId() != null) {
+      joiner.add(String.format("%sadapter_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAdapterId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `confidence` to the URL query string
+    if (getConfidence() != null) {
+      joiner.add(String.format("%sconfidence%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getConfidence()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `evidence` to the URL query string
+    if (getEvidence() != null) {
+      for (int i = 0; i < getEvidence().size(); i++) {
+        joiner.add(String.format("%sevidence%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getEvidence().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * AddTrustKey200Response
  */
 @JsonPropertyOrder({
@@ -6757,6 +6977,1062 @@ public static class BudgetCeiling {
     // add `policy_epoch` to the URL query string
     if (getPolicyEpoch() != null) {
       joiner.add(String.format("%spolicy_epoch%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyEpoch()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * BuildStrategy
+ */
+@JsonPropertyOrder({
+  BuildStrategy.JSON_PROPERTY_STRATEGY,
+  BuildStrategy.JSON_PROPERTY_CONFIDENCE,
+  BuildStrategy.JSON_PROPERTY_REASON,
+  BuildStrategy.JSON_PROPERTY_COMMANDS,
+  BuildStrategy.JSON_PROPERTY_MANIFEST_SOURCES
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class BuildStrategy {
+  public static final String JSON_PROPERTY_STRATEGY = "strategy";
+  private String strategy;
+
+  public static final String JSON_PROPERTY_CONFIDENCE = "confidence";
+  private BigDecimal confidence;
+
+  public static final String JSON_PROPERTY_REASON = "reason";
+  private String reason;
+
+  public static final String JSON_PROPERTY_COMMANDS = "commands";
+  private List<List<String>> commands;
+
+  public static final String JSON_PROPERTY_MANIFEST_SOURCES = "manifest_sources";
+  private List<String> manifestSources;
+
+  public BuildStrategy() {
+  }
+
+  public BuildStrategy strategy(String strategy) {
+    this.strategy = strategy;
+    return this;
+  }
+
+   /**
+   * Get strategy
+   * @return strategy
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_STRATEGY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getStrategy() {
+    return strategy;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STRATEGY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setStrategy(String strategy) {
+    this.strategy = strategy;
+  }
+
+
+  public BuildStrategy confidence(BigDecimal confidence) {
+    this.confidence = confidence;
+    return this;
+  }
+
+   /**
+   * Get confidence
+   * @return confidence
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CONFIDENCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public BigDecimal getConfidence() {
+    return confidence;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CONFIDENCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setConfidence(BigDecimal confidence) {
+    this.confidence = confidence;
+  }
+
+
+  public BuildStrategy reason(String reason) {
+    this.reason = reason;
+    return this;
+  }
+
+   /**
+   * Get reason
+   * @return reason
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getReason() {
+    return reason;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReason(String reason) {
+    this.reason = reason;
+  }
+
+
+  public BuildStrategy commands(List<List<String>> commands) {
+    this.commands = commands;
+    return this;
+  }
+
+  public BuildStrategy addCommandsItem(List<String> commandsItem) {
+    if (this.commands == null) {
+      this.commands = new ArrayList<>();
+    }
+    this.commands.add(commandsItem);
+    return this;
+  }
+
+   /**
+   * Get commands
+   * @return commands
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_COMMANDS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<List<String>> getCommands() {
+    return commands;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_COMMANDS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCommands(List<List<String>> commands) {
+    this.commands = commands;
+  }
+
+
+  public BuildStrategy manifestSources(List<String> manifestSources) {
+    this.manifestSources = manifestSources;
+    return this;
+  }
+
+  public BuildStrategy addManifestSourcesItem(String manifestSourcesItem) {
+    if (this.manifestSources == null) {
+      this.manifestSources = new ArrayList<>();
+    }
+    this.manifestSources.add(manifestSourcesItem);
+    return this;
+  }
+
+   /**
+   * Get manifestSources
+   * @return manifestSources
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_MANIFEST_SOURCES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getManifestSources() {
+    return manifestSources;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_MANIFEST_SOURCES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setManifestSources(List<String> manifestSources) {
+    this.manifestSources = manifestSources;
+  }
+
+
+  /**
+   * Return true if this BuildStrategy object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    BuildStrategy buildStrategy = (BuildStrategy) o;
+    return Objects.equals(this.strategy, buildStrategy.strategy) &&
+        Objects.equals(this.confidence, buildStrategy.confidence) &&
+        Objects.equals(this.reason, buildStrategy.reason) &&
+        Objects.equals(this.commands, buildStrategy.commands) &&
+        Objects.equals(this.manifestSources, buildStrategy.manifestSources);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(strategy, confidence, reason, commands, manifestSources);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class BuildStrategy {\n");
+    sb.append("    strategy: ").append(toIndentedString(strategy)).append("\n");
+    sb.append("    confidence: ").append(toIndentedString(confidence)).append("\n");
+    sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
+    sb.append("    commands: ").append(toIndentedString(commands)).append("\n");
+    sb.append("    manifestSources: ").append(toIndentedString(manifestSources)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `strategy` to the URL query string
+    if (getStrategy() != null) {
+      joiner.add(String.format("%sstrategy%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStrategy()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `confidence` to the URL query string
+    if (getConfidence() != null) {
+      joiner.add(String.format("%sconfidence%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getConfidence()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `reason` to the URL query string
+    if (getReason() != null) {
+      joiner.add(String.format("%sreason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `commands` to the URL query string
+    if (getCommands() != null) {
+      for (int i = 0; i < getCommands().size(); i++) {
+        joiner.add(String.format("%scommands%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getCommands().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `manifest_sources` to the URL query string
+    if (getManifestSources() != null) {
+      for (int i = 0; i < getManifestSources().size(); i++) {
+        joiner.add(String.format("%smanifest_sources%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getManifestSources().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * CapabilityGraph
+ */
+@JsonPropertyOrder({
+  CapabilityGraph.JSON_PROPERTY_CAPABILITIES,
+  CapabilityGraph.JSON_PROPERTY_MODULES,
+  CapabilityGraph.JSON_PROPERTY_FRAMEWORKS,
+  CapabilityGraph.JSON_PROPERTY_SECRETS,
+  CapabilityGraph.JSON_PROPERTY_OAUTH,
+  CapabilityGraph.JSON_PROPERTY_PORTS,
+  CapabilityGraph.JSON_PROPERTY_BUILD_SIGNALS,
+  CapabilityGraph.JSON_PROPERTY_RUNTIME_SIGNALS,
+  CapabilityGraph.JSON_PROPERTY_POLICY_SIGNALS,
+  CapabilityGraph.JSON_PROPERTY_SECURITY_SIGNALS,
+  CapabilityGraph.JSON_PROPERTY_ADAPTER_MATCHES,
+  CapabilityGraph.JSON_PROPERTY_CONFIDENCE,
+  CapabilityGraph.JSON_PROPERTY_CONFIDENCE_REASON
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class CapabilityGraph extends HashMap<String, Object> {
+  public static final String JSON_PROPERTY_CAPABILITIES = "capabilities";
+  private List<String> capabilities;
+
+  public static final String JSON_PROPERTY_MODULES = "modules";
+  private List<DetectedModule> modules;
+
+  public static final String JSON_PROPERTY_FRAMEWORKS = "frameworks";
+  private List<DetectedFramework> frameworks;
+
+  public static final String JSON_PROPERTY_SECRETS = "secrets";
+  private List<SecretContract> secrets;
+
+  public static final String JSON_PROPERTY_OAUTH = "oauth";
+  private List<OAuthRequirement> oauth;
+
+  public static final String JSON_PROPERTY_PORTS = "ports";
+  private List<Integer> ports;
+
+  public static final String JSON_PROPERTY_BUILD_SIGNALS = "build_signals";
+  private List<String> buildSignals;
+
+  public static final String JSON_PROPERTY_RUNTIME_SIGNALS = "runtime_signals";
+  private List<String> runtimeSignals;
+
+  public static final String JSON_PROPERTY_POLICY_SIGNALS = "policy_signals";
+  private List<String> policySignals;
+
+  public static final String JSON_PROPERTY_SECURITY_SIGNALS = "security_signals";
+  private List<String> securitySignals;
+
+  public static final String JSON_PROPERTY_ADAPTER_MATCHES = "adapter_matches";
+  private List<AdapterMatch> adapterMatches;
+
+  public static final String JSON_PROPERTY_CONFIDENCE = "confidence";
+  private BigDecimal confidence;
+
+  public static final String JSON_PROPERTY_CONFIDENCE_REASON = "confidence_reason";
+  private String confidenceReason;
+
+  public CapabilityGraph() {
+  }
+
+  public CapabilityGraph capabilities(List<String> capabilities) {
+    this.capabilities = capabilities;
+    return this;
+  }
+
+  public CapabilityGraph addCapabilitiesItem(String capabilitiesItem) {
+    if (this.capabilities == null) {
+      this.capabilities = new ArrayList<>();
+    }
+    this.capabilities.add(capabilitiesItem);
+    return this;
+  }
+
+   /**
+   * Get capabilities
+   * @return capabilities
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CAPABILITIES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getCapabilities() {
+    return capabilities;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CAPABILITIES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCapabilities(List<String> capabilities) {
+    this.capabilities = capabilities;
+  }
+
+
+  public CapabilityGraph modules(List<DetectedModule> modules) {
+    this.modules = modules;
+    return this;
+  }
+
+  public CapabilityGraph addModulesItem(DetectedModule modulesItem) {
+    if (this.modules == null) {
+      this.modules = new ArrayList<>();
+    }
+    this.modules.add(modulesItem);
+    return this;
+  }
+
+   /**
+   * Get modules
+   * @return modules
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_MODULES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<DetectedModule> getModules() {
+    return modules;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_MODULES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setModules(List<DetectedModule> modules) {
+    this.modules = modules;
+  }
+
+
+  public CapabilityGraph frameworks(List<DetectedFramework> frameworks) {
+    this.frameworks = frameworks;
+    return this;
+  }
+
+  public CapabilityGraph addFrameworksItem(DetectedFramework frameworksItem) {
+    if (this.frameworks == null) {
+      this.frameworks = new ArrayList<>();
+    }
+    this.frameworks.add(frameworksItem);
+    return this;
+  }
+
+   /**
+   * Get frameworks
+   * @return frameworks
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_FRAMEWORKS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<DetectedFramework> getFrameworks() {
+    return frameworks;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_FRAMEWORKS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setFrameworks(List<DetectedFramework> frameworks) {
+    this.frameworks = frameworks;
+  }
+
+
+  public CapabilityGraph secrets(List<SecretContract> secrets) {
+    this.secrets = secrets;
+    return this;
+  }
+
+  public CapabilityGraph addSecretsItem(SecretContract secretsItem) {
+    if (this.secrets == null) {
+      this.secrets = new ArrayList<>();
+    }
+    this.secrets.add(secretsItem);
+    return this;
+  }
+
+   /**
+   * Get secrets
+   * @return secrets
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SECRETS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<SecretContract> getSecrets() {
+    return secrets;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SECRETS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSecrets(List<SecretContract> secrets) {
+    this.secrets = secrets;
+  }
+
+
+  public CapabilityGraph oauth(List<OAuthRequirement> oauth) {
+    this.oauth = oauth;
+    return this;
+  }
+
+  public CapabilityGraph addOauthItem(OAuthRequirement oauthItem) {
+    if (this.oauth == null) {
+      this.oauth = new ArrayList<>();
+    }
+    this.oauth.add(oauthItem);
+    return this;
+  }
+
+   /**
+   * Get oauth
+   * @return oauth
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_OAUTH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<OAuthRequirement> getOauth() {
+    return oauth;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_OAUTH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setOauth(List<OAuthRequirement> oauth) {
+    this.oauth = oauth;
+  }
+
+
+  public CapabilityGraph ports(List<Integer> ports) {
+    this.ports = ports;
+    return this;
+  }
+
+  public CapabilityGraph addPortsItem(Integer portsItem) {
+    if (this.ports == null) {
+      this.ports = new ArrayList<>();
+    }
+    this.ports.add(portsItem);
+    return this;
+  }
+
+   /**
+   * Get ports
+   * @return ports
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PORTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<Integer> getPorts() {
+    return ports;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PORTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPorts(List<Integer> ports) {
+    this.ports = ports;
+  }
+
+
+  public CapabilityGraph buildSignals(List<String> buildSignals) {
+    this.buildSignals = buildSignals;
+    return this;
+  }
+
+  public CapabilityGraph addBuildSignalsItem(String buildSignalsItem) {
+    if (this.buildSignals == null) {
+      this.buildSignals = new ArrayList<>();
+    }
+    this.buildSignals.add(buildSignalsItem);
+    return this;
+  }
+
+   /**
+   * Get buildSignals
+   * @return buildSignals
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_BUILD_SIGNALS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getBuildSignals() {
+    return buildSignals;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_BUILD_SIGNALS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setBuildSignals(List<String> buildSignals) {
+    this.buildSignals = buildSignals;
+  }
+
+
+  public CapabilityGraph runtimeSignals(List<String> runtimeSignals) {
+    this.runtimeSignals = runtimeSignals;
+    return this;
+  }
+
+  public CapabilityGraph addRuntimeSignalsItem(String runtimeSignalsItem) {
+    if (this.runtimeSignals == null) {
+      this.runtimeSignals = new ArrayList<>();
+    }
+    this.runtimeSignals.add(runtimeSignalsItem);
+    return this;
+  }
+
+   /**
+   * Get runtimeSignals
+   * @return runtimeSignals
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_RUNTIME_SIGNALS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getRuntimeSignals() {
+    return runtimeSignals;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RUNTIME_SIGNALS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRuntimeSignals(List<String> runtimeSignals) {
+    this.runtimeSignals = runtimeSignals;
+  }
+
+
+  public CapabilityGraph policySignals(List<String> policySignals) {
+    this.policySignals = policySignals;
+    return this;
+  }
+
+  public CapabilityGraph addPolicySignalsItem(String policySignalsItem) {
+    if (this.policySignals == null) {
+      this.policySignals = new ArrayList<>();
+    }
+    this.policySignals.add(policySignalsItem);
+    return this;
+  }
+
+   /**
+   * Get policySignals
+   * @return policySignals
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_SIGNALS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getPolicySignals() {
+    return policySignals;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_SIGNALS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicySignals(List<String> policySignals) {
+    this.policySignals = policySignals;
+  }
+
+
+  public CapabilityGraph securitySignals(List<String> securitySignals) {
+    this.securitySignals = securitySignals;
+    return this;
+  }
+
+  public CapabilityGraph addSecuritySignalsItem(String securitySignalsItem) {
+    if (this.securitySignals == null) {
+      this.securitySignals = new ArrayList<>();
+    }
+    this.securitySignals.add(securitySignalsItem);
+    return this;
+  }
+
+   /**
+   * Get securitySignals
+   * @return securitySignals
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SECURITY_SIGNALS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getSecuritySignals() {
+    return securitySignals;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SECURITY_SIGNALS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSecuritySignals(List<String> securitySignals) {
+    this.securitySignals = securitySignals;
+  }
+
+
+  public CapabilityGraph adapterMatches(List<AdapterMatch> adapterMatches) {
+    this.adapterMatches = adapterMatches;
+    return this;
+  }
+
+  public CapabilityGraph addAdapterMatchesItem(AdapterMatch adapterMatchesItem) {
+    if (this.adapterMatches == null) {
+      this.adapterMatches = new ArrayList<>();
+    }
+    this.adapterMatches.add(adapterMatchesItem);
+    return this;
+  }
+
+   /**
+   * Get adapterMatches
+   * @return adapterMatches
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ADAPTER_MATCHES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<AdapterMatch> getAdapterMatches() {
+    return adapterMatches;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ADAPTER_MATCHES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setAdapterMatches(List<AdapterMatch> adapterMatches) {
+    this.adapterMatches = adapterMatches;
+  }
+
+
+  public CapabilityGraph confidence(BigDecimal confidence) {
+    this.confidence = confidence;
+    return this;
+  }
+
+   /**
+   * Get confidence
+   * @return confidence
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CONFIDENCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public BigDecimal getConfidence() {
+    return confidence;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CONFIDENCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setConfidence(BigDecimal confidence) {
+    this.confidence = confidence;
+  }
+
+
+  public CapabilityGraph confidenceReason(String confidenceReason) {
+    this.confidenceReason = confidenceReason;
+    return this;
+  }
+
+   /**
+   * Get confidenceReason
+   * @return confidenceReason
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CONFIDENCE_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getConfidenceReason() {
+    return confidenceReason;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CONFIDENCE_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setConfidenceReason(String confidenceReason) {
+    this.confidenceReason = confidenceReason;
+  }
+
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public CapabilityGraph putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
+
+  /**
+   * Return true if this CapabilityGraph object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    CapabilityGraph capabilityGraph = (CapabilityGraph) o;
+    return Objects.equals(this.capabilities, capabilityGraph.capabilities) &&
+        Objects.equals(this.modules, capabilityGraph.modules) &&
+        Objects.equals(this.frameworks, capabilityGraph.frameworks) &&
+        Objects.equals(this.secrets, capabilityGraph.secrets) &&
+        Objects.equals(this.oauth, capabilityGraph.oauth) &&
+        Objects.equals(this.ports, capabilityGraph.ports) &&
+        Objects.equals(this.buildSignals, capabilityGraph.buildSignals) &&
+        Objects.equals(this.runtimeSignals, capabilityGraph.runtimeSignals) &&
+        Objects.equals(this.policySignals, capabilityGraph.policySignals) &&
+        Objects.equals(this.securitySignals, capabilityGraph.securitySignals) &&
+        Objects.equals(this.adapterMatches, capabilityGraph.adapterMatches) &&
+        Objects.equals(this.confidence, capabilityGraph.confidence) &&
+        Objects.equals(this.confidenceReason, capabilityGraph.confidenceReason)&&
+        Objects.equals(this.additionalProperties, capabilityGraph.additionalProperties) &&
+        super.equals(o);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(capabilities, modules, frameworks, secrets, oauth, ports, buildSignals, runtimeSignals, policySignals, securitySignals, adapterMatches, confidence, confidenceReason, super.hashCode(), additionalProperties);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class CapabilityGraph {\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
+    sb.append("    capabilities: ").append(toIndentedString(capabilities)).append("\n");
+    sb.append("    modules: ").append(toIndentedString(modules)).append("\n");
+    sb.append("    frameworks: ").append(toIndentedString(frameworks)).append("\n");
+    sb.append("    secrets: ").append(toIndentedString(secrets)).append("\n");
+    sb.append("    oauth: ").append(toIndentedString(oauth)).append("\n");
+    sb.append("    ports: ").append(toIndentedString(ports)).append("\n");
+    sb.append("    buildSignals: ").append(toIndentedString(buildSignals)).append("\n");
+    sb.append("    runtimeSignals: ").append(toIndentedString(runtimeSignals)).append("\n");
+    sb.append("    policySignals: ").append(toIndentedString(policySignals)).append("\n");
+    sb.append("    securitySignals: ").append(toIndentedString(securitySignals)).append("\n");
+    sb.append("    adapterMatches: ").append(toIndentedString(adapterMatches)).append("\n");
+    sb.append("    confidence: ").append(toIndentedString(confidence)).append("\n");
+    sb.append("    confidenceReason: ").append(toIndentedString(confidenceReason)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `capabilities` to the URL query string
+    if (getCapabilities() != null) {
+      for (int i = 0; i < getCapabilities().size(); i++) {
+        joiner.add(String.format("%scapabilities%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getCapabilities().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `modules` to the URL query string
+    if (getModules() != null) {
+      for (int i = 0; i < getModules().size(); i++) {
+        if (getModules().get(i) != null) {
+          joiner.add(getModules().get(i).toUrlQueryString(String.format("%smodules%s%s", prefix, suffix,
+          "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
+        }
+      }
+    }
+
+    // add `frameworks` to the URL query string
+    if (getFrameworks() != null) {
+      for (int i = 0; i < getFrameworks().size(); i++) {
+        if (getFrameworks().get(i) != null) {
+          joiner.add(getFrameworks().get(i).toUrlQueryString(String.format("%sframeworks%s%s", prefix, suffix,
+          "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
+        }
+      }
+    }
+
+    // add `secrets` to the URL query string
+    if (getSecrets() != null) {
+      for (int i = 0; i < getSecrets().size(); i++) {
+        if (getSecrets().get(i) != null) {
+          joiner.add(getSecrets().get(i).toUrlQueryString(String.format("%ssecrets%s%s", prefix, suffix,
+          "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
+        }
+      }
+    }
+
+    // add `oauth` to the URL query string
+    if (getOauth() != null) {
+      for (int i = 0; i < getOauth().size(); i++) {
+        if (getOauth().get(i) != null) {
+          joiner.add(getOauth().get(i).toUrlQueryString(String.format("%soauth%s%s", prefix, suffix,
+          "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
+        }
+      }
+    }
+
+    // add `ports` to the URL query string
+    if (getPorts() != null) {
+      for (int i = 0; i < getPorts().size(); i++) {
+        joiner.add(String.format("%sports%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getPorts().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `build_signals` to the URL query string
+    if (getBuildSignals() != null) {
+      for (int i = 0; i < getBuildSignals().size(); i++) {
+        joiner.add(String.format("%sbuild_signals%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getBuildSignals().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `runtime_signals` to the URL query string
+    if (getRuntimeSignals() != null) {
+      for (int i = 0; i < getRuntimeSignals().size(); i++) {
+        joiner.add(String.format("%sruntime_signals%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getRuntimeSignals().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `policy_signals` to the URL query string
+    if (getPolicySignals() != null) {
+      for (int i = 0; i < getPolicySignals().size(); i++) {
+        joiner.add(String.format("%spolicy_signals%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getPolicySignals().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `security_signals` to the URL query string
+    if (getSecuritySignals() != null) {
+      for (int i = 0; i < getSecuritySignals().size(); i++) {
+        joiner.add(String.format("%ssecurity_signals%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getSecuritySignals().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `adapter_matches` to the URL query string
+    if (getAdapterMatches() != null) {
+      for (int i = 0; i < getAdapterMatches().size(); i++) {
+        if (getAdapterMatches().get(i) != null) {
+          joiner.add(getAdapterMatches().get(i).toUrlQueryString(String.format("%sadapter_matches%s%s", prefix, suffix,
+          "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
+        }
+      }
+    }
+
+    // add `confidence` to the URL query string
+    if (getConfidence() != null) {
+      joiner.add(String.format("%sconfidence%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getConfidence()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `confidence_reason` to the URL query string
+    if (getConfidenceReason() != null) {
+      joiner.add(String.format("%sconfidence_reason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getConfidenceReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();
@@ -13709,6 +14985,178 @@ public static class CreateApprovalWebAuthnChallengeRequest {
 
 
 /**
+ * CreateLaunchpadImport202Response
+ */
+@JsonPropertyOrder({
+  CreateLaunchpadImport202Response.JSON_PROPERTY_IMPORT,
+  CreateLaunchpadImport202Response.JSON_PROPERTY_CLI_EQUIVALENT
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class CreateLaunchpadImport202Response {
+  public static final String JSON_PROPERTY_IMPORT = "import";
+  private LaunchpadImportRecord _import;
+
+  public static final String JSON_PROPERTY_CLI_EQUIVALENT = "cli_equivalent";
+  private String cliEquivalent;
+
+  public CreateLaunchpadImport202Response() {
+  }
+
+  public CreateLaunchpadImport202Response _import(LaunchpadImportRecord _import) {
+    this._import = _import;
+    return this;
+  }
+
+   /**
+   * Get _import
+   * @return _import
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_IMPORT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public LaunchpadImportRecord getImport() {
+    return _import;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_IMPORT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setImport(LaunchpadImportRecord _import) {
+    this._import = _import;
+  }
+
+
+  public CreateLaunchpadImport202Response cliEquivalent(String cliEquivalent) {
+    this.cliEquivalent = cliEquivalent;
+    return this;
+  }
+
+   /**
+   * Get cliEquivalent
+   * @return cliEquivalent
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CLI_EQUIVALENT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getCliEquivalent() {
+    return cliEquivalent;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CLI_EQUIVALENT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCliEquivalent(String cliEquivalent) {
+    this.cliEquivalent = cliEquivalent;
+  }
+
+
+  /**
+   * Return true if this createLaunchpadImport_202_response object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    CreateLaunchpadImport202Response createLaunchpadImport202Response = (CreateLaunchpadImport202Response) o;
+    return Objects.equals(this._import, createLaunchpadImport202Response._import) &&
+        Objects.equals(this.cliEquivalent, createLaunchpadImport202Response.cliEquivalent);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(_import, cliEquivalent);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class CreateLaunchpadImport202Response {\n");
+    sb.append("    _import: ").append(toIndentedString(_import)).append("\n");
+    sb.append("    cliEquivalent: ").append(toIndentedString(cliEquivalent)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `import` to the URL query string
+    if (getImport() != null) {
+      joiner.add(getImport().toUrlQueryString(prefix + "import" + suffix));
+    }
+
+    // add `cli_equivalent` to the URL query string
+    if (getCliEquivalent() != null) {
+      joiner.add(String.format("%scli_equivalent%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCliEquivalent()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * CreateSandboxGrantRequest
  */
 @JsonPropertyOrder({
@@ -14574,6 +16022,613 @@ public static class DecisionRequest {
             "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
             getContext().get(_key), URLEncoder.encode(String.valueOf(getContext().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * DetectedFramework
+ */
+@JsonPropertyOrder({
+  DetectedFramework.JSON_PROPERTY_ID,
+  DetectedFramework.JSON_PROPERTY_NAME,
+  DetectedFramework.JSON_PROPERTY_CONFIDENCE,
+  DetectedFramework.JSON_PROPERTY_EVIDENCE
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class DetectedFramework {
+  public static final String JSON_PROPERTY_ID = "id";
+  private String id;
+
+  public static final String JSON_PROPERTY_NAME = "name";
+  private String name;
+
+  public static final String JSON_PROPERTY_CONFIDENCE = "confidence";
+  private BigDecimal confidence;
+
+  public static final String JSON_PROPERTY_EVIDENCE = "evidence";
+  private List<String> evidence;
+
+  public DetectedFramework() {
+  }
+
+  public DetectedFramework id(String id) {
+    this.id = id;
+    return this;
+  }
+
+   /**
+   * Get id
+   * @return id
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getId() {
+    return id;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setId(String id) {
+    this.id = id;
+  }
+
+
+  public DetectedFramework name(String name) {
+    this.name = name;
+    return this;
+  }
+
+   /**
+   * Get name
+   * @return name
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_NAME)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getName() {
+    return name;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_NAME)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setName(String name) {
+    this.name = name;
+  }
+
+
+  public DetectedFramework confidence(BigDecimal confidence) {
+    this.confidence = confidence;
+    return this;
+  }
+
+   /**
+   * Get confidence
+   * @return confidence
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CONFIDENCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public BigDecimal getConfidence() {
+    return confidence;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CONFIDENCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setConfidence(BigDecimal confidence) {
+    this.confidence = confidence;
+  }
+
+
+  public DetectedFramework evidence(List<String> evidence) {
+    this.evidence = evidence;
+    return this;
+  }
+
+  public DetectedFramework addEvidenceItem(String evidenceItem) {
+    if (this.evidence == null) {
+      this.evidence = new ArrayList<>();
+    }
+    this.evidence.add(evidenceItem);
+    return this;
+  }
+
+   /**
+   * Get evidence
+   * @return evidence
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EVIDENCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getEvidence() {
+    return evidence;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EVIDENCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEvidence(List<String> evidence) {
+    this.evidence = evidence;
+  }
+
+
+  /**
+   * Return true if this DetectedFramework object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    DetectedFramework detectedFramework = (DetectedFramework) o;
+    return Objects.equals(this.id, detectedFramework.id) &&
+        Objects.equals(this.name, detectedFramework.name) &&
+        Objects.equals(this.confidence, detectedFramework.confidence) &&
+        Objects.equals(this.evidence, detectedFramework.evidence);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(id, name, confidence, evidence);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class DetectedFramework {\n");
+    sb.append("    id: ").append(toIndentedString(id)).append("\n");
+    sb.append("    name: ").append(toIndentedString(name)).append("\n");
+    sb.append("    confidence: ").append(toIndentedString(confidence)).append("\n");
+    sb.append("    evidence: ").append(toIndentedString(evidence)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `id` to the URL query string
+    if (getId() != null) {
+      joiner.add(String.format("%sid%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `name` to the URL query string
+    if (getName() != null) {
+      joiner.add(String.format("%sname%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getName()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `confidence` to the URL query string
+    if (getConfidence() != null) {
+      joiner.add(String.format("%sconfidence%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getConfidence()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `evidence` to the URL query string
+    if (getEvidence() != null) {
+      for (int i = 0; i < getEvidence().size(); i++) {
+        joiner.add(String.format("%sevidence%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getEvidence().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * DetectedModule
+ */
+@JsonPropertyOrder({
+  DetectedModule.JSON_PROPERTY_PATH,
+  DetectedModule.JSON_PROPERTY_KIND,
+  DetectedModule.JSON_PROPERTY_MANIFESTS,
+  DetectedModule.JSON_PROPERTY_ENTRYPOINTS,
+  DetectedModule.JSON_PROPERTY_BUILD_STRATEGY
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class DetectedModule extends HashMap<String, Object> {
+  public static final String JSON_PROPERTY_PATH = "path";
+  private String path;
+
+  public static final String JSON_PROPERTY_KIND = "kind";
+  private String kind;
+
+  public static final String JSON_PROPERTY_MANIFESTS = "manifests";
+  private List<String> manifests;
+
+  public static final String JSON_PROPERTY_ENTRYPOINTS = "entrypoints";
+  private List<String> entrypoints;
+
+  public static final String JSON_PROPERTY_BUILD_STRATEGY = "build_strategy";
+  private String buildStrategy;
+
+  public DetectedModule() {
+  }
+
+  public DetectedModule path(String path) {
+    this.path = path;
+    return this;
+  }
+
+   /**
+   * Get path
+   * @return path
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PATH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPath() {
+    return path;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PATH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPath(String path) {
+    this.path = path;
+  }
+
+
+  public DetectedModule kind(String kind) {
+    this.kind = kind;
+    return this;
+  }
+
+   /**
+   * Get kind
+   * @return kind
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_KIND)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getKind() {
+    return kind;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_KIND)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setKind(String kind) {
+    this.kind = kind;
+  }
+
+
+  public DetectedModule manifests(List<String> manifests) {
+    this.manifests = manifests;
+    return this;
+  }
+
+  public DetectedModule addManifestsItem(String manifestsItem) {
+    if (this.manifests == null) {
+      this.manifests = new ArrayList<>();
+    }
+    this.manifests.add(manifestsItem);
+    return this;
+  }
+
+   /**
+   * Get manifests
+   * @return manifests
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_MANIFESTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getManifests() {
+    return manifests;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_MANIFESTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setManifests(List<String> manifests) {
+    this.manifests = manifests;
+  }
+
+
+  public DetectedModule entrypoints(List<String> entrypoints) {
+    this.entrypoints = entrypoints;
+    return this;
+  }
+
+  public DetectedModule addEntrypointsItem(String entrypointsItem) {
+    if (this.entrypoints == null) {
+      this.entrypoints = new ArrayList<>();
+    }
+    this.entrypoints.add(entrypointsItem);
+    return this;
+  }
+
+   /**
+   * Get entrypoints
+   * @return entrypoints
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ENTRYPOINTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getEntrypoints() {
+    return entrypoints;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ENTRYPOINTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEntrypoints(List<String> entrypoints) {
+    this.entrypoints = entrypoints;
+  }
+
+
+  public DetectedModule buildStrategy(String buildStrategy) {
+    this.buildStrategy = buildStrategy;
+    return this;
+  }
+
+   /**
+   * Get buildStrategy
+   * @return buildStrategy
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_BUILD_STRATEGY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getBuildStrategy() {
+    return buildStrategy;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_BUILD_STRATEGY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setBuildStrategy(String buildStrategy) {
+    this.buildStrategy = buildStrategy;
+  }
+
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public DetectedModule putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
+
+  /**
+   * Return true if this DetectedModule object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    DetectedModule detectedModule = (DetectedModule) o;
+    return Objects.equals(this.path, detectedModule.path) &&
+        Objects.equals(this.kind, detectedModule.kind) &&
+        Objects.equals(this.manifests, detectedModule.manifests) &&
+        Objects.equals(this.entrypoints, detectedModule.entrypoints) &&
+        Objects.equals(this.buildStrategy, detectedModule.buildStrategy)&&
+        Objects.equals(this.additionalProperties, detectedModule.additionalProperties) &&
+        super.equals(o);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(path, kind, manifests, entrypoints, buildStrategy, super.hashCode(), additionalProperties);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class DetectedModule {\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
+    sb.append("    path: ").append(toIndentedString(path)).append("\n");
+    sb.append("    kind: ").append(toIndentedString(kind)).append("\n");
+    sb.append("    manifests: ").append(toIndentedString(manifests)).append("\n");
+    sb.append("    entrypoints: ").append(toIndentedString(entrypoints)).append("\n");
+    sb.append("    buildStrategy: ").append(toIndentedString(buildStrategy)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `path` to the URL query string
+    if (getPath() != null) {
+      joiner.add(String.format("%spath%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPath()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `kind` to the URL query string
+    if (getKind() != null) {
+      joiner.add(String.format("%skind%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getKind()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `manifests` to the URL query string
+    if (getManifests() != null) {
+      for (int i = 0; i < getManifests().size(); i++) {
+        joiner.add(String.format("%smanifests%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getManifests().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `entrypoints` to the URL query string
+    if (getEntrypoints() != null) {
+      for (int i = 0; i < getEntrypoints().size(); i++) {
+        joiner.add(String.format("%sentrypoints%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getEntrypoints().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `build_strategy` to the URL query string
+    if (getBuildStrategy() != null) {
+      joiner.add(String.format("%sbuild_strategy%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getBuildStrategy()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();
@@ -17661,6 +19716,425 @@ public static class FilesystemPreopen {
 
 
 /**
+ * FrameworkAdapter
+ */
+@JsonPropertyOrder({
+  FrameworkAdapter.JSON_PROPERTY_API_VERSION,
+  FrameworkAdapter.JSON_PROPERTY_KIND,
+  FrameworkAdapter.JSON_PROPERTY_METADATA,
+  FrameworkAdapter.JSON_PROPERTY_MATCH,
+  FrameworkAdapter.JSON_PROPERTY_CAPABILITIES,
+  FrameworkAdapter.JSON_PROPERTY_ENTRYPOINTS,
+  FrameworkAdapter.JSON_PROPERTY_BUILD
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class FrameworkAdapter {
+  public static final String JSON_PROPERTY_API_VERSION = "apiVersion";
+  private String apiVersion;
+
+  public static final String JSON_PROPERTY_KIND = "kind";
+  private String kind;
+
+  public static final String JSON_PROPERTY_METADATA = "metadata";
+  private Map<String, Object> metadata = new HashMap<>();
+
+  public static final String JSON_PROPERTY_MATCH = "match";
+  private Map<String, Object> match = new HashMap<>();
+
+  public static final String JSON_PROPERTY_CAPABILITIES = "capabilities";
+  private JsonNullable<Object> capabilities = JsonNullable.<Object>of(null);
+
+  public static final String JSON_PROPERTY_ENTRYPOINTS = "entrypoints";
+  private Map<String, Object> entrypoints = new HashMap<>();
+
+  public static final String JSON_PROPERTY_BUILD = "build";
+  private Map<String, Object> build = new HashMap<>();
+
+  public FrameworkAdapter() {
+  }
+
+  public FrameworkAdapter apiVersion(String apiVersion) {
+    this.apiVersion = apiVersion;
+    return this;
+  }
+
+   /**
+   * Get apiVersion
+   * @return apiVersion
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_API_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getApiVersion() {
+    return apiVersion;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_API_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setApiVersion(String apiVersion) {
+    this.apiVersion = apiVersion;
+  }
+
+
+  public FrameworkAdapter kind(String kind) {
+    this.kind = kind;
+    return this;
+  }
+
+   /**
+   * Get kind
+   * @return kind
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_KIND)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getKind() {
+    return kind;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_KIND)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setKind(String kind) {
+    this.kind = kind;
+  }
+
+
+  public FrameworkAdapter metadata(Map<String, Object> metadata) {
+    this.metadata = metadata;
+    return this;
+  }
+
+  public FrameworkAdapter putMetadataItem(String key, Object metadataItem) {
+    if (this.metadata == null) {
+      this.metadata = new HashMap<>();
+    }
+    this.metadata.put(key, metadataItem);
+    return this;
+  }
+
+   /**
+   * Get metadata
+   * @return metadata
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_METADATA)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, Object> getMetadata() {
+    return metadata;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_METADATA)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+  public void setMetadata(Map<String, Object> metadata) {
+    this.metadata = metadata;
+  }
+
+
+  public FrameworkAdapter match(Map<String, Object> match) {
+    this.match = match;
+    return this;
+  }
+
+  public FrameworkAdapter putMatchItem(String key, Object matchItem) {
+    if (this.match == null) {
+      this.match = new HashMap<>();
+    }
+    this.match.put(key, matchItem);
+    return this;
+  }
+
+   /**
+   * Get match
+   * @return match
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_MATCH)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, Object> getMatch() {
+    return match;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_MATCH)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+  public void setMatch(Map<String, Object> match) {
+    this.match = match;
+  }
+
+
+  public FrameworkAdapter capabilities(Object capabilities) {
+    this.capabilities = JsonNullable.<Object>of(capabilities);
+    return this;
+  }
+
+   /**
+   * Get capabilities
+   * @return capabilities
+  **/
+  @javax.annotation.Nullable
+  @JsonIgnore
+
+  public Object getCapabilities() {
+        return capabilities.orElse(null);
+  }
+
+  @JsonProperty(JSON_PROPERTY_CAPABILITIES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public JsonNullable<Object> getCapabilities_JsonNullable() {
+    return capabilities;
+  }
+
+  @JsonProperty(JSON_PROPERTY_CAPABILITIES)
+  public void setCapabilities_JsonNullable(JsonNullable<Object> capabilities) {
+    this.capabilities = capabilities;
+  }
+
+  public void setCapabilities(Object capabilities) {
+    this.capabilities = JsonNullable.<Object>of(capabilities);
+  }
+
+
+  public FrameworkAdapter entrypoints(Map<String, Object> entrypoints) {
+    this.entrypoints = entrypoints;
+    return this;
+  }
+
+  public FrameworkAdapter putEntrypointsItem(String key, Object entrypointsItem) {
+    if (this.entrypoints == null) {
+      this.entrypoints = new HashMap<>();
+    }
+    this.entrypoints.put(key, entrypointsItem);
+    return this;
+  }
+
+   /**
+   * Get entrypoints
+   * @return entrypoints
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ENTRYPOINTS)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, Object> getEntrypoints() {
+    return entrypoints;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ENTRYPOINTS)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEntrypoints(Map<String, Object> entrypoints) {
+    this.entrypoints = entrypoints;
+  }
+
+
+  public FrameworkAdapter build(Map<String, Object> build) {
+    this.build = build;
+    return this;
+  }
+
+  public FrameworkAdapter putBuildItem(String key, Object buildItem) {
+    if (this.build == null) {
+      this.build = new HashMap<>();
+    }
+    this.build.put(key, buildItem);
+    return this;
+  }
+
+   /**
+   * Get build
+   * @return build
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_BUILD)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, Object> getBuild() {
+    return build;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_BUILD)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+  public void setBuild(Map<String, Object> build) {
+    this.build = build;
+  }
+
+
+  /**
+   * Return true if this FrameworkAdapter object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    FrameworkAdapter frameworkAdapter = (FrameworkAdapter) o;
+    return Objects.equals(this.apiVersion, frameworkAdapter.apiVersion) &&
+        Objects.equals(this.kind, frameworkAdapter.kind) &&
+        Objects.equals(this.metadata, frameworkAdapter.metadata) &&
+        Objects.equals(this.match, frameworkAdapter.match) &&
+        equalsNullable(this.capabilities, frameworkAdapter.capabilities) &&
+        Objects.equals(this.entrypoints, frameworkAdapter.entrypoints) &&
+        Objects.equals(this.build, frameworkAdapter.build);
+  }
+
+  private static <T> boolean equalsNullable(JsonNullable<T> a, JsonNullable<T> b) {
+    return a == b || (a != null && b != null && a.isPresent() && b.isPresent() && Objects.deepEquals(a.get(), b.get()));
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(apiVersion, kind, metadata, match, hashCodeNullable(capabilities), entrypoints, build);
+  }
+
+  private static <T> int hashCodeNullable(JsonNullable<T> a) {
+    if (a == null) {
+      return 1;
+    }
+    return a.isPresent() ? Arrays.deepHashCode(new Object[]{a.get()}) : 31;
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class FrameworkAdapter {\n");
+    sb.append("    apiVersion: ").append(toIndentedString(apiVersion)).append("\n");
+    sb.append("    kind: ").append(toIndentedString(kind)).append("\n");
+    sb.append("    metadata: ").append(toIndentedString(metadata)).append("\n");
+    sb.append("    match: ").append(toIndentedString(match)).append("\n");
+    sb.append("    capabilities: ").append(toIndentedString(capabilities)).append("\n");
+    sb.append("    entrypoints: ").append(toIndentedString(entrypoints)).append("\n");
+    sb.append("    build: ").append(toIndentedString(build)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `apiVersion` to the URL query string
+    if (getApiVersion() != null) {
+      joiner.add(String.format("%sapiVersion%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getApiVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `kind` to the URL query string
+    if (getKind() != null) {
+      joiner.add(String.format("%skind%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getKind()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `metadata` to the URL query string
+    if (getMetadata() != null) {
+      for (String _key : getMetadata().keySet()) {
+        joiner.add(String.format("%smetadata%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
+            getMetadata().get(_key), URLEncoder.encode(String.valueOf(getMetadata().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `match` to the URL query string
+    if (getMatch() != null) {
+      for (String _key : getMatch().keySet()) {
+        joiner.add(String.format("%smatch%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
+            getMatch().get(_key), URLEncoder.encode(String.valueOf(getMatch().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `capabilities` to the URL query string
+    if (getCapabilities() != null) {
+      joiner.add(String.format("%scapabilities%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCapabilities()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `entrypoints` to the URL query string
+    if (getEntrypoints() != null) {
+      for (String _key : getEntrypoints().keySet()) {
+        joiner.add(String.format("%sentrypoints%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
+            getEntrypoints().get(_key), URLEncoder.encode(String.valueOf(getEntrypoints().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `build` to the URL query string
+    if (getBuild() != null) {
+      for (String _key : getBuild().keySet()) {
+        joiner.add(String.format("%sbuild%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
+            getBuild().get(_key), URLEncoder.encode(String.valueOf(getBuild().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * GUIActionReceipt
  */
 @JsonPropertyOrder({
@@ -18342,6 +20816,309 @@ public static class GUIActionReceipt {
 
 
 /**
+ * GeneratedAppSpecCandidate
+ */
+@JsonPropertyOrder({
+  GeneratedAppSpecCandidate.JSON_PROPERTY_CANDIDATE_ID,
+  GeneratedAppSpecCandidate.JSON_PROPERTY_TRUSTED,
+  GeneratedAppSpecCandidate.JSON_PROPERTY_APP_SPEC,
+  GeneratedAppSpecCandidate.JSON_PROPERTY_PROMOTION_REQUIREMENTS
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class GeneratedAppSpecCandidate extends HashMap<String, Object> {
+  public static final String JSON_PROPERTY_CANDIDATE_ID = "candidate_id";
+  private String candidateId;
+
+  public static final String JSON_PROPERTY_TRUSTED = "trusted";
+  private Boolean trusted;
+
+  public static final String JSON_PROPERTY_APP_SPEC = "app_spec";
+  private LaunchpadApp appSpec;
+
+  public static final String JSON_PROPERTY_PROMOTION_REQUIREMENTS = "promotion_requirements";
+  private List<String> promotionRequirements = new ArrayList<>();
+
+  public GeneratedAppSpecCandidate() {
+  }
+
+  public GeneratedAppSpecCandidate candidateId(String candidateId) {
+    this.candidateId = candidateId;
+    return this;
+  }
+
+   /**
+   * Get candidateId
+   * @return candidateId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_CANDIDATE_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getCandidateId() {
+    return candidateId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CANDIDATE_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setCandidateId(String candidateId) {
+    this.candidateId = candidateId;
+  }
+
+
+  public GeneratedAppSpecCandidate trusted(Boolean trusted) {
+    this.trusted = trusted;
+    return this;
+  }
+
+   /**
+   * Get trusted
+   * @return trusted
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_TRUSTED)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public Boolean getTrusted() {
+    return trusted;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TRUSTED)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setTrusted(Boolean trusted) {
+    this.trusted = trusted;
+  }
+
+
+  public GeneratedAppSpecCandidate appSpec(LaunchpadApp appSpec) {
+    this.appSpec = appSpec;
+    return this;
+  }
+
+   /**
+   * Get appSpec
+   * @return appSpec
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_APP_SPEC)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public LaunchpadApp getAppSpec() {
+    return appSpec;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_APP_SPEC)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setAppSpec(LaunchpadApp appSpec) {
+    this.appSpec = appSpec;
+  }
+
+
+  public GeneratedAppSpecCandidate promotionRequirements(List<String> promotionRequirements) {
+    this.promotionRequirements = promotionRequirements;
+    return this;
+  }
+
+  public GeneratedAppSpecCandidate addPromotionRequirementsItem(String promotionRequirementsItem) {
+    if (this.promotionRequirements == null) {
+      this.promotionRequirements = new ArrayList<>();
+    }
+    this.promotionRequirements.add(promotionRequirementsItem);
+    return this;
+  }
+
+   /**
+   * Get promotionRequirements
+   * @return promotionRequirements
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_PROMOTION_REQUIREMENTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public List<String> getPromotionRequirements() {
+    return promotionRequirements;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PROMOTION_REQUIREMENTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setPromotionRequirements(List<String> promotionRequirements) {
+    this.promotionRequirements = promotionRequirements;
+  }
+
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public GeneratedAppSpecCandidate putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
+
+  /**
+   * Return true if this GeneratedAppSpecCandidate object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    GeneratedAppSpecCandidate generatedAppSpecCandidate = (GeneratedAppSpecCandidate) o;
+    return Objects.equals(this.candidateId, generatedAppSpecCandidate.candidateId) &&
+        Objects.equals(this.trusted, generatedAppSpecCandidate.trusted) &&
+        Objects.equals(this.appSpec, generatedAppSpecCandidate.appSpec) &&
+        Objects.equals(this.promotionRequirements, generatedAppSpecCandidate.promotionRequirements)&&
+        Objects.equals(this.additionalProperties, generatedAppSpecCandidate.additionalProperties) &&
+        super.equals(o);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(candidateId, trusted, appSpec, promotionRequirements, super.hashCode(), additionalProperties);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class GeneratedAppSpecCandidate {\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
+    sb.append("    candidateId: ").append(toIndentedString(candidateId)).append("\n");
+    sb.append("    trusted: ").append(toIndentedString(trusted)).append("\n");
+    sb.append("    appSpec: ").append(toIndentedString(appSpec)).append("\n");
+    sb.append("    promotionRequirements: ").append(toIndentedString(promotionRequirements)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `candidate_id` to the URL query string
+    if (getCandidateId() != null) {
+      joiner.add(String.format("%scandidate_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCandidateId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `trusted` to the URL query string
+    if (getTrusted() != null) {
+      joiner.add(String.format("%strusted%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTrusted()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `app_spec` to the URL query string
+    if (getAppSpec() != null) {
+      joiner.add(getAppSpec().toUrlQueryString(prefix + "app_spec" + suffix));
+    }
+
+    // add `promotion_requirements` to the URL query string
+    if (getPromotionRequirements() != null) {
+      for (int i = 0; i < getPromotionRequirements().size(); i++) {
+        joiner.add(String.format("%spromotion_requirements%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getPromotionRequirements().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * GetAgentUIRuntimeInfo200Response
  */
 @JsonPropertyOrder({
@@ -18563,6 +21340,142 @@ public static class GetAgentUIRuntimeInfo200Response {
     // add `tools` to the URL query string
     if (getTools() != null) {
       joiner.add(String.format("%stools%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTools()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * GetLaunchpadImport200Response
+ */
+@JsonPropertyOrder({
+  GetLaunchpadImport200Response.JSON_PROPERTY_IMPORT
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class GetLaunchpadImport200Response {
+  public static final String JSON_PROPERTY_IMPORT = "import";
+  private LaunchpadImportRecord _import;
+
+  public GetLaunchpadImport200Response() {
+  }
+
+  public GetLaunchpadImport200Response _import(LaunchpadImportRecord _import) {
+    this._import = _import;
+    return this;
+  }
+
+   /**
+   * Get _import
+   * @return _import
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_IMPORT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public LaunchpadImportRecord getImport() {
+    return _import;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_IMPORT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setImport(LaunchpadImportRecord _import) {
+    this._import = _import;
+  }
+
+
+  /**
+   * Return true if this getLaunchpadImport_200_response object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    GetLaunchpadImport200Response getLaunchpadImport200Response = (GetLaunchpadImport200Response) o;
+    return Objects.equals(this._import, getLaunchpadImport200Response._import);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(_import);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class GetLaunchpadImport200Response {\n");
+    sb.append("    _import: ").append(toIndentedString(_import)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `import` to the URL query string
+    if (getImport() != null) {
+      joiner.add(getImport().toUrlQueryString(prefix + "import" + suffix));
     }
 
     return joiner.toString();
@@ -22359,6 +25272,1386 @@ public static class HelmErrorError {
 
 
 /**
+ * ImportEvidenceLedger
+ */
+@JsonPropertyOrder({
+  ImportEvidenceLedger.JSON_PROPERTY_STATUS,
+  ImportEvidenceLedger.JSON_PROPERTY_RECEIPT_REFS,
+  ImportEvidenceLedger.JSON_PROPERTY_EVIDENCE_PACK_REFS,
+  ImportEvidenceLedger.JSON_PROPERTY_SBOM_REF,
+  ImportEvidenceLedger.JSON_PROPERTY_VULNERABILITY_SCAN_REF,
+  ImportEvidenceLedger.JSON_PROPERTY_PROVENANCE_REF,
+  ImportEvidenceLedger.JSON_PROPERTY_LICENSE_REF,
+  ImportEvidenceLedger.JSON_PROPERTY_POLICY_REFS,
+  ImportEvidenceLedger.JSON_PROPERTY_OFFLINE_VERIFY_COMMAND
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class ImportEvidenceLedger extends HashMap<String, Object> {
+  public static final String JSON_PROPERTY_STATUS = "status";
+  private String status;
+
+  public static final String JSON_PROPERTY_RECEIPT_REFS = "receipt_refs";
+  private List<String> receiptRefs;
+
+  public static final String JSON_PROPERTY_EVIDENCE_PACK_REFS = "evidence_pack_refs";
+  private List<String> evidencePackRefs;
+
+  public static final String JSON_PROPERTY_SBOM_REF = "sbom_ref";
+  private String sbomRef;
+
+  public static final String JSON_PROPERTY_VULNERABILITY_SCAN_REF = "vulnerability_scan_ref";
+  private String vulnerabilityScanRef;
+
+  public static final String JSON_PROPERTY_PROVENANCE_REF = "provenance_ref";
+  private String provenanceRef;
+
+  public static final String JSON_PROPERTY_LICENSE_REF = "license_ref";
+  private String licenseRef;
+
+  public static final String JSON_PROPERTY_POLICY_REFS = "policy_refs";
+  private List<String> policyRefs;
+
+  public static final String JSON_PROPERTY_OFFLINE_VERIFY_COMMAND = "offline_verify_command";
+  private String offlineVerifyCommand;
+
+  public ImportEvidenceLedger() {
+  }
+
+  public ImportEvidenceLedger status(String status) {
+    this.status = status;
+    return this;
+  }
+
+   /**
+   * Get status
+   * @return status
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getStatus() {
+    return status;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setStatus(String status) {
+    this.status = status;
+  }
+
+
+  public ImportEvidenceLedger receiptRefs(List<String> receiptRefs) {
+    this.receiptRefs = receiptRefs;
+    return this;
+  }
+
+  public ImportEvidenceLedger addReceiptRefsItem(String receiptRefsItem) {
+    if (this.receiptRefs == null) {
+      this.receiptRefs = new ArrayList<>();
+    }
+    this.receiptRefs.add(receiptRefsItem);
+    return this;
+  }
+
+   /**
+   * Get receiptRefs
+   * @return receiptRefs
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_RECEIPT_REFS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getReceiptRefs() {
+    return receiptRefs;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RECEIPT_REFS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReceiptRefs(List<String> receiptRefs) {
+    this.receiptRefs = receiptRefs;
+  }
+
+
+  public ImportEvidenceLedger evidencePackRefs(List<String> evidencePackRefs) {
+    this.evidencePackRefs = evidencePackRefs;
+    return this;
+  }
+
+  public ImportEvidenceLedger addEvidencePackRefsItem(String evidencePackRefsItem) {
+    if (this.evidencePackRefs == null) {
+      this.evidencePackRefs = new ArrayList<>();
+    }
+    this.evidencePackRefs.add(evidencePackRefsItem);
+    return this;
+  }
+
+   /**
+   * Get evidencePackRefs
+   * @return evidencePackRefs
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_PACK_REFS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getEvidencePackRefs() {
+    return evidencePackRefs;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_PACK_REFS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEvidencePackRefs(List<String> evidencePackRefs) {
+    this.evidencePackRefs = evidencePackRefs;
+  }
+
+
+  public ImportEvidenceLedger sbomRef(String sbomRef) {
+    this.sbomRef = sbomRef;
+    return this;
+  }
+
+   /**
+   * Get sbomRef
+   * @return sbomRef
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SBOM_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSbomRef() {
+    return sbomRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SBOM_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSbomRef(String sbomRef) {
+    this.sbomRef = sbomRef;
+  }
+
+
+  public ImportEvidenceLedger vulnerabilityScanRef(String vulnerabilityScanRef) {
+    this.vulnerabilityScanRef = vulnerabilityScanRef;
+    return this;
+  }
+
+   /**
+   * Get vulnerabilityScanRef
+   * @return vulnerabilityScanRef
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_VULNERABILITY_SCAN_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getVulnerabilityScanRef() {
+    return vulnerabilityScanRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_VULNERABILITY_SCAN_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setVulnerabilityScanRef(String vulnerabilityScanRef) {
+    this.vulnerabilityScanRef = vulnerabilityScanRef;
+  }
+
+
+  public ImportEvidenceLedger provenanceRef(String provenanceRef) {
+    this.provenanceRef = provenanceRef;
+    return this;
+  }
+
+   /**
+   * Get provenanceRef
+   * @return provenanceRef
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PROVENANCE_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getProvenanceRef() {
+    return provenanceRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PROVENANCE_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setProvenanceRef(String provenanceRef) {
+    this.provenanceRef = provenanceRef;
+  }
+
+
+  public ImportEvidenceLedger licenseRef(String licenseRef) {
+    this.licenseRef = licenseRef;
+    return this;
+  }
+
+   /**
+   * Get licenseRef
+   * @return licenseRef
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_LICENSE_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getLicenseRef() {
+    return licenseRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_LICENSE_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setLicenseRef(String licenseRef) {
+    this.licenseRef = licenseRef;
+  }
+
+
+  public ImportEvidenceLedger policyRefs(List<String> policyRefs) {
+    this.policyRefs = policyRefs;
+    return this;
+  }
+
+  public ImportEvidenceLedger addPolicyRefsItem(String policyRefsItem) {
+    if (this.policyRefs == null) {
+      this.policyRefs = new ArrayList<>();
+    }
+    this.policyRefs.add(policyRefsItem);
+    return this;
+  }
+
+   /**
+   * Get policyRefs
+   * @return policyRefs
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_REFS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getPolicyRefs() {
+    return policyRefs;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_REFS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyRefs(List<String> policyRefs) {
+    this.policyRefs = policyRefs;
+  }
+
+
+  public ImportEvidenceLedger offlineVerifyCommand(String offlineVerifyCommand) {
+    this.offlineVerifyCommand = offlineVerifyCommand;
+    return this;
+  }
+
+   /**
+   * Get offlineVerifyCommand
+   * @return offlineVerifyCommand
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_OFFLINE_VERIFY_COMMAND)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getOfflineVerifyCommand() {
+    return offlineVerifyCommand;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_OFFLINE_VERIFY_COMMAND)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setOfflineVerifyCommand(String offlineVerifyCommand) {
+    this.offlineVerifyCommand = offlineVerifyCommand;
+  }
+
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public ImportEvidenceLedger putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
+
+  /**
+   * Return true if this ImportEvidenceLedger object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    ImportEvidenceLedger importEvidenceLedger = (ImportEvidenceLedger) o;
+    return Objects.equals(this.status, importEvidenceLedger.status) &&
+        Objects.equals(this.receiptRefs, importEvidenceLedger.receiptRefs) &&
+        Objects.equals(this.evidencePackRefs, importEvidenceLedger.evidencePackRefs) &&
+        Objects.equals(this.sbomRef, importEvidenceLedger.sbomRef) &&
+        Objects.equals(this.vulnerabilityScanRef, importEvidenceLedger.vulnerabilityScanRef) &&
+        Objects.equals(this.provenanceRef, importEvidenceLedger.provenanceRef) &&
+        Objects.equals(this.licenseRef, importEvidenceLedger.licenseRef) &&
+        Objects.equals(this.policyRefs, importEvidenceLedger.policyRefs) &&
+        Objects.equals(this.offlineVerifyCommand, importEvidenceLedger.offlineVerifyCommand)&&
+        Objects.equals(this.additionalProperties, importEvidenceLedger.additionalProperties) &&
+        super.equals(o);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(status, receiptRefs, evidencePackRefs, sbomRef, vulnerabilityScanRef, provenanceRef, licenseRef, policyRefs, offlineVerifyCommand, super.hashCode(), additionalProperties);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class ImportEvidenceLedger {\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
+    sb.append("    status: ").append(toIndentedString(status)).append("\n");
+    sb.append("    receiptRefs: ").append(toIndentedString(receiptRefs)).append("\n");
+    sb.append("    evidencePackRefs: ").append(toIndentedString(evidencePackRefs)).append("\n");
+    sb.append("    sbomRef: ").append(toIndentedString(sbomRef)).append("\n");
+    sb.append("    vulnerabilityScanRef: ").append(toIndentedString(vulnerabilityScanRef)).append("\n");
+    sb.append("    provenanceRef: ").append(toIndentedString(provenanceRef)).append("\n");
+    sb.append("    licenseRef: ").append(toIndentedString(licenseRef)).append("\n");
+    sb.append("    policyRefs: ").append(toIndentedString(policyRefs)).append("\n");
+    sb.append("    offlineVerifyCommand: ").append(toIndentedString(offlineVerifyCommand)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `status` to the URL query string
+    if (getStatus() != null) {
+      joiner.add(String.format("%sstatus%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStatus()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `receipt_refs` to the URL query string
+    if (getReceiptRefs() != null) {
+      for (int i = 0; i < getReceiptRefs().size(); i++) {
+        joiner.add(String.format("%sreceipt_refs%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getReceiptRefs().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `evidence_pack_refs` to the URL query string
+    if (getEvidencePackRefs() != null) {
+      for (int i = 0; i < getEvidencePackRefs().size(); i++) {
+        joiner.add(String.format("%sevidence_pack_refs%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getEvidencePackRefs().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `sbom_ref` to the URL query string
+    if (getSbomRef() != null) {
+      joiner.add(String.format("%ssbom_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSbomRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `vulnerability_scan_ref` to the URL query string
+    if (getVulnerabilityScanRef() != null) {
+      joiner.add(String.format("%svulnerability_scan_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getVulnerabilityScanRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `provenance_ref` to the URL query string
+    if (getProvenanceRef() != null) {
+      joiner.add(String.format("%sprovenance_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getProvenanceRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `license_ref` to the URL query string
+    if (getLicenseRef() != null) {
+      joiner.add(String.format("%slicense_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLicenseRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_refs` to the URL query string
+    if (getPolicyRefs() != null) {
+      for (int i = 0; i < getPolicyRefs().size(); i++) {
+        joiner.add(String.format("%spolicy_refs%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getPolicyRefs().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `offline_verify_command` to the URL query string
+    if (getOfflineVerifyCommand() != null) {
+      joiner.add(String.format("%soffline_verify_command%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getOfflineVerifyCommand()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * ImportPreflightResult
+ */
+@JsonPropertyOrder({
+  ImportPreflightResult.JSON_PROPERTY_IMPORT_ID,
+  ImportPreflightResult.JSON_PROPERTY_STATUS,
+  ImportPreflightResult.JSON_PROPERTY_CHECKS,
+  ImportPreflightResult.JSON_PROPERTY_BLOCKED_REASONS,
+  ImportPreflightResult.JSON_PROPERTY_EVIDENCE_LEDGER
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class ImportPreflightResult extends HashMap<String, Object> {
+  public static final String JSON_PROPERTY_IMPORT_ID = "import_id";
+  private String importId;
+
+  public static final String JSON_PROPERTY_STATUS = "status";
+  private String status;
+
+  public static final String JSON_PROPERTY_CHECKS = "checks";
+  private List<PreflightCheck> checks = new ArrayList<>();
+
+  public static final String JSON_PROPERTY_BLOCKED_REASONS = "blocked_reasons";
+  private List<String> blockedReasons;
+
+  public static final String JSON_PROPERTY_EVIDENCE_LEDGER = "evidence_ledger";
+  private ImportEvidenceLedger evidenceLedger;
+
+  public ImportPreflightResult() {
+  }
+
+  public ImportPreflightResult importId(String importId) {
+    this.importId = importId;
+    return this;
+  }
+
+   /**
+   * Get importId
+   * @return importId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_IMPORT_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getImportId() {
+    return importId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_IMPORT_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setImportId(String importId) {
+    this.importId = importId;
+  }
+
+
+  public ImportPreflightResult status(String status) {
+    this.status = status;
+    return this;
+  }
+
+   /**
+   * Get status
+   * @return status
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getStatus() {
+    return status;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setStatus(String status) {
+    this.status = status;
+  }
+
+
+  public ImportPreflightResult checks(List<PreflightCheck> checks) {
+    this.checks = checks;
+    return this;
+  }
+
+  public ImportPreflightResult addChecksItem(PreflightCheck checksItem) {
+    if (this.checks == null) {
+      this.checks = new ArrayList<>();
+    }
+    this.checks.add(checksItem);
+    return this;
+  }
+
+   /**
+   * Get checks
+   * @return checks
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_CHECKS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public List<PreflightCheck> getChecks() {
+    return checks;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CHECKS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setChecks(List<PreflightCheck> checks) {
+    this.checks = checks;
+  }
+
+
+  public ImportPreflightResult blockedReasons(List<String> blockedReasons) {
+    this.blockedReasons = blockedReasons;
+    return this;
+  }
+
+  public ImportPreflightResult addBlockedReasonsItem(String blockedReasonsItem) {
+    if (this.blockedReasons == null) {
+      this.blockedReasons = new ArrayList<>();
+    }
+    this.blockedReasons.add(blockedReasonsItem);
+    return this;
+  }
+
+   /**
+   * Get blockedReasons
+   * @return blockedReasons
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_BLOCKED_REASONS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getBlockedReasons() {
+    return blockedReasons;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_BLOCKED_REASONS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setBlockedReasons(List<String> blockedReasons) {
+    this.blockedReasons = blockedReasons;
+  }
+
+
+  public ImportPreflightResult evidenceLedger(ImportEvidenceLedger evidenceLedger) {
+    this.evidenceLedger = evidenceLedger;
+    return this;
+  }
+
+   /**
+   * Get evidenceLedger
+   * @return evidenceLedger
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_LEDGER)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public ImportEvidenceLedger getEvidenceLedger() {
+    return evidenceLedger;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_LEDGER)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setEvidenceLedger(ImportEvidenceLedger evidenceLedger) {
+    this.evidenceLedger = evidenceLedger;
+  }
+
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public ImportPreflightResult putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
+
+  /**
+   * Return true if this ImportPreflightResult object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    ImportPreflightResult importPreflightResult = (ImportPreflightResult) o;
+    return Objects.equals(this.importId, importPreflightResult.importId) &&
+        Objects.equals(this.status, importPreflightResult.status) &&
+        Objects.equals(this.checks, importPreflightResult.checks) &&
+        Objects.equals(this.blockedReasons, importPreflightResult.blockedReasons) &&
+        Objects.equals(this.evidenceLedger, importPreflightResult.evidenceLedger)&&
+        Objects.equals(this.additionalProperties, importPreflightResult.additionalProperties) &&
+        super.equals(o);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(importId, status, checks, blockedReasons, evidenceLedger, super.hashCode(), additionalProperties);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class ImportPreflightResult {\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
+    sb.append("    importId: ").append(toIndentedString(importId)).append("\n");
+    sb.append("    status: ").append(toIndentedString(status)).append("\n");
+    sb.append("    checks: ").append(toIndentedString(checks)).append("\n");
+    sb.append("    blockedReasons: ").append(toIndentedString(blockedReasons)).append("\n");
+    sb.append("    evidenceLedger: ").append(toIndentedString(evidenceLedger)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `import_id` to the URL query string
+    if (getImportId() != null) {
+      joiner.add(String.format("%simport_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getImportId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `status` to the URL query string
+    if (getStatus() != null) {
+      joiner.add(String.format("%sstatus%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStatus()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `checks` to the URL query string
+    if (getChecks() != null) {
+      for (int i = 0; i < getChecks().size(); i++) {
+        if (getChecks().get(i) != null) {
+          joiner.add(getChecks().get(i).toUrlQueryString(String.format("%schecks%s%s", prefix, suffix,
+          "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
+        }
+      }
+    }
+
+    // add `blocked_reasons` to the URL query string
+    if (getBlockedReasons() != null) {
+      for (int i = 0; i < getBlockedReasons().size(); i++) {
+        joiner.add(String.format("%sblocked_reasons%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getBlockedReasons().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `evidence_ledger` to the URL query string
+    if (getEvidenceLedger() != null) {
+      joiner.add(getEvidenceLedger().toUrlQueryString(prefix + "evidence_ledger" + suffix));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * LaunchRecipe
+ */
+@JsonPropertyOrder({
+  LaunchRecipe.JSON_PROPERTY_IMPORT_ID,
+  LaunchRecipe.JSON_PROPERTY_GENERATED_AT,
+  LaunchRecipe.JSON_PROPERTY_DETECTION_ORDER,
+  LaunchRecipe.JSON_PROPERTY_BUILD_STRATEGY,
+  LaunchRecipe.JSON_PROPERTY_TARGET_PLANS,
+  LaunchRecipe.JSON_PROPERTY_GENERATED_APP_SPECS,
+  LaunchRecipe.JSON_PROPERTY_PROMOTION_STATE,
+  LaunchRecipe.JSON_PROPERTY_PROMOTION_REQUIREMENTS,
+  LaunchRecipe.JSON_PROPERTY_CLI_EQUIVALENT
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class LaunchRecipe extends HashMap<String, Object> {
+  public static final String JSON_PROPERTY_IMPORT_ID = "import_id";
+  private String importId;
+
+  public static final String JSON_PROPERTY_GENERATED_AT = "generated_at";
+  private OffsetDateTime generatedAt;
+
+  public static final String JSON_PROPERTY_DETECTION_ORDER = "detection_order";
+  private List<String> detectionOrder = new ArrayList<>();
+
+  public static final String JSON_PROPERTY_BUILD_STRATEGY = "build_strategy";
+  private BuildStrategy buildStrategy;
+
+  public static final String JSON_PROPERTY_TARGET_PLANS = "target_plans";
+  private List<TargetPlan> targetPlans = new ArrayList<>();
+
+  public static final String JSON_PROPERTY_GENERATED_APP_SPECS = "generated_app_specs";
+  private List<GeneratedAppSpecCandidate> generatedAppSpecs = new ArrayList<>();
+
+  public static final String JSON_PROPERTY_PROMOTION_STATE = "promotion_state";
+  private String promotionState;
+
+  public static final String JSON_PROPERTY_PROMOTION_REQUIREMENTS = "promotion_requirements";
+  private List<String> promotionRequirements;
+
+  public static final String JSON_PROPERTY_CLI_EQUIVALENT = "cli_equivalent";
+  private String cliEquivalent;
+
+  public LaunchRecipe() {
+  }
+
+  public LaunchRecipe importId(String importId) {
+    this.importId = importId;
+    return this;
+  }
+
+   /**
+   * Get importId
+   * @return importId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_IMPORT_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getImportId() {
+    return importId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_IMPORT_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setImportId(String importId) {
+    this.importId = importId;
+  }
+
+
+  public LaunchRecipe generatedAt(OffsetDateTime generatedAt) {
+    this.generatedAt = generatedAt;
+    return this;
+  }
+
+   /**
+   * Get generatedAt
+   * @return generatedAt
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_GENERATED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public OffsetDateTime getGeneratedAt() {
+    return generatedAt;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_GENERATED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setGeneratedAt(OffsetDateTime generatedAt) {
+    this.generatedAt = generatedAt;
+  }
+
+
+  public LaunchRecipe detectionOrder(List<String> detectionOrder) {
+    this.detectionOrder = detectionOrder;
+    return this;
+  }
+
+  public LaunchRecipe addDetectionOrderItem(String detectionOrderItem) {
+    if (this.detectionOrder == null) {
+      this.detectionOrder = new ArrayList<>();
+    }
+    this.detectionOrder.add(detectionOrderItem);
+    return this;
+  }
+
+   /**
+   * Get detectionOrder
+   * @return detectionOrder
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_DETECTION_ORDER)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public List<String> getDetectionOrder() {
+    return detectionOrder;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DETECTION_ORDER)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setDetectionOrder(List<String> detectionOrder) {
+    this.detectionOrder = detectionOrder;
+  }
+
+
+  public LaunchRecipe buildStrategy(BuildStrategy buildStrategy) {
+    this.buildStrategy = buildStrategy;
+    return this;
+  }
+
+   /**
+   * Get buildStrategy
+   * @return buildStrategy
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_BUILD_STRATEGY)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public BuildStrategy getBuildStrategy() {
+    return buildStrategy;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_BUILD_STRATEGY)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setBuildStrategy(BuildStrategy buildStrategy) {
+    this.buildStrategy = buildStrategy;
+  }
+
+
+  public LaunchRecipe targetPlans(List<TargetPlan> targetPlans) {
+    this.targetPlans = targetPlans;
+    return this;
+  }
+
+  public LaunchRecipe addTargetPlansItem(TargetPlan targetPlansItem) {
+    if (this.targetPlans == null) {
+      this.targetPlans = new ArrayList<>();
+    }
+    this.targetPlans.add(targetPlansItem);
+    return this;
+  }
+
+   /**
+   * Get targetPlans
+   * @return targetPlans
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_TARGET_PLANS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public List<TargetPlan> getTargetPlans() {
+    return targetPlans;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TARGET_PLANS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setTargetPlans(List<TargetPlan> targetPlans) {
+    this.targetPlans = targetPlans;
+  }
+
+
+  public LaunchRecipe generatedAppSpecs(List<GeneratedAppSpecCandidate> generatedAppSpecs) {
+    this.generatedAppSpecs = generatedAppSpecs;
+    return this;
+  }
+
+  public LaunchRecipe addGeneratedAppSpecsItem(GeneratedAppSpecCandidate generatedAppSpecsItem) {
+    if (this.generatedAppSpecs == null) {
+      this.generatedAppSpecs = new ArrayList<>();
+    }
+    this.generatedAppSpecs.add(generatedAppSpecsItem);
+    return this;
+  }
+
+   /**
+   * Get generatedAppSpecs
+   * @return generatedAppSpecs
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_GENERATED_APP_SPECS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public List<GeneratedAppSpecCandidate> getGeneratedAppSpecs() {
+    return generatedAppSpecs;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_GENERATED_APP_SPECS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setGeneratedAppSpecs(List<GeneratedAppSpecCandidate> generatedAppSpecs) {
+    this.generatedAppSpecs = generatedAppSpecs;
+  }
+
+
+  public LaunchRecipe promotionState(String promotionState) {
+    this.promotionState = promotionState;
+    return this;
+  }
+
+   /**
+   * Get promotionState
+   * @return promotionState
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_PROMOTION_STATE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getPromotionState() {
+    return promotionState;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PROMOTION_STATE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setPromotionState(String promotionState) {
+    this.promotionState = promotionState;
+  }
+
+
+  public LaunchRecipe promotionRequirements(List<String> promotionRequirements) {
+    this.promotionRequirements = promotionRequirements;
+    return this;
+  }
+
+  public LaunchRecipe addPromotionRequirementsItem(String promotionRequirementsItem) {
+    if (this.promotionRequirements == null) {
+      this.promotionRequirements = new ArrayList<>();
+    }
+    this.promotionRequirements.add(promotionRequirementsItem);
+    return this;
+  }
+
+   /**
+   * Get promotionRequirements
+   * @return promotionRequirements
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PROMOTION_REQUIREMENTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getPromotionRequirements() {
+    return promotionRequirements;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PROMOTION_REQUIREMENTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPromotionRequirements(List<String> promotionRequirements) {
+    this.promotionRequirements = promotionRequirements;
+  }
+
+
+  public LaunchRecipe cliEquivalent(String cliEquivalent) {
+    this.cliEquivalent = cliEquivalent;
+    return this;
+  }
+
+   /**
+   * Get cliEquivalent
+   * @return cliEquivalent
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CLI_EQUIVALENT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getCliEquivalent() {
+    return cliEquivalent;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CLI_EQUIVALENT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCliEquivalent(String cliEquivalent) {
+    this.cliEquivalent = cliEquivalent;
+  }
+
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public LaunchRecipe putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
+
+  /**
+   * Return true if this LaunchRecipe object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    LaunchRecipe launchRecipe = (LaunchRecipe) o;
+    return Objects.equals(this.importId, launchRecipe.importId) &&
+        Objects.equals(this.generatedAt, launchRecipe.generatedAt) &&
+        Objects.equals(this.detectionOrder, launchRecipe.detectionOrder) &&
+        Objects.equals(this.buildStrategy, launchRecipe.buildStrategy) &&
+        Objects.equals(this.targetPlans, launchRecipe.targetPlans) &&
+        Objects.equals(this.generatedAppSpecs, launchRecipe.generatedAppSpecs) &&
+        Objects.equals(this.promotionState, launchRecipe.promotionState) &&
+        Objects.equals(this.promotionRequirements, launchRecipe.promotionRequirements) &&
+        Objects.equals(this.cliEquivalent, launchRecipe.cliEquivalent)&&
+        Objects.equals(this.additionalProperties, launchRecipe.additionalProperties) &&
+        super.equals(o);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(importId, generatedAt, detectionOrder, buildStrategy, targetPlans, generatedAppSpecs, promotionState, promotionRequirements, cliEquivalent, super.hashCode(), additionalProperties);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class LaunchRecipe {\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
+    sb.append("    importId: ").append(toIndentedString(importId)).append("\n");
+    sb.append("    generatedAt: ").append(toIndentedString(generatedAt)).append("\n");
+    sb.append("    detectionOrder: ").append(toIndentedString(detectionOrder)).append("\n");
+    sb.append("    buildStrategy: ").append(toIndentedString(buildStrategy)).append("\n");
+    sb.append("    targetPlans: ").append(toIndentedString(targetPlans)).append("\n");
+    sb.append("    generatedAppSpecs: ").append(toIndentedString(generatedAppSpecs)).append("\n");
+    sb.append("    promotionState: ").append(toIndentedString(promotionState)).append("\n");
+    sb.append("    promotionRequirements: ").append(toIndentedString(promotionRequirements)).append("\n");
+    sb.append("    cliEquivalent: ").append(toIndentedString(cliEquivalent)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `import_id` to the URL query string
+    if (getImportId() != null) {
+      joiner.add(String.format("%simport_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getImportId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `generated_at` to the URL query string
+    if (getGeneratedAt() != null) {
+      joiner.add(String.format("%sgenerated_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getGeneratedAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `detection_order` to the URL query string
+    if (getDetectionOrder() != null) {
+      for (int i = 0; i < getDetectionOrder().size(); i++) {
+        joiner.add(String.format("%sdetection_order%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getDetectionOrder().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `build_strategy` to the URL query string
+    if (getBuildStrategy() != null) {
+      joiner.add(getBuildStrategy().toUrlQueryString(prefix + "build_strategy" + suffix));
+    }
+
+    // add `target_plans` to the URL query string
+    if (getTargetPlans() != null) {
+      for (int i = 0; i < getTargetPlans().size(); i++) {
+        if (getTargetPlans().get(i) != null) {
+          joiner.add(getTargetPlans().get(i).toUrlQueryString(String.format("%starget_plans%s%s", prefix, suffix,
+          "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
+        }
+      }
+    }
+
+    // add `generated_app_specs` to the URL query string
+    if (getGeneratedAppSpecs() != null) {
+      for (int i = 0; i < getGeneratedAppSpecs().size(); i++) {
+        if (getGeneratedAppSpecs().get(i) != null) {
+          joiner.add(getGeneratedAppSpecs().get(i).toUrlQueryString(String.format("%sgenerated_app_specs%s%s", prefix, suffix,
+          "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
+        }
+      }
+    }
+
+    // add `promotion_state` to the URL query string
+    if (getPromotionState() != null) {
+      joiner.add(String.format("%spromotion_state%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPromotionState()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `promotion_requirements` to the URL query string
+    if (getPromotionRequirements() != null) {
+      for (int i = 0; i < getPromotionRequirements().size(); i++) {
+        joiner.add(String.format("%spromotion_requirements%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getPromotionRequirements().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `cli_equivalent` to the URL query string
+    if (getCliEquivalent() != null) {
+      joiner.add(String.format("%scli_equivalent%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCliEquivalent()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * LaunchpadApp
  */
 @JsonPropertyOrder({
@@ -24906,6 +29199,764 @@ public static class LaunchpadGateResult extends HashMap<String, Object> {
           "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
         }
       }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * LaunchpadImportRecord
+ */
+@JsonPropertyOrder({
+  LaunchpadImportRecord.JSON_PROPERTY_ID,
+  LaunchpadImportRecord.JSON_PROPERTY_STATE,
+  LaunchpadImportRecord.JSON_PROPERTY_CREATED_AT,
+  LaunchpadImportRecord.JSON_PROPERTY_UPDATED_AT,
+  LaunchpadImportRecord.JSON_PROPERTY_REQUEST,
+  LaunchpadImportRecord.JSON_PROPERTY_SOURCE_SNAPSHOT,
+  LaunchpadImportRecord.JSON_PROPERTY_CAPABILITY_GRAPH,
+  LaunchpadImportRecord.JSON_PROPERTY_LAUNCH_RECIPE,
+  LaunchpadImportRecord.JSON_PROPERTY_PREFLIGHT,
+  LaunchpadImportRecord.JSON_PROPERTY_EVIDENCE_LEDGER
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class LaunchpadImportRecord extends HashMap<String, Object> {
+  public static final String JSON_PROPERTY_ID = "id";
+  private String id;
+
+  /**
+   * Gets or Sets state
+   */
+  public enum StateEnum {
+    IMPORTED("IMPORTED"),
+
+    PREFLIGHTED("PREFLIGHTED"),
+
+    PROMOTABLE("PROMOTABLE"),
+
+    BLOCKED("BLOCKED"),
+
+    LAUNCHED("LAUNCHED"),
+
+    TORN_DOWN("TORN_DOWN");
+
+    private String value;
+
+    StateEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static StateEnum fromValue(String value) {
+      for (StateEnum b : StateEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_STATE = "state";
+  private StateEnum state;
+
+  public static final String JSON_PROPERTY_CREATED_AT = "created_at";
+  private OffsetDateTime createdAt;
+
+  public static final String JSON_PROPERTY_UPDATED_AT = "updated_at";
+  private OffsetDateTime updatedAt;
+
+  public static final String JSON_PROPERTY_REQUEST = "request";
+  private LaunchpadImportRequest request;
+
+  public static final String JSON_PROPERTY_SOURCE_SNAPSHOT = "source_snapshot";
+  private SourceSnapshot sourceSnapshot;
+
+  public static final String JSON_PROPERTY_CAPABILITY_GRAPH = "capability_graph";
+  private CapabilityGraph capabilityGraph;
+
+  public static final String JSON_PROPERTY_LAUNCH_RECIPE = "launch_recipe";
+  private LaunchRecipe launchRecipe;
+
+  public static final String JSON_PROPERTY_PREFLIGHT = "preflight";
+  private ImportPreflightResult preflight;
+
+  public static final String JSON_PROPERTY_EVIDENCE_LEDGER = "evidence_ledger";
+  private ImportEvidenceLedger evidenceLedger;
+
+  public LaunchpadImportRecord() {
+  }
+
+  public LaunchpadImportRecord id(String id) {
+    this.id = id;
+    return this;
+  }
+
+   /**
+   * Get id
+   * @return id
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getId() {
+    return id;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setId(String id) {
+    this.id = id;
+  }
+
+
+  public LaunchpadImportRecord state(StateEnum state) {
+    this.state = state;
+    return this;
+  }
+
+   /**
+   * Get state
+   * @return state
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_STATE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public StateEnum getState() {
+    return state;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STATE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setState(StateEnum state) {
+    this.state = state;
+  }
+
+
+  public LaunchpadImportRecord createdAt(OffsetDateTime createdAt) {
+    this.createdAt = createdAt;
+    return this;
+  }
+
+   /**
+   * Get createdAt
+   * @return createdAt
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CREATED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public OffsetDateTime getCreatedAt() {
+    return createdAt;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CREATED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCreatedAt(OffsetDateTime createdAt) {
+    this.createdAt = createdAt;
+  }
+
+
+  public LaunchpadImportRecord updatedAt(OffsetDateTime updatedAt) {
+    this.updatedAt = updatedAt;
+    return this;
+  }
+
+   /**
+   * Get updatedAt
+   * @return updatedAt
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_UPDATED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public OffsetDateTime getUpdatedAt() {
+    return updatedAt;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_UPDATED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setUpdatedAt(OffsetDateTime updatedAt) {
+    this.updatedAt = updatedAt;
+  }
+
+
+  public LaunchpadImportRecord request(LaunchpadImportRequest request) {
+    this.request = request;
+    return this;
+  }
+
+   /**
+   * Get request
+   * @return request
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_REQUEST)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public LaunchpadImportRequest getRequest() {
+    return request;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REQUEST)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setRequest(LaunchpadImportRequest request) {
+    this.request = request;
+  }
+
+
+  public LaunchpadImportRecord sourceSnapshot(SourceSnapshot sourceSnapshot) {
+    this.sourceSnapshot = sourceSnapshot;
+    return this;
+  }
+
+   /**
+   * Get sourceSnapshot
+   * @return sourceSnapshot
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_SOURCE_SNAPSHOT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public SourceSnapshot getSourceSnapshot() {
+    return sourceSnapshot;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SOURCE_SNAPSHOT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setSourceSnapshot(SourceSnapshot sourceSnapshot) {
+    this.sourceSnapshot = sourceSnapshot;
+  }
+
+
+  public LaunchpadImportRecord capabilityGraph(CapabilityGraph capabilityGraph) {
+    this.capabilityGraph = capabilityGraph;
+    return this;
+  }
+
+   /**
+   * Get capabilityGraph
+   * @return capabilityGraph
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_CAPABILITY_GRAPH)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public CapabilityGraph getCapabilityGraph() {
+    return capabilityGraph;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CAPABILITY_GRAPH)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setCapabilityGraph(CapabilityGraph capabilityGraph) {
+    this.capabilityGraph = capabilityGraph;
+  }
+
+
+  public LaunchpadImportRecord launchRecipe(LaunchRecipe launchRecipe) {
+    this.launchRecipe = launchRecipe;
+    return this;
+  }
+
+   /**
+   * Get launchRecipe
+   * @return launchRecipe
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_LAUNCH_RECIPE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public LaunchRecipe getLaunchRecipe() {
+    return launchRecipe;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_LAUNCH_RECIPE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setLaunchRecipe(LaunchRecipe launchRecipe) {
+    this.launchRecipe = launchRecipe;
+  }
+
+
+  public LaunchpadImportRecord preflight(ImportPreflightResult preflight) {
+    this.preflight = preflight;
+    return this;
+  }
+
+   /**
+   * Get preflight
+   * @return preflight
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PREFLIGHT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public ImportPreflightResult getPreflight() {
+    return preflight;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PREFLIGHT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPreflight(ImportPreflightResult preflight) {
+    this.preflight = preflight;
+  }
+
+
+  public LaunchpadImportRecord evidenceLedger(ImportEvidenceLedger evidenceLedger) {
+    this.evidenceLedger = evidenceLedger;
+    return this;
+  }
+
+   /**
+   * Get evidenceLedger
+   * @return evidenceLedger
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_LEDGER)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public ImportEvidenceLedger getEvidenceLedger() {
+    return evidenceLedger;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_LEDGER)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setEvidenceLedger(ImportEvidenceLedger evidenceLedger) {
+    this.evidenceLedger = evidenceLedger;
+  }
+
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public LaunchpadImportRecord putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
+
+  /**
+   * Return true if this LaunchpadImportRecord object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    LaunchpadImportRecord launchpadImportRecord = (LaunchpadImportRecord) o;
+    return Objects.equals(this.id, launchpadImportRecord.id) &&
+        Objects.equals(this.state, launchpadImportRecord.state) &&
+        Objects.equals(this.createdAt, launchpadImportRecord.createdAt) &&
+        Objects.equals(this.updatedAt, launchpadImportRecord.updatedAt) &&
+        Objects.equals(this.request, launchpadImportRecord.request) &&
+        Objects.equals(this.sourceSnapshot, launchpadImportRecord.sourceSnapshot) &&
+        Objects.equals(this.capabilityGraph, launchpadImportRecord.capabilityGraph) &&
+        Objects.equals(this.launchRecipe, launchpadImportRecord.launchRecipe) &&
+        Objects.equals(this.preflight, launchpadImportRecord.preflight) &&
+        Objects.equals(this.evidenceLedger, launchpadImportRecord.evidenceLedger)&&
+        Objects.equals(this.additionalProperties, launchpadImportRecord.additionalProperties) &&
+        super.equals(o);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(id, state, createdAt, updatedAt, request, sourceSnapshot, capabilityGraph, launchRecipe, preflight, evidenceLedger, super.hashCode(), additionalProperties);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class LaunchpadImportRecord {\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
+    sb.append("    id: ").append(toIndentedString(id)).append("\n");
+    sb.append("    state: ").append(toIndentedString(state)).append("\n");
+    sb.append("    createdAt: ").append(toIndentedString(createdAt)).append("\n");
+    sb.append("    updatedAt: ").append(toIndentedString(updatedAt)).append("\n");
+    sb.append("    request: ").append(toIndentedString(request)).append("\n");
+    sb.append("    sourceSnapshot: ").append(toIndentedString(sourceSnapshot)).append("\n");
+    sb.append("    capabilityGraph: ").append(toIndentedString(capabilityGraph)).append("\n");
+    sb.append("    launchRecipe: ").append(toIndentedString(launchRecipe)).append("\n");
+    sb.append("    preflight: ").append(toIndentedString(preflight)).append("\n");
+    sb.append("    evidenceLedger: ").append(toIndentedString(evidenceLedger)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `id` to the URL query string
+    if (getId() != null) {
+      joiner.add(String.format("%sid%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `state` to the URL query string
+    if (getState() != null) {
+      joiner.add(String.format("%sstate%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getState()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `created_at` to the URL query string
+    if (getCreatedAt() != null) {
+      joiner.add(String.format("%screated_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCreatedAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `updated_at` to the URL query string
+    if (getUpdatedAt() != null) {
+      joiner.add(String.format("%supdated_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getUpdatedAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `request` to the URL query string
+    if (getRequest() != null) {
+      joiner.add(getRequest().toUrlQueryString(prefix + "request" + suffix));
+    }
+
+    // add `source_snapshot` to the URL query string
+    if (getSourceSnapshot() != null) {
+      joiner.add(getSourceSnapshot().toUrlQueryString(prefix + "source_snapshot" + suffix));
+    }
+
+    // add `capability_graph` to the URL query string
+    if (getCapabilityGraph() != null) {
+      joiner.add(getCapabilityGraph().toUrlQueryString(prefix + "capability_graph" + suffix));
+    }
+
+    // add `launch_recipe` to the URL query string
+    if (getLaunchRecipe() != null) {
+      joiner.add(getLaunchRecipe().toUrlQueryString(prefix + "launch_recipe" + suffix));
+    }
+
+    // add `preflight` to the URL query string
+    if (getPreflight() != null) {
+      joiner.add(getPreflight().toUrlQueryString(prefix + "preflight" + suffix));
+    }
+
+    // add `evidence_ledger` to the URL query string
+    if (getEvidenceLedger() != null) {
+      joiner.add(getEvidenceLedger().toUrlQueryString(prefix + "evidence_ledger" + suffix));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * LaunchpadImportRequest
+ */
+@JsonPropertyOrder({
+  LaunchpadImportRequest.JSON_PROPERTY_REPO_URL,
+  LaunchpadImportRequest.JSON_PROPERTY_REF,
+  LaunchpadImportRequest.JSON_PROPERTY_DESIRED_TARGET
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class LaunchpadImportRequest {
+  public static final String JSON_PROPERTY_REPO_URL = "repo_url";
+  private String repoUrl;
+
+  public static final String JSON_PROPERTY_REF = "ref";
+  private String ref;
+
+  public static final String JSON_PROPERTY_DESIRED_TARGET = "desired_target";
+  private String desiredTarget;
+
+  public LaunchpadImportRequest() {
+  }
+
+  public LaunchpadImportRequest repoUrl(String repoUrl) {
+    this.repoUrl = repoUrl;
+    return this;
+  }
+
+   /**
+   * Get repoUrl
+   * @return repoUrl
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_REPO_URL)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getRepoUrl() {
+    return repoUrl;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REPO_URL)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setRepoUrl(String repoUrl) {
+    this.repoUrl = repoUrl;
+  }
+
+
+  public LaunchpadImportRequest ref(String ref) {
+    this.ref = ref;
+    return this;
+  }
+
+   /**
+   * Get ref
+   * @return ref
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getRef() {
+    return ref;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRef(String ref) {
+    this.ref = ref;
+  }
+
+
+  public LaunchpadImportRequest desiredTarget(String desiredTarget) {
+    this.desiredTarget = desiredTarget;
+    return this;
+  }
+
+   /**
+   * Get desiredTarget
+   * @return desiredTarget
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_DESIRED_TARGET)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getDesiredTarget() {
+    return desiredTarget;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DESIRED_TARGET)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setDesiredTarget(String desiredTarget) {
+    this.desiredTarget = desiredTarget;
+  }
+
+
+  /**
+   * Return true if this LaunchpadImportRequest object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    LaunchpadImportRequest launchpadImportRequest = (LaunchpadImportRequest) o;
+    return Objects.equals(this.repoUrl, launchpadImportRequest.repoUrl) &&
+        Objects.equals(this.ref, launchpadImportRequest.ref) &&
+        Objects.equals(this.desiredTarget, launchpadImportRequest.desiredTarget);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(repoUrl, ref, desiredTarget);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class LaunchpadImportRequest {\n");
+    sb.append("    repoUrl: ").append(toIndentedString(repoUrl)).append("\n");
+    sb.append("    ref: ").append(toIndentedString(ref)).append("\n");
+    sb.append("    desiredTarget: ").append(toIndentedString(desiredTarget)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `repo_url` to the URL query string
+    if (getRepoUrl() != null) {
+      joiner.add(String.format("%srepo_url%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRepoUrl()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `ref` to the URL query string
+    if (getRef() != null) {
+      joiner.add(String.format("%sref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `desired_target` to the URL query string
+    if (getDesiredTarget() != null) {
+      joiner.add(String.format("%sdesired_target%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDesiredTarget()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();
@@ -31257,6 +36308,191 @@ public static class ListLaunchpadApps200Response {
           "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
         }
       }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * ListLaunchpadImports200Response
+ */
+@JsonPropertyOrder({
+  ListLaunchpadImports200Response.JSON_PROPERTY_IMPORTS,
+  ListLaunchpadImports200Response.JSON_PROPERTY_CLI_EQUIVALENT
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class ListLaunchpadImports200Response {
+  public static final String JSON_PROPERTY_IMPORTS = "imports";
+  private List<LaunchpadImportRecord> imports = new ArrayList<>();
+
+  public static final String JSON_PROPERTY_CLI_EQUIVALENT = "cli_equivalent";
+  private String cliEquivalent;
+
+  public ListLaunchpadImports200Response() {
+  }
+
+  public ListLaunchpadImports200Response imports(List<LaunchpadImportRecord> imports) {
+    this.imports = imports;
+    return this;
+  }
+
+  public ListLaunchpadImports200Response addImportsItem(LaunchpadImportRecord importsItem) {
+    if (this.imports == null) {
+      this.imports = new ArrayList<>();
+    }
+    this.imports.add(importsItem);
+    return this;
+  }
+
+   /**
+   * Get imports
+   * @return imports
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_IMPORTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public List<LaunchpadImportRecord> getImports() {
+    return imports;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_IMPORTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setImports(List<LaunchpadImportRecord> imports) {
+    this.imports = imports;
+  }
+
+
+  public ListLaunchpadImports200Response cliEquivalent(String cliEquivalent) {
+    this.cliEquivalent = cliEquivalent;
+    return this;
+  }
+
+   /**
+   * Get cliEquivalent
+   * @return cliEquivalent
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CLI_EQUIVALENT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getCliEquivalent() {
+    return cliEquivalent;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CLI_EQUIVALENT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCliEquivalent(String cliEquivalent) {
+    this.cliEquivalent = cliEquivalent;
+  }
+
+
+  /**
+   * Return true if this listLaunchpadImports_200_response object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    ListLaunchpadImports200Response listLaunchpadImports200Response = (ListLaunchpadImports200Response) o;
+    return Objects.equals(this.imports, listLaunchpadImports200Response.imports) &&
+        Objects.equals(this.cliEquivalent, listLaunchpadImports200Response.cliEquivalent);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(imports, cliEquivalent);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class ListLaunchpadImports200Response {\n");
+    sb.append("    imports: ").append(toIndentedString(imports)).append("\n");
+    sb.append("    cliEquivalent: ").append(toIndentedString(cliEquivalent)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `imports` to the URL query string
+    if (getImports() != null) {
+      for (int i = 0; i < getImports().size(); i++) {
+        if (getImports().get(i) != null) {
+          joiner.add(getImports().get(i).toUrlQueryString(String.format("%simports%s%s", prefix, suffix,
+          "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
+        }
+      }
+    }
+
+    // add `cli_equivalent` to the URL query string
+    if (getCliEquivalent() != null) {
+      joiner.add(String.format("%scli_equivalent%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCliEquivalent()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();
@@ -38994,6 +44230,226 @@ public static class NetworkGrant {
 
 
 /**
+ * OAuthRequirement
+ */
+@JsonPropertyOrder({
+  OAuthRequirement.JSON_PROPERTY_PROVIDER,
+  OAuthRequirement.JSON_PROPERTY_SCOPES,
+  OAuthRequirement.JSON_PROPERTY_SOURCE
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class OAuthRequirement {
+  public static final String JSON_PROPERTY_PROVIDER = "provider";
+  private String provider;
+
+  public static final String JSON_PROPERTY_SCOPES = "scopes";
+  private List<String> scopes;
+
+  public static final String JSON_PROPERTY_SOURCE = "source";
+  private String source;
+
+  public OAuthRequirement() {
+  }
+
+  public OAuthRequirement provider(String provider) {
+    this.provider = provider;
+    return this;
+  }
+
+   /**
+   * Get provider
+   * @return provider
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PROVIDER)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getProvider() {
+    return provider;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PROVIDER)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setProvider(String provider) {
+    this.provider = provider;
+  }
+
+
+  public OAuthRequirement scopes(List<String> scopes) {
+    this.scopes = scopes;
+    return this;
+  }
+
+  public OAuthRequirement addScopesItem(String scopesItem) {
+    if (this.scopes == null) {
+      this.scopes = new ArrayList<>();
+    }
+    this.scopes.add(scopesItem);
+    return this;
+  }
+
+   /**
+   * Get scopes
+   * @return scopes
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SCOPES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getScopes() {
+    return scopes;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SCOPES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setScopes(List<String> scopes) {
+    this.scopes = scopes;
+  }
+
+
+  public OAuthRequirement source(String source) {
+    this.source = source;
+    return this;
+  }
+
+   /**
+   * Get source
+   * @return source
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSource() {
+    return source;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSource(String source) {
+    this.source = source;
+  }
+
+
+  /**
+   * Return true if this OAuthRequirement object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    OAuthRequirement oauthRequirement = (OAuthRequirement) o;
+    return Objects.equals(this.provider, oauthRequirement.provider) &&
+        Objects.equals(this.scopes, oauthRequirement.scopes) &&
+        Objects.equals(this.source, oauthRequirement.source);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(provider, scopes, source);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class OAuthRequirement {\n");
+    sb.append("    provider: ").append(toIndentedString(provider)).append("\n");
+    sb.append("    scopes: ").append(toIndentedString(scopes)).append("\n");
+    sb.append("    source: ").append(toIndentedString(source)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `provider` to the URL query string
+    if (getProvider() != null) {
+      joiner.add(String.format("%sprovider%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getProvider()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `scopes` to the URL query string
+    if (getScopes() != null) {
+      for (int i = 0; i < getScopes().size(); i++) {
+        joiner.add(String.format("%sscopes%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getScopes().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `source` to the URL query string
+    if (getSource() != null) {
+      joiner.add(String.format("%ssource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * Request to the Policy Decision Point
  */
 @JsonPropertyOrder({
@@ -40299,6 +45755,506 @@ public static class PolicyBundle {
     // add `pack_type` to the URL query string
     if (getPackType() != null) {
       joiner.add(String.format("%spack_type%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPackType()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * PreflightCheck
+ */
+@JsonPropertyOrder({
+  PreflightCheck.JSON_PROPERTY_ID,
+  PreflightCheck.JSON_PROPERTY_STATUS,
+  PreflightCheck.JSON_PROPERTY_SUMMARY,
+  PreflightCheck.JSON_PROPERTY_EVIDENCE_REF,
+  PreflightCheck.JSON_PROPERTY_FIX_ACTIONS
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class PreflightCheck {
+  public static final String JSON_PROPERTY_ID = "id";
+  private String id;
+
+  public static final String JSON_PROPERTY_STATUS = "status";
+  private String status;
+
+  public static final String JSON_PROPERTY_SUMMARY = "summary";
+  private String summary;
+
+  public static final String JSON_PROPERTY_EVIDENCE_REF = "evidence_ref";
+  private String evidenceRef;
+
+  public static final String JSON_PROPERTY_FIX_ACTIONS = "fix_actions";
+  private List<String> fixActions;
+
+  public PreflightCheck() {
+  }
+
+  public PreflightCheck id(String id) {
+    this.id = id;
+    return this;
+  }
+
+   /**
+   * Get id
+   * @return id
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getId() {
+    return id;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setId(String id) {
+    this.id = id;
+  }
+
+
+  public PreflightCheck status(String status) {
+    this.status = status;
+    return this;
+  }
+
+   /**
+   * Get status
+   * @return status
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getStatus() {
+    return status;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setStatus(String status) {
+    this.status = status;
+  }
+
+
+  public PreflightCheck summary(String summary) {
+    this.summary = summary;
+    return this;
+  }
+
+   /**
+   * Get summary
+   * @return summary
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_SUMMARY)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getSummary() {
+    return summary;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SUMMARY)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setSummary(String summary) {
+    this.summary = summary;
+  }
+
+
+  public PreflightCheck evidenceRef(String evidenceRef) {
+    this.evidenceRef = evidenceRef;
+    return this;
+  }
+
+   /**
+   * Get evidenceRef
+   * @return evidenceRef
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEvidenceRef() {
+    return evidenceRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEvidenceRef(String evidenceRef) {
+    this.evidenceRef = evidenceRef;
+  }
+
+
+  public PreflightCheck fixActions(List<String> fixActions) {
+    this.fixActions = fixActions;
+    return this;
+  }
+
+  public PreflightCheck addFixActionsItem(String fixActionsItem) {
+    if (this.fixActions == null) {
+      this.fixActions = new ArrayList<>();
+    }
+    this.fixActions.add(fixActionsItem);
+    return this;
+  }
+
+   /**
+   * Get fixActions
+   * @return fixActions
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_FIX_ACTIONS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getFixActions() {
+    return fixActions;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_FIX_ACTIONS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setFixActions(List<String> fixActions) {
+    this.fixActions = fixActions;
+  }
+
+
+  /**
+   * Return true if this PreflightCheck object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    PreflightCheck preflightCheck = (PreflightCheck) o;
+    return Objects.equals(this.id, preflightCheck.id) &&
+        Objects.equals(this.status, preflightCheck.status) &&
+        Objects.equals(this.summary, preflightCheck.summary) &&
+        Objects.equals(this.evidenceRef, preflightCheck.evidenceRef) &&
+        Objects.equals(this.fixActions, preflightCheck.fixActions);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(id, status, summary, evidenceRef, fixActions);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class PreflightCheck {\n");
+    sb.append("    id: ").append(toIndentedString(id)).append("\n");
+    sb.append("    status: ").append(toIndentedString(status)).append("\n");
+    sb.append("    summary: ").append(toIndentedString(summary)).append("\n");
+    sb.append("    evidenceRef: ").append(toIndentedString(evidenceRef)).append("\n");
+    sb.append("    fixActions: ").append(toIndentedString(fixActions)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `id` to the URL query string
+    if (getId() != null) {
+      joiner.add(String.format("%sid%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `status` to the URL query string
+    if (getStatus() != null) {
+      joiner.add(String.format("%sstatus%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStatus()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `summary` to the URL query string
+    if (getSummary() != null) {
+      joiner.add(String.format("%ssummary%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSummary()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `evidence_ref` to the URL query string
+    if (getEvidenceRef() != null) {
+      joiner.add(String.format("%sevidence_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEvidenceRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `fix_actions` to the URL query string
+    if (getFixActions() != null) {
+      for (int i = 0; i < getFixActions().size(); i++) {
+        joiner.add(String.format("%sfix_actions%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getFixActions().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * PreflightLaunchpadImport202Response
+ */
+@JsonPropertyOrder({
+  PreflightLaunchpadImport202Response.JSON_PROPERTY_IMPORT,
+  PreflightLaunchpadImport202Response.JSON_PROPERTY_PREFLIGHT,
+  PreflightLaunchpadImport202Response.JSON_PROPERTY_CLI_EQUIVALENT
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class PreflightLaunchpadImport202Response {
+  public static final String JSON_PROPERTY_IMPORT = "import";
+  private LaunchpadImportRecord _import;
+
+  public static final String JSON_PROPERTY_PREFLIGHT = "preflight";
+  private ImportPreflightResult preflight;
+
+  public static final String JSON_PROPERTY_CLI_EQUIVALENT = "cli_equivalent";
+  private String cliEquivalent;
+
+  public PreflightLaunchpadImport202Response() {
+  }
+
+  public PreflightLaunchpadImport202Response _import(LaunchpadImportRecord _import) {
+    this._import = _import;
+    return this;
+  }
+
+   /**
+   * Get _import
+   * @return _import
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_IMPORT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public LaunchpadImportRecord getImport() {
+    return _import;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_IMPORT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setImport(LaunchpadImportRecord _import) {
+    this._import = _import;
+  }
+
+
+  public PreflightLaunchpadImport202Response preflight(ImportPreflightResult preflight) {
+    this.preflight = preflight;
+    return this;
+  }
+
+   /**
+   * Get preflight
+   * @return preflight
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_PREFLIGHT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public ImportPreflightResult getPreflight() {
+    return preflight;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PREFLIGHT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setPreflight(ImportPreflightResult preflight) {
+    this.preflight = preflight;
+  }
+
+
+  public PreflightLaunchpadImport202Response cliEquivalent(String cliEquivalent) {
+    this.cliEquivalent = cliEquivalent;
+    return this;
+  }
+
+   /**
+   * Get cliEquivalent
+   * @return cliEquivalent
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CLI_EQUIVALENT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getCliEquivalent() {
+    return cliEquivalent;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CLI_EQUIVALENT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCliEquivalent(String cliEquivalent) {
+    this.cliEquivalent = cliEquivalent;
+  }
+
+
+  /**
+   * Return true if this preflightLaunchpadImport_202_response object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    PreflightLaunchpadImport202Response preflightLaunchpadImport202Response = (PreflightLaunchpadImport202Response) o;
+    return Objects.equals(this._import, preflightLaunchpadImport202Response._import) &&
+        Objects.equals(this.preflight, preflightLaunchpadImport202Response.preflight) &&
+        Objects.equals(this.cliEquivalent, preflightLaunchpadImport202Response.cliEquivalent);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(_import, preflight, cliEquivalent);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class PreflightLaunchpadImport202Response {\n");
+    sb.append("    _import: ").append(toIndentedString(_import)).append("\n");
+    sb.append("    preflight: ").append(toIndentedString(preflight)).append("\n");
+    sb.append("    cliEquivalent: ").append(toIndentedString(cliEquivalent)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `import` to the URL query string
+    if (getImport() != null) {
+      joiner.add(getImport().toUrlQueryString(prefix + "import" + suffix));
+    }
+
+    // add `preflight` to the URL query string
+    if (getPreflight() != null) {
+      joiner.add(getPreflight().toUrlQueryString(prefix + "preflight" + suffix));
+    }
+
+    // add `cli_equivalent` to the URL query string
+    if (getCliEquivalent() != null) {
+      joiner.add(String.format("%scli_equivalent%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCliEquivalent()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();
@@ -44938,6 +50894,298 @@ public static class SandboxPreflightResult {
 
 
 /**
+ * SecretContract
+ */
+@JsonPropertyOrder({
+  SecretContract.JSON_PROPERTY_NAME,
+  SecretContract.JSON_PROPERTY_SOURCE,
+  SecretContract.JSON_PROPERTY_REQUIRED,
+  SecretContract.JSON_PROPERTY_REASON,
+  SecretContract.JSON_PROPERTY_TARGETS
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class SecretContract {
+  public static final String JSON_PROPERTY_NAME = "name";
+  private String name;
+
+  public static final String JSON_PROPERTY_SOURCE = "source";
+  private String source;
+
+  public static final String JSON_PROPERTY_REQUIRED = "required";
+  private Boolean required;
+
+  public static final String JSON_PROPERTY_REASON = "reason";
+  private String reason;
+
+  public static final String JSON_PROPERTY_TARGETS = "targets";
+  private List<String> targets;
+
+  public SecretContract() {
+  }
+
+  public SecretContract name(String name) {
+    this.name = name;
+    return this;
+  }
+
+   /**
+   * Get name
+   * @return name
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_NAME)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getName() {
+    return name;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_NAME)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setName(String name) {
+    this.name = name;
+  }
+
+
+  public SecretContract source(String source) {
+    this.source = source;
+    return this;
+  }
+
+   /**
+   * Get source
+   * @return source
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSource() {
+    return source;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSource(String source) {
+    this.source = source;
+  }
+
+
+  public SecretContract required(Boolean required) {
+    this.required = required;
+    return this;
+  }
+
+   /**
+   * Get required
+   * @return required
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REQUIRED)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Boolean getRequired() {
+    return required;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REQUIRED)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRequired(Boolean required) {
+    this.required = required;
+  }
+
+
+  public SecretContract reason(String reason) {
+    this.reason = reason;
+    return this;
+  }
+
+   /**
+   * Get reason
+   * @return reason
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getReason() {
+    return reason;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReason(String reason) {
+    this.reason = reason;
+  }
+
+
+  public SecretContract targets(List<String> targets) {
+    this.targets = targets;
+    return this;
+  }
+
+  public SecretContract addTargetsItem(String targetsItem) {
+    if (this.targets == null) {
+      this.targets = new ArrayList<>();
+    }
+    this.targets.add(targetsItem);
+    return this;
+  }
+
+   /**
+   * Get targets
+   * @return targets
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TARGETS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getTargets() {
+    return targets;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TARGETS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTargets(List<String> targets) {
+    this.targets = targets;
+  }
+
+
+  /**
+   * Return true if this SecretContract object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    SecretContract secretContract = (SecretContract) o;
+    return Objects.equals(this.name, secretContract.name) &&
+        Objects.equals(this.source, secretContract.source) &&
+        Objects.equals(this.required, secretContract.required) &&
+        Objects.equals(this.reason, secretContract.reason) &&
+        Objects.equals(this.targets, secretContract.targets);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(name, source, required, reason, targets);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class SecretContract {\n");
+    sb.append("    name: ").append(toIndentedString(name)).append("\n");
+    sb.append("    source: ").append(toIndentedString(source)).append("\n");
+    sb.append("    required: ").append(toIndentedString(required)).append("\n");
+    sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
+    sb.append("    targets: ").append(toIndentedString(targets)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `name` to the URL query string
+    if (getName() != null) {
+      joiner.add(String.format("%sname%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getName()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `source` to the URL query string
+    if (getSource() != null) {
+      joiner.add(String.format("%ssource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `required` to the URL query string
+    if (getRequired() != null) {
+      joiner.add(String.format("%srequired%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRequired()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `reason` to the URL query string
+    if (getReason() != null) {
+      joiner.add(String.format("%sreason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `targets` to the URL query string
+    if (getTargets() != null) {
+      for (int i = 0; i < getTargets().size(); i++) {
+        joiner.add(String.format("%stargets%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getTargets().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * Session
  */
 @JsonPropertyOrder({
@@ -45159,6 +51407,878 @@ public static class Session {
     // add `last_lamport_clock` to the URL query string
     if (getLastLamportClock() != null) {
       joiner.add(String.format("%slast_lamport_clock%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLastLamportClock()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * SourceFileSummary
+ */
+@JsonPropertyOrder({
+  SourceFileSummary.JSON_PROPERTY_PATH,
+  SourceFileSummary.JSON_PROPERTY_KIND,
+  SourceFileSummary.JSON_PROPERTY_SIZE,
+  SourceFileSummary.JSON_PROPERTY_SHA,
+  SourceFileSummary.JSON_PROPERTY_LANGUAGE,
+  SourceFileSummary.JSON_PROPERTY_CONTENT
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class SourceFileSummary {
+  public static final String JSON_PROPERTY_PATH = "path";
+  private String path;
+
+  public static final String JSON_PROPERTY_KIND = "kind";
+  private String kind;
+
+  public static final String JSON_PROPERTY_SIZE = "size";
+  private Integer size;
+
+  public static final String JSON_PROPERTY_SHA = "sha";
+  private String sha;
+
+  public static final String JSON_PROPERTY_LANGUAGE = "language";
+  private String language;
+
+  public static final String JSON_PROPERTY_CONTENT = "content";
+  private String content;
+
+  public SourceFileSummary() {
+  }
+
+  public SourceFileSummary path(String path) {
+    this.path = path;
+    return this;
+  }
+
+   /**
+   * Get path
+   * @return path
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_PATH)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getPath() {
+    return path;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PATH)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setPath(String path) {
+    this.path = path;
+  }
+
+
+  public SourceFileSummary kind(String kind) {
+    this.kind = kind;
+    return this;
+  }
+
+   /**
+   * Get kind
+   * @return kind
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_KIND)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getKind() {
+    return kind;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_KIND)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setKind(String kind) {
+    this.kind = kind;
+  }
+
+
+  public SourceFileSummary size(Integer size) {
+    this.size = size;
+    return this;
+  }
+
+   /**
+   * Get size
+   * @return size
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIZE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Integer getSize() {
+    return size;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIZE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSize(Integer size) {
+    this.size = size;
+  }
+
+
+  public SourceFileSummary sha(String sha) {
+    this.sha = sha;
+    return this;
+  }
+
+   /**
+   * Get sha
+   * @return sha
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SHA)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSha() {
+    return sha;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SHA)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSha(String sha) {
+    this.sha = sha;
+  }
+
+
+  public SourceFileSummary language(String language) {
+    this.language = language;
+    return this;
+  }
+
+   /**
+   * Get language
+   * @return language
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_LANGUAGE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getLanguage() {
+    return language;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_LANGUAGE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setLanguage(String language) {
+    this.language = language;
+  }
+
+
+  public SourceFileSummary content(String content) {
+    this.content = content;
+    return this;
+  }
+
+   /**
+   * Get content
+   * @return content
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CONTENT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getContent() {
+    return content;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CONTENT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setContent(String content) {
+    this.content = content;
+  }
+
+
+  /**
+   * Return true if this SourceFileSummary object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    SourceFileSummary sourceFileSummary = (SourceFileSummary) o;
+    return Objects.equals(this.path, sourceFileSummary.path) &&
+        Objects.equals(this.kind, sourceFileSummary.kind) &&
+        Objects.equals(this.size, sourceFileSummary.size) &&
+        Objects.equals(this.sha, sourceFileSummary.sha) &&
+        Objects.equals(this.language, sourceFileSummary.language) &&
+        Objects.equals(this.content, sourceFileSummary.content);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(path, kind, size, sha, language, content);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class SourceFileSummary {\n");
+    sb.append("    path: ").append(toIndentedString(path)).append("\n");
+    sb.append("    kind: ").append(toIndentedString(kind)).append("\n");
+    sb.append("    size: ").append(toIndentedString(size)).append("\n");
+    sb.append("    sha: ").append(toIndentedString(sha)).append("\n");
+    sb.append("    language: ").append(toIndentedString(language)).append("\n");
+    sb.append("    content: ").append(toIndentedString(content)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `path` to the URL query string
+    if (getPath() != null) {
+      joiner.add(String.format("%spath%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPath()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `kind` to the URL query string
+    if (getKind() != null) {
+      joiner.add(String.format("%skind%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getKind()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `size` to the URL query string
+    if (getSize() != null) {
+      joiner.add(String.format("%ssize%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSize()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `sha` to the URL query string
+    if (getSha() != null) {
+      joiner.add(String.format("%ssha%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSha()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `language` to the URL query string
+    if (getLanguage() != null) {
+      joiner.add(String.format("%slanguage%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLanguage()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `content` to the URL query string
+    if (getContent() != null) {
+      joiner.add(String.format("%scontent%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getContent()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * SourceSnapshot
+ */
+@JsonPropertyOrder({
+  SourceSnapshot.JSON_PROPERTY_REPO_URL,
+  SourceSnapshot.JSON_PROPERTY_PROVIDER,
+  SourceSnapshot.JSON_PROPERTY_OWNER,
+  SourceSnapshot.JSON_PROPERTY_REPO,
+  SourceSnapshot.JSON_PROPERTY_REF,
+  SourceSnapshot.JSON_PROPERTY_COMMIT,
+  SourceSnapshot.JSON_PROPERTY_LICENSE_SPDX,
+  SourceSnapshot.JSON_PROPERTY_LICENSE_STATE,
+  SourceSnapshot.JSON_PROPERTY_FETCHED_AT,
+  SourceSnapshot.JSON_PROPERTY_FILES,
+  SourceSnapshot.JSON_PROPERTY_API_SOURCE
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class SourceSnapshot extends HashMap<String, Object> {
+  public static final String JSON_PROPERTY_REPO_URL = "repo_url";
+  private String repoUrl;
+
+  public static final String JSON_PROPERTY_PROVIDER = "provider";
+  private String provider;
+
+  public static final String JSON_PROPERTY_OWNER = "owner";
+  private String owner;
+
+  public static final String JSON_PROPERTY_REPO = "repo";
+  private String repo;
+
+  public static final String JSON_PROPERTY_REF = "ref";
+  private String ref;
+
+  public static final String JSON_PROPERTY_COMMIT = "commit";
+  private String commit;
+
+  public static final String JSON_PROPERTY_LICENSE_SPDX = "license_spdx";
+  private String licenseSpdx;
+
+  public static final String JSON_PROPERTY_LICENSE_STATE = "license_state";
+  private String licenseState;
+
+  public static final String JSON_PROPERTY_FETCHED_AT = "fetched_at";
+  private OffsetDateTime fetchedAt;
+
+  public static final String JSON_PROPERTY_FILES = "files";
+  private List<SourceFileSummary> files = new ArrayList<>();
+
+  public static final String JSON_PROPERTY_API_SOURCE = "api_source";
+  private String apiSource;
+
+  public SourceSnapshot() {
+  }
+
+  public SourceSnapshot repoUrl(String repoUrl) {
+    this.repoUrl = repoUrl;
+    return this;
+  }
+
+   /**
+   * Get repoUrl
+   * @return repoUrl
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_REPO_URL)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getRepoUrl() {
+    return repoUrl;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REPO_URL)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setRepoUrl(String repoUrl) {
+    this.repoUrl = repoUrl;
+  }
+
+
+  public SourceSnapshot provider(String provider) {
+    this.provider = provider;
+    return this;
+  }
+
+   /**
+   * Get provider
+   * @return provider
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_PROVIDER)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getProvider() {
+    return provider;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PROVIDER)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setProvider(String provider) {
+    this.provider = provider;
+  }
+
+
+  public SourceSnapshot owner(String owner) {
+    this.owner = owner;
+    return this;
+  }
+
+   /**
+   * Get owner
+   * @return owner
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_OWNER)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getOwner() {
+    return owner;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_OWNER)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setOwner(String owner) {
+    this.owner = owner;
+  }
+
+
+  public SourceSnapshot repo(String repo) {
+    this.repo = repo;
+    return this;
+  }
+
+   /**
+   * Get repo
+   * @return repo
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REPO)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getRepo() {
+    return repo;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REPO)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRepo(String repo) {
+    this.repo = repo;
+  }
+
+
+  public SourceSnapshot ref(String ref) {
+    this.ref = ref;
+    return this;
+  }
+
+   /**
+   * Get ref
+   * @return ref
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getRef() {
+    return ref;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRef(String ref) {
+    this.ref = ref;
+  }
+
+
+  public SourceSnapshot commit(String commit) {
+    this.commit = commit;
+    return this;
+  }
+
+   /**
+   * Get commit
+   * @return commit
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_COMMIT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getCommit() {
+    return commit;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_COMMIT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCommit(String commit) {
+    this.commit = commit;
+  }
+
+
+  public SourceSnapshot licenseSpdx(String licenseSpdx) {
+    this.licenseSpdx = licenseSpdx;
+    return this;
+  }
+
+   /**
+   * Get licenseSpdx
+   * @return licenseSpdx
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_LICENSE_SPDX)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getLicenseSpdx() {
+    return licenseSpdx;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_LICENSE_SPDX)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setLicenseSpdx(String licenseSpdx) {
+    this.licenseSpdx = licenseSpdx;
+  }
+
+
+  public SourceSnapshot licenseState(String licenseState) {
+    this.licenseState = licenseState;
+    return this;
+  }
+
+   /**
+   * Get licenseState
+   * @return licenseState
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_LICENSE_STATE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getLicenseState() {
+    return licenseState;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_LICENSE_STATE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setLicenseState(String licenseState) {
+    this.licenseState = licenseState;
+  }
+
+
+  public SourceSnapshot fetchedAt(OffsetDateTime fetchedAt) {
+    this.fetchedAt = fetchedAt;
+    return this;
+  }
+
+   /**
+   * Get fetchedAt
+   * @return fetchedAt
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_FETCHED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public OffsetDateTime getFetchedAt() {
+    return fetchedAt;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_FETCHED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setFetchedAt(OffsetDateTime fetchedAt) {
+    this.fetchedAt = fetchedAt;
+  }
+
+
+  public SourceSnapshot files(List<SourceFileSummary> files) {
+    this.files = files;
+    return this;
+  }
+
+  public SourceSnapshot addFilesItem(SourceFileSummary filesItem) {
+    if (this.files == null) {
+      this.files = new ArrayList<>();
+    }
+    this.files.add(filesItem);
+    return this;
+  }
+
+   /**
+   * Get files
+   * @return files
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_FILES)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public List<SourceFileSummary> getFiles() {
+    return files;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_FILES)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setFiles(List<SourceFileSummary> files) {
+    this.files = files;
+  }
+
+
+  public SourceSnapshot apiSource(String apiSource) {
+    this.apiSource = apiSource;
+    return this;
+  }
+
+   /**
+   * Get apiSource
+   * @return apiSource
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_API_SOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getApiSource() {
+    return apiSource;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_API_SOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setApiSource(String apiSource) {
+    this.apiSource = apiSource;
+  }
+
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public SourceSnapshot putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
+
+  /**
+   * Return true if this SourceSnapshot object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    SourceSnapshot sourceSnapshot = (SourceSnapshot) o;
+    return Objects.equals(this.repoUrl, sourceSnapshot.repoUrl) &&
+        Objects.equals(this.provider, sourceSnapshot.provider) &&
+        Objects.equals(this.owner, sourceSnapshot.owner) &&
+        Objects.equals(this.repo, sourceSnapshot.repo) &&
+        Objects.equals(this.ref, sourceSnapshot.ref) &&
+        Objects.equals(this.commit, sourceSnapshot.commit) &&
+        Objects.equals(this.licenseSpdx, sourceSnapshot.licenseSpdx) &&
+        Objects.equals(this.licenseState, sourceSnapshot.licenseState) &&
+        Objects.equals(this.fetchedAt, sourceSnapshot.fetchedAt) &&
+        Objects.equals(this.files, sourceSnapshot.files) &&
+        Objects.equals(this.apiSource, sourceSnapshot.apiSource)&&
+        Objects.equals(this.additionalProperties, sourceSnapshot.additionalProperties) &&
+        super.equals(o);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(repoUrl, provider, owner, repo, ref, commit, licenseSpdx, licenseState, fetchedAt, files, apiSource, super.hashCode(), additionalProperties);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class SourceSnapshot {\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
+    sb.append("    repoUrl: ").append(toIndentedString(repoUrl)).append("\n");
+    sb.append("    provider: ").append(toIndentedString(provider)).append("\n");
+    sb.append("    owner: ").append(toIndentedString(owner)).append("\n");
+    sb.append("    repo: ").append(toIndentedString(repo)).append("\n");
+    sb.append("    ref: ").append(toIndentedString(ref)).append("\n");
+    sb.append("    commit: ").append(toIndentedString(commit)).append("\n");
+    sb.append("    licenseSpdx: ").append(toIndentedString(licenseSpdx)).append("\n");
+    sb.append("    licenseState: ").append(toIndentedString(licenseState)).append("\n");
+    sb.append("    fetchedAt: ").append(toIndentedString(fetchedAt)).append("\n");
+    sb.append("    files: ").append(toIndentedString(files)).append("\n");
+    sb.append("    apiSource: ").append(toIndentedString(apiSource)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `repo_url` to the URL query string
+    if (getRepoUrl() != null) {
+      joiner.add(String.format("%srepo_url%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRepoUrl()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `provider` to the URL query string
+    if (getProvider() != null) {
+      joiner.add(String.format("%sprovider%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getProvider()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `owner` to the URL query string
+    if (getOwner() != null) {
+      joiner.add(String.format("%sowner%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getOwner()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `repo` to the URL query string
+    if (getRepo() != null) {
+      joiner.add(String.format("%srepo%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRepo()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `ref` to the URL query string
+    if (getRef() != null) {
+      joiner.add(String.format("%sref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `commit` to the URL query string
+    if (getCommit() != null) {
+      joiner.add(String.format("%scommit%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCommit()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `license_spdx` to the URL query string
+    if (getLicenseSpdx() != null) {
+      joiner.add(String.format("%slicense_spdx%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLicenseSpdx()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `license_state` to the URL query string
+    if (getLicenseState() != null) {
+      joiner.add(String.format("%slicense_state%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLicenseState()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `fetched_at` to the URL query string
+    if (getFetchedAt() != null) {
+      joiner.add(String.format("%sfetched_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getFetchedAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `files` to the URL query string
+    if (getFiles() != null) {
+      for (int i = 0; i < getFiles().size(); i++) {
+        if (getFiles().get(i) != null) {
+          joiner.add(getFiles().get(i).toUrlQueryString(String.format("%sfiles%s%s", prefix, suffix,
+          "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
+        }
+      }
+    }
+
+    // add `api_source` to the URL query string
+    if (getApiSource() != null) {
+      joiner.add(String.format("%sapi_source%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getApiSource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();
@@ -45755,6 +52875,621 @@ public static class TamperPublicDemoReceiptRequest {
     // add `mutation` to the URL query string
     if (getMutation() != null) {
       joiner.add(String.format("%smutation%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getMutation()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * TargetPlan
+ */
+@JsonPropertyOrder({
+  TargetPlan.JSON_PROPERTY_TARGET_ID,
+  TargetPlan.JSON_PROPERTY_KIND,
+  TargetPlan.JSON_PROPERTY_SUBSTRATE_ID,
+  TargetPlan.JSON_PROPERTY_DEPLOYABLE,
+  TargetPlan.JSON_PROPERTY_REQUIRES_APPROVAL,
+  TargetPlan.JSON_PROPERTY_COMMANDS,
+  TargetPlan.JSON_PROPERTY_ARTIFACTS,
+  TargetPlan.JSON_PROPERTY_SECRETS_BACKEND,
+  TargetPlan.JSON_PROPERTY_HEALTHCHECK,
+  TargetPlan.JSON_PROPERTY_ROLLBACK,
+  TargetPlan.JSON_PROPERTY_RISK,
+  TargetPlan.JSON_PROPERTY_REASON
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class TargetPlan extends HashMap<String, Object> {
+  public static final String JSON_PROPERTY_TARGET_ID = "target_id";
+  private String targetId;
+
+  public static final String JSON_PROPERTY_KIND = "kind";
+  private String kind;
+
+  public static final String JSON_PROPERTY_SUBSTRATE_ID = "substrate_id";
+  private String substrateId;
+
+  public static final String JSON_PROPERTY_DEPLOYABLE = "deployable";
+  private Boolean deployable;
+
+  public static final String JSON_PROPERTY_REQUIRES_APPROVAL = "requires_approval";
+  private Boolean requiresApproval;
+
+  public static final String JSON_PROPERTY_COMMANDS = "commands";
+  private List<List<String>> commands;
+
+  public static final String JSON_PROPERTY_ARTIFACTS = "artifacts";
+  private List<String> artifacts;
+
+  public static final String JSON_PROPERTY_SECRETS_BACKEND = "secrets_backend";
+  private String secretsBackend;
+
+  public static final String JSON_PROPERTY_HEALTHCHECK = "healthcheck";
+  private Map<String, String> healthcheck = new HashMap<>();
+
+  public static final String JSON_PROPERTY_ROLLBACK = "rollback";
+  private List<String> rollback;
+
+  public static final String JSON_PROPERTY_RISK = "risk";
+  private String risk;
+
+  public static final String JSON_PROPERTY_REASON = "reason";
+  private String reason;
+
+  public TargetPlan() {
+  }
+
+  public TargetPlan targetId(String targetId) {
+    this.targetId = targetId;
+    return this;
+  }
+
+   /**
+   * Get targetId
+   * @return targetId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_TARGET_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getTargetId() {
+    return targetId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TARGET_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setTargetId(String targetId) {
+    this.targetId = targetId;
+  }
+
+
+  public TargetPlan kind(String kind) {
+    this.kind = kind;
+    return this;
+  }
+
+   /**
+   * Get kind
+   * @return kind
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_KIND)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getKind() {
+    return kind;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_KIND)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setKind(String kind) {
+    this.kind = kind;
+  }
+
+
+  public TargetPlan substrateId(String substrateId) {
+    this.substrateId = substrateId;
+    return this;
+  }
+
+   /**
+   * Get substrateId
+   * @return substrateId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SUBSTRATE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSubstrateId() {
+    return substrateId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SUBSTRATE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSubstrateId(String substrateId) {
+    this.substrateId = substrateId;
+  }
+
+
+  public TargetPlan deployable(Boolean deployable) {
+    this.deployable = deployable;
+    return this;
+  }
+
+   /**
+   * Get deployable
+   * @return deployable
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_DEPLOYABLE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public Boolean getDeployable() {
+    return deployable;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DEPLOYABLE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setDeployable(Boolean deployable) {
+    this.deployable = deployable;
+  }
+
+
+  public TargetPlan requiresApproval(Boolean requiresApproval) {
+    this.requiresApproval = requiresApproval;
+    return this;
+  }
+
+   /**
+   * Get requiresApproval
+   * @return requiresApproval
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REQUIRES_APPROVAL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Boolean getRequiresApproval() {
+    return requiresApproval;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REQUIRES_APPROVAL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRequiresApproval(Boolean requiresApproval) {
+    this.requiresApproval = requiresApproval;
+  }
+
+
+  public TargetPlan commands(List<List<String>> commands) {
+    this.commands = commands;
+    return this;
+  }
+
+  public TargetPlan addCommandsItem(List<String> commandsItem) {
+    if (this.commands == null) {
+      this.commands = new ArrayList<>();
+    }
+    this.commands.add(commandsItem);
+    return this;
+  }
+
+   /**
+   * Get commands
+   * @return commands
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_COMMANDS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<List<String>> getCommands() {
+    return commands;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_COMMANDS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCommands(List<List<String>> commands) {
+    this.commands = commands;
+  }
+
+
+  public TargetPlan artifacts(List<String> artifacts) {
+    this.artifacts = artifacts;
+    return this;
+  }
+
+  public TargetPlan addArtifactsItem(String artifactsItem) {
+    if (this.artifacts == null) {
+      this.artifacts = new ArrayList<>();
+    }
+    this.artifacts.add(artifactsItem);
+    return this;
+  }
+
+   /**
+   * Get artifacts
+   * @return artifacts
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ARTIFACTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getArtifacts() {
+    return artifacts;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ARTIFACTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setArtifacts(List<String> artifacts) {
+    this.artifacts = artifacts;
+  }
+
+
+  public TargetPlan secretsBackend(String secretsBackend) {
+    this.secretsBackend = secretsBackend;
+    return this;
+  }
+
+   /**
+   * Get secretsBackend
+   * @return secretsBackend
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SECRETS_BACKEND)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSecretsBackend() {
+    return secretsBackend;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SECRETS_BACKEND)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSecretsBackend(String secretsBackend) {
+    this.secretsBackend = secretsBackend;
+  }
+
+
+  public TargetPlan healthcheck(Map<String, String> healthcheck) {
+    this.healthcheck = healthcheck;
+    return this;
+  }
+
+   /**
+   * Get healthcheck
+   * @return healthcheck
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_HEALTHCHECK)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, String> getHealthcheck() {
+    return healthcheck;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_HEALTHCHECK)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setHealthcheck(Map<String, String> healthcheck) {
+    this.healthcheck = healthcheck;
+  }
+
+
+  public TargetPlan rollback(List<String> rollback) {
+    this.rollback = rollback;
+    return this;
+  }
+
+  public TargetPlan addRollbackItem(String rollbackItem) {
+    if (this.rollback == null) {
+      this.rollback = new ArrayList<>();
+    }
+    this.rollback.add(rollbackItem);
+    return this;
+  }
+
+   /**
+   * Get rollback
+   * @return rollback
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ROLLBACK)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getRollback() {
+    return rollback;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ROLLBACK)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRollback(List<String> rollback) {
+    this.rollback = rollback;
+  }
+
+
+  public TargetPlan risk(String risk) {
+    this.risk = risk;
+    return this;
+  }
+
+   /**
+   * Get risk
+   * @return risk
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_RISK)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getRisk() {
+    return risk;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RISK)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setRisk(String risk) {
+    this.risk = risk;
+  }
+
+
+  public TargetPlan reason(String reason) {
+    this.reason = reason;
+    return this;
+  }
+
+   /**
+   * Get reason
+   * @return reason
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_REASON)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getReason() {
+    return reason;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setReason(String reason) {
+    this.reason = reason;
+  }
+
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public TargetPlan putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
+
+  /**
+   * Return true if this TargetPlan object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    TargetPlan targetPlan = (TargetPlan) o;
+    return Objects.equals(this.targetId, targetPlan.targetId) &&
+        Objects.equals(this.kind, targetPlan.kind) &&
+        Objects.equals(this.substrateId, targetPlan.substrateId) &&
+        Objects.equals(this.deployable, targetPlan.deployable) &&
+        Objects.equals(this.requiresApproval, targetPlan.requiresApproval) &&
+        Objects.equals(this.commands, targetPlan.commands) &&
+        Objects.equals(this.artifacts, targetPlan.artifacts) &&
+        Objects.equals(this.secretsBackend, targetPlan.secretsBackend) &&
+        Objects.equals(this.healthcheck, targetPlan.healthcheck) &&
+        Objects.equals(this.rollback, targetPlan.rollback) &&
+        Objects.equals(this.risk, targetPlan.risk) &&
+        Objects.equals(this.reason, targetPlan.reason)&&
+        Objects.equals(this.additionalProperties, targetPlan.additionalProperties) &&
+        super.equals(o);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(targetId, kind, substrateId, deployable, requiresApproval, commands, artifacts, secretsBackend, healthcheck, rollback, risk, reason, super.hashCode(), additionalProperties);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class TargetPlan {\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
+    sb.append("    targetId: ").append(toIndentedString(targetId)).append("\n");
+    sb.append("    kind: ").append(toIndentedString(kind)).append("\n");
+    sb.append("    substrateId: ").append(toIndentedString(substrateId)).append("\n");
+    sb.append("    deployable: ").append(toIndentedString(deployable)).append("\n");
+    sb.append("    requiresApproval: ").append(toIndentedString(requiresApproval)).append("\n");
+    sb.append("    commands: ").append(toIndentedString(commands)).append("\n");
+    sb.append("    artifacts: ").append(toIndentedString(artifacts)).append("\n");
+    sb.append("    secretsBackend: ").append(toIndentedString(secretsBackend)).append("\n");
+    sb.append("    healthcheck: ").append(toIndentedString(healthcheck)).append("\n");
+    sb.append("    rollback: ").append(toIndentedString(rollback)).append("\n");
+    sb.append("    risk: ").append(toIndentedString(risk)).append("\n");
+    sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `target_id` to the URL query string
+    if (getTargetId() != null) {
+      joiner.add(String.format("%starget_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTargetId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `kind` to the URL query string
+    if (getKind() != null) {
+      joiner.add(String.format("%skind%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getKind()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `substrate_id` to the URL query string
+    if (getSubstrateId() != null) {
+      joiner.add(String.format("%ssubstrate_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSubstrateId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `deployable` to the URL query string
+    if (getDeployable() != null) {
+      joiner.add(String.format("%sdeployable%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDeployable()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `requires_approval` to the URL query string
+    if (getRequiresApproval() != null) {
+      joiner.add(String.format("%srequires_approval%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRequiresApproval()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `commands` to the URL query string
+    if (getCommands() != null) {
+      for (int i = 0; i < getCommands().size(); i++) {
+        joiner.add(String.format("%scommands%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getCommands().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `artifacts` to the URL query string
+    if (getArtifacts() != null) {
+      for (int i = 0; i < getArtifacts().size(); i++) {
+        joiner.add(String.format("%sartifacts%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getArtifacts().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `secrets_backend` to the URL query string
+    if (getSecretsBackend() != null) {
+      joiner.add(String.format("%ssecrets_backend%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSecretsBackend()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `healthcheck` to the URL query string
+    if (getHealthcheck() != null) {
+      joiner.add(String.format("%shealthcheck%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getHealthcheck()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `rollback` to the URL query string
+    if (getRollback() != null) {
+      for (int i = 0; i < getRollback().size(); i++) {
+        joiner.add(String.format("%srollback%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getRollback().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `risk` to the URL query string
+    if (getRisk() != null) {
+      joiner.add(String.format("%srisk%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRisk()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `reason` to the URL query string
+    if (getReason() != null) {
+      joiner.add(String.format("%sreason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();

@@ -22,7 +22,7 @@ launch, teardown, and offline EvidencePack verification for all four.
 - [KEEP] OpenCode and Kilo Code remain `oss_candidate`; Codex, Claude Code, Cursor, and Junie remain external/BYO adapters.
 - [KEEP] DigitalOcean and Hetzner remain dry-run by default; live mode requires explicit operator approval receipt and reconciliation.
 - [KEEP] OSS Skill Packs MVP, Codex plugin export, repo projection, scan/install/revoke receipts, and Skill Pack conformance tests remain in this release candidate.
-- [KEEP] Enterprise Launchpad and Skills APIs, route registry/OpenAPI parity, migrations, durable stores, Console Launchpad UI, Playwright coverage, and approved OSS boundary sync are merged through Enterprise PR #30.
+- [KEEP] Enterprise Launchpad and Skills APIs, route registry/OpenAPI parity, migrations, durable stores, and approved OSS boundary sync are merged through Enterprise PR #30. Browser checks now belong to the standalone Console repository.
 - [KEEP] Kernel release `v0.5.4` ships CLI binaries, checksums, SBOM JSON, OpenVEX, release attestation metadata, Cosign bundles, `evidence-pack.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, and sample policy material.
 - [KEEP] Release asset verification passed for `v0.5.4`: `SHA256SUMS.txt`, offline EvidencePack verification, and Cosign verification for all 14 signed assets.
 
@@ -35,7 +35,7 @@ launch, teardown, and offline EvidencePack verification for all four.
 - `docs/launchpad/FINAL_IMPLEMENTATION_REPORT.md`
 - `docs/launchpad/final_report.json`
 
-The full kernel branch diff also includes Launchpad runtime, promotion, receipts, Skill Packs, schemas, tests, policies, docs, and artifact recipe files. The Enterprise release candidate diff includes Launchpad/Skills APIs, Console feature files, migrations, OpenAPI, route registry, protected OSS sync, and route/parity tests.
+The full kernel branch diff also includes Launchpad runtime, promotion, receipts, Skill Packs, schemas, tests, policies, docs, and artifact recipe files. The Enterprise release candidate diff includes Launchpad/Skills APIs, migrations, OpenAPI, route registry, protected OSS sync, and route/parity tests.
 
 ## App Availability
 
@@ -68,7 +68,7 @@ Kernel:
 - `bin/helm-ai-kernel verify --bundle` for OpenClaw downloaded EvidencePack directory and tar archive.
 - `bin/helm-ai-kernel verify --bundle` for Hermes downloaded EvidencePack directory and tar archive.
 - `go test ./core/pkg/skillpacks/... ./core/pkg/launchpad/... ./core/cmd/helm-ai-kernel/... ./core/pkg/mcp/... ./core/pkg/evidencepack/... ./core/pkg/verifier ./tests/skills/... ./tests/launchpad/...`
-- Prior gates on this branch: `make build`, `make test`, `make test-console`, `make test-platform`, `make launch-ready`, `make launch-security`.
+- Prior gates on this branch: `make build`, `make test`, `make test-platform`, `make launch-ready`, `make sdk-openapi-check`.
 - Release workflow `26131090671`.
 - `shasum -a 256 -c SHA256SUMS.txt --ignore-missing` for downloaded v0.5.4 release assets.
 - `bin/helm-ai-kernel verify --bundle` for downloaded v0.5.4 `evidence-pack.tar`.
@@ -79,11 +79,7 @@ Enterprise:
 - `make quality-pr`
 - `make verify-boundary`
 - `make openapi-route-parity`
-- `go test ./apps/controlplane/internal/console/... ./apps/controlplane/internal/store/postgres`
-- `pnpm --dir apps/console typecheck`
-- `pnpm --dir apps/console test -- --run`
-- `pnpm --dir apps/console build`
-- `pnpm --dir e2e exec playwright test tests/launchpad.spec.ts --project=chromium`
+- `go test ./svc-helm-control-plane/internal/console/... ./svc-helm-control-plane/internal/store/postgres`
 - Enterprise PR #30 remote CI checks, including `race-detector`, `Mutation Analysis`, `Boundary Verification`, `openapi-lint`, `evidence-pack`, `doccheck`, and JS typecheck/lint/test/build.
 
 ## Tests Failing

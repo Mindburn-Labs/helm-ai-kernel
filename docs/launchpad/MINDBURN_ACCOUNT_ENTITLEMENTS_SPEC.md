@@ -7,11 +7,11 @@ last_reviewed: 2026-05-22
 
 Status: target integration contract. `helm-ai-kernel` does not currently ship a
 production Free / Individual / Enterprise entitlement service or Mindburn hosted
-login flow. Kernel Launchpad must not infer account tier in UI state.
+login flow. Kernel Launchpad must not infer account tier in API state.
 
 ## Current Repo-Backed Scope
 
-- Kernel Console uses existing Launchpad APIs for apps, substrates, matrix,
+- External clients use existing Launchpad APIs for apps, substrates, matrix,
   plan, runs, sandbox, MCP reviews, secrets, receipts, EvidencePack export,
   teardown, repair, and delete.
 - OpenClaw, Hermes, OpenCode, and Kilo Code support comes from
@@ -50,8 +50,8 @@ Future hosted integration should expose an authenticated session payload with:
 }
 ```
 
-Self-hosted Kernel Console may continue to use existing tenant/admin headers.
-That self-hosted identity is not equivalent to a hosted billing plan unless a
+Standalone clients may continue to use existing tenant/admin headers. That
+local identity is not equivalent to a hosted billing plan unless a
 real entitlement source provides it.
 
 ## Entitlement Contract
@@ -118,7 +118,7 @@ When entitlement data exists, backend responses may add fields like:
 }
 ```
 
-These fields are optional and additive. In production, Console may render them
+These fields are optional and additive. In production, clients may render them
 only when the backend returns them. Tests may use fixture-only entitlement
 states, but fixture states must be visibly labeled and must not become runtime
 fallback data.

@@ -22,7 +22,7 @@ flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Kernel["Go kernel and CLI"]
         API["HTTP API and proxy"]
-        Console["self-hostable HELM AI Kernel Console"]
+        ExternalClient["external Console or client"]
         SDKs["SDKs and adapters"]
         Starters["provider starters"]
         Deploy["Docker and Kubernetes"]
@@ -34,7 +34,7 @@ flowchart TD
 
     %% Operational Flow Edges
     Kernel --> API
-    API --> Console
+    API --> ExternalClient
     API --> SDKs
     SDKs --> Starters
     Kernel --> Policy
@@ -58,8 +58,8 @@ This page is backed by:
 - `examples/policies/`
 - `docs/architecture/policy-languages.md`
 - `deploy/helm-chart/`
-- `apps/console/`
-- `docs/CONSOLE.md`
+- `api/openapi/`
+- `protocols/`
 
 ## Supported Public Surfaces
 
@@ -70,7 +70,7 @@ This page is backed by:
 | MCP server, OAuth scope enforcement, and bundle generation | Supported | `core/cmd/helm-ai-kernel/mcp_*`, MCP tests |
 | Boundary records, MCP quarantine, sandbox grants, authz snapshots, approvals, budgets, telemetry, and coexistence APIs | Supported | `api/openapi/helm.openapi.yaml`, `core/cmd/helm-ai-kernel/route_registry.go`, `core/cmd/helm-ai-kernel/contract_routes.go` |
 | Evidence export and offline verification | Supported | `core/cmd/helm-ai-kernel/export_cmd.go`, `core/cmd/helm-ai-kernel/verify_cmd.go` |
-| Self-hostable HELM AI Kernel Console | Supported | `apps/console/`, `make test-console` |
+| Headless API contract for external clients | Supported | `api/openapi/helm.openapi.yaml`, `core/cmd/helm-ai-kernel/route_registry.go`, `make sdk-openapi-check` |
 | Python SDK | Supported | `make test-sdk-py` |
 | TypeScript SDK and JavaScript OpenAI-compatible path | Supported | `make test-sdk-ts` |
 | Go SDK | Supported | `cd sdk/go && go test ./...` |
@@ -122,7 +122,9 @@ Use `docs/architecture/policy-languages.md` for the longer comparison and comman
 
 ## Deployment Surface
 
-The repository keeps Docker, Docker Compose, a Kubernetes Helm chart, and the self-hostable HELM AI Kernel Console. It does not ship hosted operations, a static report viewer, or tenant-admin services in HELM AI Kernel.
+The repository keeps Docker, Docker Compose, and a Kubernetes Helm chart for
+the headless kernel. It does not ship hosted operations, a browser Console,
+static report viewer, or tenant-admin services in HELM AI Kernel.
 
 | Deployment | Status | Source |
 | --- | --- | --- |
@@ -130,7 +132,6 @@ The repository keeps Docker, Docker Compose, a Kubernetes Helm chart, and the se
 | Docker image | Supported | `Dockerfile` |
 | Docker Compose | Supported | `docker-compose.yml` |
 | Kubernetes Helm chart | Supported | `deploy/helm-chart/` |
-| Self-hostable HELM AI Kernel Console | Supported | `apps/console/` |
 
 ## Verdict Compatibility
 

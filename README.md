@@ -77,11 +77,10 @@ chmod +x helm-ai-kernel
 ./helm-ai-kernel --version
 ```
 
-Start a local boundary. Add `--console` when you want the self-hostable Console:
+Start a local headless boundary:
 
 ```bash
 helm-ai-kernel serve --policy ./release.high_risk.v3.toml
-helm-ai-kernel serve --policy ./release.high_risk.v3.toml --console
 helm-ai-kernel boundary status
 ```
 
@@ -139,7 +138,6 @@ Run the retained validation targets before publishing changes:
 
 ```bash
 make test
-make test-console
 make test-platform
 make test-all
 make crucible
@@ -189,8 +187,7 @@ The complete diagram doctrine lives in
 | Surface | Path | Status |
 | --- | --- | --- |
 | CLI and kernel | `core/` | Go implementation of boundary, CLI, HTTP API, proxy, receipts, evidence export, and verification |
-| Console | `apps/console/` | Self-hostable HELM AI Kernel Console |
-| Design system core | `packages/design-system-core/` | Workspace package source used by the Console |
+| Headless API contract | `api/openapi/`, `protocols/`, `schemas/` | HTTP, WebSocket-adjacent, OpenAPI, Protobuf, policy schema, and JSON schema contracts for external clients |
 | Wire contracts | `api/openapi/`, `protocols/`, `schemas/` | OpenAPI, Protobuf, policy schemas, and JSON schemas |
 | SDKs | `sdk/` | Go, Python, TypeScript, Rust, and Java sources |
 | Examples | `examples/` | Runnable integrations and launch smoke material |
@@ -207,7 +204,6 @@ The complete diagram doctrine lives in
 | TypeScript SDK | `npm install @mindburn/helm-ai-kernel` |
 | Rust SDK | `cargo add helm-sdk` |
 | Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.7` |
-| Design system core | Workspace source; public npm registry publication is not verified in this repo |
 
 HTTP clients are generated from
 [`api/openapi/helm.openapi.yaml`](api/openapi/helm.openapi.yaml). Protobuf
@@ -221,7 +217,6 @@ Public OSS docs are sourced from this repo and published through
 `docs/public-docs.manifest.json`.
 
 - [Quickstart](docs/QUICKSTART.md)
-- [Console](docs/CONSOLE.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Conformance](docs/CONFORMANCE.md)
 - [Verification](docs/VERIFICATION.md)

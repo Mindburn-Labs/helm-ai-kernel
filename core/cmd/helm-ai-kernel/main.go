@@ -51,8 +51,6 @@ type serverOptions struct {
 	DataDir    string
 	SQLitePath string
 	PolicyPath string
-	Console    bool
-	ConsoleDir string
 	JSON       bool
 	Stdout     io.Writer
 	Stderr     io.Writer
@@ -366,7 +364,6 @@ func runServerWithOptions(opts serverOptions) {
 	if extraRoutes != nil {
 		extraRoutes(mux)
 	}
-	RegisterConsoleStaticRoutes(mux, opts)
 	rateLimiter := helmapi.NewGlobalRateLimiter(60, 120)
 	if envBool("HELM_TRUST_PROXY_HEADERS") {
 		rateLimiter = rateLimiter.WithTrustProxy(true)

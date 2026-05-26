@@ -38,8 +38,7 @@
         "mcp-bundle.json",
         "release.high_risk.v3.toml",
         "CLAIMS.md",
-        "artifacthub-repo.yml",
-        "package.json"
+        "artifacthub-repo.yml"
       ],
       "owner_doc_path": "README.md",
       "public_doc_slugs": [
@@ -205,7 +204,7 @@
     },
     {
       "id": "runtime-http-api-routes",
-      "label": "Runtime HTTP route registry, auth wrapper, contract routes, receipt routes, and console bootstrap API",
+      "label": "Runtime HTTP route registry, auth wrapper, contract routes, receipt routes, and external client APIs",
       "classification": "public-direct",
       "source_patterns": [
         "core/cmd/helm-ai-kernel/route_registry.go",
@@ -223,10 +222,9 @@
       "owner_doc_path": "core/cmd/README.md",
       "public_doc_slugs": [
         "helm-ai-kernel/reference/http-api",
-        "helm-ai-kernel/reference/execution-boundary",
-        "helm-ai-kernel/console"
+        "helm-ai-kernel/reference/execution-boundary"
       ],
-      "rationale": "HTTP route behavior is enforceable at file-level granularity through the route registry, auth wrapper, handler files, and OpenAPI route parity tests.",
+      "rationale": "HTTP route behavior is enforceable at file-level granularity through the route registry, auth wrapper, handler files, and OpenAPI/SDK contract checks.",
       "validation_commands": [
         "cd core && go test ./cmd/helm-ai-kernel -run 'Test.*Route|Test.*OpenAPI|Test.*Receipt' -count=1",
         "make docs-truth"
@@ -358,28 +356,6 @@
       "rationale": "Remaining runtime libraries stay documented through owner docs and architecture/source-map pages without diluting the direct CLI/API/boundary rows.",
       "validation_commands": [
         "make test",
-        "make docs-truth"
-      ]
-    },
-    {
-      "id": "console-and-design-system",
-      "label": "HELM AI Kernel Console application and shared UI packages",
-      "classification": "public-hub",
-      "source_patterns": [
-        "apps/README.md",
-        "apps/*/**",
-        "packages/README.md",
-        "packages/*/**"
-      ],
-      "owner_doc_path": "apps/console/README.md",
-      "public_doc_slugs": [
-        "helm-ai-kernel/console",
-        "helm-ai-kernel/design-system",
-        "helm-ai-kernel/source-map"
-      ],
-      "rationale": "The console and UI packages are public OSS surfaces, with browser-level details owned near the app code.",
-      "validation_commands": [
-        "make test-console",
         "make docs-truth"
       ]
     },
@@ -517,8 +493,6 @@
       "classification": "generated-or-config",
       "source_patterns": [
         ".agents/**",
-        "HELM Console.command",
-        "pnpm-lock.yaml",
         "scratch/**",
         "skills-lock.json"
       ],
@@ -526,4 +500,3 @@
     }
   ]
 }
-

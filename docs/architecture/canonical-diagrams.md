@@ -45,11 +45,12 @@ explicitly about pre-execution discovery. Public proof should be represented by
 hashes, signatures, inclusion proofs, deterministic redaction, or offline
 verification, not by raw secrets or customer payloads.
 
-Finally, check product boundaries. HELM AI Kernel diagrams may show the CLI, kernel,
-self-hostable Console, MCP firewall, OpenAI-compatible proxy, sandbox grants,
-schemas, receipts, and conformance harness. Commercial tenant administration,
-hosted billing, private connectors, and portfolio operating systems belong in
-their own docs and must not appear as current HELM AI Kernel surfaces.
+Finally, check product boundaries. HELM AI Kernel diagrams may show the CLI,
+kernel, headless API contract, MCP firewall, OpenAI-compatible proxy, sandbox
+grants, schemas, receipts, and conformance harness. Browser UI, commercial
+tenant administration, hosted billing, private connectors, and portfolio
+operating systems belong in their own docs and must not appear as current HELM
+AI Kernel surfaces.
 
 Use one diagram per claim. If a page needs to explain both MCP quarantine and
 EvidencePack verification, show those as separate flows or explicitly label the

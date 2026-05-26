@@ -35,7 +35,7 @@ run_step() {
 run_step "Go govulncheck" bash -c "cd '$ROOT/core' && go run 'golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}' ./..."
 
 if command -v npm >/dev/null 2>&1; then
-    for dir in "$ROOT/sdk/ts" "$ROOT/apps/console" "$ROOT/packages/design-system-core"; do
+    for dir in "$ROOT/sdk/ts"; do
         if [ -f "$dir/package-lock.json" ]; then
             rel="${dir#"$ROOT"/}"
             run_step "npm audit $rel" \

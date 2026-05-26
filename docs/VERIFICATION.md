@@ -275,7 +275,6 @@ the scanner can still surface them.
 
 ```bash
 make test
-make test-console
 make test-platform
 make test-all
 make crucible

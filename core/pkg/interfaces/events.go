@@ -7,7 +7,7 @@ import (
 
 // Event is the immutable unit of history.
 // Corresponds to L0/EventHistoryEvent.md
-// Moved from apps/data-plane/events to ensure TCB sovereignty.
+// Moved from svc-helm-data-plane/events to ensure TCB sovereignty.
 type Event struct {
 	SequenceID  int64       `json:"sequence_id"`
 	EventType   string      `json:"event_type"`

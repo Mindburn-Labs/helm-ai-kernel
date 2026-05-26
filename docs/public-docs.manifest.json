@@ -28,15 +28,6 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/console",
-      "title": "HELM AI Kernel Console",
-      "section": "start-here",
-      "source_path": "docs/CONSOLE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/console",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
       "slug": "helm-ai-kernel/developer-journey",
       "title": "Developer Journey",
       "section": "start-here",
@@ -411,15 +402,6 @@
       "section": "security",
       "source_path": "docs/RELEASE_SECURITY.md",
       "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/security/release-security",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "helm-ai-kernel/design-system",
-      "title": "HELM AI Kernel Design System Surface",
-      "section": "interfaces",
-      "source_path": "docs/DESIGN_SYSTEM.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/design-system",
       "access": "public",
       "sensitivity": "public"
     }

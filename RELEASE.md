@@ -13,14 +13,12 @@ describe `v0.4.1` as the current release.
 ## Prepare v0.5.1
 
 1. Update `VERSION`, CLI fallback version, OpenAPI `info.version`, SDK
-   manifests, generated SDK comments, chart metadata, and Console visible
-   version.
+   manifests, generated SDK comments, and chart metadata.
 2. Update `CHANGELOG.md` with the `v0.5.1` user-visible delta.
 3. Run the maintained validation targets:
 
 ```bash
 make test
-make test-console
 make test-platform
 make test-all
 make crucible

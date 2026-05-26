@@ -1,0 +1,11 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: helm-ai-kernel
+  description: "Open-source fail-closed AI execution firewall daemon and API core."
+  annotations:
+    mindburn.org/project-tier: core
+spec:
+  type: service
+  lifecycle: production
+  owner: architecture-platform

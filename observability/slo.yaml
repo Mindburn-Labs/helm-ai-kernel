@@ -1,0 +1,17 @@
+service: helm-ai-kernel
+team: architecture-platform
+slos:
+  - name: API-Availability
+    description: "Successful response rate for HTTP/gRPC endpoints."
+    target: 0.999
+    window: 30d
+    indicator:
+      prometheus:
+        query: "sum(rate(http_requests_total{status!~'5..'}[5m])) / sum(rate(http_requests_total[5m]))"
+  - name: Decision-Latency
+    description: "Fail-closed interceptor execution latency."
+    target: 0.95
+    window: 30d
+    indicator:
+      prometheus:
+        query: "histogram_quantile(0.95, sum(rate(helm_policy_duration_seconds_bucket[5m])) by (le))"

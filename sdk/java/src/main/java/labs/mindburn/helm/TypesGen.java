@@ -12858,6 +12858,309 @@ public static class ConsoleBootstrapWorkspace {
 
 
 /**
+ * ConsoleCapabilities
+ */
+@JsonPropertyOrder({
+  ConsoleCapabilities.JSON_PROPERTY_ENTITLEMENTS,
+  ConsoleCapabilities.JSON_PROPERTY_VERSION,
+  ConsoleCapabilities.JSON_PROPERTY_SOURCE,
+  ConsoleCapabilities.JSON_PROPERTY_TIER_GATE
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class ConsoleCapabilities extends HashMap<String, Object> {
+  public static final String JSON_PROPERTY_ENTITLEMENTS = "entitlements";
+  private List<String> entitlements = new ArrayList<>();
+
+  public static final String JSON_PROPERTY_VERSION = "version";
+  private String version;
+
+  public static final String JSON_PROPERTY_SOURCE = "source";
+  private String source;
+
+  public static final String JSON_PROPERTY_TIER_GATE = "tier_gate";
+  private String tierGate;
+
+  public ConsoleCapabilities() {
+  }
+
+  public ConsoleCapabilities entitlements(List<String> entitlements) {
+    this.entitlements = entitlements;
+    return this;
+  }
+
+  public ConsoleCapabilities addEntitlementsItem(String entitlementsItem) {
+    if (this.entitlements == null) {
+      this.entitlements = new ArrayList<>();
+    }
+    this.entitlements.add(entitlementsItem);
+    return this;
+  }
+
+   /**
+   * Get entitlements
+   * @return entitlements
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_ENTITLEMENTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public List<String> getEntitlements() {
+    return entitlements;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ENTITLEMENTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setEntitlements(List<String> entitlements) {
+    this.entitlements = entitlements;
+  }
+
+
+  public ConsoleCapabilities version(String version) {
+    this.version = version;
+    return this;
+  }
+
+   /**
+   * Get version
+   * @return version
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_VERSION)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getVersion() {
+    return version;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_VERSION)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setVersion(String version) {
+    this.version = version;
+  }
+
+
+  public ConsoleCapabilities source(String source) {
+    this.source = source;
+    return this;
+  }
+
+   /**
+   * Get source
+   * @return source
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSource() {
+    return source;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSource(String source) {
+    this.source = source;
+  }
+
+
+  public ConsoleCapabilities tierGate(String tierGate) {
+    this.tierGate = tierGate;
+    return this;
+  }
+
+   /**
+   * Get tierGate
+   * @return tierGate
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TIER_GATE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getTierGate() {
+    return tierGate;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TIER_GATE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTierGate(String tierGate) {
+    this.tierGate = tierGate;
+  }
+
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public ConsoleCapabilities putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
+
+  /**
+   * Return true if this ConsoleCapabilities object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    ConsoleCapabilities consoleCapabilities = (ConsoleCapabilities) o;
+    return Objects.equals(this.entitlements, consoleCapabilities.entitlements) &&
+        Objects.equals(this.version, consoleCapabilities.version) &&
+        Objects.equals(this.source, consoleCapabilities.source) &&
+        Objects.equals(this.tierGate, consoleCapabilities.tierGate)&&
+        Objects.equals(this.additionalProperties, consoleCapabilities.additionalProperties) &&
+        super.equals(o);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(entitlements, version, source, tierGate, super.hashCode(), additionalProperties);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class ConsoleCapabilities {\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
+    sb.append("    entitlements: ").append(toIndentedString(entitlements)).append("\n");
+    sb.append("    version: ").append(toIndentedString(version)).append("\n");
+    sb.append("    source: ").append(toIndentedString(source)).append("\n");
+    sb.append("    tierGate: ").append(toIndentedString(tierGate)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `entitlements` to the URL query string
+    if (getEntitlements() != null) {
+      for (int i = 0; i < getEntitlements().size(); i++) {
+        joiner.add(String.format("%sentitlements%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getEntitlements().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `version` to the URL query string
+    if (getVersion() != null) {
+      joiner.add(String.format("%sversion%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `source` to the URL query string
+    if (getSource() != null) {
+      joiner.add(String.format("%ssource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `tier_gate` to the URL query string
+    if (getTierGate() != null) {
+      joiner.add(String.format("%stier_gate%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTierGate()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.7
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * ConsoleDiagnostics
  */
 @JsonPropertyOrder({

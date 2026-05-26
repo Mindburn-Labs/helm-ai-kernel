@@ -11,6 +11,8 @@ type LaunchPlan struct {
 	ArtifactImage           string                     `json:"artifact_image,omitempty"`
 	ArtifactDigest          string                     `json:"artifact_digest,omitempty"`
 	RuntimeCommand          []string                   `json:"runtime_command,omitempty"`
+	RuntimeDetached         bool                       `json:"runtime_detached,omitempty"`
+	RuntimeReadinessTimeout string                     `json:"runtime_readiness_timeout,omitempty"`
 	Healthchecks            []registry.HealthcheckSpec `json:"healthchecks,omitempty"`
 	ModelGatewayEnv         []string                   `json:"model_gateway_env,omitempty"`
 	ModelGatewayMode        string                     `json:"model_gateway_mode,omitempty"`
@@ -24,6 +26,7 @@ type LaunchPlan struct {
 	RequiredSecretRefs      []string                   `json:"required_secret_refs"`
 	NetworkAllowlist        []string                   `json:"network_allowlist"`
 	FilesystemMounts        []string                   `json:"filesystem_mounts"`
+	StateDirEnv             string                     `json:"state_dir_env,omitempty"`
 	MCPPolicy               registry.MCPPolicy         `json:"mcp_policy"`
 	Budgets                 registry.BudgetCeiling     `json:"budgets"`
 	Nodes                   map[string]any             `json:"nodes"`

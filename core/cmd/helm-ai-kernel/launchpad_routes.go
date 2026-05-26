@@ -349,7 +349,7 @@ func handleLaunchpadRunsPath(w http.ResponseWriter, r *http.Request, rest string
 			"local_verification":      run.VerificationCommand != "",
 			"proof_status":            proofStatusForRefs(run.EvidencePackRefs),
 			"cli_equivalent":          "helm evidence export " + runID,
-			"verify_cli_equivalent":   firstNonEmpty(run.VerificationCommand, "helm evidence verify <file> --offline"),
+			"verify_cli_equivalent":   firstNonEmpty(run.VerificationCommand, "helm-ai-kernel verify --bundle <file>"),
 			"without_cloud_supported": true,
 		})
 		return

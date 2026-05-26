@@ -53,6 +53,15 @@ type InstallSpec struct {
 type RuntimeSpec struct {
 	Command []string `json:"command" yaml:"command"`
 	Ports   []int    `json:"ports,omitempty" yaml:"ports,omitempty"`
+	// Detached marks the app as a long-running daemon: kernel issues
+	// `docker run -d`, returns the container ID immediately, and treats
+	// healthcheck-based readiness as the gate to RUNNING state instead
+	// of waiting for the container to exit. Required for gateway-style
+	// apps like openclaw that never terminate on their own.
+	Detached bool `json:"detached,omitempty" yaml:"detached,omitempty"`
+	// ReadinessTimeout caps how long kernel polls healthcheck before
+	// declaring REPAIR_REQUIRED for a detached run. Default 8 minutes.
+	ReadinessTimeout string `json:"readiness_timeout,omitempty" yaml:"readiness_timeout,omitempty"`
 }
 
 type ModelGatewaySpec struct {
@@ -66,6 +75,12 @@ type PolicyRef struct {
 	Mode      string   `json:"mode" yaml:"mode"`
 	Mounts    []string `json:"mounts,omitempty" yaml:"mounts,omitempty"`
 	PolicyRef string   `json:"policy_ref,omitempty" yaml:"policy_ref,omitempty"`
+	// StateDirEnv is the env var the launched app reads to discover its
+	// writable state directory. When set, kernel creates host directories
+	// for each non-workspace mount declared in Mounts, mounts them into
+	// the container at /var/lib/<app_id>/<mount_name>, and exports the
+	// env var pointing at the first such mount (typically app_state).
+	StateDirEnv string `json:"state_dir_env,omitempty" yaml:"state_dir_env,omitempty"`
 }
 
 type NetworkPolicy struct {

@@ -754,7 +754,7 @@ func cliForGate(id string) string {
 	case "receipts.emit":
 		return "helm run receipts <run_id>"
 	case "evidence.export", "offline.verify":
-		return "helm evidence verify <file> --offline"
+		return "helm-ai-kernel verify --bundle <file>"
 	case "teardown.cascade":
 		return "helm teardown <run_id> --cascade"
 	default:

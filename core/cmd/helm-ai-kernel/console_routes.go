@@ -111,6 +111,18 @@ type consoleSurfaceDefinition struct {
 // the HELM AI Kernel Console. The handler is read-only and derives state from kernel
 // services; it does not create demonstration data.
 func RegisterConsoleRoutes(mux *http.ServeMux, svc *Services, opts serverOptions) {
+	mux.HandleFunc("/api/v1/meta/capabilities", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"entitlements": []string{"OSS_CORE"},
+			"version":      "1.25",
+		})
+	})
+
 	mux.HandleFunc("/api/v1/console/bootstrap", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
@@ -327,9 +339,7 @@ func buildConsoleSurfaceState(ctx context.Context, svc *Services, opts serverOpt
 		base["status"] = "ready"
 		base["source"] = "/version"
 		base["summary"] = map[string]any{
-			"go_version":  runtime.Version(),
-			"console":     opts.Console,
-			"console_dir": defaultConsoleDir(),
+			"go_version": runtime.Version(),
 		}
 		base["records"] = consoleSurfaceCatalog()
 	case "settings":
@@ -346,7 +356,6 @@ func buildConsoleSurfaceState(ctx context.Context, svc *Services, opts serverOpt
 			{"key": "HELM_ORG", "value": envOrDefault("HELM_ORG", "local")},
 			{"key": "HELM_PROJECT", "value": envOrDefault("HELM_PROJECT", "default")},
 			{"key": "HELM_ENV", "value": envOrDefault("HELM_ENV", "production")},
-			{"key": "HELM_CONSOLE_DIR", "value": defaultConsoleDir()},
 		}
 	case "diagnostics":
 		base["status"] = "ready"
@@ -400,16 +409,14 @@ func buildConsoleDiagnostics(svc *Services, opts serverOptions, r *http.Request)
 	return consoleDiagnosticsResponse{
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano),
 		Runtime: map[string]any{
-			"version":     displayVersion(),
-			"commit":      displayCommit(),
-			"build_time":  displayBuildTime(),
-			"go_version":  runtime.Version(),
-			"mode":        firstNonEmpty(opts.Mode, "serve"),
-			"data_dir":    dataDir,
-			"console":     opts.Console,
-			"console_dir": defaultConsoleDir(),
-			"bind":        opts.BindAddr,
-			"port":        opts.Port,
+			"version":    displayVersion(),
+			"commit":     displayCommit(),
+			"build_time": displayBuildTime(),
+			"go_version": runtime.Version(),
+			"mode":       firstNonEmpty(opts.Mode, "serve"),
+			"data_dir":   dataDir,
+			"bind":       opts.BindAddr,
+			"port":       opts.Port,
 		},
 		Access: map[string]any{
 			"admin_key_configured": strings.TrimSpace(os.Getenv("HELM_ADMIN_API_KEY")) != "",
@@ -817,83 +824,4 @@ func consoleScopes() []string {
 		}
 	}
 	return scopes
-}
-
-// RegisterConsoleStaticRoutes serves the built Console when explicitly enabled.
-// API-like paths never fall through to index.html, which keeps broken contracts
-// visible during development and production operation.
-func RegisterConsoleStaticRoutes(mux *http.ServeMux, opts serverOptions) {
-	if !opts.Console {
-		return
-	}
-	dir := opts.ConsoleDir
-	if dir == "" {
-		dir = defaultConsoleDir()
-	}
-	indexPath := filepath.Join(dir, "index.html")
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if isReservedConsolePath(r.URL.Path) {
-			http.NotFound(w, r)
-			return
-		}
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			api.WriteMethodNotAllowed(w)
-			return
-		}
-		if _, err := os.Stat(indexPath); err != nil {
-			api.WriteError(w, http.StatusServiceUnavailable, "Console unavailable", "build apps/console before starting with --console")
-			return
-		}
-		requestPath := filepath.Clean(strings.TrimPrefix(r.URL.Path, "/"))
-		if requestPath == "." {
-			http.ServeFile(w, r, indexPath)
-			return
-		}
-		candidate := filepath.Join(dir, requestPath)
-		if !strings.HasPrefix(candidate, filepath.Clean(dir)+string(os.PathSeparator)) {
-			http.NotFound(w, r)
-			return
-		}
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			http.ServeFile(w, r, candidate)
-			return
-		}
-		http.ServeFile(w, r, indexPath)
-	})
-}
-
-func defaultConsoleDir() string {
-	if dir := strings.TrimSpace(os.Getenv("HELM_CONSOLE_DIR")); dir != "" {
-		return dir
-	}
-	for _, candidate := range []string{
-		filepath.Join("apps", "console", "dist"),
-		filepath.Join("..", "apps", "console", "dist"),
-		filepath.Join("/usr", "share", "helm", "console"),
-	} {
-		if _, err := os.Stat(filepath.Join(candidate, "index.html")); err == nil {
-			return candidate
-		}
-	}
-	return filepath.Join("apps", "console", "dist")
-}
-
-func isReservedConsolePath(path string) bool {
-	reserved := []string{
-		"/api/",
-		"/v1/",
-		"/mcp",
-		"/.well-known/",
-		"/health",
-		"/healthz",
-		"/version",
-		"/readiness",
-		"/startup",
-	}
-	for _, prefix := range reserved {
-		if strings.HasPrefix(path, prefix) {
-			return true
-		}
-	}
-	return false
 }

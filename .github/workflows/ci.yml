@@ -97,7 +97,12 @@ jobs:
       - name: Command tests
         run: go test ./core/cmd/helm-ai-kernel -count=1
       - name: Fetch main ref for proto compatibility checks
-        run: git fetch origin main:refs/heads/main --force
+        run: |
+          if [ "$(git symbolic-ref --short -q HEAD || true)" = "main" ]; then
+            echo "On main; local refs/heads/main is already HEAD — nothing to fetch."
+          else
+            git fetch origin main:refs/heads/main --force
+          fi
       - name: Proto lint
         run: make proto-lint
       - name: Proto breaking

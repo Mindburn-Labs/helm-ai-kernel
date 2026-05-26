@@ -68,6 +68,10 @@ func (DefaultHealthcheckRunner) Run(compiled plan.LaunchPlan, runtime RuntimeSta
 		}
 		workspace = wd
 	}
+	egressProxy, err := egressProxyFromEnv(compiled.SubstrateID, compiled.NetworkAllowlist)
+	if err != nil {
+		return HealthcheckResult{}, err
+	}
 	handle, err := lpruntime.NewLocalContainerRuntime().Start(lpruntime.ContainerRequest{
 		Plan:             compiled,
 		ImageDigest:      imageRef,
@@ -77,7 +81,7 @@ func (DefaultHealthcheckRunner) Run(compiled plan.LaunchPlan, runtime RuntimeSta
 		Command:          []string{"/bin/sh"},
 		Args:             []string{"-lc", check.Command},
 		NetworkAllowlist: compiled.NetworkAllowlist,
-		EgressProxy:      egressProxyFromEnv(compiled.NetworkAllowlist),
+		EgressProxy:      egressProxy,
 		AutoCleanup:      true,
 	})
 	if err != nil {

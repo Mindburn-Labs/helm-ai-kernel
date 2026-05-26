@@ -284,7 +284,10 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 		workspace = wd
 	}
 	secrets := runtimeSecrets(compiled, opts)
-	egressProxy := egressProxyFromEnv(compiled.NetworkAllowlist)
+	egressProxy, err := egressProxyFromEnv(compiled.SubstrateID, compiled.NetworkAllowlist)
+	if err != nil && !opts.RuntimeDryRun {
+		return RuntimeStartResult{}, err
+	}
 	runtime := lpruntime.NewLocalContainerRuntime()
 	runtime.IsolationMode = isolationModeFromEnv()
 	readiness, _ := time.ParseDuration(compiled.RuntimeReadinessTimeout)
@@ -345,26 +348,46 @@ func runtimeStartResultFromIsolation(isolation lpruntime.IsolationEvidence) Runt
 	}
 }
 
-func egressProxyFromEnv(allowlist []string) lpruntime.EgressProxy {
-	var egressProxy lpruntime.EgressProxy
+// substratesWithNetworkNamespace lists substrates whose workloads run in an
+// isolated network namespace where host-loopback proxies are unreachable.
+// For these, the LaunchOwnedEgressProxy default (listening on 127.0.0.1)
+// cannot serve the workload and silently produces curl exit 7 / HTTP 000
+// from inside the container — which then masquerades as an OpenRouter key
+// failure. Refuse the combination at start time with a clear remediation.
+var substratesWithNetworkNamespace = map[string]bool{
+	"local-container": true,
+}
+
+func egressProxyFromEnv(substrateID string, allowlist []string) (lpruntime.EgressProxy, error) {
 	if proxyURL := os.Getenv("HELM_LAUNCHPAD_EGRESS_PROXY_URL"); proxyURL != "" {
-		egressProxy = lpruntime.StaticEgressProxy{
+		return lpruntime.StaticEgressProxy{
 			ProxyURL:   proxyURL,
 			ReceiptRef: os.Getenv("HELM_LAUNCHPAD_EGRESS_PROXY_RECEIPT_REF"),
-		}
-	} else if proxyImage := os.Getenv("HELM_LAUNCHPAD_EGRESS_PROXY_IMAGE"); proxyImage != "" {
-		egressProxy = lpruntime.DockerSidecarEgressProxy{
+		}, nil
+	}
+	if proxyImage := os.Getenv("HELM_LAUNCHPAD_EGRESS_PROXY_IMAGE"); proxyImage != "" {
+		return lpruntime.DockerSidecarEgressProxy{
 			Image:      proxyImage,
 			ReceiptDir: os.Getenv("HELM_LAUNCHPAD_EGRESS_RECEIPT_DIR"),
-		}
-	} else if len(allowlist) > 0 {
-		proxy := lpruntime.NewLaunchOwnedEgressProxy()
-		if receiptDir := os.Getenv("HELM_LAUNCHPAD_EGRESS_RECEIPT_DIR"); receiptDir != "" {
-			proxy.ReceiptDir = receiptDir
-		}
-		egressProxy = proxy
+		}, nil
 	}
-	return egressProxy
+	if len(allowlist) == 0 {
+		return nil, nil
+	}
+	if substratesWithNetworkNamespace[substrateID] {
+		return nil, fmt.Errorf(
+			"egress proxy required for %q substrate with non-empty network allowlist: "+
+				"set HELM_LAUNCHPAD_EGRESS_PROXY_IMAGE=<sha256-pinned image> to run a docker sidecar proxy, "+
+				"or HELM_LAUNCHPAD_EGRESS_PROXY_URL=<http://host:port> for an external proxy. "+
+				"The default loopback-listening proxy is unreachable from the container network namespace",
+			substrateID,
+		)
+	}
+	proxy := lpruntime.NewLaunchOwnedEgressProxy()
+	if receiptDir := os.Getenv("HELM_LAUNCHPAD_EGRESS_RECEIPT_DIR"); receiptDir != "" {
+		proxy.ReceiptDir = receiptDir
+	}
+	return proxy, nil
 }
 
 func runtimeSecrets(compiled plan.LaunchPlan, opts ExecuteOptions) map[string]string {

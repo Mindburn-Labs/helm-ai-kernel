@@ -260,32 +260,47 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	addJSON(artifacts, "receipts/launchpad-start.json", startReceipt)
 
 	run.State = StateHealthchecking
-	healthRunner := opts.HealthcheckRunner
-	if healthRunner == nil {
-		healthRunner = e.HealthcheckRunner
-	}
-	if healthRunner == nil {
-		healthRunner = DefaultHealthcheckRunner{}
-	}
-	healthResult, err := healthRunner.Run(compiled, runtimeResult, opts)
-	if err != nil {
-		failureReceipt := receipts.NewReceipt("launchpad.healthcheck_failure", compiled.LaunchID, "ALLOW", map[string]any{
-			"status": "repair_required",
-			"error":  err.Error(),
+	if compiled.RuntimeDetached {
+		// Detached runs already proved readiness via the runtime's in-place
+		// healthcheck polling (waitForReadiness) before starter.Start
+		// returned nil. Re-running the healthcheck here would spin up a
+		// second container sharing the launch-scoped egress network and
+		// collide on it ("network already exists"). Record the readiness
+		// the detached probe established and move on.
+		healthReceipt := receipts.NewReceipt("launchpad.healthcheck", compiled.LaunchID, "ALLOW", map[string]any{
+			"status": "ready",
+			"type":   "detached_readiness_probe",
 		})
-		run.State = StateRepairRequired
-		run.Reason = "healthcheck failed after runtime start; repair required before RUNNING: " + err.Error()
-		addJSON(artifacts, "receipts/launchpad-healthcheck-failure.json", failureReceipt)
-		addJSON(artifacts, "runtime_environment.json", map[string]any{"runtime": runtimeResult.Runtime, "state": "REPAIR_REQUIRED", "container_id": runtimeResult.ContainerID, "error": err.Error()})
-		return e.persist(run, artifacts)
+		run.HealthcheckRefs = append(run.HealthcheckRefs, healthReceipt.ReceiptID)
+		addJSON(artifacts, "receipts/launchpad-healthcheck.json", healthReceipt)
+	} else {
+		healthRunner := opts.HealthcheckRunner
+		if healthRunner == nil {
+			healthRunner = e.HealthcheckRunner
+		}
+		if healthRunner == nil {
+			healthRunner = DefaultHealthcheckRunner{}
+		}
+		healthResult, err := healthRunner.Run(compiled, runtimeResult, opts)
+		if err != nil {
+			failureReceipt := receipts.NewReceipt("launchpad.healthcheck_failure", compiled.LaunchID, "ALLOW", map[string]any{
+				"status": "repair_required",
+				"error":  err.Error(),
+			})
+			run.State = StateRepairRequired
+			run.Reason = "healthcheck failed after runtime start; repair required before RUNNING: " + err.Error()
+			addJSON(artifacts, "receipts/launchpad-healthcheck-failure.json", failureReceipt)
+			addJSON(artifacts, "runtime_environment.json", map[string]any{"runtime": runtimeResult.Runtime, "state": "REPAIR_REQUIRED", "container_id": runtimeResult.ContainerID, "error": err.Error()})
+			return e.persist(run, artifacts)
+		}
+		healthReceipt := receipts.NewReceipt("launchpad.healthcheck", compiled.LaunchID, "ALLOW", map[string]any{
+			"status":   healthResult.Status,
+			"type":     healthResult.Type,
+			"metadata": healthResult.Metadata,
+		})
+		run.HealthcheckRefs = append(run.HealthcheckRefs, healthReceipt.ReceiptID)
+		addJSON(artifacts, "receipts/launchpad-healthcheck.json", healthReceipt)
 	}
-	healthReceipt := receipts.NewReceipt("launchpad.healthcheck", compiled.LaunchID, "ALLOW", map[string]any{
-		"status":   healthResult.Status,
-		"type":     healthResult.Type,
-		"metadata": healthResult.Metadata,
-	})
-	run.HealthcheckRefs = append(run.HealthcheckRefs, healthReceipt.ReceiptID)
-	addJSON(artifacts, "receipts/launchpad-healthcheck.json", healthReceipt)
 
 	run.State = StateRunning
 	run.Reason = "launch reached RUNNING after policy, CPI, sandbox preflight, MCP quarantine, install, start, and healthcheck receipts"

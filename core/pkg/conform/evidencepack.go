@@ -6,12 +6,9 @@ import (
 	"path/filepath"
 )
 
-// EvidencePackSubdirs lists the §3.1 mandatory top-level directories.
-// 11_HOST_EVIDENCE is part of the launchpad evidence-pack surface — the
-// launchpad writer (core/pkg/launchpad/receipts/evidence_pack.go) creates
-// and populates it for every pack. Keeping it in the canonical whitelist
-// avoids "unexpected top-level entry: 11_HOST_EVIDENCE" failures from
-// `helm-ai-kernel verify --bundle` on every launchpad-generated pack.
+// EvidencePackSubdirs lists the §3.1 mandatory top-level directories. Every
+// pack — launchpad, managed-agents, proof-replay, externally-generated —
+// must contain each of these.
 var EvidencePackSubdirs = []string{
 	"02_PROOFGRAPH",
 	"03_TELEMETRY",
@@ -21,8 +18,24 @@ var EvidencePackSubdirs = []string{
 	"07_ATTESTATIONS",
 	"08_TAPES",
 	"09_SCHEMAS",
-	"11_HOST_EVIDENCE",
 	"12_REPORTS",
+}
+
+// EvidencePackOptionalSubdirs lists top-level directories that producers
+// MAY emit alongside the mandatory set. They are accepted by the verifier
+// when present but are not required, so verification does not regress on
+// packs (managed-agents, proof-replay tar fixtures, external producers)
+// that don't carry them.
+//
+// 11_HOST_EVIDENCE belongs here because the launchpad writer
+// (core/pkg/launchpad/receipts/evidence_pack.go) always emits it, while
+// other producers in this repo (and external ones) do not. Before this
+// split the verifier rejected launchpad packs with
+// "unexpected top-level entry: 11_HOST_EVIDENCE"; adding it to the
+// mandatory set instead made non-launchpad packs fail with the symmetric
+// "missing 11_HOST_EVIDENCE/". Optional is the correct middle ground.
+var EvidencePackOptionalSubdirs = []string{
+	"11_HOST_EVIDENCE",
 }
 
 // ExtensionDirPrefix is the reserved prefix for vendor extensions.
@@ -75,6 +88,9 @@ func ValidateEvidencePackStructure(root string, declaredExtensions ...string) []
 		"01_SCORE.json.sig":    true,
 	}
 	for _, sub := range EvidencePackSubdirs {
+		allowed[sub] = true
+	}
+	for _, sub := range EvidencePackOptionalSubdirs {
 		allowed[sub] = true
 	}
 	// Allow declared extension directories under 99_EXT/

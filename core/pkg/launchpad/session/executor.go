@@ -365,6 +365,7 @@ func (e Executor) DeleteLaunch(launchID string, cascade bool) (LaunchRun, error)
 func teardownRuntimeHandles(run LaunchRun) map[string]any {
 	result := map[string]any{"attempted": false}
 	handles := run.RuntimeHandles
+	launchID := run.LaunchID
 	provider := handles.CloudResourceIDs["provider"]
 	if provider == "" {
 		provider = run.SubstrateID

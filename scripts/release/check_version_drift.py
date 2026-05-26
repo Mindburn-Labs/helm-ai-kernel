@@ -105,7 +105,10 @@ def read_json_field(path: Path, field: str) -> Any:
 def check_exact(surface: dict[str, Any], version: str) -> list[SurfaceResult]:
     path = ROOT / surface["path"]
     expected = fmt(surface.get("expected", "{version}"), version)
-    actual = path.read_text(encoding="utf-8").strip()
+    try:
+        actual = path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError as exc:
+        return [SurfaceResult(surface["id"], "fail", expected, None, path=rel(path), detail=str(exc), blocking=is_blocking(surface))]
     return [SurfaceResult(surface["id"], result_status(actual, expected), expected, actual, path=rel(path), blocking=is_blocking(surface))]
 
 
@@ -114,16 +117,19 @@ def check_json_surface(surface: dict[str, Any], version: str) -> list[SurfaceRes
     expected = fmt(surface.get("expected", "{version}"), version)
     try:
         actual = read_json_field(path, surface["field"])
-    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+    except (FileNotFoundError, KeyError, TypeError, json.JSONDecodeError) as exc:
         return [SurfaceResult(surface["id"], "fail", expected, None, path=rel(path), detail=str(exc), blocking=is_blocking(surface))]
     return [SurfaceResult(surface["id"], result_status(str(actual), expected), expected, actual, path=rel(path), blocking=is_blocking(surface))]
 
 
 def check_regex_on_path(surface: dict[str, Any], version: str, path: Path, result_id: str) -> SurfaceResult:
-    text = path.read_text(encoding="utf-8")
+    expected = fmt(surface.get("expected", "{version}"), version)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        return SurfaceResult(result_id, "fail", expected, None, path=rel(path), detail=str(exc), blocking=is_blocking(surface))
     pattern = re.compile(surface["pattern"], re.MULTILINE)
     matches = list(pattern.finditer(text))
-    expected = fmt(surface.get("expected", "{version}"), version)
     if not matches:
         return SurfaceResult(result_id, "fail", expected, None, path=rel(path), detail="pattern did not match", blocking=is_blocking(surface))
     actual = [match.group("version") if "version" in match.groupdict() else match.group(0) for match in matches]

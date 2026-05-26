@@ -7,6 +7,11 @@ import (
 )
 
 // EvidencePackSubdirs lists the §3.1 mandatory top-level directories.
+// 11_HOST_EVIDENCE is part of the launchpad evidence-pack surface — the
+// launchpad writer (core/pkg/launchpad/receipts/evidence_pack.go) creates
+// and populates it for every pack. Keeping it in the canonical whitelist
+// avoids "unexpected top-level entry: 11_HOST_EVIDENCE" failures from
+// `helm-ai-kernel verify --bundle` on every launchpad-generated pack.
 var EvidencePackSubdirs = []string{
 	"02_PROOFGRAPH",
 	"03_TELEMETRY",
@@ -16,6 +21,7 @@ var EvidencePackSubdirs = []string{
 	"07_ATTESTATIONS",
 	"08_TAPES",
 	"09_SCHEMAS",
+	"11_HOST_EVIDENCE",
 	"12_REPORTS",
 }
 

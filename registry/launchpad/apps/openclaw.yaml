@@ -14,8 +14,22 @@ install:
     source: https://github.com/openclaw/openclaw
     ref: v2026.5.12
 runtime:
+    # Headless launch: default `openclaw` invocation drops into the Crestodian
+    # TUI and exits 1 without a TTY ("Crestodian needs an interactive TTY").
+    # Use `gateway run` for a foreground HTTP gateway bound to container
+    # loopback; the readiness/healthcheck reaches it via `docker exec`, not
+    # via a published port, so loopback bind is safe here.
     command:
         - openclaw
+        - gateway
+        - run
+        - --port
+        - "18789"
+        - --allow-unconfigured
+        - --auth
+        - none
+        - --bind
+        - loopback
 model_gateway:
     logical_secret: model_gateway
     provider: openrouter

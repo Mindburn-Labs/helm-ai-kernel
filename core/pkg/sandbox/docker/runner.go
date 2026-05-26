@@ -79,11 +79,18 @@ func (r *DockerRunner) Run(spec *sandbox.SandboxSpec) (*sandbox.Result, *sandbox
 		args = append(args, "--network", spec.Network.NetworkName)
 	}
 
-	// Security: drop all capabilities, no new privileges
+	// Security: drop all capabilities, no new privileges. `--read-only` makes
+	// the rootfs immutable, but every realistic workload still expects a
+	// writable /tmp (Python config dirs, openclaw fallback temp, sh tmpfiles
+	// for sandboxed binaries). Without a tmpfs mount the workload sees an
+	// EROFS on the very first write under /tmp and fails before doing any
+	// useful work. The companion sandboxes.go path already mounts tmpfs;
+	// keep these two paths in lockstep so substrate behaviour is uniform.
 	args = append(args,
 		"--cap-drop", "ALL",
 		"--security-opt", "no-new-privileges",
 		"--read-only",
+		"--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
 	)
 
 	// Environment

@@ -14,8 +14,16 @@ install:
     source: https://github.com/NousResearch/hermes-agent
     ref: v2026.5.16
 runtime:
+    # Direct exec of `hermes` fails with `exec /opt/hermes/.venv/bin/hermes:
+    # no such file or directory` because the venv shebang in the published
+    # image points at `/src/...` (build context) instead of `/opt/...` (final
+    # rootfs). Wrap in `sh -c` to bypass kernel-level exec'ing of the broken
+    # shebang. HOME is redirected to /tmp (tmpfs) because $HOME=/opt/hermes
+    # is read-only on the rootfs and hermes wants to write `.hermes/` there.
     command:
-        - hermes
+        - /bin/sh
+        - -c
+        - HOME=/tmp/hermes-home hermes -z 'healthcheck ping' --provider openrouter --model openai/gpt-4o-mini --ignore-user-config
 model_gateway:
     logical_secret: model_gateway
     provider: openrouter

@@ -32,8 +32,9 @@ func TestWarmLeaseManager_PreWarmAndCycle(t *testing.T) {
 	mgr.Release(runner)
 
 	// Wait briefly for the async overlay recycling loop to return it to the idle queue
-	time.Sleep(10 * time.Millisecond)
-	assert.Equal(t, poolSize, len(mgr.idleRunners))
+	assert.Eventually(t, func() bool {
+		return len(mgr.idleRunners) == poolSize
+	}, 1*time.Second, 5*time.Millisecond)
 }
 
 func TestWarmLeaseManager_DynamicFallback(t *testing.T) {

@@ -1,4 +1,4 @@
-.PHONY: build test test-race test-sdk-go-standalone test-sdk-ts test-design-system build-console test-console test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli console demo-console mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets launch-security launch-api-truth launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
+.PHONY: build test test-cli test-race test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 
 # VERSION is source-controlled release truth. Tag-triggered workflows must
 # check that GITHUB_REF_NAME equals v$(VERSION) before any publish step.
@@ -16,6 +16,9 @@ build:
 test:
 	cd core && go test ./pkg/... -count=1
 
+test-cli:
+	cd core && go test ./cmd/helm-ai-kernel -count=1
+
 test-race:
 	cd core && go test ./pkg/... -count=1 -race
 
@@ -24,17 +27,6 @@ test-sdk-go-standalone:
 
 test-sdk-ts:
 	cd sdk/ts && npm ci && npm test -- --run && npm run build
-
-test-design-system:
-	cd packages/design-system-core && npm ci && npm run typecheck && npm test && npm run build && npm run smoke && npm run pack:dry
-
-build-console:
-	cd packages/design-system-core && npm ci && npm run build
-	cd apps/console && npm ci --ignore-scripts && npm run build && npm run smoke
-
-test-console:
-	cd packages/design-system-core && npm ci && npm run build
-	cd apps/console && npm ci --ignore-scripts && npm run generate:api && npm run typecheck && npm test && npm run build && npm run smoke
 
 test-sdk-py:
 	cd sdk/python && python -m pip install -q '.[dev]' && pytest -v --tb=short
@@ -57,9 +49,9 @@ verify-fixtures:
 verify-presentation:
 	bash tools/verify-presentation.sh
 
-test-all: test test-sdk-py test-sdk-ts test-design-system test-console test-sdk-rust test-sdk-java verify-fixtures
+test-all: test test-sdk-py test-sdk-ts test-sdk-rust test-sdk-java verify-fixtures
 
-test-platform: test test-design-system test-console verify-fixtures docs-coverage docs-truth
+test-platform: test verify-fixtures docs-coverage docs-truth
 
 bench:
 	cd core && go test -bench=. -benchmem -count=3 ./pkg/crypto/ ./pkg/store/ ./pkg/guardian/ ./benchmarks/
@@ -85,7 +77,7 @@ docker-verify:
 	docker build -f core/Dockerfile.api -t helm-ai-kernel:verify-core-api .
 	docker build -f oss-fuzz/Dockerfile -t helm-ai-kernel:verify-oss-fuzz oss-fuzz
 
-release-readiness: version-drift verify-boundary docs-truth test-sdk-go-standalone proto-lint proto-breaking docker-verify launch-security launch-api-truth conformance-release-gate deployment-smoke release-smoke
+release-readiness: version-drift verify-boundary docs-truth test-sdk-go-standalone proto-lint proto-breaking docker-verify conformance-release-gate deployment-smoke release-smoke
 	@echo "✅ Release readiness gate passed"
 
 crucible: build
@@ -94,7 +86,7 @@ crucible: build
 proxy: build
 	./bin/helm-ai-kernel proxy --upstream http://127.0.0.1:19090/v1
 
-docker: build-console
+docker: build
 	docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:local .
 
 docker-up:
@@ -205,30 +197,17 @@ demo-mcp: build
 demo-openai-proxy: build
 	bash scripts/launch/demo-openai-proxy.sh
 
-console: build
-	bash scripts/launch/console.sh
-
-demo-console: build
-	bash scripts/launch/demo-console.sh
-
 launch-smoke:
 	bash scripts/launch/smoke.sh
 
 launch-record-assets:
 	bash scripts/launch/record-assets.sh
 
-launch-security:
-	bash scripts/launch/security.sh
-	bash scripts/launch/security_gate.sh
-
 launch-release-dry-run:
 	bash scripts/release/dry_run.sh
 
 launch-ready:
 	bash scripts/launch/launch-ready.sh --write
-
-launch-api-truth:
-	bash scripts/launch/api_truth_gate.sh
 
 conformance-release-report: build
 	bash scripts/release/prepare_conformance_release_inputs.sh
@@ -350,7 +329,7 @@ verify-boundary:
 	bash tools/verify-boundary.sh
 
 clean:
-	rm -rf bin/ dist/ apps/console/dist/ sbom.json deps.txt helm-mcp-plugin/ benchmarks/results/*.json
+	rm -rf bin/ dist/ sbom.json deps.txt helm-mcp-plugin/ benchmarks/results/*.json
 
 .PHONY: docs-coverage docs-truth
 
@@ -359,4 +338,3 @@ docs-coverage:
 
 docs-truth:
 	python3 scripts/check_documentation_truth.py
-

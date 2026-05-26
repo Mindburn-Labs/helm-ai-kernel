@@ -69,7 +69,7 @@ func RegisterLaunchpadRoutes(mux *http.ServeMux, svc *Services) {
 			runs, _ := store.List()
 			writeLaunchpadJSON(w, http.StatusOK, map[string]any{
 				"threat_reviews": readmodel.MCPThreatReviews(catalog, runs),
-				"cli_equivalent": "helm mcp quarantine",
+				"cli_equivalent": "helm-ai-kernel mcp quarantine",
 			})
 		case path == "mcp/approvals" && r.Method == http.MethodPost:
 			handleLaunchpadMCPApproval(w, r)
@@ -308,7 +308,7 @@ func handleLaunchpadRunsPath(w http.ResponseWriter, r *http.Request, rest string
 			"run_id":         runID,
 			"receipts":       readmodel.ReceiptRefs(run),
 			"proof_status":   proofStatusForRefs(readmodel.ReceiptRefs(run)),
-			"cli_equivalent": "helm run receipts " + runID,
+			"cli_equivalent": "helm-ai-kernel run receipts " + runID,
 		})
 		return
 	}
@@ -330,7 +330,7 @@ func handleLaunchpadRunsPath(w http.ResponseWriter, r *http.Request, rest string
 			"log":            logText,
 			"log_path":       run.LogPath,
 			"proof_status":   proofStatus,
-			"cli_equivalent": "helm run logs " + runID,
+			"cli_equivalent": "helm-ai-kernel run logs " + runID,
 		})
 		return
 	}
@@ -348,8 +348,8 @@ func handleLaunchpadRunsPath(w http.ResponseWriter, r *http.Request, rest string
 			"offline_verification":    run.VerificationCommand != "",
 			"local_verification":      run.VerificationCommand != "",
 			"proof_status":            proofStatusForRefs(run.EvidencePackRefs),
-			"cli_equivalent":          "helm evidence export " + runID,
-			"verify_cli_equivalent":   firstNonEmpty(run.VerificationCommand, "helm evidence verify <file> --offline"),
+			"cli_equivalent":          "helm-ai-kernel evidence export " + runID,
+			"verify_cli_equivalent":   firstNonEmpty(run.VerificationCommand, "helm-ai-kernel verify --bundle <file>"),
 			"without_cloud_supported": true,
 		})
 		return
@@ -407,7 +407,7 @@ func handleLaunchpadSandbox(w http.ResponseWriter, _ *http.Request, rest string,
 	writeLaunchpadJSON(w, http.StatusOK, map[string]any{
 		"run_id":         runID,
 		"sandbox_grant":  grant,
-		"cli_equivalent": "helm sandbox inspect " + runID,
+		"cli_equivalent": "helm-ai-kernel sandbox inspect " + runID,
 	})
 }
 
@@ -450,11 +450,11 @@ func handleLaunchpadMCPApproval(w http.ResponseWriter, r *http.Request) {
 			"reason":                req.Reason,
 			"receipt_id":            receiptID,
 			"expires_at":            expiration,
-			"revocation_semantics":  "revocable by helm mcp quarantine or policy epoch change",
+			"revocation_semantics":  "revocable by helm-ai-kernel mcp quarantine or policy epoch change",
 			"side_effects_allowed":  true,
 			"raw_secret_disclosure": false,
 		},
-		"cli_equivalent": "helm mcp approve " + req.ServerID + " --tools " + strings.Join(req.Tools, ",") + " --ttl " + req.TTL + " --reason " + shellQuote(req.Reason),
+		"cli_equivalent": "helm-ai-kernel mcp approve " + req.ServerID + " --tools " + strings.Join(req.Tools, ",") + " --ttl " + req.TTL + " --reason " + shellQuote(req.Reason),
 	})
 }
 

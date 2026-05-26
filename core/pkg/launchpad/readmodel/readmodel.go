@@ -397,7 +397,7 @@ func RuntimeFromRun(run session.LaunchRun) RuntimeInstance {
 		LocalVerificationStatus:  verificationStatus(run),
 		OfflineVerificationReady: run.VerificationCommand != "",
 		SandboxGrant:             SandboxGrantFromRun(run),
-		CLIEquivalent:            "helm run open " + run.LaunchID,
+		CLIEquivalent:            "helm-ai-kernel run open " + run.LaunchID,
 	}
 }
 
@@ -524,10 +524,10 @@ func MCPThreatReviews(catalog *registry.Catalog, runs []session.LaunchRun) []MCP
 			Summary:             "No MCP tool dispatch is allowed until server identity, tool names, risk class, approval receipt, expiration, and revocation semantics are bound.",
 			FixActions: []FixAction{{
 				Label:       "Review MCP tools",
-				CLI:         "helm mcp quarantine",
+				CLI:         "helm-ai-kernel mcp quarantine",
 				Description: "Inspect quarantined MCP servers before issuing a scoped approval.",
 			}},
-			CLIEquivalent: "helm mcp approve " + serverID + " --tools <tool> --ttl 1h --reason <reason>",
+			CLIEquivalent: "helm-ai-kernel mcp approve " + serverID + " --tools <tool> --ttl 1h --reason <reason>",
 		})
 	}
 	return reviews
@@ -562,7 +562,7 @@ func PolicySimulationForApp(app registry.AppSpec, compiled plan.LaunchPlan) Poli
 			"reason_code":     compiled.ReasonCode,
 		},
 		ProofStatus:   proofFromBool(compiled.PlanHash != ""),
-		CLIEquivalent: "helm policy simulate " + app.ID,
+		CLIEquivalent: "helm-ai-kernel policy simulate " + app.ID,
 	}
 }
 
@@ -715,14 +715,14 @@ func mcpQuarantineState(compiled plan.LaunchPlan, run *session.LaunchRun) (strin
 func fixActionsFor(reason, id string) []FixAction {
 	switch reason {
 	case "ERR_LAUNCHPAD_REQUIRED_SECRET_MISSING", "ERR_REQUIRED_SECRET_MISSING":
-		return []FixAction{{Label: "Add local secret", CLI: "helm secret set <logical_name> --provider env --value-env <ENV>", Description: "Bind the required env-backed secret, then resume the run."}}
+		return []FixAction{{Label: "Add local secret", CLI: "helm-ai-kernel secret set <logical_name> --provider env --value-env <ENV>", Description: "Bind the required env-backed secret, then resume the run."}}
 	case "ERR_LAUNCHPAD_APP_CONFORMANCE_REQUIRED":
-		return []FixAction{{Label: "Promote verified AppSpec", CLI: "helm launch promote --app <app> --manifest <promotion-manifest.json> --write", Description: "Attach live conformance evidence before enabling OSS launch."}}
+		return []FixAction{{Label: "Promote verified AppSpec", CLI: "helm-ai-kernel launch promote --app <app> --manifest <promotion-manifest.json> --write", Description: "Attach live conformance evidence before enabling OSS launch."}}
 	case "ERR_MCP_QUARANTINE_UNPROVEN", "ERR_MCP_SERVER_QUARANTINED":
-		return []FixAction{{Label: "Review MCP threat", CLI: "helm mcp quarantine", Description: "Keep unknown tools quarantined or approve a scoped subset with TTL."}}
+		return []FixAction{{Label: "Review MCP threat", CLI: "helm-ai-kernel mcp quarantine", Description: "Keep unknown tools quarantined or approve a scoped subset with TTL."}}
 	}
 	if strings.Contains(id, "policy") {
-		return []FixAction{{Label: "Simulate policy", CLI: "helm policy simulate <app>", Description: "Review least-privilege policy before applying."}}
+		return []FixAction{{Label: "Simulate policy", CLI: "helm-ai-kernel policy simulate <app>", Description: "Review least-privilege policy before applying."}}
 	}
 	return nil
 }
@@ -732,7 +732,7 @@ func secretFixActions(app registry.AppSpec) []FixAction {
 	env := firstNonEmptyString(first(app.ModelGatewayEnv), logical)
 	return []FixAction{{
 		Label:       "Bind AppSpec secret",
-		CLI:         fmt.Sprintf("helm secret set %s --provider env --value-env %s", logical, env),
+		CLI:         fmt.Sprintf("helm-ai-kernel secret set %s --provider env --value-env %s", logical, env),
 		Description: "Bind the logical AppSpec secret to a local environment variable, then resume the run.",
 	}}
 }
@@ -740,25 +740,25 @@ func secretFixActions(app registry.AppSpec) []FixAction {
 func cliForGate(id string) string {
 	switch id {
 	case "launchplan.compile", "policy.evaluate":
-		return "helm app preflight <app>"
+		return "helm-ai-kernel app preflight <app>"
 	case "secrets.required":
-		return "helm secret set <name>"
+		return "helm-ai-kernel secret set <name>"
 	case "sandbox.grant":
-		return "helm sandbox inspect <run_id>"
+		return "helm-ai-kernel sandbox inspect <run_id>"
 	case "mcp.quarantine":
-		return "helm mcp quarantine"
+		return "helm-ai-kernel mcp quarantine"
 	case "runtime.start":
-		return "helm app run <app>"
+		return "helm-ai-kernel app run <app>"
 	case "healthcheck":
-		return "helm run logs <run_id>"
+		return "helm-ai-kernel run logs <run_id>"
 	case "receipts.emit":
-		return "helm run receipts <run_id>"
+		return "helm-ai-kernel run receipts <run_id>"
 	case "evidence.export", "offline.verify":
-		return "helm evidence verify <file> --offline"
+		return "helm-ai-kernel verify --bundle <file>"
 	case "teardown.cascade":
-		return "helm teardown <run_id> --cascade"
+		return "helm-ai-kernel teardown <run_id> --cascade"
 	default:
-		return "helm app inspect <app>"
+		return "helm-ai-kernel app inspect <app>"
 	}
 }
 
@@ -766,19 +766,19 @@ func cliForEvent(run session.LaunchRun, stage string) string {
 	id := firstNonEmptyString(run.LaunchID, "<run_id>")
 	switch {
 	case strings.Contains(stage, "secret"):
-		return "helm secret set <name>"
+		return "helm-ai-kernel secret set <name>"
 	case strings.Contains(stage, "sandbox"):
-		return "helm sandbox inspect " + id
+		return "helm-ai-kernel sandbox inspect " + id
 	case strings.Contains(stage, "mcp"):
-		return "helm mcp quarantine"
+		return "helm-ai-kernel mcp quarantine"
 	case strings.Contains(stage, "evidence"):
-		return "helm evidence export " + id
+		return "helm-ai-kernel evidence export " + id
 	case strings.Contains(stage, "teardown"):
-		return "helm teardown " + id + " --cascade"
+		return "helm-ai-kernel teardown " + id + " --cascade"
 	case strings.Contains(stage, "receipt"):
-		return "helm run receipts " + id
+		return "helm-ai-kernel run receipts " + id
 	default:
-		return "helm run open " + id
+		return "helm-ai-kernel run open " + id
 	}
 }
 

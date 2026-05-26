@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
+	lpimporter "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/importer"
 	lppromotion "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/promotion"
 	lpprovision "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/provision"
 	lpreceipts "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
@@ -24,12 +25,12 @@ import (
 )
 
 func init() {
-	Register(Subcommand{Name: "launch", Usage: "Launch verified AI apps through HELM Launchpad", RunFn: runLaunchCmd})
+	Register(Subcommand{Name: "launch", Aliases: []string{"launchpad"}, Usage: "Launch verified AI apps through HELM Launchpad", RunFn: runLaunchCmd})
 }
 
 func runLaunchCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel launch <matrix|apps|substrates|plan|status|logs|repair|delete|evidence|promote|secrets|app> [args]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel launch <matrix|apps|substrates|plan|status|logs|repair|delete|evidence|promote|secrets|imports|app> [args]")
 		return 2
 	}
 	catalog, err := lpregistry.LoadCatalog("")
@@ -64,6 +65,8 @@ func runLaunchCmd(args []string, stdout, stderr io.Writer) int {
 		return runLaunchPromote(args[1:], catalog, stdout, stderr)
 	case "secrets":
 		return runLaunchSecrets(args[1:], stdout, stderr)
+	case "imports":
+		return runLaunchImports(args[1:], stdout, stderr)
 	default:
 		return runLaunchStart(args, catalog, stdout, stderr)
 	}
@@ -987,4 +990,73 @@ func writeLaunchJSON(stdout io.Writer, v any) int {
 		return 1
 	}
 	return 0
+}
+
+func runLaunchImports(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel launchpad imports <list|preflight|promote|teardown> [args]")
+		return 2
+	}
+	store := session.NewStore("")
+	importStore := lpimporter.NewStore(store.Root())
+	switch args[0] {
+	case "list":
+		records, err := importStore.List()
+		if err != nil {
+			fmt.Fprintf(stderr, "imports list error: %v\n", err)
+			return 1
+		}
+		return writeLaunchJSON(stdout, map[string]any{"imports": records})
+	case "preflight":
+		if len(args) < 2 {
+			fmt.Fprintln(stderr, "Usage: helm-ai-kernel launchpad imports preflight <import_id>")
+			return 2
+		}
+		record, err := importStore.Get(args[1])
+		if err != nil {
+			fmt.Fprintf(stderr, "imports preflight error: %v\n", err)
+			return 1
+		}
+		record = lpimporter.Preflight(record, time.Now().UTC())
+		if err := importStore.Save(record); err != nil {
+			fmt.Fprintf(stderr, "imports preflight save error: %v\n", err)
+			return 1
+		}
+		return writeLaunchJSON(stdout, record)
+	case "promote":
+		if len(args) < 2 {
+			fmt.Fprintln(stderr, "Usage: helm-ai-kernel launchpad imports promote <import_id>")
+			return 2
+		}
+		record, err := importStore.Get(args[1])
+		if err != nil {
+			fmt.Fprintf(stderr, "imports promote error: %v\n", err)
+			return 1
+		}
+		return writeLaunchJSON(stdout, map[string]any{
+			"promotion_state":        record.LaunchRecipe.PromotionState,
+			"generated_app_specs":    record.LaunchRecipe.GeneratedAppSpecs,
+			"promotion_requirements": record.LaunchRecipe.PromotionRequirements,
+		})
+	case "teardown":
+		if len(args) < 2 {
+			fmt.Fprintln(stderr, "Usage: helm-ai-kernel launchpad imports teardown <import_id>")
+			return 2
+		}
+		record, err := importStore.Get(args[1])
+		if err != nil {
+			fmt.Fprintf(stderr, "imports teardown error: %v\n", err)
+			return 1
+		}
+		record.State = lpimporter.StateTornDown
+		record.EvidenceLedger.Status = "teardown_recorded"
+		if err := importStore.Save(record); err != nil {
+			fmt.Fprintf(stderr, "imports teardown save error: %v\n", err)
+			return 1
+		}
+		return writeLaunchJSON(stdout, record)
+	default:
+		fmt.Fprintf(stderr, "Unknown imports subcommand: %s\n", args[0])
+		return 2
+	}
 }

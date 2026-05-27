@@ -1,0 +1,155 @@
+name: Helm Integration — Launchpad k8s smoke
+
+on:
+  pull_request:
+    paths:
+      - "deploy/helm-chart/**"
+      - "scripts/ci/launchpad_k8s_smoke.sh"
+      - ".github/workflows/helm-integration.yml"
+      - "registry/launchpad/apps/openclaw.yaml"
+      - "registry/launchpad/apps/hermes.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "deploy/helm-chart/**"
+      - "scripts/ci/launchpad_k8s_smoke.sh"
+      - ".github/workflows/helm-integration.yml"
+  workflow_dispatch:
+    inputs:
+      kernel_image:
+        description: Kernel OCI image to deploy (must already exist on GHCR or be loaded locally)
+        required: false
+        default: "ghcr.io/mindburn-labs/helm-ai-kernel:latest"
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: helm-integration-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  baseline:
+    name: chart-only baseline (no launchpad apps)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Set up minikube
+        uses: medyagh/setup-minikube@cea33675329b799adccc9526aa5daccc26cd5052 # v0.0.20
+        with:
+          minikube-version: v1.34.0
+          kubernetes-version: v1.30.0
+          driver: docker
+          cpus: "4"
+          memory: "7g"
+          addons: ""
+          start-args: --cni=calico
+
+      - name: Build kernel image inside minikube docker daemon
+        run: |
+          set -euo pipefail
+          eval "$(minikube -p minikube docker-env)"
+          docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:smoke -f ./Dockerfile .
+
+      - name: Run baseline smoke
+        env:
+          LAUNCHPAD_SMOKE_KERNEL_IMAGE: "ghcr.io/mindburn-labs/helm-ai-kernel:smoke"
+          LAUNCHPAD_SMOKE_KEEP_CLUSTER: "1"
+          LAUNCHPAD_SMOKE_PROFILE: minikube
+          LAUNCHPAD_SMOKE_PRE_PULL: "0"
+        run: bash scripts/ci/launchpad_k8s_smoke.sh --mode baseline
+
+  launchpad-positive:
+    name: openclaw + hermes positive (real OPENROUTER_API_KEY)
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'launchpad-live-test') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [baseline]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Log in to GHCR for launchpad image pulls
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Set up minikube
+        uses: medyagh/setup-minikube@cea33675329b799adccc9526aa5daccc26cd5052 # v0.0.20
+        with:
+          minikube-version: v1.34.0
+          kubernetes-version: v1.30.0
+          driver: docker
+          cpus: "4"
+          memory: "7g"
+          addons: ""
+          start-args: --cni=calico
+
+      - name: Build kernel image inside minikube docker daemon
+        run: |
+          set -euo pipefail
+          eval "$(minikube -p minikube docker-env)"
+          docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:smoke -f ./Dockerfile .
+
+      - name: Run positive smoke
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
+          LAUNCHPAD_SMOKE_KERNEL_IMAGE: "ghcr.io/mindburn-labs/helm-ai-kernel:smoke"
+          LAUNCHPAD_SMOKE_KEEP_CLUSTER: "1"
+          LAUNCHPAD_SMOKE_PROFILE: minikube
+        run: |
+          if [[ -z "${OPENROUTER_API_KEY}" ]]; then
+            echo "::warning::HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY secret not configured — skipping positive scenario"
+            exit 0
+          fi
+          bash scripts/ci/launchpad_k8s_smoke.sh --mode positive
+
+  launchpad-negative:
+    name: openclaw + hermes negative (fake key)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [baseline]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Log in to GHCR for launchpad image pulls
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Set up minikube
+        uses: medyagh/setup-minikube@cea33675329b799adccc9526aa5daccc26cd5052 # v0.0.20
+        with:
+          minikube-version: v1.34.0
+          kubernetes-version: v1.30.0
+          driver: docker
+          cpus: "4"
+          memory: "7g"
+          addons: ""
+          start-args: --cni=calico
+
+      - name: Build kernel image inside minikube docker daemon
+        run: |
+          set -euo pipefail
+          eval "$(minikube -p minikube docker-env)"
+          docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:smoke -f ./Dockerfile .
+
+      - name: Run negative smoke
+        env:
+          LAUNCHPAD_SMOKE_KERNEL_IMAGE: "ghcr.io/mindburn-labs/helm-ai-kernel:smoke"
+          LAUNCHPAD_SMOKE_KEEP_CLUSTER: "1"
+          LAUNCHPAD_SMOKE_PROFILE: minikube
+        run: bash scripts/ci/launchpad_k8s_smoke.sh --mode negative

@@ -56,6 +56,13 @@ Usage: {{ include "helm-ai-kernel.launchpadApp.egressSidecar" (dict "sidecar" .V
 {{- define "helm-ai-kernel.launchpadApp.egressSidecar" -}}
 {{- $s := .sidecar -}}
 - name: egress-proxy
+  {{- if .init }}
+  # Native Kubernetes sidecar pattern (k8s >= 1.28): restartPolicy:Always on an
+  # initContainer turns it into a sidecar that does not block Pod completion.
+  # Used for short-lived workloads (Jobs) so the Pod can transition to Succeeded
+  # once the main container exits.
+  restartPolicy: Always
+  {{- end }}
   image: {{ include "helm-ai-kernel.launchpadApp.image" (dict "image" $s.image) | quote }}
   imagePullPolicy: {{ $s.image.pullPolicy | default "IfNotPresent" }}
   securityContext:
@@ -72,10 +79,24 @@ Usage: {{ include "helm-ai-kernel.launchpadApp.egressSidecar" (dict "sidecar" .V
       value: {{ printf ":%d" (int $s.port) | quote }}
     - name: HELM_EGRESS_ALLOWLIST
       value: {{ join "," $s.allowlist | quote }}
+    # The egress proxy binary requires HELM_EGRESS_LAUNCH_ID for receipt scoping.
+    # In the launchpad runtime this is the kernel-assigned launch_id; in chart-
+    # managed co-deployment there is no launch_id, so derive a stable synthetic
+    # one from the Pod UID via downward API. Each Pod restart gets a fresh UID,
+    # which matches the per-launch isolation semantic.
+    - name: HELM_EGRESS_LAUNCH_ID
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.uid
+    - name: HELM_EGRESS_RECEIPT_DIR
+      value: /var/run/launchpad-egress/receipts
   ports:
     - name: egress
       containerPort: {{ $s.port }}
       protocol: TCP
   resources:
     {{- toYaml $s.resources | nindent 4 }}
+  volumeMounts:
+    - name: egress-receipts
+      mountPath: /var/run/launchpad-egress/receipts
 {{- end -}}

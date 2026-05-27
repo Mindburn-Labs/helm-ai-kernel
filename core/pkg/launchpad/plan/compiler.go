@@ -35,6 +35,7 @@ func CompileWithRoot(app registry.AppSpec, substrate registry.SubstrateSpec, pri
 		ArtifactImage:           app.Install.Image,
 		ArtifactDigest:          app.Install.Digest,
 		RuntimeCommand:          cloneStrings(app.Runtime.Command),
+		RuntimeTimeout:          app.Runtime.Timeout,
 		Healthchecks:            cloneHealthchecks(app.Healthchecks),
 		ModelGatewayEnv:         cloneStrings(app.ModelGatewayEnv),
 		ModelGatewayMode:        modelGatewayMode(app),

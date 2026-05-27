@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -284,7 +285,14 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 		workspace = wd
 	}
 	secrets := runtimeSecrets(compiled, opts)
-	egressProxy := egressProxyFromEnv(compiled.NetworkAllowlist)
+	egressProxy, err := egressProxyFromEnv(compiled.SubstrateID, compiled.NetworkAllowlist)
+	if err != nil && !opts.RuntimeDryRun {
+		return RuntimeStartResult{}, err
+	}
+	additionalMounts, err := materializeFilesystemMounts(compiled, opts)
+	if err != nil && !opts.RuntimeDryRun {
+		return RuntimeStartResult{}, err
+	}
 	runtime := lpruntime.NewLocalContainerRuntime()
 	runtime.IsolationMode = isolationModeFromEnv()
 	handle, err := runtime.Start(lpruntime.ContainerRequest{
@@ -297,6 +305,7 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 		NetworkAllowlist: compiled.NetworkAllowlist,
 		EgressProxy:      egressProxy,
 		TokenBroker:      compiled.ModelGatewayMode == "token_broker",
+		AdditionalMounts: additionalMounts,
 	})
 	if err != nil {
 		result := runtimeStartResultFromHandle(handle)
@@ -342,26 +351,146 @@ func runtimeStartResultFromIsolation(isolation lpruntime.IsolationEvidence) Runt
 	}
 }
 
-func egressProxyFromEnv(allowlist []string) lpruntime.EgressProxy {
-	var egressProxy lpruntime.EgressProxy
+// launchpadStateRoot resolves the host directory under which per-launch
+// state mounts (`<root>/state/<launch_id>/<name>/`) are materialized.
+// Mirrors the resolution rule in services.go::launchpadStoreRoot so a
+// session package consumer does not have to depend on the cmd/ wiring.
+func launchpadStateRoot() string {
+	if v := strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_HOME")); v != "" {
+		return v
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".helm", "launchpad")
+}
+
+// parsedMount represents an AppSpec `filesystem_policy.mounts` entry in the
+// supported `<name>[:<mode>[:<target>]]` syntax. `mode` defaults to "rw" and
+// `target` defaults to `/var/lib/<app_id>/<name>` when the AppSpec leaves it
+// implicit.
+type parsedMount struct {
+	Name     string
+	ReadOnly bool
+	Target   string
+}
+
+func parseFilesystemMount(raw, appID string) (parsedMount, error) {
+	parts := strings.SplitN(raw, ":", 3)
+	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
+		return parsedMount{}, fmt.Errorf("invalid filesystem mount %q: empty name", raw)
+	}
+	m := parsedMount{Name: strings.TrimSpace(parts[0])}
+	mode := "rw"
+	if len(parts) >= 2 && strings.TrimSpace(parts[1]) != "" {
+		mode = strings.TrimSpace(parts[1])
+	}
+	switch mode {
+	case "rw":
+		m.ReadOnly = false
+	case "ro":
+		m.ReadOnly = true
+	default:
+		return parsedMount{}, fmt.Errorf("invalid filesystem mount %q: mode must be rw or ro", raw)
+	}
+	if len(parts) >= 3 && strings.TrimSpace(parts[2]) != "" {
+		target := strings.TrimSpace(parts[2])
+		if !filepath.IsAbs(target) || strings.Contains(target, "..") {
+			return parsedMount{}, fmt.Errorf("invalid filesystem mount %q: target must be absolute and not contain '..'", raw)
+		}
+		m.Target = target
+	} else {
+		m.Target = "/var/lib/" + appID + "/" + m.Name
+	}
+	return m, nil
+}
+
+// materializeFilesystemMounts walks compiled.FilesystemMounts and, for every
+// non-workspace entry, creates the host state directory and prepares a
+// runtime LaunchpadMount that the local-container runner will bind into the
+// workload. The workspace mount is excluded because it is handled separately
+// via ContainerRequest.WorkspaceMount.
+func materializeFilesystemMounts(compiled plan.LaunchPlan, opts ExecuteOptions) ([]lpruntime.LaunchpadMount, error) {
+	if len(compiled.FilesystemMounts) == 0 {
+		return nil, nil
+	}
+	stateRoot := launchpadStateRoot()
+	var mounts []lpruntime.LaunchpadMount
+	for _, raw := range compiled.FilesystemMounts {
+		m, err := parseFilesystemMount(raw, compiled.AppID)
+		if err != nil {
+			return nil, err
+		}
+		if m.Name == "workspace" {
+			continue
+		}
+		if opts.RuntimeDryRun {
+			mounts = append(mounts, lpruntime.LaunchpadMount{
+				Name:     m.Name,
+				Source:   "",
+				Target:   m.Target,
+				ReadOnly: m.ReadOnly,
+			})
+			continue
+		}
+		if stateRoot == "" {
+			return nil, fmt.Errorf("cannot materialize filesystem mount %q: HELM_LAUNCHPAD_HOME unset and user home directory not resolvable", m.Name)
+		}
+		hostDir := filepath.Join(stateRoot, "state", compiled.LaunchID, m.Name)
+		if err := os.MkdirAll(hostDir, 0o755); err != nil {
+			return nil, fmt.Errorf("create host state dir %s: %w", hostDir, err)
+		}
+		mounts = append(mounts, lpruntime.LaunchpadMount{
+			Name:     m.Name,
+			Source:   hostDir,
+			Target:   m.Target,
+			ReadOnly: m.ReadOnly,
+		})
+	}
+	return mounts, nil
+}
+
+// substratesWithNetworkNamespace lists substrates whose workloads run in an
+// isolated network namespace where host-loopback proxies are unreachable.
+// For these, the LaunchOwnedEgressProxy default (listening on 127.0.0.1)
+// cannot serve the workload and silently produces curl exit 7 / HTTP 000
+// from inside the container — which then masquerades as an OpenRouter key
+// failure. Refuse the combination at start time with a clear remediation.
+var substratesWithNetworkNamespace = map[string]bool{
+	"local-container": true,
+}
+
+func egressProxyFromEnv(substrateID string, allowlist []string) (lpruntime.EgressProxy, error) {
 	if proxyURL := os.Getenv("HELM_LAUNCHPAD_EGRESS_PROXY_URL"); proxyURL != "" {
-		egressProxy = lpruntime.StaticEgressProxy{
+		return lpruntime.StaticEgressProxy{
 			ProxyURL:   proxyURL,
 			ReceiptRef: os.Getenv("HELM_LAUNCHPAD_EGRESS_PROXY_RECEIPT_REF"),
-		}
-	} else if proxyImage := os.Getenv("HELM_LAUNCHPAD_EGRESS_PROXY_IMAGE"); proxyImage != "" {
-		egressProxy = lpruntime.DockerSidecarEgressProxy{
+		}, nil
+	}
+	if proxyImage := os.Getenv("HELM_LAUNCHPAD_EGRESS_PROXY_IMAGE"); proxyImage != "" {
+		return lpruntime.DockerSidecarEgressProxy{
 			Image:      proxyImage,
 			ReceiptDir: os.Getenv("HELM_LAUNCHPAD_EGRESS_RECEIPT_DIR"),
-		}
-	} else if len(allowlist) > 0 {
-		proxy := lpruntime.NewLaunchOwnedEgressProxy()
-		if receiptDir := os.Getenv("HELM_LAUNCHPAD_EGRESS_RECEIPT_DIR"); receiptDir != "" {
-			proxy.ReceiptDir = receiptDir
-		}
-		egressProxy = proxy
+		}, nil
 	}
-	return egressProxy
+	if len(allowlist) == 0 {
+		return nil, nil
+	}
+	if substratesWithNetworkNamespace[substrateID] {
+		return nil, fmt.Errorf(
+			"egress proxy required for %q substrate with non-empty network allowlist: "+
+				"set HELM_LAUNCHPAD_EGRESS_PROXY_IMAGE=<sha256-pinned image> to run a docker sidecar proxy, "+
+				"or HELM_LAUNCHPAD_EGRESS_PROXY_URL=<http://host:port> for an external proxy. "+
+				"The default loopback-listening proxy is unreachable from the container network namespace",
+			substrateID,
+		)
+	}
+	proxy := lpruntime.NewLaunchOwnedEgressProxy()
+	if receiptDir := os.Getenv("HELM_LAUNCHPAD_EGRESS_RECEIPT_DIR"); receiptDir != "" {
+		proxy.ReceiptDir = receiptDir
+	}
+	return proxy, nil
 }
 
 func runtimeSecrets(compiled plan.LaunchPlan, opts ExecuteOptions) map[string]string {

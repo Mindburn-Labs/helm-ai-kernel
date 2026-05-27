@@ -14,8 +14,26 @@ install:
     source: https://github.com/openclaw/openclaw
     ref: v2026.5.12
 runtime:
+    # Headless launch: default `openclaw` invocation drops into the Crestodian
+    # TUI and exits 1 without a TTY ("Crestodian needs an interactive TTY").
+    # Use `gateway run` for a foreground HTTP gateway bound to container
+    # loopback; the readiness/healthcheck reaches it via `docker exec`, not
+    # via a published port, so loopback bind is safe here.
     command:
         - openclaw
+        - gateway
+        - run
+        - --port
+        - "18789"
+        - --allow-unconfigured
+        - --auth
+        - none
+        - --bind
+        - loopback
+    # Gateway warm-up reliably exceeds the 120s LocalContainerRuntime default
+    # (8 plugins boot + Control UI scan + heartbeat). 300s gives a comfortable
+    # margin for the kernel healthcheck after the gateway settles.
+    timeout: 300s
 model_gateway:
     logical_secret: model_gateway
     provider: openrouter
@@ -29,7 +47,13 @@ filesystem_policy:
     mode: scoped_workspace
     mounts:
         - workspace:rw
-        - app_state:rw
+        # openclaw hard-codes its writable state at /opt/openclaw/.openclaw
+        # (plugins, browser auth, heartbeat all mkdir there). The rootfs is
+        # read-only, so without this explicit target the plugin subsystem
+        # crashes with ENOENT. Pin the mount target on the AppSpec side so
+        # the kernel runtime materializer creates the path and the workload
+        # finds a writable directory.
+        - app_state:rw:/opt/openclaw/.openclaw
     policy_ref: policies/launchpad/apps/openclaw.safe.toml
 network_policy:
     default: deny

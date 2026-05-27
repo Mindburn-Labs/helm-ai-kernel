@@ -23,7 +23,7 @@ echo ""
 # ── TypeScript ────────────────────────────────────────
 echo "  [ts] Generating types..."
 TEMP_TS=$(mktemp -d)
-docker run --rm -v "$PROJECT_ROOT:/work" -w /work "$GENERATOR_IMAGE" generate \
+docker run --rm --user "$(id -u):$(id -g)" -v "$PROJECT_ROOT:/work" -w /work "$GENERATOR_IMAGE" generate \
     -i /work/api/openapi/helm.openapi.yaml \
     -g typescript-fetch \
     -o /work/.gen_tmp/ts \
@@ -153,7 +153,7 @@ echo "  [ts] ✅ sdk/ts/src/types.gen.ts"
 
 # ── Python ────────────────────────────────────────────
 echo "  [py] Generating types..."
-docker run --rm -v "$PROJECT_ROOT:/work" -w /work "$GENERATOR_IMAGE" generate \
+docker run --rm --user "$(id -u):$(id -g)" -v "$PROJECT_ROOT:/work" -w /work "$GENERATOR_IMAGE" generate \
     -i /work/api/openapi/helm.openapi.yaml \
     -g python \
     -o /work/.gen_tmp/python \
@@ -189,7 +189,7 @@ echo "  [py] ✅ sdk/python/helm_sdk/types_gen.py"
 
 # ── Go ────────────────────────────────────────────────
 echo "  [go] Generating types..."
-docker run --rm -v "$PROJECT_ROOT:/work" -w /work "$GENERATOR_IMAGE" generate \
+docker run --rm --user "$(id -u):$(id -g)" -v "$PROJECT_ROOT:/work" -w /work "$GENERATOR_IMAGE" generate \
     -i /work/api/openapi/helm.openapi.yaml \
     -g go \
     -o /work/.gen_tmp/go \
@@ -272,7 +272,7 @@ echo "  [go] ✅ sdk/go/client/types_gen.go"
 
 # ── Rust ──────────────────────────────────────────────
 echo "  [rs] Generating types..."
-docker run --rm -v "$PROJECT_ROOT:/work" -w /work "$GENERATOR_IMAGE" generate \
+docker run --rm --user "$(id -u):$(id -g)" -v "$PROJECT_ROOT:/work" -w /work "$GENERATOR_IMAGE" generate \
     -i /work/api/openapi/helm.openapi.yaml \
     -g rust \
     -o /work/.gen_tmp/rust \
@@ -393,7 +393,7 @@ echo "  [rs] ✅ sdk/rust/src/types_gen.rs"
 
 # ── Java ──────────────────────────────────────────────
 echo "  [java] Generating types..."
-docker run --rm -v "$PROJECT_ROOT:/work" -w /work "$GENERATOR_IMAGE" generate \
+docker run --rm --user "$(id -u):$(id -g)" -v "$PROJECT_ROOT:/work" -w /work "$GENERATOR_IMAGE" generate \
     -i /work/api/openapi/helm.openapi.yaml \
     -g java \
     -o /work/.gen_tmp/java \

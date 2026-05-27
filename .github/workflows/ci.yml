@@ -164,7 +164,12 @@ jobs:
           repo-token: ${{ github.token }}
       - uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1
       - name: Fetch main ref for proto compatibility checks
-        run: git fetch origin main:refs/heads/main
+        run: |
+          if [ "$(git symbolic-ref --short -q HEAD || true)" = "main" ]; then
+            echo "On main; local refs/heads/main is already HEAD — nothing to fetch."
+          else
+            git fetch origin main:refs/heads/main --force
+          fi
       - name: Install codegen tools
         run: |
           python -m pip install --require-hashes -r .github/codegen-requirements.txt

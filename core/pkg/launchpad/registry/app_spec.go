@@ -53,6 +53,12 @@ type InstallSpec struct {
 type RuntimeSpec struct {
 	Command []string `json:"command" yaml:"command"`
 	Ports   []int    `json:"ports,omitempty" yaml:"ports,omitempty"`
+	// Timeout caps the per-launch container run as parsed by time.ParseDuration
+	// ("180s", "5m"). Empty falls back to the substrate default (currently
+	// 120s in LocalContainerRuntime); set when the app's warm-up plus its
+	// healthcheck reliably exceeds the default — openclaw's gateway run, for
+	// example, needs ~30s to bind plus 60-90s for the kernel readiness probe.
+	Timeout string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 type ModelGatewaySpec struct {

@@ -42,22 +42,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
-      - name: Set up minikube
-        uses: medyagh/setup-minikube@e9e035a86bbc3caea26a450bd4dbf9d0c453682e # v0.0.21
-        with:
-          minikube-version: v1.34.0
-          kubernetes-version: v1.30.0
-          driver: docker
-          cpus: "4"
-          memory: "7g"
-          addons: ""
-          start-args: --cni=calico
-
-      - name: Build kernel image inside minikube docker daemon
+      - name: Install CLI dependencies (minikube + helm + kubectl)
         run: |
           set -euo pipefail
-          eval "$(minikube -p minikube docker-env)"
+          # minikube — direct binary, immune to setup-minikube's preload-index 404s.
+          curl -fsSL -o /tmp/minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+          sudo install -m 0755 /tmp/minikube /usr/local/bin/minikube
+          minikube version
+          # helm v3 — needed to render the chart with launchpadApps schema 2020-12.
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          helm version --short
+          kubectl version --client
+
+      - name: Build kernel image on host docker
+        run: |
+          set -euo pipefail
           docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:smoke -f ./Dockerfile .
+          docker image ls ghcr.io/mindburn-labs/helm-ai-kernel:smoke
 
       - name: Run baseline smoke
         env:
@@ -84,22 +85,23 @@ jobs:
           set -euo pipefail
           echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
 
-      - name: Set up minikube
-        uses: medyagh/setup-minikube@e9e035a86bbc3caea26a450bd4dbf9d0c453682e # v0.0.21
-        with:
-          minikube-version: v1.34.0
-          kubernetes-version: v1.30.0
-          driver: docker
-          cpus: "4"
-          memory: "7g"
-          addons: ""
-          start-args: --cni=calico
-
-      - name: Build kernel image inside minikube docker daemon
+      - name: Install CLI dependencies (minikube + helm + kubectl)
         run: |
           set -euo pipefail
-          eval "$(minikube -p minikube docker-env)"
+          # minikube — direct binary, immune to setup-minikube's preload-index 404s.
+          curl -fsSL -o /tmp/minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+          sudo install -m 0755 /tmp/minikube /usr/local/bin/minikube
+          minikube version
+          # helm v3 — needed to render the chart with launchpadApps schema 2020-12.
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          helm version --short
+          kubectl version --client
+
+      - name: Build kernel image on host docker
+        run: |
+          set -euo pipefail
           docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:smoke -f ./Dockerfile .
+          docker image ls ghcr.io/mindburn-labs/helm-ai-kernel:smoke
 
       - name: Run positive smoke
         env:
@@ -130,22 +132,23 @@ jobs:
           set -euo pipefail
           echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
 
-      - name: Set up minikube
-        uses: medyagh/setup-minikube@e9e035a86bbc3caea26a450bd4dbf9d0c453682e # v0.0.21
-        with:
-          minikube-version: v1.34.0
-          kubernetes-version: v1.30.0
-          driver: docker
-          cpus: "4"
-          memory: "7g"
-          addons: ""
-          start-args: --cni=calico
-
-      - name: Build kernel image inside minikube docker daemon
+      - name: Install CLI dependencies (minikube + helm + kubectl)
         run: |
           set -euo pipefail
-          eval "$(minikube -p minikube docker-env)"
+          # minikube — direct binary, immune to setup-minikube's preload-index 404s.
+          curl -fsSL -o /tmp/minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+          sudo install -m 0755 /tmp/minikube /usr/local/bin/minikube
+          minikube version
+          # helm v3 — needed to render the chart with launchpadApps schema 2020-12.
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          helm version --short
+          kubectl version --client
+
+      - name: Build kernel image on host docker
+        run: |
+          set -euo pipefail
           docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:smoke -f ./Dockerfile .
+          docker image ls ghcr.io/mindburn-labs/helm-ai-kernel:smoke
 
       - name: Run negative smoke
         env:

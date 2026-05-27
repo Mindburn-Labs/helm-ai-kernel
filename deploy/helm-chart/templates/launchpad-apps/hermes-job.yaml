@@ -10,12 +10,11 @@ metadata:
   annotations:
     helm.ai/upstream-source: "https://github.com/NousResearch/hermes-agent"
     helm.ai/registry-ref: "registry/launchpad/apps/hermes.yaml"
-    # Recreate the Job on every helm upgrade — Jobs are immutable in spec, and
-    # smoke iterations need a fresh attempt. The hook lifecycle keeps `helm test`
-    # output predictable while the Job itself stays a first-class resource.
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "5"
-    helm.sh/hook-delete-policy: before-hook-creation
+    # Hermes is a regular release-owned Job, not a helm hook. As a hook it would
+    # block `helm install` on its own failure, which conflates "the chart is
+    # installable" with "the workload succeeded". The smoke driver inspects the
+    # Job status explicitly in stage 5 instead, so the install/assert phases
+    # stay separable.
 spec:
   backoffLimit: {{ $cfg.backoffLimit }}
   activeDeadlineSeconds: {{ $cfg.activeDeadlineSeconds }}
@@ -33,12 +32,12 @@ spec:
         runAsUser: 65534
         runAsGroup: 65534
         fsGroup: 65534
-      # Hermes is short-lived (single ping). The egress sidecar must exit too,
-      # otherwise the Pod stays Running forever waiting for the sidecar. The
-      # workload runs as a normal container and we kill the sidecar via the
-      # sidecar's own readiness gate plus `shareProcessNamespace` so a SIGTERM
-      # propagates to both containers when the workload exits.
-      shareProcessNamespace: true
+      # Native sidecar pattern: egress proxy runs as a restartPolicy:Always
+      # initContainer, so Pod completion is driven solely by the main hermes
+      # container. The proxy starts before hermes, stays alive in parallel,
+      # and is torn down by the kubelet when the workload exits.
+      initContainers:
+        {{- include "helm-ai-kernel.launchpadApp.egressSidecar" (dict "sidecar" $cfg.egressSidecar "init" true) | nindent 8 }}
       containers:
         - name: {{ $app }}
           image: {{ include "helm-ai-kernel.launchpadApp.image" (dict "image" $cfg.image) | quote }}
@@ -65,16 +64,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.openrouter.apiKeySecretRef.name | quote }}
                   key: {{ .Values.openrouter.apiKeySecretRef.key | quote }}
-          # Once the hermes command exits, the workload container terminates.
-          # We then send SIGTERM to the sidecar via a postStop hook so the Pod
-          # can transition out of Running into Succeeded/Failed cleanly.
-          lifecycle:
-            preStop:
-              exec:
-                command:
-                  - /bin/sh
-                  - -c
-                  - "pkill -TERM -f egress-proxy || true"
           resources:
             {{- toYaml $cfg.resources | nindent 12 }}
           volumeMounts:
@@ -82,7 +71,6 @@ spec:
               mountPath: /tmp
             - name: app-state
               mountPath: /var/lib/hermes
-        {{- include "helm-ai-kernel.launchpadApp.egressSidecar" (dict "sidecar" $cfg.egressSidecar) | nindent 8 }}
       volumes:
         - name: tmp
           emptyDir:
@@ -91,4 +79,7 @@ spec:
         - name: app-state
           emptyDir:
             sizeLimit: {{ $cfg.appStateSize }}
+        - name: egress-receipts
+          emptyDir:
+            sizeLimit: 64Mi
 {{- end }}

@@ -85,16 +85,12 @@ spec:
             periodSeconds: {{ $cfg.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ $cfg.readinessProbe.timeoutSeconds }}
             failureThreshold: {{ $cfg.readinessProbe.failureThreshold }}
-          livenessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - "pgrep -f 'openclaw gateway' >/dev/null"
-            initialDelaySeconds: {{ $cfg.livenessProbe.initialDelaySeconds }}
-            periodSeconds: {{ $cfg.livenessProbe.periodSeconds }}
-            timeoutSeconds: {{ $cfg.livenessProbe.timeoutSeconds }}
-            failureThreshold: {{ $cfg.livenessProbe.failureThreshold }}
+          # Liveness probe intentionally omitted. The published openclaw image
+          # is distroless-style (no procps / pgrep), and a TCP probe against
+          # the loopback-bound gateway port is unreachable from kubelet. The
+          # readiness probe already covers "the gateway can reach OpenRouter"
+          # — if it fails persistently, the Pod is removed from Service rotation
+          # and a fresh rollout replaces it.
           resources:
             {{- toYaml $cfg.resources | nindent 12 }}
           volumeMounts:
@@ -111,4 +107,7 @@ spec:
         - name: app-state
           emptyDir:
             sizeLimit: {{ $cfg.appStateSize }}
+        - name: egress-receipts
+          emptyDir:
+            sizeLimit: 64Mi
 {{- end }}

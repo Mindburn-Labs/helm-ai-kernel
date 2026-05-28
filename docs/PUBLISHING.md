@@ -70,7 +70,7 @@ The repository retains packaging metadata for the kernel binaries, container ima
 | TypeScript SDK | `@mindburn/helm-ai-kernel` |
 | Python SDK | `helm-sdk` |
 | Rust SDK | `helm-sdk` |
-| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.7` |
+| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.8` |
 | Go SDK | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@main`; pin `@main` or a commit until tagged module releases are aligned |
 
 ## Release Inputs
@@ -107,10 +107,10 @@ The retained workflow set under `.github/workflows/` covers:
 - tag-triggered npm, PyPI, crates.io, and Maven-compatible SDK publication
 - daily published registry drift monitoring through `make version-drift-published`
 
-Release target: `v0.5.7`. The release is complete only after the tagged
+Release target: `v0.5.8`. The release is complete only after the tagged
 workflow publishes every lockstep channel, attaches `version-status.json` to
 the GitHub Release, and `make version-drift-published` passes for that version:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.7>.
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.8>.
 
 There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
 actual release baseline when auditing the `v0.5.0` delta.
@@ -124,7 +124,7 @@ The release workflow attaches these assets:
 - `helm-ai-kernel-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.5.7.openvex.json`
+- `v0.5.8.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
@@ -132,12 +132,12 @@ The release workflow attaches these assets:
 - `helm-ai-kernel-launchpad-data.tar`
 - `helm-ai-kernel.mcpb`
 - `helm-ai-kernel.rb`
-- `v0.5.7.json`
+- `v0.5.8.json`
 - matching `*.cosign.bundle` files for every primary asset
 
 `sample-policy-material.tar` includes the sample policy and its referenced EU
 AI Act high-risk reference pack. The `v0.5.6` release attaches a
-`helm-ai-kernel.rb` formula asset for version `0.5.7` and publishes the same
+`helm-ai-kernel.rb` formula asset for version `0.5.8` and publishes the same
 version to `mindburnlabs/homebrew-tap`; `version-status.json` must include a
 passing `homebrew-tap` surface before documenting
 `brew install mindburnlabs/tap/helm-ai-kernel` as current.
@@ -162,7 +162,7 @@ writes the final `SHA256SUMS.txt`.
 ## Verification
 
 Every public release must include enough material to verify what was downloaded.
-For `v0.5.6`, use `SHA256SUMS.txt`, `sbom.json`, `v0.5.7.openvex.json`,
+For `v0.5.6`, use `SHA256SUMS.txt`, `sbom.json`, `v0.5.8.openvex.json`,
 `release-attestation.json`, the platform binary assets, attached
 `*.cosign.bundle` files, and the offline `evidence-pack.tar`.
 

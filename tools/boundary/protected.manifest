@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-05-28T06:10:17Z
-# Commit: 36e99e922dd999f135a5ec106a6ff205e74e77a8
+# Generated: 2026-05-28T11:09:09Z
+# Commit: 0600f4cd8010aba9311b5483298548b1fde6e08a
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -180,7 +180,7 @@ bcfd4bc7c3f9463be26db2922ad02336c8f987812e7efe442b879359cd652bf6  core/pkg/contr
 7073aecde8cbabaf1736a69f45570ccfc31eeedf80fe75b344777baa393df16d  core/pkg/contracts/model_catalog.go
 7341c7e71cc60b56057805fec95cdcd50325905f7a1a64c5c6f3e0d20e3ac708  core/pkg/contracts/model_catalog_test.go
 beddd6fd56ff42db43814720ed5e7deb2c009b0cfd208aff9fbdce80d32eef6c  core/pkg/contracts/model_routing.go
-b8977e0ca7bee656c54001e5724344c0cd6f8c5ba0eeb381076fb54c340ad08c  core/pkg/contracts/pack_manifest_v2.go
+96c228a36f733c55bd691ff5acb5b8988907e52958d5337ba15efac8684b2e3d  core/pkg/contracts/pack_manifest_v2.go
 41d4ee32362ed1828741a96b7a5b52fdbf56709ed4fe8ad15b7e0b10b9cafee4  core/pkg/contracts/packs.go
 d58fbf4af68db12d835af285b2cd97a9b1b0ad39dd4efdfeed8f759c7c9cfec9  core/pkg/contracts/phenotype.go
 e2928321438e86fb285dfe17a445b2a4f36dfb26a5701ecb9f011b0a54941375  core/pkg/contracts/plan.go
@@ -518,7 +518,7 @@ a8de5c643b49f6ed504b7bd51f27b950fe3cd68990ab4639331b9e594408ca87  core/pkg/guard
 9402c221f21eb9e33de4a469731d2c7270ab5165de388422ca2ad30fe7800fb8  core/pkg/packs/antispoof/pack_test.go
 f3cefe819fe8e55475e1fd1f624b6ad3fc7afff1bdacefd8222a01c8f8acdd78  core/pkg/packs/install/install.go
 d5459179815d31ff69d4735112827d43ac6f04965e1491ab79d79da1b9411060  core/pkg/packs/install/install_test.go
-1ba30e3cda5b7bafd58ba7e179e94922359636d8f62d8c6cbda1ee9b735342e5  core/pkg/packs/install/manifest.go
+bcb960579f44d7f4f7d0e17201fd3f9dddd9be4243aedbed82bca42aac0c9097  core/pkg/packs/install/manifest.go
 c43b4501ce7a9ba96f29e15678ba096d9f0bd77dc66ed4e9a0cae582dd2c99e8  core/pkg/packs/install/manifest_test.go
 6cb5abeb74fbec6384a4b12fd9c05e533a4c0f8b36c93972c2a59591b1972d64  core/pkg/packs/install/receipt.go
 7f6de7d81386577dce6af5cfaa52797a303d16cbc325c0c2adb0522215b27b8a  core/pkg/packs/install/receipt_test.go

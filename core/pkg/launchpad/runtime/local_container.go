@@ -4,12 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
 	dockersandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox/docker"
 )
@@ -43,6 +45,13 @@ type ContainerRequest struct {
 	// `filesystem_policy.mounts` in the AppSpec (e.g. `app_state:rw[:target]`).
 	// Each entry is bind-mounted at the requested target inside the container.
 	AdditionalMounts []LaunchpadMount
+
+	// Detached marks daemon-style runs (docker run -d). When set, runtime
+	// returns as soon as the container is up and the healthcheck passes
+	// (or times out into REPAIR_REQUIRED), instead of blocking until the
+	// container exits.
+	Detached         bool
+	ReadinessTimeout time.Duration
 }
 
 // LaunchpadMount is a host-to-container bind mount derived from an AppSpec
@@ -165,13 +174,20 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 			Target:   am.Target,
 			ReadOnly: am.ReadOnly,
 		})
+		if req.Plan.StateDirEnv != "" && am.Name != "" && !strings.EqualFold(am.Name, "workspace") && env[req.Plan.StateDirEnv] == "" {
+			env[req.Plan.StateDirEnv] = am.Target
+		}
 	}
 	spec := &sandbox.SandboxSpec{
 		Image:   req.ImageDigest,
 		Command: command,
 		Args:    args,
 		Env:     env,
-		Mounts:  mounts,
+		Labels: map[string]string{
+			"launchpad-launch-id": req.Plan.LaunchID,
+			"launchpad-app-id":    req.Plan.AppID,
+		},
+		Mounts: mounts,
 		Limits: sandbox.ResourceLimits{
 			CPUMillis:    500,
 			MemoryMB:     512,
@@ -182,6 +198,7 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 		Network:      network,
 		WorkDir:      "/workspace",
 		RuntimeClass: handle.Isolation.RuntimeClass,
+		Detached:     req.Detached,
 	}
 	result, receipt, err := dockersandbox.NewDockerRunner().Run(spec)
 	if err != nil {
@@ -201,6 +218,18 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 	}
 	handle.ContainerID = receipt.ExecutionID
 	handle.EgressReceiptRef = proxyHandle.ReceiptRef
+	// Daemon-style readiness: container started (docker run -d returned),
+	// now poll the AppSpec healthcheck commands via `docker exec` until
+	// one passes or ReadinessTimeout elapses. Failure here means the
+	// daemon never came up healthy; kill the container and surface the
+	// last error to the caller (translates to REPAIR_REQUIRED).
+	if req.Detached {
+		if err := waitForReadiness(receipt.ExecutionID, req.Plan.Healthchecks, req.ReadinessTimeout, req.Secrets); err != nil {
+			_ = exec.Command("docker", "rm", "-f", receipt.ExecutionID).Run()
+			cleanupEgressProxy(proxyHandle)
+			return handle, fmt.Errorf("local-container daemon never became ready: %w", err)
+		}
+	}
 	handle.EgressNetworkName = proxyHandle.NetworkName
 	handle.EgressProxyID = proxyHandle.ProxyContainerID
 	handle.EgressProxyName = proxyHandle.ProxyContainerName
@@ -208,7 +237,136 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 	return handle, nil
 }
 
-const defaultLocalContainerCommandTimeout = 120 * time.Second
+// projectAppStateMounts materializes the non-workspace mounts declared in
+// AppSpec.FilesystemPolicy.Mounts (e.g. "app_state:rw") into actual host
+// directories under ~/.helm/launchpad/state/<launch_id>/<name>/ and a
+// container target at /var/lib/<app_id>/<name>. If StateDirEnv is set on
+// the plan, an env var pointing at the first such mount is exported into
+// the container, so apps (hermes, openclaw) can discover their state
+// directory without baking the path into their YAML command.
+func projectAppStateMounts(p plan.LaunchPlan) ([]sandbox.Mount, map[string]string, error) {
+	if len(p.FilesystemMounts) == 0 {
+		return nil, nil, nil
+	}
+	root, err := appStateRoot(p.LaunchID)
+	if err != nil {
+		return nil, nil, err
+	}
+	var mounts []sandbox.Mount
+	var firstTarget string
+	for _, raw := range p.FilesystemMounts {
+		name, mode := parseFilesystemMount(raw)
+		if name == "" || strings.EqualFold(name, "workspace") {
+			continue
+		}
+		hostDir := filepath.Join(root, name)
+		if err := os.MkdirAll(hostDir, 0o700); err != nil {
+			return nil, nil, fmt.Errorf("create state dir for %s: %w", name, err)
+		}
+		// Workaround for container-side UID mismatch: kernel runs as the
+		// host user (often UID 501 on macOS), apps inside the container
+		// run as their own UID (hermes=999, openclaw=nonroot). Loosen
+		// dir perms so the in-container user can write. Outer parent
+		// (~/.helm/launchpad/) stays 0700, so this is not externally
+		// reachable.
+		_ = os.Chmod(hostDir, 0o777)
+		target := filepath.Join("/var/lib", p.AppID, name)
+		mounts = append(mounts, sandbox.Mount{
+			Source:   hostDir,
+			Target:   target,
+			ReadOnly: !strings.EqualFold(mode, "rw"),
+		})
+		if firstTarget == "" {
+			firstTarget = target
+		}
+	}
+	env := map[string]string{}
+	if firstTarget != "" && p.StateDirEnv != "" {
+		env[p.StateDirEnv] = firstTarget
+	}
+	return mounts, env, nil
+}
+
+// parseFilesystemMount splits entries like "app_state:rw" into name + mode.
+func parseFilesystemMount(raw string) (string, string) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", ""
+	}
+	parts := strings.SplitN(trimmed, ":", 2)
+	name := strings.TrimSpace(parts[0])
+	mode := "ro"
+	if len(parts) == 2 {
+		mode = strings.TrimSpace(parts[1])
+	}
+	return name, mode
+}
+
+// appStateRoot resolves ~/.helm/launchpad/state/<launch_id>/.
+func appStateRoot(launchID string) (string, error) {
+	if launchID == "" {
+		return "", errors.New("launch id required for app state root")
+	}
+	if override := strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_HOME")); override != "" {
+		return filepath.Join(override, "state", launchID), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".helm", "launchpad", "state", launchID), nil
+}
+
+// waitForReadiness polls the AppSpec healthcheck commands inside a detached
+// container via `docker exec`, retrying with a fixed 6-second interval until
+// one passes or timeout elapses. Returns nil on the first successful check.
+func waitForReadiness(containerID string, checks []registry.HealthcheckSpec, timeout time.Duration, secrets map[string]string) error {
+	if timeout <= 0 {
+		timeout = 8 * time.Minute
+	}
+	if len(checks) == 0 {
+		// No healthcheck declared: best-effort, just verify the container
+		// is still up after a short grace period.
+		time.Sleep(5 * time.Second)
+		if !containerRunning(containerID) {
+			return errors.New("container exited before grace period")
+		}
+		return nil
+	}
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		if !containerRunning(containerID) {
+			return errors.New("container exited during readiness wait")
+		}
+		for _, hc := range checks {
+			cmd := strings.TrimSpace(hc.Command)
+			if cmd == "" {
+				continue
+			}
+			out, err := exec.Command("docker", "exec", containerID, "sh", "-lc", cmd).CombinedOutput()
+			if err == nil {
+				return nil
+			}
+			lastErr = fmt.Errorf("healthcheck %q failed: %v (%s)", cmd, err, strings.TrimSpace(redactedCommandOutput(out, nil, secrets)))
+		}
+		time.Sleep(6 * time.Second)
+	}
+	if lastErr == nil {
+		lastErr = errors.New("readiness timeout with no successful healthcheck")
+	}
+	return lastErr
+}
+
+func containerRunning(containerID string) bool {
+	out, err := exec.Command("docker", "inspect", "--format", "{{.State.Running}}", containerID).CombinedOutput()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "true"
+}
+
+const defaultLocalContainerCommandTimeout = 600 * time.Second
 
 // commandTimeout resolves the per-launch container timeout. Precedence:
 // explicit AppSpec runtime.timeout (req.Plan.RuntimeTimeout) → struct field

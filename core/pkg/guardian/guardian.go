@@ -22,6 +22,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/safedep"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/threatscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust"
@@ -163,6 +164,10 @@ func WithZeroIDInterceptor(z *ZeroIDInterceptor) GuardianOption {
 	return func(g *Guardian) { g.zeroidInterceptor = z }
 }
 
+func WithSafeDepController(controller *safedep.Controller) GuardianOption {
+	return func(g *Guardian) { g.safeDepController = controller }
+}
+
 // Guardian enforces the Proof Requirement Graph (PRG)
 type Guardian struct {
 	signer            crypto.Signer
@@ -191,6 +196,7 @@ type Guardian struct {
 	otel              *OTelInstrumentation         // Optional OTel tracing & metrics
 	warmLeaseMgr      *sandbox.WarmLeaseManager    // Warm lease manager for sandboxes
 	zeroidInterceptor *ZeroIDInterceptor           // ZeroID identity validator
+	safeDepController *safedep.Controller          // Safe Deprecation emergency release plane
 }
 
 // ZeroID returns the registered ZeroIDInterceptor.
@@ -326,6 +332,10 @@ func (g *Guardian) SetDelegationStore(ds identity.DelegationStore) {
 // Deprecated: Use WithSessionRiskMemory GuardianOption in NewGuardian instead.
 func (g *Guardian) SetSessionRiskMemory(srm *SessionRiskMemory) {
 	g.sessionRiskMemory = srm
+}
+
+func (g *Guardian) SetSafeDepController(controller *safedep.Controller) {
+	g.safeDepController = controller
 }
 
 // SignDecision checks requirements and signs only if met
@@ -512,6 +522,17 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 		AllowedTool:      allowedTool,
 		Taint:            contracts.NormalizeTaintLabels(effect.Taint),
 	}
+	if decision.InputContext != nil {
+		if activationID, ok := decision.InputContext["safe_deprecation_activation_id"].(string); ok {
+			intent.EmergencyActivationID = activationID
+		}
+		if sessionID, ok := decision.InputContext["safe_deprecation_delegation_session_id"].(string); ok {
+			intent.EmergencyDelegationSessionID = sessionID
+		}
+		if scopeHash, ok := decision.InputContext["safe_deprecation_scope_hash"].(string); ok {
+			intent.EmergencyScopeHash = scopeHash
+		}
+	}
 
 	// 4. Sign Intent
 	if err := g.signer.SignIntent(intent); err != nil {
@@ -644,6 +665,38 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		}
 		if snapshot.PDP != nil {
 			activePDP = snapshot.PDP
+		}
+	}
+
+	if g.safeDepController != nil {
+		signal := safedep.SignalFromContext(req.Context)
+		if !signal.Empty() {
+			classification, classErr := g.safeDepController.Classify(ctx, signal)
+			if classErr != nil {
+				return nil, classErr
+			}
+			if req.Context == nil {
+				req.Context = make(map[string]interface{})
+			}
+			req.Context["safe_deprecation_state"] = string(classification.State)
+			req.Context["safe_deprecation_reason_code"] = string(classification.ReasonCode)
+			if classification.State == contracts.SafeDepTerminalFreeze ||
+				(classification.State == contracts.SafeDepDeprecatedReadonly && !safedep.IsInspectionAction(req.Action, req.Resource)) {
+				decision := &contracts.DecisionRecord{
+					ID:            newDecisionID(),
+					Timestamp:     g.clock.Now(),
+					Verdict:       string(contracts.VerdictDeny),
+					ReasonCode:    string(classification.ReasonCode),
+					Reason:        fmt.Sprintf("%s: safe deprecation state %s blocks %s", classification.ReasonCode, classification.State, req.Action),
+					InputContext:  req.Context,
+					PolicyVersion: policyVersion,
+				}
+				bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
+				if signErr := g.signer.SignDecision(decision); signErr != nil {
+					return nil, fmt.Errorf("failed to sign safe-deprecation decision: %w", signErr)
+				}
+				return decision, nil
+			}
 		}
 	}
 

@@ -34,6 +34,8 @@ def set_json_field(payload: dict[str, Any], field: str, value: str) -> None:
 
 def update_json(surface: dict[str, Any], version: str) -> bool:
     path = ROOT / surface["path"]
+    if not path.exists():
+        return False
     payload = json.loads(path.read_text(encoding="utf-8"))
     before = json.dumps(payload, sort_keys=True, ensure_ascii=False)
     set_json_field(payload, surface["field"], drift.fmt(surface.get("expected", "{version}"), version))
@@ -46,6 +48,8 @@ def update_json(surface: dict[str, Any], version: str) -> bool:
 
 def update_regex(surface: dict[str, Any], version: str) -> bool:
     path = ROOT / surface["path"]
+    if not path.exists():
+        return False
     if "replacement" not in surface:
         return False
     text = path.read_text(encoding="utf-8")
@@ -57,6 +61,24 @@ def update_regex(surface: dict[str, Any], version: str) -> bool:
         return False
     path.write_text(new_text, encoding="utf-8")
     return True
+
+
+def update_tree_regex(surface: dict[str, Any], version: str) -> bool:
+    base = ROOT / surface["path"]
+    if not base.exists():
+        return False
+    if "replacement" not in surface:
+        return False
+    did_change = False
+    for path in sorted(base.glob(surface["glob"])):
+        if path.is_file():
+            text = path.read_text(encoding="utf-8")
+            replacement = drift.fmt(surface["replacement"], version)
+            new_text, replacements = re.subn(surface["pattern"], replacement, text, count=int(surface.get("max_replacements", 0)), flags=re.MULTILINE)
+            if new_text != text:
+                path.write_text(new_text, encoding="utf-8")
+                did_change = True
+    return did_change
 
 
 def run(command: list[str]) -> None:
@@ -95,6 +117,8 @@ def main() -> int:
             did_change = update_json(surface, version)
         elif kind == "regex":
             did_change = update_regex(surface, version)
+        elif kind == "tree_regex":
+            did_change = update_tree_regex(surface, version)
         else:
             continue
         if did_change:

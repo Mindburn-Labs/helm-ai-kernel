@@ -295,6 +295,7 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 	}
 	runtime := lpruntime.NewLocalContainerRuntime()
 	runtime.IsolationMode = isolationModeFromEnv()
+	readiness, _ := time.ParseDuration(compiled.RuntimeReadinessTimeout)
 	handle, err := runtime.Start(lpruntime.ContainerRequest{
 		Plan:             compiled,
 		ImageDigest:      imageRef,
@@ -306,6 +307,8 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 		EgressProxy:      egressProxy,
 		TokenBroker:      compiled.ModelGatewayMode == "token_broker",
 		AdditionalMounts: additionalMounts,
+		Detached:         compiled.RuntimeDetached,
+		ReadinessTimeout: readiness,
 	})
 	if err != nil {
 		result := runtimeStartResultFromHandle(handle)

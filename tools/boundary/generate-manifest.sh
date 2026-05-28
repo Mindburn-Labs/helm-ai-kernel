@@ -19,6 +19,7 @@ PROTECTED_DIRS=(
   core/pkg/verifier
   core/pkg/connectors/sandbox
   core/pkg/conformance
+  core/pkg/safedep
   core/pkg/audit
   core/pkg/integrations/receipts
   core/pkg/integrations/capgraph
@@ -26,6 +27,7 @@ PROTECTED_DIRS=(
   core/pkg/api
   core/pkg/trust/registry
   core/pkg/guardian
+  core/pkg/packs
   protocols
   schemas
 )

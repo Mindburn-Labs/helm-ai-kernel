@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXCLUDE = {'.git', 'node_modules', '.next', 'dist', 'build', 'target', 'vendor', '.turbo', '.astro', '.generated', 'bin', 'coverage', 'site', '.cache', '.venv', '__pycache__', 'scratch'}
+EXCLUDE = {'.git', 'node_modules', '.next', 'dist', 'build', 'target', 'vendor', '.turbo', '.astro', '.generated', 'bin', 'coverage', 'site', '.cache', '.venv', '__pycache__', 'scratch', 'helm-receipts', 'packages'}
 CHILD_GROUPS = {'apps','services','packages','sdk','examples','infra','deploy','tools','scripts','.github','protocols','schemas','api','public','functions','configs','datasets','training','serving','eval','benchmarks','docker','tests','e2e','ops','monitoring','contracts','artifacts','proofs','reference_packs','release','fixtures','crates','cmd','integrations','modules','evidence','qa','loadtests','pipelines','packs','config','valuation','simulation','spikes'}
 CONFIG_NAMES = {'Makefile','mkdocs.yml','package.json','package-lock.json','pnpm-workspace.yaml','pnpm-lock.yaml','tsconfig.json','tsconfig.base.json','tsconfig.node.json','astro.config.mjs','wrangler.jsonc','docker-compose.yml','docker-compose.dev.yml','.env.example','go.mod','Cargo.toml','pyproject.toml','ruff.toml','uv.lock','requirements.txt'}
 CONFIG_SUFFIXES = ('.config.js','.config.mjs','.config.ts','.config.cjs','.config.json','.schema.json','.schema.yaml','.schema.yml')

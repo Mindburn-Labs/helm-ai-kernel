@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/cpi"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
@@ -39,9 +40,10 @@ const (
 )
 
 var (
-	ErrPolicyNotReady         = errors.New("policy not ready")
-	ErrPolicyHashMismatch     = errors.New("policy hash mismatch")
-	ErrPolicySignatureInvalid = errors.New("policy signature invalid")
+	ErrPolicyNotReady          = errors.New("policy not ready")
+	ErrPolicyHashMismatch      = errors.New("policy hash mismatch")
+	ErrPolicySignatureInvalid  = errors.New("policy signature invalid")
+	ErrEmergencyCapsuleInvalid = errors.New("emergency capsule invalid")
 )
 
 // PolicyScope identifies the tenant/workspace policy authority boundary.
@@ -70,16 +72,17 @@ func (s PolicyScope) Key() string {
 
 // PolicyHead is the cheap source-of-truth pointer read before loading bytes.
 type PolicyHead struct {
-	Scope           PolicyScope `json:"scope"`
-	PolicyEpoch     uint64      `json:"policy_epoch"`
-	PolicyHash      string      `json:"policy_hash"`
-	BundleRef       string      `json:"bundle_ref,omitempty"`
-	P0CeilingsHash  string      `json:"p0_ceilings_hash,omitempty"`
-	P1BundleHash    string      `json:"p1_bundle_hash,omitempty"`
-	P2OverlayHashes []string    `json:"p2_overlay_hashes,omitempty"`
-	ProofRef        string      `json:"proof_ref,omitempty"`
-	Signature       string      `json:"signature,omitempty"`
-	SourceRefs      []string    `json:"source_refs,omitempty"`
+	Scope            PolicyScope                 `json:"scope"`
+	PolicyEpoch      uint64                      `json:"policy_epoch"`
+	PolicyHash       string                      `json:"policy_hash"`
+	BundleRef        string                      `json:"bundle_ref,omitempty"`
+	P0CeilingsHash   string                      `json:"p0_ceilings_hash,omitempty"`
+	P1BundleHash     string                      `json:"p1_bundle_hash,omitempty"`
+	P2OverlayHashes  []string                    `json:"p2_overlay_hashes,omitempty"`
+	ProofRef         string                      `json:"proof_ref,omitempty"`
+	Signature        string                      `json:"signature,omitempty"`
+	SourceRefs       []string                    `json:"source_refs,omitempty"`
+	EmergencyCapsule *contracts.EmergencyCapsule `json:"emergency_capsule,omitempty"`
 }
 
 // PolicySource reads policy truth from a backend. Watchers, callbacks, and
@@ -99,15 +102,18 @@ type ValidationStatus struct {
 
 // EffectivePolicySnapshot is the immutable authority installed for a scope.
 type EffectivePolicySnapshot struct {
-	TenantID        string           `json:"tenant_id"`
-	WorkspaceID     string           `json:"workspace_id"`
-	PolicyEpoch     uint64           `json:"policy_epoch"`
-	PolicyHash      string           `json:"policy_hash"`
-	P0CeilingsHash  string           `json:"p0_ceilings_hash,omitempty"`
-	P1BundleHash    string           `json:"p1_bundle_hash,omitempty"`
-	P2OverlayHashes []string         `json:"p2_overlay_hashes,omitempty"`
-	SourceRefs      []string         `json:"source_refs,omitempty"`
-	Validation      ValidationStatus `json:"validation"`
+	TenantID             string           `json:"tenant_id"`
+	WorkspaceID          string           `json:"workspace_id"`
+	PolicyEpoch          uint64           `json:"policy_epoch"`
+	PolicyHash           string           `json:"policy_hash"`
+	P0CeilingsHash       string           `json:"p0_ceilings_hash,omitempty"`
+	P1BundleHash         string           `json:"p1_bundle_hash,omitempty"`
+	P2OverlayHashes      []string         `json:"p2_overlay_hashes,omitempty"`
+	EmergencyCapsuleHash string           `json:"emergency_capsule_hash,omitempty"`
+	EmergencyApertureID  string           `json:"emergency_aperture_id,omitempty"`
+	EmergencyExpiresAt   time.Time        `json:"emergency_expires_at,omitempty"`
+	SourceRefs           []string         `json:"source_refs,omitempty"`
+	Validation           ValidationStatus `json:"validation"`
 
 	Graph        *prg.Graph              `json:"-"`
 	PDP          pdp.PolicyDecisionPoint `json:"-"`
@@ -133,6 +139,12 @@ type SnapshotCompiler func(ctx context.Context, head PolicyHead, bundle []byte) 
 // SignatureVerifier verifies optional policy signatures/provenance.
 type SignatureVerifier interface {
 	VerifyPolicyBundle(ctx context.Context, head PolicyHead, bundle []byte) error
+}
+
+// EmergencyCapsuleVerifier verifies hardware-quorum emergency capsules before
+// the reconciler installs any snapshot that references them.
+type EmergencyCapsuleVerifier interface {
+	VerifyEmergencyCapsule(ctx context.Context, head PolicyHead, capsule contracts.EmergencyCapsule) error
 }
 
 // Ed25519PolicyVerifier verifies policy bundles against an operator-provided
@@ -192,6 +204,7 @@ type Reconciler struct {
 	store             PolicySnapshotStore
 	compiler          SnapshotCompiler
 	verifier          SignatureVerifier
+	emergencyVerifier EmergencyCapsuleVerifier
 	requireSignature  bool
 	keepLastKnownGood bool
 
@@ -204,6 +217,7 @@ type ReconcilerConfig struct {
 	Store             PolicySnapshotStore
 	Compiler          SnapshotCompiler
 	Verifier          SignatureVerifier
+	EmergencyVerifier EmergencyCapsuleVerifier
 	RequireSignature  bool
 	KeepLastKnownGood bool
 }
@@ -223,6 +237,7 @@ func NewReconciler(cfg ReconcilerConfig) (*Reconciler, error) {
 		store:             cfg.Store,
 		compiler:          cfg.Compiler,
 		verifier:          cfg.Verifier,
+		emergencyVerifier: cfg.EmergencyVerifier,
 		requireSignature:  cfg.RequireSignature,
 		keepLastKnownGood: cfg.KeepLastKnownGood,
 		status:            make(map[string]ReconcileStatus),
@@ -307,6 +322,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, scope PolicyScope) (Reconcil
 		}
 		if err := r.verifier.VerifyPolicyBundle(ctx, head, bundle); err != nil {
 			err = fmt.Errorf("%w: %v", ErrPolicySignatureInvalid, err)
+			status.Reason = err.Error()
+			return r.invalid(status, err)
+		}
+	}
+	if head.EmergencyCapsule != nil {
+		if r.emergencyVerifier == nil {
+			err := fmt.Errorf("%w: no emergency capsule verifier configured for capsule %s", ErrEmergencyCapsuleInvalid, head.EmergencyCapsule.CapsuleID)
+			status.Reason = err.Error()
+			return r.invalid(status, err)
+		}
+		if err := r.emergencyVerifier.VerifyEmergencyCapsule(ctx, head, *head.EmergencyCapsule); err != nil {
+			err = fmt.Errorf("%w: %v", ErrEmergencyCapsuleInvalid, err)
 			status.Reason = err.Error()
 			return r.invalid(status, err)
 		}
@@ -416,6 +443,17 @@ func normalizeSnapshot(snapshot *EffectivePolicySnapshot, head PolicyHead) {
 	if len(snapshot.P2OverlayHashes) == 0 {
 		snapshot.P2OverlayHashes = append([]string(nil), head.P2OverlayHashes...)
 	}
+	if head.EmergencyCapsule != nil {
+		if strings.TrimSpace(snapshot.EmergencyCapsuleHash) == "" {
+			snapshot.EmergencyCapsuleHash = HashBytes(mustJSON(head.EmergencyCapsule))
+		}
+		if strings.TrimSpace(snapshot.EmergencyApertureID) == "" {
+			snapshot.EmergencyApertureID = head.EmergencyCapsule.ApertureID
+		}
+		if snapshot.EmergencyExpiresAt.IsZero() {
+			snapshot.EmergencyExpiresAt = head.EmergencyCapsule.ExpiresAt
+		}
+	}
 	if len(snapshot.SourceRefs) == 0 {
 		snapshot.SourceRefs = append([]string(nil), head.SourceRefs...)
 	}
@@ -469,6 +507,14 @@ func verifyExpectedHash(expected string, bundle []byte) error {
 func HashBytes(data []byte) string {
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func mustJSON(v any) []byte {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return []byte(fmt.Sprintf("%v", v))
+	}
+	return data
 }
 
 // AtomicSnapshotStore is an in-memory per-scope snapshot store.

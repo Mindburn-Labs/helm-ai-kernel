@@ -1,0 +1,32 @@
+# Gitleaks config
+#
+# Extends the default ruleset with allowlists for placeholder files this repo
+# intentionally ships with, such as example env files and synthetic fixtures.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholder and test-fixture files"
+paths = [
+  '''\.env\.example$''',
+  '''\.env\.sample$''',
+  '''.*/__tests__/.*\.fixtures?\.(?:ts|js|json)$''',
+  '''.*/test/fixtures/.*''',
+  '''.*/tests/fixtures/.*''',
+  '''package-lock\.json$''',
+  '''pnpm-lock\.yaml$''',
+  '''yarn\.lock$''',
+  '''^dist/''',
+  '''^build/''',
+  '''^coverage/''',
+  '''^\.next/''',
+  '''^artifacts/''',
+  '''^_archive/''',
+]
+
+regexes = [
+  '''TELEGRAM_BOT_TOKEN=<your[^>]*>''',
+  '''ws_[a-f0-9]{4,8}''',
+  '''cg_[a-f0-9]{4,8}''',
+]

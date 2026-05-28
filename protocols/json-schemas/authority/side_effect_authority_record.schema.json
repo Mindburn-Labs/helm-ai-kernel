@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindburn.dev/helm/authority/side_effect_authority_record.schema.json",
+  "title": "SideEffectAuthorityRecord",
+  "type": "object",
+  "required": [
+    "action_urn",
+    "connector_id",
+    "tool_name",
+    "executor_kind",
+    "effect_class",
+    "risk_class",
+    "approval_policy",
+    "rollback_or_compensation",
+    "receipt_type",
+    "evidence_pack_slice",
+    "boundary_submission_mode",
+    "schema_hash",
+    "policy_hash",
+    "signer_id",
+    "status"
+  ],
+  "properties": {
+    "action_urn": { "type": "string", "minLength": 1 },
+    "connector_id": { "type": "string", "minLength": 1 },
+    "tool_name": { "type": "string", "minLength": 1 },
+    "executor_kind": { "type": "string", "enum": ["DIGITAL", "ANALOG", "KINETIC"] },
+    "effect_class": { "type": "string", "minLength": 1 },
+    "risk_class": { "type": "string", "minLength": 1 },
+    "required_scopes": { "type": "array", "items": { "type": "string" } },
+    "p0_ceilings": { "type": "array", "items": { "type": "string" } },
+    "approval_policy": { "type": "string", "minLength": 1 },
+    "rollback_or_compensation": { "type": "string", "minLength": 1 },
+    "receipt_type": { "type": "string", "minLength": 1 },
+    "evidence_pack_slice": { "type": "string", "minLength": 1 },
+    "boundary_submission_mode": { "type": "string", "minLength": 1 },
+    "schema_hash": { "type": "string", "pattern": "^sha256:" },
+    "policy_hash": { "type": "string", "pattern": "^sha256:" },
+    "signer_id": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "enum": ["active", "revoked", "stale"] }
+  },
+  "additionalProperties": false
+}

@@ -83,16 +83,31 @@ jobs:
         with:
           go-version: "1.25.10"
           cache-dependency-path: "**/go.sum"
+      - uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1
       - name: Lint
         run: make lint
+      - name: ProofGraph signature write guard
+        run: bash scripts/ci/check_proofgraph_signature_writes.sh
       - name: Build
         run: make build
       - name: Test
         run: make test
+      - name: Independent Go module tests
+        run: bash scripts/ci/go_module_tests.sh
       - name: Command tests
         run: go test ./core/cmd/helm-ai-kernel -count=1
+      - name: Fetch main ref for proto compatibility checks
+        run: git fetch origin main:refs/heads/main --force
+      - name: Proto lint
+        run: make proto-lint
+      - name: Proto breaking
+        run: make proto-breaking
       - name: Verify fixtures
         run: make verify-fixtures
+      - name: TEE collateral fixtures
+        run: make tee-collateral-verify
+      - name: Release TEE mock attestation guard
+        run: bash scripts/ci/check_release_no_mock_tee.sh
       - name: Boundary registry drift
         run: make verify-boundary
       - name: Crucible

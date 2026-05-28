@@ -21,12 +21,29 @@ type Capabilities struct {
 
 // Profile represents a deterministic provider binding.
 type Profile struct {
-	ID           string       `json:"id"`
-	Provider     ProviderType `json:"provider"`
-	BaseURL      string       `json:"base_url"`
-	ModelName    string       `json:"model_name"`
-	ModelHash    string       `json:"model_hash,omitempty"`
-	Capabilities Capabilities `json:"capabilities"`
+	ID                  string       `json:"id"`
+	Provider            ProviderType `json:"provider"`
+	BaseURL             string       `json:"base_url"`
+	ModelName           string       `json:"model_name"`
+	ModelHash           string       `json:"model_hash,omitempty"`
+	RuntimeVersion      string       `json:"runtime_version,omitempty"`
+	VerifierProfileID   string       `json:"verifier_profile_id,omitempty"`
+	AttestedMeasurement string       `json:"attested_measurement,omitempty"`
+	AlternateProfileID  string       `json:"alternate_profile_id,omitempty"`
+	EnginePin           *EnginePin   `json:"engine_pin,omitempty"`
+	Capabilities        Capabilities `json:"capabilities"`
+}
+
+// EnginePin is the deterministic provider identity allowed for execution.
+type EnginePin struct {
+	Provider                   ProviderType `json:"provider"`
+	BaseURL                    string       `json:"base_url,omitempty"`
+	ModelName                  string       `json:"model_name,omitempty"`
+	ModelHash                  string       `json:"model_hash,omitempty"`
+	RuntimeVersion             string       `json:"runtime_version,omitempty"`
+	VerifierProfileID          string       `json:"verifier_profile_id,omitempty"`
+	AttestedMeasurement        string       `json:"attested_measurement,omitempty"`
+	ApprovedAlternateProfileID string       `json:"approved_alternate_profile_id,omitempty"`
 }
 
 // GetBlessedProfiles returns provider profiles. Callers must bind a concrete

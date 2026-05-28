@@ -1,6 +1,6 @@
 module github.com/Mindburn-Labs/helm-ai-kernel/tests/launchpad
 
-go 1.25.0
+go 1.25.10
 
 require github.com/Mindburn-Labs/helm-ai-kernel/core v0.0.0
 

@@ -146,6 +146,16 @@ const (
 	ReasonHostVolumeExceeded             ReasonCode = "ERR_HOST_VOLUME_EXCEEDED"
 	ReasonHostProcessUnbound             ReasonCode = "ERR_HOST_PROCESS_UNBOUND"
 	ReasonPolicyDeniedHostObservedEgress ReasonCode = "ERR_POLICY_DENIED_BUT_HOST_OBSERVED_EGRESS"
+
+	// ── Safe Deprecation / Emergency Release Reasons ─────────────────────
+	ReasonSafeDepTerminalFreeze     ReasonCode = "SAFEDEP_TERMINAL_FREEZE"
+	ReasonSafeDepDegradedNarrowing  ReasonCode = "SAFEDEP_DEGRADED_NARROWING"
+	ReasonSafeDepDeprecatedReadonly ReasonCode = "SAFEDEP_DEPRECATED_READONLY"
+	ReasonContinuityStale           ReasonCode = "ERR_CONTINUITY_STALE"
+	ReasonEmergencyCapsuleInvalid   ReasonCode = "ERR_EMERGENCY_CAPSULE_INVALID"
+	ReasonHardwareQuorumUnbound     ReasonCode = "ERR_HARDWARE_QUORUM_UNBOUND"
+	ReasonAttestationResultRequired ReasonCode = "ERR_ATTESTATION_RESULT_REQUIRED"
+	ReasonDevFallbackPresent        ReasonCode = "ERR_DEV_FALLBACK_PRESENT"
 )
 
 // CanonicalVerdicts returns the full normative verdict vocabulary.
@@ -244,6 +254,14 @@ func CoreReasonCodes() []ReasonCode {
 		ReasonHostVolumeExceeded,
 		ReasonHostProcessUnbound,
 		ReasonPolicyDeniedHostObservedEgress,
+		ReasonSafeDepTerminalFreeze,
+		ReasonSafeDepDegradedNarrowing,
+		ReasonSafeDepDeprecatedReadonly,
+		ReasonContinuityStale,
+		ReasonEmergencyCapsuleInvalid,
+		ReasonHardwareQuorumUnbound,
+		ReasonAttestationResultRequired,
+		ReasonDevFallbackPresent,
 	}
 }
 

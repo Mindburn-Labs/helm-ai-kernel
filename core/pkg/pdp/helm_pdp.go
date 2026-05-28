@@ -33,22 +33,31 @@ func NewHelmPDP(policyVersion string, rules map[string]bool) *HelmPDP {
 
 // Evaluate implements PolicyDecisionPoint.
 func (h *HelmPDP) Evaluate(ctx context.Context, req *DecisionRequest) (*DecisionResponse, error) {
+	policyRef := fmt.Sprintf("helm:%s", h.policyVersion)
 	if req == nil {
-		return &DecisionResponse{
+		resp := &DecisionResponse{
 			Allow:      false,
 			ReasonCode: string(contracts.ReasonSchemaViolation),
-			PolicyRef:  fmt.Sprintf("helm:%s", h.policyVersion),
-		}, nil
+			PolicyRef:  policyRef,
+		}
+		if err := attachDecisionHash(resp); err != nil {
+			return denyForHashFailure(policyRef, err)
+		}
+		return resp, nil
 	}
 
 	// Check context deadline (fail-closed on timeout)
 	select {
 	case <-ctx.Done():
-		return &DecisionResponse{
+		resp := &DecisionResponse{
 			Allow:      false,
 			ReasonCode: string(contracts.ReasonPDPError),
-			PolicyRef:  fmt.Sprintf("helm:%s", h.policyVersion),
-		}, nil
+			PolicyRef:  policyRef,
+		}
+		if err := attachDecisionHash(resp); err != nil {
+			return denyForHashFailure(policyRef, err)
+		}
+		return resp, nil
 	default:
 	}
 
@@ -69,18 +78,12 @@ func (h *HelmPDP) Evaluate(ctx context.Context, req *DecisionRequest) (*Decision
 	resp := &DecisionResponse{
 		Allow:      allowed,
 		ReasonCode: reasonCode,
-		PolicyRef:  fmt.Sprintf("helm:%s", h.policyVersion),
+		PolicyRef:  policyRef,
 	}
 
-	hash, err := ComputeDecisionHash(resp)
-	if err != nil {
-		return &DecisionResponse{
-			Allow:      false,
-			ReasonCode: string(contracts.ReasonPDPError),
-			PolicyRef:  fmt.Sprintf("helm:%s", h.policyVersion),
-		}, nil
+	if err := attachDecisionHash(resp); err != nil {
+		return denyForHashFailure(policyRef, err)
 	}
-	resp.DecisionHash = hash
 
 	return resp, nil
 }

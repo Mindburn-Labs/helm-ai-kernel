@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -259,32 +260,47 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	addJSON(artifacts, "receipts/launchpad-start.json", startReceipt)
 
 	run.State = StateHealthchecking
-	healthRunner := opts.HealthcheckRunner
-	if healthRunner == nil {
-		healthRunner = e.HealthcheckRunner
-	}
-	if healthRunner == nil {
-		healthRunner = DefaultHealthcheckRunner{}
-	}
-	healthResult, err := healthRunner.Run(compiled, runtimeResult, opts)
-	if err != nil {
-		failureReceipt := receipts.NewReceipt("launchpad.healthcheck_failure", compiled.LaunchID, "ALLOW", map[string]any{
-			"status": "repair_required",
-			"error":  err.Error(),
+	if compiled.RuntimeDetached {
+		// Detached runs already proved readiness via the runtime's in-place
+		// healthcheck polling (waitForReadiness) before starter.Start
+		// returned nil. Re-running the healthcheck here would spin up a
+		// second container sharing the launch-scoped egress network and
+		// collide on it ("network already exists"). Record the readiness
+		// the detached probe established and move on.
+		healthReceipt := receipts.NewReceipt("launchpad.healthcheck", compiled.LaunchID, "ALLOW", map[string]any{
+			"status": "ready",
+			"type":   "detached_readiness_probe",
 		})
-		run.State = StateRepairRequired
-		run.Reason = "healthcheck failed after runtime start; repair required before RUNNING: " + err.Error()
-		addJSON(artifacts, "receipts/launchpad-healthcheck-failure.json", failureReceipt)
-		addJSON(artifacts, "runtime_environment.json", map[string]any{"runtime": runtimeResult.Runtime, "state": "REPAIR_REQUIRED", "container_id": runtimeResult.ContainerID, "error": err.Error()})
-		return e.persist(run, artifacts)
+		run.HealthcheckRefs = append(run.HealthcheckRefs, healthReceipt.ReceiptID)
+		addJSON(artifacts, "receipts/launchpad-healthcheck.json", healthReceipt)
+	} else {
+		healthRunner := opts.HealthcheckRunner
+		if healthRunner == nil {
+			healthRunner = e.HealthcheckRunner
+		}
+		if healthRunner == nil {
+			healthRunner = DefaultHealthcheckRunner{}
+		}
+		healthResult, err := healthRunner.Run(compiled, runtimeResult, opts)
+		if err != nil {
+			failureReceipt := receipts.NewReceipt("launchpad.healthcheck_failure", compiled.LaunchID, "ALLOW", map[string]any{
+				"status": "repair_required",
+				"error":  err.Error(),
+			})
+			run.State = StateRepairRequired
+			run.Reason = "healthcheck failed after runtime start; repair required before RUNNING: " + err.Error()
+			addJSON(artifacts, "receipts/launchpad-healthcheck-failure.json", failureReceipt)
+			addJSON(artifacts, "runtime_environment.json", map[string]any{"runtime": runtimeResult.Runtime, "state": "REPAIR_REQUIRED", "container_id": runtimeResult.ContainerID, "error": err.Error()})
+			return e.persist(run, artifacts)
+		}
+		healthReceipt := receipts.NewReceipt("launchpad.healthcheck", compiled.LaunchID, "ALLOW", map[string]any{
+			"status":   healthResult.Status,
+			"type":     healthResult.Type,
+			"metadata": healthResult.Metadata,
+		})
+		run.HealthcheckRefs = append(run.HealthcheckRefs, healthReceipt.ReceiptID)
+		addJSON(artifacts, "receipts/launchpad-healthcheck.json", healthReceipt)
 	}
-	healthReceipt := receipts.NewReceipt("launchpad.healthcheck", compiled.LaunchID, "ALLOW", map[string]any{
-		"status":   healthResult.Status,
-		"type":     healthResult.Type,
-		"metadata": healthResult.Metadata,
-	})
-	run.HealthcheckRefs = append(run.HealthcheckRefs, healthReceipt.ReceiptID)
-	addJSON(artifacts, "receipts/launchpad-healthcheck.json", healthReceipt)
 
 	run.State = StateRunning
 	run.Reason = "launch reached RUNNING after policy, CPI, sandbox preflight, MCP quarantine, install, start, and healthcheck receipts"
@@ -349,6 +365,7 @@ func (e Executor) DeleteLaunch(launchID string, cascade bool) (LaunchRun, error)
 func teardownRuntimeHandles(run LaunchRun) map[string]any {
 	result := map[string]any{"attempted": false}
 	handles := run.RuntimeHandles
+	launchID := run.LaunchID
 	provider := handles.CloudResourceIDs["provider"]
 	if provider == "" {
 		provider = run.SubstrateID
@@ -497,6 +514,53 @@ func teardownRuntimeHandles(run LaunchRun) map[string]any {
 			result["container_cleanup"] = "removed_or_absent"
 		}
 	}
+	// Orphan cleanup: containers labelled with this launch_id that never
+	// got their ID recorded (e.g. early failure before docker run returned).
+	if launchID != "" {
+		filter := "label=launchpad-launch-id=" + launchID
+		if out, err := exec.Command(docker, "ps", "-aq", "--filter", filter).CombinedOutput(); err == nil {
+			ids := strings.Fields(strings.TrimSpace(string(out)))
+			if len(ids) > 0 {
+				result["attempted"] = true
+				result["orphan_container_ids"] = ids
+				rmArgs := append([]string{"rm", "-f"}, ids...)
+				if rmOut, rmErr := exec.Command(docker, rmArgs...).CombinedOutput(); rmErr != nil {
+					result["orphan_container_cleanup"] = strings.TrimSpace(string(rmOut))
+				} else {
+					result["orphan_container_cleanup"] = "removed_or_absent"
+				}
+			}
+		}
+		// Deterministic sidecar resources by launch_id (handles partial-save
+		// failures where EgressNetworkName / EgressProxyName never landed
+		// in LaunchRun state).
+		expectedProxy := "helm-lp-" + launchID + "-proxy"
+		expectedNet := "helm-lp-" + launchID + "-net"
+		// State-dir cleanup (gap #19). Mirror of runtime.appStateRoot.
+		stateDir := ""
+		if override := strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_HOME")); override != "" {
+			stateDir = filepath.Join(override, "state", launchID)
+		} else if home, err := os.UserHomeDir(); err == nil {
+			stateDir = filepath.Join(home, ".helm", "launchpad", "state", launchID)
+		}
+		if stateDir != "" {
+			if err := os.RemoveAll(stateDir); err == nil {
+				result["state_dir_cleanup"] = "removed_or_absent"
+			} else {
+				result["state_dir_cleanup"] = err.Error()
+			}
+		}
+		if out, err := exec.Command(docker, "rm", "-f", expectedProxy).CombinedOutput(); err == nil {
+			if trimmed := strings.TrimSpace(string(out)); trimmed != "" {
+				result["orphan_proxy_cleanup"] = trimmed
+			}
+		}
+		if out, err := exec.Command(docker, "network", "rm", expectedNet).CombinedOutput(); err == nil {
+			if trimmed := strings.TrimSpace(string(out)); trimmed != "" {
+				result["orphan_network_cleanup"] = trimmed
+			}
+		}
+	}
 	if handles.EgressProxyName != "" {
 		result["attempted"] = true
 		result["egress_proxy_name"] = handles.EgressProxyName
@@ -527,9 +591,9 @@ func (e Executor) persist(run LaunchRun, artifacts map[string][]byte) (LaunchRun
 	run.EvidenceGraphRefs = appendUnique(run.EvidenceGraphRefs, packRef+"/04_EXPORTS/launchpad_evidence_graph.json")
 	if archiveRef, err := receipts.WriteEvidencePackArchive(packRef); err == nil {
 		run.EvidencePackRefs = appendUnique(run.EvidencePackRefs, archiveRef)
-		run.VerificationCommand = "helm evidence verify " + archiveRef + " --offline"
+		run.VerificationCommand = "helm-ai-kernel verify --bundle " + archiveRef
 	} else {
-		run.VerificationCommand = "helm evidence verify " + packRef + " --offline"
+		run.VerificationCommand = "helm-ai-kernel verify --bundle " + packRef
 	}
 	logPath, _ := e.Store.AppendLog(run.LaunchID, fmt.Sprintf("launchpad state %s verdict %s", run.State, run.KernelVerdict))
 	run.LogPath = logPath

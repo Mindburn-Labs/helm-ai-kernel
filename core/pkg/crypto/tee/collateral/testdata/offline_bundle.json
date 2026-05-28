@@ -1,0 +1,23 @@
+{
+  "generated_at": "2026-05-25T00:00:00Z",
+  "documents": [
+    {
+      "name": "amd-kds-root-fixture",
+      "provider": "amd-kds",
+      "url": "https://kdsintf.amd.com/fixture/offline",
+      "sha256": "59dec5c25bad7c3209c0835be1ade546930efd5482db9560a3f8dc782552cae7",
+      "not_after": "2030-01-01T00:00:00Z",
+      "body": "amd-kds-root-placeholder",
+      "fetched_at": "2026-05-25T00:00:00Z"
+    },
+    {
+      "name": "intel-pcs-root-fixture",
+      "provider": "intel-pcs",
+      "url": "https://api.trustedservices.intel.com/fixture/offline",
+      "sha256": "a765efb84e4bc2022b74ebeb10d67c40c8bb1fb9f41905c0f76a30f1b251f8cf",
+      "not_after": "2030-01-01T00:00:00Z",
+      "body": "intel-pcs-root-placeholder",
+      "fetched_at": "2026-05-25T00:00:00Z"
+    }
+  ]
+}

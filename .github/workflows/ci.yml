@@ -84,6 +84,8 @@ jobs:
           go-version: "1.25.10"
           cache-dependency-path: "**/go.sum"
       - uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1
+        with:
+          github_token: ${{ github.token }}
       - name: Lint
         run: make lint
       - name: ProofGraph signature write guard
@@ -97,7 +99,12 @@ jobs:
       - name: Command tests
         run: go test ./core/cmd/helm-ai-kernel -count=1
       - name: Fetch main ref for proto compatibility checks
-        run: git fetch origin main:refs/heads/main --force
+        run: |
+          if [ "$(git symbolic-ref --short -q HEAD || true)" = "main" ]; then
+            echo "On main; local refs/heads/main is already HEAD — nothing to fetch."
+          else
+            git fetch origin main:refs/heads/main --force
+          fi
       - name: Proto lint
         run: make proto-lint
       - name: Proto breaking
@@ -178,6 +185,8 @@ jobs:
           version: "34.1"
           repo-token: ${{ github.token }}
       - uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1
+        with:
+          github_token: ${{ github.token }}
       - name: Fetch main ref for proto compatibility checks
         run: |
           if [ "$(git symbolic-ref --short -q HEAD || true)" = "main" ]; then

@@ -5,12 +5,12 @@ last_reviewed: 2026-05-20
 
 # Launchpad Clean Install GA
 
-Status: v0.5.5 gate implemented; v1 promotes OpenClaw, Hermes, OpenCode, and
+Status: v0.5.8 gate implemented; v1 promotes OpenClaw, Hermes, OpenCode, and
 Kilo Code into the supported-app clean-install set after workflow
 `26198407296` passed signed artifact, live conformance, teardown, receipts, and
 offline EvidencePack verification.
 
-Launchpad GA is a product-adoption gate for the `v0.5.5` release. It proves the
+Launchpad GA is a product-adoption gate for the `v0.5.8` release. It proves the
 Homebrew package, signed Launchpad artifacts, local-container app launcher,
 MCP interceptor posture, signed receipts, teardown, and offline EvidencePack
 verification survive a machine that did not build the release.
@@ -29,7 +29,7 @@ offline verification.
 
 ## Source Truth
 
-- Release target: `v0.5.5`
+- Release target: `v0.5.8`
 - Current four-app Launchpad artifact workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26198407296>
 - Current macOS Homebrew clean-install workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26199878246>
 - Current Launchpad v1 report: `docs/launchpad/v1_report.json`
@@ -99,7 +99,7 @@ Use the repo-native gate to collect redacted evidence:
 ```bash
 export HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY='<fresh CI-only key>'
 bash scripts/launch/clean_install_gate.sh \
-  --release-tag v0.5.5 \
+  --release-tag v0.5.8 \
   --artifact-run-id 26198407296 \
   --host-kind developer_macos \
   --output docs/launchpad/clean_install_report.json
@@ -132,7 +132,7 @@ Manual CI entrypoint:
 ```bash
 gh workflow run launchpad-clean-install.yml \
   --repo Mindburn-Labs/helm-ai-kernel \
-  -f release_tag=v0.5.5 \
+  -f release_tag=v0.5.8 \
   -f artifact_run_id=26198407296
 ```
 

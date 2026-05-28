@@ -221,6 +221,9 @@ For `v0.4.0`, the included EvidencePack also verifies offline and reports
 
 ## Cosign Artifact Verification When Bundles Are Attached
 
+> [!NOTE]
+> Early draft/development releases prior to `v0.5.8` (specifically `v0.5.2` through `v0.5.6`) did not feature Cosign OIDC or SLSA provenance generator steps in their release pipelines. As a result, those legacy release assets do not have associated `*.cosign.bundle` or provenance files. Cryptographic signing and SLSA provenance generation are fully active starting with `v0.5.8` and all future releases.
+
 Cosign verification requires a matching `*.cosign.bundle` file attached to the
 release. When a release includes those files, verify a downloaded binary blob
 with the bundled signature:

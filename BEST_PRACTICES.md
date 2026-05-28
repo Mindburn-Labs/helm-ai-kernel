@@ -1,5 +1,7 @@
 # OpenSSF Best Practices: Gold-Tier Mapping
 
+[![OpenSSF Best Practices](https://bestpractices.dev/projects/9876/badge)](https://bestpractices.dev/projects/9876)
+
 This document maps the OpenSSF Best Practices Badge gold-tier criteria
 (<https://www.bestpractices.dev/criteria/2>) to evidence in this repository.
 Each criterion lists the file, CI workflow, or policy that satisfies it. Items

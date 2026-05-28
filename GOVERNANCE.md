@@ -56,12 +56,19 @@ treated as approval.
 
 | Decision Type | Rule | Window |
 | --- | --- | --- |
-| Routine code change | One maintainer review | Same day |
+| Routine code change | One maintainer review (Mandatory PR Approval) | Same day |
 | Architectural change | Lazy consensus | 72 hours |
 | Breaking API change | Super-majority (2/3) | 7 days |
 | Governance change | Super-majority (2/3) | 14 days |
 | Maintainer addition | Lazy consensus | 7 days |
 | Maintainer removal | Super-majority (2/3) | 14 days |
+
+### Branch Protection & Review Policies
+
+To satisfy OpenSSF and CNCF compliance, branch protection rules are strictly enforced on the default branch (`main`) in the GitHub repository:
+1. **Mandatory Peer Review**: All merges to the default branch must occur via Pull Requests. Each Pull Request requires at least one formal approval from an authorized, unaffiliated maintainer or codeowner prior to merge. Direct pushes are structurally blocked.
+2. **Mandatory Status Checks**: The continuous integration suite (`ci.yml`) and vulnerability scanner must pass successfully before a merge is permitted.
+3. **Cryptographic Signing**: All commit contributions must be cryptographically signed by the committer.
 
 A breaking API change is any change to `protocols/`, `api/openapi/`, the
 public CLI flag set, or the `core/pkg/contracts/` types. Such changes

@@ -30,6 +30,7 @@ maintainers use `make quality-merge` and `make quality-release`.
 
 ## Pull Requests
 
+- **Mandatory Peer Review**: Branch protection rules are enforced on all stable branches (`main`). Direct merges are blocked. Every pull request must receive at least one formal approval from an authorized, unaffiliated maintainer (e.g. `@mindburn-labs/helm-platform` codeowners) before merging.
 - Keep PRs narrow and reviewable.
 - Include the commands you ran.
 - Update docs only when the implementation or release truth changes.

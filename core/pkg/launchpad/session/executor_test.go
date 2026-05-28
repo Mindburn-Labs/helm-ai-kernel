@@ -12,7 +12,10 @@ import (
 
 func TestExecutorRequiresRuntimeBeforeRunning(t *testing.T) {
 	store := NewStore(t.TempDir())
-	run, err := NewExecutor(store).ExecuteLaunch(allowPlan(), ExecuteOptions{Reason: "test"})
+	run, err := NewExecutor(store).ExecuteLaunch(allowPlan(), ExecuteOptions{
+		Reason:         "test",
+		RuntimeStarter: failingRuntimeStarter{},
+	})
 	if err != nil {
 		t.Fatalf("ExecuteLaunch: %v", err)
 	}
@@ -169,6 +172,12 @@ func TestExecutorRunsNetworkedLaunchWithEgressReceipt(t *testing.T) {
 
 type fakeStarter struct {
 	called bool
+}
+
+type failingRuntimeStarter struct{}
+
+func (failingRuntimeStarter) Start(plan.LaunchPlan, ExecuteOptions) (RuntimeStartResult, error) {
+	return RuntimeStartResult{Runtime: "local-container"}, testError("runtime unavailable")
 }
 
 func (f *fakeStarter) Start(plan.LaunchPlan, ExecuteOptions) (RuntimeStartResult, error) {

@@ -112,7 +112,7 @@ teardown receipts, and offline EvidencePack verification.
 [REFACTOR] The CPI/PEP/boundary path still needs deeper action-by-action authority binding.
 
 [REBUILD] Clean install GA is not complete until `scripts/launch/clean_install_gate.sh`
-passes against `v0.5.5` on both the macOS CI runner and a separate developer Mac.
+passes against `v0.5.8` on both the macOS CI runner and a separate developer Mac.
 
 Deferred: DigitalOcean and Hetzner stay dry-run by default.
 

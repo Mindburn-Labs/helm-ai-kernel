@@ -13,10 +13,6 @@ type PackChannel string
 const (
 	PackChannelCore       PackChannel = "core"
 	PackChannelIndividual PackChannel = "individual"
-	// PackChannelBasic is retained as a legacy compatibility alias.
-	//
-	// Deprecated: use PackChannelIndividual.
-	PackChannelBasic      PackChannel = "basic"
 	PackChannelCommunity  PackChannel = "community"
 	PackChannelTeams      PackChannel = "teams"
 	PackChannelEnterprise PackChannel = "enterprise"

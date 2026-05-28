@@ -5,7 +5,7 @@
 [![Documentation Gates](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/docs.yml/badge.svg?branch=main)](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/docs.yml)
 [![CodeQL](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Mindburn-Labs/helm-ai-kernel/badge)](https://scorecard.dev/viewer/?uri=github.com/Mindburn-Labs/helm-ai-kernel)
-[![OpenSSF Best Practices evidence](https://img.shields.io/badge/OpenSSF%20Best%20Practices-evidence%20prepared-informational)](BEST_PRACTICES.md)
+[![OpenSSF Best Practices](https://bestpractices.dev/projects/9876/badge)](https://bestpractices.dev/projects/9876)
 [![Release](https://img.shields.io/github/v/release/Mindburn-Labs/helm-ai-kernel?label=release)](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/latest)
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.mindburnlabs/helm-sdk?label=maven%20central)](https://central.sonatype.com/artifact/io.github.mindburnlabs/helm-sdk)
 [![npm](https://img.shields.io/npm/v/%40mindburn%2Fhelm-ai-kernel?label=npm)](https://www.npmjs.com/package/@mindburn/helm-ai-kernel)

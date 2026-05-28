@@ -89,7 +89,7 @@ actual baseline when auditing the `v0.5.0` delta.
 
 ## v0.5.8 Asset Contract
 
-The `v0.5.6` release attaches these primary assets:
+The `v0.5.8` release attaches these primary assets:
 
 - `helm-ai-kernel-darwin-amd64`
 - `helm-ai-kernel-darwin-arm64`
@@ -212,7 +212,7 @@ The release staging path runs the same offline verification before publishing
 release checksums. If this step fails, the release must be treated as incomplete
 and the exported EvidencePack must be repaired before attaching assets.
 
-For `v0.5.6`, this command passes without network access. The verifier
+For `v0.5.8`, this command passes without network access. The verifier
 accepts both the legacy `receipts/` layout and the canonical
 `02_PROOFGRAPH/receipts/` layout.
 
@@ -220,6 +220,9 @@ For `v0.4.0`, the included EvidencePack also verifies offline and reports
 `anchor offline`, but that release does not attach OpenVEX or Cosign bundles.
 
 ## Cosign Artifact Verification When Bundles Are Attached
+
+> [!NOTE]
+> Early draft/development releases prior to `v0.5.8` (specifically `v0.5.2` through `v0.5.6`) did not feature Cosign OIDC or SLSA provenance generator steps in their release pipelines. As a result, those legacy release assets do not have associated `*.cosign.bundle` or provenance files. Cryptographic signing and SLSA provenance generation are fully active starting with `v0.5.8` and all future releases.
 
 Cosign verification requires a matching `*.cosign.bundle` file attached to the
 release. When a release includes those files, verify a downloaded binary blob

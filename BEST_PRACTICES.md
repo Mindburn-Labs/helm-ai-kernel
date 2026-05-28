@@ -1,5 +1,7 @@
 # OpenSSF Best Practices: Gold-Tier Mapping
 
+[![OpenSSF Best Practices](https://bestpractices.dev/projects/9876/badge)](https://bestpractices.dev/projects/9876)
+
 This document maps the OpenSSF Best Practices Badge gold-tier criteria
 (<https://www.bestpractices.dev/criteria/2>) to evidence in this repository.
 Each criterion lists the file, CI workflow, or policy that satisfies it. Items
@@ -74,7 +76,7 @@ canonical bestpractices.dev project badge.
   release attestation, and reproducible-build gates. Cosign keyless signing and
   OpenVEX consumption are documented verification paths when the GitHub release
   attaches `*.cosign.bundle` or `*.openvex.json` files. The current public
-  `v0.5.1` release attaches those files.
+  `v0.5.8` release attaches those files.
 - **Reproducible build** — `make release-binaries-reproducible` plus the
   `reproducibility-check` job in `.github/workflows/release.yml`, which runs
   the build twice on independent runners and diffs the SHA-256 set.

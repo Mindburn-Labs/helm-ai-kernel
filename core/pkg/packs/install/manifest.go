@@ -121,7 +121,6 @@ func IsKnownChannel(ch contracts.PackChannel) bool {
 	switch ch {
 	case contracts.PackChannelCore,
 		contracts.PackChannelIndividual,
-		contracts.PackChannelBasic,
 		contracts.PackChannelCommunity,
 		contracts.PackChannelTeams,
 		contracts.PackChannelEnterprise:

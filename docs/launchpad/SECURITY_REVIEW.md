@@ -1,7 +1,7 @@
 # Launchpad Security Review
 
 Status: Launchpad v1 local-container review passes for OpenClaw, Hermes,
-OpenCode, and Kilo Code from workflow `26198407296`. The `v0.5.5`
+OpenCode, and Kilo Code from workflow `26198407296`. The `v0.5.8`
 clean-install gate remains the package/install release gate.
 
 ## Results
@@ -112,10 +112,10 @@ skill metadata/policies, and emits signed receipts plus hash-chained
 EvidencePacks for the paths it exercises.
 
 [KEEP] OpenClaw, Hermes, OpenCode, and Kilo Code are artifact-backed for
-`local-container` Launchpad v1 support. Release `v0.5.5` packages the
+`local-container` Launchpad v1 support. Release `v0.5.8` packages the
 Launchpad registry/policy data required for Homebrew clean installs.
 
-[KEEP] The GitHub macOS clean-install gate passed for `v0.5.5` with Homebrew
+[KEEP] The GitHub macOS clean-install gate passed for `v0.5.8` with Homebrew
 install, four supported app launches, cascade delete, offline EvidencePack
 verification, and a zero-finding secret-fragment audit. Hetzner live beta
 remains fail-closed until a scoped token is available.

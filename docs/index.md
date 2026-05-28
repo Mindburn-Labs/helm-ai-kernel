@@ -5,7 +5,7 @@ last_reviewed: 2026-05-05
 
 # HELM AI Kernel Developer Portal
 
-HELM AI Kernel is the fail-closed execution firewall for AI agents. It gives developers a local kernel, policy bundle loader, OpenAI-compatible proxy path, MCP firewall, receipts, EvidencePacks, and offline verification without requiring a hosted service.
+HELM AI Kernel is the fail-closed execution firewall for AI agents. Register at <https://console.helm.mindburn.org> to get started, then install the local CLI for offline proof and integration testing. The Console provides the dashboard for managing runs, receipts, and evidence. The CLI gives developers a local kernel, policy bundle loader, OpenAI-compatible proxy path, MCP firewall, receipts, EvidencePacks, and offline verification.
 
 ## Audience
 
@@ -80,23 +80,25 @@ The code, command output, and verification artifacts override marketing language
 
 ## Start Here
 
-1. Run the quickstart: [Quickstart](QUICKSTART.md).
-2. Use the complete source-backed path: [Developer Journey](DEVELOPER_JOURNEY.md).
-3. Read the execution model: [Architecture](ARCHITECTURE.md).
-4. Pick an integration:
+1. Register at the Console: <https://console.helm.mindburn.org>.
+2. Run the quickstart: [Quickstart](QUICKSTART.md).
+3. Use the complete source-backed path: [Developer Journey](DEVELOPER_JOURNEY.md).
+4. Read the execution model: [Architecture](ARCHITECTURE.md).
+5. Pick an integration:
    - [OpenAI-compatible proxy](INTEGRATIONS/openai_baseurl.md)
    - [MCP integration](INTEGRATIONS/mcp.md)
    - [Highflame ZeroID Integration](INTEGRATIONS/zeroid.md)
    - [Vaultak State Transaction Bridge](INTEGRATIONS/vaultak.md)
    - [BGT Labs Sentinel Authorization Gateway](INTEGRATIONS/sentinel.md)
    - [SDK index](sdks/00_INDEX.md)
-5. Verify an output: [Verification](VERIFICATION.md).
-6. Add conformance checks: [Conformance](CONFORMANCE.md).
+6. Verify an output: [Verification](VERIFICATION.md).
+7. Add conformance checks: [Conformance](CONFORMANCE.md).
 
 ## Interfaces
 
 | Interface | Use When | Public Doc |
 | --- | --- | --- |
+| Console | You want the primary adoption surface: registration, run dashboard, receipts, and evidence. | <https://console.helm.mindburn.org> |
 | CLI | You want local serving, policy loading, receipts, or verification commands. | [Quickstart](QUICKSTART.md) |
 | OpenAI-compatible proxy | You have an existing OpenAI-style client and want a small integration diff. | [Proxy integration](INTEGRATIONS/openai_baseurl.md) |
 | MCP | You are exposing governed tools to MCP-capable clients. | [MCP integration](INTEGRATIONS/mcp.md) |

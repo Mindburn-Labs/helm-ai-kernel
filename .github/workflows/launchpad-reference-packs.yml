@@ -1,0 +1,44 @@
+name: Launchpad Reference Packs Verification
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'reference_packs/launchpad/**'
+      - 'registry/launchpad/**'
+      - 'policies/launchpad/**'
+      - '.github/workflows/launchpad-reference-packs.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'reference_packs/launchpad/**'
+      - 'registry/launchpad/**'
+      - 'policies/launchpad/**'
+      - '.github/workflows/launchpad-reference-packs.yml'
+
+jobs:
+  verify-packs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build helm-ai-kernel CLI
+        run: make build
+
+      - name: Verify OpenClaw Reference Bundle
+        run: ./bin/helm-ai-kernel verify --bundle reference_packs/launchpad/openclaw/evidence-pack.tar
+
+      - name: Verify Hermes Reference Bundle
+        run: ./bin/helm-ai-kernel verify --bundle reference_packs/launchpad/hermes/evidence-pack.tar
+
+      - name: Verify OpenCode Reference Bundle
+        run: ./bin/helm-ai-kernel verify --bundle reference_packs/launchpad/opencode/evidence-pack.tar
+
+      - name: Verify Kilo Code Reference Bundle
+        run: ./bin/helm-ai-kernel verify --bundle reference_packs/launchpad/kilocode/evidence-pack.tar

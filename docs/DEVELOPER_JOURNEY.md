@@ -9,7 +9,7 @@ This page is the source-backed end-to-end path for evaluating HELM AI Kernel. It
 
 ## Audience
 
-This journey is for developers and platform teams evaluating HELM AI Kernel beyond the first quickstart. It is the source-backed path for proving local runtime behavior, SDK calls, receipts, EvidencePack verification, conformance, deployment, and release verification.
+This journey is for developers and platform teams evaluating HELM AI Kernel beyond the first quickstart. It is the source-backed path for proving Console registration, local runtime behavior, SDK calls, receipts, EvidencePack verification, conformance, deployment, and release verification.
 
 ## Outcome
 
@@ -18,7 +18,9 @@ After completing the path you should know which local command owns each public c
 ```mermaid
 flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
+        Register["Register at Console"]
         Install["install or build helm-ai-kernel"]
+        Pair["helm-ai-kernel console pair"]
         Proxy["optional helm-ai-kernel proxy"]
     end
 
@@ -34,7 +36,9 @@ flowchart TD
     end
 
     %% Operational Flow Edges
-    Install --> Serve
+    Register --> Install
+    Install --> Pair
+    Pair --> Serve
     Serve --> Demo
     Serve --> Proxy
     Serve --> Receipts
@@ -42,6 +46,7 @@ flowchart TD
     Verify --> Gates
 
     %% Premium Styling Rules
+    style Register fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style Serve fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
     style Demo fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
     style Receipts fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
@@ -63,6 +68,13 @@ flowchart TD
 - `scripts/check_documentation_coverage.py`
 - `scripts/check_documentation_truth.py`
 
+## Register At Console
+
+Create your account at <https://console.helm.mindburn.org>. The Console is the
+primary surface for managing runs, inspecting receipts, and reviewing evidence.
+All local CLI operations sync receipts and evidence to the Console dashboard
+when the workstation is paired.
+
 ## Install
 
 Use one of these current paths. The published Homebrew path is the macOS path;
@@ -71,6 +83,8 @@ source builds and Docker remain the portable paths for Linux and WSL.
 ```bash
 brew install mindburnlabs/tap/helm-ai-kernel
 helm-ai-kernel --version
+helm-ai-kernel login
+helm-ai-kernel console pair
 ```
 
 ```bash
@@ -99,7 +113,7 @@ Expected ready line:
 helm-edge-local - listening :7714 - ready
 ```
 
-Point an external Console or API client at the local kernel endpoint:
+Point the Console or an API client at the local kernel endpoint:
 
 ```bash
 http://127.0.0.1:7714

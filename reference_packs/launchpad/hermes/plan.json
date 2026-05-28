@@ -1,0 +1,13 @@
+{
+  "plan_id": "22222222-2222-2222-2222-222222222222",
+  "app_id": "hermes",
+  "substrate_id": "local-container",
+  "actions": [
+    {
+      "tool_id": "hermes.default",
+      "effect_class": "T1",
+      "method": "ping",
+      "params": {}
+    }
+  ]
+}

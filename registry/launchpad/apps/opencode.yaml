@@ -96,3 +96,17 @@ metadata:
     upstream_commit: d7a6e1daaf2271bcd0b611fbb27d4956806e475a
     upstream_ref: v1.15.5
     upstream_repo: https://github.com/anomalyco/opencode
+
+display:
+  headline: "Run OpenCode through HELM"
+  short_description: "Launch OpenCode behind HELM’s fail-closed execution boundary."
+  primary_command: "helm-ai-kernel launch opencode local-container --headless --output json"
+  proof_summary:
+    - "signed OCI artifact"
+    - "deny-by-default network policy"
+    - "MCP quarantine"
+    - "signed receipts"
+    - "offline EvidencePack verification"
+  docs_path: "docs/launchpad/apps/OPENCODE.md"
+  contribution_label: "framework-integration"
+

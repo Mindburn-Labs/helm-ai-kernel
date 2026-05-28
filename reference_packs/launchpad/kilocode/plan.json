@@ -1,0 +1,13 @@
+{
+  "plan_id": "44444444-4444-4444-4444-444444444444",
+  "app_id": "kilocode",
+  "substrate_id": "local-container",
+  "actions": [
+    {
+      "tool_id": "kilocode.default",
+      "effect_class": "T1",
+      "method": "run",
+      "params": {}
+    }
+  ]
+}

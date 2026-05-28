@@ -115,3 +115,17 @@ metadata:
     release_published_at: "2026-05-16T09:59:15Z"
     upstream_commit: a91a57fa5a13d516c38b07a141a9ce8a3daabeb0
     upstream_repo: https://github.com/NousResearch/hermes-agent
+
+display:
+  headline: "Run Hermes through HELM"
+  short_description: "Launch Hermes behind HELM’s fail-closed execution boundary."
+  primary_command: "helm up hermes --target local"
+  proof_summary:
+    - "signed OCI artifact"
+    - "deny-by-default network policy"
+    - "MCP quarantine"
+    - "signed receipts"
+    - "offline EvidencePack verification"
+  docs_path: "docs/launchpad/apps/HERMES.md"
+  contribution_label: "framework-integration"
+

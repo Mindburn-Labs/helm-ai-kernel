@@ -1,0 +1,8 @@
+{
+  "launch_id": "00000000-0000-0000-0000-000000000002",
+  "teardown_status": "clean",
+  "resources_released": [
+    "local-container-sandbox"
+  ],
+  "timestamp": "2026-05-28T12:05:00Z"
+}

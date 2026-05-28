@@ -1,0 +1,13 @@
+{
+  "plan_id": "33333333-3333-3333-3333-333333333333",
+  "app_id": "opencode",
+  "substrate_id": "local-container",
+  "actions": [
+    {
+      "tool_id": "opencode.default",
+      "effect_class": "T1",
+      "method": "run",
+      "params": {}
+    }
+  ]
+}

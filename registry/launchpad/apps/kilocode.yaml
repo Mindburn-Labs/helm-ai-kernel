@@ -96,3 +96,17 @@ metadata:
     upstream_commit: 64c60812ae730a30db1fa2226d9e446f7f10c127
     upstream_ref: v7.3.1
     upstream_repo: https://github.com/Kilo-Org/kilocode
+
+display:
+  headline: "Run Kilo Code through HELM"
+  short_description: "Launch Kilo Code behind HELM’s fail-closed execution boundary."
+  primary_command: "helm-ai-kernel launch kilocode local-container --headless --output json"
+  proof_summary:
+    - "signed OCI artifact"
+    - "deny-by-default network policy"
+    - "MCP quarantine"
+    - "signed receipts"
+    - "offline EvidencePack verification"
+  docs_path: "docs/launchpad/apps/KILOCODE.md"
+  contribution_label: "framework-integration"
+

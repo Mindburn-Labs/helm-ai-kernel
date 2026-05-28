@@ -178,7 +178,7 @@ every individual call. No call reaches an executor without a signed
 | **Deny-by-default** | Unknown tools → `DENY_TOOL_NOT_FOUND`. Unknown args → `DENY`. Policy error → `FAIL_CLOSED_ERROR` |
 | **Delegation session enforcement** | Session capabilities ⊆ delegator's policy; expired/invalid sessions → `DELEGATION_INVALID` |
 | **Threat scan** | TCB scanner detects prompt injection / command injection signals → `THREAT_SIGNAL_DETECTED` |
-| **zkVM Safety Attestation** | Compiles and verifies agent safety assertions (AST static analysis) in ZK (RISC Zero zkVM) generating verifiable execution receipts |
+| **Cryptographic Proof Safety Attestation** | Compiles and verifies agent safety assertions (AST static analysis) in a RISC Zero zkVM generating verifiable execution receipts |
 | **TEE Enclave Secrets** | Silicon-sealed KMS vault wrapping (`SovereignKMSVault`) and inline token replacement proxy (`SecretProxyFilter`), preventing credentials from leaking to host memory/logs |
 
 ### Architectural Property
@@ -215,7 +215,7 @@ signed `DENY` verdict with a deterministic reason code.
 | Gated execution | `core/pkg/executor/` |
 | Canonicalization | `core/pkg/canonicalize/` |
 | Approval ceremonies | `core/pkg/escalation/ceremony/` |
-| zkVM Safety Checker | `core/pkg/crypto/zk/` |
+| Cryptographic Proof Safety Checker | `core/pkg/crypto/zk/` |
 | TEE Secrets Enclave | `core/pkg/crypto/tee/` |
 
 ---

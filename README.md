@@ -24,6 +24,42 @@
 
 HELM AI Kernel is the fail-closed execution firewall for AI agents.
 
+## Get Started
+
+1. **Register at Console** → <https://console.helm.mindburn.org>
+2. **Install locally** → `brew install mindburnlabs/tap/helm-ai-kernel`
+3. **Login locally** → `helm-ai-kernel login`
+4. **Pair with Console** → `helm-ai-kernel console pair`
+5. **Run Launchpad** → `helm up openclaw`
+6. **View in Console** → receipts and evidence appear in the Console dashboard
+
+```bash
+brew install mindburnlabs/tap/helm-ai-kernel
+helm-ai-kernel login
+helm-ai-kernel console pair
+
+export OPENROUTER_API_KEY=...
+helm-ai-kernel launch secrets set model_gateway \
+  --provider openrouter \
+  --value-env OPENROUTER_API_KEY
+
+helm up openclaw
+helm up hermes --target local
+
+helm-ai-kernel launch evidence <launch_id> --export --json
+helm-ai-kernel verify --bundle <pack>
+```
+
+What you get:
+* Console dashboard with receipts, evidence, and run history
+* deterministic ALLOW / DENY / ESCALATE verdicts
+* MCP quarantine for unknown servers and tools
+* signed receipts
+* offline-verifiable EvidencePacks
+* teardown proof
+
+## Core Overview
+
 AI models propose. Deterministic systems govern. HELM sits between stochastic
 agent tool calls and infrastructure side effects. It intercepts MCP tools and
 OpenAI-compatible requests, evaluates authority before dispatch, and emits
@@ -67,7 +103,8 @@ tooling, or non-OSS downstream extensions.
 
 ## Quick Start
 
-Install the published macOS CLI from the current GitHub release. The public
+Register at <https://console.helm.mindburn.org> to create your account, then
+install the published macOS CLI from the current GitHub release. The public
 Homebrew tap is current only when the release includes a passing
 `version-status.json`.
 

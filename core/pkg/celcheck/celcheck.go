@@ -97,13 +97,11 @@ func ValidateFile(path string) ValidationResult {
 
 	_, iss = env.Check(ast)
 	if iss.Err() != nil {
-		// Type-check errors are warnings — dynamic map access can't be
-		// verified statically in CEL.
 		result.Errors = append(result.Errors,
-			fmt.Sprintf("type warning: %v", iss.Err()))
+			fmt.Sprintf("type error: %v", iss.Err()))
 	}
 
-	result.Valid = len(result.Errors) == 0 || onlyTypeWarnings(result.Errors)
+	result.Valid = len(result.Errors) == 0
 	return result
 }
 
@@ -146,13 +144,4 @@ func countClauses(expr string) int {
 		}
 	}
 	return count
-}
-
-func onlyTypeWarnings(errs []string) bool {
-	for _, e := range errs {
-		if !strings.Contains(e, "type warning") {
-			return false
-		}
-	}
-	return true
 }

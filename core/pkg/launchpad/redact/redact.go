@@ -15,7 +15,7 @@ const placeholder = "[REDACTED]"
 
 // Minimum lengths to prevent false positives on short strings.
 const (
-	minAPIKeyLen  = 8
+	minAPIKeyLen   = 8
 	minFilePathLen = 6
 )
 

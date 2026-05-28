@@ -24,9 +24,9 @@ const SessionFile = "session.json"
 
 // Session represents a persisted authentication session.
 type Session struct {
-	Token    string `json:"token"`
-	Email    string `json:"email"`
-	TenantID string `json:"tenant_id"`
+	Token     string `json:"token"`
+	Email     string `json:"email"`
+	TenantID  string `json:"tenant_id"`
 	ExpiresAt string `json:"expires_at"`
 }
 
@@ -41,9 +41,9 @@ type LoginOptions struct {
 
 // loginResponse is the expected shape of POST /api/auth/login.
 type loginResponse struct {
-	Token    string `json:"token"`
-	Email    string `json:"email"`
-	TenantID string `json:"tenant_id"`
+	Token     string `json:"token"`
+	Email     string `json:"email"`
+	TenantID  string `json:"tenant_id"`
 	ExpiresAt string `json:"expires_at"`
 	Workspace struct {
 		ID   string `json:"id"`

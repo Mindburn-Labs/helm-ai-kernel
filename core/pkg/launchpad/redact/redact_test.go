@@ -104,7 +104,7 @@ func TestRedact_NestedMaps(t *testing.T) {
 		"config": map[string]interface{}{
 			"db": map[string]interface{}{
 				"CONNECTION_SECRET": "postgres://user:pass@host/db",
-				"host":             "localhost",
+				"host":              "localhost",
 			},
 			"path": "/Users/ivan/config.yaml",
 		},

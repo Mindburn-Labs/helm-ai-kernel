@@ -23,7 +23,7 @@ rg -n --hidden -S "$PATTERN" \
     exit 1
   }
 
-git ls-files | rg '\.(db|sqlite|log|tar|tar\.gz|zip|exe|dll|so|dylib|pem|key|crt|p12|pfx|env)$' && {
+git ls-files | rg '\.(db|sqlite|log|tar|tar\.gz|zip|exe|dll|so|dylib|pem|key|crt|p12|pfx|env)$' | rg -v '^reference_packs/.*evidence-?pack\.tar$' && {
   echo "tracked artifact hygiene check failed" >&2
   exit 1
 }

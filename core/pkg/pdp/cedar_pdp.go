@@ -74,12 +74,12 @@ func NewCedarPDP(cfg CedarConfig) (*CedarPDP, error) {
 //  3. Otherwise → ALLOW
 func (c *CedarPDP) Evaluate(ctx context.Context, req *DecisionRequest) (*DecisionResponse, error) {
 	if req == nil {
-		return c.denyResponse(string(contracts.ReasonSchemaViolation)), nil
+		return c.denyResponse(string(contracts.ReasonSchemaViolation))
 	}
 
 	select {
 	case <-ctx.Done():
-		return c.denyResponse(string(contracts.ReasonPDPError)), nil
+		return c.denyResponse(string(contracts.ReasonPDPError))
 	default:
 	}
 
@@ -93,7 +93,7 @@ func (c *CedarPDP) Evaluate(ctx context.Context, req *DecisionRequest) (*Decisio
 
 		if policy.Effect == "forbid" {
 			// Explicit deny — return immediately (Cedar semantics).
-			return c.denyResponse(string(contracts.ReasonPDPDeny)), nil
+			return c.denyResponse(string(contracts.ReasonPDPDeny))
 		}
 
 		if policy.Effect == "permit" {
@@ -103,20 +103,19 @@ func (c *CedarPDP) Evaluate(ctx context.Context, req *DecisionRequest) (*Decisio
 
 	if !hasPermit {
 		// No permit matched → default deny.
-		return c.denyResponse(string(contracts.ReasonPDPDeny)), nil
+		return c.denyResponse(string(contracts.ReasonPDPDeny))
 	}
 
+	policyRef := fmt.Sprintf("cedar:%s", c.policyRef)
 	resp := &DecisionResponse{
 		Allow:      true,
 		ReasonCode: "",
-		PolicyRef:  fmt.Sprintf("cedar:%s", c.policyRef),
+		PolicyRef:  policyRef,
 	}
 
-	hash, err := ComputeDecisionHash(resp)
-	if err != nil {
-		return c.denyResponse(string(contracts.ReasonPDPError)), nil
+	if err := attachDecisionHash(resp); err != nil {
+		return denyForHashFailure(policyRef, err)
 	}
-	resp.DecisionHash = hash
 
 	return resp, nil
 }
@@ -185,14 +184,17 @@ func (c *CedarPDP) Backend() Backend { return BackendCedar }
 // PolicyHash implements PolicyDecisionPoint.
 func (c *CedarPDP) PolicyHash() string { return c.policyCache }
 
-func (c *CedarPDP) denyResponse(reasonCode string) *DecisionResponse {
+func (c *CedarPDP) denyResponse(reasonCode string) (*DecisionResponse, error) {
+	policyRef := fmt.Sprintf("cedar:%s", c.policyRef)
 	resp := &DecisionResponse{
 		Allow:      false,
 		ReasonCode: reasonCode,
-		PolicyRef:  fmt.Sprintf("cedar:%s", c.policyRef),
+		PolicyRef:  policyRef,
 	}
-	resp.DecisionHash, _ = ComputeDecisionHash(resp)
-	return resp
+	if err := attachDecisionHash(resp); err != nil {
+		return denyForHashFailure(policyRef, err)
+	}
+	return resp, nil
 }
 
 func (c *CedarPDP) computePolicyHash() string {

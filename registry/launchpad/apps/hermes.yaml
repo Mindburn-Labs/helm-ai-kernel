@@ -47,6 +47,7 @@ filesystem_policy:
         # finds the writable .hermes directory inside this mount.
         - app_state:rw:/var/lib/hermes
     policy_ref: policies/launchpad/apps/hermes.safe.toml
+    state_dir_env: HOME
 network_policy:
     default: deny
     allowlist:

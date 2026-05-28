@@ -52,11 +52,17 @@ func (r *DockerRunner) Run(spec *sandbox.SandboxSpec) (*sandbox.Result, *sandbox
 	startedAt := r.clock()
 	execID := fmt.Sprintf("sandbox-%d", startedAt.UnixNano())
 
-	// Build docker run command
-	args := []string{
-		"run", "--rm",
-		"--name", execID,
+	// Build docker run command. Detached daemon-style runs do NOT use
+	// --rm: the container must outlive `docker run`'s return so the
+	// healthcheck runner can exec into it. Teardown removes it later
+	// by label / name.
+	args := []string{"run"}
+	if spec.Detached {
+		args = append(args, "-d")
+	} else {
+		args = append(args, "--rm")
 	}
+	args = append(args, "--name", execID)
 
 	// Resource limits
 	if spec.Limits.MemoryMB > 0 {
@@ -93,6 +99,11 @@ func (r *DockerRunner) Run(spec *sandbox.SandboxSpec) (*sandbox.Result, *sandbox
 		"--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
 	)
 
+	// Labels for downstream discovery / teardown (e.g. by launch_id).
+	for k, v := range spec.Labels {
+		args = append(args, "--label", fmt.Sprintf("%s=%s", k, v))
+	}
+
 	// Environment
 	for k, v := range spec.Env {
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
@@ -120,8 +131,15 @@ func (r *DockerRunner) Run(spec *sandbox.SandboxSpec) (*sandbox.Result, *sandbox
 	args = append(args, spec.Command...)
 	args = append(args, spec.Args...)
 
-	// Execute with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), spec.Limits.Timeout)
+	// For detached daemons we use a much shorter `docker run -d` timeout
+	// (just the time to register the container with Docker) and rely on
+	// an external healthcheck loop. Synchronous runs honour the full
+	// command timeout.
+	runTimeout := spec.Limits.Timeout
+	if spec.Detached {
+		runTimeout = 60 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, r.dockerBin, args...)
@@ -154,6 +172,9 @@ func (r *DockerRunner) Run(spec *sandbox.SandboxSpec) (*sandbox.Result, *sandbox
 			return result, nil, fmt.Errorf("docker run failed: %w", err)
 		}
 	}
+	// Detached success: Result.ExitCode is 0 and stdout carries the
+	// container ID printed by `docker run -d`. The container keeps
+	// running; teardown removes it by label.
 
 	// Compute output hashes for receipt
 	stdoutHash := sha256.Sum256(result.Stdout)

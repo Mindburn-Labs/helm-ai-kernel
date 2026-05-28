@@ -30,10 +30,9 @@ runtime:
         - none
         - --bind
         - loopback
-    # Gateway warm-up reliably exceeds the 120s LocalContainerRuntime default
-    # (8 plugins boot + Control UI scan + heartbeat). 300s gives a comfortable
-    # margin for the kernel healthcheck after the gateway settles.
     timeout: 300s
+    detached: true
+    readiness_timeout: 8m
 model_gateway:
     logical_secret: model_gateway
     provider: openrouter

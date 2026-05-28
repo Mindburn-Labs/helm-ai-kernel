@@ -1,0 +1,21 @@
+name: TEE Collateral Fixtures
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-offline-collateral:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: "1.25.10"
+          cache-dependency-path: "**/go.sum"
+      - name: Validate offline AMD KDS / Intel PCS collateral fixtures
+        run: make tee-collateral-verify

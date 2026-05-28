@@ -67,9 +67,8 @@ func (t *TelemetryPDP) Evaluate(ctx context.Context, req *DecisionRequest) (*Dec
 		resp.Allow = true
 
 		// Update the decision hash because we altered the 'Allow' field
-		hash, hashErr := ComputeDecisionHash(resp)
-		if hashErr == nil {
-			resp.DecisionHash = hash
+		if err := attachDecisionHash(resp); err != nil {
+			return denyForHashFailure(resp.PolicyRef, err)
 		}
 	}
 

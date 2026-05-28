@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -71,6 +72,83 @@ func TestExecuteOpenAICompatibleProviders(t *testing.T) {
 				t.Fatalf("unexpected result: %+v", res)
 			}
 		})
+	}
+}
+
+func TestExecuteRejectsEnginePinMismatchBeforeDispatch(t *testing.T) {
+	dispatched := false
+	mux := http.NewServeMux()
+	mux.HandleFunc("/version", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"version": "server-version"})
+	})
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, _ *http.Request) {
+		dispatched = true
+		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []map[string]any{{"message": map[string]string{"content": "ok"}}}})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	r := NewGatewayRouter()
+	err := r.RouteWithConfig(context.Background(), RouteConfig{
+		Provider:       ProviderVLLM,
+		BaseURL:        srv.URL,
+		ModelName:      "test-model",
+		ModelHash:      "sha256:def",
+		RuntimeVersion: "server-version",
+		EnginePin: &EnginePin{
+			Provider:       ProviderVLLM,
+			BaseURL:        srv.URL,
+			ModelName:      "test-model",
+			ModelHash:      "sha256:def",
+			RuntimeVersion: "other-version",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = r.Execute(context.Background(), ExecContext{Prompt: "hello"})
+	if err == nil || !strings.Contains(err.Error(), "engine pin mismatch") {
+		t.Fatalf("expected engine pin mismatch, got %v", err)
+	}
+	if dispatched {
+		t.Fatal("provider dispatch occurred after engine pin mismatch")
+	}
+}
+
+func TestExecuteAcceptsEnginePinWithVerifierAndMeasurement(t *testing.T) {
+	srv := newOpenAICompatibleServer(t, "server-version")
+	defer srv.Close()
+
+	r := NewGatewayRouter()
+	err := r.RouteWithConfig(context.Background(), RouteConfig{
+		Provider:            ProviderVLLM,
+		BaseURL:             srv.URL,
+		ModelName:           "test-model",
+		ModelHash:           "sha256:def",
+		RuntimeVersion:      "server-version",
+		VerifierProfileID:   "nitro-prod",
+		AttestedMeasurement: "sha256:measurement",
+		AlternateProfileID:  "nitro-prod-v2",
+		EnginePin: &EnginePin{
+			Provider:                   ProviderVLLM,
+			BaseURL:                    srv.URL,
+			ModelName:                  "test-model",
+			ModelHash:                  "sha256:def",
+			RuntimeVersion:             "server-version",
+			VerifierProfileID:          "nitro-prod",
+			AttestedMeasurement:        "sha256:measurement",
+			ApprovedAlternateProfileID: "nitro-prod-v2",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.Execute(context.Background(), ExecContext{Prompt: "hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Content != "ok" || res.RuntimeVersion != "server-version" || res.ModelHash != "sha256:def" {
+		t.Fatalf("unexpected result: %+v", res)
 	}
 }
 

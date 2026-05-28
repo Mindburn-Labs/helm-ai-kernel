@@ -95,6 +95,19 @@ representation is the `ReasonCode` enum in `protocols/proto/helm/kernel/v1/helm.
 | ------------------------ | ---------- | ----------------------------------------- |
 | `JURISDICTION_VIOLATION` | DENY       | Effect violates jurisdictional constraint |
 
+### 4.9 Safe Deprecation Codes
+
+| Code                              | Applies To | Description                                                       |
+| --------------------------------- | ---------- | ----------------------------------------------------------------- |
+| `SAFEDEP_TERMINAL_FREEZE`         | DENY       | Hazard appraisal entered terminal freeze                          |
+| `SAFEDEP_DEGRADED_NARROWING`      | ESCALATE   | Recoverable decay may activate a narrowing emergency capsule       |
+| `SAFEDEP_DEPRECATED_READONLY`     | DENY       | Engine or attestation trust failure forced read-only deprecation   |
+| `ERR_CONTINUITY_STALE`            | DENY       | Continuity checkpoint is stale, replayed, expired, or rollbacked   |
+| `ERR_EMERGENCY_CAPSULE_INVALID`   | DENY       | Emergency capsule failed binding, expiry, subset, or delegation checks |
+| `ERR_HARDWARE_QUORUM_UNBOUND`     | DENY       | Hardware ceremony quorum is missing, duplicated, or unauthorized   |
+| `ERR_ATTESTATION_RESULT_REQUIRED` | DENY       | Signed verifier-issued attestation result is missing or invalid    |
+| `ERR_DEV_FALLBACK_PRESENT`        | DENY       | Dev, audit, mock, software-key, env, or mutable-overlay fallback is enabled |
+
 ## 5. Extension Mechanism
 
 ### 5.1 Jurisdiction-Prefixed Codes

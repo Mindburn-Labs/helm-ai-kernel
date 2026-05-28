@@ -356,6 +356,9 @@ func receiptSubjectMatches(t *testing.T, dir, reason string, want map[string]any
 		t.Fatalf("read receipt dir: %v", err)
 	}
 	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".") || strings.HasSuffix(entry.Name(), ".tmp") {
+			continue
+		}
 		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
 		if err != nil {
 			t.Fatalf("read receipt: %v", err)

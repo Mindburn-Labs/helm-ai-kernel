@@ -136,7 +136,7 @@ The release workflow attaches these assets:
 - matching `*.cosign.bundle` files for every primary asset
 
 `sample-policy-material.tar` includes the sample policy and its referenced EU
-AI Act high-risk reference pack. The `v0.5.6` release attaches a
+AI Act high-risk reference pack. The `v0.5.8` release attaches a
 `helm-ai-kernel.rb` formula asset for version `0.5.8` and publishes the same
 version to `mindburnlabs/homebrew-tap`; `version-status.json` must include a
 passing `homebrew-tap` surface before documenting
@@ -162,7 +162,7 @@ writes the final `SHA256SUMS.txt`.
 ## Verification
 
 Every public release must include enough material to verify what was downloaded.
-For `v0.5.6`, use `SHA256SUMS.txt`, `sbom.json`, `v0.5.8.openvex.json`,
+For `v0.5.8`, use `SHA256SUMS.txt`, `sbom.json`, `v0.5.8.openvex.json`,
 `release-attestation.json`, the platform binary assets, attached
 `*.cosign.bundle` files, and the offline `evidence-pack.tar`.
 

@@ -89,7 +89,7 @@ actual baseline when auditing the `v0.5.0` delta.
 
 ## v0.5.8 Asset Contract
 
-The `v0.5.6` release attaches these primary assets:
+The `v0.5.8` release attaches these primary assets:
 
 - `helm-ai-kernel-darwin-amd64`
 - `helm-ai-kernel-darwin-arm64`
@@ -212,7 +212,7 @@ The release staging path runs the same offline verification before publishing
 release checksums. If this step fails, the release must be treated as incomplete
 and the exported EvidencePack must be repaired before attaching assets.
 
-For `v0.5.6`, this command passes without network access. The verifier
+For `v0.5.8`, this command passes without network access. The verifier
 accepts both the legacy `receipts/` layout and the canonical
 `02_PROOFGRAPH/receipts/` layout.
 

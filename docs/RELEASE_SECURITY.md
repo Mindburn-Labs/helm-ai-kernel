@@ -95,7 +95,7 @@ the audit EvidencePack, verifies the staged `evidence-pack.tar`, and only then
 writes final checksums. A failed EvidencePack verification blocks release asset
 publication.
 
-For `v0.5.6`, use checksum verification, SBOM inspection, OpenVEX inspection,
+For `v0.5.8`, use checksum verification, SBOM inspection, OpenVEX inspection,
 release metadata inspection, offline EvidencePack verification,
 reproducible-build validation, and Cosign verification against the attached
 bundles.

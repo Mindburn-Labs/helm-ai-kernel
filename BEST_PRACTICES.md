@@ -74,7 +74,7 @@ canonical bestpractices.dev project badge.
   release attestation, and reproducible-build gates. Cosign keyless signing and
   OpenVEX consumption are documented verification paths when the GitHub release
   attaches `*.cosign.bundle` or `*.openvex.json` files. The current public
-  `v0.5.1` release attaches those files.
+  `v0.5.8` release attaches those files.
 - **Reproducible build** — `make release-binaries-reproducible` plus the
   `reproducibility-check` job in `.github/workflows/release.yml`, which runs
   the build twice on independent runners and diffs the SHA-256 set.

@@ -91,6 +91,42 @@
       "sensitivity": "public"
     },
     {
+      "slug": "helm-ai-kernel/launchpad/apps/openclaw",
+      "title": "OpenClaw on HELM",
+      "section": "start-here",
+      "source_path": "docs/launchpad/apps/OPENCLAW.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad/apps/openclaw",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/launchpad/apps/hermes",
+      "title": "Hermes on HELM",
+      "section": "start-here",
+      "source_path": "docs/launchpad/apps/HERMES.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad/apps/hermes",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/launchpad/apps/opencode",
+      "title": "OpenCode on HELM",
+      "section": "start-here",
+      "source_path": "docs/launchpad/apps/OPENCODE.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad/apps/opencode",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/launchpad/apps/kilocode",
+      "title": "Kilo Code on HELM",
+      "section": "start-here",
+      "source_path": "docs/launchpad/apps/KILOCODE.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad/apps/kilocode",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "helm-ai-kernel/skills/flow-catalog",
       "title": "Skill Packs Flow Catalog",
       "section": "interfaces",

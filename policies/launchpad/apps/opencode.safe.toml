@@ -1,6 +1,5 @@
 [app]
 id = "opencode"
-availability = "oss_candidate"
 permission_bypass_forbidden = true
 recursive_launch_forbidden = true
 network_default = "deny"

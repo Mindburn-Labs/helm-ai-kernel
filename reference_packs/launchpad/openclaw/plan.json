@@ -1,0 +1,15 @@
+{
+  "plan_id": "11111111-1111-1111-1111-111111111111",
+  "app_id": "openclaw",
+  "substrate_id": "local-container",
+  "actions": [
+    {
+      "tool_id": "openclaw.default",
+      "effect_class": "T1",
+      "method": "gateway.run",
+      "params": {
+        "port": "18789"
+      }
+    }
+  ]
+}

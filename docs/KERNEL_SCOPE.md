@@ -79,7 +79,7 @@ non-TCB supporting infrastructure:
 The following names appear in strategy, standard, or roadmap material but are not active source paths in this OSS repository as of the v1.3 convergence pass. They MUST NOT be documented as shipped packages until source, tests, and conformance vectors exist under the matching path:
 
 - `crypto/hybrid/`
-- `crypto/zkproof/`
+- `crypto/zkproof/` (cryptographic proof attestation)
 - `memory/`
 - `threatscan/ensemble/`
 - `evidencepack/summary/`

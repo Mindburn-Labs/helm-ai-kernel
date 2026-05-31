@@ -121,3 +121,17 @@ metadata:
     release_published_at: "2026-05-14T18:28:04Z"
     upstream_commit: f066dd2f31c231f38fbcaacd6f6dfce0801143b3
     upstream_repo: https://github.com/openclaw/openclaw
+
+display:
+  headline: "Run OpenClaw through HELM"
+  short_description: "Launch OpenClaw behind HELM’s fail-closed execution boundary."
+  primary_command: "helm up openclaw"
+  proof_summary:
+    - "signed OCI artifact"
+    - "deny-by-default network policy"
+    - "MCP quarantine"
+    - "signed receipts"
+    - "offline EvidencePack verification"
+  docs_path: "docs/launchpad/apps/OPENCLAW.md"
+  contribution_label: "framework-integration"
+

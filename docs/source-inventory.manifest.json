@@ -10,6 +10,13 @@
       "label": "Project root, release configuration, governance, and security policy files",
       "classification": "public-hub",
       "source_patterns": [
+        ".devcontainer/devcontainer.json",
+        ".gitleaks.toml",
+        "AGENTS.md",
+        "CODEOWNERS",
+        "agent.yaml",
+        "catalog-info.yaml",
+        "renovate.json",
         ".editorconfig",
         ".bestpractices.json",
         ".gitignore",
@@ -60,6 +67,7 @@
       "source_patterns": [
         ".github/**",
         "scripts/**",
+        "observability/**",
         "tools/README.md",
         "tools/*.go",
         "tools/*.sh",
@@ -128,6 +136,10 @@
         "helm-ai-kernel/launchpad",
         "helm-ai-kernel/launchpad/conformance",
         "helm-ai-kernel/launchpad/clean-install-ga",
+        "helm-ai-kernel/launchpad/apps/openclaw",
+        "helm-ai-kernel/launchpad/apps/hermes",
+        "helm-ai-kernel/launchpad/apps/opencode",
+        "helm-ai-kernel/launchpad/apps/kilocode",
         "helm-ai-kernel/launchpad/flow-catalog",
         "helm-ai-kernel/skills/flow-catalog"
       ],
@@ -193,7 +205,8 @@
         "core/cmd/channel_gateway/**",
         "core/cmd/pack_verify/**",
         "core/cmd/skill_lint/**",
-        "core/cmd/skill_pack/**"
+        "core/cmd/skill_pack/**",
+        "core/cmd/tee-collateral/**"
       ],
       "owner_doc_path": "core/cmd/README.md",
       "public_doc_slugs": [],
@@ -372,7 +385,8 @@
         "Dockerfile.slim",
         "docker-compose.yml",
         "sdk/README.md",
-        "sdk/*/**"
+        "sdk/*/**",
+        "packages/README.md"
       ],
       "owner_doc_path": "examples/README.md",
       "public_doc_slugs": [

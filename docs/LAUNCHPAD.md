@@ -5,36 +5,32 @@ last_reviewed: 2026-05-24
 
 # HELM Launchpad
 
-Status: OpenClaw, Hermes, OpenCode, and Kilo Code are `oss_supported` for
-`local-container` after signed artifact, SBOM, vulnerability scan, live
-conformance, teardown, receipt, and offline EvidencePack verification in
-workflow `26198407296`. Codex, Claude Code, Cursor, and Junie remain external
-BYO adapters.
+Run real AI apps through HELM's execution boundary. Register at
+<https://console.helm.mindburn.org>, install the CLI, and pair your workstation
+before launching. Receipts and evidence appear in the Console dashboard.
 
-LaunchKit is the product entrypoint for one-command app bootstrap. It uses the
-existing Launchpad registry/runtime/receipt implementation as the compatibility
-foundation, then exposes the Tier-1 operator command:
+Supported local-container apps:
 
-```bash
-helm up openclaw
-helm up hermes --target cloud:aws --verify-only
-```
+| App | Command | Proof |
+| --- | --- | --- |
+| OpenClaw | `helm up openclaw` | receipts + EvidencePack |
+| Hermes | `helm up hermes --target local` | receipts + EvidencePack |
+| OpenCode | `helm-ai-kernel launch opencode local-container --headless --output json` | receipts + EvidencePack |
+| Kilo Code | `helm-ai-kernel launch kilocode local-container --headless --output json` | receipts + EvidencePack |
 
-Launchpad remains the OSS local-container implementation layer. LaunchKit starts
-verified AI apps through a fail-closed execution firewall, preserves the MCP
-interceptor posture, records signed receipts, emits EvidencePacks that verify
-offline, and returns receipt-backed run URLs for external clients.
+## What happens during launch
 
-## Audience
-
-Operators and maintainers validating the release-backed Launchpad path in HELM
-AI Kernel.
-
-## Outcome
-
-You can identify the supported app matrix, the exact verifier commands, the
-GHCR digests promoted by CI, and the passing clean-install gate behind public
-GA claims.
+1. Resolve app registry entry.
+2. Validate policy pack.
+3. Verify signed artifact digest.
+4. Prepare sandbox and scoped filesystem.
+5. Apply network deny-by-default policy.
+6. Set model gateway secret only inside launch scope.
+7. Run healthcheck.
+8. Emit launch/install/healthcheck receipts.
+9. Export EvidencePack.
+10. Teardown and emit teardown receipt.
+11. Verify offline.
 
 ## Source Truth
 

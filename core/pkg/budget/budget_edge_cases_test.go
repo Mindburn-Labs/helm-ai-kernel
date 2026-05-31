@@ -276,7 +276,8 @@ func TestDeep_DailyReset(t *testing.T) {
 func TestDeep_MonthlyReset(t *testing.T) {
 	store := NewMemoryStorage()
 	enforcer := NewSimpleEnforcer(store)
-	lastMonth := time.Now().UTC().AddDate(0, -1, 0)
+	now := time.Now().UTC()
+	lastMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, -1, 0)
 	store.Set(context.Background(), &Budget{
 		TenantID: "t1", DailyLimit: 1000, MonthlyLimit: 1000,
 		DailyUsed: 0, MonthlyUsed: 999, LastUpdated: lastMonth,

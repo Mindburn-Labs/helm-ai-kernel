@@ -5,10 +5,10 @@ last_reviewed: 2026-05-20
 
 # Quickstart
 
-This is the shortest current HELM AI Kernel path: build or install the CLI, run
-a LaunchKit app through `helm up`, inspect the receipt-backed Console run, and
-verify the exported EvidencePack offline. The lower-level boundary demo remains
-available for integration testing.
+This is the shortest current HELM AI Kernel path: register at the Console,
+install the CLI, pair your workstation, run a LaunchKit app through `helm up`,
+and inspect the receipt-backed Console run. The lower-level boundary demo
+remains available for local integration testing.
 
 ## Audience
 
@@ -16,14 +16,17 @@ This quickstart is for developers, security reviewers, and integration owners wh
 
 ## Outcome
 
-By the end you should have a LaunchKit run URL under `/runs/<run_id>`, a demo or
-live receipt chain, an offline verification command, and the narrow docs and
+By the end you should have a Console account, a paired local workstation, a
+LaunchKit run URL under `/runs/<run_id>`, a receipt chain visible in the
+Console dashboard, an offline verification command, and the narrow docs and
 route tests that prove this page still matches the CLI.
 
 ```mermaid
 flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
+        Register["Register at Console"]
         Install["install or build helm"]
+        Pair["helm-ai-kernel console pair"]
         Up["helm up openclaw"]
     end
 
@@ -37,12 +40,15 @@ flowchart TD
     end
 
     %% Operational Flow Edges
-    Install --> Up
+    Register --> Install
+    Install --> Pair
+    Pair --> Up
     Up --> Console
     Up --> Receipts
     Receipts --> Verify
 
     %% Premium Styling Rules
+    style Register fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style Console fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style Receipts fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
     style Verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
@@ -59,20 +65,26 @@ flowchart TD
 - `api/openapi/helm.openapi.yaml`
 - `release.high_risk.v3.toml`
 
-The quickstart deliberately uses the local OSS runtime rather than hosted
-services. `helm-ai-kernel serve` owns the boundary, demo routes create and verify a
-receipt, and the OpenAPI file is the route contract. If an example requires a
-credential, customer tenant, or managed control plane, it does not belong in the
-first-run OSS path. Keep this page focused on proving the boundary can allow,
-deny, record, and verify a local action.
+The quickstart uses Console registration as the primary adoption path. Console
+provides the dashboard for receipts, evidence, and run history. The local CLI
+remains the secondary path for offline proof verification and integration
+testing. `helm-ai-kernel serve` owns the boundary, demo routes create and
+verify a receipt, and the OpenAPI file is the route contract.
 
-## 1. Install Or Build
+## 0. Register At Console
 
-Use Homebrew for the published macOS CLI:
+Create your account at <https://console.helm.mindburn.org>. The Console is the
+primary surface for managing runs, inspecting receipts, and reviewing evidence.
+
+## 1. Install And Pair
+
+Install the CLI via Homebrew, log in, and pair your workstation with the Console:
 
 ```bash
 brew install mindburnlabs/tap/helm-ai-kernel
 helm-ai-kernel --version
+helm-ai-kernel login
+helm-ai-kernel console pair
 ```
 
 Use a source build when editing this repository:
@@ -94,7 +106,7 @@ docker compose up -d
 
 ## 2. Launch A Supported App
 
-For the instant no-secret path, run demo mode:
+For the instant demo path (no model key required), run demo mode:
 
 ```bash
 ./bin/helm up openclaw --demo --no-open

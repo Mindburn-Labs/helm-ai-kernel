@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"testing"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 func TestExportAndVerify_RoundTrip(t *testing.T) {
@@ -80,5 +82,65 @@ func TestVerifyPack_TamperedFile(t *testing.T) {
 	// Valid pack should verify
 	if _, err := VerifyPack(path); err != nil {
 		t.Fatalf("valid pack should verify: %v", err)
+	}
+}
+
+func TestExportPackWithOptions_EUAIActProfile(t *testing.T) {
+	path := t.TempDir() + "/ai-act.tar"
+	profile := completeExportEUAIActProfile()
+
+	if err := ExportPackWithOptions("sess-ai-act", map[string][]byte{
+		"evidence/profile.json": []byte(`{"ok":true}`),
+	}, path, ExportPackOptions{EUAIActProfile: profile}); err != nil {
+		t.Fatalf("export failed: %v", err)
+	}
+
+	manifest, err := VerifyPack(path)
+	if err != nil {
+		t.Fatalf("verify failed: %v", err)
+	}
+	if manifest.EUAIActProfile == nil || manifest.EUAIActProfile.ProfileID != profile.ProfileID {
+		t.Fatalf("manifest profile = %#v, want %s", manifest.EUAIActProfile, profile.ProfileID)
+	}
+}
+
+func TestExportPackWithOptions_RejectsIncompleteEUAIActProfile(t *testing.T) {
+	path := t.TempDir() + "/bad-ai-act.tar"
+	err := ExportPackWithOptions("sess-ai-act", map[string][]byte{
+		"evidence/profile.json": []byte(`{"ok":true}`),
+	}, path, ExportPackOptions{EUAIActProfile: &contracts.EUAIActEvidenceProfile{
+		ProfileID:              "eu-ai-act:bad",
+		RoleMap:                contracts.EUAIActRoleMap{Deployer: "customer"},
+		RiskCategory:           "high-risk employment",
+		RelevantArticles:       []string{"Article 14"},
+		ProviderOrDeployerRole: "deployer",
+		RedactionProfile:       "employment_minimized",
+		TimelineStatus:         "FINAL",
+	}})
+	if err == nil {
+		t.Fatal("expected incomplete profile export to fail")
+	}
+}
+
+func completeExportEUAIActProfile() *contracts.EUAIActEvidenceProfile {
+	return &contracts.EUAIActEvidenceProfile{
+		ProfileID:                           "eu-ai-act:export:1",
+		RoleMap:                             contracts.EUAIActRoleMap{Deployer: "customer"},
+		RiskCategory:                        "high-risk Annex III employment",
+		RelevantArticles:                    []string{"Article 9", "Article 10", "Article 12", "Article 14", "Article 26", "Article 27", "Article 49"},
+		HighRiskReasons:                     []string{"employment and worker management"},
+		ProviderOrDeployerRole:              "deployer",
+		RiskManagementRefs:                  []string{"risk:1"},
+		DataGovernanceRefs:                  []string{"data:1"},
+		LogRecordRefs:                       []string{"logs:1"},
+		TransparencyNoticeRefs:              []string{"instructions:1"},
+		HumanOversightRefs:                  []string{"oversight:1"},
+		AccuracyRobustnessCybersecurityRefs: []string{"security:1"},
+		FRIARefs:                            []string{"fria:1"},
+		AffectedPersonNoticeRefs:            []string{"notice:1"},
+		RegistrationRefs:                    []string{"registration:1"},
+		RedactionProfile:                    "employment_minimized",
+		TimelineStatus:                      "FINAL",
+		RedactionMetadata:                   map[string]string{"profile": "employment_minimized"},
 	}
 }

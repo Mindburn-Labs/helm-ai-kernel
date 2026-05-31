@@ -260,3 +260,76 @@ func TestEvidencePackValidation_RequiredFields(t *testing.T) {
 		})
 	}
 }
+
+func TestEvidencePackValidation_EUAIActProfile(t *testing.T) {
+	pack := &contracts.EvidencePack{
+		PackID: "pack-1",
+		Identity: contracts.EvidencePackIdentity{
+			ActorID: "user-1",
+		},
+		Policy: contracts.EvidencePackPolicy{
+			DecisionID: "dec-1",
+		},
+		Effect: contracts.EvidencePackEffect{
+			EffectID: "effect-1",
+		},
+		Execution: contracts.EvidencePackExecution{
+			ExecutionID: "exec-1",
+			Status:      "success",
+		},
+		EUAIActProfile: &contracts.EUAIActEvidenceProfile{
+			ProfileID:              "eu-ai-act:missing",
+			RoleMap:                contracts.EUAIActRoleMap{Deployer: "customer"},
+			RiskCategory:           "high-risk employment",
+			RelevantArticles:       []string{"Article 14"},
+			ProviderOrDeployerRole: "deployer",
+			RedactionProfile:       "employment_minimized",
+			TimelineStatus:         "FINAL",
+		},
+	}
+
+	issues := ValidateEvidencePack(pack)
+	found := false
+	for _, issue := range issues {
+		if issue == "eu_ai_act_profile.human_oversight_refs is required for high-risk profiles" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("issues = %v, want missing oversight ref", issues)
+	}
+}
+
+func TestEvidencePackHashIncludesEUAIActProfile(t *testing.T) {
+	pack := &contracts.EvidencePack{
+		PackID:        "pack-1",
+		FormatVersion: "1.0.0",
+		CreatedAt:     time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC),
+		Identity:      contracts.EvidencePackIdentity{ActorID: "user-1"},
+		Policy:        contracts.EvidencePackPolicy{DecisionID: "dec-1"},
+		Effect:        contracts.EvidencePackEffect{EffectID: "effect-1"},
+		Execution:     contracts.EvidencePackExecution{ExecutionID: "exec-1", Status: "success"},
+	}
+
+	withoutProfile, err := computeEvidencePackHash(pack)
+	if err != nil {
+		t.Fatalf("hash without profile: %v", err)
+	}
+	pack.EUAIActProfile = &contracts.EUAIActEvidenceProfile{
+		ProfileID:              "eu-ai-act:hr:1",
+		RoleMap:                contracts.EUAIActRoleMap{Deployer: "customer"},
+		RiskCategory:           "high-risk employment",
+		RelevantArticles:       []string{"Article 14"},
+		ProviderOrDeployerRole: "deployer",
+		RedactionProfile:       "employment_minimized",
+		TimelineStatus:         "FINAL",
+	}
+	withProfile, err := computeEvidencePackHash(pack)
+	if err != nil {
+		t.Fatalf("hash with profile: %v", err)
+	}
+	if withProfile == withoutProfile {
+		t.Fatal("EU AI Act profile changes must affect evidence pack hash")
+	}
+}

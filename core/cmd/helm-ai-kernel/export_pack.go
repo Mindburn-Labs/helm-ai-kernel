@@ -10,21 +10,42 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // ExportManifest is written as manifest.json inside the evidence pack.
 type ExportManifest struct {
-	Version    string            `json:"version"`
-	ExportedAt string            `json:"exported_at"`
-	SessionID  string            `json:"session_id"`
-	FileHashes map[string]string `json:"file_hashes"`
-	PackHash   string            `json:"pack_hash,omitempty"`
+	Version        string                            `json:"version"`
+	ExportedAt     string                            `json:"exported_at"`
+	SessionID      string                            `json:"session_id"`
+	FileHashes     map[string]string                 `json:"file_hashes"`
+	PackHash       string                            `json:"pack_hash,omitempty"`
+	EUAIActProfile *contracts.EUAIActEvidenceProfile `json:"eu_ai_act_profile,omitempty"`
+	RedactionMeta  map[string]string                 `json:"redaction_metadata,omitempty"`
+}
+
+// ExportPackOptions controls optional evidence profile metadata.
+type ExportPackOptions struct {
+	EUAIActProfile *contracts.EUAIActEvidenceProfile
+	RedactionMeta  map[string]string
 }
 
 // ExportPack creates a deterministic tar.gz evidence pack.
 // Determinism: sorted paths, fixed mtime(0), stable uid/gid(0).
 func ExportPack(sessionID string, files map[string][]byte, outPath string) error {
+	return ExportPackWithOptions(sessionID, files, outPath, ExportPackOptions{})
+}
+
+// ExportPackWithOptions creates a deterministic tar.gz evidence pack with
+// optional compliance evidence metadata. Existing consumers can continue using
+// ExportPack; profiles are validated only when explicitly supplied.
+func ExportPackWithOptions(sessionID string, files map[string][]byte, outPath string, opts ExportPackOptions) error {
+	if issues := contracts.ValidateEUAIActEvidenceProfile(opts.EUAIActProfile); len(issues) > 0 {
+		return fmt.Errorf("invalid EU AI Act evidence profile: %s", strings.Join(issues, "; "))
+	}
 	f, err := os.Create(outPath)
 	if err != nil {
 		return fmt.Errorf("create output: %w", err)
@@ -53,10 +74,12 @@ func ExportPack(sessionID string, files map[string][]byte, outPath string) error
 
 	// Build manifest
 	manifest := ExportManifest{
-		Version:    "1.0",
-		ExportedAt: time.Now().UTC().Format(time.RFC3339),
-		SessionID:  sessionID,
-		FileHashes: fileHashes,
+		Version:        "1.0",
+		ExportedAt:     time.Now().UTC().Format(time.RFC3339),
+		SessionID:      sessionID,
+		FileHashes:     fileHashes,
+		EUAIActProfile: opts.EUAIActProfile,
+		RedactionMeta:  opts.RedactionMeta,
 	}
 	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
@@ -143,6 +166,9 @@ func VerifyPack(packPath string) (*ExportManifest, error) {
 
 	if manifest == nil {
 		return nil, fmt.Errorf("manifest.json not found in pack")
+	}
+	if issues := contracts.ValidateEUAIActEvidenceProfile(manifest.EUAIActProfile); len(issues) > 0 {
+		return nil, fmt.Errorf("invalid EU AI Act evidence profile: %s", strings.Join(issues, "; "))
 	}
 
 	// Verify file hashes

@@ -219,6 +219,65 @@ func TestVerifyBundle_IndexHashMismatch(t *testing.T) {
 	}
 }
 
+func TestVerifyBundle_EUAIActProfileValidatesWhenPresent(t *testing.T) {
+	dir := createValidCanonicalBundleFixture(t)
+	writeJSON(t, filepath.Join(dir, "04_EXPORTS", "ai_act_profile.json"), map[string]any{
+		"eu_ai_act_profile": map[string]any{
+			"profile_id":                             "eu-ai-act:hr:1",
+			"role_map":                               map[string]any{"deployer": "customer"},
+			"risk_category":                          "high-risk Annex III employment",
+			"relevant_articles":                      []string{"Article 9", "Article 14", "Article 26", "Article 27", "Article 49"},
+			"high_risk_reasons":                      []string{"employment and worker management"},
+			"provider_or_deployer_role":              "deployer",
+			"risk_management_refs":                   []string{"risk:1"},
+			"data_governance_refs":                   []string{"data:1"},
+			"log_record_refs":                        []string{"logs:1"},
+			"transparency_notice_refs":               []string{"instructions:1"},
+			"human_oversight_refs":                   []string{"oversight:1"},
+			"accuracy_robustness_cybersecurity_refs": []string{"security:1"},
+			"fria_refs":                              []string{"fria:1"},
+			"affected_person_notice_refs":            []string{"notice:1"},
+			"registration_refs":                      []string{"registration:1"},
+			"redaction_profile":                      "employment_minimized",
+			"timeline_status":                        "FINAL",
+			"redaction_metadata":                     map[string]string{"profile": "employment_minimized"},
+		},
+	})
+
+	report, err := VerifyBundle(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !report.Verified {
+		t.Fatalf("expected PASS, got %s", report.Summary)
+	}
+	assertCheck(t, report, "eu_ai_act_profile", true)
+}
+
+func TestVerifyBundle_EUAIActProfileRejectsMissingRequiredRefs(t *testing.T) {
+	dir := createValidCanonicalBundleFixture(t)
+	writeJSON(t, filepath.Join(dir, "04_EXPORTS", "ai_act_profile.json"), map[string]any{
+		"eu_ai_act_profile": map[string]any{
+			"profile_id":                "eu-ai-act:hr:1",
+			"role_map":                  map[string]any{"deployer": "customer"},
+			"risk_category":             "high-risk Annex III employment",
+			"relevant_articles":         []string{"Article 14"},
+			"provider_or_deployer_role": "deployer",
+			"redaction_profile":         "employment_minimized",
+			"timeline_status":           "FINAL",
+		},
+	})
+
+	report, err := VerifyBundle(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if report.Verified {
+		t.Fatal("expected EU AI Act profile failure")
+	}
+	assertCheck(t, report, "eu_ai_act_profile", false)
+}
+
 func TestVerifyBundle_ValidWithHashes(t *testing.T) {
 	dir := createValidBundleFixture(t)
 
@@ -357,6 +416,19 @@ func TestVerifyBundle_GoldenFixtureRoots(t *testing.T) {
 	if report.Roots.EntryCount != 2 {
 		t.Fatalf("entry count mismatch: expected 2, got %d", report.Roots.EntryCount)
 	}
+}
+
+func assertCheck(t *testing.T, report *VerifyReport, name string, pass bool) {
+	t.Helper()
+	for _, check := range report.Checks {
+		if check.Name == name {
+			if check.Pass != pass {
+				t.Fatalf("check %s pass = %v, want %v; reason=%s", name, check.Pass, pass, check.Reason)
+			}
+			return
+		}
+	}
+	t.Fatalf("check %s not found in %#v", name, report.Checks)
 }
 
 func writeJSON(t *testing.T, path string, v any) {

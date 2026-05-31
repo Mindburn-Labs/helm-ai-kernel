@@ -1503,7 +1503,7 @@ next steps.
 QUALITY GATES
 ====================================================================
 
-No code should be considered production-ready unless it satisfies these gates.
+No code should be considered production-grade unless it satisfies these gates.
 
 Architecture:
 

@@ -1,6 +1,6 @@
 # BGT Labs Sentinel Interoperability Adapter
 
-> Status: production-ready. This adapter certifies the integration of BGT Labs Sentinel universal auth proposals within the HELM AI Kernel gateway.
+> Status: integration-certified. This adapter certifies the integration of BGT Labs Sentinel universal auth proposals within the HELM AI Kernel gateway.
 
 HELM integrates with BGT Labs Sentinel via the `SentinelConnector` to ingest external execution proposals and yield offline-verifiable cryptographic execution receipts. By serving as an authorization gateway, HELM bridges universal intent formats with fine-grained local Cedar policy enforcement.
 

@@ -1,6 +1,6 @@
 # Vaultak Interoperability Adapter
 
-> Status: production-ready. This adapter certifies the integration between Vaultak transaction boundaries and the HELM Warm Sandbox Leasing subsystem.
+> Status: integration-certified. This adapter certifies the integration between Vaultak transaction boundaries and the HELM Warm Sandbox Leasing subsystem.
 
 HELM integrates with Vaultak to bind isolated sandboxed runners to transactional undo logs. By linking runner lifecycles directly to Vaultak transaction IDs, HELM guarantees state reversibility and rapid execution rollback capability.
 

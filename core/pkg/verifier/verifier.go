@@ -91,6 +91,10 @@ func VerifyBundle(bundlePath string) (*VerifyReport, error) {
 	// 3. File hash integrity
 	report.addChecks(checkFileHashes(bundlePath))
 
+	// 3b. Optional EU AI Act profile integrity. Absence remains valid for
+	// legacy EvidencePacks; presence must be complete and redaction-safe.
+	report.addCheck(checkEUAIActEvidenceProfile(bundlePath))
+
 	// 4. Chain integrity (receipt ordering)
 	report.addCheck(checkChainIntegrity(bundlePath))
 

@@ -81,6 +81,9 @@ type EvidencePackInput struct {
 	// Verification and harness-state evidence
 	VerificationScopes []contracts.VerificationScope
 	HarnessTraceRefs   []contracts.HarnessTraceRef
+
+	// EU AI Act evidence profile
+	EUAIActProfile *contracts.EUAIActEvidenceProfile
 }
 
 // Produce creates an EvidencePack from the input.
@@ -173,6 +176,7 @@ func (p *EvidencePackProducer) Produce(ctx context.Context, input *EvidencePackI
 		BundledArtifacts:   input.BundledArtifacts,
 		VerificationScopes: input.VerificationScopes,
 		HarnessTraceRefs:   input.HarnessTraceRefs,
+		EUAIActProfile:     input.EUAIActProfile,
 
 		Attestation: contracts.EvidencePackAttestation{
 			KernelVersion: p.kernelVersion,
@@ -214,6 +218,7 @@ func computeEvidencePackHash(pack *contracts.EvidencePack) (string, error) {
 		BundledArtifacts   []contracts.ParsedArtifact           `json:"bundled_artifacts,omitempty"`
 		VerificationScopes []contracts.VerificationScope        `json:"verification_scopes,omitempty"`
 		HarnessTraceRefs   []contracts.HarnessTraceRef          `json:"harness_trace_refs,omitempty"`
+		EUAIActProfile     *contracts.EUAIActEvidenceProfile    `json:"eu_ai_act_profile,omitempty"`
 	}{
 		PackID:             pack.PackID,
 		FormatVersion:      pack.FormatVersion,
@@ -230,6 +235,7 @@ func computeEvidencePackHash(pack *contracts.EvidencePack) (string, error) {
 		BundledArtifacts:   pack.BundledArtifacts,
 		VerificationScopes: pack.VerificationScopes,
 		HarnessTraceRefs:   pack.HarnessTraceRefs,
+		EUAIActProfile:     pack.EUAIActProfile,
 	}
 
 	data, err := canonicalize.JCS(hashable)
@@ -263,6 +269,7 @@ func ValidateEvidencePack(pack *contracts.EvidencePack) []string {
 	if pack.Execution.Status == "" {
 		issues = append(issues, "execution.status is required")
 	}
+	issues = append(issues, contracts.ValidateEUAIActEvidenceProfile(pack.EUAIActProfile)...)
 
 	// Verify pack hash
 	if pack.Attestation.PackHash != "" {

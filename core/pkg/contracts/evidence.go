@@ -45,6 +45,9 @@ type EvidencePack struct {
 	// HarnessTraceRefs link telemetry that influenced execution or replay.
 	HarnessTraceRefs []HarnessTraceRef `json:"harness_trace_refs,omitempty"`
 
+	// EUAIActProfile binds high-risk AI system obligations to concrete evidence.
+	EUAIActProfile *EUAIActEvidenceProfile `json:"eu_ai_act_profile,omitempty"`
+
 	// Attestation
 	Attestation EvidencePackAttestation `json:"attestation"`
 
@@ -80,6 +83,43 @@ type HarnessTraceRef struct {
 	URI     string    `json:"uri,omitempty"`
 	Kind    string    `json:"kind,omitempty"`
 	At      time.Time `json:"at,omitempty"`
+}
+
+// EUAIActEvidenceProfile captures the evidence refs needed to verify EU AI Act
+// posture without making legal conclusions inside the pack.
+type EUAIActEvidenceProfile struct {
+	ProfileID                           string            `json:"profile_id,omitempty"`
+	RoleMap                             EUAIActRoleMap    `json:"role_map,omitempty"`
+	RiskCategory                        string            `json:"risk_category,omitempty"`
+	RelevantArticles                    []string          `json:"relevant_articles,omitempty"`
+	HighRiskReasons                     []string          `json:"high_risk_reasons,omitempty"`
+	ProviderOrDeployerRole              string            `json:"provider_or_deployer_role,omitempty"`
+	TechnicalDocumentationRefs          []string          `json:"technical_documentation_refs,omitempty"`
+	RiskManagementRefs                  []string          `json:"risk_management_refs,omitempty"`
+	DataGovernanceRefs                  []string          `json:"data_governance_refs,omitempty"`
+	LogRecordRefs                       []string          `json:"log_record_refs,omitempty"`
+	TransparencyNoticeRefs              []string          `json:"transparency_notice_refs,omitempty"`
+	HumanOversightRefs                  []string          `json:"human_oversight_refs,omitempty"`
+	AccuracyRobustnessCybersecurityRefs []string          `json:"accuracy_robustness_cybersecurity_refs,omitempty"`
+	FRIARefs                            []string          `json:"fria_refs,omitempty"`
+	AffectedPersonNoticeRefs            []string          `json:"affected_person_notice_refs,omitempty"`
+	RegistrationRefs                    []string          `json:"registration_refs,omitempty"`
+	IncidentRefs                        []string          `json:"incident_refs,omitempty"`
+	CorrectiveActionRefs                []string          `json:"corrective_action_refs,omitempty"`
+	RedactionProfile                    string            `json:"redaction_profile,omitempty"`
+	RetentionProfile                    string            `json:"retention_profile,omitempty"`
+	TimelineStatus                      string            `json:"timeline_status,omitempty"`
+	RedactionMetadata                   map[string]string `json:"redaction_metadata,omitempty"`
+}
+
+// EUAIActRoleMap records who acts in each regulatory role for this pack.
+type EUAIActRoleMap struct {
+	Provider            string `json:"provider,omitempty"`
+	Deployer            string `json:"deployer,omitempty"`
+	Importer            string `json:"importer,omitempty"`
+	Distributor         string `json:"distributor,omitempty"`
+	ProductManufacturer string `json:"product_manufacturer,omitempty"`
+	Operator            string `json:"operator,omitempty"`
 }
 
 // NetworkLogRef references a network activity log captured during execution.

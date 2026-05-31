@@ -11,7 +11,7 @@ policy, release, and security surfaces. The highest priority items are:
 - Restore green remote CI after the GitHub Actions billing lock is resolved.
 - Keep package install instructions tied to verified public registry state.
 - Add production hardware validation before describing vendor TEE attestation
-  as production-ready.
+  as ready for production deployments.
 - Grow the public maintainer set beyond the current Mindburn Labs core team.
 
 Release-level changes continue to be documented in `CHANGELOG.md`; release

@@ -25,10 +25,10 @@ addopts = "-v --tb=short"
 
 [tool.coverage.run]
 source = ["helm_sdk"]
-omit = ["helm_sdk/types_gen.py", "helm_sdk/generated/*"]
+branch = true
 
 [tool.coverage.report]
-fail_under = 80
+fail_under = 100
 show_missing = true
 exclude_lines = [
     "pragma: no cover",

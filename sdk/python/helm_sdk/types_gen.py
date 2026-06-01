@@ -411,6 +411,7 @@ class AccountEntitlements(BaseModel):
     __properties: ClassVar[List[str]] = ["principal_id", "tenant_id", "workspace_id", "plan", "plan_alias", "capabilities", "limits", "source", "updated_at"]
 
     @field_validator('plan')
+    @classmethod
     def plan_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -542,6 +543,7 @@ class AccountSession(BaseModel):
     __properties: ClassVar[List[str]] = ["session_id", "principal_id", "tenant_id", "workspace_id", "plan", "plan_alias", "edition", "deployment_mode", "account_lifecycle", "offer_code", "source", "expires_at"]
 
     @field_validator('plan')
+    @classmethod
     def plan_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -5493,6 +5495,7 @@ class EntitlementDecision(BaseModel):
     __properties: ClassVar[List[str]] = ["allowed", "user_state", "required_capability", "reason_code", "reason", "upgrade_reason", "limit", "used", "remaining", "decision_ref", "source", "expires_at"]
 
     @field_validator('user_state')
+    @classmethod
     def user_state_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -5953,6 +5956,7 @@ class EnvExposurePolicy(BaseModel):
     __properties: ClassVar[List[str]] = ["mode", "names", "names_hash", "redacted"]
 
     @field_validator('mode')
+    @classmethod
     def mode_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['deny-all', 'allowlist', 'redacted']):
@@ -6045,6 +6049,7 @@ class EvidenceEnvelopeExportRequest(BaseModel):
     __properties: ClassVar[List[str]] = ["manifest_id", "envelope", "native_evidence_hash", "subject", "experimental"]
 
     @field_validator('envelope')
+    @classmethod
     def envelope_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['dsse', 'jws', 'in-toto', 'slsa', 'sigstore', 'scitt', 'cose']):

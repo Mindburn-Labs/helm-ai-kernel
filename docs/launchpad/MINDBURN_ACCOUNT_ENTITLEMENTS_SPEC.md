@@ -1,13 +1,14 @@
 ---
 title: Mindburn Account Entitlements Integration Contract
-last_reviewed: 2026-05-22
+last_reviewed: 2026-05-23
 ---
 
 # Mindburn Account Entitlements Integration Contract
 
-Status: target integration contract. `helm-ai-kernel` does not currently ship a
-production Free / Individual / Enterprise entitlement service or Mindburn hosted
-login flow. Kernel Launchpad must not infer account tier in API state.
+Status: integration contract plus optional Kernel adapter. `helm-ai-enterprise`
+Control Plane owns hosted Free / Individual / Enterprise account decisions.
+`helm-ai-kernel` remains self-hostable and does not infer account tier when the
+hosted adapter is not configured.
 
 ## Current Repo-Backed Scope
 
@@ -20,7 +21,7 @@ login flow. Kernel Launchpad must not infer account tier in API state.
   refs, offline verify commands, sandbox grants, and MCP state are not premium
   UI features.
 
-## Target Hosted Flow
+## Hosted Flow
 
 ```text
 Mindburn hosted shell
@@ -32,8 +33,38 @@ Mindburn hosted shell
   -> receipts / EvidencePack / teardown
 ```
 
-The hosted shell may supply account state. It must not implement custom app
-launch, custom proof display, or tier-specific Kernel semantics.
+The hosted shell supplies account/session state through Control Plane account
+routes. It must not implement custom app launch, custom proof display, or
+tier-specific Kernel semantics.
+
+## Implemented Control Plane Routes
+
+`helm-ai-enterprise` exposes the hosted account authority:
+
+```text
+GET  /api/v1/account/session
+GET  /api/v1/account/entitlements
+POST /api/v1/account/decisions
+```
+
+Canonical hosted plans are:
+
+```text
+free
+individual
+enterprise
+```
+
+Compatibility aliases are normalized before decisions:
+
+```text
+oss-free, free, trial -> free
+basic, pro -> individual
+enterprise -> enterprise
+```
+
+The decision endpoint returns action-level access state and must be called
+before mutating Launchpad side effects when hosted gating is enabled.
 
 ## Session Contract
 
@@ -54,6 +85,25 @@ Standalone clients may continue to use existing tenant/admin headers. That
 local identity is not equivalent to a hosted billing plan unless a
 real entitlement source provides it.
 
+## Kernel Adapter Configuration
+
+Kernel hosted entitlement integration is disabled by default. Configure it only
+when a hosted Control Plane account authority is available:
+
+```bash
+HELM_ACCOUNT_ENTITLEMENTS_URL=https://helm.mindburn.org
+HELM_ACCOUNT_JWKS_URL=https://helm.mindburn.org/.well-known/jwks.json
+HELM_ACCOUNT_ISSUER=https://helm.mindburn.org
+HELM_ACCOUNT_AUDIENCE=helm-ai-kernel
+HELM_ACCOUNT_REQUIRED=false
+```
+
+When disabled, Kernel returns no entitlement fields and preserves existing
+self-hosted behavior. When enabled, Kernel forwards the hosted session credential
+to the Control Plane decision endpoint. When `HELM_ACCOUNT_REQUIRED=true`,
+unavailable or invalid hosted decisions fail closed before mutating Launchpad
+side effects.
+
 ## Entitlement Contract
 
 Entitlements are action decisions, not alternate products:
@@ -65,7 +115,8 @@ Entitlements are action decisions, not alternate products:
     "monthly_launches": 10,
     "concurrent_runs": 1,
     "retention_days": 7,
-    "max_cloud_targets": 1
+    "max_cloud_targets": 0,
+    "evidence_export_mb": 25
   },
   "capabilities": {
     "local_launch": true,
@@ -95,6 +146,29 @@ It should not ask:
 ```text
 Which tier-specific Launchpad should the UI render?
 ```
+
+Decision requests include principal, tenant, workspace, action, app, substrate,
+target, current usage, and optional run ID. Decision responses include:
+
+```json
+{
+  "allowed": false,
+  "user_state": "upgrade_required",
+  "required_capability": "cloud_launch",
+  "reason_code": "ENTITLEMENT_UPGRADE_REQUIRED",
+  "reason": "Capability is not enabled for this hosted account.",
+  "upgrade_reason": "Upgrade your hosted HELM plan to use this capability.",
+  "limit": 0,
+  "used": 0,
+  "remaining": 0,
+  "decision_ref": "ent_abc123",
+  "source": "controlplane.account.decisions",
+  "expires_at": "2026-05-23T12:00:00Z"
+}
+```
+
+Proof viewing and teardown are universal. Launch/create, evidence export,
+cloud launch, custom policy, and bring-your-own-secret actions can be gated.
 
 ## Additive Launchpad Fields
 

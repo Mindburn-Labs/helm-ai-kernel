@@ -41,4 +41,9 @@ type LaunchPlan struct {
 	Status                  string                     `json:"status"`
 	ReasonCode              string                     `json:"reason_code,omitempty"`
 	PlanHash                string                     `json:"plan_hash"`
+	UserState               string                     `json:"user_state,omitempty"`
+	RequiredCapability      string                     `json:"required_capability,omitempty"`
+	UpgradeReason           string                     `json:"upgrade_reason,omitempty"`
+	EntitlementDecision     any                        `json:"entitlement_decision,omitempty"`
+	ActionStates            map[string]any             `json:"action_states,omitempty"`
 }

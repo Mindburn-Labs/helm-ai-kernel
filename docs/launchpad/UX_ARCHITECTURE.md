@@ -5,8 +5,10 @@ last_reviewed: 2026-05-24
 
 # Launchpad External Client Contract
 
-Status: API contract for a standalone Console or other external client. The
-Kernel repo owns the backend facts and proof states, not browser components.
+Status: implemented Console direction for the Kernel repo, with hosted
+entitlements represented as optional backend-returned action state. The hosted
+account authority lives in `helm-ai-enterprise`; Kernel remains self-hostable
+without account configuration.
 
 ## Product Shape
 
@@ -56,10 +58,20 @@ backend evidence exists.
 
 ## Entitlement Boundary
 
-The Kernel repo currently has no production hosted account entitlement layer.
-Future Free / Individual / Enterprise differences belong in account/session
-contracts and backend action decisions. They must not create duplicate
-Launchpad pages, route trees, registries, proof panels, or Kernel semantics.
+Kernel does not create plan state by itself. When
+`HELM_ACCOUNT_ENTITLEMENTS_URL` is unset, the Console sees the same Launchpad
+payloads as before. When the adapter is configured, Kernel may attach additive
+fields:
+
+- `user_state`
+- `required_capability`
+- `upgrade_reason`
+- `entitlement_decision`
+- `action_states`
+
+Mutating routes deny before LaunchKit side effects when the hosted decision
+returns `allowed=false`. Proof viewing and teardown stay on the same universal
+surface and are not paywalled.
 
 Tests may include fixture-only entitlement states to preserve the target UX
 contract. Runtime code must treat those states as optional backend data.

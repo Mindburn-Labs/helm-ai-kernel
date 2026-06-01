@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/account"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	lpimporter "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/importer"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/readmodel"
@@ -42,11 +44,18 @@ func RegisterLaunchpadRoutes(mux *http.ServeMux, svc *Services) {
 			statuses, _ := lpsecrets.NewStore(store.Root()).Statuses()
 			runs, _ := store.List()
 			apps := readmodel.RegistryApps(catalog, statuses, runs)
+			if ok := attachAppEntitlements(w, r, apps, catalog, store); !ok {
+				return
+			}
 			writeLaunchpadJSON(w, http.StatusOK, map[string]any{"apps": apps, "registry_apps": apps})
 		case path == "substrates" && r.Method == http.MethodGet:
 			writeLaunchpadJSON(w, http.StatusOK, map[string]any{"substrates": catalog.Substrates})
 		case path == "matrix" && r.Method == http.MethodGet:
-			writeLaunchpadJSON(w, http.StatusOK, map[string]any{"matrix": catalog.Matrix()})
+			matrix := catalog.Matrix()
+			if ok := attachMatrixEntitlements(w, r, matrix, store); !ok {
+				return
+			}
+			writeLaunchpadJSON(w, http.StatusOK, map[string]any{"matrix": matrix})
 		case path == "plan" && r.Method == http.MethodPost:
 			handleLaunchpadPlan(w, r, catalog, store)
 		case path == "launch" && r.Method == http.MethodPost:
@@ -105,12 +114,18 @@ func handleLaunchpadPlan(w http.ResponseWriter, r *http.Request, catalog *regist
 	if err != nil {
 		compiled.ReasonCode = firstNonEmpty(compiled.ReasonCode, err.Error())
 	}
+	if ok := attachPlanEntitlements(w, r, &compiled, req, store); !ok {
+		return
+	}
 	writeLaunchpadJSON(w, http.StatusAccepted, compiled)
 }
 
 func handleLaunchpadLaunch(w http.ResponseWriter, r *http.Request, catalog *registry.Catalog, store *launchsession.Store) {
 	req, ok := decodeLaunchpadPlanRequest(w, r)
 	if !ok {
+		return
+	}
+	if ok := requireLaunchpadEntitlement(w, r, "launch", req.AppID, req.SubstrateID, "", store); !ok {
 		return
 	}
 	compiled, err := compileLaunchpadPlan(catalog, req, store)
@@ -255,6 +270,9 @@ func handleLaunchpadRunCreate(w http.ResponseWriter, r *http.Request, catalog *r
 	if !ok {
 		return
 	}
+	if ok := requireLaunchpadEntitlement(w, r, "create_run", req.AppID, req.SubstrateID, "", store); !ok {
+		return
+	}
 	app, appOK := catalog.App(req.AppID)
 	substrate, substrateOK := catalog.Substrate(req.SubstrateID)
 	compiled, err := compileLaunchpadPlan(catalog, req, store)
@@ -340,6 +358,9 @@ func handleLaunchpadRunsPath(w http.ResponseWriter, r *http.Request, rest string
 			api.WriteError(w, http.StatusNotFound, "Run not found", err.Error())
 			return
 		}
+		if ok := requireLaunchpadEntitlement(w, r, "evidence_export", run.AppID, run.SubstrateID, runID, store); !ok {
+			return
+		}
 		writeLaunchpadJSON(w, http.StatusAccepted, map[string]any{
 			"run_id":                  runID,
 			"evidencepack_refs":       run.EvidencePackRefs,
@@ -373,6 +394,9 @@ func handleLaunchpadRunsPath(w http.ResponseWriter, r *http.Request, rest string
 func handleLaunchpadPolicySimulate(w http.ResponseWriter, r *http.Request, catalog *registry.Catalog, store *launchsession.Store) {
 	req, ok := decodeLaunchpadPlanRequest(w, r)
 	if !ok {
+		return
+	}
+	if ok := requireLaunchpadEntitlement(w, r, "custom_policy", req.AppID, req.SubstrateID, "", store); !ok {
 		return
 	}
 	app, appOK := catalog.App(req.AppID)
@@ -467,6 +491,9 @@ func handleLaunchpadSecrets(w http.ResponseWriter, r *http.Request, store *launc
 			return
 		}
 		writeLaunchpadJSON(w, http.StatusOK, map[string]any{"secrets": readmodel.SecretGrantStatuses(statuses)})
+		return
+	}
+	if ok := requireLaunchpadEntitlement(w, r, "bring_own_secrets", "", "", "", store); !ok {
 		return
 	}
 	var req struct {
@@ -599,6 +626,171 @@ func detailForStoredRun(catalog *registry.Catalog, run launchsession.LaunchRun) 
 		return readmodel.Detail(app, substrate, compiled, run)
 	}
 	return map[string]any{"run": run, "instance": readmodel.RuntimeFromRun(run), "events": readmodel.EventsFromRun(run)}
+}
+
+func attachAppEntitlements(w http.ResponseWriter, r *http.Request, apps []readmodel.RegistryApp, catalog *registry.Catalog, store *launchsession.Store) bool {
+	client := account.NewClientFromEnv()
+	if !client.Enabled() {
+		return true
+	}
+	substrateID := defaultLaunchpadSubstrate(catalog)
+	for i := range apps {
+		decision, ok := launchpadDecision(w, r, client, "launch", apps[i].AppID, substrateID, "", store)
+		if !ok {
+			return false
+		}
+		applyEntitlementFields(&apps[i].UserState, &apps[i].RequiredCapability, &apps[i].UpgradeReason, &apps[i].EntitlementDecision, &apps[i].ActionStates, "launch", decision)
+	}
+	return true
+}
+
+func attachMatrixEntitlements(w http.ResponseWriter, r *http.Request, matrix []registry.MatrixCell, store *launchsession.Store) bool {
+	client := account.NewClientFromEnv()
+	if !client.Enabled() {
+		return true
+	}
+	for i := range matrix {
+		decision, ok := launchpadDecision(w, r, client, "launch", matrix[i].AppID, matrix[i].SubstrateID, "", store)
+		if !ok {
+			return false
+		}
+		applyEntitlementFields(&matrix[i].UserState, &matrix[i].RequiredCapability, &matrix[i].UpgradeReason, &matrix[i].EntitlementDecision, &matrix[i].ActionStates, "launch", decision)
+		if decision != nil && !decision.Allowed {
+			matrix[i].Launchable = false
+		}
+	}
+	return true
+}
+
+func attachPlanEntitlements(w http.ResponseWriter, r *http.Request, compiled *plan.LaunchPlan, req launchpadPlanRequest, store *launchsession.Store) bool {
+	client := account.NewClientFromEnv()
+	if !client.Enabled() {
+		return true
+	}
+	decision, ok := launchpadDecision(w, r, client, "launch", req.AppID, req.SubstrateID, "", store)
+	if !ok {
+		return false
+	}
+	applyEntitlementFields(&compiled.UserState, &compiled.RequiredCapability, &compiled.UpgradeReason, &compiled.EntitlementDecision, &compiled.ActionStates, "launch", decision)
+	return true
+}
+
+func requireLaunchpadEntitlement(w http.ResponseWriter, r *http.Request, action, appID, substrateID, runID string, store *launchsession.Store) bool {
+	client := account.NewClientFromEnv()
+	if !client.Enabled() {
+		return true
+	}
+	decision, ok := launchpadDecision(w, r, client, action, appID, substrateID, runID, store)
+	if !ok {
+		return false
+	}
+	if decision != nil && !decision.Allowed {
+		writeLaunchpadJSON(w, http.StatusForbidden, map[string]any{
+			"error":                "entitlement_denied",
+			"reason":               decision.Reason,
+			"upgrade_reason":       decision.UpgradeReason,
+			"entitlement_decision": decision,
+		})
+		return false
+	}
+	return true
+}
+
+func launchpadDecision(w http.ResponseWriter, r *http.Request, client *account.Client, action, appID, substrateID, runID string, store *launchsession.Store) (*account.Decision, bool) {
+	principalID, tenantID := launchpadPrincipalTenant(r)
+	decision, err := client.Decide(r.Context(), r, account.DecisionRequest{
+		PrincipalID:  principalID,
+		TenantID:     tenantID,
+		Action:       action,
+		AppID:        appID,
+		SubstrateID:  substrateID,
+		CurrentUsage: launchpadUsageCounters(store),
+		RunID:        runID,
+	})
+	if err != nil {
+		if client.Required {
+			writeLaunchpadJSON(w, http.StatusForbidden, map[string]any{
+				"error":  "entitlement_unavailable",
+				"reason": err.Error(),
+			})
+			return nil, false
+		}
+		return nil, true
+	}
+	return decision, true
+}
+
+func applyEntitlementFields(userState, requiredCapability, upgradeReason *string, entitlementDecision *any, actionStates *map[string]any, action string, decision *account.Decision) {
+	if decision == nil {
+		return
+	}
+	*userState = decision.UserState
+	*requiredCapability = decision.RequiredCapability
+	*upgradeReason = decision.UpgradeReason
+	*entitlementDecision = decision
+	if *actionStates == nil {
+		*actionStates = map[string]any{}
+	}
+	(*actionStates)[action] = decision
+}
+
+func launchpadUsageCounters(store *launchsession.Store) account.UsageCounters {
+	var counters account.UsageCounters
+	if store == nil {
+		return counters
+	}
+	runs, err := store.List()
+	if err != nil {
+		return counters
+	}
+	cloudTargets := map[string]bool{}
+	for _, run := range runs {
+		if run.State != launchsession.StateDeleted {
+			counters.MonthlyLaunches++
+		}
+		if run.State == launchsession.StateRunning {
+			counters.ConcurrentRuns++
+		}
+		if launchpadSubstrateLooksCloud(run.SubstrateID) {
+			cloudTargets[run.SubstrateID] = true
+		}
+	}
+	counters.CloudTargets = int64(len(cloudTargets))
+	return counters
+}
+
+func launchpadPrincipalTenant(r *http.Request) (string, string) {
+	if principal, err := helmauth.GetPrincipal(r.Context()); err == nil && principal != nil {
+		return principal.GetID(), principal.GetTenantID()
+	}
+	return strings.TrimSpace(r.Header.Get(principalHeader)), strings.TrimSpace(r.Header.Get(tenantHeader))
+}
+
+func defaultLaunchpadSubstrate(catalog *registry.Catalog) string {
+	if catalog == nil {
+		return "local-container"
+	}
+	for _, substrate := range catalog.Substrates {
+		if substrate.ID == "local-container" {
+			return substrate.ID
+		}
+	}
+	if len(catalog.Substrates) > 0 {
+		return catalog.Substrates[0].ID
+	}
+	return "local-container"
+}
+
+func launchpadSubstrateLooksCloud(substrateID string) bool {
+	value := strings.ToLower(strings.TrimSpace(substrateID))
+	return strings.Contains(value, "cloud") ||
+		strings.Contains(value, "aws") ||
+		strings.Contains(value, "gcp") ||
+		strings.Contains(value, "azure") ||
+		strings.Contains(value, "e2b") ||
+		strings.Contains(value, "daytona") ||
+		strings.Contains(value, "hetzner") ||
+		strings.Contains(value, "digitalocean")
 }
 
 func firstString(values []string) string {

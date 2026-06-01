@@ -1555,6 +1555,1074 @@ public static class A2AAgentCardSkillsInner {
 
 
 /**
+ * AccountEntitlements
+ */
+@JsonPropertyOrder({
+  AccountEntitlements.JSON_PROPERTY_PRINCIPAL_ID,
+  AccountEntitlements.JSON_PROPERTY_TENANT_ID,
+  AccountEntitlements.JSON_PROPERTY_WORKSPACE_ID,
+  AccountEntitlements.JSON_PROPERTY_PLAN,
+  AccountEntitlements.JSON_PROPERTY_PLAN_ALIAS,
+  AccountEntitlements.JSON_PROPERTY_CAPABILITIES,
+  AccountEntitlements.JSON_PROPERTY_LIMITS,
+  AccountEntitlements.JSON_PROPERTY_SOURCE,
+  AccountEntitlements.JSON_PROPERTY_UPDATED_AT
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class AccountEntitlements {
+  public static final String JSON_PROPERTY_PRINCIPAL_ID = "principal_id";
+  private String principalId;
+
+  public static final String JSON_PROPERTY_TENANT_ID = "tenant_id";
+  private String tenantId;
+
+  public static final String JSON_PROPERTY_WORKSPACE_ID = "workspace_id";
+  private String workspaceId;
+
+  /**
+   * Gets or Sets plan
+   */
+  public enum PlanEnum {
+    FREE("free"),
+
+    INDIVIDUAL("individual"),
+
+    ENTERPRISE("enterprise");
+
+    private Object value;
+
+    PlanEnum(Object value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public Object getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static PlanEnum fromValue(Object value) {
+      for (PlanEnum b : PlanEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      return null;
+    }
+  }
+
+  public static final String JSON_PROPERTY_PLAN = "plan";
+  private JsonNullable<PlanEnum> plan = JsonNullable.<PlanEnum>of(null);
+
+  public static final String JSON_PROPERTY_PLAN_ALIAS = "plan_alias";
+  private String planAlias;
+
+  public static final String JSON_PROPERTY_CAPABILITIES = "capabilities";
+  private EntitlementCapabilities capabilities;
+
+  public static final String JSON_PROPERTY_LIMITS = "limits";
+  private EntitlementLimits limits;
+
+  public static final String JSON_PROPERTY_SOURCE = "source";
+  private String source;
+
+  public static final String JSON_PROPERTY_UPDATED_AT = "updated_at";
+  private OffsetDateTime updatedAt;
+
+  public AccountEntitlements() {
+  }
+
+  public AccountEntitlements principalId(String principalId) {
+    this.principalId = principalId;
+    return this;
+  }
+
+   /**
+   * Get principalId
+   * @return principalId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPrincipalId() {
+    return principalId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPrincipalId(String principalId) {
+    this.principalId = principalId;
+  }
+
+
+  public AccountEntitlements tenantId(String tenantId) {
+    this.tenantId = tenantId;
+    return this;
+  }
+
+   /**
+   * Get tenantId
+   * @return tenantId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TENANT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getTenantId() {
+    return tenantId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TENANT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTenantId(String tenantId) {
+    this.tenantId = tenantId;
+  }
+
+
+  public AccountEntitlements workspaceId(String workspaceId) {
+    this.workspaceId = workspaceId;
+    return this;
+  }
+
+   /**
+   * Get workspaceId
+   * @return workspaceId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_WORKSPACE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getWorkspaceId() {
+    return workspaceId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_WORKSPACE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setWorkspaceId(String workspaceId) {
+    this.workspaceId = workspaceId;
+  }
+
+
+  public AccountEntitlements plan(PlanEnum plan) {
+    this.plan = JsonNullable.<PlanEnum>of(plan);
+    return this;
+  }
+
+   /**
+   * Get plan
+   * @return plan
+  **/
+  @javax.annotation.Nullable
+  @JsonIgnore
+
+  public PlanEnum getPlan() {
+        return plan.orElse(null);
+  }
+
+  @JsonProperty(JSON_PROPERTY_PLAN)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public JsonNullable<PlanEnum> getPlan_JsonNullable() {
+    return plan;
+  }
+
+  @JsonProperty(JSON_PROPERTY_PLAN)
+  public void setPlan_JsonNullable(JsonNullable<PlanEnum> plan) {
+    this.plan = plan;
+  }
+
+  public void setPlan(PlanEnum plan) {
+    this.plan = JsonNullable.<PlanEnum>of(plan);
+  }
+
+
+  public AccountEntitlements planAlias(String planAlias) {
+    this.planAlias = planAlias;
+    return this;
+  }
+
+   /**
+   * Get planAlias
+   * @return planAlias
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PLAN_ALIAS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPlanAlias() {
+    return planAlias;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PLAN_ALIAS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPlanAlias(String planAlias) {
+    this.planAlias = planAlias;
+  }
+
+
+  public AccountEntitlements capabilities(EntitlementCapabilities capabilities) {
+    this.capabilities = capabilities;
+    return this;
+  }
+
+   /**
+   * Get capabilities
+   * @return capabilities
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CAPABILITIES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public EntitlementCapabilities getCapabilities() {
+    return capabilities;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CAPABILITIES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCapabilities(EntitlementCapabilities capabilities) {
+    this.capabilities = capabilities;
+  }
+
+
+  public AccountEntitlements limits(EntitlementLimits limits) {
+    this.limits = limits;
+    return this;
+  }
+
+   /**
+   * Get limits
+   * @return limits
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_LIMITS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public EntitlementLimits getLimits() {
+    return limits;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_LIMITS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setLimits(EntitlementLimits limits) {
+    this.limits = limits;
+  }
+
+
+  public AccountEntitlements source(String source) {
+    this.source = source;
+    return this;
+  }
+
+   /**
+   * Get source
+   * @return source
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSource() {
+    return source;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSource(String source) {
+    this.source = source;
+  }
+
+
+  public AccountEntitlements updatedAt(OffsetDateTime updatedAt) {
+    this.updatedAt = updatedAt;
+    return this;
+  }
+
+   /**
+   * Get updatedAt
+   * @return updatedAt
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_UPDATED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public OffsetDateTime getUpdatedAt() {
+    return updatedAt;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_UPDATED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setUpdatedAt(OffsetDateTime updatedAt) {
+    this.updatedAt = updatedAt;
+  }
+
+
+  /**
+   * Return true if this AccountEntitlements object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    AccountEntitlements accountEntitlements = (AccountEntitlements) o;
+    return Objects.equals(this.principalId, accountEntitlements.principalId) &&
+        Objects.equals(this.tenantId, accountEntitlements.tenantId) &&
+        Objects.equals(this.workspaceId, accountEntitlements.workspaceId) &&
+        equalsNullable(this.plan, accountEntitlements.plan) &&
+        Objects.equals(this.planAlias, accountEntitlements.planAlias) &&
+        Objects.equals(this.capabilities, accountEntitlements.capabilities) &&
+        Objects.equals(this.limits, accountEntitlements.limits) &&
+        Objects.equals(this.source, accountEntitlements.source) &&
+        Objects.equals(this.updatedAt, accountEntitlements.updatedAt);
+  }
+
+  private static <T> boolean equalsNullable(JsonNullable<T> a, JsonNullable<T> b) {
+    return a == b || (a != null && b != null && a.isPresent() && b.isPresent() && Objects.deepEquals(a.get(), b.get()));
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(principalId, tenantId, workspaceId, hashCodeNullable(plan), planAlias, capabilities, limits, source, updatedAt);
+  }
+
+  private static <T> int hashCodeNullable(JsonNullable<T> a) {
+    if (a == null) {
+      return 1;
+    }
+    return a.isPresent() ? Arrays.deepHashCode(new Object[]{a.get()}) : 31;
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class AccountEntitlements {\n");
+    sb.append("    principalId: ").append(toIndentedString(principalId)).append("\n");
+    sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
+    sb.append("    workspaceId: ").append(toIndentedString(workspaceId)).append("\n");
+    sb.append("    plan: ").append(toIndentedString(plan)).append("\n");
+    sb.append("    planAlias: ").append(toIndentedString(planAlias)).append("\n");
+    sb.append("    capabilities: ").append(toIndentedString(capabilities)).append("\n");
+    sb.append("    limits: ").append(toIndentedString(limits)).append("\n");
+    sb.append("    source: ").append(toIndentedString(source)).append("\n");
+    sb.append("    updatedAt: ").append(toIndentedString(updatedAt)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `principal_id` to the URL query string
+    if (getPrincipalId() != null) {
+      joiner.add(String.format("%sprincipal_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPrincipalId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `tenant_id` to the URL query string
+    if (getTenantId() != null) {
+      joiner.add(String.format("%stenant_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTenantId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `workspace_id` to the URL query string
+    if (getWorkspaceId() != null) {
+      joiner.add(String.format("%sworkspace_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getWorkspaceId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `plan` to the URL query string
+    if (getPlan() != null) {
+      joiner.add(String.format("%splan%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPlan()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `plan_alias` to the URL query string
+    if (getPlanAlias() != null) {
+      joiner.add(String.format("%splan_alias%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPlanAlias()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `capabilities` to the URL query string
+    if (getCapabilities() != null) {
+      joiner.add(getCapabilities().toUrlQueryString(prefix + "capabilities" + suffix));
+    }
+
+    // add `limits` to the URL query string
+    if (getLimits() != null) {
+      joiner.add(getLimits().toUrlQueryString(prefix + "limits" + suffix));
+    }
+
+    // add `source` to the URL query string
+    if (getSource() != null) {
+      joiner.add(String.format("%ssource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `updated_at` to the URL query string
+    if (getUpdatedAt() != null) {
+      joiner.add(String.format("%supdated_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getUpdatedAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.8
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * AccountSession
+ */
+@JsonPropertyOrder({
+  AccountSession.JSON_PROPERTY_SESSION_ID,
+  AccountSession.JSON_PROPERTY_PRINCIPAL_ID,
+  AccountSession.JSON_PROPERTY_TENANT_ID,
+  AccountSession.JSON_PROPERTY_WORKSPACE_ID,
+  AccountSession.JSON_PROPERTY_PLAN,
+  AccountSession.JSON_PROPERTY_PLAN_ALIAS,
+  AccountSession.JSON_PROPERTY_EDITION,
+  AccountSession.JSON_PROPERTY_DEPLOYMENT_MODE,
+  AccountSession.JSON_PROPERTY_ACCOUNT_LIFECYCLE,
+  AccountSession.JSON_PROPERTY_OFFER_CODE,
+  AccountSession.JSON_PROPERTY_SOURCE,
+  AccountSession.JSON_PROPERTY_EXPIRES_AT
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class AccountSession {
+  public static final String JSON_PROPERTY_SESSION_ID = "session_id";
+  private String sessionId;
+
+  public static final String JSON_PROPERTY_PRINCIPAL_ID = "principal_id";
+  private String principalId;
+
+  public static final String JSON_PROPERTY_TENANT_ID = "tenant_id";
+  private String tenantId;
+
+  public static final String JSON_PROPERTY_WORKSPACE_ID = "workspace_id";
+  private String workspaceId;
+
+  /**
+   * Gets or Sets plan
+   */
+  public enum PlanEnum {
+    FREE("free"),
+
+    INDIVIDUAL("individual"),
+
+    ENTERPRISE("enterprise");
+
+    private Object value;
+
+    PlanEnum(Object value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public Object getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static PlanEnum fromValue(Object value) {
+      for (PlanEnum b : PlanEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      return null;
+    }
+  }
+
+  public static final String JSON_PROPERTY_PLAN = "plan";
+  private JsonNullable<PlanEnum> plan = JsonNullable.<PlanEnum>of(null);
+
+  public static final String JSON_PROPERTY_PLAN_ALIAS = "plan_alias";
+  private String planAlias;
+
+  public static final String JSON_PROPERTY_EDITION = "edition";
+  private String edition;
+
+  public static final String JSON_PROPERTY_DEPLOYMENT_MODE = "deployment_mode";
+  private String deploymentMode;
+
+  public static final String JSON_PROPERTY_ACCOUNT_LIFECYCLE = "account_lifecycle";
+  private String accountLifecycle;
+
+  public static final String JSON_PROPERTY_OFFER_CODE = "offer_code";
+  private String offerCode;
+
+  public static final String JSON_PROPERTY_SOURCE = "source";
+  private String source;
+
+  public static final String JSON_PROPERTY_EXPIRES_AT = "expires_at";
+  private OffsetDateTime expiresAt;
+
+  public AccountSession() {
+  }
+
+  public AccountSession sessionId(String sessionId) {
+    this.sessionId = sessionId;
+    return this;
+  }
+
+   /**
+   * Get sessionId
+   * @return sessionId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSessionId() {
+    return sessionId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSessionId(String sessionId) {
+    this.sessionId = sessionId;
+  }
+
+
+  public AccountSession principalId(String principalId) {
+    this.principalId = principalId;
+    return this;
+  }
+
+   /**
+   * Get principalId
+   * @return principalId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPrincipalId() {
+    return principalId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPrincipalId(String principalId) {
+    this.principalId = principalId;
+  }
+
+
+  public AccountSession tenantId(String tenantId) {
+    this.tenantId = tenantId;
+    return this;
+  }
+
+   /**
+   * Get tenantId
+   * @return tenantId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TENANT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getTenantId() {
+    return tenantId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TENANT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTenantId(String tenantId) {
+    this.tenantId = tenantId;
+  }
+
+
+  public AccountSession workspaceId(String workspaceId) {
+    this.workspaceId = workspaceId;
+    return this;
+  }
+
+   /**
+   * Get workspaceId
+   * @return workspaceId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_WORKSPACE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getWorkspaceId() {
+    return workspaceId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_WORKSPACE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setWorkspaceId(String workspaceId) {
+    this.workspaceId = workspaceId;
+  }
+
+
+  public AccountSession plan(PlanEnum plan) {
+    this.plan = JsonNullable.<PlanEnum>of(plan);
+    return this;
+  }
+
+   /**
+   * Get plan
+   * @return plan
+  **/
+  @javax.annotation.Nullable
+  @JsonIgnore
+
+  public PlanEnum getPlan() {
+        return plan.orElse(null);
+  }
+
+  @JsonProperty(JSON_PROPERTY_PLAN)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public JsonNullable<PlanEnum> getPlan_JsonNullable() {
+    return plan;
+  }
+
+  @JsonProperty(JSON_PROPERTY_PLAN)
+  public void setPlan_JsonNullable(JsonNullable<PlanEnum> plan) {
+    this.plan = plan;
+  }
+
+  public void setPlan(PlanEnum plan) {
+    this.plan = JsonNullable.<PlanEnum>of(plan);
+  }
+
+
+  public AccountSession planAlias(String planAlias) {
+    this.planAlias = planAlias;
+    return this;
+  }
+
+   /**
+   * Get planAlias
+   * @return planAlias
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PLAN_ALIAS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPlanAlias() {
+    return planAlias;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PLAN_ALIAS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPlanAlias(String planAlias) {
+    this.planAlias = planAlias;
+  }
+
+
+  public AccountSession edition(String edition) {
+    this.edition = edition;
+    return this;
+  }
+
+   /**
+   * Get edition
+   * @return edition
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EDITION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEdition() {
+    return edition;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EDITION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEdition(String edition) {
+    this.edition = edition;
+  }
+
+
+  public AccountSession deploymentMode(String deploymentMode) {
+    this.deploymentMode = deploymentMode;
+    return this;
+  }
+
+   /**
+   * Get deploymentMode
+   * @return deploymentMode
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_DEPLOYMENT_MODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getDeploymentMode() {
+    return deploymentMode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DEPLOYMENT_MODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setDeploymentMode(String deploymentMode) {
+    this.deploymentMode = deploymentMode;
+  }
+
+
+  public AccountSession accountLifecycle(String accountLifecycle) {
+    this.accountLifecycle = accountLifecycle;
+    return this;
+  }
+
+   /**
+   * Get accountLifecycle
+   * @return accountLifecycle
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ACCOUNT_LIFECYCLE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getAccountLifecycle() {
+    return accountLifecycle;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ACCOUNT_LIFECYCLE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setAccountLifecycle(String accountLifecycle) {
+    this.accountLifecycle = accountLifecycle;
+  }
+
+
+  public AccountSession offerCode(String offerCode) {
+    this.offerCode = offerCode;
+    return this;
+  }
+
+   /**
+   * Get offerCode
+   * @return offerCode
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_OFFER_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getOfferCode() {
+    return offerCode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_OFFER_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setOfferCode(String offerCode) {
+    this.offerCode = offerCode;
+  }
+
+
+  public AccountSession source(String source) {
+    this.source = source;
+    return this;
+  }
+
+   /**
+   * Get source
+   * @return source
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSource() {
+    return source;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSource(String source) {
+    this.source = source;
+  }
+
+
+  public AccountSession expiresAt(OffsetDateTime expiresAt) {
+    this.expiresAt = expiresAt;
+    return this;
+  }
+
+   /**
+   * Get expiresAt
+   * @return expiresAt
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EXPIRES_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public OffsetDateTime getExpiresAt() {
+    return expiresAt;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EXPIRES_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setExpiresAt(OffsetDateTime expiresAt) {
+    this.expiresAt = expiresAt;
+  }
+
+
+  /**
+   * Return true if this AccountSession object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    AccountSession accountSession = (AccountSession) o;
+    return Objects.equals(this.sessionId, accountSession.sessionId) &&
+        Objects.equals(this.principalId, accountSession.principalId) &&
+        Objects.equals(this.tenantId, accountSession.tenantId) &&
+        Objects.equals(this.workspaceId, accountSession.workspaceId) &&
+        equalsNullable(this.plan, accountSession.plan) &&
+        Objects.equals(this.planAlias, accountSession.planAlias) &&
+        Objects.equals(this.edition, accountSession.edition) &&
+        Objects.equals(this.deploymentMode, accountSession.deploymentMode) &&
+        Objects.equals(this.accountLifecycle, accountSession.accountLifecycle) &&
+        Objects.equals(this.offerCode, accountSession.offerCode) &&
+        Objects.equals(this.source, accountSession.source) &&
+        Objects.equals(this.expiresAt, accountSession.expiresAt);
+  }
+
+  private static <T> boolean equalsNullable(JsonNullable<T> a, JsonNullable<T> b) {
+    return a == b || (a != null && b != null && a.isPresent() && b.isPresent() && Objects.deepEquals(a.get(), b.get()));
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(sessionId, principalId, tenantId, workspaceId, hashCodeNullable(plan), planAlias, edition, deploymentMode, accountLifecycle, offerCode, source, expiresAt);
+  }
+
+  private static <T> int hashCodeNullable(JsonNullable<T> a) {
+    if (a == null) {
+      return 1;
+    }
+    return a.isPresent() ? Arrays.deepHashCode(new Object[]{a.get()}) : 31;
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class AccountSession {\n");
+    sb.append("    sessionId: ").append(toIndentedString(sessionId)).append("\n");
+    sb.append("    principalId: ").append(toIndentedString(principalId)).append("\n");
+    sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
+    sb.append("    workspaceId: ").append(toIndentedString(workspaceId)).append("\n");
+    sb.append("    plan: ").append(toIndentedString(plan)).append("\n");
+    sb.append("    planAlias: ").append(toIndentedString(planAlias)).append("\n");
+    sb.append("    edition: ").append(toIndentedString(edition)).append("\n");
+    sb.append("    deploymentMode: ").append(toIndentedString(deploymentMode)).append("\n");
+    sb.append("    accountLifecycle: ").append(toIndentedString(accountLifecycle)).append("\n");
+    sb.append("    offerCode: ").append(toIndentedString(offerCode)).append("\n");
+    sb.append("    source: ").append(toIndentedString(source)).append("\n");
+    sb.append("    expiresAt: ").append(toIndentedString(expiresAt)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `session_id` to the URL query string
+    if (getSessionId() != null) {
+      joiner.add(String.format("%ssession_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSessionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `principal_id` to the URL query string
+    if (getPrincipalId() != null) {
+      joiner.add(String.format("%sprincipal_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPrincipalId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `tenant_id` to the URL query string
+    if (getTenantId() != null) {
+      joiner.add(String.format("%stenant_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTenantId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `workspace_id` to the URL query string
+    if (getWorkspaceId() != null) {
+      joiner.add(String.format("%sworkspace_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getWorkspaceId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `plan` to the URL query string
+    if (getPlan() != null) {
+      joiner.add(String.format("%splan%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPlan()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `plan_alias` to the URL query string
+    if (getPlanAlias() != null) {
+      joiner.add(String.format("%splan_alias%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPlanAlias()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `edition` to the URL query string
+    if (getEdition() != null) {
+      joiner.add(String.format("%sedition%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEdition()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `deployment_mode` to the URL query string
+    if (getDeploymentMode() != null) {
+      joiner.add(String.format("%sdeployment_mode%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDeploymentMode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `account_lifecycle` to the URL query string
+    if (getAccountLifecycle() != null) {
+      joiner.add(String.format("%saccount_lifecycle%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAccountLifecycle()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `offer_code` to the URL query string
+    if (getOfferCode() != null) {
+      joiner.add(String.format("%soffer_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getOfferCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `source` to the URL query string
+    if (getSource() != null) {
+      joiner.add(String.format("%ssource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `expires_at` to the URL query string
+    if (getExpiresAt() != null) {
+      joiner.add(String.format("%sexpires_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getExpiresAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.8
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * AdapterMatch
  */
 @JsonPropertyOrder({
@@ -17431,6 +18499,2194 @@ public static class EffectBoundary {
 
 
 /**
+ * EntitlementCapabilities
+ */
+@JsonPropertyOrder({
+  EntitlementCapabilities.JSON_PROPERTY_DEMO_LAUNCH,
+  EntitlementCapabilities.JSON_PROPERTY_LOCAL_LAUNCH,
+  EntitlementCapabilities.JSON_PROPERTY_CLOUD_LAUNCH,
+  EntitlementCapabilities.JSON_PROPERTY_CUSTOM_POLICY,
+  EntitlementCapabilities.JSON_PROPERTY_BRING_OWN_SECRETS,
+  EntitlementCapabilities.JSON_PROPERTY_EVIDENCE_EXPORT,
+  EntitlementCapabilities.JSON_PROPERTY_OFFLINE_VERIFY,
+  EntitlementCapabilities.JSON_PROPERTY_TEAM_ADMIN,
+  EntitlementCapabilities.JSON_PROPERTY_SSO,
+  EntitlementCapabilities.JSON_PROPERTY_LEGAL_HOLD,
+  EntitlementCapabilities.JSON_PROPERTY_CERTIFIED_CONNECTORS,
+  EntitlementCapabilities.JSON_PROPERTY_ENTERPRISE_RETENTION
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class EntitlementCapabilities {
+  public static final String JSON_PROPERTY_DEMO_LAUNCH = "demo_launch";
+  private Boolean demoLaunch;
+
+  public static final String JSON_PROPERTY_LOCAL_LAUNCH = "local_launch";
+  private Boolean localLaunch;
+
+  public static final String JSON_PROPERTY_CLOUD_LAUNCH = "cloud_launch";
+  private Boolean cloudLaunch;
+
+  public static final String JSON_PROPERTY_CUSTOM_POLICY = "custom_policy";
+  private Boolean customPolicy;
+
+  public static final String JSON_PROPERTY_BRING_OWN_SECRETS = "bring_own_secrets";
+  private Boolean bringOwnSecrets;
+
+  public static final String JSON_PROPERTY_EVIDENCE_EXPORT = "evidence_export";
+  private Boolean evidenceExport;
+
+  public static final String JSON_PROPERTY_OFFLINE_VERIFY = "offline_verify";
+  private Boolean offlineVerify;
+
+  public static final String JSON_PROPERTY_TEAM_ADMIN = "team_admin";
+  private Boolean teamAdmin;
+
+  public static final String JSON_PROPERTY_SSO = "sso";
+  private Boolean sso;
+
+  public static final String JSON_PROPERTY_LEGAL_HOLD = "legal_hold";
+  private Boolean legalHold;
+
+  public static final String JSON_PROPERTY_CERTIFIED_CONNECTORS = "certified_connectors";
+  private Boolean certifiedConnectors;
+
+  public static final String JSON_PROPERTY_ENTERPRISE_RETENTION = "enterprise_retention";
+  private Boolean enterpriseRetention;
+
+  public EntitlementCapabilities() {
+  }
+
+  public EntitlementCapabilities demoLaunch(Boolean demoLaunch) {
+    this.demoLaunch = demoLaunch;
+    return this;
+  }
+
+   /**
+   * Get demoLaunch
+   * @return demoLaunch
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_DEMO_LAUNCH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Boolean getDemoLaunch() {
+    return demoLaunch;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DEMO_LAUNCH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setDemoLaunch(Boolean demoLaunch) {
+    this.demoLaunch = demoLaunch;
+  }
+
+
+  public EntitlementCapabilities localLaunch(Boolean localLaunch) {
+    this.localLaunch = localLaunch;
+    return this;
+  }
+
+   /**
+   * Get localLaunch
+   * @return localLaunch
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_LOCAL_LAUNCH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Boolean getLocalLaunch() {
+    return localLaunch;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_LOCAL_LAUNCH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setLocalLaunch(Boolean localLaunch) {
+    this.localLaunch = localLaunch;
+  }
+
+
+  public EntitlementCapabilities cloudLaunch(Boolean cloudLaunch) {
+    this.cloudLaunch = cloudLaunch;
+    return this;
+  }
+
+   /**
+   * Get cloudLaunch
+   * @return cloudLaunch
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CLOUD_LAUNCH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Boolean getCloudLaunch() {
+    return cloudLaunch;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CLOUD_LAUNCH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCloudLaunch(Boolean cloudLaunch) {
+    this.cloudLaunch = cloudLaunch;
+  }
+
+
+  public EntitlementCapabilities customPolicy(Boolean customPolicy) {
+    this.customPolicy = customPolicy;
+    return this;
+  }
+
+   /**
+   * Get customPolicy
+   * @return customPolicy
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CUSTOM_POLICY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Boolean getCustomPolicy() {
+    return customPolicy;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CUSTOM_POLICY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCustomPolicy(Boolean customPolicy) {
+    this.customPolicy = customPolicy;
+  }
+
+
+  public EntitlementCapabilities bringOwnSecrets(Boolean bringOwnSecrets) {
+    this.bringOwnSecrets = bringOwnSecrets;
+    return this;
+  }
+
+   /**
+   * Get bringOwnSecrets
+   * @return bringOwnSecrets
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_BRING_OWN_SECRETS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Boolean getBringOwnSecrets() {
+    return bringOwnSecrets;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_BRING_OWN_SECRETS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setBringOwnSecrets(Boolean bringOwnSecrets) {
+    this.bringOwnSecrets = bringOwnSecrets;
+  }
+
+
+  public EntitlementCapabilities evidenceExport(Boolean evidenceExport) {
+    this.evidenceExport = evidenceExport;
+    return this;
+  }
+
+   /**
+   * Get evidenceExport
+   * @return evidenceExport
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_EXPORT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Boolean getEvidenceExport() {
+    return evidenceExport;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_EXPORT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEvidenceExport(Boolean evidenceExport) {
+    this.evidenceExport = evidenceExport;
+  }
+
+
+  public EntitlementCapabilities offlineVerify(Boolean offlineVerify) {
+    this.offlineVerify = offlineVerify;
+    return this;
+  }
+
+   /**
+   * Get offlineVerify
+   * @return offlineVerify
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_OFFLINE_VERIFY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Boolean getOfflineVerify() {
+    return offlineVerify;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_OFFLINE_VERIFY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setOfflineVerify(Boolean offlineVerify) {
+    this.offlineVerify = offlineVerify;
+  }
+
+
+  public EntitlementCapabilities teamAdmin(Boolean teamAdmin) {
+    this.teamAdmin = teamAdmin;
+    return this;
+  }
+
+   /**
+   * Get teamAdmin
+   * @return teamAdmin
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TEAM_ADMIN)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Boolean getTeamAdmin() {
+    return teamAdmin;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TEAM_ADMIN)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTeamAdmin(Boolean teamAdmin) {
+    this.teamAdmin = teamAdmin;
+  }
+
+
+  public EntitlementCapabilities sso(Boolean sso) {
+    this.sso = sso;
+    return this;
+  }
+
+   /**
+   * Get sso
+   * @return sso
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SSO)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Boolean getSso() {
+    return sso;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SSO)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSso(Boolean sso) {
+    this.sso = sso;
+  }
+
+
+  public EntitlementCapabilities legalHold(Boolean legalHold) {
+    this.legalHold = legalHold;
+    return this;
+  }
+
+   /**
+   * Get legalHold
+   * @return legalHold
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_LEGAL_HOLD)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Boolean getLegalHold() {
+    return legalHold;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_LEGAL_HOLD)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setLegalHold(Boolean legalHold) {
+    this.legalHold = legalHold;
+  }
+
+
+  public EntitlementCapabilities certifiedConnectors(Boolean certifiedConnectors) {
+    this.certifiedConnectors = certifiedConnectors;
+    return this;
+  }
+
+   /**
+   * Get certifiedConnectors
+   * @return certifiedConnectors
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CERTIFIED_CONNECTORS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Boolean getCertifiedConnectors() {
+    return certifiedConnectors;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CERTIFIED_CONNECTORS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCertifiedConnectors(Boolean certifiedConnectors) {
+    this.certifiedConnectors = certifiedConnectors;
+  }
+
+
+  public EntitlementCapabilities enterpriseRetention(Boolean enterpriseRetention) {
+    this.enterpriseRetention = enterpriseRetention;
+    return this;
+  }
+
+   /**
+   * Get enterpriseRetention
+   * @return enterpriseRetention
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ENTERPRISE_RETENTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Boolean getEnterpriseRetention() {
+    return enterpriseRetention;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ENTERPRISE_RETENTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEnterpriseRetention(Boolean enterpriseRetention) {
+    this.enterpriseRetention = enterpriseRetention;
+  }
+
+
+  /**
+   * Return true if this EntitlementCapabilities object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    EntitlementCapabilities entitlementCapabilities = (EntitlementCapabilities) o;
+    return Objects.equals(this.demoLaunch, entitlementCapabilities.demoLaunch) &&
+        Objects.equals(this.localLaunch, entitlementCapabilities.localLaunch) &&
+        Objects.equals(this.cloudLaunch, entitlementCapabilities.cloudLaunch) &&
+        Objects.equals(this.customPolicy, entitlementCapabilities.customPolicy) &&
+        Objects.equals(this.bringOwnSecrets, entitlementCapabilities.bringOwnSecrets) &&
+        Objects.equals(this.evidenceExport, entitlementCapabilities.evidenceExport) &&
+        Objects.equals(this.offlineVerify, entitlementCapabilities.offlineVerify) &&
+        Objects.equals(this.teamAdmin, entitlementCapabilities.teamAdmin) &&
+        Objects.equals(this.sso, entitlementCapabilities.sso) &&
+        Objects.equals(this.legalHold, entitlementCapabilities.legalHold) &&
+        Objects.equals(this.certifiedConnectors, entitlementCapabilities.certifiedConnectors) &&
+        Objects.equals(this.enterpriseRetention, entitlementCapabilities.enterpriseRetention);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(demoLaunch, localLaunch, cloudLaunch, customPolicy, bringOwnSecrets, evidenceExport, offlineVerify, teamAdmin, sso, legalHold, certifiedConnectors, enterpriseRetention);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class EntitlementCapabilities {\n");
+    sb.append("    demoLaunch: ").append(toIndentedString(demoLaunch)).append("\n");
+    sb.append("    localLaunch: ").append(toIndentedString(localLaunch)).append("\n");
+    sb.append("    cloudLaunch: ").append(toIndentedString(cloudLaunch)).append("\n");
+    sb.append("    customPolicy: ").append(toIndentedString(customPolicy)).append("\n");
+    sb.append("    bringOwnSecrets: ").append(toIndentedString(bringOwnSecrets)).append("\n");
+    sb.append("    evidenceExport: ").append(toIndentedString(evidenceExport)).append("\n");
+    sb.append("    offlineVerify: ").append(toIndentedString(offlineVerify)).append("\n");
+    sb.append("    teamAdmin: ").append(toIndentedString(teamAdmin)).append("\n");
+    sb.append("    sso: ").append(toIndentedString(sso)).append("\n");
+    sb.append("    legalHold: ").append(toIndentedString(legalHold)).append("\n");
+    sb.append("    certifiedConnectors: ").append(toIndentedString(certifiedConnectors)).append("\n");
+    sb.append("    enterpriseRetention: ").append(toIndentedString(enterpriseRetention)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `demo_launch` to the URL query string
+    if (getDemoLaunch() != null) {
+      joiner.add(String.format("%sdemo_launch%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDemoLaunch()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `local_launch` to the URL query string
+    if (getLocalLaunch() != null) {
+      joiner.add(String.format("%slocal_launch%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLocalLaunch()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `cloud_launch` to the URL query string
+    if (getCloudLaunch() != null) {
+      joiner.add(String.format("%scloud_launch%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCloudLaunch()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `custom_policy` to the URL query string
+    if (getCustomPolicy() != null) {
+      joiner.add(String.format("%scustom_policy%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCustomPolicy()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `bring_own_secrets` to the URL query string
+    if (getBringOwnSecrets() != null) {
+      joiner.add(String.format("%sbring_own_secrets%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getBringOwnSecrets()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `evidence_export` to the URL query string
+    if (getEvidenceExport() != null) {
+      joiner.add(String.format("%sevidence_export%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEvidenceExport()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `offline_verify` to the URL query string
+    if (getOfflineVerify() != null) {
+      joiner.add(String.format("%soffline_verify%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getOfflineVerify()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `team_admin` to the URL query string
+    if (getTeamAdmin() != null) {
+      joiner.add(String.format("%steam_admin%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTeamAdmin()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `sso` to the URL query string
+    if (getSso() != null) {
+      joiner.add(String.format("%ssso%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSso()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `legal_hold` to the URL query string
+    if (getLegalHold() != null) {
+      joiner.add(String.format("%slegal_hold%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLegalHold()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `certified_connectors` to the URL query string
+    if (getCertifiedConnectors() != null) {
+      joiner.add(String.format("%scertified_connectors%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCertifiedConnectors()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `enterprise_retention` to the URL query string
+    if (getEnterpriseRetention() != null) {
+      joiner.add(String.format("%senterprise_retention%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEnterpriseRetention()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.8
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * EntitlementDecision
+ */
+@JsonPropertyOrder({
+  EntitlementDecision.JSON_PROPERTY_ALLOWED,
+  EntitlementDecision.JSON_PROPERTY_USER_STATE,
+  EntitlementDecision.JSON_PROPERTY_REQUIRED_CAPABILITY,
+  EntitlementDecision.JSON_PROPERTY_REASON_CODE,
+  EntitlementDecision.JSON_PROPERTY_REASON,
+  EntitlementDecision.JSON_PROPERTY_UPGRADE_REASON,
+  EntitlementDecision.JSON_PROPERTY_LIMIT,
+  EntitlementDecision.JSON_PROPERTY_USED,
+  EntitlementDecision.JSON_PROPERTY_REMAINING,
+  EntitlementDecision.JSON_PROPERTY_DECISION_REF,
+  EntitlementDecision.JSON_PROPERTY_SOURCE,
+  EntitlementDecision.JSON_PROPERTY_EXPIRES_AT
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class EntitlementDecision extends HashMap<String, Object> {
+  public static final String JSON_PROPERTY_ALLOWED = "allowed";
+  private Boolean allowed;
+
+  /**
+   * Gets or Sets userState
+   */
+  public enum UserStateEnum {
+    AVAILABLE("available"),
+
+    NEEDS_SETUP("needs_setup"),
+
+    UPGRADE_REQUIRED("upgrade_required"),
+
+    ENTERPRISE_CONTROLLED("enterprise_controlled"),
+
+    BLOCKED("blocked"),
+
+    UNSUPPORTED("unsupported");
+
+    private String value;
+
+    UserStateEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static UserStateEnum fromValue(String value) {
+      for (UserStateEnum b : UserStateEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_USER_STATE = "user_state";
+  private UserStateEnum userState;
+
+  public static final String JSON_PROPERTY_REQUIRED_CAPABILITY = "required_capability";
+  private String requiredCapability;
+
+  public static final String JSON_PROPERTY_REASON_CODE = "reason_code";
+  private String reasonCode;
+
+  public static final String JSON_PROPERTY_REASON = "reason";
+  private String reason;
+
+  public static final String JSON_PROPERTY_UPGRADE_REASON = "upgrade_reason";
+  private String upgradeReason;
+
+  public static final String JSON_PROPERTY_LIMIT = "limit";
+  private Long limit;
+
+  public static final String JSON_PROPERTY_USED = "used";
+  private Long used;
+
+  public static final String JSON_PROPERTY_REMAINING = "remaining";
+  private Long remaining;
+
+  public static final String JSON_PROPERTY_DECISION_REF = "decision_ref";
+  private String decisionRef;
+
+  public static final String JSON_PROPERTY_SOURCE = "source";
+  private String source;
+
+  public static final String JSON_PROPERTY_EXPIRES_AT = "expires_at";
+  private OffsetDateTime expiresAt;
+
+  public EntitlementDecision() {
+  }
+
+  public EntitlementDecision allowed(Boolean allowed) {
+    this.allowed = allowed;
+    return this;
+  }
+
+   /**
+   * Get allowed
+   * @return allowed
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ALLOWED)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Boolean getAllowed() {
+    return allowed;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ALLOWED)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setAllowed(Boolean allowed) {
+    this.allowed = allowed;
+  }
+
+
+  public EntitlementDecision userState(UserStateEnum userState) {
+    this.userState = userState;
+    return this;
+  }
+
+   /**
+   * Get userState
+   * @return userState
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_USER_STATE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public UserStateEnum getUserState() {
+    return userState;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_USER_STATE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setUserState(UserStateEnum userState) {
+    this.userState = userState;
+  }
+
+
+  public EntitlementDecision requiredCapability(String requiredCapability) {
+    this.requiredCapability = requiredCapability;
+    return this;
+  }
+
+   /**
+   * Get requiredCapability
+   * @return requiredCapability
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REQUIRED_CAPABILITY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getRequiredCapability() {
+    return requiredCapability;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REQUIRED_CAPABILITY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRequiredCapability(String requiredCapability) {
+    this.requiredCapability = requiredCapability;
+  }
+
+
+  public EntitlementDecision reasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+    return this;
+  }
+
+   /**
+   * Get reasonCode
+   * @return reasonCode
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getReasonCode() {
+    return reasonCode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+  }
+
+
+  public EntitlementDecision reason(String reason) {
+    this.reason = reason;
+    return this;
+  }
+
+   /**
+   * Get reason
+   * @return reason
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getReason() {
+    return reason;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReason(String reason) {
+    this.reason = reason;
+  }
+
+
+  public EntitlementDecision upgradeReason(String upgradeReason) {
+    this.upgradeReason = upgradeReason;
+    return this;
+  }
+
+   /**
+   * Get upgradeReason
+   * @return upgradeReason
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_UPGRADE_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getUpgradeReason() {
+    return upgradeReason;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_UPGRADE_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setUpgradeReason(String upgradeReason) {
+    this.upgradeReason = upgradeReason;
+  }
+
+
+  public EntitlementDecision limit(Long limit) {
+    this.limit = limit;
+    return this;
+  }
+
+   /**
+   * Get limit
+   * @return limit
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_LIMIT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Long getLimit() {
+    return limit;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_LIMIT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setLimit(Long limit) {
+    this.limit = limit;
+  }
+
+
+  public EntitlementDecision used(Long used) {
+    this.used = used;
+    return this;
+  }
+
+   /**
+   * Get used
+   * @return used
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_USED)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Long getUsed() {
+    return used;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_USED)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setUsed(Long used) {
+    this.used = used;
+  }
+
+
+  public EntitlementDecision remaining(Long remaining) {
+    this.remaining = remaining;
+    return this;
+  }
+
+   /**
+   * Get remaining
+   * @return remaining
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REMAINING)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Long getRemaining() {
+    return remaining;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REMAINING)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRemaining(Long remaining) {
+    this.remaining = remaining;
+  }
+
+
+  public EntitlementDecision decisionRef(String decisionRef) {
+    this.decisionRef = decisionRef;
+    return this;
+  }
+
+   /**
+   * Get decisionRef
+   * @return decisionRef
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_DECISION_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getDecisionRef() {
+    return decisionRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DECISION_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setDecisionRef(String decisionRef) {
+    this.decisionRef = decisionRef;
+  }
+
+
+  public EntitlementDecision source(String source) {
+    this.source = source;
+    return this;
+  }
+
+   /**
+   * Get source
+   * @return source
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSource() {
+    return source;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSource(String source) {
+    this.source = source;
+  }
+
+
+  public EntitlementDecision expiresAt(OffsetDateTime expiresAt) {
+    this.expiresAt = expiresAt;
+    return this;
+  }
+
+   /**
+   * Get expiresAt
+   * @return expiresAt
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EXPIRES_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public OffsetDateTime getExpiresAt() {
+    return expiresAt;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EXPIRES_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setExpiresAt(OffsetDateTime expiresAt) {
+    this.expiresAt = expiresAt;
+  }
+
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public EntitlementDecision putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
+
+  /**
+   * Return true if this EntitlementDecision object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    EntitlementDecision entitlementDecision = (EntitlementDecision) o;
+    return Objects.equals(this.allowed, entitlementDecision.allowed) &&
+        Objects.equals(this.userState, entitlementDecision.userState) &&
+        Objects.equals(this.requiredCapability, entitlementDecision.requiredCapability) &&
+        Objects.equals(this.reasonCode, entitlementDecision.reasonCode) &&
+        Objects.equals(this.reason, entitlementDecision.reason) &&
+        Objects.equals(this.upgradeReason, entitlementDecision.upgradeReason) &&
+        Objects.equals(this.limit, entitlementDecision.limit) &&
+        Objects.equals(this.used, entitlementDecision.used) &&
+        Objects.equals(this.remaining, entitlementDecision.remaining) &&
+        Objects.equals(this.decisionRef, entitlementDecision.decisionRef) &&
+        Objects.equals(this.source, entitlementDecision.source) &&
+        Objects.equals(this.expiresAt, entitlementDecision.expiresAt)&&
+        Objects.equals(this.additionalProperties, entitlementDecision.additionalProperties) &&
+        super.equals(o);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(allowed, userState, requiredCapability, reasonCode, reason, upgradeReason, limit, used, remaining, decisionRef, source, expiresAt, super.hashCode(), additionalProperties);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class EntitlementDecision {\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
+    sb.append("    allowed: ").append(toIndentedString(allowed)).append("\n");
+    sb.append("    userState: ").append(toIndentedString(userState)).append("\n");
+    sb.append("    requiredCapability: ").append(toIndentedString(requiredCapability)).append("\n");
+    sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
+    sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
+    sb.append("    upgradeReason: ").append(toIndentedString(upgradeReason)).append("\n");
+    sb.append("    limit: ").append(toIndentedString(limit)).append("\n");
+    sb.append("    used: ").append(toIndentedString(used)).append("\n");
+    sb.append("    remaining: ").append(toIndentedString(remaining)).append("\n");
+    sb.append("    decisionRef: ").append(toIndentedString(decisionRef)).append("\n");
+    sb.append("    source: ").append(toIndentedString(source)).append("\n");
+    sb.append("    expiresAt: ").append(toIndentedString(expiresAt)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `allowed` to the URL query string
+    if (getAllowed() != null) {
+      joiner.add(String.format("%sallowed%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAllowed()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `user_state` to the URL query string
+    if (getUserState() != null) {
+      joiner.add(String.format("%suser_state%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getUserState()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `required_capability` to the URL query string
+    if (getRequiredCapability() != null) {
+      joiner.add(String.format("%srequired_capability%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRequiredCapability()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `reason_code` to the URL query string
+    if (getReasonCode() != null) {
+      joiner.add(String.format("%sreason_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReasonCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `reason` to the URL query string
+    if (getReason() != null) {
+      joiner.add(String.format("%sreason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `upgrade_reason` to the URL query string
+    if (getUpgradeReason() != null) {
+      joiner.add(String.format("%supgrade_reason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getUpgradeReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `limit` to the URL query string
+    if (getLimit() != null) {
+      joiner.add(String.format("%slimit%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLimit()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `used` to the URL query string
+    if (getUsed() != null) {
+      joiner.add(String.format("%sused%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getUsed()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `remaining` to the URL query string
+    if (getRemaining() != null) {
+      joiner.add(String.format("%sremaining%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRemaining()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `decision_ref` to the URL query string
+    if (getDecisionRef() != null) {
+      joiner.add(String.format("%sdecision_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDecisionRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `source` to the URL query string
+    if (getSource() != null) {
+      joiner.add(String.format("%ssource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `expires_at` to the URL query string
+    if (getExpiresAt() != null) {
+      joiner.add(String.format("%sexpires_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getExpiresAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.8
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * EntitlementDecisionRequest
+ */
+@JsonPropertyOrder({
+  EntitlementDecisionRequest.JSON_PROPERTY_PRINCIPAL_ID,
+  EntitlementDecisionRequest.JSON_PROPERTY_TENANT_ID,
+  EntitlementDecisionRequest.JSON_PROPERTY_WORKSPACE_ID,
+  EntitlementDecisionRequest.JSON_PROPERTY_ACTION,
+  EntitlementDecisionRequest.JSON_PROPERTY_APP_ID,
+  EntitlementDecisionRequest.JSON_PROPERTY_SUBSTRATE_ID,
+  EntitlementDecisionRequest.JSON_PROPERTY_TARGET,
+  EntitlementDecisionRequest.JSON_PROPERTY_CURRENT_USAGE,
+  EntitlementDecisionRequest.JSON_PROPERTY_RUN_ID
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class EntitlementDecisionRequest {
+  public static final String JSON_PROPERTY_PRINCIPAL_ID = "principal_id";
+  private String principalId;
+
+  public static final String JSON_PROPERTY_TENANT_ID = "tenant_id";
+  private String tenantId;
+
+  public static final String JSON_PROPERTY_WORKSPACE_ID = "workspace_id";
+  private String workspaceId;
+
+  public static final String JSON_PROPERTY_ACTION = "action";
+  private String action;
+
+  public static final String JSON_PROPERTY_APP_ID = "app_id";
+  private String appId;
+
+  public static final String JSON_PROPERTY_SUBSTRATE_ID = "substrate_id";
+  private String substrateId;
+
+  public static final String JSON_PROPERTY_TARGET = "target";
+  private String target;
+
+  public static final String JSON_PROPERTY_CURRENT_USAGE = "current_usage";
+  private EntitlementDecisionRequestCurrentUsage currentUsage;
+
+  public static final String JSON_PROPERTY_RUN_ID = "run_id";
+  private String runId;
+
+  public EntitlementDecisionRequest() {
+  }
+
+  public EntitlementDecisionRequest principalId(String principalId) {
+    this.principalId = principalId;
+    return this;
+  }
+
+   /**
+   * Get principalId
+   * @return principalId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPrincipalId() {
+    return principalId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPrincipalId(String principalId) {
+    this.principalId = principalId;
+  }
+
+
+  public EntitlementDecisionRequest tenantId(String tenantId) {
+    this.tenantId = tenantId;
+    return this;
+  }
+
+   /**
+   * Get tenantId
+   * @return tenantId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TENANT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getTenantId() {
+    return tenantId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TENANT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTenantId(String tenantId) {
+    this.tenantId = tenantId;
+  }
+
+
+  public EntitlementDecisionRequest workspaceId(String workspaceId) {
+    this.workspaceId = workspaceId;
+    return this;
+  }
+
+   /**
+   * Get workspaceId
+   * @return workspaceId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_WORKSPACE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getWorkspaceId() {
+    return workspaceId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_WORKSPACE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setWorkspaceId(String workspaceId) {
+    this.workspaceId = workspaceId;
+  }
+
+
+  public EntitlementDecisionRequest action(String action) {
+    this.action = action;
+    return this;
+  }
+
+   /**
+   * Get action
+   * @return action
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_ACTION)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getAction() {
+    return action;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ACTION)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setAction(String action) {
+    this.action = action;
+  }
+
+
+  public EntitlementDecisionRequest appId(String appId) {
+    this.appId = appId;
+    return this;
+  }
+
+   /**
+   * Get appId
+   * @return appId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_APP_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getAppId() {
+    return appId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_APP_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setAppId(String appId) {
+    this.appId = appId;
+  }
+
+
+  public EntitlementDecisionRequest substrateId(String substrateId) {
+    this.substrateId = substrateId;
+    return this;
+  }
+
+   /**
+   * Get substrateId
+   * @return substrateId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SUBSTRATE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSubstrateId() {
+    return substrateId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SUBSTRATE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSubstrateId(String substrateId) {
+    this.substrateId = substrateId;
+  }
+
+
+  public EntitlementDecisionRequest target(String target) {
+    this.target = target;
+    return this;
+  }
+
+   /**
+   * Get target
+   * @return target
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TARGET)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getTarget() {
+    return target;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TARGET)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTarget(String target) {
+    this.target = target;
+  }
+
+
+  public EntitlementDecisionRequest currentUsage(EntitlementDecisionRequestCurrentUsage currentUsage) {
+    this.currentUsage = currentUsage;
+    return this;
+  }
+
+   /**
+   * Get currentUsage
+   * @return currentUsage
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CURRENT_USAGE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public EntitlementDecisionRequestCurrentUsage getCurrentUsage() {
+    return currentUsage;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CURRENT_USAGE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCurrentUsage(EntitlementDecisionRequestCurrentUsage currentUsage) {
+    this.currentUsage = currentUsage;
+  }
+
+
+  public EntitlementDecisionRequest runId(String runId) {
+    this.runId = runId;
+    return this;
+  }
+
+   /**
+   * Get runId
+   * @return runId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_RUN_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getRunId() {
+    return runId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RUN_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRunId(String runId) {
+    this.runId = runId;
+  }
+
+
+  /**
+   * Return true if this EntitlementDecisionRequest object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    EntitlementDecisionRequest entitlementDecisionRequest = (EntitlementDecisionRequest) o;
+    return Objects.equals(this.principalId, entitlementDecisionRequest.principalId) &&
+        Objects.equals(this.tenantId, entitlementDecisionRequest.tenantId) &&
+        Objects.equals(this.workspaceId, entitlementDecisionRequest.workspaceId) &&
+        Objects.equals(this.action, entitlementDecisionRequest.action) &&
+        Objects.equals(this.appId, entitlementDecisionRequest.appId) &&
+        Objects.equals(this.substrateId, entitlementDecisionRequest.substrateId) &&
+        Objects.equals(this.target, entitlementDecisionRequest.target) &&
+        Objects.equals(this.currentUsage, entitlementDecisionRequest.currentUsage) &&
+        Objects.equals(this.runId, entitlementDecisionRequest.runId);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(principalId, tenantId, workspaceId, action, appId, substrateId, target, currentUsage, runId);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class EntitlementDecisionRequest {\n");
+    sb.append("    principalId: ").append(toIndentedString(principalId)).append("\n");
+    sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
+    sb.append("    workspaceId: ").append(toIndentedString(workspaceId)).append("\n");
+    sb.append("    action: ").append(toIndentedString(action)).append("\n");
+    sb.append("    appId: ").append(toIndentedString(appId)).append("\n");
+    sb.append("    substrateId: ").append(toIndentedString(substrateId)).append("\n");
+    sb.append("    target: ").append(toIndentedString(target)).append("\n");
+    sb.append("    currentUsage: ").append(toIndentedString(currentUsage)).append("\n");
+    sb.append("    runId: ").append(toIndentedString(runId)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `principal_id` to the URL query string
+    if (getPrincipalId() != null) {
+      joiner.add(String.format("%sprincipal_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPrincipalId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `tenant_id` to the URL query string
+    if (getTenantId() != null) {
+      joiner.add(String.format("%stenant_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTenantId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `workspace_id` to the URL query string
+    if (getWorkspaceId() != null) {
+      joiner.add(String.format("%sworkspace_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getWorkspaceId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `action` to the URL query string
+    if (getAction() != null) {
+      joiner.add(String.format("%saction%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAction()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `app_id` to the URL query string
+    if (getAppId() != null) {
+      joiner.add(String.format("%sapp_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAppId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `substrate_id` to the URL query string
+    if (getSubstrateId() != null) {
+      joiner.add(String.format("%ssubstrate_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSubstrateId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `target` to the URL query string
+    if (getTarget() != null) {
+      joiner.add(String.format("%starget%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTarget()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `current_usage` to the URL query string
+    if (getCurrentUsage() != null) {
+      joiner.add(getCurrentUsage().toUrlQueryString(prefix + "current_usage" + suffix));
+    }
+
+    // add `run_id` to the URL query string
+    if (getRunId() != null) {
+      joiner.add(String.format("%srun_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRunId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.8
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * EntitlementDecisionRequestCurrentUsage
+ */
+@JsonPropertyOrder({
+  EntitlementDecisionRequestCurrentUsage.JSON_PROPERTY_MONTHLY_LAUNCHES,
+  EntitlementDecisionRequestCurrentUsage.JSON_PROPERTY_CONCURRENT_RUNS,
+  EntitlementDecisionRequestCurrentUsage.JSON_PROPERTY_CLOUD_TARGETS
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class EntitlementDecisionRequestCurrentUsage {
+  public static final String JSON_PROPERTY_MONTHLY_LAUNCHES = "monthly_launches";
+  private JsonNullable<Object> monthlyLaunches = JsonNullable.<Object>of(null);
+
+  public static final String JSON_PROPERTY_CONCURRENT_RUNS = "concurrent_runs";
+  private JsonNullable<Object> concurrentRuns = JsonNullable.<Object>of(null);
+
+  public static final String JSON_PROPERTY_CLOUD_TARGETS = "cloud_targets";
+  private JsonNullable<Object> cloudTargets = JsonNullable.<Object>of(null);
+
+  public EntitlementDecisionRequestCurrentUsage() {
+  }
+
+  public EntitlementDecisionRequestCurrentUsage monthlyLaunches(Object monthlyLaunches) {
+    this.monthlyLaunches = JsonNullable.<Object>of(monthlyLaunches);
+    return this;
+  }
+
+   /**
+   * Get monthlyLaunches
+   * @return monthlyLaunches
+  **/
+  @javax.annotation.Nullable
+  @JsonIgnore
+
+  public Object getMonthlyLaunches() {
+        return monthlyLaunches.orElse(null);
+  }
+
+  @JsonProperty(JSON_PROPERTY_MONTHLY_LAUNCHES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public JsonNullable<Object> getMonthlyLaunches_JsonNullable() {
+    return monthlyLaunches;
+  }
+
+  @JsonProperty(JSON_PROPERTY_MONTHLY_LAUNCHES)
+  public void setMonthlyLaunches_JsonNullable(JsonNullable<Object> monthlyLaunches) {
+    this.monthlyLaunches = monthlyLaunches;
+  }
+
+  public void setMonthlyLaunches(Object monthlyLaunches) {
+    this.monthlyLaunches = JsonNullable.<Object>of(monthlyLaunches);
+  }
+
+
+  public EntitlementDecisionRequestCurrentUsage concurrentRuns(Object concurrentRuns) {
+    this.concurrentRuns = JsonNullable.<Object>of(concurrentRuns);
+    return this;
+  }
+
+   /**
+   * Get concurrentRuns
+   * @return concurrentRuns
+  **/
+  @javax.annotation.Nullable
+  @JsonIgnore
+
+  public Object getConcurrentRuns() {
+        return concurrentRuns.orElse(null);
+  }
+
+  @JsonProperty(JSON_PROPERTY_CONCURRENT_RUNS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public JsonNullable<Object> getConcurrentRuns_JsonNullable() {
+    return concurrentRuns;
+  }
+
+  @JsonProperty(JSON_PROPERTY_CONCURRENT_RUNS)
+  public void setConcurrentRuns_JsonNullable(JsonNullable<Object> concurrentRuns) {
+    this.concurrentRuns = concurrentRuns;
+  }
+
+  public void setConcurrentRuns(Object concurrentRuns) {
+    this.concurrentRuns = JsonNullable.<Object>of(concurrentRuns);
+  }
+
+
+  public EntitlementDecisionRequestCurrentUsage cloudTargets(Object cloudTargets) {
+    this.cloudTargets = JsonNullable.<Object>of(cloudTargets);
+    return this;
+  }
+
+   /**
+   * Get cloudTargets
+   * @return cloudTargets
+  **/
+  @javax.annotation.Nullable
+  @JsonIgnore
+
+  public Object getCloudTargets() {
+        return cloudTargets.orElse(null);
+  }
+
+  @JsonProperty(JSON_PROPERTY_CLOUD_TARGETS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public JsonNullable<Object> getCloudTargets_JsonNullable() {
+    return cloudTargets;
+  }
+
+  @JsonProperty(JSON_PROPERTY_CLOUD_TARGETS)
+  public void setCloudTargets_JsonNullable(JsonNullable<Object> cloudTargets) {
+    this.cloudTargets = cloudTargets;
+  }
+
+  public void setCloudTargets(Object cloudTargets) {
+    this.cloudTargets = JsonNullable.<Object>of(cloudTargets);
+  }
+
+
+  /**
+   * Return true if this EntitlementDecisionRequest_current_usage object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    EntitlementDecisionRequestCurrentUsage entitlementDecisionRequestCurrentUsage = (EntitlementDecisionRequestCurrentUsage) o;
+    return equalsNullable(this.monthlyLaunches, entitlementDecisionRequestCurrentUsage.monthlyLaunches) &&
+        equalsNullable(this.concurrentRuns, entitlementDecisionRequestCurrentUsage.concurrentRuns) &&
+        equalsNullable(this.cloudTargets, entitlementDecisionRequestCurrentUsage.cloudTargets);
+  }
+
+  private static <T> boolean equalsNullable(JsonNullable<T> a, JsonNullable<T> b) {
+    return a == b || (a != null && b != null && a.isPresent() && b.isPresent() && Objects.deepEquals(a.get(), b.get()));
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(hashCodeNullable(monthlyLaunches), hashCodeNullable(concurrentRuns), hashCodeNullable(cloudTargets));
+  }
+
+  private static <T> int hashCodeNullable(JsonNullable<T> a) {
+    if (a == null) {
+      return 1;
+    }
+    return a.isPresent() ? Arrays.deepHashCode(new Object[]{a.get()}) : 31;
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class EntitlementDecisionRequestCurrentUsage {\n");
+    sb.append("    monthlyLaunches: ").append(toIndentedString(monthlyLaunches)).append("\n");
+    sb.append("    concurrentRuns: ").append(toIndentedString(concurrentRuns)).append("\n");
+    sb.append("    cloudTargets: ").append(toIndentedString(cloudTargets)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `monthly_launches` to the URL query string
+    if (getMonthlyLaunches() != null) {
+      joiner.add(String.format("%smonthly_launches%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getMonthlyLaunches()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `concurrent_runs` to the URL query string
+    if (getConcurrentRuns() != null) {
+      joiner.add(String.format("%sconcurrent_runs%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getConcurrentRuns()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `cloud_targets` to the URL query string
+    if (getCloudTargets() != null) {
+      joiner.add(String.format("%scloud_targets%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCloudTargets()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.8
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * EntitlementLimits
+ */
+@JsonPropertyOrder({
+  EntitlementLimits.JSON_PROPERTY_MONTHLY_LAUNCHES,
+  EntitlementLimits.JSON_PROPERTY_CONCURRENT_RUNS,
+  EntitlementLimits.JSON_PROPERTY_RETENTION_DAYS,
+  EntitlementLimits.JSON_PROPERTY_MAX_CLOUD_TARGETS,
+  EntitlementLimits.JSON_PROPERTY_EVIDENCE_EXPORT_MB,
+  EntitlementLimits.JSON_PROPERTY_CONNECTOR_CERTIFICATION_SCOPE
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class EntitlementLimits {
+  public static final String JSON_PROPERTY_MONTHLY_LAUNCHES = "monthly_launches";
+  private JsonNullable<Object> monthlyLaunches = JsonNullable.<Object>of(null);
+
+  public static final String JSON_PROPERTY_CONCURRENT_RUNS = "concurrent_runs";
+  private JsonNullable<Object> concurrentRuns = JsonNullable.<Object>of(null);
+
+  public static final String JSON_PROPERTY_RETENTION_DAYS = "retention_days";
+  private JsonNullable<Object> retentionDays = JsonNullable.<Object>of(null);
+
+  public static final String JSON_PROPERTY_MAX_CLOUD_TARGETS = "max_cloud_targets";
+  private JsonNullable<Object> maxCloudTargets = JsonNullable.<Object>of(null);
+
+  public static final String JSON_PROPERTY_EVIDENCE_EXPORT_MB = "evidence_export_mb";
+  private JsonNullable<Object> evidenceExportMb = JsonNullable.<Object>of(null);
+
+  public static final String JSON_PROPERTY_CONNECTOR_CERTIFICATION_SCOPE = "connector_certification_scope";
+  private String connectorCertificationScope;
+
+  public EntitlementLimits() {
+  }
+
+  public EntitlementLimits monthlyLaunches(Object monthlyLaunches) {
+    this.monthlyLaunches = JsonNullable.<Object>of(monthlyLaunches);
+    return this;
+  }
+
+   /**
+   * Get monthlyLaunches
+   * @return monthlyLaunches
+  **/
+  @javax.annotation.Nullable
+  @JsonIgnore
+
+  public Object getMonthlyLaunches() {
+        return monthlyLaunches.orElse(null);
+  }
+
+  @JsonProperty(JSON_PROPERTY_MONTHLY_LAUNCHES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public JsonNullable<Object> getMonthlyLaunches_JsonNullable() {
+    return monthlyLaunches;
+  }
+
+  @JsonProperty(JSON_PROPERTY_MONTHLY_LAUNCHES)
+  public void setMonthlyLaunches_JsonNullable(JsonNullable<Object> monthlyLaunches) {
+    this.monthlyLaunches = monthlyLaunches;
+  }
+
+  public void setMonthlyLaunches(Object monthlyLaunches) {
+    this.monthlyLaunches = JsonNullable.<Object>of(monthlyLaunches);
+  }
+
+
+  public EntitlementLimits concurrentRuns(Object concurrentRuns) {
+    this.concurrentRuns = JsonNullable.<Object>of(concurrentRuns);
+    return this;
+  }
+
+   /**
+   * Get concurrentRuns
+   * @return concurrentRuns
+  **/
+  @javax.annotation.Nullable
+  @JsonIgnore
+
+  public Object getConcurrentRuns() {
+        return concurrentRuns.orElse(null);
+  }
+
+  @JsonProperty(JSON_PROPERTY_CONCURRENT_RUNS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public JsonNullable<Object> getConcurrentRuns_JsonNullable() {
+    return concurrentRuns;
+  }
+
+  @JsonProperty(JSON_PROPERTY_CONCURRENT_RUNS)
+  public void setConcurrentRuns_JsonNullable(JsonNullable<Object> concurrentRuns) {
+    this.concurrentRuns = concurrentRuns;
+  }
+
+  public void setConcurrentRuns(Object concurrentRuns) {
+    this.concurrentRuns = JsonNullable.<Object>of(concurrentRuns);
+  }
+
+
+  public EntitlementLimits retentionDays(Object retentionDays) {
+    this.retentionDays = JsonNullable.<Object>of(retentionDays);
+    return this;
+  }
+
+   /**
+   * Get retentionDays
+   * @return retentionDays
+  **/
+  @javax.annotation.Nullable
+  @JsonIgnore
+
+  public Object getRetentionDays() {
+        return retentionDays.orElse(null);
+  }
+
+  @JsonProperty(JSON_PROPERTY_RETENTION_DAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public JsonNullable<Object> getRetentionDays_JsonNullable() {
+    return retentionDays;
+  }
+
+  @JsonProperty(JSON_PROPERTY_RETENTION_DAYS)
+  public void setRetentionDays_JsonNullable(JsonNullable<Object> retentionDays) {
+    this.retentionDays = retentionDays;
+  }
+
+  public void setRetentionDays(Object retentionDays) {
+    this.retentionDays = JsonNullable.<Object>of(retentionDays);
+  }
+
+
+  public EntitlementLimits maxCloudTargets(Object maxCloudTargets) {
+    this.maxCloudTargets = JsonNullable.<Object>of(maxCloudTargets);
+    return this;
+  }
+
+   /**
+   * Get maxCloudTargets
+   * @return maxCloudTargets
+  **/
+  @javax.annotation.Nullable
+  @JsonIgnore
+
+  public Object getMaxCloudTargets() {
+        return maxCloudTargets.orElse(null);
+  }
+
+  @JsonProperty(JSON_PROPERTY_MAX_CLOUD_TARGETS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public JsonNullable<Object> getMaxCloudTargets_JsonNullable() {
+    return maxCloudTargets;
+  }
+
+  @JsonProperty(JSON_PROPERTY_MAX_CLOUD_TARGETS)
+  public void setMaxCloudTargets_JsonNullable(JsonNullable<Object> maxCloudTargets) {
+    this.maxCloudTargets = maxCloudTargets;
+  }
+
+  public void setMaxCloudTargets(Object maxCloudTargets) {
+    this.maxCloudTargets = JsonNullable.<Object>of(maxCloudTargets);
+  }
+
+
+  public EntitlementLimits evidenceExportMb(Object evidenceExportMb) {
+    this.evidenceExportMb = JsonNullable.<Object>of(evidenceExportMb);
+    return this;
+  }
+
+   /**
+   * Get evidenceExportMb
+   * @return evidenceExportMb
+  **/
+  @javax.annotation.Nullable
+  @JsonIgnore
+
+  public Object getEvidenceExportMb() {
+        return evidenceExportMb.orElse(null);
+  }
+
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_EXPORT_MB)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public JsonNullable<Object> getEvidenceExportMb_JsonNullable() {
+    return evidenceExportMb;
+  }
+
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_EXPORT_MB)
+  public void setEvidenceExportMb_JsonNullable(JsonNullable<Object> evidenceExportMb) {
+    this.evidenceExportMb = evidenceExportMb;
+  }
+
+  public void setEvidenceExportMb(Object evidenceExportMb) {
+    this.evidenceExportMb = JsonNullable.<Object>of(evidenceExportMb);
+  }
+
+
+  public EntitlementLimits connectorCertificationScope(String connectorCertificationScope) {
+    this.connectorCertificationScope = connectorCertificationScope;
+    return this;
+  }
+
+   /**
+   * Get connectorCertificationScope
+   * @return connectorCertificationScope
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CONNECTOR_CERTIFICATION_SCOPE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getConnectorCertificationScope() {
+    return connectorCertificationScope;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CONNECTOR_CERTIFICATION_SCOPE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setConnectorCertificationScope(String connectorCertificationScope) {
+    this.connectorCertificationScope = connectorCertificationScope;
+  }
+
+
+  /**
+   * Return true if this EntitlementLimits object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    EntitlementLimits entitlementLimits = (EntitlementLimits) o;
+    return equalsNullable(this.monthlyLaunches, entitlementLimits.monthlyLaunches) &&
+        equalsNullable(this.concurrentRuns, entitlementLimits.concurrentRuns) &&
+        equalsNullable(this.retentionDays, entitlementLimits.retentionDays) &&
+        equalsNullable(this.maxCloudTargets, entitlementLimits.maxCloudTargets) &&
+        equalsNullable(this.evidenceExportMb, entitlementLimits.evidenceExportMb) &&
+        Objects.equals(this.connectorCertificationScope, entitlementLimits.connectorCertificationScope);
+  }
+
+  private static <T> boolean equalsNullable(JsonNullable<T> a, JsonNullable<T> b) {
+    return a == b || (a != null && b != null && a.isPresent() && b.isPresent() && Objects.deepEquals(a.get(), b.get()));
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(hashCodeNullable(monthlyLaunches), hashCodeNullable(concurrentRuns), hashCodeNullable(retentionDays), hashCodeNullable(maxCloudTargets), hashCodeNullable(evidenceExportMb), connectorCertificationScope);
+  }
+
+  private static <T> int hashCodeNullable(JsonNullable<T> a) {
+    if (a == null) {
+      return 1;
+    }
+    return a.isPresent() ? Arrays.deepHashCode(new Object[]{a.get()}) : 31;
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class EntitlementLimits {\n");
+    sb.append("    monthlyLaunches: ").append(toIndentedString(monthlyLaunches)).append("\n");
+    sb.append("    concurrentRuns: ").append(toIndentedString(concurrentRuns)).append("\n");
+    sb.append("    retentionDays: ").append(toIndentedString(retentionDays)).append("\n");
+    sb.append("    maxCloudTargets: ").append(toIndentedString(maxCloudTargets)).append("\n");
+    sb.append("    evidenceExportMb: ").append(toIndentedString(evidenceExportMb)).append("\n");
+    sb.append("    connectorCertificationScope: ").append(toIndentedString(connectorCertificationScope)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `monthly_launches` to the URL query string
+    if (getMonthlyLaunches() != null) {
+      joiner.add(String.format("%smonthly_launches%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getMonthlyLaunches()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `concurrent_runs` to the URL query string
+    if (getConcurrentRuns() != null) {
+      joiner.add(String.format("%sconcurrent_runs%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getConcurrentRuns()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `retention_days` to the URL query string
+    if (getRetentionDays() != null) {
+      joiner.add(String.format("%sretention_days%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRetentionDays()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `max_cloud_targets` to the URL query string
+    if (getMaxCloudTargets() != null) {
+      joiner.add(String.format("%smax_cloud_targets%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getMaxCloudTargets()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `evidence_export_mb` to the URL query string
+    if (getEvidenceExportMb() != null) {
+      joiner.add(String.format("%sevidence_export_mb%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEvidenceExportMb()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `connector_certification_scope` to the URL query string
+    if (getConnectorCertificationScope() != null) {
+      joiner.add(String.format("%sconnector_certification_scope%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getConnectorCertificationScope()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.8
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * EnvExposurePolicy
  */
 @JsonPropertyOrder({
@@ -26980,6 +30236,11 @@ public static class LaunchRecipe extends HashMap<String, Object> {
   LaunchpadApp.JSON_PROPERTY_TEARDOWN_RECIPE,
   LaunchpadApp.JSON_PROPERTY_EVIDENCE_PROFILE,
   LaunchpadApp.JSON_PROPERTY_POLICY_REF,
+  LaunchpadApp.JSON_PROPERTY_USER_STATE,
+  LaunchpadApp.JSON_PROPERTY_REQUIRED_CAPABILITY,
+  LaunchpadApp.JSON_PROPERTY_UPGRADE_REASON,
+  LaunchpadApp.JSON_PROPERTY_ENTITLEMENT_DECISION,
+  LaunchpadApp.JSON_PROPERTY_ACTION_STATES,
   LaunchpadApp.JSON_PROPERTY_STATUS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
@@ -27049,6 +30310,21 @@ public static class LaunchpadApp extends HashMap<String, Object> {
 
   public static final String JSON_PROPERTY_POLICY_REF = "policy_ref";
   private String policyRef;
+
+  public static final String JSON_PROPERTY_USER_STATE = "user_state";
+  private String userState;
+
+  public static final String JSON_PROPERTY_REQUIRED_CAPABILITY = "required_capability";
+  private String requiredCapability;
+
+  public static final String JSON_PROPERTY_UPGRADE_REASON = "upgrade_reason";
+  private String upgradeReason;
+
+  public static final String JSON_PROPERTY_ENTITLEMENT_DECISION = "entitlement_decision";
+  private EntitlementDecision entitlementDecision;
+
+  public static final String JSON_PROPERTY_ACTION_STATES = "action_states";
+  private Map<String, EntitlementDecision> actionStates = new HashMap<>();
 
   public static final String JSON_PROPERTY_STATUS = "status";
   private LaunchpadAppStatus status;
@@ -27678,6 +30954,131 @@ public static class LaunchpadApp extends HashMap<String, Object> {
   }
 
 
+  public LaunchpadApp userState(String userState) {
+    this.userState = userState;
+    return this;
+  }
+
+   /**
+   * Get userState
+   * @return userState
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_USER_STATE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getUserState() {
+    return userState;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_USER_STATE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setUserState(String userState) {
+    this.userState = userState;
+  }
+
+
+  public LaunchpadApp requiredCapability(String requiredCapability) {
+    this.requiredCapability = requiredCapability;
+    return this;
+  }
+
+   /**
+   * Get requiredCapability
+   * @return requiredCapability
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REQUIRED_CAPABILITY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getRequiredCapability() {
+    return requiredCapability;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REQUIRED_CAPABILITY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRequiredCapability(String requiredCapability) {
+    this.requiredCapability = requiredCapability;
+  }
+
+
+  public LaunchpadApp upgradeReason(String upgradeReason) {
+    this.upgradeReason = upgradeReason;
+    return this;
+  }
+
+   /**
+   * Get upgradeReason
+   * @return upgradeReason
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_UPGRADE_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getUpgradeReason() {
+    return upgradeReason;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_UPGRADE_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setUpgradeReason(String upgradeReason) {
+    this.upgradeReason = upgradeReason;
+  }
+
+
+  public LaunchpadApp entitlementDecision(EntitlementDecision entitlementDecision) {
+    this.entitlementDecision = entitlementDecision;
+    return this;
+  }
+
+   /**
+   * Get entitlementDecision
+   * @return entitlementDecision
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ENTITLEMENT_DECISION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public EntitlementDecision getEntitlementDecision() {
+    return entitlementDecision;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ENTITLEMENT_DECISION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEntitlementDecision(EntitlementDecision entitlementDecision) {
+    this.entitlementDecision = entitlementDecision;
+  }
+
+
+  public LaunchpadApp actionStates(Map<String, EntitlementDecision> actionStates) {
+    this.actionStates = actionStates;
+    return this;
+  }
+
+   /**
+   * Get actionStates
+   * @return actionStates
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ACTION_STATES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, EntitlementDecision> getActionStates() {
+    return actionStates;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ACTION_STATES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setActionStates(Map<String, EntitlementDecision> actionStates) {
+    this.actionStates = actionStates;
+  }
+
+
   public LaunchpadApp status(LaunchpadAppStatus status) {
     this.status = status;
     return this;
@@ -27780,6 +31181,11 @@ public static class LaunchpadApp extends HashMap<String, Object> {
         Objects.equals(this.teardownRecipe, launchpadApp.teardownRecipe) &&
         Objects.equals(this.evidenceProfile, launchpadApp.evidenceProfile) &&
         Objects.equals(this.policyRef, launchpadApp.policyRef) &&
+        Objects.equals(this.userState, launchpadApp.userState) &&
+        Objects.equals(this.requiredCapability, launchpadApp.requiredCapability) &&
+        Objects.equals(this.upgradeReason, launchpadApp.upgradeReason) &&
+        Objects.equals(this.entitlementDecision, launchpadApp.entitlementDecision) &&
+        Objects.equals(this.actionStates, launchpadApp.actionStates) &&
         Objects.equals(this.status, launchpadApp.status)&&
         Objects.equals(this.additionalProperties, launchpadApp.additionalProperties) &&
         super.equals(o);
@@ -27787,7 +31193,7 @@ public static class LaunchpadApp extends HashMap<String, Object> {
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, appId, name, version, ociRef, immutableDigest, ossSupported, availability, redistribution, installStrategy, riskClass, blockedReason, requiredSecrets, modelGatewayEnv, declaredCapabilities, mcpServers, filesystemNeeds, networkNeeds, healthcheck, teardownRecipe, evidenceProfile, policyRef, status, super.hashCode(), additionalProperties);
+    return Objects.hash(id, appId, name, version, ociRef, immutableDigest, ossSupported, availability, redistribution, installStrategy, riskClass, blockedReason, requiredSecrets, modelGatewayEnv, declaredCapabilities, mcpServers, filesystemNeeds, networkNeeds, healthcheck, teardownRecipe, evidenceProfile, policyRef, userState, requiredCapability, upgradeReason, entitlementDecision, actionStates, status, super.hashCode(), additionalProperties);
   }
 
   @Override
@@ -27817,6 +31223,11 @@ public static class LaunchpadApp extends HashMap<String, Object> {
     sb.append("    teardownRecipe: ").append(toIndentedString(teardownRecipe)).append("\n");
     sb.append("    evidenceProfile: ").append(toIndentedString(evidenceProfile)).append("\n");
     sb.append("    policyRef: ").append(toIndentedString(policyRef)).append("\n");
+    sb.append("    userState: ").append(toIndentedString(userState)).append("\n");
+    sb.append("    requiredCapability: ").append(toIndentedString(requiredCapability)).append("\n");
+    sb.append("    upgradeReason: ").append(toIndentedString(upgradeReason)).append("\n");
+    sb.append("    entitlementDecision: ").append(toIndentedString(entitlementDecision)).append("\n");
+    sb.append("    actionStates: ").append(toIndentedString(actionStates)).append("\n");
     sb.append("    status: ").append(toIndentedString(status)).append("\n");
     sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
     sb.append("}");
@@ -28011,6 +31422,31 @@ public static class LaunchpadApp extends HashMap<String, Object> {
     // add `policy_ref` to the URL query string
     if (getPolicyRef() != null) {
       joiner.add(String.format("%spolicy_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `user_state` to the URL query string
+    if (getUserState() != null) {
+      joiner.add(String.format("%suser_state%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getUserState()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `required_capability` to the URL query string
+    if (getRequiredCapability() != null) {
+      joiner.add(String.format("%srequired_capability%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRequiredCapability()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `upgrade_reason` to the URL query string
+    if (getUpgradeReason() != null) {
+      joiner.add(String.format("%supgrade_reason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getUpgradeReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `entitlement_decision` to the URL query string
+    if (getEntitlementDecision() != null) {
+      joiner.add(getEntitlementDecision().toUrlQueryString(prefix + "entitlement_decision" + suffix));
+    }
+
+    // add `action_states` to the URL query string
+    if (getActionStates() != null) {
+      joiner.add(String.format("%saction_states%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getActionStates()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `status` to the URL query string
@@ -30702,7 +34138,12 @@ public static class LaunchpadMCPServer extends HashMap<String, Object> {
   LaunchpadMatrixCell.JSON_PROPERTY_LAUNCHABLE,
   LaunchpadMatrixCell.JSON_PROPERTY_VERDICT,
   LaunchpadMatrixCell.JSON_PROPERTY_REASON,
-  LaunchpadMatrixCell.JSON_PROPERTY_AVAILABILITY
+  LaunchpadMatrixCell.JSON_PROPERTY_AVAILABILITY,
+  LaunchpadMatrixCell.JSON_PROPERTY_USER_STATE,
+  LaunchpadMatrixCell.JSON_PROPERTY_REQUIRED_CAPABILITY,
+  LaunchpadMatrixCell.JSON_PROPERTY_UPGRADE_REASON,
+  LaunchpadMatrixCell.JSON_PROPERTY_ENTITLEMENT_DECISION,
+  LaunchpadMatrixCell.JSON_PROPERTY_ACTION_STATES
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class LaunchpadMatrixCell extends HashMap<String, Object> {
@@ -30723,6 +34164,21 @@ public static class LaunchpadMatrixCell extends HashMap<String, Object> {
 
   public static final String JSON_PROPERTY_AVAILABILITY = "availability";
   private String availability;
+
+  public static final String JSON_PROPERTY_USER_STATE = "user_state";
+  private String userState;
+
+  public static final String JSON_PROPERTY_REQUIRED_CAPABILITY = "required_capability";
+  private String requiredCapability;
+
+  public static final String JSON_PROPERTY_UPGRADE_REASON = "upgrade_reason";
+  private String upgradeReason;
+
+  public static final String JSON_PROPERTY_ENTITLEMENT_DECISION = "entitlement_decision";
+  private EntitlementDecision entitlementDecision;
+
+  public static final String JSON_PROPERTY_ACTION_STATES = "action_states";
+  private Map<String, EntitlementDecision> actionStates = new HashMap<>();
 
   public LaunchpadMatrixCell() {
   }
@@ -30876,6 +34332,131 @@ public static class LaunchpadMatrixCell extends HashMap<String, Object> {
     this.availability = availability;
   }
 
+
+  public LaunchpadMatrixCell userState(String userState) {
+    this.userState = userState;
+    return this;
+  }
+
+   /**
+   * Get userState
+   * @return userState
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_USER_STATE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getUserState() {
+    return userState;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_USER_STATE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setUserState(String userState) {
+    this.userState = userState;
+  }
+
+
+  public LaunchpadMatrixCell requiredCapability(String requiredCapability) {
+    this.requiredCapability = requiredCapability;
+    return this;
+  }
+
+   /**
+   * Get requiredCapability
+   * @return requiredCapability
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REQUIRED_CAPABILITY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getRequiredCapability() {
+    return requiredCapability;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REQUIRED_CAPABILITY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRequiredCapability(String requiredCapability) {
+    this.requiredCapability = requiredCapability;
+  }
+
+
+  public LaunchpadMatrixCell upgradeReason(String upgradeReason) {
+    this.upgradeReason = upgradeReason;
+    return this;
+  }
+
+   /**
+   * Get upgradeReason
+   * @return upgradeReason
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_UPGRADE_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getUpgradeReason() {
+    return upgradeReason;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_UPGRADE_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setUpgradeReason(String upgradeReason) {
+    this.upgradeReason = upgradeReason;
+  }
+
+
+  public LaunchpadMatrixCell entitlementDecision(EntitlementDecision entitlementDecision) {
+    this.entitlementDecision = entitlementDecision;
+    return this;
+  }
+
+   /**
+   * Get entitlementDecision
+   * @return entitlementDecision
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ENTITLEMENT_DECISION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public EntitlementDecision getEntitlementDecision() {
+    return entitlementDecision;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ENTITLEMENT_DECISION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEntitlementDecision(EntitlementDecision entitlementDecision) {
+    this.entitlementDecision = entitlementDecision;
+  }
+
+
+  public LaunchpadMatrixCell actionStates(Map<String, EntitlementDecision> actionStates) {
+    this.actionStates = actionStates;
+    return this;
+  }
+
+   /**
+   * Get actionStates
+   * @return actionStates
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ACTION_STATES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, EntitlementDecision> getActionStates() {
+    return actionStates;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ACTION_STATES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setActionStates(Map<String, EntitlementDecision> actionStates) {
+    this.actionStates = actionStates;
+  }
+
   /**
    * A container for additional, undeclared properties.
    * This is a holder for any undeclared properties as specified with
@@ -30937,14 +34518,19 @@ public static class LaunchpadMatrixCell extends HashMap<String, Object> {
         Objects.equals(this.launchable, launchpadMatrixCell.launchable) &&
         Objects.equals(this.verdict, launchpadMatrixCell.verdict) &&
         Objects.equals(this.reason, launchpadMatrixCell.reason) &&
-        Objects.equals(this.availability, launchpadMatrixCell.availability)&&
+        Objects.equals(this.availability, launchpadMatrixCell.availability) &&
+        Objects.equals(this.userState, launchpadMatrixCell.userState) &&
+        Objects.equals(this.requiredCapability, launchpadMatrixCell.requiredCapability) &&
+        Objects.equals(this.upgradeReason, launchpadMatrixCell.upgradeReason) &&
+        Objects.equals(this.entitlementDecision, launchpadMatrixCell.entitlementDecision) &&
+        Objects.equals(this.actionStates, launchpadMatrixCell.actionStates)&&
         Objects.equals(this.additionalProperties, launchpadMatrixCell.additionalProperties) &&
         super.equals(o);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(appId, substrateId, launchable, verdict, reason, availability, super.hashCode(), additionalProperties);
+    return Objects.hash(appId, substrateId, launchable, verdict, reason, availability, userState, requiredCapability, upgradeReason, entitlementDecision, actionStates, super.hashCode(), additionalProperties);
   }
 
   @Override
@@ -30958,6 +34544,11 @@ public static class LaunchpadMatrixCell extends HashMap<String, Object> {
     sb.append("    verdict: ").append(toIndentedString(verdict)).append("\n");
     sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
     sb.append("    availability: ").append(toIndentedString(availability)).append("\n");
+    sb.append("    userState: ").append(toIndentedString(userState)).append("\n");
+    sb.append("    requiredCapability: ").append(toIndentedString(requiredCapability)).append("\n");
+    sb.append("    upgradeReason: ").append(toIndentedString(upgradeReason)).append("\n");
+    sb.append("    entitlementDecision: ").append(toIndentedString(entitlementDecision)).append("\n");
+    sb.append("    actionStates: ").append(toIndentedString(actionStates)).append("\n");
     sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
     sb.append("}");
     return sb.toString();
@@ -31034,6 +34625,31 @@ public static class LaunchpadMatrixCell extends HashMap<String, Object> {
     // add `availability` to the URL query string
     if (getAvailability() != null) {
       joiner.add(String.format("%savailability%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAvailability()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `user_state` to the URL query string
+    if (getUserState() != null) {
+      joiner.add(String.format("%suser_state%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getUserState()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `required_capability` to the URL query string
+    if (getRequiredCapability() != null) {
+      joiner.add(String.format("%srequired_capability%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRequiredCapability()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `upgrade_reason` to the URL query string
+    if (getUpgradeReason() != null) {
+      joiner.add(String.format("%supgrade_reason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getUpgradeReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `entitlement_decision` to the URL query string
+    if (getEntitlementDecision() != null) {
+      joiner.add(getEntitlementDecision().toUrlQueryString(prefix + "entitlement_decision" + suffix));
+    }
+
+    // add `action_states` to the URL query string
+    if (getActionStates() != null) {
+      joiner.add(String.format("%saction_states%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getActionStates()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();
@@ -31275,7 +34891,12 @@ public static class LaunchpadPlanRequest {
   LaunchpadPlanResponse.JSON_PROPERTY_KERNEL_VERDICT,
   LaunchpadPlanResponse.JSON_PROPERTY_REASON,
   LaunchpadPlanResponse.JSON_PROPERTY_REASON_CODE,
-  LaunchpadPlanResponse.JSON_PROPERTY_PLAN_HASH
+  LaunchpadPlanResponse.JSON_PROPERTY_PLAN_HASH,
+  LaunchpadPlanResponse.JSON_PROPERTY_USER_STATE,
+  LaunchpadPlanResponse.JSON_PROPERTY_REQUIRED_CAPABILITY,
+  LaunchpadPlanResponse.JSON_PROPERTY_UPGRADE_REASON,
+  LaunchpadPlanResponse.JSON_PROPERTY_ENTITLEMENT_DECISION,
+  LaunchpadPlanResponse.JSON_PROPERTY_ACTION_STATES
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class LaunchpadPlanResponse extends HashMap<String, Object> {
@@ -31302,6 +34923,21 @@ public static class LaunchpadPlanResponse extends HashMap<String, Object> {
 
   public static final String JSON_PROPERTY_PLAN_HASH = "plan_hash";
   private String planHash;
+
+  public static final String JSON_PROPERTY_USER_STATE = "user_state";
+  private String userState;
+
+  public static final String JSON_PROPERTY_REQUIRED_CAPABILITY = "required_capability";
+  private String requiredCapability;
+
+  public static final String JSON_PROPERTY_UPGRADE_REASON = "upgrade_reason";
+  private String upgradeReason;
+
+  public static final String JSON_PROPERTY_ENTITLEMENT_DECISION = "entitlement_decision";
+  private EntitlementDecision entitlementDecision;
+
+  public static final String JSON_PROPERTY_ACTION_STATES = "action_states";
+  private Map<String, EntitlementDecision> actionStates = new HashMap<>();
 
   public LaunchpadPlanResponse() {
   }
@@ -31505,6 +35141,131 @@ public static class LaunchpadPlanResponse extends HashMap<String, Object> {
     this.planHash = planHash;
   }
 
+
+  public LaunchpadPlanResponse userState(String userState) {
+    this.userState = userState;
+    return this;
+  }
+
+   /**
+   * Get userState
+   * @return userState
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_USER_STATE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getUserState() {
+    return userState;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_USER_STATE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setUserState(String userState) {
+    this.userState = userState;
+  }
+
+
+  public LaunchpadPlanResponse requiredCapability(String requiredCapability) {
+    this.requiredCapability = requiredCapability;
+    return this;
+  }
+
+   /**
+   * Get requiredCapability
+   * @return requiredCapability
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REQUIRED_CAPABILITY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getRequiredCapability() {
+    return requiredCapability;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REQUIRED_CAPABILITY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRequiredCapability(String requiredCapability) {
+    this.requiredCapability = requiredCapability;
+  }
+
+
+  public LaunchpadPlanResponse upgradeReason(String upgradeReason) {
+    this.upgradeReason = upgradeReason;
+    return this;
+  }
+
+   /**
+   * Get upgradeReason
+   * @return upgradeReason
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_UPGRADE_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getUpgradeReason() {
+    return upgradeReason;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_UPGRADE_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setUpgradeReason(String upgradeReason) {
+    this.upgradeReason = upgradeReason;
+  }
+
+
+  public LaunchpadPlanResponse entitlementDecision(EntitlementDecision entitlementDecision) {
+    this.entitlementDecision = entitlementDecision;
+    return this;
+  }
+
+   /**
+   * Get entitlementDecision
+   * @return entitlementDecision
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ENTITLEMENT_DECISION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public EntitlementDecision getEntitlementDecision() {
+    return entitlementDecision;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ENTITLEMENT_DECISION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEntitlementDecision(EntitlementDecision entitlementDecision) {
+    this.entitlementDecision = entitlementDecision;
+  }
+
+
+  public LaunchpadPlanResponse actionStates(Map<String, EntitlementDecision> actionStates) {
+    this.actionStates = actionStates;
+    return this;
+  }
+
+   /**
+   * Get actionStates
+   * @return actionStates
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ACTION_STATES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, EntitlementDecision> getActionStates() {
+    return actionStates;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ACTION_STATES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setActionStates(Map<String, EntitlementDecision> actionStates) {
+    this.actionStates = actionStates;
+  }
+
   /**
    * A container for additional, undeclared properties.
    * This is a holder for any undeclared properties as specified with
@@ -31568,14 +35329,19 @@ public static class LaunchpadPlanResponse extends HashMap<String, Object> {
         Objects.equals(this.kernelVerdict, launchpadPlanResponse.kernelVerdict) &&
         Objects.equals(this.reason, launchpadPlanResponse.reason) &&
         Objects.equals(this.reasonCode, launchpadPlanResponse.reasonCode) &&
-        Objects.equals(this.planHash, launchpadPlanResponse.planHash)&&
+        Objects.equals(this.planHash, launchpadPlanResponse.planHash) &&
+        Objects.equals(this.userState, launchpadPlanResponse.userState) &&
+        Objects.equals(this.requiredCapability, launchpadPlanResponse.requiredCapability) &&
+        Objects.equals(this.upgradeReason, launchpadPlanResponse.upgradeReason) &&
+        Objects.equals(this.entitlementDecision, launchpadPlanResponse.entitlementDecision) &&
+        Objects.equals(this.actionStates, launchpadPlanResponse.actionStates)&&
         Objects.equals(this.additionalProperties, launchpadPlanResponse.additionalProperties) &&
         super.equals(o);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(launchId, appId, substrateId, state, kernelVerdict, reason, reasonCode, planHash, super.hashCode(), additionalProperties);
+    return Objects.hash(launchId, appId, substrateId, state, kernelVerdict, reason, reasonCode, planHash, userState, requiredCapability, upgradeReason, entitlementDecision, actionStates, super.hashCode(), additionalProperties);
   }
 
   @Override
@@ -31591,6 +35357,11 @@ public static class LaunchpadPlanResponse extends HashMap<String, Object> {
     sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
     sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
     sb.append("    planHash: ").append(toIndentedString(planHash)).append("\n");
+    sb.append("    userState: ").append(toIndentedString(userState)).append("\n");
+    sb.append("    requiredCapability: ").append(toIndentedString(requiredCapability)).append("\n");
+    sb.append("    upgradeReason: ").append(toIndentedString(upgradeReason)).append("\n");
+    sb.append("    entitlementDecision: ").append(toIndentedString(entitlementDecision)).append("\n");
+    sb.append("    actionStates: ").append(toIndentedString(actionStates)).append("\n");
     sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
     sb.append("}");
     return sb.toString();
@@ -31677,6 +35448,31 @@ public static class LaunchpadPlanResponse extends HashMap<String, Object> {
     // add `plan_hash` to the URL query string
     if (getPlanHash() != null) {
       joiner.add(String.format("%splan_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPlanHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `user_state` to the URL query string
+    if (getUserState() != null) {
+      joiner.add(String.format("%suser_state%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getUserState()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `required_capability` to the URL query string
+    if (getRequiredCapability() != null) {
+      joiner.add(String.format("%srequired_capability%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRequiredCapability()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `upgrade_reason` to the URL query string
+    if (getUpgradeReason() != null) {
+      joiner.add(String.format("%supgrade_reason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getUpgradeReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `entitlement_decision` to the URL query string
+    if (getEntitlementDecision() != null) {
+      joiner.add(getEntitlementDecision().toUrlQueryString(prefix + "entitlement_decision" + suffix));
+    }
+
+    // add `action_states` to the URL query string
+    if (getActionStates() != null) {
+      joiner.add(String.format("%saction_states%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getActionStates()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();

@@ -1,12 +1,17 @@
 package registry
 
 type MatrixCell struct {
-	AppID        string       `json:"app_id"`
-	SubstrateID  string       `json:"substrate_id"`
-	Availability Availability `json:"availability"`
-	Launchable   bool         `json:"launchable"`
-	Verdict      string       `json:"verdict"`
-	Reason       string       `json:"reason"`
+	AppID               string         `json:"app_id"`
+	SubstrateID         string         `json:"substrate_id"`
+	Availability        Availability   `json:"availability"`
+	Launchable          bool           `json:"launchable"`
+	Verdict             string         `json:"verdict"`
+	Reason              string         `json:"reason"`
+	UserState           string         `json:"user_state,omitempty"`
+	RequiredCapability  string         `json:"required_capability,omitempty"`
+	UpgradeReason       string         `json:"upgrade_reason,omitempty"`
+	EntitlementDecision any            `json:"entitlement_decision,omitempty"`
+	ActionStates        map[string]any `json:"action_states,omitempty"`
 }
 
 func (c *Catalog) Matrix() []MatrixCell {

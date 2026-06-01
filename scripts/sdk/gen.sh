@@ -182,6 +182,28 @@ import sys
 
 path = Path(sys.argv[1])
 s = path.read_text()
+
+classmethod_validators = {
+    "AccountEntitlements": {"plan_validate_enum"},
+    "AccountSession": {"plan_validate_enum"},
+    "EntitlementDecision": {"user_state_validate_enum"},
+    "EnvExposurePolicy": {"mode_validate_enum"},
+    "EvidenceEnvelopeExportRequest": {"envelope_validate_enum"},
+}
+lines = s.splitlines()
+out = []
+current_class = None
+for i, line in enumerate(lines):
+    if line.startswith("class ") and line.endswith("(BaseModel):"):
+        current_class = line.split("(", 1)[0].split()[1]
+    out.append(line)
+    if line.lstrip().startswith("@field_validator(") and current_class in classmethod_validators:
+        next_line = lines[i + 1] if i + 1 < len(lines) else ""
+        method_name = next_line.strip().split("(", 1)[0].removeprefix("def ")
+        if method_name in classmethod_validators[current_class]:
+            out.append(f"{line[:len(line) - len(line.lstrip())]}@classmethod")
+s = "\n".join(out)
+
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY
 fi

@@ -4296,6 +4296,111 @@ components:
           items: { type: string }
         offline_verify_command: { type: string }
 
+    AccountSession:
+      type: object
+      additionalProperties: true
+      properties:
+        session_id: { type: string }
+        principal_id: { type: string }
+        tenant_id: { type: string }
+        workspace_id: { type: string }
+        plan:
+          type: string
+          enum: [free, individual, enterprise]
+        plan_alias: { type: string }
+        edition: { type: string }
+        deployment_mode: { type: string }
+        account_lifecycle: { type: string }
+        offer_code: { type: string }
+        source: { type: string }
+        expires_at: { type: string, format: date-time }
+
+    AccountEntitlements:
+      type: object
+      additionalProperties: true
+      properties:
+        principal_id: { type: string }
+        tenant_id: { type: string }
+        workspace_id: { type: string }
+        plan:
+          type: string
+          enum: [free, individual, enterprise]
+        plan_alias: { type: string }
+        capabilities:
+          $ref: '#/components/schemas/EntitlementCapabilities'
+        limits:
+          $ref: '#/components/schemas/EntitlementLimits'
+        source: { type: string }
+        updated_at: { type: string, format: date-time }
+
+    EntitlementCapabilities:
+      type: object
+      additionalProperties: false
+      properties:
+        demo_launch: { type: boolean }
+        local_launch: { type: boolean }
+        cloud_launch: { type: boolean }
+        custom_policy: { type: boolean }
+        bring_own_secrets: { type: boolean }
+        evidence_export: { type: boolean }
+        offline_verify: { type: boolean }
+        team_admin: { type: boolean }
+        sso: { type: boolean }
+        legal_hold: { type: boolean }
+        certified_connectors: { type: boolean }
+        enterprise_retention: { type: boolean }
+
+    EntitlementLimits:
+      type: object
+      additionalProperties: true
+      properties:
+        monthly_launches: { type: integer, format: int64 }
+        concurrent_runs: { type: integer, format: int64 }
+        retention_days: { type: integer, format: int64 }
+        max_cloud_targets: { type: integer, format: int64 }
+        evidence_export_mb: { type: integer, format: int64 }
+        connector_certification_scope: { type: string }
+
+    EntitlementDecisionRequest:
+      type: object
+      required: [action]
+      additionalProperties: true
+      properties:
+        principal_id: { type: string }
+        tenant_id: { type: string }
+        workspace_id: { type: string }
+        action: { type: string }
+        app_id: { type: string }
+        substrate_id: { type: string }
+        target: { type: string }
+        current_usage:
+          type: object
+          additionalProperties: true
+          properties:
+            monthly_launches: { type: integer, format: int64 }
+            concurrent_runs: { type: integer, format: int64 }
+            cloud_targets: { type: integer, format: int64 }
+        run_id: { type: string }
+
+    EntitlementDecision:
+      type: object
+      additionalProperties: true
+      properties:
+        allowed: { type: boolean }
+        user_state:
+          type: string
+          enum: [available, needs_setup, upgrade_required, enterprise_controlled, blocked, unsupported]
+        required_capability: { type: string }
+        reason_code: { type: string }
+        reason: { type: string }
+        upgrade_reason: { type: string }
+        limit: { type: integer, format: int64 }
+        used: { type: integer, format: int64 }
+        remaining: { type: integer, format: int64 }
+        decision_ref: { type: string }
+        source: { type: string }
+        expires_at: { type: string, format: date-time }
+
     LaunchpadApp:
       type: object
       required: [id, name]
@@ -4342,6 +4447,15 @@ components:
           type: object
           additionalProperties: true
         policy_ref: { type: string }
+        user_state: { type: string }
+        required_capability: { type: string }
+        upgrade_reason: { type: string }
+        entitlement_decision:
+          $ref: '#/components/schemas/EntitlementDecision'
+        action_states:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/EntitlementDecision'
         status:
           $ref: '#/components/schemas/LaunchpadAppStatus'
 
@@ -4399,6 +4513,15 @@ components:
         verdict: { type: string }
         reason: { type: string }
         availability: { type: string }
+        user_state: { type: string }
+        required_capability: { type: string }
+        upgrade_reason: { type: string }
+        entitlement_decision:
+          $ref: '#/components/schemas/EntitlementDecision'
+        action_states:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/EntitlementDecision'
 
     LaunchpadPlanResponse:
       type: object
@@ -4412,6 +4535,15 @@ components:
         reason: { type: string }
         reason_code: { type: string }
         plan_hash: { type: string }
+        user_state: { type: string }
+        required_capability: { type: string }
+        upgrade_reason: { type: string }
+        entitlement_decision:
+          $ref: '#/components/schemas/EntitlementDecision'
+        action_states:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/EntitlementDecision'
 
     LaunchpadRun:
       type: object

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	launchsession "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
 )
@@ -141,6 +142,54 @@ func TestLaunchpadImportRoutesAnalyzeLocalRepoAndBlockUnsafeLaunch(t *testing.T)
 	}
 	if _, err := os.Stat(filepath.Join(storeRoot, "runs")); err == nil {
 		t.Fatal("import launch route created a run before promotion")
+	}
+}
+
+func TestLaunchpadEntitlementDenialBlocksBeforeRunWrite(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	storeRoot := t.TempDir()
+	svc.DataDir = t.TempDir()
+	svc.DatabaseMode = "sqlite"
+	svc.DatabaseStatus = "ready"
+	svc.LaunchpadStore = launchsession.NewStore(storeRoot)
+
+	accountServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/account/decisions" {
+			t.Fatalf("decision path = %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"allowed":             false,
+			"user_state":          "upgrade_required",
+			"required_capability": "cloud_launch",
+			"reason_code":         "ENTITLEMENT_UPGRADE_REQUIRED",
+			"reason":              "Capability is not enabled for this hosted account.",
+			"upgrade_reason":      "Upgrade your hosted HELM plan to use this capability.",
+			"decision_ref":        "ent_test_denied",
+			"source":              "test",
+			"expires_at":          time.Now().UTC().Add(time.Minute).Format(time.RFC3339),
+		})
+	}))
+	defer accountServer.Close()
+	t.Setenv("HELM_ACCOUNT_ENTITLEMENTS_URL", accountServer.URL)
+
+	mux := http.NewServeMux()
+	RegisterSubsystemRoutes(mux, svc)
+
+	body := []byte(`{"app_id":"openclaw","substrate_id":"local-container","principal":"console-test"}`)
+	launchReq := httptest.NewRequest(http.MethodPost, "/api/v1/launchpad/launch", bytes.NewReader(body))
+	authorizeTestRequest(launchReq)
+	launchRec := httptest.NewRecorder()
+	mux.ServeHTTP(launchRec, launchReq)
+	if launchRec.Code != http.StatusForbidden {
+		t.Fatalf("launch status=%d body=%s", launchRec.Code, launchRec.Body.String())
+	}
+	runs, err := svc.LaunchpadStore.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 0 {
+		t.Fatalf("denied launch wrote runs: %#v", runs)
 	}
 }
 

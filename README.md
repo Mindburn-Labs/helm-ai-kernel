@@ -22,16 +22,50 @@
 [![GHCR chart](https://img.shields.io/badge/ghcr.io-helm--ai--kernel%20chart-0F1689?logo=helm&logoColor=white)](https://github.com/Mindburn-Labs/helm-ai-kernel/pkgs/container/charts%2Fhelm-ai-kernel)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/mindburn-labs)](https://artifacthub.io/packages/search?repo=mindburn-labs)
 
-HELM AI Kernel is the fail-closed execution firewall for AI agents.
+HELM AI Kernel is the open-source execution firewall for MCP and AI agents.
+It sits between agent tool calls and side effects, evaluates authority before
+dispatch, and emits signed receipts that can be verified offline.
 
-## Get Started
+**Star HELM to follow open-source AI agent security, MCP quarantine, and proof
+receipts:** <https://github.com/Mindburn-Labs/helm-ai-kernel/stargazers>
 
-1. **Register at Console** → <https://console.helm.mindburn.org>
-2. **Install locally** → `brew install mindburnlabs/tap/helm-ai-kernel`
-3. **Login locally** → `helm-ai-kernel login`
-4. **Pair with Console** → `helm-ai-kernel console pair`
-5. **Run Launchpad** → `helm up openclaw`
-6. **View in Console** → receipts and evidence appear in the Console dashboard
+## Try HELM Locally
+
+No account, hosted service, or production credential is required for the local
+proof path:
+
+```bash
+git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
+cd helm-ai-kernel
+make build
+bash scripts/launch/demo-mcp.sh
+bash scripts/launch/demo-proof.sh
+```
+
+The MCP demo shows unknown servers and tools denied before fixture dispatch.
+The proof demo emits a signed DENY receipt and proves that a tampered verdict
+fails verification. Sanitized transcripts are checked in under
+[`examples/launch/assets`](examples/launch/assets).
+
+![HELM MCP quarantine proof asset](docs/assets/helm-mcp-quarantine-demo.svg)
+
+## Start Here
+
+| Visitor | First path | What to verify |
+| --- | --- | --- |
+| Agent builders | [Quickstart](docs/QUICKSTART.md) and [OpenAI-compatible proxy](docs/INTEGRATIONS/openai_baseurl.md) | Existing OpenAI-style clients can route through HELM and receive receipt metadata. |
+| Security engineers | [Execution Security Model](docs/EXECUTION_SECURITY_MODEL.md) and [OWASP MCP Threat Mapping](docs/OWASP_MCP_THREAT_MAPPING.md) | ALLOW, DENY, and ESCALATE decisions are recorded with verifiable evidence. |
+| Gateway and MCP maintainers | [MCP integration](docs/INTEGRATIONS/mcp.md) and [Ecosystem map](docs/ECOSYSTEM.md) | Unknown tools stay quarantined until schema, identity, and policy state are approved. |
+
+## Community And Product Links
+
+- Try OSS locally: [Quickstart](https://helm.docs.mindburn.org/helm-ai-kernel/quickstart?utm_source=github&utm_medium=readme&utm_campaign=oss-traction)
+- Star on GitHub: [Mindburn-Labs/helm-ai-kernel](https://github.com/Mindburn-Labs/helm-ai-kernel?utm_source=github&utm_medium=readme&utm_campaign=oss-traction)
+- Join Discussions: [GitHub Discussions](https://github.com/Mindburn-Labs/helm-ai-kernel/discussions?utm_source=github&utm_medium=readme&utm_campaign=oss-traction)
+- Find first issues: [good first issue](https://github.com/Mindburn-Labs/helm-ai-kernel/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22)
+- Talk to Mindburn Labs about production agent governance: [Console](https://console.helm.mindburn.org?utm_source=github&utm_medium=readme&utm_campaign=oss-traction)
+
+## Launchpad And Console
 
 ```bash
 brew install mindburnlabs/tap/helm-ai-kernel
@@ -254,6 +288,9 @@ Public OSS docs are sourced from this repo and published through
 `docs/public-docs.manifest.json`.
 
 - [Quickstart](docs/QUICKSTART.md)
+- [Community](COMMUNITY.md)
+- [Ecosystem](docs/ECOSYSTEM.md)
+- [OSS Traction Playbook](docs/TRACTION.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Conformance](docs/CONFORMANCE.md)
 - [Verification](docs/VERIFICATION.md)
@@ -264,6 +301,7 @@ Public OSS docs are sourced from this repo and published through
 - [OWASP Mapping](docs/OWASP_MCP_THREAT_MAPPING.md)
 - [NIST AI Agent Critical Infrastructure Alignment](docs/compliance/nist-ai-agent-critical-infrastructure.md)
 - [NIST AI RMF to ISO 42001 Crosswalk](docs/compliance/nist-ai-rmf-iso-42001-crosswalk.md)
+- Search-intent pages: [MCP execution firewall](docs/use-cases/mcp-execution-firewall.md), [AI agent security](docs/use-cases/ai-agent-security.md), [OpenAI-compatible AI gateway policy](docs/use-cases/openai-compatible-ai-gateway-policy.md), [LLM audit receipts](docs/use-cases/llm-audit-receipts.md), and [agent tool-call governance](docs/use-cases/agent-tool-call-governance.md)
 
 ## Release Verification
 

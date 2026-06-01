@@ -5,7 +5,7 @@ last_reviewed: 2026-05-05
 
 # HELM AI Kernel Developer Portal
 
-HELM AI Kernel is the fail-closed execution firewall for AI agents. Register at <https://console.helm.mindburn.org> to get started, then install the local CLI for offline proof and integration testing. The Console provides the dashboard for managing runs, receipts, and evidence. The CLI gives developers a local kernel, policy bundle loader, OpenAI-compatible proxy path, MCP firewall, receipts, EvidencePacks, and offline verification.
+HELM AI Kernel is the open-source execution firewall for MCP and AI agents. The CLI gives developers a local kernel, policy bundle loader, OpenAI-compatible proxy path, MCP firewall, receipts, EvidencePacks, and offline verification. The Console provides the hosted dashboard for managing runs, receipts, and evidence after the local OSS path is understood.
 
 ## Audience
 
@@ -80,8 +80,9 @@ The code, command output, and verification artifacts override marketing language
 
 ## Start Here
 
-1. Register at the Console: <https://console.helm.mindburn.org>.
-2. Run the quickstart: [Quickstart](QUICKSTART.md).
+1. Run the local quickstart: [Quickstart](QUICKSTART.md).
+2. Try MCP quarantine with `bash scripts/launch/demo-mcp.sh`.
+3. Verify receipt tamper failure with `bash scripts/launch/demo-proof.sh`.
 3. Use the complete source-backed path: [Developer Journey](DEVELOPER_JOURNEY.md).
 4. Read the execution model: [Architecture](ARCHITECTURE.md).
 5. Pick an integration:

@@ -37,6 +37,114 @@
       "sensitivity": "public"
     },
     {
+      "slug": "helm-ai-kernel/community",
+      "title": "Community",
+      "section": "start-here",
+      "source_path": "COMMUNITY.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/community",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/ecosystem",
+      "title": "Ecosystem",
+      "section": "start-here",
+      "source_path": "docs/ECOSYSTEM.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/ecosystem",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/oss-traction",
+      "title": "OSS Traction Playbook",
+      "section": "start-here",
+      "source_path": "docs/TRACTION.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/oss-traction",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/use-cases/mcp-execution-firewall",
+      "title": "MCP Execution Firewall",
+      "section": "use-cases",
+      "source_path": "docs/use-cases/mcp-execution-firewall.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/use-cases/mcp-execution-firewall",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/use-cases/ai-agent-security",
+      "title": "AI Agent Security",
+      "section": "use-cases",
+      "source_path": "docs/use-cases/ai-agent-security.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/use-cases/ai-agent-security",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/use-cases/openai-compatible-ai-gateway-policy",
+      "title": "OpenAI-Compatible AI Gateway Policy",
+      "section": "use-cases",
+      "source_path": "docs/use-cases/openai-compatible-ai-gateway-policy.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/use-cases/openai-compatible-ai-gateway-policy",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/use-cases/llm-audit-receipts",
+      "title": "LLM Audit Receipts",
+      "section": "use-cases",
+      "source_path": "docs/use-cases/llm-audit-receipts.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/use-cases/llm-audit-receipts",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/use-cases/agent-tool-call-governance",
+      "title": "Agent Tool-Call Governance",
+      "section": "use-cases",
+      "source_path": "docs/use-cases/agent-tool-call-governance.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/use-cases/agent-tool-call-governance",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/posts/why-ai-agents-need-an-execution-firewall",
+      "title": "Why AI Agents Need an Execution Firewall",
+      "section": "posts",
+      "source_path": "docs/posts/why-ai-agents-need-an-execution-firewall.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/posts/why-ai-agents-need-an-execution-firewall",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/posts/mcp-quarantine-before-tool-dispatch",
+      "title": "MCP Quarantine Before Tool Dispatch",
+      "section": "posts",
+      "source_path": "docs/posts/mcp-quarantine-before-tool-dispatch.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/posts/mcp-quarantine-before-tool-dispatch",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/posts/receipts-beat-logs-for-agent-audit-trails",
+      "title": "Receipts Beat Logs for Agent Audit Trails",
+      "section": "posts",
+      "source_path": "docs/posts/receipts-beat-logs-for-agent-audit-trails.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/posts/receipts-beat-logs-for-agent-audit-trails",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "helm-ai-kernel/posts/how-to-fail-closed-on-agent-tool-calls",
+      "title": "How To Fail Closed on Agent Tool Calls",
+      "section": "posts",
+      "source_path": "docs/posts/how-to-fail-closed-on-agent-tool-calls.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/posts/how-to-fail-closed-on-agent-tool-calls",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "helm-ai-kernel/architecture",
       "title": "Architecture",
       "section": "start-here",

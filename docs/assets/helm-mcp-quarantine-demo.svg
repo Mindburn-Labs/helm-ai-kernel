@@ -1,133 +1,144 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
-  <title id="title">HELM MCP quarantine and receipt proof board</title>
-  <desc id="desc">A proof-oriented launch asset showing an AI agent tool call intercepted by HELM, unknown MCP tools denied before dispatch, schema-pinned calls allowed, signed receipts emitted, and tampered receipts rejected.</desc>
+  <title id="title">HELM AI Kernel execution firewall blueprint</title>
+  <desc id="desc">A light blueprint-style architecture diagram showing model proposals entering the HELM policy boundary, failing closed before tools, emitting signed receipts to ProofGraph, and releasing only authorized effects.</desc>
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#07090d"/>
-      <stop offset="0.48" stop-color="#0b111c"/>
-      <stop offset="1" stop-color="#101316"/>
-    </linearGradient>
-    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#111827"/>
-      <stop offset="1" stop-color="#0b1220"/>
-    </linearGradient>
-    <linearGradient id="boundary" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#172033"/>
-      <stop offset="0.55" stop-color="#101827"/>
-      <stop offset="1" stop-color="#18181b"/>
-    </linearGradient>
-    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
-      <path d="M32 0H0V32" fill="none" stroke="#253042" stroke-width="1" opacity="0.28"/>
+    <pattern id="minorGrid" width="16" height="16" patternUnits="userSpaceOnUse">
+      <path d="M16 0H0V16" fill="none" stroke="#edf0f2" stroke-width="1"/>
     </pattern>
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="20" stdDeviation="18" flood-color="#000000" flood-opacity="0.45"/>
+    <pattern id="majorGrid" width="80" height="80" patternUnits="userSpaceOnUse">
+      <path d="M80 0H0V80" fill="none" stroke="#dfe4e8" stroke-width="1.15"/>
+    </pattern>
+    <filter id="paper" x="-4%" y="-4%" width="108%" height="108%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="17" result="noise"/>
+      <feColorMatrix in="noise" type="saturate" values="0"/>
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.026"/>
+      </feComponentTransfer>
+      <feBlend in="SourceGraphic" mode="multiply"/>
     </filter>
-    <filter id="softGlow" x="-25%" y="-25%" width="150%" height="150%">
-      <feGaussianBlur stdDeviation="9" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#9aa3ad" flood-opacity="0.18"/>
     </filter>
-    <marker id="arrow" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto">
-      <path d="M2 2L12 7L2 12Z" fill="#38bdf8"/>
+    <marker id="arrowGray" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2 2L10 6L2 10Z" fill="#9ca3af"/>
+    </marker>
+    <marker id="arrowTeal" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2 2L10 6L2 10Z" fill="#77cfd0"/>
     </marker>
     <style>
       .sans { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
-      .muted { fill: #94a3b8; }
-      .text { fill: #f8fafc; }
-      .line { stroke: #334155; stroke-width: 1.4; }
-      .card { fill: url(#panel); stroke: #334155; stroke-width: 1.2; }
-      .small { font-size: 22px; }
-      .code { font-size: 24px; }
-      .tiny { font-size: 18px; }
-      .label { font-size: 17px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; }
+      .ink { fill: #2f3540; }
+      .muted { fill: #6f7782; }
+      .faint { fill: #9aa3ad; }
+      .layer { fill: #f7f8f9; stroke: #8e969f; stroke-width: 1.5; }
+      .layerText { fill: #303640; font-size: 17px; font-weight: 650; }
+      .small { font-size: 15px; }
+      .label { font-size: 18px; font-weight: 650; }
+      .nodeHead { font-size: 25px; font-weight: 720; }
+      .micro { font-size: 14px; font-weight: 600; letter-spacing: 0.4px; }
+      .ring { fill: #fbfcfc; stroke: #9aa3ad; stroke-width: 1.4; }
+      .tealStroke { stroke: #77cfd0; }
+      .violetStroke { stroke: #8f87d8; }
+      .pathBase { fill: none; stroke-linecap: round; stroke-linejoin: round; }
     </style>
   </defs>
 
-  <rect width="1600" height="900" fill="url(#bg)"/>
-  <rect width="1600" height="900" fill="url(#grid)" opacity="0.78"/>
-  <circle cx="1450" cy="78" r="180" fill="#164e63" opacity="0.12"/>
-  <circle cx="126" cy="814" r="230" fill="#7f1d1d" opacity="0.10"/>
+  <rect width="1600" height="900" fill="#fbfaf8"/>
+  <rect width="1600" height="900" fill="url(#minorGrid)" opacity="0.72"/>
+  <rect width="1600" height="900" fill="url(#majorGrid)" opacity="0.9"/>
+  <rect width="1600" height="900" fill="#fbfaf8" opacity="0.46" filter="url(#paper)"/>
 
-  <g transform="translate(70 58)">
-    <rect x="0" y="0" width="8" height="154" fill="#ef4444"/>
-    <rect x="14" y="0" width="8" height="154" fill="#f59e0b"/>
-    <rect x="28" y="0" width="8" height="154" fill="#22c55e"/>
-    <text x="62" y="24" class="sans label" fill="#38bdf8">HELM AI Kernel</text>
-    <text x="62" y="86" class="sans text" font-size="58" font-weight="760">Execution firewall for MCP and AI agents</text>
-    <text x="64" y="132" class="sans muted" font-size="27">Quarantine unknown tools before dispatch. Sign the decision. Verify evidence offline.</text>
+  <g opacity="0.16" fill="none" stroke="#cbd0d5" stroke-width="1.6">
+    <path d="M38 724C214 604 262 506 176 354C128 270 86 204 68 100C206 220 262 342 290 474C366 416 366 302 428 228C462 338 536 438 584 566C646 732 506 872 292 926"/>
+    <path d="M-34 502C110 514 242 502 338 442C420 392 470 298 530 226"/>
+    <path d="M126 106C184 254 282 292 316 438"/>
   </g>
 
-  <g transform="translate(70 238)" filter="url(#shadow)">
-    <rect x="0" y="0" width="1460" height="588" rx="24" fill="#0b1018" stroke="#263244" stroke-width="1.4"/>
-    <rect x="24" y="24" width="1412" height="540" rx="18" fill="#0e1624" stroke="#1f2937" stroke-width="1"/>
+  <g transform="translate(930 92)" text-anchor="middle">
+    <text class="sans ink" x="0" y="0" font-size="46" font-weight="720">HELM AI Kernel</text>
+    <text class="sans muted" x="0" y="38" font-size="24">Open-source execution firewall for MCP and AI agents</text>
+  </g>
 
-    <g transform="translate(56 58)">
-      <text x="0" y="0" class="sans label" fill="#f59e0b">1. Agent proposes</text>
-      <text x="0" y="50" class="sans text" font-size="36" font-weight="720">MCP tool call</text>
-      <rect x="0" y="82" width="390" height="296" rx="16" class="card"/>
-      <text x="26" y="124" class="mono code" fill="#38bdf8">{</text>
-      <text x="46" y="166" class="mono code" fill="#cbd5e1">"server":</text>
-      <text x="172" y="166" class="mono code" fill="#f8fafc">"unknown-repo-mcp",</text>
-      <text x="46" y="208" class="mono code" fill="#cbd5e1">"tool":</text>
-      <text x="142" y="208" class="mono code" fill="#f8fafc">"repo.delete",</text>
-      <text x="46" y="250" class="mono code" fill="#cbd5e1">"schema_pin":</text>
-      <text x="218" y="250" class="mono code" fill="#f87171">null,</text>
-      <text x="46" y="292" class="mono code" fill="#cbd5e1">"identity":</text>
-      <text x="190" y="292" class="mono code" fill="#f8fafc">"agent.demo.exec"</text>
-      <text x="26" y="334" class="mono code" fill="#38bdf8">}</text>
-      <rect x="0" y="406" width="390" height="70" rx="14" fill="#151a22" stroke="#334155"/>
-      <text x="24" y="450" class="sans small" fill="#f8fafc">Fixture dispatch has not happened yet.</text>
+  <g transform="translate(958 222)" opacity="0.42">
+    <circle cx="0" cy="0" r="72" fill="none" stroke="#c8cdd3" stroke-width="1.2"/>
+    <circle cx="0" cy="0" r="52" fill="none" stroke="#c8cdd3" stroke-width="1.2"/>
+    <circle cx="0" cy="0" r="35" fill="#f1f2f4" stroke="#c8cdd3" stroke-width="1.2"/>
+    <path d="M-13 18C-27-4-10-19-3-42C5-20 19-15 21 4C24 24 7 34-13 18Z" fill="none" stroke="#aeb5bd" stroke-width="2"/>
+    <path d="M-4 19C-15 4-4-9 4-22C6-10 16-3 15 9C14 22 7 27-4 19Z" fill="none" stroke="#aeb5bd" stroke-width="1.6"/>
+  </g>
+
+  <g transform="translate(492 284)" filter="url(#softShadow)">
+    <g class="sans" text-anchor="middle">
+      <path class="layer" d="M376 78L430 56C510 40 710 40 790 56L844 78L790 100C710 116 510 116 430 100Z"/>
+      <text class="layerText" x="610" y="84">6. MCP / Gateway Surface</text>
+
+      <path class="layer" d="M350 154L420 132C510 116 720 116 810 132L880 154L810 176C720 192 510 192 420 176Z"/>
+      <text class="layerText" x="610" y="160">5. Tool Plane</text>
+
+      <path class="layer" d="M326 230L404 206C506 188 724 188 826 206L904 230L826 254C724 272 506 272 404 254Z"/>
+      <text class="layerText" x="610" y="236">4. Policy Boundary</text>
+
+      <path class="layer" d="M300 308L392 278C504 258 726 258 838 278L930 308L838 338C726 358 504 358 392 338Z"/>
+
+      <path class="layer" d="M326 402L404 366C506 344 724 344 826 366L904 402L826 438C724 460 506 460 404 438Z"/>
+
+      <path class="layer" d="M350 496L420 454C510 430 720 430 810 454L880 496L810 538C720 562 510 562 420 538Z"/>
+      <text class="layerText" x="610" y="502">1. Identity and Trust</text>
     </g>
 
-    <path d="M486 300H612" stroke="#38bdf8" stroke-width="4" marker-end="url(#arrow)" opacity="0.92"/>
-    <text x="504" y="274" class="sans tiny" fill="#94a3b8">intercept</text>
-
-    <g transform="translate(612 58)">
-      <text x="0" y="0" class="sans label" fill="#38bdf8">2. HELM boundary</text>
-      <rect x="0" y="38" width="332" height="438" rx="22" fill="url(#boundary)" stroke="#475569" stroke-width="1.3"/>
-      <rect x="30" y="72" width="272" height="92" rx="18" fill="#2a1215" stroke="#ef4444" stroke-width="1.4"/>
-      <text x="62" y="132" class="sans" fill="#fecaca" font-size="54" font-weight="820">DENY</text>
-      <text x="32" y="205" class="sans small" fill="#e2e8f0">Unknown server</text>
-      <text x="32" y="241" class="sans small" fill="#e2e8f0">Missing schema pin</text>
-      <line x1="32" y1="272" x2="300" y2="272" class="line"/>
-      <text x="32" y="318" class="mono code" fill="#f87171">dispatch = blocked</text>
-      <text x="32" y="360" class="mono code" fill="#f87171">side_effect = false</text>
-      <text x="32" y="420" class="sans small" fill="#cbd5e1">Fail closed before tool side effects.</text>
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M138 346H192C220 346 222 286 260 286H364" stroke="#d7dde3" stroke-width="12"/>
+      <path d="M138 346H192C220 346 222 286 260 286H364" class="pathBase tealStroke" stroke-width="4" marker-end="url(#arrowTeal)"/>
+      <path d="M470 286H724" stroke="#d7dde3" stroke-width="12"/>
+      <path d="M470 286H724" class="pathBase tealStroke" stroke-width="4" marker-end="url(#arrowTeal)"/>
+      <path d="M838 286H918C944 286 946 346 980 346H1040" stroke="#e1e5e9" stroke-width="12"/>
+      <path d="M838 286H918C944 286 946 346 980 346H1040" class="pathBase" stroke="#c4cad0" stroke-width="3" marker-end="url(#arrowGray)"/>
+      <path d="M430 338V378C430 406 470 414 510 414H604" stroke="#d9d6ef" stroke-width="12"/>
+      <path d="M430 338V378C430 406 470 414 510 414H604" class="pathBase violetStroke" stroke-width="4"/>
+      <path d="M780 338V378C780 406 740 414 650 414" stroke="#d9d6ef" stroke-width="12"/>
+      <path d="M780 338V378C780 406 740 414 650 414" class="pathBase violetStroke" stroke-width="4" marker-end="url(#arrowGray)"/>
     </g>
 
-    <path d="M970 300H1096" stroke="#38bdf8" stroke-width="4" marker-end="url(#arrow)" opacity="0.92"/>
-    <text x="994" y="274" class="sans tiny" fill="#94a3b8">emit proof</text>
+    <g class="sans" text-anchor="middle">
+      <text class="muted small" x="-22" y="333" text-anchor="start">model proposals</text>
+      <path d="M126 346H70" fill="none" stroke="#b7bdc4" stroke-width="2" marker-end="url(#arrowGray)"/>
 
-    <g transform="translate(1096 58)">
-      <text x="0" y="0" class="sans label" fill="#22c55e">3. Signed evidence</text>
-      <text x="0" y="50" class="sans text" font-size="36" font-weight="720">Receipt verifies offline</text>
-      <rect x="0" y="82" width="314" height="296" rx="16" class="card"/>
-      <text x="24" y="124" class="mono code" fill="#f8fafc">receipt: rcpt_&lt;id&gt;</text>
-      <text x="24" y="170" class="mono code" fill="#f87171">verdict: DENY</text>
-      <text x="24" y="216" class="mono code" fill="#f8fafc">hash: sha256:&lt;proof&gt;</text>
-      <text x="24" y="262" class="mono code" fill="#22c55e">signature: OK</text>
-      <text x="24" y="322" class="mono code" fill="#f59e0b">flip verdict:</text>
-      <text x="224" y="322" class="mono code" fill="#ef4444">FAIL</text>
-      <rect x="0" y="406" width="314" height="70" rx="14" fill="#0f1f17" stroke="#22c55e"/>
-      <text x="24" y="450" class="sans small" fill="#dcfce7">Tampered proof rejected.</text>
-    </g>
+      <circle class="ring" cx="138" cy="346" r="54"/>
+      <circle fill="none" stroke="#c5cad0" stroke-width="1.2" cx="138" cy="346" r="40"/>
+      <text class="ink label" x="138" y="353">Agent</text>
 
-    <g transform="translate(56 512)">
-      <rect x="0" y="0" width="1354" height="1" fill="#334155"/>
-      <rect x="0" y="28" width="414" height="58" rx="16" fill="#281419" stroke="#ef4444"/>
-      <text x="24" y="66" class="sans small" fill="#fecaca">unknown server: DENY</text>
-      <rect x="470" y="28" width="374" height="58" rx="16" fill="#281419" stroke="#ef4444"/>
-      <text x="494" y="66" class="sans small" fill="#fecaca">unknown tool: DENY</text>
-      <rect x="900" y="28" width="454" height="58" rx="16" fill="#0f2418" stroke="#22c55e"/>
-      <text x="924" y="66" class="sans small" fill="#bbf7d0">schema-pinned local.echo: ALLOW</text>
+      <circle fill="#f8fbfb" stroke="#9fe3e2" stroke-width="7" cx="430" cy="286" r="64"/>
+      <circle fill="none" stroke="#74cbcb" stroke-width="2" cx="430" cy="286" r="76"/>
+      <circle fill="none" stroke="#d5f4f3" stroke-width="2" cx="430" cy="286" r="86"/>
+      <text class="ink nodeHead" x="430" y="277">PEP</text>
+      <text class="ink small" x="430" y="300">Policy Enforcement</text>
+      <text class="muted small" x="430" y="320">Point</text>
+
+      <rect x="540" y="266" width="132" height="28" rx="14" fill="#edf8f8" stroke="#9fe3e2"/>
+      <text class="muted micro" x="606" y="285">fail-closed</text>
+
+      <circle fill="#f8fbfb" stroke="#9fe3e2" stroke-width="7" cx="780" cy="286" r="64"/>
+      <circle fill="none" stroke="#74cbcb" stroke-width="2" cx="780" cy="286" r="76"/>
+      <circle fill="none" stroke="#d5f4f3" stroke-width="2" cx="780" cy="286" r="86"/>
+      <text class="ink nodeHead" x="780" y="277">CPI</text>
+      <text class="ink small" x="780" y="300">Constraint + Proof</text>
+      <text class="muted small" x="780" y="320">Interface</text>
+
+      <circle fill="#faf9ff" stroke="#aaa5e8" stroke-width="7" cx="610" cy="414" r="68"/>
+      <circle fill="none" stroke="#8079cf" stroke-width="2" cx="610" cy="414" r="80"/>
+      <text class="ink label" x="610" y="407">ProofGraph</text>
+      <text class="ink small" x="610" y="430">immutable receipts</text>
+
+      <circle class="ring" cx="1040" cy="346" r="54"/>
+      <circle fill="none" stroke="#c5cad0" stroke-width="1.2" cx="1040" cy="346" r="40"/>
+      <text class="faint label" x="1040" y="353">Effects</text>
     </g>
   </g>
 
-  <g transform="translate(70 850)">
-    <text x="0" y="0" class="sans" fill="#64748b" font-size="20">Local-only demo assets use fixtures and sanitized transcripts under examples/launch/assets.</text>
-    <text x="1460" y="0" class="sans" fill="#64748b" font-size="20" text-anchor="end">Star: github.com/Mindburn-Labs/helm-ai-kernel</text>
+  <g class="sans muted" transform="translate(108 820)">
+    <text x="0" y="0" font-size="18">DENY unknown tools before dispatch</text>
+    <text x="0" y="30" font-size="18">ALLOW pinned schemas with receipts</text>
+    <text x="0" y="60" font-size="18">FAIL tampered verdicts offline</text>
   </g>
 </svg>

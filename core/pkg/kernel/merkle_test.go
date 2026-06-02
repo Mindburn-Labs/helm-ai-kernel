@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"math"
 	"testing"
 )
 
@@ -316,4 +317,93 @@ func TestGetValueAtPath(t *testing.T) {
 			t.Errorf("getValueAtPath(%q) = %v, want %v", tc.path, result, tc.expected)
 		}
 	}
+}
+
+func TestMerkleAdditionalBranchEdges(t *testing.T) {
+	builder := NewMerkleTreeBuilder()
+
+	t.Run("array of nested objects", func(t *testing.T) {
+		tree, err := builder.BuildTree(map[string]any{
+			"items": []any{
+				map[string]any{"id": "a"},
+				map[string]any{"id": "b"},
+			},
+		})
+		if err != nil {
+			t.Fatalf("BuildTree failed: %v", err)
+		}
+		if len(tree.Leaves) != 2 {
+			t.Fatalf("expected 2 nested array leaves, got %d", len(tree.Leaves))
+		}
+	})
+
+	t.Run("canonicalization error", func(t *testing.T) {
+		_, err := builder.BuildTree(map[string]any{"bad": struct{}{}})
+		if err == nil {
+			t.Fatal("expected unsupported value to fail canonicalization")
+		}
+	})
+
+	t.Run("scalar extraction with prefix", func(t *testing.T) {
+		values := builder.extractPathValues("leaf", "/scalar")
+		if values["/scalar"] != "leaf" {
+			t.Fatalf("scalar prefix extraction failed: %v", values)
+		}
+	})
+
+	t.Run("default policy seals", func(t *testing.T) {
+		action, reason := matchPolicy("/unknown", ViewPolicy{})
+		if action != "SEAL" || reason == "" {
+			t.Fatalf("default policy should seal unknown paths, got %s/%s", action, reason)
+		}
+	})
+
+	t.Run("get value empty and non-map path", func(t *testing.T) {
+		obj := map[string]any{"user": "alice"}
+		if got := getValueAtPath(obj, ""); got == nil {
+			t.Fatal("empty path should return current object")
+		}
+		if got := getValueAtPath(obj, "/user/name"); got != nil {
+			t.Fatalf("non-map path segment should return nil, got %v", got)
+		}
+	})
+
+	t.Run("redact policy omits field", func(t *testing.T) {
+		pack := map[string]any{"secret": "confidential"}
+		tree, err := builder.BuildTree(pack)
+		if err != nil {
+			t.Fatalf("BuildTree failed: %v", err)
+		}
+		view, err := DeriveEvidenceView(pack, tree, ViewPolicy{
+			PolicyID: "redact-policy",
+			DisclosureRules: []DisclosureRule{
+				{PathPattern: "/secret", Action: "REDACT"},
+			},
+		}, "2024-01-01T00:00:00Z")
+		if err != nil {
+			t.Fatalf("DeriveEvidenceView failed: %v", err)
+		}
+		if _, ok := view.Disclosed["/secret"]; ok {
+			t.Fatal("redacted field should not be disclosed")
+		}
+	})
+
+	t.Run("view hash marshal error", func(t *testing.T) {
+		manualTree := &MerkleTree{
+			Root: "sha256:root",
+			Leaves: []MerkleLeaf{{
+				Path:     "/bad",
+				LeafHash: "sha256:leaf",
+			}},
+		}
+		_, err := DeriveEvidenceView(map[string]any{"bad": math.Inf(1)}, manualTree, ViewPolicy{
+			PolicyID: "bad-view",
+			DisclosureRules: []DisclosureRule{
+				{PathPattern: "/bad", Action: "DISCLOSE"},
+			},
+		}, "2024-01-01T00:00:00Z")
+		if err == nil {
+			t.Fatal("expected view hash marshal error")
+		}
+	})
 }

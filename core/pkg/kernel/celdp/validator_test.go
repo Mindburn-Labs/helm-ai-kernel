@@ -84,3 +84,24 @@ func TestValidator(t *testing.T) {
 		})
 	}
 }
+
+func TestValidatorAdditionalComprehensionAndNilTraversal(t *testing.T) {
+	var issues []CELDPIssue
+	checkRecursively(nil, &issues)
+	if len(issues) != 0 {
+		t.Fatalf("nil traversal should not add issues: %v", issues)
+	}
+
+	v, err := NewValidator()
+	if err != nil {
+		t.Fatalf("Failed to create validator: %v", err)
+	}
+
+	result, err := v.Validate("[1, 2, 3].exists(x, x > 1)")
+	if err != nil {
+		t.Fatalf("Validate comprehension expression: %v", err)
+	}
+	if !result.Valid {
+		t.Fatalf("comprehension without forbidden operations should be valid: %v", result.Issues)
+	}
+}

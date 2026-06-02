@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"math"
 	"testing"
 )
 
@@ -317,4 +318,103 @@ func TestDeduplicateArray(t *testing.T) {
 			t.Errorf("Expected 3 elements, got %d", len(result))
 		}
 	})
+}
+
+func TestCSNFTransformerAdditionalBranchErrors(t *testing.T) {
+	transformer := NewCSNFTransformer()
+
+	t.Run("array element transform error", func(t *testing.T) {
+		_, err := transformer.Transform([]any{float64(1.25)})
+		if err == nil {
+			t.Fatal("expected fractional array element to fail")
+		}
+	})
+
+	t.Run("set sort error is returned", func(t *testing.T) {
+		_, err := NewCSNFTransformer().
+			WithArrayMeta("/items", CSNFArrayMeta{Kind: CSNFArrayKindSet}).
+			Transform(map[string]any{
+				"items": []any{
+					map[string]any{"id": "a"},
+					map[string]any{"id": "b"},
+				},
+			})
+		if err == nil {
+			t.Fatal("expected set of objects without sort key to fail")
+		}
+	})
+
+	t.Run("compareElements first sort key error", func(t *testing.T) {
+		_, err := transformer.compareElements(map[string]any{"id": "a"}, "b", "/missing")
+		if err == nil {
+			t.Fatal("expected first sort key extraction to fail")
+		}
+	})
+
+	t.Run("compareElements second sort key error", func(t *testing.T) {
+		_, err := transformer.compareElements(map[string]any{"id": "a"}, map[string]any{"name": "b"}, "/id")
+		if err == nil {
+			t.Fatal("expected second sort key extraction to fail")
+		}
+	})
+
+	t.Run("compareElements first hash error", func(t *testing.T) {
+		_, err := transformer.compareElements(math.Inf(1), math.Inf(1), "")
+		if err == nil {
+			t.Fatal("expected first hash computation to fail")
+		}
+	})
+
+	t.Run("compareElements second hash error", func(t *testing.T) {
+		_, err := transformer.compareElements(
+			map[string]any{"id": "same", "ok": true},
+			map[string]any{"id": "same", "bad": math.Inf(1)},
+			"/id",
+		)
+		if err == nil {
+			t.Fatal("expected second hash computation to fail")
+		}
+	})
+
+	t.Run("hashElement marshal error", func(t *testing.T) {
+		_, err := transformer.hashElement(math.Inf(1))
+		if err == nil {
+			t.Fatal("expected marshal error for non-finite float")
+		}
+	})
+
+	t.Run("object value transform error", func(t *testing.T) {
+		_, err := transformer.Transform(map[string]any{"bad": struct{}{}})
+		if err == nil {
+			t.Fatal("expected unsupported object value to fail")
+		}
+	})
+}
+
+func TestCSNFNormalizeJSONAdditionalErrors(t *testing.T) {
+	_, err := CSNFNormalizeJSON([]byte(`{"value":1.25}`))
+	if err == nil {
+		t.Fatal("expected fractional JSON number to fail")
+	}
+}
+
+func TestExtractSortKeySkipsEmptyPathSegment(t *testing.T) {
+	obj := map[string]any{"id": "abc"}
+	val, err := NewCSNFTransformer().extractSortKey(obj, "//id")
+	if err != nil {
+		t.Fatalf("extractSortKey with empty segment failed: %v", err)
+	}
+	if val != "abc" {
+		t.Fatalf("expected abc, got %v", val)
+	}
+}
+
+func TestValidateCSNFComplianceAdditionalStringAndKeyIssues(t *testing.T) {
+	issues := ValidateCSNFCompliance(map[string]any{
+		"cafe\u0301": "ok",
+		"value":      "e\u0301",
+	})
+	if len(issues) < 2 {
+		t.Fatalf("expected non-NFC key and string issues, got %v", issues)
+	}
 }

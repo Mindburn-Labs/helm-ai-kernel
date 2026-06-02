@@ -319,3 +319,42 @@ func TestIsNFCNormalized(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateCSNFStrictSchemaNullCoverage(t *testing.T) {
+	tests := []struct {
+		name  string
+		value any
+		field string
+	}{
+		{
+			name:  "direct field",
+			value: map[string]any{"required": nil},
+			field: "required",
+		},
+		{
+			name:  "nested fallback field",
+			value: map[string]any{"user": map[string]any{"name": nil}},
+			field: "name",
+		},
+		{
+			name:  "array index fallback field",
+			value: map[string]any{"items": []any{nil}},
+			field: "items",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := &CSNFSchema{Fields: map[string]CSNFSchemaField{
+				tt.field: {Nullable: false},
+			}}
+			result := ValidateCSNFStrict(tt.value, schema)
+			if result.Valid {
+				t.Fatal("schema should reject non-nullable null")
+			}
+			if len(result.Issues) == 0 || result.Issues[0].Code != "CSNF_NULL_NOT_ALLOWED" {
+				t.Fatalf("unexpected issues: %+v", result.Issues)
+			}
+		})
+	}
+}

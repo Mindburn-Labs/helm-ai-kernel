@@ -52,3 +52,43 @@ func TestValidateSecretRef(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateSecretRefAdditionalFields(t *testing.T) {
+	valid := SecretRef{
+		RefID:                "secret-db",
+		Provider:             SecretProviderVault,
+		Path:                 "kv/data/prod/db",
+		MaterializationScope: MaterializationScopeRuntime,
+	}
+	if err := ValidateSecretRef(valid); err != nil {
+		t.Fatalf("valid SecretRef should pass: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		ref  SecretRef
+	}{
+		{name: "missing ref id", ref: SecretRef{Provider: SecretProviderVault, Path: "kv/x", MaterializationScope: MaterializationScopeRuntime}},
+		{name: "missing provider", ref: SecretRef{RefID: "s", Path: "kv/x", MaterializationScope: MaterializationScopeRuntime}},
+		{name: "missing path", ref: SecretRef{RefID: "s", Provider: SecretProviderVault, MaterializationScope: MaterializationScopeRuntime}},
+		{name: "missing scope", ref: SecretRef{RefID: "s", Provider: SecretProviderVault, Path: "kv/x"}},
+		{name: "unknown provider", ref: SecretRef{RefID: "s", Provider: SecretProvider("unknown"), Path: "kv/x", MaterializationScope: MaterializationScopeRuntime}},
+		{name: "invalid scope", ref: SecretRef{RefID: "s", Provider: SecretProviderVault, Path: "kv/x", MaterializationScope: MaterializationScope("deploy_time")}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := ValidateSecretRef(tt.ref); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
+	}
+}
+
+func TestScanForPlaintextSecretsAdditionalArrayPath(t *testing.T) {
+	artifact := []interface{}{
+		map[string]interface{}{"password": "hunter2"},
+	}
+	if err := ScanForPlaintextSecrets(artifact); err == nil {
+		t.Fatal("expected plaintext secret in array element")
+	}
+}

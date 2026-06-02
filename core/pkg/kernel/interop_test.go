@@ -244,3 +244,63 @@ func TestSchemaRegistry(t *testing.T) {
 		require.False(t, supported)
 	})
 }
+
+func TestInteropAdditionalBranchEdges(t *testing.T) {
+	t.Run("unknown inline blob policy", func(t *testing.T) {
+		v := NewInlineBlobValidator().WithPolicy(InlineBlobPolicy("UNKNOWN"))
+		result := v.Validate(make([]byte, MaxInlineBytes+1))
+		require.False(t, result.Valid)
+		require.Equal(t, "unknown policy", result.Error)
+	})
+
+	t.Run("minor and major compare less-than branches", func(t *testing.T) {
+		v1_0, _ := ParseSchemaVersion("1.0.0")
+		v1_1, _ := ParseSchemaVersion("1.1.0")
+		v2_0, _ := ParseSchemaVersion("2.0.0")
+		require.Equal(t, -1, v1_0.Compare(*v1_1))
+		require.Equal(t, -1, v1_1.Compare(*v2_0))
+	})
+
+	t.Run("unknown compatibility policy", func(t *testing.T) {
+		v1_0, _ := ParseSchemaVersion("1.0.0")
+		require.False(t, v1_0.IsCompatible(*v1_0, CompatibilityPolicy("UNKNOWN")))
+	})
+
+	t.Run("invalid schema metadata version", func(t *testing.T) {
+		issues := ValidateSchemaMetadata(SchemaMetadata{
+			SchemaID:      "https://helm.example/schemas/test",
+			SchemaVersion: "not-semver",
+		})
+		require.Len(t, issues, 1)
+		require.Contains(t, issues[0], "invalid schema version")
+	})
+
+	t.Run("register invalid metadata", func(t *testing.T) {
+		reg := NewSchemaRegistry()
+		require.Error(t, reg.Register(SchemaMetadata{SchemaID: "test"}))
+	})
+
+	t.Run("get latest missing schema", func(t *testing.T) {
+		reg := NewSchemaRegistry()
+		_, err := reg.GetLatest("missing")
+		require.Error(t, err)
+	})
+
+	t.Run("version supported missing schema", func(t *testing.T) {
+		reg := NewSchemaRegistry()
+		supported, err := reg.IsVersionSupported("missing", "1.0.0", CompatibilityPolicyStrict)
+		require.Error(t, err)
+		require.False(t, supported)
+	})
+
+	t.Run("version supported invalid check version", func(t *testing.T) {
+		reg := NewSchemaRegistry()
+		require.NoError(t, reg.Register(SchemaMetadata{
+			SchemaID:      "test",
+			SchemaVersion: "1.0.0",
+		}))
+		supported, err := reg.IsVersionSupported("test", "invalid", CompatibilityPolicyStrict)
+		require.Error(t, err)
+		require.False(t, supported)
+	})
+}

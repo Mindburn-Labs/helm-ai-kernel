@@ -226,3 +226,83 @@ func TestNormalizeNegativeZero(t *testing.T) {
 		}
 	})
 }
+
+func TestNormalizeDecimalAdditionalBranchEdges(t *testing.T) {
+	t.Run("below minimum", func(t *testing.T) {
+		_, err := NormalizeDecimal("0.99", DecimalSchema{
+			Scale:    2,
+			Rounding: DecimalRoundingHalfUp,
+			MinValue: "1.00",
+		})
+		if err == nil {
+			t.Fatal("expected minimum bound error")
+		}
+	})
+
+	t.Run("above maximum", func(t *testing.T) {
+		_, err := NormalizeDecimal("10.01", DecimalSchema{
+			Scale:    2,
+			Rounding: DecimalRoundingHalfUp,
+			MaxValue: "10.00",
+		})
+		if err == nil {
+			t.Fatal("expected maximum bound error")
+		}
+	})
+
+	t.Run("half even rounds up when remainder exceeds half", func(t *testing.T) {
+		result, err := NormalizeDecimal("1.26", DecimalSchema{Scale: 1, Rounding: DecimalRoundingHalfEven})
+		if err != nil {
+			t.Fatalf("NormalizeDecimal failed: %v", err)
+		}
+		if result != "1.3" {
+			t.Fatalf("expected 1.3, got %s", result)
+		}
+	})
+
+	t.Run("zero scale returns integer string", func(t *testing.T) {
+		result, err := NormalizeDecimal("12.4", DecimalSchema{Scale: 0, Rounding: DecimalRoundingDown})
+		if err != nil {
+			t.Fatalf("NormalizeDecimal failed: %v", err)
+		}
+		if result != "12" {
+			t.Fatalf("expected 12, got %s", result)
+		}
+	})
+}
+
+func TestCSNFMoneyAdditionalBranchEdges(t *testing.T) {
+	period := MoneyPeriod{Kind: PeriodKindInstant}
+
+	t.Run("rejects excess precision", func(t *testing.T) {
+		_, err := MoneyFromDecimal("12.345", "USD", period)
+		if err == nil {
+			t.Fatal("expected excess precision error")
+		}
+	})
+
+	t.Run("zero-scale currency decimal", func(t *testing.T) {
+		m := &CSNFMoney{AmountMinorUnits: 1234, Currency: "JPY", Period: period}
+		if d := m.ToDecimal(); d != "1234" {
+			t.Fatalf("ToDecimal() = %q, want 1234", d)
+		}
+	})
+
+	t.Run("negative padded decimal", func(t *testing.T) {
+		m := &CSNFMoney{AmountMinorUnits: -5, Currency: "USD", Period: period}
+		if d := m.ToDecimal(); d != "-0.05" {
+			t.Fatalf("ToDecimal() = %q, want -0.05", d)
+		}
+	})
+
+	t.Run("invalid period kind", func(t *testing.T) {
+		errs := ValidateMoney(&CSNFMoney{
+			AmountMinorUnits: 100,
+			Currency:         "USD",
+			Period:           MoneyPeriod{Kind: PeriodKind("WEEK")},
+		})
+		if len(errs) == 0 {
+			t.Fatal("expected invalid period kind issue")
+		}
+	})
+}

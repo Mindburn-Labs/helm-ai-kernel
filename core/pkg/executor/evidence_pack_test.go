@@ -242,6 +242,27 @@ func TestEvidencePackValidation_RequiredFields(t *testing.T) {
 			},
 			wantErr: "effect.effect_id is required",
 		},
+		{
+			name: "missing execution_id",
+			pack: &contracts.EvidencePack{
+				PackID:   "pack-1",
+				Identity: contracts.EvidencePackIdentity{ActorID: "user-1"},
+				Policy:   contracts.EvidencePackPolicy{DecisionID: "dec-1"},
+				Effect:   contracts.EvidencePackEffect{EffectID: "effect-1"},
+			},
+			wantErr: "execution.execution_id is required",
+		},
+		{
+			name: "missing execution status",
+			pack: &contracts.EvidencePack{
+				PackID:    "pack-1",
+				Identity:  contracts.EvidencePackIdentity{ActorID: "user-1"},
+				Policy:    contracts.EvidencePackPolicy{DecisionID: "dec-1"},
+				Effect:    contracts.EvidencePackEffect{EffectID: "effect-1"},
+				Execution: contracts.EvidencePackExecution{ExecutionID: "exec-1"},
+			},
+			wantErr: "execution.status is required",
+		},
 	}
 
 	for _, tt := range tests {

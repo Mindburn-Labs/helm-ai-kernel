@@ -216,12 +216,11 @@ func (v *SLSAVerifier) verifySourceRepo(externalParams json.RawMessage) error {
 		} `json:"source"`
 	}
 	if err := json.Unmarshal(externalParams, &params); err != nil {
-		// If we can't parse, we can't verify - warn but don't fail
-		return nil
+		return fmt.Errorf("failed to parse source external parameters: %w", err)
 	}
 
 	if params.Source.URI == "" {
-		return nil // No source specified
+		return fmt.Errorf("source repository is required by policy")
 	}
 
 	for _, allowed := range v.Policy.RequiredSourceRepos {

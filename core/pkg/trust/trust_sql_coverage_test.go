@@ -66,6 +66,24 @@ func TestCoveragePostgresTrustStoreMetadata(t *testing.T) {
 	if err := store.Save(&TUFMetadata{Root: root}); err == nil {
 		t.Fatal("expected metadata save error")
 	}
+	mock.ExpectExec("INSERT INTO trust_metadata").WithArgs("root", sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO trust_metadata").WithArgs("timestamp", sqlmock.AnyArg()).WillReturnError(errors.New("timestamp failed"))
+	if err := store.Save(&TUFMetadata{Root: root, Timestamp: timestamp}); err == nil {
+		t.Fatal("expected timestamp save error")
+	}
+	mock.ExpectExec("INSERT INTO trust_metadata").WithArgs("root", sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO trust_metadata").WithArgs("timestamp", sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO trust_metadata").WithArgs("snapshot", sqlmock.AnyArg()).WillReturnError(errors.New("snapshot failed"))
+	if err := store.Save(&TUFMetadata{Root: root, Timestamp: timestamp, Snapshot: snapshot}); err == nil {
+		t.Fatal("expected snapshot save error")
+	}
+	mock.ExpectExec("INSERT INTO trust_metadata").WithArgs("root", sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO trust_metadata").WithArgs("timestamp", sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO trust_metadata").WithArgs("snapshot", sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO trust_metadata").WithArgs("targets", sqlmock.AnyArg()).WillReturnError(errors.New("targets failed"))
+	if err := store.Save(&TUFMetadata{Root: root, Timestamp: timestamp, Snapshot: snapshot, Targets: targets}); err == nil {
+		t.Fatal("expected targets save error")
+	}
 	if err := store.Save(&TUFMetadata{Root: &SignedRole{Signed: json.RawMessage(`{`)}}); err == nil {
 		t.Fatal("expected metadata marshal error")
 	}

@@ -3,6 +3,7 @@ package trust
 import (
 	"context"
 	"encoding/xml"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -139,6 +140,46 @@ func TestEUTrustedList_RefreshHTTPError(t *testing.T) {
 	assert.Contains(t, err.Error(), "status 500")
 }
 
+func TestEUTrustedList_RefreshRequestAndReadErrors(t *testing.T) {
+	t.Run("request build error", func(t *testing.T) {
+		list := NewEUTrustedListWithConfig(EUTrustedListConfig{Endpoint: "http://[::1"})
+		err := list.Refresh(context.Background())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "build request")
+	})
+
+	t.Run("transport error", func(t *testing.T) {
+		list := NewEUTrustedListWithConfig(EUTrustedListConfig{
+			Endpoint: "https://example.invalid/lotl.xml",
+			HTTPClient: &http.Client{
+				Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					return nil, errors.New("transport failed")
+				}),
+			},
+		})
+		err := list.Refresh(context.Background())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "transport failed")
+	})
+
+	t.Run("body read error", func(t *testing.T) {
+		list := NewEUTrustedListWithConfig(EUTrustedListConfig{
+			Endpoint: "https://example.invalid/lotl.xml",
+			HTTPClient: &http.Client{
+				Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body:       errorReadCloser{},
+					}, nil
+				}),
+			},
+		})
+		err := list.Refresh(context.Background())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "read body")
+	})
+}
+
 func TestEUTrustedList_RefreshMalformedXML(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
@@ -165,6 +206,42 @@ func TestParseLOTL_RejectsEmpty(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestEUTrustedList_LoadFromBytesRejectsMalformedXML(t *testing.T) {
+	list := NewEUTrustedList()
+	err := list.LoadFromBytes([]byte("<"))
+	require.Error(t, err)
+}
+
+func TestParseLOTL_SkipsNonQualifiedAndUsesFallbackNames(t *testing.T) {
+	doc := lotlDocument{
+		SchemeOperator: lotlMultiLangName{Name: []struct {
+			Lang  string `xml:"lang,attr"`
+			Value string `xml:",chardata"`
+		}{{Lang: "fr", Value: "Commission europeenne"}}},
+		TSPs: []lotlTSP{{
+			Country: "nl",
+			Services: []lotlService{
+				{ServiceTypeIdentifier: "other", ServiceStatus: grantedStatusURI},
+				{
+					ServiceTypeIdentifier: qualifiedTimestampingService,
+					ServiceStatus:         grantedStatusURI,
+					ServiceDigitalIdentity: lotlServiceDigitalIdentity{DigitalID: []struct {
+						X509Certificate    string `xml:"X509Certificate"`
+						X509SubjectName    string `xml:"X509SubjectName"`
+						X509CertificateSHA string `xml:"X509CertificateSHA256"`
+					}{{X509Certificate: "aGVsbG8="}}},
+				},
+			},
+		}},
+	}
+	body, err := xml.Marshal(doc)
+	require.NoError(t, err)
+	parsed, err := parseLOTL(body)
+	require.NoError(t, err)
+	assert.Equal(t, "Commission europeenne", parsed.schemeOperator)
+	assert.Len(t, parsed.thumbprints, 1)
+}
+
 func TestComputeThumbprint_PrefersProvidedSHA(t *testing.T) {
 	tp := computeThumbprint("ZZZ-not-base64", "ABC123")
 	assert.Equal(t, "abc123", tp)
@@ -179,6 +256,27 @@ func TestComputeThumbprint_DerivesFromBase64(t *testing.T) {
 
 func TestComputeThumbprint_EmptyInputReturnsEmpty(t *testing.T) {
 	assert.Equal(t, "", computeThumbprint("", ""))
+}
+
+func TestComputeThumbprint_URLSafeAndInvalidBase64(t *testing.T) {
+	assert.NotEmpty(t, computeThumbprint("-_8=", ""))
+	assert.Equal(t, "", computeThumbprint("not valid base64!", ""))
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+type errorReadCloser struct{}
+
+func (errorReadCloser) Read([]byte) (int, error) {
+	return 0, errors.New("read failed")
+}
+
+func (errorReadCloser) Close() error {
+	return nil
 }
 
 // atomicClock is a tiny test helper for monotonic UTC time advancement

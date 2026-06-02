@@ -3,6 +3,10 @@ package trust
 import (
 	"crypto"
 	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -34,6 +38,21 @@ func TestNewTUFClient(t *testing.T) {
 		}
 		if client == nil {
 			t.Error("expected non-nil client")
+		}
+	})
+
+	t.Run("loads metadata from trust store", func(t *testing.T) {
+		stored := &TUFMetadata{Targets: &SignedRole{Signed: mustMarshal(TargetsMetadata{})}}
+		client, err := NewTUFClient(TUFClientConfig{
+			RemoteURL:  "https://example.com/tuf",
+			RootKeys:   []crypto.PublicKey{mockPublicKey{}},
+			TrustStore: &memoryTUFTrustStore{metadata: stored},
+		})
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if client.localMetadata != stored {
+			t.Fatal("expected stored metadata to be loaded")
 		}
 	})
 }
@@ -85,10 +104,36 @@ func TestTUFClient_GetTargetInfo(t *testing.T) {
 			t.Error("expected error for missing target")
 		}
 	})
+
+	t.Run("returns error without targets metadata", func(t *testing.T) {
+		_, err := (&TUFClient{}).GetTargetInfo("org.example/my-pack")
+		if err == nil {
+			t.Fatal("expected missing metadata error")
+		}
+	})
+
+	t.Run("returns error for malformed targets metadata", func(t *testing.T) {
+		bad := &TUFClient{localMetadata: &TUFMetadata{Targets: &SignedRole{Signed: []byte(`{`)}}}
+		if _, err := bad.GetTargetInfo("org.example/my-pack"); err == nil {
+			t.Fatal("expected malformed targets error")
+		}
+	})
 }
 
 func TestTUFClient_checkFreshness(t *testing.T) {
 	client := &TUFClient{}
+
+	t.Run("rejects nil role", func(t *testing.T) {
+		if err := client.checkFreshness(nil); err == nil {
+			t.Fatal("expected nil role error")
+		}
+	})
+
+	t.Run("rejects malformed role", func(t *testing.T) {
+		if err := client.checkFreshness(&SignedRole{Signed: []byte(`{`)}); err == nil {
+			t.Fatal("expected malformed role error")
+		}
+	})
 
 	t.Run("accepts fresh metadata", func(t *testing.T) {
 		future := time.Now().Add(24 * time.Hour)
@@ -125,6 +170,27 @@ func TestTUFClient_checkFreshness(t *testing.T) {
 
 func TestTUFClient_verifyVersionIncrease(t *testing.T) {
 	client := &TUFClient{}
+
+	t.Run("allows nil existing role", func(t *testing.T) {
+		err := client.verifyVersionIncrease(&SignedRole{Signed: mustMarshal(RoleMetadata{Version: 1})}, nil)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects malformed new role", func(t *testing.T) {
+		err := client.verifyVersionIncrease(&SignedRole{Signed: []byte(`{`)}, &SignedRole{Signed: mustMarshal(RoleMetadata{Version: 1})})
+		if err == nil {
+			t.Fatal("expected malformed new role error")
+		}
+	})
+
+	t.Run("rejects malformed existing role", func(t *testing.T) {
+		err := client.verifyVersionIncrease(&SignedRole{Signed: mustMarshal(RoleMetadata{Version: 2})}, &SignedRole{Signed: []byte(`{`)})
+		if err == nil {
+			t.Fatal("expected malformed existing role error")
+		}
+	})
 
 	t.Run("allows version increase", func(t *testing.T) {
 		oldRole := &SignedRole{
@@ -177,10 +243,223 @@ func TestMatchesPattern(t *testing.T) {
 	}
 }
 
+func TestTUFClient_UpdateEdges(t *testing.T) {
+	t.Run("fails on expired timestamp", func(t *testing.T) {
+		server := newTUFMetadataServer(t, map[string]*SignedRole{
+			"timestamp": signedRoleForTUFTest("timestamp", 1, time.Now().Add(-time.Hour), nil),
+		})
+		client := newTUFHTTPClientForTest(server.URL)
+		if err := client.Update(); err == nil {
+			t.Fatal("expected expired timestamp error")
+		}
+	})
+
+	t.Run("fails on snapshot fetch error", func(t *testing.T) {
+		server := newTUFMetadataServer(t, map[string]*SignedRole{
+			"timestamp": signedRoleForTUFTest("timestamp", 1, time.Now().Add(time.Hour), nil),
+		})
+		client := newTUFHTTPClientForTest(server.URL)
+		if err := client.Update(); err == nil {
+			t.Fatal("expected snapshot fetch error")
+		}
+	})
+
+	t.Run("fails on targets fetch error", func(t *testing.T) {
+		server := newTUFMetadataServer(t, map[string]*SignedRole{
+			"timestamp": signedRoleForTUFTest("timestamp", 1, time.Now().Add(time.Hour), nil),
+			"snapshot":  signedRoleForTUFTest("snapshot", 1, time.Now().Add(time.Hour), nil),
+		})
+		client := newTUFHTTPClientForTest(server.URL)
+		if err := client.Update(); err == nil {
+			t.Fatal("expected targets fetch error")
+		}
+	})
+
+	t.Run("detects snapshot rollback", func(t *testing.T) {
+		server := newTUFMetadataServer(t, map[string]*SignedRole{
+			"timestamp": signedRoleForTUFTest("timestamp", 1, time.Now().Add(time.Hour), nil),
+			"snapshot":  signedRoleForTUFTest("snapshot", 1, time.Now().Add(time.Hour), nil),
+		})
+		client := newTUFHTTPClientForTest(server.URL)
+		client.localMetadata = &TUFMetadata{Snapshot: signedRoleForTUFTest("snapshot", 5, time.Now().Add(time.Hour), nil)}
+		if err := client.Update(); err == nil {
+			t.Fatal("expected rollback error")
+		}
+	})
+
+	t.Run("fails when trust store save fails", func(t *testing.T) {
+		targets := TargetsMetadata{
+			RoleMetadata: RoleMetadata{Type: "targets", Version: 1, Expires: time.Now().Add(time.Hour)},
+			Targets:      map[string]TargetInfo{},
+		}
+		server := newTUFMetadataServer(t, map[string]*SignedRole{
+			"timestamp": signedRoleForTUFTest("timestamp", 1, time.Now().Add(time.Hour), nil),
+			"snapshot":  signedRoleForTUFTest("snapshot", 1, time.Now().Add(time.Hour), nil),
+			"targets":   signedRoleForTUFTest("targets", 1, time.Now().Add(time.Hour), targets),
+		})
+		store := &memoryTUFTrustStore{saveErr: errors.New("save failed")}
+		client := newTUFHTTPClientForTest(server.URL)
+		client.trustStore = store
+		previousMetadata := &TUFMetadata{Snapshot: signedRoleForTUFTest("snapshot", 0, time.Now().Add(time.Hour), nil)}
+		client.localMetadata = previousMetadata
+		if err := client.Update(); err == nil {
+			t.Fatal("expected save error")
+		}
+		if !store.saved {
+			t.Fatal("expected save to be attempted")
+		}
+		if client.localMetadata != previousMetadata {
+			t.Fatal("local metadata should not advance when persistence fails")
+		}
+	})
+}
+
+func TestTUFClient_fetchAndVerifyEdges(t *testing.T) {
+	tests := []struct {
+		name     string
+		response func(http.ResponseWriter, *http.Request)
+		noKeys   bool
+	}{
+		{
+			name: "non-success status",
+			response: func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "broken", http.StatusInternalServerError)
+			},
+		},
+		{
+			name: "bad response json",
+			response: func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte("{"))
+			},
+		},
+		{
+			name: "missing signed payload",
+			response: func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(`{"signatures":[{"keyid":"root","sig":"sig"}]}`))
+			},
+		},
+		{
+			name: "missing signatures",
+			response: func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(SignedRole{Signed: mustMarshal(RoleMetadata{Type: "timestamp", Expires: time.Now().Add(time.Hour)})})
+			},
+		},
+		{
+			name: "malformed role metadata",
+			response: func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(SignedRole{Signed: []byte(`"not-object"`), Signatures: []TUFSignature{{KeyID: "root", Signature: "sig"}}})
+			},
+		},
+		{
+			name: "type mismatch",
+			response: func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(SignedRole{Signed: mustMarshal(RoleMetadata{Type: "snapshot", Expires: time.Now().Add(time.Hour)}), Signatures: []TUFSignature{{KeyID: "root", Signature: "sig"}}})
+			},
+		},
+		{
+			name: "missing root keys",
+			response: func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(SignedRole{Signed: mustMarshal(RoleMetadata{Type: "timestamp", Expires: time.Now().Add(time.Hour)}), Signatures: []TUFSignature{{KeyID: "root", Signature: "sig"}}})
+			},
+			noKeys: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(tt.response))
+			defer server.Close()
+			client := newTUFHTTPClientForTest(server.URL)
+			if tt.noKeys {
+				client.rootKeys = nil
+			}
+			if _, err := client.fetchAndVerify(TUFRoleTimestamp); err == nil {
+				t.Fatal("expected fetchAndVerify error")
+			}
+		})
+	}
+}
+
+func TestTUFClient_VerifyDelegationEdges(t *testing.T) {
+	if err := (&TUFClient{}).VerifyDelegation("certified", "pack"); err == nil {
+		t.Fatal("expected missing metadata error")
+	}
+	bad := &TUFClient{localMetadata: &TUFMetadata{Targets: &SignedRole{Signed: []byte(`{`)}}}
+	if err := bad.VerifyDelegation("certified", "pack"); err == nil {
+		t.Fatal("expected malformed targets error")
+	}
+	noDelegations := &TUFClient{localMetadata: &TUFMetadata{Targets: &SignedRole{Signed: mustMarshal(TargetsMetadata{})}}}
+	if err := noDelegations.VerifyDelegation("certified", "pack"); err == nil {
+		t.Fatal("expected missing delegations error")
+	}
+	missingRole := &TUFClient{localMetadata: &TUFMetadata{Targets: &SignedRole{Signed: mustMarshal(TargetsMetadata{Delegations: &Delegations{Roles: []DelegatedRole{{Name: "community", Paths: []string{"*"}}}}})}}}
+	if err := missingRole.VerifyDelegation("certified", "pack"); err == nil {
+		t.Fatal("expected missing delegation role error")
+	}
+	pathMismatch := &TUFClient{localMetadata: &TUFMetadata{Targets: &SignedRole{Signed: mustMarshal(TargetsMetadata{Delegations: &Delegations{Roles: []DelegatedRole{{Name: "certified", Paths: []string{"other"}}}}})}}}
+	if err := pathMismatch.VerifyDelegation("certified", "pack"); err == nil {
+		t.Fatal("expected delegation path mismatch error")
+	}
+}
+
 func mustMarshal(v interface{}) json.RawMessage {
 	data, err := json.Marshal(v)
 	if err != nil {
 		panic(err)
 	}
 	return data
+}
+
+type memoryTUFTrustStore struct {
+	metadata *TUFMetadata
+	loadErr  error
+	saveErr  error
+	saved    bool
+}
+
+func (s *memoryTUFTrustStore) Load() (*TUFMetadata, error) {
+	return s.metadata, s.loadErr
+}
+
+func (s *memoryTUFTrustStore) Save(metadata *TUFMetadata) error {
+	s.saved = true
+	s.metadata = metadata
+	return s.saveErr
+}
+
+func newTUFHTTPClientForTest(remoteURL string) *TUFClient {
+	return &TUFClient{
+		remoteURL:  remoteURL,
+		rootKeys:   []crypto.PublicKey{mockPublicKey{}},
+		httpClient: http.DefaultClient,
+	}
+}
+
+func signedRoleForTUFTest(role string, version int, expires time.Time, metadata interface{}) *SignedRole {
+	var signed json.RawMessage
+	if metadata != nil {
+		signed = mustMarshal(metadata)
+	} else {
+		signed = mustMarshal(RoleMetadata{Type: role, Version: version, Expires: expires})
+	}
+	return &SignedRole{
+		Signed:     signed,
+		Signatures: []TUFSignature{{KeyID: "root", Signature: "sig"}},
+	}
+}
+
+func newTUFMetadataServer(t *testing.T, roles map[string]*SignedRole) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		role := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/"), ".json")
+		signed, ok := roles[role]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(signed); err != nil {
+			t.Errorf("Encode %s: %v", role, err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
 }

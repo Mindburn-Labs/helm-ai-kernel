@@ -118,6 +118,14 @@ func TestCompensationState(t *testing.T) {
 		require.Equal(t, CompensationOutcomeFallback, outcome)
 		require.True(t, cs.FallbackExecuted)
 	})
+
+	t.Run("unknown policy escalates by default", func(t *testing.T) {
+		cs := NewCompensationState("tx-1", "op-1", "UNKNOWN")
+		cs.AttemptCount = MaxCompensationAttempts - 1
+
+		outcome := cs.RecordAttempt(false, "")
+		require.Equal(t, CompensationOutcomeEscalate, outcome)
+	})
 }
 
 // ============================================================================

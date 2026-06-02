@@ -189,6 +189,27 @@ func TestLivenessManagerActiveCount(t *testing.T) {
 	require.Equal(t, 1, lm.ActiveCount())
 }
 
+func TestLivenessManagerCleanupExpired(t *testing.T) {
+	lm := NewLivenessManager()
+	defer lm.Shutdown()
+
+	active := NewApprovalState("active", 1*time.Minute)
+	expired := NewApprovalState("expired", 1*time.Minute)
+	require.NoError(t, lm.Register(active))
+	require.NoError(t, lm.Register(expired))
+
+	expired.Expire()
+	require.Equal(t, 1, lm.CleanupExpired())
+
+	_, err := lm.Get("expired")
+	require.Error(t, err)
+
+	retained, err := lm.Get("active")
+	require.NoError(t, err)
+	require.Equal(t, LivenessStatePending, retained.State)
+	require.NotContains(t, lm.watchers, "expired")
+}
+
 // TestLivenessManagerPendingApprovals verifies filtering.
 func TestLivenessManagerPendingApprovals(t *testing.T) {
 	lm := NewLivenessManager()

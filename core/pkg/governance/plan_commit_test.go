@@ -189,3 +189,14 @@ func TestPlanCommitController_HashMismatch(t *testing.T) {
 		t.Error("wrong hash should error")
 	}
 }
+
+func TestPlanCommitController_ApproveRejectUnknownPlan(t *testing.T) {
+	pc := NewPlanCommitController()
+
+	if err := pc.Approve("missing", "admin"); err == nil {
+		t.Fatal("approving unknown plan should fail")
+	}
+	if err := pc.Reject("missing", "admin", "not found"); err == nil {
+		t.Fatal("rejecting unknown plan should fail")
+	}
+}

@@ -2,6 +2,7 @@ package governance
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -56,6 +57,24 @@ func TestValidateModuleDependencies_CycleDetection(t *testing.T) {
 	assert.Contains(t, err.Error(), "cycle detected")
 }
 
+func TestValidateModuleDependencies_PolicyViolation(t *testing.T) {
+	mockPE := &MockPolicyEvaluator{}
+	lm := NewLifecycleManager(&MockRegistry{}, mockPE)
+	newModule := ModuleBundle{ID: "policy-blocked", Dependencies: []string{}}
+
+	mockPE.On("VerifyModulePolicy", mock.Anything, newModule).Return(errors.New("blocked by policy"))
+
+	err := lm.ValidateModuleDependencies(context.Background(), newModule, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "policy violation")
+	mockPE.AssertExpectations(t)
+}
+
+func TestSimplePolicyEvaluatorVerifyModulePolicy(t *testing.T) {
+	err := (&SimplePolicyEvaluator{}).VerifyModulePolicy(context.Background(), ModuleBundle{ID: "module"})
+	assert.NoError(t, err)
+}
+
 func TestExecuteActivation(t *testing.T) {
 	mockReg := &MockRegistry{}
 	mockPE := &MockPolicyEvaluator{}
@@ -81,6 +100,19 @@ func TestExecuteActivation(t *testing.T) {
 
 	mockReg.AssertExpectations(t)
 	mockPE.AssertExpectations(t)
+}
+
+func TestExecuteActivationDependencyValidationFailure(t *testing.T) {
+	lm := NewLifecycleManager(&MockRegistry{}, nil)
+	action := ActionActivateModule{
+		ModuleBundle: ModuleBundle{ID: "B", Dependencies: []string{"A"}},
+	}
+	decision := &contracts.DecisionRecord{Verdict: string(contracts.VerdictAllow)}
+	err := lm.ExecuteActivation(context.Background(), action, decision, map[string]ModuleBundle{
+		"A": {ID: "A", Dependencies: []string{"B"}},
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "module dependency validation failed")
 }
 
 func TestMergeModuleSet_ReplacesExistingModuleDeterministically(t *testing.T) {

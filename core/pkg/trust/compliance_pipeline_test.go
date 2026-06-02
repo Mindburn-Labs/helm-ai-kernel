@@ -62,6 +62,13 @@ func TestCompliancePipeline_IngestMapping(t *testing.T) {
 	if len(updatedCtrl.EvidenceIDs) != 1 || updatedCtrl.EvidenceIDs[0] != "ev-log-001" {
 		t.Errorf("evidence not linked correctly")
 	}
+
+	if err := pipeline.IngestMapping(bytes); err != nil {
+		t.Fatalf("second IngestMapping failed: %v", err)
+	}
+	if len(updatedCtrl.EvidenceIDs) != 1 {
+		t.Fatalf("duplicate evidence should not be linked twice: %#v", updatedCtrl.EvidenceIDs)
+	}
 }
 
 func TestCompliancePipeline_ScanForStaleControls(t *testing.T) {

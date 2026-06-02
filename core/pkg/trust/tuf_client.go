@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -234,8 +233,8 @@ func (c *TUFClient) Update() error {
 		return fmt.Errorf("targets verification failed: %w", err)
 	}
 
-	// 6. Update local metadata
-	c.localMetadata = &TUFMetadata{
+	// 6. Prepare updated local metadata
+	newMetadata := &TUFMetadata{
 		Timestamp: newTimestamp,
 		Snapshot:  newSnapshot,
 		Targets:   newTargets,
@@ -243,11 +242,13 @@ func (c *TUFClient) Update() error {
 
 	// 7. Persist to trust store
 	if c.trustStore != nil {
-		if err := c.trustStore.Save(c.localMetadata); err != nil {
-			// Log but don't fail - metadata is still valid in memory
-			slog.Warn("trust: failed to persist TUF metadata", "error", err)
+		if err := c.trustStore.Save(newMetadata); err != nil {
+			return fmt.Errorf("failed to persist TUF metadata: %w", err)
 		}
 	}
+
+	// 8. Update local metadata only after persistence succeeds.
+	c.localMetadata = newMetadata
 
 	return nil
 }

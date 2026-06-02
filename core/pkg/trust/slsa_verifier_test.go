@@ -103,6 +103,17 @@ func TestSLSAVerifier_VerifyAttestation(t *testing.T) {
 			t.Error("expected error for unauthorized builder")
 		}
 	})
+
+	t.Run("rejects malformed predicate", func(t *testing.T) {
+		statement := &InTotoStatement{
+			Type:          InTotoStatementType,
+			PredicateType: SLSAProvenancePredicateType,
+			Predicate:     []byte(`{`),
+		}
+		if err := verifier.VerifyAttestation(statement); err == nil {
+			t.Fatal("expected malformed predicate error")
+		}
+	})
 }
 
 func TestSLSAVerifier_verifyDependencies(t *testing.T) {
@@ -152,6 +163,110 @@ func TestSLSAVerifier_verifyDependencies(t *testing.T) {
 		err := verifier.verifyDependencies(deps)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects pinned dependency missing sha256", func(t *testing.T) {
+		deps := []ResourceDescriptor{
+			{
+				URI:    "pkg:npm/lodash@4.17.21",
+				Digest: map[string]string{"sha512": "abc123"},
+			},
+		}
+
+		err := verifier.verifyDependencies(deps)
+		if err == nil {
+			t.Error("expected error for missing sha256 digest")
+		}
+	})
+}
+
+func TestSLSAVerifier_verifySourceRepo(t *testing.T) {
+	verifier := NewSLSAVerifier(&ProvenancePolicy{})
+	if err := verifier.verifySourceRepo([]byte(`{`)); err != nil {
+		t.Fatalf("unrestricted malformed params should not fail: %v", err)
+	}
+
+	verifier = NewSLSAVerifier(&ProvenancePolicy{RequiredSourceRepos: []string{"https://github.com/Mindburn-Labs/"}})
+	if err := verifier.verifySourceRepo([]byte(`{`)); err == nil {
+		t.Fatal("expected malformed params to fail closed")
+	}
+	if err := verifier.verifySourceRepo([]byte(`{"source":{}}`)); err == nil {
+		t.Fatal("expected missing source URI to fail closed")
+	}
+	if err := verifier.verifySourceRepo([]byte(`{"source":{"uri":"https://github.com/Mindburn-Labs/helm-ai-kernel"}}`)); err != nil {
+		t.Fatalf("allowed source URI: %v", err)
+	}
+	if err := verifier.verifySourceRepo([]byte(`{"source":{"uri":"https://evil.example/repo"}}`)); err == nil {
+		t.Fatal("expected disallowed source URI error")
+	}
+}
+
+func TestSLSAVerifier_VerifyAttestationDependencyAndSourceFailures(t *testing.T) {
+	t.Run("dependency failure is returned", func(t *testing.T) {
+		verifier := NewSLSAVerifier(&ProvenancePolicy{
+			RequiredSLSAVersion: SLSAProvenancePredicateType,
+			PinnedDependencies:  map[string]string{"pkg:npm/lodash@4.17.21": "abc123"},
+		})
+		provenance := SLSAProvenance{
+			BuildDefinition: BuildDefinition{
+				ResolvedDependencies: []ResourceDescriptor{{URI: "pkg:npm/lodash@4.17.21", Digest: map[string]string{"sha256": "wrong"}}},
+			},
+		}
+		predicate, err := json.Marshal(provenance)
+		if err != nil {
+			t.Fatal(err)
+		}
+		statement := &InTotoStatement{Type: InTotoStatementType, PredicateType: SLSAProvenancePredicateType, Predicate: predicate}
+		if err := verifier.VerifyAttestation(statement); err == nil {
+			t.Fatal("expected dependency failure")
+		}
+	})
+
+	t.Run("source failure is returned", func(t *testing.T) {
+		verifier := NewSLSAVerifier(&ProvenancePolicy{
+			RequiredSLSAVersion: SLSAProvenancePredicateType,
+			RequiredSourceRepos: []string{"https://github.com/Mindburn-Labs/"},
+		})
+		provenance := SLSAProvenance{
+			BuildDefinition: BuildDefinition{
+				ExternalParameters: []byte(`{"source":{"uri":"https://evil.example/repo"}}`),
+			},
+		}
+		predicate, err := json.Marshal(provenance)
+		if err != nil {
+			t.Fatal(err)
+		}
+		statement := &InTotoStatement{Type: InTotoStatementType, PredicateType: SLSAProvenancePredicateType, Predicate: predicate}
+		if err := verifier.VerifyAttestation(statement); err == nil {
+			t.Fatal("expected source failure")
+		}
+	})
+
+	t.Run("malformed source parameters fail closed", func(t *testing.T) {
+		verifier := NewSLSAVerifier(&ProvenancePolicy{
+			RequiredSLSAVersion: SLSAProvenancePredicateType,
+			RequiredSourceRepos: []string{"https://github.com/Mindburn-Labs/"},
+		})
+		provenance := SLSAProvenance{
+			BuildDefinition: BuildDefinition{
+				ExternalParameters: []byte(`"not-object"`),
+			},
+		}
+		predicate, err := json.Marshal(provenance)
+		if err != nil {
+			t.Fatal(err)
+		}
+		statement := &InTotoStatement{Type: InTotoStatementType, PredicateType: SLSAProvenancePredicateType, Predicate: predicate}
+		if err := verifier.VerifyAttestation(statement); err == nil {
+			t.Fatal("expected malformed source parameters to fail closed")
+		}
+	})
+
+	t.Run("empty builder allowlist skips builder restrictions", func(t *testing.T) {
+		verifier := NewSLSAVerifier(&ProvenancePolicy{})
+		if err := verifier.verifyBuilder(Builder{ID: "anything"}); err != nil {
+			t.Fatalf("unrestricted builder should pass: %v", err)
 		}
 	})
 }

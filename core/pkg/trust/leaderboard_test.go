@@ -118,6 +118,18 @@ func TestLeaderboard_UpdateAndRerank(t *testing.T) {
 	assert.Equal(t, 1, lb.Entries[0].Rank)
 }
 
+func TestLeaderboard_RankUsesOrgIDWhenNameMissing(t *testing.T) {
+	lb := NewLeaderboard()
+	lb.UpdateScore("org-no-name", "", &TrustScore{
+		ScoreID:      "s1",
+		OverallScore: 0.70,
+		ComputedAt:   time.Now(),
+	})
+	lb.Rank()
+	require.Len(t, lb.Entries, 1)
+	assert.Equal(t, "org-no-name", lb.Entries[0].OrgName)
+}
+
 func TestLeaderboard_GetTopN(t *testing.T) {
 	scores := map[string]*TrustScore{
 		"org-1": {ScoreID: "s1", OverallScore: 0.90, ComputedAt: time.Now()},

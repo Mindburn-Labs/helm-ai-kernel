@@ -62,4 +62,8 @@ func TestUpgradeGetReceipt(t *testing.T) {
 	if got.ToVersion != "2.0" {
 		t.Fatal("version mismatch")
 	}
+
+	if _, err := r.Get("missing"); err == nil {
+		t.Fatal("expected missing receipt error")
+	}
 }

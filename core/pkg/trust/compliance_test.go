@@ -126,6 +126,12 @@ func TestComplianceMatrix_GetFrameworkCompliance(t *testing.T) {
 	assert.Equal(t, 0.5, compliance.ComplianceScore)
 }
 
+func TestComplianceMatrix_GetFrameworkComplianceMissing(t *testing.T) {
+	matrix := NewComplianceMatrix()
+	_, err := matrix.GetFrameworkCompliance("missing")
+	assert.Error(t, err)
+}
+
 func TestComplianceMatrix_Hash(t *testing.T) {
 	matrix := NewComplianceMatrix()
 

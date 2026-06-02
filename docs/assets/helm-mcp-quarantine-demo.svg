@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
-  <title id="title">HELM AI Kernel execution firewall blueprint - Animated Demo</title>
-  <desc id="desc">An animated, blueprint-style architecture diagram showing model proposals entering the HELM policy boundary. Unpinned/unknown tool proposals fail closed and trigger Coral-colored quarantine DENY states with signed ProofGraph receipts. Schema-pinned tool proposals transition to safe Teal ALLOW states, execute their side-effects, and record verifiable audit receipts.</desc>
+  <title id="title">HELM AI Kernel execution firewall blueprint - Centered Symmetrical Flow</title>
+  <desc id="desc">A centered, highly legible blueprint-style architecture diagram showing model proposals entering the HELM policy boundary. Unpinned/unknown tool proposals fail closed and trigger Coral-colored quarantine DENY states with signed ProofGraph receipts. Schema-pinned tool proposals transition to safe Teal ALLOW states, execute their side-effects, and record verifiable audit receipts.</desc>
   <defs>
     <pattern id="minorGrid" width="16" height="16" patternUnits="userSpaceOnUse">
       <path d="M16 0H0V16" fill="none" stroke="#edf0f2" stroke-width="1"/>
@@ -32,7 +32,7 @@
       <feComposite in="SourceGraphic" in2="blur" operator="over" />
     </filter>
     <marker id="arrowGray" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
-      <path d="M2 2L10 6L2 10Z" fill="#9ca3af"/>
+      <path d="M2 2L10 6L2 10Z" fill="#94a3b8"/>
     </marker>
     <marker id="arrowTeal" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
       <path d="M2 2L10 6L2 10Z" fill="#14b8a6"/>
@@ -45,17 +45,14 @@
       .ink { fill: #1e293b; }
       .muted { fill: #64748b; }
       .faint { fill: #94a3b8; }
-      .layer { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; transition: stroke 0.3s; }
-      .layerText { fill: #334155; font-size: 16px; font-weight: 600; }
-      .small { font-size: 15px; }
-      .label { font-size: 18px; font-weight: 600; }
-      .nodeHead { font-size: 25px; font-weight: 800; }
-      .micro { font-size: 13px; font-weight: 600; letter-spacing: 0.5px; }
+      
+      .layerCard { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; filter: drop-shadow(0 4px 6px rgba(148, 163, 184, 0.08)); }
       .ring { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
-      .tealStroke { stroke: #14b8a6; }
-      .violetStroke { stroke: #818cf8; }
-      .redStroke { stroke: #f43f5e; }
       .pathBase { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      
+      .nodeHead { font-size: 24px; font-weight: 800; letter-spacing: -0.3px; }
+      .small { font-size: 15px; font-weight: 500; }
+      .micro { font-size: 13px; font-weight: 600; letter-spacing: 0.5px; }
       
       /* Animation Timings */
       .packet-deny {
@@ -73,6 +70,7 @@
       .receipt-allow {
         animation: receipt-allow-anim 12s infinite cubic-bezier(0.4, 0, 0.2, 1);
       }
+      
       .node-pep {
         animation: pep-glow-anim 12s infinite ease-in-out;
       }
@@ -85,9 +83,10 @@
       .node-effects {
         animation: effects-glow-anim 12s infinite ease-in-out;
       }
+      
       .barrier-deny {
         animation: barrier-deny-anim 12s infinite ease-in-out;
-        transform-origin: 430px 286px;
+        transform-origin: 600px 450px;
       }
       .text-deny-state {
         animation: text-deny-anim 12s infinite ease-in-out;
@@ -95,12 +94,7 @@
       .text-allow-state {
         animation: text-allow-anim 12s infinite ease-in-out;
       }
-      .line-pep-pg {
-        animation: line-pep-pg-anim 12s infinite ease-in-out;
-      }
-      .line-cpi-pg {
-        animation: line-cpi-pg-anim 12s infinite ease-in-out;
-      }
+      
       .line-agent-pep {
         animation: line-agent-pep-anim 12s infinite ease-in-out;
       }
@@ -110,8 +104,15 @@
       .line-cpi-effects {
         animation: line-cpi-effects-anim 12s infinite ease-in-out;
       }
+      .line-pep-pg {
+        animation: line-pep-pg-anim 12s infinite ease-in-out;
+      }
+      .line-cpi-pg {
+        animation: line-cpi-pg-anim 12s infinite ease-in-out;
+      }
+      
       .grid-scanner {
-        animation: scan-anim 6s infinite linear;
+        animation: scan-anim 8s infinite linear;
       }
       
       /* Animation Keyframes */
@@ -121,326 +122,298 @@
       }
       
       @keyframes deny-packet-anim {
-        0% { transform: translate(138px, 346px); opacity: 0; }
+        0% { transform: translate(250px, 450px); opacity: 0; }
         2% { opacity: 1; }
-        12% { transform: translate(192px, 346px); opacity: 1; }
-        22% { transform: translate(260px, 286px); opacity: 1; }
-        28% { transform: translate(364px, 286px); opacity: 1; }
-        30% { transform: translate(430px, 286px); opacity: 0; }
-        30.1%, 100% { opacity: 0; transform: translate(138px, 346px); }
-      }
-      
-      @keyframes deny-glow-anim {
-        0%, 28% { fill: #f8fafc; stroke: #cbd5e1; filter: none; }
-        30%, 48% { fill: #fff1f2; stroke: #f43f5e; filter: url(#glowRed); stroke-width: 3.5px; }
-        50%, 100% { fill: #f8fafc; stroke: #cbd5e1; filter: none; }
-      }
-      
-      @keyframes barrier-deny-anim {
-        0%, 28% { opacity: 0; transform: scale(0.7); }
-        30%, 48% { opacity: 0.95; transform: scale(1.0); }
-        50%, 100% { opacity: 0; transform: scale(0.7); }
-      }
-      
-      @keyframes receipt-deny-anim {
-        0%, 34% { transform: translate(430px, 286px); opacity: 0; }
-        36% { opacity: 1; }
-        42% { transform: translate(430px, 378px); opacity: 1; }
-        48% { transform: translate(510px, 414px); opacity: 1; }
-        54% { transform: translate(610px, 414px); opacity: 1; }
-        56% { opacity: 0; }
-        56.1%, 100% { opacity: 0; transform: translate(430px, 286px); }
-      }
-      
-      @keyframes allow-packet-anim {
-        0%, 50% { transform: translate(138px, 346px); opacity: 0; }
-        51% { opacity: 1; }
-        60% { transform: translate(192px, 346px); opacity: 1; }
-        70% { transform: translate(260px, 286px); opacity: 1; }
-        76% { transform: translate(364px, 286px); opacity: 1; }
-        80% { transform: translate(430px, 286px); opacity: 1; }
-        80.1% { opacity: 0; }
-        100% { opacity: 0; transform: translate(138px, 346px); }
+        10% { transform: translate(600px, 450px); opacity: 1; }
+        11%, 100% { opacity: 0; transform: translate(250px, 450px); }
       }
       
       @keyframes pep-glow-anim {
-        0%, 28% { fill: #ffffff; stroke: #cbd5e1; filter: none; }
-        30%, 48% { fill: #fff1f2; stroke: #f43f5e; filter: url(#glowRed); stroke-width: 3px; }
-        50%, 76% { fill: #ffffff; stroke: #cbd5e1; filter: none; }
-        80%, 94% { fill: #f0fdf4; stroke: #10b981; filter: url(#glowTeal); stroke-width: 3px; }
-        96%, 100% { fill: #ffffff; stroke: #cbd5e1; filter: none; }
+        0%, 8% { fill: #ffffff; stroke: #cbd5e1; filter: none; }
+        10%, 28% { fill: #fff1f2; stroke: #f43f5e; filter: url(#glowRed); stroke-width: 3px; }
+        30%, 70% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
+        72%, 84% { fill: #f0fdf4; stroke: #10b981; filter: url(#glowTeal); stroke-width: 3px; }
+        86%, 100% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
+      }
+      
+      @keyframes barrier-deny-anim {
+        0%, 8% { opacity: 0; transform: scale(0.8); }
+        10%, 28% { opacity: 0.95; transform: scale(1.0); }
+        30%, 100% { opacity: 0; transform: scale(0.8); }
+      }
+      
+      @keyframes receipt-deny-anim {
+        0%, 14% { transform: translate(600px, 450px); opacity: 0; }
+        15% { opacity: 1; }
+        17% { transform: translate(600px, 508px); opacity: 1; }
+        20% { transform: translate(625px, 565px); opacity: 1; }
+        23% { transform: translate(700px, 622px); opacity: 1; }
+        26% { transform: translate(800px, 680px); opacity: 1; }
+        28% { opacity: 0; }
+        28.1%, 100% { opacity: 0; transform: translate(600px, 450px); }
+      }
+      
+      @keyframes allow-packet-anim {
+        0%, 50% { transform: translate(250px, 450px); opacity: 0; }
+        51% { opacity: 1; }
+        60% { transform: translate(600px, 450px); opacity: 1; }
+        61%, 100% { opacity: 0; transform: translate(250px, 450px); }
       }
       
       @keyframes line-agent-pep-anim {
-        0%, 28% { stroke: #cbd5e1; stroke-width: 4px; }
-        30%, 48% { stroke: #fca5a5; stroke-width: 5px; }
-        50%, 76% { stroke: #cbd5e1; stroke-width: 4px; }
-        80%, 94% { stroke: #99f6e4; stroke-width: 5px; }
-        96%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
+        0%, 8% { stroke: #cbd5e1; stroke-width: 4px; }
+        10%, 28% { stroke: #fca5a5; stroke-width: 5px; }
+        30%, 70% { stroke: #cbd5e1; stroke-width: 4px; }
+        72%, 84% { stroke: #99f6e4; stroke-width: 5px; }
+        86%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
       }
       
       @keyframes line-pep-cpi-anim {
-        0%, 76% { stroke: #cbd5e1; stroke-width: 4px; }
-        80%, 94% { stroke: #99f6e4; stroke-width: 5px; }
-        96%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
+        0%, 70% { stroke: #cbd5e1; stroke-width: 4px; }
+        72%, 84% { stroke: #99f6e4; stroke-width: 5px; }
+        86%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
       }
       
       @keyframes line-cpi-effects-anim {
-        0%, 82% { stroke: #cbd5e1; stroke-width: 3px; }
-        86%, 98% { stroke: #99f6e4; stroke-width: 4px; }
-        100% { stroke: #cbd5e1; stroke-width: 3px; }
+        0%, 77% { stroke: #cbd5e1; stroke-width: 3px; }
+        80%, 94% { stroke: #99f6e4; stroke-width: 4px; }
+        96%, 100% { stroke: #cbd5e1; stroke-width: 3px; }
       }
       
       @keyframes line-pep-pg-anim {
-        0%, 32% { stroke: #cbd5e1; stroke-width: 4px; }
-        36%, 52% { stroke: #c7d2fe; stroke-width: 5px; }
-        56%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
+        0%, 14% { stroke: #cbd5e1; stroke-width: 4px; }
+        16%, 28% { stroke: #c7d2fe; stroke-width: 5px; }
+        30%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
       }
       
       @keyframes line-cpi-pg-anim {
-        0%, 82% { stroke: #cbd5e1; stroke-width: 4px; }
-        86%, 98% { stroke: #c7d2fe; stroke-width: 5px; }
-        100% { stroke: #cbd5e1; stroke-width: 4px; }
+        0%, 74% { stroke: #cbd5e1; stroke-width: 4px; }
+        76%, 88% { stroke: #c7d2fe; stroke-width: 5px; }
+        90%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
       }
       
       @keyframes cpi-glow-anim {
-        0%, 78% { fill: #ffffff; stroke: #cbd5e1; filter: none; }
-        80%, 96% { fill: #f0fdf4; stroke: #10b981; filter: url(#glowTeal); stroke-width: 3px; }
-        98%, 100% { fill: #ffffff; stroke: #cbd5e1; filter: none; }
+        0%, 70% { fill: #ffffff; stroke: #cbd5e1; filter: none; }
+        72%, 86% { fill: #f0fdf4; stroke: #10b981; filter: url(#glowTeal); stroke-width: 3px; }
+        88%, 100% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
       }
       
       @keyframes effect-packet-anim {
-        0%, 80% { transform: translate(430px, 286px); opacity: 0; }
-        81% { opacity: 1; }
-        85% { transform: translate(580px, 286px); opacity: 1; }
-        90% { transform: translate(724px, 286px); opacity: 1; }
-        92% { transform: translate(780px, 286px); opacity: 1; }
-        93% { transform: translate(838px, 286px); opacity: 1; }
-        95% { transform: translate(918px, 286px); opacity: 1; }
-        97% { transform: translate(980px, 346px); opacity: 1; }
-        99% { transform: translate(1040px, 346px); opacity: 1; }
-        100% { opacity: 0; transform: translate(430px, 286px); }
+        0%, 72% { transform: translate(600px, 450px); opacity: 0; }
+        73% { opacity: 1; }
+        78% { transform: translate(800px, 450px); opacity: 1; }
+        82% { transform: translate(1000px, 450px); opacity: 1; }
+        84% { transform: translate(1100px, 450px); opacity: 1; }
+        89% { transform: translate(1250px, 450px); opacity: 1; }
+        93% { transform: translate(1350px, 450px); opacity: 1; }
+        95%, 100% { opacity: 0; transform: translate(600px, 450px); }
       }
       
       @keyframes receipt-allow-anim {
-        0%, 82% { transform: translate(780px, 286px); opacity: 0; }
-        84% { opacity: 1; }
-        90% { transform: translate(780px, 378px); opacity: 1; }
-        94% { transform: translate(650px, 414px); opacity: 1; }
-        98% { transform: translate(610px, 414px); opacity: 1; }
-        100% { opacity: 0; transform: translate(780px, 286px); }
+        0%, 74% { transform: translate(1000px, 450px); opacity: 0; }
+        76% { opacity: 1; }
+        78% { transform: translate(1000px, 508px); opacity: 1; }
+        81% { transform: translate(975px, 565px); opacity: 1; }
+        84% { transform: translate(900px, 622px); opacity: 1; }
+        87% { transform: translate(800px, 680px); opacity: 1; }
+        89% { opacity: 0; }
+        89.1%, 100% { opacity: 0; transform: translate(1000px, 450px); }
       }
       
       @keyframes pg-glow-anim {
-        0%, 48% { fill: #faf9ff; stroke: #aaa5e8; filter: none; }
-        50%, 60% { fill: #e0e7ff; stroke: #6366f1; filter: url(#glowViolet); stroke-width: 3px; }
-        62%, 92% { fill: #faf9ff; stroke: #aaa5e8; filter: none; }
-        94%, 100% { fill: #e0e7ff; stroke: #6366f1; filter: url(#glowViolet); stroke-width: 3px; }
+        0%, 22% { fill: #ffffff; stroke: #cbd5e1; filter: none; }
+        24%, 34% { fill: #e0e7ff; stroke: #6366f1; filter: url(#glowViolet); stroke-width: 3px; }
+        36%, 82% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
+        84%, 94% { fill: #e0e7ff; stroke: #6366f1; filter: url(#glowViolet); stroke-width: 3px; }
+        96%, 100% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
       }
       
       @keyframes effects-glow-anim {
-        0%, 94% { fill: #ffffff; stroke: #cbd5e1; filter: none; }
-        96%, 100% { fill: #ecfeff; stroke: #06b6d4; filter: url(#glowTeal); stroke-width: 3px; }
+        0%, 88% { fill: #ffffff; stroke: #cbd5e1; filter: none; }
+        90%, 98% { fill: #ecfeff; stroke: #06b6d4; filter: url(#glowTeal); stroke-width: 3px; }
+        100% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
       }
       
       @keyframes text-deny-anim {
-        0%, 28% { opacity: 0; }
-        30%, 48% { opacity: 1; }
-        50%, 100% { opacity: 0; }
+        0%, 8% { opacity: 0; }
+        10%, 28% { opacity: 1; }
+        30%, 100% { opacity: 0; }
       }
       
       @keyframes text-allow-anim {
-        0%, 78% { opacity: 0; }
-        80%, 98% { opacity: 1; }
-        100% { opacity: 0; }
+        0%, 70% { opacity: 0; }
+        72%, 86% { opacity: 1; }
+        88%, 100% { opacity: 0; }
       }
     </style>
   </defs>
 
-  <!-- Background -->
+  <!-- Background Warm Canvas -->
   <rect width="1600" height="900" fill="#fafaf9"/>
   <rect width="1600" height="900" fill="url(#minorGrid)" opacity="0.6"/>
   <rect width="1600" height="900" fill="url(#majorGrid)" opacity="0.8"/>
   <rect width="1600" height="900" fill="#fafaf9" opacity="0.25" filter="url(#paper)"/>
 
-  <!-- Scanning Line (Subtle Blueprint effect) -->
+  <!-- Scanning grid line for tech detail -->
   <line x1="0" y1="0" x2="1600" y2="0" stroke="#0ea5e9" stroke-width="0.7" opacity="0.12" class="grid-scanner"/>
 
-  <!-- Decorative Wave Blueprint Paths -->
-  <g opacity="0.12" fill="none" stroke="#94a3b8" stroke-width="1.6">
-    <path d="M38 724C214 604 262 506 176 354C128 270 86 204 68 100C206 220 262 342 290 474C366 416 366 302 428 228C462 338 536 438 584 566C646 732 506 872 292 926"/>
-    <path d="M-34 502C110 514 242 502 338 442C420 392 470 298 530 226"/>
-    <path d="M126 106C184 254 282 292 316 438"/>
+  <!-- Decorative technical blueprint vectors -->
+  <g opacity="0.08" fill="none" stroke="#94a3b8" stroke-width="1.5">
+    <circle cx="800" cy="450" r="320"/>
+    <circle cx="800" cy="450" r="440"/>
+    <line x1="0" y1="450" x2="1600" y2="450"/>
+    <line x1="800" y1="0" x2="800" y2="900"/>
+    <path d="M 400,200 L 1200,200 L 1200,700 L 400,700 Z"/>
   </g>
 
   <!-- Header -->
-  <g transform="translate(930 92)" text-anchor="middle">
+  <g transform="translate(800 100)" text-anchor="middle">
     <text class="sans ink" x="0" y="0" font-size="46" font-weight="800" letter-spacing="-0.5px">HELM AI Kernel</text>
-    <text class="sans muted" x="0" y="38" font-size="23" font-weight="500">Open-source execution firewall for MCP and AI agents</text>
+    <text class="sans muted" x="0" y="38" font-size="22" font-weight="500">Open-source execution firewall for MCP and AI agents</text>
   </g>
 
-  <!-- Side Logo / Badge -->
-  <g transform="translate(958 222)" opacity="0.4">
-    <circle cx="0" cy="0" r="72" fill="none" stroke="#cbd5e1" stroke-width="1.2"/>
-    <circle cx="0" cy="0" r="52" fill="none" stroke="#cbd5e1" stroke-width="1.2"/>
-    <circle cx="0" cy="0" r="35" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.2"/>
-    <path d="M-13 18C-27-4-10-19-3-42C5-20 19-15 21 4C24 24 7 34-13 18Z" fill="none" stroke="#64748b" stroke-width="2"/>
-    <path d="M-4 19C-15 4-4-9 4-22C6-10 16-3 15 9C14 22 7 27-4 19Z" fill="none" stroke="#64748b" stroke-width="1.6"/>
+  <!-- Flowchart Connections (Centered Pipeline & V-shape Ledger) -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" transform="translate(0, 0)">
+    <!-- Agent -> PEP -->
+    <path d="M 250,450 H 600" stroke="#cbd5e1" stroke-width="12"/>
+    <path d="M 250,450 H 600" class="pathBase line-agent-pep" stroke="#94a3b8" stroke-width="4"/>
+
+    <!-- PEP -> CPI -->
+    <path d="M 600,450 H 1000" stroke="#cbd5e1" stroke-width="12"/>
+    <path d="M 600,450 H 1000" class="pathBase line-pep-cpi" stroke="#94a3b8" stroke-width="4" marker-end="url(#arrowTeal)"/>
+
+    <!-- CPI -> Effects -->
+    <path d="M 1000,450 H 1350" stroke="#cbd5e1" stroke-width="12"/>
+    <path d="M 1000,450 H 1350" class="pathBase line-cpi-effects" stroke="#cbd5e1" stroke-width="3" marker-end="url(#arrowGray)"/>
+
+    <!-- PEP -> ProofGraph (curved audit receipt flow) -->
+    <path d="M 600,450 Q 600,680 800,680" stroke="#cbd5e1" stroke-width="12"/>
+    <path d="M 600,450 Q 600,680 800,680" class="pathBase line-pep-pg" stroke="#cbd5e1" stroke-width="4"/>
+
+    <!-- CPI -> ProofGraph (curved audit receipt flow) -->
+    <path d="M 1000,450 Q 1000,680 800,680" stroke="#cbd5e1" stroke-width="12"/>
+    <path d="M 1000,450 Q 1000,680 800,680" class="pathBase line-cpi-pg" stroke="#cbd5e1" stroke-width="4"/>
   </g>
 
-  <!-- Main Architecture Container -->
-  <g transform="translate(492 284)" filter="url(#softShadow)">
+  <!-- Flowchart Nodes (Centered & Balanced) -->
+  <g class="sans" text-anchor="middle" filter="url(#softShadow)">
     
-    <!-- 3D Layer Stack Base -->
-    <g class="sans" text-anchor="middle" opacity="0.75">
-      <!-- 6. MCP / Gateway Surface -->
-      <path class="layer" d="M376 78L430 56C510 40 710 40 790 56L844 78L790 100C710 116 510 116 430 100Z"/>
-      <text class="layerText" x="610" y="84">6. MCP / Gateway Surface</text>
-
-      <!-- 5. Tool Plane -->
-      <path class="layer" d="M350 154L420 132C510 116 720 116 810 132L880 154L810 176C720 192 510 192 420 176Z"/>
-      <text class="layerText" x="610" y="160">5. Tool Plane</text>
-
-      <!-- 4. Policy Boundary -->
-      <path class="layer" d="M326 230L404 206C506 188 724 188 826 206L904 230L826 254C724 272 506 272 404 254Z"/>
-      <text class="layerText" x="610" y="236">4. Policy Boundary</text>
-
-      <!-- 3. Policy Enforcement Point (PEP) -->
-      <path class="layer" d="M300 308L392 278C504 258 726 258 838 278L930 308L838 338C726 358 504 358 392 338Z"/>
-
-      <!-- 2. Constraint + Proof -->
-      <path class="layer" d="M326 402L404 366C506 344 724 344 826 366L904 402L826 438C724 460 506 460 404 438Z"/>
-
-      <!-- 1. Identity and Trust -->
-      <path class="layer" d="M350 496L420 454C510 430 720 430 810 454L880 496L810 538C720 562 510 562 420 538Z"/>
-      <text class="layerText" x="610" y="502">1. Identity and Trust</text>
+    <!-- 1. AGENT NODE (cx=250, cy=450) -->
+    <g transform="translate(250 450)">
+      <circle class="ring" cx="0" cy="0" r="75" stroke-dasharray="4, 4"/>
+      <circle class="ring" cx="0" cy="0" r="65"/>
+      <circle fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5" cx="0" cy="0" r="52"/>
+      <text class="ink nodeHead" x="0" y="8">Agent</text>
+      <!-- proposal label -->
+      <text class="muted small" x="0" y="-88">proposals</text>
     </g>
 
-    <!-- Connection Paths / Tubes -->
-    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-      <!-- Agent -> PEP -->
-      <path d="M138 346H192C220 346 222 286 260 286H364" stroke="#cbd5e1" stroke-width="12"/>
-      <path d="M138 346H192C220 346 222 286 260 286H364" class="pathBase line-agent-pep" stroke="#94a3b8" stroke-width="4"/>
+    <!-- 2. POLICY ENFORCEMENT POINT (cx=600, cy=450) -->
+    <g transform="translate(600 450)">
+      <circle class="ring" cx="0" cy="0" r="95" stroke-dasharray="8, 6"/>
+      <circle class="ring" cx="0" cy="0" r="82"/>
+      <circle id="pep-node" class="ring node-pep" cx="0" cy="0" r="68"/>
+      <text class="ink nodeHead" x="0" y="-8">PEP</text>
+      <text class="ink small" x="0" y="16" font-size="14">Policy Enforcement</text>
+      <text class="muted small" x="0" y="34" font-size="13">Point</text>
       
-      <!-- PEP -> CPI (Teal flow) -->
-      <path d="M470 286H724" stroke="#cbd5e1" stroke-width="12"/>
-      <path d="M470 286H724" class="pathBase line-pep-cpi" stroke="#cbd5e1" stroke-width="4" marker-end="url(#arrowTeal)"/>
-      
-      <!-- CPI -> Effects (Safe action flow) -->
-      <path d="M838 286H918C944 286 946 346 980 346H1040" stroke="#cbd5e1" stroke-width="12"/>
-      <path d="M838 286H918C944 286 946 346 980 346H1040" class="pathBase line-cpi-effects" stroke="#cbd5e1" stroke-width="3" marker-end="url(#arrowGray)"/>
-      
-      <!-- PEP -> ProofGraph (Deny audit trail) -->
-      <path d="M430 338V378C430 406 470 414 510 414H604" stroke="#cbd5e1" stroke-width="12"/>
-      <path d="M430 338V378C430 406 470 414 510 414H604" class="pathBase line-pep-pg" stroke="#cbd5e1" stroke-width="4"/>
-      
-      <!-- CPI -> ProofGraph (Allow audit trail) -->
-      <path d="M780 338V378C780 406 740 414 650 414" stroke="#cbd5e1" stroke-width="12"/>
-      <path d="M780 338V378C780 406 740 414 650 414" class="pathBase line-cpi-pg" stroke="#cbd5e1" stroke-width="4"/>
+      <!-- State Badge -->
+      <rect x="-65" y="110" width="130" height="28" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+      <text class="muted micro" x="0" y="128">fail-closed</text>
+
+      <!-- Warning Quarantine Shield (Flashes and glows red when Deny is active) -->
+      <circle class="barrier-deny" fill="none" stroke="#f43f5e" stroke-width="6" stroke-dasharray="14, 10" cx="0" cy="0" r="75" opacity="0"/>
     </g>
 
-    <!-- Node Groups and Elements -->
-    <g class="sans" text-anchor="middle">
+    <!-- 3. CONSTRAINT + PROOF INTERFACE (cx=1000, cy=450) -->
+    <g transform="translate(1000 450)">
+      <circle class="ring" cx="0" cy="0" r="95" stroke-dasharray="8, 6"/>
+      <circle class="ring" cx="0" cy="0" r="82"/>
+      <circle id="cpi-node" class="ring node-cpi" cx="0" cy="0" r="68"/>
+      <text class="ink nodeHead" x="0" y="-8">CPI</text>
+      <text class="ink small" x="0" y="16" font-size="14">Constraint + Proof</text>
+      <text class="muted small" x="0" y="34" font-size="13">Interface</text>
       
-      <!-- Left side: Proposal text -->
-      <text class="muted small" x="-22" y="333" text-anchor="start">model proposals</text>
-      <path d="M126 346H70" fill="none" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowGray)"/>
-
-      <!-- AGENT NODE -->
-      <circle class="ring" cx="138" cy="346" r="54"/>
-      <circle fill="none" stroke="#cbd5e1" stroke-width="1.2" cx="138" cy="346" r="40"/>
-      <text class="ink label" x="138" y="352">Agent</text>
-
-      <!-- POLICY ENFORCEMENT POINT (PEP) NODE -->
-      <g>
-        <circle id="pep-outer" class="pathBase" fill="none" stroke="#94a3b8" stroke-width="1" cx="430" cy="286" r="86"/>
-        <circle id="pep-middle" class="pathBase" fill="none" stroke="#94a3b8" stroke-width="1" cx="430" cy="286" r="76"/>
-        <circle id="pep-inner" class="ring node-pep" cx="430" cy="286" r="64"/>
-        <text class="ink nodeHead" x="430" y="277">PEP</text>
-        <text class="ink small" x="430" y="300">Policy Enforcement</text>
-        <text class="muted small" x="430" y="318">Point</text>
-        
-        <!-- Fail-Closed Coral Ribbon Label (Evaluated State) -->
-        <rect x="364" y="356" width="132" height="28" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
-        <text class="muted micro" x="430" y="374">fail-closed</text>
-
-        <!-- DENY Barrier Shield Overlay -->
-        <circle class="barrier-deny" fill="none" stroke="#f43f5e" stroke-width="6" stroke-dasharray="12, 10" cx="430" cy="286" r="74" opacity="0"/>
-      </g>
-
-      <!-- CONSTRAINT + PROOF INTERFACE (CPI) NODE -->
-      <g>
-        <circle id="cpi-outer" class="pathBase" fill="none" stroke="#94a3b8" stroke-width="1" cx="780" cy="286" r="86"/>
-        <circle id="cpi-middle" class="pathBase" fill="none" stroke="#94a3b8" stroke-width="1" cx="780" cy="286" r="76"/>
-        <circle id="cpi-inner" class="ring node-cpi" cx="780" cy="286" r="64"/>
-        <text class="ink nodeHead" x="780" y="277">CPI</text>
-        <text class="ink small" x="780" y="300">Constraint + Proof</text>
-        <text class="muted small" x="780" y="318">Interface</text>
-      </g>
-
-      <!-- PROOFGRAPH LEDGER NODE -->
-      <g>
-        <circle id="pg-outer" class="pathBase" fill="none" stroke="#818cf8" stroke-dasharray="6, 6" stroke-width="1" cx="610" cy="414" r="80"/>
-        <circle id="pg-inner" class="ring node-pg" cx="610" cy="414" r="68"/>
-        <text class="ink label" x="610" y="407" font-weight="700">ProofGraph</text>
-        <text class="ink small" x="610" y="430" font-weight="500">immutable receipts</text>
-      </g>
-
-      <!-- EFFECTS SURFACE NODE -->
-      <g>
-        <circle id="effects-outer" class="pathBase" fill="none" stroke="#cbd5e1" stroke-width="1" cx="1040" cy="346" r="62"/>
-        <circle id="effects-inner" class="ring node-effects" cx="1040" cy="346" r="54"/>
-        <circle fill="none" stroke="#cbd5e1" stroke-width="1" cx="1040" cy="346" r="40"/>
-        <text class="muted label" x="1040" y="353">Effects</text>
-      </g>
-      
+      <!-- State Badge -->
+      <rect x="-65" y="110" width="130" height="28" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+      <text class="muted micro" x="0" y="128">schema-pinned</text>
     </g>
 
-    <!-- Animated Data Packets / Pulses -->
-    <g>
-      <!-- DENY Packet (Coral/Red warning flow) -->
-      <circle class="packet-deny" r="7" fill="#f43f5e" filter="url(#glowRed)" opacity="0"/>
-      <!-- DENY Receipt (Purple audit flow) -->
-      <circle class="receipt-deny" r="6" fill="#818cf8" filter="url(#glowViolet)" opacity="0"/>
-
-      <!-- ALLOW Packet (Teal safe flow) -->
-      <circle class="packet-allow" r="7" fill="#14b8a6" filter="url(#glowTeal)" opacity="0"/>
-      <!-- ALLOW Side-Effect Trigger (Cyan flow) -->
-      <circle class="packet-effect" r="7" fill="#06b6d4" filter="url(#glowTeal)" opacity="0"/>
-      <!-- ALLOW Receipt (Purple audit flow) -->
-      <circle class="receipt-allow" r="6" fill="#818cf8" filter="url(#glowViolet)" opacity="0"/>
+    <!-- 4. EFFECTS NODE (cx=1350, cy=450) -->
+    <g transform="translate(1350 450)">
+      <circle class="ring" cx="0" cy="0" r="75" stroke-dasharray="4, 4"/>
+      <circle class="ring" cx="0" cy="0" r="65"/>
+      <circle id="effects-node" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" class="node-effects" cx="0" cy="0" r="52"/>
+      <text class="ink nodeHead" x="0" y="0">Effects</text>
+      <text class="muted small" x="0" y="20" font-size="13">Secure Dispatch</text>
     </g>
 
-    <!-- Dynamic Verdict Banner Annotations (Synced with the timeline) -->
-    <g class="sans" text-anchor="middle">
-      
-      <!-- DENY State (Seconds 3.6 to 5.7) -->
-      <g class="text-deny-state" opacity="0">
-        <rect x="330" y="146" width="200" height="34" rx="6" fill="#fecdd3" stroke="#f43f5e" stroke-width="1"/>
-        <text class="mono" x="430" y="168" fill="#9f1239" font-size="14" font-weight="600">VERDICT: DENY (QUARANTINED)</text>
-        <text class="muted small" x="430" y="196" font-size="13">Unknown server and tool blocked</text>
-      </g>
-
-      <!-- ALLOW State (Seconds 9.6 to 11.7) -->
-      <g class="text-allow-state" opacity="0">
-        <rect x="680" y="146" width="200" height="34" rx="6" fill="#a7f3d0" stroke="#10b981" stroke-width="1"/>
-        <text class="mono" x="780" y="168" fill="#065f46" font-size="14" font-weight="600">VERDICT: ALLOW (PINNED)</text>
-        <text class="muted small" x="780" y="196" font-size="13">Schema-pinned fixture authorized</text>
-      </g>
-
+    <!-- 5. PROOFGRAPH LEDGER NODE (cx=800, cy=680) -->
+    <g transform="translate(800 680)">
+      <circle class="ring" cx="0" cy="0" r="88" stroke-dasharray="6, 6" stroke="#818cf8"/>
+      <circle class="ring" cx="0" cy="0" r="78"/>
+      <circle id="pg-node" class="ring node-pg" cx="0" cy="0" r="65"/>
+      <text class="ink nodeHead" x="0" y="-4" fill="#6366f1">ProofGraph</text>
+      <text class="muted small" x="0" y="18" font-size="14" font-weight="600">immutable ledger</text>
     </g>
 
   </g>
 
-  <!-- Blueprint Doctrine Legend (Bottom Left) -->
-  <g class="sans muted" transform="translate(108 790)">
-    <circle cx="-16" cy="-8" r="6" fill="#f43f5e"/>
-    <text x="0" y="0" font-size="18" font-weight="600" fill="#334155">DENY unknown tools before dispatch (Fail-Closed Quarantine)</text>
+  <!-- Animated Floating Packets -->
+  <g>
+    <!-- DENY Packet (Coral/Red warning flow) -->
+    <circle class="packet-deny" r="7" fill="#f43f5e" filter="url(#glowRed)" opacity="0"/>
+    <!-- DENY Receipt (Purple audit flow) -->
+    <circle class="receipt-deny" r="6" fill="#818cf8" filter="url(#glowViolet)" opacity="0"/>
+
+    <!-- ALLOW Packet (Teal safe flow) -->
+    <circle class="packet-allow" r="7" fill="#14b8a6" filter="url(#glowTeal)" opacity="0"/>
+    <!-- ALLOW Side-Effect Trigger (Cyan flow) -->
+    <circle class="packet-effect" r="7" fill="#06b6d4" filter="url(#glowTeal)" opacity="0"/>
+    <!-- ALLOW Receipt (Purple audit flow) -->
+    <circle class="receipt-allow" r="6" fill="#818cf8" filter="url(#glowViolet)" opacity="0"/>
+  </g>
+
+  <!-- Interactive/Timed Verdict Indicator Banners (Synced with keyframes) -->
+  <g class="sans" text-anchor="middle" filter="url(#softShadow)">
     
-    <circle cx="-16" cy="22" r="6" fill="#14b8a6"/>
-    <text x="0" y="30" font-size="18" font-weight="600" fill="#334155">ALLOW pinned schemas with receipts (Authorized Execution)</text>
+    <!-- DENY State (Emphasized Coral Banner, Seconds 1.2 to 3.4) -->
+    <g class="text-deny-state" opacity="0" transform="translate(600 280)">
+      <rect x="-115" y="-20" width="230" height="40" rx="8" fill="#ffe4e6" stroke="#f43f5e" stroke-width="1.5"/>
+      <text class="mono" x="0" y="5" fill="#be123c" font-size="14" font-weight="700">VERDICT: DENY (QUARANTINED)</text>
+      <text class="muted small" x="0" y="38" font-size="13" font-weight="600">Unknown server and tool blocked</text>
+    </g>
+
+    <!-- ALLOW State (Emphasized Emerald/Teal Banner, Seconds 7.2 to 9.4) -->
+    <g class="text-allow-state" opacity="0" transform="translate(1000 280)">
+      <rect x="-115" y="-20" width="230" height="40" rx="8" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+      <text class="mono" x="0" y="5" fill="#065f46" font-size="14" font-weight="700">VERDICT: ALLOW (PINNED)</text>
+      <text class="muted small" x="0" y="38" font-size="13" font-weight="600">Schema-pinned fixture authorized</text>
+    </g>
+
+  </g>
+
+  <!-- Horizontal Legend Frame Card centered at bottom -->
+  <g class="sans" transform="translate(800 830)">
+    <rect x="-560" y="-30" width="1120" height="60" rx="10" class="layerCard"/>
     
-    <circle cx="-16" cy="52" r="6" fill="#818cf8"/>
-    <text x="0" y="60" font-size="18" font-weight="600" fill="#334155">RECORD and verify all evidence offline via immutable ProofGraph</text>
+    <!-- Legend Items -->
+    <g transform="translate(-510 0)">
+      <!-- DENY -->
+      <g transform="translate(0 5)">
+        <circle cx="0" cy="0" r="7" fill="#f43f5e" filter="url(#glowRed)"/>
+        <text class="ink" x="20" y="5" font-size="15" font-weight="600">FAIL-CLOSED QUARANTINE: Deny unknown servers &amp; tools before dispatch</text>
+      </g>
+      <!-- ALLOW -->
+      <g transform="translate(420 5)">
+        <circle cx="0" cy="0" r="7" fill="#14b8a6" filter="url(#glowTeal)"/>
+        <text class="ink" x="20" y="5" font-size="15" font-weight="600">AUTHORIZED EXECUTION: Allow schema-pinned tool calls with evidence</text>
+      </g>
+      <!-- RECORD -->
+      <g transform="translate(840 5)">
+        <circle cx="0" cy="0" r="7" fill="#818cf8" filter="url(#glowViolet)"/>
+        <text class="ink" x="20" y="5" font-size="15" font-weight="600">VERIFIABLE LEDGER: Record audit receipts in ProofGraph</text>
+      </g>
+    </g>
   </g>
 </svg>

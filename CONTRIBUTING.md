@@ -33,6 +33,12 @@ Run `make quality-impact` for a quick path-scoped package pass, or use focused t
 
 Public contribution lanes and community expectations are in [COMMUNITY.md](COMMUNITY.md). The ecosystem map for upstream work is in [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md).
 
+## Issue Labels
+
+- `good first issue` is scoped and newcomer-safe.
+- `help wanted` is contributor-ready, but may need more context or maintainer review.
+- `maintainer-task` requires maintainer, operator, or release access and is not externally claimable.
+
 ## Contribution Rules
 
 1. Keep documentation tied to code, tests, or release automation.

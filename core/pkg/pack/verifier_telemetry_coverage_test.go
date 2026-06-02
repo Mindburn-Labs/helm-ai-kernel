@@ -202,6 +202,23 @@ func TestCoverageVerifierIntegrityEdges(t *testing.T) {
 		t.Fatalf("empty average trust score = %f, want 0", empty.Summary.AvgTrustScore)
 	}
 
+	missingSignature := ResolvedPack{
+		PackID:      "missing-signature",
+		Manifest:    PackManifest{Name: "missing-signature", Version: "1.0.0"},
+		ContentHash: "sha256:abc123",
+	}
+	missingSignatureResult, err := verifier.Verify(context.Background(), &VerificationRequest{
+		RequestID: "missing-signature",
+		Packs:     []ResolvedPack{missingSignature},
+		Options:   VerificationOptions{RequiredChecks: []string{"signature"}},
+	})
+	if err != nil {
+		t.Fatalf("Verify missing signature: %v", err)
+	}
+	if missingSignatureResult.Status != VerificationFailed {
+		t.Fatalf("missing signature status = %s, want %s", missingSignatureResult.Status, VerificationFailed)
+	}
+
 	withDrill := ResolvedPack{
 		PackID: "pack-drill",
 		Manifest: PackManifest{

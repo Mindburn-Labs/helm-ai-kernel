@@ -13,6 +13,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox/daytona"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox/e2b"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/modelproviders"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	lpprovision "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/provision"
 	lpruntime "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/runtime"
@@ -511,16 +512,68 @@ func runtimeSecrets(compiled plan.LaunchPlan, opts ExecuteOptions) map[string]st
 		}
 		return secrets
 	}
+	selectedEnv := ""
 	for _, envName := range compiled.ModelGatewayEnv {
 		if value := opts.RuntimeSecretEnv[envName]; value != "" {
 			secrets[envName] = value
+			if selectedEnv == "" {
+				selectedEnv = envName
+			}
 			continue
 		}
 		if value, ok := os.LookupEnv(envName); ok && value != "" {
 			secrets[envName] = value
+			if selectedEnv == "" {
+				selectedEnv = envName
+			}
 		}
 	}
+	projectModelProviderRuntimeMetadata(secrets, selectedEnv)
 	return secrets
+}
+
+func projectModelProviderRuntimeMetadata(env map[string]string, selectedEnv string) {
+	if selectedEnv == "" {
+		return
+	}
+	catalog, err := modelproviders.DefaultCatalog()
+	if err != nil {
+		return
+	}
+	provider, ok := catalog.ProviderForEnv(selectedEnv)
+	if !ok {
+		return
+	}
+	lookup := func(name string) (string, bool) {
+		if value := env[name]; value != "" {
+			return value, true
+		}
+		return os.LookupEnv(name)
+	}
+	baseURL := provider.PreferredBaseURLFromEnv(lookup)
+	setIfEmpty(env, "HELM_MODEL_GATEWAY_PROVIDER", provider.ID)
+	setIfEmpty(env, "HELM_LAUNCHPAD_MODEL_PROVIDER", provider.ID)
+	setIfEmpty(env, "HELM_MODEL_GATEWAY_ENV", selectedEnv)
+	if baseURL != "" {
+		setIfEmpty(env, "HELM_MODEL_GATEWAY_BASE_URL", baseURL)
+	}
+	if len(provider.Protocols) > 0 {
+		setIfEmpty(env, "HELM_MODEL_GATEWAY_PROTOCOLS", strings.Join(provider.Protocols, ","))
+	}
+	if baseURL != "" && provider.HasProtocol("openai-compatible") {
+		setIfEmpty(env, "OPENAI_BASE_URL", baseURL)
+		setIfEmpty(env, "OPENAI_API_BASE", baseURL)
+	}
+	if baseURL != "" && (provider.HasProtocol("anthropic-compatible") || provider.HasProtocol("anthropic-messages")) {
+		setIfEmpty(env, "ANTHROPIC_BASE_URL", baseURL)
+	}
+}
+
+func setIfEmpty(env map[string]string, key, value string) {
+	if value == "" || env[key] != "" {
+		return
+	}
+	env[key] = value
 }
 
 func isolationModeFromEnv() string {

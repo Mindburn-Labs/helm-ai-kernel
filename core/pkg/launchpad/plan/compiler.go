@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/modelproviders"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 )
 
@@ -26,6 +27,14 @@ func CompileWithRoot(app registry.AppSpec, substrate registry.SubstrateSpec, pri
 	substrateHash := hashCanonical(substrate)
 	policyHash := hashPolicyRefs(root, app.FilesystemPolicy.PolicyRef, substrate.PolicyPack)
 	sandboxHash := hashStrings(substrate.ID, substrate.Filesystem.Mode, substrate.Network.Default)
+	modelGatewayEnv, err := modelGatewayEnvNames(app)
+	if err != nil {
+		return FailurePlan(app.ID, substrate.ID, principal, "ESCALATE", "ESCALATED", "ERR_LAUNCHPAD_MODEL_PROVIDER_CATALOG"), err
+	}
+	networkAllowlist, err := networkAllowlist(app)
+	if err != nil {
+		return FailurePlan(app.ID, substrate.ID, principal, "ESCALATE", "ESCALATED", "ERR_LAUNCHPAD_MODEL_PROVIDER_CATALOG"), err
+	}
 	base := LaunchPlan{
 		LaunchID:                uuid.NewString(),
 		AppID:                   app.ID,
@@ -39,7 +48,7 @@ func CompileWithRoot(app registry.AppSpec, substrate registry.SubstrateSpec, pri
 		RuntimeDetached:         app.Runtime.Detached,
 		RuntimeReadinessTimeout: app.Runtime.ReadinessTimeout,
 		Healthchecks:            cloneHealthchecks(app.Healthchecks),
-		ModelGatewayEnv:         cloneStrings(app.ModelGatewayEnv),
+		ModelGatewayEnv:         modelGatewayEnv,
 		ModelGatewayMode:        modelGatewayMode(app),
 		ModelGatewayProvider:    app.ModelGateway.Provider,
 		RawProviderKeyProjected: rawProviderKeyProjected(app),
@@ -48,8 +57,8 @@ func CompileWithRoot(app registry.AppSpec, substrate registry.SubstrateSpec, pri
 		AppSpecHash:             appHash,
 		SubstrateSpecHash:       substrateHash,
 		SandboxProfileHash:      sandboxHash,
-		RequiredSecretRefs:      requiredSecretRefs(app),
-		NetworkAllowlist:        cloneStrings(app.NetworkPolicy.Allowlist),
+		RequiredSecretRefs:      requiredSecretRefs(app, modelGatewayEnv),
+		NetworkAllowlist:        networkAllowlist,
 		FilesystemMounts:        cloneStrings(app.FilesystemPolicy.Mounts),
 		StateDirEnv:             app.FilesystemPolicy.StateDirEnv,
 		MCPPolicy:               app.MCPPolicy,
@@ -70,20 +79,18 @@ func CompileWithRoot(app registry.AppSpec, substrate registry.SubstrateSpec, pri
 		finalizeStableIR(&base)
 		return base, fmt.Errorf("app %s artifact verification failed: %s", app.ID, reason)
 	}
-	for _, secret := range requiredSecretEnvNames(app) {
-		if value, ok := os.LookupEnv(secret); !ok || value == "" {
-			base.KernelVerdict = "ESCALATE"
-			base.Status = "ESCALATED"
-			base.ReasonCode = "ERR_LAUNCHPAD_REQUIRED_SECRET_MISSING"
-			base.Nodes["blocked"] = "required_secret_missing"
-			base.Nodes["missing_secret"] = secret
-			base.Nodes["required_secret_refs"] = base.RequiredSecretRefs
-			finalizeStableIR(&base)
-			cpiOutput, _ := EvaluateActions(base, base.ActionIR)
-			base.CPIOutput = &cpiOutput
-			finalizeStableIR(&base)
-			return base, fmt.Errorf("app %s requires missing secret %s", app.ID, secret)
-		}
+	if missing := missingRequiredSecretEnv(app, modelGatewayEnv); missing != "" {
+		base.KernelVerdict = "ESCALATE"
+		base.Status = "ESCALATED"
+		base.ReasonCode = "ERR_LAUNCHPAD_REQUIRED_SECRET_MISSING"
+		base.Nodes["blocked"] = "required_secret_missing"
+		base.Nodes["missing_secret"] = missing
+		base.Nodes["required_secret_refs"] = base.RequiredSecretRefs
+		finalizeStableIR(&base)
+		cpiOutput, _ := EvaluateActions(base, base.ActionIR)
+		base.CPIOutput = &cpiOutput
+		finalizeStableIR(&base)
+		return base, fmt.Errorf("app %s requires missing secret %s", app.ID, missing)
 	}
 	if app.Availability != registry.AvailabilityOSSSupported || !app.Conformance.FullyVerified() {
 		base.KernelVerdict = "ESCALATE"
@@ -223,12 +230,15 @@ func cloneHealthchecks(in []registry.HealthcheckSpec) []registry.HealthcheckSpec
 	return out
 }
 
-func requiredSecretRefs(app registry.AppSpec) []string {
+func requiredSecretRefs(app registry.AppSpec, modelGatewayEnv []string) []string {
 	refs := cloneStrings(app.RequiredSecrets)
 	if modelGatewayMode(app) == "token_broker" && !containsString(refs, "model_gateway_token") {
 		refs = append(refs, "model_gateway_token")
 	}
-	for _, envName := range app.ModelGatewayEnv {
+	if modelGatewayAcceptsAnyProviderEnv(app, modelGatewayEnv) {
+		return refs
+	}
+	for _, envName := range modelGatewayEnv {
 		if !containsString(refs, envName) {
 			refs = append(refs, envName)
 		}
@@ -236,14 +246,42 @@ func requiredSecretRefs(app registry.AppSpec) []string {
 	return refs
 }
 
-func requiredSecretEnvNames(app registry.AppSpec) []string {
+func requiredSecretEnvNames(app registry.AppSpec, modelGatewayEnv []string) []string {
 	if modelGatewayMode(app) == "token_broker" {
 		return []string{"HELM_MODEL_GATEWAY_TOKEN"}
 	}
-	if len(app.ModelGatewayEnv) > 0 {
-		return cloneStrings(app.ModelGatewayEnv)
+	if len(modelGatewayEnv) > 0 {
+		return cloneStrings(modelGatewayEnv)
 	}
 	return cloneStrings(app.RequiredSecrets)
+}
+
+func missingRequiredSecretEnv(app registry.AppSpec, modelGatewayEnv []string) string {
+	names := requiredSecretEnvNames(app, modelGatewayEnv)
+	if len(names) == 0 {
+		return ""
+	}
+	if modelGatewayAcceptsAnyProviderEnv(app, modelGatewayEnv) {
+		for _, group := range modelGatewayRequiredEnvGroups(app, modelGatewayEnv) {
+			complete := true
+			for _, name := range group {
+				if value, ok := os.LookupEnv(name); !ok || value == "" {
+					complete = false
+					break
+				}
+			}
+			if complete {
+				return ""
+			}
+		}
+		return missingProviderEnvGroupMessage(modelGatewayRequiredEnvGroups(app, modelGatewayEnv))
+	}
+	for _, name := range names {
+		if value, ok := os.LookupEnv(name); !ok || value == "" {
+			return name
+		}
+	}
+	return ""
 }
 
 func modelGatewayMode(app registry.AppSpec) string {
@@ -254,6 +292,67 @@ func modelGatewayMode(app registry.AppSpec) string {
 		return "raw_provider_key"
 	}
 	return ""
+}
+
+func modelGatewayAcceptsAnyProviderEnv(app registry.AppSpec, modelGatewayEnv []string) bool {
+	provider := strings.ToLower(strings.TrimSpace(app.ModelGateway.Provider))
+	return len(modelGatewayEnv) > 1 && (provider == "byo" || provider == "multi" || len(app.ModelGateway.ProviderIDs) > 1)
+}
+
+func modelGatewayUsesCatalog(app registry.AppSpec) bool {
+	provider := strings.ToLower(strings.TrimSpace(app.ModelGateway.Provider))
+	return provider == "byo" || provider == "multi"
+}
+
+func modelGatewayRequiredEnvGroups(app registry.AppSpec, modelGatewayEnv []string) [][]string {
+	if !modelGatewayUsesCatalog(app) {
+		groups := make([][]string, 0, len(modelGatewayEnv))
+		for _, envName := range modelGatewayEnv {
+			groups = append(groups, []string{envName})
+		}
+		return groups
+	}
+	catalog, err := modelproviders.DefaultCatalog()
+	if err != nil {
+		groups := make([][]string, 0, len(modelGatewayEnv))
+		for _, envName := range modelGatewayEnv {
+			groups = append(groups, []string{envName})
+		}
+		return groups
+	}
+	groups, err := catalog.EnvGroupsForProviderIDs(app.ModelGateway.ProviderIDs)
+	if err != nil || len(groups) == 0 {
+		groups = make([][]string, 0, len(modelGatewayEnv))
+		for _, envName := range modelGatewayEnv {
+			groups = append(groups, []string{envName})
+		}
+	}
+	return groups
+}
+
+func modelGatewayEnvNames(app registry.AppSpec) ([]string, error) {
+	if len(app.ModelGatewayEnv) > 0 {
+		return cloneStrings(app.ModelGatewayEnv), nil
+	}
+	if !modelGatewayUsesCatalog(app) {
+		return []string{}, nil
+	}
+	catalog, err := modelproviders.DefaultCatalog()
+	if err != nil {
+		return nil, err
+	}
+	return catalog.EnvNamesForProviderIDs(app.ModelGateway.ProviderIDs)
+}
+
+func networkAllowlist(app registry.AppSpec) ([]string, error) {
+	if len(app.NetworkPolicy.Allowlist) > 0 || !modelGatewayUsesCatalog(app) {
+		return cloneStrings(app.NetworkPolicy.Allowlist), nil
+	}
+	catalog, err := modelproviders.DefaultCatalog()
+	if err != nil {
+		return nil, err
+	}
+	return catalog.BaseURLsForProviderIDsWithEnv(app.ModelGateway.ProviderIDs, os.LookupEnv)
 }
 
 func rawProviderKeyProjected(app registry.AppSpec) bool {
@@ -274,6 +373,21 @@ func containsString(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func formatEnvGroups(groups [][]string) string {
+	formatted := make([]string, 0, len(groups))
+	for _, group := range groups {
+		formatted = append(formatted, strings.Join(group, "+"))
+	}
+	return strings.Join(formatted, " or ")
+}
+
+func missingProviderEnvGroupMessage(groups [][]string) string {
+	if len(groups) > 8 {
+		return "one complete catalog-backed provider env group"
+	}
+	return "one complete provider env group: " + formatEnvGroups(groups)
 }
 
 func artifactVerificationFailure(app registry.AppSpec) string {

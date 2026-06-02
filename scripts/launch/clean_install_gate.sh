@@ -61,12 +61,85 @@ export HELM_LAUNCHPAD_HOME="$TRANSCRIPT_DIR/launchpad-home"
 export HELM_LAUNCHPAD_EGRESS_RECEIPT_DIR="$TRANSCRIPT_DIR/egress-receipts"
 mkdir -p "$HELM_LAUNCHPAD_HOME" "$HELM_LAUNCHPAD_EGRESS_RECEIPT_DIR"
 
+model_provider_secret_envs() {
+  jq -r '.providers[].env[]' "$ROOT/core/pkg/launchpad/modelproviders/catalog.json" | sort -u
+}
+
+model_provider_required_env_groups() {
+  jq -r '
+    .providers[]
+    | ((.required_env_groups // []) as $groups
+       | if ($groups | length) > 0 then $groups[] else (.env[] | [.]) end)
+    | @tsv
+  ' "$ROOT/core/pkg/launchpad/modelproviders/catalog.json"
+}
+
+import_model_provider_secret_json() {
+  [[ -n "${HELM_LAUNCHPAD_CI_MODEL_PROVIDER_SECRET_JSON:-}" ]] || return 0
+  local allowed
+  allowed="$(model_provider_secret_envs | tr '\n' ' ')"
+  local key value
+  while IFS=$'\t' read -r key value; do
+    [[ -n "$key" && -n "$value" ]] || continue
+    case " $allowed " in
+      *" $key "*) export "$key=$value" ;;
+    esac
+  done < <(printf '%s' "$HELM_LAUNCHPAD_CI_MODEL_PROVIDER_SECRET_JSON" | jq -r 'to_entries[] | [.key, .value] | @tsv')
+}
+
+model_provider_key_present() {
+  local group env_name complete
+  while IFS=$'\t' read -r -a group; do
+    [[ "${#group[@]}" -gt 0 ]] || continue
+    complete=1
+    for env_name in "${group[@]}"; do
+      if [[ -z "${!env_name:-}" ]]; then
+        complete=0
+        break
+      fi
+    done
+    [[ "$complete" -eq 1 ]] && return 0
+  done < <(model_provider_required_env_groups)
+  return 1
+}
+
+first_model_provider_secret_env() {
+  local group env_name complete fallback
+  while IFS=$'\t' read -r -a group; do
+    [[ "${#group[@]}" -gt 0 ]] || continue
+    complete=1
+    fallback=""
+    for env_name in "${group[@]}"; do
+      [[ -z "$fallback" ]] && fallback="$env_name"
+      if [[ -z "${!env_name:-}" ]]; then
+        complete=0
+        break
+      fi
+    done
+    if [[ "$complete" -eq 1 ]]; then
+      for env_name in "${group[@]}"; do
+        case "$env_name" in
+          *_API_KEY|*_ACCESS_TOKEN|*_TOKEN|*_KEY)
+            printf '%s\n' "$env_name"
+            return 0
+            ;;
+        esac
+      done
+      printf '%s\n' "$fallback"
+      return 0
+    fi
+  done < <(model_provider_required_env_groups)
+  return 1
+}
+
 redact_file() {
   local file="$1"
   [[ -f "$file" ]] || return 0
-  if [[ -n "${OPENROUTER_API_KEY:-}" ]]; then
-    perl -0pi -e 's/\Q$ENV{OPENROUTER_API_KEY}\E/[REDACTED]/g' "$file"
-  fi
+  local env_name
+  while IFS= read -r env_name; do
+    [[ -n "$env_name" && -n "${!env_name:-}" ]] || continue
+    SECRET_ENV_NAME="$env_name" perl -0pi -e 's/\Q$ENV{$ENV{SECRET_ENV_NAME}}\E/[REDACTED]/g' "$file"
+  done < <(model_provider_secret_envs)
   if [[ -n "${HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY:-}" ]]; then
     perl -0pi -e 's/\Q$ENV{HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY}\E/[REDACTED]/g' "$file"
   fi
@@ -270,8 +343,10 @@ PY
 main() {
   local final_status="PASS"
 
-  if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
-    printf 'clean-install: OPENROUTER_API_KEY or HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY is required\n' >&2
+  import_model_provider_secret_json
+
+  if ! model_provider_key_present; then
+    printf 'clean-install: one BYO model provider API key from core/pkg/launchpad/modelproviders/catalog.json is required\n' >&2
     final_status="FAIL"
   fi
 
@@ -326,9 +401,11 @@ main() {
 
   verify_evidence_refs || final_status="FAIL"
 
-  if [[ -n "${OPENROUTER_API_KEY:-}" ]]; then
+  local audit_secret_env
+  audit_secret_env="$(first_model_provider_secret_env || true)"
+  if [[ -n "$audit_secret_env" ]]; then
     python3 "$ROOT/scripts/launch/secret_fragment_audit.py" \
-      --secret-env OPENROUTER_API_KEY \
+      --secret-env "$audit_secret_env" \
       --root "$TRANSCRIPT_DIR/commands" \
       --root "$TRANSCRIPT_DIR/audit" \
       --root "$HELM_LAUNCHPAD_HOME" \

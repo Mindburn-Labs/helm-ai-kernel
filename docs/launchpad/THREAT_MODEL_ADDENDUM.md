@@ -27,10 +27,10 @@ unconfigured modes must fail closed before launch.
 ## Egress And Prompt Data
 
 The launch-owned egress proxy validates CONNECT destinations against the
-OpenRouter allowlist and emits allow/deny receipts. CONNECT payload contents
-remain encrypted and opaque to the proxy. Without token-broker or L7
-model-gateway enforcement, Launchpad can claim only destination enforcement:
-OpenRouter-only egress with receipt-backed proxy control.
+embedded BYO model-provider catalog and emits allow/deny receipts. CONNECT
+payload contents remain encrypted and opaque to the proxy. Without token-broker
+or L7 model-gateway enforcement, Launchpad can claim only destination
+enforcement: catalog-backed provider egress with receipt-backed proxy control.
 
 Any claim that sensitive prompt contents could not leave the runtime requires
 separate model-gateway inspection, scoped token issuance, or broker receipts.
@@ -50,7 +50,7 @@ must be added to the mediation proof harness before it appears in public claims.
 
 OpenClaw, Hermes, OpenCode, and Kilo Code are the current `oss_supported`
 local-container set after workflow `26198407296` passed signed artifact build,
-SBOM, vulnerability scan, live OpenRouter launch, teardown, and offline
+SBOM, vulnerability scan, live model-provider launch, teardown, and offline
 EvidencePack verification for all four apps.
 
 Any app outside that four-app set remains non-marketable as supported until the

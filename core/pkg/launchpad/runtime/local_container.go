@@ -102,7 +102,7 @@ func (r LocalContainerRuntime) Preflight(req ContainerRequest) (ContainerHandle,
 	if req.RecursiveLaunch || launchRecurses(req.Plan) {
 		return ContainerHandle{}, errors.New("local-container recursive launch is denied")
 	}
-	if err := ValidateOpenRouterAllowlist(req.NetworkAllowlist); err != nil {
+	if err := ValidateModelProviderAllowlist(req.NetworkAllowlist); err != nil {
 		return ContainerHandle{}, err
 	}
 	if containsPrivilegeEscalation(req.Command) || containsPrivilegeEscalation(req.Args) {
@@ -132,7 +132,7 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 	proxyHandle := EgressProxyHandle{}
 	if len(req.NetworkAllowlist) > 0 {
 		if req.EgressProxy == nil {
-			return handle, fmt.Errorf("local-container OpenRouter egress requires launch-scoped egress proxy receipt")
+			return handle, fmt.Errorf("local-container model provider egress requires launch-scoped egress proxy receipt")
 		}
 		proxyHandle, err = req.EgressProxy.Start(EgressProxyRequest{
 			LaunchID:           req.Plan.LaunchID,

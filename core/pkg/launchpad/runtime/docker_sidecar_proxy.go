@@ -23,7 +23,7 @@ func (p DockerSidecarEgressProxy) Start(req EgressProxyRequest) (EgressProxyHand
 	if strings.TrimSpace(req.LaunchID) == "" {
 		return EgressProxyHandle{}, errors.New("docker egress proxy launch id is required")
 	}
-	if err := ValidateOpenRouterAllowlist(req.Allowlist); err != nil {
+	if err := ValidateModelProviderAllowlist(req.Allowlist); err != nil {
 		return EgressProxyHandle{}, err
 	}
 	image := strings.TrimSpace(p.Image)

@@ -75,18 +75,18 @@ func TestPreflightBlocksRecursiveLaunch(t *testing.T) {
 	}
 }
 
-func TestPreflightRestrictsEgressAllowlistToOpenRouter(t *testing.T) {
+func TestPreflightRestrictsEgressAllowlistToRegisteredModelProviders(t *testing.T) {
 	req := baseContainerRequest(t)
 	req.NetworkAllowlist = []string{"https://example.com"}
 
 	_, err := NewLocalContainerRuntime().Preflight(req)
 	if err == nil {
-		t.Fatal("expected non-OpenRouter egress allowlist to fail preflight")
+		t.Fatal("expected unregistered model provider egress allowlist to fail preflight")
 	}
 
-	req.NetworkAllowlist = []string{"https://openrouter.ai/api/v1"}
+	req.NetworkAllowlist = []string{"https://api.anthropic.com/v1"}
 	if _, err := NewLocalContainerRuntime().Preflight(req); err != nil {
-		t.Fatalf("OpenRouter egress allowlist rejected: %v", err)
+		t.Fatalf("registered model provider egress allowlist rejected: %v", err)
 	}
 }
 
@@ -145,7 +145,7 @@ func TestPreflightAllowsGVisorRuntimeClass(t *testing.T) {
 	}
 }
 
-func TestStartRequiresEgressProxyReceiptForOpenRouterAllowlist(t *testing.T) {
+func TestStartRequiresEgressProxyReceiptForModelProviderAllowlist(t *testing.T) {
 	req := baseContainerRequest(t)
 	req.DryRun = false
 	req.Command = []string{"/bin/sh"}
@@ -154,7 +154,7 @@ func TestStartRequiresEgressProxyReceiptForOpenRouterAllowlist(t *testing.T) {
 
 	_, err := NewLocalContainerRuntime().Start(req)
 	if err == nil {
-		t.Fatal("expected OpenRouter allowlist without proxy receipt to fail closed")
+		t.Fatal("expected model provider allowlist without proxy receipt to fail closed")
 	}
 
 	req.EgressProxy = StaticEgressProxy{ProxyURL: "http://127.0.0.1:18080", ReceiptRef: "receipt://egress/launch-1"}
@@ -286,13 +286,13 @@ func TestLaunchOwnedEgressProxyDeniesUnknownDestination(t *testing.T) {
 	}
 }
 
-func TestLaunchOwnedEgressProxyRejectsNonOpenRouterAllowlist(t *testing.T) {
+func TestLaunchOwnedEgressProxyRejectsUnregisteredProviderAllowlist(t *testing.T) {
 	_, err := NewLaunchOwnedEgressProxy().Start(EgressProxyRequest{
 		LaunchID:  "launch-1",
 		Allowlist: []string{"example.com:443"},
 	})
 	if err == nil {
-		t.Fatal("expected non-OpenRouter allowlist to fail")
+		t.Fatal("expected unregistered model provider allowlist to fail")
 	}
 }
 

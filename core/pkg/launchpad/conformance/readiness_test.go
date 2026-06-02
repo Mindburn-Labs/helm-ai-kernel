@@ -7,7 +7,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 )
 
-func TestMissionReadinessRequiresOpenRouterSecret(t *testing.T) {
+func TestMissionReadinessRequiresBYOModelProviderSecret(t *testing.T) {
 	app := supportedFixture()
 	substrate := localContainerFixture()
 	report := EvaluateMissionReadiness(app, substrate, Options{
@@ -15,10 +15,10 @@ func TestMissionReadinessRequiresOpenRouterSecret(t *testing.T) {
 		ToolLookup: presentTools,
 	})
 	if report.Verdict != "ESCALATE" {
-		t.Fatalf("missing OpenRouter secret must escalate, got %s", report.Verdict)
+		t.Fatalf("missing BYO model provider secret must escalate, got %s", report.Verdict)
 	}
-	if !hasBlocker(report, "secret.OPENROUTER_API_KEY") {
-		t.Fatalf("expected OPENROUTER_API_KEY blocker, got %#v", report.Blockers)
+	if !hasBlocker(report, "secret.model_gateway_provider") {
+		t.Fatalf("expected model gateway provider blocker, got %#v", report.Blockers)
 	}
 }
 
@@ -50,11 +50,48 @@ func TestMissionReadinessAllowsFullyVerifiedSignedOCI(t *testing.T) {
 	}
 }
 
+func TestMissionReadinessRequiresCompleteDynamicProviderEnvGroup(t *testing.T) {
+	app := supportedFixture()
+	app.ModelGateway.ProviderIDs = []string{"azure-openai"}
+	substrate := localContainerFixture()
+
+	report := EvaluateMissionReadiness(app, substrate, Options{
+		EnvLookup: func(name string) (string, bool) {
+			if name == "AZURE_OPENAI_API_KEY" {
+				return "sk-test", true
+			}
+			return "", false
+		},
+		ToolLookup: presentTools,
+	})
+	if report.Verdict != "ESCALATE" || !hasBlocker(report, "secret.model_gateway_provider") {
+		t.Fatalf("Azure key without endpoint must escalate, got %#v", report)
+	}
+
+	report = EvaluateMissionReadiness(app, substrate, Options{
+		EnvLookup: func(name string) (string, bool) {
+			switch name {
+			case "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT":
+				return "present", true
+			default:
+				return "", false
+			}
+		},
+		ToolLookup: presentTools,
+	})
+	if report.Verdict != "ALLOW" {
+		t.Fatalf("complete Azure env group should allow readiness, got %#v", report)
+	}
+}
+
 func supportedFixture() registry.AppSpec {
 	return registry.AppSpec{
-		ID:              "openclaw",
-		Availability:    registry.AvailabilityOSSSupported,
-		ModelGatewayEnv: []string{"OPENROUTER_API_KEY"},
+		ID:           "openclaw",
+		Availability: registry.AvailabilityOSSSupported,
+		ModelGateway: registry.ModelGatewaySpec{
+			Provider:    "byo",
+			ProviderIDs: []string{"openai", "anthropic"},
+		},
 		Install: registry.InstallSpec{
 			Strategy: "signed_oci",
 			Image:    "ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:" + strings.Repeat("a", 64),

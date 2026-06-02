@@ -35,11 +35,9 @@ runtime:
     readiness_timeout: 8m
 model_gateway:
     logical_secret: model_gateway
-    provider: openrouter
+    provider: byo
     mode: logical_binding_env_projection
     raw_provider_key_projected: true
-model_gateway_env:
-    - OPENROUTER_API_KEY
 required_secrets:
     - model_gateway
 filesystem_policy:
@@ -56,8 +54,6 @@ filesystem_policy:
     policy_ref: policies/launchpad/apps/openclaw.safe.toml
 network_policy:
     default: deny
-    allowlist:
-        - https://openrouter.ai/api/v1
 mcp_policy:
     unknown_server_policy: quarantine
     unknown_tool_policy: ESCALATE
@@ -134,4 +130,3 @@ display:
     - "offline EvidencePack verification"
   docs_path: "docs/launchpad/apps/OPENCLAW.md"
   contribution_label: "framework-integration"
-

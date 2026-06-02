@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/modelproviders"
 )
 
 var allowedEvidenceRequirements = map[string]struct{}{
@@ -202,6 +203,21 @@ func validateModelGateway(app AppSpec) error {
 	}
 	if app.ModelGateway.LogicalSecret != "model_gateway" && contains(app.RequiredSecrets, "model_gateway") {
 		return fmt.Errorf("app %s model_gateway.logical_secret must match required secret model_gateway", app.ID)
+	}
+	if len(app.ModelGateway.ProviderIDs) > 0 {
+		catalog, err := modelproviders.DefaultCatalog()
+		if err != nil {
+			return fmt.Errorf("app %s model provider catalog unavailable: %w", app.ID, err)
+		}
+		known := map[string]struct{}{}
+		for _, provider := range catalog.Providers {
+			known[provider.ID] = struct{}{}
+		}
+		for _, providerID := range app.ModelGateway.ProviderIDs {
+			if _, ok := known[providerID]; !ok {
+				return fmt.Errorf("app %s references unknown model_gateway.provider_ids entry %q", app.ID, providerID)
+			}
+		}
 	}
 	if app.Availability == AvailabilityOSSSupported && !hasEvidenceRequirement(app.EvidenceRequirements, "model_gateway_broker") {
 		return fmt.Errorf("app %s cannot be oss_supported without model_gateway_broker evidence requirement", app.ID)

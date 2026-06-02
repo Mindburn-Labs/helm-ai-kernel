@@ -71,10 +71,11 @@ type RuntimeSpec struct {
 }
 
 type ModelGatewaySpec struct {
-	LogicalSecret           string `json:"logical_secret,omitempty" yaml:"logical_secret,omitempty"`
-	Provider                string `json:"provider,omitempty" yaml:"provider,omitempty"`
-	Mode                    string `json:"mode,omitempty" yaml:"mode,omitempty"`
-	RawProviderKeyProjected bool   `json:"raw_provider_key_projected" yaml:"raw_provider_key_projected"`
+	LogicalSecret           string   `json:"logical_secret,omitempty" yaml:"logical_secret,omitempty"`
+	Provider                string   `json:"provider,omitempty" yaml:"provider,omitempty"`
+	ProviderIDs             []string `json:"provider_ids,omitempty" yaml:"provider_ids,omitempty"`
+	Mode                    string   `json:"mode,omitempty" yaml:"mode,omitempty"`
+	RawProviderKeyProjected bool     `json:"raw_provider_key_projected" yaml:"raw_provider_key_projected"`
 }
 
 type PolicyRef struct {

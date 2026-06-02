@@ -88,9 +88,10 @@ func TestWriteEvidencePackRewriteKeepsEvidenceGraphHashCurrent(t *testing.T) {
 
 func TestWriteEvidencePackRedactsSecretLikePayloads(t *testing.T) {
 	secret := strings.Join([]string{"sk", "or", "v1"}, "-") + "-" + strings.Repeat("a", 24)
+	deepseekSecret := "deepseek-token-" + strings.Repeat("b", 24)
 	packDir, err := WriteEvidencePack(t.TempDir(), "launch-redact", map[string][]byte{
 		"receipts/kernel-verdict.json": []byte(`{"receipt_id":"r1","type":"launchpad.kernel_verdict","decision_id":"d1","decision_hash":"sha256:test","status":"ALLOW","verdict":"ALLOW","lamport_clock":1}`),
-		"runtime_environment.json":     []byte(`{"OPENROUTER_API_KEY":"` + secret + `"}`),
+		"runtime_environment.json":     []byte(`{"OPENROUTER_API_KEY":"` + secret + `","DEEPSEEK_API_KEY":"` + deepseekSecret + `"}`),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +100,7 @@ func TestWriteEvidencePackRedactsSecretLikePayloads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(data), secret) {
+	if strings.Contains(string(data), secret) || strings.Contains(string(data), deepseekSecret) {
 		t.Fatalf("secret-like payload was not redacted: %s", data)
 	}
 	var payload map[string]string
@@ -108,5 +109,8 @@ func TestWriteEvidencePackRedactsSecretLikePayloads(t *testing.T) {
 	}
 	if payload["OPENROUTER_API_KEY"] != "[REDACTED_SECRET]" {
 		t.Fatalf("unexpected redacted payload: %#v", payload)
+	}
+	if payload["DEEPSEEK_API_KEY"] != "[REDACTED_SECRET]" {
+		t.Fatalf("catalog provider secret assignment was not redacted: %#v", payload)
 	}
 }

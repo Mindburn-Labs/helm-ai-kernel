@@ -22,8 +22,9 @@ clean-install gate remains the package/install release gate.
   proprietary redistribution claim is made.
 - [KEEP] CLI/API launch path returns `ESCALATE` for missing required secrets and
   does not crash.
-- [KEEP] Live CI uses `HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY`, mapped to
-  `OPENROUTER_API_KEY` only inside the test step.
+- [KEEP] Live CI uses one scoped BYO model-provider key from the embedded
+  provider catalog. The `HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY` compatibility
+  path still maps to `OPENROUTER_API_KEY` only inside the test step.
 - [KEEP] `scripts/launch/secret_fragment_audit.py` scans command output, GitHub
   logs, release notes/assets, reports, and EvidencePacks for the scoped test key
   and fixed-length fragments without printing the secret or fragments.
@@ -45,10 +46,10 @@ clean-install gate remains the package/install release gate.
   baseline developer substrate. Hardened modes rootless/userns, Docker ECI,
   gVisor, Kata/Firecracker, and dedicated VM are explicit isolation tiers and
   fail closed when requested without matching runtime evidence.
-- [KEEP] Local-container OpenRouter egress is fail-closed: non-OpenRouter
-  allowlists are rejected, OpenRouter allowlists use a launch-scoped proxy path,
-  and runtime start requires an egress proxy receipt for networked `RUNNING`
-  launches.
+- [KEEP] Local-container BYO model-provider egress is fail-closed:
+  non-catalog destinations are rejected, catalog allowlists use a launch-scoped
+  proxy path, and runtime start requires an egress proxy receipt for networked
+  `RUNNING` launches.
 - [KEEP] Egress receipts label CONNECT payloads as opaque and record that the
   proxy proves destination allowlisting only unless token-broker mode is enabled.
 - [KEEP] Live conformance tests exercise Docker-backed runtime startup and app

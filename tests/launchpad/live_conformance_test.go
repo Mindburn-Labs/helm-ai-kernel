@@ -1,6 +1,7 @@
 package launchpad_test
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"os/exec"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/modelproviders"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/promotion"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
@@ -15,13 +17,13 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
-func TestLiveOpenRouterLocalContainerConformance(t *testing.T) {
+func TestLiveModelProviderLocalContainerConformance(t *testing.T) {
 	if testing.Short() || getenv("HELM_LAUNCHPAD_LIVE_E2E") != "1" {
 		t.Skip("live Launchpad conformance requires HELM_LAUNCHPAD_LIVE_E2E=1")
 	}
-	openRouterKey := getenv("OPENROUTER_API_KEY")
-	if openRouterKey == "" {
-		t.Fatal("OPENROUTER_API_KEY is required for live Launchpad conformance")
+	providerSecrets := firstLiveModelProviderSecrets(t)
+	if len(providerSecrets) == 0 {
+		t.Fatal("one complete catalog-backed BYO model provider env group is required for live Launchpad conformance")
 	}
 	manifestPath := getenv("HELM_LAUNCHPAD_ARTIFACT_MANIFEST")
 	if manifestPath == "" {
@@ -74,9 +76,9 @@ func TestLiveOpenRouterLocalContainerConformance(t *testing.T) {
 			compiled.RuntimeCommand = []string{"helm-launchpad-openrouter-check"}
 			compiled.Healthchecks = []registry.HealthcheckSpec{{Type: "command", Command: "helm-launchpad-openrouter-check"}}
 			opts := session.ExecuteOptions{
-				Reason:           "live OpenRouter Launchpad conformance",
+				Reason:           "live BYO model-provider Launchpad conformance",
 				WorkspaceMount:   t.TempDir(),
-				RuntimeSecretEnv: map[string]string{"OPENROUTER_API_KEY": openRouterKey},
+				RuntimeSecretEnv: providerSecrets,
 			}
 			if proxyURL != "" {
 				t.Setenv("HELM_LAUNCHPAD_EGRESS_PROXY_URL", proxyURL)
@@ -102,6 +104,57 @@ func TestLiveOpenRouterLocalContainerConformance(t *testing.T) {
 			copyLiveEvidenceRefs(t, appID, deleted.EvidencePackRefs)
 		})
 	}
+}
+
+func firstLiveModelProviderSecrets(t *testing.T) map[string]string {
+	t.Helper()
+	catalog, err := modelproviders.DefaultCatalog()
+	if err != nil {
+		t.Fatalf("DefaultCatalog: %v", err)
+	}
+	for _, group := range catalogEnvGroups(catalog) {
+		values := map[string]string{}
+		for _, envName := range group {
+			value := getenv(envName)
+			if value == "" {
+				values = nil
+				break
+			}
+			values[envName] = value
+		}
+		if len(values) > 0 {
+			return values
+		}
+	}
+	if payload := getenv("HELM_LAUNCHPAD_CI_MODEL_PROVIDER_SECRET_JSON"); payload != "" {
+		var values map[string]string
+		if err := json.Unmarshal([]byte(payload), &values); err != nil {
+			t.Fatalf("HELM_LAUNCHPAD_CI_MODEL_PROVIDER_SECRET_JSON is not valid JSON: %v", err)
+		}
+		for _, group := range catalogEnvGroups(catalog) {
+			out := map[string]string{}
+			for _, envName := range group {
+				value := strings.TrimSpace(values[envName])
+				if value == "" {
+					out = nil
+					break
+				}
+				out[envName] = value
+			}
+			if len(out) > 0 {
+				return out
+			}
+		}
+	}
+	return nil
+}
+
+func catalogEnvGroups(catalog modelproviders.Catalog) [][]string {
+	var out [][]string
+	for _, provider := range catalog.Providers {
+		out = append(out, provider.RequiredGroups()...)
+	}
+	return out
 }
 
 var (

@@ -10,6 +10,13 @@ data, and dry-run receipts.
 make launch-smoke
 ```
 
+The public proof board used by the README is generated from the same launch
+claims this suite exercises: unknown MCP inputs fail closed before fixture
+dispatch, schema-pinned calls are allowed, receipts verify, and tampered
+receipts fail verification.
+
+![HELM MCP quarantine and receipt proof board](../../docs/assets/helm-mcp-quarantine-demo.png)
+
 Run individual demos:
 
 ```bash

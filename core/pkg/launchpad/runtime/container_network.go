@@ -2,9 +2,10 @@ package runtime
 
 import (
 	"errors"
-	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/modelproviders"
 )
 
 type EgressProxy interface {
@@ -46,7 +47,7 @@ func (p StaticEgressProxy) Start(req EgressProxyRequest) (EgressProxyHandle, err
 	if p.ReceiptRef == "" {
 		return EgressProxyHandle{}, errors.New("egress proxy receipt ref is required")
 	}
-	if err := ValidateOpenRouterAllowlist(req.Allowlist); err != nil {
+	if err := ValidateModelProviderAllowlist(req.Allowlist); err != nil {
 		return EgressProxyHandle{}, err
 	}
 	return EgressProxyHandle{
@@ -83,17 +84,12 @@ func networkProof(value string) string {
 	return strings.TrimSpace(value)
 }
 
+func ValidateModelProviderAllowlist(allowlist []string) error {
+	return modelproviders.ValidateAllowlist(allowlist)
+}
+
 func ValidateOpenRouterAllowlist(allowlist []string) error {
-	for _, allowed := range allowlist {
-		destination := normalizeDestination(allowed)
-		switch destination {
-		case "openrouter.ai:443", "api.openrouter.ai:443":
-			continue
-		default:
-			return fmt.Errorf("local-container egress allowlist can only contain OpenRouter HTTPS endpoints, got %q", allowed)
-		}
-	}
-	return nil
+	return ValidateModelProviderAllowlist(allowlist)
 }
 
 func normalizeDestination(value string) string {

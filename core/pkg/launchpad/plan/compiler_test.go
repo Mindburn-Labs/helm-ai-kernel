@@ -47,6 +47,118 @@ func TestCompileDeniesBadArtifactBeforeSecretCheck(t *testing.T) {
 	}
 }
 
+func TestCompileAllowsBYOProviderWhenAnyDeclaredGatewayEnvIsPresent(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("ANTHROPIC_API_KEY", "sk-test-anthropic")
+	app := verifiedAppSpec()
+	app.ModelGateway = registry.ModelGatewaySpec{
+		LogicalSecret:           "model_gateway",
+		Provider:                "byo",
+		ProviderIDs:             []string{"openai", "anthropic"},
+		Mode:                    "external_byo",
+		RawProviderKeyProjected: true,
+	}
+	app.ModelGatewayEnv = []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY"}
+	app.RequiredSecrets = []string{"model_gateway"}
+	app.EvidenceRequirements = append(app.EvidenceRequirements, "model_gateway_broker")
+
+	compiled, err := Compile(app, supportedSubstrate(), "console-test")
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if compiled.KernelVerdict != "ALLOW" {
+		t.Fatalf("expected ALLOW with one BYO provider key present, got %s", compiled.KernelVerdict)
+	}
+}
+
+func TestCompileEscalatesBYOProviderWhenNoDeclaredGatewayEnvIsPresent(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	app := verifiedAppSpec()
+	app.ModelGateway = registry.ModelGatewaySpec{
+		LogicalSecret:           "model_gateway",
+		Provider:                "byo",
+		ProviderIDs:             []string{"openai", "anthropic"},
+		Mode:                    "external_byo",
+		RawProviderKeyProjected: true,
+	}
+	app.ModelGatewayEnv = []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY"}
+	app.RequiredSecrets = []string{"model_gateway"}
+	app.EvidenceRequirements = append(app.EvidenceRequirements, "model_gateway_broker")
+
+	compiled, err := Compile(app, supportedSubstrate(), "console-test")
+	if err == nil {
+		t.Fatal("expected missing BYO provider secret error")
+	}
+	if got := compiled.Nodes["missing_secret"]; got != "one complete provider env group: ANTHROPIC_API_KEY or OPENAI_API_KEY" {
+		t.Fatalf("missing secret = %#v", got)
+	}
+}
+
+func TestCompileRequiresCompleteDynamicProviderEnvGroup(t *testing.T) {
+	t.Setenv("AZURE_OPENAI_API_KEY", "sk-test-azure")
+	t.Setenv("AZURE_OPENAI_ENDPOINT", "")
+	app := verifiedAppSpec()
+	app.ModelGateway = registry.ModelGatewaySpec{
+		LogicalSecret:           "model_gateway",
+		Provider:                "byo",
+		ProviderIDs:             []string{"azure-openai"},
+		Mode:                    "external_byo",
+		RawProviderKeyProjected: true,
+	}
+	app.ModelGatewayEnv = nil
+	app.NetworkPolicy.Allowlist = nil
+	app.RequiredSecrets = []string{"model_gateway"}
+
+	compiled, err := Compile(app, supportedSubstrate(), "console-test")
+	if err == nil {
+		t.Fatal("expected missing endpoint to fail the Azure provider env group")
+	}
+	if got := compiled.Nodes["missing_secret"]; got != "one complete provider env group: AZURE_OPENAI_API_KEY+AZURE_OPENAI_ENDPOINT" {
+		t.Fatalf("missing secret = %#v", got)
+	}
+
+	t.Setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com/")
+	compiled, err = Compile(app, supportedSubstrate(), "console-test")
+	if err != nil {
+		t.Fatalf("Compile with complete Azure group: %v", err)
+	}
+	if !containsString(compiled.NetworkAllowlist, "https://example.openai.azure.com") {
+		t.Fatalf("dynamic Azure endpoint not added to allowlist: %#v", compiled.NetworkAllowlist)
+	}
+}
+
+func TestCompileExpandsBYOProviderCatalogScope(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "sk-test-openai")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	app := verifiedAppSpec()
+	app.ModelGateway = registry.ModelGatewaySpec{
+		LogicalSecret:           "model_gateway",
+		Provider:                "byo",
+		ProviderIDs:             []string{"openai", "anthropic"},
+		Mode:                    "external_byo",
+		RawProviderKeyProjected: true,
+	}
+	app.ModelGatewayEnv = nil
+	app.NetworkPolicy.Allowlist = nil
+	app.RequiredSecrets = []string{"model_gateway"}
+	app.EvidenceRequirements = append(app.EvidenceRequirements, "model_gateway_broker")
+
+	compiled, err := Compile(app, supportedSubstrate(), "console-test")
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if !containsString(compiled.ModelGatewayEnv, "OPENAI_API_KEY") || !containsString(compiled.ModelGatewayEnv, "ANTHROPIC_API_KEY") {
+		t.Fatalf("catalog provider env not expanded: %#v", compiled.ModelGatewayEnv)
+	}
+	if !containsString(compiled.NetworkAllowlist, "https://api.openai.com/v1") || !containsString(compiled.NetworkAllowlist, "https://api.anthropic.com/v1") {
+		t.Fatalf("catalog provider allowlist not expanded: %#v", compiled.NetworkAllowlist)
+	}
+	if containsString(compiled.RequiredSecretRefs, "OPENAI_API_KEY") || containsString(compiled.RequiredSecretRefs, "ANTHROPIC_API_KEY") {
+		t.Fatalf("BYO required secret refs must remain any-of logical refs, got %#v", compiled.RequiredSecretRefs)
+	}
+}
+
 func verifiedAppSpec() registry.AppSpec {
 	digest := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	return registry.AppSpec{

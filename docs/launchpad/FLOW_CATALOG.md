@@ -87,7 +87,7 @@ Required path:
 7. Install immutable artifact.
 8. Start local-container with deny-by-default filesystem and network.
 9. Project scoped secrets.
-10. Route OpenRouter egress through launch-owned proxy.
+10. Route catalog-backed BYO model-provider egress through launch-owned proxy.
 11. Run healthcheck.
 12. Emit receipts and EvidencePack.
 

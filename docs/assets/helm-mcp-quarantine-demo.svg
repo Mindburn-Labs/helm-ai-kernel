@@ -1,1 +1,133 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="1280" height="720" fill="#0f172a"/><text x="92" y="150" fill="#e2e8f0" font-family="Menlo" font-size="29">HELM MCP Quarantine Demo</text><text x="92" y="280" fill="#f87171" font-family="Menlo" font-size="25">unknown server: DENY</text><text x="92" y="340" fill="#f87171" font-family="Menlo" font-size="25">unknown tool: DENY</text><text x="92" y="400" fill="#4ade80" font-family="Menlo" font-size="25">schema-pinned call: ALLOW</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">HELM MCP quarantine and receipt proof board</title>
+  <desc id="desc">A proof-oriented launch asset showing an AI agent tool call intercepted by HELM, unknown MCP tools denied before dispatch, schema-pinned calls allowed, signed receipts emitted, and tampered receipts rejected.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07090d"/>
+      <stop offset="0.48" stop-color="#0b111c"/>
+      <stop offset="1" stop-color="#101316"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#111827"/>
+      <stop offset="1" stop-color="#0b1220"/>
+    </linearGradient>
+    <linearGradient id="boundary" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#172033"/>
+      <stop offset="0.55" stop-color="#101827"/>
+      <stop offset="1" stop-color="#18181b"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#253042" stroke-width="1" opacity="0.28"/>
+    </pattern>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="20" stdDeviation="18" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+    <filter id="softGlow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <marker id="arrow" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto">
+      <path d="M2 2L12 7L2 12Z" fill="#38bdf8"/>
+    </marker>
+    <style>
+      .sans { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+      .muted { fill: #94a3b8; }
+      .text { fill: #f8fafc; }
+      .line { stroke: #334155; stroke-width: 1.4; }
+      .card { fill: url(#panel); stroke: #334155; stroke-width: 1.2; }
+      .small { font-size: 22px; }
+      .code { font-size: 24px; }
+      .tiny { font-size: 18px; }
+      .label { font-size: 17px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <rect width="1600" height="900" fill="url(#grid)" opacity="0.78"/>
+  <circle cx="1450" cy="78" r="180" fill="#164e63" opacity="0.12"/>
+  <circle cx="126" cy="814" r="230" fill="#7f1d1d" opacity="0.10"/>
+
+  <g transform="translate(70 58)">
+    <rect x="0" y="0" width="8" height="154" fill="#ef4444"/>
+    <rect x="14" y="0" width="8" height="154" fill="#f59e0b"/>
+    <rect x="28" y="0" width="8" height="154" fill="#22c55e"/>
+    <text x="62" y="24" class="sans label" fill="#38bdf8">HELM AI Kernel</text>
+    <text x="62" y="86" class="sans text" font-size="58" font-weight="760">Execution firewall for MCP and AI agents</text>
+    <text x="64" y="132" class="sans muted" font-size="27">Quarantine unknown tools before dispatch. Sign the decision. Verify evidence offline.</text>
+  </g>
+
+  <g transform="translate(70 238)" filter="url(#shadow)">
+    <rect x="0" y="0" width="1460" height="588" rx="24" fill="#0b1018" stroke="#263244" stroke-width="1.4"/>
+    <rect x="24" y="24" width="1412" height="540" rx="18" fill="#0e1624" stroke="#1f2937" stroke-width="1"/>
+
+    <g transform="translate(56 58)">
+      <text x="0" y="0" class="sans label" fill="#f59e0b">1. Agent proposes</text>
+      <text x="0" y="50" class="sans text" font-size="36" font-weight="720">MCP tool call</text>
+      <rect x="0" y="82" width="390" height="296" rx="16" class="card"/>
+      <text x="26" y="124" class="mono code" fill="#38bdf8">{</text>
+      <text x="46" y="166" class="mono code" fill="#cbd5e1">"server":</text>
+      <text x="172" y="166" class="mono code" fill="#f8fafc">"unknown-repo-mcp",</text>
+      <text x="46" y="208" class="mono code" fill="#cbd5e1">"tool":</text>
+      <text x="142" y="208" class="mono code" fill="#f8fafc">"repo.delete",</text>
+      <text x="46" y="250" class="mono code" fill="#cbd5e1">"schema_pin":</text>
+      <text x="218" y="250" class="mono code" fill="#f87171">null,</text>
+      <text x="46" y="292" class="mono code" fill="#cbd5e1">"identity":</text>
+      <text x="190" y="292" class="mono code" fill="#f8fafc">"agent.demo.exec"</text>
+      <text x="26" y="334" class="mono code" fill="#38bdf8">}</text>
+      <rect x="0" y="406" width="390" height="70" rx="14" fill="#151a22" stroke="#334155"/>
+      <text x="24" y="450" class="sans small" fill="#f8fafc">Fixture dispatch has not happened yet.</text>
+    </g>
+
+    <path d="M486 300H612" stroke="#38bdf8" stroke-width="4" marker-end="url(#arrow)" opacity="0.92"/>
+    <text x="504" y="274" class="sans tiny" fill="#94a3b8">intercept</text>
+
+    <g transform="translate(612 58)">
+      <text x="0" y="0" class="sans label" fill="#38bdf8">2. HELM boundary</text>
+      <rect x="0" y="38" width="332" height="438" rx="22" fill="url(#boundary)" stroke="#475569" stroke-width="1.3"/>
+      <rect x="30" y="72" width="272" height="92" rx="18" fill="#2a1215" stroke="#ef4444" stroke-width="1.4"/>
+      <text x="62" y="132" class="sans" fill="#fecaca" font-size="54" font-weight="820">DENY</text>
+      <text x="32" y="205" class="sans small" fill="#e2e8f0">Unknown server</text>
+      <text x="32" y="241" class="sans small" fill="#e2e8f0">Missing schema pin</text>
+      <line x1="32" y1="272" x2="300" y2="272" class="line"/>
+      <text x="32" y="318" class="mono code" fill="#f87171">dispatch = blocked</text>
+      <text x="32" y="360" class="mono code" fill="#f87171">side_effect = false</text>
+      <text x="32" y="420" class="sans small" fill="#cbd5e1">Fail closed before tool side effects.</text>
+    </g>
+
+    <path d="M970 300H1096" stroke="#38bdf8" stroke-width="4" marker-end="url(#arrow)" opacity="0.92"/>
+    <text x="994" y="274" class="sans tiny" fill="#94a3b8">emit proof</text>
+
+    <g transform="translate(1096 58)">
+      <text x="0" y="0" class="sans label" fill="#22c55e">3. Signed evidence</text>
+      <text x="0" y="50" class="sans text" font-size="36" font-weight="720">Receipt verifies offline</text>
+      <rect x="0" y="82" width="314" height="296" rx="16" class="card"/>
+      <text x="24" y="124" class="mono code" fill="#f8fafc">receipt: rcpt_&lt;id&gt;</text>
+      <text x="24" y="170" class="mono code" fill="#f87171">verdict: DENY</text>
+      <text x="24" y="216" class="mono code" fill="#f8fafc">hash: sha256:&lt;proof&gt;</text>
+      <text x="24" y="262" class="mono code" fill="#22c55e">signature: OK</text>
+      <text x="24" y="322" class="mono code" fill="#f59e0b">flip verdict:</text>
+      <text x="224" y="322" class="mono code" fill="#ef4444">FAIL</text>
+      <rect x="0" y="406" width="314" height="70" rx="14" fill="#0f1f17" stroke="#22c55e"/>
+      <text x="24" y="450" class="sans small" fill="#dcfce7">Tampered proof rejected.</text>
+    </g>
+
+    <g transform="translate(56 512)">
+      <rect x="0" y="0" width="1354" height="1" fill="#334155"/>
+      <rect x="0" y="28" width="414" height="58" rx="16" fill="#281419" stroke="#ef4444"/>
+      <text x="24" y="66" class="sans small" fill="#fecaca">unknown server: DENY</text>
+      <rect x="470" y="28" width="374" height="58" rx="16" fill="#281419" stroke="#ef4444"/>
+      <text x="494" y="66" class="sans small" fill="#fecaca">unknown tool: DENY</text>
+      <rect x="900" y="28" width="454" height="58" rx="16" fill="#0f2418" stroke="#22c55e"/>
+      <text x="924" y="66" class="sans small" fill="#bbf7d0">schema-pinned local.echo: ALLOW</text>
+    </g>
+  </g>
+
+  <g transform="translate(70 850)">
+    <text x="0" y="0" class="sans" fill="#64748b" font-size="20">Local-only demo assets use fixtures and sanitized transcripts under examples/launch/assets.</text>
+    <text x="1460" y="0" class="sans" fill="#64748b" font-size="20" text-anchor="end">Star: github.com/Mindburn-Labs/helm-ai-kernel</text>
+  </g>
+</svg>

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       run_live_conformance:
-        description: Run live OpenRouter local-container conformance after artifact build
+        description: Run live BYO model-provider local-container conformance after artifact build
         required: false
         default: false
         type: boolean
@@ -135,6 +135,11 @@ jobs:
           set -euo pipefail
           test -f LICENSE
           grep -Eiq 'MIT|Massachusetts Institute of Technology' LICENSE
+
+      - name: Stage HELM Launchpad helper scripts
+        run: |
+          set -euo pipefail
+          cp helm/tools/launchpad/artifacts/model-gateway-check.sh upstream/.helm-launchpad-model-gateway-check.sh
 
       - name: Log in to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -477,7 +482,7 @@ jobs:
           path: launchpad-artifact-manifest.json
 
   live-conformance:
-    name: Live OpenRouter local-container conformance
+    name: Live BYO model-provider local-container conformance
     runs-on: ubuntu-latest
     needs: aggregate
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live_conformance }}
@@ -513,9 +518,43 @@ jobs:
           HELM_LAUNCHPAD_ARTIFACT_MANIFEST: /tmp/launchpad/launchpad-artifact-manifest.json
           HELM_LAUNCHPAD_LIVE_EVIDENCE_DIR: /tmp/launchpad-live-evidence
           HELM_LAUNCHPAD_LOCAL_CONTAINER_TIMEOUT: 8m
+          HELM_LAUNCHPAD_CI_MODEL_PROVIDER_SECRET_JSON: ${{ secrets.HELM_LAUNCHPAD_CI_MODEL_PROVIDER_SECRET_JSON }}
           HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
-        run: go test ./tests/launchpad/... -run TestLiveOpenRouterLocalContainerConformance -count=1 -timeout 30m -v
+          ALEPH_ALPHA_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_ALEPH_ALPHA_API_KEY || secrets.ALEPH_ALPHA_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_ANTHROPIC_API_KEY || secrets.ANTHROPIC_API_KEY }}
+          ARK_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_ARK_API_KEY || secrets.ARK_API_KEY }}
+          BAICHUAN_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_BAICHUAN_API_KEY || secrets.BAICHUAN_API_KEY }}
+          BIGMODEL_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_BIGMODEL_API_KEY || secrets.BIGMODEL_API_KEY }}
+          CEREBRAS_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_CEREBRAS_API_KEY || secrets.CEREBRAS_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_COHERE_API_KEY || secrets.COHERE_API_KEY }}
+          DASHSCOPE_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_DASHSCOPE_API_KEY || secrets.DASHSCOPE_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_DEEPSEEK_API_KEY || secrets.DEEPSEEK_API_KEY }}
+          FIREWORKS_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_FIREWORKS_API_KEY || secrets.FIREWORKS_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_GEMINI_API_KEY || secrets.GEMINI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_GOOGLE_API_KEY || secrets.GOOGLE_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_GROQ_API_KEY || secrets.GROQ_API_KEY }}
+          HUNYUAN_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_HUNYUAN_API_KEY || secrets.HUNYUAN_API_KEY }}
+          IFLYTEK_SPARK_API_PASSWORD: ${{ secrets.HELM_LAUNCHPAD_CI_IFLYTEK_SPARK_API_PASSWORD || secrets.IFLYTEK_SPARK_API_PASSWORD }}
+          LINGYIWANWU_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_LINGYIWANWU_API_KEY || secrets.LINGYIWANWU_API_KEY }}
+          MINIMAX_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_MINIMAX_API_KEY || secrets.MINIMAX_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_MISTRAL_API_KEY || secrets.MISTRAL_API_KEY }}
+          MOONSHOT_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_MOONSHOT_API_KEY || secrets.MOONSHOT_API_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_NVIDIA_API_KEY || secrets.NVIDIA_API_KEY }}
+          NVIDIA_NIM_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_NVIDIA_NIM_API_KEY || secrets.NVIDIA_NIM_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY || secrets.OPENROUTER_API_KEY }}
+          PERPLEXITY_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_PERPLEXITY_API_KEY || secrets.PERPLEXITY_API_KEY }}
+          QIANFAN_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_QIANFAN_API_KEY || secrets.QIANFAN_API_KEY }}
+          STEP_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_STEP_API_KEY || secrets.STEP_API_KEY }}
+          STEPFUN_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_STEPFUN_API_KEY || secrets.STEPFUN_API_KEY }}
+          TENCENT_HUNYUAN_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_TENCENT_HUNYUAN_API_KEY || secrets.TENCENT_HUNYUAN_API_KEY }}
+          TOGETHER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_TOGETHER_API_KEY || secrets.TOGETHER_API_KEY }}
+          VOLCENGINE_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_VOLCENGINE_API_KEY || secrets.VOLCENGINE_API_KEY }}
+          XFYUN_SPARK_API_PASSWORD: ${{ secrets.HELM_LAUNCHPAD_CI_XFYUN_SPARK_API_PASSWORD || secrets.XFYUN_SPARK_API_PASSWORD }}
+          XAI_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_XAI_API_KEY || secrets.XAI_API_KEY }}
+          YI_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_YI_API_KEY || secrets.YI_API_KEY }}
+          ZHIPU_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_ZHIPU_API_KEY || secrets.ZHIPU_API_KEY }}
+        run: go test ./tests/launchpad/... -run TestLiveModelProviderLocalContainerConformance -count=1 -timeout 30m -v
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: ${{ always() }}
         with:

@@ -42,12 +42,17 @@ bash scripts/launch/demo-mcp.sh
 bash scripts/launch/demo-proof.sh
 ```
 
-The MCP demo shows unknown servers and tools denied before fixture dispatch.
-The proof demo emits a signed DENY receipt and proves that a tampered verdict
-fails verification. Sanitized transcripts are checked in under
-[`examples/launch/assets`](examples/launch/assets).
+The local proof path shows the public value proposition in one frame:
 
-![HELM MCP quarantine proof asset](docs/assets/helm-mcp-quarantine-demo.svg)
+- unknown MCP servers and tools are denied before fixture dispatch
+- a schema-pinned fixture call is allowed
+- a signed DENY receipt verifies offline
+- a flipped-verdict receipt fails verification
+
+![HELM MCP quarantine and receipt proof board](docs/assets/helm-mcp-quarantine-demo.png)
+
+Sanitized transcripts are checked in under
+[`examples/launch/assets`](examples/launch/assets).
 
 ## Start Here
 

@@ -24,17 +24,19 @@ runtime:
     # where the old `-z 'healthcheck ping'` is gone; use `--q ping` for the
     # canonical single-query healthcheck — gpt-4o-mini answers in <2s through
     # the launch-scoped egress proxy and exits 0.
+    # NOTE: model_gateway below is catalog-backed BYO, but this promoted
+    # Hermes smoke command still exercises the known-good OpenRouter path until
+    # the Hermes artifact/runtime command is re-promoted with provider-specific
+    # routing evidence.
     command:
         - /bin/sh
         - -c
         - HOME=/var/lib/hermes hermes --q ping --provider openrouter --model openai/gpt-4o-mini --ignore_user_config --quiet
 model_gateway:
     logical_secret: model_gateway
-    provider: openrouter
+    provider: byo
     mode: logical_binding_env_projection
     raw_provider_key_projected: true
-model_gateway_env:
-    - OPENROUTER_API_KEY
 required_secrets:
     - model_gateway
 filesystem_policy:
@@ -50,8 +52,6 @@ filesystem_policy:
     state_dir_env: HOME
 network_policy:
     default: deny
-    allowlist:
-        - https://openrouter.ai/api/v1
 mcp_policy:
     unknown_server_policy: quarantine
     unknown_tool_policy: ESCALATE
@@ -128,4 +128,3 @@ display:
     - "offline EvidencePack verification"
   docs_path: "docs/launchpad/apps/HERMES.md"
   contribution_label: "framework-integration"
-

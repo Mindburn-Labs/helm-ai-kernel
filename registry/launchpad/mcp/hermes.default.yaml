@@ -14,5 +14,5 @@ tools:
     labels: ["model", "egress"]
 effect_labels: ["model", "egress", "side_effect"]
 required_secrets: ["model_gateway"]
-network_grants: ["https://openrouter.ai/api/v1"]
+network_grants: ["catalog:model-providers"]
 filesystem_grants: ["workspace:rw", "app_state:rw"]

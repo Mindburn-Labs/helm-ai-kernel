@@ -22,14 +22,15 @@
 [![GHCR chart](https://img.shields.io/badge/ghcr.io-helm--ai--kernel%20chart-0F1689?logo=helm&logoColor=white)](https://github.com/Mindburn-Labs/helm-ai-kernel/pkgs/container/charts%2Fhelm-ai-kernel)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/mindburn-labs)](https://artifacthub.io/packages/search?repo=mindburn-labs)
 
-HELM AI Kernel is the open-source execution firewall for MCP and AI agents.
-It sits between agent tool calls and side effects, evaluates authority before
-dispatch, and emits signed receipts that can be verified offline.
+HELM AI Kernel is the fail-closed execution firewall for AI agents.
 
-**Star HELM to follow open-source AI agent security, MCP quarantine, and proof
-receipts:** <https://github.com/Mindburn-Labs/helm-ai-kernel/stargazers>
+Mindburn Labs' HELM execution kernel for AI agents, not the Kubernetes package
+manager.
 
-## Try HELM Locally
+Models propose. HELM governs execution. Every ALLOW / DENY / ESCALATE decision
+leaves proof.
+
+## Try HELM AI Kernel Locally
 
 No account, hosted service, or production credential is required for the local
 proof path:
@@ -49,6 +50,10 @@ The local proof path shows the public value proposition in one frame:
 - a signed DENY receipt verifies offline
 - a flipped-verdict receipt fails verification
 
+Star HELM AI Kernel if you want to follow fail-closed AI agent execution, MCP
+quarantine, signed receipts, and offline-verifiable EvidencePacks:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/stargazers>
+
 ![HELM MCP quarantine and receipt proof board](docs/assets/helm-mcp-quarantine-demo.svg)
 
 Sanitized transcripts are checked in under
@@ -64,11 +69,11 @@ Sanitized transcripts are checked in under
 
 ## Community And Product Links
 
-- Try OSS locally: [Quickstart](https://helm.docs.mindburn.org/helm-ai-kernel/quickstart?utm_source=github&utm_medium=readme&utm_campaign=oss-traction)
+- Try HELM AI Kernel locally: [Quickstart](https://helm.docs.mindburn.org/helm-ai-kernel/quickstart?utm_source=github&utm_medium=readme&utm_campaign=oss-traction)
 - Star on GitHub: [Mindburn-Labs/helm-ai-kernel](https://github.com/Mindburn-Labs/helm-ai-kernel?utm_source=github&utm_medium=readme&utm_campaign=oss-traction)
 - Join Discussions: [GitHub Discussions](https://github.com/Mindburn-Labs/helm-ai-kernel/discussions?utm_source=github&utm_medium=readme&utm_campaign=oss-traction)
 - Find first issues: [good first issue](https://github.com/Mindburn-Labs/helm-ai-kernel/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22)
-- Talk to Mindburn Labs about production agent governance: [Console](https://console.helm.mindburn.org?utm_source=github&utm_medium=readme&utm_campaign=oss-traction)
+- Talk to Mindburn Labs about production execution authority: [Console](https://console.helm.mindburn.org?utm_source=github&utm_medium=readme&utm_campaign=oss-traction)
 
 ## Launchpad And Console
 
@@ -295,7 +300,7 @@ Public OSS docs are sourced from this repo and published through
 - [Quickstart](docs/QUICKSTART.md)
 - [Community](COMMUNITY.md)
 - [Ecosystem](docs/ECOSYSTEM.md)
-- [OSS Traction Playbook](docs/TRACTION.md)
+- [HELM AI Kernel OSS Traction Plan](docs/TRACTION.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Conformance](docs/CONFORMANCE.md)
 - [Verification](docs/VERIFICATION.md)
@@ -306,7 +311,7 @@ Public OSS docs are sourced from this repo and published through
 - [OWASP Mapping](docs/OWASP_MCP_THREAT_MAPPING.md)
 - [NIST AI Agent Critical Infrastructure Alignment](docs/compliance/nist-ai-agent-critical-infrastructure.md)
 - [NIST AI RMF to ISO 42001 Crosswalk](docs/compliance/nist-ai-rmf-iso-42001-crosswalk.md)
-- Search-intent pages: [MCP execution firewall](docs/use-cases/mcp-execution-firewall.md), [AI agent security](docs/use-cases/ai-agent-security.md), [OpenAI-compatible AI gateway policy](docs/use-cases/openai-compatible-ai-gateway-policy.md), [LLM audit receipts](docs/use-cases/llm-audit-receipts.md), and [agent tool-call governance](docs/use-cases/agent-tool-call-governance.md)
+- Search-intent pages: [MCP tool quarantine](docs/use-cases/mcp-execution-firewall.md), [AI agent execution firewall](docs/use-cases/ai-agent-security.md), [OpenAI-compatible execution boundary](docs/use-cases/openai-compatible-ai-gateway-policy.md), [signed receipts for AI agent actions](docs/use-cases/llm-audit-receipts.md), and [AI agent side-effect governance](docs/use-cases/agent-tool-call-governance.md)
 
 ## Release Verification
 

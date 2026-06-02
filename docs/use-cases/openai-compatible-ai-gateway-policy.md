@@ -1,9 +1,9 @@
 ---
-title: OpenAI-Compatible AI Gateway Policy
+title: OpenAI-Compatible Execution Boundary
 last_reviewed: 2026-06-01
 ---
 
-# OpenAI-Compatible AI Gateway Policy
+# OpenAI-Compatible Execution Boundary
 
 HELM AI Kernel documents this search intent with a local, source-backed proof path.
 

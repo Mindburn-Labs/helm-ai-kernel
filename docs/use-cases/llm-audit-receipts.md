@@ -1,9 +1,9 @@
 ---
-title: LLM Audit Receipts
+title: Signed Receipts for AI Agent Actions
 last_reviewed: 2026-06-01
 ---
 
-# LLM Audit Receipts
+# Signed Receipts for AI Agent Actions
 
 HELM AI Kernel documents this search intent with a local, source-backed proof path.
 

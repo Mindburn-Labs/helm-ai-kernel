@@ -29,6 +29,14 @@ import (
 // Ensure Connector implements effects.Connector at compile time.
 var _ effects.Connector = (*Connector)(nil)
 
+var (
+	canonicalHash = canonicalize.CanonicalHash
+	marshalJSON   = json.Marshal
+	appendNode    = func(g *proofgraph.Graph, kind proofgraph.NodeType, payload []byte, principal string, seq uint64) (*proofgraph.Node, error) {
+		return g.Append(kind, payload, principal, seq)
+	}
+)
+
 // Connector is the HELM connector for the Polymarket prediction market.
 //
 // It composes:
@@ -110,7 +118,7 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 	}
 
 	// 4. Compute input hash via JCS canonicalization
-	inputHash, err := canonicalize.CanonicalHash(params)
+	inputHash, err := canonicalHash(params)
 	if err != nil {
 		return nil, fmt.Errorf("polymarket: canonical hash of params: %w", err)
 	}
@@ -125,7 +133,7 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 
 	if deny != nil {
 		// 6a. DENIED: emit INTENT node with denial payload
-		denialPayload, _ := json.Marshal(map[string]any{
+		denialPayload, _ := marshalJSON(map[string]any{
 			"type":       "polymarket.intent",
 			"tool":       toolName,
 			"input_hash": inputHash,
@@ -135,7 +143,7 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 			"detail":     deny.Detail,
 		})
 		seq := c.seq.Add(1)
-		if _, appendErr := c.graph.Append(proofgraph.NodeTypeIntent, denialPayload, c.connectorID, seq); appendErr != nil {
+		if _, appendErr := appendNode(c.graph, proofgraph.NodeTypeIntent, denialPayload, c.connectorID, seq); appendErr != nil {
 			return nil, fmt.Errorf("polymarket: append denied intent: %w", appendErr)
 		}
 
@@ -143,7 +151,7 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 	}
 
 	// 6b. ALLOWED: emit INTENT node with success payload
-	intentPayload, err := json.Marshal(map[string]any{
+	intentPayload, err := marshalJSON(map[string]any{
 		"type":       "polymarket.intent",
 		"tool":       toolName,
 		"input_hash": inputHash,
@@ -160,7 +168,7 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 		return nil, fmt.Errorf("polymarket: marshal intent payload: %w", err)
 	}
 	seq := c.seq.Add(1)
-	if _, err := c.graph.Append(proofgraph.NodeTypeIntent, intentPayload, c.connectorID, seq); err != nil {
+	if _, err := appendNode(c.graph, proofgraph.NodeTypeIntent, intentPayload, c.connectorID, seq); err != nil {
 		return nil, fmt.Errorf("polymarket: append intent: %w", err)
 	}
 

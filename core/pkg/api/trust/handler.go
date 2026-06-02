@@ -17,6 +17,8 @@ type Handler struct {
 	logger   *slog.Logger
 }
 
+var snapshotFromRegistry = registry.SnapshotFromRegistry
+
 // NewHandler creates a new trust API handler.
 func NewHandler(reg *registry.Registry, logger *slog.Logger) *Handler {
 	return &Handler{
@@ -43,7 +45,7 @@ func (h *Handler) HandleGetSnapshot(w http.ResponseWriter, r *http.Request) {
 
 	if lamportStr == "" || lamportStr == "current" {
 		// Return current state snapshot
-		snapshot, err = registry.SnapshotFromRegistry(h.registry)
+		snapshot, err = snapshotFromRegistry(h.registry)
 	} else {
 		lamport, parseErr := strconv.ParseUint(lamportStr, 10, 64)
 		if parseErr != nil {
@@ -52,7 +54,7 @@ func (h *Handler) HandleGetSnapshot(w http.ResponseWriter, r *http.Request) {
 		}
 		// For historical snapshots, we need the store — use current state if lamport >= current
 		if lamport >= h.registry.CurrentLamport() {
-			snapshot, err = registry.SnapshotFromRegistry(h.registry)
+			snapshot, err = snapshotFromRegistry(h.registry)
 		} else {
 			// Historical snapshot: fetch events up to the requested lamport and reduce
 			events, listErr := h.registry.ListEventsUpTo(r.Context(), lamport)

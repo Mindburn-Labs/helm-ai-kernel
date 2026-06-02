@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+var marshalRotationEvent = json.Marshal
+
 // RotationEventType identifies the kind of key rotation action.
 type RotationEventType string
 
@@ -55,7 +57,7 @@ func (e *RotationEvent) Hash() (string, error) {
 		PublicKeyHash: e.PublicKeyHash,
 		Reason:        e.Reason,
 	}
-	data, err := json.Marshal(hashable)
+	data, err := marshalRotationEvent(hashable)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal rotation event: %w", err)
 	}
@@ -165,7 +167,7 @@ func (r *RotationExecutor) Rotate(plan *RotationPlan) (*RotationReceipt, error) 
 	receipt := &RotationReceipt{
 		Event:         event,
 		EventHash:     eventHash,
-		AuthorizerSig: string(sig),
+		AuthorizerSig: hex.EncodeToString(sig),
 		AuthorizerKID: authorizer.KID(),
 	}
 

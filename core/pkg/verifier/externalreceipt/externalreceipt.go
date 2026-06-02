@@ -17,6 +17,13 @@ type BundleReport struct {
 	Checks       []externalhost.CheckResult         `json:"checks,omitempty"`
 }
 
+var (
+	receiptStat       = os.Stat
+	receiptWalkDir    = filepath.WalkDir
+	receiptRel        = filepath.Rel
+	receiptVerifyFile = externalhost.VerifyFile
+)
+
 func VerifyBundle(bundleRoot string) BundleReport {
 	files := FindChainFiles(bundleRoot)
 	report := BundleReport{Found: len(files) > 0, ChainFiles: files}
@@ -24,7 +31,7 @@ func VerifyBundle(bundleRoot string) BundleReport {
 		return report
 	}
 	for _, file := range files {
-		chainReport, err := externalhost.VerifyFile(file, externalhost.VerifyOptions{RequireKey: true})
+		chainReport, err := receiptVerifyFile(file, externalhost.VerifyOptions{RequireKey: true})
 		if err != nil {
 			report.Checks = append(report.Checks, externalhost.CheckResult{
 				Name:   "external_host:chain_file",
@@ -48,11 +55,11 @@ func FindChainFiles(bundleRoot string) []string {
 		filepath.Join(bundleRoot, "host_evidence"),
 		filepath.Join(bundleRoot, "11_HOST_EVIDENCE"),
 	} {
-		info, err := os.Stat(dir)
+		info, err := receiptStat(dir)
 		if err != nil || !info.IsDir() {
 			continue
 		}
-		_ = filepath.WalkDir(dir, func(path string, entry os.DirEntry, walkErr error) error {
+		_ = receiptWalkDir(dir, func(path string, entry os.DirEntry, walkErr error) error {
 			if walkErr != nil || entry.IsDir() {
 				return nil
 			}
@@ -72,7 +79,7 @@ func FindChainFiles(bundleRoot string) []string {
 }
 
 func rel(root, path string) string {
-	r, err := filepath.Rel(root, path)
+	r, err := receiptRel(root, path)
 	if err != nil {
 		return path
 	}

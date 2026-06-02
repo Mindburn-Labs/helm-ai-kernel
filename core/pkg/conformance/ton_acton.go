@@ -41,6 +41,7 @@ func loadTONActonGoldenCases(ctx *TestContext) map[string]string {
 			CaseID             string `json:"case_id"`
 			ActionURN          string `json:"action_urn"`
 			ExpectedVerdict    string `json:"expected_verdict"`
+			ExpectedStatus     string `json:"expected_status"`
 			ExpectedReasonCode string `json:"expected_reason_code"`
 		}
 		if err := json.Unmarshal(data, &payload); err != nil {
@@ -50,8 +51,11 @@ func loadTONActonGoldenCases(ctx *TestContext) map[string]string {
 		if payload.CaseID != entry.Name() {
 			ctx.Fail("%s case_id mismatch: %s", entry.Name(), payload.CaseID)
 		}
-		if payload.ActionURN == "" || payload.ExpectedVerdict == "" {
-			ctx.Fail("%s missing action_urn or expected_verdict", entry.Name())
+		if payload.ActionURN == "" {
+			ctx.Fail("%s missing action_urn", entry.Name())
+		}
+		if payload.ExpectedVerdict == "" && payload.ExpectedStatus == "" {
+			ctx.Fail("%s missing expected_verdict or expected_status", entry.Name())
 		}
 		out[payload.CaseID] = payload.ExpectedReasonCode
 	}

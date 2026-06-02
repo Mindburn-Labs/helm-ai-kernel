@@ -18,9 +18,20 @@ type Store struct {
 	root string
 }
 
+var (
+	fsMkdirAll   = os.MkdirAll
+	fsStat       = os.Stat
+	fsCreateTemp = os.CreateTemp
+	fsCloseFile  = func(f *os.File) error { return f.Close() }
+	fsRemove     = os.Remove
+	fsRename     = os.Rename
+	fsOpen       = os.Open
+	fsWalk       = filepath.Walk
+)
+
 // New creates a new filesystem-backed object store at the given root directory.
 func New(root string) (*Store, error) {
-	if err := os.MkdirAll(root, 0755); err != nil {
+	if err := fsMkdirAll(root, 0755); err != nil {
 		return nil, fmt.Errorf("create object store root: %w", err)
 	}
 	return &Store{root: root}, nil
@@ -38,35 +49,35 @@ func (s *Store) Put(_ context.Context, hash string, data io.Reader) error {
 	path := s.objectPath(hash)
 
 	// Check if already exists (idempotent)
-	if _, err := os.Stat(path); err == nil {
+	if _, err := fsStat(path); err == nil {
 		return nil
 	}
 
 	// Create directory structure
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := fsMkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("create directory %s: %w", dir, err)
 	}
 
 	// Write to temp file then rename (atomic)
-	tmp, err := os.CreateTemp(dir, ".tmp-*")
+	tmp, err := fsCreateTemp(dir, ".tmp-*")
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)
 	}
 	tmpName := tmp.Name()
 
 	if _, err := io.Copy(tmp, data); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
+		_ = fsCloseFile(tmp)
+		_ = fsRemove(tmpName)
 		return fmt.Errorf("write object: %w", err)
 	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
+	if err := fsCloseFile(tmp); err != nil {
+		_ = fsRemove(tmpName)
 		return fmt.Errorf("close temp file: %w", err)
 	}
 
-	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
+	if err := fsRename(tmpName, path); err != nil {
+		_ = fsRemove(tmpName)
 		return fmt.Errorf("rename to final path: %w", err)
 	}
 
@@ -75,7 +86,7 @@ func (s *Store) Put(_ context.Context, hash string, data io.Reader) error {
 
 func (s *Store) Get(_ context.Context, hash string) (io.ReadCloser, error) {
 	path := s.objectPath(hash)
-	f, err := os.Open(path)
+	f, err := fsOpen(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, &objstore.ErrNotFound{Hash: hash}
@@ -87,7 +98,7 @@ func (s *Store) Get(_ context.Context, hash string) (io.ReadCloser, error) {
 
 func (s *Store) Exists(_ context.Context, hash string) (bool, error) {
 	path := s.objectPath(hash)
-	_, err := os.Stat(path)
+	_, err := fsStat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
@@ -99,7 +110,7 @@ func (s *Store) Exists(_ context.Context, hash string) (bool, error) {
 
 func (s *Store) Delete(_ context.Context, hash string) error {
 	path := s.objectPath(hash)
-	err := os.Remove(path)
+	err := fsRemove(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("delete object: %w", err)
 	}
@@ -108,7 +119,7 @@ func (s *Store) Delete(_ context.Context, hash string) error {
 
 func (s *Store) List(_ context.Context, prefix string) ([]string, error) {
 	var hashes []string
-	return hashes, filepath.Walk(s.root, func(path string, info os.FileInfo, err error) error {
+	return hashes, fsWalk(s.root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}

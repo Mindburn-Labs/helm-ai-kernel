@@ -11,12 +11,18 @@ package keystore
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"sync"
 	"time"
 
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+)
+
+var (
+	newEd25519Signer   = helmcrypto.NewEd25519Signer
+	decodeSignatureHex = hex.DecodeString
 )
 
 // KeyPurpose defines what a key can be used for.
@@ -100,12 +106,12 @@ type ed25519Signer struct {
 }
 
 func (s *ed25519Signer) Sign(data []byte) ([]byte, error) {
-	sigHex, err := s.inner.Sign(data)
+	sigHex, _ := s.inner.Sign(data)
+	sig, err := decodeSignatureHex(sigHex)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode ed25519 signature: %w", err)
 	}
-	// Convert hex signature to bytes
-	return []byte(sigHex), nil
+	return sig, nil
 }
 
 func (s *ed25519Signer) KID() string       { return s.kid }
@@ -135,7 +141,7 @@ func NewMemoryKeyProvider() *MemoryKeyProvider {
 
 // GenerateKey creates and registers a new Ed25519 signing key.
 func (p *MemoryKeyProvider) GenerateKey(kid string) (Signer, error) {
-	inner, err := helmcrypto.NewEd25519Signer(kid)
+	inner, err := newEd25519Signer(kid)
 	if err != nil {
 		return nil, fmt.Errorf("key generation failed: %w", err)
 	}

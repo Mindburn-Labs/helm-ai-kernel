@@ -12,22 +12,33 @@ import (
 type PackBuilder struct {
 	missionID string
 	buffer    *bytes.Buffer
-	writer    *tar.Writer
+	writer    archiveWriter
 }
+
+type archiveWriter interface {
+	WriteHeader(*tar.Header) error
+	Write([]byte) (int, error)
+	Close() error
+}
+
+var (
+	newArchiveWriter = func(buf *bytes.Buffer) archiveWriter { return tar.NewWriter(buf) }
+	marshalNodes     = json.Marshal
+)
 
 func NewPackBuilder(missionID string) *PackBuilder {
 	buf := new(bytes.Buffer)
 	return &PackBuilder{
 		missionID: missionID,
 		buffer:    buf,
-		writer:    tar.NewWriter(buf),
+		writer:    newArchiveWriter(buf),
 	}
 }
 
 // AppendProofGraph locks the graph's terminal state into the archive.
 func (p *PackBuilder) AppendProofGraph(graph *proofgraph.Graph) error {
 	nodes := graph.AllNodes()
-	data, err := json.Marshal(nodes)
+	data, err := marshalNodes(nodes)
 	if err != nil {
 		return err
 	}

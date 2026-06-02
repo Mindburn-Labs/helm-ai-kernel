@@ -13,6 +13,8 @@ import (
 // This enforces mathematical proofs of policy compliance.
 type SMTTranslator struct{}
 
+var smtCommandContext = exec.CommandContext
+
 // NewSMTTranslator creates a new formal verification translator.
 func NewSMTTranslator() *SMTTranslator {
 	return &SMTTranslator{}
@@ -30,7 +32,7 @@ func (t *SMTTranslator) Translate(ctx context.Context, policies []byte, intent [
 // Evaluate runs the translated proof obligation through an SMT solver.
 // Uses a shell-out bridge to the `z3` binary.
 func (t *SMTTranslator) Evaluate(ctx context.Context, proofObligation string) (bool, error) {
-	cmd := exec.CommandContext(ctx, "z3", "-in")
+	cmd := smtCommandContext(ctx, "z3", "-in")
 	cmd.Stdin = strings.NewReader(proofObligation)
 
 	var out bytes.Buffer

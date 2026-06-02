@@ -185,10 +185,7 @@ func (a *Adapter) Send(ctx context.Context, tenantID string, sessionID string, b
 	if text == "" {
 		text = fmt.Sprintf("%d attachment(s)", len(body.Attachments))
 	}
-	content, err := json.Marshal(map[string]string{"text": text})
-	if err != nil {
-		return err
-	}
+	content, _ := json.Marshal(map[string]string{"text": text})
 	payload := map[string]any{
 		"receive_id": sessionID,
 		"msg_type":   "text",

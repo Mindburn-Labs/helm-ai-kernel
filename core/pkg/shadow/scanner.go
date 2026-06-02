@@ -2,6 +2,7 @@ package shadow
 
 import (
 	"bufio"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -9,6 +10,13 @@ import (
 	"sort"
 	"strings"
 	"time"
+)
+
+var (
+	scannerAbs     = filepath.Abs
+	scannerWalkDir = filepath.WalkDir
+	scannerRel     = filepath.Rel
+	scannerOpen    = os.Open
 )
 
 // Scanner walks a directory tree and produces a Report of shadow-AI findings.
@@ -41,7 +49,7 @@ func NewScanner() *Scanner {
 // Scan walks the root directory and returns a Report.
 func (s *Scanner) Scan(root string) (*Report, error) {
 	start := s.Clock()
-	absRoot, err := filepath.Abs(root)
+	absRoot, err := scannerAbs(root)
 	if err != nil {
 		return nil, err
 	}
@@ -53,10 +61,13 @@ func (s *Scanner) Scan(root string) (*Report, error) {
 		SummaryBySeverity: map[string]int{},
 	}
 
-	err = filepath.WalkDir(absRoot, func(path string, d fs.DirEntry, walkErr error) error {
+	err = scannerWalkDir(absRoot, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			// Skip unreadable paths rather than abort the whole scan.
 			return nil
+		}
+		if d == nil {
+			return errors.New("shadow: nil directory entry")
 		}
 		if d.IsDir() {
 			if s.shouldSkipDir(absRoot, path) {
@@ -125,7 +136,7 @@ func (s *Scanner) Scan(root string) (*Report, error) {
 }
 
 func (s *Scanner) shouldSkipDir(root, path string) bool {
-	rel, err := filepath.Rel(root, path)
+	rel, err := scannerRel(root, path)
 	if err != nil {
 		return false
 	}
@@ -158,13 +169,13 @@ func (s *Scanner) shouldScanFile(path string) bool {
 
 // scanFile inspects a single file and appends findings to the report.
 func (s *Scanner) scanFile(path, root string, r *Report) {
-	f, err := os.Open(path)
+	f, err := scannerOpen(path)
 	if err != nil {
 		return
 	}
 	defer f.Close()
 
-	rel, err := filepath.Rel(root, path)
+	rel, err := scannerRel(root, path)
 	if err != nil {
 		rel = path
 	}

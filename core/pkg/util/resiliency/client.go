@@ -21,6 +21,22 @@ type EnhancedClient struct {
 	breaker    *CircuitBreaker
 }
 
+var (
+	readTraceRandom  = rand.Read
+	readJitterRandom = rand.Int
+	sleep            = time.Sleep
+	now              = time.Now
+	since            = time.Since
+)
+
+func jitterDelay() time.Duration {
+	n, err := readJitterRandom(rand.Reader, big.NewInt(50))
+	if err != nil {
+		return 0
+	}
+	return time.Duration(n.Int64()) * time.Millisecond
+}
+
 func NewEnhancedClient() *EnhancedClient {
 	return &EnhancedClient{
 		client:     &http.Client{Timeout: 30 * time.Second},
@@ -36,11 +52,11 @@ func (c *EnhancedClient) Do(req *http.Request) (*http.Response, error) {
 	// Here we stick to a simulated trace ID for observability.
 	var traceBytes [16]byte
 	traceID := ""
-	if _, err := rand.Read(traceBytes[:]); err == nil {
+	if _, err := readTraceRandom(traceBytes[:]); err == nil {
 		traceID = hex.EncodeToString(traceBytes[:])
 	} else {
 		// Best-effort fallback if the system RNG fails.
-		traceID = fmt.Sprintf("%032x", time.Now().UnixNano())
+		traceID = fmt.Sprintf("%032x", now().UnixNano())
 	}
 	req.Header.Set("traceparent", fmt.Sprintf("00-%s-0000000000000001-01", traceID))
 
@@ -69,11 +85,7 @@ func (c *EnhancedClient) Do(req *http.Request) (*http.Response, error) {
 
 		// Calculate backoff: base * 2^i + jitter
 		backoff := time.Duration(math.Pow(2, float64(i))) * 100 * time.Millisecond
-		jitter := time.Duration(0)
-		if n, err := rand.Int(rand.Reader, big.NewInt(50)); err == nil {
-			jitter = time.Duration(n.Int64()) * time.Millisecond
-		}
-		time.Sleep(backoff + jitter)
+		sleep(backoff + jitterDelay())
 	}
 
 	// 4. Record Failure
@@ -106,7 +118,7 @@ func (cb *CircuitBreaker) Allow() bool {
 	defer cb.mu.Unlock()
 
 	if cb.state == "OPEN" {
-		if time.Since(cb.lastFailure) > cb.resetTimeout {
+		if since(cb.lastFailure) > cb.resetTimeout {
 			cb.state = "HALF_OPEN"
 			return true
 		}
@@ -129,7 +141,7 @@ func (cb *CircuitBreaker) Failure() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.failureCount++
-	cb.lastFailure = time.Now()
+	cb.lastFailure = now()
 	if cb.failureCount >= cb.threshold {
 		cb.state = "OPEN"
 	}

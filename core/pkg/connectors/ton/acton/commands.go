@@ -94,17 +94,17 @@ var commandSpecs = map[ActionURN]CommandSpec{
 	ActionScriptLocal:       spec(ActionScriptLocal, "script", RiskT2, EffectNone, NetworkLocal, false),
 	ActionScriptForkTestnet: spec(ActionScriptForkTestnet, "script", RiskT2, EffectNone, NetworkForkTestnet, false).withNetwork(),
 	ActionScriptForkMainnet: spec(ActionScriptForkMainnet, "script", RiskT2, EffectNone, NetworkForkMainnet, false).withNetwork(),
-	ActionScriptTestnet:     spec(ActionScriptTestnet, "script", RiskT2, EffectIrreversible, NetworkTestnet, true).withNetwork().withManifest().withWallet().withSpend().withExpected(),
-	ActionScriptMainnet:     spec(ActionScriptMainnet, "script", RiskT3, EffectIrreversible, NetworkMainnet, true).withNetwork().withManifest().withWallet().withSpend().withApproval().withEvidence().withCompiler().withExpected().withGenericDenied(),
+	ActionScriptTestnet:     spec(ActionScriptTestnet, "script", RiskT2, EffectIrreversible, NetworkTestnet, true).withNetwork().withManifest().withWallet().withSpend().withExpected().withBroadcast(),
+	ActionScriptMainnet:     spec(ActionScriptMainnet, "script", RiskT3, EffectIrreversible, NetworkMainnet, true).withNetwork().withManifest().withWallet().withSpend().withApproval().withEvidence().withCompiler().withExpected().withGenericDenied().withBroadcast(),
 	ActionVerifyDryRun:      spec(ActionVerifyDryRun, "verify", RiskT2, EffectNone, NetworkTestnet, false).withNetwork().withCompiler(),
-	ActionVerifyTestnet:     spec(ActionVerifyTestnet, "verify", RiskT2, EffectIrreversible, NetworkTestnet, true).withNetwork().withWallet().withSpend().withCompiler(),
-	ActionVerifyMainnet:     spec(ActionVerifyMainnet, "verify", RiskT3, EffectIrreversible, NetworkMainnet, true).withNetwork().withWallet().withSpend().withApproval().withEvidence().withCompiler(),
+	ActionVerifyTestnet:     spec(ActionVerifyTestnet, "verify", RiskT2, EffectIrreversible, NetworkTestnet, true).withNetwork().withWallet().withSpend().withCompiler().withBroadcast(),
+	ActionVerifyMainnet:     spec(ActionVerifyMainnet, "verify", RiskT3, EffectIrreversible, NetworkMainnet, true).withNetwork().withWallet().withSpend().withApproval().withEvidence().withCompiler().withBroadcast(),
 	ActionLibraryInfo:       spec(ActionLibraryInfo, "library", RiskT2, EffectNone, NetworkTestnet, false).withNetwork(),
 	ActionLibraryFetch:      spec(ActionLibraryFetch, "library", RiskT2, EffectReversible, NetworkTestnet, true).withNetwork(),
-	ActionLibraryPublishTN:  spec(ActionLibraryPublishTN, "library", RiskT2, EffectIrreversible, NetworkTestnet, true).withNetwork().withWallet().withSpend().withExpected(),
-	ActionLibraryPublishMN:  spec(ActionLibraryPublishMN, "library", RiskT3, EffectIrreversible, NetworkMainnet, true).withNetwork().withWallet().withSpend().withApproval().withEvidence().withExpected().withGenericDenied(),
-	ActionLibraryTopupTN:    spec(ActionLibraryTopupTN, "library", RiskT2, EffectIrreversible, NetworkTestnet, true).withNetwork().withWallet().withSpend().withExpected(),
-	ActionLibraryTopupMN:    spec(ActionLibraryTopupMN, "library", RiskT3, EffectIrreversible, NetworkMainnet, true).withNetwork().withWallet().withSpend().withApproval().withEvidence().withExpected().withGenericDenied(),
+	ActionLibraryPublishTN:  spec(ActionLibraryPublishTN, "library", RiskT2, EffectIrreversible, NetworkTestnet, true).withNetwork().withWallet().withSpend().withExpected().withBroadcast(),
+	ActionLibraryPublishMN:  spec(ActionLibraryPublishMN, "library", RiskT3, EffectIrreversible, NetworkMainnet, true).withNetwork().withWallet().withSpend().withApproval().withEvidence().withExpected().withGenericDenied().withBroadcast(),
+	ActionLibraryTopupTN:    spec(ActionLibraryTopupTN, "library", RiskT2, EffectIrreversible, NetworkTestnet, true).withNetwork().withWallet().withSpend().withExpected().withBroadcast(),
+	ActionLibraryTopupMN:    spec(ActionLibraryTopupMN, "library", RiskT3, EffectIrreversible, NetworkMainnet, true).withNetwork().withWallet().withSpend().withApproval().withEvidence().withExpected().withGenericDenied().withBroadcast(),
 	ActionWalletList:        spec(ActionWalletList, "wallet", RiskT2, EffectNone, NetworkLocal, false),
 	ActionRPCQuery:          spec(ActionRPCQuery, "rpc", RiskT2, EffectNone, NetworkTestnet, false).withNetwork(),
 }
@@ -113,16 +113,17 @@ func spec(urn ActionURN, sub string, risk RiskClass, effect EffectClass, network
 	return CommandSpec{URN: urn, ActonSubcommand: sub, RiskClass: risk, EffectClass: effect, ExecutorKind: ExecutorDigital, Network: network, SideEffect: sideEffect}
 }
 
-func (s CommandSpec) withNetwork() CommandSpec  { s.RequiresNetworkGrant = true; return s }
-func (s CommandSpec) withManifest() CommandSpec { s.RequiresManifest = true; return s }
-func (s CommandSpec) withWallet() CommandSpec   { s.RequiresWallet = true; return s }
-func (s CommandSpec) withSpend() CommandSpec    { s.RequiresSpendCap = true; return s }
-func (s CommandSpec) withApproval() CommandSpec { s.RequiresApproval = true; return s }
-func (s CommandSpec) withEvidence() CommandSpec { s.RequiresFullEvidence = true; return s }
-func (s CommandSpec) withCompiler() CommandSpec { s.RequiresCompilerPin = true; return s }
-func (s CommandSpec) withWritable() CommandSpec { s.RequiresWritablePreopen = true; return s }
-func (s CommandSpec) withCompute() CommandSpec  { s.RequiresComputeBudget = true; return s }
-func (s CommandSpec) withExpected() CommandSpec { s.RequiresExpectedEffects = true; return s }
+func (s CommandSpec) withNetwork() CommandSpec   { s.RequiresNetworkGrant = true; return s }
+func (s CommandSpec) withManifest() CommandSpec  { s.RequiresManifest = true; return s }
+func (s CommandSpec) withWallet() CommandSpec    { s.RequiresWallet = true; return s }
+func (s CommandSpec) withSpend() CommandSpec     { s.RequiresSpendCap = true; return s }
+func (s CommandSpec) withApproval() CommandSpec  { s.RequiresApproval = true; return s }
+func (s CommandSpec) withEvidence() CommandSpec  { s.RequiresFullEvidence = true; return s }
+func (s CommandSpec) withCompiler() CommandSpec  { s.RequiresCompilerPin = true; return s }
+func (s CommandSpec) withWritable() CommandSpec  { s.RequiresWritablePreopen = true; return s }
+func (s CommandSpec) withCompute() CommandSpec   { s.RequiresComputeBudget = true; return s }
+func (s CommandSpec) withExpected() CommandSpec  { s.RequiresExpectedEffects = true; return s }
+func (s CommandSpec) withBroadcast() CommandSpec { s.Broadcast = true; return s }
 func (s CommandSpec) withGenericDenied() CommandSpec {
 	s.GenericDenied = true
 	return s
@@ -281,7 +282,7 @@ func validateArgvForAction(action ActionURN, argv []string) ([]string, error) {
 	hasNetTestnet := containsFlagValue(argv, "--net", "testnet")
 	hasForkNet := containsFlag(argv, "--fork-net")
 	switch {
-	case hasNetMainnet && action != ActionScriptMainnet && action != ActionVerifyMainnet && action != ActionLibraryPublishMN && action != ActionLibraryTopupMN:
+	case hasNetMainnet && action != ActionScriptMainnet && action != ActionVerifyMainnet && action != ActionLibraryPublishMN && action != ActionLibraryTopupMN && action != ActionLibraryInfo && action != ActionLibraryFetch && action != ActionRPCQuery:
 		return nil, fmt.Errorf("%s", ReasonGenericMainnetScriptDenied)
 	case hasNetTestnet && action != ActionScriptTestnet && action != ActionVerifyTestnet && action != ActionLibraryPublishTN && action != ActionLibraryTopupTN && action != ActionLibraryInfo && action != ActionLibraryFetch && action != ActionRPCQuery:
 		return nil, fmt.Errorf("%s", ReasonArgvRejected)

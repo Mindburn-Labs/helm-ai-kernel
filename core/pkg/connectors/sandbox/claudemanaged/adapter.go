@@ -581,7 +581,11 @@ func safeJoin(root, rel string, forWrite bool) (string, error) {
 		if !os.IsNotExist(err) {
 			return "", err
 		}
-		checkEval = checkPath
+		missingRel, relErr := filepath.Rel(rootAbs, checkPath)
+		if relErr != nil {
+			return "", relErr
+		}
+		checkEval = filepath.Join(rootEval, missingRel)
 	}
 	if !withinRoot(rootEval, checkEval) {
 		return "", fmt.Errorf("claude managed agents: path escapes sandbox root")

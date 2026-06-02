@@ -38,8 +38,9 @@ func TestAdapterLifecycleListFilesLogsAndStateBranches(t *testing.T) {
 	require.GreaterOrEqual(t, len(entries), 2)
 	require.Equal(t, "/workspace/a.txt", entries[0].Path)
 
-	_, err = adapter.ListFiles(context.Background(), handle.ID, "/workspace/missing")
-	require.Error(t, err)
+	missingEntries, err := adapter.ListFiles(context.Background(), handle.ID, "/workspace/missing")
+	require.NoError(t, err)
+	require.Empty(t, missingEntries)
 
 	_, err = adapter.Exec(context.Background(), handle.ID, nil)
 	require.ErrorContains(t, err, "command is required")

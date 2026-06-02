@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/modelproviders"
 	lpplan "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 	lpsecrets "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/secrets"
@@ -225,18 +226,33 @@ func isCloudTarget(target Target) bool {
 }
 
 func missingLiveSecrets(app registry.AppSpec) bool {
-	for _, envName := range app.ModelGatewayEnv {
-		if os.Getenv(envName) == "" {
-			return true
+	groups := launchkitModelGatewayEnvGroups(app)
+	if len(groups) == 0 {
+		return false
+	}
+	for _, group := range groups {
+		complete := true
+		for _, envName := range group {
+			if value, ok := os.LookupEnv(envName); !ok || value == "" {
+				complete = false
+				break
+			}
+		}
+		if complete {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 func applyScopedDemoSecrets(app registry.AppSpec) (map[string]string, func()) {
 	values := map[string]string{}
 	previous := map[string]*string{}
-	for _, envName := range app.ModelGatewayEnv {
+	groups := launchkitModelGatewayEnvGroups(app)
+	if len(groups) == 0 {
+		return values, func() {}
+	}
+	for _, envName := range groups[0] {
 		if envName == "" {
 			continue
 		}
@@ -258,6 +274,26 @@ func applyScopedDemoSecrets(app registry.AppSpec) (map[string]string, func()) {
 			}
 		}
 	}
+}
+
+func launchkitModelGatewayEnvGroups(app registry.AppSpec) [][]string {
+	provider := strings.ToLower(strings.TrimSpace(app.ModelGateway.Provider))
+	if provider == "byo" || provider == "multi" {
+		catalog, err := modelproviders.DefaultCatalog()
+		if err == nil {
+			if groups, err := catalog.EnvGroupsForProviderIDs(app.ModelGateway.ProviderIDs); err == nil && len(groups) > 0 {
+				return groups
+			}
+		}
+	}
+	groups := make([][]string, 0, len(app.ModelGatewayEnv))
+	for _, envName := range app.ModelGatewayEnv {
+		envName = strings.TrimSpace(envName)
+		if envName != "" {
+			groups = append(groups, []string{envName})
+		}
+	}
+	return groups
 }
 
 func rebindLaunchID(compiled lpplan.LaunchPlan, launchID string) lpplan.LaunchPlan {

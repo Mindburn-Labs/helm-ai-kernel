@@ -13,8 +13,8 @@ on:
       - '.github/workflows/launchpad-model-provider-catalog.yml'
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -22,6 +22,7 @@ concurrency:
 
 jobs:
   refresh:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -31,21 +32,32 @@ jobs:
         with:
           python-version: "3.12"
       - name: Validate provider sources
-        if: github.event_name == 'pull_request'
         run: python3 scripts/launch/update_model_provider_catalog.py --network
       - name: Validate and normalize catalog
-        if: github.event_name == 'pull_request'
         run: python3 scripts/launch/update_model_provider_catalog.py --write
-      - name: Refresh catalog source fingerprints
-        if: github.event_name != 'pull_request'
-        run: python3 scripts/launch/update_model_provider_catalog.py --network --write
       - name: Summarize catalog coverage
         run: python3 scripts/launch/update_model_provider_catalog.py --summary >> "$GITHUB_STEP_SUMMARY"
       - name: Ensure generated catalog artifacts are committed
-        if: github.event_name == 'pull_request'
         run: git diff --exit-code -- core/pkg/launchpad/modelproviders/catalog.json scripts/launch/update_model_provider_catalog.py tools/launchpad/artifacts/model-gateway-check.sh
+
+  open-refresh-pr:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.12"
+      - name: Refresh catalog source fingerprints
+        run: python3 scripts/launch/update_model_provider_catalog.py --network --write
+      - name: Summarize catalog coverage
+        run: python3 scripts/launch/update_model_provider_catalog.py --summary >> "$GITHUB_STEP_SUMMARY"
       - name: Open refresh PR
-        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

@@ -49,6 +49,14 @@ func TestCoverageFSRegistryEdges(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(root, "README"), []byte("skip me"), 0600); err != nil {
 			t.Fatalf("WriteFile: %v", err)
 		}
+		blockedDir := filepath.Join(root, "blocked-pack")
+		if err := os.MkdirAll(blockedDir, 0700); err != nil {
+			t.Fatalf("MkdirAll blocked: %v", err)
+		}
+		if err := os.Chmod(blockedDir, 0000); err != nil {
+			t.Fatalf("Chmod blocked: %v", err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(blockedDir, 0700) })
 		if err := os.MkdirAll(filepath.Join(root, "invalid-pack", "1.0.0"), 0700); err != nil {
 			t.Fatalf("MkdirAll invalid: %v", err)
 		}

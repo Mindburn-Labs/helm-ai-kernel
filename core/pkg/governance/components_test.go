@@ -72,6 +72,20 @@ func TestSignalController(t *testing.T) {
 	assert.Contains(t, string(env.Payload), "GREEN")
 }
 
+func TestSignalController_FailClosedEdges(t *testing.T) {
+	sc := NewSignalController("test-producer", &MockSigner{})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := sc.Advise(ctx, "scale", nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "context canceled")
+
+	unsigned := NewSignalController("test-producer", nil)
+	_, err = unsigned.Advise(context.Background(), "scale", nil)
+	assert.Error(t, err)
+}
+
 func TestStateEstimator(t *testing.T) {
 	se := NewStateEstimator("test-producer", &MockSigner{})
 	assert.Equal(t, "state.estimator", se.Name())
@@ -79,6 +93,20 @@ func TestStateEstimator(t *testing.T) {
 	env, err := se.Advise(context.Background(), "scale", nil)
 	require.NoError(t, err)
 	assert.Contains(t, string(env.Payload), "confidence")
+}
+
+func TestStateEstimator_FailClosedEdges(t *testing.T) {
+	se := NewStateEstimator("test-producer", &MockSigner{})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := se.Advise(ctx, "scale", nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "context canceled")
+
+	unsigned := NewStateEstimator("test-producer", nil)
+	_, err = unsigned.Advise(context.Background(), "scale", nil)
+	assert.Error(t, err)
 }
 
 func TestComputePowerDelta(t *testing.T) {
@@ -100,6 +128,22 @@ func TestComputePowerDelta(t *testing.T) {
 	assert.Equal(t, 25, delta.RiskScoreDelta)
 }
 
+func TestComputePowerDelta_ScoresRemainingEffectClasses(t *testing.T) {
+	newModule := ModuleBundle{
+		Capabilities: []capabilities.Capability{
+			{ID: "cap-e3", EffectClass: "E3", Effects: []capabilities.EffectType{"write"}},
+			{ID: "cap-e1", EffectClass: "E1", Effects: []capabilities.EffectType{"read"}},
+			{ID: "cap-e0", EffectClass: "E0", Effects: []capabilities.EffectType{"observe"}},
+		},
+	}
+
+	delta := ComputePowerDelta(nil, newModule)
+
+	assert.Len(t, delta.NewCapabilities, 3)
+	assert.Equal(t, 13, delta.RiskScoreDelta)
+	assert.Equal(t, []capabilities.EffectType{"write", "read", "observe"}, delta.NewEffects)
+}
+
 func TestPolicyInductor(t *testing.T) {
 	pi := NewPolicyInductor("test-producer", &MockSigner{})
 	assert.Equal(t, "policy.inductor", pi.Name())
@@ -107,4 +151,10 @@ func TestPolicyInductor(t *testing.T) {
 	env, err := pi.Advise(context.Background(), "deploy", nil)
 	require.NoError(t, err)
 	assert.Contains(t, string(env.Payload), "pol-generic-allow")
+}
+
+func TestPolicyInductor_FailClosedSigning(t *testing.T) {
+	pi := NewPolicyInductor("test-producer", nil)
+	_, err := pi.Advise(context.Background(), "deploy", nil)
+	assert.Error(t, err)
 }

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 pub mod client;
+pub mod canonical;
 pub mod types_gen;
 pub use types_gen::*;
 

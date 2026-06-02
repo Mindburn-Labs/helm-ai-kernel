@@ -1,0 +1,133 @@
+// HELM Boundary External Authorization Protocol Buffer Definitions
+//
+// Canonical IDL for the optional gRPC transport of the Kernel-owned
+// pre-dispatch external authorization contract.
+//
+// Stability: v1 additive-only.
+//
+// This contract deliberately represents pre-dispatch authorization only. Final
+// EFFECT receipts, ProofGraph edges, and EvidencePack refs are post-dispatch
+// proof artifacts and must not be minted by the gateway.
+syntax = "proto3";
+package helm.boundary.extauthz.v1;
+
+option go_package = "helm.mindburn.run/boundary/extauthz/v1;extauthzv1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+enum Verdict {
+  VERDICT_UNSPECIFIED = 0;
+  VERDICT_ALLOW = 1;
+  VERDICT_DENY = 2;
+  VERDICT_ESCALATE = 3;
+}
+
+enum Protocol {
+  PROTOCOL_UNSPECIFIED = 0;
+  PROTOCOL_MCP = 1;
+  PROTOCOL_A2A = 2;
+  PROTOCOL_HTTP = 3;
+  PROTOCOL_GRPC = 4;
+  PROTOCOL_OPENAI = 5;
+}
+
+message AuthorizationRequest {
+  string schema_version = 1;
+  string contract_version = 2;
+  string request_id = 3;
+  string tenant_id = 4;
+  string workspace_id = 5;
+  string principal_id = 6;
+  uint64 principal_seq = 7;
+  string agent_identity_profile_ref = 8;
+  Protocol protocol = 9;
+  string action_urn = 10;
+  string tool_urn = 11;
+  string connector_id = 12;
+  string connector_contract_hash = 13;
+  string executor_kind = 14;
+  string effect_class = 15;
+  string risk_class = 16;
+  string args_c14n_hash = 17;
+  string request_body_hash = 18;
+  string plan_hash = 19;
+  string policy_hash = 20;
+  string p0_hash = 21;
+  string policy_epoch = 22;
+  string idempotency_key_candidate = 23;
+  string payload_class = 24;
+  string redaction_profile = 25;
+  string upstream_trace_id = 26;
+  string upstream_run_id = 27;
+  uint64 deadline_ms = 28;
+  google.protobuf.Struct risk_context = 29;
+  string risk_context_hash = 30;
+}
+
+message AuthorizationResponse {
+  string schema_version = 1;
+  string contract_version = 2;
+  string request_id = 3;
+  string tenant_id = 4;
+  string workspace_id = 5;
+  string principal_id = 6;
+  uint64 principal_seq = 7;
+  string agent_identity_profile_ref = 8;
+  Protocol protocol = 9;
+  string action_urn = 10;
+  string tool_urn = 11;
+  string connector_id = 12;
+  string connector_contract_hash = 13;
+  string executor_kind = 14;
+  string effect_class = 15;
+  string risk_class = 16;
+  string args_c14n_hash = 17;
+  string request_body_hash = 18;
+  string plan_hash = 19;
+  string policy_hash = 20;
+  string p0_hash = 21;
+  string policy_epoch = 22;
+  string idempotency_key_candidate = 23;
+  string payload_class = 24;
+  string redaction_profile = 25;
+  string upstream_trace_id = 26;
+  string upstream_run_id = 27;
+  uint64 deadline_ms = 28;
+  string risk_context_hash = 29;
+
+  Verdict verdict = 30;
+  string reason_code = 31;
+
+  string kernel_trust_root_id = 32;
+  string signing_key_ref = 33;
+  string kernel_verdict_ref = 34;
+  string kernel_verdict_hash = 35;
+  bytes kernel_verdict_signature = 36;
+  google.protobuf.Timestamp kernel_verdict_issued_at = 37;
+  google.protobuf.Timestamp kernel_verdict_expires_at = 38;
+
+  // ALLOW-only, single-use pre-dispatch permit fields.
+  string effect_permit_ref = 39;
+  string permit_nonce = 40;
+  google.protobuf.Timestamp permit_expiry = 41;
+  string proof_session_ref = 42;
+  string evidence_reservation_ref = 43;
+  string budget_reservation_ref = 44;
+
+  string cache_policy = 45;
+  string replay_hint = 46;
+
+  // DENY/ESCALATE references are pre-dispatch records, not final effect proof.
+  string denial_receipt_ref = 47;
+  string escalation_ref = 48;
+  string escalation_receipt_ref = 49;
+
+  string proof_obligation = 50;
+  string connector_receipt_policy = 51;
+  string proof_finalization_policy = 52;
+}
+
+service ExternalAuthorizationService {
+  rpc Authorize(AuthorizationRequest) returns (AuthorizationResponse);
+}

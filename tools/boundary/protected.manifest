@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-05-31T21:02:51Z
-# Commit: 4604ac1f208a3ad76d7ce7da1aab513b3bd7a4fc
+# Generated: 2026-06-01T22:53:29Z
+# Commit: b81222c56adf0c71314dc6565e81f09ac999eec4
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -567,7 +567,7 @@ b084e586791f8a6ca882cb8ec49cae843a10ee13a3b94f527eeb2af34acf3494  protocols/conf
 35149966be79226039f1cfe611f70da36c2e9f93e2d9e96a91bb995a3bfb2cc9  protocols/conformance/v1/test-vectors.json
 f6b074227cf683adef1fe49522cedfcae372c5abd670c5dfcb8da144a1f836df  protocols/conformance/workstation/v1/conformance-pack.json
 cabc519027fc1c737db0b8008ccbb7fbe32bd473a407334aee32f5fb1d1e7314  protocols/json-schemas/README.md
-f98cbcbf1f30cebfb91faf1ee3a5128b1fe50612e610e720720092554daf85be  protocols/json-schemas/SCHEMA_INDEX.md
+ab25733ec836a79badcb781a0f184a84fd95faa5ffd49f35e753bb37c181c0f8  protocols/json-schemas/SCHEMA_INDEX.md
 44d2b23e718d7d3e6011c5cabbcf7653553a265b96a24020a9db18e44ce49e9f  protocols/json-schemas/access/OperatorAccessPolicy.v1.json
 19005e4e4ebd10fb816ecbc19db94ac5fe1212da7b9a47cc03cb3f14f9357758  protocols/json-schemas/access/PrivilegedAccessReceipt.v1.json
 ca16cb628b8913f291816419eeeaabf663281437f8cf4ef8079b0e4a2773b60f  protocols/json-schemas/access/PrivilegedAccessRequest.v1.json
@@ -578,6 +578,7 @@ ca16cb628b8913f291816419eeeaabf663281437f8cf4ef8079b0e4a2773b60f  protocols/json
 77c7f1102b0dc7ffedf4ced58b4d6b95213e40ff9925651bda47337fd3be0c59  protocols/json-schemas/authority/side_effect_authority_record.schema.json
 4abdd3bd202fe71f6337fd8c32fbfb05c89ba6f30ac801442f14f7bba37bad22  protocols/json-schemas/autonomy_envelope/v1.json
 5e3278db56ce4c9d48475efc54475cb2345870a7a30badce6df7beeabc66ced0  protocols/json-schemas/backpressure_policy/v1.json
+5f1e37a958f601cd4f8a241f0c9ea1cc6d9e6f97013ccd6bad120b5cf7850136  protocols/json-schemas/boundary/extauthz.v1.schema.json
 b33cd57db21eb1fd4b89541107daa3bfd0c4ab94463f774a7385fadadaecd48e  protocols/json-schemas/business/escalation_policy.schema.json
 91d39f0c4aad747ffcff1cd9c587ffcdc393b50935701cda01cd4ebbdf2c81e2  protocols/json-schemas/business/human_task.schema.json
 555c3d64a44609a2797b61ea0e994dd8bab056b6584e5a9ceb36da39b349a8e3  protocols/json-schemas/business/obligation.schema.json
@@ -802,6 +803,7 @@ f6c9ca3e1131edd533fed07f54d3d9b7aeebcd4e32e74b7e90fb4db87a2a0344  protocols/poli
 6e0b999ffdc8aa598022f1d0fdb9d9eba52e0fe6762b9a243f3afc1c23464488  protocols/policy-schema/v1/verdict.proto
 f7b7c2a2c993d54f99aeed00201f32901858348750209b981e8098f014960d0b  protocols/policy-schema/v1/witness.proto
 2ed09a1f11ea2d4693361178752804efebfe62d32643c37fbac60251564dd836  protocols/proto/README.md
+c0ca0052768b38ddd185451616af6a411f6700d2f55d61544e6b6a327b1ce209  protocols/proto/boundary/extauthz/v1/extauthz.proto
 2d49a81d17c37627dedf1093504345280a437250fe8edaadb5a7e236768a12f4  protocols/proto/helm/authority/v1/authority.proto
 c28f8d64a15c801dff22c984b977f5a3f899684653ab4307386b842cd0b467bb  protocols/proto/helm/effects/v1/effects.proto
 952f916f65ce4c1bac02c9d93bc7bfd661252d10e3454c1e469cd715c108fe6c  protocols/proto/helm/intervention/v1/intervention.proto

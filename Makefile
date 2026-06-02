@@ -45,6 +45,10 @@ sdk-examples-smoke:
 
 verify-fixtures:
 	cd core && go test ./pkg/verifier -run TestVerifyBundle_GoldenFixtureRoots -count=1
+	cd core && go test ./pkg/boundary/extauthz -run TestContract -count=1
+	cd core && go test ./pkg/canonicalize -run TestExtauthzGoldenVectorsAreCanonical -count=1
+	python3 reference_packs/extauthz/verify_extauthz_vectors.py
+	protoc -Iprotocols/proto --descriptor_set_out="$${TMPDIR:-/tmp}/helm-extauthz-v1.pb" protocols/proto/boundary/extauthz/v1/extauthz.proto
 
 tee-collateral-verify:
 	cd core && go test ./pkg/crypto/tee/collateral -count=1 && go run ./cmd/tee-collateral -bundle pkg/crypto/tee/collateral/testdata/offline_bundle.json

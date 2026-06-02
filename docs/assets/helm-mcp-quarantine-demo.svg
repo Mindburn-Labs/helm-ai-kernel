@@ -55,65 +55,29 @@
       .micro { font-size: 13px; font-weight: 600; letter-spacing: 0.5px; }
       
       /* Animation Timings */
-      .packet-deny {
-        animation: deny-packet-anim 12s infinite cubic-bezier(0.4, 0, 0.2, 1);
-      }
-      .packet-allow {
-        animation: allow-packet-anim 12s infinite cubic-bezier(0.4, 0, 0.2, 1);
-      }
-      .packet-effect {
-        animation: effect-packet-anim 12s infinite cubic-bezier(0.4, 0, 0.2, 1);
-      }
-      .receipt-deny {
-        animation: receipt-deny-anim 12s infinite cubic-bezier(0.4, 0, 0.2, 1);
-      }
-      .receipt-allow {
-        animation: receipt-allow-anim 12s infinite cubic-bezier(0.4, 0, 0.2, 1);
-      }
+      .packet-deny { animation: deny-packet-anim 12s infinite cubic-bezier(0.4, 0, 0.2, 1); }
+      .packet-allow { animation: allow-packet-anim 12s infinite cubic-bezier(0.4, 0, 0.2, 1); }
+      .packet-pep-cpi { animation: packet-pep-cpi-anim 12s infinite cubic-bezier(0.4, 0, 0.2, 1); }
+      .packet-effect { animation: packet-effect-anim 12s infinite cubic-bezier(0.4, 0, 0.2, 1); }
+      .receipt-deny { animation: receipt-deny-anim 12s infinite cubic-bezier(0.4, 0, 0.2, 1); }
+      .receipt-allow { animation: receipt-allow-anim 12s infinite cubic-bezier(0.4, 0, 0.2, 1); }
       
-      .node-pep {
-        animation: pep-glow-anim 12s infinite ease-in-out;
-      }
-      .node-cpi {
-        animation: cpi-glow-anim 12s infinite ease-in-out;
-      }
-      .node-pg {
-        animation: pg-glow-anim 12s infinite ease-in-out;
-      }
-      .node-effects {
-        animation: effects-glow-anim 12s infinite ease-in-out;
-      }
+      .node-pep { animation: pep-glow-anim 12s infinite ease-in-out; }
+      .node-cpi { animation: cpi-glow-anim 12s infinite ease-in-out; }
+      .node-pg { animation: pg-glow-anim 12s infinite ease-in-out; }
+      .node-effects { animation: effects-glow-anim 12s infinite ease-in-out; }
       
-      .barrier-deny {
-        animation: barrier-deny-anim 12s infinite ease-in-out;
-        transform-origin: 600px 450px;
-      }
-      .text-deny-state {
-        animation: text-deny-anim 12s infinite ease-in-out;
-      }
-      .text-allow-state {
-        animation: text-allow-anim 12s infinite ease-in-out;
-      }
+      .barrier-deny { animation: barrier-deny-anim 12s infinite ease-in-out; transform-origin: 600px 450px; }
+      .text-deny-state { animation: text-deny-anim 12s infinite ease-in-out; }
+      .text-allow-state { animation: text-allow-anim 12s infinite ease-in-out; }
       
-      .line-agent-pep {
-        animation: line-agent-pep-anim 12s infinite ease-in-out;
-      }
-      .line-pep-cpi {
-        animation: line-pep-cpi-anim 12s infinite ease-in-out;
-      }
-      .line-cpi-effects {
-        animation: line-cpi-effects-anim 12s infinite ease-in-out;
-      }
-      .line-pep-pg {
-        animation: line-pep-pg-anim 12s infinite ease-in-out;
-      }
-      .line-cpi-pg {
-        animation: line-cpi-pg-anim 12s infinite ease-in-out;
-      }
+      .line-agent-pep { animation: line-agent-pep-anim 12s infinite ease-in-out; }
+      .line-pep-cpi { animation: line-pep-cpi-anim 12s infinite ease-in-out; }
+      .line-cpi-effects { animation: line-cpi-effects-anim 12s infinite ease-in-out; }
+      .line-pep-pg { animation: line-pep-pg-anim 12s infinite ease-in-out; }
+      .line-cpi-pg { animation: line-cpi-pg-anim 12s infinite ease-in-out; }
       
-      .grid-scanner {
-        animation: scan-anim 8s infinite linear;
-      }
+      .grid-scanner { animation: scan-anim 8s infinite linear; }
       
       /* Animation Keyframes */
       @keyframes scan-anim {
@@ -123,127 +87,131 @@
       
       @keyframes deny-packet-anim {
         0% { transform: translate(250px, 450px); opacity: 0; }
-        2% { opacity: 1; }
-        10% { transform: translate(600px, 450px); opacity: 1; }
-        11%, 100% { opacity: 0; transform: translate(250px, 450px); }
+        1% { opacity: 1; }
+        9% { transform: translate(600px, 450px); opacity: 1; }
+        10%, 100% { opacity: 0; transform: translate(600px, 450px); }
       }
-      
+
       @keyframes pep-glow-anim {
-        0%, 8% { fill: #ffffff; stroke: #cbd5e1; filter: none; }
-        10%, 28% { fill: #fff1f2; stroke: #f43f5e; filter: url(#glowRed); stroke-width: 3px; }
-        30%, 70% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
-        72%, 84% { fill: #f0fdf4; stroke: #10b981; filter: url(#glowTeal); stroke-width: 3px; }
+        0%, 9% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
+        /* Deny glow */
+        10%, 20% { fill: #fff1f2; stroke: #f43f5e; filter: url(#glowRed); stroke-width: 3px; }
+        21%, 59% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
+        /* Allow glow */
+        60%, 75% { fill: #f0fdf4; stroke: #10b981; filter: url(#glowTeal); stroke-width: 3px; }
+        76%, 100% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
+      }
+
+      @keyframes barrier-deny-anim {
+        0%, 9% { opacity: 0; transform: scale(0.8); }
+        10%, 20% { opacity: 0.95; transform: scale(1.0); }
+        21%, 100% { opacity: 0; transform: scale(0.8); }
+      }
+
+      @keyframes text-deny-anim {
+        0%, 9% { opacity: 0; }
+        10%, 20% { opacity: 1; }
+        21%, 100% { opacity: 0; }
+      }
+
+      @keyframes receipt-deny-anim {
+        0%, 11% { transform: translate(600px, 450px); opacity: 0; }
+        12% { opacity: 1; }
+        14.5% { transform: translate(612.5px, 550.6px); opacity: 1; }
+        17% { transform: translate(650px, 622.5px); opacity: 1; }
+        19.5% { transform: translate(712.5px, 665.6px); opacity: 1; }
+        21.5% { transform: translate(800px, 680px); opacity: 1; }
+        22%, 100% { opacity: 0; transform: translate(800px, 680px); }
+      }
+
+      @keyframes pg-glow-anim {
+        0%, 21% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
+        /* Deny receipt */
+        22%, 32% { fill: #e0e7ff; stroke: #6366f1; filter: url(#glowViolet); stroke-width: 3px; }
+        33%, 89% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
+        /* Allow receipt */
+        90%, 100% { fill: #e0e7ff; stroke: #6366f1; filter: url(#glowViolet); stroke-width: 3px; }
+      }
+
+      /* CYCLE 2 */
+      @keyframes allow-packet-anim {
+        0%, 49% { transform: translate(250px, 450px); opacity: 0; }
+        50% { opacity: 1; }
+        59% { transform: translate(600px, 450px); opacity: 1; }
+        60%, 100% { opacity: 0; transform: translate(600px, 450px); }
+      }
+
+      @keyframes text-allow-anim {
+        0%, 59% { opacity: 0; }
+        60%, 75% { opacity: 1; }
+        76%, 100% { opacity: 0; }
+      }
+
+      @keyframes packet-pep-cpi-anim {
+        0%, 64% { transform: translate(600px, 450px); opacity: 0; }
+        65% { opacity: 1; }
+        74% { transform: translate(1000px, 450px); opacity: 1; }
+        75%, 100% { opacity: 0; transform: translate(1000px, 450px); }
+      }
+
+      @keyframes cpi-glow-anim {
+        0%, 74% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
+        75%, 85% { fill: #f0fdf4; stroke: #10b981; filter: url(#glowTeal); stroke-width: 3px; }
         86%, 100% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
       }
-      
-      @keyframes barrier-deny-anim {
-        0%, 8% { opacity: 0; transform: scale(0.8); }
-        10%, 28% { opacity: 0.95; transform: scale(1.0); }
-        30%, 100% { opacity: 0; transform: scale(0.8); }
+
+      @keyframes packet-effect-anim {
+        0%, 79% { transform: translate(1000px, 450px); opacity: 0; }
+        80% { opacity: 1; }
+        89% { transform: translate(1350px, 450px); opacity: 1; }
+        90%, 100% { opacity: 0; transform: translate(1350px, 450px); }
       }
-      
-      @keyframes receipt-deny-anim {
-        0%, 14% { transform: translate(600px, 450px); opacity: 0; }
-        15% { opacity: 1; }
-        17% { transform: translate(600px, 508px); opacity: 1; }
-        20% { transform: translate(625px, 565px); opacity: 1; }
-        23% { transform: translate(700px, 622px); opacity: 1; }
-        26% { transform: translate(800px, 680px); opacity: 1; }
-        28% { opacity: 0; }
-        28.1%, 100% { opacity: 0; transform: translate(600px, 450px); }
-      }
-      
-      @keyframes allow-packet-anim {
-        0%, 50% { transform: translate(250px, 450px); opacity: 0; }
-        51% { opacity: 1; }
-        60% { transform: translate(600px, 450px); opacity: 1; }
-        61%, 100% { opacity: 0; transform: translate(250px, 450px); }
-      }
-      
-      @keyframes line-agent-pep-anim {
-        0%, 8% { stroke: #cbd5e1; stroke-width: 4px; }
-        10%, 28% { stroke: #fca5a5; stroke-width: 5px; }
-        30%, 70% { stroke: #cbd5e1; stroke-width: 4px; }
-        72%, 84% { stroke: #99f6e4; stroke-width: 5px; }
-        86%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
-      }
-      
-      @keyframes line-pep-cpi-anim {
-        0%, 70% { stroke: #cbd5e1; stroke-width: 4px; }
-        72%, 84% { stroke: #99f6e4; stroke-width: 5px; }
-        86%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
-      }
-      
-      @keyframes line-cpi-effects-anim {
-        0%, 77% { stroke: #cbd5e1; stroke-width: 3px; }
-        80%, 94% { stroke: #99f6e4; stroke-width: 4px; }
-        96%, 100% { stroke: #cbd5e1; stroke-width: 3px; }
-      }
-      
-      @keyframes line-pep-pg-anim {
-        0%, 14% { stroke: #cbd5e1; stroke-width: 4px; }
-        16%, 28% { stroke: #c7d2fe; stroke-width: 5px; }
-        30%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
-      }
-      
-      @keyframes line-cpi-pg-anim {
-        0%, 74% { stroke: #cbd5e1; stroke-width: 4px; }
-        76%, 88% { stroke: #c7d2fe; stroke-width: 5px; }
-        90%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
-      }
-      
-      @keyframes cpi-glow-anim {
-        0%, 70% { fill: #ffffff; stroke: #cbd5e1; filter: none; }
-        72%, 86% { fill: #f0fdf4; stroke: #10b981; filter: url(#glowTeal); stroke-width: 3px; }
-        88%, 100% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
-      }
-      
-      @keyframes effect-packet-anim {
-        0%, 72% { transform: translate(600px, 450px); opacity: 0; }
-        73% { opacity: 1; }
-        78% { transform: translate(800px, 450px); opacity: 1; }
-        82% { transform: translate(1000px, 450px); opacity: 1; }
-        84% { transform: translate(1100px, 450px); opacity: 1; }
-        89% { transform: translate(1250px, 450px); opacity: 1; }
-        93% { transform: translate(1350px, 450px); opacity: 1; }
-        95%, 100% { opacity: 0; transform: translate(600px, 450px); }
-      }
-      
+
       @keyframes receipt-allow-anim {
-        0%, 74% { transform: translate(1000px, 450px); opacity: 0; }
-        76% { opacity: 1; }
-        78% { transform: translate(1000px, 508px); opacity: 1; }
-        81% { transform: translate(975px, 565px); opacity: 1; }
-        84% { transform: translate(900px, 622px); opacity: 1; }
-        87% { transform: translate(800px, 680px); opacity: 1; }
-        89% { opacity: 0; }
-        89.1%, 100% { opacity: 0; transform: translate(1000px, 450px); }
+        0%, 79% { transform: translate(1000px, 450px); opacity: 0; }
+        80% { opacity: 1; }
+        82.5% { transform: translate(987.5px, 550.6px); opacity: 1; }
+        85% { transform: translate(950px, 622.5px); opacity: 1; }
+        87.5% { transform: translate(887.5px, 665.6px); opacity: 1; }
+        89.5% { transform: translate(800px, 680px); opacity: 1; }
+        90%, 100% { opacity: 0; transform: translate(800px, 680px); }
       }
-      
-      @keyframes pg-glow-anim {
-        0%, 22% { fill: #ffffff; stroke: #cbd5e1; filter: none; }
-        24%, 34% { fill: #e0e7ff; stroke: #6366f1; filter: url(#glowViolet); stroke-width: 3px; }
-        36%, 82% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
-        84%, 94% { fill: #e0e7ff; stroke: #6366f1; filter: url(#glowViolet); stroke-width: 3px; }
-        96%, 100% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
-      }
-      
+
       @keyframes effects-glow-anim {
-        0%, 88% { fill: #ffffff; stroke: #cbd5e1; filter: none; }
-        90%, 98% { fill: #ecfeff; stroke: #06b6d4; filter: url(#glowTeal); stroke-width: 3px; }
-        100% { fill: #ffffff; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
+        0%, 89% { fill: #f8fafc; stroke: #cbd5e1; filter: none; stroke-width: 1.5px; }
+        90%, 100% { fill: #ecfeff; stroke: #06b6d4; filter: url(#glowTeal); stroke-width: 3px; }
       }
-      
-      @keyframes text-deny-anim {
-        0%, 8% { opacity: 0; }
-        10%, 28% { opacity: 1; }
-        30%, 100% { opacity: 0; }
+
+      @keyframes line-agent-pep-anim {
+        0%, 9% { stroke: #cbd5e1; stroke-width: 4px; }
+        10%, 20% { stroke: #fca5a5; stroke-width: 5px; }
+        21%, 59% { stroke: #cbd5e1; stroke-width: 4px; }
+        60%, 70% { stroke: #99f6e4; stroke-width: 5px; }
+        71%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
       }
-      
-      @keyframes text-allow-anim {
-        0%, 70% { opacity: 0; }
-        72%, 86% { opacity: 1; }
-        88%, 100% { opacity: 0; }
+
+      @keyframes line-pep-cpi-anim {
+        0%, 64% { stroke: #cbd5e1; stroke-width: 4px; }
+        65%, 75% { stroke: #99f6e4; stroke-width: 5px; }
+        76%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
+      }
+
+      @keyframes line-cpi-effects-anim {
+        0%, 79% { stroke: #cbd5e1; stroke-width: 4px; }
+        80%, 90% { stroke: #99f6e4; stroke-width: 5px; }
+        91%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
+      }
+
+      @keyframes line-pep-pg-anim {
+        0%, 11% { stroke: #cbd5e1; stroke-width: 4px; }
+        12%, 22% { stroke: #c7d2fe; stroke-width: 5px; }
+        23%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
+      }
+
+      @keyframes line-cpi-pg-anim {
+        0%, 79% { stroke: #cbd5e1; stroke-width: 4px; }
+        80%, 90% { stroke: #c7d2fe; stroke-width: 5px; }
+        91%, 100% { stroke: #cbd5e1; stroke-width: 4px; }
       }
     </style>
   </defs>
@@ -284,7 +252,7 @@
 
     <!-- CPI -> Effects -->
     <path d="M 1000,450 H 1350" stroke="#cbd5e1" stroke-width="12"/>
-    <path d="M 1000,450 H 1350" class="pathBase line-cpi-effects" stroke="#cbd5e1" stroke-width="3" marker-end="url(#arrowGray)"/>
+    <path d="M 1000,450 H 1350" class="pathBase line-cpi-effects" stroke="#cbd5e1" stroke-width="4" marker-end="url(#arrowGray)"/>
 
     <!-- PEP -> ProofGraph (curved audit receipt flow) -->
     <path d="M 600,450 Q 600,680 800,680" stroke="#cbd5e1" stroke-width="12"/>
@@ -368,6 +336,8 @@
 
     <!-- ALLOW Packet (Teal safe flow) -->
     <circle class="packet-allow" r="7" fill="#14b8a6" filter="url(#glowTeal)" opacity="0"/>
+    <!-- PEP -> CPI Packet (Teal safe flow) -->
+    <circle class="packet-pep-cpi" r="7" fill="#14b8a6" filter="url(#glowTeal)" opacity="0"/>
     <!-- ALLOW Side-Effect Trigger (Cyan flow) -->
     <circle class="packet-effect" r="7" fill="#06b6d4" filter="url(#glowTeal)" opacity="0"/>
     <!-- ALLOW Receipt (Purple audit flow) -->
@@ -398,21 +368,21 @@
     <rect x="-560" y="-30" width="1120" height="60" rx="10" class="layerCard"/>
     
     <!-- Legend Items -->
-    <g transform="translate(-510 0)">
+    <g transform="translate(-560 0)">
       <!-- DENY -->
       <g transform="translate(0 5)">
         <circle cx="0" cy="0" r="7" fill="#f43f5e" filter="url(#glowRed)"/>
-        <text class="ink" x="20" y="5" font-size="15" font-weight="600">FAIL-CLOSED QUARANTINE: Deny unknown servers &amp; tools before dispatch</text>
+        <text class="ink" x="18" y="5" font-size="14" font-weight="600">FAIL-CLOSED QUARANTINE: Deny unknown servers &amp; tools</text>
       </g>
       <!-- ALLOW -->
       <g transform="translate(420 5)">
         <circle cx="0" cy="0" r="7" fill="#14b8a6" filter="url(#glowTeal)"/>
-        <text class="ink" x="20" y="5" font-size="15" font-weight="600">AUTHORIZED EXECUTION: Allow schema-pinned tool calls with evidence</text>
+        <text class="ink" x="18" y="5" font-size="14" font-weight="600">AUTHORIZED EXECUTION: Allow schema-pinned tool calls</text>
       </g>
       <!-- RECORD -->
-      <g transform="translate(840 5)">
+      <g transform="translate(820 5)">
         <circle cx="0" cy="0" r="7" fill="#818cf8" filter="url(#glowViolet)"/>
-        <text class="ink" x="20" y="5" font-size="15" font-weight="600">VERIFIABLE LEDGER: Record audit receipts in ProofGraph</text>
+        <text class="ink" x="18" y="5" font-size="14" font-weight="600">VERIFIABLE LEDGER: Record audit receipts</text>
       </g>
     </g>
   </g>

@@ -32,6 +32,63 @@ func TestRuntimeSecretsTokenBrokerDoesNotProjectRawProviderKey(t *testing.T) {
 	if secrets["HELM_MODEL_GATEWAY_URL"] != "https://gateway.example" {
 		t.Fatalf("broker URL missing: %#v", secrets)
 	}
+	if _, leaked := secrets["OPENAI_BASE_URL"]; leaked {
+		t.Fatalf("token broker projected raw provider routing metadata: %#v", secrets)
+	}
+}
+
+func TestRuntimeSecretsProjectsBYOProviderRoutingMetadata(t *testing.T) {
+	compiled := plan.LaunchPlan{
+		ModelGatewayEnv:  []string{"YI_API_KEY"},
+		ModelGatewayMode: "external_byo",
+	}
+
+	secrets := runtimeSecrets(compiled, ExecuteOptions{
+		RuntimeSecretEnv: map[string]string{"YI_API_KEY": "sk-yi"},
+	})
+
+	if secrets["YI_API_KEY"] != "sk-yi" {
+		t.Fatalf("provider key missing: %#v", secrets)
+	}
+	if secrets["HELM_MODEL_GATEWAY_PROVIDER"] != "01-ai" {
+		t.Fatalf("provider metadata missing: %#v", secrets)
+	}
+	if secrets["HELM_MODEL_GATEWAY_ENV"] != "YI_API_KEY" {
+		t.Fatalf("provider env metadata missing: %#v", secrets)
+	}
+	if secrets["HELM_MODEL_GATEWAY_BASE_URL"] != "https://api.01.ai/v1" {
+		t.Fatalf("provider base URL metadata missing: %#v", secrets)
+	}
+	if secrets["OPENAI_BASE_URL"] != "https://api.01.ai/v1" || secrets["OPENAI_API_BASE"] != "https://api.01.ai/v1" {
+		t.Fatalf("OpenAI-compatible routing metadata missing: %#v", secrets)
+	}
+	if secrets["HELM_LAUNCHPAD_MODEL_PROVIDER"] != "01-ai" {
+		t.Fatalf("compat provider metadata missing: %#v", secrets)
+	}
+}
+
+func TestRuntimeSecretsProjectsDynamicProviderEndpointMetadata(t *testing.T) {
+	compiled := plan.LaunchPlan{
+		ModelGatewayEnv:  []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"},
+		ModelGatewayMode: "external_byo",
+	}
+
+	secrets := runtimeSecrets(compiled, ExecuteOptions{
+		RuntimeSecretEnv: map[string]string{
+			"AZURE_OPENAI_API_KEY":  "sk-azure",
+			"AZURE_OPENAI_ENDPOINT": "https://example.openai.azure.com/",
+		},
+	})
+
+	if secrets["HELM_MODEL_GATEWAY_PROVIDER"] != "azure-openai" {
+		t.Fatalf("provider metadata missing: %#v", secrets)
+	}
+	if secrets["HELM_MODEL_GATEWAY_BASE_URL"] != "https://example.openai.azure.com" {
+		t.Fatalf("dynamic provider endpoint metadata missing: %#v", secrets)
+	}
+	if secrets["OPENAI_BASE_URL"] != "https://example.openai.azure.com" {
+		t.Fatalf("OpenAI-compatible dynamic endpoint metadata missing: %#v", secrets)
+	}
 }
 
 func TestEgressProxyFromEnvStaticURL(t *testing.T) {

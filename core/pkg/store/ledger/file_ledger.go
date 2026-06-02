@@ -17,6 +17,11 @@ type FileLedger struct {
 	clock func() time.Time // Injectable clock
 }
 
+var (
+	fileLedgerMarshalIndent = json.MarshalIndent
+	fileLedgerWriteFile     = os.WriteFile
+)
+
 func NewFileLedger(path string) (*FileLedger, error) {
 	return NewFileLedgerWithClock(path, time.Now)
 }
@@ -50,11 +55,11 @@ func (f *FileLedger) load() error {
 }
 
 func (f *FileLedger) save() error {
-	bytes, err := json.MarshalIndent(f.data, "", "  ")
+	bytes, err := fileLedgerMarshalIndent(f.data, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(f.path, bytes, 0600)
+	return fileLedgerWriteFile(f.path, bytes, 0600)
 }
 
 func (f *FileLedger) Create(ctx context.Context, obl Obligation) error {

@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/modelproviders"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 )
 
@@ -70,11 +71,33 @@ func EvaluateMissionReadiness(app registry.AppSpec, substrate registry.Substrate
 	}
 
 	requiredEnv := modelGatewayEnv(app)
-	for _, envName := range requiredEnv {
-		if value, ok := opts.EnvLookup(envName); !ok || value == "" {
-			add("secret."+envName, GateFail, envName+" is required for live OpenRouter local-container e2e")
+	if modelGatewayAcceptsAnyProviderEnv(app, requiredEnv) {
+		present := []string{}
+		for _, group := range modelGatewayEnvGroups(app, requiredEnv) {
+			complete := true
+			for _, envName := range group {
+				if value, ok := opts.EnvLookup(envName); !ok || value == "" {
+					complete = false
+					break
+				}
+			}
+			if complete {
+				present = group
+				break
+			}
+		}
+		if len(present) == 0 {
+			add("secret.model_gateway_provider", GateFail, "one complete supported BYO model provider env group is required for live local-container e2e")
 		} else {
-			add("secret."+envName, GatePass, envName+" is present")
+			add("secret."+strings.Join(present, "."), GatePass, strings.Join(present, "+")+" is present")
+		}
+	} else {
+		for _, envName := range requiredEnv {
+			if value, ok := opts.EnvLookup(envName); !ok || value == "" {
+				add("secret."+envName, GateFail, envName+" is required for live local-container e2e")
+			} else {
+				add("secret."+envName, GatePass, envName+" is present")
+			}
 		}
 	}
 	for _, tool := range []string{"docker", "cosign", "syft"} {
@@ -150,7 +173,51 @@ func modelGatewayEnv(app registry.AppSpec) []string {
 	if len(app.ModelGatewayEnv) > 0 {
 		return append([]string{}, app.ModelGatewayEnv...)
 	}
-	return nil
+	if !modelGatewayUsesCatalog(app) {
+		return nil
+	}
+	catalog, err := modelproviders.DefaultCatalog()
+	if err != nil {
+		return nil
+	}
+	envNames, err := catalog.EnvNamesForProviderIDs(app.ModelGateway.ProviderIDs)
+	if err != nil {
+		return nil
+	}
+	return envNames
+}
+
+func modelGatewayEnvGroups(app registry.AppSpec, envNames []string) [][]string {
+	if !modelGatewayUsesCatalog(app) {
+		return singletonEnvGroups(envNames)
+	}
+	catalog, err := modelproviders.DefaultCatalog()
+	if err != nil {
+		return singletonEnvGroups(envNames)
+	}
+	groups, err := catalog.EnvGroupsForProviderIDs(app.ModelGateway.ProviderIDs)
+	if err != nil || len(groups) == 0 {
+		return singletonEnvGroups(envNames)
+	}
+	return groups
+}
+
+func modelGatewayUsesCatalog(app registry.AppSpec) bool {
+	provider := strings.ToLower(strings.TrimSpace(app.ModelGateway.Provider))
+	return provider == "byo" || provider == "multi"
+}
+
+func modelGatewayAcceptsAnyProviderEnv(app registry.AppSpec, envNames []string) bool {
+	provider := strings.ToLower(strings.TrimSpace(app.ModelGateway.Provider))
+	return len(envNames) > 1 && (provider == "byo" || provider == "multi" || len(app.ModelGateway.ProviderIDs) > 1)
+}
+
+func singletonEnvGroups(envNames []string) [][]string {
+	groups := make([][]string, 0, len(envNames))
+	for _, envName := range envNames {
+		groups = append(groups, []string{envName})
+	}
+	return groups
 }
 
 func defaultToolLookup(name string) (string, bool) {

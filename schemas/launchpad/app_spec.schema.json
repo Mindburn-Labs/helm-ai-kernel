@@ -19,6 +19,7 @@
       "properties": {
         "logical_secret": { "type": "string" },
         "provider": { "type": "string" },
+        "provider_ids": { "type": "array", "items": { "type": "string" } },
         "mode": { "enum": ["logical_binding_env_projection", "raw_provider_key", "token_broker", "external_byo"] },
         "raw_provider_key_projected": { "type": "boolean" }
       },

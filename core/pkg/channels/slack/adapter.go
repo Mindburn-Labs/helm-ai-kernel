@@ -207,9 +207,6 @@ func (a *Adapter) postJSON(ctx context.Context, method string, payload map[strin
 // It returns 0 on any parse failure.
 func tsToUnixMs(ts string) int64 {
 	parts := strings.SplitN(ts, ".", 2)
-	if len(parts) == 0 {
-		return 0
-	}
 	secs, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
 		return 0

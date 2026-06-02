@@ -25,31 +25,13 @@ RUN apt-get update \
 
 COPY --from=build /src/openclaw /opt/openclaw
 COPY --from=build /licenses /licenses
+COPY .helm-launchpad-model-gateway-check.sh /usr/local/bin/helm-launchpad-model-gateway-check
 
 RUN <<'SH'
 set -eu
 ln -sf /opt/openclaw/openclaw.mjs /usr/local/bin/openclaw
-cat > /usr/local/bin/helm-launchpad-openrouter-check <<'CHECK'
-#!/bin/sh
-set -eu
-if [ -z "${OPENROUTER_API_KEY:-}" ]; then
-  echo "OPENROUTER_API_KEY missing" >&2
-  exit 42
-fi
-if [ -z "${HTTPS_PROXY:-}" ] && [ -z "${HTTP_PROXY:-}" ]; then
-  echo "Launchpad egress proxy missing" >&2
-  exit 43
-fi
-status="$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
-  --output /dev/null --write-out "%{http_code}" \
-  -H "Authorization: Bearer ${OPENROUTER_API_KEY}" \
-  https://openrouter.ai/api/v1/key || true)"
-if [ "$status" != "200" ]; then
-  echo "OpenRouter key check failed with HTTP status ${status}" >&2
-  exit 44
-fi
-CHECK
-chmod 0755 /usr/local/bin/helm-launchpad-openrouter-check
+ln -sf /usr/local/bin/helm-launchpad-model-gateway-check /usr/local/bin/helm-launchpad-openrouter-check
+chmod 0755 /usr/local/bin/helm-launchpad-model-gateway-check
 chown -R helm:helm /opt/openclaw /licenses
 SH
 

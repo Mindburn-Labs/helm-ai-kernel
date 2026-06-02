@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/modelproviders"
 )
 
 type EvidencePackManifest struct {
@@ -211,7 +213,39 @@ var evidenceSecretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`hf_[A-Za-z0-9]{20,}`),
 }
 
-var evidenceSecretAssignmentPattern = regexp.MustCompile(`(?i)(OPENROUTER_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY)(["']?\s*[:=]\s*["']?)[A-Za-z0-9_\-\.=]{8,}`)
+var evidenceSecretAssignmentPattern = regexp.MustCompile(evidenceSecretAssignmentPatternSource())
+
+func evidenceSecretAssignmentPatternSource() string {
+	envNames := []string{
+		"ANTHROPIC_API_KEY",
+		"HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY",
+		"OPENAI_API_KEY",
+		"OPENROUTER_API_KEY",
+	}
+	if catalog, err := modelproviders.DefaultCatalog(); err == nil {
+		envNames = envNames[:0]
+		seen := map[string]struct{}{}
+		for _, provider := range catalog.Providers {
+			for _, envName := range provider.Env {
+				if _, ok := seen[envName]; ok {
+					continue
+				}
+				seen[envName] = struct{}{}
+				envNames = append(envNames, envName)
+				ciEnvName := "HELM_LAUNCHPAD_CI_" + strings.TrimSuffix(envName, "_API_KEY") + "_API_KEY"
+				if _, ok := seen[ciEnvName]; !ok {
+					seen[ciEnvName] = struct{}{}
+					envNames = append(envNames, ciEnvName)
+				}
+			}
+		}
+	}
+	sort.Strings(envNames)
+	for i, envName := range envNames {
+		envNames[i] = regexp.QuoteMeta(envName)
+	}
+	return `(?i)(` + strings.Join(envNames, "|") + `)(["']?\s*[:=]\s*["']?)[A-Za-z0-9_\-\.=]{8,}`
+}
 
 func redactEvidenceArtifacts(artifacts map[string][]byte) {
 	for name, data := range artifacts {

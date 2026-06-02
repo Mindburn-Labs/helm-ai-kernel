@@ -59,14 +59,44 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ github.token }}
+          HELM_LAUNCHPAD_CI_MODEL_PROVIDER_SECRET_JSON: ${{ secrets.HELM_LAUNCHPAD_CI_MODEL_PROVIDER_SECRET_JSON }}
           HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
+          ALEPH_ALPHA_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_ALEPH_ALPHA_API_KEY || secrets.ALEPH_ALPHA_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_ANTHROPIC_API_KEY || secrets.ANTHROPIC_API_KEY }}
+          ARK_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_ARK_API_KEY || secrets.ARK_API_KEY }}
+          BAICHUAN_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_BAICHUAN_API_KEY || secrets.BAICHUAN_API_KEY }}
+          BIGMODEL_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_BIGMODEL_API_KEY || secrets.BIGMODEL_API_KEY }}
+          CEREBRAS_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_CEREBRAS_API_KEY || secrets.CEREBRAS_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_COHERE_API_KEY || secrets.COHERE_API_KEY }}
+          DASHSCOPE_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_DASHSCOPE_API_KEY || secrets.DASHSCOPE_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_DEEPSEEK_API_KEY || secrets.DEEPSEEK_API_KEY }}
+          FIREWORKS_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_FIREWORKS_API_KEY || secrets.FIREWORKS_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_GEMINI_API_KEY || secrets.GEMINI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_GOOGLE_API_KEY || secrets.GOOGLE_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_GROQ_API_KEY || secrets.GROQ_API_KEY }}
+          HUNYUAN_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_HUNYUAN_API_KEY || secrets.HUNYUAN_API_KEY }}
+          IFLYTEK_SPARK_API_PASSWORD: ${{ secrets.HELM_LAUNCHPAD_CI_IFLYTEK_SPARK_API_PASSWORD || secrets.IFLYTEK_SPARK_API_PASSWORD }}
+          LINGYIWANWU_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_LINGYIWANWU_API_KEY || secrets.LINGYIWANWU_API_KEY }}
+          MINIMAX_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_MINIMAX_API_KEY || secrets.MINIMAX_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_MISTRAL_API_KEY || secrets.MISTRAL_API_KEY }}
+          MOONSHOT_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_MOONSHOT_API_KEY || secrets.MOONSHOT_API_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_NVIDIA_API_KEY || secrets.NVIDIA_API_KEY }}
+          NVIDIA_NIM_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_NVIDIA_NIM_API_KEY || secrets.NVIDIA_NIM_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY || secrets.OPENROUTER_API_KEY }}
+          PERPLEXITY_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_PERPLEXITY_API_KEY || secrets.PERPLEXITY_API_KEY }}
+          QIANFAN_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_QIANFAN_API_KEY || secrets.QIANFAN_API_KEY }}
+          STEP_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_STEP_API_KEY || secrets.STEP_API_KEY }}
+          STEPFUN_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_STEPFUN_API_KEY || secrets.STEPFUN_API_KEY }}
+          TENCENT_HUNYUAN_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_TENCENT_HUNYUAN_API_KEY || secrets.TENCENT_HUNYUAN_API_KEY }}
+          TOGETHER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_TOGETHER_API_KEY || secrets.TOGETHER_API_KEY }}
+          VOLCENGINE_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_VOLCENGINE_API_KEY || secrets.VOLCENGINE_API_KEY }}
+          XFYUN_SPARK_API_PASSWORD: ${{ secrets.HELM_LAUNCHPAD_CI_XFYUN_SPARK_API_PASSWORD || secrets.XFYUN_SPARK_API_PASSWORD }}
+          XAI_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_XAI_API_KEY || secrets.XAI_API_KEY }}
+          YI_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_YI_API_KEY || secrets.YI_API_KEY }}
+          ZHIPU_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_ZHIPU_API_KEY || secrets.ZHIPU_API_KEY }}
         run: |
           set -euo pipefail
-          if [[ -z "${HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY}" ]]; then
-            echo "HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY is not configured" >&2
-            exit 1
-          fi
           bash scripts/launch/clean_install_gate.sh \
             --release-tag "${{ inputs.release_tag }}" \
             --artifact-run-id "${{ inputs.artifact_run_id }}" \

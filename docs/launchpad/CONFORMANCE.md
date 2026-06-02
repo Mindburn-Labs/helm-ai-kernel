@@ -54,9 +54,10 @@ Implemented checks currently prove:
   `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550`.
 - Kilo Code image:
   `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6`.
-- Local-container OpenRouter egress requires a launch-scoped egress proxy
-  receipt, can use the signed egress-proxy image from the artifact workflow, and
-  rejects non-OpenRouter allowlists.
+- Local-container BYO model-provider egress requires a launch-scoped egress
+  proxy receipt, can use the signed egress-proxy image from the artifact
+  workflow, and rejects destinations outside the embedded model-provider
+  catalog.
 - Installer tests reject missing digests, host `curl | bash`, mutable git
   update patterns, and package-manager mutation inside the current worktree.
 - MCP governance rejects unknown or revoked tools and requires schema pins.
@@ -130,7 +131,7 @@ No additional app may move to `oss_supported` until it passes the same bar.
 brew update
 brew install mindburnlabs/tap/helm-ai-kernel
 helm-ai-kernel launch matrix --json
-helm-ai-kernel launch secrets set model_gateway --provider openrouter --value-env OPENROUTER_API_KEY
+helm-ai-kernel launch secrets set model_gateway --provider openai --value-env OPENAI_API_KEY
 helm-ai-kernel launch openclaw local-container --headless --output json
 helm-ai-kernel launch hermes local-container --headless --output json
 helm-ai-kernel launch opencode local-container --headless --output json

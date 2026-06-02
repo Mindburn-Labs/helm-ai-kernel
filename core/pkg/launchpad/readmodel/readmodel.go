@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/modelproviders"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/secrets"
@@ -215,9 +216,9 @@ func RegistryApps(catalog *registry.Catalog, secretStatuses []secrets.Status, ru
 	if catalog == nil {
 		return []RegistryApp{}
 	}
-	secretMap := map[string]secrets.Status{}
+	secretMap := map[string][]secrets.Status{}
 	for _, status := range secretStatuses {
-		secretMap[status.Name] = status
+		secretMap[status.Name] = append(secretMap[status.Name], status)
 	}
 	latestEvidence := map[string]string{}
 	for _, run := range runs {
@@ -229,6 +230,8 @@ func RegistryApps(catalog *registry.Catalog, secretStatuses []secrets.Status, ru
 	apps := make([]RegistryApp, 0, len(catalog.Apps))
 	for _, app := range catalog.Apps {
 		missing := missingSecrets(app, secretMap)
+		modelGatewayEnv := modelGatewayEnvNames(app)
+		networkNeeds := networkAllowlist(app)
 		status := appStatus(app, missing, latestEvidence[app.ID])
 		apps = append(apps, RegistryApp{
 			ID:                   app.ID,
@@ -242,11 +245,11 @@ func RegistryApps(catalog *registry.Catalog, secretStatuses []secrets.Status, ru
 			Redistribution:       app.Redistribution,
 			InstallStrategy:      app.Install.Strategy,
 			RequiredSecrets:      cloneStrings(app.RequiredSecrets),
-			ModelGatewayEnv:      cloneStrings(app.ModelGatewayEnv),
+			ModelGatewayEnv:      modelGatewayEnv,
 			DeclaredCapabilities: declaredCapabilities(app),
 			MCPServers:           mcpServers(app),
 			FilesystemNeeds:      cloneStrings(app.FilesystemPolicy.Mounts),
-			NetworkNeeds:         cloneStrings(app.NetworkPolicy.Allowlist),
+			NetworkNeeds:         networkNeeds,
 			Healthcheck:          app.Healthchecks,
 			TeardownRecipe:       map[string]any{"cascade": true, "remove_container": true, "revoke_secret_grants": true, "close_mcp_sessions": true},
 			EvidenceProfile:      cloneStrings(app.EvidenceRequirements),
@@ -457,11 +460,11 @@ func SandboxGrant(app registry.AppSpec, substrate registry.SubstrateSpec, run se
 	if len(grant.FilesystemPreopens) == 0 {
 		grant.FilesystemPreopens = []string{"deny-by-default"}
 	}
-	grant.NetworkPolicy = cloneStrings(app.NetworkPolicy.Allowlist)
+	grant.NetworkPolicy = networkAllowlist(app)
 	if len(grant.NetworkPolicy) == 0 {
 		grant.NetworkPolicy = []string{"default-deny"}
 	}
-	grant.Env = cloneStrings(app.ModelGatewayEnv)
+	grant.Env = modelGatewayEnvNames(app)
 	if len(grant.Env) == 0 {
 		grant.Env = []string{"none"}
 	}
@@ -541,7 +544,8 @@ func MCPThreatReviews(catalog *registry.Catalog, runs []session.LaunchRun) []MCP
 func PolicySimulationForApp(app registry.AppSpec, compiled plan.LaunchPlan) PolicySimulation {
 	verdict := compiled.KernelVerdict
 	reason := compiled.ReasonCode
-	plain := fmt.Sprintf("%s uses deny-by-default filesystem policy %q and network policy with %d allowlisted destination(s).", app.Name, app.FilesystemPolicy.PolicyRef, len(app.NetworkPolicy.Allowlist))
+	networkNeeds := networkAllowlist(app)
+	plain := fmt.Sprintf("%s uses deny-by-default filesystem policy %q and network policy with %d allowlisted destination(s).", app.Name, app.FilesystemPolicy.PolicyRef, len(networkNeeds))
 	if reason == "ERR_LAUNCHPAD_REQUIRED_SECRET_MISSING" {
 		plain = "Policy simulation is blocked until required secret grants exist; runtime remains fail-closed."
 	}
@@ -552,7 +556,7 @@ func PolicySimulationForApp(app registry.AppSpec, compiled plan.LaunchPlan) Poli
 		PlainEnglish: plain,
 		Structured: map[string]any{
 			"filesystem": map[string]any{"default": "deny", "allow": app.FilesystemPolicy.Mounts, "policy_ref": app.FilesystemPolicy.PolicyRef},
-			"network":    map[string]any{"default": app.NetworkPolicy.Default, "allow": app.NetworkPolicy.Allowlist},
+			"network":    map[string]any{"default": app.NetworkPolicy.Default, "allow": networkNeeds},
 			"mcp":        app.MCPPolicy,
 			"secrets":    app.RequiredSecrets,
 		},
@@ -571,31 +575,175 @@ func PolicySimulationForApp(app registry.AppSpec, compiled plan.LaunchPlan) Poli
 	}
 }
 
-func missingSecrets(app registry.AppSpec, secretMap map[string]secrets.Status) []string {
+func missingSecrets(app registry.AppSpec, secretMap map[string][]secrets.Status) []string {
 	missing := []string{}
-	for _, envName := range app.ModelGatewayEnv {
-		if os.Getenv(envName) != "" {
-			continue
-		}
-		bound := false
-		for _, logical := range app.RequiredSecrets {
-			if status, ok := secretMap[logical]; ok && status.Available {
-				bound = true
-				break
+	envNames := modelGatewayEnvNames(app)
+	if len(envNames) > 0 {
+		if modelGatewayAcceptsAnyProviderEnv(app, envNames) {
+			if anyCompleteModelGatewayEnvGroupAvailable(app, envNames, secretMap) {
+				return nil
 			}
+			return []string{missingProviderEnvGroupMessage(modelGatewayEnvGroups(app, envNames))}
 		}
-		if !bound {
+		for _, envName := range envNames {
+			if envAvailable(app, envName, secretMap) {
+				continue
+			}
 			missing = append(missing, envName)
 		}
+		return missing
 	}
-	if len(app.ModelGatewayEnv) == 0 {
+	if len(envNames) == 0 {
 		for _, logical := range app.RequiredSecrets {
-			if status, ok := secretMap[logical]; !ok || !status.Available {
+			if !logicalSecretAvailable(secretMap[logical]) {
 				missing = append(missing, logical)
 			}
 		}
 	}
 	return missing
+}
+
+func modelGatewayUsesCatalog(app registry.AppSpec) bool {
+	provider := strings.ToLower(strings.TrimSpace(app.ModelGateway.Provider))
+	return provider == "byo" || provider == "multi"
+}
+
+func modelGatewayEnvNames(app registry.AppSpec) []string {
+	if len(app.ModelGatewayEnv) > 0 {
+		return cloneStrings(app.ModelGatewayEnv)
+	}
+	if !modelGatewayUsesCatalog(app) {
+		return []string{}
+	}
+	catalog, err := modelproviders.DefaultCatalog()
+	if err != nil {
+		return []string{}
+	}
+	envNames, err := catalog.EnvNamesForProviderIDs(app.ModelGateway.ProviderIDs)
+	if err != nil {
+		return []string{}
+	}
+	return envNames
+}
+
+func networkAllowlist(app registry.AppSpec) []string {
+	if len(app.NetworkPolicy.Allowlist) > 0 || !modelGatewayUsesCatalog(app) {
+		return cloneStrings(app.NetworkPolicy.Allowlist)
+	}
+	catalog, err := modelproviders.DefaultCatalog()
+	if err != nil {
+		return []string{}
+	}
+	baseURLs, err := catalog.BaseURLsForProviderIDsWithEnv(app.ModelGateway.ProviderIDs, os.LookupEnv)
+	if err != nil {
+		return []string{}
+	}
+	return baseURLs
+}
+
+func modelGatewayAcceptsAnyProviderEnv(app registry.AppSpec, envNames []string) bool {
+	provider := strings.ToLower(strings.TrimSpace(app.ModelGateway.Provider))
+	return len(envNames) > 1 && (provider == "byo" || provider == "multi" || len(app.ModelGateway.ProviderIDs) > 1)
+}
+
+func anyCompleteModelGatewayEnvGroupAvailable(app registry.AppSpec, envNames []string, secretMap map[string][]secrets.Status) bool {
+	for _, group := range modelGatewayEnvGroups(app, envNames) {
+		complete := true
+		for _, envName := range group {
+			if !envAvailable(app, envName, secretMap) {
+				complete = false
+				break
+			}
+		}
+		if complete {
+			return true
+		}
+	}
+	return false
+}
+
+func modelGatewayEnvGroups(app registry.AppSpec, envNames []string) [][]string {
+	if !modelGatewayUsesCatalog(app) {
+		return singletonEnvGroups(envNames)
+	}
+	catalog, err := modelproviders.DefaultCatalog()
+	if err != nil {
+		return singletonEnvGroups(envNames)
+	}
+	groups, err := catalog.EnvGroupsForProviderIDs(app.ModelGateway.ProviderIDs)
+	if err != nil || len(groups) == 0 {
+		return singletonEnvGroups(envNames)
+	}
+	return groups
+}
+
+func envAvailable(app registry.AppSpec, envName string, secretMap map[string][]secrets.Status) bool {
+	if os.Getenv(envName) != "" {
+		return true
+	}
+	catalog, _ := modelproviders.DefaultCatalog()
+	for _, logical := range app.RequiredSecrets {
+		statuses := secretMap[logical]
+		for _, status := range statuses {
+			if !status.Available {
+				continue
+			}
+			if logical == "model_gateway" && status.Provider != "" && !providerMatchesEnv(catalog, status.Provider, envName) {
+				continue
+			}
+			if logical == "model_gateway" && status.Provider != "" && !providerCanProjectCredential(catalog, status.Provider, envName) {
+				continue
+			}
+			return true
+		}
+	}
+	return false
+}
+
+func providerCanProjectCredential(catalog modelproviders.Catalog, providerID, envName string) bool {
+	provider, ok := catalog.ProviderForID(providerID)
+	return ok && provider.CanProjectCredential(envName)
+}
+
+func singletonEnvGroups(envNames []string) [][]string {
+	groups := make([][]string, 0, len(envNames))
+	for _, envName := range envNames {
+		groups = append(groups, []string{envName})
+	}
+	return groups
+}
+
+func formatEnvGroups(groups [][]string) string {
+	formatted := make([]string, 0, len(groups))
+	for _, group := range groups {
+		formatted = append(formatted, strings.Join(group, "+"))
+	}
+	return strings.Join(formatted, " or ")
+}
+
+func missingProviderEnvGroupMessage(groups [][]string) string {
+	if len(groups) > 8 {
+		return "one complete catalog-backed provider env group"
+	}
+	return "one complete provider env group: " + formatEnvGroups(groups)
+}
+
+func providerMatchesEnv(catalog modelproviders.Catalog, providerID, envName string) bool {
+	for _, candidate := range catalog.ProviderIDsForEnv(envName) {
+		if candidate == providerID {
+			return true
+		}
+	}
+	return false
+}
+
+func logicalSecretAvailable(statuses []secrets.Status) bool {
+	for _, status := range statuses {
+		if status.Available {
+			return true
+		}
+	}
+	return false
 }
 
 func appStatus(app registry.AppSpec, missing []string, lastEvidence string) AppStatus {
@@ -619,7 +767,7 @@ func appStatus(app registry.AppSpec, missing []string, lastEvidence string) AppS
 
 func declaredCapabilities(app registry.AppSpec) []string {
 	values := []string{"artifact-first-launch", "receipt-backed-runtime", "evidencepack-export"}
-	if len(app.NetworkPolicy.Allowlist) > 0 {
+	if len(networkAllowlist(app)) > 0 {
 		values = append(values, "scoped-network-egress")
 	}
 	if len(app.MCPPolicy.UnknownServerPolicy) > 0 {
@@ -733,8 +881,9 @@ func fixActionsFor(reason, id string) []FixAction {
 }
 
 func secretFixActions(app registry.AppSpec) []FixAction {
-	logical := firstNonEmptyString(first(app.RequiredSecrets), first(app.ModelGatewayEnv), "<name>")
-	env := firstNonEmptyString(first(app.ModelGatewayEnv), logical)
+	envNames := modelGatewayEnvNames(app)
+	logical := firstNonEmptyString(first(app.RequiredSecrets), first(envNames), "<name>")
+	env := firstNonEmptyString(first(envNames), logical)
 	return []FixAction{{
 		Label:       "Bind AppSpec secret",
 		CLI:         fmt.Sprintf("helm-ai-kernel secret set %s --provider env --value-env %s", logical, env),

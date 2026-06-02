@@ -1,6 +1,6 @@
 ---
 title: OSS Traction Playbook
-last_reviewed: 2026-06-01
+last_reviewed: 2026-06-02
 ---
 
 # OSS Traction Playbook
@@ -34,5 +34,17 @@ Short description: HELM AI Kernel is an open-source execution firewall for MCP a
 ## Proof Assets
 
 - Social preview: [helm-social-preview.png](assets/helm-social-preview.png)
-- MCP quarantine image: [helm-mcp-quarantine-demo.png](assets/helm-mcp-quarantine-demo.png)
+- Social preview source: [helm-social-preview.svg](assets/helm-social-preview.svg)
+- MCP quarantine proof board: [helm-mcp-quarantine-demo.png](assets/helm-mcp-quarantine-demo.png)
+- MCP quarantine proof board source: [helm-mcp-quarantine-demo.svg](assets/helm-mcp-quarantine-demo.svg)
 - Sanitized transcripts: [examples/launch/assets](../examples/launch/assets)
+
+Use the PNG files for README, launch posts, and link previews. Keep the SVG
+files as the editable sources when copy, layout, or proof framing changes.
+
+Render updated PNG files from the SVG sources before publishing visual changes:
+
+```bash
+rsvg-convert docs/assets/helm-mcp-quarantine-demo.svg -w 1600 -h 900 -o docs/assets/helm-mcp-quarantine-demo.png
+rsvg-convert docs/assets/helm-social-preview.svg -w 1280 -h 640 -o docs/assets/helm-social-preview.png
+```

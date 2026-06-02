@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/modelproviders"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
 )
@@ -62,11 +63,12 @@ func (s Store) Set(name, provider, valueEnv string) (Binding, error) {
 		return Binding{}, err
 	}
 	now := time.Now().UTC()
+	key := bindingKey(name, provider)
 	binding := Binding{Name: name, Provider: provider, ValueEnv: valueEnv, CreatedAt: now, UpdatedAt: now}
-	if existing, ok := bindings[name]; ok {
+	if existing, ok := bindings[key]; ok {
 		binding.CreatedAt = existing.CreatedAt
 	}
-	bindings[name] = binding
+	bindings[key] = binding
 	if err := s.save(bindings); err != nil {
 		return Binding{}, err
 	}
@@ -103,13 +105,37 @@ func (s Store) ApplyAppEnv(app registry.AppSpec) (map[string]string, error) {
 		return nil, err
 	}
 	projected := map[string]string{}
-	for _, envName := range app.ModelGatewayEnv {
+	catalog, _ := modelproviders.DefaultCatalog()
+	envNames := modelGatewayEnvNames(app, catalog)
+	for _, envName := range envNames {
 		if os.Getenv(envName) != "" {
 			continue
+		}
+		for _, providerID := range catalog.ProviderIDsForEnv(envName) {
+			if !providerCanProjectCredential(catalog, providerID, envName) {
+				continue
+			}
+			if binding, ok := bindings[bindingKey("model_gateway", providerID)]; ok {
+				value := os.Getenv(binding.ValueEnv)
+				if value == "" {
+					continue
+				}
+				if err := os.Setenv(envName, value); err != nil {
+					return nil, err
+				}
+				projected[envName] = binding.Name + ":" + binding.Provider
+				goto nextEnv
+			}
 		}
 		for _, logical := range app.RequiredSecrets {
 			binding, ok := bindings[logical]
 			if !ok || binding.ValueEnv == "" {
+				continue
+			}
+			if logical == "model_gateway" && binding.Provider != "" && !providerMatchesEnv(catalog, binding.Provider, envName) {
+				continue
+			}
+			if logical == "model_gateway" && binding.Provider != "" && !providerCanProjectCredential(catalog, binding.Provider, envName) {
 				continue
 			}
 			value := os.Getenv(binding.ValueEnv)
@@ -122,6 +148,7 @@ func (s Store) ApplyAppEnv(app registry.AppSpec) (map[string]string, error) {
 			projected[envName] = logical
 			break
 		}
+	nextEnv:
 	}
 	return projected, nil
 }
@@ -163,4 +190,40 @@ func (s Store) save(bindings map[string]Binding) error {
 
 func (s Store) path() string {
 	return filepath.Join(s.root, "secrets", "bindings.json")
+}
+
+func bindingKey(name, provider string) string {
+	if name == "model_gateway" && provider != "" {
+		return name + ":" + provider
+	}
+	return name
+}
+
+func providerMatchesEnv(catalog modelproviders.Catalog, providerID, envName string) bool {
+	for _, candidate := range catalog.ProviderIDsForEnv(envName) {
+		if candidate == providerID {
+			return true
+		}
+	}
+	return false
+}
+
+func providerCanProjectCredential(catalog modelproviders.Catalog, providerID, envName string) bool {
+	provider, ok := catalog.ProviderForID(providerID)
+	return ok && provider.CanProjectCredential(envName)
+}
+
+func modelGatewayEnvNames(app registry.AppSpec, catalog modelproviders.Catalog) []string {
+	if len(app.ModelGatewayEnv) > 0 {
+		return app.ModelGatewayEnv
+	}
+	provider := strings.ToLower(strings.TrimSpace(app.ModelGateway.Provider))
+	if provider != "byo" && provider != "multi" {
+		return nil
+	}
+	envNames, err := catalog.EnvNamesForProviderIDs(app.ModelGateway.ProviderIDs)
+	if err != nil {
+		return nil
+	}
+	return envNames
 }

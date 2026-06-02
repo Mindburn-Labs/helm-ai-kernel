@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/mcp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/modelproviders"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
@@ -42,20 +43,15 @@ func TestReferencePacksVerifyOffline(t *testing.T) {
 func TestMissingModelSecretEscalates(t *testing.T) {
 	root := repoRoot(t)
 	previousModelGateway, hadModelGateway := os.LookupEnv("model_gateway")
-	previousOpenRouter, hadOpenRouter := os.LookupEnv("OPENROUTER_API_KEY")
 	if err := os.Unsetenv("model_gateway"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Unsetenv("OPENROUTER_API_KEY"); err != nil {
-		t.Fatal(err)
-	}
+	restoreProviderEnv := unsetCatalogProviderEnv(t)
 	defer func() {
 		if hadModelGateway {
 			_ = os.Setenv("model_gateway", previousModelGateway)
 		}
-		if hadOpenRouter {
-			_ = os.Setenv("OPENROUTER_API_KEY", previousOpenRouter)
-		}
+		restoreProviderEnv()
 	}()
 	catalog, err := registry.LoadCatalog(root)
 	if err != nil {
@@ -76,8 +72,41 @@ func TestMissingModelSecretEscalates(t *testing.T) {
 	if compiled.KernelVerdict != "ESCALATE" || compiled.Status != "ESCALATED" || compiled.ReasonCode != "ERR_LAUNCHPAD_REQUIRED_SECRET_MISSING" {
 		t.Fatalf("unexpected missing secret plan: %#v", compiled)
 	}
-	if compiled.Nodes["missing_secret"] != "OPENROUTER_API_KEY" {
-		t.Fatalf("missing model gateway must name scoped env secret, got %#v", compiled.Nodes["missing_secret"])
+	missing, ok := compiled.Nodes["missing_secret"].(string)
+	if !ok || missing != "one complete catalog-backed provider env group" {
+		t.Fatalf("missing model gateway must name catalog-backed BYO env set, got %#v", compiled.Nodes["missing_secret"])
+	}
+}
+
+func unsetCatalogProviderEnv(t *testing.T) func() {
+	t.Helper()
+	catalog, err := modelproviders.DefaultCatalog()
+	if err != nil {
+		t.Fatalf("DefaultCatalog: %v", err)
+	}
+	previous := map[string]string{}
+	present := map[string]bool{}
+	for _, provider := range catalog.Providers {
+		for _, envName := range provider.Env {
+			if _, seen := present[envName]; seen {
+				continue
+			}
+			value, ok := os.LookupEnv(envName)
+			present[envName] = ok
+			previous[envName] = value
+			if err := os.Unsetenv(envName); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	return func() {
+		for envName, wasPresent := range present {
+			if wasPresent {
+				_ = os.Setenv(envName, previous[envName])
+			} else {
+				_ = os.Unsetenv(envName)
+			}
+		}
 	}
 }
 

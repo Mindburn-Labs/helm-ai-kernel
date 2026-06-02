@@ -1,0 +1,79 @@
+name: Launchpad Model Provider Catalog
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "42 4 * * *"
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'core/pkg/launchpad/modelproviders/**'
+      - 'scripts/launch/update_model_provider_catalog.py'
+      - 'tools/launchpad/artifacts/model-gateway-check.sh'
+      - '.github/workflows/launchpad-model-provider-catalog.yml'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.12"
+      - name: Validate provider sources
+        run: python3 scripts/launch/update_model_provider_catalog.py --network
+      - name: Validate and normalize catalog
+        run: python3 scripts/launch/update_model_provider_catalog.py --write
+      - name: Summarize catalog coverage
+        run: python3 scripts/launch/update_model_provider_catalog.py --summary >> "$GITHUB_STEP_SUMMARY"
+      - name: Ensure generated catalog artifacts are committed
+        run: git diff --exit-code -- core/pkg/launchpad/modelproviders/catalog.json scripts/launch/update_model_provider_catalog.py tools/launchpad/artifacts/model-gateway-check.sh
+
+  open-refresh-pr:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.12"
+      - name: Refresh catalog source fingerprints
+        run: python3 scripts/launch/update_model_provider_catalog.py --network --write
+      - name: Summarize catalog coverage
+        run: python3 scripts/launch/update_model_provider_catalog.py --summary >> "$GITHUB_STEP_SUMMARY"
+      - name: Open refresh PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- core/pkg/launchpad/modelproviders/catalog.json core/pkg/launchpad/modelproviders/source_fingerprints.json scripts/launch/update_model_provider_catalog.py tools/launchpad/artifacts/model-gateway-check.sh; then
+            echo "Catalog is already current."
+            exit 0
+          fi
+          branch="automation/model-provider-catalog-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add core/pkg/launchpad/modelproviders/catalog.json core/pkg/launchpad/modelproviders/source_fingerprints.json scripts/launch/update_model_provider_catalog.py tools/launchpad/artifacts/model-gateway-check.sh
+          git commit -m "chore: refresh Launchpad model provider catalog"
+          git push origin "$branch"
+          gh pr create \
+            --title "chore: refresh Launchpad model provider catalog" \
+            --body "Automated Launchpad BYO model provider catalog refresh." \
+            --base main \
+            --head "$branch"

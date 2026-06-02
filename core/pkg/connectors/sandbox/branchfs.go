@@ -16,13 +16,19 @@ type BranchFS struct {
 	BranchDir string
 }
 
+var (
+	branchFSTempDir   = os.TempDir
+	branchFSMkdirAll  = os.MkdirAll
+	branchFSRemoveAll = os.RemoveAll
+)
+
 // NewBranchFS initializes a speculative BranchFS.
 func NewBranchFS(baseDir, branchID string) (*BranchFS, error) {
 	// Note: In a production environment with proper CAP_SYS_ADMIN capabilities,
 	// this would utilize FUSE or overlayfs. We simulate this by creating an
 	// isolated branch directory.
-	branchDir := filepath.Join(os.TempDir(), "helm-branchfs", branchID)
-	if err := os.MkdirAll(branchDir, 0755); err != nil {
+	branchDir := filepath.Join(branchFSTempDir(), "helm-branchfs", branchID)
+	if err := branchFSMkdirAll(branchDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create BranchFS directory: %w", err)
 	}
 
@@ -56,5 +62,5 @@ func (b *BranchFS) Commit(ctx context.Context) (string, error) {
 
 // Cleanup destroys the speculative branch completely, functioning as a rollback.
 func (b *BranchFS) Cleanup() error {
-	return os.RemoveAll(b.BranchDir)
+	return branchFSRemoveAll(b.BranchDir)
 }

@@ -13,6 +13,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+var loadS3DefaultConfig = config.LoadDefaultConfig
+
 // S3Store implements Store interface using AWS S3.
 // Artifacts are stored with their SHA-256 hash as the key prefix.
 type S3Store struct {
@@ -32,7 +34,7 @@ type S3StoreConfig struct {
 // NewS3Store creates a new S3-backed artifact store.
 func NewS3Store(ctx context.Context, cfg S3StoreConfig) (*S3Store, error) {
 	// Load AWS config
-	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(cfg.Region))
+	awsCfg, err := loadS3DefaultConfig(ctx, config.WithRegion(cfg.Region))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
@@ -58,9 +60,7 @@ func NewS3Store(ctx context.Context, cfg S3StoreConfig) (*S3Store, error) {
 func (s *S3Store) Store(ctx context.Context, data []byte) (string, error) {
 	// 1. Compute Hash
 	h := sha256.New()
-	if _, err := h.Write(data); err != nil {
-		return "", fmt.Errorf("hash computation failed: %w", err)
-	}
+	_, _ = h.Write(data)
 	hashBytes := h.Sum(nil)
 	hashStr := hex.EncodeToString(hashBytes)
 	prefixedHash := "sha256:" + hashStr

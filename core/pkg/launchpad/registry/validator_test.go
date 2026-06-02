@@ -223,6 +223,38 @@ network_default = "deny"
 	}
 }
 
+func TestModelGatewayProviderIDsMustExistInCatalog(t *testing.T) {
+	catalog := testCatalog(t, `[app]
+id = "test-app"
+permission_bypass_forbidden = true
+recursive_launch_forbidden = true
+network_default = "deny"
+`, `[substrate]
+id = "local-container"
+permission_bypass_forbidden = true
+recursive_launch_forbidden = true
+network_default = "deny"
+isolation_mode = "docker-default"
+hostile_agent_grade = false
+`)
+	app := &catalog.Apps[0]
+	app.RequiredSecrets = []string{"model_gateway"}
+	app.ModelGateway = ModelGatewaySpec{
+		LogicalSecret:           "model_gateway",
+		Provider:                "byo",
+		ProviderIDs:             []string{"openai", "missing-provider"},
+		Mode:                    "external_byo",
+		RawProviderKeyProjected: true,
+	}
+	app.ModelGatewayEnv = []string{"OPENAI_API_KEY"}
+	app.EvidenceRequirements = append(app.EvidenceRequirements, "model_gateway_broker")
+
+	err := catalog.Validate()
+	if err == nil || !strings.Contains(err.Error(), `unknown model_gateway.provider_ids entry "missing-provider"`) {
+		t.Fatalf("Validate() error = %v, want unknown provider_ids rejection", err)
+	}
+}
+
 func TestDiscoverRootUsesExplicitLaunchpadRegistryRoot(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "registry", "launchpad"), 0o700); err != nil {

@@ -1,0 +1,1090 @@
+{
+  "schema_version": "helm.launchpad.model_providers.v1",
+  "generated_at": "2026-06-02T00:00:00Z",
+  "source_policy": "Official provider API docs or provider-published documentation indexes. The scheduled catalog refresh validates sources and normalizes endpoints before opening a PR.",
+  "providers": [
+    {
+      "id": "01-ai",
+      "name": "01.AI",
+      "regions": [
+        "CN"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "LINGYIWANWU_API_KEY",
+        "YI_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.01.ai/v1"
+      ],
+      "source_urls": [
+        "https://platform.01.ai/docs"
+      ]
+    },
+    {
+      "id": "aleph-alpha",
+      "name": "Aleph Alpha",
+      "regions": [
+        "EU"
+      ],
+      "protocols": [
+        "native"
+      ],
+      "env": [
+        "ALEPH_ALPHA_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.aleph-alpha.com"
+      ],
+      "source_urls": [
+        "https://docs.aleph-alpha.com"
+      ]
+    },
+    {
+      "id": "alibaba-dashscope",
+      "name": "Alibaba Cloud DashScope",
+      "regions": [
+        "CN"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "DASHSCOPE_API_KEY"
+      ],
+      "base_urls": [
+        "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        "https://dashscope.aliyuncs.com/compatible-mode/v1"
+      ],
+      "source_urls": [
+        "https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope"
+      ]
+    },
+    {
+      "id": "amazon-bedrock",
+      "name": "Amazon Bedrock",
+      "regions": [
+        "EU",
+        "US"
+      ],
+      "protocols": [
+        "amazon-bedrock",
+        "anthropic-messages",
+        "openai-compatible"
+      ],
+      "env": [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_BEARER_TOKEN_BEDROCK",
+        "AWS_REGION",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN"
+      ],
+      "base_urls": [
+        "https://bedrock-mantle.eu-central-1.api.aws",
+        "https://bedrock-mantle.eu-west-1.api.aws",
+        "https://bedrock-mantle.us-east-1.api.aws",
+        "https://bedrock-mantle.us-west-2.api.aws",
+        "https://bedrock-runtime.eu-central-1.amazonaws.com",
+        "https://bedrock-runtime.eu-west-1.amazonaws.com",
+        "https://bedrock-runtime.us-east-1.amazonaws.com",
+        "https://bedrock-runtime.us-west-2.amazonaws.com"
+      ],
+      "source_urls": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys-use.html",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/endpoints.html",
+        "https://docs.aws.amazon.com/credref/latest/refdocs/environment-variables.html"
+      ],
+      "credential_env": [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_BEARER_TOKEN_BEDROCK",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN"
+      ],
+      "required_env_groups": [
+        [
+          "AWS_BEARER_TOKEN_BEDROCK",
+          "AWS_REGION"
+        ],
+        [
+          "AWS_ACCESS_KEY_ID",
+          "AWS_REGION",
+          "AWS_SECRET_ACCESS_KEY"
+        ]
+      ]
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "anthropic-messages"
+      ],
+      "env": [
+        "ANTHROPIC_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.anthropic.com/v1"
+      ],
+      "source_urls": [
+        "https://platform.claude.com/docs/en/api/messages"
+      ]
+    },
+    {
+      "id": "azure-ai-foundry",
+      "name": "Azure AI Foundry Models",
+      "regions": [
+        "EU",
+        "US"
+      ],
+      "protocols": [
+        "azure-ai-model-inference"
+      ],
+      "env": [
+        "AZURE_AI_FOUNDRY_ENDPOINT",
+        "AZURE_AI_INFERENCE_ENDPOINT",
+        "AZURE_INFERENCE_CREDENTIAL"
+      ],
+      "base_urls": [],
+      "source_urls": [
+        "https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-models/concepts/endpoints",
+        "https://learn.microsoft.com/en-us/azure/ai-foundry/model-inference/how-to/inference"
+      ],
+      "credential_env": [
+        "AZURE_INFERENCE_CREDENTIAL"
+      ],
+      "required_env_groups": [
+        [
+          "AZURE_AI_FOUNDRY_ENDPOINT",
+          "AZURE_INFERENCE_CREDENTIAL"
+        ],
+        [
+          "AZURE_AI_INFERENCE_ENDPOINT",
+          "AZURE_INFERENCE_CREDENTIAL"
+        ]
+      ],
+      "base_url_env": [
+        "AZURE_AI_FOUNDRY_ENDPOINT",
+        "AZURE_AI_INFERENCE_ENDPOINT"
+      ],
+      "allowed_host_suffixes": [
+        ".services.ai.azure.com"
+      ]
+    },
+    {
+      "id": "azure-openai",
+      "name": "Azure OpenAI",
+      "regions": [
+        "EU",
+        "US"
+      ],
+      "protocols": [
+        "azure-openai",
+        "openai-compatible"
+      ],
+      "env": [
+        "AZURE_OPENAI_API_KEY",
+        "AZURE_OPENAI_API_VERSION",
+        "AZURE_OPENAI_BASE_URL",
+        "AZURE_OPENAI_DEPLOYMENT_NAME",
+        "AZURE_OPENAI_ENDPOINT"
+      ],
+      "base_urls": [],
+      "source_urls": [
+        "https://learn.microsoft.com/en-us/azure/ai-foundry/openai/supported-languages",
+        "https://learn.microsoft.com/en-us/azure/ai-foundry/openai/whisper-quickstart"
+      ],
+      "credential_env": [
+        "AZURE_OPENAI_API_KEY"
+      ],
+      "required_env_groups": [
+        [
+          "AZURE_OPENAI_API_KEY",
+          "AZURE_OPENAI_ENDPOINT"
+        ]
+      ],
+      "base_url_env": [
+        "AZURE_OPENAI_BASE_URL",
+        "AZURE_OPENAI_ENDPOINT"
+      ],
+      "allowed_host_suffixes": [
+        ".openai.azure.com"
+      ]
+    },
+    {
+      "id": "baichuan",
+      "name": "Baichuan AI",
+      "regions": [
+        "CN"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "BAICHUAN_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.baichuan-ai.com/v1"
+      ],
+      "source_urls": [
+        "https://platform.baichuan-ai.com/docs/api"
+      ]
+    },
+    {
+      "id": "baidu-qianfan",
+      "name": "Baidu Qianfan",
+      "regions": [
+        "CN"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "QIANFAN_API_KEY"
+      ],
+      "base_urls": [
+        "https://qianfan.baidubce.com/v2"
+      ],
+      "source_urls": [
+        "https://cloud.baidu.com/doc/WENXINWORKSHOP/index.html"
+      ]
+    },
+    {
+      "id": "cerebras",
+      "name": "Cerebras",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "CEREBRAS_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.cerebras.ai/v1"
+      ],
+      "source_urls": [
+        "https://inference-docs.cerebras.ai/api-reference/chat-completions"
+      ]
+    },
+    {
+      "id": "cloudflare-ai-gateway",
+      "name": "Cloudflare AI Gateway",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "cloudflare-ai-gateway",
+        "openai-compatible",
+        "openai-responses"
+      ],
+      "env": [
+        "CLOUDFLARE_AI_GATEWAY_BASE_URL",
+        "CLOUDFLARE_API_TOKEN"
+      ],
+      "base_urls": [],
+      "source_urls": [
+        "https://developers.cloudflare.com/ai-gateway/usage/chat-completion",
+        "https://developers.cloudflare.com/ai-gateway/usage/rest-api"
+      ],
+      "credential_env": [
+        "CLOUDFLARE_API_TOKEN"
+      ],
+      "required_env_groups": [
+        [
+          "CLOUDFLARE_AI_GATEWAY_BASE_URL",
+          "CLOUDFLARE_API_TOKEN"
+        ]
+      ],
+      "base_url_env": [
+        "CLOUDFLARE_AI_GATEWAY_BASE_URL"
+      ],
+      "allowed_host_suffixes": [
+        "api.cloudflare.com",
+        "gateway.ai.cloudflare.com"
+      ]
+    },
+    {
+      "id": "cohere",
+      "name": "Cohere",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "cohere-v2"
+      ],
+      "env": [
+        "COHERE_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.cohere.com/v2"
+      ],
+      "source_urls": [
+        "https://docs.cohere.com/reference/chat"
+      ]
+    },
+    {
+      "id": "deepinfra",
+      "name": "DeepInfra",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "DEEPINFRA_API_KEY",
+        "DEEPINFRA_TOKEN"
+      ],
+      "base_urls": [
+        "https://api.deepinfra.com/v1/openai"
+      ],
+      "source_urls": [
+        "https://docs.deepinfra.com",
+        "https://docs.deepinfra.com/api-reference/introduction",
+        "https://docs.deepinfra.com/chat/overview"
+      ]
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "regions": [
+        "CN"
+      ],
+      "protocols": [
+        "anthropic-compatible",
+        "openai-compatible"
+      ],
+      "env": [
+        "DEEPSEEK_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.deepseek.com",
+        "https://api.deepseek.com/anthropic"
+      ],
+      "source_urls": [
+        "https://api-docs.deepseek.com"
+      ]
+    },
+    {
+      "id": "fireworks-ai",
+      "name": "Fireworks AI",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "FIREWORKS_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.fireworks.ai/inference/v1"
+      ],
+      "source_urls": [
+        "https://docs.fireworks.ai/api-reference/post-chatcompletions"
+      ]
+    },
+    {
+      "id": "github-models",
+      "name": "GitHub Models",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "github-models"
+      ],
+      "env": [
+        "GITHUB_MODELS_TOKEN"
+      ],
+      "base_urls": [
+        "https://models.github.ai"
+      ],
+      "source_urls": [
+        "https://docs.github.com/en/github-models/about-github-models",
+        "https://docs.github.com/en/rest/models/catalog",
+        "https://docs.github.com/en/rest/models/inference"
+      ],
+      "probe_urls": [
+        "https://models.github.ai/catalog/models"
+      ]
+    },
+    {
+      "id": "google-gemini",
+      "name": "Google Gemini",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "gemini-generate-content"
+      ],
+      "env": [
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY"
+      ],
+      "base_urls": [
+        "https://generativelanguage.googleapis.com/v1beta"
+      ],
+      "source_urls": [
+        "https://ai.google.dev/api/generate-content"
+      ]
+    },
+    {
+      "id": "google-vertex-ai",
+      "name": "Google Vertex AI",
+      "regions": [
+        "EU",
+        "US"
+      ],
+      "protocols": [
+        "openai-compatible",
+        "vertex-ai"
+      ],
+      "env": [
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "GOOGLE_CLOUD_LOCATION",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_VERTEX_ACCESS_TOKEN",
+        "GOOGLE_VERTEX_BASE_URL"
+      ],
+      "base_urls": [
+        "https://aiplatform.googleapis.com/v1",
+        "https://aiplatform.googleapis.com/v1beta1"
+      ],
+      "source_urls": [
+        "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations",
+        "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/migrate/openai/auth-and-credentials",
+        "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/start/openai"
+      ],
+      "credential_env": [
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "GOOGLE_VERTEX_ACCESS_TOKEN"
+      ],
+      "required_env_groups": [
+        [
+          "GOOGLE_VERTEX_ACCESS_TOKEN",
+          "GOOGLE_VERTEX_BASE_URL"
+        ],
+        [
+          "GOOGLE_APPLICATION_CREDENTIALS",
+          "GOOGLE_CLOUD_LOCATION",
+          "GOOGLE_CLOUD_PROJECT"
+        ]
+      ],
+      "base_url_env": [
+        "GOOGLE_VERTEX_BASE_URL"
+      ],
+      "allowed_host_suffixes": [
+        "-aiplatform.googleapis.com",
+        "aiplatform.googleapis.com"
+      ]
+    },
+    {
+      "id": "groq",
+      "name": "Groq",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "GROQ_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.groq.com/openai/v1"
+      ],
+      "source_urls": [
+        "https://console.groq.com/docs/api-reference"
+      ]
+    },
+    {
+      "id": "hugging-face",
+      "name": "Hugging Face Inference Providers",
+      "regions": [
+        "EU",
+        "US"
+      ],
+      "protocols": [
+        "huggingface-inference-providers",
+        "openai-compatible"
+      ],
+      "env": [
+        "HF_TOKEN",
+        "HUGGINGFACE_API_KEY"
+      ],
+      "base_urls": [
+        "https://router.huggingface.co/v1"
+      ],
+      "source_urls": [
+        "https://huggingface.co/docs/api-inference",
+        "https://huggingface.co/docs/inference-providers/en/index",
+        "https://huggingface.co/docs/inference-providers/providers/hf-inference"
+      ]
+    },
+    {
+      "id": "ibm-watsonx",
+      "name": "IBM watsonx.ai",
+      "regions": [
+        "EU",
+        "US"
+      ],
+      "protocols": [
+        "watsonx-ai"
+      ],
+      "env": [
+        "IBM_CLOUD_API_KEY",
+        "IBM_WATSONX_ACCESS_TOKEN",
+        "WATSONX_PROJECT_ID",
+        "WATSONX_SPACE_ID",
+        "WATSONX_URL"
+      ],
+      "base_urls": [
+        "https://ca-tor.ml.cloud.ibm.com",
+        "https://eu-de.ml.cloud.ibm.com",
+        "https://eu-gb.ml.cloud.ibm.com",
+        "https://us-south.ml.cloud.ibm.com"
+      ],
+      "source_urls": [
+        "https://cloud.ibm.com/apidocs/watsonx-ai"
+      ],
+      "credential_env": [
+        "IBM_CLOUD_API_KEY",
+        "IBM_WATSONX_ACCESS_TOKEN"
+      ],
+      "required_env_groups": [
+        [
+          "IBM_CLOUD_API_KEY",
+          "WATSONX_PROJECT_ID"
+        ],
+        [
+          "IBM_CLOUD_API_KEY",
+          "WATSONX_SPACE_ID"
+        ],
+        [
+          "IBM_WATSONX_ACCESS_TOKEN",
+          "WATSONX_PROJECT_ID"
+        ],
+        [
+          "IBM_WATSONX_ACCESS_TOKEN",
+          "WATSONX_SPACE_ID"
+        ]
+      ],
+      "base_url_env": [
+        "WATSONX_URL"
+      ],
+      "allowed_host_suffixes": [
+        ".ml.cloud.ibm.com"
+      ]
+    },
+    {
+      "id": "iflytek-spark",
+      "name": "iFlytek Spark",
+      "regions": [
+        "CN"
+      ],
+      "protocols": [
+        "anthropic-compatible",
+        "openai-compatible"
+      ],
+      "env": [
+        "IFLYTEK_SPARK_API_PASSWORD",
+        "XFYUN_SPARK_API_PASSWORD"
+      ],
+      "base_urls": [
+        "https://maas-coding-api.cn-huabei-1.xf-yun.com/anthropic",
+        "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
+        "https://spark-api-open.xf-yun.com/v1",
+        "https://spark-api-open.xf-yun.com/x2"
+      ],
+      "source_urls": [
+        "https://www.xfyun.cn/doc/spark/CodingPlan.html",
+        "https://www.xfyun.cn/doc/spark/HTTP%E8%B0%83%E7%94%A8%E6%96%87%E6%A1%A3.html"
+      ]
+    },
+    {
+      "id": "ionos-ai-model-hub",
+      "name": "IONOS AI Model Hub",
+      "regions": [
+        "EU"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "IONOS_API_TOKEN"
+      ],
+      "base_urls": [
+        "https://openai.inference.de-txl.ionos.com/v1"
+      ],
+      "source_urls": [
+        "https://api.ionos.com/docs/inference-openai/v1",
+        "https://docs.ionos.com/cloud/ai/ai-model-hub/how-tos/tool-integration"
+      ]
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax",
+      "regions": [
+        "CN"
+      ],
+      "protocols": [
+        "native",
+        "openai-compatible"
+      ],
+      "env": [
+        "MINIMAX_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.minimax.io/v1",
+        "https://api.minimaxi.com/v1"
+      ],
+      "source_urls": [
+        "https://platform.minimax.io/docs/api-reference/api-overview",
+        "https://platform.minimaxi.com/docs/api-reference/api-overview"
+      ]
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral AI",
+      "regions": [
+        "EU"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "MISTRAL_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.mistral.ai/v1"
+      ],
+      "source_urls": [
+        "https://docs.mistral.ai/api"
+      ]
+    },
+    {
+      "id": "modelscope",
+      "name": "ModelScope API Inference",
+      "regions": [
+        "CN"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "MODELSCOPE_API_KEY",
+        "MODELSCOPE_TOKEN"
+      ],
+      "base_urls": [
+        "https://api-inference.modelscope.cn/v1"
+      ],
+      "source_urls": [
+        "https://modelscope.cn/docs/model-service/API-Inference",
+        "https://modelscope.cn/docs/model-service/deployment/swingdeploy-openai-api-compatible"
+      ]
+    },
+    {
+      "id": "moonshot",
+      "name": "Moonshot AI",
+      "regions": [
+        "CN"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "MOONSHOT_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.moonshot.ai/v1"
+      ],
+      "source_urls": [
+        "https://platform.moonshot.ai/docs"
+      ]
+    },
+    {
+      "id": "nebius",
+      "name": "Nebius AI Studio",
+      "regions": [
+        "EU"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "NEBIUS_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.studio.nebius.ai/v1",
+        "https://api.studio.nebius.com/v1",
+        "https://api.tokenfactory.nebius.com/v1"
+      ],
+      "source_urls": [
+        "https://api.studio.nebius.ai/docs",
+        "https://docs.studio.nebius.com",
+        "https://docs.studio.nebius.com/api-reference/introduction"
+      ]
+    },
+    {
+      "id": "nvidia-nim",
+      "name": "NVIDIA NIM",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "NVIDIA_API_KEY",
+        "NVIDIA_NIM_API_KEY"
+      ],
+      "base_urls": [
+        "https://integrate.api.nvidia.com/v1"
+      ],
+      "source_urls": [
+        "https://docs.api.nvidia.com/nim/reference/llm-apis"
+      ]
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "openai-chat-completions",
+        "openai-responses"
+      ],
+      "env": [
+        "OPENAI_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.openai.com/v1"
+      ],
+      "source_urls": [
+        "https://developers.openai.com/api/reference/overview"
+      ]
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "OPENROUTER_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.openrouter.ai/api/v1",
+        "https://openrouter.ai/api/v1"
+      ],
+      "source_urls": [
+        "https://openrouter.ai/docs/api-reference/overview"
+      ]
+    },
+    {
+      "id": "ovhcloud-ai-endpoints",
+      "name": "OVHcloud AI Endpoints",
+      "regions": [
+        "EU"
+      ],
+      "protocols": [
+        "openai-compatible",
+        "openai-responses"
+      ],
+      "env": [
+        "AI_ENDPOINT_API_KEY",
+        "OVH_AI_ENDPOINTS_ACCESS_TOKEN"
+      ],
+      "base_urls": [
+        "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1"
+      ],
+      "source_urls": [
+        "https://help.ovhcloud.com/csm/en-ie-public-cloud-ai-endpoints-responses-api",
+        "https://help.ovhcloud.com/csm/en-public-cloud-ai-endpoints-getting-started%3Fid%3Dkb_article_view%26sysparm_article%3DKB0065403"
+      ]
+    },
+    {
+      "id": "perplexity",
+      "name": "Perplexity",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "sonar-api"
+      ],
+      "env": [
+        "PERPLEXITY_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.perplexity.ai/v1"
+      ],
+      "source_urls": [
+        "https://docs.perplexity.ai/api-reference/sonar-post"
+      ]
+    },
+    {
+      "id": "replicate",
+      "name": "Replicate",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "replicate-predictions"
+      ],
+      "env": [
+        "REPLICATE_API_TOKEN"
+      ],
+      "base_urls": [
+        "https://api.replicate.com/v1"
+      ],
+      "source_urls": [
+        "https://replicate.com/docs/reference/http",
+        "https://replicate.com/docs/topics/models/official-models",
+        "https://replicate.com/docs/topics/security/api-tokens"
+      ]
+    },
+    {
+      "id": "sambanova",
+      "name": "SambaNova Cloud",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "openai-compatible",
+        "openai-responses"
+      ],
+      "env": [
+        "SAMBANOVA_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.sambanova.ai/v1"
+      ],
+      "source_urls": [
+        "https://docs.sambanova.ai/docs/en/features/openai-compatibility",
+        "https://docs.sambanova.ai/docs/en/get-started/api-keys-urls"
+      ]
+    },
+    {
+      "id": "scaleway-generative-apis",
+      "name": "Scaleway Generative APIs",
+      "regions": [
+        "EU"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "SCALEWAY_API_KEY",
+        "SCALEWAY_GENERATIVE_BASE_URL",
+        "SCW_SECRET_KEY"
+      ],
+      "base_urls": [
+        "https://api.scaleway.ai/v1"
+      ],
+      "source_urls": [
+        "https://www.scaleway.com/en/developers/api/generative-apis",
+        "https://www.scaleway.com/en/docs/generative-apis/api-cli/using-generative-apis",
+        "https://www.scaleway.com/en/docs/generative-apis/quickstart"
+      ],
+      "credential_env": [
+        "SCALEWAY_API_KEY",
+        "SCW_SECRET_KEY"
+      ],
+      "required_env_groups": [
+        [
+          "SCALEWAY_API_KEY"
+        ],
+        [
+          "SCW_SECRET_KEY"
+        ]
+      ],
+      "base_url_env": [
+        "SCALEWAY_GENERATIVE_BASE_URL"
+      ],
+      "allowed_host_suffixes": [
+        "api.scaleway.ai"
+      ]
+    },
+    {
+      "id": "siliconflow",
+      "name": "SiliconFlow",
+      "regions": [
+        "CN"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "SILICONFLOW_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.siliconflow.cn/v1",
+        "https://api.siliconflow.com/v1"
+      ],
+      "source_urls": [
+        "https://api-docs.siliconflow.cn/docs/api/chat-completions-post",
+        "https://docs.siliconflow.com/en/api-reference/chat-completions/chat-completions"
+      ]
+    },
+    {
+      "id": "stepfun",
+      "name": "StepFun",
+      "regions": [
+        "CN"
+      ],
+      "protocols": [
+        "anthropic-compatible",
+        "openai-compatible"
+      ],
+      "env": [
+        "STEPFUN_API_KEY",
+        "STEP_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.stepfun.ai/step_plan",
+        "https://api.stepfun.ai/step_plan/v1",
+        "https://api.stepfun.ai/v1",
+        "https://api.stepfun.com/step_plan",
+        "https://api.stepfun.com/step_plan/v1",
+        "https://api.stepfun.com/v1"
+      ],
+      "source_urls": [
+        "https://platform.stepfun.ai/docs/en/guide/openai",
+        "https://platform.stepfun.ai/docs/en/step-plan/quick-start"
+      ]
+    },
+    {
+      "id": "tencent-hunyuan",
+      "name": "Tencent Hunyuan",
+      "regions": [
+        "CN"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "HUNYUAN_API_KEY",
+        "TENCENT_HUNYUAN_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.hunyuan.cloud.tencent.com/v1"
+      ],
+      "source_urls": [
+        "https://cloud.tencent.com/document/product/1729"
+      ]
+    },
+    {
+      "id": "together-ai",
+      "name": "Together AI",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "TOGETHER_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.together.ai/v1",
+        "https://api.together.xyz/v1"
+      ],
+      "source_urls": [
+        "https://docs.together.ai/reference/chat-completions"
+      ]
+    },
+    {
+      "id": "vercel-ai-gateway",
+      "name": "Vercel AI Gateway",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "anthropic-compatible",
+        "openai-compatible",
+        "openai-responses"
+      ],
+      "env": [
+        "AI_GATEWAY_API_KEY",
+        "VERCEL_OIDC_TOKEN"
+      ],
+      "base_urls": [
+        "https://ai-gateway.vercel.sh/v1"
+      ],
+      "source_urls": [
+        "https://vercel.com/docs/ai-gateway",
+        "https://vercel.com/docs/ai-gateway/openai-compat",
+        "https://vercel.com/docs/ai-gateway/sdks-and-apis"
+      ]
+    },
+    {
+      "id": "volcengine-ark",
+      "name": "ByteDance Volcengine Ark",
+      "regions": [
+        "CN"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "ARK_API_KEY",
+        "VOLCENGINE_API_KEY"
+      ],
+      "base_urls": [
+        "https://ark.cn-beijing.volces.com/api/v3"
+      ],
+      "source_urls": [
+        "https://www.volcengine.com/docs/82379"
+      ]
+    },
+    {
+      "id": "xai",
+      "name": "xAI",
+      "regions": [
+        "US"
+      ],
+      "protocols": [
+        "openai-compatible",
+        "openai-responses"
+      ],
+      "env": [
+        "XAI_API_KEY"
+      ],
+      "base_urls": [
+        "https://api.x.ai/v1"
+      ],
+      "source_urls": [
+        "https://docs.x.ai/developers/rest-api-reference/inference/chat"
+      ]
+    },
+    {
+      "id": "zhipu-bigmodel",
+      "name": "Zhipu BigModel",
+      "regions": [
+        "CN"
+      ],
+      "protocols": [
+        "openai-compatible"
+      ],
+      "env": [
+        "BIGMODEL_API_KEY",
+        "ZHIPU_API_KEY"
+      ],
+      "base_urls": [
+        "https://open.bigmodel.cn/api/paas/v4"
+      ],
+      "source_urls": [
+        "https://docs.bigmodel.cn"
+      ]
+    }
+  ]
+}

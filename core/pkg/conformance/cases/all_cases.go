@@ -14,6 +14,29 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust/registry"
 )
 
+type evidencePackBuilder interface {
+	AddReceipt(name string, receipt interface{}) error
+	Build() (*evidencepack.Manifest, map[string][]byte, error)
+}
+
+var (
+	archiveEvidencePack    = evidencepack.Archive
+	unarchiveEvidencePack  = evidencepack.Unarchive
+	computeManifestHash    = evidencepack.ComputeManifestHash
+	newEvidencePackBuilder = func(packID, actorDID, intentID, policyHash string, createdAt time.Time) evidencePackBuilder {
+		b := evidencepack.NewBuilder(packID, actorDID, intentID, policyHash)
+		b.WithCreatedAt(createdAt)
+		return b
+	}
+	newTrustState   = registry.NewTrustState
+	applyTrustEvent = func(state *registry.TrustState, event *registry.TrustEvent) error {
+		return state.Apply(event)
+	}
+	conformanceNow = func() time.Time {
+		return time.Now().UTC()
+	}
+)
+
 // RegisterEvidencePackTests adds evidence pack conformance tests.
 func RegisterEvidencePackTests(suite *conformance.Suite) {
 	suite.Register(conformance.TestCase{
@@ -29,11 +52,11 @@ func RegisterEvidencePackTests(suite *conformance.Suite) {
 				"manifest.json":    []byte(`{"version":"1.0.0"}`),
 			}
 
-			archive1, err := evidencepack.Archive(contents)
+			archive1, err := archiveEvidencePack(contents)
 			if err != nil {
 				return fmt.Errorf("first archive: %w", err)
 			}
-			archive2, err := evidencepack.Archive(contents)
+			archive2, err := archiveEvidencePack(contents)
 			if err != nil {
 				return fmt.Errorf("second archive: %w", err)
 			}
@@ -56,8 +79,7 @@ func RegisterEvidencePackTests(suite *conformance.Suite) {
 		Name:        "Builder produces valid manifest hash",
 		Description: "Builder output manifest hash matches recomputation",
 		Run: func(ctx *conformance.TestContext) error {
-			b := evidencepack.NewBuilder("test-pack", "did:test:actor", "intent-1", "policy-hash")
-			b.WithCreatedAt(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
+			b := newEvidencePackBuilder("test-pack", "did:test:actor", "intent-1", "policy-hash", time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
 
 			if err := b.AddReceipt("receipt1", map[string]string{"id": "r1"}); err != nil {
 				return err
@@ -68,7 +90,7 @@ func RegisterEvidencePackTests(suite *conformance.Suite) {
 				return fmt.Errorf("build: %w", err)
 			}
 
-			recomputed, err := evidencepack.ComputeManifestHash(manifest)
+			recomputed, err := computeManifestHash(manifest)
 			if err != nil {
 				return fmt.Errorf("recompute hash: %w", err)
 			}
@@ -91,12 +113,12 @@ func RegisterEvidencePackTests(suite *conformance.Suite) {
 				"b.txt":  []byte("hello world"),
 			}
 
-			archived, err := evidencepack.Archive(contents)
+			archived, err := archiveEvidencePack(contents)
 			if err != nil {
 				return err
 			}
 
-			restored, err := evidencepack.Unarchive(archived)
+			restored, err := unarchiveEvidencePack(archived)
 			if err != nil {
 				return err
 			}
@@ -126,29 +148,29 @@ func RegisterTrustRegistryTests(suite *conformance.Suite) {
 					EventType: registry.EventKeyPublish,
 					SubjectID: "key-001",
 					Lamport:   1,
-					CreatedAt: time.Now().UTC(),
-					Payload:   json.RawMessage(`{"algorithm":"ed25519","purpose":"signing"}`),
+					CreatedAt: conformanceNow(),
+					Payload:   json.RawMessage(`{"kid":"key-001","algorithm":"ed25519","purpose":"signing"}`),
 				},
 				{
 					ID:        "e2",
 					EventType: registry.EventDIDRegister,
 					SubjectID: "did:helm:abc",
 					Lamport:   2,
-					CreatedAt: time.Now().UTC(),
-					Payload:   json.RawMessage(`{"method":"helm","controller":"key-001"}`),
+					CreatedAt: conformanceNow(),
+					Payload:   json.RawMessage(`{"did":"did:helm:abc","method":"helm","controller":"key-001"}`),
 				},
 			}
 
-			state1 := registry.NewTrustState()
+			state1 := newTrustState()
 			for _, e := range events {
-				if err := state1.Apply(e); err != nil {
+				if err := applyTrustEvent(state1, e); err != nil {
 					return fmt.Errorf("apply event %s: %w", e.ID, err)
 				}
 			}
 
-			state2 := registry.NewTrustState()
+			state2 := newTrustState()
 			for _, e := range events {
-				if err := state2.Apply(e); err != nil {
+				if err := applyTrustEvent(state2, e); err != nil {
 					return fmt.Errorf("apply event %s: %w", e.ID, err)
 				}
 			}
@@ -170,7 +192,7 @@ func RegisterTrustRegistryTests(suite *conformance.Suite) {
 		Name:        "Revoked key is no longer active",
 		Description: "After KEY_REVOKE, key.IsActive returns false",
 		Run: func(ctx *conformance.TestContext) error {
-			state := registry.NewTrustState()
+			state := newTrustState()
 
 			// Register key
 			regEvent := &registry.TrustEvent{
@@ -178,10 +200,10 @@ func RegisterTrustRegistryTests(suite *conformance.Suite) {
 				EventType: registry.EventKeyPublish,
 				SubjectID: "key-001",
 				Lamport:   1,
-				CreatedAt: time.Now().UTC(),
-				Payload:   json.RawMessage(`{"algorithm":"ed25519","purpose":"signing"}`),
+				CreatedAt: conformanceNow(),
+				Payload:   json.RawMessage(`{"kid":"key-001","algorithm":"ed25519","purpose":"signing"}`),
 			}
-			if err := state.Apply(regEvent); err != nil {
+			if err := applyTrustEvent(state, regEvent); err != nil {
 				return err
 			}
 
@@ -202,9 +224,10 @@ func RegisterTrustRegistryTests(suite *conformance.Suite) {
 				EventType: registry.EventKeyRevoke,
 				SubjectID: "key-001",
 				Lamport:   2,
-				CreatedAt: time.Now().UTC(),
+				CreatedAt: conformanceNow(),
+				Payload:   json.RawMessage(`{"kid":"key-001"}`),
 			}
-			if err := state.Apply(revokeEvent); err != nil {
+			if err := applyTrustEvent(state, revokeEvent); err != nil {
 				return err
 			}
 
@@ -231,8 +254,7 @@ func RegisterL3SignedEvidenceTests(suite *conformance.Suite) {
 		Name:        "Builder-produced evidence pack is signable",
 		Description: "Evidence pack from builder can be signed and verified",
 		Run: func(ctx *conformance.TestContext) error {
-			b := evidencepack.NewBuilder("signable-pack", "did:test:signer", "intent-sig-1", "policy-hash-sig")
-			b.WithCreatedAt(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
+			b := newEvidencePackBuilder("signable-pack", "did:test:signer", "intent-sig-1", "policy-hash-sig", time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
 
 			if err := b.AddReceipt("receipt-sig-1", map[string]string{"verdict": "ALLOW"}); err != nil {
 				return err
@@ -252,7 +274,7 @@ func RegisterL3SignedEvidenceTests(suite *conformance.Suite) {
 				return nil
 			}
 
-			recomputed, err := evidencepack.ComputeManifestHash(manifest)
+			recomputed, err := computeManifestHash(manifest)
 			if err != nil {
 				return fmt.Errorf("recompute: %w", err)
 			}
@@ -277,11 +299,11 @@ func RegisterL3SignedEvidenceTests(suite *conformance.Suite) {
 				"manifest.json":    []byte(`{"version":"1.0.0","signed":true}`),
 			}
 
-			archive1, err := evidencepack.Archive(contents)
+			archive1, err := archiveEvidencePack(contents)
 			if err != nil {
 				return fmt.Errorf("first archive: %w", err)
 			}
-			archive2, err := evidencepack.Archive(contents)
+			archive2, err := archiveEvidencePack(contents)
 			if err != nil {
 				return fmt.Errorf("second archive: %w", err)
 			}
@@ -305,7 +327,7 @@ func RegisterL3TrustRegistryTests(suite *conformance.Suite) {
 		Name:        "Key rotation preserves trust state consistency",
 		Description: "After key rotation, trust state reflects both old (revoked) and new keys",
 		Run: func(ctx *conformance.TestContext) error {
-			state := registry.NewTrustState()
+			state := newTrustState()
 
 			// Register initial key
 			regEvent := &registry.TrustEvent{
@@ -313,10 +335,10 @@ func RegisterL3TrustRegistryTests(suite *conformance.Suite) {
 				EventType: registry.EventKeyPublish,
 				SubjectID: "key-v1",
 				Lamport:   1,
-				CreatedAt: time.Now().UTC(),
-				Payload:   json.RawMessage(`{"algorithm":"ed25519","purpose":"signing"}`),
+				CreatedAt: conformanceNow(),
+				Payload:   json.RawMessage(`{"kid":"key-v1","algorithm":"ed25519","purpose":"signing"}`),
 			}
-			if err := state.Apply(regEvent); err != nil {
+			if err := applyTrustEvent(state, regEvent); err != nil {
 				return err
 			}
 
@@ -326,9 +348,10 @@ func RegisterL3TrustRegistryTests(suite *conformance.Suite) {
 				EventType: registry.EventKeyRevoke,
 				SubjectID: "key-v1",
 				Lamport:   5,
-				CreatedAt: time.Now().UTC(),
+				CreatedAt: conformanceNow(),
+				Payload:   json.RawMessage(`{"kid":"key-v1"}`),
 			}
-			if err := state.Apply(revokeEvent); err != nil {
+			if err := applyTrustEvent(state, revokeEvent); err != nil {
 				return err
 			}
 
@@ -338,10 +361,10 @@ func RegisterL3TrustRegistryTests(suite *conformance.Suite) {
 				EventType: registry.EventKeyPublish,
 				SubjectID: "key-v2",
 				Lamport:   6,
-				CreatedAt: time.Now().UTC(),
-				Payload:   json.RawMessage(`{"algorithm":"ed25519","purpose":"signing"}`),
+				CreatedAt: conformanceNow(),
+				Payload:   json.RawMessage(`{"kid":"key-v2","algorithm":"ed25519","purpose":"signing"}`),
 			}
-			if err := state.Apply(newKeyEvent); err != nil {
+			if err := applyTrustEvent(state, newKeyEvent); err != nil {
 				return err
 			}
 

@@ -30,10 +30,19 @@ type FileStore struct {
 	mu      sync.RWMutex
 }
 
+var (
+	fileStoreMkdirAll = os.MkdirAll
+	fileStoreStat     = os.Stat
+	fileStoreWrite    = os.WriteFile
+	fileStoreRename   = os.Rename
+	fileStoreOpen     = os.Open
+	fileStoreRemove   = os.Remove
+)
+
 // NewFileStore creates a new CAS store at the specified directory.
 func NewFileStore(baseDir string) (*FileStore, error) {
 	//nolint:gosec // G301: 0755 is intentional for shared artifact directory
-	if err := os.MkdirAll(baseDir, 0755); err != nil {
+	if err := fileStoreMkdirAll(baseDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to ensure artifact dir: %w", err)
 	}
 	return &FileStore{baseDir: baseDir}, nil
@@ -45,10 +54,7 @@ func (s *FileStore) Store(ctx context.Context, data []byte) (string, error) {
 
 	// 1. Compute Hash
 	h := sha256.New()
-	//nolint:wrapcheck // error from Write is interface method
-	if _, err := h.Write(data); err != nil {
-		return "", err
-	}
+	_, _ = h.Write(data)
 	hashBytes := h.Sum(nil)
 	hashStr := hex.EncodeToString(hashBytes) // e.g., "a3f5..."
 	prefixedHash := "sha256:" + hashStr
@@ -57,18 +63,18 @@ func (s *FileStore) Store(ctx context.Context, data []byte) (string, error) {
 	path := filepath.Join(s.baseDir, hashStr+".blob")
 
 	// 3. Atomic Write (idempotent)
-	if _, err := os.Stat(path); err == nil {
+	if _, err := fileStoreStat(path); err == nil {
 		return prefixedHash, nil // Already exists
 	}
 
 	// Write to temp, then rename
 	tmpPath := path + ".tmp"
 	//nolint:gosec // G306: 0644 is intentional for readable blob files
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+	if err := fileStoreWrite(tmpPath, data, 0644); err != nil {
 		return "", fmt.Errorf("failed to write blob: %w", err)
 	}
 
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := fileStoreRename(tmpPath, path); err != nil {
 		return "", fmt.Errorf("failed to commit blob: %w", err)
 	}
 
@@ -90,7 +96,7 @@ func (s *FileStore) Get(ctx context.Context, hash string) ([]byte, error) {
 
 	path := filepath.Join(s.baseDir, rawHash+".blob")
 
-	f, err := os.Open(path) //nolint:gosec // Hash validated as hex
+	f, err := fileStoreOpen(path) //nolint:gosec // Hash validated as hex
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("artifact not found: %s", hash)
@@ -118,7 +124,7 @@ func (s *FileStore) Exists(ctx context.Context, hash string) (bool, error) {
 	}
 
 	path := filepath.Join(s.baseDir, rawHash+".blob")
-	_, err := os.Stat(path)
+	_, err := fileStoreStat(path)
 	if err == nil {
 		return true, nil
 	}
@@ -143,7 +149,7 @@ func (s *FileStore) Delete(ctx context.Context, hash string) error {
 	}
 
 	path := filepath.Join(s.baseDir, rawHash+".blob")
-	err := os.Remove(path)
+	err := fileStoreRemove(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to delete artifact: %w", err)
 	}

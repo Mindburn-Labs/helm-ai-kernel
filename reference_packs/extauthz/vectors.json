@@ -1,0 +1,41 @@
+{
+  "schema_version": "extauthz.v1",
+  "contract_version": "2026-06-01",
+  "vectors": [
+    {
+      "id": "allow_request",
+      "input": "allow_request.c14n.json",
+      "canonical": "allow_request.c14n.json",
+      "sha256": "b1226b9d9bd32a1e1aa9b189cdf86891b69f8b6af22f4adb95fa59f0f29a575d",
+      "expected_status": "canonical"
+    },
+    {
+      "id": "allow_response_pre_dispatch",
+      "input": "allow_response.c14n.json",
+      "canonical": "allow_response.c14n.json",
+      "sha256": "8f7ebe53e71de0ae8d9e459dc1c827844617b9a56ff501c28cd5dfbea2a9afbb",
+      "expected_status": "canonical_without_final_receipt"
+    },
+    {
+      "id": "deny_response_no_permit",
+      "input": "deny_response.c14n.json",
+      "canonical": "deny_response.c14n.json",
+      "sha256": "5330e887366ea8003c112a1993ee4a18369faf1a053fd2beb7b0cf5ee300ba4c",
+      "expected_status": "canonical_no_dispatch"
+    },
+    {
+      "id": "escalate_response_no_permit",
+      "input": "escalate_response.c14n.json",
+      "canonical": "escalate_response.c14n.json",
+      "sha256": "dff2c6f261afb24db7f235156963fa044b181848470056a83599db1d8a24a449",
+      "expected_status": "canonical_no_dispatch"
+    },
+    {
+      "id": "jcs_edge_case",
+      "input": "jcs_edge_case.c14n.json",
+      "canonical": "jcs_edge_case.c14n.json",
+      "sha256": "d0fae9acf53cb1e9750b068d2bf01753e4f0fca4e8f1bb61a3ce8c0f6c70fbbd",
+      "expected_status": "canonical"
+    }
+  ]
+}

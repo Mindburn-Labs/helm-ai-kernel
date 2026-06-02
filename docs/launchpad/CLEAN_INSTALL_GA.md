@@ -71,10 +71,13 @@ flowchart TD
 
 ## Required Secret
 
-Live local-container conformance uses a scoped OpenRouter test key. Store the
-fresh CI-only key as `HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY`. Workflows map it to
-`OPENROUTER_API_KEY` only inside the live Launchpad test step. Do not commit the
-key, fragments, screenshots, or raw logs.
+Live local-container conformance uses one scoped BYO model-provider test key
+from `core/pkg/launchpad/modelproviders/catalog.json`. CI may continue to store
+an OpenRouter-only compatibility key as `HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY`;
+the gate maps it to `OPENROUTER_API_KEY` inside the live Launchpad test step.
+For provider-agnostic CI, set `HELM_LAUNCHPAD_CI_MODEL_PROVIDER_SECRET_JSON` to
+a JSON object keyed by catalog env names.
+Do not commit provider keys, fragments, screenshots, or raw logs.
 
 ## Clean Machine Commands
 
@@ -85,7 +88,7 @@ Docker-compatible runtime such as Docker Desktop or Colima:
 brew update
 brew install mindburnlabs/tap/helm-ai-kernel
 helm-ai-kernel launch matrix --json
-helm-ai-kernel launch secrets set model_gateway --provider openrouter --value-env OPENROUTER_API_KEY
+helm-ai-kernel launch secrets set model_gateway --provider openai --value-env OPENAI_API_KEY
 helm-ai-kernel launch openclaw local-container --headless --output json
 helm-ai-kernel launch hermes local-container --headless --output json
 helm-ai-kernel launch opencode local-container --headless --output json
@@ -97,7 +100,7 @@ helm-ai-kernel verify --bundle <pack>
 Use the repo-native gate to collect redacted evidence:
 
 ```bash
-export HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY='<fresh CI-only key>'
+export OPENAI_API_KEY='<fresh CI-only key>'
 bash scripts/launch/clean_install_gate.sh \
   --release-tag v0.5.8 \
   --artifact-run-id 26198407296 \

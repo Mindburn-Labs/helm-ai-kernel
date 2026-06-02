@@ -39,6 +39,12 @@
 | `event_envelope.schema.json`  | L1          | normative | Kernel event envelope              |
 | `prng_config.schema.json`     | L2          | normative | PRNG configuration for determinism |
 
+### Boundary (`boundary/`)
+
+| Schema | Conformance | Status | Description |
+| --- | --- | --- | --- |
+| `extauthz.v1.schema.json` | L1 | preview | Gateway-to-Kernel external authorization contract |
+
 ### Policy (`policy/`)
 
 | Schema                               | Conformance | Status    | Description                 |
@@ -214,8 +220,8 @@
 
 ---
 
-**Total schemas**: 138 files across 27 domains.
-**L1 (Core)**: 41 schemas
+**Total schemas**: 139 files across 28 domains.
+**L1 (Core)**: 42 schemas
 **L2 (Extended)**: 72 schemas
 **L3 (Optional)**: 19 schemas
 **Informational**: 6 schemas

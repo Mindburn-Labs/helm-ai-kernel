@@ -804,7 +804,7 @@ func withKey(in map[string]any, key string, value any) map[string]any {
 
 func rsaLeafCertificate(t *testing.T, now time.Time) *x509.Certificate {
 	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}

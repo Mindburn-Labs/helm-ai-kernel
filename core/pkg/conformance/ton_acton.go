@@ -8,12 +8,18 @@ import (
 	"runtime"
 )
 
+var tonActonRuntimeCaller = runtime.Caller
+
 func validateTONActonGoldenPacks(ctx *TestContext) error {
 	cases := loadTONActonGoldenCases(ctx)
+	validateTONActonGoldenCaseCount(ctx, cases)
+	return nil
+}
+
+func validateTONActonGoldenCaseCount(ctx *TestContext, cases map[string]string) {
 	if len(cases) < 22 {
 		ctx.Fail("expected at least 22 TON Acton golden cases, got %d", len(cases))
 	}
-	return nil
 }
 
 func loadTONActonGoldenCases(ctx *TestContext) map[string]string {
@@ -22,6 +28,10 @@ func loadTONActonGoldenCases(ctx *TestContext) map[string]string {
 		ctx.Fail("%v", err)
 		return nil
 	}
+	return loadTONActonGoldenCasesFromRoot(ctx, root)
+}
+
+func loadTONActonGoldenCasesFromRoot(ctx *TestContext, root string) map[string]string {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		ctx.Fail("read TON Acton golden root: %v", err)
@@ -63,7 +73,7 @@ func loadTONActonGoldenCases(ctx *TestContext) map[string]string {
 }
 
 func tonActonGoldenRoot() (string, error) {
-	_, file, _, ok := runtime.Caller(0)
+	_, file, _, ok := tonActonRuntimeCaller(0)
 	if !ok {
 		return "", fmt.Errorf("cannot resolve conformance source path")
 	}

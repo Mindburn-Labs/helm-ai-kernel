@@ -10,17 +10,17 @@ This tree is the canonical public documentation source for HELM AI Kernel. Publi
 - [Developer journey](DEVELOPER_JOURNEY.md)
 - [Community](../COMMUNITY.md)
 - [Ecosystem map](ECOSYSTEM.md)
-- [OSS traction playbook](TRACTION.md)
+- [HELM AI Kernel OSS traction plan](TRACTION.md)
 - [Architecture](ARCHITECTURE.md)
 - [Canonical diagrams](architecture/canonical-diagrams.md)
 
 ## Search-Intent Pages
 
-- [MCP execution firewall](use-cases/mcp-execution-firewall.md)
-- [AI agent security](use-cases/ai-agent-security.md)
-- [OpenAI-compatible AI gateway policy](use-cases/openai-compatible-ai-gateway-policy.md)
-- [LLM audit receipts](use-cases/llm-audit-receipts.md)
-- [Agent tool-call governance](use-cases/agent-tool-call-governance.md)
+- [MCP tool quarantine](use-cases/mcp-execution-firewall.md)
+- [AI agent execution firewall](use-cases/ai-agent-security.md)
+- [OpenAI-compatible execution boundary](use-cases/openai-compatible-ai-gateway-policy.md)
+- [Signed receipts for AI agent actions](use-cases/llm-audit-receipts.md)
+- [AI agent side-effect governance](use-cases/agent-tool-call-governance.md)
 
 ## Launch Posts
 

@@ -1,9 +1,9 @@
 ---
-title: Agent Tool-Call Governance
+title: AI Agent Side-Effect Governance
 last_reviewed: 2026-06-01
 ---
 
-# Agent Tool-Call Governance
+# AI Agent Side-Effect Governance
 
 HELM AI Kernel documents this search intent with a local, source-backed proof path.
 

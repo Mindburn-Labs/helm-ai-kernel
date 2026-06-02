@@ -1,9 +1,9 @@
 ---
-title: MCP Execution Firewall
+title: MCP Tool Quarantine
 last_reviewed: 2026-06-01
 ---
 
-# MCP Execution Firewall
+# MCP Tool Quarantine
 
 HELM AI Kernel documents this search intent with a local, source-backed proof path.
 

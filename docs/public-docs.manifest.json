@@ -56,7 +56,7 @@
     },
     {
       "slug": "helm-ai-kernel/oss-traction",
-      "title": "OSS Traction Playbook",
+      "title": "HELM AI Kernel OSS Traction Plan",
       "section": "start-here",
       "source_path": "docs/TRACTION.md",
       "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/oss-traction",
@@ -65,7 +65,7 @@
     },
     {
       "slug": "helm-ai-kernel/use-cases/mcp-execution-firewall",
-      "title": "MCP Execution Firewall",
+      "title": "MCP Tool Quarantine",
       "section": "use-cases",
       "source_path": "docs/use-cases/mcp-execution-firewall.md",
       "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/use-cases/mcp-execution-firewall",
@@ -83,7 +83,7 @@
     },
     {
       "slug": "helm-ai-kernel/use-cases/openai-compatible-ai-gateway-policy",
-      "title": "OpenAI-Compatible AI Gateway Policy",
+      "title": "OpenAI-Compatible Execution Boundary",
       "section": "use-cases",
       "source_path": "docs/use-cases/openai-compatible-ai-gateway-policy.md",
       "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/use-cases/openai-compatible-ai-gateway-policy",
@@ -92,7 +92,7 @@
     },
     {
       "slug": "helm-ai-kernel/use-cases/llm-audit-receipts",
-      "title": "LLM Audit Receipts",
+      "title": "Signed Receipts for AI Agent Actions",
       "section": "use-cases",
       "source_path": "docs/use-cases/llm-audit-receipts.md",
       "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/use-cases/llm-audit-receipts",
@@ -101,7 +101,7 @@
     },
     {
       "slug": "helm-ai-kernel/use-cases/agent-tool-call-governance",
-      "title": "Agent Tool-Call Governance",
+      "title": "AI Agent Side-Effect Governance",
       "section": "use-cases",
       "source_path": "docs/use-cases/agent-tool-call-governance.md",
       "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/use-cases/agent-tool-call-governance",

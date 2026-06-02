@@ -1,9 +1,9 @@
 ---
-title: AI Agent Security
+title: AI Agent Execution Firewall
 last_reviewed: 2026-06-01
 ---
 
-# AI Agent Security
+# AI Agent Execution Firewall
 
 HELM AI Kernel documents this search intent with a local, source-backed proof path.
 

@@ -13,7 +13,7 @@ HELM AI Kernel treats that state as quarantine. Unknown servers, unknown tools,
 and missing schema pins return DENY or ESCALATE before fixture dispatch. A
 known schema-pinned call can be allowed.
 
-![HELM MCP quarantine and receipt proof board](../assets/helm-mcp-quarantine-demo.png)
+![HELM MCP quarantine and receipt proof board](../assets/helm-mcp-quarantine-demo.svg)
 
 The local MCP launch demo exercises the path end to end:
 

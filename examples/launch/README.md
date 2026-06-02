@@ -15,7 +15,7 @@ claims this suite exercises: unknown MCP inputs fail closed before fixture
 dispatch, schema-pinned calls are allowed, receipts verify, and tampered
 receipts fail verification.
 
-![HELM MCP quarantine and receipt proof board](../../docs/assets/helm-mcp-quarantine-demo.png)
+![HELM MCP quarantine and receipt proof board](../../docs/assets/helm-mcp-quarantine-demo.svg)
 
 Run individual demos:
 

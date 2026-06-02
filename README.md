@@ -49,7 +49,7 @@ The local proof path shows the public value proposition in one frame:
 - a signed DENY receipt verifies offline
 - a flipped-verdict receipt fails verification
 
-![HELM MCP quarantine and receipt proof board](docs/assets/helm-mcp-quarantine-demo.png)
+![HELM MCP quarantine and receipt proof board](docs/assets/helm-mcp-quarantine-demo.svg)
 
 Sanitized transcripts are checked in under
 [`examples/launch/assets`](examples/launch/assets).

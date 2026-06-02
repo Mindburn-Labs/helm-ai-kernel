@@ -30,13 +30,20 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.12"
+      - name: Validate provider sources
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/launch/update_model_provider_catalog.py --network
       - name: Validate and normalize catalog
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/launch/update_model_provider_catalog.py --write
+      - name: Refresh catalog source fingerprints
+        if: github.event_name != 'pull_request'
         run: python3 scripts/launch/update_model_provider_catalog.py --network --write
       - name: Summarize catalog coverage
         run: python3 scripts/launch/update_model_provider_catalog.py --summary >> "$GITHUB_STEP_SUMMARY"
       - name: Ensure generated catalog artifacts are committed
         if: github.event_name == 'pull_request'
-        run: git diff --exit-code -- core/pkg/launchpad/modelproviders/catalog.json core/pkg/launchpad/modelproviders/source_fingerprints.json scripts/launch/update_model_provider_catalog.py tools/launchpad/artifacts/model-gateway-check.sh
+        run: git diff --exit-code -- core/pkg/launchpad/modelproviders/catalog.json scripts/launch/update_model_provider_catalog.py tools/launchpad/artifacts/model-gateway-check.sh
       - name: Open refresh PR
         if: github.event_name != 'pull_request'
         env:

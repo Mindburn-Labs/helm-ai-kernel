@@ -3,11 +3,18 @@ package sovereignty
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
+
+type failingIntentSigner struct{}
+
+func (failingIntentSigner) Sign([]byte) ([]byte, error) {
+	return nil, errors.New("signer unavailable")
+}
 
 func TestAuthorize(t *testing.T) {
 	// Generate a real Ed25519 key pair for the test
@@ -81,4 +88,38 @@ func TestAuthorize(t *testing.T) {
 		assert.Nil(t, intent)
 		assert.Contains(t, err.Error(), "no signer configured")
 	})
+}
+
+func TestAuthorizeAdditionalFailureEdges(t *testing.T) {
+	guard := NewSovereigntyGuard(failingIntentSigner{})
+	intent, err := guard.Authorize(nil)
+	assert.Error(t, err)
+	assert.Nil(t, intent)
+	assert.Contains(t, err.Error(), "nil")
+
+	intent, err = guard.Authorize(&DecisionRecord{
+		DecisionID:   "dec_fail",
+		EffectDigest: "digest_fail",
+		Expiry:       time.Now().Add(1 * time.Hour),
+		Signature:    "valid_sig",
+	})
+	assert.Error(t, err)
+	assert.Nil(t, intent)
+	assert.Contains(t, err.Error(), "failed to sign")
+}
+
+func TestEd25519IntentSignerRejectsInvalidKey(t *testing.T) {
+	signer := NewEd25519IntentSigner(ed25519.PrivateKey("too-short"))
+	sig, err := signer.Sign([]byte("intent"))
+	assert.Error(t, err)
+	assert.Nil(t, sig)
+}
+
+func TestVerifyReceiptTerminalStatuses(t *testing.T) {
+	guard := NewSovereigntyGuard(nil)
+
+	assert.False(t, guard.VerifyReceipt(nil))
+	assert.True(t, guard.VerifyReceipt(&Receipt{Status: "SUCCESS"}))
+	assert.True(t, guard.VerifyReceipt(&Receipt{Status: "FAILURE"}))
+	assert.False(t, guard.VerifyReceipt(&Receipt{Status: "PENDING"}))
 }

@@ -39,19 +39,72 @@ jobs:
           set -euo pipefail
           title="Version drift monitor: published channels out of lockstep"
           issue_number="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
-          {
-            echo "Published version drift was detected for expected version \`$(cat VERSION)\`."
-            echo
-            echo "Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            echo
-            echo '```json'
-            cat version-status.json
-            echo '```'
-          } > issue-body.md
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            python3 - <<'PY' > issue-body.md
+          import json
+          import os
+
+          with open("version-status.json", "r", encoding="utf-8") as f:
+              status = json.load(f)
+
+          expected = status.get("expected_version", "unknown")
+          generated_at = status.get("generated_at", "unknown")
+          registries = status.get("registry_versions", [])
+          failing = [item for item in registries if item.get("status") != "pass"]
+          passing = [item for item in registries if item.get("status") == "pass"]
+
+          def value_text(value):
+              if value is None:
+                  return "`missing`"
+              if isinstance(value, (dict, list)):
+                  return f"`{json.dumps(value, sort_keys=True, separators=(',', ':'))}`"
+              return f"`{value}`"
+
+          print(f"Published version drift was detected for expected version `{expected}`.")
+          print()
+          print(f"Workflow run: {os.environ['RUN_URL']}")
+          print(f"Generated at: `{generated_at}`")
+          print()
+          print("## Failing published channels")
+          print()
+          if failing:
+              for item in failing:
+                  detail = item.get("detail")
+                  suffix = f" ({detail})" if detail else ""
+                  print(
+                      f"- `{item.get('id', 'unknown')}`: expected {value_text(item.get('expected'))}, "
+                      f"actual {value_text(item.get('actual'))}{suffix}"
+                  )
+                  if item.get("url"):
+                      print(f"  {item['url']}")
+          else:
+              print("- None")
+          print()
+          print("## Passing published channels")
+          print()
+          if passing:
+              print(", ".join(f"`{item.get('id', 'unknown')}`" for item in passing))
+          else:
+              print("None")
+          print()
+          print("## Resolution path")
+          print()
+          print("- Publish or repair the failing public channels so they match `VERSION`.")
+          print("- Re-run the Version Drift Monitor workflow.")
+          print("- The workflow closes this issue automatically once published channels are back in lockstep.")
+          print()
+          print("Raw `version-status.json` remains attached to the workflow artifact; do not paste the full JSON into this issue.")
+          PY
           if [ -n "$issue_number" ]; then
             gh issue edit "$issue_number" --body-file issue-body.md
           else
-            gh issue create --title "$title" --body-file issue-body.md
+            gh issue create \
+              --title "$title" \
+              --body-file issue-body.md \
+              --label conformance \
+              --label roadmap \
+              --label maintainer-task \
+              --label release-blocker
           fi
       - name: Close resolved drift issue
         if: steps.drift.outcome == 'success'

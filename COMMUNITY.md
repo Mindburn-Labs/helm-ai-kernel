@@ -23,4 +23,10 @@ Star the repo to follow the MCP execution-firewall roadmap: <https://github.com/
 | Receipts | Add verification or tamper-failure fixtures. | `bash scripts/launch/demo-proof.sh` |
 | SDKs | Polish first-run examples and README snippets. | `make sdk-examples-smoke` or the focused SDK target |
 
+## Issue Labels
+
+- `good first issue` is scoped and newcomer-safe.
+- `help wanted` is contributor-ready, but may need more context or maintainer review.
+- `maintainer-task` requires maintainer, operator, or release access and is not externally claimable.
+
 Large changes should start in Discussions before a PR. Do not post provider keys, customer data, private prompts, unredacted production receipts, or live tenant metadata.

@@ -55,6 +55,7 @@ func TestRegisteredSandboxConformanceFailureBranches(t *testing.T) {
 	})
 
 	expectCaseError(t, "SBX-L2-TIMEOUT-001", &sandboxCaseActuator{MockActuator: NewMockActuator(), createErr: errCreate})
+	expectCaseClean(t, "SBX-L2-TIMEOUT-001", &sandboxCaseActuator{MockActuator: NewMockActuator(), execErrs: []error{errExec}})
 	expectCaseFailure(t, "SBX-L2-TIMEOUT-001", &sandboxCaseActuator{
 		MockActuator: NewMockActuator(),
 		execResults:  []*actuators.ExecResult{{ExitCode: 0, TimedOut: false}},

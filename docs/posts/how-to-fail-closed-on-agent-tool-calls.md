@@ -18,7 +18,7 @@ HELM AI Kernel demonstrates the pattern locally:
 - dangerous shell fixture: DENY with a signed receipt
 - flipped-verdict receipt: verification failure
 
-![HELM MCP quarantine and receipt proof board](../assets/helm-mcp-quarantine-demo.png)
+![HELM MCP quarantine and receipt proof board](../assets/helm-mcp-quarantine-demo.svg)
 
 Run the local demos:
 

@@ -15,7 +15,7 @@ intercepts proposed tool calls, evaluates policy before dispatch, records
 ALLOW, DENY, or ESCALATE decisions, and emits signed receipts that can be
 verified offline.
 
-![HELM MCP quarantine and receipt proof board](../assets/helm-mcp-quarantine-demo.png)
+![HELM MCP quarantine and receipt proof board](../assets/helm-mcp-quarantine-demo.svg)
 
 The key idea is simple: the agent can propose, but HELM decides whether the
 side effect is authorized. Unknown MCP servers and tools fail closed before

@@ -373,3 +373,126 @@ func TestGateway_InvalidSessionIdRejected(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 	assert.Contains(t, rec.Body.String(), "invalid or expired MCP session")
 }
+
+func TestGateway_TransportEdgeBranches(t *testing.T) {
+	catalog := NewInMemoryCatalog()
+	gateway := NewGateway(catalog, GatewayConfig{})
+
+	nonFlushing := &gatewayNonFlushingWriter{header: http.Header{}}
+	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
+	req.Header.Set("Accept", "text/event-stream")
+	gateway.handleTransportGET(nonFlushing, req)
+	assert.Equal(t, http.StatusInternalServerError, nonFlushing.status)
+	assert.Contains(t, nonFlushing.body.String(), "streaming unsupported")
+
+	mux := newProtocolTestMux(t, GatewayConfig{}, nil)
+	badJSON := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString("{"))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, badJSON)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	initUnsupported := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "1900-01-01",
+		},
+	}, nil)
+	assert.Equal(t, http.StatusBadRequest, initUnsupported.Code)
+
+	notification := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"method":  "notifications/initialized",
+	}, nil)
+	assert.Equal(t, http.StatusAccepted, notification.Code)
+	assert.Empty(t, notification.Body.String())
+}
+
+func TestGateway_RESTExecutePropagatesDelegationHeaders(t *testing.T) {
+	exec := func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
+		assert.Equal(t, "file_read", req.ToolName)
+		assert.Equal(t, "delegation-1", req.DelegationSessionID)
+		assert.Equal(t, "did:example:verifier", req.DelegationVerifier)
+		assert.Equal(t, []string{"file_read", "file_write"}, req.DelegationAllowedTools)
+		return ToolExecutionResponse{Content: "delegated"}, nil
+	}
+	mux := newProtocolTestMux(t, GatewayConfig{}, exec)
+
+	body, err := json.Marshal(MCPToolCallRequest{
+		Method: "file_read",
+		Params: map[string]any{"path": "/tmp/demo.txt"},
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body))
+	req.Header.Set("X-HELM-Delegation-Session-ID", "delegation-1")
+	req.Header.Set("X-HELM-Delegation-Verifier", "did:example:verifier")
+	req.Header.Set("X-HELM-Delegation-Allowed-Tools", " file_read, ,file_write ")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "delegated")
+}
+
+func TestGateway_JSONRPCAndSchemaFallbackEdges(t *testing.T) {
+	errGateway := NewGateway(errorCatalog{}, GatewayConfig{})
+	resp, respond, status := errGateway.handleJSONRPCRequest(context.Background(), 1, "tools/list", nil, LatestProtocolVersion)
+	require.True(t, respond)
+	assert.Equal(t, http.StatusOK, status)
+	assert.Contains(t, marshalMCPTestValue(t, resp), "catalog failed")
+
+	catalog := NewInMemoryCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name:           "scoped",
+		Description:    "scoped jsonrpc tool",
+		Schema:         map[string]any{"type": "object"},
+		RequiredScopes: []string{"mcp:tool:scoped"},
+	}))
+	execGateway := NewGateway(catalog, GatewayConfig{}, WithExecutor(func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
+		assert.Equal(t, []string{"mcp:tool:scoped"}, req.RequiredScopes)
+		assert.Equal(t, []string{"mcp:tool:scoped"}, req.OAuthScopes)
+		assert.Equal(t, []string{"https://resource.example/mcp"}, req.OAuthResources)
+		return ToolExecutionResponse{Content: "ok"}, nil
+	}))
+	ctx := WithOAuthAuthorization(context.Background(), OAuthAuthorization{
+		Scopes:    []string{"mcp:tool:scoped"},
+		Resources: []string{"https://resource.example/mcp"},
+	})
+	resp, respond, status = execGateway.handleJSONRPCRequest(ctx, 2, "tools/call", json.RawMessage(`{"name":"scoped","arguments":{}}`), LatestProtocolVersion)
+	require.True(t, respond)
+	assert.Equal(t, http.StatusOK, status)
+	assert.Contains(t, marshalMCPTestValue(t, resp), "ok")
+
+	schema := catalogSchemaToArgSchema(map[string]any{
+		"properties": map[string]any{
+			"payload": map[string]any{},
+		},
+		"required": []any{"payload", 42},
+	})
+	require.NotNil(t, schema)
+	field := schema.Fields["payload"]
+	assert.Equal(t, "any", field.Type)
+	assert.True(t, field.Required)
+}
+
+type gatewayNonFlushingWriter struct {
+	header http.Header
+	status int
+	body   bytes.Buffer
+}
+
+func (w *gatewayNonFlushingWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *gatewayNonFlushingWriter) Write(data []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	return w.body.Write(data)
+}
+
+func (w *gatewayNonFlushingWriter) WriteHeader(statusCode int) {
+	w.status = statusCode
+}

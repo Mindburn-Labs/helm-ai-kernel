@@ -2,6 +2,8 @@ package session
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -482,6 +484,16 @@ exit 0
 	if err == nil {
 		t.Fatal("expected materialize filesystem mkdir error")
 	}
+	mounts, err := materializeFilesystemMounts(plan.LaunchPlan{LaunchID: "lp-dry", AppID: "app", FilesystemMounts: []string{"workspace:rw:/workspace", "cache:ro:/var/cache/app"}}, ExecuteOptions{RuntimeDryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mounts) != 1 || mounts[0].Source != "" || !mounts[0].ReadOnly {
+		t.Fatalf("dry-run filesystem mount mismatch: %#v", mounts)
+	}
+	if _, err := parseFilesystemMount(":rw:/var/lib/app/data", "app"); err == nil {
+		t.Fatal("expected empty filesystem mount name error")
+	}
 
 	starter := DefaultRuntimeStarter{}
 	local := allowPlan()
@@ -500,6 +512,325 @@ exit 0
 	_, err = starter.Start(local, ExecuteOptions{RuntimeDryRun: true, WorkspaceMount: t.TempDir()})
 	if err == nil {
 		t.Fatal("expected invalid isolation mode error")
+	}
+}
+
+func TestCoverageTeardownFailureBranches(t *testing.T) {
+	t.Run("docker_missing", func(t *testing.T) {
+		t.Setenv("PATH", t.TempDir())
+		result := teardownRuntimeHandles(LaunchRun{
+			LaunchID: "lp-no-docker",
+			RuntimeHandles: RuntimeHandles{
+				ContainerID:      "container-1",
+				CloudResourceIDs: map[string]string{},
+			},
+		})
+		if result["docker_available"] != false {
+			t.Fatalf("expected docker unavailable result: %#v", result)
+		}
+	})
+
+	t.Run("docker_cleanup_failures_are_reported", func(t *testing.T) {
+		binDir := t.TempDir()
+		dockerPath := filepath.Join(binDir, "docker")
+		script := `#!/bin/sh
+if [ "$1" = "ps" ]; then
+  echo "orphan-a"
+  exit 0
+fi
+if [ "$1" = "rm" ]; then
+  echo "rm failed: $*"
+  exit 1
+fi
+if [ "$1" = "network" ]; then
+  echo "network failed: $*"
+  exit 1
+fi
+exit 0
+`
+		if err := os.WriteFile(dockerPath, []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("PATH", binDir)
+		t.Setenv("HELM_LAUNCHPAD_HOME", t.TempDir())
+		result := teardownRuntimeHandles(LaunchRun{
+			LaunchID: "lp-docker-fail",
+			RuntimeHandles: RuntimeHandles{
+				ContainerID:       "container-1",
+				EgressProxyName:   "proxy-1",
+				EgressNetworkName: "net-1",
+				CloudResourceIDs:  map[string]string{},
+			},
+		})
+		joined := marshalString(t, result)
+		for _, want := range []string{"container_cleanup", "orphan_container_cleanup", "egress_proxy_cleanup", "egress_network_cleanup", "rm failed", "network failed"} {
+			if !strings.Contains(joined, want) {
+				t.Fatalf("docker failure result missing %q: %s", want, joined)
+			}
+		}
+	})
+
+	for _, tc := range []struct {
+		name       string
+		provider   string
+		keyEnv     string
+		urlEnv     string
+		path       string
+		status     int
+		wantDelete bool
+	}{
+		{"e2b_success", "e2b", "E2B_API_KEY", "HELM_LAUNCHPAD_E2B_API_URL", "/sandboxes/sandbox-1", http.StatusNoContent, true},
+		{"e2b_error", "e2b", "E2B_API_KEY", "HELM_LAUNCHPAD_E2B_API_URL", "/sandboxes/sandbox-1", http.StatusInternalServerError, false},
+		{"daytona_success", "daytona", "DAYTONA_API_KEY", "HELM_LAUNCHPAD_DAYTONA_BASE_URL", "/sandbox/sandbox-1", http.StatusNoContent, true},
+		{"daytona_error", "daytona", "DAYTONA_API_KEY", "HELM_LAUNCHPAD_DAYTONA_BASE_URL", "/sandbox/sandbox-1", http.StatusInternalServerError, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodDelete || r.URL.Path != tc.path {
+					t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+				}
+				w.WriteHeader(tc.status)
+				if tc.status >= 400 {
+					_, _ = w.Write([]byte("cleanup failed"))
+				}
+			}))
+			t.Cleanup(server.Close)
+			t.Setenv(tc.keyEnv, "test-key")
+			t.Setenv(tc.urlEnv, server.URL)
+			result := teardownRuntimeHandles(LaunchRun{
+				LaunchID: "lp-" + tc.name,
+				RuntimeHandles: RuntimeHandles{
+					ContainerID:      "sandbox-1",
+					CloudResourceIDs: map[string]string{"provider": tc.provider},
+				},
+			})
+			if tc.wantDelete {
+				if result["cloud_cleanup"] != "deleted" || result["receipt_id"] == "" {
+					t.Fatalf("expected cloud delete success: %#v", result)
+				}
+			} else if result["cloud_cleanup_error"] == "" {
+				t.Fatalf("expected cloud delete error: %#v", result)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name       string
+		provider   string
+		tokenEnv   string
+		altEnv     string
+		urlEnv     string
+		resourceID map[string]string
+		status     int
+		wantDelete bool
+	}{
+		{"digitalocean_success", "digitalocean", "DIGITALOCEAN_TOKEN", "HELM_LAUNCHPAD_DIGITALOCEAN_TOKEN", "HELM_LAUNCHPAD_DIGITALOCEAN_ENDPOINT", map[string]string{"droplet": "123", "firewall": "fw-1"}, http.StatusNoContent, true},
+		{"digitalocean_error", "digitalocean", "DIGITALOCEAN_TOKEN", "HELM_LAUNCHPAD_DIGITALOCEAN_TOKEN", "HELM_LAUNCHPAD_DIGITALOCEAN_ENDPOINT", map[string]string{"droplet": "123", "firewall": "fw-1"}, http.StatusInternalServerError, false},
+		{"hetzner_success", "hetzner", "HCLOUD_TOKEN", "HELM_LAUNCHPAD_HETZNER_TOKEN", "HELM_LAUNCHPAD_HETZNER_ENDPOINT", map[string]string{"server": "456", "firewall": "789"}, http.StatusNoContent, true},
+		{"hetzner_error", "hetzner", "HCLOUD_TOKEN", "HELM_LAUNCHPAD_HETZNER_TOKEN", "HELM_LAUNCHPAD_HETZNER_ENDPOINT", map[string]string{"server": "456", "firewall": "789"}, http.StatusInternalServerError, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+			}))
+			t.Cleanup(server.Close)
+			t.Setenv(tc.tokenEnv, "test-token")
+			t.Setenv(tc.altEnv, "")
+			t.Setenv(tc.urlEnv, server.URL)
+			refs := map[string]string{"provider": tc.provider}
+			for key, value := range tc.resourceID {
+				refs[key] = value
+			}
+			result := teardownRuntimeHandles(LaunchRun{
+				LaunchID: "lp-" + tc.name,
+				PlanHash: "sha256:plan",
+				RuntimeHandles: RuntimeHandles{
+					CloudResourceIDs: refs,
+				},
+			})
+			if tc.wantDelete {
+				if result["cloud_cleanup"] != "deleted" || result["receipt_id"] == "" {
+					t.Fatalf("expected provider delete success: %#v", result)
+				}
+			} else if result["cloud_cleanup_error"] == "" {
+				t.Fatalf("expected provider delete error: %#v", result)
+			}
+		})
+	}
+}
+
+func TestCoverageRuntimeStarterHostedSandboxLiveBranches(t *testing.T) {
+	starter := DefaultRuntimeStarter{}
+	for _, tc := range []struct {
+		name        string
+		substrate   string
+		keyEnv      string
+		urlEnv      string
+		path        string
+		successBody string
+		status      int
+		wantID      string
+	}{
+		{"e2b_success", "e2b", "E2B_API_KEY", "HELM_LAUNCHPAD_E2B_API_URL", "/sandboxes", `{"sandboxID":"e2b-live","clientID":"client-1"}`, http.StatusOK, "e2b-live"},
+		{"e2b_error", "e2b", "E2B_API_KEY", "HELM_LAUNCHPAD_E2B_API_URL", "/sandboxes", `{"error":"failed"}`, http.StatusInternalServerError, ""},
+		{"daytona_success", "daytona", "DAYTONA_API_KEY", "HELM_LAUNCHPAD_DAYTONA_BASE_URL", "/sandbox", `{"sandboxId":"daytona-live"}`, http.StatusOK, "daytona-live"},
+		{"daytona_error", "daytona", "DAYTONA_API_KEY", "HELM_LAUNCHPAD_DAYTONA_BASE_URL", "/sandbox", `{"error":"failed"}`, http.StatusInternalServerError, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost || r.URL.Path != tc.path {
+					t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+				}
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.successBody))
+			}))
+			t.Cleanup(server.Close)
+			t.Setenv(tc.keyEnv, "test-key")
+			t.Setenv(tc.urlEnv, server.URL)
+			p := allowPlan()
+			p.SubstrateID = tc.substrate
+			p.ArtifactImage = "custom-template"
+			result, err := starter.Start(p, ExecuteOptions{})
+			if tc.wantID == "" {
+				if err == nil {
+					t.Fatalf("expected hosted sandbox start error, got %#v", result)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.ContainerID != tc.wantID || result.CloudResourceIDs["sandbox_id"] != tc.wantID || result.CloudResourceIDs["provider"] != tc.substrate {
+				t.Fatalf("hosted sandbox start mismatch: %#v", result)
+			}
+		})
+	}
+}
+
+func TestCoverageRuntimeStarterCloudProviderLiveBranches(t *testing.T) {
+	starter := DefaultRuntimeStarter{}
+	for _, tc := range []struct {
+		name      string
+		substrate string
+		tokenEnv  string
+		urlEnv    string
+		status    int
+		wantID    string
+	}{
+		{"digitalocean_success", "digitalocean", "DIGITALOCEAN_TOKEN", "HELM_LAUNCHPAD_DIGITALOCEAN_ENDPOINT", http.StatusCreated, "321"},
+		{"digitalocean_error", "digitalocean", "DIGITALOCEAN_TOKEN", "HELM_LAUNCHPAD_DIGITALOCEAN_ENDPOINT", http.StatusInternalServerError, ""},
+		{"hetzner_success", "hetzner", "HCLOUD_TOKEN", "HELM_LAUNCHPAD_HETZNER_ENDPOINT", http.StatusCreated, "987"},
+		{"hetzner_error", "hetzner", "HCLOUD_TOKEN", "HELM_LAUNCHPAD_HETZNER_ENDPOINT", http.StatusInternalServerError, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				if tc.status >= 400 {
+					_, _ = w.Write([]byte(`{"error":"failed"}`))
+					return
+				}
+				switch r.URL.Path {
+				case "/v2/droplets":
+					_, _ = w.Write([]byte(`{"droplet":{"id":321}}`))
+				case "/v2/firewalls":
+					_, _ = w.Write([]byte(`{"firewall":{"id":"fw-live"}}`))
+				case "/firewalls":
+					_, _ = w.Write([]byte(`{"firewall":{"id":654}}`))
+				case "/servers":
+					_, _ = w.Write([]byte(`{"server":{"id":987}}`))
+				default:
+					t.Errorf("unexpected provider path: %s", r.URL.Path)
+				}
+			}))
+			t.Cleanup(server.Close)
+			t.Setenv(tc.tokenEnv, "test-token")
+			t.Setenv(tc.urlEnv, server.URL)
+			p := allowPlan()
+			p.SubstrateID = tc.substrate
+			result, err := starter.Start(p, ExecuteOptions{})
+			if tc.wantID == "" {
+				if err == nil {
+					t.Fatalf("expected cloud provider start error, got %#v", result)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.ContainerID != tc.wantID || result.CloudResourceIDs["provider"] != tc.substrate {
+				t.Fatalf("cloud provider start mismatch: %#v", result)
+			}
+		})
+	}
+}
+
+func TestCoverageExecutorPersistenceEdges(t *testing.T) {
+	blockedRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(blockedRoot, "runs"), []byte("file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewExecutor(NewStore(blockedRoot)).ExecuteLaunch(allowPlan(), ExecuteOptions{}); err == nil {
+		t.Fatal("expected execute launch to fail when initial state save is blocked")
+	}
+
+	defaultStarterPlan := allowPlan()
+	defaultStarterPlan.LaunchID = "default-starter"
+	defaultStarterPlan.CPIOutput = &plan.CPIOutput{ResultHash: "sha256:cpi"}
+	defaultStarterPlan.ArtifactImage = "registry.example/openclaw:latest"
+	defaultStarterPlan.ArtifactDigest = "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+	t.Setenv("HELM_LAUNCHPAD_HOME", t.TempDir())
+	run, err := Executor{Store: NewStore(t.TempDir())}.ExecuteLaunch(defaultStarterPlan, ExecuteOptions{RuntimeDryRun: true, WorkspaceMount: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.State != StateRunning || len(run.CPIRefs) != 1 {
+		t.Fatalf("default starter run mismatch: %#v", run)
+	}
+
+	rootFile := filepath.Join(t.TempDir(), "root-file")
+	if err := os.WriteFile(rootFile, []byte("file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Executor{Store: NewStore(rootFile)}).persist(LaunchRun{LaunchID: "pack-fail", State: StateValidated, KernelVerdict: "ALLOW"}, map[string][]byte{}); err == nil {
+		t.Fatal("expected evidence pack write failure")
+	}
+
+	archiveFallbackRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(archiveFallbackRoot, "evidencepacks", "archive-fallback.tar"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run, err = (Executor{Store: NewStore(archiveFallbackRoot)}).persist(LaunchRun{LaunchID: "archive-fallback", State: StateValidated, KernelVerdict: "ALLOW"}, map[string][]byte{"runtime_environment.json": []byte("{}")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.HasSuffix(run.VerificationCommand, ".tar") {
+		t.Fatalf("expected verification fallback to unpacked evidence pack: %s", run.VerificationCommand)
+	}
+
+	saveFailRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(saveFailRoot, "runs"), []byte("file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Executor{Store: NewStore(saveFailRoot)}).persist(LaunchRun{LaunchID: "save-fail", State: StateValidated, KernelVerdict: "ALLOW"}, map[string][]byte{}); err == nil {
+		t.Fatal("expected persist save failure")
+	}
+
+	if _, err := NewExecutor(NewStore(t.TempDir())).DeleteLaunch("missing", false); err == nil {
+		t.Fatal("expected missing launch delete error")
+	}
+
+	env := map[string]string{"EXISTING": "kept"}
+	setIfEmpty(env, "EMPTY_VALUE", "")
+	setIfEmpty(env, "EXISTING", "replacement")
+	if env["EMPTY_VALUE"] != "" || env["EXISTING"] != "kept" {
+		t.Fatalf("setIfEmpty guard mismatch: %#v", env)
+	}
+	projectModelProviderRuntimeMetadata(env, "")
+	projectModelProviderRuntimeMetadata(env, "CUSTOM_API_KEY")
+	t.Setenv("ANTHROPIC_BASE_URL", "https://anthropic.example")
+	secrets := runtimeSecrets(plan.LaunchPlan{ModelGatewayEnv: []string{"ANTHROPIC_API_KEY"}}, ExecuteOptions{RuntimeSecretEnv: map[string]string{"ANTHROPIC_API_KEY": "anthropic-key"}})
+	if secrets["ANTHROPIC_BASE_URL"] == "" || secrets["HELM_MODEL_GATEWAY_PROVIDER"] != "anthropic" {
+		t.Fatalf("anthropic provider metadata missing: %#v", secrets)
 	}
 }
 

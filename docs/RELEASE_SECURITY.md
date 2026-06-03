@@ -51,13 +51,13 @@ flowchart TD
 ```
 
 
-Current source release target: `v0.5.8`:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.8>. The
+Current source release target: `v0.5.9`:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.9>. The
 release is complete only when GitHub shows Darwin/Linux/Windows binaries,
-`SHA256SUMS.txt`, `sbom.json`, `v0.5.8.openvex.json`,
+`SHA256SUMS.txt`, `sbom.json`, `v0.5.9.openvex.json`,
 `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`,
 `sample-policy-material.tar`, `helm-ai-kernel-launchpad-data.tar`,
-`helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.8.json`,
+`helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.9.json`,
 `version-status.json`, and matching `*.cosign.bundle` files for each primary
 asset.
 
@@ -95,16 +95,23 @@ the audit EvidencePack, verifies the staged `evidence-pack.tar`, and only then
 writes final checksums. A failed EvidencePack verification blocks release asset
 publication.
 
-For `v0.5.8`, use checksum verification, SBOM inspection, OpenVEX inspection,
+For `v0.5.9`, use checksum verification, SBOM inspection, OpenVEX inspection,
 release metadata inspection, offline EvidencePack verification,
 reproducible-build validation, and Cosign verification against the attached
 bundles.
 
 ## Historical Release Context (Signed Releases & Provenance)
 
-Historical development releases prior to `v0.5.8` (including tags `v0.5.2` through `v0.5.6`) were early developer drafts designed to test baseline execution mechanics. Because keyless Sigstore Cosign signing and SLSA generator actions were not yet activated in the release pipeline during those iterations, those specific release assets do not contain cryptographic signature bundles (`*.cosign.bundle`) or SLSA provenance attestations. 
+Historical development releases before the `v0.5.9` release target were early
+developer drafts designed to test baseline execution mechanics. Because those
+iterations did not complete the current keyless Sigstore Cosign and SLSA
+provenance release contract, their assets must not be treated as having
+cryptographic signature bundles (`*.cosign.bundle`) or SLSA provenance
+attestations unless those files are attached to the release.
 
-Starting from release `v0.5.8` and for all future tags, the release pipeline is fully integrated with keyless OIDC Cosign signing and SLSA Level 3 provenance builders. All active public releases are guaranteed to ship complete signature bundles and attestation metadata.
+Starting from a completed `v0.5.9` public release and for later tags, the
+retained release pipeline must publish complete signature bundles and
+attestation metadata before the release is documented as complete.
 
 ## Source Truth
 

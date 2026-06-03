@@ -39,13 +39,14 @@ flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Page["HELM AI Kernel Changelog"]
         A["[Unreleased]"]
-        B["[0.5.4] - 2026-05-20"]
-        C["[0.5.3] - 2026-05-19"]
-        D["[0.5.2] - 2026-05-19"]
-        E["[0.5.1] - 2026-05-18"]
-        F["[0.5.0] - 2026-05-13"]
-        G["[0.4.0] - 2026-04-25"]
-        H["Validation"]
+        B["[0.5.9] - 2026-06-03"]
+        C["[0.5.4] - 2026-05-20"]
+        D["[0.5.3] - 2026-05-19"]
+        E["[0.5.2] - 2026-05-19"]
+        F["[0.5.1] - 2026-05-18"]
+        G["[0.5.0] - 2026-05-13"]
+        H["[0.4.0] - 2026-04-25"]
+        I["Validation"]
     end
 
     %% Operational Flow Edges
@@ -57,6 +58,7 @@ flowchart TD
     E --> F
     F --> G
     G --> H
+    H --> I
 
     %% Premium Styling Rules
 ```
@@ -70,6 +72,20 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - **UCS v1.5 Super-Sovereign Execution Standard**: Scaffolded zero-knowledge execution proof boundaries and Trusted Execution Environment (TEE) sealed secrets vault.
 - **zkVM Guest Safety Checker**: Introduced the `ZKVMGuestSafetyChecker` and `SafetyGuestProgram` inside `pkg/crypto/zk` to simulate AST static analysis inside zero-knowledge execution enclaves.
 - **TEE Secrets Enclave**: Introduced `SovereignKMSVault` and `SecretProxyFilter` inside `pkg/crypto/tee` to enforce hardware-sealed secrets isolation and inline proxy token injection with constant-time verification.
+
+## [0.5.9] - 2026-06-03
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.9>.
+
+- Prepared the lockstep `0.5.9` release surfaces across the CLI, Helm chart,
+  OpenAPI metadata, SDK package manifests, generated SDK headers, verification
+  docs, and Launchpad clean-install defaults.
+- Refreshed the Launchpad model-provider catalog so direct OpenRouter,
+  Anthropic, DeepSeek, and xAI provider routes are represented in retained
+  provider metadata.
+- Expanded regression coverage across governance policy streams, executor
+  evidence, trust roots, kernel edge cases, guardian checks, MCP quarantine,
+  conformance gates, Launchpad session runtime, and pack behavior.
 
 ## [0.5.4] - 2026-05-20
 

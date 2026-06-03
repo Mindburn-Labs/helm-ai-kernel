@@ -74,22 +74,22 @@ The verification path is local-first. `helm-ai-kernel verify <evidence-pack.tar|
 performs offline checks by default; `--online` is optional and only runs after
 offline checks pass.
 
-Current source release target: `v0.5.8`:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.8>. The
+Current source release target: `v0.5.9`:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.9>. The
 release is complete only when the page attaches platform binaries,
-`SHA256SUMS.txt`, `sbom.json`, `v0.5.8.openvex.json`,
+`SHA256SUMS.txt`, `sbom.json`, `v0.5.9.openvex.json`,
 `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
 `helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`,
-`helm-ai-kernel.rb`, `v0.5.8.json`, `version-status.json`, and matching
+`helm-ai-kernel.rb`, `v0.5.9.json`, `version-status.json`, and matching
 `*.cosign.bundle` files for each primary asset.
 
 There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
 actual baseline when auditing the `v0.5.0` delta.
 
-## v0.5.8 Asset Contract
+## v0.5.9 Asset Contract
 
-The `v0.5.8` release attaches these primary assets:
+The `v0.5.9` release attaches these primary assets:
 
 - `helm-ai-kernel-darwin-amd64`
 - `helm-ai-kernel-darwin-arm64`
@@ -98,7 +98,7 @@ The `v0.5.8` release attaches these primary assets:
 - `helm-ai-kernel-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.5.8.openvex.json`
+- `v0.5.9.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
@@ -212,7 +212,7 @@ The release staging path runs the same offline verification before publishing
 release checksums. If this step fails, the release must be treated as incomplete
 and the exported EvidencePack must be repaired before attaching assets.
 
-For `v0.5.8`, this command passes without network access. The verifier
+For `v0.5.9`, this command passes without network access. The verifier
 accepts both the legacy `receipts/` layout and the canonical
 `02_PROOFGRAPH/receipts/` layout.
 
@@ -222,7 +222,12 @@ For `v0.4.0`, the included EvidencePack also verifies offline and reports
 ## Cosign Artifact Verification When Bundles Are Attached
 
 > [!NOTE]
-> Early draft/development releases prior to `v0.5.8` (specifically `v0.5.2` through `v0.5.6`) did not feature Cosign OIDC or SLSA provenance generator steps in their release pipelines. As a result, those legacy release assets do not have associated `*.cosign.bundle` or provenance files. Cryptographic signing and SLSA provenance generation are fully active starting with `v0.5.8` and all future releases.
+> Early draft/development releases before the `v0.5.9` release target did not
+> complete the current Cosign OIDC and SLSA provenance release contract. As a
+> result, those legacy assets must not be treated as having associated
+> `*.cosign.bundle` or provenance files unless those files are attached to the
+> release. A completed `v0.5.9` or later public release must ship the matching
+> signature bundles and attestation metadata described here.
 
 Cosign verification requires a matching `*.cosign.bundle` file attached to the
 release. When a release includes those files, verify a downloaded binary blob

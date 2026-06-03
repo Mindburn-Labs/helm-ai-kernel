@@ -62,7 +62,7 @@ HELM AI Kernel is the fail-closed execution firewall for AI agents.
 
 Mindburn Labs' HELM execution kernel for AI agents, not the Kubernetes package manager.
 
-Models propose. HELM governs execution. Every ALLOW / DENY / ESCALATE decision leaves proof.
+HELM evaluates agent execution requests and records every ALLOW / DENY / ESCALATE decision as verifiable evidence.
 ```
 
 The star CTA belongs after the local proof path:

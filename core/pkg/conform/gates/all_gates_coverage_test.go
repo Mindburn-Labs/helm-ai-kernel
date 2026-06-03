@@ -228,6 +228,224 @@ func TestGateTargetedInvalidEvidenceBranches(t *testing.T) {
 	}
 }
 
+func TestGateAdditionalMalformedEvidenceBranches(t *testing.T) {
+	t.Run("G4 detects leaked secrets in evidence", func(t *testing.T) {
+		ctx := setupSparseGateContext(t)
+		writeGateFile(t, filepath.Join(ctx.EvidenceDir, "06_LOGS", "agent.log"), []byte("password=super-secret"))
+
+		result := (&G4Secrets{}).Run(ctx)
+		if result.Pass || !reasonContains(result.Reasons, "SECRET_LEAK_DETECTED") || result.Metrics.Counts["files_scanned"] != 1 {
+			t.Fatalf("G4 secret scan result = %+v, want detected secret leak", result)
+		}
+	})
+
+	t.Run("G9 reports incomplete packs and failed conformance", func(t *testing.T) {
+		ctx := setupSparseGateContext(t)
+		root := filepath.Join(ctx.EvidenceDir, "04_EXPORTS", "jurisdictions")
+		for _, name := range []string{"us", "eu"} {
+			mkdirGate(t, filepath.Join(root, name, "test_suite"))
+			writeGateJSON(t, filepath.Join(root, name, "policy_bundle.json"), map[string]any{"tenant_id": "tenant-a"})
+			writeGateJSON(t, filepath.Join(root, name, "conformance_report.json"), map[string]any{"pass": false})
+			writeGateJSON(t, filepath.Join(root, name, "test_suite", "case.json"), map[string]any{"tenant_id": "tenant-a"})
+		}
+
+		result := (&G9Jurisdiction{}).Run(ctx)
+		if result.Pass || !reasonContains(result.Reasons, "JURISDICTION_PACK_INCOMPLETE") || !reasonContains(result.Reasons, "JURISDICTION_CONFORMANCE_FAILED") {
+			t.Fatalf("G9 incomplete jurisdiction result = %+v, want incomplete and failed reports", result)
+		}
+		if result.Metrics.Counts["jurisdiction_packs"] != 2 || result.Metrics.Counts["jurisdiction_tests"] != 2 {
+			t.Fatalf("G9 metrics = %+v, want two packs and tests", result.Metrics.Counts)
+		}
+	})
+
+	t.Run("G11 reports partial SLO coverage", func(t *testing.T) {
+		ctx := setupSparseGateContext(t)
+		writeGateJSON(t, filepath.Join(ctx.EvidenceDir, "03_TELEMETRY", "slo.json"), []map[string]any{
+			{"name": "scheduler_latency", "target": "99p"},
+		})
+		writeGateJSON(t, filepath.Join(ctx.EvidenceDir, "12_REPORTS", "ops_status_snapshot.json"), map[string]any{"status": "ok"})
+		writeGateJSON(t, filepath.Join(ctx.ProjectRoot, "docs", "runbooks", "index.json"), map[string]any{"runbooks": []string{"incident"}})
+
+		result := (&G11Operability{}).Run(ctx)
+		if result.Pass || !reasonContains(result.Reasons, "SLO_MISSING:policy_decision_latency") || result.Metrics.Counts["slo_definitions"] != 1 {
+			t.Fatalf("G11 partial SLO result = %+v, want missing SLO failure", result)
+		}
+	})
+
+	t.Run("G12 reports unsigned invalid and unrooted packs", func(t *testing.T) {
+		ctx := setupSparseGateContext(t)
+		packsRoot := filepath.Join(ctx.ProjectRoot, "packs")
+		mkdirGate(t, filepath.Join(packsRoot, "unsigned"))
+		mkdirGate(t, filepath.Join(packsRoot, "invalid"))
+		writeGateFile(t, filepath.Join(packsRoot, "invalid", "signature.json"), []byte("{"))
+
+		result := (&G12SupplyChain{}).Run(ctx)
+		if result.Pass || !reasonContains(result.Reasons, "PACK_UNSIGNED:unsigned") || !reasonContains(result.Reasons, "PACK_SIG_INVALID:invalid") || !reasonContains(result.Reasons, "TRUSTED_ROOTS_MISSING") {
+			t.Fatalf("G12 malformed pack result = %+v, want unsigned invalid and missing roots", result)
+		}
+	})
+
+	t.Run("GX tenant isolation reports missing and cross-tenant ids", func(t *testing.T) {
+		ctx := setupSparseGateContext(t)
+		receiptsDir := filepath.Join(ctx.EvidenceDir, "02_PROOFGRAPH", "receipts")
+		writeGateFile(t, filepath.Join(receiptsDir, "bad.json"), []byte("{"))
+		writeGateJSON(t, filepath.Join(receiptsDir, "missing-tenant.json"), map[string]any{"receipt_hash": "r1"})
+		writeGateJSON(t, filepath.Join(receiptsDir, "tenant-a.json"), map[string]any{"tenant_id": "tenant-a"})
+		writeGateJSON(t, filepath.Join(receiptsDir, "tenant-b.json"), map[string]any{"tenant_id": "tenant-b"})
+		writeGateJSON(t, filepath.Join(ctx.EvidenceDir, "03_TELEMETRY", "budget_metrics.json"), map[string]any{"spend": map[string]any{"used": 1}})
+		writeGateJSON(t, filepath.Join(ctx.EvidenceDir, "08_TAPES", "tape.json"), map[string]any{"entries": []any{}})
+
+		result := (&GXTenantIsolation{}).Run(ctx)
+		if result.Pass || !reasonContains(result.Reasons, conform.ReasonTenantIDMissing) || !reasonContains(result.Reasons, conform.ReasonTenantIsolationViolation) {
+			t.Fatalf("GX tenant result = %+v, want missing tenant and isolation failure", result)
+		}
+		if result.Metrics.Counts["receipts_with_tenant_id"] != 2 || result.Metrics.Counts["artifacts_without_tenant_id"] == 0 {
+			t.Fatalf("GX tenant metrics = %+v, want tenant and artifact counts", result.Metrics.Counts)
+		}
+	})
+
+	t.Run("GX delegation reports wrong proof node kinds", func(t *testing.T) {
+		ctx := setupSparseGateContext(t)
+		writeGateFile(t, filepath.Join(ctx.EvidenceDir, "01_DECISIONS", "bad.json"), []byte("{"))
+		writeGateJSON(t, filepath.Join(ctx.EvidenceDir, "01_DECISIONS", "plain.json"), map[string]any{"verdict": "ALLOW"})
+		writeGateJSON(t, filepath.Join(ctx.EvidenceDir, "01_DECISIONS", "other-reason.json"), map[string]any{
+			"delegation_session_ref": "session-1",
+			"verdict":                "DENY",
+			"reason_code":            "OTHER_REASON",
+		})
+		writeGateJSON(t, filepath.Join(ctx.EvidenceDir, "01_DECISIONS", "allow.json"), map[string]any{
+			"delegation_session_ref": "session-2",
+			"verdict":                "ALLOW",
+		})
+		nodesDir := filepath.Join(ctx.EvidenceDir, "02_PROOFGRAPH", "nodes")
+		writeGateFile(t, filepath.Join(nodesDir, "bad-node.json"), []byte("{"))
+		writeGateJSON(t, filepath.Join(nodesDir, "wrong-bind.json"), map[string]any{
+			"kind":    "ATTESTATION",
+			"payload": map[string]any{"event": "DELEGATION_BIND"},
+		})
+		writeGateJSON(t, filepath.Join(nodesDir, "wrong-attestation.json"), map[string]any{
+			"kind":    "TRUST_EVENT",
+			"payload": map[string]any{"session_id": "session-2"},
+		})
+
+		result := (&GXDelegation{}).Run(ctx)
+		if result.Pass || !reasonContains(result.Reasons, "non-TRUST_EVENT") || !reasonContains(result.Reasons, "non-ATTESTATION") {
+			t.Fatalf("GX delegation result = %+v, want wrong node kind failures", result)
+		}
+		if result.Metrics.Counts["decisions_without_delegation"] != 1 || result.Metrics.Counts["delegation_deny_other_reason"] != 1 || result.Metrics.Counts["delegation_allow"] != 1 {
+			t.Fatalf("GX delegation metrics = %+v, want decision branch counts", result.Metrics.Counts)
+		}
+	})
+}
+
+func TestGateRemainingReachableFailureBranches(t *testing.T) {
+	t.Run("G2A fails empty schema directory", func(t *testing.T) {
+		ctx := setupSparseGateContext(t)
+		mkdirGate(t, filepath.Join(ctx.EvidenceDir, "09_SCHEMAS", "tool_io"))
+
+		result := (&G2ASchemaFirst{}).Run(ctx)
+		if result.Pass || !reasonContains(result.Reasons, conform.ReasonSchemaValidationFailed) || result.Metrics.Counts["schemas"] != 0 {
+			t.Fatalf("G2A empty schema result = %+v, want schema validation failure", result)
+		}
+	})
+
+	t.Run("G3 rejects malformed policy decision JSON", func(t *testing.T) {
+		ctx := setupSparseGateContext(t)
+		writeGateFile(t, filepath.Join(ctx.EvidenceDir, "02_PROOFGRAPH", "policy_decisions", "bad.json"), []byte("{"))
+
+		result := (&G3Policy{}).Run(ctx)
+		if result.Pass || !reasonContains(result.Reasons, conform.ReasonPolicyDecisionMissing) {
+			t.Fatalf("G3 malformed policy result = %+v, want policy decision failure", result)
+		}
+	})
+
+	t.Run("G3A detects receipt content and containment miss", func(t *testing.T) {
+		ctx := setupSparseGateContext(t)
+		writeGateFile(t, filepath.Join(ctx.EvidenceDir, "03_TELEMETRY", "budget_metrics.json"), []byte("{"))
+		writeGateFile(t, filepath.Join(ctx.EvidenceDir, "02_PROOFGRAPH", "receipts", "receipt.json"), []byte(`{"event":"BudgetExhausted"}`))
+
+		result := (&G3ABudget{}).Run(ctx)
+		if result.Pass || !reasonContains(result.Reasons, conform.ReasonContainmentNotTriggered) || reasonContains(result.Reasons, conform.ReasonBudgetExhausted) {
+			t.Fatalf("G3A content receipt result = %+v, want containment-only failure", result)
+		}
+	})
+
+	t.Run("G5 rejects empty and malformed tool manifests", func(t *testing.T) {
+		emptyCtx := setupSparseGateContext(t)
+		mkdirGate(t, filepath.Join(emptyCtx.EvidenceDir, "02_PROOFGRAPH", "tool_manifests"))
+		if result := (&G5ToolTrust{}).Run(emptyCtx); result.Pass || !reasonContains(result.Reasons, "TOOL_MANIFEST_MISSING") {
+			t.Fatalf("G5 empty manifest result = %+v, want missing failure", result)
+		}
+
+		badCtx := setupSparseGateContext(t)
+		writeGateFile(t, filepath.Join(badCtx.EvidenceDir, "02_PROOFGRAPH", "tool_manifests", "bad.json"), []byte("{"))
+		if result := (&G5ToolTrust{}).Run(badCtx); result.Pass || !reasonContains(result.Reasons, "TOOL_MANIFEST_INVALID") {
+			t.Fatalf("G5 malformed manifest result = %+v, want invalid failure", result)
+		}
+	})
+
+	t.Run("G6 rejects malformed taint lineage", func(t *testing.T) {
+		ctx := setupSparseGateContext(t)
+		writeGateFile(t, filepath.Join(ctx.EvidenceDir, "02_PROOFGRAPH", "taint", "lineage.json"), []byte("{"))
+
+		result := (&G6Taint{}).Run(ctx)
+		if result.Pass || !reasonContains(result.Reasons, conform.ReasonTaintFlowViolation) {
+			t.Fatalf("G6 malformed lineage result = %+v, want taint violation", result)
+		}
+	})
+
+	t.Run("G7 and G8 fail receipts without containment or operator", func(t *testing.T) {
+		ctx := setupSparseGateContext(t)
+		writeGateJSON(t, filepath.Join(ctx.EvidenceDir, "02_PROOFGRAPH", "receipts", "agent.json"), map[string]any{
+			"action_type": "effect_attempt",
+			"actor":       "agent",
+		})
+
+		if result := (&G7Incident{}).Run(ctx); result.Pass || !reasonContains(result.Reasons, conform.ReasonContainmentNotTriggered) {
+			t.Fatalf("G7 no containment result = %+v, want containment failure", result)
+		}
+		if result := (&G8HITL{}).Run(ctx); result.Pass || !reasonContains(result.Reasons, "HITL_RECEIPTS_MISSING") {
+			t.Fatalf("G8 no operator result = %+v, want HITL failure", result)
+		}
+	})
+
+	t.Run("G9 fails when only one complete pack exists", func(t *testing.T) {
+		ctx := setupSparseGateContext(t)
+		packDir := filepath.Join(ctx.EvidenceDir, "04_EXPORTS", "jurisdictions", "us")
+		mkdirGate(t, filepath.Join(packDir, "test_suite"))
+		writeGateJSON(t, filepath.Join(packDir, "policy_bundle.json"), map[string]any{"tenant_id": "tenant-a"})
+		writeGateJSON(t, filepath.Join(packDir, "evidence_requirements.json"), map[string]any{"tenant_id": "tenant-a"})
+		writeGateJSON(t, filepath.Join(packDir, "retention_rules.json"), map[string]any{"tenant_id": "tenant-a"})
+		writeGateJSON(t, filepath.Join(packDir, "conformance_report.json"), map[string]any{"pass": true})
+
+		result := (&G9Jurisdiction{}).Run(ctx)
+		if result.Pass || !reasonContains(result.Reasons, "JURISDICTION_PACKS_INSUFFICIENT") || result.Metrics.Counts["jurisdiction_packs"] != 1 {
+			t.Fatalf("G9 one-pack result = %+v, want insufficient pack failure", result)
+		}
+	})
+
+	t.Run("GX envelope skips malformed receipts without policy directory", func(t *testing.T) {
+		ctx := setupSparseGateContext(t)
+		writeGateFile(t, filepath.Join(ctx.EvidenceDir, "02_PROOFGRAPH", "receipts", "bad.json"), []byte("{"))
+
+		result := (&GXEnvelopeBound{}).Run(ctx)
+		if !result.Pass || result.Metrics.Counts["receipts_checked"] != 0 {
+			t.Fatalf("GX envelope malformed-only result = %+v, want skipped malformed receipt", result)
+		}
+	})
+
+	t.Run("GX SDK drift reports missing markers", func(t *testing.T) {
+		ctx := setupSparseGateContext(t)
+		writeGateFile(t, filepath.Join(ctx.ProjectRoot, "api", "openapi.yaml"), []byte("openapi: 3.0.0\n"))
+		mkdirGate(t, filepath.Join(ctx.ProjectRoot, "sdk", "python"))
+
+		result := (&GXSDKDrift{}).Run(ctx)
+		if !reasonContains(result.Reasons, "SDK_VERSION_MARKER_MISSING") || result.Metrics.Counts["sdk_directories"] != 1 || result.Metrics.Counts["sdk_version_markers"] != 0 {
+			t.Fatalf("GX SDK marker result = %+v, want missing marker reason", result)
+		}
+	})
+}
+
 func TestEnvelopeBoundHelpersDetectFailures(t *testing.T) {
 	result := &conform.GateResult{Pass: true, Reasons: []string{}, Metrics: conform.GateMetrics{Counts: map[string]int{}}}
 	if decoded, ok := decodeJSONMap([]byte("{")); ok || decoded != nil {

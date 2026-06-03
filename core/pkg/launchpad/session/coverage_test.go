@@ -121,6 +121,27 @@ func TestCoverageStatesAndStoreBranches(t *testing.T) {
 	if _, err := NewStore(blockedRoot).AppendLog("blocked", "line"); err == nil {
 		t.Fatal("expected append log mkdir error")
 	}
+	logCollisionRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(logCollisionRoot, "logs", "blocked.log"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewStore(logCollisionRoot).AppendLog("blocked", "line"); err == nil {
+		t.Fatal("expected append log open-file error for directory collision")
+	}
+	if err := store.Save(LaunchRun{
+		LaunchID:      "running-missing-refs",
+		State:         StateRunning,
+		KernelVerdict: "ALLOW",
+	}); err == nil {
+		t.Fatal("expected running without launch/health/sandbox refs to fail after ALLOW verdict")
+	}
+	if err := store.Save(LaunchRun{
+		LaunchID:      "deleted-missing-teardown",
+		State:         StateDeleted,
+		KernelVerdict: "ALLOW",
+	}); err == nil {
+		t.Fatal("expected deleted without teardown refs to fail after ALLOW verdict")
+	}
 	for _, state := range []State{StateProvisioning, StateInstalling, StateStarting, StateHealthchecking, StateRunning, StateTearingDown, StateDeleted} {
 		if !isSideEffectState(state) {
 			t.Fatalf("side-effect state not detected: %s", state)

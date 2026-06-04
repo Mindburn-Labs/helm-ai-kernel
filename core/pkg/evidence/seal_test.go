@@ -156,6 +156,56 @@ func TestVerifyEvidencePackSealRejectsBadTrustedKey(t *testing.T) {
 	}
 }
 
+func TestTeamProfileAllowsLocalAnchorAndStorageWithoutReceipts(t *testing.T) {
+	dataDir := t.TempDir()
+	signer, err := NewFileDevEvidenceSigner(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packDir := writeSealTestPack(t, map[string][]byte{
+		"01_SCORE.json": []byte(`{"pass":true}`),
+	})
+	cfg := &EvidencePackTrustConfig{
+		Version:       "evidence-pack-trust/v1",
+		ActiveProfile: EvidenceTrustProfileTeam,
+		Signer: EvidencePackTrustSigner{
+			Type:      "file-dev",
+			KeyID:     signer.KeyID(),
+			PublicKey: signer.PublicKeyHex(),
+		},
+		Anchor: EvidencePackSealAnchor{Type: "local-dev", Status: "local-only"},
+		Storage: EvidencePackSealStorage{
+			Type:   "local-dev",
+			Status: "local-only",
+		},
+		TrustedKeys: map[string]string{signer.KeyID(): signer.PublicKeyHex()},
+		UpdatedAt:   fixedSealTime(),
+	}
+	if _, err := SealEvidencePack(context.Background(), packDir, SealEvidencePackOptions{
+		PackID:      "team-pack",
+		Profile:     EvidenceTrustProfileTeam,
+		Signer:      signer,
+		TrustConfig: cfg,
+		SignedAt:    fixedSealTime(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result := VerifyEvidencePackSeal(packDir, VerifyEvidencePackSealOptions{
+		Profile:     EvidenceTrustProfileTeam,
+		TrustConfig: cfg,
+		Now:         fixedSealTime(),
+	})
+	if result.State != "valid" || !result.SignatureValid {
+		t.Fatalf("team seal did not verify: %+v", result)
+	}
+	if result.AnchorStatus != "local-only" || result.StorageStatus != "local-only" {
+		t.Fatalf("team seal required external receipts: %+v", result)
+	}
+	if joined := strings.Join(result.Errors, "; "); strings.Contains(joined, "requires external") || strings.Contains(joined, "requires storage receipt") {
+		t.Fatalf("team seal reported customer-grade receipt requirements: %s", joined)
+	}
+}
+
 func TestVerifyEvidencePackSealTeamAcceptsTrustedKeyEnvWithoutCustomerArtifacts(t *testing.T) {
 	packDir := writeSealTestPack(t, map[string][]byte{
 		"01_SCORE.json": []byte(`{"pass":true}`),

@@ -50,10 +50,10 @@ func anchorEvidenceRoot(ctx context.Context, backend proofanchor.AnchorBackend, 
 func verifyEvidenceAnchorReceipts(ctx context.Context, seal EvidencePackSeal, cfg *EvidencePackTrustConfig, profile EvidenceTrustProfile) (string, []string) {
 	profile = NormalizeEvidenceTrustProfile(profile)
 	if len(seal.AnchorReceipts) == 0 {
-		if profile == EvidenceTrustProfileDevLocal || profile == EvidenceTrustProfileTeam {
+		if !profileRequiresExternalTrust(profile) {
 			return "local-only", nil
 		}
-		return "missing", []string{"customer profile requires external anchor receipt"}
+		return "missing", []string{fmt.Sprintf("%s profile requires external anchor receipt", profile)}
 	}
 	for i := range seal.AnchorReceipts {
 		receipt := &seal.AnchorReceipts[i]

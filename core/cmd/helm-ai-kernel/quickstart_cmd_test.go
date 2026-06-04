@@ -2,15 +2,18 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 )
 
 func TestLoadServePolicyTOML(t *testing.T) {
@@ -182,17 +185,25 @@ func TestBuildReceiptsTailURL(t *testing.T) {
 func createMinimalVerifiableBundle(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	receiptsDir := filepath.Join(dir, "receipts")
-	if err := os.MkdirAll(receiptsDir, 0750); err != nil {
-		t.Fatal(err)
+	for _, subdir := range []string{"02_PROOFGRAPH/receipts", "03_TELEMETRY", "04_EXPORTS", "05_DIFFS", "06_LOGS", "07_ATTESTATIONS", "08_TAPES", "09_SCHEMAS", "12_REPORTS"} {
+		if err := os.MkdirAll(filepath.Join(dir, filepath.FromSlash(subdir)), 0750); err != nil {
+			t.Fatal(err)
+		}
 	}
+	score := []byte(`{"pass":true}`)
 	receipt := []byte(`{"decision_hash":"sha256:decision","signature":"sig","lamport_clock":1}`)
-	receiptHash := sha256.Sum256(receipt)
-	manifest := fmt.Sprintf(`{"session_id":"ep_test","sealed_at":"2024-11-08T10:24:18.402Z","file_hashes":{"receipts/r1.json":"%s"}}`, hex.EncodeToString(receiptHash[:]))
+	proofgraph := []byte(`{"nodes":[]}`)
 	files := map[string][]byte{
-		"manifest.json":    []byte(manifest),
-		"proofgraph.json":  []byte(`{"nodes":[]}`),
-		"receipts/r1.json": receipt,
+		"01_SCORE.json":                  score,
+		"02_PROOFGRAPH/proofgraph.json":  proofgraph,
+		"02_PROOFGRAPH/receipts/r1.json": receipt,
+		"03_TELEMETRY/.keep":             []byte("reserved\n"),
+		"04_EXPORTS/.keep":               []byte("reserved\n"),
+		"05_DIFFS/.keep":                 []byte("reserved\n"),
+		"06_LOGS/.keep":                  []byte("reserved\n"),
+		"08_TAPES/.keep":                 []byte("reserved\n"),
+		"09_SCHEMAS/.keep":               []byte("reserved\n"),
+		"12_REPORTS/.keep":               []byte("reserved\n"),
 	}
 	for name, data := range files {
 		path := filepath.Join(dir, name)
@@ -202,6 +213,24 @@ func createMinimalVerifiableBundle(t *testing.T) string {
 		if err := os.WriteFile(path, data, 0600); err != nil {
 			t.Fatal(err)
 		}
+	}
+	entries := make([]map[string]string, 0, len(files))
+	for name, data := range files {
+		sum := sha256.Sum256(data)
+		entries = append(entries, map[string]string{"path": name, "sha256": hex.EncodeToString(sum[:])})
+	}
+	indexData, err := json.MarshalIndent(map[string]any{"version": "1.0.0", "entries": entries}, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "00_INDEX.json"), append(indexData, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := evidencepkg.SealEvidencePack(context.Background(), dir, evidencepkg.SealEvidencePackOptions{
+		PackID:  "ep_test",
+		DataDir: t.TempDir(),
+	}); err != nil {
+		t.Fatal(err)
 	}
 	return dir
 }

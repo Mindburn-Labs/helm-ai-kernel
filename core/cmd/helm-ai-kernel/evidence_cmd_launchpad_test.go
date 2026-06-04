@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
+	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	lpreceipts "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
 )
 
@@ -14,6 +16,12 @@ func TestEvidenceInspectReportsLaunchpadGraph(t *testing.T) {
 		"receipts/kernel-verdict.json": []byte(`{"receipt_id":"r1","type":"launchpad.kernel_verdict","decision_id":"d1","decision_hash":"sha256:test","status":"ALLOW","verdict":"ALLOW","lamport_clock":1}`),
 	})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := evidencepkg.SealEvidencePack(context.Background(), packDir, evidencepkg.SealEvidencePackOptions{
+		PackID:  "launch-inspect",
+		DataDir: t.TempDir(),
+	}); err != nil {
 		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer

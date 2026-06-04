@@ -94,6 +94,17 @@ helm-ai-kernel launch evidence <launch_id> --export --json
 helm-ai-kernel verify --bundle <pack>
 ```
 
+Native EvidencePack verification is sealed by
+`07_ATTESTATIONS/evidence_pack.sig`. Dev-local packs verify offline with the
+default profile. Customer-grade packs use the same seal plus explicit trust
+configuration, external signing, an external Rekor or RFC3161 anchor receipt,
+and an S3 Object Lock storage receipt:
+
+```bash
+helm-ai-kernel trust init --config helm/helm.yaml --profile customer --signer kms --anchor rekor --store s3 --object-lock
+helm-ai-kernel verify --bundle <pack.tar> --profile customer --storage-receipt <pack.tar.storage.json>
+```
+
 What you get:
 * Console dashboard with receipts, evidence, and run history
 * deterministic ALLOW / DENY / ESCALATE verdicts
@@ -120,17 +131,17 @@ Agent proposal -> HELM boundary -> ALLOW / DENY / ESCALATE -> signed receipt
 
 - Repository: `Mindburn-Labs/helm-ai-kernel`
 - Root package identity: `helm-ai-kernel-root`
-- Source release target: `v0.5.9`
+- Source release target: `v0.5.10`
 - License: Apache-2.0
 - Supported security line: `0.5.x`; `0.4.x` is best effort
 - Canonical docs: <https://helm.docs.mindburn.org/helm-ai-kernel>
 
-The `v0.5.9` release is complete only when the GitHub Release includes
+The `v0.5.10` release is complete only when the GitHub Release includes
 CLI binaries, checksums, SBOM JSON, OpenVEX, release-attestation metadata,
 Cosign bundles, `evidence-pack.tar`, `helm-ai-kernel.mcpb`,
 `helm-ai-kernel.rb`, sample policy material, and a passing
 `version-status.json` for all lockstep package channels:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.9>.
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.10>.
 
 ## What HELM AI Kernel Does
 
@@ -284,7 +295,7 @@ The complete diagram doctrine lives in
 | Python SDK | `pip install helm-sdk` |
 | TypeScript SDK | `npm install @mindburn/helm-ai-kernel` |
 | Rust SDK | `cargo add helm-sdk` |
-| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.9` |
+| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.10` |
 
 HTTP clients are generated from
 [`api/openapi/helm.openapi.yaml`](api/openapi/helm.openapi.yaml). Protobuf
@@ -315,8 +326,8 @@ Public OSS docs are sourced from this repo and published through
 
 ## Release Verification
 
-For `v0.5.9`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
-`v0.5.9.openvex.json`, `release-attestation.json`, the platform binary assets,
+For `v0.5.10`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
+`v0.5.10.openvex.json`, `release-attestation.json`, the platform binary assets,
 matching `*.cosign.bundle` files, and offline `evidence-pack.tar` verification.
 
 Current release tooling requires tag refs to match the checked-in `VERSION`,

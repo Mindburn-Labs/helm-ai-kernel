@@ -16,6 +16,7 @@ import (
 //
 // Currently supports:
 //
+//	helm-ai-kernel trust init [--config helm/helm.yaml]
 //	helm-ai-kernel trust eu-list status [--json] [--fixture path] [--offline]
 //
 // Future trust subcommands (TUF root, SLSA roots, TEE PCRs) will register
@@ -25,15 +26,19 @@ func runTrustCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel trust <subcommand> [flags]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Subcommands:")
+		fmt.Fprintln(stderr, "  init             Initialize native EvidencePack trust config")
 		fmt.Fprintln(stderr, "  eu-list status   Print EU LOTL refresh state, signer, and qualified-TSA count")
 		return 2
 	}
 
 	switch args[0] {
+	case "init":
+		return runEvidenceTrustInit(args[1:], stdout, stderr)
 	case "eu-list":
 		return runTrustEUList(args[1:], stdout, stderr)
 	case "--help", "-h", "help":
 		fmt.Fprintln(stdout, "Usage: helm-ai-kernel trust <subcommand> [flags]")
+		fmt.Fprintln(stdout, "  init             Initialize native EvidencePack trust config")
 		fmt.Fprintln(stdout, "  eu-list status   Print EU LOTL state (last refresh, signer, qualified-TSA count)")
 		return 0
 	default:
@@ -146,7 +151,7 @@ func init() {
 	Register(Subcommand{
 		Name:    "trust",
 		Aliases: []string{},
-		Usage:   "Inspect HELM trust roots (eu-list status)",
+		Usage:   "Inspect HELM trust roots (init, eu-list status)",
 		RunFn:   runTrustCmd,
 	})
 }

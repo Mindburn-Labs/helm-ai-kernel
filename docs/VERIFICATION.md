@@ -74,22 +74,22 @@ The verification path is local-first. `helm-ai-kernel verify <evidence-pack.tar|
 performs offline checks by default; `--online` is optional and only runs after
 offline checks pass.
 
-Current source release target: `v0.5.9`:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.9>. The
+Current source release target: `v0.5.10`:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.10>. The
 release is complete only when the page attaches platform binaries,
-`SHA256SUMS.txt`, `sbom.json`, `v0.5.9.openvex.json`,
+`SHA256SUMS.txt`, `sbom.json`, `v0.5.10.openvex.json`,
 `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
 `helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`,
-`helm-ai-kernel.rb`, `v0.5.9.json`, `version-status.json`, and matching
+`helm-ai-kernel.rb`, `v0.5.10.json`, `version-status.json`, and matching
 `*.cosign.bundle` files for each primary asset.
 
 There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
 actual baseline when auditing the `v0.5.0` delta.
 
-## v0.5.9 Asset Contract
+## v0.5.10 Asset Contract
 
-The `v0.5.9` release attaches these primary assets:
+The `v0.5.10` release attaches these primary assets:
 
 - `helm-ai-kernel-darwin-amd64`
 - `helm-ai-kernel-darwin-arm64`
@@ -98,7 +98,7 @@ The `v0.5.9` release attaches these primary assets:
 - `helm-ai-kernel-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.5.9.openvex.json`
+- `v0.5.10.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
@@ -126,6 +126,31 @@ helm-ai-kernel verify --bundle evidence-pack.tar
 ```
 
 Successful compact output includes the envelope id, signature count, anchor state, and sealed timestamp when those fields are embedded in the pack. If no anchor is embedded, the CLI reports `anchor offline`; it does not invent an anchor.
+
+Native EvidencePack seals live at
+`07_ATTESTATIONS/evidence_pack.sig`. The old `00_SEAL.json` plan is not a
+customer-facing verification contract. Customer and high-assurance profiles
+must verify the native seal signature, a trusted external signer key, an
+external Rekor or RFC3161 anchor receipt, and an S3 Object Lock storage receipt
+with active COMPLIANCE retention:
+
+```bash
+helm-ai-kernel trust init --config helm/helm.yaml \
+  --profile customer \
+  --signer kms \
+  --anchor rekor \
+  --store s3 \
+  --object-lock
+
+helm-ai-kernel verify --bundle evidence-pack.tar \
+  --profile customer \
+  --storage-receipt evidence-pack.tar.storage.json
+```
+
+The storage receipt must identify the bucket, key, object version, object hash,
+retention mode, and `retain_until` timestamp. When verification runs against a
+tar archive, the verifier compares the receipt object hash with the local
+archive bytes.
 
 ## Online Proof Check
 
@@ -212,7 +237,7 @@ The release staging path runs the same offline verification before publishing
 release checksums. If this step fails, the release must be treated as incomplete
 and the exported EvidencePack must be repaired before attaching assets.
 
-For `v0.5.9`, this command passes without network access. The verifier
+For `v0.5.10`, this command passes without network access. The verifier
 accepts both the legacy `receipts/` layout and the canonical
 `02_PROOFGRAPH/receipts/` layout.
 

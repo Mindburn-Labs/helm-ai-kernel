@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -16,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
@@ -609,6 +611,11 @@ func writeManagedAgentEvidenceDirectory(root string, report managedAgentLiveRepo
 		if err := os.WriteFile(target, data, 0600); err != nil {
 			return err
 		}
+	}
+	if _, err := evidencepkg.SealEvidencePack(context.Background(), root, evidencepkg.SealEvidencePackOptions{
+		PackID: "managed-agents-" + safeEvidenceName(report.Provider),
+	}); err != nil {
+		return err
 	}
 	return nil
 }

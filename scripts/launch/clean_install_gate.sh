@@ -17,7 +17,7 @@ usage() {
 Usage: scripts/launch/clean_install_gate.sh [options]
 
 Options:
-  --release-tag <tag>       Release tag to validate (default: v0.5.9)
+  --release-tag <tag>       Release tag to validate (default: v0.5.10)
   --artifact-run-id <id>    Launchpad artifact workflow run (default: 26198407296)
   --host-kind <kind>        developer_macos or github_macos_runner
   --output <path>           Redacted JSON report path
@@ -313,7 +313,7 @@ failed = [item["name"] for item in commands if item.get("exit_code") != 0]
 report = {
     "schema_version": 1,
     "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-    "milestone": "Launchpad v0.5.9 Clean Install + Public Docs GA",
+    "milestone": "Launchpad v0.5.10 Clean Install + Public Docs GA",
     "release_tag": release_tag,
     "artifact_workflow_run_id": artifact_run_id,
     "host_kind": host_kind,

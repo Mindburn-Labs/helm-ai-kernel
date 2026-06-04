@@ -39,6 +39,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	}
 
 	registerPolicyReconcileRoutes(mux, svc)
+	registerExtAuthzRoutes(mux, svc)
 
 	// --- OpenAI-Compatible Proxy (governed inference) ---
 	// Wraps api.HandleOpenAIProxy with Guardian governance enforcement and receipt headers.

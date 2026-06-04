@@ -20,26 +20,35 @@ import (
 	"strings"
 	"time"
 
+	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/externalreceipt"
 )
 
 // VerifyReport is the structured output of offline verification.
 // Designed for auditor consumption — every field is evidence-grade.
 type VerifyReport struct {
-	Bundle              string        `json:"bundle"`
-	Verified            bool          `json:"verified"`
-	Timestamp           time.Time     `json:"timestamp"`
-	Roots               VerifyRoots   `json:"roots,omitempty"`
-	Checks              []CheckResult `json:"checks"`
-	Summary             string        `json:"summary"`
-	IssueCount          int           `json:"issue_count"`
-	VerifierVer         string        `json:"verifier_version"`
-	EnvelopeID          string        `json:"envelope_id,omitempty"`
-	SealedAt            string        `json:"sealed_at,omitempty"`
-	SignatureValidCount int           `json:"signature_valid_count,omitempty"`
-	SignatureTotalCount int           `json:"signature_total_count,omitempty"`
-	AnchorIndex         *uint64       `json:"anchor_index,omitempty"`
-	MerkleRoot          string        `json:"merkle_root,omitempty"`
+	Bundle              string                                    `json:"bundle"`
+	Verified            bool                                      `json:"verified"`
+	Timestamp           time.Time                                 `json:"timestamp"`
+	Roots               VerifyRoots                               `json:"roots,omitempty"`
+	Checks              []CheckResult                             `json:"checks"`
+	Summary             string                                    `json:"summary"`
+	IssueCount          int                                       `json:"issue_count"`
+	VerifierVer         string                                    `json:"verifier_version"`
+	EnvelopeID          string                                    `json:"envelope_id,omitempty"`
+	SealedAt            string                                    `json:"sealed_at,omitempty"`
+	SignatureValidCount int                                       `json:"signature_valid_count,omitempty"`
+	SignatureTotalCount int                                       `json:"signature_total_count,omitempty"`
+	AnchorIndex         *uint64                                   `json:"anchor_index,omitempty"`
+	MerkleRoot          string                                    `json:"merkle_root,omitempty"`
+	Seal                *evidencepkg.EvidencePackSealVerification `json:"seal,omitempty"`
+	TrustLevel          string                                    `json:"trust_level,omitempty"`
+	SealState           string                                    `json:"seal_state,omitempty"`
+	SealSignatureValid  bool                                      `json:"seal_signature_valid,omitempty"`
+	AnchorStatus        string                                    `json:"anchor_status,omitempty"`
+	StorageStatus       string                                    `json:"storage_status,omitempty"`
+	SealSubjectRoot     string                                    `json:"seal_subject_root,omitempty"`
+	SealID              string                                    `json:"seal_id,omitempty"`
 }
 
 // VerifyRoots contains deterministic roots derived from 00_INDEX.json.
@@ -59,9 +68,24 @@ type CheckResult struct {
 
 const VerifierVersion = "0.2.0"
 
+type VerifyOptions struct {
+	Profile            evidencepkg.EvidenceTrustProfile
+	TrustConfig        *evidencepkg.EvidencePackTrustConfig
+	DataDir            string
+	ConfigPath         string
+	StorageReceiptPath string
+	StorageObjectPath  string
+	Now                time.Time
+}
+
 // VerifyBundle performs offline verification of an EvidencePack directory.
 // No network access. No server dependency. Pure filesystem + crypto.
 func VerifyBundle(bundlePath string) (*VerifyReport, error) {
+	return VerifyBundleWithOptions(bundlePath, VerifyOptions{Profile: evidencepkg.EvidenceTrustProfileDevLocal})
+}
+
+// VerifyBundleWithOptions performs offline verification with an explicit trust profile.
+func VerifyBundleWithOptions(bundlePath string, opts VerifyOptions) (*VerifyReport, error) {
 	report := &VerifyReport{
 		Bundle:      bundlePath,
 		Verified:    true,
@@ -88,26 +112,29 @@ func VerifyBundle(bundlePath string) (*VerifyReport, error) {
 		})
 	}
 
-	// 3. File hash integrity
+	// 3. Native EvidencePack seal.
+	report.addCheck(checkEvidencePackSeal(bundlePath, report, opts))
+
+	// 4. File hash integrity
 	report.addChecks(checkFileHashes(bundlePath))
 
-	// 3b. Optional EU AI Act profile integrity. Absence remains valid for
+	// 4b. Optional EU AI Act profile integrity. Absence remains valid for
 	// legacy EvidencePacks; presence must be complete and redaction-safe.
 	report.addCheck(checkEUAIActEvidenceProfile(bundlePath))
 
-	// 4. Chain integrity (receipt ordering)
+	// 5. Chain integrity (receipt ordering)
 	report.addCheck(checkChainIntegrity(bundlePath))
 
-	// 5. Lamport monotonicity
+	// 6. Lamport monotonicity
 	report.addCheck(checkLamportMonotonicity(bundlePath))
 
-	// 6. Policy decision hashes
+	// 7. Policy decision hashes
 	report.addCheck(checkPolicyDecisionHashes(bundlePath))
 
-	// 7. Replay determinism verdict
+	// 8. Replay determinism verdict
 	report.addCheck(checkReplayDeterminism(bundlePath))
 
-	// 8. Optional external host evidence verification.
+	// 9. Optional external host evidence verification.
 	hostEvidence := externalreceipt.VerifyBundle(bundlePath)
 	if hostEvidence.Found {
 		for _, check := range hostEvidence.Checks {
@@ -140,6 +167,48 @@ func VerifyBundle(bundlePath string) (*VerifyReport, error) {
 	return report, nil
 }
 
+func checkEvidencePackSeal(bundlePath string, report *VerifyReport, opts VerifyOptions) CheckResult {
+	seal := evidencepkg.VerifyEvidencePackSeal(bundlePath, evidencepkg.VerifyEvidencePackSealOptions{
+		Profile:            opts.Profile,
+		TrustConfig:        opts.TrustConfig,
+		DataDir:            opts.DataDir,
+		ConfigPath:         opts.ConfigPath,
+		StorageReceiptPath: opts.StorageReceiptPath,
+		StorageObjectPath:  opts.StorageObjectPath,
+		Now:                opts.Now,
+	})
+	report.Seal = &seal
+	report.SealState = seal.State
+	report.SealSignatureValid = seal.SignatureValid
+	report.AnchorStatus = seal.AnchorStatus
+	report.StorageStatus = seal.StorageStatus
+	report.TrustLevel = string(seal.TrustLevel)
+	report.SealSubjectRoot = seal.MerkleRoot
+	report.SealID = seal.PackID
+	if seal.MerkleRoot != "" {
+		report.MerkleRoot = seal.MerkleRoot
+	}
+	if !seal.SignedAt.IsZero() {
+		report.SealedAt = seal.SignedAt.Format(time.RFC3339)
+	}
+	if seal.SignatureValid {
+		report.SignatureValidCount++
+		report.SignatureTotalCount++
+	}
+	if seal.State == "valid" {
+		return CheckResult{
+			Name:   "evidence_pack_seal",
+			Pass:   true,
+			Detail: fmt.Sprintf("seal valid; trust=%s; anchor=%s; storage=%s", seal.TrustLevel, seal.AnchorStatus, seal.StorageStatus),
+		}
+	}
+	reason := strings.Join(seal.Errors, "; ")
+	if reason == "" {
+		reason = "native EvidencePack seal is invalid"
+	}
+	return CheckResult{Name: "evidence_pack_seal", Pass: false, Reason: reason}
+}
+
 func enrichReportMetadata(bundlePath string, report *VerifyReport) {
 	for _, name := range []string{"00_INDEX.json", "manifest.json"} {
 		data, err := os.ReadFile(filepath.Join(bundlePath, name))
@@ -170,6 +239,12 @@ func enrichReportMetadata(bundlePath string, report *VerifyReport) {
 	}
 
 	valid, total := countEmbeddedSignatures(bundlePath)
+	if report.SealState != "" {
+		total++
+		if report.SealSignatureValid {
+			valid++
+		}
+	}
 	report.SignatureValidCount = valid
 	report.SignatureTotalCount = total
 	if report.EnvelopeID == "" {
@@ -341,65 +416,18 @@ type indexFile struct {
 }
 
 func computeIndexRoots(bundlePath string) (VerifyRoots, error) {
-	indexPath := filepath.Join(bundlePath, "00_INDEX.json")
-	if !fileExists(indexPath) {
+	if !fileExists(filepath.Join(bundlePath, "00_INDEX.json")) {
 		return VerifyRoots{}, nil
 	}
-
-	data, err := os.ReadFile(indexPath)
+	roots, err := evidencepkg.ComputeEvidencePackIndexRoots(bundlePath)
 	if err != nil {
-		return VerifyRoots{}, fmt.Errorf("cannot read index for roots: %w", err)
+		return VerifyRoots{}, err
 	}
-
-	var index indexFile
-	if err := json.Unmarshal(data, &index); err != nil {
-		return VerifyRoots{}, fmt.Errorf("invalid index JSON for roots: %w", err)
-	}
-
-	sort.Slice(index.Entries, func(i, j int) bool {
-		return index.Entries[i].Path < index.Entries[j].Path
-	})
-
-	leaves := make([][]byte, 0, len(index.Entries))
-	for _, entry := range index.Entries {
-		digest, err := hex.DecodeString(entry.SHA256)
-		if err != nil {
-			return VerifyRoots{}, fmt.Errorf("invalid sha256 for %s: %w", entry.Path, err)
-		}
-		leafInput := append([]byte{0x00}, digest...)
-		leaf := sha256.Sum256(leafInput)
-		leaves = append(leaves, leaf[:])
-	}
-
 	return VerifyRoots{
-		ManifestRootHash: sha256Hex(data),
-		MerkleRoot:       merkleRootHex(leaves),
-		EntryCount:       len(index.Entries),
+		ManifestRootHash: roots.IndexHash,
+		MerkleRoot:       roots.MerkleRoot,
+		EntryCount:       roots.EntryCount,
 	}, nil
-}
-
-func merkleRootHex(leaves [][]byte) string {
-	if len(leaves) == 0 {
-		return sha256Hex(nil)
-	}
-	for len(leaves) > 1 {
-		next := make([][]byte, 0, (len(leaves)+1)/2)
-		for i := 0; i < len(leaves); i += 2 {
-			left := leaves[i]
-			right := left
-			if i+1 < len(leaves) {
-				right = leaves[i+1]
-			}
-			input := make([]byte, 0, 1+len(left)+len(right))
-			input = append(input, 0x01)
-			input = append(input, left...)
-			input = append(input, right...)
-			parent := sha256.Sum256(input)
-			next = append(next, parent[:])
-		}
-		leaves = next
-	}
-	return hex.EncodeToString(leaves[0])
 }
 
 func checkFileHashes(bundlePath string) []CheckResult {

@@ -15,6 +15,7 @@ func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "helm-boundary-surfaces-test-*")
 	if err == nil {
 		_ = os.Setenv("HELM_BOUNDARY_REGISTRY_PATH", filepath.Join(dir, "surfaces.json"))
+		_ = os.Setenv("HELM_DATA_DIR", filepath.Join(dir, "data"))
 	}
 	code := m.Run()
 	if err == nil {

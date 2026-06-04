@@ -69,6 +69,8 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 ## [Unreleased]
 
 ### Added
+- **Native EvidencePack customer proof**: `07_ATTESTATIONS/evidence_pack.sig` is now the seal authority for customer-grade verification, with customer/high-assurance profiles requiring external signer trust, verified Rekor/RFC3161 anchor receipts, and S3 Object Lock storage receipts.
+- **Receipt-aware verification CLI**: `helm-ai-kernel verify` accepts `--profile`, `--config`, and `--storage-receipt` for native EvidencePack trust profiles; top-level `helm-ai-kernel trust init --config helm/helm.yaml` routes to native EvidencePack trust initialization.
 - **UCS v1.5 Super-Sovereign Execution Standard**: Scaffolded zero-knowledge execution proof boundaries and Trusted Execution Environment (TEE) sealed secrets vault.
 - **zkVM Guest Safety Checker**: Introduced the `ZKVMGuestSafetyChecker` and `SafetyGuestProgram` inside `pkg/crypto/zk` to simulate AST static analysis inside zero-knowledge execution enclaves.
 - **TEE Secrets Enclave**: Introduced `SovereignKMSVault` and `SecretProxyFilter` inside `pkg/crypto/tee` to enforce hardware-sealed secrets isolation and inline proxy token injection with constant-time verification.

@@ -127,6 +127,31 @@ helm-ai-kernel verify --bundle evidence-pack.tar
 
 Successful compact output includes the envelope id, signature count, anchor state, and sealed timestamp when those fields are embedded in the pack. If no anchor is embedded, the CLI reports `anchor offline`; it does not invent an anchor.
 
+Native EvidencePack seals live at
+`07_ATTESTATIONS/evidence_pack.sig`. The old `00_SEAL.json` plan is not a
+customer-facing verification contract. Customer and high-assurance profiles
+must verify the native seal signature, a trusted external signer key, an
+external Rekor or RFC3161 anchor receipt, and an S3 Object Lock storage receipt
+with active COMPLIANCE retention:
+
+```bash
+helm-ai-kernel trust init --config helm/helm.yaml \
+  --profile customer \
+  --signer kms \
+  --anchor rekor \
+  --store s3 \
+  --object-lock
+
+helm-ai-kernel verify --bundle evidence-pack.tar \
+  --profile customer \
+  --storage-receipt evidence-pack.tar.storage.json
+```
+
+The storage receipt must identify the bucket, key, object version, object hash,
+retention mode, and `retain_until` timestamp. When verification runs against a
+tar archive, the verifier compares the receipt object hash with the local
+archive bytes.
+
 ## Online Proof Check
 
 ```bash

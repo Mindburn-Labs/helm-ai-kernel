@@ -1,14 +1,29 @@
 package session
 
 import (
+	"archive/tar"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 )
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "helm-launchpad-session-test-*")
+	if err == nil {
+		_ = os.Setenv("HELM_DATA_DIR", dir)
+	}
+	code := m.Run()
+	if err == nil {
+		_ = os.RemoveAll(dir)
+	}
+	os.Exit(code)
+}
 
 func TestExecutorRequiresRuntimeBeforeRunning(t *testing.T) {
 	store := NewStore(t.TempDir())
@@ -79,6 +94,11 @@ func TestExecutorRecordsRuntimeHandleBeforeRunning(t *testing.T) {
 	if run.ArtifactDigest == "" || run.VerificationCommand == "" || run.TeardownCommand == "" {
 		t.Fatalf("developer response fields missing: %#v", run)
 	}
+	if !strings.Contains(run.VerificationCommand, ".tar") {
+		t.Fatalf("verification command must point to sealed archive: %s", run.VerificationCommand)
+	}
+	archivePath := strings.TrimPrefix(run.VerificationCommand, "helm-ai-kernel verify --bundle ")
+	assertTarContains(t, archivePath, "07_ATTESTATIONS/evidence_pack.sig")
 }
 
 func TestExecutorBlocksRunningWhenHealthcheckFails(t *testing.T) {
@@ -128,6 +148,29 @@ func TestExecutorRecordsIsolationEvidenceOnRuntimeFailure(t *testing.T) {
 	if failureReceipt.Subject["isolation_unsupported_reason"] == "" {
 		t.Fatalf("runtime failure receipt missing unsupported reason: %#v", failureReceipt.Subject)
 	}
+}
+
+func assertTarContains(t *testing.T, archivePath, want string) {
+	t.Helper()
+	file, err := os.Open(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	tr := tar.NewReader(file)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hdr.Name == want {
+			return
+		}
+	}
+	t.Fatalf("archive %s missing %s", archivePath, want)
 }
 
 func TestExecutorRequiresEgressReceiptForNetworkedLaunch(t *testing.T) {

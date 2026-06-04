@@ -288,6 +288,7 @@ func mergeExistingArtifacts(dir string, artifacts map[string][]byte) error {
 		"01_SCORE.json": {},
 		"04_EXPORTS/launchpad_evidence_graph.json": {},
 		"04_EXPORTS/launchpad_manifest.json":       {},
+		"07_ATTESTATIONS/evidence_pack.sig":        {},
 	}
 	return filepath.WalkDir(dir, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {

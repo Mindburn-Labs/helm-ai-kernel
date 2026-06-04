@@ -1,6 +1,7 @@
 package conform
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 )
 
 // Engine is the conformance engine per §11.1.
@@ -174,6 +176,11 @@ func (e *Engine) Run(opts *RunOptions) (*ConformanceReport, error) {
 	if err := writeIndex(evidenceDir, runID, opts.Profile, e.clock); err != nil {
 		return report, fmt.Errorf("failed to write index: %w", err)
 	}
+	if _, err := evidencepkg.SealEvidencePack(context.Background(), evidenceDir, evidencepkg.SealEvidencePackOptions{
+		PackID: runID,
+	}); err != nil {
+		return report, fmt.Errorf("failed to seal EvidencePack: %w", err)
+	}
 
 	return report, nil
 }
@@ -280,7 +287,7 @@ func writeIndex(evidenceDir, runID string, profile ProfileID, clock func() time.
 			return nil
 		}
 		relPath, _ := filepath.Rel(evidenceDir, path)
-		if relPath == "00_INDEX.json" {
+		if relPath == "00_INDEX.json" || filepath.ToSlash(relPath) == evidencepkg.EvidencePackSealPath {
 			return nil // skip self
 		}
 

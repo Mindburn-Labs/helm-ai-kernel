@@ -1,10 +1,13 @@
 package verifier
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+
+	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 )
 
 // createValidBundleFixture creates a minimal valid evidence bundle directory
@@ -48,6 +51,7 @@ func createValidBundleFixture(t *testing.T) string {
 		"lamport_clock": 1,
 	})
 
+	sealVerifierFixture(t, dir, "test-session-001")
 	return dir
 }
 
@@ -90,7 +94,18 @@ func createValidCanonicalBundleFixture(t *testing.T) string {
 		"lamport_clock": 1,
 	})
 
+	sealVerifierFixture(t, dir, "canonical-test")
 	return dir
+}
+
+func sealVerifierFixture(t *testing.T, dir, packID string) {
+	t.Helper()
+	if _, err := evidencepkg.SealEvidencePack(context.Background(), dir, evidencepkg.SealEvidencePackOptions{
+		PackID:  packID,
+		DataDir: t.TempDir(),
+	}); err != nil {
+		t.Fatalf("seal fixture: %v", err)
+	}
 }
 
 func TestVerifyBundle_Valid(t *testing.T) {
@@ -127,6 +142,46 @@ func TestVerifyBundle_CanonicalProofGraphReceipts(t *testing.T) {
 				t.Logf("  FAIL: %s — %s", c.Name, c.Reason)
 			}
 		}
+	}
+}
+
+func TestVerifyBundle_RequiresEvidencePackSeal(t *testing.T) {
+	dir := t.TempDir()
+	writeJSON(t, filepath.Join(dir, "00_INDEX.json"), map[string]any{
+		"version": "1.0.0",
+		"entries": []any{},
+	})
+	writeJSON(t, filepath.Join(dir, "01_SCORE.json"), map[string]any{"pass": true})
+	for _, subdir := range []string{"02_PROOFGRAPH", "03_TELEMETRY", "04_EXPORTS", "05_DIFFS", "06_LOGS", "07_ATTESTATIONS", "08_TAPES", "09_SCHEMAS", "12_REPORTS"} {
+		if err := os.MkdirAll(filepath.Join(dir, subdir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "02_PROOFGRAPH", "receipts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(dir, "02_PROOFGRAPH", "receipts", "receipt-001.json"), map[string]any{
+		"receipt_id":    "rcpt-001",
+		"decision_id":   "dec-001",
+		"decision_hash": "sha256:abc123",
+		"lamport_clock": 1,
+	})
+
+	report, err := VerifyBundle(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified {
+		t.Fatal("unsealed native EvidencePack must fail verification")
+	}
+	found := false
+	for _, c := range report.Checks {
+		if c.Name == "evidence_pack_seal" && !c.Pass {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("missing evidence_pack_seal failure: %+v", report.Checks)
 	}
 }
 

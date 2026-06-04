@@ -29,8 +29,10 @@ Supported local-container apps:
 7. Run healthcheck.
 8. Emit launch/install/healthcheck receipts.
 9. Export EvidencePack.
-10. Teardown and emit teardown receipt.
-11. Verify offline.
+10. Seal `07_ATTESTATIONS/evidence_pack.sig`.
+11. In customer/high-assurance profile, create external anchor and S3 Object Lock storage receipts.
+12. Teardown and emit teardown receipt.
+13. Verify offline.
 
 ## Source Truth
 
@@ -78,10 +80,18 @@ helm-ai-kernel launch evidence <launch_id> --output <dir>
 helm-ai-kernel evidence inspect <pack>
 helm-ai-kernel evidence diff <pack-a> <pack-b>
 helm-ai-kernel verify --bundle <pack>
+helm-ai-kernel verify --bundle <pack.tar> --profile customer --storage-receipt <pack.tar.storage.json>
 ```
 
 `helm-ai-kernel` remains the backwards-compatible binary and command namespace.
 Release builds also ship `helm` as the primary product command.
+
+Launchpad reads native EvidencePack trust config from `helm/helm.yaml`,
+`HELM_EVIDENCE_TRUST_CONFIG`, or `$HELM_DATA_DIR/trust/evidence-pack.json`.
+Dev-local launches keep the compact `helm-ai-kernel verify --bundle <pack>`
+command. Customer and high-assurance launches include `--profile` and
+`--storage-receipt` so auditors verify the signed native seal, external anchor,
+and off-host immutable storage proof together.
 
 ## Account and Entitlement Boundary
 

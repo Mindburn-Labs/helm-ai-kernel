@@ -94,6 +94,17 @@ helm-ai-kernel launch evidence <launch_id> --export --json
 helm-ai-kernel verify --bundle <pack>
 ```
 
+Native EvidencePack verification is sealed by
+`07_ATTESTATIONS/evidence_pack.sig`. Dev-local packs verify offline with the
+default profile. Customer-grade packs use the same seal plus explicit trust
+configuration, external signing, an external Rekor or RFC3161 anchor receipt,
+and an S3 Object Lock storage receipt:
+
+```bash
+helm-ai-kernel trust init --config helm/helm.yaml --profile customer --signer kms --anchor rekor --store s3 --object-lock
+helm-ai-kernel verify --bundle <pack.tar> --profile customer --storage-receipt <pack.tar.storage.json>
+```
+
 What you get:
 * Console dashboard with receipts, evidence, and run history
 * deterministic ALLOW / DENY / ESCALATE verdicts

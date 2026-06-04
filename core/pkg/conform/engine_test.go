@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,6 +34,7 @@ func (g *fakeGate) Run(_ *RunContext) *GateResult {
 }
 
 func TestEngine_RegisterAndRun(t *testing.T) {
+	withEngineEvidenceDataDir(t)
 	e := NewEngine()
 	e.RegisterGate(&fakeGate{id: "G0", name: "Build Identity", pass: true})
 	e.RegisterGate(&fakeGate{id: "G1", name: "Proof Receipts", pass: true})
@@ -60,6 +62,7 @@ func TestEngine_RegisterAndRun(t *testing.T) {
 }
 
 func TestEngine_FailingGate(t *testing.T) {
+	withEngineEvidenceDataDir(t)
 	e := NewEngine()
 	e.RegisterGate(&fakeGate{id: "G0", name: "Build", pass: true})
 	e.RegisterGate(&fakeGate{id: "G1", name: "Proof", pass: false, reason: ReasonReceiptChainBroken})
@@ -82,6 +85,7 @@ func TestEngine_FailingGate(t *testing.T) {
 }
 
 func TestEngine_MissingGate(t *testing.T) {
+	withEngineEvidenceDataDir(t)
 	e := NewEngine()
 	// Register only G0, but filter asks for G0 and G1
 	e.RegisterGate(&fakeGate{id: "G0", name: "Build", pass: true})
@@ -98,6 +102,7 @@ func TestEngine_MissingGate(t *testing.T) {
 }
 
 func TestEngine_ScoreFileWritten(t *testing.T) {
+	withEngineEvidenceDataDir(t)
 	e := NewEngine()
 	e.RegisterGate(&fakeGate{id: "G0", name: "Build", pass: true})
 
@@ -121,6 +126,7 @@ func TestEngine_ScoreFileWritten(t *testing.T) {
 }
 
 func TestEngine_IndexFileWritten(t *testing.T) {
+	withEngineEvidenceDataDir(t)
 	e := NewEngine()
 	e.RegisterGate(&fakeGate{id: "G0", name: "Build", pass: true})
 
@@ -141,9 +147,13 @@ func TestEngine_IndexFileWritten(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &manifest))
 	require.Equal(t, report.RunID, manifest.RunID)
 	require.NotEmpty(t, manifest.Entries)
+	sealPath := filepath.Join(filepath.Dir(indexPath), evidencepkg.EvidencePackSealPath)
+	_, err = os.Stat(sealPath)
+	require.NoError(t, err)
 }
 
 func TestEngine_DeterministicClock(t *testing.T) {
+	withEngineEvidenceDataDir(t)
 	fixed := time.Date(2026, 2, 13, 12, 0, 0, 0, time.UTC)
 	e := NewEngine().WithClock(func() time.Time { return fixed })
 	e.RegisterGate(&fakeGate{id: "G0", name: "Build", pass: true})
@@ -160,6 +170,7 @@ func TestEngine_DeterministicClock(t *testing.T) {
 }
 
 func TestEngineMarksSeededBaselineAsLocalCompatibilityEvidence(t *testing.T) {
+	withEngineEvidenceDataDir(t)
 	e := NewEngine()
 	e.RegisterGate(&fakeGate{id: "G0", name: "Build", pass: true})
 
@@ -180,4 +191,9 @@ func TestEngineMarksSeededBaselineAsLocalCompatibilityEvidence(t *testing.T) {
 	data, err := os.ReadFile(scorePath)
 	require.NoError(t, err)
 	require.Contains(t, string(data), "seeded-local-baseline")
+}
+
+func withEngineEvidenceDataDir(t *testing.T) {
+	t.Helper()
+	t.Setenv("HELM_DATA_DIR", t.TempDir())
 }

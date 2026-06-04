@@ -6,7 +6,7 @@ on:
       release_tag:
         description: Release tag to validate
         required: true
-        default: v0.5.9
+        default: v0.5.10
       artifact_run_id:
         description: Launchpad artifact workflow run containing signed app and egress-proxy evidence
         required: true

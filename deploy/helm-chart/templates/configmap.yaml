@@ -62,18 +62,4 @@ data:
         initial_reconcile_timeout: {{ .Values.helm.policy.source.initialReconcileTimeout | quote }}
       reload_hints:
         http_wake_endpoint: {{ .Values.helm.policy.reloadHints.httpWakeEndpoint | quote }}
-      agent_safety:
-        baseline_policy_enabled: {{ .Values.helm.policy.agentSafety.baseline.enabled }}
-        baseline_bundle_id: {{ .Values.helm.policy.agentSafety.baseline.bundleID | quote }}
-        deny_unknown_tools: {{ .Values.helm.policy.agentSafety.denyUnknownTools }}
-        deny_unknown_egress: {{ .Values.helm.policy.agentSafety.denyUnknownEgress }}
-        require_manifest_validation: {{ .Values.helm.policy.agentSafety.requireManifestValidation }}
-        require_output_contract_validation: {{ .Values.helm.policy.agentSafety.requireOutputContractValidation }}
-        require_approved_arg_binding: {{ .Values.helm.policy.agentSafety.requireApprovedArgBinding }}
-        lks_memory_influence_only: {{ .Values.helm.policy.agentSafety.lksMemoryInfluenceOnly }}
-        require_a2a_signatures: {{ .Values.helm.policy.agentSafety.requireA2ASignatures }}
-        enforce_safedep_gates: {{ .Values.helm.policy.agentSafety.enforceSafeDepGates }}
-        enforce_budget_circuit_breakers: {{ .Values.helm.policy.agentSafety.enforceBudgetCircuitBreakers }}
-        fail_closed_on_missing_context: {{ .Values.helm.policy.agentSafety.failClosedOnMissingContext }}
-        shadow_mode_observes_only: {{ .Values.helm.policy.agentSafety.shadowModeObservesOnly }}
 {{- end }}

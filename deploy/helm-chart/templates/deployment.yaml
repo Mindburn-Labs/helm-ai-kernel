@@ -16,12 +16,6 @@
 {{- if and .Values.helm.production (eq .Values.helm.policy.source.kind "controlplane") (not .Values.helm.policy.signature.required) -}}
 {{- fail "helm.production=true with helm.policy.source.kind=controlplane requires helm.policy.signature.required=true" -}}
 {{- end -}}
-{{- if and .Values.helm.production (not .Values.helm.policy.agentSafety.baseline.enabled) -}}
-{{- fail "helm.production=true requires helm.policy.agentSafety.baseline.enabled=true" -}}
-{{- end -}}
-{{- if and .Values.helm.production (or (not .Values.helm.policy.agentSafety.denyUnknownTools) (not .Values.helm.policy.agentSafety.denyUnknownEgress) (not .Values.helm.policy.agentSafety.requireManifestValidation) (not .Values.helm.policy.agentSafety.requireOutputContractValidation) (not .Values.helm.policy.agentSafety.requireApprovedArgBinding) (not .Values.helm.policy.agentSafety.lksMemoryInfluenceOnly) (not .Values.helm.policy.agentSafety.requireA2ASignatures) (not .Values.helm.policy.agentSafety.enforceSafeDepGates) (not .Values.helm.policy.agentSafety.enforceBudgetCircuitBreakers) (not .Values.helm.policy.agentSafety.failClosedOnMissingContext)) -}}
-{{- fail "helm.production=true requires all helm.policy.agentSafety fail-closed guards enabled" -}}
-{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -95,32 +89,6 @@ spec:
               value: {{ .Values.helm.policy.reloadHints.httpWakeEndpoint | quote }}
             - name: HELM_POLICY_SIGNATURE_REQUIRED
               value: {{ ternary "1" "0" .Values.helm.policy.signature.required | quote }}
-            - name: HELM_AGENT_SAFETY_BASELINE_ENABLED
-              value: {{ ternary "1" "0" .Values.helm.policy.agentSafety.baseline.enabled | quote }}
-            - name: HELM_AGENT_SAFETY_BASELINE_BUNDLE_ID
-              value: {{ .Values.helm.policy.agentSafety.baseline.bundleID | quote }}
-            - name: HELM_AGENT_SAFETY_DENY_UNKNOWN_TOOLS
-              value: {{ ternary "1" "0" .Values.helm.policy.agentSafety.denyUnknownTools | quote }}
-            - name: HELM_AGENT_SAFETY_DENY_UNKNOWN_EGRESS
-              value: {{ ternary "1" "0" .Values.helm.policy.agentSafety.denyUnknownEgress | quote }}
-            - name: HELM_AGENT_SAFETY_REQUIRE_MANIFEST_VALIDATION
-              value: {{ ternary "1" "0" .Values.helm.policy.agentSafety.requireManifestValidation | quote }}
-            - name: HELM_AGENT_SAFETY_REQUIRE_OUTPUT_CONTRACT_VALIDATION
-              value: {{ ternary "1" "0" .Values.helm.policy.agentSafety.requireOutputContractValidation | quote }}
-            - name: HELM_AGENT_SAFETY_REQUIRE_APPROVED_ARG_BINDING
-              value: {{ ternary "1" "0" .Values.helm.policy.agentSafety.requireApprovedArgBinding | quote }}
-            - name: HELM_AGENT_SAFETY_LKS_INFLUENCE_ONLY
-              value: {{ ternary "1" "0" .Values.helm.policy.agentSafety.lksMemoryInfluenceOnly | quote }}
-            - name: HELM_AGENT_SAFETY_REQUIRE_A2A_SIGNATURES
-              value: {{ ternary "1" "0" .Values.helm.policy.agentSafety.requireA2ASignatures | quote }}
-            - name: HELM_AGENT_SAFETY_ENFORCE_SAFEDEP_GATES
-              value: {{ ternary "1" "0" .Values.helm.policy.agentSafety.enforceSafeDepGates | quote }}
-            - name: HELM_AGENT_SAFETY_ENFORCE_BUDGET_CIRCUIT_BREAKERS
-              value: {{ ternary "1" "0" .Values.helm.policy.agentSafety.enforceBudgetCircuitBreakers | quote }}
-            - name: HELM_AGENT_SAFETY_FAIL_CLOSED_ON_MISSING_CONTEXT
-              value: {{ ternary "1" "0" .Values.helm.policy.agentSafety.failClosedOnMissingContext | quote }}
-            - name: HELM_AGENT_SAFETY_SHADOW_MODE_OBSERVES_ONLY
-              value: {{ ternary "1" "0" .Values.helm.policy.agentSafety.shadowModeObservesOnly | quote }}
             {{- if or .Values.helm.policy.signature.publicKey .Values.helm.policy.signature.existingSecret }}
             - name: HELM_POLICY_TRUST_PUBLIC_KEY
               {{- if .Values.helm.policy.signature.existingSecret }}

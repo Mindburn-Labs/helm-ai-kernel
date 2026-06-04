@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policybundles"
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/decls"
 	"github.com/google/cel-go/common/types"
@@ -16,16 +15,10 @@ import (
 // PolicyEngine is the single point of truth for all "Allow/Deny" decisions.
 // It replaces the legacy RBAC/ABAC engines with a unified CEL-based evaluator.
 type PolicyEngine struct {
-	mu                      sync.RWMutex
-	env                     *cel.Env
-	agentSafetyEnv          *cel.Env
-	policySet               map[string]cel.Program
-	definitions             map[string]string // ID -> CEL Source
-	agentSafetyPrograms     map[string]cel.Program
-	agentSafetyRules        []policybundles.PolicyRule
-	agentSafetyBundleHash   string
-	agentSafetyBaselineID   string
-	agentSafetyBaselineName string
+	mu          sync.RWMutex
+	env         *cel.Env
+	policySet   map[string]cel.Program
+	definitions map[string]string // ID -> CEL Source
 }
 
 // NewPolicyEngine initializes the CEL environment.
@@ -42,22 +35,12 @@ func NewPolicyEngine() (*PolicyEngine, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CEL env: %w", err)
 	}
-	agentSafetyEnv, err := cel.NewEnv(policybundles.AgentSafetyCELEnvOptions()...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create agent safety CEL env: %w", err)
-	}
 
-	pe := &PolicyEngine{
-		env:                 env,
-		agentSafetyEnv:      agentSafetyEnv,
-		policySet:           make(map[string]cel.Program),
-		definitions:         make(map[string]string),
-		agentSafetyPrograms: make(map[string]cel.Program),
-	}
-	if err := pe.loadAgentSafetyBaseline(policybundles.AgentSafetyBaselineBundle()); err != nil {
-		return nil, err
-	}
-	return pe, nil
+	return &PolicyEngine{
+		env:         env,
+		policySet:   make(map[string]cel.Program),
+		definitions: make(map[string]string),
+	}, nil
 }
 
 // LoadPolicy compiles and registers a policy.
@@ -89,37 +72,6 @@ func (pe *PolicyEngine) ListDefinitions() map[string]string {
 		out[k] = v
 	}
 	return out
-}
-
-func (pe *PolicyEngine) loadAgentSafetyBaseline(bundle *policybundles.PolicyBundle) error {
-	hash, err := policybundles.ComputeBundleHash(bundle)
-	if err != nil {
-		return fmt.Errorf("compute agent safety bundle hash: %w", err)
-	}
-	pe.agentSafetyRules = append([]policybundles.PolicyRule(nil), bundle.Rules...)
-	pe.agentSafetyBundleHash = hash
-	pe.agentSafetyBaselineID = bundle.BundleID
-	pe.agentSafetyBaselineName = bundle.Name
-	for _, rule := range bundle.Rules {
-		ast, issues := pe.agentSafetyEnv.Compile(rule.Condition)
-		if issues != nil && issues.Err() != nil {
-			return fmt.Errorf("compile agent safety rule %s: %w", rule.RuleID, issues.Err())
-		}
-		prg, err := pe.agentSafetyEnv.Program(ast)
-		if err != nil {
-			return fmt.Errorf("construct agent safety rule %s: %w", rule.RuleID, err)
-		}
-		pe.agentSafetyPrograms[rule.RuleID] = prg
-	}
-	return nil
-}
-
-// AgentSafetyBaselineLoaded reports whether the built-in baseline is active.
-func (pe *PolicyEngine) AgentSafetyBaselineLoaded() bool {
-	pe.mu.RLock()
-	defer pe.mu.RUnlock()
-	return pe.agentSafetyBaselineID == policybundles.AgentSafetyBaselineBundleID &&
-		len(pe.agentSafetyRules) == len(policybundles.AgentSafetyBaselineBundle().Rules)
 }
 
 // Evaluate checks a request against a specific policy (or all if policyID is empty).

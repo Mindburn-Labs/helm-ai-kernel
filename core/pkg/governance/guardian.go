@@ -1,7 +1,6 @@
 package governance
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -24,18 +23,6 @@ func NewGuardian(signer *crypto.Ed25519Signer, engine *PolicyEngine) *Guardian {
 		signer: signer,
 		engine: engine,
 	}
-}
-
-// AuthorizeAgentSafety evaluates the agent-safety baseline and signs the result.
-func (g *Guardian) AuthorizeAgentSafety(ctx context.Context, input AgentSafetyContext) (*contracts.DecisionRecord, error) {
-	dec, err := g.engine.EvaluateAgentSafetyBaseline(ctx, input)
-	if err != nil {
-		return nil, fmt.Errorf("agent safety policy evaluation failed: %w", err)
-	}
-	if err := g.signer.SignDecision(dec); err != nil {
-		return nil, fmt.Errorf("guardian signing failed: %w", err)
-	}
-	return dec, nil
 }
 
 // Authorize evaluates the action and risk score against the default governance policy

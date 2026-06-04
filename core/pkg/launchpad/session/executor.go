@@ -14,6 +14,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox/daytona"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/sandbox/e2b"
+	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	lpprovision "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/provision"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
@@ -589,18 +590,68 @@ func (e Executor) persist(run LaunchRun, artifacts map[string][]byte) (LaunchRun
 	}
 	run.EvidencePackRefs = appendUnique(run.EvidencePackRefs, packRef)
 	run.EvidenceGraphRefs = appendUnique(run.EvidenceGraphRefs, packRef+"/04_EXPORTS/launchpad_evidence_graph.json")
-	if archiveRef, err := receipts.WriteEvidencePackArchive(packRef); err == nil {
-		run.EvidencePackRefs = appendUnique(run.EvidencePackRefs, archiveRef)
-		run.VerificationCommand = "helm-ai-kernel verify --bundle " + archiveRef
-	} else {
-		run.VerificationCommand = "helm-ai-kernel verify --bundle " + packRef
+	cfg, err := evidencepkg.LoadEvidencePackTrustConfig("")
+	if err != nil {
+		return LaunchRun{}, err
 	}
+	profile := launchEvidenceProfile(cfg)
+	archiveRef := packRef + ".tar"
+	storageReceiptPath := launchStorageReceiptPath(profile, archiveRef)
+	seal, err := evidencepkg.SealEvidencePack(context.Background(), packRef, evidencepkg.SealEvidencePackOptions{
+		PackID:             run.LaunchID,
+		Profile:            profile,
+		TrustConfig:        cfg,
+		StorageReceiptPath: storageReceiptPath,
+	})
+	if err != nil {
+		return LaunchRun{}, err
+	}
+	archiveRef, err = receipts.WriteEvidencePackArchive(packRef)
+	if err != nil {
+		return LaunchRun{}, err
+	}
+	if storageReceiptPath != "" {
+		if err := storeLaunchStorageReceipt(context.Background(), archiveRef, seal.MerkleRoot, cfg, storageReceiptPath); err != nil {
+			return LaunchRun{}, err
+		}
+		run.EvidencePackRefs = appendUnique(run.EvidencePackRefs, storageReceiptPath)
+	}
+	run.EvidencePackRefs = appendUnique(run.EvidencePackRefs, archiveRef)
+	run.VerificationCommand = evidencepkg.BuildEvidencePackVerifyCommand(archiveRef, profile, storageReceiptPath)
 	logPath, _ := e.Store.AppendLog(run.LaunchID, fmt.Sprintf("launchpad state %s verdict %s", run.State, run.KernelVerdict))
 	run.LogPath = logPath
 	if err := e.Store.Save(run); err != nil {
 		return LaunchRun{}, err
 	}
 	return run, nil
+}
+
+func launchEvidenceProfile(cfg *evidencepkg.EvidencePackTrustConfig) evidencepkg.EvidenceTrustProfile {
+	if cfg != nil && cfg.ActiveProfile != "" {
+		return evidencepkg.NormalizeEvidenceTrustProfile(cfg.ActiveProfile)
+	}
+	return evidencepkg.EvidenceTrustProfileDevLocal
+}
+
+func launchStorageReceiptPath(profile evidencepkg.EvidenceTrustProfile, archiveRef string) string {
+	if evidencepkg.ProfileRequiresExternalTrust(profile) {
+		return evidencepkg.DefaultStorageReceiptPath(archiveRef)
+	}
+	return ""
+}
+
+func storeLaunchStorageReceipt(ctx context.Context, archiveRef, subjectRoot string, cfg *evidencepkg.EvidencePackTrustConfig, receiptPath string) error {
+	if strings.TrimSpace(receiptPath) == "" {
+		return nil
+	}
+	if cfg == nil {
+		return errors.New("customer profile requires evidence trust config for storage receipt")
+	}
+	receipt, err := evidencepkg.StoreArchiveWithS3ObjectLock(ctx, archiveRef, subjectRoot, cfg.Storage)
+	if err != nil {
+		return err
+	}
+	return evidencepkg.WriteStorageReceipt(receiptPath, *receipt)
 }
 
 func newLaunchRun(compiled plan.LaunchPlan, reason string) LaunchRun {

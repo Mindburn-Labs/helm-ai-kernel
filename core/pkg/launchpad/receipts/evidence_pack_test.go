@@ -1,12 +1,14 @@
 package receipts
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
@@ -31,6 +33,7 @@ func TestWriteEvidencePackMaterializesRequiredDirectories(t *testing.T) {
 			t.Fatalf("required EvidencePack placeholder %s missing: %v", keep, err)
 		}
 	}
+	sealLaunchpadTestPack(t, packDir, "launch-test")
 	report, err := verifier.VerifyBundle(packDir)
 	if err != nil {
 		t.Fatal(err)
@@ -66,23 +69,36 @@ func TestWriteEvidencePackBuildsEvidenceGraph(t *testing.T) {
 
 func TestWriteEvidencePackRewriteKeepsEvidenceGraphHashCurrent(t *testing.T) {
 	root := t.TempDir()
-	if _, err := WriteEvidencePack(root, "launch-rewrite", map[string][]byte{
+	firstPackDir, err := WriteEvidencePack(root, "launch-rewrite", map[string][]byte{
 		"receipts/kernel-verdict.json": []byte(`{"receipt_id":"r1","type":"launchpad.kernel_verdict","decision_id":"d1","decision_hash":"sha256:test","status":"ALLOW","verdict":"ALLOW","lamport_clock":1}`),
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
+	sealLaunchpadTestPack(t, firstPackDir, "launch-rewrite")
 	packDir, err := WriteEvidencePack(root, "launch-rewrite", map[string][]byte{
 		"receipts/teardown.json": []byte(`{"receipt_id":"r2","type":"launchpad.teardown","decision_id":"d2","decision_hash":"sha256:test2","status":"ALLOW","verdict":"ALLOW","lamport_clock":2}`),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	sealLaunchpadTestPack(t, packDir, "launch-rewrite")
 	report, err := verifier.VerifyBundle(packDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !report.Verified {
 		t.Fatalf("rewritten EvidencePack did not verify: %s", report.Summary)
+	}
+}
+
+func sealLaunchpadTestPack(t *testing.T, packDir, packID string) {
+	t.Helper()
+	if _, err := evidencepkg.SealEvidencePack(context.Background(), packDir, evidencepkg.SealEvidencePackOptions{
+		PackID:  packID,
+		DataDir: t.TempDir(),
+	}); err != nil {
+		t.Fatalf("seal launchpad EvidencePack: %v", err)
 	}
 }
 

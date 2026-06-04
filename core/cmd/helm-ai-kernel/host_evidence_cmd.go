@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/correlation/hostaction"
+	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence/externalhost"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidencepack"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/externalreceipt"
@@ -121,6 +123,9 @@ func runEvidenceAttachHostChain(args []string, stdout, stderr io.Writer) int {
 		}
 		attachedPath = filepath.ToSlash(relPath)
 		if err := updateEvidenceIndexes(workDir, attachedPath, chainData); err != nil {
+			return err
+		}
+		if _, err := evidencepkg.SealEvidencePack(context.Background(), workDir, evidencepkg.SealEvidencePackOptions{}); err != nil {
 			return err
 		}
 		if archiveOut != "" {

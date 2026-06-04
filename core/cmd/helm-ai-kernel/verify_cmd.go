@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
+	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
@@ -47,6 +48,9 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		jsonOutFile      string
 		online           bool
 		ledgerURL        string
+		profile          string
+		configPath       string
+		storageReceipt   string
 		requireEIDAS     bool
 		eidasMaxAgeHours int
 		requireTEE       string
@@ -57,6 +61,9 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&jsonOutFile, "json-out", "", "Write structured audit report to file (auditor mode)")
 	cmd.BoolVar(&online, "online", false, "Verify pack metadata against the public proof ledger after offline checks pass")
 	cmd.StringVar(&ledgerURL, "ledger-url", "", "Public proof verification URL")
+	cmd.StringVar(&profile, "profile", "", "Evidence trust profile: dev-local, team, customer, high-assurance (default: active config or dev-local)")
+	cmd.StringVar(&configPath, "config", "", "Evidence trust config path (for example helm/helm.yaml)")
+	cmd.StringVar(&storageReceipt, "storage-receipt", "", "Path to S3 Object Lock storage receipt for customer/high-assurance verification")
 	cmd.BoolVar(&requireEIDAS, "require-eidas", false, "Require every receipt to carry an eIDAS-qualified RFC 3161 anchor")
 	cmd.IntVar(&eidasMaxAgeHours, "eidas-max-age-hours", 24, "Maximum age in hours of an anchor's integrated_time before --require-eidas treats it as stale")
 	cmd.StringVar(&requireTEE, "require-tee", "", "Require every receipt to carry a TEE attestation; one of sevsnp|tdx|nitro|any (empty = no requirement)")
@@ -83,12 +90,14 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	verifyTarget := bundle
+	storageObjectPath := ""
 	info, err := os.Stat(bundle)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: verification failed: %v\n", err)
 		return 2
 	}
 	if !info.IsDir() {
+		storageObjectPath = bundle
 		tempDir, err := os.MkdirTemp("", "helm-verify-*")
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "Error: cannot create verification workspace: %v\n", err)
@@ -104,7 +113,16 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// Use the standalone verifier library (zero network deps)
-	report, err := verifier.VerifyBundle(verifyTarget)
+	profileOpt := evidencepkg.EvidenceTrustProfile("")
+	if strings.TrimSpace(profile) != "" {
+		profileOpt = normalizeEvidenceTrustProfile(profile)
+	}
+	report, err := verifier.VerifyBundleWithOptions(verifyTarget, verifier.VerifyOptions{
+		Profile:            profileOpt,
+		ConfigPath:         configPath,
+		StorageReceiptPath: storageReceipt,
+		StorageObjectPath:  storageObjectPath,
+	})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: verification failed: %v\n", err)
 		return 2
@@ -354,6 +372,12 @@ func normalizeVerifyArgs(args []string) ([]string, error) {
 		"-json-out":             true,
 		"--ledger-url":          true,
 		"-ledger-url":           true,
+		"--profile":             true,
+		"-profile":              true,
+		"--config":              true,
+		"-config":               true,
+		"--storage-receipt":     true,
+		"-storage-receipt":      true,
 		"--eidas-max-age-hours": true,
 		"-eidas-max-age-hours":  true,
 	}
@@ -457,8 +481,26 @@ func printCompactVerifyReport(stdout io.Writer, report *verifier.VerifyReport) {
 	if sealed == "" {
 		sealed = "unknown"
 	}
-	_, _ = fmt.Fprintf(stdout, "envelope %s · sig %d/%d · anchor %s\n", displayEnvelopeID(report), report.SignatureValidCount, report.SignatureTotalCount, anchor)
-	_, _ = fmt.Fprintf(stdout, "VERIFIED · sealed %s\n", sealed)
+	sealState := report.SealState
+	if sealState == "" {
+		sealState = "unknown"
+	}
+	trust := report.TrustLevel
+	if trust == "" {
+		trust = string(evidencepkg.EvidenceTrustProfileDevLocal)
+	}
+	anchorStatus := report.AnchorStatus
+	if anchorStatus == "" {
+		anchorStatus = anchor
+	} else if anchor != "offline" && anchorStatus != anchor {
+		anchorStatus = anchor + " (" + anchorStatus + ")"
+	}
+	storageStatus := report.StorageStatus
+	if storageStatus == "" {
+		storageStatus = "unknown"
+	}
+	_, _ = fmt.Fprintf(stdout, "envelope %s · seal %s · sig %d/%d · trust %s\n", displayEnvelopeID(report), sealState, report.SignatureValidCount, report.SignatureTotalCount, trust)
+	_, _ = fmt.Fprintf(stdout, "VERIFIED · sealed %s · anchor %s · storage %s\n", sealed, anchorStatus, storageStatus)
 }
 
 func displayEnvelopeID(report *verifier.VerifyReport) string {

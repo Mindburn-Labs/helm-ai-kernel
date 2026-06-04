@@ -799,12 +799,8 @@ func TestCoverageExecutorPersistenceEdges(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(archiveFallbackRoot, "evidencepacks", "archive-fallback.tar"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	run, err = (Executor{Store: NewStore(archiveFallbackRoot)}).persist(LaunchRun{LaunchID: "archive-fallback", State: StateValidated, KernelVerdict: "ALLOW"}, map[string][]byte{"runtime_environment.json": []byte("{}")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.HasSuffix(run.VerificationCommand, ".tar") {
-		t.Fatalf("expected verification fallback to unpacked evidence pack: %s", run.VerificationCommand)
+	if _, err := (Executor{Store: NewStore(archiveFallbackRoot)}).persist(LaunchRun{LaunchID: "archive-fallback", State: StateValidated, KernelVerdict: "ALLOW"}, map[string][]byte{"runtime_environment.json": []byte("{}")}); err == nil {
+		t.Fatal("expected archive creation failure to abort persistence")
 	}
 
 	saveFailRoot := t.TempDir()

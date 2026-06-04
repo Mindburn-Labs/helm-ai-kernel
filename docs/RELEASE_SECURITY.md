@@ -95,6 +95,13 @@ the audit EvidencePack, verifies the staged `evidence-pack.tar`, and only then
 writes final checksums. A failed EvidencePack verification blocks release asset
 publication.
 
+Release EvidencePacks use the native
+`07_ATTESTATIONS/evidence_pack.sig` seal. If a release is cut under the
+customer or high-assurance profile, release verification must pass with
+`helm-ai-kernel verify --profile customer --storage-receipt <receipt>` or the
+equivalent high-assurance profile, proving the trusted external signer,
+Rekor/RFC3161 anchor receipt, and active S3 Object Lock storage receipt.
+
 For `v0.5.9`, use checksum verification, SBOM inspection, OpenVEX inspection,
 release metadata inspection, offline EvidencePack verification,
 reproducible-build validation, and Cosign verification against the attached

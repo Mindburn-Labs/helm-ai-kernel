@@ -11,7 +11,7 @@ type PolicyBundle struct {
 	Name         string       `json:"name"`
 	Description  string       `json:"description,omitempty"`
 	Jurisdiction string       `json:"jurisdiction"` // "US", "EU", "UK", "global"
-	Category     string       `json:"category"`     // "retention", "approval", "data_residency", "access_control"
+	Category     string       `json:"category"`     // "retention", "approval", "data_residency", "access_control", "agent_safety"
 	Version      int          `json:"version"`
 	Rules        []PolicyRule `json:"rules"`
 	ContentHash  string       `json:"content_hash"`

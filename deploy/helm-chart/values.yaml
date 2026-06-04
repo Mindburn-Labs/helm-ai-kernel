@@ -188,6 +188,22 @@ helm:
       existingSecret: ""
       existingSecretKey: "HELM_POLICY_TRUST_PUBLIC_KEY"
 
+    agentSafety:
+      baseline:
+        enabled: true
+        bundleID: "builtin-agent-safety-baseline"
+      denyUnknownTools: true
+      denyUnknownEgress: true
+      requireManifestValidation: true
+      requireOutputContractValidation: true
+      requireApprovedArgBinding: true
+      lksMemoryInfluenceOnly: true
+      requireA2ASignatures: true
+      enforceSafeDepGates: true
+      enforceBudgetCircuitBreakers: true
+      failClosedOnMissingContext: true
+      shadowModeObservesOnly: true
+
     # Name of an existing ConfigMap containing the serve policy file.
     # Legacy alias for policy.source.mountedFile.existingConfigMap.
     configMap: ""

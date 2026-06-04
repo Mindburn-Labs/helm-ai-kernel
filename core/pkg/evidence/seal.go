@@ -708,6 +708,9 @@ func LoadEvidencePackTrustConfigWithPath(configPath, dataDir string) (*EvidenceP
 		}
 		cfg, err := parseEvidencePackTrustConfig(data)
 		if err != nil {
+			if shouldSkipUnrelatedEvidencePackTrustConfig(configPath, path, data) {
+				continue
+			}
 			return nil, fmt.Errorf("parse evidence pack trust config %s: %w", path, err)
 		}
 		return cfg, nil
@@ -818,7 +821,7 @@ func parseEvidencePackTrustConfig(data []byte) (*EvidencePackTrustConfig, error)
 	var file evidencePackTrustYAMLFile
 	if err := yaml.Unmarshal(data, &file); err == nil {
 		nested := file.Trust.EvidencePack
-		if nested.Profile != "" || nested.ActiveProfile != "" || nested.Version != "" {
+		if hasEvidencePackTrustYAML(nested) {
 			cfg := EvidencePackTrustConfig{
 				Version:       nested.Version,
 				ActiveProfile: firstNonEmptyProfile(nested.ActiveProfile, nested.Profile),
@@ -838,6 +841,36 @@ func parseEvidencePackTrustConfig(data []byte) (*EvidencePackTrustConfig, error)
 	}
 	cfg.ActiveProfile = NormalizeEvidenceTrustProfile(cfg.ActiveProfile)
 	return &cfg, nil
+}
+
+func shouldSkipUnrelatedEvidencePackTrustConfig(configPath, path string, data []byte) bool {
+	if strings.TrimSpace(configPath) != "" || filepath.ToSlash(path) != "helm/helm.yaml" {
+		return false
+	}
+	var file evidencePackTrustYAMLFile
+	if err := yaml.Unmarshal(data, &file); err != nil {
+		return false
+	}
+	return !hasEvidencePackTrustYAML(file.Trust.EvidencePack)
+}
+
+func hasEvidencePackTrustYAML(cfg evidencePackTrustYAML) bool {
+	return cfg.Version != "" ||
+		cfg.Profile != "" ||
+		cfg.ActiveProfile != "" ||
+		cfg.Signer.Type != "" ||
+		cfg.Signer.KeyID != "" ||
+		cfg.Signer.PublicKey != "" ||
+		cfg.Signer.KMSKeyID != "" ||
+		cfg.Signer.SignCommand != "" ||
+		cfg.Anchor.Type != "" ||
+		cfg.Anchor.URI != "" ||
+		cfg.Anchor.URL != "" ||
+		cfg.Storage.Type != "" ||
+		cfg.Storage.URI != "" ||
+		cfg.Storage.Bucket != "" ||
+		len(cfg.TrustedKeys) > 0 ||
+		!cfg.UpdatedAt.IsZero()
 }
 
 func marshalEvidencePackTrustYAML(cfg EvidencePackTrustConfig) ([]byte, error) {
@@ -1050,10 +1083,14 @@ func validateProfileSeal(seal EvidencePackSeal, cfg *EvidencePackTrustConfig, pr
 	default:
 		errs = append(errs, fmt.Sprintf("unknown evidence trust profile %q", profile))
 	}
-	if cfg == nil && profile != EvidenceTrustProfileDevLocal {
+	if cfg == nil && profile != EvidenceTrustProfileDevLocal && !trustedKeyEnvConfigured() {
 		errs = append(errs, fmt.Sprintf("%s profile requires a local trust config or trusted-key env", profile))
 	}
 	return errs
+}
+
+func trustedKeyEnvConfigured() bool {
+	return strings.TrimSpace(firstNonEmpty(os.Getenv("HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX"), os.Getenv("HELM_EVIDENCE_SIGNER_PUBLIC_KEY_HEX"))) != ""
 }
 
 func profileRequiresExternalTrust(profile EvidenceTrustProfile) bool {

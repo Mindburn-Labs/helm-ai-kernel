@@ -708,6 +708,9 @@ func LoadEvidencePackTrustConfigWithPath(configPath, dataDir string) (*EvidenceP
 		}
 		cfg, err := parseEvidencePackTrustConfig(data)
 		if err != nil {
+			if shouldSkipUnrelatedEvidencePackTrustConfig(configPath, path, data) {
+				continue
+			}
 			return nil, fmt.Errorf("parse evidence pack trust config %s: %w", path, err)
 		}
 		return cfg, nil
@@ -818,7 +821,7 @@ func parseEvidencePackTrustConfig(data []byte) (*EvidencePackTrustConfig, error)
 	var file evidencePackTrustYAMLFile
 	if err := yaml.Unmarshal(data, &file); err == nil {
 		nested := file.Trust.EvidencePack
-		if nested.Profile != "" || nested.ActiveProfile != "" || nested.Version != "" {
+		if hasEvidencePackTrustYAML(nested) {
 			cfg := EvidencePackTrustConfig{
 				Version:       nested.Version,
 				ActiveProfile: firstNonEmptyProfile(nested.ActiveProfile, nested.Profile),
@@ -838,6 +841,36 @@ func parseEvidencePackTrustConfig(data []byte) (*EvidencePackTrustConfig, error)
 	}
 	cfg.ActiveProfile = NormalizeEvidenceTrustProfile(cfg.ActiveProfile)
 	return &cfg, nil
+}
+
+func shouldSkipUnrelatedEvidencePackTrustConfig(configPath, path string, data []byte) bool {
+	if strings.TrimSpace(configPath) != "" || filepath.ToSlash(path) != "helm/helm.yaml" {
+		return false
+	}
+	var file evidencePackTrustYAMLFile
+	if err := yaml.Unmarshal(data, &file); err != nil {
+		return false
+	}
+	return !hasEvidencePackTrustYAML(file.Trust.EvidencePack)
+}
+
+func hasEvidencePackTrustYAML(cfg evidencePackTrustYAML) bool {
+	return cfg.Version != "" ||
+		cfg.Profile != "" ||
+		cfg.ActiveProfile != "" ||
+		cfg.Signer.Type != "" ||
+		cfg.Signer.KeyID != "" ||
+		cfg.Signer.PublicKey != "" ||
+		cfg.Signer.KMSKeyID != "" ||
+		cfg.Signer.SignCommand != "" ||
+		cfg.Anchor.Type != "" ||
+		cfg.Anchor.URI != "" ||
+		cfg.Anchor.URL != "" ||
+		cfg.Storage.Type != "" ||
+		cfg.Storage.URI != "" ||
+		cfg.Storage.Bucket != "" ||
+		len(cfg.TrustedKeys) > 0 ||
+		!cfg.UpdatedAt.IsZero()
 }
 
 func marshalEvidencePackTrustYAML(cfg EvidencePackTrustConfig) ([]byte, error) {

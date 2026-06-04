@@ -200,6 +200,38 @@ func TestVerifyEvidencePackSealTeamAcceptsTrustedKeyEnvWithoutCustomerArtifacts(
 	}
 }
 
+func TestLoadEvidencePackTrustConfigSkipsImplicitUnrelatedHelmYAML(t *testing.T) {
+	dir := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(cwd)
+	})
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll("helm", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("helm", "helm.yaml"), []byte("project:\n  name: unrelated\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadEvidencePackTrustConfigWithPath("", filepath.Join(dir, "data"))
+	if err != nil {
+		t.Fatalf("implicit unrelated helm.yaml should be skipped: %v", err)
+	}
+	if cfg != nil {
+		t.Fatalf("unexpected trust config from unrelated helm.yaml: %+v", cfg)
+	}
+
+	_, err = LoadEvidencePackTrustConfigWithPath(filepath.Join("helm", "helm.yaml"), filepath.Join(dir, "data"))
+	if err == nil {
+		t.Fatal("explicit unrelated trust config path should fail closed")
+	}
+}
+
 func TestSealEvidencePackKMSConfigFailsClosedWhenUnconfigured(t *testing.T) {
 	packDir := writeSealTestPack(t, map[string][]byte{
 		"01_SCORE.json": []byte(`{"pass":true}`),

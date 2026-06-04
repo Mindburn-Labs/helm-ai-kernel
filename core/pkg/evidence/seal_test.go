@@ -156,6 +156,50 @@ func TestVerifyEvidencePackSealRejectsBadTrustedKey(t *testing.T) {
 	}
 }
 
+func TestVerifyEvidencePackSealTeamAcceptsTrustedKeyEnvWithoutCustomerArtifacts(t *testing.T) {
+	packDir := writeSealTestPack(t, map[string][]byte{
+		"01_SCORE.json": []byte(`{"pass":true}`),
+	})
+	dataDir := t.TempDir()
+	signer, err := NewFileDevEvidenceSigner(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &EvidencePackTrustConfig{
+		ActiveProfile: EvidenceTrustProfileTeam,
+		Signer: EvidencePackTrustSigner{
+			Type:      "file-dev",
+			KeyID:     signer.KeyID(),
+			PublicKey: signer.PublicKeyHex(),
+		},
+		Anchor:      EvidencePackSealAnchor{Type: "local-dev", Status: "development-only"},
+		Storage:     EvidencePackSealStorage{Type: "local-dev", Status: "development-only"},
+		TrustedKeys: map[string]string{signer.KeyID(): signer.PublicKeyHex()},
+	}
+	if _, err := SealEvidencePack(context.Background(), packDir, SealEvidencePackOptions{
+		PackID:      "team-pack",
+		Profile:     EvidenceTrustProfileTeam,
+		Signer:      signer,
+		TrustConfig: cfg,
+		SignedAt:    fixedSealTime(),
+	}); err != nil {
+		t.Fatalf("SealEvidencePack: %v", err)
+	}
+
+	t.Setenv("HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX", signer.PublicKeyHex())
+	result := VerifyEvidencePackSeal(packDir, VerifyEvidencePackSealOptions{
+		Profile: EvidenceTrustProfileTeam,
+		DataDir: t.TempDir(),
+		Now:     fixedSealTime(),
+	})
+	if result.State != "valid" || !result.SignatureValid {
+		t.Fatalf("team seal did not verify with trusted-key env: %+v", result)
+	}
+	if result.AnchorStatus != "local-only" || result.StorageStatus != "local-only" {
+		t.Fatalf("team seal should not require customer artifacts: %+v", result)
+	}
+}
+
 func TestSealEvidencePackKMSConfigFailsClosedWhenUnconfigured(t *testing.T) {
 	packDir := writeSealTestPack(t, map[string][]byte{
 		"01_SCORE.json": []byte(`{"pass":true}`),

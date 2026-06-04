@@ -150,7 +150,7 @@ func VerifyStorageReceiptForSeal(seal EvidencePackSeal, profile EvidenceTrustPro
 	profile = NormalizeEvidenceTrustProfile(profile)
 	path := firstNonEmpty(explicitPath, seal.Storage.Receipt)
 	if strings.TrimSpace(path) == "" {
-		if profile == EvidenceTrustProfileDevLocal {
+		if profile == EvidenceTrustProfileDevLocal || profile == EvidenceTrustProfileTeam {
 			return "local-only", "", nil
 		}
 		return "missing", "", []string{"customer profile requires storage receipt"}

@@ -50,7 +50,7 @@ func anchorEvidenceRoot(ctx context.Context, backend proofanchor.AnchorBackend, 
 func verifyEvidenceAnchorReceipts(ctx context.Context, seal EvidencePackSeal, cfg *EvidencePackTrustConfig, profile EvidenceTrustProfile) (string, []string) {
 	profile = NormalizeEvidenceTrustProfile(profile)
 	if len(seal.AnchorReceipts) == 0 {
-		if profile == EvidenceTrustProfileDevLocal {
+		if profile == EvidenceTrustProfileDevLocal || profile == EvidenceTrustProfileTeam {
 			return "local-only", nil
 		}
 		return "missing", []string{"customer profile requires external anchor receipt"}

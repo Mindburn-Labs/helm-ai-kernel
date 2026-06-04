@@ -1050,10 +1050,14 @@ func validateProfileSeal(seal EvidencePackSeal, cfg *EvidencePackTrustConfig, pr
 	default:
 		errs = append(errs, fmt.Sprintf("unknown evidence trust profile %q", profile))
 	}
-	if cfg == nil && profile != EvidenceTrustProfileDevLocal {
+	if cfg == nil && profile != EvidenceTrustProfileDevLocal && !trustedKeyEnvConfigured() {
 		errs = append(errs, fmt.Sprintf("%s profile requires a local trust config or trusted-key env", profile))
 	}
 	return errs
+}
+
+func trustedKeyEnvConfigured() bool {
+	return strings.TrimSpace(firstNonEmpty(os.Getenv("HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX"), os.Getenv("HELM_EVIDENCE_SIGNER_PUBLIC_KEY_HEX"))) != ""
 }
 
 func profileRequiresExternalTrust(profile EvidenceTrustProfile) bool {

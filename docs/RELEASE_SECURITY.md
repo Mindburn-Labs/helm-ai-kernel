@@ -51,13 +51,13 @@ flowchart TD
 ```
 
 
-Current source release target: `v0.5.9`:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.9>. The
+Current source release target: `v0.5.10`:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.10>. The
 release is complete only when GitHub shows Darwin/Linux/Windows binaries,
-`SHA256SUMS.txt`, `sbom.json`, `v0.5.9.openvex.json`,
+`SHA256SUMS.txt`, `sbom.json`, `v0.5.10.openvex.json`,
 `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`,
 `sample-policy-material.tar`, `helm-ai-kernel-launchpad-data.tar`,
-`helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.9.json`,
+`helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.10.json`,
 `version-status.json`, and matching `*.cosign.bundle` files for each primary
 asset.
 
@@ -102,7 +102,7 @@ customer or high-assurance profile, release verification must pass with
 equivalent high-assurance profile, proving the trusted external signer,
 Rekor/RFC3161 anchor receipt, and active S3 Object Lock storage receipt.
 
-For `v0.5.9`, use checksum verification, SBOM inspection, OpenVEX inspection,
+For `v0.5.10`, use checksum verification, SBOM inspection, OpenVEX inspection,
 release metadata inspection, offline EvidencePack verification,
 reproducible-build validation, and Cosign verification against the attached
 bundles.

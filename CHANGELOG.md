@@ -39,14 +39,15 @@ flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Page["HELM AI Kernel Changelog"]
         A["[Unreleased]"]
-        B["[0.5.9] - 2026-06-03"]
-        C["[0.5.4] - 2026-05-20"]
-        D["[0.5.3] - 2026-05-19"]
-        E["[0.5.2] - 2026-05-19"]
-        F["[0.5.1] - 2026-05-18"]
-        G["[0.5.0] - 2026-05-13"]
-        H["[0.4.0] - 2026-04-25"]
-        I["Validation"]
+        B["[0.5.10] - 2026-06-04"]
+        C["[0.5.9] - 2026-06-03"]
+        D["[0.5.4] - 2026-05-20"]
+        E["[0.5.3] - 2026-05-19"]
+        F["[0.5.2] - 2026-05-19"]
+        G["[0.5.1] - 2026-05-18"]
+        H["[0.5.0] - 2026-05-13"]
+        I["[0.4.0] - 2026-04-25"]
+        J["Validation"]
     end
 
     %% Operational Flow Edges
@@ -59,6 +60,7 @@ flowchart TD
     F --> G
     G --> H
     H --> I
+    I --> J
 
     %% Premium Styling Rules
 ```
@@ -69,11 +71,17 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 ## [Unreleased]
 
 ### Added
-- **Native EvidencePack customer proof**: `07_ATTESTATIONS/evidence_pack.sig` is now the seal authority for customer-grade verification, with customer/high-assurance profiles requiring external signer trust, verified Rekor/RFC3161 anchor receipts, and S3 Object Lock storage receipts.
-- **Receipt-aware verification CLI**: `helm-ai-kernel verify` accepts `--profile`, `--config`, and `--storage-receipt` for native EvidencePack trust profiles; top-level `helm-ai-kernel trust init --config helm/helm.yaml` routes to native EvidencePack trust initialization.
 - **UCS v1.5 Super-Sovereign Execution Standard**: Scaffolded zero-knowledge execution proof boundaries and Trusted Execution Environment (TEE) sealed secrets vault.
 - **zkVM Guest Safety Checker**: Introduced the `ZKVMGuestSafetyChecker` and `SafetyGuestProgram` inside `pkg/crypto/zk` to simulate AST static analysis inside zero-knowledge execution enclaves.
 - **TEE Secrets Enclave**: Introduced `SovereignKMSVault` and `SecretProxyFilter` inside `pkg/crypto/tee` to enforce hardware-sealed secrets isolation and inline proxy token injection with constant-time verification.
+
+## [0.5.10] - 2026-06-04
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.10>.
+
+- Added native EvidencePack customer proof verification: `07_ATTESTATIONS/evidence_pack.sig` is now the seal authority for customer-grade verification, with customer/high-assurance profiles requiring external signer trust, verified Rekor/RFC3161 anchor receipts, and S3 Object Lock storage receipts.
+- Added receipt-aware verification commands: `helm-ai-kernel verify` accepts `--profile`, `--config`, and `--storage-receipt` for native EvidencePack trust profiles; top-level `helm-ai-kernel trust init --config helm/helm.yaml` routes to native EvidencePack trust initialization.
+- Extended Launchpad verification to carry profile-aware native seal options through evidence pack receipts and verifier execution.
 
 ## [0.5.9] - 2026-06-03
 

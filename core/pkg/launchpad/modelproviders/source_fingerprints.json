@@ -656,8 +656,8 @@
       "final_url": "https://docs.bigmodel.cn/cn/guide/start/introduction",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:dabd3aff769f07eb2965401eb029974ebba3407afd02b26ddb564ea5f8efae72",
-      "content_length": 1
+      "content_sha256": "sha256:decdda3bff530e8a20175ea85e3a0c417a12bcc5264bd23de9aaa8bd050d66e1",
+      "content_length": 355112
     }
   ]
 }

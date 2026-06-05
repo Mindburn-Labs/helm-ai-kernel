@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -646,6 +647,36 @@ func NewControlPlaneSource(baseURL string, scope PolicyScope) *ControlPlaneSourc
 	return &ControlPlaneSource{BaseURL: strings.TrimRight(baseURL, "/"), HTTPClient: http.DefaultClient, Scope: scope.Normalize()}
 }
 
+func ValidateControlPlaneURL(raw string) error {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return fmt.Errorf("controlplane URL is invalid: %w", err)
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("controlplane URL must be an absolute URL")
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "https":
+		return nil
+	case "http":
+		if isLoopbackControlPlaneHost(parsed.Hostname()) {
+			return nil
+		}
+		return fmt.Errorf("controlplane URL must use https unless the host is localhost or loopback")
+	default:
+		return fmt.Errorf("controlplane URL must use https")
+	}
+}
+
+func isLoopbackControlPlaneHost(host string) bool {
+	host = strings.TrimSpace(strings.ToLower(host))
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func (s *ControlPlaneSource) ListScopes(ctx context.Context) ([]PolicyScope, error) {
 	return []PolicyScope{s.Scope.Normalize()}, nil
 }
@@ -689,6 +720,9 @@ func (s *ControlPlaneSource) Load(ctx context.Context, scope PolicyScope, epoch 
 func (s *ControlPlaneSource) url(path string, scope PolicyScope, epoch uint64) (string, error) {
 	if strings.TrimSpace(s.BaseURL) == "" {
 		return "", fmt.Errorf("controlplane URL is required")
+	}
+	if err := ValidateControlPlaneURL(s.BaseURL); err != nil {
+		return "", err
 	}
 	u, err := url.Parse(strings.TrimRight(s.BaseURL, "/") + path)
 	if err != nil {

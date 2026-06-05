@@ -114,6 +114,10 @@ func TestControlPlaneSourceErrorAndHeaderBranches(t *testing.T) {
 	if _, err := source.Load(context.Background(), scope, 1); err == nil {
 		t.Fatal("expected empty controlplane load URL error")
 	}
+	source = NewControlPlaneSource("http://controlplane.example", scope)
+	if _, err := source.Head(context.Background(), scope); err == nil {
+		t.Fatal("expected non-HTTPS controlplane URL error")
+	}
 
 	bundle := []byte("controlplane-policy")
 	head := PolicyHead{Scope: DefaultScope, PolicyEpoch: 9, PolicyHash: HashBytes(bundle)}

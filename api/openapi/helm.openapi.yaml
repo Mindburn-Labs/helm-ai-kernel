@@ -334,6 +334,8 @@ paths:
       operationId: evaluateDecision
       tags: [console]
       summary: Evaluate a governed intent and emit a receipt
+      security:
+        - AdminBearerAuth: []
       requestBody:
         required: true
         content:
@@ -348,6 +350,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/DecisionRecord'
         '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '403':
           $ref: '#/components/responses/HelmError'
         '500':
           $ref: '#/components/responses/HelmError'

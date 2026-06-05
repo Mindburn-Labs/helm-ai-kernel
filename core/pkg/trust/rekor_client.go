@@ -4,6 +4,7 @@ package trust
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -78,14 +79,18 @@ type RekorClient struct {
 	// trustedRoot is the last verified signed tree head
 	trustedRoot *SignedTreeHead
 
+	// trustedLogKeys verify signed tree head checkpoints.
+	trustedLogKeys []crypto.PublicKey
+
 	// httpClient is bounded so transparency checks cannot hang the caller.
 	httpClient *http.Client
 }
 
 // RekorClientConfig configures the Rekor client.
 type RekorClientConfig struct {
-	LogURL      string
-	TrustedRoot *SignedTreeHead
+	LogURL         string
+	TrustedRoot    *SignedTreeHead
+	TrustedLogKeys []crypto.PublicKey
 }
 
 // NewRekorClient creates a new Rekor client.
@@ -95,9 +100,10 @@ func NewRekorClient(config RekorClientConfig) (*RekorClient, error) {
 	}
 
 	return &RekorClient{
-		logURL:      config.LogURL,
-		trustedRoot: config.TrustedRoot,
-		httpClient:  &http.Client{Timeout: 15 * time.Second},
+		logURL:         config.LogURL,
+		trustedRoot:    config.TrustedRoot,
+		trustedLogKeys: config.TrustedLogKeys,
+		httpClient:     &http.Client{Timeout: 15 * time.Second},
 	}, nil
 }
 
@@ -229,19 +235,63 @@ func (c *RekorClient) verifySignedTreeHead(entry *RekorEntry) error {
 	if entry.InclusionProof == nil {
 		return fmt.Errorf("no inclusion proof to verify against tree head")
 	}
-
-	// If we have a trusted root, verify consistency
-	if c.trustedRoot != nil {
-		// Tree size should not decrease
-		if entry.InclusionProof.TreeSize < c.trustedRoot.TreeSize {
-			return fmt.Errorf("tree size regression detected: %d < %d",
-				entry.InclusionProof.TreeSize, c.trustedRoot.TreeSize)
-		}
+	if c.trustedRoot == nil {
+		return fmt.Errorf("no trusted Rekor signed tree head configured")
+	}
+	if err := c.verifyCheckpointSignature(c.trustedRoot); err != nil {
+		return err
 	}
 
-	// STH signature verification is delegated to the configured Rekor endpoint;
-	// this client enforces monotonic tree size and inclusion-root consistency.
+	if entry.InclusionProof.TreeSize != c.trustedRoot.TreeSize {
+		return fmt.Errorf("inclusion proof tree size %d does not match trusted signed tree head %d",
+			entry.InclusionProof.TreeSize, c.trustedRoot.TreeSize)
+	}
+	if entry.InclusionProof.RootHash != c.trustedRoot.RootHash {
+		return fmt.Errorf("inclusion proof root hash does not match trusted signed tree head")
+	}
+
 	return nil
+}
+
+func (c *RekorClient) verifyCheckpointSignature(sth *SignedTreeHead) error {
+	if sth.Signature == "" {
+		return fmt.Errorf("trusted Rekor signed tree head missing signature")
+	}
+	if len(c.trustedLogKeys) == 0 {
+		return fmt.Errorf("no trusted Rekor log keys configured")
+	}
+	payload, err := signedTreeHeadPayload(sth)
+	if err != nil {
+		return err
+	}
+	hash := sha256.Sum256(payload)
+	sig, err := decodeSignature(sth.Signature)
+	if err != nil {
+		return fmt.Errorf("decode Rekor signed tree head signature: %w", err)
+	}
+	for _, key := range c.trustedLogKeys {
+		if err := verifySignature(key, hash[:], sig); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("Rekor signed tree head signature verification failed")
+}
+
+func signedTreeHeadPayload(sth *SignedTreeHead) ([]byte, error) {
+	payload := struct {
+		TreeSize  int64  `json:"tree_size"`
+		RootHash  string `json:"root_hash"`
+		Timestamp int64  `json:"timestamp"`
+	}{
+		TreeSize:  sth.TreeSize,
+		RootHash:  sth.RootHash,
+		Timestamp: sth.Timestamp,
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Rekor signed tree head payload: %w", err)
+	}
+	return data, nil
 }
 
 // GetCheckpointRef creates an evidence reference for the current log state.

@@ -1,6 +1,9 @@
 package trust
 
 import (
+	"crypto"
+	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -78,11 +81,10 @@ func TestRekorClient_verifyInclusionProof(t *testing.T) {
 
 func TestRekorClient_verifySignedTreeHead(t *testing.T) {
 	t.Run("detects tree size regression", func(t *testing.T) {
+		root, pub := signedRekorTreeHeadForTest(t, 100, "abc123")
 		client := &RekorClient{
-			trustedRoot: &SignedTreeHead{
-				TreeSize: 100,
-				RootHash: "abc123",
-			},
+			trustedRoot:    root,
+			trustedLogKeys: []crypto.PublicKey{pub},
 		}
 
 		entry := &RekorEntry{
@@ -98,17 +100,16 @@ func TestRekorClient_verifySignedTreeHead(t *testing.T) {
 		}
 	})
 
-	t.Run("allows tree growth", func(t *testing.T) {
+	t.Run("accepts matching signed tree head", func(t *testing.T) {
+		root, pub := signedRekorTreeHeadForTest(t, 150, "def456")
 		client := &RekorClient{
-			trustedRoot: &SignedTreeHead{
-				TreeSize: 100,
-				RootHash: "abc123",
-			},
+			trustedRoot:    root,
+			trustedLogKeys: []crypto.PublicKey{pub},
 		}
 
 		entry := &RekorEntry{
 			InclusionProof: &InclusionProof{
-				TreeSize: 150, // Larger than trusted
+				TreeSize: 150,
 				RootHash: "def456",
 			},
 		}
@@ -116,6 +117,17 @@ func TestRekorClient_verifySignedTreeHead(t *testing.T) {
 		err := client.verifySignedTreeHead(entry)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects unsigned checkpoint", func(t *testing.T) {
+		client := &RekorClient{
+			trustedRoot:    &SignedTreeHead{TreeSize: 1, RootHash: "root"},
+			trustedLogKeys: []crypto.PublicKey{rekorTestLogPublicKey()},
+		}
+		err := client.verifySignedTreeHead(&RekorEntry{InclusionProof: &InclusionProof{TreeSize: 1, RootHash: "root"}})
+		if err == nil {
+			t.Fatal("expected unsigned checkpoint error")
 		}
 	})
 }
@@ -246,6 +258,7 @@ func TestRekorClientHTTPFlows(t *testing.T) {
 		t.Fatal(err)
 	}
 	leafHash := computeLeafHash(bodyBytes)
+	trustedRoot, trustedLogKey := signedRekorTreeHeadForTest(t, 1, leafHash)
 	entry := RekorEntry{
 		LogID:          RekorLogID,
 		LogIndex:       0,
@@ -275,7 +288,11 @@ func TestRekorClientHTTPFlows(t *testing.T) {
 		}))
 		defer server.Close()
 
-		client, err := NewRekorClient(RekorClientConfig{LogURL: server.URL})
+		client, err := NewRekorClient(RekorClientConfig{
+			LogURL:         server.URL,
+			TrustedRoot:    trustedRoot,
+			TrustedLogKeys: []crypto.PublicKey{trustedLogKey},
+		})
 		if err != nil {
 			t.Fatalf("NewRekorClient: %v", err)
 		}
@@ -431,9 +448,11 @@ func TestRekorClientHTTPFlows(t *testing.T) {
 			}
 		}))
 		defer regressionServer.Close()
+		regressionRoot, regressionKey := signedRekorTreeHeadForTest(t, 2, leafHash)
 		client, err = NewRekorClient(RekorClientConfig{
-			LogURL:      regressionServer.URL,
-			TrustedRoot: &SignedTreeHead{TreeSize: 2},
+			LogURL:         regressionServer.URL,
+			TrustedRoot:    regressionRoot,
+			TrustedLogKeys: []crypto.PublicKey{regressionKey},
 		})
 		if err != nil {
 			t.Fatalf("NewRekorClient regression: %v", err)
@@ -485,10 +504,56 @@ func TestRekorClientAdditionalProofEdges(t *testing.T) {
 	if err := client.verifyInclusionProof(mismatch); err == nil {
 		t.Fatal("expected inclusion root mismatch")
 	}
+
+	root, _ := signedRekorTreeHeadForTest(t, 1, "root")
+	if err := (&RekorClient{trustedRoot: root}).verifySignedTreeHead(&RekorEntry{
+		InclusionProof: &InclusionProof{TreeSize: 1, RootHash: "root"},
+	}); err == nil {
+		t.Fatal("expected missing trusted log key error")
+	}
+	badRoot := *root
+	badRoot.Signature = "!"
+	if err := (&RekorClient{trustedRoot: &badRoot, trustedLogKeys: []crypto.PublicKey{rekorTestLogPublicKey()}}).verifySignedTreeHead(&RekorEntry{
+		InclusionProof: &InclusionProof{TreeSize: 1, RootHash: "root"},
+	}); err == nil {
+		t.Fatal("expected bad checkpoint signature encoding error")
+	}
 }
 
 type assertAnError struct{}
 
 func (assertAnError) Error() string {
 	return "transport failed"
+}
+
+func signedRekorTreeHeadForTest(t *testing.T, treeSize int64, rootHash string) (*SignedTreeHead, ed25519.PublicKey) {
+	t.Helper()
+	pub, priv := rekorTestLogKey()
+	sth := &SignedTreeHead{
+		TreeSize:  treeSize,
+		RootHash:  rootHash,
+		Timestamp: 1700000000,
+	}
+	payload, err := signedTreeHeadPayload(sth)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := sha256.Sum256(payload)
+	sth.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(priv, hash[:]))
+	return sth, pub
+}
+
+func rekorTestLogPublicKey() ed25519.PublicKey {
+	pub, _ := rekorTestLogKey()
+	return pub
+}
+
+func rekorTestLogKey() (ed25519.PublicKey, ed25519.PrivateKey) {
+	seed := make([]byte, ed25519.SeedSize)
+	for i := range seed {
+		seed[i] = byte(101 + i)
+	}
+	priv := ed25519.NewKeyFromSeed(seed)
+	pub := priv.Public().(ed25519.PublicKey)
+	return pub, priv
 }

@@ -107,7 +107,12 @@ func (r *Registry) VerifyArtifact(ctx context.Context, hash string) (bool, []str
 		return false, append(reasons, "signature decode failed"), nil
 	}
 
-	if !r.verifier.Verify(envelope.Payload, sigBytes) {
+	signingPayload, err := envelopeSigningPayload(envelope)
+	if err != nil {
+		return false, append(reasons, "signature payload invalid: "+strings.TrimPrefix(err.Error(), "artifacts: ")), nil
+	}
+
+	if !r.verifier.Verify(signingPayload, sigBytes) {
 		valid = false
 		reasons = append(reasons, "signature invalid")
 	}

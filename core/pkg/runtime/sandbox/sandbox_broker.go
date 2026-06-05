@@ -30,7 +30,10 @@ type PreparedExecution struct {
 	// Verdict is the approved step verdict.
 	Verdict *effectgraph.NodeVerdict
 
-	// Tokens lists scoped token IDs issued for this execution.
+	// TokenIDs lists scoped token IDs issued for cleanup and audit.
+	TokenIDs []string
+
+	// Tokens lists one-time bearer token values to inject into the sandbox.
 	Tokens []string
 
 	// PreparedAt is when the execution was prepared.
@@ -109,6 +112,7 @@ func (b *SandboxBroker) PrepareExecution(
 
 	// Issue scoped credentials.
 	var tokenIDs []string
+	var bearerTokens []string
 	for _, binding := range execLease.SecretBindings {
 		token, err := b.credBroker.IssueToken(TokenRequest{
 			SandboxID:       sandboxID,
@@ -124,6 +128,7 @@ func (b *SandboxBroker) PrepareExecution(
 			return nil, fmt.Errorf("issue credential for %s: %w", binding.SecretRef, err)
 		}
 		tokenIDs = append(tokenIDs, token.TokenID)
+		bearerTokens = append(bearerTokens, token.BearerToken)
 	}
 
 	// Build sandbox spec.
@@ -140,7 +145,8 @@ func (b *SandboxBroker) PrepareExecution(
 		Lease:      execLease,
 		Spec:       spec,
 		Verdict:    verdict,
-		Tokens:     tokenIDs,
+		TokenIDs:   tokenIDs,
+		Tokens:     bearerTokens,
 		PreparedAt: b.clock(),
 	}, nil
 }
@@ -180,7 +186,7 @@ func (b *SandboxBroker) Execute(
 // Errors are logged but not returned — cleanup is best-effort.
 func (b *SandboxBroker) cleanup(ctx context.Context, prepared *PreparedExecution) {
 	// Revoke all issued tokens.
-	for _, tokenID := range prepared.Tokens {
+	for _, tokenID := range prepared.TokenIDs {
 		if err := b.credBroker.RevokeToken(tokenID); err != nil {
 			slog.Warn("failed to revoke scoped token during cleanup",
 				"token_id", tokenID,

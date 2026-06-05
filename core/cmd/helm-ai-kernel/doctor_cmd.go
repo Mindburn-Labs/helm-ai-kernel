@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -255,15 +256,9 @@ func checkCryptoKeys(verbose bool) CheckResult {
 	for _, dir := range resolveKeysDir() {
 		keyPath := filepath.Join(dir, "root.key")
 		if info, err := os.Stat(keyPath); err == nil && !info.IsDir() {
-			// Found a key file. Try to read enough to extract a key ID snippet.
 			detail := fmt.Sprintf("key at %s", keyPath)
-			data, readErr := os.ReadFile(keyPath)
-			if readErr == nil && len(data) >= 12 {
-				keyID := strings.TrimSpace(string(data))
-				if len(keyID) > 12 {
-					keyID = keyID[:12]
-				}
-				detail = fmt.Sprintf("key at %s (key_id: %s...)", keyPath, keyID)
+			if pubDetail := rootPublicKeyDetail(dir); pubDetail != "" {
+				detail = fmt.Sprintf("key at %s (%s)", keyPath, pubDetail)
 			}
 			r.Status = statusPass
 			r.Message = "Ed25519 keypair loaded"
@@ -288,6 +283,20 @@ func checkCryptoKeys(verbose bool) CheckResult {
 	r.Message = "No keypair found"
 	r.Suggestion = "Run: helm-ai-kernel init"
 	return r
+}
+
+func rootPublicKeyDetail(dir string) string {
+	pubPath := filepath.Join(dir, "root.pub")
+	data, err := os.ReadFile(pubPath)
+	if err != nil {
+		return ""
+	}
+	pub := strings.TrimSpace(string(data))
+	if pub == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(pub))
+	return fmt.Sprintf("public_key_hash: sha256:%x", sum[:6])
 }
 
 func checkDataDirectory(verbose bool) CheckResult {

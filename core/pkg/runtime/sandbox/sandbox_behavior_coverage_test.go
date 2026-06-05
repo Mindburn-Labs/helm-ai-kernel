@@ -155,7 +155,7 @@ func TestBrokerIssueAndValidateToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	valid, _ := b.ValidateToken(tok.TokenID)
+	valid, _ := b.ValidateToken(tok.BearerToken)
 	if !valid {
 		t.Fatal("expected valid")
 	}
@@ -167,7 +167,7 @@ func TestBrokerTokenExpiry(t *testing.T) {
 	b.SetScopeAllowlist("sbx-1", []string{"read"})
 	tok, _ := b.IssueToken(TokenRequest{SandboxID: "sbx-1", RequestedScopes: []string{"read"}, TTLSeconds: 60})
 	b.WithClock(func() time.Time { return now.Add(2 * time.Minute) })
-	valid, reason := b.ValidateToken(tok.TokenID)
+	valid, reason := b.ValidateToken(tok.BearerToken)
 	if valid {
 		t.Fatal("expected expired")
 	}
@@ -181,7 +181,7 @@ func TestBrokerRevokeToken(t *testing.T) {
 	b.SetScopeAllowlist("sbx-1", []string{"write"})
 	tok, _ := b.IssueToken(TokenRequest{SandboxID: "sbx-1", RequestedScopes: []string{"write"}, TTLSeconds: 60})
 	b.RevokeToken(tok.TokenID)
-	valid, _ := b.ValidateToken(tok.TokenID)
+	valid, _ := b.ValidateToken(tok.BearerToken)
 	if valid {
 		t.Fatal("expected revoked")
 	}

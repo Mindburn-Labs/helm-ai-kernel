@@ -25,8 +25,8 @@ services:
       HELM_HEALTH_PORT: "8081"
       EVIDENCE_SIGNING_KEY: "${EVIDENCE_SIGNING_KEY:-helm-evidence-dev}"
     ports:
-      - "${HELM_SMOKE_API_PORT:-8080}:8080"
-      - "${HELM_SMOKE_HEALTH_PORT:-8081}:8081"
+      - "127.0.0.1:${HELM_SMOKE_API_PORT:-8080}:8080"
+      - "127.0.0.1:${HELM_SMOKE_HEALTH_PORT:-8081}:8081"
     volumes:
       - ${HELM_SMOKE_DATA_DIR:-helmdata}:/var/lib/helm-ai-kernel
     healthcheck:

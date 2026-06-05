@@ -63,6 +63,10 @@ func NewGovernanceFirewall(evaluator PolicyEvaluator, catalog *ToolCatalog) *Gov
 // When DelegationAllowedTools is set, tool scope is checked BEFORE the
 // Guardian evaluation (defense-in-depth — see ARCHITECTURE.md §2.1).
 func (f *GovernanceFirewall) InterceptToolExecution(ctx context.Context, req ToolExecutionRequest) error {
+	if f.evaluator == nil {
+		return fmt.Errorf("governance evaluator is required")
+	}
+
 	// Pre-Guardian delegation scope check.
 	// This runs before the full policy evaluation so that a delegated agent
 	// cannot even attempt to call tools outside its session scope.
@@ -107,18 +111,21 @@ func (f *GovernanceFirewall) InterceptToolExecution(ctx context.Context, req Too
 	if err != nil {
 		return fmt.Errorf("governance check failed: %w", err)
 	}
+	if decision == nil {
+		return fmt.Errorf("governance returned empty decision")
+	}
 
 	// Enforce Decision — use canonical verdict constants
-	if decision.Verdict == string(contracts.VerdictDeny) {
+	switch decision.Verdict {
+	case string(contracts.VerdictAllow):
+		return nil
+	case string(contracts.VerdictDeny):
 		return fmt.Errorf("governance blocked execution: %s", decision.Reason)
-	}
-
-	if decision.Verdict == string(contracts.VerdictEscalate) || decision.Verdict == "PENDING" {
+	case string(contracts.VerdictEscalate), "PENDING":
 		return fmt.Errorf("governance requires approval: %s", decision.Reason)
+	default:
+		return fmt.Errorf("governance returned non-canonical verdict %q", decision.Verdict)
 	}
-
-	// Allow Proceed
-	return nil
 }
 
 // WrapToolHandler wraps a standard tool handler with the firewall.
@@ -195,6 +202,12 @@ func (f *GovernanceFirewall) InterceptPlan(ctx context.Context, plan ToolExecuti
 		if err != nil {
 			return nil, fmt.Errorf("failed to evaluate step %s: %w", step.ToolName, err)
 		}
+		if decision == nil {
+			return nil, fmt.Errorf("failed to evaluate step %s: empty governance decision", step.ToolName)
+		}
+		if !isCanonicalToolVerdict(decision.Verdict) && decision.Verdict != "PENDING" {
+			return nil, fmt.Errorf("failed to evaluate step %s: non-canonical governance verdict %q", step.ToolName, decision.Verdict)
+		}
 
 		// Aggregate Status
 		if decision.Verdict == string(contracts.VerdictDeny) {
@@ -211,4 +224,10 @@ func (f *GovernanceFirewall) InterceptPlan(ctx context.Context, plan ToolExecuti
 		Decisions: decisions,
 		Status:    overallStatus,
 	}, nil
+}
+
+func isCanonicalToolVerdict(verdict string) bool {
+	return verdict == string(contracts.VerdictAllow) ||
+		verdict == string(contracts.VerdictDeny) ||
+		verdict == string(contracts.VerdictEscalate)
 }

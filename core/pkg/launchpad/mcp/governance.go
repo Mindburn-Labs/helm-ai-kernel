@@ -1,5 +1,7 @@
 package mcp
 
+import "strings"
+
 type ToolEffect string
 
 const (
@@ -97,5 +99,5 @@ func Authorize(record ServerRecord, req CallRequest) Decision {
 }
 
 func sameScope(recordValue, requestValue string) bool {
-	return recordValue == "" || recordValue == requestValue
+	return strings.TrimSpace(recordValue) != "" && recordValue == requestValue
 }

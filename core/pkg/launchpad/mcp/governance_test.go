@@ -34,24 +34,32 @@ func TestUnknownServerQuarantines(t *testing.T) {
 }
 
 func TestSchemaPinRequired(t *testing.T) {
-	record := ServerRecord{ServerID: "srv", Approved: true, SchemaPins: map[string]string{"write": "sha256:abc"}}
-	decision := Authorize(record, CallRequest{ServerID: "srv", ToolName: "write", SchemaHash: "sha256:def"})
+	record := scopedServer()
+	record.SchemaPins = map[string]string{"write": "sha256:abc"}
+	req := scopedRequest("write", "sha256:def")
+	decision := Authorize(record, req)
 	if decision.Verdict != "DENY" {
 		t.Fatalf("expected DENY, got %s", decision.Verdict)
 	}
 }
 
 func TestSideEffectRequiresApprovalReceipt(t *testing.T) {
-	record := ServerRecord{ServerID: "srv", Approved: true, SchemaPins: map[string]string{"write": "sha256:abc"}}
-	decision := Authorize(record, CallRequest{ServerID: "srv", ToolName: "write", SchemaHash: "sha256:abc", Effect: EffectSideEffect})
+	record := scopedServer()
+	record.SchemaPins = map[string]string{"write": "sha256:abc"}
+	req := scopedRequest("write", "sha256:abc")
+	req.Effect = EffectSideEffect
+	decision := Authorize(record, req)
 	if decision.Verdict != "DENY" {
 		t.Fatalf("expected DENY, got %s", decision.Verdict)
 	}
 }
 
 func TestRevokeBlocksFutureDispatch(t *testing.T) {
-	record := ServerRecord{ServerID: "srv", Approved: true, Revoked: true, SchemaPins: map[string]string{"read": "sha256:abc"}}
-	decision := Authorize(record, CallRequest{ServerID: "srv", ToolName: "read", SchemaHash: "sha256:abc"})
+	record := scopedServer()
+	record.Revoked = true
+	record.SchemaPins = map[string]string{"read": "sha256:abc"}
+	req := scopedRequest("read", "sha256:abc")
+	decision := Authorize(record, req)
 	if decision.Verdict != "DENY" {
 		t.Fatalf("expected DENY, got %s", decision.Verdict)
 	}
@@ -81,6 +89,16 @@ func TestLaunchScopeMismatchBlocks(t *testing.T) {
 	decision := Authorize(scopedServer(), req)
 	if decision.Verdict != "DENY" || decision.Reason != "ERR_MCP_LAUNCH_SCOPE_MISMATCH" {
 		t.Fatalf("launch scope mismatch should deny, got %#v", decision)
+	}
+}
+
+func TestBlankScopeFieldsBlockWildcardAuthorization(t *testing.T) {
+	record := scopedServer()
+	record.Principal = ""
+
+	decision := Authorize(record, scopedRequest("read", "sha256:read"))
+	if decision.Verdict != "DENY" || decision.Reason != "ERR_MCP_LAUNCH_SCOPE_MISMATCH" {
+		t.Fatalf("blank record scope should not act as wildcard, got %#v", decision)
 	}
 }
 

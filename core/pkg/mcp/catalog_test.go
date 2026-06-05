@@ -74,10 +74,25 @@ func TestToolCatalog_AuditToolCall(t *testing.T) {
 	catalog := NewInMemoryCatalog()
 
 	t.Run("Successful audit", func(t *testing.T) {
-		receipt, err := catalog.AuditToolCall("test-tool", map[string]any{"key": "val"}, "ok")
+		receipt, err := catalog.AuditToolCall("test-tool", map[string]any{"path": "/tmp/input.txt"}, "ok")
 		require.NoError(t, err)
 		assert.Equal(t, "test-tool", receipt.ToolName)
-		assert.Contains(t, receipt.Inputs, "key")
+		assert.Contains(t, receipt.Inputs, "path")
+		assert.Contains(t, receipt.Outputs, "ok")
+	})
+
+	t.Run("Sensitive inputs and outputs are redacted", func(t *testing.T) {
+		receipt, err := catalog.AuditToolCall("test-tool", map[string]any{
+			"api_key": "sk-live-secret",
+			"nested":  map[string]any{"password": "p@ssw0rd", "path": "/tmp/input.txt"},
+		}, map[string]any{"seed": "mnemonic", "status": "ok"})
+		require.NoError(t, err)
+		assert.NotContains(t, receipt.Inputs, "sk-live-secret")
+		assert.NotContains(t, receipt.Inputs, "p@ssw0rd")
+		assert.NotContains(t, receipt.Outputs, "mnemonic")
+		assert.Contains(t, receipt.Inputs, "[REDACTED]")
+		assert.Contains(t, receipt.Outputs, "[REDACTED]")
+		assert.Contains(t, receipt.Inputs, "/tmp/input.txt")
 		assert.Contains(t, receipt.Outputs, "ok")
 	})
 

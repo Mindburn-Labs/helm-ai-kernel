@@ -110,6 +110,18 @@ func TestGovernanceFirewall_Intercept_Pending(t *testing.T) {
 	assert.Contains(t, err.Error(), "governance requires approval")
 }
 
+func TestGovernanceFirewall_Intercept_NonCanonicalVerdictFailsClosed(t *testing.T) {
+	eval := &mockEvaluator{verdict: "ALLOW_WITH_WARNINGS", reason: "adapter drift"}
+	fw := NewGovernanceFirewall(eval, nil)
+
+	err := fw.InterceptToolExecution(context.Background(), ToolExecutionRequest{
+		ToolName:  "risky-tool",
+		SessionID: "sess-5",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "non-canonical")
+}
+
 func TestGovernanceFirewall_InterceptPlan(t *testing.T) {
 	eval := &smartMockEvaluator{
 		decisions: map[string]string{

@@ -241,11 +241,11 @@ type ToolCallReceipt struct {
 }
 
 func (c *ToolCatalog) AuditToolCall(name string, params map[string]any, result any) (ToolCallReceipt, error) {
-	inputJSON, err := json.Marshal(params)
+	inputJSON, err := json.Marshal(redactAuditValue(params))
 	if err != nil {
 		return ToolCallReceipt{}, fmt.Errorf("failed to marshal tool call inputs: %w", err)
 	}
-	outputJSON, err := json.Marshal(result)
+	outputJSON, err := json.Marshal(redactAuditValue(result))
 	if err != nil {
 		return ToolCallReceipt{}, fmt.Errorf("failed to marshal tool call outputs: %w", err)
 	}
@@ -257,4 +257,66 @@ func (c *ToolCatalog) AuditToolCall(name string, params map[string]any, result a
 		Outputs:   string(outputJSON),
 		Timestamp: time.Now(),
 	}, nil
+}
+
+func redactAuditValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		redacted := make(map[string]any, len(typed))
+		for key, nested := range typed {
+			if isSensitiveAuditKey(key) {
+				redacted[key] = "[REDACTED]"
+				continue
+			}
+			redacted[key] = redactAuditValue(nested)
+		}
+		return redacted
+	case map[string]string:
+		redacted := make(map[string]string, len(typed))
+		for key, nested := range typed {
+			if isSensitiveAuditKey(key) {
+				redacted[key] = "[REDACTED]"
+				continue
+			}
+			redacted[key] = nested
+		}
+		return redacted
+	case []any:
+		redacted := make([]any, len(typed))
+		for i, nested := range typed {
+			redacted[i] = redactAuditValue(nested)
+		}
+		return redacted
+	case []map[string]any:
+		redacted := make([]map[string]any, len(typed))
+		for i, nested := range typed {
+			redacted[i], _ = redactAuditValue(nested).(map[string]any)
+		}
+		return redacted
+	default:
+		return value
+	}
+}
+
+func isSensitiveAuditKey(key string) bool {
+	normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(key), "-", "_"), " ", "_"))
+	for _, marker := range []string{
+		"secret",
+		"token",
+		"password",
+		"passwd",
+		"authorization",
+		"cookie",
+		"credential",
+		"api_key",
+		"apikey",
+		"private_key",
+		"seed",
+		"session",
+	} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
 }

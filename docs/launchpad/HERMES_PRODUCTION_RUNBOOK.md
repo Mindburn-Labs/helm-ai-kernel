@@ -57,12 +57,53 @@ install -m 0755 "helm-ai-kernel-${HELM_ARCH}" "$HOME/.local/bin/helm-ai-kernel"
 
 The version output must report `v0.5.10`.
 
+## Select registry root
+
+Use the reviewed source revision that contains the OpenRouter-only Hermes
+AppSpec until that AppSpec is included in the next release artifact bundle.
+
+```bash
+set -euo pipefail
+
+export HELM_SOURCE_REF=codex/hermes-production-proof
+export HELM_SOURCE_ROOT="$HOME/src/helm-ai-kernel-hermes-production-proof"
+mkdir -p "$HOME/src"
+
+if [ -d "$HELM_SOURCE_ROOT/.git" ]; then
+  git -C "$HELM_SOURCE_ROOT" fetch origin "$HELM_SOURCE_REF" --depth 1
+  git -C "$HELM_SOURCE_ROOT" checkout -q "$HELM_SOURCE_REF"
+  git -C "$HELM_SOURCE_ROOT" reset --hard -q "origin/$HELM_SOURCE_REF"
+else
+  git clone --depth 1 --branch "$HELM_SOURCE_REF" \
+    https://github.com/Mindburn-Labs/helm-ai-kernel.git \
+    "$HELM_SOURCE_ROOT"
+fi
+
+export HELM_LAUNCHPAD_REGISTRY_ROOT="$HELM_SOURCE_ROOT"
+grep -A4 '^model_gateway:' \
+  "$HELM_LAUNCHPAD_REGISTRY_ROOT/registry/launchpad/apps/hermes.yaml"
+grep -A4 '^model_gateway:' \
+  "$HELM_LAUNCHPAD_REGISTRY_ROOT/registry/launchpad/apps/hermes.yaml" |
+  grep -q 'openrouter'
+
+helm-ai-kernel up hermes --target local --verify-only --json --no-open |
+  jq -e '
+    .mode == "verify-only" and
+    .started_runtime == false and
+    .plan.kernel_verdict == "ALLOW" and
+    .plan.model_gateway_env == ["OPENROUTER_API_KEY"] and
+    (.plan.network_allowlist | sort) ==
+      (["https://api.openrouter.ai/api/v1", "https://openrouter.ai/api/v1"] | sort)
+  '
+```
+
 ## Configure proof state
 
 ```bash
 set -euo pipefail
 
 export HELM_LAUNCHPAD_HOME="$HOME/.helm/launchpad-production"
+export HELM_LAUNCHPAD_REGISTRY_ROOT="$HELM_SOURCE_ROOT"
 mkdir -p "$HELM_LAUNCHPAD_HOME"
 chmod 700 "$HELM_LAUNCHPAD_HOME"
 

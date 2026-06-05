@@ -3,6 +3,7 @@ package zk
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 )
@@ -57,9 +58,8 @@ func (v *RISCZeroVerifier) VerifyReceipt(ctx context.Context, receiptBytes []byt
 	if len(receipt.Seal) == 0 {
 		return false, fmt.Errorf("receipt is missing cryptographic seal")
 	}
-
-	// Check for a specific mock error pattern in tests to simulate failures
-	if string(receipt.Seal) == "INVALID_SEAL" {
+	expectedSeal := computeMockRISCZeroSeal(receipt.ImageID, receipt.Journal)
+	if subtle.ConstantTimeCompare(receipt.Seal, expectedSeal) != 1 {
 		return false, fmt.Errorf("cryptographic seal verification failed")
 	}
 
@@ -73,4 +73,14 @@ func (v *RISCZeroVerifier) VerifyReceipt(ctx context.Context, receiptBytes []byt
 	}
 
 	return true, nil
+}
+
+func computeMockRISCZeroSeal(imageID []byte, journal []byte) []byte {
+	hasher := sha256.New()
+	_, _ = hasher.Write([]byte("helm-risc-zero-mock-seal-v1"))
+	_, _ = hasher.Write([]byte{0})
+	_, _ = hasher.Write(imageID)
+	_, _ = hasher.Write([]byte{0})
+	_, _ = hasher.Write(journal)
+	return hasher.Sum(nil)
 }

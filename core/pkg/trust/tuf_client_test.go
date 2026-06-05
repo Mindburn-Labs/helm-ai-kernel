@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -395,6 +396,32 @@ func TestTUFClient_fetchAndVerifyRejectsTamperedSignature(t *testing.T) {
 	}
 }
 
+func TestTUFClient_fetchAndVerifyUsesTrustedRootRoleKeys(t *testing.T) {
+	timestampPub, timestampPriv := tufTestRoleKey(90)
+	timestampKeyID := tufTestKeyID(timestampPub)
+	timestamp := signedRoleForTUFTestWithKey("timestamp", 1, time.Now().Add(time.Hour), nil, timestampPriv, timestampKeyID)
+	server := newTUFMetadataServer(t, map[string]*SignedRole{
+		"timestamp": timestamp,
+	})
+	client := newTUFHTTPClientForTest(server.URL)
+	client.localMetadata = &TUFMetadata{
+		Root: &SignedRole{
+			Signed: mustMarshal(RootMetadata{
+				Keys: map[string]Key{
+					timestampKeyID: rootMetadataKeyForTUFTest(timestampPub),
+				},
+				Roles: map[string]Role{
+					string(TUFRoleTimestamp): {KeyIDs: []string{timestampKeyID}, Threshold: 1},
+				},
+			}),
+		},
+	}
+
+	if _, err := client.fetchAndVerify(TUFRoleTimestamp); err != nil {
+		t.Fatalf("expected timestamp role to verify with trusted root role key: %v", err)
+	}
+}
+
 func TestTUFClient_fetchAndVerifyHonorsTrustedRootThreshold(t *testing.T) {
 	server := newTUFMetadataServer(t, map[string]*SignedRole{
 		"timestamp": signedRoleForTUFTest("timestamp", 1, time.Now().Add(time.Hour), nil),
@@ -412,6 +439,46 @@ func TestTUFClient_fetchAndVerifyHonorsTrustedRootThreshold(t *testing.T) {
 
 	if _, err := client.fetchAndVerify(TUFRoleTimestamp); err == nil {
 		t.Fatal("expected threshold failure")
+	}
+}
+
+func TestTUFClient_UpdatePreservesTrustedRootMetadata(t *testing.T) {
+	rootPub, _ := tufTestRootKey()
+	rootKeyID := tufTestRootKeyID()
+	trustedRoot := &SignedRole{
+		Signed: mustMarshal(RootMetadata{
+			Keys: map[string]Key{
+				rootKeyID: rootMetadataKeyForTUFTest(rootPub),
+			},
+			Roles: map[string]Role{
+				string(TUFRoleTimestamp): {KeyIDs: []string{rootKeyID}, Threshold: 1},
+				string(TUFRoleSnapshot):  {KeyIDs: []string{rootKeyID}, Threshold: 1},
+				string(TUFRoleTargets):   {KeyIDs: []string{rootKeyID}, Threshold: 1},
+			},
+		}),
+	}
+	targets := TargetsMetadata{
+		RoleMetadata: RoleMetadata{Type: "targets", Version: 1, Expires: time.Now().Add(time.Hour)},
+		Targets:      map[string]TargetInfo{},
+	}
+	server := newTUFMetadataServer(t, map[string]*SignedRole{
+		"timestamp": signedRoleForTUFTest("timestamp", 1, time.Now().Add(time.Hour), nil),
+		"snapshot":  signedRoleForTUFTest("snapshot", 1, time.Now().Add(time.Hour), nil),
+		"targets":   signedRoleForTUFTest("targets", 1, time.Now().Add(time.Hour), targets),
+	})
+	store := &memoryTUFTrustStore{}
+	client := newTUFHTTPClientForTest(server.URL)
+	client.localMetadata = &TUFMetadata{Root: trustedRoot}
+	client.trustStore = store
+
+	if err := client.Update(); err != nil {
+		t.Fatalf("update with trusted root metadata: %v", err)
+	}
+	if client.localMetadata.Root != trustedRoot {
+		t.Fatal("client dropped trusted root metadata after update")
+	}
+	if store.metadata == nil || store.metadata.Root != trustedRoot {
+		t.Fatal("trust store did not persist trusted root metadata with updated roles")
 	}
 }
 
@@ -472,6 +539,11 @@ func newTUFHTTPClientForTest(remoteURL string) *TUFClient {
 }
 
 func signedRoleForTUFTest(role string, version int, expires time.Time, metadata interface{}) *SignedRole {
+	_, priv := tufTestRootKey()
+	return signedRoleForTUFTestWithKey(role, version, expires, metadata, priv, tufTestRootKeyID())
+}
+
+func signedRoleForTUFTestWithKey(role string, version int, expires time.Time, metadata interface{}, priv ed25519.PrivateKey, keyID string) *SignedRole {
 	var signed json.RawMessage
 	if metadata != nil {
 		signed = mustMarshal(metadata)
@@ -480,16 +552,20 @@ func signedRoleForTUFTest(role string, version int, expires time.Time, metadata 
 	}
 	return &SignedRole{
 		Signed:     signed,
-		Signatures: []TUFSignature{signTUFTestPayload(signed)},
+		Signatures: []TUFSignature{signTUFTestPayloadWithKey(signed, priv, keyID)},
 	}
 }
 
 func signTUFTestPayload(signed json.RawMessage) TUFSignature {
 	_, priv := tufTestRootKey()
+	return signTUFTestPayloadWithKey(signed, priv, tufTestRootKeyID())
+}
+
+func signTUFTestPayloadWithKey(signed json.RawMessage, priv ed25519.PrivateKey, keyID string) TUFSignature {
 	hash := sha256.Sum256(signed)
 	sig := ed25519.Sign(priv, hash[:])
 	return TUFSignature{
-		KeyID:     tufTestRootKeyID(),
+		KeyID:     keyID,
 		Signature: base64.StdEncoding.EncodeToString(sig),
 	}
 }
@@ -506,11 +582,33 @@ func tufTestRootKey() (ed25519.PublicKey, ed25519.PrivateKey) {
 
 func tufTestRootKeyID() string {
 	pub, _ := tufTestRootKey()
+	return tufTestKeyID(pub)
+}
+
+func tufTestKeyID(pub crypto.PublicKey) string {
 	keyID, err := ComputeKeyID(pub)
 	if err != nil {
 		panic(err)
 	}
 	return keyID
+}
+
+func tufTestRoleKey(seedStart byte) (ed25519.PublicKey, ed25519.PrivateKey) {
+	seed := make([]byte, ed25519.SeedSize)
+	for i := range seed {
+		seed[i] = seedStart + byte(i)
+	}
+	priv := ed25519.NewKeyFromSeed(seed)
+	pub := priv.Public().(ed25519.PublicKey)
+	return pub, priv
+}
+
+func rootMetadataKeyForTUFTest(pub ed25519.PublicKey) Key {
+	return Key{
+		KeyType: "ed25519",
+		Scheme:  "ed25519",
+		KeyVal:  KeyVal{Public: hex.EncodeToString(pub)},
+	}
 }
 
 func newTUFMetadataServer(t *testing.T, roles map[string]*SignedRole) *httptest.Server {

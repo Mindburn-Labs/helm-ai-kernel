@@ -5,6 +5,10 @@ package trust
 
 import (
 	"crypto"
+	"crypto/ed25519"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -235,6 +239,7 @@ func (c *TUFClient) Update() error {
 
 	// 6. Prepare updated local metadata
 	newMetadata := &TUFMetadata{
+		Root:      trustedRootMetadata(c.localMetadata),
 		Timestamp: newTimestamp,
 		Snapshot:  newSnapshot,
 		Targets:   newTargets,
@@ -368,11 +373,7 @@ func (c *TUFClient) fetchAndVerify(role TUFRole) (*SignedRole, error) {
 }
 
 func (c *TUFClient) verifyRoleSignatures(role TUFRole, signed *SignedRole) error {
-	trustedKeys, err := c.trustedRootKeyMap()
-	if err != nil {
-		return err
-	}
-	threshold, err := c.signatureThresholdForRole(role)
+	trustedKeys, threshold, err := c.trustedKeysAndThresholdForRole(role)
 	if err != nil {
 		return err
 	}
@@ -380,6 +381,28 @@ func (c *TUFClient) verifyRoleSignatures(role TUFRole, signed *SignedRole) error
 		return fmt.Errorf("%s metadata signature verification failed: %w", role, err)
 	}
 	return nil
+}
+
+func trustedRootMetadata(metadata *TUFMetadata) *SignedRole {
+	if metadata == nil {
+		return nil
+	}
+	return metadata.Root
+}
+
+func (c *TUFClient) trustedKeysAndThresholdForRole(role TUFRole) (map[string]crypto.PublicKey, int, error) {
+	if c.localMetadata != nil && c.localMetadata.Root != nil && len(c.localMetadata.Root.Signed) > 0 {
+		keys, threshold, err := c.trustedRootRoleKeys(role)
+		if err != nil {
+			return nil, 0, err
+		}
+		return keys, threshold, nil
+	}
+	keys, err := c.trustedRootKeyMap()
+	if err != nil {
+		return nil, 0, err
+	}
+	return keys, 1, nil
 }
 
 func (c *TUFClient) trustedRootKeyMap() (map[string]crypto.PublicKey, error) {
@@ -397,22 +420,71 @@ func (c *TUFClient) trustedRootKeyMap() (map[string]crypto.PublicKey, error) {
 	return keys, nil
 }
 
-func (c *TUFClient) signatureThresholdForRole(role TUFRole) (int, error) {
-	if c.localMetadata == nil || c.localMetadata.Root == nil || len(c.localMetadata.Root.Signed) == 0 {
-		return 1, nil
-	}
+func (c *TUFClient) trustedRootRoleKeys(role TUFRole) (map[string]crypto.PublicKey, int, error) {
 	var root RootMetadata
 	if err := json.Unmarshal(c.localMetadata.Root.Signed, &root); err != nil {
-		return 0, fmt.Errorf("parse trusted root metadata for %s threshold: %w", role, err)
+		return nil, 0, fmt.Errorf("parse trusted root metadata for %s signatures: %w", role, err)
 	}
 	if root.Roles == nil {
-		return 1, nil
+		return nil, 0, fmt.Errorf("trusted root metadata has no roles")
 	}
 	roleInfo, ok := root.Roles[string(role)]
-	if !ok || roleInfo.Threshold <= 0 {
-		return 1, nil
+	if !ok {
+		return nil, 0, fmt.Errorf("trusted root metadata has no %s role", role)
 	}
-	return roleInfo.Threshold, nil
+	if roleInfo.Threshold <= 0 {
+		return nil, 0, fmt.Errorf("trusted root metadata has invalid threshold for %s role", role)
+	}
+	if len(roleInfo.KeyIDs) == 0 {
+		return nil, 0, fmt.Errorf("trusted root metadata has no key IDs for %s role", role)
+	}
+	if root.Keys == nil {
+		return nil, 0, fmt.Errorf("trusted root metadata has no keys")
+	}
+	keys := make(map[string]crypto.PublicKey, len(roleInfo.KeyIDs))
+	for _, keyID := range roleInfo.KeyIDs {
+		key, ok := root.Keys[keyID]
+		if !ok {
+			return nil, 0, fmt.Errorf("trusted root metadata missing key %s for %s role", keyID, role)
+		}
+		pub, err := parseRootMetadataKey(key)
+		if err != nil {
+			return nil, 0, fmt.Errorf("parse trusted root key %s for %s role: %w", keyID, role, err)
+		}
+		keys[keyID] = pub
+	}
+	return keys, roleInfo.Threshold, nil
+}
+
+func parseRootMetadataKey(key Key) (crypto.PublicKey, error) {
+	raw := strings.TrimSpace(key.KeyVal.Public)
+	if raw == "" {
+		return nil, fmt.Errorf("public key is empty")
+	}
+	keyBytes, err := decodeRootMetadataKeyBytes(raw)
+	if err != nil {
+		return nil, err
+	}
+	if strings.EqualFold(key.KeyType, "ed25519") && len(keyBytes) == ed25519.PublicKeySize {
+		return ed25519.PublicKey(keyBytes), nil
+	}
+	if pub, err := x509.ParsePKIXPublicKey(keyBytes); err == nil {
+		return pub, nil
+	}
+	if len(keyBytes) == ed25519.PublicKeySize {
+		return ed25519.PublicKey(keyBytes), nil
+	}
+	return nil, fmt.Errorf("unsupported TUF key encoding for keytype %q", key.KeyType)
+}
+
+func decodeRootMetadataKeyBytes(raw string) ([]byte, error) {
+	if data, err := hex.DecodeString(raw); err == nil {
+		return data, nil
+	}
+	if data, err := base64.StdEncoding.DecodeString(raw); err == nil {
+		return data, nil
+	}
+	return nil, fmt.Errorf("public key must be hex or base64 encoded")
 }
 
 // checkFreshness verifies metadata has not expired.

@@ -86,8 +86,15 @@ func (f *GovernanceFirewall) InterceptToolExecution(ctx context.Context, req Too
 	// Build Guardian decision context, forwarding delegation metadata.
 	decisionCtx := make(map[string]interface{})
 	for k, v := range req.Arguments {
+		if guardian.IsReservedSecurityContextKey(k) {
+			return fmt.Errorf("reserved security context argument %q must be supplied by the transport boundary", k)
+		}
 		decisionCtx[k] = v
 	}
+	decisionCtx[guardian.ContextSecurityTrusted] = true
+	decisionCtx[guardian.ContextSessionID] = req.SessionID
+	decisionCtx[guardian.ContextSourceChannel] = string(contracts.SourceChannelMCPClient)
+	decisionCtx[guardian.ContextTrustLevel] = string(contracts.InputTrustExternalUntrusted)
 	if req.DelegationSessionID != "" {
 		decisionCtx["delegation_session_id"] = req.DelegationSessionID
 		decisionCtx["delegation_verifier"] = req.DelegationVerifier

@@ -65,7 +65,11 @@ func TestExt_IdentityIsolationViolationDenies(t *testing.T) {
 	req := DecisionRequest{
 		Principal: "agent-2",
 		Action:    "x",
-		Context:   map[string]interface{}{"credential_hash": "cred-hash-1", "session_id": "session-2"},
+		Context: map[string]interface{}{
+			ContextSecurityTrusted: true,
+			ContextCredentialHash:  "cred-hash-1",
+			ContextSessionID:       "session-2",
+		},
 	}
 	dec, _ := g.EvaluateDecision(context.Background(), req)
 	if dec.ReasonCode != string(contracts.ReasonIdentityIsolationViolation) {
@@ -81,7 +85,10 @@ func TestExt_EgressBlockedDenies(t *testing.T) {
 	req := DecisionRequest{
 		Principal: "a",
 		Action:    "x",
-		Context:   map[string]interface{}{"destination": "https://evil.com"},
+		Context: map[string]interface{}{
+			ContextSecurityTrusted: true,
+			ContextDestination:     "https://evil.com",
+		},
 	}
 	dec, _ := g.EvaluateDecision(context.Background(), req)
 	if dec.ReasonCode != string(contracts.ReasonDataEgressBlocked) {
@@ -226,7 +233,10 @@ func TestExt_BehavioralScorerRecordsEgressBlock(t *testing.T) {
 	req := DecisionRequest{
 		Principal: "agent-1",
 		Action:    "x",
-		Context:   map[string]interface{}{"destination": "https://evil.com"},
+		Context: map[string]interface{}{
+			ContextSecurityTrusted: true,
+			ContextDestination:     "https://evil.com",
+		},
 	}
 	g.EvaluateDecision(context.Background(), req)
 	score := scorer.GetScore("agent-1")

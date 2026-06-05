@@ -58,7 +58,9 @@ func (h *AutonomyHandler) Register(mux *http.ServeMux, adminAuth func(http.Handl
 	if adminAuth != nil {
 		mux.Handle("/api/autonomy/control", adminAuth(http.HandlerFunc(h.HandleControl)))
 	} else {
-		mux.HandleFunc("/api/autonomy/control", h.HandleControl)
+		mux.HandleFunc("/api/autonomy/control", func(w http.ResponseWriter, _ *http.Request) {
+			WriteUnauthorized(w, "Autonomy control requires admin authentication")
+		})
 	}
 }
 

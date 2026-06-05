@@ -35,6 +35,8 @@ runtime:
 model_gateway:
     logical_secret: model_gateway
     provider: byo
+    provider_ids:
+        - openrouter
     mode: logical_binding_env_projection
     raw_provider_key_projected: true
 required_secrets:

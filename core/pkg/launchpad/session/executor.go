@@ -590,7 +590,8 @@ func (e Executor) persist(run LaunchRun, artifacts map[string][]byte) (LaunchRun
 	}
 	run.EvidencePackRefs = appendUnique(run.EvidencePackRefs, packRef)
 	run.EvidenceGraphRefs = appendUnique(run.EvidenceGraphRefs, packRef+"/04_EXPORTS/launchpad_evidence_graph.json")
-	cfg, err := evidencepkg.LoadEvidencePackTrustConfig("")
+	evidenceDataDir := e.Store.Root()
+	cfg, err := evidencepkg.LoadEvidencePackTrustConfig(evidenceDataDir)
 	if err != nil {
 		return LaunchRun{}, err
 	}
@@ -601,6 +602,7 @@ func (e Executor) persist(run LaunchRun, artifacts map[string][]byte) (LaunchRun
 		PackID:             run.LaunchID,
 		Profile:            profile,
 		TrustConfig:        cfg,
+		DataDir:            evidenceDataDir,
 		StorageReceiptPath: storageReceiptPath,
 	})
 	if err != nil {

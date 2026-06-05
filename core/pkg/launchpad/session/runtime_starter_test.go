@@ -251,6 +251,8 @@ func TestMaterializeFilesystemMountsCreatesHostDirAndPassesTarget(t *testing.T) 
 	}
 	if info, err := os.Stat(m.Source); err != nil || !info.IsDir() {
 		t.Fatalf("host source dir not created: %v (info=%+v)", err, info)
+	} else if info.Mode().Perm() != 0o777 {
+		t.Fatalf("host source dir permissions = %o, want 777", info.Mode().Perm())
 	}
 }
 

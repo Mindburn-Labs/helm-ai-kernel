@@ -209,6 +209,84 @@ func TestSchemaAlignment(t *testing.T) {
 		}
 	})
 
+	t.Run("PrivilegedAccessReceipt_requires_signed_closed_grant", func(t *testing.T) {
+		schema := compileSchema(t, "access/PrivilegedAccessReceipt.v1.json")
+		now := time.Now().UTC()
+		valid := map[string]interface{}{
+			"version":    "1.0.0",
+			"receipt_id": "prec-prod-root",
+			"request_id": "preq-001",
+			"grant": map[string]interface{}{
+				"granted_tier": "breakglass",
+				"granted_at":   now.Format(time.RFC3339),
+				"expires_at":   now.Add(time.Hour).Format(time.RFC3339),
+				"granted_by":   []interface{}{"did:helm:approver#key-1"},
+				"granted_scope": map[string]interface{}{
+					"actions": []interface{}{"deploy"},
+				},
+			},
+			"grantee": map[string]interface{}{
+				"identity_id": "did:helm:operator#key-1",
+			},
+			"attestation": map[string]interface{}{
+				"hash":      "sha256:" + strings.Repeat("a", 64),
+				"algorithm": "sha256",
+				"signature": "ed25519:" + strings.Repeat("A", 86),
+				"signed_by": "did:helm:approver#key-1",
+				"timestamp": now.Format(time.RFC3339),
+			},
+		}
+
+		clone := func(input map[string]interface{}) map[string]interface{} {
+			t.Helper()
+			data, err := json.Marshal(input)
+			if err != nil {
+				t.Fatalf("marshal clone: %v", err)
+			}
+			var out map[string]interface{}
+			if err := json.Unmarshal(data, &out); err != nil {
+				t.Fatalf("unmarshal clone: %v", err)
+			}
+			return out
+		}
+
+		if err := schema.Validate(valid); err != nil {
+			t.Fatalf("signed privileged access receipt should validate: %v", err)
+		}
+
+		missingGrantee := clone(valid)
+		delete(missingGrantee, "grantee")
+		if err := schema.Validate(missingGrantee); err == nil {
+			t.Fatal("expected missing grantee to fail schema validation")
+		}
+
+		unsigned := clone(valid)
+		attestation := unsigned["attestation"].(map[string]interface{})
+		delete(attestation, "signature")
+		delete(attestation, "signed_by")
+		if err := schema.Validate(unsigned); err == nil {
+			t.Fatal("expected unsigned receipt attestation to fail schema validation")
+		}
+
+		grantSmuggle := clone(valid)
+		grantSmuggle["grant"].(map[string]interface{})["admin_override"] = true
+		if err := schema.Validate(grantSmuggle); err == nil {
+			t.Fatal("expected extra grant claim to fail schema validation")
+		}
+
+		attestationSmuggle := clone(valid)
+		attestationSmuggle["attestation"].(map[string]interface{})["claims"] = map[string]interface{}{"role": "root"}
+		if err := schema.Validate(attestationSmuggle); err == nil {
+			t.Fatal("expected extra attestation claim to fail schema validation")
+		}
+
+		badSignature := clone(valid)
+		badSignature["attestation"].(map[string]interface{})["signature"] = "unsigned"
+		if err := schema.Validate(badSignature); err == nil {
+			t.Fatal("expected malformed signature to fail schema validation")
+		}
+	})
+
 	t.Run("DecisionRecord_field_names", func(t *testing.T) {
 		// Verify that DecisionRecord marshals with expected JSON field names
 		// that align with decision.proto.

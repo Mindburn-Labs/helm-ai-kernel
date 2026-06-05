@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/bridge"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/budget"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
@@ -502,29 +504,48 @@ func TestGateway_RESTExecuteBridgeGovernanceBranches(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	allowGateway := NewGateway(catalog, GatewayConfig{}, WithBridge(newGatewayTestBridge(t, "tenant-allow", nil)))
+	allowGateway := NewGateway(catalog, GatewayConfig{}, WithBridge(newGatewayTestBridge(t, "tenant-allow", nil, "bridge_tool")))
 	rec := httptest.NewRecorder()
 	allowGateway.handleExecute(rec, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body)))
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), "governed_allow")
 	assert.Contains(t, rec.Body.String(), "proofgraph_node")
 
+	noPolicyGateway := NewGateway(catalog, GatewayConfig{}, WithBridge(newGatewayTestBridge(t, "tenant-no-policy", nil)))
+	rec = httptest.NewRecorder()
+	noPolicyGateway.handleExecute(rec, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body)))
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Contains(t, rec.Body.String(), string(contracts.ReasonNoPolicy))
+
 	store := budget.NewMemoryStorage()
 	enforcer := budget.NewSimpleEnforcer(store)
 	require.NoError(t, enforcer.SetLimits(context.Background(), "tenant-deny", 0, 0))
-	denyGateway := NewGateway(catalog, GatewayConfig{}, WithBridge(newGatewayTestBridge(t, "tenant-deny", enforcer)))
+	denyGateway := NewGateway(catalog, GatewayConfig{}, WithBridge(newGatewayTestBridge(t, "tenant-deny", enforcer, "bridge_tool")))
 	rec = httptest.NewRecorder()
 	denyGateway.handleExecute(rec, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body)))
 	require.Equal(t, http.StatusForbidden, rec.Code)
 	assert.Contains(t, rec.Body.String(), "denied by governance")
 }
 
-func newGatewayTestBridge(t *testing.T, tenantID string, enforcer budget.Enforcer) *bridge.KernelBridge {
+func newGatewayTestBridge(t *testing.T, tenantID string, enforcer budget.Enforcer, allowedTools ...string) *bridge.KernelBridge {
 	t.Helper()
 
 	signer, err := crypto.NewEd25519Signer("test-mcp-gateway")
 	require.NoError(t, err)
 	prgGraph := prg.NewGraph()
+	for _, toolName := range allowedTools {
+		err := prgGraph.AddRule(toolName, prg.RequirementSet{
+			ID:    "allow-" + toolName,
+			Logic: prg.AND,
+			Requirements: []prg.Requirement{
+				{
+					ID:         "tool-match-" + toolName,
+					Expression: fmt.Sprintf("input.action == %q", toolName),
+				},
+			},
+		})
+		require.NoError(t, err)
+	}
 	store, err := artifacts.NewFileStore(t.TempDir())
 	require.NoError(t, err)
 	registry := artifacts.NewRegistry(store, signer)

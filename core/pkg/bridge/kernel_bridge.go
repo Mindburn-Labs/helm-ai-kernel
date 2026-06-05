@@ -84,9 +84,8 @@ func (kb *KernelBridge) Govern(ctx context.Context, toolName string, argsHash st
 	})
 
 	// 3. Guardian evaluation
-	// Guardian uses tool_name as PRG action ID. We ensure every tool has
-	// an open-policy PRG rule registered (empty requirements = allow-all).
-	kb.ensurePRGRule(toolName)
+	// Guardian uses tool_name as PRG action ID. Tool policy must already be
+	// present in the PRG graph; missing policy fails closed in Guardian.
 
 	req := guardian.DecisionRequest{
 		Principal: kb.tenantID,
@@ -142,20 +141,6 @@ func (kb *KernelBridge) Govern(ctx context.Context, toolName string, argsHash st
 // Graph returns the underlying ProofGraph for serialization/export.
 func (kb *KernelBridge) Graph() *proofgraph.Graph {
 	return kb.graph
-}
-
-// ensurePRGRule dynamically registers an open-policy PRG rule for a tool name
-// if one doesn't already exist. Empty RequirementSet with AND logic = allow-all.
-func (kb *KernelBridge) ensurePRGRule(toolName string) {
-	if kb.prgGraph == nil {
-		return
-	}
-	if _, exists := kb.prgGraph.Rules[toolName]; !exists {
-		_ = kb.prgGraph.AddRule(toolName, prg.RequirementSet{
-			ID:    "proxy-open-" + toolName,
-			Logic: prg.AND,
-		})
-	}
 }
 
 // appendNode is a helper that marshals the payload and appends to the ProofGraph.

@@ -82,6 +82,122 @@ func TestController_PackAdmission_ValidAttestation(t *testing.T) {
 	}
 }
 
+func TestController_PackAdmission_RequireValidSignaturesRejectsUnsigned(t *testing.T) {
+	ctrl := NewController()
+	att := &certification.ModuleAttestation{
+		AttestationID: "att-unsigned",
+		Module:        certification.ModuleIdentity{ModuleID: "mod-unsigned", ArtifactHash: "sha256:abc", ManifestHash: "sha256:def"},
+		CreatedAt:     time.Now(),
+	}
+	profile := &PackAdmissionProfile{
+		ProfileID: "test-profile",
+		Enabled:   true,
+		AdmissionRequirements: AdmissionReqs{
+			RequireAttestation:     true,
+			RequireValidSignatures: true,
+		},
+		Enforcement: Enforcement{Mode: ModeEnforce},
+	}
+	_ = ctrl.LoadPackProfile(profile)
+
+	result := ctrl.AdmitPack(context.Background(), "test-profile", att, "registry.example.com")
+	if result.Decision != DecisionDeny {
+		t.Fatalf("expected Deny, got %s", result.Decision)
+	}
+	if !hasViolation(result, "NO_SIGNATURES") {
+		t.Fatalf("expected NO_SIGNATURES violation, got %+v", result.Violations)
+	}
+}
+
+func TestController_PackAdmission_RejectsTamperedSignerRole(t *testing.T) {
+	ctrl := NewController()
+	att, pub := signedAdmissionAttestation(t, "builder-1", "builder")
+	att.Signatures[0].SignerRole = "auditor"
+	ctrl.RegisterPublicKey("builder-1", pub)
+
+	profile := &PackAdmissionProfile{
+		ProfileID: "test-profile",
+		Enabled:   true,
+		AdmissionRequirements: AdmissionReqs{
+			RequiredSignerRoles: []string{"auditor"},
+		},
+		Enforcement: Enforcement{Mode: ModeEnforce},
+	}
+	_ = ctrl.LoadPackProfile(profile)
+
+	result := ctrl.AdmitPack(context.Background(), "test-profile", att, "registry.example.com")
+	if result.Decision != DecisionDeny {
+		t.Fatalf("expected Deny, got %s", result.Decision)
+	}
+	if !hasViolation(result, "INVALID_SIGNATURE") {
+		t.Fatalf("expected INVALID_SIGNATURE violation for role tamper, got %+v", result.Violations)
+	}
+}
+
+func TestController_PackAdmission_EnforcesSignatureRequirements(t *testing.T) {
+	ctrl := NewController()
+	att, pub := signedAdmissionAttestation(t, "builder-1", "builder")
+	ctrl.RegisterPublicKey("builder-1", pub)
+
+	profile := &PackAdmissionProfile{
+		ProfileID: "test-profile",
+		Enabled:   true,
+		AdmissionRequirements: AdmissionReqs{
+			RequireValidSignatures: true,
+		},
+		SignatureRequirements: &SignatureReqs{
+			AllowedAlgorithms: []string{"ed25519"},
+			TrustedSigners:    []string{"release-manager-1"},
+		},
+		Enforcement: Enforcement{Mode: ModeEnforce},
+	}
+	_ = ctrl.LoadPackProfile(profile)
+
+	result := ctrl.AdmitPack(context.Background(), "test-profile", att, "registry.example.com")
+	if result.Decision != DecisionDeny {
+		t.Fatalf("expected Deny, got %s", result.Decision)
+	}
+	if !hasViolation(result, "SIGNER_NOT_TRUSTED") {
+		t.Fatalf("expected SIGNER_NOT_TRUSTED, got %+v", result.Violations)
+	}
+}
+
+func TestController_PackAdmission_EnforcesDeclaredProvenanceAndCertificationRequirements(t *testing.T) {
+	ctrl := NewController()
+	att, pub := signedAdmissionAttestation(t, "builder-1", "builder")
+	ctrl.RegisterPublicKey("builder-1", pub)
+
+	profile := &PackAdmissionProfile{
+		ProfileID: "test-profile",
+		Enabled:   true,
+		AdmissionRequirements: AdmissionReqs{
+			RequireValidSignatures: true,
+		},
+		ProvenanceRequirements: &ProvenanceReqs{
+			AllowedBuilders:         []string{"trusted-builder"},
+			AllowedSourceRepos:      []string{"https://git.example/trusted/repo"},
+			RequireDependencyHashes: true,
+		},
+		CertificationRequirements: &CertReqs{
+			RequireSecurityAudit: true,
+			MaxEffectTypes:       1,
+			DeniedEffectTypes:    []string{"network"},
+		},
+		Enforcement: Enforcement{Mode: ModeEnforce},
+	}
+	_ = ctrl.LoadPackProfile(profile)
+
+	result := ctrl.AdmitPack(context.Background(), "test-profile", att, "registry.example.com")
+	if result.Decision != DecisionDeny {
+		t.Fatalf("expected Deny, got %s", result.Decision)
+	}
+	for _, code := range []string{"BUILDER_NOT_ALLOWED", "SOURCE_REPO_NOT_ALLOWED", "NO_DEPENDENCY_HASHES", "SECURITY_AUDIT_REQUIRED", "DENIED_EFFECT_TYPE"} {
+		if !hasViolation(result, code) {
+			t.Fatalf("expected %s violation, got %+v", code, result.Violations)
+		}
+	}
+}
+
 func TestController_PackAdmission_MinimumSigners(t *testing.T) {
 	ctrl := NewController()
 
@@ -336,6 +452,46 @@ func TestController_DeployAdmission_Approvals(t *testing.T) {
 	}
 }
 
+func TestController_DeployAdmission_EnforcesDeclaredEvidenceRequirements(t *testing.T) {
+	ctrl := NewController()
+	att, _ := signedAdmissionAttestation(t, "builder-1", "builder")
+
+	profile := &DeployAdmissionProfile{
+		ProfileID:    "deploy-prod",
+		Enabled:      true,
+		Environments: []string{"production"},
+		EnvironmentRequirements: EnvReqs{
+			RequireHealthCheck:          true,
+			RequireSmokeTests:           true,
+			RequireErrorBudgetAvailable: true,
+		},
+		PreDeployChecks: &PreDeployChecks{
+			RequireIntegrationTests: true,
+			RequireSecurityScan:     true,
+		},
+		ApprovalChain: &ApprovalChain{
+			ApproverRoles:       []string{"release-manager"},
+			RequireDeployWindow: true,
+		},
+		RolloutPolicy: &RolloutPolicy{
+			Strategy:     "canary",
+			AutoRollback: true,
+		},
+		Enforcement: Enforcement{Mode: ModeEnforce},
+	}
+	_ = ctrl.LoadDeployProfile(profile)
+
+	result := ctrl.AdmitDeploy(context.Background(), "deploy-prod", att, "production", 100, 2)
+	if result.Decision != DecisionDeny {
+		t.Fatalf("expected Deny, got %s", result.Decision)
+	}
+	for _, code := range []string{"HEALTH_CHECK_EVIDENCE_REQUIRED", "SMOKE_TEST_EVIDENCE_REQUIRED", "ERROR_BUDGET_EVIDENCE_REQUIRED", "INTEGRATION_TEST_EVIDENCE_REQUIRED", "SECURITY_SCAN_EVIDENCE_REQUIRED", "APPROVER_ROLE_EVIDENCE_REQUIRED", "DEPLOY_WINDOW_EVIDENCE_REQUIRED", "ROLLBACK_TRIGGERS_REQUIRED"} {
+		if !hasViolation(result, code) {
+			t.Fatalf("expected %s violation, got %+v", code, result.Violations)
+		}
+	}
+}
+
 func TestController_ViolationHandler(t *testing.T) {
 	ctrl := NewController()
 
@@ -359,4 +515,49 @@ func TestController_ViolationHandler(t *testing.T) {
 	if len(captured.Violations) == 0 {
 		t.Error("expected violation handler to be called with violations")
 	}
+}
+
+func signedAdmissionAttestation(t *testing.T, signerID, role string) (*certification.ModuleAttestation, ed25519.PublicKey) {
+	t.Helper()
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certifier := certification.NewCertifier(signerID, role, priv)
+	att, err := certifier.CreateAttestation(
+		certification.ModuleIdentity{
+			ModuleID:     "mod-1",
+			ArtifactHash: "sha256:abc",
+			ManifestHash: "sha256:def",
+			SourceRepo:   "https://git.example/untrusted/repo",
+		},
+		certification.BuildProvenance{
+			BuilderID:      "ci",
+			BuildTimestamp: time.Now(),
+			Reproducible:   true,
+		},
+		certification.CertificationResults{
+			SchemaConformance: certification.ConformanceResult{Passed: true},
+			DeterminismTests:  certification.DeterminismTestResult{Passed: true, TestCount: 10},
+			PermissionsDeclared: certification.PermissionsDecl{
+				EffectTypes: []string{"network", "filesystem"},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := certifier.Sign(att); err != nil {
+		t.Fatal(err)
+	}
+	return att, pub
+}
+
+func hasViolation(result AdmissionResult, code string) bool {
+	for _, violation := range result.Violations {
+		if violation.Code == code {
+			return true
+		}
+	}
+	return false
 }

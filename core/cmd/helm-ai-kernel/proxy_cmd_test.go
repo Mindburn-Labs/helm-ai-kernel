@@ -1,7 +1,11 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -40,5 +44,91 @@ func TestDeniedProxyResponseBodyRemovesExecutableToolCalls(t *testing.T) {
 	}
 	if helmPayload["status"] != "DENIED" || helmPayload["correlation_id"] != "corr-1" {
 		t.Fatalf("unexpected helm block metadata: %+v", helmPayload)
+	}
+}
+
+func TestReceiptStoreRecoversCausalStateAfterRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "receipts.jsonl")
+
+	store, err := newReceiptStore(path)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	if err := store.Append(&proxyReceipt{
+		ReceiptID:    "r1",
+		Timestamp:    "2026-01-01T00:00:00Z",
+		Upstream:     "https://api.example.test",
+		InputHash:    "sha256:input1",
+		OutputHash:   "sha256:output1",
+		Status:       "APPROVED",
+		LamportClock: 1,
+	}); err != nil {
+		t.Fatalf("append first receipt: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("close first store: %v", err)
+	}
+
+	recovered, err := newReceiptStore(path)
+	if err != nil {
+		t.Fatalf("recover store: %v", err)
+	}
+	if recovered.LastLamport() != 1 {
+		t.Fatalf("recovered lamport = %d, want 1", recovered.LastLamport())
+	}
+	if err := recovered.Append(&proxyReceipt{
+		ReceiptID:    "r2",
+		Timestamp:    "2026-01-01T00:00:01Z",
+		Upstream:     "https://api.example.test",
+		InputHash:    "sha256:input2",
+		OutputHash:   "sha256:output2",
+		Status:       "APPROVED",
+		LamportClock: recovered.LastLamport() + 1,
+	}); err != nil {
+		t.Fatalf("append second receipt: %v", err)
+	}
+	if err := recovered.Close(); err != nil {
+		t.Fatalf("close recovered store: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read receipts: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("receipt line count = %d, want 2: %s", len(lines), data)
+	}
+	var second proxyReceipt
+	if err := json.Unmarshal([]byte(lines[1]), &second); err != nil {
+		t.Fatalf("unmarshal second receipt: %v", err)
+	}
+	firstHash := sha256.Sum256([]byte(lines[0]))
+	wantPrev := "sha256:" + hex.EncodeToString(firstHash[:])
+	if second.PrevHash != wantPrev {
+		t.Fatalf("second prev_hash = %q, want %q", second.PrevHash, wantPrev)
+	}
+	if second.LamportClock != 2 {
+		t.Fatalf("second lamport = %d, want 2", second.LamportClock)
+	}
+}
+
+func TestReceiptStoreRejectsBrokenExistingChain(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "receipts.jsonl")
+	broken := strings.Join([]string{
+		`{"receipt_id":"r1","timestamp":"2026-01-01T00:00:00Z","upstream":"https://api.example.test","input_hash":"sha256:input1","output_hash":"sha256:output1","status":"APPROVED","lamport_clock":1,"prev_hash":"GENESIS"}`,
+		`{"receipt_id":"r2","timestamp":"2026-01-01T00:00:01Z","upstream":"https://api.example.test","input_hash":"sha256:input2","output_hash":"sha256:output2","status":"APPROVED","lamport_clock":1,"prev_hash":"GENESIS"}`,
+	}, "\n") + "\n"
+	if err := os.WriteFile(path, []byte(broken), 0o600); err != nil {
+		t.Fatalf("write broken receipts: %v", err)
+	}
+
+	store, err := newReceiptStore(path)
+	if err == nil {
+		_ = store.Close()
+		t.Fatal("expected broken receipt chain to be rejected")
+	}
+	if !strings.Contains(err.Error(), "prev_hash") {
+		t.Fatalf("expected prev_hash chain error, got %v", err)
 	}
 }

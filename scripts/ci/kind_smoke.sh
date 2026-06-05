@@ -100,6 +100,9 @@ curl -fsS "http://127.0.0.1:${API_PORT}/healthz" >/dev/null
 
 curl -fsS -X POST "http://127.0.0.1:${API_PORT}/api/v1/evaluate" \
     -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${ADMIN_KEY}" \
+    -H "X-Helm-Tenant-ID: ${TENANT_ID}" \
+    -H "X-Helm-Principal-ID: ${AGENT_ID}" \
     --data-binary "{\"principal\":\"${AGENT_ID}\",\"action\":\"EXECUTE_TOOL\",\"resource\":\"unknown.tool.kind\",\"context\":{\"session_id\":\"${AGENT_ID}\"}}" >"$TMP_DIR/decision.json"
 python3 - "$TMP_DIR/decision.json" <<'PY'
 import json, sys

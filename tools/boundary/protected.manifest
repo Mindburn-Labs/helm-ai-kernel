@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-05T08:49:37Z
-# Commit: f561958761dd68d4d1498a3fd12763d48ff70d4d
+# Generated: 2026-06-05T09:10:16Z
+# Commit: 22003f1f8a9dbf247a21de0c497cafd7cd6cad9a
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -225,7 +225,7 @@ d4716f592388c9e770ba647be8f071527a43e1a2db6d32f0c455ef2ed1039d1a  core/pkg/contr
 300c57c0291408966a38c790053e393a514eeb697585c731c811ad90ec6a5939  core/pkg/contracts/vpl.go
 cec8685ee1984a7d2354c6772225a93f0b2410933199464e7a982e90cf8c17de  core/pkg/contracts/worker.go
 325bf833e1433821e93a52a0c815b1348fc7d1f87225471a45659dfdc10f72da  core/pkg/contracts/workflow.go
-c850dbf83973b52a3dec6673786750f6e8d590a5a7c2bb0866c6f41ea3a1132a  core/pkg/crypto/audit.go
+186d040b431e5cd34941758f98a9ee676006909a8780cb90214dc98799a114b6  core/pkg/crypto/audit.go
 7bb309852eb6f56e94608764d95590d12d0363799464cefd13890a6be6337561  core/pkg/crypto/audit_test.go
 4c93d6bca52d1d607b7a6a17431e621dae6a282517502fcdb02c339583d784cc  core/pkg/crypto/cache.go
 62295ca6b0b2b8e127a8aecb5be2341a516cdd3a0b07a437f91c8572485178a5  core/pkg/crypto/canonical.go
@@ -233,7 +233,7 @@ c850dbf83973b52a3dec6673786750f6e8d590a5a7c2bb0866c6f41ea3a1132a  core/pkg/crypt
 79c5800555e866ef43ef7cc0f0578676770ab6292ea2860e2e331d0ee25c764b  core/pkg/crypto/chaos_test.go
 30dc78ffcbc8b20deee5dcfd8abf06c3ad65b0b461e7cf7956824130eaf6faf8  core/pkg/crypto/crypto_additional_coverage_test.go
 025010b18f42907df5a5c15d8192f4486db473c58142c63eff68c7df23e4835f  core/pkg/crypto/crypto_behavior_coverage_test.go
-d8d67e184f584a227c30e6d74f99d91fcb818b93f806c97939aa560f8e8fb908  core/pkg/crypto/crypto_branch_coverage_test.go
+761bf57fce279f0f3ddf10657518bf491af38d619722dfaa038885c5cef633d7  core/pkg/crypto/crypto_branch_coverage_test.go
 2e275e42591140af46c9e197a8a19701bd8ca83bea2b0ea5bb2b3418cb245053  core/pkg/crypto/crypto_contracts_test.go
 511337f4e0760aa5fa254d618b06e354174b54aad2e241198805fad68ca7f9f2  core/pkg/crypto/crypto_edge_cases_test.go
 7c655fb26e3a547a0e3d1e817cc9a9fb87b300e7e439815941111a570edb46ab  core/pkg/crypto/crypto_regression_test.go

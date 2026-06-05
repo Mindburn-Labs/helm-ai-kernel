@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
 type coverageHazardError struct {
@@ -28,6 +29,98 @@ type coverageStringer string
 
 func (s coverageStringer) String() string {
 	return string(s)
+}
+
+type coverageContinuityStore struct {
+	latest      ContinuityState
+	latestOK    bool
+	latestErr   error
+	appendState ContinuityState
+	appendErr   error
+	storeErr    error
+	getErr      error
+	closeErr    error
+	appended    []contracts.ContinuityCheckpoint
+	stored      []contracts.ActivationReceipt
+	closed      []string
+}
+
+func (s *coverageContinuityStore) Latest(context.Context) (ContinuityState, bool, error) {
+	if s.latestErr != nil {
+		return ContinuityState{}, false, s.latestErr
+	}
+	return s.latest, s.latestOK, nil
+}
+
+func (s *coverageContinuityStore) AppendCheckpoint(_ context.Context, checkpoint contracts.ContinuityCheckpoint) (ContinuityState, error) {
+	s.appended = append(s.appended, checkpoint)
+	if s.appendErr != nil {
+		return ContinuityState{}, s.appendErr
+	}
+	if s.appendState.CheckpointHash != "" {
+		return s.appendState, nil
+	}
+	hash, err := CheckpointHash(checkpoint)
+	if err != nil {
+		return ContinuityState{}, err
+	}
+	return ContinuityState{
+		CheckpointID:    checkpoint.CheckpointID,
+		CheckpointHash:  hash,
+		HazardSequence:  checkpoint.HazardSequence,
+		PolicyEpoch:     checkpoint.PolicyEpoch,
+		LamportClock:    checkpoint.LamportClock,
+		DeadManWindowID: checkpoint.DeadManWindowID,
+	}, nil
+}
+
+func (s *coverageContinuityStore) StoreActivation(_ context.Context, receipt contracts.ActivationReceipt) error {
+	s.stored = append(s.stored, receipt)
+	return s.storeErr
+}
+
+func (s *coverageContinuityStore) GetActivation(context.Context, string) (contracts.ActivationReceipt, bool, error) {
+	if s.getErr != nil {
+		return contracts.ActivationReceipt{}, false, s.getErr
+	}
+	return contracts.ActivationReceipt{}, false, nil
+}
+
+func (s *coverageContinuityStore) CloseActivation(_ context.Context, activationID string, _ contracts.ContinuityCheckpoint) error {
+	s.closed = append(s.closed, activationID)
+	return s.closeErr
+}
+
+type coverageEvidenceSink struct {
+	err    error
+	refs   EvidenceRefs
+	events []EvidenceEvent
+}
+
+func (s *coverageEvidenceSink) RecordSafeDepEvent(_ context.Context, event EvidenceEvent) (EvidenceRefs, error) {
+	s.events = append(s.events, event)
+	if s.err != nil {
+		return EvidenceRefs{}, s.err
+	}
+	if s.refs != (EvidenceRefs{}) {
+		return s.refs, nil
+	}
+	return EvidenceRefs{ProofGraphRef: "proofgraph:test", EvidencePackRef: "evidencepack:test"}, nil
+}
+
+type coverageReceiptSigner struct {
+	err error
+	sig string
+}
+
+func (s coverageReceiptSigner) Sign([]byte) (string, error) {
+	if s.err != nil {
+		return "", s.err
+	}
+	if s.sig != "" {
+		return s.sig, nil
+	}
+	return "signed-receipt", nil
 }
 
 func TestCoverageContextSignalsAndHelpers(t *testing.T) {
@@ -105,6 +198,9 @@ func TestCoverageContextSignalsAndHelpers(t *testing.T) {
 	}
 	if !firstBool(map[string]any{"a": "TRUE"}, "a") || firstBool(map[string]any{"a": "false"}, "a") {
 		t.Fatal("firstBool string parsing mismatch")
+	}
+	if firstBool(map[string]any{"a": 1}, "a") {
+		t.Fatal("firstBool should ignore unsupported values")
 	}
 }
 
@@ -265,6 +361,43 @@ func TestCoverageValidationBranchMatrices(t *testing.T) {
 	if !strings.Contains(hardwareApprovalPayload("sha256:t", ceremony.Approvals[0]), "alice") {
 		t.Fatal("hardware approval payload did not bind signer")
 	}
+	hardwareBound, authorized := coverageHardwareBoundCeremony(t, now)
+	if err := ValidateHardwareCeremony(hardwareBound, CeremonyExpectation{
+		AuthorizedSigners:    authorized,
+		RequiredQuorum:       3,
+		PolicyEpoch:          7,
+		Now:                  now,
+		RequireHardwareBound: true,
+	}); err != nil {
+		t.Fatalf("valid hardware-bound ceremony rejected: %v", err)
+	}
+	tampered := hardwareBound
+	tampered.Approvals[0].AssertionHash = "sha256:tampered"
+	if err := ValidateHardwareCeremony(tampered, CeremonyExpectation{
+		AuthorizedSigners:    authorized,
+		RequiredQuorum:       3,
+		PolicyEpoch:          7,
+		Now:                  now,
+		RequireHardwareBound: true,
+	}); !errors.Is(err, ErrHardwareQuorumUnbound) {
+		t.Fatalf("expected tampered hardware assertion rejection, got %v", err)
+	}
+	missingSignature := hardwareBound
+	missingSignature.Approvals[0].AssertionSignature = ""
+	unsigned := make(map[string]contracts.ThresholdSignature, len(authorized))
+	for signerID, signer := range authorized {
+		unsigned[signerID] = signer
+	}
+	unsigned["alice"] = contracts.ThresholdSignature{SignerID: "alice", Role: "founder", DeviceID: "yubi-a", PublicKey: authorized["alice"].PublicKey}
+	if err := ValidateHardwareCeremony(missingSignature, CeremonyExpectation{
+		AuthorizedSigners:    unsigned,
+		RequiredQuorum:       3,
+		PolicyEpoch:          7,
+		Now:                  now,
+		RequireHardwareBound: true,
+	}); !errors.Is(err, ErrHardwareQuorumUnbound) {
+		t.Fatalf("expected missing hardware assertion rejection, got %v", err)
+	}
 
 	delegation := validCapsule(now).Delegation
 	for name, mutate := range map[string]func(*contracts.EmergencyDelegationChain){
@@ -320,6 +453,86 @@ func TestCoverageValidationBranchMatrices(t *testing.T) {
 	}
 	if !defaultTime(time.Time{}, now).Equal(now) || !defaultTime(now.Add(time.Minute), now).Equal(now.Add(time.Minute)) {
 		t.Fatal("defaultTime returned unexpected value")
+	}
+}
+
+func TestCoverageValidateActivationFailureBranches(t *testing.T) {
+	now := fixedSafeDepClock()
+	for _, tc := range []struct {
+		name    string
+		mutate  func(*contracts.ContinuityCheckpoint, *contracts.EmergencyCapsule, *contracts.DevFallbackPosture, *ActivationExpectation, *MemoryNonceStore)
+		wantErr error
+	}{
+		{
+			name: "dev fallback",
+			mutate: func(_ *contracts.ContinuityCheckpoint, _ *contracts.EmergencyCapsule, posture *contracts.DevFallbackPosture, _ *ActivationExpectation, _ *MemoryNonceStore) {
+				posture.SoftwareHSM = true
+			},
+			wantErr: ErrDevFallbackPresent,
+		},
+		{
+			name: "nonce replay",
+			mutate: func(cp *contracts.ContinuityCheckpoint, _ *contracts.EmergencyCapsule, _ *contracts.DevFallbackPosture, _ *ActivationExpectation, nonces *MemoryNonceStore) {
+				nonces.Consume(cp.Nonce)
+			},
+			wantErr: ErrContinuityStale,
+		},
+		{
+			name: "capsule invalid",
+			mutate: func(_ *contracts.ContinuityCheckpoint, capsule *contracts.EmergencyCapsule, _ *contracts.DevFallbackPosture, _ *ActivationExpectation, _ *MemoryNonceStore) {
+				capsule.CapsuleID = ""
+			},
+			wantErr: ErrEmergencyCapsuleInvalid,
+		},
+		{
+			name: "ceremony invalid",
+			mutate: func(_ *contracts.ContinuityCheckpoint, capsule *contracts.EmergencyCapsule, _ *contracts.DevFallbackPosture, _ *ActivationExpectation, _ *MemoryNonceStore) {
+				capsule.Ceremony.Approvals = capsule.Ceremony.Approvals[:2]
+			},
+			wantErr: ErrHardwareQuorumUnbound,
+		},
+		{
+			name: "delegation invalid",
+			mutate: func(_ *contracts.ContinuityCheckpoint, capsule *contracts.EmergencyCapsule, _ *contracts.DevFallbackPosture, _ *ActivationExpectation, _ *MemoryNonceStore) {
+				capsule.Delegation.MaxHops = 0
+			},
+			wantErr: ErrEmergencyCapsuleInvalid,
+		},
+		{
+			name: "attestation invalid",
+			mutate: func(_ *contracts.ContinuityCheckpoint, capsule *contracts.EmergencyCapsule, _ *contracts.DevFallbackPosture, _ *ActivationExpectation, _ *MemoryNonceStore) {
+				capsule.Attestation.Synthetic = true
+			},
+			wantErr: ErrAttestationResultRequired,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checkpoint := validContinuityCheckpoint(now, "activation-"+strings.ReplaceAll(tc.name, " ", "-"), 11)
+			capsule := validCapsule(now)
+			posture := contracts.DevFallbackPosture{}
+			expectation := coverageActivationExpectation(now)
+			nonces := NewMemoryNonceStore()
+			tc.mutate(&checkpoint, &capsule, &posture, &expectation, nonces)
+			if err := ValidateActivation(checkpoint, capsule, posture, expectation, nonces); !errors.Is(err, tc.wantErr) {
+				t.Fatalf("expected %v, got %v", tc.wantErr, err)
+			}
+		})
+	}
+
+	capsule := validCapsule(now)
+	hardwareCeremony, expectationSigners := coverageHardwareBoundCeremony(t, now)
+	capsule.Ceremony = hardwareCeremony
+	expectation := coverageActivationExpectation(now)
+	expectation.Ceremony.RequireHardwareBound = true
+	expectation.Ceremony.AuthorizedSigners = expectationSigners
+	if err := ValidateActivation(
+		validContinuityCheckpoint(now, "activation-hardware-bound", 11),
+		capsule,
+		contracts.DevFallbackPosture{},
+		expectation,
+		NewMemoryNonceStore(),
+	); err != nil {
+		t.Fatalf("valid hardware-bound activation rejected: %v", err)
 	}
 }
 
@@ -419,14 +632,147 @@ func TestCoverageControllerAndMemoryStoreBranches(t *testing.T) {
 	if !(*Controller)(nil).now().After(time.Time{}) {
 		t.Fatal("nil controller now should return current time")
 	}
+	result := GateResult{}
+	noEvidence.attachEvidence(context.Background(), &result, "safedep.coverage", &checkpoint, &scopeCapsule)
+	if result.ProofGraphRef != "" {
+		t.Fatalf("nil evidence attach should not set refs: %+v", result)
+	}
 	if _, err := (HashEvidenceSink{}).RecordSafeDepEvent(canceled, EvidenceEvent{Type: "ctx"}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected canceled evidence sink, got %v", err)
+	}
+	if _, err := store.AppendCheckpoint(context.Background(), checkpoint); !errors.Is(err, ErrContinuityStale) {
+		t.Fatalf("expected memory nonce replay, got %v", err)
+	}
+	rollback := validContinuityCheckpoint(now, "rollback-nonce", 1)
+	if _, err := store.AppendCheckpoint(context.Background(), rollback); !errors.Is(err, ErrContinuityStale) {
+		t.Fatalf("expected memory rollback rejection, got %v", err)
+	}
+	if id := activationID(scopeCapsule, checkpoint); !strings.HasPrefix(id, "safedep-act-") {
+		t.Fatalf("unexpected activation id: %s", id)
+	}
+}
+
+func TestCoverageControllerActivationAndRestoreErrors(t *testing.T) {
+	now := fixedSafeDepClock()
+	capsule := validCapsule(now)
+	request := func(nonce string) GateRequest {
+		return GateRequest{
+			Signal:      Signal{HazardCode: contracts.HazardCredentialExpired, ActiveClock: true},
+			Checkpoint:  validContinuityCheckpoint(now, nonce, 1),
+			Capsule:     &capsule,
+			Action:      "credential.rotate.propose",
+			ConnectorID: "github",
+		}
+	}
+	if _, err := NewController(ControllerConfig{Clock: fixedSafeDepClock}).Gate(context.Background(), GateRequest{
+		Signal: Signal{HazardCode: contracts.HazardCredentialExpired, ActiveClock: true},
+	}); !errors.Is(err, ErrEmergencyCapsuleInvalid) {
+		t.Fatalf("expected missing capsule rejection, got %v", err)
+	}
+
+	latestErr := errors.New("latest failed")
+	if _, err := NewController(ControllerConfig{
+		Store: &coverageContinuityStore{latestErr: latestErr},
+		Clock: fixedSafeDepClock,
+	}).Gate(context.Background(), request("latest-error")); !errors.Is(err, latestErr) {
+		t.Fatalf("expected latest error, got %v", err)
+	}
+
+	appendErr := errors.New("append failed")
+	if _, err := NewController(ControllerConfig{
+		Store: &coverageContinuityStore{appendErr: appendErr},
+		Clock: fixedSafeDepClock,
+	}).Gate(context.Background(), request("append-error")); !errors.Is(err, appendErr) {
+		t.Fatalf("expected append error, got %v", err)
+	}
+
+	evidenceErr := errors.New("evidence failed")
+	if _, err := NewController(ControllerConfig{
+		Store:    &coverageContinuityStore{},
+		Evidence: &coverageEvidenceSink{err: evidenceErr},
+		Clock:    fixedSafeDepClock,
+	}).Gate(context.Background(), request("evidence-error")); !errors.Is(err, evidenceErr) {
+		t.Fatalf("expected evidence error, got %v", err)
+	}
+
+	signerErr := errors.New("signer failed")
+	if _, err := NewController(ControllerConfig{
+		Store:    &coverageContinuityStore{},
+		Evidence: &coverageEvidenceSink{},
+		Signer:   coverageReceiptSigner{err: signerErr},
+		Clock:    fixedSafeDepClock,
+	}).Gate(context.Background(), request("signer-error")); !errors.Is(err, signerErr) {
+		t.Fatalf("expected signer error, got %v", err)
+	}
+
+	storeErr := errors.New("store activation failed")
+	if _, err := NewController(ControllerConfig{
+		Store:    &coverageContinuityStore{storeErr: storeErr},
+		Evidence: &coverageEvidenceSink{},
+		Clock:    fixedSafeDepClock,
+	}).Gate(context.Background(), request("store-error")); !errors.Is(err, storeErr) {
+		t.Fatalf("expected store activation error, got %v", err)
+	}
+
+	successStore := &coverageContinuityStore{}
+	signed, err := NewController(ControllerConfig{
+		Store:    successStore,
+		Evidence: &coverageEvidenceSink{},
+		Signer:   coverageReceiptSigner{sig: "receipt-signature"},
+		Clock:    fixedSafeDepClock,
+	}).Gate(context.Background(), request("signed-success"))
+	if err != nil {
+		t.Fatalf("signed activation rejected: %v", err)
+	}
+	if !signed.DispatchAllowed || signed.ActivationReceipt == nil || signed.ActivationReceipt.Signature != "receipt-signature" {
+		t.Fatalf("signed activation missing receipt signature: %+v", signed)
+	}
+	if len(successStore.stored) != 1 || successStore.stored[0].Signature != "receipt-signature" {
+		t.Fatalf("signed activation was not stored: %+v", successStore.stored)
+	}
+
+	restoreLatestErr := errors.New("restore latest failed")
+	if err := NewController(ControllerConfig{
+		Store: &coverageContinuityStore{latestErr: restoreLatestErr},
+		Clock: fixedSafeDepClock,
+	}).Restore(context.Background(), "activation", validContinuityCheckpoint(now, "restore-latest", 1)); !errors.Is(err, restoreLatestErr) {
+		t.Fatalf("expected restore latest error, got %v", err)
+	}
+	restoreAppendErr := errors.New("restore append failed")
+	if err := NewController(ControllerConfig{
+		Store: &coverageContinuityStore{appendErr: restoreAppendErr},
+		Clock: fixedSafeDepClock,
+	}).Restore(context.Background(), "activation", validContinuityCheckpoint(now, "restore-append", 1)); !errors.Is(err, restoreAppendErr) {
+		t.Fatalf("expected restore append error, got %v", err)
+	}
+	restoreCloseErr := errors.New("restore close failed")
+	if err := NewController(ControllerConfig{
+		Store: &coverageContinuityStore{closeErr: restoreCloseErr},
+		Clock: fixedSafeDepClock,
+	}).Restore(context.Background(), "activation", validContinuityCheckpoint(now, "restore-close", 1)); !errors.Is(err, restoreCloseErr) {
+		t.Fatalf("expected restore close error, got %v", err)
+	}
+	if err := NewController(ControllerConfig{
+		Store: &coverageContinuityStore{},
+		Clock: fixedSafeDepClock,
+	}).Restore(context.Background(), "activation", contracts.ContinuityCheckpoint{CheckpointID: "missing-nonce"}); !errors.Is(err, ErrContinuityStale) {
+		t.Fatalf("expected restore continuity error, got %v", err)
 	}
 }
 
 func TestCoverageSQLiteContinuityStoreBranches(t *testing.T) {
 	if _, err := NewSQLiteContinuityStore(nil); err == nil {
 		t.Fatal("expected nil sqlite db error")
+	}
+	closedDB, err := sql.Open("sqlite", "file:safedep-closed-init?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := closedDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewSQLiteContinuityStore(closedDB); err == nil {
+		t.Fatal("expected closed sqlite db init error")
 	}
 	db, err := sql.Open("sqlite", "file:safedep-coverage?mode=memory&cache=shared")
 	if err != nil {
@@ -478,6 +824,33 @@ func TestCoverageSQLiteContinuityStoreBranches(t *testing.T) {
 	if formatTime(time.Time{}) != "" || !strings.Contains(formatTime(now), "2026-05-24") {
 		t.Fatal("formatTime returned unexpected values")
 	}
+
+	closedRuntimeDB, err := sql.Open("sqlite", "file:safedep-closed-runtime?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	closedRuntimeStore, err := NewSQLiteContinuityStore(closedRuntimeDB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := closedRuntimeDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := closedRuntimeStore.Latest(context.Background()); err == nil {
+		t.Fatal("expected latest on closed sqlite db to fail")
+	}
+	if _, err := closedRuntimeStore.AppendCheckpoint(context.Background(), validContinuityCheckpoint(now, "closed-append", 1)); err == nil {
+		t.Fatal("expected append on closed sqlite db to fail")
+	}
+	if err := closedRuntimeStore.StoreActivation(context.Background(), receipt); err == nil {
+		t.Fatal("expected store activation on closed sqlite db to fail")
+	}
+	if _, _, err := closedRuntimeStore.GetActivation(context.Background(), receipt.ActivationID); err == nil {
+		t.Fatal("expected get activation on closed sqlite db to fail")
+	}
+	if err := closedRuntimeStore.CloseActivation(context.Background(), receipt.ActivationID, checkpoint); err == nil {
+		t.Fatal("expected close activation on closed sqlite db to fail")
+	}
 }
 
 func validContinuityCheckpoint(now time.Time, nonce string, sequence uint64) contracts.ContinuityCheckpoint {
@@ -495,4 +868,67 @@ func validContinuityCheckpoint(now time.Time, nonce string, sequence uint64) con
 		AttestedTime:                 now,
 		ExpiresAt:                    now.Add(time.Minute),
 	}
+}
+
+func coverageActivationExpectation(now time.Time) ActivationExpectation {
+	return ActivationExpectation{
+		Continuity: ContinuityExpectation{
+			PolicyEpoch:                  7,
+			PolicyHash:                   "sha256:policy",
+			OrgGenomeHash:                "sha256:org",
+			MinHazardSequence:            10,
+			LatestAcceptedCheckpointHash: "sha256:last",
+			RequireDeadManActive:         true,
+		},
+		Capsule: CapsuleExpectation{
+			HazardCode:             contracts.HazardCredentialExpired,
+			State:                  contracts.SafeDepDegradedNarrowing,
+			OrgGenomeHash:          "sha256:org",
+			PolicyEpoch:            7,
+			PolicyHash:             "sha256:policy",
+			P0CeilingsHash:         "sha256:p0",
+			P1BundleHash:           "sha256:p1",
+			CPIHash:                "sha256:cpi",
+			ProviderRegistryHash:   "sha256:providers",
+			CredentialRegistryHash: "sha256:creds",
+			VerifierProfileHash:    "sha256:verifier",
+			MaxTTL:                 30 * time.Minute,
+		},
+		Ceremony: CeremonyExpectation{
+			RequiredQuorum: 3,
+			PolicyEpoch:    7,
+		},
+		Attestation: AttestationExpectation{
+			ProfileID:       "nitro-prod",
+			PolicyHash:      "sha256:appraisal",
+			Nonce:           "nonce-1",
+			MeasurementHash: "sha256:measurement",
+		},
+		Now: now,
+	}
+}
+
+func coverageHardwareBoundCeremony(t *testing.T, now time.Time) (contracts.HardwareCeremonyTranscript, map[string]contracts.ThresholdSignature) {
+	t.Helper()
+	ceremony := validCapsule(now).Ceremony
+	authorized := make(map[string]contracts.ThresholdSignature, len(ceremony.Approvals))
+	for i, approval := range ceremony.Approvals {
+		signer, err := helmcrypto.NewEd25519Signer(approval.SignerID + "-hardware")
+		if err != nil {
+			t.Fatalf("new hardware signer: %v", err)
+		}
+		signature, err := signer.Sign([]byte(hardwareApprovalPayload(ceremony.TranscriptHash, approval)))
+		if err != nil {
+			t.Fatalf("sign hardware approval: %v", err)
+		}
+		ceremony.Approvals[i].AssertionSignature = signature
+		authorized[approval.SignerID] = contracts.ThresholdSignature{
+			SignerID:  approval.SignerID,
+			Role:      approval.Role,
+			DeviceID:  approval.DeviceID,
+			KeyID:     approval.SignerID + "-hardware",
+			PublicKey: signer.PublicKey(),
+		}
+	}
+	return ceremony, authorized
 }

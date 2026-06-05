@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 )
@@ -99,6 +100,54 @@ func TestExecutorRecordsRuntimeHandleBeforeRunning(t *testing.T) {
 	}
 	archivePath := strings.TrimPrefix(run.VerificationCommand, "helm-ai-kernel verify --bundle ")
 	assertTarContains(t, archivePath, "07_ATTESTATIONS/evidence_pack.sig")
+}
+
+func TestExecutorEvidenceSealUsesLaunchpadStoreRoot(t *testing.T) {
+	dataRoot := t.TempDir()
+	storeRoot := t.TempDir()
+	t.Setenv("HELM_DATA_DIR", dataRoot)
+
+	run, err := (Executor{Store: NewStore(storeRoot)}).persist(LaunchRun{
+		LaunchID:      "store-root-evidence",
+		State:         StateValidated,
+		KernelVerdict: "ALLOW",
+	}, map[string][]byte{"runtime_environment.json": []byte("{}")})
+	if err != nil {
+		t.Fatalf("persist: %v", err)
+	}
+
+	var keyFile struct {
+		KeyID string `json:"key_id"`
+	}
+	keyData, err := os.ReadFile(filepath.Join(storeRoot, "keys", "evidence-pack-dev.ed25519"))
+	if err != nil {
+		t.Fatalf("read store-root evidence key: %v", err)
+	}
+	if err := json.Unmarshal(keyData, &keyFile); err != nil {
+		t.Fatalf("parse store-root evidence key: %v", err)
+	}
+	if keyFile.KeyID == "" {
+		t.Fatal("store-root evidence key id missing")
+	}
+
+	var seal struct {
+		Signer struct {
+			KeyID string `json:"key_id"`
+		} `json:"signer"`
+	}
+	sealData, err := os.ReadFile(filepath.Join(storeRoot, "evidencepacks", run.LaunchID, evidencepkg.EvidencePackSealPath))
+	if err != nil {
+		t.Fatalf("read evidence seal: %v", err)
+	}
+	if err := json.Unmarshal(sealData, &seal); err != nil {
+		t.Fatalf("parse evidence seal: %v", err)
+	}
+	if seal.Signer.KeyID != keyFile.KeyID {
+		t.Fatalf("evidence seal used %q, want store-root key %q", seal.Signer.KeyID, keyFile.KeyID)
+	}
+	if _, err := os.Stat(filepath.Join(dataRoot, "keys", "evidence-pack-dev.ed25519")); !os.IsNotExist(err) {
+		t.Fatalf("expected HELM_DATA_DIR key to stay unused, stat err=%v", err)
+	}
 }
 
 func TestExecutorBlocksRunningWhenHealthcheckFails(t *testing.T) {

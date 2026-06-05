@@ -503,7 +503,8 @@ func persistCloudLaunch(compiled plan.LaunchPlan, substrate lpregistry.Substrate
 	}
 	run.EvidencePackRefs = appendUniqueLaunchString(run.EvidencePackRefs, packRef)
 	run.EvidenceGraphRefs = appendUniqueLaunchString(run.EvidenceGraphRefs, packRef+"/04_EXPORTS/launchpad_evidence_graph.json")
-	cfg, err := evidencepkg.LoadEvidencePackTrustConfig("")
+	evidenceDataDir := store.Root()
+	cfg, err := evidencepkg.LoadEvidencePackTrustConfig(evidenceDataDir)
 	if err != nil {
 		return nil, err
 	}
@@ -514,6 +515,7 @@ func persistCloudLaunch(compiled plan.LaunchPlan, substrate lpregistry.Substrate
 		PackID:             run.LaunchID,
 		Profile:            profile,
 		TrustConfig:        cfg,
+		DataDir:            evidenceDataDir,
 		StorageReceiptPath: storageReceiptPath,
 	})
 	if err != nil {
@@ -836,7 +838,8 @@ func appendLaunchEvidencePack(store *session.Store, run *session.LaunchRun, arti
 	}
 	run.EvidencePackRefs = appendUniqueLaunchString(run.EvidencePackRefs, packRef)
 	run.EvidenceGraphRefs = appendUniqueLaunchString(run.EvidenceGraphRefs, packRef+"/04_EXPORTS/launchpad_evidence_graph.json")
-	cfg, err := evidencepkg.LoadEvidencePackTrustConfig("")
+	evidenceDataDir := store.Root()
+	cfg, err := evidencepkg.LoadEvidencePackTrustConfig(evidenceDataDir)
 	if err != nil {
 		return nil, err
 	}
@@ -847,6 +850,7 @@ func appendLaunchEvidencePack(store *session.Store, run *session.LaunchRun, arti
 		PackID:             run.LaunchID,
 		Profile:            profile,
 		TrustConfig:        cfg,
+		DataDir:            evidenceDataDir,
 		StorageReceiptPath: storageReceiptPath,
 	})
 	if err != nil {

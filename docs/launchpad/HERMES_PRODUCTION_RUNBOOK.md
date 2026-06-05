@@ -104,6 +104,7 @@ set -euo pipefail
 
 export HELM_LAUNCHPAD_HOME="$HOME/.helm/launchpad-production"
 export HELM_LAUNCHPAD_REGISTRY_ROOT="$HELM_SOURCE_ROOT"
+export HELM_DATA_DIR="$HELM_LAUNCHPAD_HOME"
 mkdir -p "$HELM_LAUNCHPAD_HOME"
 chmod 700 "$HELM_LAUNCHPAD_HOME"
 
@@ -195,7 +196,7 @@ final_pack="$(
 )"
 test -n "$final_pack"
 
-helm-ai-kernel verify --bundle "$final_pack"
+HELM_DATA_DIR="$HELM_LAUNCHPAD_HOME" helm-ai-kernel verify --bundle "$final_pack"
 ```
 
 Verifier output must include `VERIFIED` and `trust team`.

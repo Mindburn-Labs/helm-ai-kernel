@@ -20,6 +20,7 @@ import (
 )
 
 const extauthzAuthorizePath = "/api/v1/extauthz/authorize"
+const extauthzPolicyBindingMismatchReason = "EXTAUTHZ_POLICY_BINDING_MISMATCH"
 
 func registerExtAuthzRoutes(mux *http.ServeMux, svc *Services) {
 	mux.HandleFunc(extauthzAuthorizePath, protectRuntimeHandler(RouteAuthService, func(w http.ResponseWriter, r *http.Request) {
@@ -91,6 +92,17 @@ func authorizeExtAuthzRequest(ctx context.Context, svc *Services, req extauthz.A
 			PolicyEpoch:   req.PolicyEpoch,
 		}
 	}
+	if reason, mismatch := extAuthzPolicyBindingMismatch(req, decision); mismatch {
+		decision = &contracts.DecisionRecord{
+			ID:            "dec-" + randomHex(16),
+			Timestamp:     now,
+			Verdict:       string(contracts.VerdictDeny),
+			ReasonCode:    extauthzPolicyBindingMismatchReason,
+			Reason:        reason,
+			PolicyVersion: req.PolicyHash,
+			PolicyEpoch:   req.PolicyEpoch,
+		}
+	}
 
 	resp := baseExtAuthzResponse(req, decision, now)
 	if resp.Verdict == extauthz.VerdictAllow {
@@ -112,6 +124,19 @@ func authorizeExtAuthzRequest(ctx context.Context, svc *Services, req extauthz.A
 		resp.EscalationReceiptRef = "escalation-receipt:" + resp.KernelVerdictRef
 	}
 	return signExtAuthzResponse(resp, svc)
+}
+
+func extAuthzPolicyBindingMismatch(req extauthz.AuthorizationRequest, decision *contracts.DecisionRecord) (string, bool) {
+	if decision == nil {
+		return "", false
+	}
+	if decision.PolicyContentHash != "" && decision.PolicyContentHash != req.PolicyHash {
+		return fmt.Sprintf("policy hash mismatch: request=%s evaluated=%s", req.PolicyHash, decision.PolicyContentHash), true
+	}
+	if decision.PolicyEpoch != "" && decision.PolicyEpoch != req.PolicyEpoch {
+		return fmt.Sprintf("policy epoch mismatch: request=%s evaluated=%s", req.PolicyEpoch, decision.PolicyEpoch), true
+	}
+	return "", false
 }
 
 func baseExtAuthzResponse(req extauthz.AuthorizationRequest, decision *contracts.DecisionRecord, now time.Time) extauthz.AuthorizationResponse {

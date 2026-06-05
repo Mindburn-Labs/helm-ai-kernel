@@ -14,6 +14,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
+	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	otelapi "go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -114,6 +115,99 @@ func TestExtAuthzAuthorizeRouteSignsDenyWithoutPermit(t *testing.T) {
 	}
 }
 
+func TestExtAuthzAuthorizeRouteAllowsMatchingPolicySnapshot(t *testing.T) {
+	t.Setenv(serviceAPIKeyEnv, "route-secret")
+	t.Setenv("HELM_EXTAUTHZ_TRUST_ROOT_ID", "kernel-test-root")
+
+	signer, err := helmcrypto.NewEd25519Signer("extauthz-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reqFixture := extAuthzRouteFixture("req-snapshot-allow", "tenant-a", "42")
+	reqFixture.PolicyHash = hashURNForExtAuthzRouteTest("snapshot-policy")
+	svc := extAuthzSnapshotService(t, signer, reqFixture.PolicyHash, 42)
+	mux := http.NewServeMux()
+	registerExtAuthzRoutes(mux, svc)
+
+	body := mustJSONExtAuthzRoute(t, reqFixture)
+	req := httptest.NewRequest(http.MethodPost, extauthzAuthorizePath, bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer route-secret")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp extauthz.AuthorizationResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Verdict != extauthz.VerdictAllow {
+		t.Fatalf("verdict=%s body=%s", resp.Verdict, rec.Body.String())
+	}
+	if resp.PolicyHash != reqFixture.PolicyHash || resp.PolicyEpoch != reqFixture.PolicyEpoch {
+		t.Fatalf("response lost request policy binding: %+v", resp)
+	}
+	store := extauthz.TrustStore{Keys: map[string]extauthz.TrustedKey{
+		resp.SigningKeyRef: {TrustRootID: resp.KernelTrustRootID, PublicKey: signer.PublicKeyBytes(), Enabled: true},
+	}}
+	if err := extauthz.VerifyResponse(reqFixture, resp, store, extauthz.VerifyOptions{
+		ExpectedKernelTrustRootID: "kernel-test-root",
+		ExpectedPolicyEpoch:       "42",
+		MaxVerdictTTL:             time.Minute,
+		MaxPermitTTL:              time.Minute,
+	}, time.Now().UTC()); err != nil {
+		t.Fatalf("verify response: %v\nresponse=%+v", err, resp)
+	}
+}
+
+func TestExtAuthzAuthorizeRouteDeniesPolicySnapshotMismatch(t *testing.T) {
+	t.Setenv(serviceAPIKeyEnv, "route-secret")
+
+	signer, err := helmcrypto.NewEd25519Signer("extauthz-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	activePolicyHash := hashURNForExtAuthzRouteTest("active-snapshot-policy")
+	reqFixture := extAuthzRouteFixture("req-snapshot-mismatch", "tenant-a", "41")
+	reqFixture.PolicyHash = hashURNForExtAuthzRouteTest("stale-request-policy")
+	svc := extAuthzSnapshotService(t, signer, activePolicyHash, 42)
+	mux := http.NewServeMux()
+	registerExtAuthzRoutes(mux, svc)
+
+	body := mustJSONExtAuthzRoute(t, reqFixture)
+	req := httptest.NewRequest(http.MethodPost, extauthzAuthorizePath, bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer route-secret")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp extauthz.AuthorizationResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Verdict != extauthz.VerdictDeny || resp.ReasonCode != extauthzPolicyBindingMismatchReason {
+		t.Fatalf("expected policy binding mismatch deny, got %+v", resp)
+	}
+	if resp.EffectPermitRef != "" || resp.PermitNonce != "" || resp.ProofSessionRef != "" {
+		t.Fatalf("mismatch deny carried permit/proof refs: %+v", resp)
+	}
+	if resp.PolicyHash != reqFixture.PolicyHash || resp.PolicyEpoch != reqFixture.PolicyEpoch {
+		t.Fatalf("response should preserve request echo for verification: %+v", resp)
+	}
+	store := extauthz.TrustStore{Keys: map[string]extauthz.TrustedKey{
+		resp.SigningKeyRef: {TrustRootID: resp.KernelTrustRootID, PublicKey: signer.PublicKeyBytes(), Enabled: true},
+	}}
+	if err := extauthz.VerifyResponse(reqFixture, resp, store, extauthz.VerifyOptions{
+		MaxVerdictTTL: time.Minute,
+		MaxPermitTTL:  time.Minute,
+	}, time.Now().UTC()); err != nil {
+		t.Fatalf("verify mismatch deny response: %v\nresponse=%+v", err, resp)
+	}
+}
+
 func TestExtAuthzAuthorizeRouteRequiresServiceAuth(t *testing.T) {
 	t.Setenv(serviceAPIKeyEnv, "route-secret")
 	mux := http.NewServeMux()
@@ -167,6 +261,26 @@ func TestExtAuthzAuthorizeRouteExtractsTraceparent(t *testing.T) {
 		}
 	}
 	t.Fatalf("no Kernel span carried incoming trace id; spans=%+v", exporter.GetSpans())
+}
+
+func extAuthzSnapshotService(t *testing.T, signer *helmcrypto.Ed25519Signer, policyHash string, policyEpoch uint64) *Services {
+	t.Helper()
+	scope := policyreconcile.PolicyScope{TenantID: "tenant-a", WorkspaceID: "workspace-a"}
+	store := policyreconcile.NewAtomicSnapshotStore()
+	if err := store.Swap(scope, &policyreconcile.EffectivePolicySnapshot{
+		TenantID:    scope.TenantID,
+		WorkspaceID: scope.WorkspaceID,
+		PolicyEpoch: policyEpoch,
+		PolicyHash:  policyHash,
+		Validation:  policyreconcile.ValidationStatus{Status: policyreconcile.StatusActive},
+		Graph:       allowGraphForExtAuthzTest("local.echo"),
+	}); err != nil {
+		t.Fatalf("swap policy snapshot: %v", err)
+	}
+	return &Services{
+		Guardian:      guardian.NewGuardian(signer, prg.NewGraph(), artifacts.NewRegistry(nil, nil), guardian.WithPolicySnapshots(store, scope)),
+		ReceiptSigner: signer,
+	}
 }
 
 func allowGraphForExtAuthzTest(tool string) *prg.Graph {

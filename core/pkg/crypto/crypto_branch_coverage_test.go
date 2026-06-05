@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,6 +69,47 @@ func TestAuditLogErrorAndMalformedEntryBranches(t *testing.T) {
 	memoryLog := NewMemoryAuditLog()
 	if err := memoryLog.Append("actor", "bad-payload", map[string]any{"bad": func() {}}); err == nil {
 		t.Fatal("memory audit log should reject non-canonical payload")
+	}
+}
+
+func TestFileAuditLogEntriesReadsLargeJSONLRecords(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "large-audit.jsonl")
+	records := []AuditEvent{
+		{
+			Timestamp: "2026-06-05T00:00:00Z",
+			Actor:     "guardian",
+			Action:    "DECISION_MADE",
+			Payload:   map[string]any{"blob": strings.Repeat("x", 70*1024)},
+			Hash:      "hash-large",
+		},
+		{
+			Timestamp: "2026-06-05T00:00:01Z",
+			Actor:     "guardian",
+			Action:    "FOLLOWUP",
+			Payload:   map[string]any{"ok": true},
+			Hash:      "hash-followup",
+		},
+	}
+	var data []byte
+	for _, record := range records {
+		line, err := json.Marshal(record)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data = append(data, line...)
+		data = append(data, '\n')
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	log := &FileAuditLog{filePath: path}
+	entries := log.Entries()
+	if len(entries) != 2 {
+		t.Fatalf("large JSONL entries = %d, want 2", len(entries))
+	}
+	if entries[0].Action != "DECISION_MADE" || entries[1].Action != "FOLLOWUP" {
+		t.Fatalf("unexpected entries: %#v", entries)
 	}
 }
 

@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/siem/internal/safeurl"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -46,6 +47,8 @@ type Config struct {
 	Env string
 	// HTTPClient is optional; defaults to a 10s-timeout client.
 	HTTPClient *http.Client
+	// AllowInsecureHTTP permits loopback http:// collectors for tests/dev only.
+	AllowInsecureHTTP bool
 }
 
 // Exporter implements sdktrace.SpanExporter for Datadog Logs.
@@ -67,6 +70,9 @@ func New(cfg Config) (*Exporter, error) {
 			return nil, errors.New("datadog_logs: Site or URL is required")
 		}
 		url = "https://http-intake.logs." + strings.TrimPrefix(cfg.Site, "https://") + "/api/v2/logs"
+	}
+	if err := safeurl.RequireHTTPS(url, "datadog_logs", cfg.AllowInsecureHTTP); err != nil {
+		return nil, err
 	}
 	if cfg.Service == "" {
 		cfg.Service = "helm-governance"

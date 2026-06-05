@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/siem/internal/safeurl"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -42,6 +43,8 @@ type Config struct {
 	Host string
 	// HTTPClient is optional; defaults to a 10s-timeout client.
 	HTTPClient *http.Client
+	// AllowInsecureHTTP permits loopback http:// collectors for tests/dev only.
+	AllowInsecureHTTP bool
 }
 
 // Exporter implements sdktrace.SpanExporter for Splunk HEC.
@@ -58,6 +61,9 @@ func New(cfg Config) (*Exporter, error) {
 	}
 	if cfg.Token == "" {
 		return nil, errors.New("splunk_hec: Token is required")
+	}
+	if err := safeurl.RequireHTTPS(cfg.URL, "splunk_hec", cfg.AllowInsecureHTTP); err != nil {
+		return nil, err
 	}
 	if cfg.Source == "" {
 		cfg.Source = "helm-ai-kernel"

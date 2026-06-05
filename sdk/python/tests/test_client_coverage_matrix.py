@@ -255,6 +255,37 @@ def test_client_endpoint_matrix(method_name: str, invoke: Any, response: Any, ex
         assert result == b"bundle"
 
 
+def test_list_sessions_uses_params_for_query_values() -> None:
+    fake = FakeHTTPClient()
+    fake.queue([])
+    with patch("helm_sdk.client.httpx.Client", return_value=fake):
+        client = HelmClient(base_url="http://h")
+        client.list_sessions(limit=10, offset=5)
+
+    assert fake.calls == [("GET", "/api/v1/proofgraph/sessions", {"params": {"limit": 10, "offset": 5}})]
+
+
+def test_path_segments_are_encoded_as_single_segments() -> None:
+    fake = FakeHTTPClient()
+    fake.queue(model_payload("Receipt"))
+    with patch("helm_sdk.client.httpx.Client", return_value=fake):
+        client = HelmClient(base_url="http://h")
+        client.get_receipt("sha256:abc+def@key")
+
+    assert fake.calls[0][1] == "/api/v1/proofgraph/receipts/sha256%3Aabc%2Bdef%40key"
+
+
+@pytest.mark.parametrize("bad_id", ["../other", "a%2fb", "id?debug=true", "id&limit=999", "", "..", "space id"])
+def test_path_segment_inputs_reject_scope_and_query_injection(bad_id: str) -> None:
+    fake = FakeHTTPClient()
+    with patch("helm_sdk.client.httpx.Client", return_value=fake):
+        client = HelmClient(base_url="http://h")
+        with pytest.raises(ValueError):
+            client.get_evidence_envelope_manifest(bad_id)
+
+    assert fake.calls == []
+
+
 def test_session_and_receipt_lists_skip_none_items() -> None:
     fake = FakeHTTPClient()
     fake.queue([model_payload("Session"), None])

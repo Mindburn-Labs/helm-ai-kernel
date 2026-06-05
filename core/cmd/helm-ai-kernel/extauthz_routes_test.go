@@ -15,6 +15,10 @@ import (
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
+	otelapi "go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestExtAuthzAuthorizeRouteSignsAllowPermit(t *testing.T) {
@@ -120,6 +124,49 @@ func TestExtAuthzAuthorizeRouteRequiresServiceAuth(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
+}
+
+func TestExtAuthzAuthorizeRouteExtractsTraceparent(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	previous := otelapi.GetTracerProvider()
+	otelapi.SetTracerProvider(provider)
+	defer otelapi.SetTracerProvider(previous)
+
+	t.Setenv(serviceAPIKeyEnv, "route-secret")
+	t.Setenv("HELM_EXTAUTHZ_TRUST_ROOT_ID", "kernel-test-root")
+
+	signer, err := helmcrypto.NewEd25519Signer("extauthz-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := &Services{
+		Guardian:      guardian.NewGuardian(signer, allowGraphForExtAuthzTest("local.echo"), artifacts.NewRegistry(nil, nil)),
+		ReceiptSigner: signer,
+	}
+	mux := http.NewServeMux()
+	registerExtAuthzRoutes(mux, svc)
+
+	body := mustJSONExtAuthzRoute(t, extAuthzRouteFixture("req-trace", "tenant-a", "epoch-1"))
+	req := httptest.NewRequest(http.MethodPost, extauthzAuthorizePath, bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer route-secret")
+	req.Header.Set("traceparent", "00-0102030405060708090a0b0c0d0e0f10-0000000000000001-01")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	wantTraceID, err := trace.TraceIDFromHex("0102030405060708090a0b0c0d0e0f10")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, span := range exporter.GetSpans() {
+		if span.SpanContext.TraceID() == wantTraceID {
+			return
+		}
+	}
+	t.Fatalf("no Kernel span carried incoming trace id; spans=%+v", exporter.GetSpans())
 }
 
 func allowGraphForExtAuthzTest(tool string) *prg.Graph {

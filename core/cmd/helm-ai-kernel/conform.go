@@ -116,8 +116,14 @@ func runConform(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	g1Verifier, err := conformG1ReceiptVerifierFromEnv()
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: invalid G1 receipt verifier: %v\n", err)
+		return 2
+	}
+
 	// Build engine with all gates
-	engine := gates.DefaultEngine()
+	engine := gates.DefaultEngineWithOptions(gates.RegistryOptions{G1ReceiptVerifier: g1Verifier})
 
 	// Run conformance
 	opts := &conform.RunOptions{
@@ -213,6 +219,30 @@ func runConform(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func conformG1ReceiptVerifierFromEnv() (func(data []byte, sig string) error, error) {
+	keyHex := strings.TrimSpace(os.Getenv("HELM_CONFORM_RECEIPT_PUBLIC_KEY_HEX"))
+	if keyHex == "" {
+		return nil, nil
+	}
+	publicKey, err := hex.DecodeString(keyHex)
+	if err != nil {
+		return nil, fmt.Errorf("HELM_CONFORM_RECEIPT_PUBLIC_KEY_HEX must be hex encoded: %w", err)
+	}
+	if len(publicKey) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("HELM_CONFORM_RECEIPT_PUBLIC_KEY_HEX must be a %d-byte Ed25519 public key encoded as hex", ed25519.PublicKeySize)
+	}
+	return func(data []byte, sig string) error {
+		sigBytes, err := hex.DecodeString(strings.TrimPrefix(sig, "hex:"))
+		if err != nil {
+			return fmt.Errorf("receipt signature must be hex encoded: %w", err)
+		}
+		if !ed25519.Verify(ed25519.PublicKey(publicKey), data, sigBytes) {
+			return fmt.Errorf("receipt signature verification failed")
+		}
+		return nil
+	}, nil
 }
 
 type externalFailureVector struct {

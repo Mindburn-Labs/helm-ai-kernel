@@ -127,7 +127,7 @@ func (a *BrowserSplitAdapter) Intercept(ctx context.Context, req *AdaptedRequest
 			ToolName:    req.ToolName,
 			Arguments:   req.Arguments,
 			PlannerRef:  meta["browser.planner_ref"],
-			SideEffect:  boolMeta(meta, "browser.side_effect"),
+			SideEffect:  boolMeta(meta, "browser.side_effect") || browserToolIsSideEffecting(req.ToolName),
 			Destination: firstNonEmpty(meta["browser.destination"], stringArg(req.Arguments, "destination")),
 		},
 	}
@@ -143,6 +143,7 @@ func (a *BrowserSplitAdapter) InterceptBrowserAction(ctx context.Context, req *B
 	if req.Plan.ToolName == "" {
 		return nil, fmt.Errorf("runtimeadapters/browser_split: missing tool name")
 	}
+	req.Plan.SideEffect = req.Plan.SideEffect || browserToolIsSideEffecting(req.Plan.ToolName)
 
 	inputHash, err := canonicalize.CanonicalHash(req)
 	if err != nil {
@@ -302,6 +303,25 @@ func boolMeta(meta map[string]string, key string) bool {
 		return false
 	}
 	return value
+}
+
+func browserToolIsSideEffecting(toolName string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(toolName))
+	switch normalized {
+	case "browser.screenshot",
+		"browser.snapshot",
+		"browser.inspect",
+		"browser.read",
+		"browser.get_text",
+		"browser.gettext",
+		"browser.extract",
+		"browser.current_url",
+		"browser.url",
+		"browser.title":
+		return false
+	default:
+		return true
+	}
 }
 
 func csvMeta(meta map[string]string, key string) []string {

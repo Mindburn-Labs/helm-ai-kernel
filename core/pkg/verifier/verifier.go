@@ -75,6 +75,7 @@ type VerifyOptions struct {
 	ConfigPath         string
 	StorageReceiptPath string
 	StorageObjectPath  string
+	ExternalHostKeyHex string
 	Now                time.Time
 }
 
@@ -135,7 +136,7 @@ func VerifyBundleWithOptions(bundlePath string, opts VerifyOptions) (*VerifyRepo
 	report.addCheck(checkReplayDeterminism(bundlePath))
 
 	// 9. Optional external host evidence verification.
-	hostEvidence := externalreceipt.VerifyBundle(bundlePath)
+	hostEvidence := externalreceipt.VerifyBundleWithOptions(bundlePath, externalreceipt.VerifyOptions{PublicKeyHex: opts.ExternalHostKeyHex})
 	if hostEvidence.Found {
 		for _, check := range hostEvidence.Checks {
 			report.addCheck(CheckResult{

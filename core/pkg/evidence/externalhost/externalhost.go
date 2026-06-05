@@ -106,7 +106,7 @@ func VerifyChain(chain *contracts.ExternalReceiptChain, opts VerifyOptions) (*Ve
 	report.add(CheckResult{Name: "external_host:receipts", Pass: true, Detail: fmt.Sprintf("%d host receipts", len(chain.Receipts))})
 
 	keyHex := strings.TrimSpace(opts.PublicKeyHex)
-	if keyHex == "" {
+	if keyHex == "" && !opts.RequireKey {
 		keyHex = firstChainPublicKey(chain)
 	}
 	if keyHex == "" && opts.RequireKey {

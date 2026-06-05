@@ -51,6 +51,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		profile          string
 		configPath       string
 		storageReceipt   string
+		externalHostKey  string
 		requireEIDAS     bool
 		eidasMaxAgeHours int
 		requireTEE       string
@@ -64,6 +65,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&profile, "profile", "", "Evidence trust profile: dev-local, team, customer, high-assurance (default: active config or dev-local)")
 	cmd.StringVar(&configPath, "config", "", "Evidence trust config path (for example helm/helm.yaml)")
 	cmd.StringVar(&storageReceipt, "storage-receipt", "", "Path to S3 Object Lock storage receipt for customer/high-assurance verification")
+	cmd.StringVar(&externalHostKey, "external-host-public-key", strings.TrimSpace(os.Getenv("HELM_EXTERNAL_HOST_PUBLIC_KEY_HEX")), "Trusted Ed25519 public key hex for external host evidence chains")
 	cmd.BoolVar(&requireEIDAS, "require-eidas", false, "Require every receipt to carry an eIDAS-qualified RFC 3161 anchor")
 	cmd.IntVar(&eidasMaxAgeHours, "eidas-max-age-hours", 24, "Maximum age in hours of an anchor's integrated_time before --require-eidas treats it as stale")
 	cmd.StringVar(&requireTEE, "require-tee", "", "Require every receipt to carry a TEE attestation; one of sevsnp|tdx|nitro|any (empty = no requirement)")
@@ -122,6 +124,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		ConfigPath:         configPath,
 		StorageReceiptPath: storageReceipt,
 		StorageObjectPath:  storageObjectPath,
+		ExternalHostKeyHex: externalHostKey,
 	})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: verification failed: %v\n", err)

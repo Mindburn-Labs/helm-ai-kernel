@@ -2,7 +2,6 @@ package trust
 
 import (
 	"crypto"
-	"crypto/ed25519"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,17 +11,10 @@ import (
 )
 
 func TestDeadcodeCoverage_TUFClient_UpdateAndDelegation(t *testing.T) {
-	pub := ed25519.NewKeyFromSeed(make([]byte, 32)).Public()
+	pub, _ := tufTestRootKey()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		role := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/"), ".json")
-		_ = json.NewEncoder(w).Encode(SignedRole{
-			Signed: mustMarshal(RoleMetadata{
-				Type:    role,
-				Version: 1,
-				Expires: time.Now().Add(time.Hour),
-			}),
-			Signatures: []TUFSignature{{KeyID: "root", Signature: "sig"}},
-		})
+		_ = json.NewEncoder(w).Encode(signedRoleForTUFTest(role, 1, time.Now().Add(time.Hour), nil))
 	}))
 	defer server.Close()
 

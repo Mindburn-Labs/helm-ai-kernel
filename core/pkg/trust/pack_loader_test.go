@@ -454,6 +454,11 @@ func newPackLoaderTUFClient(t *testing.T, packName, packHash string, delegations
 	t.Helper()
 
 	priv := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))
+	pub := priv.Public()
+	keyID, err := ComputeKeyID(pub)
+	if err != nil {
+		t.Fatalf("ComputeKeyID: %v", err)
+	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		role := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/"), ".json")
 		var signed json.RawMessage
@@ -485,7 +490,7 @@ func newPackLoaderTUFClient(t *testing.T, packName, packHash string, delegations
 		}
 		err := json.NewEncoder(w).Encode(SignedRole{
 			Signed:     signed,
-			Signatures: []TUFSignature{{KeyID: "root", Signature: signPackLoaderTUFRole(signed, priv)}},
+			Signatures: []TUFSignature{{KeyID: keyID, Signature: signPackLoaderTUFRole(signed, priv)}},
 		})
 		if err != nil {
 			t.Errorf("Encode %s metadata: %v", role, err)
@@ -493,7 +498,6 @@ func newPackLoaderTUFClient(t *testing.T, packName, packHash string, delegations
 	}))
 	t.Cleanup(server.Close)
 
-	pub := priv.Public()
 	client, err := NewTUFClient(TUFClientConfig{
 		RemoteURL: server.URL,
 		RootKeys:  []crypto.PublicKey{pub},

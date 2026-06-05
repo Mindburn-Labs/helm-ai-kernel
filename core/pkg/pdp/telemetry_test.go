@@ -55,11 +55,11 @@ func TestTelemetryPDP_ShadowMode(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	// Should be allowed in shadow mode!
-	assert.True(t, resp.Allow)
+	// Shadow mode must be observe-only; enforcement denies stay denied.
+	assert.False(t, resp.Allow)
 	assert.Equal(t, "PDP_DENY", resp.ReasonCode) // Reason code is preserved
 
-	// Verify decision hash was recomputed successfully
+	// Verify decision hash still binds the original deny decision.
 	expectedHash, _ := ComputeDecisionHash(resp)
 	assert.Equal(t, expectedHash, resp.DecisionHash)
 

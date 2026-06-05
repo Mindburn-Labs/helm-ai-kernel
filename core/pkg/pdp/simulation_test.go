@@ -120,7 +120,6 @@ func TestRunEnterpriseSimulation(t *testing.T) {
 					continue
 				}
 
-				// In Shadow Mode, resp.Allow is true. We check original reason code.
 				if resp.ReasonCode == "" {
 					localAllow++
 				} else if resp.ReasonCode == "APPROVAL_REQUIRED" {
@@ -160,7 +159,7 @@ func TestRunEnterpriseSimulation(t *testing.T) {
 	escalatePercent := float64(escalateShadowCount) * 100.0 / float64(totalProcessed)
 
 	fmt.Printf("  - ALLOW           : %d (%.3f%%) [Permitted immediately]\n", allowCount, allowPercent)
-	fmt.Printf("  - ESCALATE_SHADOW : %d (%.3f%%) [Dry-run: Allowed, flagged for Approval]\n", escalateShadowCount, escalatePercent)
-	fmt.Printf("  - DENY_SHADOW     : %d (%.3f%%) [Dry-run: Allowed, flagged as Violation]\n", denyShadowCount, denyPercent)
+	fmt.Printf("  - ESCALATE_SHADOW : %d (%.3f%%) [Dry-run: observed escalation, enforcement still denies]\n", escalateShadowCount, escalatePercent)
+	fmt.Printf("  - DENY_SHADOW     : %d (%.3f%%) [Dry-run: observed violation, enforcement still denies]\n", denyShadowCount, denyPercent)
 	fmt.Println("==================================================")
 }

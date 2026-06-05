@@ -26,7 +26,7 @@ func initMetrics() {
 	})
 }
 
-// TelemetryPDP wraps any PolicyDecisionPoint to collect metrics and optionally execute in Shadow Mode.
+// TelemetryPDP wraps any PolicyDecisionPoint to collect metrics.
 type TelemetryPDP struct {
 	inner      PolicyDecisionPoint
 	shadowMode bool
@@ -41,7 +41,7 @@ func NewTelemetryPDP(inner PolicyDecisionPoint, shadowMode bool) *TelemetryPDP {
 	}
 }
 
-// Evaluate runs the inner policy evaluation, records metrics, and applies Shadow Mode transformation if active.
+// Evaluate runs the inner policy evaluation and records metrics.
 func (t *TelemetryPDP) Evaluate(ctx context.Context, req *DecisionRequest) (*DecisionResponse, error) {
 	resp, err := t.inner.Evaluate(ctx, req)
 	if err != nil {
@@ -62,14 +62,9 @@ func (t *TelemetryPDP) Evaluate(ctx context.Context, req *DecisionRequest) (*Dec
 
 	metricVerdict := actualVerdict
 	if t.shadowMode && !resp.Allow {
-		// In Shadow Mode, we log it as *_shadow but permit the operation (Allow = true)
+		// Shadow mode is observe-only: record shadow labels without changing
+		// the enforcement decision or its receipt-bound hash.
 		metricVerdict = strings.ToLower(actualVerdict) + "_shadow"
-		resp.Allow = true
-
-		// Update the decision hash because we altered the 'Allow' field
-		if err := attachDecisionHash(resp); err != nil {
-			return denyForHashFailure(resp.PolicyRef, err)
-		}
 	}
 
 	if decisionsCounter != nil {

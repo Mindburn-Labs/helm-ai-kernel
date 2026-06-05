@@ -25,18 +25,7 @@ func (a *GuardianAdapter) EvaluateStep(ctx context.Context, step *contracts.Plan
 		Principal: actor,
 		Action:    step.EffectType,
 		Resource:  step.ID,
-		Context: map[string]interface{}{
-			"step_id":           step.ID,
-			"description":       step.Description,
-			"effect_type":       step.EffectType,
-			"requested_backend": step.RequestedBackend,
-			"requested_profile": step.RequestedProfile,
-		},
-	}
-
-	// Copy step params into context for policy evaluation.
-	for k, v := range step.Params {
-		req.Context["param."+k] = v
+		Context:   decisionContextForStep(step),
 	}
 
 	decision, err := a.guardian.EvaluateDecision(ctx, req)
@@ -55,7 +44,7 @@ func (a *GuardianAdapter) IssueIntent(ctx context.Context, decision *contracts.D
 	effect := &contracts.Effect{
 		EffectID:   "eff-" + step.ID,
 		EffectType: step.EffectType,
-		Params:     step.Params,
+		Params:     decisionContextForStep(step),
 	}
 
 	intent, err := a.guardian.IssueExecutionIntent(ctx, decision, effect)
@@ -63,4 +52,18 @@ func (a *GuardianAdapter) IssueIntent(ctx context.Context, decision *contracts.D
 		return nil, fmt.Errorf("guardian issue intent: %w", err)
 	}
 	return intent, nil
+}
+
+func decisionContextForStep(step *contracts.PlanStep) map[string]interface{} {
+	ctx := map[string]interface{}{
+		"step_id":           step.ID,
+		"description":       step.Description,
+		"effect_type":       step.EffectType,
+		"requested_backend": step.RequestedBackend,
+		"requested_profile": step.RequestedProfile,
+	}
+	for k, v := range step.Params {
+		ctx["param."+k] = v
+	}
+	return ctx
 }

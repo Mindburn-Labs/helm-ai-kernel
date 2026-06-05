@@ -899,8 +899,12 @@ func TestCoverageGuardianHelperAndIntentEdges(t *testing.T) {
 		t.Fatalf("expected audited ZeroID deny, decision=%+v audit=%+v err=%v", decision, zeroIDAuditLog.Entries, err)
 	}
 
-	allowDecision := &contracts.DecisionRecord{ID: "dec-intent", Verdict: string(contracts.VerdictAllow), Signature: "sig"}
 	allowEffect := &contracts.Effect{EffectID: "effect-intent", EffectType: "EXECUTE_TOOL", Params: map[string]any{"tool_name": "deploy"}}
+	allowDigest, err := canonicalEffectDigest(allowEffect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowDecision := &contracts.DecisionRecord{ID: "dec-intent", Verdict: string(contracts.VerdictAllow), Signature: "sig", EffectDigest: allowDigest}
 	if _, err := NewGuardian(&guardianCoverageSignOnly{}, nil, nil, WithClock(clock)).IssueExecutionIntent(ctx, allowDecision, allowEffect); err == nil || !strings.Contains(err.Error(), "VerifyDecision") {
 		t.Fatalf("expected missing verifier error, got %v", err)
 	}
@@ -944,9 +948,45 @@ func TestCoverageGuardianHelperAndIntentEdges(t *testing.T) {
 			"safe_deprecation_scope_hash":            "sha256:scope",
 		},
 	}
-	intent, err := NewGuardian(&testSigner{}, nil, nil, WithClock(clock)).IssueExecutionIntent(ctx, safeDepDecision, &contracts.Effect{EffectID: "effect-safedep", EffectType: "CUSTOM_TOOL"})
+	safeDepEffect := &contracts.Effect{EffectID: "effect-safedep", EffectType: "CUSTOM_TOOL"}
+	safeDepDigest, err := canonicalEffectDigest(safeDepEffect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	safeDepDecision.EffectDigest = safeDepDigest
+	intent, err := NewGuardian(&testSigner{}, nil, nil, WithClock(clock)).IssueExecutionIntent(ctx, safeDepDecision, safeDepEffect)
 	if err != nil || intent.AllowedTool != "CUSTOM_TOOL" || intent.EmergencyActivationID != "act-1" || intent.EmergencyDelegationSessionID != "delegation-1" || intent.EmergencyScopeHash != "sha256:scope" {
 		t.Fatalf("intent did not propagate safe-dep fields: intent=%+v err=%v", intent, err)
+	}
+}
+
+func TestIssueExecutionIntentRejectsEffectDigestMismatch(t *testing.T) {
+	ctx := context.Background()
+	clock := newFixedClock()
+	approvedEffect := &contracts.Effect{
+		EffectID:   "effect-approved",
+		EffectType: "EXECUTE_TOOL",
+		Params:     map[string]any{"tool_name": "deploy", "target": "staging"},
+	}
+	approvedDigest, err := canonicalEffectDigest(approvedEffect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision := &contracts.DecisionRecord{
+		ID:           "dec-approved",
+		Verdict:      string(contracts.VerdictAllow),
+		Signature:    "sig",
+		EffectDigest: approvedDigest,
+	}
+	substitutedEffect := &contracts.Effect{
+		EffectID:   "effect-substituted",
+		EffectType: "EXECUTE_TOOL",
+		Params:     map[string]any{"tool_name": "deploy", "target": "production"},
+	}
+
+	_, err = NewGuardian(&testSigner{}, nil, nil, WithClock(clock)).IssueExecutionIntent(ctx, decision, substitutedEffect)
+	if err == nil || !strings.Contains(err.Error(), "effect digest mismatch") {
+		t.Fatalf("expected effect digest mismatch, got %v", err)
 	}
 }
 

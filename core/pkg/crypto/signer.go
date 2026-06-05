@@ -126,7 +126,7 @@ func (s *Ed25519Signer) SignDecision(d *contracts.DecisionRecord) error {
 }
 
 func (s *Ed25519Signer) SignIntent(i *contracts.AuthorizedExecutionIntent) error {
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool)
+	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
 	sig, err := s.Sign([]byte(payload))
 	if err != nil {
 		return err
@@ -160,7 +160,7 @@ func (s *Ed25519Signer) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bo
 	if i.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool)
+	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
 	return Verify(s.PublicKey(), i.Signature, []byte(payload))
 }
 

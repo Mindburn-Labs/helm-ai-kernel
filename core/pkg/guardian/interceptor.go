@@ -134,8 +134,10 @@ func (t *TemporalInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationC
 				}
 				effect.Params["tool_name"] = evalCtx.Request.Resource
 			}
-			effectBytes, _ := canonicalize.JCS(effect)
-			effectDigest := canonicalize.HashBytes(effectBytes)
+			effectDigest, err := canonicalEffectDigest(effect)
+			if err != nil {
+				return nil, fmt.Errorf("canonicalize effect digest: %w", err)
+			}
 
 			envFP := t.g.envFprint
 			if envFP == "" {

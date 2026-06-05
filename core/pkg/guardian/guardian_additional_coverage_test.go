@@ -344,13 +344,17 @@ func TestExt_IssueIntentRejectsEscalate(t *testing.T) {
 
 func TestExt_IssueIntentPropagatesTaint(t *testing.T) {
 	g := newMinimalGuardian()
-	dec := &contracts.DecisionRecord{ID: "dec-taint", Verdict: string(contracts.VerdictAllow), Signature: "sig"}
 	effect := &contracts.Effect{
 		EffectID:   "e-taint",
 		EffectType: "tool_call",
 		Params:     map[string]any{"tool_name": "safe_tool"},
 		Taint:      []string{"PII", contracts.TaintCredential},
 	}
+	digest, err := canonicalEffectDigest(effect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := &contracts.DecisionRecord{ID: "dec-taint", Verdict: string(contracts.VerdictAllow), Signature: "sig", EffectDigest: digest}
 	intent, err := g.IssueExecutionIntent(context.Background(), dec, effect)
 	if err != nil {
 		t.Fatalf("IssueExecutionIntent failed: %v", err)

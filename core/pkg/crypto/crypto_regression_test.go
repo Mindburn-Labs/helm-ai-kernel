@@ -46,7 +46,7 @@ func TestClosing_Ed25519_SignVerify_Intent(t *testing.T) {
 	}
 	for _, tool := range []string{"shell.exec", "file.read", "http.get", "db.query"} {
 		t.Run("tool_"+tool, func(t *testing.T) {
-			i := &contracts.AuthorizedExecutionIntent{ID: "i1", DecisionID: "d1", AllowedTool: tool}
+			i := &contracts.AuthorizedExecutionIntent{ID: "i1", DecisionID: "d1", AllowedTool: tool, EffectDigestHash: "sha256:effect-" + tool}
 			if err := signer.SignIntent(i); err != nil {
 				t.Fatal(err)
 			}
@@ -56,6 +56,14 @@ func TestClosing_Ed25519_SignVerify_Intent(t *testing.T) {
 			}
 			if !ok {
 				t.Fatal("expected valid signature")
+			}
+			i.EffectDigestHash = "sha256:tampered"
+			ok, err = signer.VerifyIntent(i)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ok {
+				t.Fatal("expected tampered effect digest to invalidate intent signature")
 			}
 		})
 	}

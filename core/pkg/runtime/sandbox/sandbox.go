@@ -3,6 +3,8 @@ package sandbox
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -31,6 +33,11 @@ type SandboxConfig struct {
 	NetworkEnabled   bool
 }
 
+// PackVerifier validates pack trust metadata before WASI execution.
+type PackVerifier interface {
+	ValidatePackLoad(packRef trust.PackRef) error
+}
+
 // InProcessSandbox is a developer-mode runner and does not provide process isolation.
 type InProcessSandbox struct{}
 
@@ -53,13 +60,22 @@ func (s *InProcessSandbox) Close(ctx context.Context) error {
 
 // WasiSandbox enforces strict confinement using WebAssembly (wazero).
 type WasiSandbox struct {
-	runtime  wazero.Runtime
-	artStore artifacts.Store
-	config   SandboxConfig
+	runtime      wazero.Runtime
+	artStore     artifacts.Store
+	config       SandboxConfig
+	packVerifier PackVerifier
 }
 
 // NewWasiSandbox creates a secure WASI sandbox.
 func NewWasiSandbox(ctx context.Context, artStore artifacts.Store, config SandboxConfig) (*WasiSandbox, error) {
+	return NewWasiSandboxWithVerifier(ctx, artStore, config, nil)
+}
+
+// NewWasiSandboxWithVerifier creates a secure WASI sandbox with pack trust verification.
+func NewWasiSandboxWithVerifier(ctx context.Context, artStore artifacts.Store, config SandboxConfig, verifier PackVerifier) (*WasiSandbox, error) {
+	if artStore == nil {
+		return nil, fmt.Errorf("artifact store is required")
+	}
 	rConfig := wazero.NewRuntimeConfig()
 	if config.MemoryLimitBytes > 0 {
 		pages := uint32(config.MemoryLimitBytes / 65536) // 64KB per page
@@ -74,9 +90,10 @@ func NewWasiSandbox(ctx context.Context, artStore artifacts.Store, config Sandbo
 		return nil, fmt.Errorf("failed to instantiate WASI: %w", err)
 	}
 	return &WasiSandbox{
-		runtime:  r,
-		artStore: artStore,
-		config:   config,
+		runtime:      r,
+		artStore:     artStore,
+		config:       config,
+		packVerifier: verifier,
 	}, nil
 }
 
@@ -84,9 +101,24 @@ func NewWasiSandbox(ctx context.Context, artStore artifacts.Store, config Sandbo
 const OutputMaxBytes = 1024 * 1024 // 1MB
 
 func (s *WasiSandbox) Run(ctx context.Context, packRef trust.PackRef, input []byte) ([]byte, error) {
+	if s.packVerifier == nil {
+		return nil, &SandboxError{
+			Code:    ErrPackTrustUnverified,
+			Message: "WASI pack execution requires a trusted PackLoader verifier",
+		}
+	}
+	if err := s.packVerifier.ValidatePackLoad(packRef); err != nil {
+		return nil, &SandboxError{
+			Code:    ErrPackTrustUnverified,
+			Message: fmt.Sprintf("pack trust verification failed: %v", err),
+		}
+	}
 	wasmBytes, err := s.artStore.Get(ctx, packRef.Hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load WASM blob %s: %w", packRef.Hash, err)
+	}
+	if err := verifyPackBytesHash(packRef.Hash, wasmBytes); err != nil {
+		return nil, err
 	}
 
 	execCtx := ctx
@@ -140,6 +172,31 @@ func (s *WasiSandbox) Run(ctx context.Context, packRef trust.PackRef, input []by
 	return stdout.Bytes(), nil
 }
 
+func verifyPackBytesHash(expected string, data []byte) error {
+	rawExpected := strings.TrimPrefix(expected, "sha256:")
+	if len(rawExpected) != sha256.Size*2 {
+		return &SandboxError{
+			Code:    ErrPackHashMismatch,
+			Message: fmt.Sprintf("invalid pack hash %q", expected),
+		}
+	}
+	if _, err := hex.DecodeString(rawExpected); err != nil {
+		return &SandboxError{
+			Code:    ErrPackHashMismatch,
+			Message: fmt.Sprintf("invalid pack hash %q", expected),
+		}
+	}
+	got := sha256.Sum256(data)
+	gotHex := hex.EncodeToString(got[:])
+	if gotHex != rawExpected {
+		return &SandboxError{
+			Code:    ErrPackHashMismatch,
+			Message: fmt.Sprintf("WASI blob hash mismatch: expected sha256:%s got sha256:%s", rawExpected, gotHex),
+		}
+	}
+	return nil
+}
+
 func (s *WasiSandbox) Close(ctx context.Context) error {
 	return s.runtime.Close(ctx)
 }
@@ -149,6 +206,8 @@ const (
 	ErrComputeTimeExhausted   = "ERR_COMPUTE_TIME_EXHAUSTED"
 	ErrComputeMemoryExhausted = "ERR_COMPUTE_MEMORY_EXHAUSTED"
 	ErrComputeOutputExhausted = "ERR_COMPUTE_OUTPUT_EXHAUSTED"
+	ErrPackTrustUnverified    = "ERR_PACK_TRUST_UNVERIFIED"
+	ErrPackHashMismatch       = "ERR_PACK_HASH_MISMATCH"
 )
 
 // SandboxError is a deterministic, typed error for sandbox limit violations.

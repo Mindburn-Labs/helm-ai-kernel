@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -136,3 +137,11 @@ func decodeSignature(sig string) ([]byte, error) {
 }
 
 // ComputeKeyID computes the TUF key ID from a public key.
+func ComputeKeyID(pubKey crypto.PublicKey) (string, error) {
+	der, err := x509.MarshalPKIXPublicKey(pubKey)
+	if err != nil {
+		return "", fmt.Errorf("marshal TUF public key: %w", err)
+	}
+	sum := sha256.Sum256(der)
+	return hex.EncodeToString(sum[:]), nil
+}

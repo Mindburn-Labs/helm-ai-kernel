@@ -360,8 +360,59 @@ func (c *TUFClient) fetchAndVerify(role TUFRole) (*SignedRole, error) {
 	if len(c.rootKeys) == 0 {
 		return nil, fmt.Errorf("no trusted root keys configured for %s metadata", role)
 	}
+	if err := c.verifyRoleSignatures(role, &signed); err != nil {
+		return nil, err
+	}
 
 	return &signed, nil
+}
+
+func (c *TUFClient) verifyRoleSignatures(role TUFRole, signed *SignedRole) error {
+	trustedKeys, err := c.trustedRootKeyMap()
+	if err != nil {
+		return err
+	}
+	threshold, err := c.signatureThresholdForRole(role)
+	if err != nil {
+		return err
+	}
+	if err := NewSignatureVerifier(trustedKeys).VerifySignatures(signed, threshold); err != nil {
+		return fmt.Errorf("%s metadata signature verification failed: %w", role, err)
+	}
+	return nil
+}
+
+func (c *TUFClient) trustedRootKeyMap() (map[string]crypto.PublicKey, error) {
+	if len(c.rootKeys) == 0 {
+		return nil, fmt.Errorf("no trusted root keys configured")
+	}
+	keys := make(map[string]crypto.PublicKey, len(c.rootKeys))
+	for i, key := range c.rootKeys {
+		keyID, err := ComputeKeyID(key)
+		if err != nil {
+			return nil, fmt.Errorf("trusted root key %d: %w", i, err)
+		}
+		keys[keyID] = key
+	}
+	return keys, nil
+}
+
+func (c *TUFClient) signatureThresholdForRole(role TUFRole) (int, error) {
+	if c.localMetadata == nil || c.localMetadata.Root == nil || len(c.localMetadata.Root.Signed) == 0 {
+		return 1, nil
+	}
+	var root RootMetadata
+	if err := json.Unmarshal(c.localMetadata.Root.Signed, &root); err != nil {
+		return 0, fmt.Errorf("parse trusted root metadata for %s threshold: %w", role, err)
+	}
+	if root.Roles == nil {
+		return 1, nil
+	}
+	roleInfo, ok := root.Roles[string(role)]
+	if !ok || roleInfo.Threshold <= 0 {
+		return 1, nil
+	}
+	return roleInfo.Threshold, nil
 }
 
 // checkFreshness verifies metadata has not expired.

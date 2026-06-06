@@ -175,6 +175,7 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 		cfg := e2b.DefaultConfig()
 		cfg.APIKey = apiKey
 		cfg.APIURL = apiURL
+		cfg.AllowInsecureLoopback = allowInsecureLoopbackSandboxAPI()
 		if compiled.ArtifactImage != "" {
 			cfg.TemplateID = compiled.ArtifactImage
 		}
@@ -235,6 +236,7 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 		cfg := daytona.DefaultConfig()
 		cfg.APIKey = apiKey
 		cfg.BaseURL = baseURL
+		cfg.AllowInsecureLoopback = allowInsecureLoopbackSandboxAPI()
 		if compiled.ArtifactImage != "" {
 			cfg.DefaultLanguage = compiled.ArtifactImage
 		}
@@ -599,6 +601,15 @@ func firstEnvValue(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func allowInsecureLoopbackSandboxAPI() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_ALLOW_INSECURE_LOOPBACK_API"))) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
 }
 
 func cloudResourceName(compiled plan.LaunchPlan) string {

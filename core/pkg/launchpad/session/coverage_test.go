@@ -230,12 +230,20 @@ func TestCoverageHealthcheckRunnerBranches(t *testing.T) {
 	if _, err := runner.Run(p, RuntimeStartResult{}, ExecuteOptions{}); err == nil {
 		t.Fatal("expected missing runtime refs error")
 	}
-	cloud, err := runner.Run(p, RuntimeStartResult{ContainerID: "cloud-1", SandboxGrantRef: "grant", Runtime: "e2b"}, ExecuteOptions{})
+	cloudNoCheck := p
+	cloudNoCheck.Healthchecks = nil
+	if _, err := runner.Run(cloudNoCheck, RuntimeStartResult{ContainerID: "cloud-1", SandboxGrantRef: "grant", Runtime: "e2b"}, ExecuteOptions{}); err == nil {
+		t.Fatal("expected cloud runtime without healthcheck spec to fail")
+	}
+	if _, err := runner.Run(p, RuntimeStartResult{ContainerID: "cloud-1", SandboxGrantRef: "grant", Runtime: "e2b"}, ExecuteOptions{}); err == nil {
+		t.Fatal("expected cloud command healthcheck without remote command runner to fail")
+	}
+	cloudDryRun, err := runner.Run(p, RuntimeStartResult{ContainerID: "cloud-1", SandboxGrantRef: "grant", Runtime: "e2b"}, ExecuteOptions{RuntimeDryRun: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cloud.Type != "cloud-status" || cloud.Status != "passed" {
-		t.Fatalf("cloud healthcheck mismatch: %#v", cloud)
+	if cloudDryRun.Type != "command" || cloudDryRun.Status != "dry-run-passed" {
+		t.Fatalf("cloud dry-run healthcheck mismatch: %#v", cloudDryRun)
 	}
 	noCheck := p
 	noCheck.Healthchecks = nil
@@ -243,9 +251,31 @@ func TestCoverageHealthcheckRunnerBranches(t *testing.T) {
 		t.Fatal("expected missing healthcheck spec error")
 	}
 	unsupported := p
-	unsupported.Healthchecks = []registry.HealthcheckSpec{{Type: "http", URL: "http://127.0.0.1/"}}
+	unsupported.Healthchecks = []registry.HealthcheckSpec{{Type: "tcp", URL: "127.0.0.1:80"}}
 	if _, err := runner.Run(unsupported, RuntimeStartResult{ContainerID: "c", SandboxGrantRef: "grant", Runtime: "local-container"}, ExecuteOptions{}); err == nil {
 		t.Fatal("expected unsupported healthcheck type error")
+	}
+	httpProbe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer httpProbe.Close()
+	httpPlan := p
+	httpPlan.Healthchecks = []registry.HealthcheckSpec{{Type: "http", URL: httpProbe.URL}}
+	httpResult, err := runner.Run(httpPlan, RuntimeStartResult{ContainerID: "cloud-1", SandboxGrantRef: "grant", Runtime: "e2b"}, ExecuteOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if httpResult.Type != "http" || httpResult.Status != "passed" || httpResult.Metadata["status_code"] != http.StatusNoContent {
+		t.Fatalf("http healthcheck mismatch: %#v", httpResult)
+	}
+	failingHTTPProbe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "starting", http.StatusServiceUnavailable)
+	}))
+	defer failingHTTPProbe.Close()
+	failingHTTPPlan := p
+	failingHTTPPlan.Healthchecks = []registry.HealthcheckSpec{{Type: "http", URL: failingHTTPProbe.URL}}
+	if _, err := runner.Run(failingHTTPPlan, RuntimeStartResult{ContainerID: "cloud-1", SandboxGrantRef: "grant", Runtime: "e2b"}, ExecuteOptions{}); err == nil {
+		t.Fatal("expected failing http healthcheck to block RUNNING")
 	}
 	dryRun, err := runner.Run(p, RuntimeStartResult{ContainerID: "c", SandboxGrantRef: "grant", Runtime: "local-container"}, ExecuteOptions{RuntimeDryRun: true})
 	if err != nil {
@@ -687,6 +717,7 @@ func TestCoverageRuntimeStarterHostedSandboxLiveBranches(t *testing.T) {
 			t.Cleanup(server.Close)
 			t.Setenv(tc.keyEnv, "test-key")
 			t.Setenv(tc.urlEnv, server.URL)
+			t.Setenv("HELM_LAUNCHPAD_ALLOW_INSECURE_LOOPBACK_API", "true")
 			p := allowPlan()
 			p.SubstrateID = tc.substrate
 			p.ArtifactImage = "custom-template"

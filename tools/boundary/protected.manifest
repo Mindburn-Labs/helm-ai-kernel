@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-06T12:04:32Z
-# Commit: 66237e452a9dcfd94b86472a4c3bb6e14c3a5454
+# Generated: 2026-06-06T12:08:04Z
+# Commit: 2db6ed387c8e449456acbc2ab3c5de15dfd84a7b
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -495,7 +495,7 @@ b0849c44801c1a3751e3b7c1cb6884ed14baff53b059701da41a8f8aef55830a  core/pkg/api/a
 744087ed15d3d15ef7d6c815148178bfc076c36190551e9b9a8cedb921e859a3  core/pkg/api/handlers.go
 fdf6404b70f0f1033a7bffdcd68b18e99b4191c3e66a26a5a4020e99a80d397e  core/pkg/api/idempotency.go
 5f0a9efb3e0403e6ddcee782ba02f5e6703528275d2f7c4dd109a21c7c67e787  core/pkg/api/launchpad_handler.go
-1549eb05ba6fb823420f97c2be45645cd641f258ef23a705d85862c818822d05  core/pkg/api/launchpad_handler_test.go
+ae045a0230651b8091da0f5d739fc6faeb0fecc1b22629117505173c7151c6d5  core/pkg/api/launchpad_handler_test.go
 3a569d473db609d38d61e4baa82d9ef0e5f0d7aaec02c0fd14af39d6c1d07f05  core/pkg/api/memory.go
 ea13163e8a5595ab0ce7b13e8c097a19c8c9b86370ce3844c8dca5441a49838c  core/pkg/api/middleware.go
 a8e802a6196729340bf94836eb0b3d437c4f54f8f08d4287c4d4f882d2bc9c38  core/pkg/api/middleware_test.go

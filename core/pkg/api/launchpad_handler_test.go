@@ -38,6 +38,9 @@ func TestLaunchpadAPIPlanLaunchDeleteEvidence(t *testing.T) {
 	if run.State != session.StateEscalated || run.KernelVerdict != "ESCALATE" {
 		t.Fatalf("launch should fail closed on missing secret: %#v", run)
 	}
+	if run.Principal != "operator-1" {
+		t.Fatalf("launch principal = %q, want authenticated operator", run.Principal)
+	}
 	if len(run.SandboxGrantRefs) == 0 || len(run.MCPRefs) == 0 || len(run.LaunchReceiptRefs) == 0 || len(run.HealthcheckRefs) == 0 || len(run.EvidencePackRefs) == 0 {
 		t.Fatalf("launch missing authority/proof refs: %#v", run)
 	}
@@ -68,5 +71,26 @@ func TestLaunchpadAPIPlanLaunchDeleteEvidence(t *testing.T) {
 	}
 	if !report.Verified {
 		t.Fatalf("EvidencePack did not verify: %s", report.Summary)
+	}
+}
+
+func TestLaunchpadAPIFailsClosedWithoutAuthentication(t *testing.T) {
+	t.Setenv("HELM_LAUNCHPAD_HOME", t.TempDir())
+	t.Setenv("model_gateway", "")
+	srv := NewServer(ServerConfig{})
+
+	body := []byte(`{"app_id":"openclaw","substrate_id":"local-container","principal":"attacker"}`)
+	for name, req := range map[string]*http.Request{
+		"matrix": httptest.NewRequest(http.MethodGet, "/api/v1/launchpad/matrix", nil),
+		"launch": httptest.NewRequest(http.MethodPost, "/api/v1/launchpad/launch", bytes.NewReader(body)),
+		"delete": httptest.NewRequest(http.MethodPost, "/api/v1/launchpad/launches/lp-attacker/delete", bytes.NewReader([]byte(`{"cascade":true}`))),
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			srv.ServeHTTP(rec, req)
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401; body=%s", rec.Code, rec.Body.String())
+			}
+		})
 	}
 }

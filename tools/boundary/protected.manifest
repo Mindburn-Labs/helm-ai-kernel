@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-06T12:19:45Z
-# Commit: c336c06788a4caa778374af5d7d08952d21826fc
+# Generated: 2026-06-06T12:25:57Z
+# Commit: ceabd14f4f1919f4148d0d3a548616fd3d6b1b9c
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -313,9 +313,10 @@ a226afb5d6e4fb3803e44a325a0e9124e2a82e28d24b36fe71861bd4b2d05f69  core/pkg/evide
 8225ab502a3b43151de3c21ecb69e3452878ff32b905f238b68bf22f65ddceeb  core/pkg/evidencepack/summary.go
 da9037083cc66885794deff9ba7d84a682b8b84ed924eabd364d180f7323bfc4  core/pkg/evidencepack/summary_test.go
 1448c75f2effd677584aaa2c5e7a3234747dec4f2d56f188ce51afa5622a8b3c  core/pkg/proofgraph/README.md
-44fc873eb9518d0ad7a93b14effdb82e59d9b17cc8b9b0a05a817ee01bb608dd  core/pkg/proofgraph/aigp/aigp_behavior_coverage_test.go
-b32c372ba44b9022bcf05ccca344ffaa8493e73994cce27d9ad8604d04086ecc  core/pkg/proofgraph/aigp/aigp_test.go
-7aa8b7f1aa887855c72253748ce581beec6080eae6a410830ed791f9d5a1e1e1  core/pkg/proofgraph/aigp/exporter.go
+b7a2756206bba206fd3a0e1c3aea9dada283c7eea07fc83d1d17ec826df7ff4b  core/pkg/proofgraph/aigp/aigp_behavior_coverage_test.go
+7d4c6dab62c722662f7c1f6178577e7c8d155d5f886417ed8e5ab4fa15fe42d3  core/pkg/proofgraph/aigp/aigp_exporter_security_test.go
+4565307bb4c7b80e584e185b183c94950e660a688e37c39d7874992c0bcc3ac4  core/pkg/proofgraph/aigp/aigp_test.go
+e0a93d19032c49f604d86253f299f4ecfebdd7fc5c51d39d8933d3a3f191effd  core/pkg/proofgraph/aigp/exporter.go
 97242f1a8eac66d865c039f8ff85db4e9b52b2e6fdaa10d5d94818f908f9f374  core/pkg/proofgraph/aigp/merkle.go
 f8556eda874fc23b111d17abe0384d4a872eb4e48691c36defd4d04cd3344791  core/pkg/proofgraph/aigp/merkle_test.go
 4aa424fb4224ba7fc7601ac19594ddc37e50d4938e8a2d8b4b321ef6e37becd7  core/pkg/proofgraph/aigp/pcd.go

@@ -30,6 +30,7 @@ EXPECTED_GATE_IDS = {
     "sdk-openapi-check",
     "release-smoke",
     "deployment-smoke",
+    "docker-smoke-hardening",
     "helm-smoke-hardening",
     "secrets",
     "vuln-audit",

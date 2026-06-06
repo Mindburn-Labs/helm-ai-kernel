@@ -60,7 +60,8 @@ flowchart TD
 | `helm.auth.serviceAPIKey` | empty | Service API key written to the generated auth secret. |
 | `helm.auth.existingSecret` | empty | Existing secret containing auth key entries. |
 | `helm.storage.type` | `sqlite` | `sqlite` or `postgres`. |
-| `helm.storage.postgres.existingSecret` | empty | Existing secret containing `DATABASE_URL`. |
+| `helm.storage.postgres.existingSecret` | empty | Existing secret containing `DATABASE_URL`; required for production Postgres. |
+| `helm.storage.postgres.sslMode` | `require` | PostgreSQL TLS mode. Production requires `require`, `verify-ca`, or `verify-full`. |
 | `helm.policy.source.kind` | `mountedFile` | `controlplane`, `crd`, or `mountedFile`; Kubernetes delivery is not policy truth. |
 | `helm.policy.source.pollInterval` | `10s` | Runtime reconciler polling interval. Lost hints are recovered by polling. |
 | `helm.policy.signature.required` | `false` | Rejects unsigned policy heads during reconciliation when enabled. |

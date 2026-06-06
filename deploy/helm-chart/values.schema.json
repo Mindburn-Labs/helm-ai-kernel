@@ -396,8 +396,8 @@
                 "sslMode": {
                   "type": "string",
                   "enum": ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"],
-                  "default": "disable",
-                  "description": "libpq sslmode. Use verify-full against managed PostgreSQL services that ship a CA bundle."
+                  "default": "require",
+                  "description": "libpq sslmode. Production postgres storage requires require, verify-ca, or verify-full; use verify-full against managed PostgreSQL services that ship a CA bundle."
                 },
                 "existingSecret": {
                   "type": "string",

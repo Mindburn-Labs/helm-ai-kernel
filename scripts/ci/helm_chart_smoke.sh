@@ -98,6 +98,68 @@ if helm_runner template "$RELEASE" "$CHART" \
 fi
 assert_contains "$fail_log" "requires helm.signing.key"
 
+postgres_inline_fail_log="$RENDER_DIR/postgres-inline-production.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.storage.type=postgres \
+    --set helm.storage.postgres.host=postgres.example.internal \
+    --set helm.storage.postgres.password=secret >"$RENDER_DIR/postgres-inline-production.yaml" 2>"$postgres_inline_fail_log"; then
+    echo "::error::production postgres render with inline credentials unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$postgres_inline_fail_log" "requires helm.storage.postgres.existingSecret"
+
+postgres_tls_fail_log="$RENDER_DIR/postgres-weak-tls-production.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.storage.type=postgres \
+    --set helm.storage.postgres.existingSecret=helm-postgres-url \
+    --set helm.storage.postgres.sslMode=disable >"$RENDER_DIR/postgres-weak-tls-production.yaml" 2>"$postgres_tls_fail_log"; then
+    echo "::error::production postgres render with weak sslMode unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$postgres_tls_fail_log" "requires helm.storage.postgres.sslMode"
+
+postgres_subchart_fail_log="$RENDER_DIR/postgres-subchart-production.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.storage.type=postgres \
+    --set helm.storage.postgres.existingSecret=helm-postgres-url \
+    --set postgresql.enabled=true >"$RENDER_DIR/postgres-subchart-production.yaml" 2>"$postgres_subchart_fail_log"; then
+    echo "::error::production postgres render with bundled subchart unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$postgres_subchart_fail_log" "does not support the bundled postgresql subchart"
+
+postgres_rendered="$RENDER_DIR/rendered-postgres-secret.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.storage.type=postgres \
+    --set helm.storage.postgres.existingSecret=helm-postgres-url \
+    --set helm.storage.postgres.sslMode=verify-full >"$postgres_rendered"
+assert_contains "$postgres_rendered" "name: DATABASE_URL"
+assert_contains "$postgres_rendered" "secretKeyRef:"
+assert_contains "$postgres_rendered" "name: helm-postgres-url"
+assert_not_contains "$postgres_rendered" "postgres://"
+assert_not_contains "$postgres_rendered" "POSTGRES_PASSWORD"
+assert_not_contains "$postgres_rendered" "sslmode=disable"
+
 helm_runner lint "$CHART" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \

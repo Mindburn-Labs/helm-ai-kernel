@@ -121,7 +121,7 @@ helm:
       database: "helm"
       user: "helm"
       password: ""
-      sslMode: "disable"
+      sslMode: "require"
       # Use an existing secret containing DATABASE_URL
       existingSecret: ""
       # Key in the existing secret that contains the database URL

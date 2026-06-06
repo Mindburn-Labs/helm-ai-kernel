@@ -1010,13 +1010,13 @@ func TestClosing_AdversarialLab_RunSuite(t *testing.T) {
 		}
 	})
 	t.Run("pass_count", func(t *testing.T) {
-		if run.PassCount != 2 {
-			t.Fatalf("got %d, want 2", run.PassCount)
+		if run.PassCount != 1 {
+			t.Fatalf("got %d, want 1", run.PassCount)
 		}
 	})
 	t.Run("fail_count", func(t *testing.T) {
-		if run.FailCount != 1 {
-			t.Fatalf("got %d, want 1", run.FailCount)
+		if run.FailCount != 2 {
+			t.Fatalf("got %d, want 2", run.FailCount)
 		}
 	})
 	t.Run("status_failed", func(t *testing.T) {
@@ -1040,8 +1040,11 @@ func TestClosing_AdversarialLab_UnknownSuiteErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if run.Status != "passed" {
+		if run.Status != "failed" {
 			t.Fatalf("got %q", run.Status)
+		}
+		if run.PassCount != 0 || run.FailCount != 1 {
+			t.Fatalf("unexpected counts: pass=%d fail=%d", run.PassCount, run.FailCount)
 		}
 	})
 	t.Run("results_accumulate", func(t *testing.T) {

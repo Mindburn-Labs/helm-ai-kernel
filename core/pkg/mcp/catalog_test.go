@@ -96,6 +96,31 @@ func TestToolCatalog_AuditToolCall(t *testing.T) {
 		assert.Contains(t, receipt.Outputs, "ok")
 	})
 
+	t.Run("Token-like values and customer payload fields are redacted", func(t *testing.T) {
+		receipt, err := catalog.AuditToolCall("test-tool", map[string]any{
+			"note": "Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6ImsxIn0.eyJzdWIiOiJhZ2VudCJ9.c2lnbmF0dXJl",
+			"safe": "ok",
+			"items": []any{
+				map[string]any{"description": "public"},
+				map[string]any{"description": "github_pat_1234567890abcdef"},
+			},
+		}, map[string]any{
+			"content": "customer secret text",
+			"status":  "ok",
+			"message": "sk-live-output-token",
+		})
+		require.NoError(t, err)
+		assert.NotContains(t, receipt.Inputs, "Bearer")
+		assert.NotContains(t, receipt.Inputs, "github_pat_")
+		assert.NotContains(t, receipt.Outputs, "customer secret text")
+		assert.NotContains(t, receipt.Outputs, "sk-live-output-token")
+		assert.Contains(t, receipt.Inputs, "public")
+		assert.Contains(t, receipt.Inputs, "ok")
+		assert.Contains(t, receipt.Outputs, "ok")
+		assert.Contains(t, receipt.Inputs, "[REDACTED]")
+		assert.Contains(t, receipt.Outputs, "[REDACTED]")
+	})
+
 	t.Run("Unmarshalable input returns error", func(t *testing.T) {
 		// Channels cannot be marshaled to JSON
 		_, err := catalog.AuditToolCall("bad", map[string]any{"ch": make(chan int)}, nil)

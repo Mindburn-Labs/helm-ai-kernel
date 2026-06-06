@@ -117,6 +117,8 @@ helm_runner upgrade --install "$RELEASE" deploy/helm-chart \
     --set helm.signing.key="$SIGNING_KEY" \
     --set helm.auth.adminAPIKey="$ADMIN_KEY" \
     --set helm.auth.serviceAPIKey="${HELM_SMOKE_SERVICE_KEY:-helm-service-smoke}" \
+    --set helm.auth.tenantID="$TENANT_ID" \
+    --set helm.auth.principalID="$AGENT_ID" \
     --set image.repository="${IMAGE%:*}" \
     --set image.tag="${IMAGE##*:}" \
     --set image.pullPolicy=IfNotPresent \

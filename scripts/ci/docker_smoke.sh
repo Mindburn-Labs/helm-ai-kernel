@@ -116,6 +116,8 @@ start_docker() {
         -p "127.0.0.1:${HEALTH_PORT}:8081" \
         -e HELM_ADMIN_API_KEY="$ADMIN_KEY" \
         -e HELM_SERVICE_API_KEY="$SERVICE_KEY" \
+        -e HELM_RUNTIME_TENANT_ID="$TENANT_ID" \
+        -e HELM_RUNTIME_PRINCIPAL_ID="$AGENT_ID" \
         -e EVIDENCE_SIGNING_KEY="$EVIDENCE_SIGNING_KEY" \
         -e HELM_HEALTH_PORT=8081 \
         -v "${DATA_DIR}:/var/lib/helm-ai-kernel" \
@@ -126,6 +128,8 @@ start_compose() {
     (cd "$ROOT" && docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" down -v --remove-orphans >/dev/null 2>&1 || true)
     HELM_ADMIN_API_KEY="$ADMIN_KEY" \
     HELM_SERVICE_API_KEY="$SERVICE_KEY" \
+    HELM_RUNTIME_TENANT_ID="$TENANT_ID" \
+    HELM_RUNTIME_PRINCIPAL_ID="$AGENT_ID" \
     EVIDENCE_SIGNING_KEY="$EVIDENCE_SIGNING_KEY" \
     HELM_SMOKE_DATA_DIR="$DATA_DIR" \
     HELM_SMOKE_API_PORT="$API_PORT" \

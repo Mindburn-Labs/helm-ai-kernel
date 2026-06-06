@@ -23,7 +23,9 @@ helm install helm-ai-kernel deploy/helm-chart \
   --set helm.production=true \
   --set helm.signing.key=<64-char-ed25519-seed-hex> \
   --set helm.auth.adminAPIKey=<admin-api-key> \
-  --set helm.auth.serviceAPIKey=<service-api-key>
+  --set helm.auth.serviceAPIKey=<service-api-key> \
+  --set helm.auth.tenantID=<runtime-tenant-id> \
+  --set helm.auth.principalID=<runtime-principal-id>
 ```
 
 Review `values.yaml` before use in a real environment.
@@ -59,6 +61,8 @@ flowchart TD
 | `helm.auth.adminAPIKey` | empty | Admin API key written to the generated auth secret. |
 | `helm.auth.serviceAPIKey` | empty | Service API key written to the generated auth secret. |
 | `helm.auth.existingSecret` | empty | Existing secret containing auth key entries. |
+| `helm.auth.tenantID` | `default` | Server-bound tenant for tenant-scoped runtime routes; request tenant headers must match. |
+| `helm.auth.principalID` | `system-admin` | Server-bound principal for tenant-scoped runtime routes; request principal headers must match. |
 | `helm.storage.type` | `sqlite` | `sqlite` or `postgres`. |
 | `helm.storage.postgres.existingSecret` | empty | Existing secret containing `DATABASE_URL`; required for production Postgres. |
 | `helm.storage.postgres.sslMode` | `require` | PostgreSQL TLS mode. Production requires `require`, `verify-ca`, or `verify-full`. |
@@ -80,6 +84,9 @@ flowchart TD
 - Provide `helm.auth.adminAPIKey` and `helm.auth.serviceAPIKey`, or
   `helm.auth.existingSecret`; production rendering fails closed without auth
   material.
+- Set `helm.auth.tenantID` and `helm.auth.principalID` to the runtime identity
+  expected by tenant-scoped API clients. Caller-supplied tenant and principal
+  headers are accepted only when they match these server-bound values.
 - Prefer `helm.policy.source.kind=controlplane` for production deployments.
   The chart configures where policy truth is published; the runtime still
   polls, verifies hash/signature/provenance, compiles, and atomically swaps

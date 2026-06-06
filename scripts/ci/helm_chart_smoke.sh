@@ -14,6 +14,8 @@ SIGNING_KEY="${HELM_CHART_SMOKE_SIGNING_KEY:-0123456789abcdef0123456789abcdef012
 TRUST_PUBLIC_KEY="${HELM_CHART_SMOKE_POLICY_TRUST_PUBLIC_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
 ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-helm-admin-smoke}"
 SERVICE_KEY="${HELM_SMOKE_SERVICE_KEY:-helm-service-smoke}"
+TENANT_ID="${HELM_SMOKE_TENANT_ID:-tenant-smoke}"
+AGENT_ID="${HELM_SMOKE_AGENT_ID:-agent.smoke}"
 RENDER_DIR="${HELM_CHART_RENDER_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/helm-ai-kernel-chart.XXXXXX")}"
 
 cleanup() {
@@ -81,6 +83,10 @@ assert_contains "$default_rendered" "HELM_POLICY_SOURCE_KIND"
 assert_contains "$default_rendered" "mountedFile"
 assert_contains "$default_rendered" "HELM_POLICY_SIGNATURE_REQUIRED"
 assert_contains "$default_rendered" "/etc/helm-ai-kernel/policy/serve-policy.toml"
+assert_contains "$default_rendered" "HELM_RUNTIME_TENANT_ID"
+assert_contains "$default_rendered" "HELM_RUNTIME_PRINCIPAL_ID"
+assert_contains "$default_rendered" "value: \"default\""
+assert_contains "$default_rendered" "value: \"system-admin\""
 assert_contains "$default_rendered" "automountServiceAccountToken: false"
 assert_not_contains "$default_rendered" "HELM_POLICY_TRUST_PUBLIC_KEY"
 assert_not_contains "$default_rendered" "checksum/config"
@@ -97,6 +103,32 @@ if helm_runner template "$RELEASE" "$CHART" \
     exit 1
 fi
 assert_contains "$fail_log" "requires helm.signing.key"
+
+tenant_fail_log="$RENDER_DIR/production-missing-runtime-tenant.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set-string helm.auth.tenantID= >"$RENDER_DIR/production-missing-runtime-tenant.yaml" 2>"$tenant_fail_log"; then
+    echo "::error::production render without runtime tenant unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$tenant_fail_log" "helm.auth.tenantID"
+
+principal_fail_log="$RENDER_DIR/production-missing-runtime-principal.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set-string helm.auth.principalID= >"$RENDER_DIR/production-missing-runtime-principal.yaml" 2>"$principal_fail_log"; then
+    echo "::error::production render without runtime principal unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$principal_fail_log" "helm.auth.principalID"
 
 postgres_inline_fail_log="$RENDER_DIR/postgres-inline-production.log"
 if helm_runner template "$RELEASE" "$CHART" \
@@ -165,6 +197,8 @@ helm_runner lint "$CHART" \
     --set helm.signing.key="$SIGNING_KEY" \
     --set helm.auth.adminAPIKey="$ADMIN_KEY" \
     --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.auth.tenantID="$TENANT_ID" \
+    --set helm.auth.principalID="$AGENT_ID" \
     --set image.repository=ghcr.io/mindburn-labs/helm-ai-kernel \
     --set image.tag=local \
     --set image.pullPolicy=IfNotPresent >/dev/null
@@ -176,6 +210,8 @@ helm_runner template "$RELEASE" "$CHART" \
     --set helm.signing.key="$SIGNING_KEY" \
     --set helm.auth.adminAPIKey="$ADMIN_KEY" \
     --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.auth.tenantID="$TENANT_ID" \
+    --set helm.auth.principalID="$AGENT_ID" \
     --set image.repository=ghcr.io/mindburn-labs/helm-ai-kernel \
     --set image.tag=local \
     --set image.pullPolicy=IfNotPresent >"$rendered"
@@ -195,6 +231,10 @@ assert_contains "$rendered" "/internal/policy/reconcile"
 assert_contains "$rendered" "EVIDENCE_SIGNING_KEY"
 assert_contains "$rendered" "HELM_ADMIN_API_KEY"
 assert_contains "$rendered" "HELM_SERVICE_API_KEY"
+assert_contains "$rendered" "HELM_RUNTIME_TENANT_ID"
+assert_contains "$rendered" "HELM_RUNTIME_PRINCIPAL_ID"
+assert_contains "$rendered" "value: \"$TENANT_ID\""
+assert_contains "$rendered" "value: \"$AGENT_ID\""
 assert_contains "$rendered" "readOnlyRootFilesystem: true"
 assert_contains "$rendered" "runAsNonRoot: true"
 assert_contains "$rendered" "persistentVolumeClaim:"

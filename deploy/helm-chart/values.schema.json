@@ -318,6 +318,18 @@
               "type": "string",
               "default": "HELM_SERVICE_API_KEY",
               "description": "Key inside existingSecret that contains the service API key."
+            },
+            "tenantID": {
+              "type": "string",
+              "minLength": 1,
+              "default": "default",
+              "description": "Server-bound tenant ID for tenant-scoped runtime routes. Request tenant headers or tenant_id query values must match this value and cannot select another tenant."
+            },
+            "principalID": {
+              "type": "string",
+              "minLength": 1,
+              "default": "system-admin",
+              "description": "Server-bound principal ID for tenant-scoped runtime routes. X-Helm-Principal-ID may be supplied only when it matches this configured principal."
             }
           }
         },

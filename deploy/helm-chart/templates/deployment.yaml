@@ -31,6 +31,12 @@
 {{- if and .Values.helm.production (eq .Values.helm.storage.type "postgres") (not (or (eq .Values.helm.storage.postgres.sslMode "require") (eq .Values.helm.storage.postgres.sslMode "verify-ca") (eq .Values.helm.storage.postgres.sslMode "verify-full"))) -}}
 {{- fail "helm.production=true with helm.storage.type=postgres requires helm.storage.postgres.sslMode=require, verify-ca, or verify-full" -}}
 {{- end -}}
+{{- if and .Values.helm.production (not .Values.helm.auth.tenantID) -}}
+{{- fail "helm.production=true requires helm.auth.tenantID so tenant-scoped runtime routes are server-bound" -}}
+{{- end -}}
+{{- if and .Values.helm.production (not .Values.helm.auth.principalID) -}}
+{{- fail "helm.production=true requires helm.auth.principalID so tenant-scoped runtime routes are server-bound" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -197,6 +203,10 @@ spec:
                   name: {{ include "helm-ai-kernel.authSecretName" . }}
                   key: {{ .Values.helm.auth.serviceAPIKeySecretKey }}
             {{- end }}
+            - name: HELM_RUNTIME_TENANT_ID
+              value: {{ .Values.helm.auth.tenantID | quote }}
+            - name: HELM_RUNTIME_PRINCIPAL_ID
+              value: {{ .Values.helm.auth.principalID | quote }}
             {{- if eq .Values.helm.storage.type "postgres" }}
             {{- if .Values.helm.storage.postgres.existingSecret }}
             - name: DATABASE_URL

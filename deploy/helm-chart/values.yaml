@@ -100,6 +100,11 @@ helm:
     existingSecret: ""
     adminAPIKeySecretKey: "HELM_ADMIN_API_KEY"
     serviceAPIKeySecretKey: "HELM_SERVICE_API_KEY"
+    # Server-bound tenant/principal for tenant-scoped runtime routes. Incoming
+    # tenant/principal headers must match these values and cannot select
+    # another tenant or principal.
+    tenantID: "default"
+    principalID: "system-admin"
 
   # Signing key configuration
   signing:

@@ -90,12 +90,27 @@ func TestNewCertRotatorDefaultsAndTLSConfig(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	cfg := NewRotatingTLSConfig(rotator, ca)
+	peer, err := ca.IssueCertificate(context.Background(), "rotating-peer")
+	require.NoError(t, err)
+
+	cfg := NewRotatingTLSConfig(rotator, ca, WithExpectedPeerSPIFFEID(peer.SPIFFEID))
 	assert.Equal(t, tls.RequireAndVerifyClientCert, cfg.ClientAuth)
 	assert.Equal(t, uint16(tls.VersionTLS13), cfg.MinVersion)
+	assert.True(t, cfg.InsecureSkipVerify)
 	assert.NotNil(t, cfg.RootCAs)
 	assert.NotNil(t, cfg.ClientCAs)
 	require.NotNil(t, cfg.GetCertificate)
+	require.NotNil(t, cfg.VerifyConnection)
+	require.NoError(t, cfg.VerifyConnection(tls.ConnectionState{PeerCertificates: []*x509.Certificate{leafFromIssued(t, peer)}}))
+
+	wrongPeer, err := ca.IssueCertificate(context.Background(), "wrong-rotating-peer")
+	require.NoError(t, err)
+	err = cfg.VerifyConnection(tls.ConnectionState{PeerCertificates: []*x509.Certificate{leafFromIssued(t, wrongPeer)}})
+	require.ErrorContains(t, err, "peer SPIFFE ID not allowed")
+
+	failClosed := NewRotatingTLSConfig(rotator, ca)
+	err = failClosed.VerifyConnection(tls.ConnectionState{PeerCertificates: []*x509.Certificate{leafFromIssued(t, peer)}})
+	require.ErrorContains(t, err, "expected peer SPIFFE ID required")
 
 	fromConfig, err := cfg.GetCertificate(nil)
 	require.NoError(t, err)

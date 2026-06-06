@@ -143,12 +143,18 @@ func (ca *CertificateAuthority) CACertPool() *x509.CertPool {
 }
 
 // NewRotatingTLSConfig creates a tls.Config that uses the rotator for certificate provisioning.
-func NewRotatingTLSConfig(rotator *CertRotator, ca *CertificateAuthority) *tls.Config {
+func NewRotatingTLSConfig(rotator *CertRotator, ca *CertificateAuthority, options ...TLSConfigOption) *tls.Config {
+	opts := applyTLSConfigOptions(options)
+	caPool := ca.CACertPool()
 	return &tls.Config{
 		GetCertificate: rotator.GetCertificate,
-		RootCAs:        ca.CACertPool(),
-		ClientCAs:      ca.CACertPool(),
+		RootCAs:        caPool,
+		ClientCAs:      caPool,
 		ClientAuth:     tls.RequireAndVerifyClientCert,
 		MinVersion:     tls.VersionTLS13,
+		// HELM mTLS peers use SPIFFE URI SANs, so VerifyConnection performs
+		// CA-chain and identity verification instead of DNS-name checks.
+		InsecureSkipVerify: true,
+		VerifyConnection:   verifyPeerConnection(caPool, opts.expectedPeerSPIFFEIDs),
 	}
 }

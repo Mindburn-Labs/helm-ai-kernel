@@ -2,6 +2,7 @@ package governance
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capabilities"
@@ -66,10 +67,47 @@ func TestSignalController(t *testing.T) {
 	sc := NewSignalController("test-producer", &MockSigner{})
 	assert.Equal(t, "signal.controller", sc.Name())
 
+	env, err := sc.Advise(context.Background(), "scale", map[string]any{
+		"health":     99.9,
+		"error_rate": 0.001,
+		"latency_ms": 120,
+		"saturation": 0.4,
+		"safe":       true,
+		"approved":   true,
+	})
+	require.NoError(t, err)
+	payload := decodeSignalPayload(t, env.Payload)
+	assert.Equal(t, "GREEN", payload["signal"])
+	assert.Equal(t, "metrics_nominal", payload["check"])
+	assert.Equal(t, "scale", payload["intent"])
+}
+
+func TestSignalController_DerivesWarningsFromContext(t *testing.T) {
+	sc := NewSignalController("test-producer", &MockSigner{})
+
 	env, err := sc.Advise(context.Background(), "scale", nil)
 	require.NoError(t, err)
-	// Since GetLabel might not exist or we need to unmarshal payload
-	assert.Contains(t, string(env.Payload), "GREEN")
+	payload := decodeSignalPayload(t, env.Payload)
+	assert.Equal(t, "WARN", payload["signal"])
+	assert.NotContains(t, string(env.Payload), "all_systems_nominal")
+
+	env, err = sc.Advise(context.Background(), "production destroy", map[string]any{
+		"health":            72,
+		"error_rate":        0.15,
+		"latency_ms":        7000,
+		"saturation":        0.99,
+		"active_incident":   true,
+		"unsafe":            true,
+		"requires_approval": true,
+		"approved":          false,
+		"signal":            "GREEN",
+	})
+	require.NoError(t, err)
+	payload = decodeSignalPayload(t, env.Payload)
+	assert.Equal(t, "CRITICAL", payload["signal"])
+	assert.Equal(t, "metrics_degraded", payload["check"])
+	assert.Contains(t, string(env.Payload), "health_below_critical_threshold")
+	assert.NotContains(t, string(env.Payload), `"signal":"GREEN"`)
 }
 
 func TestSignalController_FailClosedEdges(t *testing.T) {
@@ -84,6 +122,13 @@ func TestSignalController_FailClosedEdges(t *testing.T) {
 	unsigned := NewSignalController("test-producer", nil)
 	_, err = unsigned.Advise(context.Background(), "scale", nil)
 	assert.Error(t, err)
+}
+
+func decodeSignalPayload(t *testing.T, raw []byte) map[string]any {
+	t.Helper()
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(raw, &payload))
+	return payload
 }
 
 func TestStateEstimator(t *testing.T) {

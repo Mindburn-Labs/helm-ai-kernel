@@ -122,6 +122,7 @@
     "security": {
       "description": "Security and supply-chain checks.",
       "gates": [
+        "helm-smoke-hardening",
         "secrets",
         "vuln-audit",
         "sbom",
@@ -462,6 +463,18 @@
         "deploy/**",
         "core/**",
         "scripts/ci/*smoke*.sh"
+      ]
+    },
+    {
+      "id": "helm-smoke-hardening",
+      "title": "Containerized Helm smoke fallback hardening",
+      "command": "python3 scripts/ci/check_helm_smoke_hardening.py",
+      "timeout_seconds": 120,
+      "paths": [
+        "scripts/ci/kind_smoke.sh",
+        "scripts/ci/helm_chart_smoke.sh",
+        "scripts/ci/check_helm_smoke_hardening.py",
+        "scripts/ci/quality-gates.json"
       ]
     },
     {

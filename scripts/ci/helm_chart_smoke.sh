@@ -9,7 +9,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHART="${HELM_CHART_PATH:-deploy/helm-chart}"
 RELEASE="${HELM_CHART_RELEASE:-helm-smoke}"
 NAMESPACE="${HELM_CHART_NAMESPACE:-helm-smoke}"
-KUBE_HELM_IMAGE="${KUBE_HELM_IMAGE:-alpine/helm:3.15.4}"
+KUBE_HELM_IMAGE="${KUBE_HELM_IMAGE:-docker.io/alpine/helm@sha256:105741fa6621ed9a3ea944066de78bb27d4b9bb93a56ce8e7cb4d621e1e4bbf2}"
 SIGNING_KEY="${HELM_CHART_SMOKE_SIGNING_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
 TRUST_PUBLIC_KEY="${HELM_CHART_SMOKE_POLICY_TRUST_PUBLIC_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
 ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-helm-admin-smoke}"
@@ -22,6 +22,13 @@ cleanup() {
     fi
 }
 trap cleanup EXIT
+
+require_pinned_helm_image() {
+    if [[ ! "$KUBE_HELM_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]; then
+        echo "::error::KUBE_HELM_IMAGE must be pinned by immutable sha256 digest, got: ${KUBE_HELM_IMAGE}"
+        exit 1
+    fi
+}
 
 helm_runner() {
     if [ -n "${KUBE_HELM_CMD:-}" ]; then
@@ -40,6 +47,7 @@ helm_runner() {
         echo "::error::Kubernetes Helm not found. Set KUBE_HELM_CMD or install docker for ${KUBE_HELM_IMAGE}."
         exit 1
     }
+    require_pinned_helm_image
     docker run --rm -v "$ROOT:/work" -w /work "$KUBE_HELM_IMAGE" "$@"
 }
 

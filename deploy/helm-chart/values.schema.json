@@ -538,6 +538,18 @@
                     "resource": {
                       "type": "string",
                       "description": "CRD plural/kind name (default HelmPolicyBundle)."
+                    },
+                    "allowedConfigMapNames": {
+                      "type": "array",
+                      "description": "ConfigMap names the CRD policy reader may dereference. Empty renders no ConfigMap read grant.",
+                      "items": { "type": "string", "minLength": 1 },
+                      "default": []
+                    },
+                    "allowedSecretNames": {
+                      "type": "array",
+                      "description": "Secret names the CRD policy reader may dereference. Empty renders no Secret read grant.",
+                      "items": { "type": "string", "minLength": 1 },
+                      "default": []
                     }
                   }
                 },

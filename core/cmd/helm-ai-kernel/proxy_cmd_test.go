@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,6 +45,30 @@ func TestDeniedProxyResponseBodyRemovesExecutableToolCalls(t *testing.T) {
 	}
 	if helmPayload["status"] != "DENIED" || helmPayload["correlation_id"] != "corr-1" {
 		t.Fatalf("unexpected helm block metadata: %+v", helmPayload)
+	}
+}
+
+func TestContainDeniedProxyResponseReplacesExecutableBody(t *testing.T) {
+	resp := &http.Response{Header: make(http.Header), StatusCode: http.StatusOK, Status: "200 OK"}
+	resp.Header.Set("Content-Type", "application/json")
+	resp.Header.Set("Content-Length", "999")
+
+	body := containDeniedProxyResponse(resp, "PROXY_WALLCLOCK_LIMIT", "PROXY_WALLCLOCK_LIMIT", []string{"file_write"}, "corr-2")
+	if resp.StatusCode != http.StatusForbidden || resp.Status != "403 Forbidden" {
+		t.Fatalf("denied response status not rewritten: %d %s", resp.StatusCode, resp.Status)
+	}
+	if resp.Header.Get("Content-Type") != "application/json" || resp.Header.Get("Content-Length") != "" {
+		t.Fatalf("denied response headers not contained: %+v", resp.Header)
+	}
+	if strings.Contains(string(body), "tool_calls") {
+		t.Fatalf("denied response leaked executable tool call body: %s", body)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["error"] == nil || payload["helm"] == nil {
+		t.Fatalf("denied body missing structured error metadata: %+v", payload)
 	}
 }
 

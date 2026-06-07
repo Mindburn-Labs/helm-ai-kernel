@@ -49,8 +49,8 @@ Current branch baseline: `codex/kernel-security-remediation` at `ee2cfd6d`, befo
 | HELM_AI_KERNEL-SUBAGENT-0030 | remaining | Signed trust registry mutations |
 | HELM_AI_KERNEL-SUBAGENT-0029 | already-fixed-with-regression | Kernel Launchpad API auth |
 | HELM_AI_KERNEL-SUBAGENT-0028 | already-fixed-with-regression | Autonomy control admin auth |
-| HELM_AI_KERNEL-SUBAGENT-0022 | remaining | Launchpad mount-name containment |
-| HELM_AI_KERNEL-SUBAGENT-0001 | remaining | Proxy DENY containment |
+| HELM_AI_KERNEL-SUBAGENT-0022 | fixed | Launchpad mount-name containment |
+| HELM_AI_KERNEL-SUBAGENT-0001 | fixed | Proxy DENY containment |
 | HELM_AI_KERNEL-SUBAGENT-0092 | already-fixed-with-regression | Helm smoke helper image and kubeconfig hardening |
 | HELM_AI_KERNEL-SUBAGENT-0099 | already-fixed-with-regression | Certify archive extraction bounds |
 | helm-ai-kernel-FILE-0788-A | already-fixed-with-regression | Pinned TLA tools download verification |
@@ -95,14 +95,14 @@ Current branch baseline: `codex/kernel-security-remediation` at `ee2cfd6d`, befo
 | HELM_AI_KERNEL-SUBAGENT-0014 | fixed | TEE secret proxy plaintext storage |
 | HELM_AI_KERNEL-SUBAGENT-0013 | fixed | EvidencePack trusted signature root enforcement |
 | HELM_AI_KERNEL-SUBAGENT-0012 | remaining | Scoped MCP approval expiry and tool binding |
-| HELM_AI_KERNEL-SUBAGENT-0011 | remaining | Reference-pack policy hash binding |
-| HELM_AI_KERNEL-SUBAGENT-0010 | remaining | Python publish workflow dispatch input validation |
-| HELM_AI_KERNEL-SUBAGENT-0009 | remaining | npm publish workflow dispatch input validation |
-| HELM_AI_KERNEL-SUBAGENT-0008 | remaining | Maven publish workflow dispatch input validation |
-| HELM_AI_KERNEL-SUBAGENT-0007 | remaining | Clean-install workflow dispatch input validation |
-| HELM_AI_KERNEL-SUBAGENT-0006 | remaining | Crates publish workflow dispatch input validation |
+| HELM_AI_KERNEL-SUBAGENT-0011 | fixed | Reference-pack policy hash binding |
+| HELM_AI_KERNEL-SUBAGENT-0010 | fixed | Python publish workflow dispatch input validation |
+| HELM_AI_KERNEL-SUBAGENT-0009 | fixed | npm publish workflow dispatch input validation |
+| HELM_AI_KERNEL-SUBAGENT-0008 | fixed | Maven publish workflow dispatch input validation |
+| HELM_AI_KERNEL-SUBAGENT-0007 | fixed | Clean-install workflow dispatch input validation |
+| HELM_AI_KERNEL-SUBAGENT-0006 | fixed | Crates publish workflow dispatch input validation |
 | HELM_AI_KERNEL-SUBAGENT-0005 | fixed | Managed-agent receipt signer default |
-| HELM_AI_KERNEL-SUBAGENT-0003 | remaining | Policy-reader RBAC Secret scope |
+| HELM_AI_KERNEL-SUBAGENT-0003 | fixed | Policy-reader RBAC Secret scope |
 | HELM_AI_KERNEL-SUBAGENT-0002 | already-fixed-with-regression | Proxy receipt causal chain continuity |
 | HELM_AI_KERNEL-SUBAGENT-0090 | already-fixed-with-regression | Pack verify authenticity fail-closed behavior |
 | HELM_AI_KERNEL-SUBAGENT-0082 | already-fixed-with-regression | Python SDK path segment validation |

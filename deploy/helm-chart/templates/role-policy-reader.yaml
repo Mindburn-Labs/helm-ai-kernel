@@ -14,11 +14,28 @@ rules:
       - get
       - list
       - watch
+  {{- if .Values.helm.policy.source.crd.allowedConfigMapNames }}
   - apiGroups:
       - ""
     resources:
       - configmaps
-      - secrets
+    resourceNames:
+      {{- range .Values.helm.policy.source.crd.allowedConfigMapNames }}
+      - {{ . | quote }}
+      {{- end }}
     verbs:
       - get
+  {{- end }}
+  {{- if .Values.helm.policy.source.crd.allowedSecretNames }}
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    resourceNames:
+      {{- range .Values.helm.policy.source.crd.allowedSecretNames }}
+      - {{ . | quote }}
+      {{- end }}
+    verbs:
+      - get
+  {{- end }}
 {{- end }}

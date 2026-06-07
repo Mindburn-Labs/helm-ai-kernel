@@ -326,6 +326,17 @@ func deniedProxyResponseBody(status, reasonCode string, toolNames []string, corr
 	return data
 }
 
+func containDeniedProxyResponse(resp *http.Response, status, reasonCode string, toolNames []string, correlationID string) []byte {
+	body := deniedProxyResponseBody(status, reasonCode, toolNames, correlationID)
+	if resp != nil {
+		resp.StatusCode = http.StatusForbidden
+		resp.Status = "403 Forbidden"
+		resp.Header.Set("Content-Type", "application/json")
+		resp.Header.Del("Content-Length")
+	}
+	return body
+}
+
 // validateToolCallArgs performs PEP validation: validates tool arguments
 // via the manifest package (JCS canonicalization + SHA-256 hash).
 // Schema validation is skipped (nil schema) in open-policy proxy mode;
@@ -707,10 +718,7 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 				verdict = "DENY"
 			}
 			if proxyStatusBlocksBody(status) {
-				body = deniedProxyResponseBody(status, reasonCode, toolNames, correlationID)
-				resp.StatusCode = http.StatusForbidden
-				resp.Status = "403 Forbidden"
-				resp.Header.Set("Content-Type", "application/json")
+				body = containDeniedProxyResponse(resp, status, reasonCode, toolNames, correlationID)
 			}
 
 			// Hash the body that will be delivered to the client.

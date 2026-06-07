@@ -16,6 +16,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
+	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 )
 
 func TestLoadServePolicyTOML(t *testing.T) {
@@ -91,6 +92,63 @@ path = "./data/receipts.db"
 	}
 	if len(rule.Requirements) != 1 || rule.Requirements[0].Expression != "true" {
 		t.Fatalf("unexpected rule: %+v", rule)
+	}
+}
+
+func TestCompileServePolicySnapshotRequiresReferencePackDigest(t *testing.T) {
+	dir := t.TempDir()
+	refDir := filepath.Join(dir, "reference_packs")
+	if err := os.MkdirAll(refDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	refBytes := []byte(`{
+  "pack_id": "runtime-pack",
+  "version": 1,
+  "runtime_actions": [
+    {"action": "EXECUTE_TOOL", "expression": "true"}
+  ]
+}`)
+	if err := os.WriteFile(filepath.Join(refDir, "runtime.json"), refBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	policyPath := filepath.Join(dir, "policy.toml")
+	policyBytes := []byte(`
+name = "runtime"
+profile = "test"
+reference_pack = "./reference_packs/runtime.json"
+
+[server]
+bind = "127.0.0.1"
+port = 7714
+
+[receipts]
+store = "sqlite"
+path = "./data/receipts.db"
+`)
+	if err := os.WriteFile(policyPath, policyBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	head := policyreconcile.PolicyHead{
+		Scope:       policyreconcile.DefaultScope,
+		PolicyEpoch: 1,
+		PolicyHash:  policyreconcile.HashBytes(policyBytes),
+		BundleRef:   policyPath,
+		SourceRefs:  []string{policyPath},
+	}
+	if _, err := compileServePolicySnapshot(context.Background(), head, policyBytes); err == nil || !strings.Contains(err.Error(), "missing reference_pack digest") {
+		t.Fatalf("expected missing reference_pack digest error, got %v", err)
+	}
+
+	ref := "reference_pack:" + filepath.Join(refDir, "runtime.json") + "@" + policyreconcile.HashBytes(refBytes)
+	head.SourceRefs = append(head.SourceRefs, ref)
+	head.PolicyHash = policyreconcile.PolicyHashWithSourceRefs(policyBytes, head.SourceRefs)
+	snapshot, err := compileServePolicySnapshot(context.Background(), head, policyBytes)
+	if err != nil {
+		t.Fatalf("digest-bound policy compile failed: %v", err)
+	}
+	if snapshot.PolicyHash != head.PolicyHash {
+		t.Fatalf("snapshot policy hash not bound to source refs: %s != %s", snapshot.PolicyHash, head.PolicyHash)
 	}
 }
 

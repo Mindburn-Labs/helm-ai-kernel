@@ -26,6 +26,10 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+      - name: Validate dispatch inputs
+        run: |
+          python3 scripts/ci/validate_workflow_dispatch_inputs.py publish \
+            --version "${{ inputs.version }}"
       - name: Version checks
         working-directory: sdk/java
         run: |

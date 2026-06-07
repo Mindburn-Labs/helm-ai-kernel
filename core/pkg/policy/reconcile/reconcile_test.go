@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -303,6 +304,52 @@ func TestReconcilerInstallsValidEd25519Signature(t *testing.T) {
 	}
 	if !status.Updated || status.InstalledPolicyHash != HashBytes(bundle) || status.InstalledPolicyEpoch != 1 {
 		t.Fatalf("signed bundle was not installed: %+v", status)
+	}
+}
+
+func TestReconcilerRequiresCompositeSignatureForDigestBoundPolicy(t *testing.T) {
+	scope := DefaultScope
+	bundle := []byte("signed-policy-with-reference")
+	sourceRefs := []string{"policy.toml", "reference_pack:/policy/reference.json@sha256:" + strings.Repeat("a", 64)}
+	policyHash := PolicyHashWithSourceRefs(bundle, sourceRefs)
+	signer, err := helmcrypto.NewEd25519Signer("policy-test")
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+	bundleOnlySignature, err := signer.Sign(bundle)
+	if err != nil {
+		t.Fatalf("sign bundle: %v", err)
+	}
+	source := &mutableSource{
+		head:   PolicyHead{Scope: scope, PolicyEpoch: 1, PolicyHash: policyHash, SourceRefs: sourceRefs, Signature: bundleOnlySignature},
+		bundle: bundle,
+	}
+	store := NewAtomicSnapshotStore()
+	reconciler, err := NewReconciler(ReconcilerConfig{
+		Source:           source,
+		Store:            store,
+		Compiler:         testCompiler,
+		Verifier:         NewEd25519PolicyVerifier(signer.PublicKey()),
+		RequireSignature: true,
+	})
+	if err != nil {
+		t.Fatalf("new reconciler: %v", err)
+	}
+	if status, err := reconciler.Reconcile(context.Background(), scope); err == nil {
+		t.Fatalf("bundle-only signature installed digest-bound policy: %+v", status)
+	}
+
+	compositeSignature, err := signer.Sign(PolicyHashMaterial(bundle, sourceRefs))
+	if err != nil {
+		t.Fatalf("sign composite material: %v", err)
+	}
+	source.head.Signature = compositeSignature
+	status, err := reconciler.Reconcile(context.Background(), scope)
+	if err != nil {
+		t.Fatalf("composite signature rejected: status=%+v err=%v", status, err)
+	}
+	if !status.Updated || status.InstalledPolicyHash != policyHash {
+		t.Fatalf("digest-bound policy not installed: %+v", status)
 	}
 }
 

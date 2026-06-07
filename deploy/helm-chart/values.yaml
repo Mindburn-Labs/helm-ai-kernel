@@ -163,6 +163,10 @@ helm:
         install: false
         apiGroup: "policy.helm.ai"
         resource: "HelmPolicyBundle"
+        # Names of ConfigMaps/Secrets the CRD reconciler may dereference.
+        # Empty lists render no ConfigMap/Secret read grants.
+        allowedConfigMapNames: []
+        allowedSecretNames: []
       mountedFile:
         existingConfigMap: ""
         existingSecret: ""

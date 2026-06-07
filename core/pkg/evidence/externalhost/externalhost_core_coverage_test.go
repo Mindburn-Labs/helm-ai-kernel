@@ -42,7 +42,7 @@ func TestParseVariantsAndVerifyFile(t *testing.T) {
 	if err := os.WriteFile(path, chainBytes, 0o600); err != nil {
 		t.Fatalf("write chain file: %v", err)
 	}
-	report, err := VerifyFile(path, VerifyOptions{RequireKey: true})
+	report, err := VerifyFile(path, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
 	if err != nil {
 		t.Fatalf("VerifyFile: %v", err)
 	}

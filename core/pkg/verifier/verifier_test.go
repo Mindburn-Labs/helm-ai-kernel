@@ -2,6 +2,8 @@ package verifier
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -214,6 +216,46 @@ func TestVerifyBundleRejectsUntrustedEmbeddedSignatures(t *testing.T) {
 	}
 	if report.SignatureValidCount >= report.SignatureTotalCount {
 		t.Fatalf("unverified embedded signature was counted as valid: valid=%d total=%d", report.SignatureValidCount, report.SignatureTotalCount)
+	}
+}
+
+func TestVerifyBundleAcceptsTrustedManagedAgentReceiptSignature(t *testing.T) {
+	dir := createValidBundleFixture(t)
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decisionHash := "sha256:abc123"
+	writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), map[string]any{
+		"receipt_version":        "managed_agent_live_scenario_receipt.v1",
+		"receipt_id":             "rcpt-001",
+		"decision_id":            "dec-001",
+		"decision_hash":          decisionHash,
+		"status":                 "APPLIED",
+		"lamport_clock":          1,
+		"scenario_id":            "allowed-bash",
+		"signature_algorithm":    "ed25519",
+		"signature_payload":      "decision_hash",
+		"signer_key_id":          "test-managed-agent-signer",
+		"signing_public_key_hex": hex.EncodeToString(pub),
+		"signature":              hex.EncodeToString(ed25519.Sign(priv, []byte(decisionHash))),
+	})
+
+	report, err := VerifyBundleWithOptions(dir, VerifyOptions{ManagedAgentReceiptPublicKeyHex: hex.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Verified {
+		t.Fatalf("trusted managed-agent receipt signature should verify: %s", report.Summary)
+	}
+	var found bool
+	for _, check := range report.Checks {
+		if check.Name == "embedded_signature_trust" && check.Pass {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("missing passing embedded signature trust check: %+v", report.Checks)
 	}
 }
 

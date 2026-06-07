@@ -38,14 +38,14 @@ Current branch baseline: `codex/kernel-security-remediation` at `ee2cfd6d`, befo
 | HELM_AI_KERNEL-SUBAGENT-0097 | already-fixed-with-regression | Control-plane policy bundle signature enforcement |
 | HELM_AI_KERNEL-SUBAGENT-0091 | already-fixed-with-regression | GitHub EffectPermit scope enforcement |
 | HELM_AI_KERNEL-SUBAGENT-0089 | already-fixed-with-regression | Control-plane policy update trust roots |
-| HELM_AI_KERNEL-SUBAGENT-0087 | remaining | Claude-managed sandbox per-session filesystem isolation |
-| HELM_AI_KERNEL-SUBAGENT-0086 | remaining | Claude-managed sandbox environment scrubbing |
+| HELM_AI_KERNEL-SUBAGENT-0087 | fixed | Claude-managed sandbox per-session filesystem isolation |
+| HELM_AI_KERNEL-SUBAGENT-0086 | fixed | Claude-managed sandbox environment scrubbing |
 | HELM_AI_KERNEL-SUBAGENT-0085 | already-fixed-with-regression | Guardian effect-digest intent binding |
 | HELM_AI_KERNEL-SUBAGENT-0083 | already-fixed-with-regression | Privileged access signed receipt schema |
 | HELM_AI_KERNEL-SUBAGENT-0080 | already-fixed-with-regression | TUF metadata signature verification |
 | HELM_AI_KERNEL-SUBAGENT-0079 | already-fixed-with-regression | Rekor checkpoint signature verification |
-| HELM_AI_KERNEL-SUBAGENT-0078 | remaining | Workstation receipt trust roots and signer defaults |
-| HELM_AI_KERNEL-SUBAGENT-0036 | remaining | Workstation enforce operate-mode execution guard |
+| HELM_AI_KERNEL-SUBAGENT-0078 | fixed | Workstation receipt trust roots and signer defaults |
+| HELM_AI_KERNEL-SUBAGENT-0036 | fixed | Workstation enforce operate-mode execution guard |
 | HELM_AI_KERNEL-SUBAGENT-0030 | remaining | Signed trust registry mutations |
 | HELM_AI_KERNEL-SUBAGENT-0029 | already-fixed-with-regression | Kernel Launchpad API auth |
 | HELM_AI_KERNEL-SUBAGENT-0028 | already-fixed-with-regression | Autonomy control admin auth |
@@ -76,11 +76,11 @@ Current branch baseline: `codex/kernel-security-remediation` at `ee2cfd6d`, befo
 | HELM_AI_KERNEL-SUBAGENT-0093 | already-fixed-with-regression | Docker smoke local credential exposure |
 | HELM_AI_KERNEL-SUBAGENT-0088 | already-fixed-with-regression | Runtime tenant identity binding |
 | HELM_AI_KERNEL-SUBAGENT-0081 | remaining | Module attestation commit hash validation |
-| HELM_AI_KERNEL-SUBAGENT-0037 | remaining | Workstation decision signing seed argv removal |
-| HELM_AI_KERNEL-SUBAGENT-0035 | remaining | Workstation import signing seed argv removal |
-| HELM_AI_KERNEL-SUBAGENT-0034 | remaining | Workstation receipt signing seed argv removal |
-| HELM_AI_KERNEL-SUBAGENT-0033 | remaining | Shadow scan secret redaction |
-| HELM_AI_KERNEL-SUBAGENT-0032 | remaining | Console login password argv removal |
+| HELM_AI_KERNEL-SUBAGENT-0037 | fixed | Workstation decision signing seed argv removal |
+| HELM_AI_KERNEL-SUBAGENT-0035 | fixed | Workstation import signing seed argv removal |
+| HELM_AI_KERNEL-SUBAGENT-0034 | fixed | Workstation receipt signing seed argv removal |
+| HELM_AI_KERNEL-SUBAGENT-0033 | fixed | Shadow scan secret redaction |
+| HELM_AI_KERNEL-SUBAGENT-0032 | fixed | Console login password argv removal |
 | HELM_AI_KERNEL-SUBAGENT-0027 | remaining | Authority evaluation schema top-level binding |
 | HELM_AI_KERNEL-SUBAGENT-0026 | remaining | Release cosign identity anchoring |
 | HELM_AI_KERNEL-SUBAGENT-0025 | already-fixed-with-regression | MCP firewall canonical verdicts |
@@ -88,11 +88,11 @@ Current branch baseline: `codex/kernel-security-remediation` at `ee2cfd6d`, befo
 | HELM_AI_KERNEL-SUBAGENT-0021 | remaining | Acton connector permit and grant binding |
 | HELM_AI_KERNEL-SUBAGENT-0020 | already-fixed-with-regression | E2B HTTPS preflight enforcement |
 | HELM_AI_KERNEL-SUBAGENT-0019 | already-fixed-with-regression | Daytona HTTPS preflight enforcement |
-| HELM_AI_KERNEL-SUBAGENT-0018 | remaining | Claude-managed shim dispatcher policy |
+| HELM_AI_KERNEL-SUBAGENT-0018 | fixed | Claude-managed shim dispatcher policy |
 | HELM_AI_KERNEL-SUBAGENT-0017 | already-fixed-with-regression | Inbound channel strict signature metadata |
 | HELM_AI_KERNEL-SUBAGENT-0016 | remaining | Execute-payment schema payee and amount constraints |
 | HELM_AI_KERNEL-SUBAGENT-0015 | already-fixed-with-regression | Helm external Postgres Secret handling |
-| HELM_AI_KERNEL-SUBAGENT-0014 | remaining | TEE secret proxy plaintext storage |
+| HELM_AI_KERNEL-SUBAGENT-0014 | fixed | TEE secret proxy plaintext storage |
 | HELM_AI_KERNEL-SUBAGENT-0013 | fixed | EvidencePack trusted signature root enforcement |
 | HELM_AI_KERNEL-SUBAGENT-0012 | remaining | Scoped MCP approval expiry and tool binding |
 | HELM_AI_KERNEL-SUBAGENT-0011 | remaining | Reference-pack policy hash binding |
@@ -101,7 +101,7 @@ Current branch baseline: `codex/kernel-security-remediation` at `ee2cfd6d`, befo
 | HELM_AI_KERNEL-SUBAGENT-0008 | remaining | Maven publish workflow dispatch input validation |
 | HELM_AI_KERNEL-SUBAGENT-0007 | remaining | Clean-install workflow dispatch input validation |
 | HELM_AI_KERNEL-SUBAGENT-0006 | remaining | Crates publish workflow dispatch input validation |
-| HELM_AI_KERNEL-SUBAGENT-0005 | remaining | Managed-agent receipt signer default |
+| HELM_AI_KERNEL-SUBAGENT-0005 | fixed | Managed-agent receipt signer default |
 | HELM_AI_KERNEL-SUBAGENT-0003 | remaining | Policy-reader RBAC Secret scope |
 | HELM_AI_KERNEL-SUBAGENT-0002 | already-fixed-with-regression | Proxy receipt causal chain continuity |
 | HELM_AI_KERNEL-SUBAGENT-0090 | already-fixed-with-regression | Pack verify authenticity fail-closed behavior |

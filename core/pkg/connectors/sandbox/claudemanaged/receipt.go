@@ -140,7 +140,7 @@ func (a *Adapter) managedReceiptForTool(req ToolRequest, verdict contracts.Verdi
 	receipt.ReceiptID = managedReceiptID(receipt)
 	receipt.ReceiptHash = bareHashAny(receipt.withoutSignature())
 	if a.receiptSigner == nil {
-		a.receiptSigner = deterministicPreviewSigner{}
+		return nil, fmt.Errorf("claude managed agents: managed-agent receipt signer is required")
 	}
 	receipt.SignerKeyID = a.receiptSigner.SignerKeyID()
 	signature, err := a.receiptSigner.Sign([]byte(receipt.ReceiptHash))

@@ -53,6 +53,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		storageReceipt   string
 		externalHostKey  string
 		trustedPublicKey string
+		managedAgentKey  string
 		requireEIDAS     bool
 		eidasMaxAgeHours int
 		requireTEE       string
@@ -68,6 +69,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&storageReceipt, "storage-receipt", "", "Path to S3 Object Lock storage receipt for customer/high-assurance verification")
 	cmd.StringVar(&externalHostKey, "external-host-public-key", strings.TrimSpace(os.Getenv("HELM_EXTERNAL_HOST_PUBLIC_KEY_HEX")), "Trusted Ed25519 public key hex for external host evidence chains")
 	cmd.StringVar(&trustedPublicKey, "trusted-public-key", strings.TrimSpace(os.Getenv("HELM_VERIFY_PUBLIC_KEY_HEX")), "Trusted Ed25519 public key hex for conformance report signatures")
+	cmd.StringVar(&managedAgentKey, "managed-agent-receipt-public-key", strings.TrimSpace(os.Getenv("HELM_MANAGED_AGENT_RECEIPT_PUBLIC_KEY_HEX")), "Trusted Ed25519 public key hex for embedded managed-agent receipt signatures")
 	cmd.BoolVar(&requireEIDAS, "require-eidas", false, "Require every receipt to carry an eIDAS-qualified RFC 3161 anchor")
 	cmd.IntVar(&eidasMaxAgeHours, "eidas-max-age-hours", 24, "Maximum age in hours of an anchor's integrated_time before --require-eidas treats it as stale")
 	cmd.StringVar(&requireTEE, "require-tee", "", "Require every receipt to carry a TEE attestation; one of sevsnp|tdx|nitro|any (empty = no requirement)")
@@ -122,11 +124,12 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		profileOpt = normalizeEvidenceTrustProfile(profile)
 	}
 	report, err := verifier.VerifyBundleWithOptions(verifyTarget, verifier.VerifyOptions{
-		Profile:            profileOpt,
-		ConfigPath:         configPath,
-		StorageReceiptPath: storageReceipt,
-		StorageObjectPath:  storageObjectPath,
-		ExternalHostKeyHex: externalHostKey,
+		Profile:                         profileOpt,
+		ConfigPath:                      configPath,
+		StorageReceiptPath:              storageReceipt,
+		StorageObjectPath:               storageObjectPath,
+		ExternalHostKeyHex:              externalHostKey,
+		ManagedAgentReceiptPublicKeyHex: managedAgentKey,
 	})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: verification failed: %v\n", err)
@@ -361,24 +364,26 @@ func normalizeVerifyArgs(args []string) ([]string, error) {
 	var flags []string
 	var positional []string
 	valueFlags := map[string]bool{
-		"--bundle":                   true,
-		"-bundle":                    true,
-		"--json-out":                 true,
-		"-json-out":                  true,
-		"--ledger-url":               true,
-		"-ledger-url":                true,
-		"--profile":                  true,
-		"-profile":                   true,
-		"--config":                   true,
-		"-config":                    true,
-		"--storage-receipt":          true,
-		"-storage-receipt":           true,
-		"--external-host-public-key": true,
-		"-external-host-public-key":  true,
-		"--trusted-public-key":       true,
-		"-trusted-public-key":        true,
-		"--eidas-max-age-hours":      true,
-		"-eidas-max-age-hours":       true,
+		"--bundle":                           true,
+		"-bundle":                            true,
+		"--json-out":                         true,
+		"-json-out":                          true,
+		"--ledger-url":                       true,
+		"-ledger-url":                        true,
+		"--profile":                          true,
+		"-profile":                           true,
+		"--config":                           true,
+		"-config":                            true,
+		"--storage-receipt":                  true,
+		"-storage-receipt":                   true,
+		"--external-host-public-key":         true,
+		"-external-host-public-key":          true,
+		"--trusted-public-key":               true,
+		"-trusted-public-key":                true,
+		"--managed-agent-receipt-public-key": true,
+		"-managed-agent-receipt-public-key":  true,
+		"--eidas-max-age-hours":              true,
+		"-eidas-max-age-hours":               true,
 	}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]

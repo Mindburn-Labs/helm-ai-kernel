@@ -88,6 +88,15 @@ func TestScanFindingsSummariesAndSkips(t *testing.T) {
 	if report.SummaryBySeverity["MEDIUM"] == 0 || report.SummaryBySeverity["HIGH"] == 0 || report.SummaryBySeverity["INFO"] != 2 {
 		t.Fatalf("SummaryBySeverity = %#v", report.SummaryBySeverity)
 	}
+	for _, key := range []string{"openai.py:openai:key", "openai.py:anthropic:key"} {
+		finding := seen[key]
+		if strings.Contains(finding.Evidence, "sk-AAAAAAAA") || strings.Contains(finding.Evidence, "sk-ant-BBBBB") {
+			t.Fatalf("api key evidence leaked raw secret for %s: %q", key, finding.Evidence)
+		}
+		if !strings.Contains(finding.Evidence, "[REDACTED_") || !strings.Contains(finding.Evidence, "sha256:") {
+			t.Fatalf("api key evidence missing redacted fingerprint for %s: %q", key, finding.Evidence)
+		}
+	}
 	for i := 1; i < len(report.Findings); i++ {
 		prev, cur := report.Findings[i-1], report.Findings[i]
 		if prev.Path > cur.Path || (prev.Path == cur.Path && prev.Line > cur.Line) {

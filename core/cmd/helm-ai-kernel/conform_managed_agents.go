@@ -46,6 +46,12 @@ type managedAgentSignerConfig struct {
 	KeyID string `json:"key_id"`
 }
 
+type managedAgentSigningMaterial struct {
+	keyID        string
+	publicKeyHex string
+	privateKey   ed25519.PrivateKey
+}
+
 type managedAgentAnthropicConfig struct {
 	AgentID       string `json:"agent_id"`
 	AgentVersion  string `json:"agent_version"`
@@ -232,8 +238,14 @@ func runConformClaudeSelfHosted(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	var signer *managedAgentSigningMaterial
 	if signReport {
-		sig, err := signManagedAgentLiveReport(reportPath, cfg.Signer.KeyID)
+		signer, err = loadManagedAgentSigningMaterial(cfg.Signer.KeyID)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: cannot load live evidence signing key: %v\n", err)
+			return 2
+		}
+		sig, err := signManagedAgentLiveReport(reportPath, signer)
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "Error: cannot sign live evidence report: %v\n", err)
 			return 2
@@ -245,11 +257,13 @@ func runConformClaudeSelfHosted(args []string, stdout, stderr io.Writer) int {
 	}
 
 	packDir := filepath.Join(outDir, "evidence-pack")
-	if err := writeManagedAgentEvidenceDirectory(packDir, report, signReport); err != nil {
+	if err := writeManagedAgentEvidenceDirectory(packDir, report, signer); err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: cannot write evidence pack: %v\n", err)
 		return 2
 	}
-	verifyReport, err := verifier.VerifyBundle(packDir)
+	verifyReport, err := verifier.VerifyBundleWithOptions(packDir, verifier.VerifyOptions{
+		ManagedAgentReceiptPublicKeyHex: managedAgentSignerPublicKeyHex(signer),
+	})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: cannot verify evidence pack: %v\n", err)
 		return 2
@@ -266,11 +280,13 @@ func runConformClaudeSelfHosted(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "Error: cannot refresh report: %v\n", err)
 		return 2
 	}
-	if err := writeManagedAgentEvidenceDirectory(packDir, report, signReport); err != nil {
+	if err := writeManagedAgentEvidenceDirectory(packDir, report, signer); err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: cannot refresh evidence pack: %v\n", err)
 		return 2
 	}
-	verifyReport, err = verifier.VerifyBundle(packDir)
+	verifyReport, err = verifier.VerifyBundleWithOptions(packDir, verifier.VerifyOptions{
+		ManagedAgentReceiptPublicKeyHex: managedAgentSignerPublicKeyHex(signer),
+	})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: cannot verify final evidence pack: %v\n", err)
 		return 2
@@ -520,7 +536,7 @@ func buildManagedAgentLiveReport(cfg *managedAgentLiveConfig, blockers []string)
 	}
 }
 
-func writeManagedAgentEvidenceDirectory(root string, report managedAgentLiveReport, signed bool) error {
+func writeManagedAgentEvidenceDirectory(root string, report managedAgentLiveReport, signer *managedAgentSigningMaterial) error {
 	if err := os.RemoveAll(root); err != nil {
 		return err
 	}
@@ -560,6 +576,7 @@ func writeManagedAgentEvidenceDirectory(root string, report managedAgentLiveRepo
 		return err
 	}
 	for _, scenario := range report.ScenarioResults {
+		decisionHash := "sha256:" + sha256Hex(mustJSONBytes(scenario))
 		receipt := map[string]any{
 			"receipt_version": "managed_agent_live_scenario_receipt.v1",
 			"receipt_id":      scenario.ReceiptID,
@@ -571,8 +588,18 @@ func writeManagedAgentEvidenceDirectory(root string, report managedAgentLiveRepo
 			"dispatched":      scenario.Dispatched,
 			"evidence_ref":    scenario.EvidenceRef,
 			"observed_at":     scenario.ObservedAt,
-			"decision_hash":   "sha256:" + sha256Hex(mustJSONBytes(scenario)),
-			"signature":       "sha256:" + sha256Hex([]byte(scenario.ReceiptHash+"|"+scenario.ID)),
+			"decision_hash":   decisionHash,
+		}
+		if signer != nil {
+			signature, err := signer.sign([]byte(decisionHash))
+			if err != nil {
+				return err
+			}
+			receipt["signature_algorithm"] = "ed25519"
+			receipt["signature_payload"] = "decision_hash"
+			receipt["signer_key_id"] = signer.keyID
+			receipt["signing_public_key_hex"] = signer.publicKeyHex
+			receipt["signature"] = signature
 		}
 		if err := addJSON("02_PROOFGRAPH/receipts/"+safeEvidenceName(scenario.ID)+".json", receipt); err != nil {
 			return err
@@ -586,8 +613,14 @@ func writeManagedAgentEvidenceDirectory(root string, report managedAgentLiveRepo
 	files["05_DIFFS/no-source-diff.txt"] = []byte("live evidence pack contains sanitized reports and receipt references only\n")
 	files["06_LOGS/retention.txt"] = []byte("retained logs are hash-referenced in the redacted live config\n")
 	files["09_SCHEMAS/claude-self-hosted-live-config.schema-ref.txt"] = []byte("protocols/json-schemas/managed-agents/claude_self_hosted_live_config.v1.schema.json\n")
-	if signed {
-		files["07_ATTESTATIONS/live_evidence.sig"] = []byte("signed-by:" + report.SignerKeyID + "\n")
+	if signer != nil {
+		if err := addJSON("07_ATTESTATIONS/managed-agent-receipt-signer.json", map[string]string{
+			"algorithm":      "ed25519",
+			"key_id":         signer.keyID,
+			"public_key_hex": signer.publicKeyHex,
+		}); err != nil {
+			return err
+		}
 	} else {
 		files["07_ATTESTATIONS/unsigned.txt"] = []byte("live evidence report was not signed in this run\n")
 	}
@@ -659,7 +692,11 @@ func archiveManagedAgentEvidence(root, outPath string) error {
 	return nil
 }
 
-func signManagedAgentLiveReport(path, keyID string) (map[string]string, error) {
+func loadManagedAgentSigningMaterial(keyID string) (*managedAgentSigningMaterial, error) {
+	keyID = strings.TrimSpace(keyID)
+	if keyID == "" {
+		return nil, fmt.Errorf("signer.key_id is required")
+	}
 	keyHex := strings.TrimSpace(os.Getenv("HELM_SIGNING_KEY_HEX"))
 	if keyHex == "" {
 		return nil, fmt.Errorf("HELM_SIGNING_KEY_HEX is required for --sign")
@@ -677,18 +714,51 @@ func signManagedAgentLiveReport(path, keyID string) (map[string]string, error) {
 	default:
 		return nil, fmt.Errorf("HELM_SIGNING_KEY_HEX must encode a 32-byte Ed25519 seed or 64-byte private key")
 	}
+	priv := ed25519.NewKeyFromSeed(seed)
+	pub, ok := priv.Public().(ed25519.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("cannot derive Ed25519 public key")
+	}
+	return &managedAgentSigningMaterial{
+		keyID:        keyID,
+		publicKeyHex: hex.EncodeToString(pub),
+		privateKey:   priv,
+	}, nil
+}
+
+func managedAgentSignerPublicKeyHex(signer *managedAgentSigningMaterial) string {
+	if signer == nil {
+		return ""
+	}
+	return signer.publicKeyHex
+}
+
+func (s *managedAgentSigningMaterial) sign(data []byte) (string, error) {
+	if s == nil || len(s.privateKey) != ed25519.PrivateKeySize {
+		return "", fmt.Errorf("managed-agent signer is not configured")
+	}
+	return hex.EncodeToString(ed25519.Sign(s.privateKey, data)), nil
+}
+
+func signManagedAgentLiveReport(path string, signer *managedAgentSigningMaterial) (map[string]string, error) {
+	if signer == nil {
+		return nil, fmt.Errorf("managed-agent signer is not configured")
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 	digest := sha256.Sum256(data)
-	priv := ed25519.NewKeyFromSeed(seed)
-	sig := ed25519.Sign(priv, digest[:])
+	sig, err := signer.sign(digest[:])
+	if err != nil {
+		return nil, err
+	}
 	return map[string]string{
-		"algorithm":   "ed25519",
-		"key_id":      keyID,
-		"report_hash": hex.EncodeToString(digest[:]),
-		"signature":   hex.EncodeToString(sig),
+		"algorithm":      "ed25519",
+		"key_id":         signer.keyID,
+		"public_key_hex": signer.publicKeyHex,
+		"report_hash":    hex.EncodeToString(digest[:]),
+		"signature":      sig,
 	}, nil
 }
 

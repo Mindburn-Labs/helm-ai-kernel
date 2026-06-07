@@ -58,6 +58,10 @@ func runWorkstationEnforceCmd(args []string, stdout, stderr io.Writer) int {
 	if len(remaining) == 0 {
 		return 0
 	}
+	if receipt.Verdict != contracts.WorkstationVerdictAllow || receipt.Request.EffectMode != contracts.WorkstationEffectModeOperate {
+		_, _ = fmt.Fprintf(stderr, "Error: refusing to execute command without operate-mode ALLOW receipt (verdict=%s mode=%s)\n", receipt.Verdict, receipt.Request.EffectMode)
+		return 126
+	}
 	cmd := exec.CommandContext(context.Background(), remaining[0], remaining[1:]...)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -171,7 +175,7 @@ func runWorkstationCertifyCmd(args []string, stdout, stderr io.Writer) int {
 func buildDecisionFromFlags(name string, args []string, stderr io.Writer) (*contracts.WorkstationPolicyDecisionReceipt, string, string, bool, error) {
 	cmd := flag.NewFlagSet(name, flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	var class, effectType, effectMode, action, toolID, target, policyPath, runID, workspaceID, actorID, out, receiptDir, seedHex string
+	var class, effectType, effectMode, action, toolID, target, policyPath, runID, workspaceID, actorID, out, receiptDir, seedHex, seedFile string
 	var jsonOut bool
 	cmd.StringVar(&class, "class", "shell", "Effect class: shell, network, mcp, memory, loop, file")
 	cmd.StringVar(&effectType, "effect-type", "", "Explicit workstation effect type")
@@ -185,7 +189,8 @@ func buildDecisionFromFlags(name string, args []string, stderr io.Writer) (*cont
 	cmd.StringVar(&actorID, "actor", "agent.local", "Actor id")
 	cmd.StringVar(&out, "out", "", "Write decision receipt JSON")
 	cmd.StringVar(&receiptDir, "receipt-dir", "", "Write decision receipt JSON as <decision_id>.json in this directory")
-	cmd.StringVar(&seedHex, "signing-seed-hex", "", "Optional 32-byte Ed25519 seed as hex")
+	cmd.StringVar(&seedHex, "signing-seed-hex", "", "Deprecated unsafe argv seed input; use --signing-seed-file")
+	cmd.StringVar(&seedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
 	cmd.BoolVar(&jsonOut, "json", false, "Print JSON")
 	if err := cmd.Parse(args); err != nil {
 		return nil, "", "", false, err
@@ -207,7 +212,7 @@ func buildDecisionFromFlags(name string, args []string, stderr io.Writer) (*cont
 	if err != nil {
 		return nil, "", "", false, err
 	}
-	seed, err := parseSigningSeed(seedHex)
+	seed, err := loadSigningSeed(seedHex, seedFile)
 	if err != nil {
 		return nil, "", "", false, err
 	}

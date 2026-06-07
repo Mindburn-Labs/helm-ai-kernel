@@ -10,6 +10,7 @@
 package verifier
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -76,7 +77,11 @@ type VerifyOptions struct {
 	StorageReceiptPath string
 	StorageObjectPath  string
 	ExternalHostKeyHex string
-	Now                time.Time
+	// ManagedAgentReceiptPublicKeyHex is the trusted Ed25519 public key used
+	// to verify embedded managed-agent execution receipts. The verifier never
+	// trusts public keys declared inside the bundle unless they match this root.
+	ManagedAgentReceiptPublicKeyHex string
+	Now                             time.Time
 }
 
 // VerifyBundle performs offline verification of an EvidencePack directory.
@@ -147,9 +152,9 @@ func VerifyBundleWithOptions(bundlePath string, opts VerifyOptions) (*VerifyRepo
 			})
 		}
 	}
-	report.addCheck(checkEmbeddedSignatureTrust(bundlePath))
+	report.addCheck(checkEmbeddedSignatureTrust(bundlePath, opts))
 
-	enrichReportMetadata(bundlePath, report)
+	enrichReportMetadata(bundlePath, report, opts)
 
 	// Compute summary
 	failed := 0
@@ -211,7 +216,7 @@ func checkEvidencePackSeal(bundlePath string, report *VerifyReport, opts VerifyO
 	return CheckResult{Name: "evidence_pack_seal", Pass: false, Reason: reason}
 }
 
-func enrichReportMetadata(bundlePath string, report *VerifyReport) {
+func enrichReportMetadata(bundlePath string, report *VerifyReport, opts VerifyOptions) {
 	for _, name := range []string{"00_INDEX.json", "manifest.json"} {
 		data, err := os.ReadFile(filepath.Join(bundlePath, name))
 		if err != nil {
@@ -240,7 +245,7 @@ func enrichReportMetadata(bundlePath string, report *VerifyReport) {
 		}
 	}
 
-	valid, total := countEmbeddedSignatures(bundlePath)
+	valid, total := countEmbeddedSignatures(bundlePath, opts)
 	if report.SealState != "" {
 		total++
 		if report.SealSignatureValid {
@@ -281,19 +286,27 @@ func firstUint(document map[string]any, keys ...string) *uint64 {
 	return nil
 }
 
-func checkEmbeddedSignatureTrust(bundlePath string) CheckResult {
-	_, total := countEmbeddedSignatures(bundlePath)
+func checkEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) CheckResult {
+	valid, total := countEmbeddedSignatures(bundlePath, opts)
 	if total == 0 {
 		return CheckResult{Name: "embedded_signature_trust", Pass: true, Detail: "no embedded receipt or witness signatures require verification"}
+	}
+	if valid == total {
+		return CheckResult{
+			Name:   "embedded_signature_trust",
+			Pass:   true,
+			Detail: fmt.Sprintf("%d embedded receipt or witness signatures verified against configured trust roots", valid),
+		}
 	}
 	return CheckResult{
 		Name:   "embedded_signature_trust",
 		Pass:   false,
-		Reason: fmt.Sprintf("%d embedded receipt or witness signatures require a configured verifier; none are trusted by presence alone", total),
+		Reason: fmt.Sprintf("%d/%d embedded receipt or witness signatures require a configured verifier; none are trusted by presence alone", total-valid, total),
 	}
 }
 
-func countEmbeddedSignatures(bundlePath string) (int, int) {
+func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
+	valid := 0
 	total := 0
 	for _, dir := range []string{receiptPath(bundlePath), filepath.Join(bundlePath, "07_ATTESTATIONS")} {
 		if !dirExists(dir) {
@@ -313,6 +326,9 @@ func countEmbeddedSignatures(bundlePath string) (int, int) {
 			}
 			if sig, ok := document["signature"].(string); ok && sig != "" {
 				total++
+				if verifyEmbeddedDocumentSignature(document, sig, opts) {
+					valid++
+				}
 			}
 			if witnesses, ok := document["witness_signatures"].([]any); ok {
 				for _, witness := range witnesses {
@@ -326,7 +342,44 @@ func countEmbeddedSignatures(bundlePath string) (int, int) {
 			return nil
 		})
 	}
-	return 0, total
+	return valid, total
+}
+
+func verifyEmbeddedDocumentSignature(document map[string]any, sig string, opts VerifyOptions) bool {
+	switch firstString(document, "receipt_version") {
+	case "managed_agent_live_scenario_receipt.v1":
+		if firstString(document, "signature_payload") != "decision_hash" {
+			return false
+		}
+		return verifyManagedAgentEd25519Signature(document, sig, opts.ManagedAgentReceiptPublicKeyHex, firstString(document, "decision_hash"))
+	case "managed_agent_execution_receipt.v1":
+		return verifyManagedAgentEd25519Signature(document, sig, opts.ManagedAgentReceiptPublicKeyHex, firstString(document, "receipt_hash"))
+	default:
+		return false
+	}
+}
+
+func verifyManagedAgentEd25519Signature(document map[string]any, sig, trustedPublicKeyHex, payload string) bool {
+	if payload == "" || firstString(document, "signature_algorithm") != "ed25519" {
+		return false
+	}
+	trustedPublicKeyHex = strings.TrimSpace(trustedPublicKeyHex)
+	if trustedPublicKeyHex == "" {
+		return false
+	}
+	declaredPublicKeyHex := strings.TrimSpace(firstString(document, "signing_public_key_hex", "public_key_hex"))
+	if declaredPublicKeyHex != "" && !strings.EqualFold(declaredPublicKeyHex, trustedPublicKeyHex) {
+		return false
+	}
+	pubBytes, err := hex.DecodeString(trustedPublicKeyHex)
+	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
+		return false
+	}
+	sigBytes, err := hex.DecodeString(strings.TrimSpace(sig))
+	if err != nil || len(sigBytes) != ed25519.SignatureSize {
+		return false
+	}
+	return ed25519.Verify(ed25519.PublicKey(pubBytes), []byte(payload), sigBytes)
 }
 
 func shortHash(value string) string {

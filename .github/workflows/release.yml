@@ -689,6 +689,7 @@ jobs:
             if GNUPGHOME="$verify_home" timeout 60s gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys "$fingerprint"; then
               exit 0
             fi
+            echo "::warning::Maven public key verification attempt $attempt failed"
             sleep 10
           done
           exit 1

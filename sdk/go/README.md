@@ -45,7 +45,11 @@ import (
 )
 
 func main() {
-    c := helm.New("http://127.0.0.1:7714")
+    c := helm.New(
+        "http://127.0.0.1:7714",
+        helm.WithTenantID("tenant-a"),
+        helm.WithPrincipalID("operator-a"),
+    )
 
     // Chat completions via the HELM boundary.
     res, err := c.ChatCompletions(helm.ChatCompletionRequest{

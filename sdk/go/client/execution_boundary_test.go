@@ -115,6 +115,12 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		if r.Header.Get("Authorization") != "Bearer token" {
 			t.Fatalf("missing authorization header for %s %s", r.Method, r.URL.RequestURI())
 		}
+		if r.Header.Get("X-Helm-Tenant-ID") != "tenant-a" {
+			t.Fatalf("missing tenant header for %s %s", r.Method, r.URL.RequestURI())
+		}
+		if r.Header.Get("X-Helm-Principal-ID") != "operator-a" {
+			t.Fatalf("missing principal header for %s %s", r.Method, r.URL.RequestURI())
+		}
 		if r.URL.Path == "/v1/chat/completions" {
 			w.Header().Set("X-Helm-Receipt-ID", "receipt-1")
 			w.Header().Set("X-Helm-Status", "ALLOW")
@@ -133,7 +139,7 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		writeJSON(t, w, responseForClientMatrix(r.Method, r.URL))
 	}))
 	defer server.Close()
-	client := New(server.URL, WithAPIKey("token"))
+	client := New(server.URL, WithAPIKey("token"), WithTenantID("tenant-a"), WithPrincipalID("operator-a"))
 
 	cases := []struct {
 		name string

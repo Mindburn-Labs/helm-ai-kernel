@@ -26,9 +26,11 @@ func (e *HelmApiError) Error() string {
 
 // HelmClient is a typed client for the HELM kernel API.
 type HelmClient struct {
-	BaseURL    string
-	APIKey     string
-	HTTPClient *http.Client
+	BaseURL     string
+	APIKey      string
+	TenantID    string
+	PrincipalID string
+	HTTPClient  *http.Client
 }
 
 // GovernanceMetadata captures kernel-issued X-Helm-* response headers.
@@ -75,6 +77,16 @@ func WithAPIKey(key string) Option {
 	return func(c *HelmClient) { c.APIKey = key }
 }
 
+// WithTenantID sets the X-Helm-Tenant-ID header.
+func WithTenantID(tenantID string) Option {
+	return func(c *HelmClient) { c.TenantID = tenantID }
+}
+
+// WithPrincipalID sets the X-Helm-Principal-ID header.
+func WithPrincipalID(principalID string) Option {
+	return func(c *HelmClient) { c.PrincipalID = principalID }
+}
+
 // WithTimeout sets the HTTP timeout.
 func WithTimeout(d time.Duration) Option {
 	return func(c *HelmClient) { c.HTTPClient.Timeout = d }
@@ -94,10 +106,7 @@ func (c *HelmClient) do(method, path string, body any, out any) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.APIKey)
-	}
+	c.applyHeaders(req)
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -132,10 +141,7 @@ func (c *HelmClient) ChatCompletionsWithReceipt(req ChatCompletionRequest) (*Cha
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
-	}
+	c.applyHeaders(httpReq)
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
 		return nil, err
@@ -224,10 +230,7 @@ func (c *HelmClient) ExportEvidence(sessionID string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.APIKey)
-	}
+	c.applyHeaders(req)
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -307,4 +310,17 @@ func parseHeaderInt(raw string) int {
 		return 0
 	}
 	return value
+}
+
+func (c *HelmClient) applyHeaders(req *http.Request) {
+	req.Header.Set("Content-Type", "application/json")
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+	if c.TenantID != "" {
+		req.Header.Set("X-Helm-Tenant-ID", c.TenantID)
+	}
+	if c.PrincipalID != "" {
+		req.Header.Set("X-Helm-Principal-ID", c.PrincipalID)
+	}
 }

@@ -9,7 +9,7 @@ HELM_URL="http://127.0.0.1:${PORT}"
 SERVER_LOG="$TMP/helm-server.log"
 FIXTURE_CMD="python3 scripts/launch/mcp-fixture-server.py"
 ADMIN_KEY="${HELM_ADMIN_API_KEY:-launch-mcp-local-admin-key}"
-TENANT_ID="${HELM_TENANT_ID:-launch-mcp-demo}"
+TENANT_ID="${HELM_TENANT_ID:-default}"
 
 cleanup() {
   if [ -n "${HELM_PID:-}" ]; then
@@ -84,6 +84,7 @@ def request(method: str, path: str, payload: dict | None = None, expected: set[i
             "Content-Type": "application/json",
             "Authorization": f"Bearer {admin_key}",
             "X-Helm-Tenant-ID": tenant_id,
+            "X-Helm-Principal-ID": "mcp-demo-agent",
         },
     )
     try:

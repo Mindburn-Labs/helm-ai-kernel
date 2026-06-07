@@ -152,9 +152,9 @@ func NewRotatingTLSConfig(rotator *CertRotator, ca *CertificateAuthority, option
 		ClientCAs:      caPool,
 		ClientAuth:     tls.RequireAndVerifyClientCert,
 		MinVersion:     tls.VersionTLS13,
-		// HELM mTLS peers use SPIFFE URI SANs, so VerifyConnection performs
-		// CA-chain and identity verification instead of DNS-name checks.
-		InsecureSkipVerify: true,
-		VerifyConnection:   verifyPeerConnection(caPool, opts.expectedPeerSPIFFEIDs),
+		ServerName:     opts.expectedPeerServerName,
+		// Go verifies the DNS SAN and CA chain before this hook runs. The hook
+		// adds the HELM-specific SPIFFE URI authorization check.
+		VerifyConnection: verifyPeerConnection(caPool, opts.expectedPeerSPIFFEIDs),
 	}
 }

@@ -10,9 +10,11 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -192,6 +194,7 @@ func (ca *CertificateAuthority) IssueCertificate(_ context.Context, identity str
 	if err != nil {
 		return nil, fmt.Errorf("mtls: generate serial number: %w", err)
 	}
+	dnsName := dnsNameForSPIFFEURI(spiffeURI)
 
 	now := time.Now()
 	template := &x509.Certificate{
@@ -207,7 +210,8 @@ func (ca *CertificateAuthority) IssueCertificate(_ context.Context, identity str
 			x509.ExtKeyUsageClientAuth,
 			x509.ExtKeyUsageServerAuth,
 		},
-		URIs: []*url.URL{spiffeURI},
+		DNSNames: []string{dnsName},
+		URIs:     []*url.URL{spiffeURI},
 	}
 
 	// Issue the certificate signed by our CA.
@@ -245,7 +249,8 @@ func (ca *CertificateAuthority) IssueCertificate(_ context.Context, identity str
 }
 
 type tlsConfigOptions struct {
-	expectedPeerSPIFFEIDs map[string]struct{}
+	expectedPeerSPIFFEIDs  map[string]struct{}
+	expectedPeerServerName string
 }
 
 // TLSConfigOption configures mTLS peer identity verification.
@@ -257,6 +262,10 @@ func WithExpectedPeerSPIFFEID(spiffeID string) TLSConfigOption {
 		spiffeID = strings.TrimSpace(spiffeID)
 		if spiffeID == "" {
 			return
+		}
+		parsed, err := url.Parse(spiffeID)
+		if err == nil && validSPIFFEURI(parsed) && opts.expectedPeerServerName == "" {
+			opts.expectedPeerServerName = dnsNameForSPIFFEURI(parsed)
 		}
 		if opts.expectedPeerSPIFFEIDs == nil {
 			opts.expectedPeerSPIFFEIDs = map[string]struct{}{}
@@ -308,6 +317,9 @@ func NewMutualTLSConfig(cert *IssuedCertificate, options ...TLSConfigOption) (*t
 	if len(opts.expectedPeerSPIFFEIDs) == 0 {
 		return nil, errors.New("mtls: expected peer SPIFFE ID required")
 	}
+	if opts.expectedPeerServerName == "" {
+		return nil, errors.New("mtls: expected peer server name required")
+	}
 
 	return &tls.Config{
 		Certificates: []tls.Certificate{*cert.TLSCert},
@@ -315,10 +327,10 @@ func NewMutualTLSConfig(cert *IssuedCertificate, options ...TLSConfigOption) (*t
 		ClientCAs:    caCertPool,
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		MinVersion:   tls.VersionTLS13,
-		// HELM mTLS peers use SPIFFE URI SANs, so VerifyConnection performs
-		// CA-chain and identity verification instead of DNS-name checks.
-		InsecureSkipVerify: true,
-		VerifyConnection:   verifyPeerConnection(caCertPool, opts.expectedPeerSPIFFEIDs),
+		ServerName:   opts.expectedPeerServerName,
+		// Go verifies the DNS SAN and CA chain before this hook runs. The hook
+		// adds the HELM-specific SPIFFE URI authorization check.
+		VerifyConnection: verifyPeerConnection(caCertPool, opts.expectedPeerSPIFFEIDs),
 	}, nil
 }
 
@@ -340,6 +352,63 @@ func spiffeURIForIdentity(identity string) (*url.URL, string, error) {
 
 func validSPIFFEURI(uri *url.URL) bool {
 	return uri != nil && uri.Scheme == "spiffe" && uri.Host != "" && strings.Trim(uri.Path, "/") != ""
+}
+
+func dnsNameForSPIFFEURI(uri *url.URL) string {
+	host := dnsLabel(uri.Host)
+	if host == "" {
+		host = "helm-local"
+	}
+
+	path := strings.Trim(uri.Path, "/")
+	labels := []string{}
+	for _, segment := range strings.Split(path, "/") {
+		if label := dnsLabel(segment); label != "" {
+			labels = append(labels, label)
+		}
+	}
+	if len(labels) == 0 {
+		labels = append(labels, "identity")
+	}
+	labels = append(labels, strings.Split(host, ".")...)
+	return strings.Join(labels, ".")
+}
+
+func dnsLabel(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+
+	var b strings.Builder
+	lastHyphen := false
+	for _, r := range value {
+		valid := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if valid {
+			b.WriteRune(r)
+			lastHyphen = false
+			continue
+		}
+		if r == '.' {
+			if !lastHyphen {
+				b.WriteRune('.')
+			}
+			lastHyphen = false
+			continue
+		}
+		if !lastHyphen {
+			b.WriteByte('-')
+			lastHyphen = true
+		}
+	}
+
+	label := strings.Trim(b.String(), "-.")
+	if len(label) <= 63 {
+		return label
+	}
+
+	sum := sha256.Sum256([]byte(label))
+	return strings.Trim(label[:46], "-.") + "-" + hex.EncodeToString(sum[:])[:16]
 }
 
 func verifyPeerConnection(roots *x509.CertPool, expectedPeerSPIFFEIDs map[string]struct{}) func(tls.ConnectionState) error {

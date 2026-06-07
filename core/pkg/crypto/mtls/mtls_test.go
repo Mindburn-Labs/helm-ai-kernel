@@ -55,11 +55,13 @@ func TestIssueCertificate(t *testing.T) {
 	leaf, err := x509.ParseCertificate(cert.TLSCert.Certificate[0])
 	require.NoError(t, err)
 	assert.Equal(t, "proxy", leaf.Subject.CommonName)
+	assert.Contains(t, leaf.DNSNames, "proxy.helm.local")
 	require.Len(t, leaf.URIs, 1)
 	assert.Equal(t, cert.SPIFFEID, leaf.URIs[0].String())
 
 	_, err = leaf.Verify(x509.VerifyOptions{
-		Roots: certPool,
+		Roots:   certPool,
+		DNSName: "proxy.helm.local",
 		KeyUsages: []x509.ExtKeyUsage{
 			x509.ExtKeyUsageClientAuth,
 			x509.ExtKeyUsageServerAuth,
@@ -108,7 +110,8 @@ func TestNewMutualTLSConfig(t *testing.T) {
 
 	assert.Equal(t, tls.RequireAndVerifyClientCert, cfg.ClientAuth)
 	assert.Equal(t, uint16(tls.VersionTLS13), cfg.MinVersion)
-	assert.True(t, cfg.InsecureSkipVerify)
+	assert.False(t, cfg.InsecureSkipVerify)
+	assert.Equal(t, "expected-peer.helm.local", cfg.ServerName)
 	assert.Len(t, cfg.Certificates, 1)
 	assert.NotNil(t, cfg.RootCAs)
 	assert.NotNil(t, cfg.ClientCAs)

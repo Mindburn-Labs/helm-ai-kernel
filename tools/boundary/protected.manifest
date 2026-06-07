@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-07T22:15:11Z
-# Commit: 0df4fc6eedb110aa1e4e4893bf22e2d6045db8aa
+# Generated: 2026-06-07T23:13:26Z
+# Commit: 0977fb7fbfca327b8829ea0d8a1060b78980d027
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -259,10 +259,10 @@ f5fa3d7fb690ece1be77b63802373f92c45c100be5d035fcfe2e119454efd99c  core/pkg/crypt
 e413e00ef1096f7b175843caf4017059bac41b3eaf946a5728844d5d063f7a42  core/pkg/crypto/mldsa_signer.go
 24f018864c1a6d8803359565dc873667f3d78fdaf256f5f95dc8f585c415fb91  core/pkg/crypto/mldsa_signer_test.go
 c175602cb54061691c460cd9b4177c70ea6436ac951a055b6f8e6d58dda2f310  core/pkg/crypto/mldsa_verifier.go
-8bcac1acc597ee5469eef258231b9531686e6694785c52d54c4f6548322b4c50  core/pkg/crypto/mtls/mtls.go
-9d2d99daa800af373b910a461d71e46155943dd761df483c5154ac0b84e35b9e  core/pkg/crypto/mtls/mtls_test.go
-c2ca666954ff76e43c48e74a6746b827804fda7af6f1518a6a561f122a73ec17  core/pkg/crypto/mtls/rotator.go
-05455b29cb3d67e42ee005932386a8b0501bf5128be1be3fd5395d0a545e5ba8  core/pkg/crypto/mtls/rotator_core_coverage_test.go
+bb9cccd00a8f5107ccad949e14c50e13b4e6e714fa952e8b7c866798d0e9c9c8  core/pkg/crypto/mtls/mtls.go
+6d0889b2a97402f7d0627e2871be096505e733b456862abd5df24bbce9267f71  core/pkg/crypto/mtls/mtls_test.go
+328536be43592bcc25b4bf18a0bbe864c73ff43954dc1923033a537123af679f  core/pkg/crypto/mtls/rotator.go
+a8c4c2ef34613e99ecf4b3a72861c0b34dafa8c10ad3084ff903f72b72ec02b9  core/pkg/crypto/mtls/rotator_core_coverage_test.go
 f83617b68486e9380a2271b72b51066e188c82f415560bffdc1d8d62452aad69  core/pkg/crypto/sdjwt/sdjwt.go
 d3366d27f1a5e3b4b0b36d66aa78b895f1a6220bfd40172fc789ed7f946bcb06  core/pkg/crypto/sdjwt/sdjwt_test.go
 c05fd979d2cba7ac6decd9766f929b8df7b095e26b07f711354fe32e466cacb7  core/pkg/crypto/shredding/shredding.go

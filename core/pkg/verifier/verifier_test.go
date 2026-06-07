@@ -185,6 +185,38 @@ func TestVerifyBundle_RequiresEvidencePackSeal(t *testing.T) {
 	}
 }
 
+func TestVerifyBundleRejectsUntrustedEmbeddedSignatures(t *testing.T) {
+	dir := createValidBundleFixture(t)
+	writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), map[string]any{
+		"receipt_id":    "rcpt-001",
+		"decision_id":   "dec-001",
+		"decision_hash": "sha256:abc123",
+		"status":        "APPLIED",
+		"lamport_clock": 1,
+		"signature":     "attacker-controlled",
+	})
+
+	report, err := VerifyBundle(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified {
+		t.Fatal("bundle with untrusted embedded receipt signature must fail verification")
+	}
+	var found bool
+	for _, check := range report.Checks {
+		if check.Name == "embedded_signature_trust" && !check.Pass {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("missing embedded signature trust failure: %+v", report.Checks)
+	}
+	if report.SignatureValidCount >= report.SignatureTotalCount {
+		t.Fatalf("unverified embedded signature was counted as valid: valid=%d total=%d", report.SignatureValidCount, report.SignatureTotalCount)
+	}
+}
+
 func TestVerifyBundle_MissingManifest(t *testing.T) {
 	dir := t.TempDir()
 

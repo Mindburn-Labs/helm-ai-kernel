@@ -35,15 +35,15 @@ Current branch baseline: `codex/kernel-security-remediation` at `ee2cfd6d`, befo
 | helm-ai-kernel-FILE-0514-A | already-fixed-with-regression | TelemetryPDP observe-only shadow mode |
 | helm-ai-kernel-FILE-0432-A | already-fixed-with-regression | ZK receipt mock seal verification |
 | HELM_AI_KERNEL-SUBAGENT-0100 | already-fixed-with-regression | Standalone Launchpad API auth |
-| HELM_AI_KERNEL-SUBAGENT-0097 | remaining | Control-plane policy bundle signature enforcement |
+| HELM_AI_KERNEL-SUBAGENT-0097 | already-fixed-with-regression | Control-plane policy bundle signature enforcement |
 | HELM_AI_KERNEL-SUBAGENT-0091 | already-fixed-with-regression | GitHub EffectPermit scope enforcement |
-| HELM_AI_KERNEL-SUBAGENT-0089 | remaining | Control-plane policy update trust roots |
+| HELM_AI_KERNEL-SUBAGENT-0089 | already-fixed-with-regression | Control-plane policy update trust roots |
 | HELM_AI_KERNEL-SUBAGENT-0087 | remaining | Claude-managed sandbox per-session filesystem isolation |
 | HELM_AI_KERNEL-SUBAGENT-0086 | remaining | Claude-managed sandbox environment scrubbing |
 | HELM_AI_KERNEL-SUBAGENT-0085 | already-fixed-with-regression | Guardian effect-digest intent binding |
 | HELM_AI_KERNEL-SUBAGENT-0083 | already-fixed-with-regression | Privileged access signed receipt schema |
-| HELM_AI_KERNEL-SUBAGENT-0080 | remaining | TUF metadata signature verification |
-| HELM_AI_KERNEL-SUBAGENT-0079 | remaining | Rekor checkpoint signature verification |
+| HELM_AI_KERNEL-SUBAGENT-0080 | already-fixed-with-regression | TUF metadata signature verification |
+| HELM_AI_KERNEL-SUBAGENT-0079 | already-fixed-with-regression | Rekor checkpoint signature verification |
 | HELM_AI_KERNEL-SUBAGENT-0078 | remaining | Workstation receipt trust roots and signer defaults |
 | HELM_AI_KERNEL-SUBAGENT-0036 | remaining | Workstation enforce operate-mode execution guard |
 | HELM_AI_KERNEL-SUBAGENT-0030 | remaining | Signed trust registry mutations |
@@ -93,7 +93,7 @@ Current branch baseline: `codex/kernel-security-remediation` at `ee2cfd6d`, befo
 | HELM_AI_KERNEL-SUBAGENT-0016 | remaining | Execute-payment schema payee and amount constraints |
 | HELM_AI_KERNEL-SUBAGENT-0015 | already-fixed-with-regression | Helm external Postgres Secret handling |
 | HELM_AI_KERNEL-SUBAGENT-0014 | remaining | TEE secret proxy plaintext storage |
-| HELM_AI_KERNEL-SUBAGENT-0013 | remaining | EvidencePack trusted signature root enforcement |
+| HELM_AI_KERNEL-SUBAGENT-0013 | fixed | EvidencePack trusted signature root enforcement |
 | HELM_AI_KERNEL-SUBAGENT-0012 | remaining | Scoped MCP approval expiry and tool binding |
 | HELM_AI_KERNEL-SUBAGENT-0011 | remaining | Reference-pack policy hash binding |
 | HELM_AI_KERNEL-SUBAGENT-0010 | remaining | Python publish workflow dispatch input validation |

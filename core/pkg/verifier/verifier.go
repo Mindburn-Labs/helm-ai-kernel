@@ -147,6 +147,7 @@ func VerifyBundleWithOptions(bundlePath string, opts VerifyOptions) (*VerifyRepo
 			})
 		}
 	}
+	report.addCheck(checkEmbeddedSignatureTrust(bundlePath))
 
 	enrichReportMetadata(bundlePath, report)
 
@@ -280,9 +281,20 @@ func firstUint(document map[string]any, keys ...string) *uint64 {
 	return nil
 }
 
+func checkEmbeddedSignatureTrust(bundlePath string) CheckResult {
+	_, total := countEmbeddedSignatures(bundlePath)
+	if total == 0 {
+		return CheckResult{Name: "embedded_signature_trust", Pass: true, Detail: "no embedded receipt or witness signatures require verification"}
+	}
+	return CheckResult{
+		Name:   "embedded_signature_trust",
+		Pass:   false,
+		Reason: fmt.Sprintf("%d embedded receipt or witness signatures require a configured verifier; none are trusted by presence alone", total),
+	}
+}
+
 func countEmbeddedSignatures(bundlePath string) (int, int) {
 	total := 0
-	valid := 0
 	for _, dir := range []string{receiptPath(bundlePath), filepath.Join(bundlePath, "07_ATTESTATIONS")} {
 		if !dirExists(dir) {
 			continue
@@ -301,14 +313,12 @@ func countEmbeddedSignatures(bundlePath string) (int, int) {
 			}
 			if sig, ok := document["signature"].(string); ok && sig != "" {
 				total++
-				valid++
 			}
 			if witnesses, ok := document["witness_signatures"].([]any); ok {
 				for _, witness := range witnesses {
 					if item, ok := witness.(map[string]any); ok {
 						if sig, ok := item["signature"].(string); ok && sig != "" {
 							total++
-							valid++
 						}
 					}
 				}
@@ -316,11 +326,7 @@ func countEmbeddedSignatures(bundlePath string) (int, int) {
 			return nil
 		})
 	}
-	if fileExists(filepath.Join(bundlePath, "07_ATTESTATIONS", "conformance_report.sig")) {
-		total++
-		valid++
-	}
-	return valid, total
+	return 0, total
 }
 
 func shortHash(value string) string {

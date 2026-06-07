@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 )
 
@@ -161,6 +163,41 @@ func TestVerifyCmdOnlineUsesLedgerURL(t *testing.T) {
 	}
 }
 
+func TestVerifyCmdRejectsBundledConformancePublicKey(t *testing.T) {
+	bundle := createMinimalVerifiableBundle(t)
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conform.SignReport(bundle, "policy-hash", "schema-hash", "attacker", func(data []byte) (string, error) {
+		return hex.EncodeToString(ed25519.Sign(priv, data)), nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundle, "public_key.hex"), []byte(hex.EncodeToString(pub)), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := runVerifyCmd([]string{bundle, "--json"}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("verify accepted bundled public_key.hex as a trust root: stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "no trusted verification key") {
+		t.Fatalf("verify did not report missing external trust root: stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if err := os.Remove(filepath.Join(bundle, "public_key.hex")); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = runVerifyCmd([]string{bundle, "--json", "--trusted-public-key", hex.EncodeToString(pub)}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("verify with explicit trusted key failed: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestReceiptsTailRequiresAgent(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runReceiptsCmd([]string{"tail"}, &stdout, &stderr)
@@ -191,7 +228,7 @@ func createMinimalVerifiableBundle(t *testing.T) string {
 		}
 	}
 	score := []byte(`{"pass":true}`)
-	receipt := []byte(`{"decision_hash":"sha256:decision","signature":"sig","lamport_clock":1}`)
+	receipt := []byte(`{"decision_hash":"sha256:decision","lamport_clock":1}`)
 	proofgraph := []byte(`{"nodes":[]}`)
 	files := map[string][]byte{
 		"01_SCORE.json":                  score,

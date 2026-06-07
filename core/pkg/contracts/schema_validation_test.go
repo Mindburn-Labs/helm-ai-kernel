@@ -182,6 +182,147 @@ func TestSchemaAlignment(t *testing.T) {
 		compileSchema(t, "effects/effect_type_catalog.schema.json")
 	})
 
+	t.Run("ExecutePayment_requires_payee_positive_amount_and_ap2_binding", func(t *testing.T) {
+		schema := compileSchema(t, "effects/execute_payment_effect.v1.json")
+		valid := map[string]interface{}{
+			"effect_id":            "EXECUTE_PAYMENT",
+			"amount":               12.34,
+			"currency":             "USD",
+			"payee":                "wallet:treasury:vendor-001",
+			"payment_request_hash": "sha256:" + strings.Repeat("a", 64),
+			"ap2_receipt_id":       "ap2-rcpt-001",
+			"budget_receipt_id":    "budget-rcpt-001",
+		}
+		clone := func(input map[string]interface{}) map[string]interface{} {
+			t.Helper()
+			data, err := json.Marshal(input)
+			if err != nil {
+				t.Fatalf("marshal clone: %v", err)
+			}
+			var out map[string]interface{}
+			if err := json.Unmarshal(data, &out); err != nil {
+				t.Fatalf("unmarshal clone: %v", err)
+			}
+			return out
+		}
+		if err := schema.Validate(valid); err != nil {
+			t.Fatalf("valid execute-payment effect should validate: %v", err)
+		}
+		for name, mutate := range map[string]func(map[string]interface{}){
+			"missing_payee": func(v map[string]interface{}) { delete(v, "payee") },
+			"zero_amount":   func(v map[string]interface{}) { v["amount"] = 0 },
+			"bad_currency":  func(v map[string]interface{}) { v["currency"] = "usd" },
+			"bad_hash":      func(v map[string]interface{}) { v["payment_request_hash"] = "sha256:bad" },
+			"missing_ap2":   func(v map[string]interface{}) { delete(v, "ap2_receipt_id") },
+		} {
+			t.Run(name, func(t *testing.T) {
+				candidate := clone(valid)
+				mutate(candidate)
+				if err := schema.Validate(candidate); err == nil {
+					t.Fatalf("expected %s to fail schema validation", name)
+				}
+			})
+		}
+	})
+
+	t.Run("AuthorityEvaluation_top_level_binds_request_or_decision", func(t *testing.T) {
+		schema := compileSchema(t, "authority/authority_evaluation.v1.schema.json")
+		now := time.Now().UTC().Format(time.RFC3339)
+		request := map[string]interface{}{
+			"request_id":     "auth-req-001",
+			"principal_id":   "principal-1",
+			"principal_type": "user",
+			"effect_types":   []interface{}{"EXECUTE_PAYMENT"},
+			"policy_epoch":   "epoch-1",
+			"timestamp":      now,
+		}
+		decision := map[string]interface{}{
+			"decision_id":  "auth-dec-001",
+			"request_id":   "auth-req-001",
+			"result":       "DENY",
+			"policy_epoch": "epoch-1",
+			"issued_at":    now,
+			"content_hash": "sha256:" + strings.Repeat("b", 64),
+		}
+		if err := schema.Validate(request); err != nil {
+			t.Fatalf("authority request should validate: %v", err)
+		}
+		if err := schema.Validate(decision); err != nil {
+			t.Fatalf("authority decision should validate: %v", err)
+		}
+		inert := map[string]interface{}{"unexpected": "accepted-before"}
+		if err := schema.Validate(inert); err == nil {
+			t.Fatal("expected inert authority object to fail top-level schema validation")
+		}
+		smuggled := map[string]interface{}{
+			"request_id":     "auth-req-001",
+			"principal_id":   "principal-1",
+			"principal_type": "user",
+			"effect_types":   []interface{}{"EXECUTE_PAYMENT"},
+			"policy_epoch":   "epoch-1",
+			"timestamp":      now,
+			"admin_override": true,
+		}
+		if err := schema.Validate(smuggled); err == nil {
+			t.Fatal("expected authority request with extra top-level claim to fail")
+		}
+	})
+
+	t.Run("ModuleAttestation_requires_valid_commit_hash", func(t *testing.T) {
+		schema := compileSchema(t, "certification/module_attestation.schema.json")
+		valid := map[string]interface{}{
+			"attestation_id": "550e8400-e29b-41d4-a716-446655440000",
+			"module": map[string]interface{}{
+				"module_id":     "module-1",
+				"artifact_hash": "sha256:" + strings.Repeat("a", 64),
+				"manifest_hash": "sha256:" + strings.Repeat("b", 64),
+				"commit_hash":   strings.Repeat("c", 40),
+			},
+			"provenance": map[string]interface{}{
+				"builder_id":        "builder-1",
+				"build_timestamp":   time.Now().UTC().Format(time.RFC3339),
+				"build_config_hash": "sha256:" + strings.Repeat("d", 64),
+			},
+			"certification": map[string]interface{}{
+				"schema_conformance":   map[string]interface{}{"passed": true},
+				"determinism_tests":    map[string]interface{}{"passed": true},
+				"permissions_declared": map[string]interface{}{"effect_types": []interface{}{"EXECUTE_PAYMENT"}},
+			},
+			"signatures": []interface{}{
+				map[string]interface{}{
+					"signer_id": "certifier-1",
+					"signature": "base64-signature",
+					"signed_at": time.Now().UTC().Format(time.RFC3339),
+				},
+			},
+		}
+		clone := func(input map[string]interface{}) map[string]interface{} {
+			t.Helper()
+			data, err := json.Marshal(input)
+			if err != nil {
+				t.Fatalf("marshal clone: %v", err)
+			}
+			var out map[string]interface{}
+			if err := json.Unmarshal(data, &out); err != nil {
+				t.Fatalf("unmarshal clone: %v", err)
+			}
+			return out
+		}
+		if err := schema.Validate(valid); err != nil {
+			t.Fatalf("valid module attestation should validate: %v", err)
+		}
+		missing := clone(valid)
+		delete(missing["module"].(map[string]interface{}), "commit_hash")
+		if err := schema.Validate(missing); err == nil {
+			t.Fatal("expected missing commit_hash to fail")
+		}
+		bad := clone(valid)
+		bad["module"].(map[string]interface{})["commit_hash"] = "not-a-git-sha"
+		if err := schema.Validate(bad); err == nil {
+			t.Fatal("expected malformed commit_hash to fail")
+		}
+	})
+
 	t.Run("AccessRequest_field_names", func(t *testing.T) {
 		// Verify that AccessRequest marshals with expected JSON field names.
 		req := contracts.AccessRequest{

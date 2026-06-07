@@ -74,7 +74,10 @@ type EffectPermit struct {
 	Nonce       string      `json:"nonce"`
 	IssuedAt    time.Time   `json:"issued_at"`
 	IssuerID    string      `json:"issuer_id"`
-	Signature   string      `json:"signature,omitempty"`
+	// EvidenceBindings binds verifier-approved evidence hashes required by
+	// connector policy, such as sandbox_grant_hash for governed sandboxes.
+	EvidenceBindings map[string]string `json:"evidence_bindings,omitempty"`
+	Signature        string            `json:"signature,omitempty"`
 }
 
 // EffectScope defines the boundaries of what a permit allows.

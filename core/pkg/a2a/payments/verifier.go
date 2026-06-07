@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -93,12 +94,6 @@ func (v *ReceiptVerifier) SignReceipt(ctx context.Context, receipt *PaymentRecei
 		return fmt.Errorf("ap2: receipt is nil")
 	}
 
-	content := receipt.SignableContent()
-	sig, err := v.hsm.Sign(ctx, keyHandle, content, hsm.SignOpts{})
-	if err != nil {
-		return fmt.Errorf("ap2: sign receipt: %w", err)
-	}
-
 	keyInfo, err := v.hsm.GetKeyInfo(ctx, keyHandle)
 	if err != nil {
 		return fmt.Errorf("ap2: get key info: %w", err)
@@ -106,6 +101,11 @@ func (v *ReceiptVerifier) SignReceipt(ctx context.Context, receipt *PaymentRecei
 
 	receipt.SignatureKID = string(keyHandle)
 	receipt.SignatureAlg = keyInfo.Algorithm.String()
+	content := receipt.SignableContent()
+	sig, err := v.hsm.Sign(ctx, keyHandle, content, hsm.SignOpts{})
+	if err != nil {
+		return fmt.Errorf("ap2: sign receipt: %w", err)
+	}
 	receipt.SignatureVal = sig
 	return nil
 }
@@ -185,15 +185,34 @@ func (v *ReceiptVerifier) validateAgainstRequest(receipt *PaymentReceipt) error 
 	if receipt.AmountCents != req.AmountCents {
 		return ErrAmountMismatch
 	}
+	if receipt.RequestHash == "" || receipt.RequestHash != req.Hash() {
+		return fmt.Errorf("ap2: request hash mismatch")
+	}
+	if receipt.ChannelID != req.ChannelID {
+		return fmt.Errorf("ap2: channel mismatch: receipt=%s request=%s", receipt.ChannelID, req.ChannelID)
+	}
+	if receipt.FromAgentID != req.FromAgentID || receipt.ToAgentID != req.ToAgentID {
+		return fmt.Errorf("ap2: request agent mismatch")
+	}
+	if receipt.Method != req.Method {
+		return fmt.Errorf("ap2: method mismatch: receipt=%s request=%s", receipt.Method, req.Method)
+	}
 
 	// Currency must match
 	if receipt.Currency != req.Currency {
 		return fmt.Errorf("ap2: currency mismatch: receipt=%s request=%s", receipt.Currency, req.Currency)
 	}
-
-	// Verify request hash
-	if receipt.RequestHash != "" && receipt.RequestHash != req.Hash() {
-		return fmt.Errorf("ap2: request hash mismatch")
+	if req.Method == PaymentMethodBudget && receipt.BudgetReceiptID == "" {
+		return fmt.Errorf("ap2: budget receipt id is required for budget payments")
+	}
+	if receipt.IssuedAt.IsZero() {
+		return fmt.Errorf("ap2: issued_at is required")
+	}
+	if !req.CreatedAt.IsZero() && receipt.IssuedAt.Before(req.CreatedAt) {
+		return fmt.Errorf("ap2: issued_at precedes request creation")
+	}
+	if !reflect.DeepEqual(cloneStringMap(receipt.Metadata), cloneStringMap(req.Metadata)) {
+		return fmt.Errorf("ap2: metadata mismatch")
 	}
 
 	return nil

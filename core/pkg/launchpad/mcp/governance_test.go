@@ -1,6 +1,9 @@
 package mcp
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func scopedServer() ServerRecord {
 	return ServerRecord{
@@ -70,7 +73,13 @@ func TestLaunchScopedDecisionIncludesLiveAuthorizationFields(t *testing.T) {
 	req.Effect = EffectSideEffect
 	req.ApprovalReceiptRef = "approval-receipt:launch-1/write"
 
-	decision := Authorize(scopedServer(), req)
+	record := scopedServer()
+	record.Approvals = []ApprovalGrant{{
+		ReceiptRef: req.ApprovalReceiptRef,
+		ToolNames:  []string{"write"},
+		ExpiresAt:  time.Now().UTC().Add(time.Hour),
+	}}
+	decision := Authorize(record, req)
 	if decision.Verdict != "ALLOW" {
 		t.Fatalf("expected ALLOW, got %#v", decision)
 	}
@@ -79,6 +88,34 @@ func TestLaunchScopedDecisionIncludesLiveAuthorizationFields(t *testing.T) {
 	}
 	if decision.SchemaPin != "sha256:write" {
 		t.Fatalf("decision schema pin = %q", decision.SchemaPin)
+	}
+}
+
+func TestSideEffectApprovalGrantMustMatchToolAndExpiry(t *testing.T) {
+	now := time.Unix(1700000000, 0).UTC()
+	req := scopedRequest("write", "sha256:write")
+	req.Effect = EffectSideEffect
+	req.ApprovalReceiptRef = "approval-receipt:launch-1/write"
+	record := scopedServer()
+
+	record.Approvals = []ApprovalGrant{{
+		ReceiptRef: req.ApprovalReceiptRef,
+		ToolNames:  []string{"read"},
+		ExpiresAt:  now.Add(time.Hour),
+	}}
+	if decision := AuthorizeAt(record, req, now); decision.Verdict != "DENY" || decision.Reason != "ERR_MCP_APPROVAL_SCOPE_OR_EXPIRY" {
+		t.Fatalf("wrong tool approval should deny, got %#v", decision)
+	}
+
+	record.Approvals[0].ToolNames = []string{"write"}
+	record.Approvals[0].ExpiresAt = now.Add(-time.Second)
+	if decision := AuthorizeAt(record, req, now); decision.Verdict != "DENY" || decision.Reason != "ERR_MCP_APPROVAL_SCOPE_OR_EXPIRY" {
+		t.Fatalf("expired approval should deny, got %#v", decision)
+	}
+
+	record.Approvals[0].ExpiresAt = now.Add(time.Hour)
+	if decision := AuthorizeAt(record, req, now); decision.Verdict != "ALLOW" {
+		t.Fatalf("scoped live approval should allow, got %#v", decision)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -87,15 +88,14 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 		p0 := policyFromParams(params)
 		env.P0CeilingsHash = p0.Hash()
 	}
-	grant := c.defaultGrant
-	if parsed := sandboxGrantFromParams(params); parsed != nil {
-		grant = parsed
-	}
-	if grant != nil && env.SandboxGrantHash == "" {
-		sealed, sealErr := grant.Seal()
-		if sealErr == nil {
-			env.SandboxGrantHash = sealed.GrantHash
+	grant, bindingErr := c.boundSandboxGrant(permit, params, env)
+	if bindingErr != nil {
+		receipt, receiptErr := NewPreDispatchReceipt(env, deny(reasonFromError(bindingErr, ReasonSandboxGrantRequired), bindingErr.Error()))
+		if receiptErr == nil {
+			_ = c.appendProofNode(proofgraph.NodeTypeIntent, env)
+			_ = c.appendProofNode(proofgraph.NodeTypeAttestation, receipt)
 		}
+		return receipt, receiptErr
 	}
 	manifest := scriptManifestFromParams(params)
 	ceilings := c.defaultP0
@@ -118,6 +118,31 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 	}
 	_ = c.appendProofNode(proofgraph.NodeTypeEffect, receipt)
 	return receipt, nil
+}
+
+func (c *Connector) boundSandboxGrant(permit *effects.EffectPermit, params map[string]any, env *ActonCommandEnvelope) (*contracts.SandboxGrant, error) {
+	if _, ok := params["sandbox_grant"]; ok {
+		return nil, fmt.Errorf("%s: caller supplied sandbox_grant is not trusted", ReasonSandboxGrantRequired)
+	}
+	if c.defaultGrant == nil {
+		return nil, fmt.Errorf("%s: connector sandbox grant is not configured", ReasonSandboxGrantRequired)
+	}
+	sealed, err := c.defaultGrant.Seal()
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", ReasonSandboxGrantRequired, err)
+	}
+	boundHash := strings.TrimSpace(permit.EvidenceBindings["sandbox_grant_hash"])
+	if boundHash == "" {
+		return nil, fmt.Errorf("%s: permit missing sandbox_grant_hash binding", ReasonSandboxGrantRequired)
+	}
+	if boundHash != sealed.GrantHash {
+		return nil, fmt.Errorf("%s: permit sandbox_grant_hash mismatch", ReasonSandboxGrantRequired)
+	}
+	if env.SandboxGrantHash != "" && env.SandboxGrantHash != boundHash {
+		return nil, fmt.Errorf("%s: envelope sandbox_grant_hash mismatch", ReasonSandboxGrantRequired)
+	}
+	env.SandboxGrantHash = boundHash
+	return c.defaultGrant, nil
 }
 
 func (c *Connector) appendProofNode(t proofgraph.NodeType, payload any) error {

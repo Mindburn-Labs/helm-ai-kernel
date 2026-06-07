@@ -46,7 +46,7 @@ Current branch baseline: `codex/kernel-security-remediation` at `ee2cfd6d`, befo
 | HELM_AI_KERNEL-SUBAGENT-0079 | already-fixed-with-regression | Rekor checkpoint signature verification |
 | HELM_AI_KERNEL-SUBAGENT-0078 | fixed | Workstation receipt trust roots and signer defaults |
 | HELM_AI_KERNEL-SUBAGENT-0036 | fixed | Workstation enforce operate-mode execution guard |
-| HELM_AI_KERNEL-SUBAGENT-0030 | remaining | Signed trust registry mutations |
+| HELM_AI_KERNEL-SUBAGENT-0030 | fixed | Signed trust registry mutations |
 | HELM_AI_KERNEL-SUBAGENT-0029 | already-fixed-with-regression | Kernel Launchpad API auth |
 | HELM_AI_KERNEL-SUBAGENT-0028 | already-fixed-with-regression | Autonomy control admin auth |
 | HELM_AI_KERNEL-SUBAGENT-0022 | fixed | Launchpad mount-name containment |
@@ -68,33 +68,33 @@ Current branch baseline: `codex/kernel-security-remediation` at `ee2cfd6d`, befo
 | helm-ai-kernel-FILE-0482-A | already-fixed-with-regression | Skill promotion evaluator evidence checks |
 | helm-ai-kernel-FILE-0410-A | already-fixed-with-regression | mTLS SPIFFE peer identity binding |
 | helm-ai-kernel-FILE-0390-A | already-fixed-with-regression | File audit hash-chain verification |
-| helm-ai-kernel-FILE-0389-A | remaining | TON wallet secret detection |
-| helm-ai-kernel-FILE-0378-A | remaining | AP2 payment signed payload binding |
+| helm-ai-kernel-FILE-0389-A | fixed | TON wallet secret detection |
+| helm-ai-kernel-FILE-0378-A | fixed | AP2 payment signed payload binding |
 | HELM_AI_KERNEL-SUBAGENT-0096 | already-fixed-with-regression | Helm Postgres TLS production guard |
 | HELM_AI_KERNEL-SUBAGENT-0095 | already-fixed-with-regression | Helm Postgres Secret references |
 | HELM_AI_KERNEL-SUBAGENT-0094 | already-fixed-with-regression | Guardian context provenance binding |
 | HELM_AI_KERNEL-SUBAGENT-0093 | already-fixed-with-regression | Docker smoke local credential exposure |
 | HELM_AI_KERNEL-SUBAGENT-0088 | already-fixed-with-regression | Runtime tenant identity binding |
-| HELM_AI_KERNEL-SUBAGENT-0081 | remaining | Module attestation commit hash validation |
+| HELM_AI_KERNEL-SUBAGENT-0081 | fixed | Module attestation commit hash validation |
 | HELM_AI_KERNEL-SUBAGENT-0037 | fixed | Workstation decision signing seed argv removal |
 | HELM_AI_KERNEL-SUBAGENT-0035 | fixed | Workstation import signing seed argv removal |
 | HELM_AI_KERNEL-SUBAGENT-0034 | fixed | Workstation receipt signing seed argv removal |
 | HELM_AI_KERNEL-SUBAGENT-0033 | fixed | Shadow scan secret redaction |
 | HELM_AI_KERNEL-SUBAGENT-0032 | fixed | Console login password argv removal |
-| HELM_AI_KERNEL-SUBAGENT-0027 | remaining | Authority evaluation schema top-level binding |
-| HELM_AI_KERNEL-SUBAGENT-0026 | remaining | Release cosign identity anchoring |
+| HELM_AI_KERNEL-SUBAGENT-0027 | fixed | Authority evaluation schema top-level binding |
+| HELM_AI_KERNEL-SUBAGENT-0026 | fixed | Release cosign identity anchoring |
 | HELM_AI_KERNEL-SUBAGENT-0025 | already-fixed-with-regression | MCP firewall canonical verdicts |
 | HELM_AI_KERNEL-SUBAGENT-0023 | already-fixed-with-regression | Sandbox broker bearer-token validation |
-| HELM_AI_KERNEL-SUBAGENT-0021 | remaining | Acton connector permit and grant binding |
+| HELM_AI_KERNEL-SUBAGENT-0021 | fixed | Acton connector permit and grant binding |
 | HELM_AI_KERNEL-SUBAGENT-0020 | already-fixed-with-regression | E2B HTTPS preflight enforcement |
 | HELM_AI_KERNEL-SUBAGENT-0019 | already-fixed-with-regression | Daytona HTTPS preflight enforcement |
 | HELM_AI_KERNEL-SUBAGENT-0018 | fixed | Claude-managed shim dispatcher policy |
 | HELM_AI_KERNEL-SUBAGENT-0017 | already-fixed-with-regression | Inbound channel strict signature metadata |
-| HELM_AI_KERNEL-SUBAGENT-0016 | remaining | Execute-payment schema payee and amount constraints |
+| HELM_AI_KERNEL-SUBAGENT-0016 | fixed | Execute-payment schema payee and amount constraints |
 | HELM_AI_KERNEL-SUBAGENT-0015 | already-fixed-with-regression | Helm external Postgres Secret handling |
 | HELM_AI_KERNEL-SUBAGENT-0014 | fixed | TEE secret proxy plaintext storage |
 | HELM_AI_KERNEL-SUBAGENT-0013 | fixed | EvidencePack trusted signature root enforcement |
-| HELM_AI_KERNEL-SUBAGENT-0012 | remaining | Scoped MCP approval expiry and tool binding |
+| HELM_AI_KERNEL-SUBAGENT-0012 | fixed | Scoped MCP approval expiry and tool binding |
 | HELM_AI_KERNEL-SUBAGENT-0011 | fixed | Reference-pack policy hash binding |
 | HELM_AI_KERNEL-SUBAGENT-0010 | fixed | Python publish workflow dispatch input validation |
 | HELM_AI_KERNEL-SUBAGENT-0009 | fixed | npm publish workflow dispatch input validation |

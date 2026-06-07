@@ -535,6 +535,7 @@ func postMCPAuthorizeForTest(t *testing.T, mux *http.ServeMux, body map[string]a
 func authorizeTestRequest(req *http.Request) {
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 	req.Header.Set(tenantHeader, defaultRuntimeTenantID)
+	req.Header.Set(principalHeader, "system-admin")
 }
 
 type overflowReceiptStore struct {

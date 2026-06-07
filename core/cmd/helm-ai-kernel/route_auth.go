@@ -57,7 +57,12 @@ func requireRuntimeTenant(handler http.HandlerFunc) http.HandlerFunc {
 		}
 
 		tenantID := configuredRuntimeTenantID()
-		if requestedTenantID := selectedTenantID(r); requestedTenantID != "" && requestedTenantID != tenantID {
+		requestedTenantID := selectedTenantID(r)
+		if requestedTenantID == "" {
+			api.WriteForbidden(w, "Tenant-scoped route requires explicit tenant binding")
+			return
+		}
+		if requestedTenantID != tenantID {
 			api.WriteForbidden(w, "Tenant-scoped route tenant mismatch")
 			return
 		}
@@ -67,7 +72,12 @@ func requireRuntimeTenant(handler http.HandlerFunc) http.HandlerFunc {
 			api.WriteForbidden(w, "Tenant-scoped route principal could not be resolved")
 			return
 		}
-		if requestedPrincipalID := strings.TrimSpace(r.Header.Get(principalHeader)); requestedPrincipalID != "" && requestedPrincipalID != principalID {
+		requestedPrincipalID := strings.TrimSpace(r.Header.Get(principalHeader))
+		if requestedPrincipalID == "" {
+			api.WriteForbidden(w, "Tenant-scoped route requires explicit principal binding")
+			return
+		}
+		if requestedPrincipalID != principalID {
 			api.WriteForbidden(w, "Tenant-scoped route principal mismatch")
 			return
 		}

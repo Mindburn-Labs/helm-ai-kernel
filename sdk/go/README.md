@@ -72,13 +72,21 @@ func main() {
 | Method | Endpoint |
 | --- | --- |
 | `ChatCompletions(req)` | `POST /v1/chat/completions` |
+| `ChatCompletionsWithReceipt(req)` | `POST /v1/chat/completions` plus `X-Helm-*` governance headers |
+| `EvaluateDecision(req)` | `POST /api/v1/evaluate` |
+| `RunPublicDemo(actionID, args)` | `POST /api/demo/run` |
+| `VerifyPublicDemoReceipt(receipt, expectedHash)` | `POST /api/demo/verify` |
 | `ApproveIntent(req)` | `POST /api/v1/kernel/approve` |
 | `ListSessions(limit, offset)` | `GET /api/v1/proofgraph/sessions` |
 | `GetReceipts(sessionID)` | `GET /api/v1/proofgraph/sessions/{id}/receipts` |
+| `GetReceipt(receiptHash)` | `GET /api/v1/proofgraph/receipts/{hash}` |
 | `ExportEvidence(sessionID)` | `POST /api/v1/evidence/export` |
 | `VerifyEvidence(bundle)` | `POST /api/v1/evidence/verify` |
+| `ReplayVerify(bundle)` | `POST /api/v1/replay/verify` |
 | `CreateEvidenceEnvelopeManifest(req)` | `POST /api/v1/evidence/envelopes` |
 | `ConformanceRun(req)` | `POST /api/v1/conformance/run` |
+| `GetConformanceReport(reportID)` | `GET /api/v1/conformance/reports/{id}` |
+| `ListConformanceReports()` | `GET /api/v1/conformance/reports` |
 | `ListNegativeConformanceVectors()` | `GET /api/v1/conformance/negative` |
 | `ListConformanceVectors()` | `GET /api/v1/conformance/vectors` |
 | `ListMCPRegistry()` | `GET /api/v1/mcp/registry` |
@@ -88,6 +96,9 @@ func main() {
 | `ListBoundaryCapabilities()` | `GET /api/v1/boundary/capabilities` |
 | `ListBoundaryRecords(query)` | `GET /api/v1/boundary/records` |
 | `VerifyBoundaryRecord(recordID)` | `POST /api/v1/boundary/records/{id}/verify` |
+| `ListBoundaryCheckpoints()` | `GET /api/v1/boundary/checkpoints` |
+| `CreateBoundaryCheckpoint()` | `POST /api/v1/boundary/checkpoints` |
+| `VerifyBoundaryCheckpoint(checkpointID)` | `POST /api/v1/boundary/checkpoints/{id}/verify` |
 | `ListSandboxBackendProfiles()` | `GET /api/v1/sandbox/grants/inspect` |
 | `InspectSandboxGrant(runtime, profile, policyEpoch)` | `GET /api/v1/sandbox/grants/inspect` |
 | `Health()` | `GET /healthz` |

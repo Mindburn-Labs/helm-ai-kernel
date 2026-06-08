@@ -328,9 +328,11 @@ func runtimeStartResultFromHandle(handle lpruntime.ContainerHandle) RuntimeStart
 	result.ContainerID = handle.ContainerID
 	result.SandboxGrantRef = handle.SandboxGrantRef
 	result.EgressReceiptRef = handle.EgressReceiptRef
+	result.EgressReceiptPath = handle.EgressReceiptPath
 	result.EgressNetworkName = handle.EgressNetworkName
 	result.EgressProxyID = handle.EgressProxyID
 	result.EgressProxyName = handle.EgressProxyName
+	result.EgressProxyImage = handle.EgressProxyImage
 	return result
 }
 

@@ -262,6 +262,40 @@ func TestExecutorRunsNetworkedLaunchWithEgressReceipt(t *testing.T) {
 	}
 }
 
+func TestExecutorBundlesEgressProxyReceiptOnRuntimeFailure(t *testing.T) {
+	receiptPath := filepath.Join(t.TempDir(), "egress-receipt.json")
+	if err := os.WriteFile(receiptPath, []byte(`{"receipt_id":"receipt:egress","subject":{"proxy_image":"proxy@sha256:abc"}}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := NewStore(t.TempDir())
+	p := allowPlan()
+	p.NetworkAllowlist = []string{"openrouter.ai:443"}
+	run, err := NewExecutor(store).ExecuteLaunch(p, ExecuteOptions{
+		Reason:         "test",
+		RuntimeStarter: failingNetworkStarterWithReceipt{receiptPath: receiptPath},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteLaunch: %v", err)
+	}
+	if run.State != StateRepairRequired {
+		t.Fatalf("expected REPAIR_REQUIRED, got %s", run.State)
+	}
+	if len(run.EgressReceiptRefs) == 0 {
+		t.Fatalf("runtime failure did not retain egress receipt refs: %#v", run)
+	}
+	if len(run.EvidencePackRefs) == 0 {
+		t.Fatalf("evidence pack missing: %#v", run)
+	}
+	if _, err := os.Stat(filepath.Join(run.EvidencePackRefs[0], "02_PROOFGRAPH/receipts/launchpad-egress-proxy.json")); err != nil {
+		t.Fatalf("egress proxy receipt was not bundled: %v", err)
+	}
+	var runtimeEnv map[string]any
+	readJSON(t, filepath.Join(run.EvidencePackRefs[0], "04_EXPORTS/runtime_environment.json"), &runtimeEnv)
+	if runtimeEnv["egress_proxy_image"] != "proxy@sha256:abc" || runtimeEnv["egress_receipt_ref"] != "receipt:egress" {
+		t.Fatalf("runtime environment missing egress proxy evidence: %#v", runtimeEnv)
+	}
+}
+
 type fakeStarter struct {
 	called bool
 }
@@ -294,6 +328,19 @@ func (fakeNetworkStarter) Start(plan.LaunchPlan, ExecuteOptions) (RuntimeStartRe
 		EgressReceiptRef: "receipt:egress",
 		Runtime:          "local-container",
 	}, nil
+}
+
+type failingNetworkStarterWithReceipt struct {
+	receiptPath string
+}
+
+func (s failingNetworkStarterWithReceipt) Start(plan.LaunchPlan, ExecuteOptions) (RuntimeStartResult, error) {
+	return RuntimeStartResult{
+		Runtime:           "local-container",
+		EgressReceiptRef:  "receipt:egress",
+		EgressReceiptPath: s.receiptPath,
+		EgressProxyImage:  "proxy@sha256:abc",
+	}, testError("runtime command failed")
 }
 
 type failingIsolationStarter struct{}

@@ -504,8 +504,14 @@ exit 0
 	if err != nil {
 		t.Fatal(err)
 	}
-	if handle.ProxyContainerID != "proxy-container-id" || handle.NetworkName == "" || handle.ReceiptRef == "" || !handle.TokenBrokerEnabled {
+	if handle.ProxyContainerID != "proxy-container-id" || handle.NetworkName == "" || handle.ReceiptRef == "" || handle.ReceiptPath == "" || !handle.TokenBrokerEnabled {
 		t.Fatalf("sidecar handle mismatch: %#v", handle)
+	}
+	if handle.ProxyImage != "image@sha256:abc" {
+		t.Fatalf("sidecar proxy image = %q", handle.ProxyImage)
+	}
+	if _, err := os.Stat(handle.ReceiptPath); err != nil {
+		t.Fatalf("sidecar receipt path not written: %v", err)
 	}
 	if err := handle.Stop(); err != nil {
 		t.Fatalf("sidecar stop failed: %v", err)
@@ -519,7 +525,7 @@ exit 0
 			t.Fatalf("docker log missing %q: %s", want, logData)
 		}
 	}
-	if ref := writeSidecarReceipt(blocker, "launch", "ALLOW", "write-error", nil); ref == "" {
+	if ref, _ := writeSidecarReceipt(blocker, "launch", "ALLOW", "write-error", nil); ref == "" {
 		t.Fatal("sidecar receipt id should be returned on write failure")
 	}
 

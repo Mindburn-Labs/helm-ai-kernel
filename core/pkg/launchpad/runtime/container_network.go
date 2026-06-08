@@ -24,11 +24,13 @@ type EgressProxyRequest struct {
 type EgressProxyHandle struct {
 	ProxyURL           string       `json:"proxy_url"`
 	ReceiptRef         string       `json:"receipt_ref"`
+	ReceiptPath        string       `json:"receipt_path,omitempty"`
 	ReceiptDir         string       `json:"receipt_dir,omitempty"`
 	Allowlist          []string     `json:"allowlist"`
 	NetworkName        string       `json:"network_name,omitempty"`
 	ProxyContainerID   string       `json:"proxy_container_id,omitempty"`
 	ProxyContainerName string       `json:"proxy_container_name,omitempty"`
+	ProxyImage         string       `json:"proxy_image,omitempty"`
 	PayloadInspection  string       `json:"payload_inspection"`
 	NetworkProof       string       `json:"network_proof"`
 	TokenBrokerEnabled bool         `json:"token_broker_enabled"`

@@ -69,9 +69,20 @@ func TestLiveModelProviderLocalContainerConformance(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Promote: %v", err)
 			}
+			if manifest.EgressProxy != nil && manifest.EgressProxy.Image != "" && promoted.FrameworkContract.EgressProxy.Required {
+				if promoted.FrameworkContract.EgressProxy.Image != manifest.EgressProxy.Image {
+					t.Fatalf("%s promoted egress proxy image = %q, want run artifact %q", appID, promoted.FrameworkContract.EgressProxy.Image, manifest.EgressProxy.Image)
+				}
+				if promoted.FrameworkContract.EgressProxy.Digest != manifest.EgressProxy.Digest {
+					t.Fatalf("%s promoted egress proxy digest = %q, want run artifact %q", appID, promoted.FrameworkContract.EgressProxy.Digest, manifest.EgressProxy.Digest)
+				}
+			}
 			compiled, err := plan.CompileWithRoot(promoted, substrate, "ci.launchpad", catalog.Root)
 			if err != nil {
 				t.Fatalf("CompileWithRoot: %v", err)
+			}
+			if manifest.EgressProxy != nil && manifest.EgressProxy.Image != "" && compiled.FrameworkContract.EgressProxy.Required && compiled.FrameworkContract.EgressProxy.Image != manifest.EgressProxy.Image {
+				t.Fatalf("%s compiled egress proxy image = %q, want run artifact %q", appID, compiled.FrameworkContract.EgressProxy.Image, manifest.EgressProxy.Image)
 			}
 			if len(compiled.RuntimeCommand) == 0 {
 				t.Fatalf("%s compiled without an AppSpec runtime command", appID)

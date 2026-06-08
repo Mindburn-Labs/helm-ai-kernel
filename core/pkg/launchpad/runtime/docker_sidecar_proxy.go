@@ -82,7 +82,7 @@ func (p DockerSidecarEgressProxy) Start(req EgressProxyRequest) (EgressProxyHand
 		_ = exec.Command(docker, "network", "rm", networkName).Run()
 		return EgressProxyHandle{}, fmt.Errorf("attach egress proxy to launch network: %w: %s", err, strings.TrimSpace(string(out)))
 	}
-	receiptRef := writeSidecarReceipt(receiptDir, req.LaunchID, "ALLOW", "docker_sidecar_started", map[string]any{
+	receiptRef, receiptPath := writeSidecarReceipt(receiptDir, req.LaunchID, "ALLOW", "docker_sidecar_started", map[string]any{
 		"network_name":          networkName,
 		"proxy_container_id":    containerID,
 		"proxy_container_name":  proxyName,
@@ -95,11 +95,13 @@ func (p DockerSidecarEgressProxy) Start(req EgressProxyRequest) (EgressProxyHand
 	return EgressProxyHandle{
 		ProxyURL:           "http://" + proxyName + ":8080",
 		ReceiptRef:         receiptRef,
+		ReceiptPath:        receiptPath,
 		ReceiptDir:         receiptDir,
 		Allowlist:          append([]string{}, req.Allowlist...),
 		NetworkName:        networkName,
 		ProxyContainerID:   containerID,
 		ProxyContainerName: proxyName,
+		ProxyImage:         image,
 		PayloadInspection:  payloadInspection(req.PayloadInspection),
 		NetworkProof:       networkProof(req.NetworkProof),
 		TokenBrokerEnabled: req.TokenBrokerEnabled,
@@ -111,16 +113,17 @@ func (p DockerSidecarEgressProxy) Start(req EgressProxyRequest) (EgressProxyHand
 			if out, err := exec.Command(docker, "network", "rm", networkName).CombinedOutput(); err != nil && stopErr == nil {
 				stopErr = fmt.Errorf("remove egress network: %w: %s", err, strings.TrimSpace(string(out)))
 			}
-			_ = writeSidecarReceipt(receiptDir, req.LaunchID, "ALLOW", "docker_sidecar_stopped", map[string]any{
+			_, _ = writeSidecarReceipt(receiptDir, req.LaunchID, "ALLOW", "docker_sidecar_stopped", map[string]any{
 				"network_name":         networkName,
 				"proxy_container_name": proxyName,
+				"proxy_image":          image,
 			})
 			return stopErr
 		},
 	}, nil
 }
 
-func writeSidecarReceipt(dir, launchID, verdict, reason string, subject map[string]any) string {
+func writeSidecarReceipt(dir, launchID, verdict, reason string, subject map[string]any) (string, string) {
 	if subject == nil {
 		subject = map[string]any{}
 	}
@@ -128,11 +131,11 @@ func writeSidecarReceipt(dir, launchID, verdict, reason string, subject map[stri
 	receipt := receipts.NewReceipt("launchpad.egress_proxy", launchID, verdict, subject)
 	data, err := json.MarshalIndent(receipt, "", "  ")
 	if err != nil {
-		return receipt.ReceiptID
+		return receipt.ReceiptID, ""
 	}
 	path := filepath.Join(dir, safeFileComponent(receipt.Hash)+"-"+time.Now().UTC().Format("20060102T150405Z")+".json")
 	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
-		return receipt.ReceiptID
+		return receipt.ReceiptID, ""
 	}
-	return receipt.ReceiptID
+	return receipt.ReceiptID, path
 }

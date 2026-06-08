@@ -39,9 +39,11 @@ type RuntimeStartResult struct {
 	ContainerID                string
 	SandboxGrantRef            string
 	EgressReceiptRef           string
+	EgressReceiptPath          string
 	EgressNetworkName          string
 	EgressProxyID              string
 	EgressProxyName            string
+	EgressProxyImage           string
 	Runtime                    string
 	IsolationMode              string
 	IsolationHardened          bool
@@ -211,7 +213,9 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		run.ResultClass = plan.ResultClassRuntimeRepairRequired
 		run.RepairClass = plan.RepairClassRuntimeRepairRequired
 		run.Reason = "runtime start failed after ALLOW; repair required before RUNNING: " + err.Error()
+		run.EgressReceiptRefs = appendUnique(run.EgressReceiptRefs, runtimeResult.EgressReceiptRef)
 		addJSON(artifacts, "receipts/launchpad-runtime-failure.json", failureReceipt)
+		addEgressProxyReceipt(artifacts, runtimeResult)
 		runtimeEnvironment := map[string]any{"runtime": "local-container", "state": "REPAIR_REQUIRED", "error": err.Error()}
 		addRuntimeStartEvidence(runtimeEnvironment, runtimeResult)
 		addJSON(artifacts, "runtime_environment.json", runtimeEnvironment)
@@ -250,6 +254,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	run.RuntimeHandles.CloudResourceIDs = runtimeResult.CloudResourceIDs
 	run.SandboxGrantRefs = appendUnique(run.SandboxGrantRefs, runtimeResult.SandboxGrantRef)
 	run.EgressReceiptRefs = appendUnique(run.EgressReceiptRefs, runtimeResult.EgressReceiptRef)
+	addEgressProxyReceipt(artifacts, runtimeResult)
 	startReceipt := receipts.NewReceipt("launchpad.start", compiled.LaunchID, "ALLOW", map[string]any{
 		"runtime":                      runtimeResult.Runtime,
 		"container_id":                 runtimeResult.ContainerID,
@@ -257,6 +262,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		"filesystem":                   "scoped_workspace",
 		"side_effects":                 "policy-authorized",
 		"egress_receipt_ref":           runtimeResult.EgressReceiptRef,
+		"egress_proxy_image":           runtimeResult.EgressProxyImage,
 		"isolation_mode":               runtimeResult.IsolationMode,
 		"isolation_hardened":           runtimeResult.IsolationHardened,
 		"isolation_detection_status":   runtimeResult.IsolationDetectionStatus,
@@ -718,6 +724,20 @@ func addJSON(dst map[string][]byte, name string, value any) {
 	dst[name] = append(data, '\n')
 }
 
+func addEgressProxyReceipt(dst map[string][]byte, result RuntimeStartResult) {
+	if strings.TrimSpace(result.EgressReceiptPath) == "" {
+		return
+	}
+	data, err := os.ReadFile(result.EgressReceiptPath)
+	if err != nil {
+		return
+	}
+	if len(data) == 0 || data[len(data)-1] != '\n' {
+		data = append(data, '\n')
+	}
+	dst["receipts/launchpad-egress-proxy.json"] = data
+}
+
 func addRuntimeStartEvidence(dst map[string]any, result RuntimeStartResult) {
 	if result.Runtime != "" {
 		dst["runtime"] = result.Runtime
@@ -742,6 +762,24 @@ func addRuntimeStartEvidence(dst map[string]any, result RuntimeStartResult) {
 	}
 	if result.NetworkProof != "" {
 		dst["network_proof"] = result.NetworkProof
+	}
+	if result.EgressReceiptRef != "" {
+		dst["egress_receipt_ref"] = result.EgressReceiptRef
+	}
+	if result.EgressReceiptPath != "" {
+		dst["egress_receipt_path"] = result.EgressReceiptPath
+	}
+	if result.EgressProxyImage != "" {
+		dst["egress_proxy_image"] = result.EgressProxyImage
+	}
+	if result.EgressProxyID != "" {
+		dst["egress_proxy_id"] = result.EgressProxyID
+	}
+	if result.EgressProxyName != "" {
+		dst["egress_proxy_name"] = result.EgressProxyName
+	}
+	if result.EgressNetworkName != "" {
+		dst["egress_network_name"] = result.EgressNetworkName
 	}
 	dst["token_broker_enabled"] = result.TokenBrokerEnabled
 }

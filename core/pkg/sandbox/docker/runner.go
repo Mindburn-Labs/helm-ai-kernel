@@ -131,14 +131,10 @@ func (r *DockerRunner) Run(spec *sandbox.SandboxSpec) (*sandbox.Result, *sandbox
 	args = append(args, spec.Command...)
 	args = append(args, spec.Args...)
 
-	// For detached daemons we use a much shorter `docker run -d` timeout
-	// (just the time to register the container with Docker) and rely on
-	// an external healthcheck loop. Synchronous runs honour the full
-	// command timeout.
+	// `docker run -d` still performs any required image pull before Docker
+	// returns the container ID. Honor the spec timeout here so cold pulls of
+	// pinned Launchpad images do not get misclassified as runtime repair.
 	runTimeout := spec.Limits.Timeout
-	if spec.Detached {
-		runTimeout = 60 * time.Second
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 	defer cancel()
 

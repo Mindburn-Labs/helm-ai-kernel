@@ -3,6 +3,7 @@ package boundary
 import (
 	"context"
 	"database/sql"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -582,6 +583,121 @@ func TestBoundaryPerimeterAndSyscallEdges(t *testing.T) {
 				t.Fatalf("ValidateSyscall() error = %v", err)
 			}
 		})
+	}
+}
+
+func TestSurfaceRegistryPersistenceFailureBranches(t *testing.T) {
+	now := boundaryTestNow()
+	record := contracts.ExecutionBoundaryRecord{
+		RecordID:    "rec-persist-error",
+		Verdict:     contracts.VerdictAllow,
+		ToolName:    "tool.persist",
+		PolicyEpoch: "epoch-persist",
+		ReceiptID:   "receipt-persist",
+		CreatedAt:   now,
+	}
+
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "closed-runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := NewSQLSurfaceRegistry(context.Background(), db, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.PutRecord(record); err == nil {
+		t.Fatal("closed SQL registry should fail record index persistence")
+	}
+	registry.mu.Lock()
+	err = registry.persistLocked()
+	registry.mu.Unlock()
+	if err == nil {
+		t.Fatal("closed SQL registry should fail snapshot persistence")
+	}
+
+	closedDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "closed-init.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := closedDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewSQLSurfaceRegistry(context.Background(), closedDB, func() time.Time { return now }); err == nil {
+		t.Fatal("closed SQL db should fail registry init")
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	canceledDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "canceled.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer canceledDB.Close()
+	if _, err := NewSQLSurfaceRegistry(canceled, canceledDB, func() time.Time { return now }); err == nil {
+		t.Fatal("canceled context should fail registry init")
+	}
+
+	invalidDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "invalid-snapshot.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer invalidDB.Close()
+	if _, err := invalidDB.Exec(`CREATE TABLE boundary_surface_snapshots (id TEXT PRIMARY KEY, snapshot_json TEXT NOT NULL, updated_at TEXT NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := invalidDB.Exec(`INSERT INTO boundary_surface_snapshots (id, snapshot_json, updated_at) VALUES ('default', '{bad-json', 'now')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewSQLSurfaceRegistry(context.Background(), invalidDB, func() time.Time { return now }); err == nil {
+		t.Fatal("invalid SQL snapshot should fail registry load")
+	}
+
+	badFileParent := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(badFileParent, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fileRegistry := newSurfaceRegistry(func() time.Time { return now })
+	fileRegistry.path = filepath.Join(badFileParent, "surface.json")
+	fileRegistry.mu.Lock()
+	err = fileRegistry.persistLocked()
+	fileRegistry.mu.Unlock()
+	if err == nil {
+		t.Fatal("file registry should fail when parent path is not a directory")
+	}
+
+	marshalRegistry := newSurfaceRegistry(func() time.Time { return now })
+	marshalRegistry.reports["bad"] = map[string]any{"nan": math.NaN()}
+	marshalRegistry.mu.Lock()
+	err = marshalRegistry.persistLocked()
+	marshalRegistry.mu.Unlock()
+	if err == nil {
+		t.Fatal("non-JSON report value should fail registry snapshot marshal")
+	}
+
+	eventDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "events.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventRegistry, err := NewSQLSurfaceRegistry(context.Background(), eventDB, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventRegistry.mu.Lock()
+	err = eventRegistry.appendEventLocked("bad", "bad", map[string]float64{"nan": math.NaN()})
+	eventRegistry.mu.Unlock()
+	if err == nil {
+		t.Fatal("non-JSON event value should fail event marshal")
+	}
+	if err := eventDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	eventRegistry.mu.Lock()
+	err = eventRegistry.appendEventLocked("budget", "budget-z", map[string]string{"ok": "true"})
+	eventRegistry.mu.Unlock()
+	if err == nil {
+		t.Fatal("closed SQL db should fail event append")
 	}
 }
 

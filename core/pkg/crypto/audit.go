@@ -1,6 +1,8 @@
 package crypto
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"os"
 	"sync"
@@ -103,13 +105,21 @@ func (l *FileAuditLog) Entries() []AuditEvent {
 	defer func() { _ = f.Close() }()
 
 	var events []AuditEvent
-	decoder := json.NewDecoder(f)
-	for decoder.More() {
-		var event AuditEvent
-		if err := decoder.Decode(&event); err != nil {
-			continue
+	reader := bufio.NewReader(f)
+	for {
+		line, err := reader.ReadBytes('\n')
+		if len(line) > 0 {
+			line = bytes.TrimSpace(line)
 		}
-		events = append(events, event)
+		if len(line) > 0 {
+			var event AuditEvent
+			if err := json.Unmarshal(line, &event); err == nil {
+				events = append(events, event)
+			}
+		}
+		if err != nil {
+			break
+		}
 	}
 
 	return events

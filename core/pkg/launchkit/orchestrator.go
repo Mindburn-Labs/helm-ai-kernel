@@ -383,15 +383,76 @@ func bindRunGates(gates []Gate, run session.LaunchRun) []Gate {
 	if run.KernelVerdict != "ALLOW" {
 		gates = setGate(gates, "runtime.launch", GateSkipped, run.ReasonCode, "No runtime was launched because a prior gate did not allow.")
 		gates = setGate(gates, "healthcheck", GateSkipped, run.ReasonCode, "Healthcheck was blocked before runtime.")
-	} else {
+	} else if run.State == session.StateRunning && len(run.StartReceiptRefs) > 0 && run.RuntimeHandles.ContainerID != "" {
 		gates = setGate(gates, "runtime.launch", GateAllow, "", "Runtime start receipt and handle are attached to the run.")
-		gates = setGate(gates, "healthcheck", GateAllow, "", "Healthcheck receipt is attached to the run.")
+		if len(run.HealthcheckRefs) > 0 {
+			gates = setGate(gates, "healthcheck", GateAllow, "", "Healthcheck receipt is attached to the run.")
+		} else {
+			gates = setGate(gates, "healthcheck", GateEscalate, repairReason(run), "Healthcheck did not certify a running workload; repair is required before RUNNING.")
+		}
+	} else if len(run.StartReceiptRefs) > 0 && run.RuntimeHandles.ContainerID != "" {
+		gates = setGate(gates, "runtime.launch", GateEscalate, repairReason(run), "Runtime returned a handle but did not reach RUNNING; repair is required before production proof.")
+		gates = setGate(gates, "healthcheck", GateEscalate, repairReason(run), "Healthcheck did not certify RUNNING; repair is required before production proof.")
+	} else {
+		gates = setGate(gates, "runtime.launch", GateEscalate, repairReason(run), "Runtime did not return a start receipt and handle; repair is required before RUNNING.")
+		gates = setGate(gates, "healthcheck", GateSkipped, repairReason(run), "Healthcheck was blocked because runtime did not start.")
 	}
-	gates = setGate(gates, "receipts.emit", status, run.ReasonCode, "Receipt refs are attached to the run.")
-	gates = setGate(gates, "evidence.export", status, run.ReasonCode, "EvidencePack refs are attached to the run.")
-	gates = setGate(gates, "offline.verify", status, run.ReasonCode, run.VerificationCommand)
+	receiptStatus, receiptReason, receiptSummary := receiptGateStatus(run, status)
+	evidenceStatus, evidenceReason := evidenceGateStatus(run, status)
+	verifyStatus, verifyReason := verifyGateStatus(run, status)
+	gates = setGate(gates, "receipts.emit", receiptStatus, receiptReason, receiptSummary)
+	gates = setGate(gates, "evidence.export", evidenceStatus, evidenceReason, "EvidencePack refs are attached to the run.")
+	gates = setGate(gates, "offline.verify", verifyStatus, verifyReason, run.VerificationCommand)
 	gates = setGate(gates, "console.deeplink", status, run.ReasonCode, "Console can open the receipt-backed run.")
 	return gates
+}
+
+func receiptGateStatus(run session.LaunchRun, fallback GateStatus) (GateStatus, string, string) {
+	if run.KernelVerdict != "ALLOW" {
+		return fallback, run.ReasonCode, "Receipt refs are blocked because a prior gate did not allow."
+	}
+	if len(run.StartReceiptRefs) == 0 {
+		return GateEscalate, repairReason(run), "Runtime start receipt is missing; repair is required before RUNNING."
+	}
+	if requiresEgressReceipt(run) && len(run.EgressReceiptRefs) == 0 {
+		return GateEscalate, "ERR_LAUNCHKIT_EGRESS_RECEIPT_MISSING", "Launch-scoped egress receipt is missing; repair is required before production proof."
+	}
+	return GateAllow, "", "Receipt refs are attached to the run."
+}
+
+func evidenceGateStatus(run session.LaunchRun, fallback GateStatus) (GateStatus, string) {
+	if run.KernelVerdict != "ALLOW" {
+		return fallback, run.ReasonCode
+	}
+	if len(run.EvidencePackRefs) == 0 {
+		return GateEscalate, "ERR_LAUNCHKIT_EVIDENCEPACK_MISSING"
+	}
+	return GateAllow, ""
+}
+
+func verifyGateStatus(run session.LaunchRun, fallback GateStatus) (GateStatus, string) {
+	if run.KernelVerdict != "ALLOW" {
+		return fallback, run.ReasonCode
+	}
+	if strings.TrimSpace(run.VerificationCommand) == "" {
+		return GateEscalate, "ERR_LAUNCHKIT_OFFLINE_VERIFY_COMMAND_MISSING"
+	}
+	return GateAllow, ""
+}
+
+func requiresEgressReceipt(run session.LaunchRun) bool {
+	handles := run.RuntimeHandles
+	return handles.EgressNetworkName != "" || handles.EgressProxyID != "" || handles.EgressProxyName != ""
+}
+
+func repairReason(run session.LaunchRun) string {
+	if run.ReasonCode != "" {
+		return run.ReasonCode
+	}
+	if run.State == session.StateRepairRequired {
+		return "ERR_LAUNCHKIT_RUNTIME_REPAIR_REQUIRED"
+	}
+	return ""
 }
 
 func secretSummary(mode Mode, refs []string) string {

@@ -1,13 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
@@ -15,6 +22,7 @@ type captureReceiptStore struct {
 	last     *contracts.Receipt
 	stored   *contracts.Receipt
 	storeErr error
+	agentID  string
 }
 
 func (s *captureReceiptStore) Get(context.Context, string) (*contracts.Receipt, error) {
@@ -51,7 +59,8 @@ func (s *captureReceiptStore) Store(_ context.Context, receipt *contracts.Receip
 	return nil
 }
 
-func (s *captureReceiptStore) AppendCausal(ctx context.Context, _ string, build store.CausalReceiptBuilder) error {
+func (s *captureReceiptStore) AppendCausal(ctx context.Context, agentID string, build store.CausalReceiptBuilder) error {
+	s.agentID = agentID
 	lamport := uint64(1)
 	prevHash := ""
 	if s.last != nil {
@@ -163,4 +172,81 @@ func TestPersistDecisionReceiptReturnsStoreError(t *testing.T) {
 	if !errors.Is(err, storeErr) {
 		t.Fatalf("expected store error, got %v", err)
 	}
+}
+
+func TestEvaluateRouteRequiresTenantAuthentication(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	svc, receipts := newEvaluateRouteTestServices(t)
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader([]byte(`{"principal":"attacker","action":"EXECUTE_TOOL","resource":"local.echo"}`)))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated evaluate status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if receipts.stored != nil {
+		t.Fatalf("unauthenticated evaluate persisted receipt: %+v", receipts.stored)
+	}
+}
+
+func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	svc, receipts := newEvaluateRouteTestServices(t)
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	body := []byte(`{"principal":"attacker","action":"EXECUTE_TOOL","resource":"local.echo","context":{"tenant_id":"tenant-attacker","principal_id":"attacker","session_id":"session-1"}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-trusted")
+	req.Header.Set(principalHeader, "principal-trusted")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("authenticated evaluate status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if receipts.agentID != "principal-trusted" {
+		t.Fatalf("causal chain agent = %q, want trusted principal", receipts.agentID)
+	}
+	if receipts.stored == nil {
+		t.Fatal("authenticated evaluate did not persist receipt")
+	}
+	if receipts.stored.ExecutorID != "principal-trusted" {
+		t.Fatalf("receipt executor = %q, want trusted principal", receipts.stored.ExecutorID)
+	}
+	var decision contracts.DecisionRecord
+	if err := json.Unmarshal(rec.Body.Bytes(), &decision); err != nil {
+		t.Fatal(err)
+	}
+	if decision.InputContext["tenant_id"] != "tenant-trusted" || decision.InputContext["principal_id"] != "principal-trusted" {
+		t.Fatalf("decision context did not use trusted identity: %+v", decision.InputContext)
+	}
+}
+
+func newEvaluateRouteTestServices(t *testing.T) (*Services, *captureReceiptStore) {
+	t.Helper()
+	signer, err := helmcrypto.NewEd25519Signer("evaluate-route-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph := prg.NewGraph()
+	if err := graph.AddRule("local.echo", prg.RequirementSet{
+		ID:    "allow-local-echo",
+		Logic: prg.AND,
+		Requirements: []prg.Requirement{
+			{ID: "allow", Expression: "true"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	receipts := &captureReceiptStore{}
+	return &Services{
+		Guardian:      guardian.NewGuardian(signer, graph, artifacts.NewRegistry(nil, nil)),
+		ReceiptStore:  receipts,
+		ReceiptSigner: signer,
+	}, receipts
 }

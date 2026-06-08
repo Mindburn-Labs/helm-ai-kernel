@@ -12,12 +12,13 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 )
 
 func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
-	mux.HandleFunc("/api/v1/evaluate", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/evaluate", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -31,9 +32,23 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteBadRequest(w, "Invalid JSON body")
 			return
 		}
-		if req.Principal == "" {
-			req.Principal = "anonymous"
+		principal, err := helmauth.GetPrincipal(r.Context())
+		if err != nil || principal == nil {
+			api.WriteForbidden(w, "Evaluate route requires authenticated tenant principal context")
+			return
 		}
+		principalID := strings.TrimSpace(principal.GetID())
+		tenantID := strings.TrimSpace(principal.GetTenantID())
+		if principalID == "" || tenantID == "" {
+			api.WriteForbidden(w, "Evaluate route requires authenticated tenant and principal identifiers")
+			return
+		}
+		req.Principal = principalID
+		if req.Context == nil {
+			req.Context = make(map[string]interface{})
+		}
+		req.Context["principal_id"] = principalID
+		req.Context["tenant_id"] = tenantID
 		decision, err := svc.Guardian.EvaluateDecision(r.Context(), req)
 		if err != nil {
 			api.WriteInternal(w, err)
@@ -50,7 +65,7 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(decision)
-	})
+	}))
 
 	mux.HandleFunc("/api/v1/receipts/tail", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

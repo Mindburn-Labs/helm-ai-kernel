@@ -222,6 +222,42 @@ func pickInt64(m map[string]any, keys ...string) int64 {
 	return 0
 }
 
+func proxyStatusBlocksBody(status string) bool {
+	switch status {
+	case "DENIED", "PEP_VALIDATION_FAILED", "GOVERNANCE_ERROR", "PROXY_ITERATION_LIMIT", "PROXY_WALLCLOCK_LIMIT":
+		return true
+	default:
+		return false
+	}
+}
+
+func deniedProxyResponseBody(status, reasonCode string, toolNames []string, correlationID string) []byte {
+	if reasonCode == "" {
+		reasonCode = status
+	}
+	helm := map[string]any{
+		"status":      status,
+		"reason_code": reasonCode,
+		"tool_names":  append([]string(nil), toolNames...),
+	}
+	body := map[string]any{
+		"error": map[string]any{
+			"message": "HELM proxy blocked a governed tool call",
+			"type":    "helm_governance_denied",
+			"code":    reasonCode,
+		},
+		"helm": helm,
+	}
+	if correlationID != "" {
+		helm["correlation_id"] = correlationID
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return []byte(`{"error":{"message":"HELM proxy blocked a governed tool call","type":"helm_governance_denied","code":"DENIED"}}`)
+	}
+	return data
+}
+
 // validateToolCallArgs performs PEP validation: validates tool arguments
 // via the manifest package (JCS canonicalization + SHA-256 hash).
 // Schema validation is skipped (nil schema) in open-policy proxy mode;
@@ -482,10 +518,6 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			// Extract OTel GenAI usage from response body.
 			inputTokens, outputTokens, finishReason := extractGenAIUsage(body)
 
-			// Hash output
-			outHash := sha256.Sum256(body)
-			outHashHex := "sha256:" + hex.EncodeToString(outHash[:])
-
 			// Parse for tool_calls + PEP validation
 			var chatResp map[string]any
 			toolCallCount := 0
@@ -606,6 +638,16 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 				status == "PROXY_WALLCLOCK_LIMIT" {
 				verdict = "DENY"
 			}
+			if proxyStatusBlocksBody(status) {
+				body = deniedProxyResponseBody(status, reasonCode, toolNames, correlationID)
+				resp.StatusCode = http.StatusForbidden
+				resp.Status = "403 Forbidden"
+				resp.Header.Set("Content-Type", "application/json")
+			}
+
+			// Hash the body that will be delivered to the client.
+			outHash := sha256.Sum256(body)
+			outHashHex := "sha256:" + hex.EncodeToString(outHash[:])
 
 			// Build receipt
 			rcptID := fmt.Sprintf("rcpt-proxy-%d-%d", time.Now().UnixNano(), clock)

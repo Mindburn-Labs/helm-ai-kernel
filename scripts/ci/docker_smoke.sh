@@ -153,6 +153,7 @@ root_key_hash() {
 evaluate_unknown_tool() {
     curl -fsS -X POST "$(base_url)/api/v1/evaluate" \
         -H 'Content-Type: application/json' \
+        "${auth_headers[@]}" \
         --data-binary @- >"$DATA_DIR/decision.json" <<JSON
 {"principal":"${AGENT_ID}","action":"EXECUTE_TOOL","resource":"unknown.tool.smoke","context":{"session_id":"${AGENT_ID}","destination":"blocked.smoke.local","payload_size":1}}
 JSON

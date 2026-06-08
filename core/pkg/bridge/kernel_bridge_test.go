@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
@@ -30,8 +31,24 @@ func newTestGuardian(t *testing.T) (*guardian.Guardian, *prg.Graph) {
 	return guardian.NewGuardian(signer, prgGraph, reg), prgGraph
 }
 
+func addAllowedToolRule(t *testing.T, prgGraph *prg.Graph, toolName string) {
+	t.Helper()
+	err := prgGraph.AddRule(toolName, prg.RequirementSet{
+		ID:    "allow-" + toolName,
+		Logic: prg.AND,
+		Requirements: []prg.Requirement{
+			{
+				ID:         "tool-match-" + toolName,
+				Expression: fmt.Sprintf("input.action == %q", toolName),
+			},
+		},
+	})
+	require.NoError(t, err)
+}
+
 func TestGovern_AllowedToolCall(t *testing.T) {
 	g, prgG := newTestGuardian(t)
+	addAllowedToolRule(t, prgG, "get_weather")
 	pg := proofgraph.NewGraph()
 
 	kb := NewKernelBridge(g, prgG, pg, nil, "tenant-test")
@@ -49,8 +66,28 @@ func TestGovern_AllowedToolCall(t *testing.T) {
 	assert.Equal(t, 2, pg.Len())
 }
 
+func TestGovern_UnknownToolFailsClosedWithoutMutatingPolicy(t *testing.T) {
+	g, prgG := newTestGuardian(t)
+	pg := proofgraph.NewGraph()
+
+	kb := NewKernelBridge(g, prgG, pg, nil, "tenant-test")
+
+	result, err := kb.Govern(context.Background(), "credential_export", "sha256:bad")
+	require.NoError(t, err)
+
+	assert.False(t, result.Allowed, "unknown tools must not be allowed")
+	require.NotNil(t, result.Decision)
+	assert.Equal(t, string(contracts.VerdictDeny), result.Decision.Verdict)
+	assert.Equal(t, string(contracts.ReasonNoPolicy), result.ReasonCode)
+	assert.Equal(t, string(contracts.ReasonNoPolicy), result.Decision.ReasonCode)
+	assert.NotContains(t, prgG.Rules, "credential_export", "bridge must not auto-register tool policies")
+	assert.Equal(t, 2, pg.Len(), "denials still record INTENT + ATTESTATION")
+}
+
 func TestGovern_BudgetExhausted(t *testing.T) {
 	g, prgG := newTestGuardian(t)
+	addAllowedToolRule(t, prgG, "tool_a")
+	addAllowedToolRule(t, prgG, "tool_b")
 	pg := proofgraph.NewGraph()
 
 	// Create budget enforcer with very low limit
@@ -82,6 +119,7 @@ func TestGovern_BudgetExhausted(t *testing.T) {
 
 func TestGovern_ProofGraphChainIntegrity(t *testing.T) {
 	g, prgG := newTestGuardian(t)
+	addAllowedToolRule(t, prgG, "tool_iterate")
 	pg := proofgraph.NewGraph()
 
 	kb := NewKernelBridge(g, prgG, pg, nil, "tenant-chain")
@@ -105,19 +143,21 @@ func TestGovern_ProofGraphChainIntegrity(t *testing.T) {
 	}
 }
 
-func TestGovern_NilBudgetSkips(t *testing.T) {
+func TestGovern_NilBudgetSkipsBudgetOnly(t *testing.T) {
 	g, prgG := newTestGuardian(t)
+	addAllowedToolRule(t, prgG, "any_tool")
 	pg := proofgraph.NewGraph()
 
 	kb := NewKernelBridge(g, prgG, pg, nil, "tenant-nobud")
 
 	result, err := kb.Govern(context.Background(), "any_tool", "sha256:any")
 	require.NoError(t, err)
-	assert.True(t, result.Allowed, "should allow when no budget enforcer")
+	assert.True(t, result.Allowed, "nil budget should skip only budget checks")
 }
 
 func TestGovern_DecisionHasToolName(t *testing.T) {
 	g, prgG := newTestGuardian(t)
+	addAllowedToolRule(t, prgG, "execute_code")
 	pg := proofgraph.NewGraph()
 
 	kb := NewKernelBridge(g, prgG, pg, nil, "tenant-tool")
@@ -125,6 +165,6 @@ func TestGovern_DecisionHasToolName(t *testing.T) {
 	result, err := kb.Govern(context.Background(), "execute_code", "sha256:code")
 	require.NoError(t, err)
 	require.NotNil(t, result.Decision)
-	// Verify that the decision was made (verdict should be ALLOW with our open policy)
+	// Verify that the decision was made against the explicit tool policy.
 	assert.Equal(t, "ALLOW", result.Decision.Verdict)
 }

@@ -249,7 +249,7 @@ func runServerWithOptions(opts serverOptions) {
 		if sourceErr != nil {
 			log.Fatalf("Failed to configure policy source: %v", sourceErr)
 		}
-		policyVerifier, requirePolicySignature, verifierErr := policySignatureVerifierFromEnv()
+		policyVerifier, requirePolicySignature, verifierErr := policySignatureVerifierFromEnv(policySourceKind)
 		if verifierErr != nil {
 			log.Fatalf("Failed to configure policy signature verifier: %v", verifierErr)
 		}
@@ -480,6 +480,9 @@ func policySourceFromEnv(policyPath string, scope policyreconcile.PolicyScope) (
 		if baseURL == "" {
 			return nil, "controlplane", fmt.Errorf("HELM_POLICY_CONTROLPLANE_URL is required when HELM_POLICY_SOURCE_KIND=controlplane")
 		}
+		if err := policyreconcile.ValidateControlPlaneURL(baseURL); err != nil {
+			return nil, "controlplane", err
+		}
 		source := policyreconcile.NewControlPlaneSource(baseURL, scope)
 		source.BearerToken = os.Getenv("HELM_POLICY_BEARER_TOKEN")
 		return source, "controlplane", nil
@@ -490,9 +493,12 @@ func policySourceFromEnv(policyPath string, scope policyreconcile.PolicyScope) (
 	}
 }
 
-func policySignatureVerifierFromEnv() (policyreconcile.SignatureVerifier, bool, error) {
+func policySignatureVerifierFromEnv(sourceKind string) (policyreconcile.SignatureVerifier, bool, error) {
 	requireSignature := envBool("HELM_POLICY_SIGNATURE_REQUIRED")
 	publicKey := strings.TrimSpace(os.Getenv("HELM_POLICY_TRUST_PUBLIC_KEY"))
+	if strings.EqualFold(sourceKind, "controlplane") && !requireSignature {
+		return nil, false, fmt.Errorf("HELM_POLICY_SIGNATURE_REQUIRED=true is required when HELM_POLICY_SOURCE_KIND=controlplane")
+	}
 	if publicKey == "" {
 		if requireSignature {
 			return nil, true, fmt.Errorf("HELM_POLICY_TRUST_PUBLIC_KEY is required when HELM_POLICY_SIGNATURE_REQUIRED=true")

@@ -19,7 +19,7 @@ flowchart TD
 
 ## One-command path
 ```bash
-helm up hermes --target local
+helm-ai-kernel up hermes --target local --live --json --no-open
 ```
 
 ## Headless path
@@ -30,6 +30,12 @@ helm-ai-kernel launch hermes local-container --headless --output json
 ## Source Truth
 - Registry source: `registry/launchpad/apps/hermes.yaml`
 - Policy source: `policies/launchpad/apps/hermes.safe.toml`
+- Production runbook: `docs/launchpad/HERMES_PRODUCTION_RUNBOOK.md`
+
+## Production claim boundary
+Hermes production proof uses explicit `--live` mode with OpenRouter-only model
+gateway scope and team-grade EvidencePack trust. It is a Mindburn-owned
+production proof, not a customer/high-assurance claim.
 
 ## Evidence requirements
 - cpi_output

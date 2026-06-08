@@ -51,6 +51,30 @@ func TestPolicySourceFromEnvControlPlaneUsesBearerToken(t *testing.T) {
 	}
 }
 
+func TestPolicySourceFromEnvControlPlaneAllowsLoopbackHTTP(t *testing.T) {
+	t.Setenv("HELM_POLICY_SOURCE_KIND", "controlplane")
+	t.Setenv("HELM_POLICY_CONTROLPLANE_URL", "http://127.0.0.1:18080")
+	source, kind, err := policySourceFromEnv("/tmp/policy.toml", policyreconcile.DefaultScope)
+	if err != nil {
+		t.Fatalf("source from env: %v", err)
+	}
+	if kind != "controlplane" {
+		t.Fatalf("expected controlplane, got %s", kind)
+	}
+	if _, ok := source.(*policyreconcile.ControlPlaneSource); !ok {
+		t.Fatalf("expected ControlPlaneSource, got %T", source)
+	}
+}
+
+func TestPolicySourceFromEnvControlPlaneRejectsPlainHTTP(t *testing.T) {
+	t.Setenv("HELM_POLICY_SOURCE_KIND", "controlplane")
+	t.Setenv("HELM_POLICY_CONTROLPLANE_URL", "http://controlplane.example")
+	_, _, err := policySourceFromEnv("/tmp/policy.toml", policyreconcile.DefaultScope)
+	if err == nil || !strings.Contains(err.Error(), "must use https") {
+		t.Fatalf("expected non-HTTPS controlplane URL error, got %v", err)
+	}
+}
+
 func TestPolicySourceFromEnvCRDFailsClosedInOSSRuntime(t *testing.T) {
 	t.Setenv("HELM_POLICY_SOURCE_KIND", "crd")
 	_, _, err := policySourceFromEnv("/tmp/policy.toml", policyreconcile.DefaultScope)
@@ -70,7 +94,7 @@ func TestPolicySourceFromEnvRejectsUnknownKind(t *testing.T) {
 func TestPolicySignatureVerifierFromEnvDefaultsOptional(t *testing.T) {
 	t.Setenv("HELM_POLICY_SIGNATURE_REQUIRED", "")
 	t.Setenv("HELM_POLICY_TRUST_PUBLIC_KEY", "")
-	verifier, required, err := policySignatureVerifierFromEnv()
+	verifier, required, err := policySignatureVerifierFromEnv("mountedFile")
 	if err != nil {
 		t.Fatalf("signature verifier from env: %v", err)
 	}
@@ -82,9 +106,31 @@ func TestPolicySignatureVerifierFromEnvDefaultsOptional(t *testing.T) {
 func TestPolicySignatureVerifierFromEnvRequiresPublicKey(t *testing.T) {
 	t.Setenv("HELM_POLICY_SIGNATURE_REQUIRED", "true")
 	t.Setenv("HELM_POLICY_TRUST_PUBLIC_KEY", "")
-	_, required, err := policySignatureVerifierFromEnv()
+	_, required, err := policySignatureVerifierFromEnv("mountedFile")
 	if err == nil || !required || !strings.Contains(err.Error(), "HELM_POLICY_TRUST_PUBLIC_KEY") {
 		t.Fatalf("expected required public key error, got required=%v err=%v", required, err)
+	}
+}
+
+func TestPolicySignatureVerifierFromEnvControlPlaneRequiresSignatureFlag(t *testing.T) {
+	signer, err := crypto.NewEd25519Signer("policy-source-test")
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+	t.Setenv("HELM_POLICY_SIGNATURE_REQUIRED", "")
+	t.Setenv("HELM_POLICY_TRUST_PUBLIC_KEY", signer.PublicKey())
+	_, required, err := policySignatureVerifierFromEnv("controlplane")
+	if err == nil || required || !strings.Contains(err.Error(), "HELM_POLICY_SIGNATURE_REQUIRED=true") {
+		t.Fatalf("expected required signature flag error, got required=%v err=%v", required, err)
+	}
+}
+
+func TestPolicySignatureVerifierFromEnvControlPlaneRequiresTrustPublicKey(t *testing.T) {
+	t.Setenv("HELM_POLICY_SIGNATURE_REQUIRED", "true")
+	t.Setenv("HELM_POLICY_TRUST_PUBLIC_KEY", "")
+	_, required, err := policySignatureVerifierFromEnv("controlplane")
+	if err == nil || !required || !strings.Contains(err.Error(), "HELM_POLICY_TRUST_PUBLIC_KEY") {
+		t.Fatalf("expected controlplane public key error, got required=%v err=%v", required, err)
 	}
 }
 
@@ -95,7 +141,7 @@ func TestPolicySignatureVerifierFromEnvUsesTrustPublicKey(t *testing.T) {
 	}
 	t.Setenv("HELM_POLICY_SIGNATURE_REQUIRED", "1")
 	t.Setenv("HELM_POLICY_TRUST_PUBLIC_KEY", signer.PublicKey())
-	verifier, required, err := policySignatureVerifierFromEnv()
+	verifier, required, err := policySignatureVerifierFromEnv("controlplane")
 	if err != nil {
 		t.Fatalf("signature verifier from env: %v", err)
 	}
@@ -110,7 +156,7 @@ func TestPolicySignatureVerifierFromEnvUsesTrustPublicKey(t *testing.T) {
 func TestPolicySignatureVerifierFromEnvRejectsInvalidTrustPublicKey(t *testing.T) {
 	t.Setenv("HELM_POLICY_SIGNATURE_REQUIRED", "true")
 	t.Setenv("HELM_POLICY_TRUST_PUBLIC_KEY", "not-hex")
-	_, _, err := policySignatureVerifierFromEnv()
+	_, _, err := policySignatureVerifierFromEnv("mountedFile")
 	if err == nil || !strings.Contains(err.Error(), "hex encoded") {
 		t.Fatalf("expected invalid trust public key error, got %v", err)
 	}

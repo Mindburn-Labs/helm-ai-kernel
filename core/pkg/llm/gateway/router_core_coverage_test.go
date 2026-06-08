@@ -232,7 +232,7 @@ func TestExecuteOpenAICompatibleSendsJSONModeToolsAndSystem(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := router.Execute(context.Background(), ExecContext{
-		Prompt: "hello", System: "system", JSONMode: true, Tools: []string{"tool"},
+		Prompt: "hello", System: "system", JSONMode: true, Tools: []string{"tool"}, SpendDecision: gatewayAllowSpendDecision(),
 	})
 	if err != nil {
 		t.Fatal(err)

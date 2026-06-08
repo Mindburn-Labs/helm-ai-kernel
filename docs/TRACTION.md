@@ -95,18 +95,8 @@ Canonical demo ladder:
 
 Current assets:
 
-- Social preview: [helm-social-preview.png](assets/helm-social-preview.png)
-- Social preview source: [helm-social-preview.svg](assets/helm-social-preview.svg)
-- MCP quarantine proof board: [helm-mcp-quarantine-demo.png](assets/helm-mcp-quarantine-demo.png)
 - MCP quarantine proof board source: [helm-mcp-quarantine-demo.svg](assets/helm-mcp-quarantine-demo.svg)
 - Sanitized transcripts: [examples/launch/assets](../examples/launch/assets)
-
-Render updated PNG files from SVG sources before publishing visual changes:
-
-```bash
-rsvg-convert docs/assets/helm-mcp-quarantine-demo.svg -w 1600 -h 900 -o docs/assets/helm-mcp-quarantine-demo.png
-rsvg-convert docs/assets/helm-social-preview.svg -w 1280 -h 640 -o docs/assets/helm-social-preview.png
-```
 
 ## Launch Sequence
 

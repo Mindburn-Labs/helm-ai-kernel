@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -181,6 +182,63 @@ func TestParse_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestManifestLint_TinyFishGovernedWeb(t *testing.T) {
+	m, err := LoadFromFile(filepath.Join("testdata", "tinyfish-web.json"))
+	if err != nil {
+		t.Fatalf("failed to load TinyFish manifest: %v", err)
+	}
+	if m.Provider.ID != "tinyfish" {
+		t.Errorf("expected provider.id=tinyfish, got %s", m.Provider.ID)
+	}
+	if m.Connector.ID != "tinyfish-web-v1" {
+		t.Errorf("expected connector.id=tinyfish-web-v1, got %s", m.Connector.ID)
+	}
+	if m.Auth.Methods[0].Type != "apikey" {
+		t.Errorf("expected apikey auth, got %s", m.Auth.Methods[0].Type)
+	}
+	if got := m.Auth.Methods[0].APIKeyConfig.Header; got != "X-API-Key" {
+		t.Errorf("expected X-API-Key auth header, got %q", got)
+	}
+
+	riskByURN := map[string]string{}
+	for _, cap := range m.Caps {
+		riskByURN[cap.URN] = cap.RiskClass
+	}
+	for urn, want := range map[string]string{
+		"cap://tinyfish/search-query@1.0.0":            "E2",
+		"cap://tinyfish/fetch-extract@1.0.0":           "E2",
+		"cap://tinyfish/browser-session-create@1.0.0":  "E3",
+		"cap://tinyfish/browser-session-connect@1.0.0": "E3",
+		"cap://tinyfish/agent-run@1.0.0":               "E3",
+		"cap://tinyfish/agent-external-action@1.0.0":   "E4",
+	} {
+		if got := riskByURN[urn]; got != want {
+			t.Errorf("%s risk_class = %q, want %q", urn, got, want)
+		}
+	}
+
+	for _, host := range []string{
+		"api.search.tinyfish.ai",
+		"api.fetch.tinyfish.ai",
+		"api.browser.tinyfish.ai",
+		"agent.tinyfish.ai",
+	} {
+		if !containsString(m.Policies.HostAllowlist, host) {
+			t.Errorf("missing host allowlist entry %q", host)
+		}
+	}
+
+	copy := strings.ToLower(m.UI.LongDescription + " " + strings.Join(m.UI.Warnings, " "))
+	for _, forbidden := range []string{"certified", "partnership", "stealth", "undetectable", "bypass"} {
+		if strings.Contains(copy, forbidden) {
+			t.Errorf("TinyFish UI copy must avoid %q framing", forbidden)
+		}
+	}
+	if !strings.Contains(copy, "external provider") || !strings.Contains(copy, "helm") {
+		t.Error("TinyFish UI copy must frame TinyFish as external and HELM-governed")
+	}
+}
+
 // validGitHubManifest returns a minimal valid IntegrationManifest for testing.
 func validGitHubManifest() *IntegrationManifest {
 	return &IntegrationManifest{
@@ -217,4 +275,13 @@ func validGitHubManifest() *IntegrationManifest {
 			Kind: RuntimeHTTP,
 		},
 	}
+}
+
+func containsString(values []string, needle string) bool {
+	for _, value := range values {
+		if value == needle {
+			return true
+		}
+	}
+	return false
 }

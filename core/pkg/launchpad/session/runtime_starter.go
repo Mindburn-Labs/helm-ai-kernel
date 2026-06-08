@@ -442,9 +442,14 @@ func materializeFilesystemMounts(compiled plan.LaunchPlan, opts ExecuteOptions) 
 			return nil, fmt.Errorf("cannot materialize filesystem mount %q: HELM_LAUNCHPAD_HOME unset and user home directory not resolvable", m.Name)
 		}
 		hostDir := filepath.Join(stateRoot, "state", compiled.LaunchID, m.Name)
-		if err := os.MkdirAll(hostDir, 0o755); err != nil {
+		if err := os.MkdirAll(hostDir, 0o700); err != nil {
 			return nil, fmt.Errorf("create host state dir %s: %w", hostDir, err)
 		}
+		// Launch-scoped state directories are mounted into containers whose
+		// app user often differs from the host operator UID. Keep the outer
+		// Launchpad root private, but make this specific bind target writable
+		// so apps can initialize their state without a host chown step.
+		_ = os.Chmod(hostDir, 0o777)
 		mounts = append(mounts, lpruntime.LaunchpadMount{
 			Name:     m.Name,
 			Source:   hostDir,

@@ -1,0 +1,329 @@
+{
+  "api_version": "integrations.helm.mindburn.run/v1",
+  "provider": {
+    "id": "tinyfish",
+    "name": "TinyFish",
+    "category": "web_capability",
+    "homepage": "https://tinyfish.ai",
+    "icon_url": "https://docs.tinyfish.ai/favicon.ico"
+  },
+  "connector": {
+    "id": "tinyfish-web-v1",
+    "version": "1.0.0",
+    "packaging": "manifest",
+    "artifact_digest": "sha256:fixture"
+  },
+  "auth": {
+    "methods": [
+      {
+        "type": "apikey",
+        "apikey_config": {
+          "header": "X-API-Key",
+          "prefix": ""
+        }
+      }
+    ],
+    "scopes": [
+      "web.search",
+      "web.fetch",
+      "browser.session.create",
+      "browser.session.connect",
+      "agent.run",
+      "agent.run_async",
+      "agent.run_sse"
+    ]
+  },
+  "capabilities": [
+    {
+      "urn": "cap://tinyfish/search-query@1.0.0",
+      "name": "Search Web",
+      "description": "Run a ranked web search and return result URLs, titles, and snippets for source-grounded review.",
+      "risk_class": "E2",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "location": { "type": "string" },
+          "language": { "type": "string" }
+        },
+        "required": ["query"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "position": { "type": "integer" },
+                "title": { "type": "string" },
+                "snippet": { "type": "string" },
+                "url": { "type": "string" }
+              },
+              "required": ["position", "title", "url"]
+            }
+          }
+        },
+        "required": ["query", "results"]
+      },
+      "idempotent": true,
+      "rollback": false
+    },
+    {
+      "urn": "cap://tinyfish/fetch-extract@1.0.0",
+      "name": "Fetch Extracted Content",
+      "description": "Fetch up to ten HTTP or HTTPS URLs and return extracted page content plus per-URL errors.",
+      "risk_class": "E2",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "urls": { "type": "array", "items": { "type": "string" }, "maxItems": 10 },
+          "format": { "type": "string", "enum": ["markdown", "html", "json"] },
+          "links": { "type": "boolean" },
+          "image_links": { "type": "boolean" },
+          "ttl": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["urls"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "results": { "type": "array" },
+          "errors": { "type": "array" }
+        },
+        "required": ["results", "errors"]
+      },
+      "idempotent": true,
+      "rollback": false
+    },
+    {
+      "urn": "cap://tinyfish/browser-session-create@1.0.0",
+      "name": "Create Browser Session",
+      "description": "Create an isolated remote browser session and return connection metadata for governed automation.",
+      "risk_class": "E3",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string" },
+          "credential_grant_ref": { "type": "string" },
+          "ttl_seconds": { "type": "integer", "minimum": 60, "maximum": 3600 }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": { "type": "string" },
+          "cdp_url": { "type": "string" },
+          "base_url": { "type": "string" }
+        },
+        "required": ["session_id", "cdp_url"]
+      },
+      "idempotent": false,
+      "rollback": false
+    },
+    {
+      "urn": "cap://tinyfish/browser-session-connect@1.0.0",
+      "name": "Connect Browser Session",
+      "description": "Connect automation tooling to a browser session through a policy-bound CDP URL.",
+      "risk_class": "E3",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": { "type": "string" },
+          "cdp_url": { "type": "string" },
+          "credential_grant_ref": { "type": "string" }
+        },
+        "required": ["session_id", "cdp_url"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "connected": { "type": "boolean" },
+          "grounding_ref": { "type": "string" }
+        },
+        "required": ["connected"]
+      },
+      "idempotent": false,
+      "rollback": false
+    },
+    {
+      "urn": "cap://tinyfish/agent-run@1.0.0",
+      "name": "Run Web Agent",
+      "description": "Submit a goal-based web automation run that may browse and extract a structured result.",
+      "risk_class": "E3",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string" },
+          "goal": { "type": "string" },
+          "output_schema": { "type": "object" },
+          "use_vault": { "type": "boolean" },
+          "credential_item_ids": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["url", "goal"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "run_id": { "type": ["string", "null"] },
+          "status": { "type": "string" },
+          "result": { "type": ["object", "null"] },
+          "error": { "type": ["object", "null"] }
+        },
+        "required": ["status"]
+      },
+      "idempotent": false,
+      "rollback": false
+    },
+    {
+      "urn": "cap://tinyfish/agent-external-action@1.0.0",
+      "name": "Approve Agent External Action",
+      "description": "Govern goal-based runs that can submit forms, purchase, send, publish, or otherwise affect an external system.",
+      "risk_class": "E4",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "run_id": { "type": "string" },
+          "action_intent": { "type": "string" },
+          "approval_receipt_ref": { "type": "string" },
+          "postcondition_ref": { "type": "string" }
+        },
+        "required": ["action_intent", "approval_receipt_ref"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "verdict": { "type": "string", "enum": ["DENY", "ESCALATE", "ALLOW"] },
+          "receipt_ref": { "type": "string" }
+        },
+        "required": ["verdict", "receipt_ref"]
+      },
+      "idempotent": false,
+      "rollback": false
+    }
+  ],
+  "runtime": {
+    "kind": "http",
+    "config": {
+      "endpoint_families": {
+        "search": "https://api.search.tinyfish.ai",
+        "fetch": "https://api.fetch.tinyfish.ai",
+        "browser": "https://api.browser.tinyfish.ai",
+        "agent": "https://agent.tinyfish.ai/v1/automation"
+      },
+      "default_headers": {
+        "Accept": "application/json"
+      }
+    }
+  },
+  "policies_default": {
+    "max_requests_per_minute": 30,
+    "host_allowlist": [
+      "api.search.tinyfish.ai",
+      "api.fetch.tinyfish.ai",
+      "api.browser.tinyfish.ai",
+      "agent.tinyfish.ai"
+    ],
+    "data_class_restriction": [
+      "public_or_source_minimized"
+    ]
+  },
+  "evidence_default": {
+    "retention_days": 90,
+    "redaction_rules": [
+      "x-api-key",
+      "cdp_url",
+      "credential_item_ids",
+      "credential_grant_ref",
+      "authorization",
+      "cookies"
+    ]
+  },
+  "tests": {
+    "smoke": [
+      {
+        "name": "search_requires_api_key",
+        "capability_urn": "cap://tinyfish/search-query@1.0.0",
+        "input": { "query": "helm governed web capability" },
+        "expect_status": 401,
+        "timeout_seconds": 10
+      }
+    ],
+    "contract": [
+      {
+        "name": "fetch_partial_source_shape",
+        "capability_urn": "cap://tinyfish/fetch-extract@1.0.0",
+        "input": { "urls": ["https://example.com"], "format": "markdown", "ttl": 3600 },
+        "expect_status": 200,
+        "timeout_seconds": 120
+      },
+      {
+        "name": "agent_external_action_requires_approval",
+        "capability_urn": "cap://tinyfish/agent-external-action@1.0.0",
+        "input": { "action_intent": "submit_form" },
+        "expect_status": 403,
+        "timeout_seconds": 10
+      }
+    ],
+    "drift": [
+      {
+        "name": "response_shape",
+        "capability_urn": "cap://tinyfish/search-query@1.0.0",
+        "input": { "query": "site:tinyfish.ai TinyFish API" },
+        "expect_status": 200,
+        "timeout_seconds": 10
+      },
+      {
+        "name": "endpoint_family",
+        "capability_urn": "cap://tinyfish/fetch-extract@1.0.0",
+        "input": { "urls": ["https://tinyfish.ai"], "ttl": 3600 },
+        "expect_status": 200,
+        "timeout_seconds": 120
+      }
+    ]
+  },
+  "ui": {
+    "category": "Governed Web Capability",
+    "icon_url": "https://docs.tinyfish.ai/favicon.ico",
+    "short_description": "HELM-governed external web search, fetch, browser, and agent capability.",
+    "long_description": "This manifest models TinyFish as an external web capability provider. HELM remains the policy, approval, receipt, and evidence boundary; missing credentials deny before dispatch.",
+    "install_steps": [
+      {
+        "order": 1,
+        "action_type": "api_key_input",
+        "title": "Add TinyFish API key",
+        "description": "Store the TinyFish key as a governed secret bound to the connector profile."
+      },
+      {
+        "order": 2,
+        "action_type": "scope_approval",
+        "title": "Approve web capability scopes",
+        "description": "Approve search, fetch, browser session, and agent-run scopes separately."
+      },
+      {
+        "order": 3,
+        "action_type": "custom",
+        "title": "Bind evidence requirements",
+        "description": "Require connector contract, policy, request, response or error, source URL, receipt, and EvidencePack hashes."
+      }
+    ],
+    "permission_copy": {
+      "web.search": "Run ranked web searches and record source URL hashes.",
+      "web.fetch": "Fetch declared HTTP or HTTPS URLs and record per-source success or error hashes.",
+      "browser.session.create": "Create an isolated browser session with credential grants scoped by HELM policy.",
+      "browser.session.connect": "Connect automation tooling to a policy-bound browser session.",
+      "agent.run": "Run a goal-based browser automation task under HELM approval and evidence gates.",
+      "agent.run_async": "Start an asynchronous governed browser automation run.",
+      "agent.run_sse": "Stream governed browser automation progress events."
+    },
+    "warnings": [
+      "TinyFish is an external provider; HELM does not treat it as a trust boundary.",
+      "Search and Fetch results must bind source URL hashes before promotion into evidence.",
+      "Browser sessions that use credentials require an explicit credential grant and TTL.",
+      "Agent runs that submit, purchase, send, publish, or otherwise affect external state require approval before dispatch.",
+      "Sample-only fixtures are rejected for production receipts and EvidencePacks."
+    ]
+  }
+}

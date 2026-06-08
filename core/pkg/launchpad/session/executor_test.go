@@ -260,6 +260,19 @@ func TestExecutorRunsNetworkedLaunchWithEgressReceipt(t *testing.T) {
 	if len(run.EgressReceiptRefs) == 0 {
 		t.Fatalf("egress receipt missing: %#v", run)
 	}
+	var runtimeEnv map[string]any
+	readJSON(t, filepath.Join(run.EvidencePackRefs[0], "04_EXPORTS/runtime_environment.json"), &runtimeEnv)
+	for key, want := range map[string]string{
+		"egress_receipt_ref":  "receipt:egress",
+		"egress_network_name": "network-1",
+		"egress_proxy_id":     "proxy-id",
+		"egress_proxy_name":   "proxy-name",
+		"egress_proxy_image":  "proxy@sha256:abc",
+	} {
+		if runtimeEnv[key] != want {
+			t.Fatalf("runtime environment %s = %#v, want %q in %#v", key, runtimeEnv[key], want, runtimeEnv)
+		}
+	}
 }
 
 func TestExecutorBundlesEgressProxyReceiptOnRuntimeFailure(t *testing.T) {
@@ -323,10 +336,17 @@ type fakeNetworkStarter struct{}
 
 func (fakeNetworkStarter) Start(plan.LaunchPlan, ExecuteOptions) (RuntimeStartResult, error) {
 	return RuntimeStartResult{
-		ContainerID:      "container-1",
-		SandboxGrantRef:  "sandbox-grant:runtime",
-		EgressReceiptRef: "receipt:egress",
-		Runtime:          "local-container",
+		ContainerID:        "container-1",
+		SandboxGrantRef:    "sandbox-grant:runtime",
+		EgressReceiptRef:   "receipt:egress",
+		EgressNetworkName:  "network-1",
+		EgressProxyID:      "proxy-id",
+		EgressProxyName:    "proxy-name",
+		EgressProxyImage:   "proxy@sha256:abc",
+		Runtime:            "local-container",
+		PayloadInspection:  "opaque_connect",
+		NetworkProof:       "destination_allowlist_only",
+		TokenBrokerEnabled: false,
 	}, nil
 }
 

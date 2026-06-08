@@ -448,6 +448,16 @@ func TestCoverageEgressProxyAndNetworkBranches(t *testing.T) {
 	}
 }
 
+func TestDockerRunContainerIDUsesLastNonEmptyLine(t *testing.T) {
+	out := []byte("Unable to find image 'proxy' locally\nDigest: sha256:abc\nStatus: Downloaded newer image\n\n6b40ca4b1b2114e8637b46835166f0350099a0c0f5f28e1f54c7cd69224362d8\n")
+	if got := dockerRunContainerID(out); got != "6b40ca4b1b2114e8637b46835166f0350099a0c0f5f28e1f54c7cd69224362d8" {
+		t.Fatalf("dockerRunContainerID returned %q", got)
+	}
+	if got := dockerRunContainerID(nil); got != "" {
+		t.Fatalf("empty docker output returned %q", got)
+	}
+}
+
 func TestCoverageDockerSidecarProxyBranches(t *testing.T) {
 	if _, err := (DockerSidecarEgressProxy{Image: "image@sha256:abc"}).Start(EgressProxyRequest{Allowlist: []string{"openrouter.ai:443"}}); err == nil {
 		t.Fatal("expected missing launch id error")

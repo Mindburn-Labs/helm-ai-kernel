@@ -76,7 +76,7 @@ func (p DockerSidecarEgressProxy) Start(req EgressProxyRequest) (EgressProxyHand
 		_ = exec.Command(docker, "network", "rm", networkName).Run()
 		return EgressProxyHandle{}, fmt.Errorf("start launch egress proxy sidecar: %w: %s", err, strings.TrimSpace(string(out)))
 	}
-	containerID := strings.TrimSpace(string(out))
+	containerID := dockerRunContainerID(out)
 	if out, err := exec.Command(docker, "network", "connect", "--alias", proxyName, networkName, proxyName).CombinedOutput(); err != nil {
 		_ = exec.Command(docker, "rm", "-f", proxyName).Run()
 		_ = exec.Command(docker, "network", "rm", networkName).Run()
@@ -121,6 +121,16 @@ func (p DockerSidecarEgressProxy) Start(req EgressProxyRequest) (EgressProxyHand
 			return stopErr
 		},
 	}, nil
+}
+
+func dockerRunContainerID(out []byte) string {
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if line := strings.TrimSpace(lines[i]); line != "" {
+			return line
+		}
+	}
+	return ""
 }
 
 func writeSidecarReceipt(dir, launchID, verdict, reason string, subject map[string]any) (string, string) {

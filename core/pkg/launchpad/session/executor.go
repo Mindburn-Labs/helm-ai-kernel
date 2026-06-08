@@ -230,8 +230,10 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		run.ResultClass = plan.ResultClassRuntimeRepairRequired
 		run.RepairClass = plan.RepairClassRuntimeRepairRequired
 		run.Reason = "runtime start did not return required refs; repair required before RUNNING"
+		runtimeEnvironment := map[string]any{"state": "REPAIR_REQUIRED"}
+		addRuntimeStartEvidence(runtimeEnvironment, runtimeResult)
 		addJSON(artifacts, "receipts/launchpad-runtime-failure.json", failureReceipt)
-		addJSON(artifacts, "runtime_environment.json", map[string]any{"runtime": "local-container", "state": "REPAIR_REQUIRED"})
+		addJSON(artifacts, "runtime_environment.json", runtimeEnvironment)
 		return e.persist(run, artifacts)
 	}
 	if len(compiled.NetworkAllowlist) > 0 && runtimeResult.EgressReceiptRef == "" {
@@ -243,8 +245,10 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		run.ResultClass = plan.ResultClassRuntimeRepairRequired
 		run.RepairClass = plan.RepairClassRuntimeRepairRequired
 		run.Reason = "runtime start did not return egress receipt ref for networked launch; repair required before RUNNING"
+		runtimeEnvironment := map[string]any{"state": "REPAIR_REQUIRED", "container_id": runtimeResult.ContainerID}
+		addRuntimeStartEvidence(runtimeEnvironment, runtimeResult)
 		addJSON(artifacts, "receipts/launchpad-runtime-failure.json", failureReceipt)
-		addJSON(artifacts, "runtime_environment.json", map[string]any{"runtime": "local-container", "state": "REPAIR_REQUIRED", "container_id": runtimeResult.ContainerID})
+		addJSON(artifacts, "runtime_environment.json", runtimeEnvironment)
 		return e.persist(run, artifacts)
 	}
 	run.RuntimeHandles.ContainerID = runtimeResult.ContainerID
@@ -314,8 +318,10 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 			run.ResultClass = plan.ResultClassRuntimeRepairRequired
 			run.RepairClass = plan.RepairClassRuntimeRepairRequired
 			run.Reason = "healthcheck failed after runtime start; repair required before RUNNING: " + err.Error()
+			runtimeEnvironment := map[string]any{"state": "REPAIR_REQUIRED", "container_id": runtimeResult.ContainerID, "error": err.Error()}
+			addRuntimeStartEvidence(runtimeEnvironment, runtimeResult)
 			addJSON(artifacts, "receipts/launchpad-healthcheck-failure.json", failureReceipt)
-			addJSON(artifacts, "runtime_environment.json", map[string]any{"runtime": runtimeResult.Runtime, "state": "REPAIR_REQUIRED", "container_id": runtimeResult.ContainerID, "error": err.Error()})
+			addJSON(artifacts, "runtime_environment.json", runtimeEnvironment)
 			return e.persist(run, artifacts)
 		}
 		healthReceipt := receipts.NewReceipt("launchpad.healthcheck", compiled.LaunchID, "ALLOW", map[string]any{
@@ -330,26 +336,9 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	run.State = StateRunning
 	run.RepairClass = plan.RepairClassNone
 	run.Reason = "launch reached RUNNING after policy, CPI, sandbox preflight, MCP quarantine, install, start, and healthcheck receipts"
-	addJSON(artifacts, "runtime_environment.json", map[string]any{
-		"runtime":                      runtimeResult.Runtime,
-		"state":                        "RUNNING",
-		"container_id":                 runtimeResult.ContainerID,
-		"isolation_mode":               runtimeResult.IsolationMode,
-		"isolation_hardened":           runtimeResult.IsolationHardened,
-		"isolation_detection_status":   runtimeResult.IsolationDetectionStatus,
-		"isolation_unsupported_reason": runtimeResult.IsolationUnsupportedReason,
-		"runtime_class":                runtimeResult.RuntimeClass,
-		"docker_rootless":              runtimeResult.DockerRootless,
-		"docker_userns":                runtimeResult.DockerUserns,
-		"docker_eci":                   runtimeResult.DockerECI,
-		"dedicated_vm":                 runtimeResult.DedicatedVM,
-		"docker_runtimes":              runtimeResult.DockerRuntimes,
-		"default_runtime":              runtimeResult.DefaultRuntime,
-		"hostile_agent_grade":          runtimeResult.HostileAgentGrade,
-		"payload_inspection":           runtimeResult.PayloadInspection,
-		"network_proof":                runtimeResult.NetworkProof,
-		"token_broker_enabled":         runtimeResult.TokenBrokerEnabled,
-	})
+	runtimeEnvironment := map[string]any{"state": "RUNNING", "container_id": runtimeResult.ContainerID}
+	addRuntimeStartEvidence(runtimeEnvironment, runtimeResult)
+	addJSON(artifacts, "runtime_environment.json", runtimeEnvironment)
 	return e.persist(run, artifacts)
 }
 
@@ -741,6 +730,24 @@ func addEgressProxyReceipt(dst map[string][]byte, result RuntimeStartResult) {
 func addRuntimeStartEvidence(dst map[string]any, result RuntimeStartResult) {
 	if result.Runtime != "" {
 		dst["runtime"] = result.Runtime
+	}
+	if result.EgressReceiptRef != "" {
+		dst["egress_receipt_ref"] = result.EgressReceiptRef
+	}
+	if result.EgressReceiptPath != "" {
+		dst["egress_receipt_path"] = result.EgressReceiptPath
+	}
+	if result.EgressNetworkName != "" {
+		dst["egress_network_name"] = result.EgressNetworkName
+	}
+	if result.EgressProxyID != "" {
+		dst["egress_proxy_id"] = result.EgressProxyID
+	}
+	if result.EgressProxyName != "" {
+		dst["egress_proxy_name"] = result.EgressProxyName
+	}
+	if result.EgressProxyImage != "" {
+		dst["egress_proxy_image"] = result.EgressProxyImage
 	}
 	if result.IsolationMode != "" {
 		dst["isolation_mode"] = result.IsolationMode

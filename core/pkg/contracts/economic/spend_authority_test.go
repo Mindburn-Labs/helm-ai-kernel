@@ -1,6 +1,8 @@
 package economic
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"strings"
 	"testing"
 	"time"
@@ -137,6 +139,50 @@ func TestRouteQuoteValidationAndExpiry(t *testing.T) {
 	requireEconomicErrorContains(t, quote.Validate(), "fallback_chain is required")
 }
 
+func TestBudgetVerdictReceiptSigningAndDecisionBinding(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision := spendAuthorityTestEnvelope().EvaluateSpend(100, "openai", "gpt-5-mini")
+	receipt := spendAuthorityTestBudgetVerdictReceipt(decision)
+	if err := receipt.Seal("spend-test-key", privateKey); err != nil {
+		t.Fatalf("Seal() = %v, want nil", err)
+	}
+	if err := receipt.ValidateForDecision(decision); err != nil {
+		t.Fatalf("ValidateForDecision() = %v, want nil", err)
+	}
+	if err := receipt.VerifySignature(privateKey.Public().(ed25519.PublicKey)); err != nil {
+		t.Fatalf("VerifySignature() = %v, want nil", err)
+	}
+
+	tampered := *receipt
+	tampered.DecisionHash = "sha256:other"
+	tampered.ContentHash = tampered.computeHash()
+	if err := tampered.ValidateForDecision(decision); err == nil || !strings.Contains(err.Error(), "decision_hash does not match") {
+		t.Fatalf("expected decision hash mismatch, got %v", err)
+	}
+
+	tampered = *receipt
+	tampered.ModelID = "other-model"
+	tampered.ContentHash = tampered.computeHash()
+	if err := tampered.VerifySignature(privateKey.Public().(ed25519.PublicKey)); err == nil || !strings.Contains(err.Error(), "signature verification failed") {
+		t.Fatalf("expected signature verification failure, got %v", err)
+	}
+
+	tampered = *receipt
+	tampered.ContentHash = "sha256:tampered"
+	if err := tampered.Validate(); err == nil || !strings.Contains(err.Error(), "content_hash mismatch") {
+		t.Fatalf("expected content hash mismatch, got %v", err)
+	}
+
+	tampered = *receipt
+	tampered.CreatedAt = tampered.CreatedAt.Add(time.Minute)
+	if err := tampered.Validate(); err == nil || !strings.Contains(err.Error(), "content_hash mismatch") {
+		t.Fatalf("expected timestamp content hash mismatch, got %v", err)
+	}
+}
+
 func TestUsageReceiptValidationAndSettlementRequirements(t *testing.T) {
 	receipt := spendAuthorityTestUsageReceipt()
 	receipt.SettlementReceiptHash = "sha256:settlement"
@@ -215,6 +261,25 @@ func spendAuthorityTestQuote(decision SpendAuthorityDecision) *RouteQuote {
 		"USD",
 		"sha256:route-policy",
 		time.Now().UTC().Add(5*time.Minute),
+		decision,
+	)
+}
+
+func spendAuthorityTestBudgetVerdictReceipt(decision SpendAuthorityDecision) *BudgetVerdictReceipt {
+	return NewBudgetVerdictReceipt(
+		"verdict-1",
+		"tenant-1",
+		"spend-1",
+		"env-1",
+		"agent-1",
+		"openai",
+		"gpt-5-mini",
+		100,
+		200,
+		"USD",
+		"sha256:price",
+		"sha256:route-policy",
+		"evidence://pack-1",
 		decision,
 	)
 }

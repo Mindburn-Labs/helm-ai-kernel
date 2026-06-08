@@ -227,13 +227,13 @@ func TestExecuteOpenAICompatibleSendsJSONModeToolsAndSystem(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	router := NewGatewayRouter()
+	router := newGatewayRouterWithReceiptTrust()
 	if err := router.RouteWithConfig(context.Background(), RouteConfig{Provider: ProviderVLLM, BaseURL: srv.URL, ModelName: "model", ModelHash: "sha256:model"}); err != nil {
 		t.Fatal(err)
 	}
-	result, err := router.Execute(context.Background(), ExecContext{
-		Prompt: "hello", System: "system", JSONMode: true, Tools: []string{"tool"}, SpendDecision: gatewayAllowSpendDecision(),
-	})
+	result, err := router.Execute(context.Background(), gatewayExecContext(ProviderVLLM, "model", gatewayAllowSpendDecision(), ExecContext{
+		Prompt: "hello", System: "system", JSONMode: true, Tools: []string{"tool"},
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}

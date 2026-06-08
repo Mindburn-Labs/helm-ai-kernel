@@ -5,7 +5,9 @@ last_reviewed: "2026-05-28"
 # OpenCode on HELM
 
 ## What this proves
-OpenCode runs through HELM’s fail-closed execution boundary.
+OpenCode currently has `verify_only` contract evidence. The pinned image and
+`opencode --version` healthcheck are useful smoke proof, but `--version` smoke
+checks do not count as live-agent F2 coverage.
 
 ```mermaid
 flowchart TD
@@ -17,9 +19,9 @@ flowchart TD
     D -->|Teardown / Receipt| G[EvidencePack Export]
 ```
 
-## Headless path
+## Contract preflight path
 ```bash
-helm-ai-kernel launch opencode local-container --headless --output json
+helm-ai-kernel app preflight opencode --json
 ```
 
 ## Source Truth
@@ -30,11 +32,9 @@ helm-ai-kernel launch opencode local-container --headless --output json
 - cpi_output
 - kernel_verdict
 - sandbox_grant
-- launch_receipt
-- install_receipt
 - healthcheck_receipt
-- teardown_receipt
 - evidence_pack
+- offline_verify
 - evidence_graph
 - mcp_quarantine
 - mcp_manifest

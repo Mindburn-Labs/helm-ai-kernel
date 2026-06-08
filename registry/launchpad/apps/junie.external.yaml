@@ -5,6 +5,7 @@ license:
   status: proprietary_byo
 redistribution: prohibited
 availability: external_proprietary_adapter
+support_level: external_byo_adapter
 install:
   strategy: byo_tool
 runtime:
@@ -28,7 +29,30 @@ budget_ceiling:
   usd_max: 0
   api_calls_max: 0
   time_ms_max: 0
-evidence_requirements: ["cpi_output", "kernel_verdict", "sandbox_grant", "launch_receipt", "teardown_receipt", "evidence_pack"]
+framework_contract:
+  f2_contract_preflight: true
+  claim_level: external_byo_adapter
+  live_command_kind: workstation_adapter
+  runtime_install_policy: forbidden
+  baked_dependencies: ["byo_junie_cli"]
+  forbidden_runtime_install_patterns: ["npm install", "pnpm install", "yarn install", "pip install", "uv pip install", "playwright install", "apt-get", "apk add", "curl | sh", "curl -fsSL"]
+  writable_paths:
+    - path: /var/lib/junie/app_state
+      purpose: workstation_state_manifest
+      required: true
+  provider_host_groups: []
+  egress_proxy:
+    required: false
+  mcp_manifest_refs: []
+  healthcheck: "workstation_contract_manifest"
+  evidence_profile: workstation.contract.v1
+  evidence_refs:
+    - contract_preflight.json
+    - launch_plan.json
+    - workstation_artifact_manifest.json
+    - agent_run_receipt.json
+    - offline_verify.txt
+evidence_requirements: ["contract_preflight", "cpi_output", "kernel_verdict", "sandbox_grant", "launch_receipt", "teardown_receipt", "evidence_pack", "offline_verify"]
 conformance:
   license_verified: false
   artifact_verified: false

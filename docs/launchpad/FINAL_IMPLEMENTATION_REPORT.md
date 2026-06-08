@@ -42,7 +42,7 @@ The full kernel branch diff also includes Launchpad runtime, promotion, receipts
 | App | Availability | Evidence |
 | --- | --- | --- |
 | OpenClaw | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e`; workflow `26110916296`; directory and tar EvidencePack verification passed |
-| Hermes | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527`; workflow `26110916296`; directory and tar EvidencePack verification passed |
+| Hermes | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652`; workflow `26198407296`; directory and tar EvidencePack verification passed |
 | OpenCode | `oss_candidate` | Not promoted; same signed OCI/live e2e/teardown/EvidencePack bar has not been run |
 | Kilo Code | `oss_candidate` | Not promoted; same signed OCI/live e2e/teardown/EvidencePack bar has not been run |
 | Codex | `external_proprietary_adapter` | BYO/external only; HELM governs execution and does not redistribute Codex |

@@ -26,34 +26,36 @@ type AppStatus struct {
 }
 
 type RegistryApp struct {
-	ID                   string                     `json:"id"`
-	AppID                string                     `json:"app_id"`
-	Name                 string                     `json:"name"`
-	Version              string                     `json:"version"`
-	OCIRef               string                     `json:"oci_ref,omitempty"`
-	ImmutableDigest      string                     `json:"immutable_digest,omitempty"`
-	OSSSupported         bool                       `json:"oss_supported"`
-	Availability         registry.Availability      `json:"availability"`
-	Redistribution       string                     `json:"redistribution,omitempty"`
-	InstallStrategy      string                     `json:"install_strategy,omitempty"`
-	RequiredSecrets      []string                   `json:"required_secrets"`
-	ModelGatewayEnv      []string                   `json:"model_gateway_env,omitempty"`
-	DeclaredCapabilities []string                   `json:"declared_capabilities"`
-	MCPServers           []MCPServerNeed            `json:"mcp_servers"`
-	FilesystemNeeds      []string                   `json:"filesystem_needs"`
-	NetworkNeeds         []string                   `json:"network_needs"`
-	Healthcheck          []registry.HealthcheckSpec `json:"healthcheck"`
-	TeardownRecipe       map[string]any             `json:"teardown_recipe"`
-	EvidenceProfile      []string                   `json:"evidence_profile"`
-	RiskClass            string                     `json:"risk_class,omitempty"`
-	PolicyRef            string                     `json:"policy_ref,omitempty"`
-	Status               AppStatus                  `json:"status"`
-	BlockedReason        string                     `json:"blocked_reason,omitempty"`
-	UserState            string                     `json:"user_state,omitempty"`
-	RequiredCapability   string                     `json:"required_capability,omitempty"`
-	UpgradeReason        string                     `json:"upgrade_reason,omitempty"`
-	EntitlementDecision  any                        `json:"entitlement_decision,omitempty"`
-	ActionStates         map[string]any             `json:"action_states,omitempty"`
+	ID                   string                         `json:"id"`
+	AppID                string                         `json:"app_id"`
+	Name                 string                         `json:"name"`
+	Version              string                         `json:"version"`
+	OCIRef               string                         `json:"oci_ref,omitempty"`
+	ImmutableDigest      string                         `json:"immutable_digest,omitempty"`
+	OSSSupported         bool                           `json:"oss_supported"`
+	Availability         registry.Availability          `json:"availability"`
+	SupportLevel         registry.SupportLevel          `json:"support_level"`
+	Redistribution       string                         `json:"redistribution,omitempty"`
+	InstallStrategy      string                         `json:"install_strategy,omitempty"`
+	RequiredSecrets      []string                       `json:"required_secrets"`
+	ModelGatewayEnv      []string                       `json:"model_gateway_env,omitempty"`
+	DeclaredCapabilities []string                       `json:"declared_capabilities"`
+	MCPServers           []MCPServerNeed                `json:"mcp_servers"`
+	FilesystemNeeds      []string                       `json:"filesystem_needs"`
+	NetworkNeeds         []string                       `json:"network_needs"`
+	Healthcheck          []registry.HealthcheckSpec     `json:"healthcheck"`
+	TeardownRecipe       map[string]any                 `json:"teardown_recipe"`
+	EvidenceProfile      []string                       `json:"evidence_profile"`
+	FrameworkContract    registry.FrameworkContractSpec `json:"framework_contract,omitempty"`
+	RiskClass            string                         `json:"risk_class,omitempty"`
+	PolicyRef            string                         `json:"policy_ref,omitempty"`
+	Status               AppStatus                      `json:"status"`
+	BlockedReason        string                         `json:"blocked_reason,omitempty"`
+	UserState            string                         `json:"user_state,omitempty"`
+	RequiredCapability   string                         `json:"required_capability,omitempty"`
+	UpgradeReason        string                         `json:"upgrade_reason,omitempty"`
+	EntitlementDecision  any                            `json:"entitlement_decision,omitempty"`
+	ActionStates         map[string]any                 `json:"action_states,omitempty"`
 }
 
 type MCPServerNeed struct {
@@ -111,6 +113,9 @@ type RuntimeInstance struct {
 	LaunchPlanHash           string            `json:"launchplan_hash,omitempty"`
 	State                    session.State     `json:"state"`
 	Verdict                  string            `json:"verdict"`
+	ResultClass              plan.ResultClass  `json:"result_class,omitempty"`
+	RepairClass              plan.RepairClass  `json:"repair_class,omitempty"`
+	SupportLevel             string            `json:"support_level,omitempty"`
 	AppID                    string            `json:"app_id"`
 	SubstrateID              string            `json:"substrate_id"`
 	Runtime                  string            `json:"runtime"`
@@ -242,6 +247,7 @@ func RegistryApps(catalog *registry.Catalog, secretStatuses []secrets.Status, ru
 			ImmutableDigest:      app.Install.Digest,
 			OSSSupported:         app.Availability == registry.AvailabilityOSSSupported,
 			Availability:         app.Availability,
+			SupportLevel:         app.SupportLevel,
 			Redistribution:       app.Redistribution,
 			InstallStrategy:      app.Install.Strategy,
 			RequiredSecrets:      cloneStrings(app.RequiredSecrets),
@@ -253,6 +259,7 @@ func RegistryApps(catalog *registry.Catalog, secretStatuses []secrets.Status, ru
 			Healthcheck:          app.Healthchecks,
 			TeardownRecipe:       map[string]any{"cascade": true, "remove_container": true, "revoke_secret_grants": true, "close_mcp_sessions": true},
 			EvidenceProfile:      cloneStrings(app.EvidenceRequirements),
+			FrameworkContract:    app.FrameworkContract,
 			RiskClass:            app.RiskClass,
 			PolicyRef:            app.FilesystemPolicy.PolicyRef,
 			Status:               status,
@@ -306,6 +313,12 @@ func GatesFromPlan(app registry.AppSpec, substrate registry.SubstrateSpec, compi
 		ossReason = "ERR_LAUNCHPAD_APP_CONFORMANCE_REQUIRED"
 	}
 	mcpVerdict, mcpReason, mcpSummary := mcpQuarantineState(compiled, run)
+	contractVerdict := "DENY"
+	if compiled.ContractPreflight != nil {
+		contractVerdict = compiled.ContractPreflight.Verdict
+	} else if compiled.KernelVerdict != "" {
+		contractVerdict = compiled.KernelVerdict
+	}
 	secretGate := gate("secrets.required", "Secrets", "Check required secrets", secretVerdict, secretReason, secretProof, secretSummary, refsWithPrefix(receiptRefs, "secret"), evidenceRefs)
 	if secretReason == "ERR_LAUNCHPAD_REQUIRED_SECRET_MISSING" {
 		secretGate.FixActions = secretFixActions(app)
@@ -313,6 +326,7 @@ func GatesFromPlan(app registry.AppSpec, substrate registry.SubstrateSpec, compi
 	return []GateResult{
 		gate("registry.read", "Preflight", "Read registry spec", "ALLOW", "", "proven", "Registry AppSpec was loaded from the local registry.", nil, nil),
 		gate("app.oss_supported", "Preflight", "Check oss_supported", verdictFor(ossSupported), ossReason, "proven", "OSS support and conformance were evaluated from AppSpec.", nil, nil),
+		gate("f2.contract_preflight", "F2 contract", "Prove runtime contract", contractVerdict, compiled.ReasonCode, "proven", "Contract preflight proves image, command, sandbox, egress proxy, writable paths, secret projection, MCP manifests, healthcheck, EvidencePack export, and offline verify before prompts run.", runRefs(run, "contract"), evidenceRefs),
 		gate("artifact.digest", "Artifact verification", "Digest pinned", artifactVerdict, artifactReason, artifactProof, "Immutable artifact digest is pinned in AppSpec.", nil, nil),
 		gate("artifact.signature", "Artifact verification", "Signature valid", artifactVerdict, artifactReason, artifactProof, "Cosign signature evidence is declared by AppSpec.", nil, nil),
 		gate("artifact.sbom", "Artifact verification", "SBOM present", artifactVerdict, artifactReason, artifactProof, "SBOM evidence is declared by AppSpec.", nil, nil),
@@ -342,6 +356,7 @@ func EventsFromRun(run session.LaunchRun) []RunEvent {
 	}
 	events := []RunEvent{
 		event(run, "registry_read", "Registry read", run.KernelVerdict, "", "proven", "Registry spec was read for this run.", first(run.BoundaryRecordRefs), ""),
+		event(run, "f2_contract_preflight", "F2 contract preflight", run.KernelVerdict, run.ReasonCode, proofFromRefs(run.ContractPreflightRefs), "Contract preflight must pass before any prompt-injection matrix can run.", first(run.ContractPreflightRefs), "contract_preflight.json"),
 		event(run, "supply_chain_verification", "Supply-chain verification", run.KernelVerdict, "", "proven", "Artifact digest, signature, SBOM, and scan evidence were evaluated before runtime.", "", "launch_plan.json"),
 		event(run, "launchplan_compiled", "LaunchPlan compiled", run.KernelVerdict, "", proofFromBool(run.PlanHash != ""), "LaunchPlan hash is bound to the run.", "", "launch_plan.json"),
 		event(run, "policy_evaluated", "Policy evaluated", run.KernelVerdict, "", proofFromBool(len(run.CPIRefs) > 0), "CPI and policy outputs were evaluated.", first(run.CPIRefs), "cpi_output.json"),
@@ -392,6 +407,9 @@ func RuntimeFromRun(run session.LaunchRun) RuntimeInstance {
 		LaunchPlanHash:           run.PlanHash,
 		State:                    run.State,
 		Verdict:                  run.KernelVerdict,
+		ResultClass:              run.ResultClass,
+		RepairClass:              run.RepairClass,
+		SupportLevel:             run.SupportLevel,
 		AppID:                    run.AppID,
 		SubstrateID:              run.SubstrateID,
 		Runtime:                  runtimeName(run),
@@ -422,6 +440,7 @@ func Detail(app registry.AppSpec, substrate registry.SubstrateSpec, compiled pla
 
 func ReceiptRefs(run session.LaunchRun) []string {
 	refs := []string{}
+	refs = append(refs, run.ContractPreflightRefs...)
 	refs = append(refs, run.InstallReceiptRefs...)
 	refs = append(refs, run.LaunchReceiptRefs...)
 	refs = append(refs, run.StartReceiptRefs...)
@@ -893,6 +912,8 @@ func secretFixActions(app registry.AppSpec) []FixAction {
 
 func cliForGate(id string) string {
 	switch id {
+	case "f2.contract_preflight":
+		return "helm-ai-kernel app preflight <app> --json"
 	case "launchplan.compile", "policy.evaluate":
 		return "helm-ai-kernel app preflight <app>"
 	case "secrets.required":
@@ -919,6 +940,8 @@ func cliForGate(id string) string {
 func cliForEvent(run session.LaunchRun, stage string) string {
 	id := firstNonEmptyString(run.LaunchID, "<run_id>")
 	switch {
+	case strings.Contains(stage, "contract"):
+		return "helm-ai-kernel app preflight <app> --json"
 	case strings.Contains(stage, "secret"):
 		return "helm-ai-kernel secret set <name>"
 	case strings.Contains(stage, "sandbox"):
@@ -959,6 +982,8 @@ func runRefs(run *session.LaunchRun, kind string) []string {
 		return nil
 	}
 	switch kind {
+	case "contract":
+		return run.ContractPreflightRefs
 	case "sandbox":
 		return run.SandboxGrantRefs
 	case "mcp":

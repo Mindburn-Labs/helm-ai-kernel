@@ -35,6 +35,13 @@ a clean machine.
 
 Implemented checks currently prove:
 
+| App | Support level | F2 claim boundary |
+| --- | --- | --- |
+| OpenClaw | `agent_live` | live local-container contract and attack matrix eligible after preflight |
+| Hermes | `agent_live` | live local-container contract and attack matrix eligible after preflight |
+| OpenCode | `verify_only` | contract/version proof only; `--version` smoke checks do not count as live-agent F2 coverage |
+| Kilo Code | `verify_only` | contract/version proof only; `--version` smoke checks do not count as live-agent F2 coverage |
+
 - `launchpad-artifacts` workflow `26198407296` built pinned OpenClaw, Hermes,
   OpenCode, and Kilo Code upstream refs into GHCR OCI images, signed them with
   GitHub OIDC keyless cosign, generated syft SBOMs, ran grype scans, and
@@ -43,17 +50,23 @@ Implemented checks currently prove:
   manifest, immutable image digest, cosign signature, syft SBOM, grype/trivy
   scan, live e2e run, teardown receipt, and EvidencePack refs are present and
   tied to the same workflow run.
-- OpenClaw, Hermes, OpenCode, and Kilo Code are `oss_supported` in the registry
-  from signed CI evidence, live e2e, teardown, receipts, and offline
+- OpenClaw and Hermes are live `agent_live` apps in the registry from signed CI
+  evidence, contract preflight, live e2e, teardown, receipts, and offline
   EvidencePack verification, not from assertion.
+- OpenCode and Kilo Code are `verify_only`; `--version` smoke checks do not
+  count as live-agent F2 coverage.
 - OpenClaw image:
   `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995`.
 - Hermes image:
   `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652`.
-- OpenCode image:
+- OpenCode image (`verify_only`):
   `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550`.
-- Kilo Code image:
+- Kilo Code image (`verify_only`):
   `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6`.
+- F2 reports are blocked unless they attach contract preflight JSON, launch
+  plan, kernel verdict, sandbox grant, egress receipt, MCP quarantine receipt,
+  healthcheck receipt, runtime environment, EvidencePack, offline verify output,
+  and raw per-case results.
 - Local-container BYO model-provider egress requires a launch-scoped egress
   proxy receipt, can use the signed egress-proxy image from the artifact
   workflow, and rejects destinations outside the embedded model-provider
@@ -134,8 +147,8 @@ helm-ai-kernel launch matrix --json
 helm-ai-kernel launch secrets set model_gateway --provider openai --value-env OPENAI_API_KEY
 helm-ai-kernel launch openclaw local-container --headless --output json
 helm-ai-kernel launch hermes local-container --headless --output json
-helm-ai-kernel launch opencode local-container --headless --output json
-helm-ai-kernel launch kilocode local-container --headless --output json
+helm-ai-kernel app preflight opencode --json
+helm-ai-kernel app preflight kilocode --json
 helm-ai-kernel launch delete <launch_id> --cascade
 helm-ai-kernel evidence inspect <pack>
 helm-ai-kernel evidence diff <pack-a> <pack-b>
@@ -146,8 +159,8 @@ helm-ai-kernel verify --bundle <pack>
 confirmation, EvidencePack verification, and secret-fragment audit. It writes
 redacted JSON only.
 
-OpenCode and Kilo Code are now part of the supported clean-install app set.
-`--include-candidates` remains accepted by the clean-install gate for backward
+OpenCode and Kilo Code are now part of the verify-only clean-install proof set,
+not the live supported launch set. `--include-candidates` remains accepted by the clean-install gate for backward
 compatibility only.
 
 ## Troubleshooting

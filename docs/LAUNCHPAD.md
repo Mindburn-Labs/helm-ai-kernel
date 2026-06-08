@@ -9,30 +9,31 @@ Run real AI apps through HELM's execution boundary. Register at
 <https://console.helm.mindburn.org>, install the CLI, and pair your workstation
 before launching. Receipts and evidence appear in the Console dashboard.
 
-Supported local-container apps:
+Current local-container support levels:
 
-| App | Command | Proof |
-| --- | --- | --- |
-| OpenClaw | `helm up openclaw` | receipts + EvidencePack |
-| Hermes | `helm up hermes --target local` | receipts + EvidencePack |
-| OpenCode | `helm-ai-kernel launch opencode local-container --headless --output json` | receipts + EvidencePack |
-| Kilo Code | `helm-ai-kernel launch kilocode local-container --headless --output json` | receipts + EvidencePack |
+| App | Support level | Command | Proof |
+| --- | --- | --- | --- |
+| OpenClaw | `agent_live` | `helm up openclaw` | contract preflight + receipts + EvidencePack |
+| Hermes | `agent_live` | `helm up hermes --target local` | contract preflight + receipts + EvidencePack |
+| OpenCode | `verify_only` | `helm-ai-kernel app preflight opencode --json` | contract proof only; `--version` smoke checks do not count as live-agent F2 coverage |
+| Kilo Code | `verify_only` | `helm-ai-kernel app preflight kilocode --json` | contract proof only; `--version` smoke checks do not count as live-agent F2 coverage |
 
 ## What happens during launch
 
 1. Resolve app registry entry.
-2. Validate policy pack.
-3. Verify signed artifact digest.
-4. Prepare sandbox and scoped filesystem.
-5. Apply network deny-by-default policy.
-6. Set model gateway secret only inside launch scope.
-7. Run healthcheck.
-8. Emit launch/install/healthcheck receipts.
-9. Export EvidencePack.
-10. Seal `07_ATTESTATIONS/evidence_pack.sig`.
-11. In customer/high-assurance profile, create external anchor and S3 Object Lock storage receipts.
-12. Teardown and emit teardown receipt.
-13. Verify offline.
+2. Run `f2_contract_preflight` before any prompt or attack matrix.
+3. Validate policy pack.
+4. Verify signed artifact digest.
+5. Prepare sandbox and scoped filesystem.
+6. Apply network deny-by-default policy.
+7. Set model gateway secret only inside launch scope.
+8. Run healthcheck.
+9. Emit launch/install/healthcheck receipts.
+10. Export EvidencePack.
+11. Seal `07_ATTESTATIONS/evidence_pack.sig`.
+12. In customer/high-assurance profile, create external anchor and S3 Object Lock storage receipts.
+13. Teardown and emit teardown receipt.
+14. Verify offline.
 
 ## Source Truth
 
@@ -67,8 +68,8 @@ helm-ai-kernel launch secrets status
 helm-ai-kernel launch plan openclaw local-container --json
 helm-ai-kernel launch openclaw local-container --headless --output json
 helm-ai-kernel launch hermes local-container --headless --output json
-helm-ai-kernel launch opencode local-container --headless --output json
-helm-ai-kernel launch kilocode local-container --headless --output json
+helm-ai-kernel app preflight opencode --json
+helm-ai-kernel app preflight kilocode --json
 helm-ai-kernel launch openclaw digitalocean --live-cloud-beta --approval <approval_id> --cost-ceiling-usd <n> --headless --output json
 helm-ai-kernel launch hermes hetzner --live-cloud-beta --approval <approval_id> --cost-ceiling-usd <n> --headless --output json
 helm-ai-kernel launch status <launch_id> --json
@@ -129,17 +130,21 @@ See `docs/launchpad/UNIVERSAL_IMPORTER.md` for adapter and promotion details.
 
 ## App Classification
 
-| App | Availability | Evidence |
-| --- | --- | --- |
-| OpenClaw | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995`; workflow `26198407296`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
-| Hermes | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652`; workflow `26198407296`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
-| OpenCode | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550`; workflow `26198407296`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
-| Kilo Code | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6`; workflow `26198407296`; live conformance, teardown, receipts, and offline EvidencePack verification passed |
-| Codex / Claude Code / Cursor / Junie | `external_proprietary_adapter` | BYO/external adapters only; HELM governs execution and does not redistribute them |
+| App | Availability | Support level | Evidence |
+| --- | --- | --- | --- |
+| OpenClaw | `oss_supported` | `agent_live` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995`; workflow `26198407296`; contract preflight, live conformance, teardown, receipts, and offline EvidencePack verification passed |
+| Hermes | `oss_supported` | `agent_live` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652`; workflow `26198407296`; contract preflight, live conformance, teardown, receipts, and offline EvidencePack verification passed |
+| OpenCode | `oss_candidate` | `verify_only` | `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550`; version smoke only; `--version` smoke checks do not count as live-agent F2 coverage |
+| Kilo Code | `oss_candidate` | `verify_only` | `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6`; version smoke only; `--version` smoke checks do not count as live-agent F2 coverage |
+| Codex / Claude Code / Cursor / Junie | `external_proprietary_adapter` | `external_byo_adapter` | BYO/external adapters only; HELM records workstation contract evidence and does not redistribute them |
 
 ## Safety Model
 
 - Runtime verdicts are only `ALLOW`, `DENY`, or `ESCALATE`.
+- F2 is invalid until `f2_contract_preflight` proves image digest parity,
+  command parity, sandbox, egress proxy, writable HOME/cache/state paths,
+  scoped secret projection, MCP manifests, healthcheck, EvidencePack export,
+  and offline verify. Setup/runtime failures never count as `ATTACK_BLOCKED`.
 - `oss_supported` requires license, immutable signed OCI artifact, policy pack,
   sandbox, healthcheck, e2e, signed MCP manifest refs, teardown, signed
   receipts, a hash-chained EvidencePack graph, and offline-verifiable proof.
@@ -223,8 +228,8 @@ brew install mindburnlabs/tap/helm-ai-kernel
 helm-ai-kernel launch matrix --json
 helm-ai-kernel launch openclaw local-container --headless --output json
 helm-ai-kernel launch hermes local-container --headless --output json
-helm-ai-kernel launch opencode local-container --headless --output json
-helm-ai-kernel launch kilocode local-container --headless --output json
+helm-ai-kernel app preflight opencode --json
+helm-ai-kernel app preflight kilocode --json
 helm-ai-kernel launch delete <launch_id> --cascade
 helm-ai-kernel verify --bundle <pack>
 ```

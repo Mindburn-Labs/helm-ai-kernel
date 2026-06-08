@@ -158,7 +158,7 @@ func catalogEnvGroups(catalog modelproviders.Catalog) [][]string {
 }
 
 var (
-	defaultLiveConformanceApps   = []string{"openclaw", "hermes", "opencode", "kilocode"}
+	defaultLiveConformanceApps   = []string{"openclaw", "hermes"}
 	candidateLiveConformanceApps = []string{}
 )
 

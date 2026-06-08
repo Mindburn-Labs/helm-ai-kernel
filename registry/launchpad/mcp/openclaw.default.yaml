@@ -3,8 +3,8 @@ app_id: openclaw
 server_id: openclaw-default
 transport: stdio
 command: ["openclaw", "mcp", "serve"]
-package_digest: sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e
-signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e
+package_digest: sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995
+signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995
 schema_hash: sha256:1111111111111111111111111111111111111111111111111111111111111111
 tools:
   - name: model_gateway.complete

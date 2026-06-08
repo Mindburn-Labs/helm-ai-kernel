@@ -115,8 +115,16 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		"network_allowlist":          compiled.NetworkAllowlist,
 		"budget_ceiling":             compiled.Budgets,
 	})
+	contractReceipt := receipts.NewReceipt("launchpad.f2_contract_preflight", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
+		"stage":         "f2_contract_preflight",
+		"support_level": compiled.SupportLevel,
+		"result_class":  compiled.ResultClass,
+		"repair_class":  compiled.RepairClass,
+		"preflight":     compiled.ContractPreflight,
+	})
 
 	run.BoundaryRecordRefs = append(run.BoundaryRecordRefs, "boundary://launchpad/"+compiled.LaunchID)
+	run.ContractPreflightRefs = append(run.ContractPreflightRefs, contractReceipt.ReceiptID)
 	if compiled.CPIOutput != nil {
 		run.CPIRefs = append(run.CPIRefs, compiled.CPIOutput.ResultHash)
 	}
@@ -130,6 +138,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	run.IdempotencyKeys["teardown"] = "teardown:" + compiled.PlanHash
 
 	addJSON(artifacts, "launch_plan.json", compiled)
+	addJSON(artifacts, "contract_preflight.json", compiled.ContractPreflight)
 	addJSON(artifacts, "cpi_output.json", compiled.CPIOutput)
 	addJSON(artifacts, "kernel_verdict.json", kernelReceipt)
 	addJSON(artifacts, "sandbox_grant.json", sandboxReceipt)
@@ -139,6 +148,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		addJSON(artifacts, "receipts/launchpad-model-gateway-grant.json", modelGatewayReceipt)
 	}
 	addJSON(artifacts, "receipts/launchpad-kernel-verdict.json", kernelReceipt)
+	addJSON(artifacts, "receipts/launchpad-contract-preflight.json", contractReceipt)
 	addJSON(artifacts, "receipts/launchpad-launch.json", launchReceipt)
 	addJSON(artifacts, "receipts/launchpad-sandbox-preflight.json", sandboxReceipt)
 	addJSON(artifacts, "receipts/launchpad-mcp-quarantine.json", mcpReceipt)
@@ -198,6 +208,8 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		addRuntimeStartEvidence(failureSubject, runtimeResult)
 		failureReceipt := receipts.NewReceipt("launchpad.runtime_failure", compiled.LaunchID, "ALLOW", failureSubject)
 		run.State = StateRepairRequired
+		run.ResultClass = plan.ResultClassRuntimeRepairRequired
+		run.RepairClass = plan.RepairClassRuntimeRepairRequired
 		run.Reason = "runtime start failed after ALLOW; repair required before RUNNING: " + err.Error()
 		addJSON(artifacts, "receipts/launchpad-runtime-failure.json", failureReceipt)
 		runtimeEnvironment := map[string]any{"runtime": "local-container", "state": "REPAIR_REQUIRED", "error": err.Error()}
@@ -211,6 +223,8 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 			"error":  "runtime did not return container id and sandbox grant ref",
 		})
 		run.State = StateRepairRequired
+		run.ResultClass = plan.ResultClassRuntimeRepairRequired
+		run.RepairClass = plan.RepairClassRuntimeRepairRequired
 		run.Reason = "runtime start did not return required refs; repair required before RUNNING"
 		addJSON(artifacts, "receipts/launchpad-runtime-failure.json", failureReceipt)
 		addJSON(artifacts, "runtime_environment.json", map[string]any{"runtime": "local-container", "state": "REPAIR_REQUIRED"})
@@ -222,6 +236,8 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 			"error":  "runtime did not return launch-scoped egress receipt ref",
 		})
 		run.State = StateRepairRequired
+		run.ResultClass = plan.ResultClassRuntimeRepairRequired
+		run.RepairClass = plan.RepairClassRuntimeRepairRequired
 		run.Reason = "runtime start did not return egress receipt ref for networked launch; repair required before RUNNING"
 		addJSON(artifacts, "receipts/launchpad-runtime-failure.json", failureReceipt)
 		addJSON(artifacts, "runtime_environment.json", map[string]any{"runtime": "local-container", "state": "REPAIR_REQUIRED", "container_id": runtimeResult.ContainerID})
@@ -289,6 +305,8 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 				"error":  err.Error(),
 			})
 			run.State = StateRepairRequired
+			run.ResultClass = plan.ResultClassRuntimeRepairRequired
+			run.RepairClass = plan.RepairClassRuntimeRepairRequired
 			run.Reason = "healthcheck failed after runtime start; repair required before RUNNING: " + err.Error()
 			addJSON(artifacts, "receipts/launchpad-healthcheck-failure.json", failureReceipt)
 			addJSON(artifacts, "runtime_environment.json", map[string]any{"runtime": runtimeResult.Runtime, "state": "REPAIR_REQUIRED", "container_id": runtimeResult.ContainerID, "error": err.Error()})
@@ -304,6 +322,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	}
 
 	run.State = StateRunning
+	run.RepairClass = plan.RepairClassNone
 	run.Reason = "launch reached RUNNING after policy, CPI, sandbox preflight, MCP quarantine, install, start, and healthcheck receipts"
 	addJSON(artifacts, "runtime_environment.json", map[string]any{
 		"runtime":                      runtimeResult.Runtime,
@@ -667,24 +686,30 @@ func newLaunchRun(compiled plan.LaunchPlan, reason string) LaunchRun {
 		state = StatePlanned
 	}
 	return LaunchRun{
-		LaunchID:         compiled.LaunchID,
-		AppID:            compiled.AppID,
-		AppVersion:       compiled.AppVersion,
-		SubstrateID:      compiled.SubstrateID,
-		Principal:        compiled.Principal,
-		PlanHash:         compiled.PlanHash,
-		ArtifactImage:    compiled.ArtifactImage,
-		ArtifactDigest:   compiled.ArtifactDigest,
-		State:            state,
-		KernelVerdict:    compiled.KernelVerdict,
-		ReasonCode:       compiled.ReasonCode,
-		Reason:           reason,
-		RuntimeHandles:   RuntimeHandles{CloudResourceIDs: map[string]string{}},
-		IdempotencyKeys:  map[string]string{},
-		CPIRefs:          []string{},
-		SandboxGrantRefs: []string{},
-		MCPRefs:          []string{},
-		TeardownCommand:  "helm teardown " + compiled.LaunchID + " --cascade",
+		LaunchID:              compiled.LaunchID,
+		AppID:                 compiled.AppID,
+		AppVersion:            compiled.AppVersion,
+		SubstrateID:           compiled.SubstrateID,
+		Principal:             compiled.Principal,
+		PlanHash:              compiled.PlanHash,
+		ArtifactImage:         compiled.ArtifactImage,
+		ArtifactDigest:        compiled.ArtifactDigest,
+		SupportLevel:          string(compiled.SupportLevel),
+		ContractPreflight:     compiled.ContractPreflight,
+		ResultClass:           compiled.ResultClass,
+		RepairClass:           compiled.RepairClass,
+		EvidenceRefs:          append([]string{}, compiled.EvidenceRefs...),
+		State:                 state,
+		KernelVerdict:         compiled.KernelVerdict,
+		ReasonCode:            compiled.ReasonCode,
+		Reason:                reason,
+		RuntimeHandles:        RuntimeHandles{CloudResourceIDs: map[string]string{}},
+		IdempotencyKeys:       map[string]string{},
+		ContractPreflightRefs: []string{},
+		CPIRefs:               []string{},
+		SandboxGrantRefs:      []string{},
+		MCPRefs:               []string{},
+		TeardownCommand:       "helm teardown " + compiled.LaunchID + " --cascade",
 	}
 }
 

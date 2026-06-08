@@ -64,13 +64,24 @@ func (o Orchestrator) Up(opts Options) (Result, error) {
 		compiled := lpplan.FailurePlan(opts.AppID, result.SubstrateID, opts.Principal, "DENY", "DENIED", "ERR_LAUNCHKIT_UNKNOWN_APP")
 		return o.persistBlocked(result, compiled, "unknown app")
 	}
+	result.SupportLevel = app.SupportLevel
 	result.Gates = setGate(result.Gates, "dependency.bootstrap", GateAllow, "", "LaunchKit registry and local state store are ready.")
 
-	if app.Availability != registry.AvailabilityOSSSupported || !app.Conformance.FullyVerified() {
+	if app.SupportLevel == registry.SupportLevelVerifyOnly {
+		if opts.Mode == ModeLive {
+			compiled := lpplan.FailurePlan(app.ID, result.SubstrateID, opts.Principal, "ESCALATE", "ESCALATED", "ERR_LAUNCHKIT_VERIFY_ONLY_SUPPORT_LEVEL")
+			return o.persistBlocked(result, compiled, "app is verify_only; live-agent LaunchKit coverage requires runtime command evidence beyond version smoke checks")
+		}
+		opts.Mode = ModeVerifyOnly
+		result.Mode = ModeVerifyOnly
+		result.VerifyOnly = true
+		result.Gates = setGate(result.Gates, "app.support", GateAllow, "", "AppSpec is verify_only; LaunchKit will stop after contract proof and not claim live-agent F2 coverage.")
+	} else if app.Availability != registry.AvailabilityOSSSupported || !app.Conformance.FullyVerified() {
 		compiled := lpplan.FailurePlan(app.ID, result.SubstrateID, opts.Principal, "ESCALATE", "ESCALATED", "ERR_LAUNCHKIT_APP_UNSUPPORTED")
 		return o.persistBlocked(result, compiled, "app is not fully verified for LaunchKit availability")
+	} else {
+		result.Gates = setGate(result.Gates, "app.support", GateAllow, "", "AppSpec is oss_supported and fully verified.")
 	}
-	result.Gates = setGate(result.Gates, "app.support", GateAllow, "", "AppSpec is oss_supported and fully verified.")
 
 	supplyChain := VerifySupplyChain(app)
 	result.Gates = applySupplyChainGates(result.Gates, supplyChain)
@@ -89,7 +100,9 @@ func (o Orchestrator) Up(opts Options) (Result, error) {
 
 	compiled, mode, runtimeSecrets, err := o.compile(app, opts, result.Provider.Available)
 	result.Mode = mode
+	applyCompiledResult(&result, compiled)
 	if err != nil {
+		result.Gates = bindContractGate(result.Gates, compiled)
 		result.Gates = setGate(result.Gates, "launchplan.compile", statusFromVerdict(compiled.KernelVerdict), compiled.ReasonCode, err.Error())
 		result.Gates = setGate(result.Gates, "policy.compile", statusFromVerdict(compiled.KernelVerdict), compiled.ReasonCode, "Policy/CPI compile did not authorize runtime.")
 		return o.persistBlocked(result, compiled, err.Error())
@@ -98,6 +111,8 @@ func (o Orchestrator) Up(opts Options) (Result, error) {
 		compiled = rebindLaunchID(compiled, opts.ResumeRunID)
 	}
 	result.Plan = &compiled
+	applyCompiledResult(&result, compiled)
+	result.Gates = bindContractGate(result.Gates, compiled)
 	result.Gates = setGate(result.Gates, "launchplan.compile", GateAllow, "", "LaunchPlan compiled before runtime side effects.")
 	result.Gates = setGate(result.Gates, "policy.compile", GateAllow, "", "Policy and CPI output are bound to the LaunchPlan.")
 	result.Gates = setGate(result.Gates, "secret.preflight", GateAllow, "", secretSummary(mode, compiled.RequiredSecretRefs))
@@ -120,6 +135,9 @@ func (o Orchestrator) Up(opts Options) (Result, error) {
 		return result, err
 	}
 	result.Run = &run
+	result.ResultClass = run.ResultClass
+	result.RepairClass = run.RepairClass
+	result.EvidenceRefs = append([]string{}, run.EvidenceRefs...)
 	result.StartedRuntime = run.RuntimeHandles.ContainerID != ""
 	result.ConsoleURL = consoleURL(opts.ConsoleBaseURL, run.LaunchID)
 	result.OfflineVerifyCommand = run.VerificationCommand
@@ -165,6 +183,9 @@ func (o Orchestrator) compile(app registry.AppSpec, opts Options, localRuntimeRe
 			mode = ModeDemo
 		}
 	}
+	if app.SupportLevel == registry.SupportLevelVerifyOnly {
+		mode = ModeVerifyOnly
+	}
 	runtimeSecrets := map[string]string{}
 	restore := func() {}
 	if mode == ModeDemo {
@@ -185,6 +206,10 @@ func (o Orchestrator) persistBlocked(result Result, compiled lpplan.LaunchPlan, 
 	}
 	result.Plan = &compiled
 	result.Run = &run
+	applyCompiledResult(&result, compiled)
+	result.ResultClass = run.ResultClass
+	result.RepairClass = run.RepairClass
+	result.EvidenceRefs = append([]string{}, run.EvidenceRefs...)
 	result.ConsoleURL = consoleURL("", run.LaunchID)
 	result.OfflineVerifyCommand = run.VerificationCommand
 	result.ResumeCommand = "helm up " + compiled.AppID + " --resume " + run.LaunchID
@@ -314,6 +339,7 @@ func canonicalGates() []Gate {
 		gate("environment.detect", "Environment detection", "helm up <app>"),
 		gate("dependency.bootstrap", "Dependency/bootstrap", "helm up <app>"),
 		gate("app.support", "AppSpec support", "helm app inspect <app>"),
+		gate("f2.contract_preflight", "F2 contract preflight", "helm app preflight <app> --json"),
 		gate("artifact.digest", "OCI digest verification", "helm app inspect <app>"),
 		gate("artifact.signature", "Signature verification", "helm app inspect <app>"),
 		gate("artifact.sbom", "SBOM verification", "helm app inspect <app>"),
@@ -330,6 +356,29 @@ func canonicalGates() []Gate {
 		gate("offline.verify", "Offline verify command", "helm-ai-kernel verify --bundle <file>"),
 		gate("console.deeplink", "Console deep link", "helm run open <run_id>"),
 	}
+}
+
+func applyCompiledResult(result *Result, compiled lpplan.LaunchPlan) {
+	if result == nil {
+		return
+	}
+	result.ContractPreflight = compiled.ContractPreflight
+	result.ResultClass = compiled.ResultClass
+	result.RepairClass = compiled.RepairClass
+	result.SupportLevel = compiled.SupportLevel
+	result.EvidenceRefs = append([]string{}, compiled.EvidenceRefs...)
+}
+
+func bindContractGate(gates []Gate, compiled lpplan.LaunchPlan) []Gate {
+	if compiled.ContractPreflight == nil {
+		return setGate(gates, "f2.contract_preflight", statusFromVerdict(compiled.KernelVerdict), compiled.ReasonCode, "Contract preflight was not emitted.")
+	}
+	status := statusFromVerdict(compiled.ContractPreflight.Verdict)
+	summary := "Contract preflight proved image, command, sandbox, egress proxy, writable paths, secret projection, MCP manifests, healthcheck, EvidencePack export, and offline verify before attack execution."
+	if compiled.ContractPreflight.Verdict != "ALLOW" {
+		summary = "Contract preflight failed before any attack prompt could run."
+	}
+	return setGate(gates, "f2.contract_preflight", status, compiled.ReasonCode, summary)
 }
 
 func gate(id, label, cli string) Gate {

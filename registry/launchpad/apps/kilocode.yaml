@@ -6,7 +6,8 @@ license:
     spdx: MIT
     url: https://github.com/Kilo-Org/kilocode/blob/v7.3.1/LICENSE
 redistribution: allowed_by_MIT_with_upstream_notice
-availability: oss_supported
+availability: oss_candidate
+support_level: verify_only
 install:
     strategy: signed_oci
     image: ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6
@@ -16,13 +17,7 @@ install:
 runtime:
     command:
         - kilocode
-model_gateway:
-    logical_secret: model_gateway
-    provider: byo
-    mode: logical_binding_env_projection
-    raw_provider_key_projected: true
-required_secrets:
-    - model_gateway
+required_secrets: []
 filesystem_policy:
     mode: scoped_workspace
     mounts:
@@ -45,7 +40,54 @@ budget_ceiling:
     usd_max: 0
     api_calls_max: 0
     time_ms_max: 0
+framework_contract:
+    f2_contract_preflight: true
+    claim_level: verify_only
+    live_command_kind: verify_only
+    runtime_install_policy: forbidden
+    baked_dependencies:
+        - kilocode-cli
+    forbidden_runtime_install_patterns:
+        - npm install
+        - pnpm install
+        - yarn install
+        - pip install
+        - uv pip install
+        - playwright install
+        - apt-get
+        - apk add
+        - curl | sh
+        - curl -fsSL
+    writable_paths:
+        - path: /var/lib/kilocode/app_state
+          purpose: app_state
+          required: true
+    provider_host_groups: []
+    egress_proxy:
+        required: false
+    mcp_manifest_refs:
+        - kilocode.default
+    healthcheck: kilocode --version
+    evidence_profile: f2.contract.verify_only.v1
+    images:
+        - name: kilocode-verify
+          image: ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6
+          digest: sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6
+          purpose: version_smoke_only
+          baked_dependencies:
+              - kilocode-cli
+    evidence_refs:
+        - contract_preflight.json
+        - launch_plan.json
+        - kernel_verdict.json
+        - sandbox_grant.json
+        - mcp_quarantine.json
+        - receipts/launchpad-healthcheck.json
+        - runtime_environment.json
+        - 04_EXPORTS/launchpad_manifest.json
+        - offline_verify.txt
 evidence_requirements:
+    - contract_preflight
     - cpi_output
     - kernel_verdict
     - sandbox_grant
@@ -54,10 +96,10 @@ evidence_requirements:
     - healthcheck_receipt
     - teardown_receipt
     - evidence_pack
+    - offline_verify
     - evidence_graph
     - mcp_quarantine
     - mcp_manifest
-    - model_gateway_broker
     - artifact_digest
     - cosign_signature
     - syft_sbom
@@ -81,10 +123,10 @@ conformance:
     policy_pack_present: true
     sandbox_verified: true
     healthcheck_passing: true
-    e2e_passing: true
-    teardown_verified: true
+    e2e_passing: false
+    teardown_verified: false
     receipt_verified: true
-    evidence_pack_verified: true
+    evidence_pack_verified: false
 metadata:
     artifact_workflow_run: github-actions://26198407296/1
     helm_oci_status: promoted_from_signed_ci_artifact_manifest
@@ -92,6 +134,7 @@ metadata:
     upstream_commit: 64c60812ae730a30db1fa2226d9e446f7f10c127
     upstream_ref: v7.3.1
     upstream_repo: https://github.com/Kilo-Org/kilocode
+    verify_only_reason: healthcheck only proves --version smoke coverage; no live-agent command evidence is attached
 
 display:
   headline: "Run Kilo Code through HELM"

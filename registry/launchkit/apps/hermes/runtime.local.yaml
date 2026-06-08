@@ -1,7 +1,15 @@
 mode: live
 target: local-container
 command:
-  - hermes
+  - /bin/sh
+  - -c
+  - HOME=/var/lib/hermes hermes --q ping --provider openrouter --model openai/gpt-4o-mini --ignore_user_config --quiet
+healthcheck: helm-launchpad-openrouter-check
+state_dir_env: HOME
+mcp_registry_ref: mcp.registry.yaml
+provider_host_groups:
+  - openrouter
+egress_proxy_required: true
 requires:
   - local.docker
   - scoped_secret_grant

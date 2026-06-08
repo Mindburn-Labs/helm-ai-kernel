@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -115,21 +114,39 @@ func runAppInspect(args []string, stdout, stderr io.Writer) int {
 }
 
 func parseAppCommandArgs(name string, args []string, stderr io.Writer) (string, string, bool, int) {
-	fs := flag.NewFlagSet(name, flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	substrate := fs.String("substrate", "local-container", "substrate id")
-	jsonOut := fs.Bool("json", false, "emit JSON")
-	resume := fs.String("resume", "", "existing run id to resume from the Console")
-	if err := fs.Parse(args); err != nil {
-		return "", "", false, 2
+	substrate := "local-container"
+	jsonOut := false
+	apps := []string{}
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			jsonOut = true
+		case "--substrate":
+			if i+1 >= len(args) {
+				fmt.Fprintf(stderr, "Usage: helm-ai-kernel %s <app> [--substrate local-container] [--json]\n", name)
+				return "", "", false, 2
+			}
+			substrate = args[i+1]
+			i++
+		case "--resume":
+			if i+1 >= len(args) {
+				fmt.Fprintf(stderr, "Usage: helm-ai-kernel %s <app> [--substrate local-container] [--json]\n", name)
+				return "", "", false, 2
+			}
+			i++
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				fmt.Fprintf(stderr, "unknown %s flag: %s\n", name, args[i])
+				return "", "", false, 2
+			}
+			apps = append(apps, args[i])
+		}
 	}
-	_ = resume
-	rest := fs.Args()
-	if len(rest) != 1 {
+	if len(apps) != 1 {
 		fmt.Fprintf(stderr, "Usage: helm-ai-kernel %s <app> [--substrate local-container] [--json]\n", name)
 		return "", "", false, 2
 	}
-	return rest[0], *substrate, *jsonOut, 0
+	return apps[0], substrate, jsonOut, 0
 }
 
 func loadLaunchpadCatalog(stderr io.Writer) (*lpregistry.Catalog, error) {

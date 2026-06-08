@@ -514,7 +514,7 @@ jobs:
       - name: Run gated live conformance
         env:
           HELM_LAUNCHPAD_LIVE_E2E: "1"
-          HELM_LAUNCHPAD_LIVE_APPS: openclaw,hermes,opencode,kilocode
+          HELM_LAUNCHPAD_LIVE_APPS: openclaw,hermes
           HELM_LAUNCHPAD_ARTIFACT_MANIFEST: /tmp/launchpad/launchpad-artifact-manifest.json
           HELM_LAUNCHPAD_LIVE_EVIDENCE_DIR: /tmp/launchpad-live-evidence
           HELM_LAUNCHPAD_LOCAL_CONTAINER_TIMEOUT: 8m
@@ -563,7 +563,7 @@ jobs:
           include-hidden-files: true
       - name: Write merged promotion manifest
         env:
-          LIVE_APPS: openclaw,hermes,opencode,kilocode
+          LIVE_APPS: openclaw,hermes
         run: |
           set -euo pipefail
           mkdir -p /tmp/launchpad-promotion

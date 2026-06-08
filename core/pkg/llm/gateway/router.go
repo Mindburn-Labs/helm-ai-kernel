@@ -241,7 +241,17 @@ func requireSpendAuthorityAllow(decision *economic.SpendAuthorityDecision) error
 	if decision.Verdict != economic.BudgetVerdictAllow {
 		return &SpendVerdictError{Decision: decision, Reason: "provider dispatch requires ALLOW"}
 	}
+	if !isAllowSpendReasonCode(decision.ReasonCode) {
+		return &SpendVerdictError{Decision: decision, Reason: "ALLOW spend authority reason code is invalid"}
+	}
+	if !decision.HasCanonicalContentHash() {
+		return &SpendVerdictError{Decision: decision, Reason: "spend authority decision hash mismatch"}
+	}
 	return nil
+}
+
+func isAllowSpendReasonCode(code economic.SpendReasonCode) bool {
+	return code == economic.SpendReasonOKWithinEnvelope || code == economic.SpendReasonOKApproved
 }
 
 func defaultBaseURL(provider ProviderType) string {

@@ -38,6 +38,20 @@ func TestAgentSpendEnvelopeEvaluateSpend(t *testing.T) {
 	}
 }
 
+func TestSpendAuthorityDecisionCanonicalContentHash(t *testing.T) {
+	decision := spendAuthorityTestEnvelope().EvaluateSpend(100, "openai", "gpt-5-mini")
+	if decision.CanonicalContentHash() != decision.ContentHash {
+		t.Fatalf("canonical decision hash = %s, want %s", decision.CanonicalContentHash(), decision.ContentHash)
+	}
+	if !decision.HasCanonicalContentHash() {
+		t.Fatal("decision should report a canonical content hash")
+	}
+	decision.ContentHash = "sha256:tampered"
+	if decision.HasCanonicalContentHash() {
+		t.Fatal("tampered decision hash should not validate")
+	}
+}
+
 func TestAgentSpendEnvelopeEvaluateSpendValidityWindow(t *testing.T) {
 	envelope := spendAuthorityTestEnvelope()
 	envelope.EffectiveAt = time.Now().UTC().Add(time.Hour)

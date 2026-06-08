@@ -166,6 +166,8 @@ func TestExecuteRequiresSpendAuthorityAllowBeforeProviderDispatch(t *testing.T) 
 		{name: "missing", decision: nil, want: "spend authority decision required"},
 		{name: "deny", decision: gatewaySpendDecision(economic.BudgetVerdictDeny, economic.SpendReasonBalanceInsufficient), want: "provider dispatch requires ALLOW"},
 		{name: "escalate", decision: gatewaySpendDecision(economic.BudgetVerdictEscalate, economic.SpendReasonApprovalRequired), want: "provider dispatch requires ALLOW"},
+		{name: "allow with deny reason", decision: gatewaySpendDecision(economic.BudgetVerdictAllow, economic.SpendReasonBalanceInsufficient), want: "ALLOW spend authority reason code is invalid"},
+		{name: "allow with tampered hash", decision: gatewayTamperedAllowSpendDecision(), want: "spend authority decision hash mismatch"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dispatched := false
@@ -224,12 +226,19 @@ func gatewayAllowSpendDecision() *economic.SpendAuthorityDecision {
 }
 
 func gatewaySpendDecision(verdict economic.BudgetVerdict, reason economic.SpendReasonCode) *economic.SpendAuthorityDecision {
-	return &economic.SpendAuthorityDecision{
+	decision := &economic.SpendAuthorityDecision{
 		Verdict:        verdict,
 		ReasonCode:     reason,
 		Reason:         "test spend decision",
 		RemainingCents: 1000,
 		EnvelopeHash:   "sha256:envelope",
-		ContentHash:    "sha256:decision",
 	}
+	decision.ContentHash = decision.CanonicalContentHash()
+	return decision
+}
+
+func gatewayTamperedAllowSpendDecision() *economic.SpendAuthorityDecision {
+	decision := gatewayAllowSpendDecision()
+	decision.ContentHash = "sha256:tampered"
+	return decision
 }

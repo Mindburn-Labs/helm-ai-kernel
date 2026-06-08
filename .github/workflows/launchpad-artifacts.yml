@@ -219,6 +219,14 @@ jobs:
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             > "cosign-${{ matrix.app_id }}.json"
 
+      - name: Free Docker build cache before image evidence scans
+        run: |
+          set -euo pipefail
+          docker buildx prune --force --all || true
+          docker builder prune --force --all || true
+          docker system prune --force || true
+          docker system df
+
       - name: Generate syft SBOM
         env:
           IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
@@ -389,6 +397,13 @@ jobs:
             --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/launchpad-artifacts.yml@${GITHUB_REF}" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             > cosign-egress-proxy.json
+      - name: Free Docker build cache before egress proxy evidence scans
+        run: |
+          set -euo pipefail
+          docker buildx prune --force --all || true
+          docker builder prune --force --all || true
+          docker system prune --force || true
+          docker system df
       - name: Generate egress proxy SBOM and vulnerability report
         env:
           IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}

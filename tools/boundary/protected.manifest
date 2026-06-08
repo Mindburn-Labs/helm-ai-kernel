@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-08T17:02:58Z
-# Commit: 0eb64a55ebeb681a9449f17ddca272b516ecfb9d
+# Generated: 2026-06-08T17:23:34Z
+# Commit: 42c72213a5bf143f144f74bf46c1bfb7c1bee87e
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -156,10 +156,10 @@ daa5d9844d49d92004ed79bc292b1638adf11a876c702aafe578a387c967aba6  core/pkg/contr
 5fcbb041c39a4f5e1752aa07f806fd82e50100b32722e7253980e6fd2861179b  core/pkg/contracts/economic/org_budget.go
 23a788e681c240f5a0b4c19b82df1dd18b8c44442ca69c526e1ba36c0e16a674  core/pkg/contracts/economic/procurement.go
 74f527420a813365f34b9ed1861d6107169414256f0eb154e59ec9f5a66dbd90  core/pkg/contracts/economic/reconciliation.go
-75e38653d39ee249fc6cfb9cf1401bd21d8a8a85f5d6d0d29c41cee549fbc4ee  core/pkg/contracts/economic/spend_authority.go
+32961a5716809d4cd0111d5134b6bbe3fbfcb9b24ee2c8d6e149e152b528e597  core/pkg/contracts/economic/spend_authority.go
 b2efddcd68b8ed03f424acb3cd01733e8539003c78a0a927abecf97840ebbb17  core/pkg/contracts/economic/spend_authority_financial.go
 efa7332a9fedf60766463654e224f336beeabb54c926fc512500de295c6bc37c  core/pkg/contracts/economic/spend_authority_financial_test.go
-fb59084b0bd2ccc5d27cf4300ac962c9329c9c84e803db3c4ffd323e0ad691a2  core/pkg/contracts/economic/spend_authority_test.go
+1eabb5ab1b04136ce2c2898178be165e8697781bf38a99b79d54ce962a991ed0  core/pkg/contracts/economic/spend_authority_test.go
 98bc2a2891d56d764d84c357656b454695174ac352b2eb0208befe7e5c85b9bb  core/pkg/contracts/economic/spend_intent.go
 6c292cd4db2d7bac15002fed6be93912381349526177325ce097133ffb3db002  core/pkg/contracts/economic/transaction_manifest.go
 e1c9fbfd2bf7b04450d17b79ed61ec6a2710c7b13e179adb84c88f8bbdbea612  core/pkg/contracts/economic/treasury.go

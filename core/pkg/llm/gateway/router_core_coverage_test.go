@@ -62,6 +62,7 @@ func TestBlessedProfileRoutingAndDefaults(t *testing.T) {
 		{ModelName: "model"},
 		{Provider: ProviderOllama},
 		{Provider: ProviderOllama, BaseURL: "not-a-url", ModelName: "model"},
+		{Provider: ProviderType("unknown"), BaseURL: "http://localhost:9999", ModelName: "model"},
 	} {
 		if err := NewGatewayRouter().RouteWithConfig(context.Background(), cfg); err == nil {
 			t.Fatalf("expected invalid route config to fail: %+v", cfg)
@@ -187,7 +188,7 @@ func TestDiscoveryAndProviderErrorBranches(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"message": map[string]string{"content": ""}})
 	}))
 	defer emptyOllama.Close()
-	if _, err := router.executeOllama(context.Background(), Profile{Provider: ProviderOllama, BaseURL: emptyOllama.URL, ModelName: "model"}, ExecContext{Prompt: "hello"}); err == nil {
+	if _, err := router.executeOllama(context.Background(), Profile{Provider: ProviderOllama, BaseURL: emptyOllama.URL, ModelName: "model"}, ExecContext{Prompt: "hello"}, gatewayDispatchPermit()); err == nil {
 		t.Fatal("expected empty Ollama content to fail")
 	}
 
@@ -195,8 +196,69 @@ func TestDiscoveryAndProviderErrorBranches(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []map[string]any{}})
 	}))
 	defer emptyOpenAI.Close()
-	if _, err := router.executeOpenAICompatible(context.Background(), Profile{Provider: ProviderVLLM, BaseURL: emptyOpenAI.URL, ModelName: "model"}, ExecContext{Prompt: "hello"}); err == nil {
+	if _, err := router.executeOpenAICompatible(context.Background(), Profile{Provider: ProviderVLLM, BaseURL: emptyOpenAI.URL, ModelName: "model"}, ExecContext{Prompt: "hello"}, gatewayDispatchPermit()); err == nil {
 		t.Fatal("expected empty OpenAI-compatible content to fail")
+	}
+}
+
+func TestProviderExecutorsRequireBudgetVerdictDispatchPermitBeforeNetwork(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		provider ProviderType
+		call     func(*GatewayRouter, string) (string, error)
+	}{
+		{
+			name:     "ollama",
+			provider: ProviderOllama,
+			call: func(router *GatewayRouter, baseURL string) (string, error) {
+				return router.executeOllama(context.Background(), Profile{Provider: ProviderOllama, BaseURL: baseURL, ModelName: "model"}, ExecContext{Prompt: "hello"}, budgetVerdictDispatchPermit{})
+			},
+		},
+		{
+			name:     "openai-compatible",
+			provider: ProviderVLLM,
+			call: func(router *GatewayRouter, baseURL string) (string, error) {
+				return router.executeOpenAICompatible(context.Background(), Profile{Provider: ProviderVLLM, BaseURL: baseURL, ModelName: "model"}, ExecContext{Prompt: "hello"}, budgetVerdictDispatchPermit{})
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dispatched := false
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				dispatched = true
+				_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+			}))
+			defer srv.Close()
+
+			_, err := tc.call(NewGatewayRouter(), srv.URL)
+			if err == nil || !strings.Contains(err.Error(), "authorized BudgetVerdict dispatch permit required") {
+				t.Fatalf("expected dispatch permit error, got %v", err)
+			}
+			if dispatched {
+				t.Fatalf("%s provider endpoint was touched without BudgetVerdict permit", tc.provider)
+			}
+		})
+	}
+}
+
+func TestExecuteProviderRejectsUnknownProviderBeforeNetwork(t *testing.T) {
+	dispatched := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		dispatched = true
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer srv.Close()
+
+	_, err := NewGatewayRouter().executeProvider(context.Background(), Profile{
+		Provider:  ProviderType("unknown"),
+		BaseURL:   srv.URL,
+		ModelName: "model",
+	}, ExecContext{Prompt: "hello"}, gatewayDispatchPermit())
+	if err == nil || !strings.Contains(err.Error(), "unsupported provider") {
+		t.Fatalf("expected unsupported provider error, got %v", err)
+	}
+	if dispatched {
+		t.Fatal("unknown provider endpoint was touched")
 	}
 }
 
@@ -227,13 +289,13 @@ func TestExecuteOpenAICompatibleSendsJSONModeToolsAndSystem(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	router := NewGatewayRouter()
+	router := newGatewayRouterWithReceiptTrust()
 	if err := router.RouteWithConfig(context.Background(), RouteConfig{Provider: ProviderVLLM, BaseURL: srv.URL, ModelName: "model", ModelHash: "sha256:model"}); err != nil {
 		t.Fatal(err)
 	}
-	result, err := router.Execute(context.Background(), ExecContext{
-		Prompt: "hello", System: "system", JSONMode: true, Tools: []string{"tool"}, SpendDecision: gatewayAllowSpendDecision(),
-	})
+	result, err := router.Execute(context.Background(), gatewayExecContext(ProviderVLLM, "model", gatewayAllowSpendDecision(), ExecContext{
+		Prompt: "hello", System: "system", JSONMode: true, Tools: []string{"tool"},
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}

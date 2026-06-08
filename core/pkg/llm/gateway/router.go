@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
 )
 
 // GatewayRouter normalizes capability requests across providers.
@@ -34,6 +35,21 @@ func (e *EnginePinMismatchError) Error() string {
 
 func (e *EnginePinMismatchError) SafeDepHazardCode() contracts.SafeDepHazardCode {
 	return contracts.HazardEnginePinMismatch
+}
+
+type SpendVerdictError struct {
+	Decision *economic.SpendAuthorityDecision
+	Reason   string
+}
+
+func (e *SpendVerdictError) Error() string {
+	if e == nil {
+		return "lig: spend authority verdict unavailable"
+	}
+	if e.Decision == nil {
+		return "lig: spend authority decision required before provider dispatch"
+	}
+	return fmt.Sprintf("lig: spend authority verdict %s/%s: %s", e.Decision.Verdict, e.Decision.ReasonCode, e.Reason)
 }
 
 // NewGatewayRouter creates a new Local Inference Gateway router.
@@ -134,21 +150,25 @@ func (r *GatewayRouter) HealthCheck(ctx context.Context) error {
 
 // ExecContext represents normalized LLM execution parameters within HELM.
 type ExecContext struct {
-	Prompt      string
-	Temperature float32
-	System      string
-	JSONMode    bool
-	Tools       []string
+	Prompt        string
+	Temperature   float32
+	System        string
+	JSONMode      bool
+	Tools         []string
+	SpendDecision *economic.SpendAuthorityDecision
 }
 
 // ExecResult encapsulates normalized output and telemetry for receipts.
 type ExecResult struct {
-	Content        string
-	GatewayID      string
-	RuntimeType    ProviderType
-	RuntimeVersion string
-	ModelHash      string
-	Duration       time.Duration
+	Content           string
+	GatewayID         string
+	RuntimeType       ProviderType
+	RuntimeVersion    string
+	ModelHash         string
+	BudgetVerdict     economic.BudgetVerdict
+	SpendReasonCode   economic.SpendReasonCode
+	SpendDecisionHash string
+	Duration          time.Duration
 }
 
 // Execute performs an inference request, enforcing LIG constraints.
@@ -162,6 +182,9 @@ func (r *GatewayRouter) Execute(ctx context.Context, req ExecContext) (*ExecResu
 	}
 	if len(req.Tools) > 0 && !r.activeProfile.Capabilities.SupportsTools {
 		return nil, fmt.Errorf("lig: capability constraint violation; model %s does not support tools", r.activeProfile.ID)
+	}
+	if err := requireSpendAuthorityAllow(req.SpendDecision); err != nil {
+		return nil, err
 	}
 
 	modelHash := r.activeProfile.ModelHash
@@ -190,13 +213,45 @@ func (r *GatewayRouter) Execute(ctx context.Context, req ExecContext) (*ExecResu
 	}
 
 	return &ExecResult{
-		Content:        content,
-		GatewayID:      r.activeProfile.ID,
-		RuntimeType:    r.activeProfile.Provider,
-		RuntimeVersion: version,
-		ModelHash:      modelHash,
-		Duration:       time.Since(start),
+		Content:           content,
+		GatewayID:         r.activeProfile.ID,
+		RuntimeType:       r.activeProfile.Provider,
+		RuntimeVersion:    version,
+		ModelHash:         modelHash,
+		BudgetVerdict:     req.SpendDecision.Verdict,
+		SpendReasonCode:   req.SpendDecision.ReasonCode,
+		SpendDecisionHash: req.SpendDecision.ContentHash,
+		Duration:          time.Since(start),
 	}, nil
+}
+
+func requireSpendAuthorityAllow(decision *economic.SpendAuthorityDecision) error {
+	if decision == nil {
+		return &SpendVerdictError{Reason: "missing spend authority decision"}
+	}
+	if decision.Verdict == "" {
+		return &SpendVerdictError{Decision: decision, Reason: "spend authority verdict is required"}
+	}
+	if decision.ReasonCode == "" {
+		return &SpendVerdictError{Decision: decision, Reason: "spend authority reason code is required"}
+	}
+	if decision.ContentHash == "" {
+		return &SpendVerdictError{Decision: decision, Reason: "spend authority decision hash is required"}
+	}
+	if decision.Verdict != economic.BudgetVerdictAllow {
+		return &SpendVerdictError{Decision: decision, Reason: "provider dispatch requires ALLOW"}
+	}
+	if !isAllowSpendReasonCode(decision.ReasonCode) {
+		return &SpendVerdictError{Decision: decision, Reason: "ALLOW spend authority reason code is invalid"}
+	}
+	if !decision.HasCanonicalContentHash() {
+		return &SpendVerdictError{Decision: decision, Reason: "spend authority decision hash mismatch"}
+	}
+	return nil
+}
+
+func isAllowSpendReasonCode(code economic.SpendReasonCode) bool {
+	return code == economic.SpendReasonOKWithinEnvelope || code == economic.SpendReasonOKApproved
 }
 
 func defaultBaseURL(provider ProviderType) string {

@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
 )
 
 func TestExecuteOllamaDiscoversDigestAndCallsAPI(t *testing.T) {
@@ -27,12 +29,15 @@ func TestExecuteOllamaDiscoversDigestAndCallsAPI(t *testing.T) {
 	if err := r.RouteWithConfig(context.Background(), RouteConfig{Provider: ProviderOllama, BaseURL: srv.URL, ModelName: "test-model"}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := r.Execute(context.Background(), ExecContext{Prompt: "hello", JSONMode: true})
+	res, err := r.Execute(context.Background(), ExecContext{Prompt: "hello", JSONMode: true, SpendDecision: gatewayAllowSpendDecision()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if res.Content != "ok" || res.ModelHash != "sha256:abc" || res.RuntimeVersion != "0.5.0" {
 		t.Fatalf("unexpected result: %+v", res)
+	}
+	if res.BudgetVerdict != economic.BudgetVerdictAllow || res.SpendDecisionHash == "" {
+		t.Fatalf("missing spend decision evidence on result: %+v", res)
 	}
 }
 
@@ -44,7 +49,7 @@ func TestExecuteOpenAICompatibleRequiresModelHash(t *testing.T) {
 	if err := r.RouteWithConfig(context.Background(), RouteConfig{Provider: ProviderVLLM, BaseURL: srv.URL, ModelName: "test-model"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Execute(context.Background(), ExecContext{Prompt: "hello"}); err == nil {
+	if _, err := r.Execute(context.Background(), ExecContext{Prompt: "hello", SpendDecision: gatewayAllowSpendDecision()}); err == nil {
 		t.Fatal("expected model hash error")
 	}
 }
@@ -64,7 +69,7 @@ func TestExecuteOpenAICompatibleProviders(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			res, err := r.Execute(context.Background(), ExecContext{Prompt: "hello"})
+			res, err := r.Execute(context.Background(), ExecContext{Prompt: "hello", SpendDecision: gatewayAllowSpendDecision()})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -106,7 +111,7 @@ func TestExecuteRejectsEnginePinMismatchBeforeDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = r.Execute(context.Background(), ExecContext{Prompt: "hello"})
+	_, err = r.Execute(context.Background(), ExecContext{Prompt: "hello", SpendDecision: gatewayAllowSpendDecision()})
 	if err == nil || !strings.Contains(err.Error(), "engine pin mismatch") {
 		t.Fatalf("expected engine pin mismatch, got %v", err)
 	}
@@ -143,12 +148,58 @@ func TestExecuteAcceptsEnginePinWithVerifierAndMeasurement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := r.Execute(context.Background(), ExecContext{Prompt: "hello"})
+	res, err := r.Execute(context.Background(), ExecContext{Prompt: "hello", SpendDecision: gatewayAllowSpendDecision()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if res.Content != "ok" || res.RuntimeVersion != "server-version" || res.ModelHash != "sha256:def" {
 		t.Fatalf("unexpected result: %+v", res)
+	}
+}
+
+func TestExecuteRequiresSpendAuthorityAllowBeforeProviderDispatch(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		decision *economic.SpendAuthorityDecision
+		want     string
+	}{
+		{name: "missing", decision: nil, want: "spend authority decision required"},
+		{name: "deny", decision: gatewaySpendDecision(economic.BudgetVerdictDeny, economic.SpendReasonBalanceInsufficient), want: "provider dispatch requires ALLOW"},
+		{name: "escalate", decision: gatewaySpendDecision(economic.BudgetVerdictEscalate, economic.SpendReasonApprovalRequired), want: "provider dispatch requires ALLOW"},
+		{name: "allow with deny reason", decision: gatewaySpendDecision(economic.BudgetVerdictAllow, economic.SpendReasonBalanceInsufficient), want: "ALLOW spend authority reason code is invalid"},
+		{name: "allow with tampered hash", decision: gatewayTamperedAllowSpendDecision(), want: "spend authority decision hash mismatch"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dispatched := false
+			mux := http.NewServeMux()
+			mux.HandleFunc("/version", func(w http.ResponseWriter, _ *http.Request) {
+				dispatched = true
+				_ = json.NewEncoder(w).Encode(map[string]string{"version": "server-version"})
+			})
+			mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, _ *http.Request) {
+				dispatched = true
+				_ = json.NewEncoder(w).Encode(map[string]any{"choices": []map[string]any{{"message": map[string]string{"content": "ok"}}}})
+			})
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
+
+			r := NewGatewayRouter()
+			if err := r.RouteWithConfig(context.Background(), RouteConfig{
+				Provider:  ProviderVLLM,
+				BaseURL:   srv.URL,
+				ModelName: "test-model",
+				ModelHash: "sha256:def",
+			}); err != nil {
+				t.Fatal(err)
+			}
+			_, err := r.Execute(context.Background(), ExecContext{Prompt: "hello", SpendDecision: tc.decision})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected spend verdict error containing %q, got %v", tc.want, err)
+			}
+			if dispatched {
+				t.Fatal("provider dispatch occurred before spend authority ALLOW")
+			}
+		})
 	}
 }
 
@@ -168,4 +219,26 @@ func newOpenAICompatibleServer(t *testing.T, version string) *httptest.Server {
 		})
 	})
 	return httptest.NewServer(mux)
+}
+
+func gatewayAllowSpendDecision() *economic.SpendAuthorityDecision {
+	return gatewaySpendDecision(economic.BudgetVerdictAllow, economic.SpendReasonOKWithinEnvelope)
+}
+
+func gatewaySpendDecision(verdict economic.BudgetVerdict, reason economic.SpendReasonCode) *economic.SpendAuthorityDecision {
+	decision := &economic.SpendAuthorityDecision{
+		Verdict:        verdict,
+		ReasonCode:     reason,
+		Reason:         "test spend decision",
+		RemainingCents: 1000,
+		EnvelopeHash:   "sha256:envelope",
+	}
+	decision.ContentHash = decision.CanonicalContentHash()
+	return decision
+}
+
+func gatewayTamperedAllowSpendDecision() *economic.SpendAuthorityDecision {
+	decision := gatewayAllowSpendDecision()
+	decision.ContentHash = "sha256:tampered"
+	return decision
 }

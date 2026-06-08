@@ -314,6 +314,17 @@ func (d SpendAuthorityDecision) computeHash() string {
 	}{d.Verdict, d.ReasonCode, d.RemainingCents, d.EnvelopeHash})
 }
 
+// CanonicalContentHash returns the deterministic hash for the decision fields.
+func (d SpendAuthorityDecision) CanonicalContentHash() string {
+	return d.computeHash()
+}
+
+// HasCanonicalContentHash reports whether ContentHash matches the canonical
+// decision fields, excluding mutable explanation text.
+func (d SpendAuthorityDecision) HasCanonicalContentHash() bool {
+	return d.ContentHash != "" && d.ContentHash == d.computeHash()
+}
+
 // ModelRoute identifies an allowed or fallback provider/model route.
 type ModelRoute struct {
 	ProviderID        string `json:"provider_id"`

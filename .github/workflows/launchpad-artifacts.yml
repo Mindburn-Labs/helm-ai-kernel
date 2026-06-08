@@ -230,18 +230,21 @@ jobs:
       - name: Generate syft SBOM
         env:
           IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          SYFT_CHECK_FOR_APP_UPDATE: "false"
+          SYFT_SCOPE: squashed
         run: |
           set -euo pipefail
-          syft "${IMAGE_REF}" -o spdx-json="sbom-${{ matrix.app_id }}.spdx.json"
+          timeout 20m syft "${IMAGE_REF}" -o spdx-json="sbom-${{ matrix.app_id }}.spdx.json"
 
       - name: Run grype scan
         id: grype
         env:
           IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          GRYPE_CHECK_FOR_APP_UPDATE: "false"
         run: |
           set -euo pipefail
           status=completed
-          if ! grype "${IMAGE_REF}" -o json --file "grype-${{ matrix.app_id }}.json"; then
+          if ! timeout 20m grype "${IMAGE_REF}" -o json --file "grype-${{ matrix.app_id }}.json"; then
             status=failed
           fi
           echo "status=${status}" >> "$GITHUB_OUTPUT"
@@ -407,11 +410,14 @@ jobs:
       - name: Generate egress proxy SBOM and vulnerability report
         env:
           IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          SYFT_CHECK_FOR_APP_UPDATE: "false"
+          SYFT_SCOPE: squashed
+          GRYPE_CHECK_FOR_APP_UPDATE: "false"
         run: |
           set -euo pipefail
-          syft "${IMAGE_REF}" -o spdx-json=sbom-egress-proxy.spdx.json
+          timeout 20m syft "${IMAGE_REF}" -o spdx-json=sbom-egress-proxy.spdx.json
           status=completed
-          if ! grype "${IMAGE_REF}" -o json --file grype-egress-proxy.json; then
+          if ! timeout 20m grype "${IMAGE_REF}" -o json --file grype-egress-proxy.json; then
             status=failed
           fi
           jq -n \

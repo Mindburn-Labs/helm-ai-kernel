@@ -227,7 +227,7 @@ func TestExecuteOpenAICompatibleSendsJSONModeToolsAndSystem(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	router := NewGatewayRouter()
+	router := newGatewayRouterWithReceiptTrust()
 	if err := router.RouteWithConfig(context.Background(), RouteConfig{Provider: ProviderVLLM, BaseURL: srv.URL, ModelName: "model", ModelHash: "sha256:model"}); err != nil {
 		t.Fatal(err)
 	}

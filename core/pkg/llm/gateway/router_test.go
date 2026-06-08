@@ -26,7 +26,7 @@ func TestExecuteOllamaDiscoversDigestAndCallsAPI(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	r := NewGatewayRouter()
+	r := newGatewayRouterWithReceiptTrust()
 	if err := r.RouteWithConfig(context.Background(), RouteConfig{Provider: ProviderOllama, BaseURL: srv.URL, ModelName: "test-model"}); err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestExecuteOpenAICompatibleRequiresModelHash(t *testing.T) {
 	srv := newOpenAICompatibleServer(t, "server-version")
 	defer srv.Close()
 
-	r := NewGatewayRouter()
+	r := newGatewayRouterWithReceiptTrust()
 	if err := r.RouteWithConfig(context.Background(), RouteConfig{Provider: ProviderVLLM, BaseURL: srv.URL, ModelName: "test-model"}); err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestExecuteOpenAICompatibleProviders(t *testing.T) {
 			srv := newOpenAICompatibleServer(t, "server-version")
 			defer srv.Close()
 
-			r := NewGatewayRouter()
+			r := newGatewayRouterWithReceiptTrust()
 			if err := r.RouteWithConfig(context.Background(), RouteConfig{
 				Provider:  provider,
 				BaseURL:   srv.URL,
@@ -97,7 +97,7 @@ func TestExecuteRejectsEnginePinMismatchBeforeDispatch(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	r := NewGatewayRouter()
+	r := newGatewayRouterWithReceiptTrust()
 	err := r.RouteWithConfig(context.Background(), RouteConfig{
 		Provider:       ProviderVLLM,
 		BaseURL:        srv.URL,
@@ -128,7 +128,7 @@ func TestExecuteAcceptsEnginePinWithVerifierAndMeasurement(t *testing.T) {
 	srv := newOpenAICompatibleServer(t, "server-version")
 	defer srv.Close()
 
-	r := NewGatewayRouter()
+	r := newGatewayRouterWithReceiptTrust()
 	err := r.RouteWithConfig(context.Background(), RouteConfig{
 		Provider:            ProviderVLLM,
 		BaseURL:             srv.URL,
@@ -228,6 +228,12 @@ func TestExecuteRequiresSignedBudgetVerdictReceiptBeforeProviderDispatch(t *test
 			r.DecisionHash = "sha256:other"
 			sealGatewayReceipt(r)
 		}, want: "decision_hash does not match decision"},
+		{name: "untrusted key id", mutate: func(r *economic.BudgetVerdictReceipt) {
+			sealGatewayReceiptWithKey(r, "other-key", gatewayUntrustedReceiptPrivateKey)
+		}, want: "trusted BudgetVerdict receipt key not found"},
+		{name: "forged trusted key id", mutate: func(r *economic.BudgetVerdictReceipt) {
+			sealGatewayReceiptWithKey(r, "gateway-test-key", gatewayUntrustedReceiptPrivateKey)
+		}, want: "signature verification failed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dispatched := false
@@ -250,7 +256,7 @@ func TestExecuteRequiresSignedBudgetVerdictReceiptBeforeProviderDispatch(t *test
 				tc.mutate(receipt)
 			}
 
-			r := NewGatewayRouter()
+			r := newGatewayRouterWithReceiptTrust()
 			if err := r.RouteWithConfig(context.Background(), RouteConfig{
 				Provider:  ProviderVLLM,
 				BaseURL:   srv.URL,
@@ -310,7 +316,18 @@ func gatewayTamperedAllowSpendDecision() *economic.SpendAuthorityDecision {
 	return decision
 }
 
-var gatewayReceiptPrivateKey = ed25519.NewKeyFromSeed([]byte("0123456789abcdef0123456789abcdef"))
+var (
+	gatewayReceiptPrivateKey          = ed25519.NewKeyFromSeed([]byte("0123456789abcdef0123456789abcdef"))
+	gatewayUntrustedReceiptPrivateKey = ed25519.NewKeyFromSeed([]byte("fedcba9876543210fedcba9876543210"))
+)
+
+func newGatewayRouterWithReceiptTrust() *GatewayRouter {
+	router := NewGatewayRouter()
+	if err := router.TrustBudgetVerdictReceiptKey("gateway-test-key", gatewayReceiptPrivateKey.Public().(ed25519.PublicKey)); err != nil {
+		panic(err)
+	}
+	return router
+}
 
 func gatewayExecContext(provider ProviderType, model string, decision *economic.SpendAuthorityDecision, req ExecContext) ExecContext {
 	req.SpendDecision = decision
@@ -347,10 +364,14 @@ func gatewayUnsignedSpendReceipt(provider ProviderType, model string, decision *
 }
 
 func sealGatewayReceipt(receipt *economic.BudgetVerdictReceipt) {
+	sealGatewayReceiptWithKey(receipt, "gateway-test-key", gatewayReceiptPrivateKey)
+}
+
+func sealGatewayReceiptWithKey(receipt *economic.BudgetVerdictReceipt, keyID string, key ed25519.PrivateKey) {
 	if receipt == nil {
 		return
 	}
-	if err := receipt.Seal("gateway-test-key", gatewayReceiptPrivateKey); err != nil {
+	if err := receipt.Seal(keyID, key); err != nil {
 		panic(err)
 	}
 }

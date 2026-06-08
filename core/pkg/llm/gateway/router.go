@@ -4,6 +4,7 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,8 +20,9 @@ import (
 
 // GatewayRouter normalizes capability requests across providers.
 type GatewayRouter struct {
-	activeProfile *Profile
-	client        *http.Client
+	activeProfile           *Profile
+	client                  *http.Client
+	budgetVerdictReceiptKey map[string]ed25519.PublicKey
 }
 
 type EnginePinMismatchError struct {
@@ -55,6 +57,22 @@ func (e *SpendVerdictError) Error() string {
 // NewGatewayRouter creates a new Local Inference Gateway router.
 func NewGatewayRouter() *GatewayRouter {
 	return &GatewayRouter{client: &http.Client{Timeout: 30 * time.Second}}
+}
+
+// TrustBudgetVerdictReceiptKey registers a trusted signer for pre-dispatch spend receipts.
+func (r *GatewayRouter) TrustBudgetVerdictReceiptKey(keyID string, publicKey ed25519.PublicKey) error {
+	if keyID == "" {
+		return errors.New("lig: BudgetVerdict receipt key id is required")
+	}
+	if len(publicKey) != ed25519.PublicKeySize {
+		return fmt.Errorf("lig: BudgetVerdict receipt public key must be %d bytes", ed25519.PublicKeySize)
+	}
+	if r.budgetVerdictReceiptKey == nil {
+		r.budgetVerdictReceiptKey = make(map[string]ed25519.PublicKey)
+	}
+	keyCopy := append(ed25519.PublicKey(nil), publicKey...)
+	r.budgetVerdictReceiptKey[keyID] = keyCopy
+	return nil
 }
 
 type RouteConfig struct {
@@ -188,7 +206,7 @@ func (r *GatewayRouter) Execute(ctx context.Context, req ExecContext) (*ExecResu
 	if err := requireSpendAuthorityAllow(req.SpendDecision); err != nil {
 		return nil, err
 	}
-	if err := requireBudgetVerdictReceipt(req.SpendDecision, req.SpendReceipt, *r.activeProfile); err != nil {
+	if err := requireBudgetVerdictReceipt(req.SpendDecision, req.SpendReceipt, *r.activeProfile, r.budgetVerdictReceiptKey); err != nil {
 		return nil, err
 	}
 
@@ -260,7 +278,7 @@ func isAllowSpendReasonCode(code economic.SpendReasonCode) bool {
 	return code == economic.SpendReasonOKWithinEnvelope || code == economic.SpendReasonOKApproved
 }
 
-func requireBudgetVerdictReceipt(decision *economic.SpendAuthorityDecision, receipt *economic.BudgetVerdictReceipt, profile Profile) error {
+func requireBudgetVerdictReceipt(decision *economic.SpendAuthorityDecision, receipt *economic.BudgetVerdictReceipt, profile Profile, trustedKeys map[string]ed25519.PublicKey) error {
 	if receipt == nil {
 		return &SpendVerdictError{Decision: decision, Reason: "signed BudgetVerdict receipt is required"}
 	}
@@ -268,6 +286,13 @@ func requireBudgetVerdictReceipt(decision *economic.SpendAuthorityDecision, rece
 		return &SpendVerdictError{Reason: "missing spend authority decision"}
 	}
 	if err := receipt.ValidateForDecision(*decision); err != nil {
+		return &SpendVerdictError{Decision: decision, Reason: err.Error()}
+	}
+	trustedKey, ok := trustedKeys[receipt.SignatureKeyID]
+	if !ok {
+		return &SpendVerdictError{Decision: decision, Reason: "trusted BudgetVerdict receipt key not found"}
+	}
+	if err := receipt.VerifySignature(trustedKey); err != nil {
 		return &SpendVerdictError{Decision: decision, Reason: err.Error()}
 	}
 	if receipt.ProviderID != string(profile.Provider) {

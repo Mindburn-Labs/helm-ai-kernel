@@ -351,6 +351,8 @@ func NewRouteQuote(id, tenantID, spendIntentID, envelopeID, agentID string, sele
 		SpendIntentID:             spendIntentID,
 		EnvelopeID:                envelopeID,
 		AgentID:                   agentID,
+		RequestedProviderID:       selected.ProviderID,
+		RequestedModelID:          selected.ModelID,
 		SelectedProviderID:        selected.ProviderID,
 		SelectedModelID:           selected.ModelID,
 		ProviderPriceSnapshotHash: selected.PriceSnapshotHash,
@@ -391,6 +393,9 @@ func (q *RouteQuote) Validate() error {
 	}
 	if q.AgentID == "" {
 		return errors.New("route_quote: agent_id is required")
+	}
+	if q.RequestedModelID == "" {
+		return errors.New("route_quote: requested_model_id is required")
 	}
 	if q.SelectedProviderID == "" {
 		return errors.New("route_quote: selected_provider_id is required")
@@ -539,6 +544,12 @@ func (r *UsageReceipt) Validate() error {
 	}
 	if r.ModelID == "" {
 		return errors.New("usage_receipt: model_id is required")
+	}
+	if r.ProviderRequestID == "" {
+		return errors.New("usage_receipt: provider_request_id is required")
+	}
+	if r.ProviderPriceSnapshotHash == "" {
+		return errors.New("usage_receipt: provider_price_snapshot_hash is required")
 	}
 	if r.QuotedAmountCents <= 0 {
 		return errors.New("usage_receipt: quoted_amount_cents must be positive")

@@ -27,24 +27,26 @@ const (
 type SpendReasonCode string
 
 const (
-	SpendReasonOKWithinEnvelope       SpendReasonCode = "OK_WITHIN_ENVELOPE"
-	SpendReasonOKApproved             SpendReasonCode = "OK_APPROVED"
-	SpendReasonEnvelopeNotFound       SpendReasonCode = "ERR_SPEND_ENVELOPE_NOT_FOUND"
-	SpendReasonEnvelopeInactive       SpendReasonCode = "ERR_SPEND_ENVELOPE_INACTIVE"
-	SpendReasonEmergencyStop          SpendReasonCode = "ERR_SPEND_EMERGENCY_STOP"
-	SpendReasonInvalidAmount          SpendReasonCode = "ERR_SPEND_INVALID_AMOUNT"
-	SpendReasonBalanceInsufficient    SpendReasonCode = "ERR_BALANCE_INSUFFICIENT"
-	SpendReasonPerRequestLimit        SpendReasonCode = "ERR_SPEND_PER_REQUEST_LIMIT"
-	SpendReasonProviderNotAllowed     SpendReasonCode = "ERR_SPEND_PROVIDER_NOT_ALLOWED"
-	SpendReasonModelNotAllowed        SpendReasonCode = "ERR_SPEND_MODEL_NOT_ALLOWED"
-	SpendReasonApprovalRequired       SpendReasonCode = "ERR_APPROVAL_REQUIRED"
-	SpendReasonRouteQuoteExpired      SpendReasonCode = "ERR_ROUTE_QUOTE_EXPIRED"
-	SpendReasonProviderPriceStale     SpendReasonCode = "ERR_PROVIDER_PRICE_STALE"
-	SpendReasonReceiptMismatch        SpendReasonCode = "ERR_RECEIPT_MISMATCH"
-	SpendReasonLedgerUnbalanced       SpendReasonCode = "ERR_LEDGER_UNBALANCED"
-	SpendReasonEvidenceMissing        SpendReasonCode = "ERR_EVIDENCE_MISSING"
-	SpendReasonSettlementMissing      SpendReasonCode = "ERR_SETTLEMENT_MISSING"
-	SpendReasonProviderContractNeeded SpendReasonCode = "ERR_PROVIDER_CONTRACT_NEEDED"
+	SpendReasonOKWithinEnvelope        SpendReasonCode = "OK_WITHIN_ENVELOPE"
+	SpendReasonOKApproved              SpendReasonCode = "OK_APPROVED"
+	SpendReasonEnvelopeNotFound        SpendReasonCode = "ERR_SPEND_ENVELOPE_NOT_FOUND"
+	SpendReasonEnvelopeInactive        SpendReasonCode = "ERR_SPEND_ENVELOPE_INACTIVE"
+	SpendReasonEnvelopeNotYetEffective SpendReasonCode = "ERR_SPEND_ENVELOPE_NOT_YET_EFFECTIVE"
+	SpendReasonEnvelopeExpired         SpendReasonCode = "ERR_SPEND_ENVELOPE_EXPIRED"
+	SpendReasonEmergencyStop           SpendReasonCode = "ERR_SPEND_EMERGENCY_STOP"
+	SpendReasonInvalidAmount           SpendReasonCode = "ERR_SPEND_INVALID_AMOUNT"
+	SpendReasonBalanceInsufficient     SpendReasonCode = "ERR_BALANCE_INSUFFICIENT"
+	SpendReasonPerRequestLimit         SpendReasonCode = "ERR_SPEND_PER_REQUEST_LIMIT"
+	SpendReasonProviderNotAllowed      SpendReasonCode = "ERR_SPEND_PROVIDER_NOT_ALLOWED"
+	SpendReasonModelNotAllowed         SpendReasonCode = "ERR_SPEND_MODEL_NOT_ALLOWED"
+	SpendReasonApprovalRequired        SpendReasonCode = "ERR_APPROVAL_REQUIRED"
+	SpendReasonRouteQuoteExpired       SpendReasonCode = "ERR_ROUTE_QUOTE_EXPIRED"
+	SpendReasonProviderPriceStale      SpendReasonCode = "ERR_PROVIDER_PRICE_STALE"
+	SpendReasonReceiptMismatch         SpendReasonCode = "ERR_RECEIPT_MISMATCH"
+	SpendReasonLedgerUnbalanced        SpendReasonCode = "ERR_LEDGER_UNBALANCED"
+	SpendReasonEvidenceMissing         SpendReasonCode = "ERR_EVIDENCE_MISSING"
+	SpendReasonSettlementMissing       SpendReasonCode = "ERR_SETTLEMENT_MISSING"
+	SpendReasonProviderContractNeeded  SpendReasonCode = "ERR_PROVIDER_CONTRACT_NEEDED"
 )
 
 // SpendPeriod is the reset cadence for an agent envelope.
@@ -141,6 +143,13 @@ func (e *AgentSpendEnvelope) EvaluateSpend(amountCents int64, providerID, modelI
 	}
 	if !e.Active {
 		return newSpendAuthorityDecision(BudgetVerdictDeny, SpendReasonEnvelopeInactive, "spend envelope is inactive", e.RemainingCents(), e.ContentHash)
+	}
+	now := time.Now().UTC()
+	if e.EffectiveAt.After(now) {
+		return newSpendAuthorityDecision(BudgetVerdictDeny, SpendReasonEnvelopeNotYetEffective, "spend envelope is not yet effective", e.RemainingCents(), e.ContentHash)
+	}
+	if e.ExpiresAt != nil && !now.Before(*e.ExpiresAt) {
+		return newSpendAuthorityDecision(BudgetVerdictDeny, SpendReasonEnvelopeExpired, "spend envelope is expired", e.RemainingCents(), e.ContentHash)
 	}
 	if e.EmergencyStop {
 		return newSpendAuthorityDecision(BudgetVerdictDeny, SpendReasonEmergencyStop, "spend envelope emergency stop is active", e.RemainingCents(), e.ContentHash)

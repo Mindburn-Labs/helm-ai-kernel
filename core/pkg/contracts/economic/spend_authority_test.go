@@ -38,6 +38,25 @@ func TestAgentSpendEnvelopeEvaluateSpend(t *testing.T) {
 	}
 }
 
+func TestAgentSpendEnvelopeEvaluateSpendValidityWindow(t *testing.T) {
+	envelope := spendAuthorityTestEnvelope()
+	envelope.EffectiveAt = time.Now().UTC().Add(time.Hour)
+	envelope.ContentHash = envelope.computeHash()
+	decision := envelope.EvaluateSpend(100, "openai", "gpt-5-mini")
+	if decision.Verdict != BudgetVerdictDeny || decision.ReasonCode != SpendReasonEnvelopeNotYetEffective {
+		t.Fatalf("future envelope decision = (%s, %s), want DENY not-yet-effective", decision.Verdict, decision.ReasonCode)
+	}
+
+	envelope = spendAuthorityTestEnvelope()
+	expired := time.Now().UTC().Add(-time.Second)
+	envelope.ExpiresAt = &expired
+	envelope.ContentHash = envelope.computeHash()
+	decision = envelope.EvaluateSpend(100, "openai", "gpt-5-mini")
+	if decision.Verdict != BudgetVerdictDeny || decision.ReasonCode != SpendReasonEnvelopeExpired {
+		t.Fatalf("expired envelope decision = (%s, %s), want DENY expired", decision.Verdict, decision.ReasonCode)
+	}
+}
+
 func TestAgentSpendEnvelopeValidationAndDeterministicHash(t *testing.T) {
 	a := spendAuthorityTestEnvelope()
 	b := spendAuthorityTestEnvelope()

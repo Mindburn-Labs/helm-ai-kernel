@@ -114,6 +114,9 @@ func (r *GatewayRouter) RouteWithConfig(_ context.Context, cfg RouteConfig) erro
 	if cfg.Provider == "" {
 		return errors.New("lig: provider is required")
 	}
+	if !isKnownProvider(cfg.Provider) {
+		return fmt.Errorf("lig: unsupported provider %q", cfg.Provider)
+	}
 	if cfg.ModelName == "" {
 		return errors.New("lig: model is required")
 	}
@@ -206,7 +209,8 @@ func (r *GatewayRouter) Execute(ctx context.Context, req ExecContext) (*ExecResu
 	if err := requireSpendAuthorityAllow(req.SpendDecision); err != nil {
 		return nil, err
 	}
-	if err := requireBudgetVerdictReceipt(req.SpendDecision, req.SpendReceipt, *r.activeProfile, r.budgetVerdictReceiptKey); err != nil {
+	dispatchPermit, err := requireBudgetVerdictReceipt(req.SpendDecision, req.SpendReceipt, *r.activeProfile, r.budgetVerdictReceiptKey)
+	if err != nil {
 		return nil, err
 	}
 
@@ -230,7 +234,7 @@ func (r *GatewayRouter) Execute(ctx context.Context, req ExecContext) (*ExecResu
 	if err := validateEnginePin(*r.activeProfile, version, modelHash); err != nil {
 		return nil, err
 	}
-	content, err := r.executeProvider(ctx, *r.activeProfile, req)
+	content, err := r.executeProvider(ctx, *r.activeProfile, req, dispatchPermit)
 	if err != nil {
 		return nil, err
 	}
@@ -243,8 +247,8 @@ func (r *GatewayRouter) Execute(ctx context.Context, req ExecContext) (*ExecResu
 		ModelHash:         modelHash,
 		BudgetVerdict:     req.SpendDecision.Verdict,
 		SpendReasonCode:   req.SpendDecision.ReasonCode,
-		SpendDecisionHash: req.SpendDecision.ContentHash,
-		SpendReceiptHash:  req.SpendReceipt.ContentHash,
+		SpendDecisionHash: dispatchPermit.decisionHash,
+		SpendReceiptHash:  dispatchPermit.receiptHash,
 		Duration:          time.Since(start),
 	}, nil
 }
@@ -278,30 +282,51 @@ func isAllowSpendReasonCode(code economic.SpendReasonCode) bool {
 	return code == economic.SpendReasonOKWithinEnvelope || code == economic.SpendReasonOKApproved
 }
 
-func requireBudgetVerdictReceipt(decision *economic.SpendAuthorityDecision, receipt *economic.BudgetVerdictReceipt, profile Profile, trustedKeys map[string]ed25519.PublicKey) error {
+type budgetVerdictDispatchPermit struct {
+	decisionHash string
+	receiptHash  string
+}
+
+func (p budgetVerdictDispatchPermit) require() error {
+	if p.decisionHash == "" || p.receiptHash == "" {
+		return errors.New("lig: authorized BudgetVerdict dispatch permit required")
+	}
+	return nil
+}
+
+func requireBudgetVerdictReceipt(decision *economic.SpendAuthorityDecision, receipt *economic.BudgetVerdictReceipt, profile Profile, trustedKeys map[string]ed25519.PublicKey) (budgetVerdictDispatchPermit, error) {
 	if receipt == nil {
-		return &SpendVerdictError{Decision: decision, Reason: "signed BudgetVerdict receipt is required"}
+		return budgetVerdictDispatchPermit{}, &SpendVerdictError{Decision: decision, Reason: "signed BudgetVerdict receipt is required"}
 	}
 	if decision == nil {
-		return &SpendVerdictError{Reason: "missing spend authority decision"}
+		return budgetVerdictDispatchPermit{}, &SpendVerdictError{Reason: "missing spend authority decision"}
 	}
 	if err := receipt.ValidateForDecision(*decision); err != nil {
-		return &SpendVerdictError{Decision: decision, Reason: err.Error()}
+		return budgetVerdictDispatchPermit{}, &SpendVerdictError{Decision: decision, Reason: err.Error()}
 	}
 	trustedKey, ok := trustedKeys[receipt.SignatureKeyID]
 	if !ok {
-		return &SpendVerdictError{Decision: decision, Reason: "trusted BudgetVerdict receipt key not found"}
+		return budgetVerdictDispatchPermit{}, &SpendVerdictError{Decision: decision, Reason: "trusted BudgetVerdict receipt key not found"}
 	}
 	if err := receipt.VerifySignature(trustedKey); err != nil {
-		return &SpendVerdictError{Decision: decision, Reason: err.Error()}
+		return budgetVerdictDispatchPermit{}, &SpendVerdictError{Decision: decision, Reason: err.Error()}
 	}
 	if receipt.ProviderID != string(profile.Provider) {
-		return &SpendVerdictError{Decision: decision, Reason: "BudgetVerdict receipt provider does not match active profile"}
+		return budgetVerdictDispatchPermit{}, &SpendVerdictError{Decision: decision, Reason: "BudgetVerdict receipt provider does not match active profile"}
 	}
 	if receipt.ModelID != profile.ModelName {
-		return &SpendVerdictError{Decision: decision, Reason: "BudgetVerdict receipt model does not match active profile"}
+		return budgetVerdictDispatchPermit{}, &SpendVerdictError{Decision: decision, Reason: "BudgetVerdict receipt model does not match active profile"}
 	}
-	return nil
+	return budgetVerdictDispatchPermit{decisionHash: decision.ContentHash, receiptHash: receipt.ContentHash}, nil
+}
+
+func isKnownProvider(provider ProviderType) bool {
+	switch provider {
+	case ProviderOllama, ProviderLlamaCPP, ProviderVLLM, ProviderLMStudio:
+		return true
+	default:
+		return false
+	}
 }
 
 func defaultBaseURL(provider ProviderType) string {
@@ -441,14 +466,21 @@ func (r *GatewayRouter) discoverModelHash(ctx context.Context, profile Profile) 
 	return "", nil
 }
 
-func (r *GatewayRouter) executeProvider(ctx context.Context, profile Profile, req ExecContext) (string, error) {
-	if profile.Provider == ProviderOllama {
-		return r.executeOllama(ctx, profile, req)
+func (r *GatewayRouter) executeProvider(ctx context.Context, profile Profile, req ExecContext, permit budgetVerdictDispatchPermit) (string, error) {
+	switch profile.Provider {
+	case ProviderOllama:
+		return r.executeOllama(ctx, profile, req, permit)
+	case ProviderLlamaCPP, ProviderVLLM, ProviderLMStudio:
+		return r.executeOpenAICompatible(ctx, profile, req, permit)
+	default:
+		return "", fmt.Errorf("lig: unsupported provider %q", profile.Provider)
 	}
-	return r.executeOpenAICompatible(ctx, profile, req)
 }
 
-func (r *GatewayRouter) executeOllama(ctx context.Context, profile Profile, req ExecContext) (string, error) {
+func (r *GatewayRouter) executeOllama(ctx context.Context, profile Profile, req ExecContext, permit budgetVerdictDispatchPermit) (string, error) {
+	if err := permit.require(); err != nil {
+		return "", err
+	}
 	payload := map[string]any{
 		"model":  profile.ModelName,
 		"stream": false,
@@ -475,7 +507,10 @@ func (r *GatewayRouter) executeOllama(ctx context.Context, profile Profile, req 
 	return out.Message.Content, nil
 }
 
-func (r *GatewayRouter) executeOpenAICompatible(ctx context.Context, profile Profile, req ExecContext) (string, error) {
+func (r *GatewayRouter) executeOpenAICompatible(ctx context.Context, profile Profile, req ExecContext, permit budgetVerdictDispatchPermit) (string, error) {
+	if err := permit.require(); err != nil {
+		return "", err
+	}
 	messages := []map[string]string{}
 	if req.System != "" {
 		messages = append(messages, map[string]string{"role": "system", "content": req.System})

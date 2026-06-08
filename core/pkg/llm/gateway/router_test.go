@@ -341,6 +341,12 @@ func gatewaySpendReceipt(provider ProviderType, model string, decision *economic
 	return receipt
 }
 
+func gatewayDispatchPermit() budgetVerdictDispatchPermit {
+	decision := gatewayAllowSpendDecision()
+	receipt := gatewaySpendReceipt(ProviderVLLM, "model", decision)
+	return budgetVerdictDispatchPermit{decisionHash: decision.ContentHash, receiptHash: receipt.ContentHash}
+}
+
 func gatewayUnsignedSpendReceipt(provider ProviderType, model string, decision *economic.SpendAuthorityDecision) *economic.BudgetVerdictReceipt {
 	if decision == nil {
 		return nil

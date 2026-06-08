@@ -6,11 +6,13 @@
 package economic
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -474,6 +476,272 @@ func (q *RouteQuote) computeHash() string {
 		ReasonCode                SpendReasonCode `json:"reason_code"`
 		ReceiptHash               string          `json:"receipt_hash,omitempty"`
 	}{q.ID, q.TenantID, q.SpendIntentID, q.EnvelopeID, q.AgentID, q.SelectedProviderID, q.SelectedModelID, q.ProviderPriceSnapshotHash, q.QuotedAmountCents, q.MaxAmountCents, q.Currency, q.RoutePolicyHash, q.BudgetVerdict, q.ReasonCode, q.ReceiptHash})
+}
+
+// BudgetVerdictReceipt is the signed pre-dispatch proof for a spend verdict.
+type BudgetVerdictReceipt struct {
+	ID                        string          `json:"id"`
+	TenantID                  string          `json:"tenant_id"`
+	SpendIntentID             string          `json:"spend_intent_id"`
+	EnvelopeID                string          `json:"envelope_id"`
+	AgentID                   string          `json:"agent_id"`
+	PrincipalID               string          `json:"principal_id,omitempty"`
+	ProviderID                string          `json:"provider_id"`
+	ModelID                   string          `json:"model_id"`
+	ProviderPriceSnapshotHash string          `json:"provider_price_snapshot_hash"`
+	QuotedAmountCents         int64           `json:"quoted_amount_cents"`
+	MaxAmountCents            int64           `json:"max_amount_cents"`
+	Currency                  string          `json:"currency"`
+	BudgetVerdict             BudgetVerdict   `json:"budget_verdict"`
+	ReasonCode                SpendReasonCode `json:"reason_code"`
+	DecisionHash              string          `json:"decision_hash"`
+	EnvelopeHash              string          `json:"envelope_hash,omitempty"`
+	RoutePolicyHash           string          `json:"route_policy_hash"`
+	EvidencePackRef           string          `json:"evidence_pack_ref"`
+	CreatedAt                 time.Time       `json:"created_at"`
+	ContentHash               string          `json:"content_hash"`
+	SignatureKeyID            string          `json:"signature_key_id"`
+	Signature                 string          `json:"signature"`
+}
+
+// NewBudgetVerdictReceipt creates an unsigned pre-dispatch receipt.
+func NewBudgetVerdictReceipt(id, tenantID, spendIntentID, envelopeID, agentID, providerID, modelID string, quotedAmountCents, maxAmountCents int64, currency, providerPriceSnapshotHash, routePolicyHash, evidencePackRef string, decision SpendAuthorityDecision) *BudgetVerdictReceipt {
+	r := &BudgetVerdictReceipt{
+		ID:                        id,
+		TenantID:                  tenantID,
+		SpendIntentID:             spendIntentID,
+		EnvelopeID:                envelopeID,
+		AgentID:                   agentID,
+		ProviderID:                providerID,
+		ModelID:                   modelID,
+		ProviderPriceSnapshotHash: providerPriceSnapshotHash,
+		QuotedAmountCents:         quotedAmountCents,
+		MaxAmountCents:            maxAmountCents,
+		Currency:                  currency,
+		BudgetVerdict:             decision.Verdict,
+		ReasonCode:                decision.ReasonCode,
+		DecisionHash:              decision.ContentHash,
+		EnvelopeHash:              decision.EnvelopeHash,
+		RoutePolicyHash:           routePolicyHash,
+		EvidencePackRef:           evidencePackRef,
+		CreatedAt:                 time.Now().UTC(),
+	}
+	r.ContentHash = r.computeHash()
+	return r
+}
+
+// Seal signs the canonical receipt hash with an Ed25519 key.
+func (r *BudgetVerdictReceipt) Seal(keyID string, privateKey ed25519.PrivateKey) error {
+	if r == nil {
+		return errors.New("budget_verdict_receipt: receipt is nil")
+	}
+	if keyID == "" {
+		return errors.New("budget_verdict_receipt: signature_key_id is required")
+	}
+	if len(privateKey) != ed25519.PrivateKeySize {
+		return fmt.Errorf("budget_verdict_receipt: ed25519 private key must be %d bytes", ed25519.PrivateKeySize)
+	}
+	r.ContentHash = r.computeHash()
+	hashBytes, err := decodeSHA256Hash(r.ContentHash)
+	if err != nil {
+		return err
+	}
+	r.SignatureKeyID = keyID
+	r.Signature = "ed25519:" + hex.EncodeToString(ed25519.Sign(privateKey, hashBytes))
+	return r.Validate()
+}
+
+// Validate ensures the receipt is signed and internally consistent.
+func (r *BudgetVerdictReceipt) Validate() error {
+	if err := r.validateCore(); err != nil {
+		return err
+	}
+	if r.SignatureKeyID == "" {
+		return errors.New("budget_verdict_receipt: signature_key_id is required")
+	}
+	if _, err := decodeEd25519Signature(r.Signature); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ValidateForDecision checks that the receipt binds the canonical spend decision.
+func (r *BudgetVerdictReceipt) ValidateForDecision(decision SpendAuthorityDecision) error {
+	if err := r.Validate(); err != nil {
+		return err
+	}
+	if !decision.HasCanonicalContentHash() {
+		return errors.New("budget_verdict_receipt: spend authority decision hash mismatch")
+	}
+	if r.BudgetVerdict != decision.Verdict {
+		return errors.New("budget_verdict_receipt: budget_verdict does not match decision")
+	}
+	if r.ReasonCode != decision.ReasonCode {
+		return errors.New("budget_verdict_receipt: reason_code does not match decision")
+	}
+	if r.DecisionHash != decision.ContentHash {
+		return errors.New("budget_verdict_receipt: decision_hash does not match decision")
+	}
+	if r.EnvelopeHash != decision.EnvelopeHash {
+		return errors.New("budget_verdict_receipt: envelope_hash does not match decision")
+	}
+	return nil
+}
+
+// VerifySignature validates the Ed25519 signature over the canonical receipt hash.
+func (r *BudgetVerdictReceipt) VerifySignature(publicKey ed25519.PublicKey) error {
+	if err := r.Validate(); err != nil {
+		return err
+	}
+	if len(publicKey) != ed25519.PublicKeySize {
+		return fmt.Errorf("budget_verdict_receipt: ed25519 public key must be %d bytes", ed25519.PublicKeySize)
+	}
+	hashBytes, err := decodeSHA256Hash(r.ContentHash)
+	if err != nil {
+		return err
+	}
+	sig, err := decodeEd25519Signature(r.Signature)
+	if err != nil {
+		return err
+	}
+	if !ed25519.Verify(publicKey, hashBytes, sig) {
+		return errors.New("budget_verdict_receipt: signature verification failed")
+	}
+	return nil
+}
+
+// HasCanonicalContentHash reports whether ContentHash matches the receipt body.
+func (r *BudgetVerdictReceipt) HasCanonicalContentHash() bool {
+	return r != nil && r.ContentHash != "" && r.ContentHash == r.computeHash()
+}
+
+// CanonicalContentHash returns the deterministic hash for the receipt body.
+func (r *BudgetVerdictReceipt) CanonicalContentHash() string {
+	if r == nil {
+		return ""
+	}
+	return r.computeHash()
+}
+
+func (r *BudgetVerdictReceipt) validateCore() error {
+	if r == nil {
+		return errors.New("budget_verdict_receipt: receipt is nil")
+	}
+	if r.ID == "" {
+		return errors.New("budget_verdict_receipt: id is required")
+	}
+	if r.TenantID == "" {
+		return errors.New("budget_verdict_receipt: tenant_id is required")
+	}
+	if r.SpendIntentID == "" {
+		return errors.New("budget_verdict_receipt: spend_intent_id is required")
+	}
+	if r.EnvelopeID == "" {
+		return errors.New("budget_verdict_receipt: envelope_id is required")
+	}
+	if r.AgentID == "" {
+		return errors.New("budget_verdict_receipt: agent_id is required")
+	}
+	if r.ProviderID == "" {
+		return errors.New("budget_verdict_receipt: provider_id is required")
+	}
+	if r.ModelID == "" {
+		return errors.New("budget_verdict_receipt: model_id is required")
+	}
+	if r.ProviderPriceSnapshotHash == "" {
+		return errors.New("budget_verdict_receipt: provider_price_snapshot_hash is required")
+	}
+	if r.QuotedAmountCents <= 0 {
+		return errors.New("budget_verdict_receipt: quoted_amount_cents must be positive")
+	}
+	if r.MaxAmountCents <= 0 {
+		return errors.New("budget_verdict_receipt: max_amount_cents must be positive")
+	}
+	if r.QuotedAmountCents > r.MaxAmountCents {
+		return errors.New("budget_verdict_receipt: quoted_amount_cents exceeds max_amount_cents")
+	}
+	if r.Currency == "" {
+		return errors.New("budget_verdict_receipt: currency is required")
+	}
+	if r.BudgetVerdict == "" {
+		return errors.New("budget_verdict_receipt: budget_verdict is required")
+	}
+	if r.ReasonCode == "" {
+		return errors.New("budget_verdict_receipt: reason_code is required")
+	}
+	if r.DecisionHash == "" {
+		return errors.New("budget_verdict_receipt: decision_hash is required")
+	}
+	if r.RoutePolicyHash == "" {
+		return errors.New("budget_verdict_receipt: route_policy_hash is required")
+	}
+	if r.EvidencePackRef == "" {
+		return errors.New("budget_verdict_receipt: evidence_pack_ref is required")
+	}
+	if r.CreatedAt.IsZero() {
+		return errors.New("budget_verdict_receipt: created_at is required")
+	}
+	if r.ContentHash == "" {
+		return errors.New("budget_verdict_receipt: content_hash is required")
+	}
+	if !r.HasCanonicalContentHash() {
+		return errors.New("budget_verdict_receipt: content_hash mismatch")
+	}
+	return nil
+}
+
+func (r *BudgetVerdictReceipt) computeHash() string {
+	return hashSpendAuthorityCanonical(struct {
+		ID                        string          `json:"id"`
+		TenantID                  string          `json:"tenant_id"`
+		SpendIntentID             string          `json:"spend_intent_id"`
+		EnvelopeID                string          `json:"envelope_id"`
+		AgentID                   string          `json:"agent_id"`
+		PrincipalID               string          `json:"principal_id,omitempty"`
+		ProviderID                string          `json:"provider_id"`
+		ModelID                   string          `json:"model_id"`
+		ProviderPriceSnapshotHash string          `json:"provider_price_snapshot_hash"`
+		QuotedAmountCents         int64           `json:"quoted_amount_cents"`
+		MaxAmountCents            int64           `json:"max_amount_cents"`
+		Currency                  string          `json:"currency"`
+		BudgetVerdict             BudgetVerdict   `json:"budget_verdict"`
+		ReasonCode                SpendReasonCode `json:"reason_code"`
+		DecisionHash              string          `json:"decision_hash"`
+		EnvelopeHash              string          `json:"envelope_hash,omitempty"`
+		RoutePolicyHash           string          `json:"route_policy_hash"`
+		EvidencePackRef           string          `json:"evidence_pack_ref"`
+		CreatedAt                 time.Time       `json:"created_at"`
+	}{r.ID, r.TenantID, r.SpendIntentID, r.EnvelopeID, r.AgentID, r.PrincipalID, r.ProviderID, r.ModelID, r.ProviderPriceSnapshotHash, r.QuotedAmountCents, r.MaxAmountCents, r.Currency, r.BudgetVerdict, r.ReasonCode, r.DecisionHash, r.EnvelopeHash, r.RoutePolicyHash, r.EvidencePackRef, r.CreatedAt})
+}
+
+func decodeSHA256Hash(hash string) ([]byte, error) {
+	raw := strings.TrimPrefix(hash, "sha256:")
+	if raw == hash {
+		return nil, errors.New("budget_verdict_receipt: content_hash must use sha256 prefix")
+	}
+	decoded, err := hex.DecodeString(raw)
+	if err != nil {
+		return nil, fmt.Errorf("budget_verdict_receipt: invalid sha256 content_hash: %w", err)
+	}
+	if len(decoded) != sha256.Size {
+		return nil, fmt.Errorf("budget_verdict_receipt: sha256 content_hash must decode to %d bytes", sha256.Size)
+	}
+	return decoded, nil
+}
+
+func decodeEd25519Signature(signature string) ([]byte, error) {
+	raw := strings.TrimPrefix(signature, "ed25519:")
+	if raw == signature {
+		return nil, errors.New("budget_verdict_receipt: signature must use ed25519 prefix")
+	}
+	decoded, err := hex.DecodeString(raw)
+	if err != nil {
+		return nil, fmt.Errorf("budget_verdict_receipt: invalid ed25519 signature: %w", err)
+	}
+	if len(decoded) != ed25519.SignatureSize {
+		return nil, fmt.Errorf("budget_verdict_receipt: ed25519 signature must decode to %d bytes", ed25519.SignatureSize)
+	}
+	return decoded, nil
 }
 
 // UsageReceipt records the actual provider usage and balance debit after dispatch.

@@ -156,6 +156,7 @@ type ExecContext struct {
 	JSONMode      bool
 	Tools         []string
 	SpendDecision *economic.SpendAuthorityDecision
+	SpendReceipt  *economic.BudgetVerdictReceipt
 }
 
 // ExecResult encapsulates normalized output and telemetry for receipts.
@@ -168,6 +169,7 @@ type ExecResult struct {
 	BudgetVerdict     economic.BudgetVerdict
 	SpendReasonCode   economic.SpendReasonCode
 	SpendDecisionHash string
+	SpendReceiptHash  string
 	Duration          time.Duration
 }
 
@@ -184,6 +186,9 @@ func (r *GatewayRouter) Execute(ctx context.Context, req ExecContext) (*ExecResu
 		return nil, fmt.Errorf("lig: capability constraint violation; model %s does not support tools", r.activeProfile.ID)
 	}
 	if err := requireSpendAuthorityAllow(req.SpendDecision); err != nil {
+		return nil, err
+	}
+	if err := requireBudgetVerdictReceipt(req.SpendDecision, req.SpendReceipt, *r.activeProfile); err != nil {
 		return nil, err
 	}
 
@@ -221,6 +226,7 @@ func (r *GatewayRouter) Execute(ctx context.Context, req ExecContext) (*ExecResu
 		BudgetVerdict:     req.SpendDecision.Verdict,
 		SpendReasonCode:   req.SpendDecision.ReasonCode,
 		SpendDecisionHash: req.SpendDecision.ContentHash,
+		SpendReceiptHash:  req.SpendReceipt.ContentHash,
 		Duration:          time.Since(start),
 	}, nil
 }
@@ -252,6 +258,25 @@ func requireSpendAuthorityAllow(decision *economic.SpendAuthorityDecision) error
 
 func isAllowSpendReasonCode(code economic.SpendReasonCode) bool {
 	return code == economic.SpendReasonOKWithinEnvelope || code == economic.SpendReasonOKApproved
+}
+
+func requireBudgetVerdictReceipt(decision *economic.SpendAuthorityDecision, receipt *economic.BudgetVerdictReceipt, profile Profile) error {
+	if receipt == nil {
+		return &SpendVerdictError{Decision: decision, Reason: "signed BudgetVerdict receipt is required"}
+	}
+	if decision == nil {
+		return &SpendVerdictError{Reason: "missing spend authority decision"}
+	}
+	if err := receipt.ValidateForDecision(*decision); err != nil {
+		return &SpendVerdictError{Decision: decision, Reason: err.Error()}
+	}
+	if receipt.ProviderID != string(profile.Provider) {
+		return &SpendVerdictError{Decision: decision, Reason: "BudgetVerdict receipt provider does not match active profile"}
+	}
+	if receipt.ModelID != profile.ModelName {
+		return &SpendVerdictError{Decision: decision, Reason: "BudgetVerdict receipt model does not match active profile"}
+	}
+	return nil
 }
 
 func defaultBaseURL(provider ProviderType) string {

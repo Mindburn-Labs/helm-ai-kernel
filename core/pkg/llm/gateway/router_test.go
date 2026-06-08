@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -29,7 +30,7 @@ func TestExecuteOllamaDiscoversDigestAndCallsAPI(t *testing.T) {
 	if err := r.RouteWithConfig(context.Background(), RouteConfig{Provider: ProviderOllama, BaseURL: srv.URL, ModelName: "test-model"}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := r.Execute(context.Background(), ExecContext{Prompt: "hello", JSONMode: true, SpendDecision: gatewayAllowSpendDecision()})
+	res, err := r.Execute(context.Background(), gatewayExecContext(ProviderOllama, "test-model", gatewayAllowSpendDecision(), ExecContext{Prompt: "hello", JSONMode: true}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,6 +39,9 @@ func TestExecuteOllamaDiscoversDigestAndCallsAPI(t *testing.T) {
 	}
 	if res.BudgetVerdict != economic.BudgetVerdictAllow || res.SpendDecisionHash == "" {
 		t.Fatalf("missing spend decision evidence on result: %+v", res)
+	}
+	if res.SpendReceiptHash == "" {
+		t.Fatalf("missing spend receipt evidence on result: %+v", res)
 	}
 }
 
@@ -49,7 +53,7 @@ func TestExecuteOpenAICompatibleRequiresModelHash(t *testing.T) {
 	if err := r.RouteWithConfig(context.Background(), RouteConfig{Provider: ProviderVLLM, BaseURL: srv.URL, ModelName: "test-model"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Execute(context.Background(), ExecContext{Prompt: "hello", SpendDecision: gatewayAllowSpendDecision()}); err == nil {
+	if _, err := r.Execute(context.Background(), gatewayExecContext(ProviderVLLM, "test-model", gatewayAllowSpendDecision(), ExecContext{Prompt: "hello"})); err == nil {
 		t.Fatal("expected model hash error")
 	}
 }
@@ -69,7 +73,7 @@ func TestExecuteOpenAICompatibleProviders(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			res, err := r.Execute(context.Background(), ExecContext{Prompt: "hello", SpendDecision: gatewayAllowSpendDecision()})
+			res, err := r.Execute(context.Background(), gatewayExecContext(provider, "test-model", gatewayAllowSpendDecision(), ExecContext{Prompt: "hello"}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -111,7 +115,7 @@ func TestExecuteRejectsEnginePinMismatchBeforeDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = r.Execute(context.Background(), ExecContext{Prompt: "hello", SpendDecision: gatewayAllowSpendDecision()})
+	_, err = r.Execute(context.Background(), gatewayExecContext(ProviderVLLM, "test-model", gatewayAllowSpendDecision(), ExecContext{Prompt: "hello"}))
 	if err == nil || !strings.Contains(err.Error(), "engine pin mismatch") {
 		t.Fatalf("expected engine pin mismatch, got %v", err)
 	}
@@ -148,7 +152,7 @@ func TestExecuteAcceptsEnginePinWithVerifierAndMeasurement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := r.Execute(context.Background(), ExecContext{Prompt: "hello", SpendDecision: gatewayAllowSpendDecision()})
+	res, err := r.Execute(context.Background(), gatewayExecContext(ProviderVLLM, "test-model", gatewayAllowSpendDecision(), ExecContext{Prompt: "hello"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,6 +207,69 @@ func TestExecuteRequiresSpendAuthorityAllowBeforeProviderDispatch(t *testing.T) 
 	}
 }
 
+func TestExecuteRequiresSignedBudgetVerdictReceiptBeforeProviderDispatch(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		mutate  func(*economic.BudgetVerdictReceipt)
+		receipt *economic.BudgetVerdictReceipt
+		want    string
+	}{
+		{name: "missing", receipt: nil, want: "signed BudgetVerdict receipt is required"},
+		{name: "unsigned", receipt: gatewayUnsignedSpendReceipt(ProviderVLLM, "test-model", gatewayAllowSpendDecision()), want: "signature_key_id is required"},
+		{name: "wrong provider", mutate: func(r *economic.BudgetVerdictReceipt) {
+			r.ProviderID = string(ProviderOllama)
+			sealGatewayReceipt(r)
+		}, want: "BudgetVerdict receipt provider does not match active profile"},
+		{name: "wrong model", mutate: func(r *economic.BudgetVerdictReceipt) {
+			r.ModelID = "other-model"
+			sealGatewayReceipt(r)
+		}, want: "BudgetVerdict receipt model does not match active profile"},
+		{name: "decision hash mismatch", mutate: func(r *economic.BudgetVerdictReceipt) {
+			r.DecisionHash = "sha256:other"
+			sealGatewayReceipt(r)
+		}, want: "decision_hash does not match decision"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dispatched := false
+			mux := http.NewServeMux()
+			mux.HandleFunc("/version", func(w http.ResponseWriter, _ *http.Request) {
+				dispatched = true
+				_ = json.NewEncoder(w).Encode(map[string]string{"version": "server-version"})
+			})
+			mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, _ *http.Request) {
+				dispatched = true
+				_ = json.NewEncoder(w).Encode(map[string]any{"choices": []map[string]any{{"message": map[string]string{"content": "ok"}}}})
+			})
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
+
+			decision := gatewayAllowSpendDecision()
+			receipt := tc.receipt
+			if tc.mutate != nil {
+				receipt = gatewaySpendReceipt(ProviderVLLM, "test-model", decision)
+				tc.mutate(receipt)
+			}
+
+			r := NewGatewayRouter()
+			if err := r.RouteWithConfig(context.Background(), RouteConfig{
+				Provider:  ProviderVLLM,
+				BaseURL:   srv.URL,
+				ModelName: "test-model",
+				ModelHash: "sha256:def",
+			}); err != nil {
+				t.Fatal(err)
+			}
+			_, err := r.Execute(context.Background(), ExecContext{Prompt: "hello", SpendDecision: decision, SpendReceipt: receipt})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected spend receipt error containing %q, got %v", tc.want, err)
+			}
+			if dispatched {
+				t.Fatal("provider endpoint was touched before signed BudgetVerdict receipt")
+			}
+		})
+	}
+}
+
 func newOpenAICompatibleServer(t *testing.T, version string) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -241,4 +308,49 @@ func gatewayTamperedAllowSpendDecision() *economic.SpendAuthorityDecision {
 	decision := gatewayAllowSpendDecision()
 	decision.ContentHash = "sha256:tampered"
 	return decision
+}
+
+var gatewayReceiptPrivateKey = ed25519.NewKeyFromSeed([]byte("0123456789abcdef0123456789abcdef"))
+
+func gatewayExecContext(provider ProviderType, model string, decision *economic.SpendAuthorityDecision, req ExecContext) ExecContext {
+	req.SpendDecision = decision
+	req.SpendReceipt = gatewaySpendReceipt(provider, model, decision)
+	return req
+}
+
+func gatewaySpendReceipt(provider ProviderType, model string, decision *economic.SpendAuthorityDecision) *economic.BudgetVerdictReceipt {
+	receipt := gatewayUnsignedSpendReceipt(provider, model, decision)
+	sealGatewayReceipt(receipt)
+	return receipt
+}
+
+func gatewayUnsignedSpendReceipt(provider ProviderType, model string, decision *economic.SpendAuthorityDecision) *economic.BudgetVerdictReceipt {
+	if decision == nil {
+		return nil
+	}
+	return economic.NewBudgetVerdictReceipt(
+		"verdict-1",
+		"tenant-1",
+		"spend-1",
+		"env-1",
+		"agent-1",
+		string(provider),
+		model,
+		100,
+		200,
+		"USD",
+		"sha256:price",
+		"sha256:route-policy",
+		"evidence://pack-1",
+		*decision,
+	)
+}
+
+func sealGatewayReceipt(receipt *economic.BudgetVerdictReceipt) {
+	if receipt == nil {
+		return
+	}
+	if err := receipt.Seal("gateway-test-key", gatewayReceiptPrivateKey); err != nil {
+		panic(err)
+	}
 }

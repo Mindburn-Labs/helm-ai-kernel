@@ -84,6 +84,14 @@
 | -------------------------------------------------- | ----------- | ------- | -------------------------------------------------- |
 | `claude_self_hosted_live_config.v1.schema.json`    | L2          | preview | Redacted live evidence config for Claude workers   |
 
+### Workstation (`workstation/`)
+
+| Schema                                             | Conformance | Status    | Description                                        |
+| -------------------------------------------------- | ----------- | --------- | -------------------------------------------------- |
+| `agent_run_receipt.v1.schema.json`                 | L2          | preview   | Manifest-first workstation agent run receipt       |
+| `workstation_policy_decision_receipt.v1.schema.json` | L2        | preview   | Selected-effect workstation policy decision receipt |
+| `scope_audit_report.v1.schema.json`                | L2          | preview   | Agent Scope Audit report over workstation receipts |
+
 ### Effects (`effects/`)
 
 | Schema                            | Conformance | Status        | Description                                               |

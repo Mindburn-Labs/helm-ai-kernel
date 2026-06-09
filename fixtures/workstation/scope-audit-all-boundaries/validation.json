@@ -1,0 +1,10 @@
+{
+  "commands": [
+    {
+      "command": "go test ./pkg/workstation",
+      "exit_code": 0,
+      "status": "passed",
+      "stdout_hash": "sha256:scope-audit-workstation-test"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "run_id": "run_scope_audit_all_boundaries",
+  "goal": "Exercise Agent Scope Audit across MCP, filesystem, network, memory, secrets, deploys, payments, loops, and shell.",
+  "actor_id": "agent.codex.local",
+  "actor_type": "agent",
+  "workspace_id": "workspace-scope-audit",
+  "workspace_path": "/workspace/scope-audit",
+  "repository": "helm-ai-kernel",
+  "agent_surface": "codex",
+  "policy_profile": "workstation.observe_draft.v1",
+  "started_at": "2026-06-09T09:00:00Z",
+  "completed_at": "2026-06-09T09:05:00Z",
+  "source_refs": [
+    "fixtures/workstation/scope-audit-all-boundaries"
+  ]
+}

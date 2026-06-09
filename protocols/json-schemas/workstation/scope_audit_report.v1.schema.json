@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.mindburn.run/workstation/scope_audit_report.v1.schema.json",
+  "title": "HELM Agent Scope Audit Report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_version",
+    "generated_at",
+    "summary",
+    "boundaries",
+    "out_of_scope_attempts",
+    "missing_controls",
+    "memory_writes",
+    "recurring_loops",
+    "high_impact_metadata",
+    "evidence_refs",
+    "operator_view",
+    "limitations"
+  ],
+  "properties": {
+    "report_version": { "const": "scope_audit_report.v1" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "summary": { "$ref": "#/$defs/summary" },
+    "boundaries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/boundary_summary" }
+    },
+    "out_of_scope_attempts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/out_of_scope_attempt" }
+    },
+    "missing_controls": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/missing_control" }
+    },
+    "memory_writes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/memory_write" }
+    },
+    "recurring_loops": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/recurring_loop" }
+    },
+    "high_impact_metadata": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/high_impact_metadata" }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidence_ref" }
+    },
+    "operator_view": {
+      "type": "object"
+    },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "$defs": {
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input_files",
+        "agent_run_receipts",
+        "decision_receipts",
+        "total_actions",
+        "allowed_actions",
+        "denied_actions",
+        "tainted_actions",
+        "unknown_mcp_actions",
+        "out_of_scope_attempts",
+        "missing_controls",
+        "memory_writes",
+        "recurring_loops",
+        "high_impact_metadata"
+      ],
+      "properties": {
+        "input_files": { "type": "integer", "minimum": 0 },
+        "agent_run_receipts": { "type": "integer", "minimum": 0 },
+        "decision_receipts": { "type": "integer", "minimum": 0 },
+        "total_actions": { "type": "integer", "minimum": 0 },
+        "allowed_actions": { "type": "integer", "minimum": 0 },
+        "denied_actions": { "type": "integer", "minimum": 0 },
+        "tainted_actions": { "type": "integer", "minimum": 0 },
+        "unknown_mcp_actions": { "type": "integer", "minimum": 0 },
+        "out_of_scope_attempts": { "type": "integer", "minimum": 0 },
+        "missing_controls": { "type": "integer", "minimum": 0 },
+        "memory_writes": { "type": "integer", "minimum": 0 },
+        "recurring_loops": { "type": "integer", "minimum": 0 },
+        "high_impact_metadata": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "boundary_name": {
+      "enum": ["mcp", "filesystem", "network", "memory", "secret", "deploy", "payment", "loop", "shell"]
+    },
+    "verdict": {
+      "enum": ["ALLOW", "DENY"]
+    },
+    "string_array": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "string_map": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "boundary_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "boundary",
+        "effect_types",
+        "total",
+        "allowed",
+        "denied",
+        "tainted",
+        "unknown",
+        "receipt_refs",
+        "reason_codes"
+      ],
+      "properties": {
+        "boundary": { "$ref": "#/$defs/boundary_name" },
+        "effect_types": { "$ref": "#/$defs/string_array" },
+        "total": { "type": "integer", "minimum": 0 },
+        "allowed": { "type": "integer", "minimum": 0 },
+        "denied": { "type": "integer", "minimum": 0 },
+        "tainted": { "type": "integer", "minimum": 0 },
+        "unknown": { "type": "integer", "minimum": 0 },
+        "receipt_refs": { "$ref": "#/$defs/string_array" },
+        "reason_codes": { "$ref": "#/$defs/string_array" }
+      }
+    },
+    "out_of_scope_attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["boundary", "effect_type", "verdict", "receipt", "source", "occurred_at"],
+      "properties": {
+        "boundary": { "$ref": "#/$defs/boundary_name" },
+        "run_id": { "type": "string" },
+        "effect_id": { "type": "string" },
+        "effect_type": { "type": "string", "minLength": 1 },
+        "tool_id": { "type": "string" },
+        "action": { "type": "string" },
+        "target": { "type": "string" },
+        "verdict": { "$ref": "#/$defs/verdict" },
+        "reason_code": { "type": "string" },
+        "reason": { "type": "string" },
+        "receipt": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "taint_labels": { "$ref": "#/$defs/string_array" },
+        "metadata": { "$ref": "#/$defs/string_map" }
+      }
+    },
+    "missing_control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["boundary", "control", "detail"],
+      "properties": {
+        "boundary": { "$ref": "#/$defs/boundary_name" },
+        "run_id": { "type": "string" },
+        "effect_id": { "type": "string" },
+        "control": { "type": "string", "minLength": 1 },
+        "reason_code": { "type": "string" },
+        "detail": { "type": "string", "minLength": 1 },
+        "receipt": { "type": "string" }
+      }
+    },
+    "evidence_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "source_path", "receipt_hash", "signature_present"],
+      "properties": {
+        "kind": { "enum": ["agent_run_receipt", "decision_receipt"] },
+        "source_path": { "type": "string", "minLength": 1 },
+        "run_id": { "type": "string" },
+        "receipt_id": { "type": "string" },
+        "decision_id": { "type": "string" },
+        "receipt_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "signature_present": { "type": "boolean" },
+        "evidence_pack_refs": { "$ref": "#/$defs/string_array" }
+      }
+    },
+    "memory_write": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "effect_id",
+        "memory_class",
+        "data_class",
+        "sensitivity",
+        "ttl_days",
+        "verdict",
+        "receipt",
+        "observed_at"
+      ],
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1 },
+        "effect_id": { "type": "string", "minLength": 1 },
+        "memory_class": { "type": "string", "minLength": 1 },
+        "data_class": { "type": "string", "minLength": 1 },
+        "sensitivity": { "type": "string", "minLength": 1 },
+        "ttl_days": { "type": "integer", "minimum": 1 },
+        "purpose": { "type": "string" },
+        "review_state": { "type": "string" },
+        "verdict": { "$ref": "#/$defs/verdict" },
+        "reason_code": { "type": "string" },
+        "receipt": { "type": "string", "minLength": 1 },
+        "observed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "recurring_loop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "effect_id",
+        "schedule",
+        "max_runtime",
+        "tool_scope",
+        "expires_at",
+        "verdict",
+        "receipt"
+      ],
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1 },
+        "effect_id": { "type": "string", "minLength": 1 },
+        "schedule": { "type": "string", "minLength": 1 },
+        "max_runtime": { "type": "string", "minLength": 1 },
+        "tool_scope": { "$ref": "#/$defs/string_array" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "verdict": { "$ref": "#/$defs/verdict" },
+        "reason_code": { "type": "string" },
+        "receipt": { "type": "string", "minLength": 1 }
+      }
+    },
+    "high_impact_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["boundary", "effect_type", "verdict", "receipt", "metadata"],
+      "properties": {
+        "boundary": { "$ref": "#/$defs/boundary_name" },
+        "run_id": { "type": "string" },
+        "effect_id": { "type": "string" },
+        "effect_type": { "type": "string", "minLength": 1 },
+        "tool_id": { "type": "string" },
+        "action": { "type": "string" },
+        "target": { "type": "string" },
+        "verdict": { "$ref": "#/$defs/verdict" },
+        "receipt": { "type": "string", "minLength": 1 },
+        "metadata": { "$ref": "#/$defs/string_map" }
+      }
+    }
+  }
+}

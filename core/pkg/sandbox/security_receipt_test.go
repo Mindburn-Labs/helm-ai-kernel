@@ -1,7 +1,9 @@
 package sandbox
 
 import (
+	"encoding/json"
 	"errors"
+	"os"
 	"testing"
 	"time"
 )
@@ -49,6 +51,23 @@ func TestSandboxSecurityReceiptRejectsCredentialMaterial(t *testing.T) {
 
 	if _, err := NewSandboxSecurityReceipt(exec, "sha256:build", "sha256:poc", "sha256:verdict", "sha256:secrets", true); !errors.Is(err, errSandboxCredentialMaterial) {
 		t.Fatalf("error = %v, want errSandboxCredentialMaterial", err)
+	}
+}
+
+func TestSandboxSecurityReceiptSharedFixtureValidates(t *testing.T) {
+	raw, err := os.ReadFile("testdata/sandbox_security_receipt_valid.json")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var fixture struct {
+		ExecutionReceipt ExecutionReceipt       `json:"execution_receipt"`
+		SecurityReceipt  SandboxSecurityReceipt `json:"security_receipt"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatalf("unmarshal fixture: %v", err)
+	}
+	if err := ValidateSandboxSecurityReceipt(&fixture.ExecutionReceipt, &fixture.SecurityReceipt); err != nil {
+		t.Fatalf("ValidateSandboxSecurityReceipt fixture: %v", err)
 	}
 }
 

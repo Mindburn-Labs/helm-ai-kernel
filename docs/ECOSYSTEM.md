@@ -7,6 +7,18 @@ last_reviewed: 2026-06-01
 
 This map helps contributors find high-value integration and upstream contribution targets.
 
+## Integration Map
+
+```mermaid
+flowchart LR
+    MCP["MCP registries and docs"] --> Kernel["HELM execution boundary"]
+    Gateway["AI gateway projects"] --> Kernel
+    Guardrails["Security scanners and guardrails"] --> Kernel
+    Frameworks["Agent frameworks"] --> Kernel
+    Kernel --> Proof["Receipts and EvidencePacks"]
+    Proof --> Listings["Awesome lists and ecosystem docs"]
+```
+
 | Lane | Adjacent projects | HELM contribution angle |
 | --- | --- | --- |
 | MCP registries and docs | [modelcontextprotocol/registry](https://github.com/modelcontextprotocol/registry), [modelcontextprotocol/docs](https://github.com/modelcontextprotocol/docs), [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers) | Tool metadata, schema-pin, authz, and fail-closed examples. |

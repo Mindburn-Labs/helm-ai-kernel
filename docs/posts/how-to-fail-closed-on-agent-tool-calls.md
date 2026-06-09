@@ -18,6 +18,19 @@ HELM AI Kernel demonstrates the pattern locally:
 - dangerous shell fixture: DENY with a signed receipt
 - flipped-verdict receipt: verification failure
 
+## Fail-Closed Path
+
+```mermaid
+flowchart LR
+    Proposal["Agent proposes tool call"] --> Boundary["HELM boundary"]
+    Boundary --> Context{"Known identity, policy, and schema?"}
+    Context -->|No| Deny["DENY or ESCALATE"]
+    Context -->|Yes| Allow["ALLOW fixture dispatch"]
+    Deny --> Receipt["Signed receipt"]
+    Allow --> Receipt
+    Receipt --> Verify["Offline verification"]
+```
+
 ![HELM MCP quarantine and receipt proof board](../assets/helm-mcp-quarantine-demo.svg)
 
 Run the local demos:

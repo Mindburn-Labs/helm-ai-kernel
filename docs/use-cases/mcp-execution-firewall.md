@@ -7,6 +7,17 @@ last_reviewed: 2026-06-01
 
 HELM AI Kernel documents this search intent with a local, source-backed proof path.
 
+## MCP Firewall Path
+
+```mermaid
+flowchart LR
+    Server["MCP server"] --> Tool["Tool call"]
+    Tool --> Registry["HELM registry"]
+    Registry --> Pin["Schema pin check"]
+    Pin --> Verdict["DENY, ESCALATE, or ALLOW"]
+    Verdict --> Receipt["Receipt"]
+```
+
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
 cd helm-ai-kernel

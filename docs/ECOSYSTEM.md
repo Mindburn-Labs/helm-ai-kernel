@@ -32,4 +32,4 @@ flowchart LR
 - [MCP integration](INTEGRATIONS/mcp.md)
 - [OpenAI-compatible proxy example](EXAMPLES.md#openai-compatible-proxy)
 - [Execution security model](EXECUTION_SECURITY_MODEL.md)
-- [Launch proof assets](../examples/launch/assets/README.md)
+- [Launch proof assets](../examples/launch/README.md)

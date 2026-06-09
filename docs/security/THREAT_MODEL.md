@@ -1,6 +1,7 @@
 # HELM AI Kernel Threat Model
 
 Version: 2026-06-08-security-evidence-loop-v1
+Version Hash: sha256:77210a48f9f402bd0c28c1c93bc5d422a08f80003fa850e819cedff116697bc8
 Owner: HELM Kernel Security
 Review Date: 2026-06-08
 

@@ -25,7 +25,7 @@ make build
 bash scripts/launch/demo-local.sh
 ```
 
-## Source-Backed Docs
+## Source Truth
 
 - [Quickstart](../QUICKSTART.md)
 - [Execution security model](../EXECUTION_SECURITY_MODEL.md)

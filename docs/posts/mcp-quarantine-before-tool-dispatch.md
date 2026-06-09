@@ -48,3 +48,10 @@ bash scripts/launch/demo-mcp.sh
 
 The sanitized transcript is checked in at
 [`examples/launch/assets/mcp-quarantine.transcript.txt`](../../examples/launch/assets/mcp-quarantine.transcript.txt).
+
+## Source Truth
+
+- [MCP integration](../INTEGRATIONS/mcp.md)
+- [MCP launch demo](../../scripts/launch/demo-mcp.sh)
+- [MCP fixture server](../../scripts/launch/mcp-fixture-server.py)
+- [Launch assets](../../examples/launch/assets/README.md)

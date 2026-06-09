@@ -1,3 +1,8 @@
+---
+title: HELM AI Kernel Community
+last_reviewed: 2026-06-09
+---
+
 # Community
 
 HELM AI Kernel is open for developers who care about AI agent security, MCP tool-call governance, signed receipts, and offline-verifiable evidence.
@@ -41,3 +46,10 @@ flowchart LR
 - `maintainer-task` requires maintainer, operator, or release access and is not externally claimable.
 
 Large changes should start in Discussions before a PR. Do not post provider keys, customer data, private prompts, unredacted production receipts, or live tenant metadata.
+
+## Source Truth
+
+- [Quickstart](docs/QUICKSTART.md)
+- [Developer journey](docs/DEVELOPER_JOURNEY.md)
+- [SDK index](docs/sdks/00_INDEX.md)
+- [Documentation coverage ledger](docs/documentation-coverage.csv)

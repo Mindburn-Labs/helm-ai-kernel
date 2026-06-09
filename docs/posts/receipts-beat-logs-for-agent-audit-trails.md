@@ -48,3 +48,10 @@ bash scripts/launch/demo-proof.sh
 ```
 
 The demo uses localhost fixtures and sample policy data only.
+
+## Source Truth
+
+- [Verification](../VERIFICATION.md)
+- [Execution security model](../EXECUTION_SECURITY_MODEL.md)
+- [Proof launch demo](../../scripts/launch/demo-proof.sh)
+- [Receipt schemas](../../protocols/json-schemas/SCHEMA_INDEX.md)

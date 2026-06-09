@@ -47,6 +47,7 @@ framework_contract:
     runtime_install_policy: forbidden
     baked_dependencies:
         - kilocode-cli
+        - ripgrep
     forbidden_runtime_install_patterns:
         - npm install
         - pnpm install
@@ -76,6 +77,7 @@ framework_contract:
           purpose: version_smoke_only
           baked_dependencies:
               - kilocode-cli
+              - ripgrep
     evidence_refs:
         - contract_preflight.json
         - launch_plan.json

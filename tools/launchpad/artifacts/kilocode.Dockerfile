@@ -9,8 +9,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates g++ git make python3 \
     && rm -rf /var/lib/apt/lists/*
 COPY . .
-RUN bun install --frozen-lockfile
-RUN bun run --cwd packages/opencode build
+RUN bun install --frozen-lockfile --ignore-scripts
+RUN bun run --cwd packages/opencode fix-node-pty
+RUN bun run --cwd packages/opencode build --single --skip-install
 RUN install -d /licenses/kilocode && cp LICENSE /licenses/kilocode/LICENSE
 
 FROM node:24-bookworm-slim@sha256:24dc26ef1e3c3690f27ebc4136c9c186c3133b25563ae4d7f0692e4d1fe5db0e
@@ -20,7 +21,7 @@ ENV NODE_ENV=production
 WORKDIR /opt/kilocode
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && apt-get install -y --no-install-recommends ca-certificates curl ripgrep \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system helm \
     && useradd --system --gid helm --home-dir /opt/kilocode --shell /usr/sbin/nologin helm

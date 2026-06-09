@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
@@ -470,6 +471,76 @@ func TestVerifyBundle_GoldenFixtureRoots(t *testing.T) {
 	}
 	if report.Roots.EntryCount != 2 {
 		t.Fatalf("entry count mismatch: expected 2, got %d", report.Roots.EntryCount)
+	}
+}
+
+func TestCheckConnectorEvidenceAcceptsTinyFishProofRecord(t *testing.T) {
+	dir := t.TempDir()
+	writeJSON(t, filepath.Join(dir, "connector_evidence.json"), map[string]any{
+		"records": []map[string]any{
+			{
+				"connector_id":            "tinyfish-web-v1",
+				"connector_contract_hash": "sha256:contract",
+				"policy_hash":             "sha256:policy",
+				"request_hash":            "sha256:request",
+				"response_hash":           "sha256:response",
+				"source_url_hashes":       []string{"sha256:url-1", "sha256:url-2"},
+				"receipt_ref":             "receipt://tinyfish/rcpt-1",
+				"evidence_pack_ref":       "evidencepack://pack-1",
+				"sample_only":             false,
+				"production":              true,
+			},
+		},
+	})
+
+	check := checkConnectorEvidence(dir)
+	if !check.Pass {
+		t.Fatalf("expected connector evidence to pass, got %s", check.Reason)
+	}
+}
+
+func TestCheckConnectorEvidenceRejectsSampleOnlyProductionPromotion(t *testing.T) {
+	dir := t.TempDir()
+	writeJSON(t, filepath.Join(dir, "connector_evidence.json"), map[string]any{
+		"connector_id":            "tinyfish-web-v1",
+		"connector_contract_hash": "sha256:contract",
+		"policy_hash":             "sha256:policy",
+		"request_hash":            "sha256:request",
+		"error_hash":              "sha256:error",
+		"source_url_hashes":       []string{"sha256:url-1"},
+		"receipt_ref":             "receipt://tinyfish/rcpt-1",
+		"evidence_pack_ref":       "evidencepack://pack-1",
+		"fixture_id":              "tinyfish-search-sample",
+		"sample_only":             true,
+		"production":              true,
+	})
+
+	check := checkConnectorEvidence(dir)
+	if check.Pass {
+		t.Fatal("expected sample_only production connector evidence to fail")
+	}
+	if !strings.Contains(check.Reason, "sample_only_production_exclusion") {
+		t.Fatalf("expected sample_only rejection, got %s", check.Reason)
+	}
+}
+
+func TestCheckConnectorEvidenceRejectsMissingSourceHashes(t *testing.T) {
+	dir := t.TempDir()
+	writeJSON(t, filepath.Join(dir, "connector_evidence.json"), map[string]any{
+		"connector_contract_hash": "sha256:contract",
+		"policy_hash":             "sha256:policy",
+		"request_hash":            "sha256:request",
+		"response_hash":           "sha256:response",
+		"receipt_ref":             "receipt://tinyfish/rcpt-1",
+		"evidence_pack_ref":       "evidencepack://pack-1",
+	})
+
+	check := checkConnectorEvidence(dir)
+	if check.Pass {
+		t.Fatal("expected missing source_url_hashes to fail")
+	}
+	if !strings.Contains(check.Reason, "source_url_hashes") {
+		t.Fatalf("expected source hash failure, got %s", check.Reason)
 	}
 }
 

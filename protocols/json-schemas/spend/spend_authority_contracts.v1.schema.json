@@ -1,0 +1,506 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/spend/spend_authority_contracts.v1.schema.json",
+  "title": "Spend Authority Contracts",
+  "description": "Versioned HELM contracts for AI compute spend envelopes, route quotes, usage receipts, settlement receipts, provider pricing, balance ledger entries, capacity commitments, and deferred credit lines.",
+  "oneOf": [
+    { "$ref": "#/$defs/AgentSpendEnvelope" },
+    { "$ref": "#/$defs/RouteQuote" },
+    { "$ref": "#/$defs/UsageReceipt" },
+    { "$ref": "#/$defs/SettlementReceipt" },
+    { "$ref": "#/$defs/ProviderTermsProfile" },
+    { "$ref": "#/$defs/ProviderPriceSnapshot" },
+    { "$ref": "#/$defs/BalanceAccount" },
+    { "$ref": "#/$defs/UsageLedgerEntry" },
+    { "$ref": "#/$defs/CapacityCommitment" },
+    { "$ref": "#/$defs/CreditLine" }
+  ],
+  "$defs": {
+    "BudgetVerdict": {
+      "type": "string",
+      "enum": ["ALLOW", "DENY", "ESCALATE"]
+    },
+    "SpendReasonCode": {
+      "type": "string",
+      "enum": [
+        "OK_WITHIN_ENVELOPE",
+        "OK_APPROVED",
+        "ERR_SPEND_ENVELOPE_NOT_FOUND",
+        "ERR_SPEND_ENVELOPE_INACTIVE",
+        "ERR_SPEND_ENVELOPE_NOT_YET_EFFECTIVE",
+        "ERR_SPEND_ENVELOPE_EXPIRED",
+        "ERR_SPEND_EMERGENCY_STOP",
+        "ERR_SPEND_INVALID_AMOUNT",
+        "ERR_BALANCE_INSUFFICIENT",
+        "ERR_SPEND_PER_REQUEST_LIMIT",
+        "ERR_SPEND_PROVIDER_NOT_ALLOWED",
+        "ERR_SPEND_MODEL_NOT_ALLOWED",
+        "ERR_APPROVAL_REQUIRED",
+        "ERR_ROUTE_QUOTE_EXPIRED",
+        "ERR_PROVIDER_PRICE_STALE",
+        "ERR_RECEIPT_MISMATCH",
+        "ERR_LEDGER_UNBALANCED",
+        "ERR_EVIDENCE_MISSING",
+        "ERR_SETTLEMENT_MISSING",
+        "ERR_PROVIDER_CONTRACT_NEEDED"
+      ]
+    },
+    "SpendPeriod": {
+      "type": "string",
+      "enum": ["DAILY", "WEEKLY", "MONTHLY", "QUARTERLY"]
+    },
+    "SettlementDirection": {
+      "type": "string",
+      "enum": ["DEBIT", "CREDIT"]
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "ContentHash": {
+      "type": "string",
+      "pattern": "^sha256:[a-fA-F0-9]{8,}$"
+    },
+    "Metadata": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "ModelRoute": {
+      "type": "object",
+      "required": ["provider_id", "model_id", "price_snapshot_hash"],
+      "additionalProperties": false,
+      "properties": {
+        "provider_id": { "type": "string", "minLength": 1 },
+        "model_id": { "type": "string", "minLength": 1 },
+        "price_snapshot_hash": { "$ref": "#/$defs/ContentHash" },
+        "max_amount_cents": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "AgentSpendEnvelope": {
+      "type": "object",
+      "required": [
+        "id",
+        "tenant_id",
+        "agent_id",
+        "principal_id",
+        "budget_id",
+        "currency",
+        "period",
+        "max_amount_cents",
+        "used_amount_cents",
+        "reserved_amount_cents",
+        "per_request_max_cents",
+        "allowed_providers",
+        "allowed_models",
+        "allow_model_substitution",
+        "emergency_stop",
+        "active",
+        "policy_hash",
+        "effective_at",
+        "content_hash"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "tenant_id": { "type": "string", "minLength": 1 },
+        "workspace_id": { "type": "string" },
+        "agent_id": { "type": "string", "minLength": 1 },
+        "principal_id": { "type": "string", "minLength": 1 },
+        "budget_id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "currency": { "$ref": "#/$defs/Currency" },
+        "period": { "$ref": "#/$defs/SpendPeriod" },
+        "max_amount_cents": { "type": "integer", "minimum": 1 },
+        "used_amount_cents": { "type": "integer", "minimum": 0 },
+        "reserved_amount_cents": { "type": "integer", "minimum": 0 },
+        "per_request_max_cents": { "type": "integer", "minimum": 1 },
+        "approval_required_above_cents": { "type": "integer", "minimum": 0 },
+        "allowed_providers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "allowed_models": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "fallback_models": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ModelRoute" }
+        },
+        "allow_model_substitution": { "type": "boolean" },
+        "emergency_stop": { "type": "boolean" },
+        "active": { "type": "boolean" },
+        "approval_policy_ref": { "type": "string" },
+        "policy_hash": { "$ref": "#/$defs/ContentHash" },
+        "effective_at": { "$ref": "#/$defs/Timestamp" },
+        "expires_at": { "$ref": "#/$defs/Timestamp" },
+        "metadata": { "$ref": "#/$defs/Metadata" },
+        "content_hash": { "$ref": "#/$defs/ContentHash" }
+      }
+    },
+    "RouteQuote": {
+      "type": "object",
+      "required": [
+        "id",
+        "tenant_id",
+        "spend_intent_id",
+        "envelope_id",
+        "agent_id",
+        "requested_model_id",
+        "selected_provider_id",
+        "selected_model_id",
+        "provider_price_snapshot_hash",
+        "quoted_amount_cents",
+        "max_amount_cents",
+        "currency",
+        "route_policy_hash",
+        "budget_verdict",
+        "reason_code",
+        "created_at",
+        "expires_at",
+        "content_hash"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "tenant_id": { "type": "string", "minLength": 1 },
+        "spend_intent_id": { "type": "string", "minLength": 1 },
+        "envelope_id": { "type": "string", "minLength": 1 },
+        "agent_id": { "type": "string", "minLength": 1 },
+        "principal_id": { "type": "string" },
+        "requested_provider_id": { "type": "string" },
+        "requested_model_id": { "type": "string", "minLength": 1 },
+        "selected_provider_id": { "type": "string", "minLength": 1 },
+        "selected_model_id": { "type": "string", "minLength": 1 },
+        "provider_price_snapshot_hash": { "$ref": "#/$defs/ContentHash" },
+        "quoted_amount_cents": { "type": "integer", "minimum": 1 },
+        "max_amount_cents": { "type": "integer", "minimum": 1 },
+        "currency": { "$ref": "#/$defs/Currency" },
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "fallback_chain": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ModelRoute" }
+        },
+        "model_substituted": { "type": "boolean" },
+        "route_policy_hash": { "$ref": "#/$defs/ContentHash" },
+        "budget_verdict": { "$ref": "#/$defs/BudgetVerdict" },
+        "reason_code": { "$ref": "#/$defs/SpendReasonCode" },
+        "receipt_hash": { "$ref": "#/$defs/ContentHash" },
+        "metadata": { "$ref": "#/$defs/Metadata" },
+        "created_at": { "$ref": "#/$defs/Timestamp" },
+        "expires_at": { "$ref": "#/$defs/Timestamp" },
+        "content_hash": { "$ref": "#/$defs/ContentHash" }
+      }
+    },
+    "UsageReceipt": {
+      "type": "object",
+      "required": [
+        "id",
+        "tenant_id",
+        "route_quote_id",
+        "spend_intent_id",
+        "envelope_id",
+        "agent_id",
+        "provider_id",
+        "model_id",
+        "provider_request_id",
+        "quoted_amount_cents",
+        "actual_amount_cents",
+        "provider_cost_cents",
+        "platform_fee_cents",
+        "balance_debit_cents",
+        "currency",
+        "budget_verdict",
+        "reason_code",
+        "policy_hash",
+        "settlement_receipt_hash",
+        "evidence_pack_ref",
+        "created_at",
+        "content_hash"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "tenant_id": { "type": "string", "minLength": 1 },
+        "route_quote_id": { "type": "string", "minLength": 1 },
+        "spend_intent_id": { "type": "string", "minLength": 1 },
+        "envelope_id": { "type": "string", "minLength": 1 },
+        "agent_id": { "type": "string", "minLength": 1 },
+        "provider_id": { "type": "string", "minLength": 1 },
+        "model_id": { "type": "string", "minLength": 1 },
+        "provider_request_id": { "type": "string", "minLength": 1 },
+        "provider_price_snapshot_hash": { "$ref": "#/$defs/ContentHash" },
+        "quoted_amount_cents": { "type": "integer", "minimum": 1 },
+        "actual_amount_cents": { "type": "integer", "minimum": 0 },
+        "provider_cost_cents": { "type": "integer", "minimum": 0 },
+        "platform_fee_cents": { "type": "integer", "minimum": 0 },
+        "balance_debit_cents": { "type": "integer", "minimum": 0 },
+        "currency": { "$ref": "#/$defs/Currency" },
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "budget_verdict": { "$ref": "#/$defs/BudgetVerdict" },
+        "reason_code": { "$ref": "#/$defs/SpendReasonCode" },
+        "policy_hash": { "$ref": "#/$defs/ContentHash" },
+        "ledger_entry_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "settlement_receipt_hash": { "$ref": "#/$defs/ContentHash" },
+        "evidence_pack_ref": { "type": "string", "minLength": 1 },
+        "reconciliation_ref": { "type": "string" },
+        "metadata": { "$ref": "#/$defs/Metadata" },
+        "created_at": { "$ref": "#/$defs/Timestamp" },
+        "content_hash": { "$ref": "#/$defs/ContentHash" }
+      }
+    },
+    "SettlementLedgerEntry": {
+      "type": "object",
+      "required": ["id", "account_id", "direction", "amount_cents", "currency"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "account_id": { "type": "string", "minLength": 1 },
+        "direction": { "$ref": "#/$defs/SettlementDirection" },
+        "amount_cents": { "type": "integer", "minimum": 1 },
+        "currency": { "$ref": "#/$defs/Currency" },
+        "reference": { "type": "string" }
+      }
+    },
+    "SettlementReceipt": {
+      "type": "object",
+      "required": [
+        "id",
+        "tenant_id",
+        "usage_receipt_id",
+        "route_quote_id",
+        "treasury_account_id",
+        "source_usage_receipt_hash",
+        "ledger_entries",
+        "currency",
+        "evidence_pack_ref",
+        "created_at",
+        "content_hash"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "tenant_id": { "type": "string", "minLength": 1 },
+        "usage_receipt_id": { "type": "string", "minLength": 1 },
+        "route_quote_id": { "type": "string", "minLength": 1 },
+        "treasury_account_id": { "type": "string", "minLength": 1 },
+        "source_usage_receipt_hash": { "$ref": "#/$defs/ContentHash" },
+        "ledger_entries": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/SettlementLedgerEntry" }
+        },
+        "currency": { "$ref": "#/$defs/Currency" },
+        "evidence_pack_ref": { "type": "string", "minLength": 1 },
+        "created_at": { "$ref": "#/$defs/Timestamp" },
+        "content_hash": { "$ref": "#/$defs/ContentHash" }
+      }
+    },
+    "ProviderTermsProfile": {
+      "type": "object",
+      "required": [
+        "id",
+        "provider_id",
+        "account_mode",
+        "terms_version",
+        "legal_review_ref",
+        "allows_usage_resale",
+        "allows_provider_credit_transfer",
+        "allows_provider_credit_cash_redemption",
+        "requires_contract_for_managed_billing",
+        "effective_at",
+        "content_hash"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "tenant_id": { "type": "string" },
+        "provider_id": { "type": "string", "minLength": 1 },
+        "account_mode": { "type": "string", "enum": ["BYOK", "DIRECT", "MANAGED_ORG_ACCOUNT"] },
+        "terms_version": { "type": "string", "minLength": 1 },
+        "contract_ref": { "type": "string" },
+        "legal_review_ref": { "type": "string", "minLength": 1 },
+        "jurisdiction": { "type": "string" },
+        "data_retention_days": { "type": "integer", "minimum": 0 },
+        "allows_usage_resale": { "type": "boolean", "const": false },
+        "allows_provider_credit_transfer": { "type": "boolean", "const": false },
+        "allows_provider_credit_cash_redemption": { "type": "boolean", "const": false },
+        "requires_contract_for_managed_billing": { "type": "boolean" },
+        "effective_at": { "$ref": "#/$defs/Timestamp" },
+        "expires_at": { "$ref": "#/$defs/Timestamp" },
+        "content_hash": { "$ref": "#/$defs/ContentHash" }
+      }
+    },
+    "ProviderPriceSnapshot": {
+      "type": "object",
+      "required": [
+        "id",
+        "provider_id",
+        "model_id",
+        "currency",
+        "provider_terms_profile_id",
+        "source_hash",
+        "captured_at",
+        "effective_at",
+        "expires_at",
+        "content_hash"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "provider_id": { "type": "string", "minLength": 1 },
+        "model_id": { "type": "string", "minLength": 1 },
+        "currency": { "$ref": "#/$defs/Currency" },
+        "input_token_micro_cents": { "type": "integer", "minimum": 0 },
+        "output_token_micro_cents": { "type": "integer", "minimum": 0 },
+        "request_cents": { "type": "integer", "minimum": 0 },
+        "provider_terms_profile_id": { "type": "string", "minLength": 1 },
+        "source_uri": { "type": "string" },
+        "source_hash": { "$ref": "#/$defs/ContentHash" },
+        "captured_at": { "$ref": "#/$defs/Timestamp" },
+        "effective_at": { "$ref": "#/$defs/Timestamp" },
+        "expires_at": { "$ref": "#/$defs/Timestamp" },
+        "content_hash": { "$ref": "#/$defs/ContentHash" }
+      }
+    },
+    "BalanceAccount": {
+      "type": "object",
+      "required": [
+        "id",
+        "tenant_id",
+        "type",
+        "status",
+        "currency",
+        "balance_cents",
+        "hold_cents",
+        "evidence_pack_ref",
+        "updated_at",
+        "content_hash"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "tenant_id": { "type": "string", "minLength": 1 },
+        "workspace_id": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["USAGE_BALANCE", "INTERNAL_LEDGER", "PROVIDER_PREPAY", "INVOICE_ACCRUAL"]
+        },
+        "status": { "type": "string", "enum": ["ACTIVE", "FROZEN", "CLOSED"] },
+        "currency": { "$ref": "#/$defs/Currency" },
+        "balance_cents": { "type": "integer", "minimum": 0 },
+        "hold_cents": { "type": "integer", "minimum": 0 },
+        "credit_limit_cents": { "type": "integer", "minimum": 0 },
+        "credit_line_id": { "type": "string" },
+        "legal_entity_id": { "type": "string" },
+        "evidence_pack_ref": { "type": "string", "minLength": 1 },
+        "updated_at": { "$ref": "#/$defs/Timestamp" },
+        "content_hash": { "$ref": "#/$defs/ContentHash" }
+      }
+    },
+    "UsageLedgerEntry": {
+      "type": "object",
+      "required": [
+        "id",
+        "tenant_id",
+        "balance_account_id",
+        "type",
+        "direction",
+        "amount_cents",
+        "currency",
+        "reason_code",
+        "source_content_hash",
+        "created_at",
+        "content_hash"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "tenant_id": { "type": "string", "minLength": 1 },
+        "balance_account_id": { "type": "string", "minLength": 1 },
+        "usage_receipt_id": { "type": "string" },
+        "settlement_receipt_id": { "type": "string" },
+        "type": { "type": "string", "enum": ["RESERVE", "RELEASE", "DEBIT", "CREDIT", "ADJUSTMENT"] },
+        "direction": { "$ref": "#/$defs/SettlementDirection" },
+        "amount_cents": { "type": "integer", "minimum": 1 },
+        "currency": { "$ref": "#/$defs/Currency" },
+        "reason_code": { "$ref": "#/$defs/SpendReasonCode" },
+        "source_content_hash": { "$ref": "#/$defs/ContentHash" },
+        "created_at": { "$ref": "#/$defs/Timestamp" },
+        "content_hash": { "$ref": "#/$defs/ContentHash" }
+      }
+    },
+    "CapacityCommitment": {
+      "type": "object",
+      "required": [
+        "id",
+        "tenant_id",
+        "provider_id",
+        "currency",
+        "committed_amount_cents",
+        "used_amount_cents",
+        "contract_ref",
+        "evidence_pack_ref",
+        "status",
+        "period_start",
+        "period_end",
+        "content_hash"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "tenant_id": { "type": "string", "minLength": 1 },
+        "provider_id": { "type": "string", "minLength": 1 },
+        "model_family": { "type": "string" },
+        "currency": { "$ref": "#/$defs/Currency" },
+        "committed_amount_cents": { "type": "integer", "minimum": 1 },
+        "used_amount_cents": { "type": "integer", "minimum": 0 },
+        "contract_ref": { "type": "string" },
+        "evidence_pack_ref": { "type": "string" },
+        "status": { "type": "string", "enum": ["DRAFT", "ACTIVE", "EXHAUSTED", "EXPIRED", "CANCELED"] },
+        "period_start": { "$ref": "#/$defs/Timestamp" },
+        "period_end": { "$ref": "#/$defs/Timestamp" },
+        "content_hash": { "$ref": "#/$defs/ContentHash" }
+      }
+    },
+    "CreditLine": {
+      "type": "object",
+      "required": [
+        "id",
+        "tenant_id",
+        "currency",
+        "limit_cents",
+        "status",
+        "runtime_usable",
+        "deferral_reason",
+        "content_hash"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "tenant_id": { "type": "string", "minLength": 1 },
+        "provider_id": { "type": "string" },
+        "currency": { "$ref": "#/$defs/Currency" },
+        "limit_cents": { "type": "integer", "minimum": 0 },
+        "status": { "type": "string", "const": "DEFERRED" },
+        "runtime_usable": { "type": "boolean", "const": false },
+        "deferral_reason": { "$ref": "#/$defs/SpendReasonCode" },
+        "legal_review_ref": { "type": "string" },
+        "evidence_pack_ref": { "type": "string" },
+        "content_hash": { "$ref": "#/$defs/ContentHash" }
+      }
+    }
+  }
+}

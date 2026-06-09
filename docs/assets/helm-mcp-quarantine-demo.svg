@@ -51,8 +51,11 @@
       .pathBase { fill: none; stroke-linecap: round; stroke-linejoin: round; }
       
       .nodeHead { font-size: 24px; font-weight: 800; letter-spacing: -0.3px; }
+      .nodeSub { font-size: 13px; font-weight: 600; }
+      .nodeSubTight { font-size: 12px; font-weight: 600; }
       .small { font-size: 15px; font-weight: 500; }
       .micro { font-size: 13px; font-weight: 600; letter-spacing: 0.5px; }
+      .legendText { font-size: 13.5px; font-weight: 600; }
       
       /* Animation Timings */
       .packet-deny { animation: deny-packet-anim 12s infinite cubic-bezier(0.4, 0, 0.2, 1); }
@@ -263,6 +266,23 @@
     <path d="M 1000,450 Q 1000,680 800,680" class="pathBase line-cpi-pg" stroke="#cbd5e1" stroke-width="4"/>
   </g>
 
+  <!-- Animated Floating Packets -->
+  <g>
+    <!-- DENY Packet (Coral/Red warning flow) -->
+    <circle class="packet-deny" r="7" fill="#f43f5e" filter="url(#glowRed)" opacity="0"/>
+    <!-- DENY Receipt (Purple audit flow) -->
+    <circle class="receipt-deny" r="6" fill="#818cf8" filter="url(#glowViolet)" opacity="0"/>
+
+    <!-- ALLOW Packet (Teal safe flow) -->
+    <circle class="packet-allow" r="7" fill="#14b8a6" filter="url(#glowTeal)" opacity="0"/>
+    <!-- PEP -> CPI Packet (Teal safe flow) -->
+    <circle class="packet-pep-cpi" r="7" fill="#14b8a6" filter="url(#glowTeal)" opacity="0"/>
+    <!-- ALLOW Side-Effect Trigger (Cyan flow) -->
+    <circle class="packet-effect" r="7" fill="#06b6d4" filter="url(#glowTeal)" opacity="0"/>
+    <!-- ALLOW Receipt (Purple audit flow) -->
+    <circle class="receipt-allow" r="6" fill="#818cf8" filter="url(#glowViolet)" opacity="0"/>
+  </g>
+
   <!-- Flowchart Nodes (Centered & Balanced) -->
   <g class="sans" text-anchor="middle" filter="url(#softShadow)">
     
@@ -282,8 +302,8 @@
       <circle class="ring" cx="0" cy="0" r="82"/>
       <circle id="pep-node" class="ring node-pep" cx="0" cy="0" r="68"/>
       <text class="ink nodeHead" x="0" y="-8">PEP</text>
-      <text class="ink small" x="0" y="16" font-size="14">Policy Enforcement</text>
-      <text class="muted small" x="0" y="34" font-size="13">Point</text>
+      <text class="ink nodeSub" x="0" y="16">Policy</text>
+      <text class="muted nodeSub" x="0" y="34">Enforcement Point</text>
       
       <!-- State Badge -->
       <rect x="-65" y="110" width="130" height="28" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
@@ -299,8 +319,8 @@
       <circle class="ring" cx="0" cy="0" r="82"/>
       <circle id="cpi-node" class="ring node-cpi" cx="0" cy="0" r="68"/>
       <text class="ink nodeHead" x="0" y="-8">CPI</text>
-      <text class="ink small" x="0" y="16" font-size="14">Constraint + Proof</text>
-      <text class="muted small" x="0" y="34" font-size="13">Interface</text>
+      <text class="ink nodeSub" x="0" y="16">Constraint +</text>
+      <text class="muted nodeSub" x="0" y="34">Proof Interface</text>
       
       <!-- State Badge -->
       <rect x="-65" y="110" width="130" height="28" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
@@ -312,8 +332,9 @@
       <circle class="ring" cx="0" cy="0" r="75" stroke-dasharray="4, 4"/>
       <circle class="ring" cx="0" cy="0" r="65"/>
       <circle id="effects-node" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" class="node-effects" cx="0" cy="0" r="52"/>
-      <text class="ink nodeHead" x="0" y="0">Effects</text>
-      <text class="muted small" x="0" y="20" font-size="13">Secure Dispatch</text>
+      <text class="ink nodeHead" x="0" y="-2">Effects</text>
+      <text class="muted nodeSubTight" x="0" y="19">Secure</text>
+      <text class="muted nodeSubTight" x="0" y="34">Dispatch</text>
     </g>
 
     <!-- 5. PROOFGRAPH LEDGER NODE (cx=800, cy=680) -->
@@ -322,26 +343,9 @@
       <circle class="ring" cx="0" cy="0" r="78"/>
       <circle id="pg-node" class="ring node-pg" cx="0" cy="0" r="65"/>
       <text class="ink nodeHead" x="0" y="-4" fill="#6366f1">ProofGraph</text>
-      <text class="muted small" x="0" y="18" font-size="14" font-weight="600">immutable ledger</text>
+      <text class="muted nodeSub" x="0" y="19">immutable ledger</text>
     </g>
 
-  </g>
-
-  <!-- Animated Floating Packets -->
-  <g>
-    <!-- DENY Packet (Coral/Red warning flow) -->
-    <circle class="packet-deny" r="7" fill="#f43f5e" filter="url(#glowRed)" opacity="0"/>
-    <!-- DENY Receipt (Purple audit flow) -->
-    <circle class="receipt-deny" r="6" fill="#818cf8" filter="url(#glowViolet)" opacity="0"/>
-
-    <!-- ALLOW Packet (Teal safe flow) -->
-    <circle class="packet-allow" r="7" fill="#14b8a6" filter="url(#glowTeal)" opacity="0"/>
-    <!-- PEP -> CPI Packet (Teal safe flow) -->
-    <circle class="packet-pep-cpi" r="7" fill="#14b8a6" filter="url(#glowTeal)" opacity="0"/>
-    <!-- ALLOW Side-Effect Trigger (Cyan flow) -->
-    <circle class="packet-effect" r="7" fill="#06b6d4" filter="url(#glowTeal)" opacity="0"/>
-    <!-- ALLOW Receipt (Purple audit flow) -->
-    <circle class="receipt-allow" r="6" fill="#818cf8" filter="url(#glowViolet)" opacity="0"/>
   </g>
 
   <!-- Interactive/Timed Verdict Indicator Banners (Synced with keyframes) -->
@@ -349,14 +353,14 @@
     
     <!-- DENY State (Emphasized Coral Banner, Seconds 1.2 to 3.4) -->
     <g class="text-deny-state" opacity="0" transform="translate(600 280)">
-      <rect x="-115" y="-20" width="230" height="40" rx="8" fill="#ffe4e6" stroke="#f43f5e" stroke-width="1.5"/>
+      <rect x="-140" y="-20" width="280" height="40" rx="8" fill="#ffe4e6" stroke="#f43f5e" stroke-width="1.5"/>
       <text class="mono" x="0" y="5" fill="#be123c" font-size="14" font-weight="700">VERDICT: DENY (QUARANTINED)</text>
       <text class="muted small" x="0" y="38" font-size="13" font-weight="600">Unknown server and tool blocked</text>
     </g>
 
     <!-- ALLOW State (Emphasized Emerald/Teal Banner, Seconds 7.2 to 9.4) -->
     <g class="text-allow-state" opacity="0" transform="translate(1000 280)">
-      <rect x="-115" y="-20" width="230" height="40" rx="8" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+      <rect x="-140" y="-20" width="280" height="40" rx="8" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
       <text class="mono" x="0" y="5" fill="#065f46" font-size="14" font-weight="700">VERDICT: ALLOW (PINNED)</text>
       <text class="muted small" x="0" y="38" font-size="13" font-weight="600">Schema-pinned fixture authorized</text>
     </g>
@@ -365,24 +369,24 @@
 
   <!-- Horizontal Legend Frame Card centered at bottom -->
   <g class="sans" transform="translate(800 830)">
-    <rect x="-560" y="-30" width="1120" height="60" rx="10" class="layerCard"/>
+    <rect x="-610" y="-30" width="1220" height="60" rx="10" class="layerCard"/>
     
     <!-- Legend Items -->
-    <g transform="translate(-560 0)">
+    <g transform="translate(-580 0)">
       <!-- DENY -->
       <g transform="translate(0 5)">
         <circle cx="0" cy="0" r="7" fill="#f43f5e" filter="url(#glowRed)"/>
-        <text class="ink" x="18" y="5" font-size="14" font-weight="600">FAIL-CLOSED QUARANTINE: Deny unknown servers &amp; tools</text>
+        <text class="ink legendText" x="18" y="5">FAIL-CLOSED QUARANTINE: Deny unknown servers &amp; tools</text>
       </g>
       <!-- ALLOW -->
-      <g transform="translate(420 5)">
+      <g transform="translate(450 5)">
         <circle cx="0" cy="0" r="7" fill="#14b8a6" filter="url(#glowTeal)"/>
-        <text class="ink" x="18" y="5" font-size="14" font-weight="600">AUTHORIZED EXECUTION: Allow schema-pinned tool calls</text>
+        <text class="ink legendText" x="18" y="5">AUTHORIZED EXECUTION: Allow schema-pinned tool calls</text>
       </g>
       <!-- RECORD -->
-      <g transform="translate(820 5)">
+      <g transform="translate(870 5)">
         <circle cx="0" cy="0" r="7" fill="#818cf8" filter="url(#glowViolet)"/>
-        <text class="ink" x="18" y="5" font-size="14" font-weight="600">VERIFIABLE LEDGER: Record audit receipts</text>
+        <text class="ink legendText" x="18" y="5">VERIFIABLE LEDGER: Record audit receipts</text>
       </g>
     </g>
   </g>

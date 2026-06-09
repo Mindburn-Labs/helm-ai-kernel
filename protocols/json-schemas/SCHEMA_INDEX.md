@@ -188,6 +188,12 @@
 | `memory/*.json`              | L3          | normative | Memory retrieval schemas       |
 | `packs/*.schema.json`        | L2          | normative | Pack manifest and type schemas |
 
+### Spend (`spend/`)
+
+| Schema                                       | Conformance | Status  | Description                                                                 |
+| -------------------------------------------- | ----------- | ------- | --------------------------------------------------------------------------- |
+| `spend_authority_contracts.v1.schema.json`   | L2          | preview | Spend envelopes, route quotes, receipts, provider terms, balances, and deferred credit lines |
+
 ### Authority (`authority/`)
 
 | Schema                                             | Conformance | Status    | Description                             |
@@ -220,8 +226,8 @@
 
 ---
 
-**Total schemas**: 139 files across 28 domains.
+**Total schemas**: 140 files across 29 domains.
 **L1 (Core)**: 42 schemas
-**L2 (Extended)**: 72 schemas
+**L2 (Extended)**: 73 schemas
 **L3 (Optional)**: 19 schemas
 **Informational**: 6 schemas

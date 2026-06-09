@@ -28,6 +28,13 @@ func TestDefaultNegativeBoundaryVectorsContainRequiredGates(t *testing.T) {
 		"wasm-fuel-exhaustion",
 		"gui-action-missing-grounding-ref",
 		"gui-action-postcondition-unverified",
+		"tinyfish-web-missing-api-key",
+		"tinyfish-search-fetch-source-hash-missing",
+		"tinyfish-fetch-partial-source-error",
+		"tinyfish-browser-credential-grant-escalation",
+		"tinyfish-agent-side-effect-approval",
+		"tinyfish-web-schema-drift",
+		"tinyfish-sample-fixture-production-rejection",
 	}
 	vectors := DefaultNegativeBoundaryVectors()
 	seen := map[string]NegativeBoundaryVector{}

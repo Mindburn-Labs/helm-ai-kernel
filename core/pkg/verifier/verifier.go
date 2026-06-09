@@ -122,6 +122,10 @@ func VerifyBundleWithOptions(bundlePath string, opts VerifyOptions) (*VerifyRepo
 	// legacy EvidencePacks; presence must be complete and redaction-safe.
 	report.addCheck(checkEUAIActEvidenceProfile(bundlePath))
 
+	// 4c. Optional external connector evidence integrity. Absence remains valid
+	// for legacy EvidencePacks; presence must bind production proof fields.
+	report.addCheck(checkConnectorEvidence(bundlePath))
+
 	// 5. Chain integrity (receipt ordering)
 	report.addCheck(checkChainIntegrity(bundlePath))
 
@@ -487,6 +491,79 @@ func checkFileHashes(bundlePath string) []CheckResult {
 	}
 
 	return results
+}
+
+func checkConnectorEvidence(bundlePath string) CheckResult {
+	path := ""
+	for _, candidate := range []string{
+		filepath.Join(bundlePath, "connector_evidence.json"),
+		filepath.Join(bundlePath, "09_SCHEMAS", "connector_evidence.json"),
+		filepath.Join(bundlePath, "07_ATTESTATIONS", "connector_evidence.json"),
+	} {
+		if fileExists(candidate) {
+			path = candidate
+			break
+		}
+	}
+	if path == "" {
+		return CheckResult{Name: "connector_evidence", Pass: true, Detail: "no connector evidence record"}
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return CheckResult{Name: "connector_evidence", Pass: false, Reason: fmt.Sprintf("cannot read connector evidence: %v", err)}
+	}
+	records, err := parseConnectorEvidenceRecords(data)
+	if err != nil {
+		return CheckResult{Name: "connector_evidence", Pass: false, Reason: err.Error()}
+	}
+	if len(records) == 0 {
+		return CheckResult{Name: "connector_evidence", Pass: false, Reason: "connector evidence must contain at least one record"}
+	}
+
+	var failures []string
+	for i, record := range records {
+		for _, issue := range evidencepkg.ValidateConnectorEvidenceRecord(record) {
+			failures = append(failures, fmt.Sprintf("records[%d].%s", i, issue))
+		}
+	}
+	if len(failures) > 0 {
+		return CheckResult{Name: "connector_evidence", Pass: false, Reason: strings.Join(failures, "; ")}
+	}
+	return CheckResult{Name: "connector_evidence", Pass: true, Detail: fmt.Sprintf("%d connector evidence records verified", len(records))}
+}
+
+func parseConnectorEvidenceRecords(data []byte) ([]evidencepkg.ConnectorEvidenceRecord, error) {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" {
+		return nil, fmt.Errorf("connector evidence is empty")
+	}
+	if strings.HasPrefix(trimmed, "[") {
+		var records []evidencepkg.ConnectorEvidenceRecord
+		if err := json.Unmarshal(data, &records); err != nil {
+			return nil, fmt.Errorf("invalid connector evidence array: %v", err)
+		}
+		return records, nil
+	}
+
+	var envelope struct {
+		Records           []evidencepkg.ConnectorEvidenceRecord `json:"records"`
+		ConnectorEvidence []evidencepkg.ConnectorEvidenceRecord `json:"connector_evidence"`
+	}
+	if err := json.Unmarshal(data, &envelope); err == nil {
+		if len(envelope.Records) > 0 {
+			return envelope.Records, nil
+		}
+		if len(envelope.ConnectorEvidence) > 0 {
+			return envelope.ConnectorEvidence, nil
+		}
+	}
+
+	var record evidencepkg.ConnectorEvidenceRecord
+	if err := json.Unmarshal(data, &record); err != nil {
+		return nil, fmt.Errorf("invalid connector evidence object: %v", err)
+	}
+	return []evidencepkg.ConnectorEvidenceRecord{record}, nil
 }
 
 func checkChainIntegrity(bundlePath string) CheckResult {

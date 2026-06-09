@@ -54,4 +54,4 @@ The sanitized transcript is checked in at
 - [MCP integration](../INTEGRATIONS/mcp.md)
 - [MCP launch demo](../../scripts/launch/demo-mcp.sh)
 - [MCP fixture server](../../scripts/launch/mcp-fixture-server.py)
-- [Launch assets](../../examples/launch/assets/README.md)
+- [Launch assets](../../examples/launch/README.md)

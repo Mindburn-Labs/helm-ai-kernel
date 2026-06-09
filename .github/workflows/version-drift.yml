@@ -25,7 +25,8 @@ jobs:
           python3 scripts/release/check_version_drift.py \
             --expected-version "$VERSION" \
             --write-status version-status.json \
-            published
+            published \
+            --surface-timeout 15
       - name: Upload version status
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

@@ -504,6 +504,41 @@
       "kind": "homebrew_formula",
       "url": "https://raw.githubusercontent.com/mindburnlabs/homebrew-tap/main/Formula/helm-ai-kernel.rb",
       "human_url": "https://github.com/mindburnlabs/homebrew-tap/blob/main/Formula/helm-ai-kernel.rb"
+    },
+    {
+      "id": "pkg-go-dev-sdk",
+      "kind": "pkg_go_dev",
+      "url": "https://pkg.go.dev/github.com/Mindburn-Labs/helm-ai-kernel/sdk/go?tab=versions",
+      "human_url": "https://pkg.go.dev/github.com/Mindburn-Labs/helm-ai-kernel/sdk/go",
+      "blocking": false
+    },
+    {
+      "id": "docs-site-developer-journey",
+      "kind": "http_contains",
+      "url": "https://helm.docs.mindburn.org/helm-ai-kernel/developer-journey",
+      "human_url": "https://helm.docs.mindburn.org/helm-ai-kernel/developer-journey",
+      "contains": [
+        "io.github.mindburnlabs:helm-sdk:{version}"
+      ]
+    },
+    {
+      "id": "docs-site-sdk-index",
+      "kind": "http_contains",
+      "url": "https://helm.docs.mindburn.org/helm-ai-kernel/sdks",
+      "human_url": "https://helm.docs.mindburn.org/helm-ai-kernel/sdks",
+      "contains": [
+        "io.github.mindburnlabs:helm-sdk:{version}",
+        "version-status.json"
+      ]
+    },
+    {
+      "id": "docs-site-examples",
+      "kind": "http_contains",
+      "url": "https://helm.docs.mindburn.org/helm-ai-kernel/examples",
+      "human_url": "https://helm.docs.mindburn.org/helm-ai-kernel/examples",
+      "contains": [
+        "io.github.mindburnlabs:helm-sdk:{version}"
+      ]
     }
   ],
   "normalization_enabled": true

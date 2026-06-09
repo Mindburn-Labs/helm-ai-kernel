@@ -24,7 +24,7 @@ import (
 //	2 = config error
 func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel mcp <serve|install|pack|print-config|scan|wrap|list|get|quarantine|approve|revoke|auth-profile|authorize-call> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel mcp <serve|install|pack|print-config|scan|wrap|proof|list|get|quarantine|approve|revoke|auth-profile|authorize-call> [flags]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Subcommands:")
 		fmt.Fprintln(stderr, "  serve         Start the HELM MCP server (stdio or remote HTTP)")
@@ -33,6 +33,7 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "  print-config  Print MCP config for a specific client")
 		fmt.Fprintln(stderr, "  scan          Static scan of an MCP tool catalog for DDIPE / typosquat / suspicious patterns")
 		fmt.Fprintln(stderr, "  wrap          Emit a clean-room execution-firewall wrapper profile for an upstream MCP server")
+		fmt.Fprintln(stderr, "  proof         Emit a no-dispatch MCP quarantine proof EvidencePack")
 		fmt.Fprintln(stderr, "  list          List local MCP registry records")
 		fmt.Fprintln(stderr, "  get           Get one MCP registry record")
 		fmt.Fprintln(stderr, "  quarantine    List Launchpad MCP threat reviews and quarantined tools")
@@ -56,6 +57,8 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 		return runMCPScan(args[1:], stdout, stderr)
 	case "wrap":
 		return runMCPWrap(args[1:], stdout, stderr)
+	case "proof":
+		return runMCPProof(args[1:], stdout, stderr)
 	case "list":
 		return runMCPList(args[1:], stdout, stderr)
 	case "get":
@@ -71,7 +74,7 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 	case "authorize-call":
 		return runMCPAuthorizeCall(args[1:], stdout, stderr)
 	case "--help", "-h":
-		fmt.Fprintln(stdout, "Usage: helm-ai-kernel mcp <serve|install|pack|print-config|scan|wrap|list|get|quarantine|approve|revoke|auth-profile|authorize-call> [flags]")
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel mcp <serve|install|pack|print-config|scan|wrap|proof|list|get|quarantine|approve|revoke|auth-profile|authorize-call> [flags]")
 		fmt.Fprintln(stdout, "")
 		fmt.Fprintln(stdout, "Subcommands:")
 		fmt.Fprintln(stdout, "  serve         Start the HELM MCP server (stdio or remote HTTP)")
@@ -80,6 +83,7 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "  print-config  Print MCP config for a specific client")
 		fmt.Fprintln(stdout, "  scan          Static scan of an MCP tool catalog for DDIPE / typosquat / suspicious patterns")
 		fmt.Fprintln(stdout, "  wrap          Emit a clean-room execution-firewall wrapper profile for an upstream MCP server")
+		fmt.Fprintln(stdout, "  proof         Emit a no-dispatch MCP quarantine proof EvidencePack")
 		fmt.Fprintln(stdout, "  list          List local MCP registry records")
 		fmt.Fprintln(stdout, "  get           Get one MCP registry record")
 		fmt.Fprintln(stdout, "  quarantine    List Launchpad MCP threat reviews and quarantined tools")

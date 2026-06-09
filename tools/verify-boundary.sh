@@ -18,7 +18,7 @@ echo "════════════════════════�
 echo ""
 
 # ── Detect which repo we're in ───────────────────────────
-LOCK_FILE="$REPO_ROOT/tools/oss.lock"
+LOCK_FILE="$REPO_ROOT/tools/helm-ai-kernel.lock"
 MANIFEST="$REPO_ROOT/tools/boundary/protected.manifest"
 
 if [ -f "$LOCK_FILE" ]; then
@@ -27,7 +27,7 @@ elif [ -f "$MANIFEST" ]; then
   MODE="oss"
 else
   echo "ERROR: Cannot detect repo type."
-  echo "  Expected tools/oss.lock (commercial) or tools/boundary/protected.manifest (OSS)."
+  echo "  Expected tools/helm-ai-kernel.lock (commercial) or tools/boundary/protected.manifest (OSS)."
   exit 1
 fi
 
@@ -56,7 +56,7 @@ if [ "$MODE" = "commercial" ]; then
     echo "    Run 'tools/sync-oss-kernel.sh' to resync."
     exit 1
   fi
-  echo "  ✓ Manifest hash matches oss.lock"
+  echo "  ✓ Manifest hash matches helm-ai-kernel.lock"
 
   # Verify each file from manifest
   PASS=0

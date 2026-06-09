@@ -51,7 +51,8 @@ jobs:
           expected = status.get("expected_version", "unknown")
           generated_at = status.get("generated_at", "unknown")
           registries = status.get("registry_versions", [])
-          failing = [item for item in registries if item.get("status") != "pass"]
+          failing = [item for item in registries if item.get("status") != "pass" and item.get("blocking", True)]
+          advisory = [item for item in registries if item.get("status") != "pass" and not item.get("blocking", True)]
           passing = [item for item in registries if item.get("status") == "pass"]
 
           def value_text(value):
@@ -66,10 +67,25 @@ jobs:
           print(f"Workflow run: {os.environ['RUN_URL']}")
           print(f"Generated at: `{generated_at}`")
           print()
-          print("## Failing published channels")
+          print("## Failing blocking published channels")
           print()
           if failing:
               for item in failing:
+                  detail = item.get("detail")
+                  suffix = f" ({detail})" if detail else ""
+                  print(
+                      f"- `{item.get('id', 'unknown')}`: expected {value_text(item.get('expected'))}, "
+                      f"actual {value_text(item.get('actual'))}{suffix}"
+                  )
+                  if item.get("url"):
+                      print(f"  {item['url']}")
+          else:
+              print("- None")
+          print()
+          print("## Advisory published channels")
+          print()
+          if advisory:
+              for item in advisory:
                   detail = item.get("detail")
                   suffix = f" ({detail})" if detail else ""
                   print(

@@ -519,6 +519,9 @@
       "human_url": "https://helm.docs.mindburn.org/helm-ai-kernel/developer-journey",
       "contains": [
         "io.github.mindburnlabs:helm-sdk:{version}"
+      ],
+      "rejects": [
+        "io.github.mindburnlabs:helm-sdk:0.5.2"
       ]
     },
     {
@@ -529,6 +532,10 @@
       "contains": [
         "io.github.mindburnlabs:helm-sdk:{version}",
         "version-status.json"
+      ],
+      "rejects": [
+        "source manifest currently declares",
+        "io.github.mindburnlabs:helm-sdk:0.5.2"
       ]
     },
     {
@@ -538,6 +545,10 @@
       "human_url": "https://helm.docs.mindburn.org/helm-ai-kernel/examples",
       "contains": [
         "io.github.mindburnlabs:helm-sdk:{version}"
+      ],
+      "rejects": [
+        "artifact is source-backed but not registry-backed",
+        "avoid claiming Maven Central availability"
       ]
     }
   ],

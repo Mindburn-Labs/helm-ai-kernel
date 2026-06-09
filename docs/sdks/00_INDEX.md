@@ -145,7 +145,7 @@ Use the verified Maven Central coordinate:
 <dependency>
   <groupId>io.github.mindburnlabs</groupId>
   <artifactId>helm-sdk</artifactId>
-  <version>0.5.2</version>
+  <version>0.5.10</version>
 </dependency>
 ```
 

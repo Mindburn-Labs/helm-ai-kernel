@@ -289,8 +289,13 @@ def check_http_contains(surface: dict[str, Any], version: str) -> SurfaceResult:
     text = request_text(url)
     expected = [fmt(str(token), version) for token in surface.get("contains", ["{version}"])]
     missing = [token for token in expected if token not in text]
-    actual = {"found": [token for token in expected if token not in missing], "missing": missing}
-    return SurfaceResult(surface["id"], "pass" if not missing else "fail", expected, actual, url=fmt(surface.get("human_url", url), version), blocking=is_blocking(surface))
+    rejected = [fmt(str(token), version) for token in surface.get("rejects", []) if fmt(str(token), version) in text]
+    actual = {
+        "found": [token for token in expected if token not in missing],
+        "missing": missing,
+        "rejected_found": rejected,
+    }
+    return SurfaceResult(surface["id"], "pass" if not missing and not rejected else "fail", expected, actual, url=fmt(surface.get("human_url", url), version), blocking=is_blocking(surface))
 
 
 def check_pkg_go_dev(surface: dict[str, Any], version: str) -> SurfaceResult:

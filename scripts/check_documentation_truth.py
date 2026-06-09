@@ -224,6 +224,33 @@ def validate_sdk_freshness_docs(failures: list[str]) -> None:
         'artifact is source-backed but not registry-backed': 'contradictory Java registry status',
         'avoid claiming Maven Central availability': 'contradictory Java Maven Central guidance',
     }
+    sdk_version_claims = [
+        (
+            'Java Maven coordinate',
+            re.compile(r'io\.github\.mindburnlabs:helm-sdk:(?P<version>[0-9]+\.[0-9]+\.[0-9]+)'),
+        ),
+        (
+            'Java Maven dependency',
+            re.compile(
+                r'<groupId>io\.github\.mindburnlabs</groupId>\s*'
+                r'<artifactId>helm-sdk</artifactId>\s*'
+                r'<version>(?P<version>[0-9]+\.[0-9]+\.[0-9]+)</version>',
+                re.MULTILINE,
+            ),
+        ),
+        (
+            'Python pinned install',
+            re.compile(r'helm-sdk(?:==|~=|>=|<=|=)(?P<version>[0-9]+\.[0-9]+\.[0-9]+)'),
+        ),
+        (
+            'npm pinned install',
+            re.compile(r'@mindburn/helm-ai-kernel@(?P<version>[0-9]+\.[0-9]+\.[0-9]+)'),
+        ),
+        (
+            'Cargo pinned dependency',
+            re.compile(r'helm-sdk\s*=\s*"(?P<version>[0-9]+\.[0-9]+\.[0-9]+)"'),
+        ),
+    ]
     for path in docs_to_scan:
         if not path.exists():
             failures.append(f'{path.relative_to(ROOT)} is missing from SDK freshness docs check')
@@ -232,6 +259,14 @@ def validate_sdk_freshness_docs(failures: list[str]) -> None:
         for pattern, detail in stale_patterns.items():
             if pattern in text:
                 failures.append(f'{path.relative_to(ROOT)} contains {detail}: {pattern!r}')
+        for claim_name, claim_pattern in sdk_version_claims:
+            for match in claim_pattern.finditer(text):
+                found_version = match.group('version')
+                if found_version != version:
+                    failures.append(
+                        f'{path.relative_to(ROOT)} contains stale {claim_name}: '
+                        f'{found_version} != {version}'
+                    )
 
     developer_journey = ROOT / 'docs' / 'DEVELOPER_JOURNEY.md'
     sdk_index = ROOT / 'docs' / 'sdks' / '00_INDEX.md'

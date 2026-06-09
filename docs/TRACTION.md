@@ -11,6 +11,18 @@ Primary objective: drive verified adoption of HELM AI Kernel as the local-first 
 
 Primary conversion: visitor -> install -> run boundary -> trigger DENY or ESCALATE -> inspect signed receipt -> verify EvidencePack offline -> star, follow, discuss, or contribute.
 
+## Adoption Path
+
+```mermaid
+flowchart LR
+    Visitor["Visitor"] --> Install["Install or clone"]
+    Install --> Boundary["Run local boundary"]
+    Boundary --> Verdict["Trigger DENY or ESCALATE"]
+    Verdict --> Receipt["Inspect signed receipt"]
+    Receipt --> EvidencePack["Verify EvidencePack offline"]
+    EvidencePack --> Community["Star, discuss, or contribute"]
+```
+
 ## Canonical Positioning
 
 - Public OSS name: HELM AI Kernel.

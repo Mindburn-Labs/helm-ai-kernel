@@ -15,6 +15,8 @@ specific GitHub release attached a matching asset.
 | `stage_release_assets.sh` | Stages the complete release asset directory, including exact tag OpenVEX, verified EvidencePack, sample policy material, attestation, Homebrew formula, and checksums. | `make release-assets`, release workflow. |
 | `verify_cosign.sh` | Verifies local artifacts that have adjacent `*.cosign.bundle` files. | `make verify-cosign`, manual verification. |
 | `distribute.sh` | Legacy/manual multi-package publication helper. | Manual only; do not treat as automatic release proof. |
+| `check_version_drift.py` | Checks local source versions and published release channels with bounded per-surface requests. | `make version-drift`, `make version-drift-published`, scheduled monitor. |
+| `check_version_drift_test.py` | Self-test for required published-channel coverage and drift-monitor error shaping. | Manual validation for release monitor edits. |
 
 ## Validation
 
@@ -24,6 +26,7 @@ make sbom
 make vex
 make release-assets
 bash scripts/release/verify_cosign.sh ./downloaded-release
+python3 scripts/release/check_version_drift_test.py
 make docs-coverage docs-truth
 ```
 

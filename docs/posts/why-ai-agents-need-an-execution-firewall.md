@@ -47,3 +47,10 @@ bash scripts/launch/demo-proof.sh
 
 Star the repo if you want to follow the MCP execution-firewall roadmap:
 <https://github.com/Mindburn-Labs/helm-ai-kernel>
+
+## Source Truth
+
+- [Quickstart](../QUICKSTART.md)
+- [Execution security model](../EXECUTION_SECURITY_MODEL.md)
+- [MCP integration](../INTEGRATIONS/mcp.md)
+- [Verification](../VERIFICATION.md)

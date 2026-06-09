@@ -47,3 +47,10 @@ Use the pattern when integrating agent frameworks, MCP servers, or
 OpenAI-compatible clients: intercept before dispatch, bind approval to the
 schema and identity you inspected, emit a receipt, and verify the evidence
 offline.
+
+## Source Truth
+
+- [MCP integration](../INTEGRATIONS/mcp.md)
+- [Execution security model](../EXECUTION_SECURITY_MODEL.md)
+- [Verification](../VERIFICATION.md)
+- [MCP launch demo](../../scripts/launch/demo-mcp.sh)

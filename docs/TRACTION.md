@@ -32,7 +32,7 @@ flowchart LR
 - Short description: Fail-closed execution firewall for AI agents: quarantine MCP tools, proxy OpenAI-compatible requests, emit signed receipts, and verify EvidencePacks offline.
 - Proof vocabulary: signed receipts, EvidencePack, ProofGraph, offline verification, ALLOW, DENY, ESCALATE.
 
-Avoid `HELM OSS`, `helm-oss`, `HELM Teams`, generic AI governance platform language, hosted-control-plane claims for Kernel, certification claims, or Enterprise features framed as Kernel features.
+Avoid stale product-family names, generic AI governance platform language, hosted-control-plane claims for Kernel, certification claims, or Enterprise features framed as Kernel features.
 
 ## GitHub Metadata
 
@@ -202,8 +202,8 @@ Engagement:
 
 Commercial bridge:
 
-- HELM AI Enterprise Basic interest CTA clicks
-- docs path from Kernel to Basic
+- HELM AI Enterprise Individual interest CTA clicks
+- docs path from Kernel to Individual
 - inbound team-use requests
 
 GitHub traffic windows are short, so export private analytics daily, publish a weekly channel cohort report, keep a launch-post UTM map, and log README hook changes.
@@ -212,7 +212,7 @@ GitHub traffic windows are short, so export private analytics daily, publish a w
 
 Run this checklist before publishing README edits, launch posts, diagrams, videos, social previews, and website copy:
 
-- Uses HELM AI Kernel, not HELM OSS as the current public name.
+- Uses HELM AI Kernel as the current public name.
 - Mentions not Kubernetes Helm when context is introductory.
 - Uses signed receipts, EvidencePack, and ProofGraph exactly.
 - Uses ALLOW, DENY, and ESCALATE.
@@ -220,7 +220,7 @@ Run this checklist before publishing README edits, launch posts, diagrams, video
 - Does not claim a hosted control plane for OSS Kernel.
 - Does not claim certification unless certification exists.
 - Does not describe Enterprise features as Kernel features.
-- Does not imply Basic or Enterprise weakens or forks Kernel semantics.
+- Does not imply Individual or Enterprise weakens or forks Kernel semantics.
 - Does not mention robot fleets, AGI OS, OrgDNA compiler, Titan, or physical-world control in OSS copy.
 
 ## Diagram Doctrine
@@ -258,8 +258,16 @@ Use this bridge after local Kernel proof:
 
 ```text
 Try HELM AI Kernel locally.
-Use HELM AI Enterprise Basic for shared approvals, receipts, policies, and short-retention evidence.
+Use HELM AI Enterprise Individual for shared approvals, receipts, policies, and short-retention evidence.
 Talk to Mindburn Labs about production execution authority.
 ```
 
-HELM AI Enterprise Basic gives teams a shared control plane for governed AI actions: workspaces, approvals, receipts, API access, custom policies, and short-retention evidence, all built on HELM AI Kernel.
+HELM AI Enterprise Individual gives operators a shared control plane for governed AI actions: workspaces, approvals, receipts, API access, custom policies, and short-retention evidence, all built on HELM AI Kernel.
+
+## Source Truth
+
+- [Quickstart](QUICKSTART.md)
+- [Developer journey](DEVELOPER_JOURNEY.md)
+- [Execution security model](EXECUTION_SECURITY_MODEL.md)
+- [Publishing runbook](PUBLISHING.md)
+- [Version surfaces contract](../release/version-surfaces.yaml)

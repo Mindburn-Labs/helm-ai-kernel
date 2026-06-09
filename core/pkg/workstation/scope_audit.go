@@ -604,9 +604,9 @@ func (b *scopeAuditBuilder) finish() ScopeAuditReport {
 	b.report.GeneratedAt = b.generatedAt.UTC()
 	for _, boundary := range scopeAuditBoundaries {
 		summary := b.boundary(boundary)
-		summary.EffectTypes = sortedStrings(summary.EffectTypes)
-		summary.ReceiptRefs = sortedStrings(summary.ReceiptRefs)
-		summary.ReasonCodes = sortedStrings(summary.ReasonCodes)
+		summary.EffectTypes = nonNilSlice(sortedStrings(summary.EffectTypes))
+		summary.ReceiptRefs = nonNilSlice(sortedStrings(summary.ReceiptRefs))
+		summary.ReasonCodes = nonNilSlice(sortedStrings(summary.ReasonCodes))
 		b.report.Boundaries = append(b.report.Boundaries, *summary)
 	}
 	sort.SliceStable(b.report.OutOfScopeAttempts, func(i, j int) bool {
@@ -638,6 +638,14 @@ func (b *scopeAuditBuilder) finish() ScopeAuditReport {
 	b.report.Summary.MemoryWrites = len(b.report.MemoryWrites)
 	b.report.Summary.RecurringLoops = len(b.report.RecurringLoops)
 	b.report.Summary.HighImpactMetadata = len(b.report.HighImpactMetadata)
+	b.report.Boundaries = nonNilSlice(b.report.Boundaries)
+	b.report.OutOfScopeAttempts = nonNilSlice(b.report.OutOfScopeAttempts)
+	b.report.MissingControls = nonNilSlice(b.report.MissingControls)
+	b.report.MemoryWrites = nonNilSlice(b.report.MemoryWrites)
+	b.report.RecurringLoops = nonNilSlice(b.report.RecurringLoops)
+	b.report.HighImpactMetadata = nonNilSlice(b.report.HighImpactMetadata)
+	b.report.EvidenceRefs = nonNilSlice(b.report.EvidenceRefs)
+	b.report.Limitations = nonNilSlice(b.report.Limitations)
 	return b.report
 }
 
@@ -852,6 +860,13 @@ func appendUnique(values []string, value string) []string {
 		}
 	}
 	return append(values, value)
+}
+
+func nonNilSlice[T any](values []T) []T {
+	if values == nil {
+		return []T{}
+	}
+	return values
 }
 
 func sortKey(t time.Time, parts ...string) string {

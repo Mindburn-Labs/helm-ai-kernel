@@ -43,6 +43,12 @@ The sample policy material archive contains `release.high_risk.v3.toml` and
 `reference_packs/eu_ai_act_high_risk.v1.json`. The GitHub release workflow
 attaches `*.cosign.bundle` files generated for each primary asset.
 
+Agent Scope Audit is a CLI/reporting surface. A release that includes it should
+mention `helm-ai-kernel audit scope` in release notes and docs, but it does not
+change the Homebrew formula contract, platform binary list, SBOM/OpenVEX shape,
+release attestation shape, EvidencePack release asset, or Kubernetes Helm chart
+runtime behavior unless a future API route is added.
+
 ## Validation
 
 ```bash

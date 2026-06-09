@@ -386,7 +386,8 @@
         "docker-compose.yml",
         "sdk/README.md",
         "sdk/*/**",
-        "packages/README.md"
+        "packages/README.md",
+        "packages/design-system-core/package.json"
       ],
       "owner_doc_path": "examples/README.md",
       "public_doc_slugs": [
@@ -472,14 +473,27 @@
       "label": "Public docs, compliance notes, architecture notes, internal strategy notes, and generated docs ledgers",
       "classification": "public-hub",
       "source_patterns": [
+        "COMMUNITY.md",
         "docs/**"
       ],
       "owner_doc_path": "docs/README.md",
       "public_doc_slugs": [
         "helm-ai-kernel",
+        "helm-ai-kernel/community",
+        "helm-ai-kernel/ecosystem",
+        "helm-ai-kernel/oss-traction",
         "helm-ai-kernel/source-map",
         "helm-ai-kernel/quickstart",
         "helm-ai-kernel/compatibility",
+        "helm-ai-kernel/use-cases/mcp-execution-firewall",
+        "helm-ai-kernel/use-cases/ai-agent-security",
+        "helm-ai-kernel/use-cases/openai-compatible-ai-gateway-policy",
+        "helm-ai-kernel/use-cases/llm-audit-receipts",
+        "helm-ai-kernel/use-cases/agent-tool-call-governance",
+        "helm-ai-kernel/posts/why-ai-agents-need-an-execution-firewall",
+        "helm-ai-kernel/posts/mcp-quarantine-before-tool-dispatch",
+        "helm-ai-kernel/posts/receipts-beat-logs-for-agent-audit-trails",
+        "helm-ai-kernel/posts/how-to-fail-closed-on-agent-tool-calls",
         "helm-ai-kernel/owasp-mcp-threat-mapping",
         "helm-ai-kernel/integrations/microsoft-agent-governance-toolkit",
         "helm-ai-kernel/security/owasp-agentic-top10-mapping",

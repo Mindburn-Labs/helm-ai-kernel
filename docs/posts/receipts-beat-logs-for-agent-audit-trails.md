@@ -15,6 +15,18 @@ HELM AI Kernel emits signed receipts for execution-boundary decisions. The
 local proof demo creates a signed DENY receipt, verifies it, then submits a
 flipped-verdict copy and confirms the tamper attempt fails verification.
 
+## Receipt Evidence Path
+
+```mermaid
+flowchart LR
+    Request["Tool-call request"] --> Decision["ALLOW, DENY, or ESCALATE"]
+    Decision --> Receipt["Signed receipt"]
+    Receipt --> EvidencePack["EvidencePack"]
+    EvidencePack --> Verify["Offline verifier"]
+    Receipt --> Tamper["Tampered copy"]
+    Tamper --> Reject["Verification failure"]
+```
+
 ![HELM MCP quarantine and receipt proof board](../assets/helm-mcp-quarantine-demo.svg)
 
 A useful agent receipt should make these checks boring:

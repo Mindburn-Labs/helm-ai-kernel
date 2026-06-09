@@ -7,6 +7,17 @@ last_reviewed: 2026-06-01
 
 HELM AI Kernel documents this search intent with a local, source-backed proof path.
 
+## Audit Receipt Chain
+
+```mermaid
+flowchart LR
+    Request["LLM action request"] --> Verdict["Boundary verdict"]
+    Verdict --> Receipt["Signed receipt"]
+    Receipt --> Hash["Receipt hash"]
+    Hash --> EvidencePack["EvidencePack"]
+    EvidencePack --> Auditor["Auditor verification"]
+```
+
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
 cd helm-ai-kernel

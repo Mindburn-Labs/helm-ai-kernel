@@ -4,6 +4,17 @@ HELM AI Kernel is open for developers who care about AI agent security, MCP tool
 
 Star the repo to follow the MCP execution-firewall roadmap: <https://github.com/Mindburn-Labs/helm-ai-kernel/stargazers>
 
+## Contribution Flow
+
+```mermaid
+flowchart LR
+    Interest["Contributor interest"] --> ProofPath["Run local proof path"]
+    ProofPath --> Lane["Pick a contribution lane"]
+    Lane --> Fixture["Add docs, fixture, SDK, or receipt proof"]
+    Fixture --> Validation["Run focused validation"]
+    Validation --> Review["Open PR with evidence"]
+```
+
 ## Start Here
 
 - Run the local proof path: [Quickstart](docs/QUICKSTART.md).

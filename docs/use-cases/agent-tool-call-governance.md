@@ -7,6 +7,17 @@ last_reviewed: 2026-06-01
 
 HELM AI Kernel documents this search intent with a local, source-backed proof path.
 
+## Governance Path
+
+```mermaid
+flowchart LR
+    Agent["Agent request"] --> Boundary["HELM boundary"]
+    Boundary --> Policy["Policy evaluation"]
+    Policy --> Verdict["ALLOW, DENY, or ESCALATE"]
+    Verdict --> Receipt["Signed receipt"]
+    Receipt --> Audit["Audit and replay"]
+```
+
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
 cd helm-ai-kernel

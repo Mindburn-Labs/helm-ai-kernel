@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-08T17:23:34Z
-# Commit: 42c72213a5bf143f144f74bf46c1bfb7c1bee87e
+# Generated: 2026-06-09T13:58:49Z
+# Commit: 6f9ca5113c029b0e29cc2fa1848f96e7fbbf463e
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -173,11 +173,12 @@ e0ae0eb682c07e6b3930c057a22a476292ab270ef7f88d7ab24f095d83396451  core/pkg/contr
 04789aa50c575ea248b48a67c809e4033fdf7dd593032f3951632ad8373fcad4  core/pkg/contracts/envelope.go
 83733b8d1e6ee7b36057fab206040881034b5c93269ad1ee7badb322e02f18be  core/pkg/contracts/environment.go
 29fb8357a183f42b696f621244d0da1caff47c8394f50229bb622f32f1fe9189  core/pkg/contracts/escalation.go
-8ccefc28f8b1bc7373078e66048907aa230665058b6af3494ae2a6e40b57205d  core/pkg/contracts/evidence.go
+4b7a8f576110f8f9694356a7d25c5f70e71e2eae4b6bd407290c1d433b3e9b36  core/pkg/contracts/evidence.go
 822659c2ae440760972208d96ff03ed168d6d9fb422b99fe37a56b0e961e912b  core/pkg/contracts/evidence_ai_act_validation.go
 8586d6893b4f3bd452c20bb4cfaa0f7e61eba33948af2323793696dc9cbbae43  core/pkg/contracts/evidence_contract.go
 d29fe1bb678b79cb4e7e1f7531396c71354389fa10fd4ce024fafe3196fb30c3  core/pkg/contracts/evidence_eu_ai_act_test.go
 b2f4075709b2d09edb2b245e5d8cd1097bbb63fdc4291c37522eb5b69ed6b507  core/pkg/contracts/evidence_pack_single_source_test.go
+4f436de6d176339bedbe736e71343e0df2e9403e7f7fb30124cf3d6f808cce75  core/pkg/contracts/evidence_security_finding_test.go
 2520eb2f9cf233d2ffa977ba7537f02912ad50e6939626448c8df82372f129a8  core/pkg/contracts/execution_boundary.go
 1dd110c768d83d94b4c9e1805911595a9acd0ed7ae9e20633a5866e0790ff483  core/pkg/contracts/execution_boundary_test.go
 18f026d4224115c4eba1c4d17f2cec94d3d1fe3a0ce24255e2c66d39917fb4b7  core/pkg/contracts/extended2_test.go

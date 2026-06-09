@@ -39,6 +39,9 @@ type EvidencePack struct {
 	// Threat Scan Evidence
 	ThreatScan *ThreatScanRef `json:"threat_scan,omitempty"`
 
+	// SecurityFindings bind vulnerability lifecycle evidence to this pack.
+	SecurityFindings []SecurityFindingRef `json:"security_findings,omitempty"`
+
 	// Verification scope records what the verification did and did not cover.
 	VerificationScopes []VerificationScope `json:"verification_scopes,omitempty"`
 
@@ -57,6 +60,21 @@ type EvidencePack struct {
 	PortExposures  []PortExposureRef  `json:"port_exposures,omitempty"`
 	GitDiffs       []GitDiffRef       `json:"git_diffs,omitempty"`
 	ReplayManifest *ReplayManifestRef `json:"replay_manifest,omitempty"`
+}
+
+// SecurityFindingRef links a HELM-owned vulnerability lifecycle record to an
+// EvidencePack without making scanner output the source of truth.
+type SecurityFindingRef struct {
+	FindingID          string   `json:"finding_id"`
+	State              string   `json:"state"`
+	EventHash          string   `json:"event_hash"`
+	ThreatModelRef     string   `json:"threat_model_ref,omitempty"`
+	SandboxReceiptRef  string   `json:"sandbox_receipt_ref,omitempty"`
+	VerifierRef        string   `json:"verifier_ref,omitempty"`
+	PatchRef           string   `json:"patch_ref,omitempty"`
+	RegressionTestRef  string   `json:"regression_test_ref,omitempty"`
+	VariantScanRef     string   `json:"variant_scan_ref,omitempty"`
+	LifecycleEventRefs []string `json:"lifecycle_event_refs,omitempty"`
 }
 
 // VerificationScope records verification coverage and residual risk.

@@ -12,25 +12,100 @@ fi
 LOG_DIR="${HELM_LAUNCH_READY_LOG_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/helm-launch-ready.XXXXXX")}"
 mkdir -p "$LOG_DIR"
 LAUNCH_TARGET_VERSION="${HELM_LAUNCH_TARGET_VERSION:-$(cat VERSION)}"
+MIN_GO_VERSION="$(awk '/^go / {print $2; exit}' core/go.mod)"
 
-declare -A STATUS
-declare -A DETAIL
+go_version_ok() {
+  local bin="$1"
+  local version
+  version="$("$bin" version 2>/dev/null | awk '{print $3}' | sed 's/^go//')" || return 1
+  if [[ -z "$version" ]]; then
+    return 1
+  fi
+  python3 - "$MIN_GO_VERSION" "$version" <<'PY'
+import sys
+
+required = [int(part) for part in sys.argv[1].split(".")]
+actual = [int(part) for part in sys.argv[2].split(".")]
+while len(required) < 3:
+    required.append(0)
+while len(actual) < 3:
+    actual.append(0)
+raise SystemExit(0 if actual >= required else 1)
+PY
+}
+
+select_go_bin() {
+  local candidate
+  if [[ -n "${HELM_GO_BIN:-}" ]]; then
+    if [[ -x "$HELM_GO_BIN" ]] && go_version_ok "$HELM_GO_BIN"; then
+      printf '%s\n' "$HELM_GO_BIN"
+      return 0
+    fi
+    printf 'HELM_GO_BIN does not point to Go >= %s: %s\n' "$MIN_GO_VERSION" "$HELM_GO_BIN" >&2
+    return 1
+  fi
+
+  for candidate in /usr/local/go/bin/go /opt/homebrew/bin/go "$(command -v go 2>/dev/null || true)"; do
+    if [[ -n "$candidate" && -x "$candidate" ]] && go_version_ok "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  printf 'Go >= %s is required for launch readiness.\n' "$MIN_GO_VERSION" >&2
+  return 1
+}
+
+if ! GO_BIN="$(select_go_bin)"; then
+  exit 1
+fi
+export PATH="$(dirname "$GO_BIN"):$PATH"
+unset GOROOT
+printf 'Using Go: %s\n' "$("$GO_BIN" version)"
+
 ORDER=()
+STATUS=()
+DETAIL=()
+
+lookup_index() {
+  local wanted="$1"
+  local i
+  for i in "${!ORDER[@]}"; do
+    if [[ "${ORDER[$i]}" == "$wanted" ]]; then
+      printf '%s\n' "$i"
+      return 0
+    fi
+  done
+  return 1
+}
+
+status_for() {
+  local idx
+  idx="$(lookup_index "$1")"
+  printf '%s' "${STATUS[$idx]}"
+}
+
+detail_for() {
+  local idx
+  idx="$(lookup_index "$1")"
+  printf '%s' "${DETAIL[$idx]}"
+}
 
 record() {
   local key="$1"
   local label="$2"
   local command="$3"
   local log="$LOG_DIR/${key}.log"
-  ORDER+=("$key")
+  local idx="${#ORDER[@]}"
+  ORDER[$idx]="$key"
   printf '==> %s\n' "$label"
   if bash -c "$command" >"$log" 2>&1; then
-    STATUS["$key"]="x"
-    DETAIL["$key"]="$label"
+    STATUS[$idx]="x"
+    DETAIL[$idx]="$label"
     printf '    ok\n'
   else
-    STATUS["$key"]=" "
-    DETAIL["$key"]="$label (see $log)"
+    STATUS[$idx]=" "
+    DETAIL[$idx]="$label (see $log)"
     printf '    failed (see %s)\n' "$log"
   fi
 }
@@ -52,8 +127,8 @@ record docs_sync "Docs Sync: docs-coverage and docs-truth checks pass." "make do
 record release "Release: Dry-run release script confirms artifacts can be generated." "make launch-release-dry-run"
 
 final_state="READY"
-for key in "${ORDER[@]}"; do
-  if [[ "${STATUS[$key]}" != "x" ]]; then
+for idx in "${!ORDER[@]}"; do
+  if [[ "${STATUS[$idx]}" != "x" ]]; then
     final_state="NOT READY"
     break
   fi
@@ -72,23 +147,23 @@ Verification logs are emitted by the tool for each run and are intentionally
 not committed to the repository.
 
 ## Phase 0: Boundary Hardening
-- [${STATUS[pr_boundary]}] **${DETAIL[pr_boundary]}**
-- [${STATUS[terminology_boundary]}] **${DETAIL[terminology_boundary]}**
-- [${STATUS[version]}] **${DETAIL[version]}**
-- [${STATUS[homebrew]}] **${DETAIL[homebrew]}**
+- [$(status_for pr_boundary)] **$(detail_for pr_boundary)**
+- [$(status_for terminology_boundary)] **$(detail_for terminology_boundary)**
+- [$(status_for version)] **$(detail_for version)**
+- [$(status_for homebrew)] **$(detail_for homebrew)**
 
 ## Phase 1: Implementation & Proof
-- [${STATUS[build]}] **${DETAIL[build]}**
-- [${STATUS[test]}] **${DETAIL[test]}**
-- [${STATUS[demos]}] **${DETAIL[demos]}**
-- [${STATUS[mcp]}] **${DETAIL[mcp]}**
-- [${STATUS[proxy]}] **${DETAIL[proxy]}**
-- [${STATUS[proof]}] **${DETAIL[proof]}**
+- [$(status_for build)] **$(detail_for build)**
+- [$(status_for test)] **$(detail_for test)**
+- [$(status_for demos)] **$(detail_for demos)**
+- [$(status_for mcp)] **$(detail_for mcp)**
+- [$(status_for proxy)] **$(detail_for proxy)**
+- [$(status_for proof)] **$(detail_for proof)**
 
 ## Phase 2: Community & Release
-- [${STATUS[issue_templates]}] **${DETAIL[issue_templates]}**
-- [${STATUS[docs_sync]}] **${DETAIL[docs_sync]}**
-- [${STATUS[release]}] **${DETAIL[release]}**
+- [$(status_for issue_templates)] **$(detail_for issue_templates)**
+- [$(status_for docs_sync)] **$(detail_for docs_sync)**
+- [$(status_for release)] **$(detail_for release)**
 
 ## Final Status
 **CURRENT STATE: $final_state**

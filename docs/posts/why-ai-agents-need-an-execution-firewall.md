@@ -15,6 +15,19 @@ intercepts proposed tool calls, evaluates policy before dispatch, records
 ALLOW, DENY, or ESCALATE decisions, and emits signed receipts that can be
 verified offline.
 
+## Execution Firewall Flow
+
+```mermaid
+flowchart LR
+    Agent["AI agent"] --> Proposal["Proposed side effect"]
+    Proposal --> Kernel["HELM AI Kernel"]
+    Kernel --> Policy["Policy and schema evaluation"]
+    Policy --> Verdict["ALLOW, DENY, or ESCALATE"]
+    Verdict --> Dispatch["Dispatch only when allowed"]
+    Verdict --> Receipt["Signed receipt"]
+    Receipt --> Verifier["Offline verification"]
+```
+
 ![HELM MCP quarantine and receipt proof board](../assets/helm-mcp-quarantine-demo.svg)
 
 The key idea is simple: the agent can propose, but HELM decides whether the
@@ -34,3 +47,10 @@ bash scripts/launch/demo-proof.sh
 
 Star the repo if you want to follow the MCP execution-firewall roadmap:
 <https://github.com/Mindburn-Labs/helm-ai-kernel>
+
+## Source Truth
+
+- [Quickstart](../QUICKSTART.md)
+- [Execution security model](../EXECUTION_SECURITY_MODEL.md)
+- [MCP integration](../INTEGRATIONS/mcp.md)
+- [Verification](../VERIFICATION.md)

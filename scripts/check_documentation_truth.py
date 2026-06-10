@@ -205,6 +205,85 @@ def validate_source_inventory(failures: list[str], public_slugs: set[str]) -> No
         failures.append(f'docs/source-inventory.manifest.json does not link required runtime reference slug: {slug}')
 
 
+def validate_sdk_freshness_docs(failures: list[str]) -> None:
+    version_path = ROOT / 'VERSION'
+    if not version_path.exists():
+        failures.append('VERSION is missing; SDK freshness docs cannot be checked')
+        return
+    version = read_text(version_path).strip()
+    java_coordinate = f'io.github.mindburnlabs:helm-sdk:{version}'
+
+    docs_to_scan = [
+        ROOT / 'docs' / 'DEVELOPER_JOURNEY.md',
+        ROOT / 'docs' / 'sdks' / '00_INDEX.md',
+        ROOT / 'docs' / 'EXAMPLES.md',
+    ]
+    stale_patterns = {
+        'source manifest currently declares `0.5.1`': 'stale SDK source manifest version',
+        'io.github.mindburnlabs:helm-sdk:0.5.2': 'stale Java Maven coordinate',
+        'artifact is source-backed but not registry-backed': 'contradictory Java registry status',
+        'avoid claiming Maven Central availability': 'contradictory Java Maven Central guidance',
+    }
+    sdk_version_claims = [
+        (
+            'Java Maven coordinate',
+            re.compile(r'io\.github\.mindburnlabs:helm-sdk:(?P<version>[0-9]+\.[0-9]+\.[0-9]+)'),
+        ),
+        (
+            'Java Maven dependency',
+            re.compile(
+                r'<groupId>io\.github\.mindburnlabs</groupId>\s*'
+                r'<artifactId>helm-sdk</artifactId>\s*'
+                r'<version>(?P<version>[0-9]+\.[0-9]+\.[0-9]+)</version>',
+                re.MULTILINE,
+            ),
+        ),
+        (
+            'Python pinned install',
+            re.compile(r'helm-sdk(?:==|~=|>=|<=|=)(?P<version>[0-9]+\.[0-9]+\.[0-9]+)'),
+        ),
+        (
+            'npm pinned install',
+            re.compile(r'@mindburn/helm-ai-kernel@(?P<version>[0-9]+\.[0-9]+\.[0-9]+)'),
+        ),
+        (
+            'Cargo pinned dependency',
+            re.compile(r'helm-sdk\s*=\s*"(?P<version>[0-9]+\.[0-9]+\.[0-9]+)"'),
+        ),
+    ]
+    for path in docs_to_scan:
+        if not path.exists():
+            failures.append(f'{path.relative_to(ROOT)} is missing from SDK freshness docs check')
+            continue
+        text = read_text(path)
+        for pattern, detail in stale_patterns.items():
+            if pattern in text:
+                failures.append(f'{path.relative_to(ROOT)} contains {detail}: {pattern!r}')
+        for claim_name, claim_pattern in sdk_version_claims:
+            for match in claim_pattern.finditer(text):
+                found_version = match.group('version')
+                if found_version != version:
+                    failures.append(
+                        f'{path.relative_to(ROOT)} contains stale {claim_name}: '
+                        f'{found_version} != {version}'
+                    )
+
+    developer_journey = ROOT / 'docs' / 'DEVELOPER_JOURNEY.md'
+    sdk_index = ROOT / 'docs' / 'sdks' / '00_INDEX.md'
+    examples = ROOT / 'docs' / 'EXAMPLES.md'
+
+    if developer_journey.exists() and java_coordinate not in read_text(developer_journey):
+        failures.append(f'docs/DEVELOPER_JOURNEY.md is missing current Java coordinate {java_coordinate}')
+    if sdk_index.exists():
+        sdk_text = read_text(sdk_index)
+        if java_coordinate not in sdk_text:
+            failures.append(f'docs/sdks/00_INDEX.md is missing current Java coordinate {java_coordinate}')
+        if 'version-status.json' not in sdk_text and 'make version-drift-published' not in sdk_text:
+            failures.append('docs/sdks/00_INDEX.md must point pinned install claims at version-status.json or make version-drift-published')
+    if examples.exists() and java_coordinate not in read_text(examples):
+        failures.append(f'docs/EXAMPLES.md is missing current Java coordinate {java_coordinate}')
+
+
 def main() -> int:
     coverage = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'check_documentation_coverage.py')], cwd=ROOT)
     if coverage.returncode != 0:
@@ -240,6 +319,8 @@ def main() -> int:
         for module in ('google.golang.org/grpc', 'google.golang.org/protobuf'):
             if module not in sdk_text:
                 failures.append(f'sdk/go/go.mod is missing standalone generated SDK dependency {module}')
+
+    validate_sdk_freshness_docs(failures)
 
     for row in rows:
         source = ROOT if row['source_path'] == '.' else ROOT / row['source_path']

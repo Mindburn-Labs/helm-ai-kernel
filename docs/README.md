@@ -63,6 +63,7 @@ This tree is the canonical public documentation source for HELM AI Kernel. Publi
 ## Security And Compliance
 
 - [Prompt-injection watchlist](security/prompt-injection-watchlist-2026-04.md)
+- [MCP competitive threat conformance](security/mcp-competitive-threat-conformance.md)
 - [EU AI Act high-risk pack](compliance/eu-ai-act-high-risk-pack.md)
 
 ## Documentation Gates

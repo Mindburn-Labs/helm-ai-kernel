@@ -502,8 +502,8 @@
     {
       "id": "homebrew-tap",
       "kind": "homebrew_formula",
-      "url": "https://raw.githubusercontent.com/mindburnlabs/homebrew-tap/main/Formula/helm-ai-kernel.rb",
-      "human_url": "https://github.com/mindburnlabs/homebrew-tap/blob/main/Formula/helm-ai-kernel.rb"
+      "url": "https://raw.githubusercontent.com/Mindburn-Labs/homebrew-tap/main/Formula/helm-ai-kernel.rb",
+      "human_url": "https://github.com/Mindburn-Labs/homebrew-tap/blob/main/Formula/helm-ai-kernel.rb"
     },
     {
       "id": "pkg-go-dev-sdk",

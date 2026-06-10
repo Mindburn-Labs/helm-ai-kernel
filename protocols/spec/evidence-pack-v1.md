@@ -25,6 +25,10 @@ for regulatory compliance workflows.
 
 Draft -- Normative Standard
 
+## Implementation Independence (Informative)
+
+This format is an open specification. Independent implementations are permitted and encouraged; compatibility is a statement about archive and manifest wire behavior — verifiable against the golden fixtures shipped with the conformance harness — not about the use of HELM software or branding. Evidence packs are verifiable offline by parties that do not trust the producing implementation, using only JCS (RFC 8785), SHA-256, and Ed25519.
+
 ## 1. Introduction
 
 HELM is a fail-closed AI execution firewall. Every tool call, policy decision,

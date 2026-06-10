@@ -16,6 +16,7 @@ type GovernanceMetrics struct {
 	decisions      int64
 	allows         int64
 	denials        int64
+	verifications  int64
 	latencySum     int64 // microseconds
 	latencyCount   int64
 	latencyP99     int64 // microseconds
@@ -58,6 +59,14 @@ func (m *GovernanceMetrics) RecordDecision(allowed bool, tool, reasonCode, agent
 	m.mu.Unlock()
 }
 
+// RecordVerification records one EvidencePack verification run against this
+// instance. Verifications by parties other than the operator are the
+// north-star adoption metric (see docs: the category is won when receipts are
+// verified by auditors, customers, and counterparties — not just produced).
+func (m *GovernanceMetrics) RecordVerification() {
+	atomic.AddInt64(&m.verifications, 1)
+}
+
 // SetBudget updates budget tracking.
 func (m *GovernanceMetrics) SetBudget(used, ceiling int64) {
 	atomic.StoreInt64(&m.budgetUsed, used)
@@ -66,18 +75,19 @@ func (m *GovernanceMetrics) SetBudget(used, ceiling int64) {
 
 // Snapshot returns a point-in-time metrics snapshot.
 type MetricsSnapshot struct {
-	Decisions    int64            `json:"decisions_total"`
-	Allows       int64            `json:"allows_total"`
-	Denials      int64            `json:"denials_total"`
-	DenyRate     float64          `json:"deny_rate"`
-	AvgLatencyMs float64          `json:"avg_latency_ms"`
-	P99LatencyMs float64          `json:"p99_latency_ms"`
-	ChainLength  int64            `json:"chain_length"`
-	ActiveAgents int              `json:"active_agents"`
-	BudgetUsed   float64          `json:"budget_used_pct"`
-	ToolCounts   map[string]int64 `json:"tool_counts"`
-	ReasonCounts map[string]int64 `json:"reason_counts"`
-	Timestamp    string           `json:"timestamp"`
+	Decisions     int64            `json:"decisions_total"`
+	Allows        int64            `json:"allows_total"`
+	Denials       int64            `json:"denials_total"`
+	Verifications int64            `json:"verifications_total"`
+	DenyRate      float64          `json:"deny_rate"`
+	AvgLatencyMs  float64          `json:"avg_latency_ms"`
+	P99LatencyMs  float64          `json:"p99_latency_ms"`
+	ChainLength   int64            `json:"chain_length"`
+	ActiveAgents  int              `json:"active_agents"`
+	BudgetUsed    float64          `json:"budget_used_pct"`
+	ToolCounts    map[string]int64 `json:"tool_counts"`
+	ReasonCounts  map[string]int64 `json:"reason_counts"`
+	Timestamp     string           `json:"timestamp"`
 }
 
 // Snapshot returns current metrics.
@@ -85,6 +95,7 @@ func (m *GovernanceMetrics) Snapshot() MetricsSnapshot {
 	dec := atomic.LoadInt64(&m.decisions)
 	allows := atomic.LoadInt64(&m.allows)
 	denials := atomic.LoadInt64(&m.denials)
+	verifications := atomic.LoadInt64(&m.verifications)
 	latSum := atomic.LoadInt64(&m.latencySum)
 	latCount := atomic.LoadInt64(&m.latencyCount)
 	budgetUsed := atomic.LoadInt64(&m.budgetUsed)
@@ -122,17 +133,18 @@ func (m *GovernanceMetrics) Snapshot() MetricsSnapshot {
 	m.mu.RUnlock()
 
 	return MetricsSnapshot{
-		Decisions:    dec,
-		Allows:       allows,
-		Denials:      denials,
-		DenyRate:     denyRate,
-		AvgLatencyMs: avgLatency,
-		ChainLength:  chain,
-		ActiveAgents: active,
-		BudgetUsed:   budgetPct,
-		ToolCounts:   tools,
-		ReasonCounts: reasons,
-		Timestamp:    time.Now().UTC().Format(time.RFC3339),
+		Decisions:     dec,
+		Allows:        allows,
+		Denials:       denials,
+		Verifications: verifications,
+		DenyRate:      denyRate,
+		AvgLatencyMs:  avgLatency,
+		ChainLength:   chain,
+		ActiveAgents:  active,
+		BudgetUsed:    budgetPct,
+		ToolCounts:    tools,
+		ReasonCounts:  reasons,
+		Timestamp:     time.Now().UTC().Format(time.RFC3339),
 	}
 }
 
@@ -160,6 +172,9 @@ func (m *GovernanceMetrics) PrometheusHandler() http.HandlerFunc {
 		fmt.Fprintf(w, "# HELP helm_denials_total Total denied decisions\n")
 		fmt.Fprintf(w, "# TYPE helm_denials_total counter\n")
 		fmt.Fprintf(w, "helm_denials_total %d\n", snap.Denials)
+		fmt.Fprintf(w, "# HELP helm_verifications_total EvidencePack verifications run (north-star adoption metric)\n")
+		fmt.Fprintf(w, "# TYPE helm_verifications_total counter\n")
+		fmt.Fprintf(w, "helm_verifications_total %d\n", snap.Verifications)
 		fmt.Fprintf(w, "# HELP helm_decision_latency_ms Average decision latency\n")
 		fmt.Fprintf(w, "# TYPE helm_decision_latency_ms gauge\n")
 		fmt.Fprintf(w, "helm_decision_latency_ms %.3f\n", snap.AvgLatencyMs)

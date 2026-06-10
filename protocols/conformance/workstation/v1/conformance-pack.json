@@ -41,13 +41,15 @@
     "denied_network": "fixtures/workstation/denied-network",
     "denied_memory": "fixtures/workstation/denied-memory",
     "denied_recurring_loop": "fixtures/workstation/denied-recurring-loop",
-    "prompt_injection_tainted": "fixtures/workstation/prompt-injection-tainted"
+    "prompt_injection_tainted": "fixtures/workstation/prompt-injection-tainted",
+    "scope_audit_all_boundaries": "fixtures/workstation/scope-audit-all-boundaries"
   },
   "commands": [
     "helm-ai-kernel workstation import --artifacts fixtures/workstation/allowed-draft --out /tmp/workstation-run.json",
     "helm-ai-kernel workstation enforce --class network --target https://forbidden.example --out /tmp/workstation-deny.json",
     "helm-ai-kernel workstation decide --class file --target docs/example.md --out /tmp/workstation-draft.json",
     "helm-ai-kernel workstation evidence --receipt /tmp/workstation-run.json --out /tmp/workstation-evidencepack",
+    "helm-ai-kernel audit scope --input fixtures/workstation/reference/receipts --out /tmp/workstation-scope-audit --evidence-pack",
     "helm-ai-kernel workstation certify --fixtures fixtures/workstation --mode high-risk-effect-capable"
   ]
 }

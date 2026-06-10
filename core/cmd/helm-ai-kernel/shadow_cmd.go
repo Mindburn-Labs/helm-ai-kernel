@@ -119,6 +119,23 @@ func writeShadowReport(w io.Writer, r *shadow.Report, exitCode int) {
 	}
 	fmt.Fprintln(w)
 
+	gradeColor := ColorGreen
+	switch r.Grade.Letter {
+	case "B", "C":
+		gradeColor = ColorYellow
+	case "D", "F":
+		gradeColor = ColorRed
+	}
+	fmt.Fprintf(w, "%sBoundary grade: %s%s%s — %s\n", ColorBold, gradeColor, r.Grade.Letter, ColorReset, r.Grade.Reason)
+	fmt.Fprintf(w, "  Agent SDK signals:    %d\n", r.Grade.SDKSignals)
+	fmt.Fprintf(w, "  MCP servers detected: %d\n", r.Grade.MCPServersDetected)
+	fmt.Fprintf(w, "  API key exposures:    %d\n", r.Grade.APIKeyExposures)
+	if !r.Grade.BoundaryPresent {
+		fmt.Fprintf(w, "  Replayable actions:   0 (no boundary — nothing provable)\n")
+		fmt.Fprintf(w, "\n%sNo receipt, no production.%s Wrap this setup: helm-ai-kernel onboard\n", ColorBold, ColorReset)
+	}
+	fmt.Fprintln(w)
+
 	if len(r.Findings) == 0 {
 		fmt.Fprintf(w, "%sNo agent SDK or MCP signals detected.%s\n\n", ColorGreen, ColorReset)
 		return
@@ -181,5 +198,11 @@ func init() {
 		Aliases: []string{},
 		Usage:   "Static scan for shadow-AI: agent SDKs, MCP configs, API keys",
 		RunFn:   runShadowCmd,
+	})
+	Register(Subcommand{
+		Name:    "scan",
+		Aliases: []string{},
+		Usage:   "Boundary audit: grade ungoverned agent execution surface (alias for shadow scan)",
+		RunFn:   runShadowScan,
 	})
 }

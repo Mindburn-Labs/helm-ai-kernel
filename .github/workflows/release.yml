@@ -315,7 +315,7 @@ jobs:
         run: |
           mkdir -p Formula
           cp release-assets/helm-ai-kernel.rb Formula/helm-ai-kernel.rb
-      - name: Push formula to mindburnlabs/homebrew-tap
+      - name: Push formula to Mindburn-Labs/homebrew-tap
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
@@ -325,7 +325,7 @@ jobs:
           fi
           git config --global user.name "mindburn-release-bot"
           git config --global user.email "release@mindburn.org"
-          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/mindburnlabs/homebrew-tap.git" tap
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/Mindburn-Labs/homebrew-tap.git" tap
           mkdir -p tap/Formula
           cp Formula/helm-ai-kernel.rb tap/Formula/helm-ai-kernel.rb
           cd tap

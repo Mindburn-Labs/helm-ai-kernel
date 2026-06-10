@@ -1,0 +1,24 @@
+name: Version Drift Watch
+
+on:
+  schedule:
+    - cron: "23 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  published-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.12"
+      - name: Check published surfaces against VERSION
+        run: |
+          python3 scripts/release/check_version_drift.py \
+            --expected-version "$(cat VERSION)" \
+            published \
+            --surface-timeout 15

@@ -46,6 +46,23 @@ go run ./cmd/helm-ai-kernel workstation memory --input ../fixtures/workstation/r
 go run ./cmd/helm-ai-kernel workstation loops --input ../fixtures/workstation/reference/receipts
 ```
 
+## Agent scope audit
+
+Generate one audit report across MCP tools, filesystem, network, memory, secrets, deploys, payments, loops, and shell:
+
+```bash
+go run ./cmd/helm-ai-kernel audit scope \
+  --input ../fixtures/workstation/reference/receipts \
+  --json
+
+go run ./cmd/helm-ai-kernel audit scope \
+  --input /tmp/helm-workstation-run.json,/tmp/helm-workstation-network-deny.json \
+  --out /tmp/helm-scope-audit \
+  --evidence-pack
+```
+
+The report is receipt-scoped. It never claims full desktop, browser, OS, or proprietary hosted-agent control.
+
 ## EvidencePack and certification
 
 ```bash

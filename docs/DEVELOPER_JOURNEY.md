@@ -170,6 +170,17 @@ curl 'http://127.0.0.1:7714/api/v1/receipts?limit=20'
 
 The CLI receipt tail requires `--agent`; the HTTP list route is the unfiltered inspection path.
 
+For workstation runs, `audit scope` turns signed `AgentRunReceipt` and `WorkstationPolicyDecisionReceipt` inputs into a B2B-ready Agent Scope Audit:
+
+```bash
+./bin/helm-ai-kernel audit scope \
+  --input fixtures/workstation/reference/receipts \
+  --out /tmp/helm-scope-audit \
+  --evidence-pack
+```
+
+The report covers MCP tools, filesystem, network egress, memory, secrets, deploys, payments, loops, and shell only when those actions appear in HELM receipts, wrapper decisions, or imported artifacts. It is not a hosted Console or OS-wide enforcement claim.
+
 ## Policy Fixtures
 
 **Launch Demo Suite:** You can evaluate a complete, end-to-end set of `ALLOW`,

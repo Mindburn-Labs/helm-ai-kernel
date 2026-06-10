@@ -1,0 +1,83 @@
+{{- if .Values.launchpadApps.hermes.enabled -}}
+{{- $app := "hermes" -}}
+{{- $cfg := .Values.launchpadApps.hermes -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "helm-ai-kernel.launchpadApp.fullname" (dict "ctx" . "app" $app) }}
+  labels:
+    {{- include "helm-ai-kernel.launchpadApp.labels" (dict "ctx" . "app" $app) | nindent 4 }}
+  annotations:
+    helm.ai/upstream-source: "https://github.com/NousResearch/hermes-agent"
+    helm.ai/registry-ref: "registry/launchpad/apps/hermes.yaml"
+    # Hermes is a regular release-owned Job, not a helm hook. As a hook it would
+    # block `helm install` on its own failure, which conflates "the chart is
+    # installable" with "the workload succeeded". The smoke driver inspects the
+    # Job status explicitly in stage 5 instead, so the install/assert phases
+    # stay separable.
+spec:
+  backoffLimit: {{ $cfg.backoffLimit }}
+  activeDeadlineSeconds: {{ $cfg.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ $cfg.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "helm-ai-kernel.launchpadApp.labels" (dict "ctx" . "app" $app) | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        {{- toYaml .Values.launchpadApps.nodeSelector | nindent 8 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      # Init container order matters: the egress-init installs the iptables
+      # REDIRECT and runs to completion FIRST, then the egress proxy starts as a
+      # restartPolicy:Always sidecar (Pod completion is driven solely by the main
+      # hermes container; the proxy stays alive in parallel and is torn down by
+      # the kubelet when the workload exits).
+      initContainers:
+        {{- include "helm-ai-kernel.launchpadApp.egressInit" (dict "sidecar" $cfg.egressSidecar) | nindent 8 }}
+        {{- include "helm-ai-kernel.launchpadApp.egressSidecar" (dict "sidecar" $cfg.egressSidecar "init" true) | nindent 8 }}
+      containers:
+        - name: {{ $app }}
+          image: {{ include "helm-ai-kernel.launchpadApp.image" (dict "image" $cfg.image) | quote }}
+          imagePullPolicy: {{ $cfg.image.pullPolicy | default "IfNotPresent" }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            {{- toYaml $cfg.command | nindent 12 }}
+          env:
+            - name: HOME
+              value: /var/lib/hermes
+            # No HTTP_PROXY/HTTPS_PROXY: egress is enforced transparently by the
+            # egress-init iptables REDIRECT, not by the workload honoring proxy env.
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.openrouter.apiKeySecretRef.name | quote }}
+                  key: {{ .Values.openrouter.apiKeySecretRef.key | quote }}
+          resources:
+            {{- toYaml $cfg.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: app-state
+              mountPath: /var/lib/hermes
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ $cfg.tmpfsSize | default "128Mi" }}
+        - name: app-state
+          emptyDir:
+            sizeLimit: {{ $cfg.appStateSize }}
+        - name: egress-receipts
+          emptyDir:
+            sizeLimit: 64Mi
+{{- end }}

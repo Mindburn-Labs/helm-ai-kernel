@@ -1,0 +1,113 @@
+{{- if .Values.launchpadApps.openclaw.enabled -}}
+{{- $app := "openclaw" -}}
+{{- $cfg := .Values.launchpadApps.openclaw -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "helm-ai-kernel.launchpadApp.fullname" (dict "ctx" . "app" $app) }}
+  labels:
+    {{- include "helm-ai-kernel.launchpadApp.labels" (dict "ctx" . "app" $app) | nindent 4 }}
+  annotations:
+    helm.ai/upstream-source: "https://github.com/openclaw/openclaw"
+    helm.ai/registry-ref: "registry/launchpad/apps/openclaw.yaml"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "helm-ai-kernel.launchpadApp.selectorLabels" (dict "ctx" . "app" $app) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "helm-ai-kernel.launchpadApp.labels" (dict "ctx" . "app" $app) | nindent 8 }}
+    spec:
+      restartPolicy: Always
+      nodeSelector:
+        {{- toYaml .Values.launchpadApps.nodeSelector | nindent 8 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      initContainers:
+        # Egress enforcement: install the iptables REDIRECT before the workload
+        # starts, so every outbound TCP is forced through the egress proxy sidecar.
+        {{- include "helm-ai-kernel.launchpadApp.egressInit" (dict "sidecar" $cfg.egressSidecar) | nindent 8 }}
+      containers:
+        # Workload container — gateway bound to loopback, mirroring the local-container
+        # runbook (registry/launchpad/apps/openclaw.yaml). Smoke tests reach the gateway
+        # via `kubectl exec` rather than a Service, because loopback bind makes Service
+        # routing unreachable by design — same as docker exec on the standalone host.
+        - name: {{ $app }}
+          image: {{ include "helm-ai-kernel.launchpadApp.image" (dict "image" $cfg.image) | quote }}
+          imagePullPolicy: {{ $cfg.image.pullPolicy | default "IfNotPresent" }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - openclaw
+            - gateway
+            - run
+            - --port
+            - {{ $cfg.gatewayPort | quote }}
+            - --allow-unconfigured
+            - --auth
+            - none
+            - --bind
+            - loopback
+          env:
+            - name: HOME
+              value: /opt/openclaw/.openclaw
+            # No HTTP_PROXY/HTTPS_PROXY: egress is enforced transparently by the
+            # egress-init iptables REDIRECT, not by the workload honoring proxy env.
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.openrouter.apiKeySecretRef.name | quote }}
+                  key: {{ .Values.openrouter.apiKeySecretRef.key | quote }}
+          ports:
+            - name: gateway
+              containerPort: {{ $cfg.gatewayPort }}
+              protocol: TCP
+          # Readiness via the same helm-launchpad-openrouter-check script that the
+          # local-container substrate runs through `docker exec`. The script lives
+          # inside the openclaw image (see tools/launchpad/artifacts/openclaw.Dockerfile)
+          # and hits openrouter.ai through the sidecar proxy.
+          readinessProbe:
+            exec:
+              command:
+                - helm-launchpad-openrouter-check
+            initialDelaySeconds: {{ $cfg.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ $cfg.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ $cfg.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ $cfg.readinessProbe.failureThreshold }}
+          # Liveness probe intentionally omitted. The published openclaw image
+          # is distroless-style (no procps / pgrep), and a TCP probe against
+          # the loopback-bound gateway port is unreachable from kubelet. The
+          # readiness probe already covers "the gateway can reach OpenRouter"
+          # — if it fails persistently, the Pod is removed from Service rotation
+          # and a fresh rollout replaces it.
+          resources:
+            {{- toYaml $cfg.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: app-state
+              mountPath: /opt/openclaw/.openclaw
+        {{- include "helm-ai-kernel.launchpadApp.egressSidecar" (dict "sidecar" $cfg.egressSidecar) | nindent 8 }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ $cfg.tmpfsSize | default "256Mi" }}
+        - name: app-state
+          emptyDir:
+            sizeLimit: {{ $cfg.appStateSize }}
+        - name: egress-receipts
+          emptyDir:
+            sizeLimit: 64Mi
+{{- end }}

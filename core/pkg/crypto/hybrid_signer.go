@@ -55,6 +55,21 @@ func NewHybridSigner(keyID string) (*HybridSigner, error) {
 	}, nil
 }
 
+// NewHybridSignerFromSigners builds a HybridSigner from existing Ed25519 and
+// ML-DSA-65 signers, so persisted keyring material (e.g. SoftHSM or data-dir
+// root keys) can be composed into the hybrid receipt profile.
+func NewHybridSignerFromSigners(ed *Ed25519Signer, mldsa *MLDSASigner, keyID string) (*HybridSigner, error) {
+	if ed == nil || mldsa == nil {
+		return nil, fmt.Errorf("hybrid: both ed25519 and ml-dsa-65 signers are required")
+	}
+	return &HybridSigner{ed25519: ed, mldsa: mldsa, keyID: keyID}, nil
+}
+
+// GetKeyID returns the key identifier, enabling KeyRing registration via the
+// KeyIDer interface. Both hybrid components share this key ID and rotate as
+// one unit in the keyring.
+func (h *HybridSigner) GetKeyID() string { return h.keyID }
+
 // Sign produces a composite signature in the format "hybrid:<ed25519_hex>:<mldsa_hex>".
 // Both sub-signatures must succeed; if either fails, the entire operation fails (fail-closed).
 func (h *HybridSigner) Sign(data []byte) (string, error) {

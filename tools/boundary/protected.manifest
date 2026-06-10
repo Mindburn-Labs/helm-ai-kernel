@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-10T20:52:45Z
-# Commit: 6715d9c5335688b633cccb0ff623d818f5c757bf
+# Generated: 2026-06-10T20:56:06Z
+# Commit: d2c69aa74c2d62b0f675f43e3bbb43071549ce9b
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -179,7 +179,7 @@ e0ae0eb682c07e6b3930c057a22a476292ab270ef7f88d7ab24f095d83396451  core/pkg/contr
 d29fe1bb678b79cb4e7e1f7531396c71354389fa10fd4ce024fafe3196fb30c3  core/pkg/contracts/evidence_eu_ai_act_test.go
 b2f4075709b2d09edb2b245e5d8cd1097bbb63fdc4291c37522eb5b69ed6b507  core/pkg/contracts/evidence_pack_single_source_test.go
 4f436de6d176339bedbe736e71343e0df2e9403e7f7fb30124cf3d6f808cce75  core/pkg/contracts/evidence_security_finding_test.go
-2520eb2f9cf233d2ffa977ba7537f02912ad50e6939626448c8df82372f129a8  core/pkg/contracts/execution_boundary.go
+b73247596b31e34f593de62e5a59a1d31887ab307572fed66e477298a5134f20  core/pkg/contracts/execution_boundary.go
 1dd110c768d83d94b4c9e1805911595a9acd0ed7ae9e20633a5866e0790ff483  core/pkg/contracts/execution_boundary_test.go
 18f026d4224115c4eba1c4d17f2cec94d3d1fe3a0ce24255e2c66d39917fb4b7  core/pkg/contracts/extended2_test.go
 ab5eddf2db83e466a543df784900fd961bc6ec65416b7058cd607a30c0cb453a  core/pkg/contracts/genesis_approval.go
@@ -853,8 +853,8 @@ c28f8d64a15c801dff22c984b977f5a3f899684653ab4307386b842cd0b467bb  protocols/prot
 952f916f65ce4c1bac02c9d93bc7bfd661252d10e3454c1e469cd715c108fe6c  protocols/proto/helm/intervention/v1/intervention.proto
 a3b4957fbf92a0950e4dccbe6d48037b8b88b56c0ba5d36ac3cbab1695b92b58  protocols/proto/helm/kernel/v1/helm.proto
 f294ad5b8fcc429072bd16a1dcef407e4884e843c6099c5de8d1ce8ec3cc0f2c  protocols/proto/helm/truth/v1/truth.proto
-1405469fcd9be2bdb08cee0f7ad201c6504cf68c941462f443aec13c3c0632aa  protocols/spec/PROTOCOL.md
-3703bcf881c3577f7ffaafa36672da4a05d7342a4a2e61299517ade500622bda  protocols/spec/evidence-pack-v1.md
+6e2ee245f428faa27dbb15747f17cace76a0edabc72d1023b99120aa2a29f925  protocols/spec/PROTOCOL.md
+0188f5d805346df6847bae2dde5c85afe08ab5f7173e2b5842a5f3b5e8c29885  protocols/spec/evidence-pack-v1.md
 6709408084e33158dfe9baf079e5a66b99c33c04362aa2dd76c832e3c5af7d21  protocols/spec/external-evidence-receipt-profile-v0.1.md
 b5b0ad4ea4a936f16ab4bd82e6cfed5e8b52c3c1a9eb2ce30d5043f0c1939aa3  protocols/specs/README.md
 59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03  protocols/specs/SPEC_VERSION
@@ -871,7 +871,7 @@ de0c086ae6fc3f8eaadeabc5cbea9bd3574ed06299e31c191ac149f23e2a97b8  protocols/spec
 41e41ae7387cbfeff899b7569d4b3cb3859ce2049e0cacc80c8c521500cb02d3  protocols/specs/rfc/identifier-urn-v1.md
 0e3a1fb9e542ac8ff5d41e45134f1d29af0126745089d386d1386e247fc64e72  protocols/specs/rfc/policy-bundle-v1.md
 2a18e0c35cba8d7d0536a36ab502e4cf667f0de1a7dafc07343cb0b1c3dc3214  protocols/specs/rfc/reason-codes-v1.md
-842b0f79e8f4a75f1c688562afce1901b982bd90ff28e1f5869c944627545bf0  protocols/specs/rfc/receipt-format-v1.md
+15dd251f21ee1568ae981928edc763210c08cbc1dbb0af70d800eea9ea843e22  protocols/specs/rfc/receipt-format-v1.md
 380c032e17308e7ab0969b085502eb9cdee21c57a516fe513ebef536a93b6022  protocols/specs/tla/HelmKernel.cfg
 d56a40be7ca0f41c92b226ce37bd2406efee20abc4bc7de7bfba57ccc0a91e15  protocols/specs/tla/HelmKernel.tla
 7f15ead74b2bc715f7db215d5576526a8a190a76f9fcd99c39af96197e39058a  protocols/specs/tool-manifest/tool_manifest.v1.schema.json

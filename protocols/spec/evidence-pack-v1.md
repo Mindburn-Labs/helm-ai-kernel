@@ -1,5 +1,5 @@
 ---
-title: "HELM Evidence Pack Format Specification"
+title: "HELM EvidencePack Format Specification"
 status: draft
 version: "1.0.0"
 created: 2026-04-13
@@ -10,11 +10,11 @@ references:
   - "arXiv:2604.04604 — Deterministic Audit Trails for Autonomous Agents"
 ---
 
-# Evidence Pack Format Specification v1.0
+# EvidencePack Format Specification v1.0
 
 ## Abstract
 
-This document specifies the canonical format for HELM Evidence Packs.
+This document specifies the canonical format for HELM EvidencePacks.
 An evidence pack is a content-addressed, tamper-evident archive that bundles
 all governance receipts, policy decisions, tool transcripts, and provenance
 data produced during a single AI agent execution. The format guarantees

@@ -305,7 +305,7 @@ Each layer protects against failures in the other two.
 | Approval Ceremony | B |
 | ProofGraph DAG | C |
 | Trust Registry | C |
-| Evidence Pack | C |
+| EvidencePack | C |
 | Offline Replay | C |
 | Output Drift | B |
 | Idempotency | B + C |

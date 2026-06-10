@@ -790,6 +790,223 @@
           }
         }
       }
+    },
+    "openrouter": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "OpenRouter credentials shared by launchpad apps (openclaw, hermes). The chart only accepts a Secret reference, never a raw API key in values.yaml.",
+      "properties": {
+        "apiKeySecretRef": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "key"],
+          "description": "Reference to a Secret in the release namespace that holds the OpenRouter API key.",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Name of the Kubernetes Secret containing the OpenRouter API key."
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Key inside the Secret whose value is the raw OpenRouter API key string."
+            }
+          }
+        }
+      }
+    },
+    "launchpadApps": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Launchpad apps deployed alongside the kernel inside the same helm release. Not a launchpad runtime path — kernel does not launch them via k8s API; these are pinned chart-managed Pods that mirror the local-container runbook for openclaw and hermes on a Kubernetes substrate.",
+      "properties": {
+        "nodeSelector": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "nodeSelector applied to every launchpad-app Pod. The published openclaw/hermes images are linux/amd64 only — until multi-arch builds land, keep `kubernetes.io/arch: amd64` here."
+        },
+        "networkPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "NetworkPolicy default-deny applied to launchpad-app Pods.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Create the NetworkPolicy object. Enforcement requires a CNI that honors NetworkPolicy (Calico, Cilium). On default minikube/kindnet the object is recorded but not enforced."
+            },
+            "allowDNS": {
+              "type": "boolean",
+              "default": true,
+              "description": "Allow egress to kube-system/kube-dns on UDP/TCP 53 so the egress sidecar can resolve openrouter.ai. Disable only in environments with NodeLocalDNSCache or other DNS topologies."
+            }
+          }
+        },
+        "test": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Connectivity test Pod (helm.sh/hook: test) used by `helm test`.",
+          "properties": {
+            "image": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Image with a POSIX shell and wget for the test Pod. Pinned to busybox by default."
+            }
+          }
+        },
+        "openclaw": {
+          "$ref": "#/$defs/launchpadAppDeployment"
+        },
+        "hermes": {
+          "$ref": "#/$defs/launchpadAppJob"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "launchpadAppImage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "digest"],
+      "description": "Immutable image reference pinned by sha256 digest. Tags are not accepted — supply chain integrity is enforced by the chart helper.",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "description": "OCI repository, e.g. ghcr.io/mindburn-labs/helm-launchpad/openclaw."
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "sha256 image digest including the `sha256:` prefix."
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"],
+          "default": "IfNotPresent",
+          "description": "Kubernetes image pull policy."
+        }
+      }
+    },
+    "launchpadAppEgressSidecar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "port", "allowlist"],
+      "description": "Egress proxy sidecar that fronts the workload's HTTP_PROXY/HTTPS_PROXY traffic and enforces an allowlist on outbound CONNECT tunnels.",
+      "properties": {
+        "image": { "$ref": "#/$defs/launchpadAppImage" },
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 8080,
+          "description": "TCP port the sidecar binds inside the Pod's shared network namespace. The workload container reaches it via localhost:<port>."
+        },
+        "allowlist": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "format": "uri" },
+          "description": "List of URL prefixes the sidecar is allowed to proxy. Anything else is denied at the sidecar level."
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Kubernetes resources (requests/limits) for the sidecar container."
+        }
+      }
+    },
+    "launchpadAppDeployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Long-running launchpad app deployed as a Kubernetes Deployment.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Render the Deployment, Service if any, and supporting resources for this app."
+        },
+        "image": { "$ref": "#/$defs/launchpadAppImage" },
+        "gatewayPort": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "description": "TCP port the workload's gateway binds inside the container. With `--bind loopback` this is reachable only via `kubectl exec`, never via a Service."
+        },
+        "tmpfsSize": {
+          "type": "string",
+          "description": "Size limit for the tmpfs-backed emptyDir mounted at /tmp."
+        },
+        "appStateSize": {
+          "type": "string",
+          "description": "Size limit for the app_state emptyDir mounted at the workload's writable state directory."
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Kubernetes resources for the workload container."
+        },
+        "readinessProbe": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Tunables for the exec-based readiness probe. The exec command itself is hard-coded to helm-launchpad-openrouter-check inside the chart template."
+        },
+        "livenessProbe": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Tunables for the liveness probe."
+        },
+        "egressSidecar": { "$ref": "#/$defs/launchpadAppEgressSidecar" }
+      }
+    },
+    "launchpadAppJob": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Short-lived launchpad app deployed as a Kubernetes Job.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Render the Job and supporting resources for this app."
+        },
+        "image": { "$ref": "#/$defs/launchpadAppImage" },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "Command and args for the workload container. Mirrors the runtime.command field in registry/launchpad/apps/<id>.yaml verbatim."
+        },
+        "backoffLimit": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Job backoffLimit. Zero means a single attempt — failure surfaces immediately."
+        },
+        "activeDeadlineSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Hard wall-clock limit for the Job; after this the Job is marked failed regardless of state."
+        },
+        "ttlSecondsAfterFinished": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Delete the Job (and its Pod) this many seconds after it reaches a terminal state, leaving evidence available to smoke audits for the window."
+        },
+        "tmpfsSize": {
+          "type": "string",
+          "description": "Size limit for the tmpfs-backed emptyDir mounted at /tmp."
+        },
+        "appStateSize": {
+          "type": "string",
+          "description": "Size limit for the app_state emptyDir mounted at the workload's writable state directory."
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Kubernetes resources for the workload container."
+        },
+        "egressSidecar": { "$ref": "#/$defs/launchpadAppEgressSidecar" }
+      }
     }
   }
 }

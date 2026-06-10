@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-10T21:34:21Z
-# Commit: 5405287e4569d7023fc30cba504da0e162f9cc4e
+# Generated: 2026-06-10T21:44:03Z
+# Commit: 48b5c0a12903ea20c61c5e31484bebbb8a25eb62
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md

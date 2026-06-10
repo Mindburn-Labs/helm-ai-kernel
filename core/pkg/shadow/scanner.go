@@ -129,6 +129,7 @@ func (s *Scanner) Scan(root string) (*Report, error) {
 	}
 	r.HelmCoverage.Present = r.HelmCoverage.Count > 0
 	r.HelmCoverage.Paths = helmPaths
+	r.Grade = ComputeGrade(r)
 
 	r.GeneratedAt = s.Clock()
 	r.ScanDurationMs = r.GeneratedAt.Sub(start).Milliseconds()

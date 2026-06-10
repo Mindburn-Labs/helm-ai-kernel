@@ -77,6 +77,23 @@ Enterprise Console exposes the same read model as workspace-scoped API routes af
 
 The run detail route returns sanitized receipt fields and operator queues, not raw chat transcript bodies.
 
+## Agent Scope Audit
+
+Use `audit scope` when a B2B reviewer needs one report across high-impact agent boundaries instead of separate operator queues:
+
+```bash
+helm-ai-kernel audit scope \
+  --input fixtures/workstation/reference/receipts \
+  --out /tmp/helm-scope-audit \
+  --evidence-pack
+```
+
+The command accepts `AgentRunReceipt` and `WorkstationPolicyDecisionReceipt` JSON files or directories. It writes `scope-audit.json`, `scope-audit.md`, `evidence-refs.json`, and, when `--evidence-pack` is set, `scope-audit-evidencepack/`. Add `--json` to print the canonical report JSON to stdout.
+
+The report groups events into `mcp`, `filesystem`, `network`, `memory`, `secret`, `deploy`, `payment`, `loop`, and `shell`. It counts allowed, denied, tainted, and unknown actions; lists out-of-scope attempts; records missing controls; summarizes memory TTL/sensitivity/review state; and preserves source receipt hashes and signature presence. Secret, deploy, and payment details are metadata conventions in v1 (`secret_ref`, `lease_ref`, `redaction_ref`, `environment`, `artifact_digest`, `approval_ref`, `rollback_ref`, `verification_ref`, `amount`, `currency`, `counterparty_ref`, `spend_cap_ref`, `idempotency_key`, `ledger_ref`) so existing receipt compatibility is preserved.
+
+`audit scope` is an audit and evidence export over HELM-owned receipts, wrapper decisions, and imported artifacts. It does not imply OS-wide control, full browser control, hosted Console enforcement, or control of proprietary hosted agents unless the relevant action passed through HELM receipts, wrappers, or adapters.
+
 ## Conformance and proof
 
 The conformance entrypoint is:

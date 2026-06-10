@@ -84,6 +84,13 @@ type MCPAuthorizationProfile struct {
 	ProfileHash          string   `json:"profile_hash,omitempty"`
 }
 
+// EnforcementModeShadow labels boundary records produced under an explicit,
+// time-boxed observe grant. The verdict is computed and sealed exactly as in
+// enforce mode; only the dispatch disposition differs, and the label makes
+// that visible to every downstream verifier. The empty string means enforce
+// (fail-closed default). Shadow mode is never set implicitly.
+const EnforcementModeShadow = "shadow"
+
 // ExecutionBoundaryRecord is the compact receipt-boundary preimage that links
 // policy, MCP auth, sandbox grants, relationship snapshots, and allow/deny
 // decisions before an actuator can dispatch.
@@ -102,6 +109,8 @@ type ExecutionBoundaryRecord struct {
 	ReceiptID          string     `json:"receipt_id,omitempty"`
 	ApprovalReceiptID  string     `json:"approval_receipt_id,omitempty"`
 	DirectDispatchSeen bool       `json:"direct_dispatch_seen,omitempty"`
+	EnforcementMode    string     `json:"enforcement_mode,omitempty"`
+	ObserveGrantID     string     `json:"observe_grant_id,omitempty"`
 	CreatedAt          time.Time  `json:"created_at"`
 	RecordHash         string     `json:"record_hash,omitempty"`
 }
@@ -260,6 +269,15 @@ func (r ExecutionBoundaryRecord) Validate() error {
 	}
 	if r.ReasonCode != "" && !IsCanonicalReasonCode(string(r.ReasonCode)) {
 		return fmt.Errorf("invalid reason code %q", r.ReasonCode)
+	}
+	if r.EnforcementMode != "" && r.EnforcementMode != EnforcementModeShadow {
+		return fmt.Errorf("invalid enforcement mode %q", r.EnforcementMode)
+	}
+	if r.EnforcementMode == EnforcementModeShadow && r.ObserveGrantID == "" {
+		return fmt.Errorf("shadow enforcement mode requires an observe grant id")
+	}
+	if r.ObserveGrantID != "" && r.EnforcementMode != EnforcementModeShadow {
+		return fmt.Errorf("observe grant id requires shadow enforcement mode")
 	}
 	return nil
 }

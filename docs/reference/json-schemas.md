@@ -17,7 +17,7 @@ After this page you should know where public schema files live, how schema famil
 
 ## Source Truth
 
-The schema source is [`protocols/json-schemas`](../../protocols/json-schemas), with the generated index at [`protocols/json-schemas/SCHEMA_INDEX.md`](../../protocols/json-schemas/SCHEMA_INDEX.md). The current tree contains 192 schema-related files across the public schema families listed below. Legacy compatibility schemas under [`schemas`](../../schemas) remain source-owned and are referenced from the protocol hub when they back public receipt examples.
+The schema source is [`protocols/json-schemas`](../../protocols/json-schemas), with the generated index at [`protocols/json-schemas/SCHEMA_INDEX.md`](../../protocols/json-schemas/SCHEMA_INDEX.md). The current tree contains 214 schema-related files across the public schema families listed below. Legacy compatibility schemas under [`schemas`](../../schemas) remain source-owned and are referenced from the protocol hub when they back public receipt examples.
 
 ## Schema Family Flow
 
@@ -65,6 +65,7 @@ flowchart TD
 | registry | [`protocols/json-schemas/registry`](../../protocols/json-schemas/registry) | module, connector, and pack registries |
 | safety / verification | [`protocols/json-schemas/safety`](../../protocols/json-schemas/safety), [`protocols/json-schemas/verification`](../../protocols/json-schemas/verification) | fail-closed checks and verifier outputs |
 | telemetry / tooling | [`protocols/json-schemas/telemetry`](../../protocols/json-schemas/telemetry), [`protocols/json-schemas/tooling`](../../protocols/json-schemas/tooling) | OpenTelemetry and tool governance exports |
+| workstation | [`protocols/json-schemas/workstation`](../../protocols/json-schemas/workstation) | workstation receipts, policy decision receipts, and Agent Scope Audit reports |
 
 Families not listed here are still indexed in `SCHEMA_INDEX.md`; they are intentionally routed through the protocol hub until they become direct public contracts.
 

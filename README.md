@@ -59,6 +59,28 @@ quarantine, signed receipts, and offline-verifiable EvidencePacks:
 Sanitized transcripts are checked in under
 [`examples/launch/assets`](examples/launch/assets).
 
+## From Zero To Verified
+
+**Autonomous setup. Explicit authority.** HELM sets itself up autonomously,
+but cannot grant itself authority. Setup is near-zero-touch by design —
+adoption friction is a security property:
+
+```bash
+helm-ai-kernel onboard    # one command: local store + trust root + config,
+                          # plus auto-detection of agent SDKs and MCP configs
+helm-ai-kernel scan       # boundary grade: what runs ungoverned here?
+helm-ai-kernel proxy --upstream <openai-compatible-url>   # wrap an agent
+helm-ai-kernel mcp serve  # quarantine MCP tools until approved
+helm-ai-kernel verify --bundle <pack>                     # verify evidence offline
+```
+
+Onboarding requires no external dependencies. Discovered MCP servers are
+quarantined automatically until approved — HELM prepares approval records, it
+never approves them itself. Observe mode (the shadow on-ramp:
+full verdicts and receipts, no blocking) is an explicit, receipt-labeled,
+time-boxed grant — never a silent default; expiry restores fail-closed
+enforcement automatically.
+
 ## Start Here
 
 | Visitor | First path | What to verify |
@@ -126,6 +148,17 @@ manager.
 ```text
 Agent proposal -> HELM boundary -> ALLOW / DENY / ESCALATE -> signed receipt
 ```
+
+The wire formats behind that pipeline — verdicts, receipts, EvidencePacks,
+policy bundles, reason codes — are open, versioned specifications under
+[`protocols/`](protocols/spec/PROTOCOL.md), implementable without HELM
+software or branding and verifiable against the conformance golden vectors in
+[`tests/conformance`](tests/conformance). HELM is the reference
+implementation. Proof is only proof when the verifier does not have to trust
+the prover.
+
+If your agent can execute tools without receipts, it is not production-grade.
+**No receipt, no production.**
 
 ## Status
 

@@ -269,3 +269,124 @@ postgresql:
     username: helm-ai-kernel
     password: ""
     # existingSecret: ""
+
+# OpenRouter credentials shared by launchpad apps (openclaw, hermes).
+# The chart never accepts a raw API key in values.yaml — only a Secret
+# reference. Create the Secret out-of-band (kubectl, ExternalSecrets, etc.)
+# before enabling any launchpad app.
+openrouter:
+  apiKeySecretRef:
+    name: "openrouter-key"
+    key: "OPENROUTER_API_KEY"
+
+# Launchpad apps as co-deployed Pods inside the same helm release.
+# This is NOT the launchpad runtime path (kernel does not launch them via
+# k8s API here) — they are pinned chart-managed workloads that mirror the
+# local-container runbook on a Kubernetes substrate. See
+# docs/launchpad/K8S_SMOKE.md for the conformance map between
+# registry/launchpad/apps/{openclaw,hermes}.yaml and these templates.
+launchpadApps:
+  # All launchpad-app Pods land on amd64 nodes — openclaw/hermes images are
+  # built linux/amd64 only by .github/workflows/launchpad-artifacts.yml. Until
+  # multi-arch builds land (GAP #11 in audit), this is a hard constraint.
+  nodeSelector:
+    kubernetes.io/arch: amd64
+
+  # NetworkPolicy default-deny with explicit DNS + 443 egress allowance for
+  # the sidecar proxy. Enforcement requires a CNI that honors NetworkPolicy
+  # (Calico, Cilium); on default minikube/kindnet the object is created but
+  # not enforced — useful as a positive-control signal nonetheless.
+  networkPolicy:
+    enabled: true
+    allowDNS: true
+
+  # Connectivity test Pod (helm.sh/hook: test). Pinned to a small image with
+  # wget that runs as nonroot.
+  test:
+    image: "busybox:1.36"
+
+  openclaw:
+    enabled: false
+    image:
+      repository: "ghcr.io/mindburn-labs/helm-launchpad/openclaw"
+      digest: "sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995"
+      pullPolicy: "IfNotPresent"
+    gatewayPort: 18789
+    tmpfsSize: "256Mi"
+    appStateSize: "1Gi"
+    # Resources sized for the ~6.36 GiB OCI image plus 8-plugin warm-up. Trim
+    # only with measurement — `gateway run` warm-up reliably exceeds the
+    # 120s default in registry/launchpad/apps/openclaw.yaml.
+    resources:
+      limits:
+        cpu: "1500m"
+        memory: "4Gi"
+      requests:
+        cpu: "300m"
+        memory: "1Gi"
+    readinessProbe:
+      initialDelaySeconds: 15
+      periodSeconds: 20
+      timeoutSeconds: 30
+      failureThreshold: 8
+    livenessProbe:
+      initialDelaySeconds: 60
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    egressSidecar:
+      image:
+        repository: "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy"
+        digest: "sha256:e09e0aec1e0e1f926f4cd18444e88310656b85551cbc10a6c340acb979a42e03"
+        pullPolicy: "IfNotPresent"
+      port: 8080
+      allowlist:
+        - "https://openrouter.ai/api/v1"
+      resources:
+        limits:
+          cpu: "200m"
+          memory: "128Mi"
+        requests:
+          cpu: "50m"
+          memory: "32Mi"
+
+  hermes:
+    enabled: false
+    image:
+      repository: "ghcr.io/mindburn-labs/helm-launchpad/hermes"
+      digest: "sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652"
+      pullPolicy: "IfNotPresent"
+    # Mirror registry/launchpad/apps/hermes.yaml verbatim. The /bin/sh wrapper
+    # bypasses a broken shebang in the published venv and pins HOME into the
+    # writable app_state mount.
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "HOME=/var/lib/hermes hermes --q ping --provider openrouter --model openai/gpt-4o-mini --ignore_user_config --quiet"
+    backoffLimit: 0
+    activeDeadlineSeconds: 240
+    ttlSecondsAfterFinished: 3600
+    tmpfsSize: "128Mi"
+    appStateSize: "512Mi"
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "1Gi"
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+    egressSidecar:
+      image:
+        repository: "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy"
+        digest: "sha256:e09e0aec1e0e1f926f4cd18444e88310656b85551cbc10a6c340acb979a42e03"
+        pullPolicy: "IfNotPresent"
+      port: 8080
+      allowlist:
+        - "https://openrouter.ai/api/v1"
+      resources:
+        limits:
+          cpu: "200m"
+          memory: "128Mi"
+        requests:
+          cpu: "50m"
+          memory: "32Mi"

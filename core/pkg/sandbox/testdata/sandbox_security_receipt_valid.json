@@ -1,0 +1,70 @@
+{
+  "execution_receipt": {
+    "execution_id": "exec-verify-1",
+    "spec": {
+      "image": "registry.example/helm-verifier@sha256:abc123",
+      "command": [
+        "/bin/verify"
+      ],
+      "args": [
+        "--finding",
+        "finding-1"
+      ],
+      "env": {
+        "HELM_MODE": "verify"
+      },
+      "mounts": [
+        {
+          "source": "/tmp/helm/repo",
+          "target": "/workspace/repo",
+          "read_only": true
+        }
+      ],
+      "limits": {
+        "cpu_millis": 500,
+        "memory_mb": 1024,
+        "disk_mb": 2048,
+        "timeout": 60000000000,
+        "max_processes": 64
+      },
+      "network": {
+        "disabled": true,
+        "egress_allowlist": null,
+        "dns_allowed": false
+      },
+      "workdir": "/workspace/repo"
+    },
+    "result": {
+      "exit_code": 0,
+      "stdout": null,
+      "stderr": null,
+      "duration": 1000000000,
+      "oom_killed": false,
+      "timed_out": false
+    },
+    "started_at": "2026-06-08T12:00:00Z",
+    "completed_at": "2026-06-08T12:00:01Z",
+    "image_digest": "sha256:abc123",
+    "stdout_hash": "sha256:stdout",
+    "stderr_hash": "sha256:stderr"
+  },
+  "security_receipt": {
+    "receipt_id": "sandbox-security:exec-verify-1",
+    "execution_id": "exec-verify-1",
+    "spec_hash": "sha256:b000bfe6c6d2bdb38ebb50cde52b7b1b56f74e34559a572395f4dc482d8f71c7",
+    "sandbox_config_hash": "sha256:37cf0179aeec39f08b040b4f62bd8d2487b8432d2edfc4a6f13e5858ddd33814",
+    "image_digest": "sha256:abc123",
+    "allowed_egress_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "mounted_paths_hash": "sha256:2e14e382714e15cb915175f43aa2220ba5e5df1ad3d31935a5d05ebdaa274a88",
+    "secret_scan_result": {
+      "result": "clean",
+      "hash": "sha256:secrets",
+      "checked_at": "2026-06-08T12:00:00Z"
+    },
+    "build_digest": "sha256:build",
+    "poc_transcript_hash": "sha256:poc",
+    "verifier_verdict_hash": "sha256:verdict",
+    "no_credential_material": true,
+    "created_at": "2026-06-08T12:00:00Z"
+  }
+}

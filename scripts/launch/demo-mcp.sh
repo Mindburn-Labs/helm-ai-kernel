@@ -9,7 +9,8 @@ HELM_URL="http://127.0.0.1:${PORT}"
 SERVER_LOG="$TMP/helm-server.log"
 FIXTURE_CMD="python3 scripts/launch/mcp-fixture-server.py"
 ADMIN_KEY="${HELM_ADMIN_API_KEY:-launch-mcp-local-admin-key}"
-TENANT_ID="${HELM_TENANT_ID:-launch-mcp-demo}"
+# serve --policy installs the launch snapshot for the OSS default/default scope.
+TENANT_ID="${HELM_TENANT_ID:-default}"
 
 cleanup() {
   if [ -n "${HELM_PID:-}" ]; then
@@ -74,7 +75,7 @@ tool_names = [tool["name"] for tool in fixture["tools"]]
 tool_schema = json.loads(schema_json)
 
 
-def request(method: str, path: str, payload: dict | None = None, expected: set[int] | None = None) -> tuple[int, dict]:
+def request(method, path, payload=None, expected=None):
     data = None if payload is None else json.dumps(payload).encode()
     req = urllib.request.Request(
         base_url + path,
@@ -84,6 +85,7 @@ def request(method: str, path: str, payload: dict | None = None, expected: set[i
             "Content-Type": "application/json",
             "Authorization": f"Bearer {admin_key}",
             "X-Helm-Tenant-ID": tenant_id,
+            "X-Helm-Principal-ID": "mcp-demo-agent",
         },
     )
     try:

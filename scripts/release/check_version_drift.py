@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import urllib.error
@@ -18,6 +19,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONTRACT = ROOT / "release" / "version-surfaces.yaml"
+REQUEST_TIMEOUT_SECONDS = 30.0
 SEMVER_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 SEMVER_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 
@@ -189,18 +191,19 @@ def http_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
 
 def request_json(url: str) -> Any:
     req = urllib.request.Request(url, headers=http_headers())
-    with urllib.request.urlopen(req, timeout=30) as response:
+    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
 def request_text(url: str) -> str:
-    req = urllib.request.Request(url, headers=http_headers())
-    with urllib.request.urlopen(req, timeout=30) as response:
+    req = urllib.request.Request(url, headers=http_headers({"Accept": "text/plain, text/html, application/xml, */*"}))
+    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
         return response.read().decode("utf-8")
 
 
 def published_error(surface: dict[str, Any], version: str, exc: Exception) -> SurfaceResult:
-    return SurfaceResult(surface["id"], "fail", version, None, url=fmt(surface.get("human_url") or surface.get("url", ""), version), detail=str(exc), blocking=True)
+    detail = f"{type(exc).__name__}: {exc}"
+    return SurfaceResult(surface["id"], "fail", version, None, url=fmt(surface.get("human_url") or surface.get("url", ""), version), detail=detail, blocking=is_blocking(surface))
 
 
 def check_github_release(surface: dict[str, Any], version: str) -> SurfaceResult:
@@ -257,7 +260,7 @@ def ghcr_tags(repository: str) -> list[str]:
     token_url = f"https://ghcr.io/token?scope=repository:{repository}:pull&service=ghcr.io"
     token = request_json(token_url)["token"]
     req = urllib.request.Request(f"https://ghcr.io/v2/{repository}/tags/list", headers=http_headers({"Authorization": f"Bearer {token}"}))
-    with urllib.request.urlopen(req, timeout=30) as response:
+    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
         payload = json.loads(response.read().decode("utf-8"))
     return payload.get("tags") or []
 
@@ -273,12 +276,35 @@ def check_http_exists(surface: dict[str, Any], version: str) -> SurfaceResult:
     url = fmt(surface["url"], version)
     req = urllib.request.Request(url, method="HEAD", headers=http_headers())
     try:
-        with urllib.request.urlopen(req, timeout=30) as response:
+        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
             code = response.status
     except urllib.error.HTTPError as exc:
         code = exc.code
     ok_codes = set(surface.get("ok_status", [200, 301, 302, 403]))
     return SurfaceResult(surface["id"], "pass" if code in ok_codes else "fail", sorted(ok_codes), code, url=fmt(surface.get("human_url", url), version))
+
+
+def check_http_contains(surface: dict[str, Any], version: str) -> SurfaceResult:
+    url = fmt(surface["url"], version)
+    text = request_text(url)
+    expected = [fmt(str(token), version) for token in surface.get("contains", ["{version}"])]
+    missing = [token for token in expected if token not in text]
+    rejected = [fmt(str(token), version) for token in surface.get("rejects", []) if fmt(str(token), version) in text]
+    actual = {
+        "found": [token for token in expected if token not in missing],
+        "missing": missing,
+        "rejected_found": rejected,
+    }
+    return SurfaceResult(surface["id"], "pass" if not missing and not rejected else "fail", expected, actual, url=fmt(surface.get("human_url", url), version), blocking=is_blocking(surface))
+
+
+def check_pkg_go_dev(surface: dict[str, Any], version: str) -> SurfaceResult:
+    url = fmt(surface["url"], version)
+    text = request_text(url)
+    versions = unique(re.findall(r"\bv[0-9]+\.[0-9]+\.[0-9]+\b", text))
+    expected = f"v{version}"
+    detail = None if expected in versions else "pkg.go.dev has not indexed the aligned SDK module tag yet"
+    return SurfaceResult(surface["id"], "pass" if expected in versions else "fail", expected, versions, url=fmt(surface.get("human_url", url), version), detail=detail, blocking=is_blocking(surface))
 
 
 PUBLISHED_CHECKS = {
@@ -291,6 +317,8 @@ PUBLISHED_CHECKS = {
     "homebrew_formula": check_homebrew_formula,
     "ghcr_tags": check_ghcr_tags,
     "http_exists": check_http_exists,
+    "http_contains": check_http_contains,
+    "pkg_go_dev": check_pkg_go_dev,
 }
 
 
@@ -306,7 +334,7 @@ def check_published(contract: dict[str, Any], version: str, skip: set[str]) -> l
             continue
         try:
             results.append(checker(surface, version))
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, KeyError, ET.ParseError, json.JSONDecodeError) as exc:
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, socket.timeout, KeyError, ET.ParseError, json.JSONDecodeError) as exc:
             results.append(published_error(surface, version, exc))
     return results
 
@@ -364,13 +392,18 @@ def parse_args() -> argparse.Namespace:
     local.add_argument("--tag", help="tag ref to compare, for example v1.2.3")
     published = sub.add_parser("published", help="check public registry surfaces")
     published.add_argument("--skip", action="append", default=[], help="published surface id to skip; can be passed more than once")
+    published.add_argument("--surface-timeout", type=float, default=REQUEST_TIMEOUT_SECONDS, help="timeout in seconds for each public surface request")
     return parser.parse_args()
 
 
 def main() -> int:
+    global REQUEST_TIMEOUT_SECONDS
     args = parse_args()
     contract = load_contract(args.contract)
     version = expected_version(contract, args.expected_version)
+    if getattr(args, "surface_timeout", REQUEST_TIMEOUT_SECONDS) <= 0:
+        raise SystemExit("--surface-timeout must be greater than 0")
+    REQUEST_TIMEOUT_SECONDS = float(getattr(args, "surface_timeout", REQUEST_TIMEOUT_SECONDS))
 
     if args.mode == "local":
         source_results = check_local(contract, version, args.tag)

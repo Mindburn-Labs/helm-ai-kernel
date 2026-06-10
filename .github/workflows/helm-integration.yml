@@ -1,0 +1,182 @@
+name: Helm Integration — Launchpad k8s smoke
+
+on:
+  pull_request:
+    paths:
+      - "deploy/helm-chart/**"
+      - "scripts/ci/launchpad_k8s_smoke.sh"
+      - ".github/workflows/helm-integration.yml"
+      - "registry/launchpad/apps/openclaw.yaml"
+      - "registry/launchpad/apps/hermes.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "deploy/helm-chart/**"
+      - "scripts/ci/launchpad_k8s_smoke.sh"
+      - ".github/workflows/helm-integration.yml"
+  workflow_dispatch:
+    inputs:
+      kernel_image:
+        description: Kernel OCI image to deploy (must already exist on GHCR or be loaded locally)
+        required: false
+        default: "ghcr.io/mindburn-labs/helm-ai-kernel:latest"
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # CLI deps pinned by version + sha256 (Scorecard Pinned-Dependencies — no
+  # download-then-run of `latest`). Bump version and sha256 together.
+  MINIKUBE_VERSION: v1.38.1
+  MINIKUBE_SHA256: 099477eaf248bcb5bcea8ce78a2898e93ac01461c35189da1848c3de82ecd22e
+  HELM_VERSION: v3.21.0
+  HELM_SHA256: 0093eb572e3d2380f094df162ddb525e219249de88957afe24cfbb19632acd36
+
+concurrency:
+  group: helm-integration-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  baseline:
+    name: chart-only baseline (no launchpad apps)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Install CLI dependencies (minikube + helm + kubectl)
+        run: |
+          set -euo pipefail
+          # minikube — pinned version + sha256 (was: storage.googleapis.com/.../latest,
+          # download-then-run; still a direct binary, immune to setup-minikube 404s).
+          curl -fsSL -o /tmp/minikube "https://github.com/kubernetes/minikube/releases/download/${MINIKUBE_VERSION}/minikube-linux-amd64"
+          echo "${MINIKUBE_SHA256}  /tmp/minikube" | sha256sum -c -
+          sudo install -m 0755 /tmp/minikube /usr/local/bin/minikube
+          minikube version
+          # helm v3 — pinned tarball + sha256 (was: get-helm-3 | bash). Needed to render
+          # the chart with launchpadApps schema 2020-12.
+          curl -fsSL -o /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  /tmp/helm.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/helm.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+          helm version --short
+          kubectl version --client
+
+      - name: Build kernel image on host docker
+        run: |
+          set -euo pipefail
+          docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:smoke -f ./Dockerfile .
+          docker image ls ghcr.io/mindburn-labs/helm-ai-kernel:smoke
+
+      - name: Run baseline smoke
+        env:
+          LAUNCHPAD_SMOKE_KERNEL_IMAGE: "ghcr.io/mindburn-labs/helm-ai-kernel:smoke"
+          LAUNCHPAD_SMOKE_KEEP_CLUSTER: "1"
+          LAUNCHPAD_SMOKE_PROFILE: minikube
+          LAUNCHPAD_SMOKE_PRE_PULL: "0"
+        run: bash scripts/ci/launchpad_k8s_smoke.sh --mode baseline
+
+  launchpad-positive:
+    name: openclaw + hermes positive (real OPENROUTER_API_KEY)
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'launchpad-live-test') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [baseline]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Log in to GHCR for launchpad image pulls
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Install CLI dependencies (minikube + helm + kubectl)
+        run: |
+          set -euo pipefail
+          # minikube — pinned version + sha256 (was: storage.googleapis.com/.../latest,
+          # download-then-run; still a direct binary, immune to setup-minikube 404s).
+          curl -fsSL -o /tmp/minikube "https://github.com/kubernetes/minikube/releases/download/${MINIKUBE_VERSION}/minikube-linux-amd64"
+          echo "${MINIKUBE_SHA256}  /tmp/minikube" | sha256sum -c -
+          sudo install -m 0755 /tmp/minikube /usr/local/bin/minikube
+          minikube version
+          # helm v3 — pinned tarball + sha256 (was: get-helm-3 | bash). Needed to render
+          # the chart with launchpadApps schema 2020-12.
+          curl -fsSL -o /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  /tmp/helm.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/helm.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+          helm version --short
+          kubectl version --client
+
+      - name: Build kernel image on host docker
+        run: |
+          set -euo pipefail
+          docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:smoke -f ./Dockerfile .
+          docker image ls ghcr.io/mindburn-labs/helm-ai-kernel:smoke
+
+      - name: Run positive smoke
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
+          LAUNCHPAD_SMOKE_KERNEL_IMAGE: "ghcr.io/mindburn-labs/helm-ai-kernel:smoke"
+          LAUNCHPAD_SMOKE_KEEP_CLUSTER: "1"
+          LAUNCHPAD_SMOKE_PROFILE: minikube
+        run: |
+          if [[ -z "${OPENROUTER_API_KEY}" ]]; then
+            echo "::warning::HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY secret not configured — skipping positive scenario"
+            exit 0
+          fi
+          bash scripts/ci/launchpad_k8s_smoke.sh --mode positive
+
+  launchpad-negative:
+    name: openclaw + hermes negative (fake key)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [baseline]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Log in to GHCR for launchpad image pulls
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Install CLI dependencies (minikube + helm + kubectl)
+        run: |
+          set -euo pipefail
+          # minikube — pinned version + sha256 (was: storage.googleapis.com/.../latest,
+          # download-then-run; still a direct binary, immune to setup-minikube 404s).
+          curl -fsSL -o /tmp/minikube "https://github.com/kubernetes/minikube/releases/download/${MINIKUBE_VERSION}/minikube-linux-amd64"
+          echo "${MINIKUBE_SHA256}  /tmp/minikube" | sha256sum -c -
+          sudo install -m 0755 /tmp/minikube /usr/local/bin/minikube
+          minikube version
+          # helm v3 — pinned tarball + sha256 (was: get-helm-3 | bash). Needed to render
+          # the chart with launchpadApps schema 2020-12.
+          curl -fsSL -o /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  /tmp/helm.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/helm.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+          helm version --short
+          kubectl version --client
+
+      - name: Build kernel image on host docker
+        run: |
+          set -euo pipefail
+          docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:smoke -f ./Dockerfile .
+          docker image ls ghcr.io/mindburn-labs/helm-ai-kernel:smoke
+
+      - name: Run negative smoke
+        env:
+          LAUNCHPAD_SMOKE_KERNEL_IMAGE: "ghcr.io/mindburn-labs/helm-ai-kernel:smoke"
+          LAUNCHPAD_SMOKE_KEEP_CLUSTER: "1"
+          LAUNCHPAD_SMOKE_PROFILE: minikube
+        run: bash scripts/ci/launchpad_k8s_smoke.sh --mode negative

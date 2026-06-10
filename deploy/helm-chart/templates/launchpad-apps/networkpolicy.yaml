@@ -1,0 +1,60 @@
+{{- if and .Values.launchpadApps.networkPolicy.enabled (or .Values.launchpadApps.openclaw.enabled .Values.launchpadApps.hermes.enabled) -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "helm-ai-kernel.fullname" . }}-launchpad-apps
+  labels:
+    {{- include "helm-ai-kernel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: launchpad-app
+  annotations:
+    helm.ai/policy-intent: "defense-in-depth; egress is enforced in-pod via iptables REDIRECT into the egress proxy sidecar (see egress-init), this policy is a second layer"
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: helm-ai-kernel
+      app.kubernetes.io/component: launchpad-app
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Default-deny ingress to launchpad app Pods. The kernel does not push
+    # work into them in the co-deployment topology — they are pulled from
+    # via `kubectl exec` (openclaw) or run to completion as a Job (hermes).
+    []
+  egress:
+    {{- if .Values.launchpadApps.networkPolicy.allowDNS }}
+    # DNS resolution — needed by the egress sidecar to look up openrouter.ai.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
+    # Outbound HTTPS — only the egress proxy sidecar actually leaves the Pod on
+    # :443 (workload TCP is iptables-REDIRECTed into the sidecar, which re-emits
+    # TLS to allowlisted destinations and writes a receipt for every attempt).
+    # Allowlist enforcement happens inside the sidecar via HELM_EGRESS_ALLOWLIST;
+    # this rule is the node-level second layer.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              # Block intra-cluster reach by accident — the chart-mode network
+              # policy is a smoke guardrail, not a substitute for a CNI-level
+              # NetworkPolicy enforcement (Calico/Cilium). On minikube with the
+              # default kindnet CNI this object is recorded but not enforced;
+              # smoke skripts opt in to `--network-plugin=cni --cni=calico`.
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+{{- end }}

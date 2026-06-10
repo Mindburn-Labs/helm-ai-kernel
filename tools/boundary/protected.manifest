@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-09T13:58:49Z
-# Commit: 6f9ca5113c029b0e29cc2fa1848f96e7fbbf463e
+# Generated: 2026-06-10T11:35:58Z
+# Commit: 423ae6842414e9c09d0ae9b9a02cc41d39952f1a
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -467,7 +467,7 @@ c03e9e13148436da767d4f21deb9d5efaa663df71eb783bd986a297b46d40bb8  core/pkg/safed
 52700cd4abbe86ec35d58338f395760f64d48b7c2971d1c9de72dd9efe53ec3e  core/pkg/safedep/store_sqlite.go
 d4b1355d20707d2a5828ed9da3cacaeff085301319977aca9126c75324f9d574  core/pkg/audit/audit_behavior_coverage_test.go
 ccf98f9bb1b284fd0550acea4ce4035328b248b27f8fc235f0deea11eb7c3b84  core/pkg/audit/audit_test.go
-cd7921263ffaeb23c0e3c191d9026b321d813fee9f7c5fe1e65930706454535a  core/pkg/audit/export.go
+28e14911351c48771d254728f198e2f81599ce208996e13d300a6075544db306  core/pkg/audit/export.go
 2ad4260470ef4b93bf5bc4cb4dff57b1f4b60b9de1b6677e84bc52b319ea73dc  core/pkg/audit/logger.go
 a2785afd9fb3894e6438e6967299364cfd289b6e5a7fc0667ba82d5402fe45e1  core/pkg/audit/store_logger.go
 b15cabc823af335741e8076e07b1cd3eb7a543be469bccd026756281499c9660  core/pkg/audit/timeline.go
@@ -853,7 +853,7 @@ c28f8d64a15c801dff22c984b977f5a3f899684653ab4307386b842cd0b467bb  protocols/prot
 a3b4957fbf92a0950e4dccbe6d48037b8b88b56c0ba5d36ac3cbab1695b92b58  protocols/proto/helm/kernel/v1/helm.proto
 f294ad5b8fcc429072bd16a1dcef407e4884e843c6099c5de8d1ce8ec3cc0f2c  protocols/proto/helm/truth/v1/truth.proto
 1405469fcd9be2bdb08cee0f7ad201c6504cf68c941462f443aec13c3c0632aa  protocols/spec/PROTOCOL.md
-165e28db76f8a1e12f65451c283587b628a19806627ffd11febaf1176b9f0593  protocols/spec/evidence-pack-v1.md
+3703bcf881c3577f7ffaafa36672da4a05d7342a4a2e61299517ade500622bda  protocols/spec/evidence-pack-v1.md
 6709408084e33158dfe9baf079e5a66b99c33c04362aa2dd76c832e3c5af7d21  protocols/spec/external-evidence-receipt-profile-v0.1.md
 b5b0ad4ea4a936f16ab4bd82e6cfed5e8b52c3c1a9eb2ce30d5043f0c1939aa3  protocols/specs/README.md
 59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03  protocols/specs/SPEC_VERSION

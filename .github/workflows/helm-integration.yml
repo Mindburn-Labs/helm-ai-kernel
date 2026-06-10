@@ -28,6 +28,12 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # CLI deps pinned by version + sha256 (Scorecard Pinned-Dependencies — no
+  # download-then-run of `latest`). Bump version and sha256 together.
+  MINIKUBE_VERSION: v1.38.1
+  MINIKUBE_SHA256: 099477eaf248bcb5bcea8ce78a2898e93ac01461c35189da1848c3de82ecd22e
+  HELM_VERSION: v3.21.0
+  HELM_SHA256: 0093eb572e3d2380f094df162ddb525e219249de88957afe24cfbb19632acd36
 
 concurrency:
   group: helm-integration-${{ github.head_ref || github.ref }}
@@ -45,12 +51,18 @@ jobs:
       - name: Install CLI dependencies (minikube + helm + kubectl)
         run: |
           set -euo pipefail
-          # minikube — direct binary, immune to setup-minikube's preload-index 404s.
-          curl -fsSL -o /tmp/minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+          # minikube — pinned version + sha256 (was: storage.googleapis.com/.../latest,
+          # download-then-run; still a direct binary, immune to setup-minikube 404s).
+          curl -fsSL -o /tmp/minikube "https://github.com/kubernetes/minikube/releases/download/${MINIKUBE_VERSION}/minikube-linux-amd64"
+          echo "${MINIKUBE_SHA256}  /tmp/minikube" | sha256sum -c -
           sudo install -m 0755 /tmp/minikube /usr/local/bin/minikube
           minikube version
-          # helm v3 — needed to render the chart with launchpadApps schema 2020-12.
-          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          # helm v3 — pinned tarball + sha256 (was: get-helm-3 | bash). Needed to render
+          # the chart with launchpadApps schema 2020-12.
+          curl -fsSL -o /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  /tmp/helm.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/helm.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
           helm version --short
           kubectl version --client
 
@@ -88,12 +100,18 @@ jobs:
       - name: Install CLI dependencies (minikube + helm + kubectl)
         run: |
           set -euo pipefail
-          # minikube — direct binary, immune to setup-minikube's preload-index 404s.
-          curl -fsSL -o /tmp/minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+          # minikube — pinned version + sha256 (was: storage.googleapis.com/.../latest,
+          # download-then-run; still a direct binary, immune to setup-minikube 404s).
+          curl -fsSL -o /tmp/minikube "https://github.com/kubernetes/minikube/releases/download/${MINIKUBE_VERSION}/minikube-linux-amd64"
+          echo "${MINIKUBE_SHA256}  /tmp/minikube" | sha256sum -c -
           sudo install -m 0755 /tmp/minikube /usr/local/bin/minikube
           minikube version
-          # helm v3 — needed to render the chart with launchpadApps schema 2020-12.
-          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          # helm v3 — pinned tarball + sha256 (was: get-helm-3 | bash). Needed to render
+          # the chart with launchpadApps schema 2020-12.
+          curl -fsSL -o /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  /tmp/helm.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/helm.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
           helm version --short
           kubectl version --client
 
@@ -135,12 +153,18 @@ jobs:
       - name: Install CLI dependencies (minikube + helm + kubectl)
         run: |
           set -euo pipefail
-          # minikube — direct binary, immune to setup-minikube's preload-index 404s.
-          curl -fsSL -o /tmp/minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+          # minikube — pinned version + sha256 (was: storage.googleapis.com/.../latest,
+          # download-then-run; still a direct binary, immune to setup-minikube 404s).
+          curl -fsSL -o /tmp/minikube "https://github.com/kubernetes/minikube/releases/download/${MINIKUBE_VERSION}/minikube-linux-amd64"
+          echo "${MINIKUBE_SHA256}  /tmp/minikube" | sha256sum -c -
           sudo install -m 0755 /tmp/minikube /usr/local/bin/minikube
           minikube version
-          # helm v3 — needed to render the chart with launchpadApps schema 2020-12.
-          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          # helm v3 — pinned tarball + sha256 (was: get-helm-3 | bash). Needed to render
+          # the chart with launchpadApps schema 2020-12.
+          curl -fsSL -o /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  /tmp/helm.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/helm.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
           helm version --short
           kubectl version --client
 

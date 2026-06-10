@@ -79,6 +79,9 @@ type Report struct {
 	// HelmCoverage indicates if HELM was detected in the tree.
 	HelmCoverage HelmCoverage `json:"helm_coverage"`
 
+	// Grade is the boundary grade derived from the findings.
+	Grade Grade `json:"grade"`
+
 	// GeneratedAt is the scan completion timestamp.
 	GeneratedAt time.Time `json:"generated_at"`
 

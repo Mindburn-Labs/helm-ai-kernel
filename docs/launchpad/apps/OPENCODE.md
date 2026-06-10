@@ -1,11 +1,11 @@
 ---
-last_reviewed: "2026-05-28"
+last_reviewed: "2026-06-11"
 ---
 
 # OpenCode on HELM
 
 ## What this proves
-OpenCode runs through HELM’s fail-closed execution boundary.
+OpenCode runs through HELM’s fail-closed execution boundary. The launch is driven by a registry-pinned app definition and a safe default-deny policy: HELM installs OpenCode into a sandboxed local container, gates every tool call through the kernel verdict path, and emits a signed receipt for each lifecycle step, from install and healthcheck to teardown. The run ends with an exported EvidencePack that anyone can verify offline, so terminal coding sessions stay inside a provable authority envelope.
 
 ```mermaid
 flowchart TD

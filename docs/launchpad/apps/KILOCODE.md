@@ -1,11 +1,11 @@
 ---
-last_reviewed: "2026-05-28"
+last_reviewed: "2026-06-11"
 ---
 
 # Kilo Code on HELM
 
 ## What this proves
-Kilo Code runs through HELM’s fail-closed execution boundary.
+Kilo Code runs through HELM’s fail-closed execution boundary. The launch is driven by a registry-pinned app definition and a safe default-deny policy: HELM installs Kilo Code into a sandboxed local container, gates every tool call through the kernel verdict path, and emits a signed receipt for each lifecycle step, from install and healthcheck to teardown. The run ends with an exported EvidencePack that anyone can verify offline, so a coding agent's session leaves a replayable proof trail instead of just terminal scrollback.
 
 ```mermaid
 flowchart TD

@@ -359,8 +359,69 @@ func verifyEmbeddedDocumentSignature(document map[string]any, sig string, opts V
 	case "managed_agent_execution_receipt.v1":
 		return verifyManagedAgentEd25519Signature(document, sig, opts.ManagedAgentReceiptPublicKeyHex, firstString(document, "receipt_hash"))
 	default:
+		if firstString(document, "type") == "mcp_policy_decision" {
+			return verifyMCPPolicyDecisionReceiptSignature(document, sig, opts)
+		}
 		return false
 	}
+}
+
+// verifyMCPPolicyDecisionReceiptSignature verifies kernel-issued MCP proof
+// receipts (`mcp proof` quarantine scenarios). The signing key is disclosed in
+// receipt metadata and is integrity-anchored by the pack seal, so
+// disclosure-based trust is accepted only under the dev-local profile — the
+// same trust decision the seal check already makes for dev-local packs. Every
+// other profile requires out-of-band trust roots and fails closed here.
+func verifyMCPPolicyDecisionReceiptSignature(document map[string]any, sig string, opts VerifyOptions) bool {
+	profile := opts.Profile
+	if profile == "" {
+		profile = evidencepkg.EvidenceTrustProfileDevLocal
+	}
+	if profile != evidencepkg.EvidenceTrustProfileDevLocal {
+		return false
+	}
+	meta, _ := document["metadata"].(map[string]any)
+	if meta == nil {
+		return false
+	}
+	if firstString(meta, "signature_key_type") != "ed25519" {
+		return false
+	}
+	keyHex := strings.TrimSpace(firstString(meta, "signing_public_key_hex"))
+	if keyHex == "" {
+		return false
+	}
+	if ref := strings.TrimSpace(firstString(meta, "signature_key_ref")); ref != "" {
+		const refPrefix = "ed25519:"
+		if !strings.HasPrefix(ref, refPrefix) || !strings.HasPrefix(strings.ToLower(keyHex), strings.ToLower(strings.TrimPrefix(ref, refPrefix))) {
+			return false
+		}
+	}
+	pubBytes, err := hex.DecodeString(keyHex)
+	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
+		return false
+	}
+	sigBytes, err := hex.DecodeString(strings.TrimSpace(sig))
+	if err != nil || len(sigBytes) != ed25519.SignatureSize {
+		return false
+	}
+	var lamport uint64
+	if v := firstUint(document, "lamport_clock"); v != nil {
+		lamport = *v
+	}
+	// Mirrors crypto.CanonicalizeReceipt — receipt_id:decision_id:effect_id:
+	// status:output_hash:prev_hash:lamport_clock:args_hash.
+	payload := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%d:%s",
+		firstString(document, "receipt_id"),
+		firstString(document, "decision_id"),
+		firstString(document, "effect_id"),
+		firstString(document, "status"),
+		firstString(document, "output_hash"),
+		firstString(document, "prev_hash"),
+		lamport,
+		firstString(document, "args_hash"),
+	)
+	return ed25519.Verify(ed25519.PublicKey(pubBytes), []byte(payload), sigBytes)
 }
 
 func verifyManagedAgentEd25519Signature(document map[string]any, sig, trustedPublicKeyHex, payload string) bool {

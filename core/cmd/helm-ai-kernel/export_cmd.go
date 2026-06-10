@@ -28,6 +28,12 @@ func runExportCmd(args []string, stdout, stderr io.Writer) int {
 		return handlePackCreate(args[1:])
 	}
 
+	// Support `helm-ai-kernel export aat` subcommand (MIN-496):
+	// IETF draft-sharif-agent-audit-trail conformant export/verify.
+	if len(args) > 0 && args[0] == "aat" {
+		return runExportAATCmd(args[1:], stdout, stderr)
+	}
+
 	cmd := flag.NewFlagSet("export", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 
@@ -479,5 +485,5 @@ func appendUniqueSorted(values []string, next ...string) []string {
 }
 
 func init() {
-	Register(Subcommand{Name: "export", Aliases: []string{}, Usage: "Export EvidencePack (--evidence, --out)", RunFn: runExportCmd})
+	Register(Subcommand{Name: "export", Aliases: []string{}, Usage: "Export EvidencePack (--evidence, --out); `export aat` for IETF AAT JSONL", RunFn: runExportCmd})
 }

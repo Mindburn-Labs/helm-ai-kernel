@@ -7,7 +7,7 @@ metadata:
     {{- include "helm-ai-kernel.labels" . | nindent 4 }}
     app.kubernetes.io/component: launchpad-app
   annotations:
-    helm.ai/policy-intent: "default-deny except DNS and outbound HTTPS via egress sidecar"
+    helm.ai/policy-intent: "defense-in-depth; egress is enforced in-pod via iptables REDIRECT into the egress proxy sidecar (see egress-init), this policy is a second layer"
 spec:
   podSelector:
     matchLabels:
@@ -37,9 +37,11 @@ spec:
         - protocol: TCP
           port: 53
     {{- end }}
-    # Outbound HTTPS — the egress sidecar terminates the workload's HTTP_PROXY
-    # CONNECT tunnel and re-emits TLS to openrouter.ai. Allowlist enforcement
-    # happens inside the sidecar via HELM_EGRESS_ALLOWLIST.
+    # Outbound HTTPS — only the egress proxy sidecar actually leaves the Pod on
+    # :443 (workload TCP is iptables-REDIRECTed into the sidecar, which re-emits
+    # TLS to allowlisted destinations and writes a receipt for every attempt).
+    # Allowlist enforcement happens inside the sidecar via HELM_EGRESS_ALLOWLIST;
+    # this rule is the node-level second layer.
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0

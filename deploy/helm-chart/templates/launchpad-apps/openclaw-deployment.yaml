@@ -30,6 +30,10 @@ spec:
         runAsUser: 65534
         runAsGroup: 65534
         fsGroup: 65534
+      initContainers:
+        # Egress enforcement: install the iptables REDIRECT before the workload
+        # starts, so every outbound TCP is forced through the egress proxy sidecar.
+        {{- include "helm-ai-kernel.launchpadApp.egressInit" (dict "sidecar" $cfg.egressSidecar) | nindent 8 }}
       containers:
         # Workload container — gateway bound to loopback, mirroring the local-container
         # runbook (registry/launchpad/apps/openclaw.yaml). Smoke tests reach the gateway
@@ -58,12 +62,8 @@ spec:
           env:
             - name: HOME
               value: /opt/openclaw/.openclaw
-            - name: HTTP_PROXY
-              value: {{ printf "http://127.0.0.1:%d" (int $cfg.egressSidecar.port) | quote }}
-            - name: HTTPS_PROXY
-              value: {{ printf "http://127.0.0.1:%d" (int $cfg.egressSidecar.port) | quote }}
-            - name: NO_PROXY
-              value: "localhost,127.0.0.1,.svc,.cluster.local"
+            # No HTTP_PROXY/HTTPS_PROXY: egress is enforced transparently by the
+            # egress-init iptables REDIRECT, not by the workload honoring proxy env.
             - name: OPENROUTER_API_KEY
               valueFrom:
                 secretKeyRef:

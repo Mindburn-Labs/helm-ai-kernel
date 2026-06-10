@@ -32,11 +32,13 @@ spec:
         runAsUser: 65534
         runAsGroup: 65534
         fsGroup: 65534
-      # Native sidecar pattern: egress proxy runs as a restartPolicy:Always
-      # initContainer, so Pod completion is driven solely by the main hermes
-      # container. The proxy starts before hermes, stays alive in parallel,
-      # and is torn down by the kubelet when the workload exits.
+      # Init container order matters: the egress-init installs the iptables
+      # REDIRECT and runs to completion FIRST, then the egress proxy starts as a
+      # restartPolicy:Always sidecar (Pod completion is driven solely by the main
+      # hermes container; the proxy stays alive in parallel and is torn down by
+      # the kubelet when the workload exits).
       initContainers:
+        {{- include "helm-ai-kernel.launchpadApp.egressInit" (dict "sidecar" $cfg.egressSidecar) | nindent 8 }}
         {{- include "helm-ai-kernel.launchpadApp.egressSidecar" (dict "sidecar" $cfg.egressSidecar "init" true) | nindent 8 }}
       containers:
         - name: {{ $app }}
@@ -53,12 +55,8 @@ spec:
           env:
             - name: HOME
               value: /var/lib/hermes
-            - name: HTTP_PROXY
-              value: {{ printf "http://127.0.0.1:%d" (int $cfg.egressSidecar.port) | quote }}
-            - name: HTTPS_PROXY
-              value: {{ printf "http://127.0.0.1:%d" (int $cfg.egressSidecar.port) | quote }}
-            - name: NO_PROXY
-              value: "localhost,127.0.0.1,.svc,.cluster.local"
+            # No HTTP_PROXY/HTTPS_PROXY: egress is enforced transparently by the
+            # egress-init iptables REDIRECT, not by the workload honoring proxy env.
             - name: OPENROUTER_API_KEY
               valueFrom:
                 secretKeyRef:

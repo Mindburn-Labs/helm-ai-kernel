@@ -54,9 +54,22 @@ Namespace: helm-launchpad-smoke
 OpenClaw's gateway binds to `loopback` per
 `registry/launchpad/apps/openclaw.yaml` — the same posture used in the
 local-container runbook. Smoke reaches the gateway through `kubectl
-exec`, not through a Service. The egress sidecar in each Pod terminates
-the workload's `HTTP_PROXY`/`HTTPS_PROXY` and enforces a per-app
-allowlist (`https://openrouter.ai/api/v1`).
+exec`, not through a Service.
+
+Egress is **enforced transparently**, not honor-based. An `egress-init`
+container (`CAP_NET_ADMIN`) installs an iptables `REDIRECT` that funnels
+every outbound TCP connection from the workload into the egress proxy
+sidecar; a direct connection cannot bypass it. The sidecar recovers the
+original destination via `SO_ORIGINAL_DST` (and the hostname via TLS SNI,
+best-effort), enforces the per-app allowlist
+(`https://openrouter.ai/api/v1`), and writes a receipt for **every**
+attempt — allow and deny. The workload needs no `HTTP_PROXY` env.
+
+Caveats — what this does **not** cover: SNI is best-effort (TLS 1.3 ECH,
+non-TLS, or IP-literal traffic yields a receipt keyed by IP rather than
+hostname); only TCP egress is intercepted, so DNS/UDP/ICMP are out of
+scope (DNS-tunnel exfiltration is a separate control). The honest claim
+is "every **TCP** egress goes through the sidecar and leaves a receipt".
 
 ## Source Truth
 
@@ -79,8 +92,8 @@ allowlist (`https://openrouter.ai/api/v1`).
 | `model_gateway_env` + `required_secrets.model_gateway` | Secret reference via `openrouter.apiKeySecretRef`; key injected as `OPENROUTER_API_KEY` env |
 | `filesystem_policy.mounts: workspace:rw` | not modeled in this smoke (no kernel-owned workspace materializer yet) |
 | `filesystem_policy.mounts: app_state:rw:<target>` | `emptyDir` volume at the target path inside the Pod |
-| `network_policy.default: deny` + `allowlist` | NetworkPolicy object + egress sidecar `HELM_EGRESS_ALLOWLIST` |
-| `healthchecks: helm-launchpad-openrouter-check` | Pod `readinessProbe.exec` (openclaw); single Job run with same script implicitly invoked by hermes `--q ping` |
+| `network_policy.default: deny` + `allowlist` | `egress-init` iptables REDIRECT → transparent egress proxy enforcing `HELM_EGRESS_ALLOWLIST` (primary); NetworkPolicy object (defense-in-depth second layer) |
+| `healthchecks: helm-launchpad-openrouter-check` | Pod `readinessProbe.exec` (openclaw); single Job run with same script invoked by hermes `--q ping` — both reach OpenRouter via transparent intercept, no proxy env needed |
 | `mcp_policy.*` | not enforced at the chart level; same as local-container (kernel-side concern) |
 
 ## Quick start

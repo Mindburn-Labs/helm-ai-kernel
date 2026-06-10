@@ -50,5 +50,6 @@ Not included:
 - hosted demo deployment material
 - Grafana dashboards or broader monitoring bundles
 - managed control-plane deployment material
+- Agent Scope Audit chart behavior; `helm-ai-kernel audit scope` is a local CLI and evidence export over receipt files
 
 Those excluded surfaces are not part of the retained OSS deployment contract.

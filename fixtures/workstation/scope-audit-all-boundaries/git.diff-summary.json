@@ -1,0 +1,13 @@
+{
+  "repository": "helm-ai-kernel",
+  "base_ref": "scope-audit-base",
+  "head_ref": "scope-audit-head",
+  "changed_files": [
+    {
+      "path": "docs/workstation-scope-audit.md",
+      "status": "added",
+      "additions": 24,
+      "deletions": 0
+    }
+  ]
+}

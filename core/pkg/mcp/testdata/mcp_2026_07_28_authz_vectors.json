@@ -1,0 +1,107 @@
+{
+  "spec": "MCP 2026-07-28 release candidate (published 2026-06-09)",
+  "source": "https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/",
+  "issuer": "https://as.example",
+  "audience": "helm-mcp",
+  "resource": "https://resource.example/mcp",
+  "vectors": [
+    {
+      "id": "sep-2468-issuer-mismatch",
+      "sep": "SEP-2468",
+      "kind": "token",
+      "note": "RFC 9207 iss validation: token from a different issuer must be rejected (mix-up attack).",
+      "token_issuer": "https://attacker.example",
+      "token_resource": "https://resource.example/mcp",
+      "token_scope": "mcp:tools",
+      "expected_error": "invalid_issuer"
+    },
+    {
+      "id": "sep-2468-issuer-match",
+      "sep": "SEP-2468",
+      "kind": "token",
+      "note": "Token from the configured issuer validates.",
+      "token_issuer": "https://as.example",
+      "token_resource": "https://resource.example/mcp",
+      "token_scope": "mcp:tools",
+      "expected_error": ""
+    },
+    {
+      "id": "sep-2352-foreign-resource-rejected",
+      "sep": "SEP-2352",
+      "kind": "token",
+      "note": "Issuer-bound credentials: a token minted for another resource must not authorize this one (RFC 8707 resource indicator mismatch).",
+      "token_issuer": "https://as.example",
+      "token_resource": "https://other.example/mcp",
+      "token_scope": "mcp:tools",
+      "expected_error": "invalid_resource"
+    },
+    {
+      "id": "sep-2352-bound-resource-accepted",
+      "sep": "SEP-2352",
+      "kind": "token",
+      "note": "Token bound to this resource validates.",
+      "token_issuer": "https://as.example",
+      "token_resource": "https://resource.example/mcp",
+      "token_scope": "mcp:tools",
+      "expected_error": ""
+    },
+    {
+      "id": "sep-2350-step-up-insufficient",
+      "sep": "SEP-2350",
+      "kind": "tool_call",
+      "note": "Scope accumulation during step-up: before step-up the call lacking the elevated scope is denied fail-closed.",
+      "granted_scopes": ["mcp:tools"],
+      "required_scopes": ["mcp:tools", "helm:deploy"],
+      "expected_verdict": "DENY",
+      "expected_reason": "INSUFFICIENT_PRIVILEGE"
+    },
+    {
+      "id": "sep-2350-step-up-accumulated",
+      "sep": "SEP-2350",
+      "kind": "tool_call",
+      "note": "After step-up the accumulated grant (prior scopes plus elevated scope) authorizes the call.",
+      "granted_scopes": ["mcp:tools", "helm:deploy"],
+      "required_scopes": ["mcp:tools", "helm:deploy"],
+      "expected_verdict": "ALLOW",
+      "expected_reason": ""
+    },
+    {
+      "id": "sep-2350-step-up-preserves-prior-grants",
+      "sep": "SEP-2350",
+      "kind": "tool_call",
+      "note": "Accumulation is monotonic: a superset grant keeps authorizing tools that needed only the original scopes.",
+      "granted_scopes": ["mcp:tools", "helm:deploy", "helm:verify"],
+      "required_scopes": ["mcp:tools"],
+      "expected_verdict": "ALLOW",
+      "expected_reason": ""
+    },
+    {
+      "id": "sep-2351-protected-resource-discovery",
+      "sep": "SEP-2351",
+      "kind": "discovery",
+      "note": ".well-known discovery suffix: protected resource metadata is served on both the bare and suffixed path.",
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "expected_fields": ["resource", "authorization_servers", "scopes_supported", "bearer_methods_supported"]
+    },
+    {
+      "id": "sep-2351-protected-resource-discovery-bare",
+      "sep": "SEP-2351",
+      "kind": "discovery",
+      "note": "Bare .well-known path also resolves.",
+      "path": "/.well-known/oauth-protected-resource",
+      "expected_fields": ["resource", "authorization_servers", "scopes_supported", "bearer_methods_supported"]
+    },
+    {
+      "id": "sep-837-dcr-application-type",
+      "sep": "SEP-837",
+      "kind": "client_obligation",
+      "note": "Clients declare OIDC application_type during Dynamic Client Registration. HELM is the protected resource / policy enforcement point, not the registering client; no kernel enforcement surface. Tracked in docs/MCP_2026_07_28_AUTHORIZATION_MAPPING.md."
+    },
+    {
+      "id": "sep-2207-refresh-token-request",
+      "sep": "SEP-2207",
+      "kind": "client_obligation",
+      "note": "Requesting refresh tokens from OIDC-style authorization servers is a client flow. HELM validates whatever access token arrives (issuer, audience, resource, scopes) and is agnostic to refresh acquisition. Tracked in docs/MCP_2026_07_28_AUTHORIZATION_MAPPING.md."
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-10T21:40:29Z
-# Commit: 0cac32d1ea682de807cc117dedc49ce654551296
+# Generated: 2026-06-10T21:53:42Z
+# Commit: 719c2ce1757f51356ffe805ba8a0e5e29ab51f7a
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -468,11 +468,14 @@ cec65ac5bec7c304d23e751029ea821f2cfb81f7923f6738b3474e6c12d36fb0  core/pkg/confo
 6e30b7499c3ad8cadaa06437e3eb2bbe010aa8d313be02db37227df57f213e8a  core/pkg/safedep/safedep.go
 c03e9e13148436da767d4f21deb9d5efaa663df71eb783bd986a297b46d40bb8  core/pkg/safedep/safedep_test.go
 52700cd4abbe86ec35d58338f395760f64d48b7c2971d1c9de72dd9efe53ec3e  core/pkg/safedep/store_sqlite.go
+a2a57a5dc0883b7f7666a201d00a7a91f88ecd49ad247d391854dac03c16d0b7  core/pkg/audit/aat.go
+1339ceb9a2b6f191b72d8cfd6b7619f30e035914d5e475f52e566cabc8b91b85  core/pkg/audit/aat_test.go
 d4b1355d20707d2a5828ed9da3cacaeff085301319977aca9126c75324f9d574  core/pkg/audit/audit_behavior_coverage_test.go
 ccf98f9bb1b284fd0550acea4ce4035328b248b27f8fc235f0deea11eb7c3b84  core/pkg/audit/audit_test.go
 28e14911351c48771d254728f198e2f81599ce208996e13d300a6075544db306  core/pkg/audit/export.go
 2ad4260470ef4b93bf5bc4cb4dff57b1f4b60b9de1b6677e84bc52b319ea73dc  core/pkg/audit/logger.go
 a2785afd9fb3894e6438e6967299364cfd289b6e5a7fc0667ba82d5402fe45e1  core/pkg/audit/store_logger.go
+6c1250e03feee197bcbaae1faa1551e649ea0596100f6fedaa7f2bb3c01bf6c0  core/pkg/audit/testdata/aat_export_golden.jsonl
 b15cabc823af335741e8076e07b1cd3eb7a543be469bccd026756281499c9660  core/pkg/audit/timeline.go
 8a6d242c64ed0080f96a0d5eec83648596aba9c6c3cb73420534ead0e853b465  core/pkg/integrations/receipts/envelope.go
 c3074ebdb36e140948707e8341c8aaa70c13a16554855f1e19eae4ae97afe929  core/pkg/integrations/receipts/envelope_test.go

@@ -1,0 +1,18 @@
+{
+  "receipt": {
+    "receipt_id": "cf-receipt-mcp-boundary-1",
+    "enforcement": "counterfactual",
+    "would_have_verdict": "DENY",
+    "reason_code": "APPROVAL_REQUIRED",
+    "observe_grant_id": "og-1",
+    "boundary_record_id": "mcp-boundary-1",
+    "boundary_record_hash": "sha256:deadbeef",
+    "policy_epoch": "epoch-42",
+    "tool_name": "deploy",
+    "mcp_server_id": "srv-1",
+    "args_hash": "sha256:args",
+    "created_at": "2026-06-11T12:00:00Z"
+  },
+  "expected_receipt_hash": "sha256:ecccd7645497f437c2a36e62ebc92d68668e0a57478f6c24a2d3b194fccaa7df",
+  "expected_signing_payload": "counterfactual:sha256:ecccd7645497f437c2a36e62ebc92d68668e0a57478f6c24a2d3b194fccaa7df"
+}

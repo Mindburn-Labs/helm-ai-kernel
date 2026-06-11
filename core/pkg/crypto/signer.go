@@ -171,3 +171,37 @@ func (s *Ed25519Signer) VerifyReceipt(r *contracts.Receipt) (bool, error) {
 	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
 	return Verify(s.PublicKey(), r.Signature, []byte(payload))
 }
+
+// SignCounterfactualReceipt seals (if needed) and signs a counterfactual
+// receipt. The signature covers the enforcement-prefixed receipt hash, so it can
+// never be lifted onto an enforced receipt. Validation runs first: a receipt that
+// is not labeled counterfactual will not seal and will not be signed.
+func (s *Ed25519Signer) SignCounterfactualReceipt(r *contracts.CounterfactualReceipt) error {
+	sealed, err := r.Seal()
+	if err != nil {
+		return err
+	}
+	sig, err := s.Sign([]byte(sealed.SigningPayload()))
+	if err != nil {
+		return err
+	}
+	sealed.SignerKeyID = s.PublicKey()
+	sealed.Signature = sig
+	*r = sealed
+	return nil
+}
+
+// VerifyCounterfactualReceipt verifies the signature over a counterfactual
+// receipt. It re-seals the receipt to recompute the content hash, so a tampered
+// would-have verdict, reason code, or grant id breaks verification. A receipt
+// that does not validate as counterfactual is rejected before any signature math.
+func (s *Ed25519Signer) VerifyCounterfactualReceipt(r *contracts.CounterfactualReceipt) (bool, error) {
+	if r.Signature == "" {
+		return false, fmt.Errorf("missing signature")
+	}
+	sealed, err := r.Seal()
+	if err != nil {
+		return false, err
+	}
+	return Verify(s.PublicKey(), r.Signature, []byte(sealed.SigningPayload()))
+}

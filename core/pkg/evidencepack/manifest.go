@@ -29,6 +29,13 @@ type Manifest struct {
 	PolicyHash   string          `json:"policy_hash"`
 	Entries      []ManifestEntry `json:"entries"`
 	ManifestHash string          `json:"manifest_hash"`
+
+	// EntriesMerkleRoot is the deterministic Merkle root over Entries (MIN-512).
+	// It is ADDITIVE: it is NOT an input to ComputeManifestHash, so existing
+	// manifest hashes and golden fixtures are unaffected. It enables single-entry
+	// inclusion proofs (see merkle.go / inclusionproof.go) without disclosing
+	// sibling entries. Omitted from JSON when empty for backward compatibility.
+	EntriesMerkleRoot string `json:"entries_merkle_root,omitempty"`
 }
 
 // ManifestEntry describes a single file in the evidence pack.

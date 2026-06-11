@@ -374,17 +374,18 @@ func buildMCPProofArtifacts(runID, scenarioName string, generatedAt time.Time, s
 			ToolName:     scenario.Request.ToolName,
 			ReasonCode:   decision.Reason,
 			Metadata: map[string]any{
-				"scenario_id":        scenario.ID,
-				"threat_class":       scenario.ThreatClass,
-				"summary":            scenario.Summary,
-				"mcp_server_id":      scenario.Request.ServerID,
-				"mcp_tool_name":      scenario.Request.ToolName,
-				"schema_hash":        scenario.Request.SchemaHash,
-				"schema_pin":         decision.SchemaPin,
-				"side_effect_class":  string(scenario.Request.Effect),
-				"dispatched":         dispatched,
-				"signature_key_ref":  mcpProofSignatureKeyRef(signer),
-				"signature_key_type": "ed25519",
+				"scenario_id":            scenario.ID,
+				"threat_class":           scenario.ThreatClass,
+				"summary":                scenario.Summary,
+				"mcp_server_id":          scenario.Request.ServerID,
+				"mcp_tool_name":          scenario.Request.ToolName,
+				"schema_hash":            scenario.Request.SchemaHash,
+				"schema_pin":             decision.SchemaPin,
+				"side_effect_class":      string(scenario.Request.Effect),
+				"dispatched":             dispatched,
+				"signature_key_ref":      mcpProofSignatureKeyRef(signer),
+				"signature_key_type":     "ed25519",
+				"signing_public_key_hex": mcpProofSigningPublicKeyHex(signer),
 			},
 		}
 		if err := signer.SignReceipt(receipt); err != nil {
@@ -452,6 +453,17 @@ func mcpProofSignatureKeyRef(signer helmcrypto.Signer) string {
 		return "ed25519:unknown"
 	}
 	return "ed25519:" + key
+}
+
+// mcpProofSigningPublicKeyHex discloses the full Ed25519 public key so the
+// standalone verifier can validate receipt signatures offline. The disclosure
+// is integrity-anchored by the pack seal and trusted only under the dev-local
+// profile.
+func mcpProofSigningPublicKeyHex(signer helmcrypto.Signer) string {
+	if signer == nil {
+		return ""
+	}
+	return signer.PublicKey()
 }
 
 func allMCPProofResultsNoDispatch(results []mcpProofScenarioResult) bool {

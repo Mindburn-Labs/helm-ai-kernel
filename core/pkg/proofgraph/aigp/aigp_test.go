@@ -22,16 +22,7 @@ func TestExportNode(t *testing.T) {
 		"decision": "ALLOW",
 		"policy":   "default-allow",
 	}
-	payloadBytes, _ := json.Marshal(payload)
-
-	node := proofgraph.NewNode(
-		proofgraph.NodeTypeAttestation,
-		[]string{"parent1"},
-		payloadBytes,
-		42,
-		"agent-001",
-		1,
-	)
+	node := newAIGPCompliantNode(t, proofgraph.NodeTypeAttestation, payload, 42, "agent-001", 1)
 
 	pcd, err := exporter.ExportNode(node)
 	require.NoError(t, err)
@@ -48,7 +39,7 @@ func TestExportNode(t *testing.T) {
 	// Verify crypto evidence.
 	assert.Equal(t, node.NodeHash, pcd.Evidence.NodeHash)
 	assert.Equal(t, node.NodeHash, pcd.Evidence.GovernanceHash)
-	assert.Equal(t, []string{"parent1"}, pcd.Evidence.ParentHashes)
+	assert.Equal(t, []string{testAIGPParentHash}, pcd.Evidence.ParentHashes)
 	assert.Equal(t, "SHA-256", pcd.Evidence.HashAlgorithm)
 	assert.Equal(t, uint64(42), pcd.Evidence.LamportClock)
 
@@ -57,7 +48,7 @@ func TestExportNode(t *testing.T) {
 	assert.Equal(t, "v1.2", pcd.Provenance.ProofGraphVersion)
 	assert.Equal(t, node.NodeHash, pcd.Provenance.NodeID)
 
-	// Verify 4TS compliance (HELM satisfies all four).
+	// Verify 4TS compliance is derived from explicit node evidence.
 	assert.True(t, pcd.FourTests.Stoppable)
 	assert.True(t, pcd.FourTests.Owned)
 	assert.True(t, pcd.FourTests.Replayable)
@@ -92,7 +83,7 @@ func TestExportNode_AllNodeTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.kind), func(t *testing.T) {
-			node := proofgraph.NewNode(tt.kind, nil, []byte("{}"), 1, "test", 0)
+			node := newAIGPCompliantNode(t, tt.kind, nil, 1, "test", 0)
 			pcd, err := exporter.ExportNode(node)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, pcd.Action.Type)
@@ -134,15 +125,12 @@ func TestExportRange(t *testing.T) {
 	store := proofgraph.NewInMemoryStore()
 	ctx := context.Background()
 
-	// Populate the graph with nodes.
-	graph := store.Graph()
 	for i := 0; i < 5; i++ {
-		payload, _ := json.Marshal(map[string]string{
+		node := newAIGPCompliantNode(t, proofgraph.NodeTypeAttestation, map[string]string{
 			"tool":     "test_tool",
 			"decision": "ALLOW",
-		})
-		_, err := graph.Append(proofgraph.NodeTypeAttestation, payload, "agent-1", uint64(i))
-		require.NoError(t, err)
+		}, uint64(i+1), "agent-1", uint64(i))
+		require.NoError(t, store.StoreNode(ctx, node))
 	}
 
 	exporter := NewExporter(ExporterConfig{Source: "test"})
@@ -161,11 +149,9 @@ func TestExportBundle(t *testing.T) {
 	store := proofgraph.NewInMemoryStore()
 	ctx := context.Background()
 
-	graph := store.Graph()
 	for i := 0; i < 3; i++ {
-		payload, _ := json.Marshal(map[string]string{"decision": "ALLOW"})
-		_, err := graph.Append(proofgraph.NodeTypeAttestation, payload, "agent-1", uint64(i))
-		require.NoError(t, err)
+		node := newAIGPCompliantNode(t, proofgraph.NodeTypeAttestation, map[string]string{"decision": "ALLOW"}, uint64(i+1), "agent-1", uint64(i))
+		require.NoError(t, store.StoreNode(ctx, node))
 	}
 
 	exporter := NewExporter(ExporterConfig{Source: "test-instance"})

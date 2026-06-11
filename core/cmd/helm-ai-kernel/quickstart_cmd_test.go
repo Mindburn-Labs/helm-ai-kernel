@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -13,7 +14,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
+	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 )
 
 func TestLoadServePolicyTOML(t *testing.T) {
@@ -92,6 +95,63 @@ path = "./data/receipts.db"
 	}
 }
 
+func TestCompileServePolicySnapshotRequiresReferencePackDigest(t *testing.T) {
+	dir := t.TempDir()
+	refDir := filepath.Join(dir, "reference_packs")
+	if err := os.MkdirAll(refDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	refBytes := []byte(`{
+  "pack_id": "runtime-pack",
+  "version": 1,
+  "runtime_actions": [
+    {"action": "EXECUTE_TOOL", "expression": "true"}
+  ]
+}`)
+	if err := os.WriteFile(filepath.Join(refDir, "runtime.json"), refBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	policyPath := filepath.Join(dir, "policy.toml")
+	policyBytes := []byte(`
+name = "runtime"
+profile = "test"
+reference_pack = "./reference_packs/runtime.json"
+
+[server]
+bind = "127.0.0.1"
+port = 7714
+
+[receipts]
+store = "sqlite"
+path = "./data/receipts.db"
+`)
+	if err := os.WriteFile(policyPath, policyBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	head := policyreconcile.PolicyHead{
+		Scope:       policyreconcile.DefaultScope,
+		PolicyEpoch: 1,
+		PolicyHash:  policyreconcile.HashBytes(policyBytes),
+		BundleRef:   policyPath,
+		SourceRefs:  []string{policyPath},
+	}
+	if _, err := compileServePolicySnapshot(context.Background(), head, policyBytes); err == nil || !strings.Contains(err.Error(), "missing reference_pack digest") {
+		t.Fatalf("expected missing reference_pack digest error, got %v", err)
+	}
+
+	ref := "reference_pack:" + filepath.Join(refDir, "runtime.json") + "@" + policyreconcile.HashBytes(refBytes)
+	head.SourceRefs = append(head.SourceRefs, ref)
+	head.PolicyHash = policyreconcile.PolicyHashWithSourceRefs(policyBytes, head.SourceRefs)
+	snapshot, err := compileServePolicySnapshot(context.Background(), head, policyBytes)
+	if err != nil {
+		t.Fatalf("digest-bound policy compile failed: %v", err)
+	}
+	if snapshot.PolicyHash != head.PolicyHash {
+		t.Fatalf("snapshot policy hash not bound to source refs: %s != %s", snapshot.PolicyHash, head.PolicyHash)
+	}
+}
+
 func TestLoadServePolicyRuntimeRequiresValidReferencePack(t *testing.T) {
 	dir := t.TempDir()
 	policyPath := filepath.Join(dir, "policy.toml")
@@ -161,6 +221,41 @@ func TestVerifyCmdOnlineUsesLedgerURL(t *testing.T) {
 	}
 }
 
+func TestVerifyCmdRejectsBundledConformancePublicKey(t *testing.T) {
+	bundle := createMinimalVerifiableBundle(t)
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conform.SignReport(bundle, "policy-hash", "schema-hash", "attacker", func(data []byte) (string, error) {
+		return hex.EncodeToString(ed25519.Sign(priv, data)), nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundle, "public_key.hex"), []byte(hex.EncodeToString(pub)), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := runVerifyCmd([]string{bundle, "--json"}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("verify accepted bundled public_key.hex as a trust root: stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "no trusted verification key") {
+		t.Fatalf("verify did not report missing external trust root: stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if err := os.Remove(filepath.Join(bundle, "public_key.hex")); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = runVerifyCmd([]string{bundle, "--json", "--trusted-public-key", hex.EncodeToString(pub)}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("verify with explicit trusted key failed: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestReceiptsTailRequiresAgent(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runReceiptsCmd([]string{"tail"}, &stdout, &stderr)
@@ -191,7 +286,7 @@ func createMinimalVerifiableBundle(t *testing.T) string {
 		}
 	}
 	score := []byte(`{"pass":true}`)
-	receipt := []byte(`{"decision_hash":"sha256:decision","signature":"sig","lamport_clock":1}`)
+	receipt := []byte(`{"decision_hash":"sha256:decision","lamport_clock":1}`)
 	proofgraph := []byte(`{"nodes":[]}`)
 	files := map[string][]byte{
 		"01_SCORE.json":                  score,

@@ -151,46 +151,51 @@ func (c *Certifier) CreateAttestation(
 
 // Sign adds a signature to the attestation.
 func (c *Certifier) Sign(att *ModuleAttestation) error {
-	// Compute attestation hash (excluding signatures)
-	attHash, err := att.computeHash()
-	if err != nil {
-		return fmt.Errorf("failed to compute attestation hash: %w", err)
-	}
-
-	// Sign with Ed25519
-	sig := ed25519.Sign(c.privateKey, attHash)
-
-	att.Signatures = append(att.Signatures, AttestationSignature{
+	signature := AttestationSignature{
 		SignerID:    c.signerID,
 		SignerRole:  c.signerRole,
-		Signature:   base64.StdEncoding.EncodeToString(sig),
 		Algorithm:   "ed25519",
 		SignedAt:    time.Now(),
 		PublicKeyID: hex.EncodeToString(c.publicKey[:8]), // First 8 bytes as key ID
-	})
+	}
+
+	payload, err := att.signaturePayload(signature)
+	if err != nil {
+		return fmt.Errorf("failed to compute attestation signature payload: %w", err)
+	}
+	sig := ed25519.Sign(c.privateKey, payload)
+	signature.Signature = base64.StdEncoding.EncodeToString(sig)
+
+	att.Signatures = append(att.Signatures, signature)
 
 	return nil
 }
 
 // Verify verifies all signatures on the attestation.
 func (att *ModuleAttestation) Verify(publicKeys map[string]ed25519.PublicKey) error {
-	attHash, err := att.computeHash()
-	if err != nil {
-		return fmt.Errorf("failed to compute attestation hash: %w", err)
+	if len(att.Signatures) == 0 {
+		return fmt.Errorf("attestation has no signatures")
 	}
 
 	for i, sig := range att.Signatures {
+		if sig.Algorithm != "ed25519" {
+			return fmt.Errorf("unsupported signature algorithm for signer %s: %s", sig.SignerID, sig.Algorithm)
+		}
 		pubKey, ok := publicKeys[sig.SignerID]
 		if !ok {
 			return fmt.Errorf("unknown signer: %s", sig.SignerID)
 		}
 
+		payload, err := att.signaturePayload(sig)
+		if err != nil {
+			return fmt.Errorf("failed to compute attestation signature payload for signer %s: %w", sig.SignerID, err)
+		}
 		sigBytes, err := base64.StdEncoding.DecodeString(sig.Signature)
 		if err != nil {
 			return fmt.Errorf("invalid signature encoding for signature %d: %w", i, err)
 		}
 
-		if !ed25519.Verify(pubKey, attHash, sigBytes) {
+		if !ed25519.Verify(pubKey, payload, sigBytes) {
 			return fmt.Errorf("signature verification failed for signer %s", sig.SignerID)
 		}
 	}
@@ -208,6 +213,7 @@ func (att *ModuleAttestation) computeHash() ([]byte, error) {
 		Module        ModuleIdentity       `json:"module"`
 		Provenance    BuildProvenance      `json:"provenance"`
 		Certification CertificationResults `json:"certification"`
+		Validity      AttestationValidity  `json:"validity"`
 		CreatedAt     time.Time            `json:"created_at"`
 	}{
 		AttestationID: att.AttestationID,
@@ -215,6 +221,7 @@ func (att *ModuleAttestation) computeHash() ([]byte, error) {
 		Module:        att.Module,
 		Provenance:    att.Provenance,
 		Certification: att.Certification,
+		Validity:      att.Validity,
 		CreatedAt:     att.CreatedAt,
 	}
 
@@ -226,6 +233,34 @@ func (att *ModuleAttestation) computeHash() ([]byte, error) {
 
 	hash := sha256.Sum256(data)
 	return hash[:], nil
+}
+
+func (att *ModuleAttestation) signaturePayload(sig AttestationSignature) ([]byte, error) {
+	attHash, err := att.computeHash()
+	if err != nil {
+		return nil, err
+	}
+	payload := struct {
+		AttestationHash string    `json:"attestation_hash"`
+		SignerID        string    `json:"signer_id"`
+		SignerRole      string    `json:"signer_role"`
+		Algorithm       string    `json:"algorithm"`
+		SignedAt        time.Time `json:"signed_at"`
+		PublicKeyID     string    `json:"public_key_id,omitempty"`
+	}{
+		AttestationHash: "sha256:" + hex.EncodeToString(attHash),
+		SignerID:        sig.SignerID,
+		SignerRole:      sig.SignerRole,
+		Algorithm:       sig.Algorithm,
+		SignedAt:        sig.SignedAt,
+		PublicKeyID:     sig.PublicKeyID,
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(data)
+	return sum[:], nil
 }
 
 // ComputeArtifactHash and VerifyArtifactHash removed - were dead code

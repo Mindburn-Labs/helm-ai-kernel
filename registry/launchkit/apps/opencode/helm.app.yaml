@@ -1,0 +1,17 @@
+id: opencode
+name: OpenCode
+version: v1.15.5
+legacy_launchpad_ref: registry/launchpad/apps/opencode.yaml
+availability: oss_candidate
+install:
+  strategy: signed_oci
+  image: ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550
+  digest: sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550
+policy: policy.default.yaml
+secrets: secrets.schema.yaml
+mcp_registry: mcp.registry.yaml
+runtimes:
+  demo: runtime.demo.yaml
+  local: runtime.local.yaml
+  cloud: runtime.cloud.yaml
+evidence_profile: evidence.profile.yaml

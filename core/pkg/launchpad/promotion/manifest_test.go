@@ -30,6 +30,60 @@ func TestPromoteRequiresCompleteSignedArtifactEvidence(t *testing.T) {
 	}
 }
 
+func TestManifestEntryCarriesTopLevelEgressProxyArtifact(t *testing.T) {
+	proxy := validEgressProxyArtifact()
+	manifest := Manifest{
+		SchemaVersion: ManifestSchemaVersion,
+		EgressProxy:   &proxy,
+		Artifacts:     []ArtifactEntry{validArtifact("openclaw")},
+	}
+
+	entry, ok := manifest.Entry("openclaw")
+	if !ok {
+		t.Fatal("manifest entry not found")
+	}
+	if entry.EgressProxy == nil || entry.EgressProxy.Digest != manifest.EgressProxy.Digest {
+		t.Fatalf("entry did not inherit top-level egress proxy artifact: %#v", entry.EgressProxy)
+	}
+}
+
+func TestPromoteBindsRunBuiltEgressProxyArtifact(t *testing.T) {
+	app := candidateApp("openclaw")
+	app.FrameworkContract.EgressProxy = registry.EgressProxyContractSpec{
+		Required:   true,
+		Image:      "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:" + strings.Repeat("d", 64),
+		Digest:     "sha256:" + strings.Repeat("d", 64),
+		ReceiptRef: "receipts/launchpad-egress-proxy.json",
+	}
+	entry := validArtifact("openclaw")
+	proxy := validEgressProxyArtifact()
+	entry.EgressProxy = &proxy
+
+	promoted, err := Promote(app, entry, validRefs())
+	if err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	if promoted.FrameworkContract.EgressProxy.Image != proxy.Image {
+		t.Fatalf("egress proxy image = %q, want %q", promoted.FrameworkContract.EgressProxy.Image, proxy.Image)
+	}
+	if promoted.FrameworkContract.EgressProxy.Digest != proxy.Digest {
+		t.Fatalf("egress proxy digest = %q, want %q", promoted.FrameworkContract.EgressProxy.Digest, proxy.Digest)
+	}
+	if promoted.FrameworkContract.EgressProxy.SignatureRef != proxy.SignatureRef {
+		t.Fatalf("egress proxy signature ref not bound from manifest: %#v", promoted.FrameworkContract.EgressProxy)
+	}
+}
+
+func TestPromoteRequiresEgressProxyArtifactWhenContractRequiresIt(t *testing.T) {
+	app := candidateApp("openclaw")
+	app.FrameworkContract.EgressProxy = registry.EgressProxyContractSpec{Required: true}
+
+	_, err := Promote(app, validArtifact("openclaw"), validRefs())
+	if err == nil || !strings.Contains(err.Error(), "signed egress proxy artifact") {
+		t.Fatalf("Promote() error = %v, want egress proxy artifact requirement", err)
+	}
+}
+
 func TestOpenCodeAndKiloCodeAreEligibleOnlyWithCompleteEvidence(t *testing.T) {
 	for _, appID := range []string{"opencode", "kilocode"} {
 		t.Run(appID, func(t *testing.T) {
@@ -166,6 +220,23 @@ func validArtifact(appID string) ArtifactEntry {
 		SBOMRef:                 "artifact://sbom-" + appID + ".spdx.json",
 		VulnerabilityScanTool:   "grype",
 		VulnerabilityScanRef:    "artifact://grype-" + appID + ".json",
+		VulnerabilityScanStatus: "completed",
+		ProvenanceRef:           "github-actions://123/1",
+	}
+}
+
+func validEgressProxyArtifact() EgressProxy {
+	digest := "sha256:" + strings.Repeat("c", 64)
+	return EgressProxy{
+		Component:               "egress-proxy",
+		Image:                   "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@" + digest,
+		Digest:                  digest,
+		SignatureTool:           "cosign",
+		SignatureRef:            "cosign://ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@" + digest,
+		SBOMTool:                "syft",
+		SBOMRef:                 "artifact://sbom-egress-proxy.spdx.json",
+		VulnerabilityScanTool:   "grype",
+		VulnerabilityScanRef:    "artifact://grype-egress-proxy.json",
 		VulnerabilityScanStatus: "completed",
 		ProvenanceRef:           "github-actions://123/1",
 	}

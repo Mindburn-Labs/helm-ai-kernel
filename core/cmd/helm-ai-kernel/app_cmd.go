@@ -1,10 +1,10 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/readmodel"
@@ -115,21 +115,69 @@ func runAppInspect(args []string, stdout, stderr io.Writer) int {
 }
 
 func parseAppCommandArgs(name string, args []string, stderr io.Writer) (string, string, bool, int) {
-	fs := flag.NewFlagSet(name, flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	substrate := fs.String("substrate", "local-container", "substrate id")
-	jsonOut := fs.Bool("json", false, "emit JSON")
-	resume := fs.String("resume", "", "existing run id to resume from the Console")
-	if err := fs.Parse(args); err != nil {
-		return "", "", false, 2
-	}
-	_ = resume
-	rest := fs.Args()
-	if len(rest) != 1 {
+	substrate := "local-container"
+	jsonOut := false
+	apps := []string{}
+	usage := func() (string, string, bool, int) {
 		fmt.Fprintf(stderr, "Usage: helm-ai-kernel %s <app> [--substrate local-container] [--json]\n", name)
 		return "", "", false, 2
 	}
-	return rest[0], *substrate, *jsonOut, 0
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if !strings.HasPrefix(arg, "-") {
+			apps = append(apps, arg)
+			continue
+		}
+		// Accept the standard Go flag forms: -flag, --flag, -flag=value,
+		// --flag=value, and -flag value.
+		flagName := strings.TrimPrefix(strings.TrimPrefix(arg, "-"), "-")
+		inlineValue := ""
+		hasInline := false
+		if eq := strings.Index(flagName, "="); eq >= 0 {
+			inlineValue = flagName[eq+1:]
+			flagName = flagName[:eq]
+			hasInline = true
+		}
+		takeValue := func() (string, bool) {
+			if hasInline {
+				return inlineValue, true
+			}
+			if i+1 < len(args) {
+				i++
+				return args[i], true
+			}
+			return "", false
+		}
+		switch flagName {
+		case "json":
+			if hasInline {
+				parsed, err := strconv.ParseBool(inlineValue)
+				if err != nil {
+					return usage()
+				}
+				jsonOut = parsed
+			} else {
+				jsonOut = true
+			}
+		case "substrate":
+			value, ok := takeValue()
+			if !ok {
+				return usage()
+			}
+			substrate = value
+		case "resume":
+			if _, ok := takeValue(); !ok {
+				return usage()
+			}
+		default:
+			fmt.Fprintf(stderr, "unknown %s flag: %s\n", name, arg)
+			return "", "", false, 2
+		}
+	}
+	if len(apps) != 1 {
+		return usage()
+	}
+	return apps[0], substrate, jsonOut, 0
 }
 
 func loadLaunchpadCatalog(stderr io.Writer) (*lpregistry.Catalog, error) {

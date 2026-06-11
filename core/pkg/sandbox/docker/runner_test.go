@@ -99,6 +99,14 @@ func TestDockerRunnerValidateAndRun(t *testing.T) {
 		t.Fatalf("Run() timeout = result %#v receipt %#v err %v", result, receipt, err)
 	}
 
+	result, receipt, err = r.Run(dockerSpec(func(s *sandbox.SandboxSpec) {
+		s.Detached = true
+		s.Limits.Timeout = time.Nanosecond
+	}))
+	if err != nil || receipt == nil || result.ExitCode != -1 || !result.TimedOut {
+		t.Fatalf("Run() detached timeout = result %#v receipt %#v err %v", result, receipt, err)
+	}
+
 	t.Setenv("DOCKER_HELPER_MODE", "success")
 	r.dockerBin = filepath.Join(t.TempDir(), "missing-docker")
 	result, receipt, err = r.Run(dockerSpec())
@@ -168,7 +176,10 @@ func dockerSpec(opts ...func(*sandbox.SandboxSpec)) *sandbox.SandboxSpec {
 		Args:    []string{"hello"},
 		Limits: sandbox.ResourceLimits{
 			MemoryMB: 128,
-			Timeout:  time.Second,
+			// Generous so loaded CI machines never turn helper-script exec
+			// into a spurious timeout; deliberate-timeout cases override
+			// this with an explicit nanosecond limit.
+			Timeout: 10 * time.Second,
 		},
 	}
 	for _, opt := range opts {

@@ -461,6 +461,12 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 
 // IssueExecutionIntent verifies a Decision and issues a signed Intent for the Executor.
 func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect) (*contracts.AuthorizedExecutionIntent, error) {
+	if decision == nil {
+		return nil, fmt.Errorf("cannot issue intent without decision")
+	}
+	if effect == nil {
+		return nil, fmt.Errorf("cannot issue intent without effect")
+	}
 	// 1. Verify Decision Structure
 	if decision.Verdict != string(contracts.VerdictAllow) {
 		return nil, fmt.Errorf("cannot issue intent for denied decision: %s", decision.Verdict)
@@ -498,6 +504,17 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 		}
 	}
 
+	effectDigest, err := canonicalEffectDigest(effect)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize effect digest: %w", err)
+	}
+	if decision.EffectDigest == "" {
+		return nil, fmt.Errorf("decision missing effect digest")
+	}
+	if decision.EffectDigest != effectDigest {
+		return nil, fmt.Errorf("effect digest mismatch: decision=%s requested=%s", decision.EffectDigest, effectDigest)
+	}
+
 	// Determine Allowed Tool (matching identification logic)
 	var allowedTool string
 	if tn, ok := effect.Params["tool_name"].(string); ok && tn != "" {
@@ -507,9 +524,6 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 	}
 
 	// 3. Create Intent
-	// F4: Compute EffectDigestHash from canonicalized effect
-	effectBytes, _ := canonicalize.JCS(effect)
-	effectDigest := canonicalize.HashBytes(effectBytes)
 	now := g.clock.Now()
 
 	intent := &contracts.AuthorizedExecutionIntent{
@@ -540,6 +554,44 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 	}
 
 	return intent, nil
+}
+
+func canonicalEffectDigest(effect *contracts.Effect) (string, error) {
+	if effect == nil {
+		return "", fmt.Errorf("effect is nil")
+	}
+	effectBytes, err := canonicalize.JCS(effectDigestEnvelopeFrom(effect))
+	if err != nil {
+		return "", err
+	}
+	return canonicalize.HashBytes(effectBytes), nil
+}
+
+type effectDigestEnvelope struct {
+	EffectType     string                `json:"effect_type"`
+	Params         map[string]any        `json:"params,omitempty"`
+	IdempotencyKey string                `json:"idempotency_key,omitempty"`
+	Irreversible   bool                  `json:"irreversible,omitempty"`
+	ArgsHash       string                `json:"args_hash,omitempty"`
+	OutputHash     string                `json:"output_hash,omitempty"`
+	Taint          []string              `json:"taint,omitempty"`
+	Compensation   *effectDigestEnvelope `json:"compensation,omitempty"`
+}
+
+func effectDigestEnvelopeFrom(effect *contracts.Effect) *effectDigestEnvelope {
+	if effect == nil {
+		return nil
+	}
+	return &effectDigestEnvelope{
+		EffectType:     effect.EffectType,
+		Params:         effect.Params,
+		IdempotencyKey: effect.IdempotencyKey,
+		Irreversible:   effect.Irreversible,
+		ArgsHash:       effect.ArgsHash,
+		OutputHash:     effect.OutputHash,
+		Taint:          contracts.NormalizeTaintLabels(effect.Taint),
+		Compensation:   effectDigestEnvelopeFrom(effect.Compensation),
+	}
 }
 
 // recordBehavioralEvent records a trust score event if the behavioral scorer is configured.
@@ -843,8 +895,10 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		}
 
 		// 2. Prepare Decision Record
-		effectBytes, _ := canonicalize.JCS(effect)
-		effectDigest := canonicalize.HashBytes(effectBytes)
+		effectDigest, err := canonicalEffectDigest(effect)
+		if err != nil {
+			return nil, fmt.Errorf("canonicalize effect digest: %w", err)
+		}
 
 		envFP := g.envFprint
 		if envFP == "" {
@@ -904,7 +958,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			}
 		}
 
-		err := g.signDecisionWithGraph(ctx, decision, effect, []string{}, eCtx.Intervention, eCtx.ActiveGraph)
+		err = g.signDecisionWithGraph(ctx, decision, effect, []string{}, eCtx.Intervention, eCtx.ActiveGraph)
 		if err != nil {
 			return nil, err
 		}

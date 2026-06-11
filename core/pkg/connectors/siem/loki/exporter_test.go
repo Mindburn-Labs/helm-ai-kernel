@@ -50,6 +50,16 @@ func TestNew_RejectsMissingURL(t *testing.T) {
 	}
 }
 
+func TestNew_RejectsBasicAuthOverNonTLS(t *testing.T) {
+	if _, err := New(Config{
+		URL:           "http://loki.example/loki/api/v1/push",
+		BasicAuthUser: "tenant",
+		BasicAuthPass: "token",
+	}); err == nil {
+		t.Fatal("expected non-TLS Loki URL with basic auth to fail")
+	}
+}
+
 func TestNew_DefaultsServiceLabel(t *testing.T) {
 	e, err := New(Config{URL: "http://example/loki/api/v1/push"})
 	if err != nil {

@@ -212,6 +212,9 @@ func (f *Forge) RequestPromotion(ctx context.Context, skillID, requestedBy strin
 	}
 
 	// Run appropriate evaluation.
+	if f.eval == nil {
+		return fmt.Errorf("evaluation failed: evaluator backend not configured")
+	}
 	var evalResult *EvalResult
 	switch skill.Level {
 	case PromotionC0Sandbox:

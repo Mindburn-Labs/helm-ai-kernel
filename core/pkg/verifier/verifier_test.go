@@ -2,6 +2,9 @@ package verifier
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -184,6 +187,235 @@ func TestVerifyBundle_RequiresEvidencePackSeal(t *testing.T) {
 	if !found {
 		t.Fatalf("missing evidence_pack_seal failure: %+v", report.Checks)
 	}
+}
+
+func TestVerifyBundleRejectsUntrustedEmbeddedSignatures(t *testing.T) {
+	dir := createValidBundleFixture(t)
+	writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), map[string]any{
+		"receipt_id":    "rcpt-001",
+		"decision_id":   "dec-001",
+		"decision_hash": "sha256:abc123",
+		"status":        "APPLIED",
+		"lamport_clock": 1,
+		"signature":     "attacker-controlled",
+	})
+
+	report, err := VerifyBundle(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified {
+		t.Fatal("bundle with untrusted embedded receipt signature must fail verification")
+	}
+	var found bool
+	for _, check := range report.Checks {
+		if check.Name == "embedded_signature_trust" && !check.Pass {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("missing embedded signature trust failure: %+v", report.Checks)
+	}
+	if report.SignatureValidCount >= report.SignatureTotalCount {
+		t.Fatalf("unverified embedded signature was counted as valid: valid=%d total=%d", report.SignatureValidCount, report.SignatureTotalCount)
+	}
+}
+
+func TestVerifyBundleAcceptsTrustedManagedAgentReceiptSignature(t *testing.T) {
+	dir := createValidBundleFixture(t)
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decisionHash := "sha256:abc123"
+	writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), map[string]any{
+		"receipt_version":        "managed_agent_live_scenario_receipt.v1",
+		"receipt_id":             "rcpt-001",
+		"decision_id":            "dec-001",
+		"decision_hash":          decisionHash,
+		"status":                 "APPLIED",
+		"lamport_clock":          1,
+		"scenario_id":            "allowed-bash",
+		"signature_algorithm":    "ed25519",
+		"signature_payload":      "decision_hash",
+		"signer_key_id":          "test-managed-agent-signer",
+		"signing_public_key_hex": hex.EncodeToString(pub),
+		"signature":              hex.EncodeToString(ed25519.Sign(priv, []byte(decisionHash))),
+	})
+
+	report, err := VerifyBundleWithOptions(dir, VerifyOptions{ManagedAgentReceiptPublicKeyHex: hex.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Verified {
+		t.Fatalf("trusted managed-agent receipt signature should verify: %s", report.Summary)
+	}
+	var found bool
+	for _, check := range report.Checks {
+		if check.Name == "embedded_signature_trust" && check.Pass {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("missing passing embedded signature trust check: %+v", report.Checks)
+	}
+}
+
+func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyHex := hex.EncodeToString(pub)
+	// Mirrors crypto.CanonicalizeReceipt field order.
+	payload := "rcpt-001:dec-001:mcp.tools.call/proof.read:DENY:sha256:out::1:sha256:args"
+	signature := hex.EncodeToString(ed25519.Sign(priv, []byte(payload)))
+	receipt := func(sig, pubKeyHex string) map[string]any {
+		meta := map[string]any{
+			"signature_key_type": "ed25519",
+			"signature_key_ref":  "ed25519:" + keyHex[:16],
+		}
+		if pubKeyHex != "" {
+			meta["signing_public_key_hex"] = pubKeyHex
+		}
+		return map[string]any{
+			"type":          "mcp_policy_decision",
+			"receipt_id":    "rcpt-001",
+			"decision_id":   "dec-001",
+			"effect_id":     "mcp.tools.call/proof.read",
+			"status":        "DENY",
+			"output_hash":   "sha256:out",
+			"prev_hash":     "",
+			"lamport_clock": 1,
+			"args_hash":     "sha256:args",
+			"signature":     sig,
+			"metadata":      meta,
+		}
+	}
+
+	t.Run("dev-local trusts seal-anchored key disclosure", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signature, keyHex))
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, check := range report.Checks {
+			if check.Name == "embedded_signature_trust" && !check.Pass {
+				t.Fatalf("dev-local MCP proof receipt signature should verify: %+v", check)
+			}
+		}
+	})
+
+	t.Run("tampered signature fails closed", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		forged := hex.EncodeToString(ed25519.Sign(priv, []byte(payload+"-tampered")))
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(forged, keyHex))
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+
+	t.Run("missing key disclosure fails closed", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signature, ""))
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+
+	t.Run("non-dev-local profile refuses disclosure trust", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signature, keyHex))
+		report, err := VerifyBundleWithOptions(dir, VerifyOptions{Profile: evidencepkg.EvidenceTrustProfileTeam})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+}
+
+func TestVerifyBundleWitnessSignatureTrust(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiptHash := sha256.Sum256([]byte("receipt-payload"))
+	receiptHashHex := hex.EncodeToString(receiptHash[:])
+	witnessSig := hex.EncodeToString(ed25519.Sign(priv, receiptHash[:]))
+	receipt := func(sig string) map[string]any {
+		return map[string]any{
+			"receipt_id":    "rcpt-001",
+			"decision_id":   "dec-001",
+			"decision_hash": "sha256:abc123",
+			"receipt_hash":  receiptHashHex,
+			"status":        "APPLIED",
+			"lamport_clock": 1,
+			"witness_signatures": []any{
+				map[string]any{"witness_id": "w1", "signature": sig},
+			},
+		}
+	}
+
+	t.Run("unconfigured witness keys are skipped, never auto-failed", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(witnessSig))
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, check := range report.Checks {
+			if check.Name == "embedded_signature_trust" && !check.Pass {
+				t.Fatalf("unconfigured witness signatures must not fail the pack: %+v", check)
+			}
+		}
+	})
+
+	t.Run("configured witness key verifies valid signature", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(witnessSig))
+		report, err := VerifyBundleWithOptions(dir, VerifyOptions{
+			WitnessPublicKeysHex: map[string]string{"w1": hex.EncodeToString(pub)},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, check := range report.Checks {
+			if check.Name == "embedded_signature_trust" && !check.Pass {
+				t.Fatalf("valid witness signature should verify against configured key: %+v", check)
+			}
+		}
+	})
+
+	t.Run("configured witness key fails tampered signature closed", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		forged := hex.EncodeToString(ed25519.Sign(priv, []byte("tampered")))
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(forged))
+		report, err := VerifyBundleWithOptions(dir, VerifyOptions{
+			WitnessPublicKeysHex: map[string]string{"w1": hex.EncodeToString(pub)},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+}
+
+func assertEmbeddedSignatureTrustFails(t *testing.T, report *VerifyReport) {
+	t.Helper()
+	for _, check := range report.Checks {
+		if check.Name == "embedded_signature_trust" {
+			if check.Pass {
+				t.Fatalf("embedded_signature_trust must fail closed: %+v", check)
+			}
+			return
+		}
+	}
+	t.Fatal("embedded_signature_trust check missing from report")
 }
 
 func TestVerifyBundle_MissingManifest(t *testing.T) {

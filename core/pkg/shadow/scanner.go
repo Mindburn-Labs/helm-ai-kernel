@@ -2,7 +2,10 @@ package shadow
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -202,7 +205,7 @@ func (s *Scanner) scanFile(path, root string, r *Report) {
 					Path:       rel,
 					Line:       lineNo,
 					Severity:   rule.Severity,
-					Evidence:   truncateEvidence(line, 140),
+					Evidence:   evidenceForRule(rule, line),
 					Note:       rule.Note,
 					DetectedAt: s.Clock(),
 				})
@@ -282,6 +285,18 @@ func truncateEvidence(s string, n int) string {
 		return s
 	}
 	return s[:n-1] + "…"
+}
+
+func evidenceForRule(rule importRule, line string) string {
+	if rule.Kind != "api_key" {
+		return truncateEvidence(line, 140)
+	}
+	match := rule.Pattern.FindString(line)
+	if match == "" {
+		return "[REDACTED_SECRET]"
+	}
+	sum := sha256.Sum256([]byte(match))
+	return fmt.Sprintf("[REDACTED_%s_API_KEY sha256:%s]", strings.ToUpper(rule.Vendor), hex.EncodeToString(sum[:])[:16])
 }
 
 func severityRank(s string) int {

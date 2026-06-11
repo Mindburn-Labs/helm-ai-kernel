@@ -23,7 +23,7 @@ func TestVerifyChain_ValidSignedChain(t *testing.T) {
 	}}
 	chain.ReceiptChainHash = ComputeChainHash([]string{chain.Receipts[0].ReceiptHash, chain.Receipts[1].ReceiptHash})
 
-	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true})
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,8 +35,33 @@ func TestVerifyChain_ValidSignedChain(t *testing.T) {
 	}
 }
 
+func TestVerifyChain_RequireKeyIgnoresEmbeddedPublicKeys(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := signedTestChain(t, priv)
+	chain.PublicKeys = []contracts.ExternalVerifierKey{{
+		KeyID:        "attacker-key",
+		Algorithm:    "Ed25519",
+		PublicKeyHex: hex.EncodeToString(pub),
+	}}
+
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified {
+		t.Fatal("embedded chain public key must not satisfy RequireKey")
+	}
+	if report.PublicKeyUsed != "" {
+		t.Fatalf("embedded key was treated as trusted: %s", report.PublicKeyUsed)
+	}
+	assertFailedCheck(t, report, "external_host:public_key")
+}
+
 func TestVerifyChain_TamperedEventFailsHashAndSignature(t *testing.T) {
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +73,7 @@ func TestVerifyChain_TamperedEventFailsHashAndSignature(t *testing.T) {
 	}}
 	chain.Receipts[0].Event.BytesSent = 999
 
-	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true})
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +85,7 @@ func TestVerifyChain_TamperedEventFailsHashAndSignature(t *testing.T) {
 }
 
 func TestVerifyChain_PrevHashMismatchFails(t *testing.T) {
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +97,7 @@ func TestVerifyChain_PrevHashMismatchFails(t *testing.T) {
 	}}
 	chain.Receipts[1].PrevReceiptHash = "sha256:wrong"
 
-	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true})
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +125,7 @@ func TestVerifyChain_MissingPublicKeyFails(t *testing.T) {
 }
 
 func TestVerifyChain_HardwareRootIsNotImplicitlyTrusted(t *testing.T) {
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +149,7 @@ func TestVerifyChain_HardwareRootIsNotImplicitlyTrusted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true})
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
 	if err != nil {
 		t.Fatal(err)
 	}

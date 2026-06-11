@@ -27,7 +27,7 @@ func pcasFixedClock(at *time.Time) func() time.Time {
 // scope (no privilege amplification).
 func TestPCASTransitiveDelegationBoundedPropagation(t *testing.T) {
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	verifier := NewAIPVerifier(WithAIPClock(pcasFixedClock(&now)))
+	verifier := NewAIPVerifier(WithAIPClock(pcasFixedClock(&now)), WithAIPSignatureVerifier(aipTestSignatureVerifier))
 	expiry := now.Add(time.Hour)
 
 	if err := verifier.RegisterDelegation(DelegationClaim{
@@ -35,6 +35,7 @@ func TestPCASTransitiveDelegationBoundedPropagation(t *testing.T) {
 		DelegateID:  "agent:orchestrator",
 		Scope:       []string{"crm.read", "crm.export", "mail.send"},
 		ExpiresAt:   expiry,
+		Signature:   "sig-fixture",
 	}); err != nil {
 		t.Fatalf("register hop 1: %v", err)
 	}
@@ -43,6 +44,7 @@ func TestPCASTransitiveDelegationBoundedPropagation(t *testing.T) {
 		DelegateID:  "agent:planner",
 		Scope:       []string{"crm.read", "crm.export"},
 		ExpiresAt:   expiry,
+		Signature:   "sig-fixture",
 	}); err != nil {
 		t.Fatalf("register hop 2: %v", err)
 	}
@@ -51,6 +53,7 @@ func TestPCASTransitiveDelegationBoundedPropagation(t *testing.T) {
 		DelegateID:  "agent:worker",
 		Scope:       []string{"crm.read"},
 		ExpiresAt:   expiry,
+		Signature:   "sig-fixture",
 	}); err != nil {
 		t.Fatalf("register hop 3: %v", err)
 	}
@@ -66,12 +69,14 @@ func TestPCASTransitiveDelegationBoundedPropagation(t *testing.T) {
 		t.Fatal("worker must not hold authority dropped at hop 2")
 	}
 
-	// Privilege amplification at any hop is rejected at registration.
+	// Privilege amplification at any hop is rejected at registration —
+	// with a valid signature, so the rejection is on scope, not signing.
 	if err := verifier.RegisterDelegation(DelegationClaim{
 		DelegatorID: "agent:planner",
 		DelegateID:  "agent:rogue",
 		Scope:       []string{"mail.send"},
 		ExpiresAt:   expiry,
+		Signature:   "sig-fixture",
 	}); err == nil {
 		t.Fatal("delegating authority the delegator does not hold must fail closed")
 	}
@@ -82,13 +87,14 @@ func TestPCASTransitiveDelegationBoundedPropagation(t *testing.T) {
 // no action required (fail-closed).
 func TestPCASTemporalValidityExpiryRevokesAuthority(t *testing.T) {
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	verifier := NewAIPVerifier(WithAIPClock(pcasFixedClock(&now)))
+	verifier := NewAIPVerifier(WithAIPClock(pcasFixedClock(&now)), WithAIPSignatureVerifier(aipTestSignatureVerifier))
 
 	if err := verifier.RegisterDelegation(DelegationClaim{
 		DelegatorID: "user:root",
 		DelegateID:  "agent:worker",
 		Scope:       []string{"crm.read"},
 		ExpiresAt:   now.Add(10 * time.Minute),
+		Signature:   "sig-fixture",
 	}); err != nil {
 		t.Fatalf("register: %v", err)
 	}

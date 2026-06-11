@@ -155,7 +155,46 @@ func main() {
 		t.Errorf("Expected proposal to be certified safe, violations: %v", journal.Violations)
 	}
 
-	// 2. Failure path: Invalid Seal
+	// 2. Failure path: Arbitrary non-empty seals must not verify.
+	randomSealReceipt := *receipt
+	randomSealReceipt.Seal = []byte("x")
+	randomSealBytes, err := json.Marshal(&randomSealReceipt)
+	if err != nil {
+		t.Fatalf("json.Marshal(randomSealReceipt) failed: %v", err)
+	}
+	ok, err = verifier.VerifyReceipt(ctx, randomSealBytes, randomSealReceipt.Journal)
+	if err == nil {
+		t.Error("VerifyReceipt expected error on random seal, got nil")
+	}
+	if ok {
+		t.Error("VerifyReceipt accepted arbitrary non-empty seal")
+	}
+
+	// 3. Failure path: Replaying the seal under another image ID must fail.
+	wrongImageReceipt := *receipt
+	wrongImageReceipt.ImageID = []byte("other_guest_image")
+	wrongImageBytes, err := json.Marshal(&wrongImageReceipt)
+	if err != nil {
+		t.Fatalf("json.Marshal(wrongImageReceipt) failed: %v", err)
+	}
+	ok, err = verifier.VerifyReceipt(ctx, wrongImageBytes, wrongImageReceipt.Journal)
+	if err == nil {
+		t.Error("VerifyReceipt expected error on wrong image ID, got nil")
+	}
+	if ok {
+		t.Error("VerifyReceipt accepted wrong image ID")
+	}
+
+	// 4. Failure path: Matching proof material cannot be reused for a different expected journal.
+	ok, err = verifier.VerifyReceipt(ctx, receiptBytes, []byte("other journal"))
+	if err == nil {
+		t.Error("VerifyReceipt expected error on wrong expected journal, got nil")
+	}
+	if ok {
+		t.Error("VerifyReceipt accepted wrong expected journal")
+	}
+
+	// 5. Failure path: Invalid Seal
 	receiptFail, err := checker.Attest(ctx, proposal, assertions, true)
 	if err != nil {
 		t.Fatalf("Attest failed: %v", err)
@@ -174,7 +213,7 @@ func main() {
 		t.Error("VerifyReceipt expected false on invalid seal, got true")
 	}
 
-	// 3. Failure path: Empty proposal
+	// 6. Failure path: Empty proposal
 	_, err = checker.Attest(ctx, nil, assertions, false)
 	if err == nil {
 		t.Error("Attest expected error on empty proposal, got nil")

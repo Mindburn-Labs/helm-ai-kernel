@@ -153,17 +153,12 @@ func (c *ZKVMGuestSafetyChecker) Attest(ctx context.Context, proposal []byte, as
 		return nil, fmt.Errorf("failed to marshal safety journal: %w", err)
 	}
 
-	// Construct seal. In a real RISC Zero zkVM execution, this is a STARK/SNARK proof.
-	// We represent it as a mock signature verification block.
+	// Construct a deterministic mock seal for non-RISC-Zero test/runtime builds.
 	var seal []byte
 	if mockFail {
 		seal = []byte("INVALID_SEAL")
 	} else {
-		// Valid seal: sha256 hash of (ImageID + JournalBytes)
-		hasher := sha256.New()
-		_, _ = hasher.Write(c.ImageID)
-		_, _ = hasher.Write(journalBytes)
-		seal = hasher.Sum(nil)
+		seal = computeMockRISCZeroSeal(c.ImageID, journalBytes)
 	}
 
 	receipt := &ZKReceipt{

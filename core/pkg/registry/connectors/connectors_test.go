@@ -139,8 +139,53 @@ func TestVerifyRelease_Success(t *testing.T) {
 		SignatureRef: "sig://ok",
 	}
 
-	err := VerifyRelease(r, data)
+	err := VerifyReleaseWithSignature(r, data, TrustedSignatureProof{
+		SignatureRef: "sig://ok",
+		SignerID:     "publisher-1",
+		SubjectHash:  binaryHash(data),
+		Verified:     true,
+	})
 	require.NoError(t, err)
+}
+
+func TestVerifyRelease_SelfConsistentWithoutTrustedProofFailsClosed(t *testing.T) {
+	data := []byte("connector-binary")
+	r := ConnectorRelease{
+		ConnectorID:  "vr-unsigned",
+		BinaryHash:   binaryHash(data),
+		SignatureRef: "sig://ok",
+	}
+
+	err := VerifyRelease(r, data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "trusted signature proof is required")
+}
+
+func TestVerifyRelease_SignatureProofMustBindHashAndRef(t *testing.T) {
+	data := []byte("connector-binary")
+	r := ConnectorRelease{
+		ConnectorID:  "vr-proof",
+		BinaryHash:   binaryHash(data),
+		SignatureRef: "sig://ok",
+	}
+
+	err := VerifyReleaseWithSignature(r, data, TrustedSignatureProof{
+		SignatureRef: "sig://other",
+		SignerID:     "publisher-1",
+		SubjectHash:  binaryHash(data),
+		Verified:     true,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ref mismatch")
+
+	err = VerifyReleaseWithSignature(r, data, TrustedSignatureProof{
+		SignatureRef: "sig://ok",
+		SignerID:     "publisher-1",
+		SubjectHash:  "0000000000000000000000000000000000000000000000000000000000000000",
+		Verified:     true,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "subject hash mismatch")
 }
 
 func TestVerifyRelease_HashMismatch(t *testing.T) {

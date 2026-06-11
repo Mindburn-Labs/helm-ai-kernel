@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/cpi"
@@ -170,7 +171,8 @@ func (v *Ed25519PolicyVerifier) VerifyPolicyBundle(ctx context.Context, head Pol
 	if signature == "" {
 		return fmt.Errorf("%w: policy head has empty signature", ErrPolicySignatureInvalid)
 	}
-	ok, err := helmcrypto.Verify(publicKey, signature, bundle)
+	material := PolicySignatureMaterial(head, bundle)
+	ok, err := helmcrypto.Verify(publicKey, signature, material)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrPolicySignatureInvalid, err)
 	}
@@ -305,7 +307,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, scope PolicyScope) (Reconcil
 		status.Reason = err.Error()
 		return r.invalid(status, err)
 	}
-	if err := verifyExpectedHash(head.PolicyHash, bundle); err != nil {
+	if err := verifyExpectedPolicyHash(head, bundle); err != nil {
 		status.Reason = err.Error()
 		return r.invalid(status, err)
 	}
@@ -493,16 +495,58 @@ func validateSnapshot(snapshot *EffectivePolicySnapshot) error {
 	return nil
 }
 
-func verifyExpectedHash(expected string, bundle []byte) error {
-	expected = strings.TrimSpace(expected)
+func verifyExpectedPolicyHash(head PolicyHead, bundle []byte) error {
+	expected := strings.TrimSpace(head.PolicyHash)
 	if expected == "" {
 		return fmt.Errorf("%w: source head has empty policy hash", ErrPolicyNotReady)
 	}
 	actual := HashBytes(bundle)
 	if !strings.EqualFold(expected, actual) {
-		return fmt.Errorf("%w: expected %s got %s", ErrPolicyHashMismatch, expected, actual)
+		composite := PolicyHashWithSourceRefs(bundle, head.SourceRefs)
+		if !strings.EqualFold(expected, composite) {
+			return fmt.Errorf("%w: expected %s got %s", ErrPolicyHashMismatch, expected, actual)
+		}
 	}
 	return nil
+}
+
+func PolicyHashWithSourceRefs(bundle []byte, sourceRefs []string) string {
+	return HashBytes(PolicyHashMaterial(bundle, sourceRefs))
+}
+
+func PolicySignatureMaterial(head PolicyHead, bundle []byte) []byte {
+	if strings.EqualFold(strings.TrimSpace(head.PolicyHash), PolicyHashWithSourceRefs(bundle, head.SourceRefs)) &&
+		!strings.EqualFold(strings.TrimSpace(head.PolicyHash), HashBytes(bundle)) {
+		return PolicyHashMaterial(bundle, head.SourceRefs)
+	}
+	return bundle
+}
+
+func PolicyHashMaterial(bundle []byte, sourceRefs []string) []byte {
+	refs := digestSourceRefs(sourceRefs)
+	data, err := json.Marshal(struct {
+		BundleHash string   `json:"bundle_hash"`
+		SourceRefs []string `json:"source_refs"`
+	}{
+		BundleHash: HashBytes(bundle),
+		SourceRefs: refs,
+	})
+	if err != nil {
+		return []byte(HashBytes(bundle))
+	}
+	return data
+}
+
+func digestSourceRefs(sourceRefs []string) []string {
+	refs := make([]string, 0, len(sourceRefs))
+	for _, ref := range sourceRefs {
+		ref = strings.TrimSpace(ref)
+		if strings.Contains(ref, "@sha256:") {
+			refs = append(refs, ref)
+		}
+	}
+	sort.Strings(refs)
+	return refs
 }
 
 func HashBytes(data []byte) string {
@@ -572,13 +616,22 @@ func (s *MountedFileSource) Head(ctx context.Context, scope PolicyScope) (Policy
 		return PolicyHead{}, err
 	}
 	sourceRefs := []string{s.Path}
+	if ref, err := mountedReferencePackSourceRef(s.Path, data); err != nil {
+		return PolicyHead{}, err
+	} else if ref != "" {
+		sourceRefs = append(sourceRefs, ref)
+	}
+	policyHash := HashBytes(data)
+	if len(digestSourceRefs(sourceRefs)) > 0 {
+		policyHash = PolicyHashWithSourceRefs(data, sourceRefs)
+	}
 	if signatureRef != "" {
 		sourceRefs = append(sourceRefs, signatureRef)
 	}
 	return PolicyHead{
 		Scope:       scope,
 		PolicyEpoch: epoch,
-		PolicyHash:  HashBytes(data),
+		PolicyHash:  policyHash,
 		BundleRef:   s.Path,
 		Signature:   signature,
 		SourceRefs:  sourceRefs,
@@ -631,6 +684,59 @@ func (s *MountedFileSource) readSignature(ctx context.Context) (string, string, 
 		return "", "", err
 	}
 	return strings.TrimSpace(string(data)), path, nil
+}
+
+type mountedPolicyRef struct {
+	ReferencePack string `toml:"reference_pack"`
+}
+
+func mountedReferencePackSourceRef(policyPath string, policyBytes []byte) (string, error) {
+	if strings.ToLower(filepath.Ext(policyPath)) != ".toml" {
+		return "", nil
+	}
+	var ref mountedPolicyRef
+	if _, err := toml.Decode(string(policyBytes), &ref); err != nil {
+		return "", fmt.Errorf("decode mounted policy reference_pack: %w", err)
+	}
+	if strings.TrimSpace(ref.ReferencePack) == "" {
+		return "", nil
+	}
+	refPath, err := ResolveReferencePackPath(policyPath, ref.ReferencePack)
+	if err != nil {
+		return "", err
+	}
+	refData, err := os.ReadFile(refPath)
+	if err != nil {
+		return "", fmt.Errorf("read reference_pack %s: %w", ref.ReferencePack, err)
+	}
+	return fmt.Sprintf("reference_pack:%s@%s", refPath, HashBytes(refData)), nil
+}
+
+func ResolveReferencePackPath(policyPath, referencePack string) (string, error) {
+	referencePack = strings.TrimSpace(referencePack)
+	if referencePack == "" {
+		return "", fmt.Errorf("reference_pack is required")
+	}
+	if filepath.IsAbs(referencePack) {
+		return "", fmt.Errorf("reference_pack must be relative to the policy file")
+	}
+	base, err := filepath.Abs(filepath.Dir(policyPath))
+	if err != nil {
+		return "", err
+	}
+	target := filepath.Clean(filepath.Join(base, referencePack))
+	targetAbs, err := filepath.Abs(target)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(base, targetAbs)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("reference_pack must not escape the policy directory")
+	}
+	return targetAbs, nil
 }
 
 // ControlPlaneSource is the HTTP contract for managed policy publication.

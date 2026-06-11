@@ -10,13 +10,17 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"math/big"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -172,8 +176,12 @@ func (ca *CertificateAuthority) IssueCertificate(_ context.Context, identity str
 	ca.mu.RLock()
 	defer ca.mu.RUnlock()
 
-	if identity == "" {
-		return nil, errors.New("mtls: identity required")
+	spiffeURI, spiffeID, err := spiffeURIForIdentity(identity)
+	if err != nil {
+		if strings.TrimSpace(identity) == "" {
+			return nil, errors.New("mtls: identity required")
+		}
+		return nil, fmt.Errorf("mtls: %w", err)
 	}
 
 	// Generate a new ECDSA P-256 key for the certificate.
@@ -186,6 +194,7 @@ func (ca *CertificateAuthority) IssueCertificate(_ context.Context, identity str
 	if err != nil {
 		return nil, fmt.Errorf("mtls: generate serial number: %w", err)
 	}
+	dnsName := dnsNameForSPIFFEURI(spiffeURI)
 
 	now := time.Now()
 	template := &x509.Certificate{
@@ -201,6 +210,8 @@ func (ca *CertificateAuthority) IssueCertificate(_ context.Context, identity str
 			x509.ExtKeyUsageClientAuth,
 			x509.ExtKeyUsageServerAuth,
 		},
+		DNSNames: []string{dnsName},
+		URIs:     []*url.URL{spiffeURI},
 	}
 
 	// Issue the certificate signed by our CA.
@@ -226,8 +237,6 @@ func (ca *CertificateAuthority) IssueCertificate(_ context.Context, identity str
 		return nil, fmt.Errorf("mtls: build tls certificate: %w", err)
 	}
 
-	spiffeID := fmt.Sprintf("spiffe://helm.local/%s", identity)
-
 	return &IssuedCertificate{
 		CertPEM:   certPEM,
 		KeyPEM:    keyPEM,
@@ -237,6 +246,53 @@ func (ca *CertificateAuthority) IssueCertificate(_ context.Context, identity str
 		SPIFFEID:  spiffeID,
 		TLSCert:   &tlsCert,
 	}, nil
+}
+
+type tlsConfigOptions struct {
+	expectedPeerSPIFFEIDs  map[string]struct{}
+	expectedPeerServerName string
+}
+
+// TLSConfigOption configures mTLS peer identity verification.
+type TLSConfigOption func(*tlsConfigOptions)
+
+// WithExpectedPeerSPIFFEID allows one peer SPIFFE URI SAN in the TLS handshake.
+func WithExpectedPeerSPIFFEID(spiffeID string) TLSConfigOption {
+	return func(opts *tlsConfigOptions) {
+		spiffeID = strings.TrimSpace(spiffeID)
+		if spiffeID == "" {
+			return
+		}
+		parsed, err := url.Parse(spiffeID)
+		if err == nil && validSPIFFEURI(parsed) && opts.expectedPeerServerName == "" {
+			opts.expectedPeerServerName = dnsNameForSPIFFEURI(parsed)
+		}
+		if opts.expectedPeerSPIFFEIDs == nil {
+			opts.expectedPeerSPIFFEIDs = map[string]struct{}{}
+		}
+		opts.expectedPeerSPIFFEIDs[spiffeID] = struct{}{}
+	}
+}
+
+// WithExpectedPeerIdentity allows a peer identity under spiffe://helm.local/.
+func WithExpectedPeerIdentity(identity string) TLSConfigOption {
+	return func(opts *tlsConfigOptions) {
+		_, spiffeID, err := spiffeURIForIdentity(identity)
+		if err != nil {
+			return
+		}
+		WithExpectedPeerSPIFFEID(spiffeID)(opts)
+	}
+}
+
+func applyTLSConfigOptions(options []TLSConfigOption) tlsConfigOptions {
+	opts := tlsConfigOptions{}
+	for _, option := range options {
+		if option != nil {
+			option(&opts)
+		}
+	}
+	return opts
 }
 
 // CACertPEM returns the PEM-encoded CA certificate.
@@ -252,10 +308,17 @@ func (ca *CertificateAuthority) NeedsRenewal(cert *IssuedCertificate) bool {
 }
 
 // NewMutualTLSConfig creates a tls.Config for mutual TLS using the issued certificate.
-func NewMutualTLSConfig(cert *IssuedCertificate) (*tls.Config, error) {
+func NewMutualTLSConfig(cert *IssuedCertificate, options ...TLSConfigOption) (*tls.Config, error) {
 	caCertPool := x509.NewCertPool()
 	if !caCertPool.AppendCertsFromPEM(cert.CACertPEM) {
 		return nil, errors.New("mtls: failed to add CA certificate to pool")
+	}
+	opts := applyTLSConfigOptions(options)
+	if len(opts.expectedPeerSPIFFEIDs) == 0 {
+		return nil, errors.New("mtls: expected peer SPIFFE ID required")
+	}
+	if opts.expectedPeerServerName == "" {
+		return nil, errors.New("mtls: expected peer server name required")
 	}
 
 	return &tls.Config{
@@ -264,5 +327,141 @@ func NewMutualTLSConfig(cert *IssuedCertificate) (*tls.Config, error) {
 		ClientCAs:    caCertPool,
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		MinVersion:   tls.VersionTLS13,
+		ServerName:   opts.expectedPeerServerName,
+		// Go verifies the DNS SAN and CA chain before this hook runs. The hook
+		// adds the HELM-specific SPIFFE URI authorization check.
+		VerifyConnection: verifyPeerConnection(caCertPool, opts.expectedPeerSPIFFEIDs),
 	}, nil
+}
+
+func spiffeURIForIdentity(identity string) (*url.URL, string, error) {
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		return nil, "", errors.New("empty identity")
+	}
+	if strings.HasPrefix(identity, "spiffe://") {
+		parsed, err := url.Parse(identity)
+		if err != nil || !validSPIFFEURI(parsed) {
+			return nil, "", fmt.Errorf("invalid SPIFFE ID %q", identity)
+		}
+		return parsed, parsed.String(), nil
+	}
+	parsed := &url.URL{Scheme: "spiffe", Host: "helm.local", Path: "/" + strings.TrimLeft(identity, "/")}
+	return parsed, parsed.String(), nil
+}
+
+func validSPIFFEURI(uri *url.URL) bool {
+	return uri != nil && uri.Scheme == "spiffe" && uri.Host != "" && strings.Trim(uri.Path, "/") != ""
+}
+
+func dnsNameForSPIFFEURI(uri *url.URL) string {
+	host := dnsLabel(uri.Host)
+	if host == "" {
+		host = "helm-local"
+	}
+
+	path := strings.Trim(uri.Path, "/")
+	labels := []string{}
+	for _, segment := range strings.Split(path, "/") {
+		if label := dnsLabel(segment); label != "" {
+			labels = append(labels, label)
+		}
+	}
+	if len(labels) == 0 {
+		labels = append(labels, "identity")
+	}
+	labels = append(labels, strings.Split(host, ".")...)
+	return strings.Join(labels, ".")
+}
+
+func dnsLabel(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+
+	var b strings.Builder
+	lastHyphen := false
+	for _, r := range value {
+		valid := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if valid {
+			b.WriteRune(r)
+			lastHyphen = false
+			continue
+		}
+		if r == '.' {
+			if !lastHyphen {
+				b.WriteRune('.')
+			}
+			lastHyphen = false
+			continue
+		}
+		if !lastHyphen {
+			b.WriteByte('-')
+			lastHyphen = true
+		}
+	}
+
+	label := strings.Trim(b.String(), "-.")
+	if len(label) <= 63 {
+		return label
+	}
+
+	sum := sha256.Sum256([]byte(label))
+	return strings.Trim(label[:46], "-.") + "-" + hex.EncodeToString(sum[:])[:16]
+}
+
+func verifyPeerConnection(roots *x509.CertPool, expectedPeerSPIFFEIDs map[string]struct{}) func(tls.ConnectionState) error {
+	return func(state tls.ConnectionState) error {
+		if len(expectedPeerSPIFFEIDs) == 0 {
+			return errors.New("mtls: expected peer SPIFFE ID required")
+		}
+		if len(state.PeerCertificates) == 0 {
+			return errors.New("mtls: peer certificate required")
+		}
+
+		leaf := state.PeerCertificates[0]
+		intermediates := x509.NewCertPool()
+		for _, intermediate := range state.PeerCertificates[1:] {
+			intermediates.AddCert(intermediate)
+		}
+		if _, err := leaf.Verify(x509.VerifyOptions{
+			Roots:         roots,
+			Intermediates: intermediates,
+			CurrentTime:   time.Now(),
+			KeyUsages: []x509.ExtKeyUsage{
+				x509.ExtKeyUsageClientAuth,
+				x509.ExtKeyUsageServerAuth,
+			},
+		}); err != nil {
+			return fmt.Errorf("mtls: verify peer certificate chain: %w", err)
+		}
+
+		if !hasMutualTLSEKU(leaf) {
+			return errors.New("mtls: peer certificate missing client/server auth EKU")
+		}
+		for _, uri := range leaf.URIs {
+			if uri == nil {
+				continue
+			}
+			if _, ok := expectedPeerSPIFFEIDs[uri.String()]; ok {
+				return nil
+			}
+		}
+		return fmt.Errorf("mtls: peer SPIFFE ID not allowed")
+	}
+}
+
+func hasMutualTLSEKU(cert *x509.Certificate) bool {
+	hasClient := false
+	hasServer := false
+	for _, eku := range cert.ExtKeyUsage {
+		if eku == x509.ExtKeyUsageClientAuth {
+			hasClient = true
+		}
+		if eku == x509.ExtKeyUsageServerAuth {
+			hasServer = true
+		}
+	}
+	return hasClient && hasServer
 }

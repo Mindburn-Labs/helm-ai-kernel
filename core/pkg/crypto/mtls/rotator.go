@@ -143,12 +143,18 @@ func (ca *CertificateAuthority) CACertPool() *x509.CertPool {
 }
 
 // NewRotatingTLSConfig creates a tls.Config that uses the rotator for certificate provisioning.
-func NewRotatingTLSConfig(rotator *CertRotator, ca *CertificateAuthority) *tls.Config {
+func NewRotatingTLSConfig(rotator *CertRotator, ca *CertificateAuthority, options ...TLSConfigOption) *tls.Config {
+	opts := applyTLSConfigOptions(options)
+	caPool := ca.CACertPool()
 	return &tls.Config{
 		GetCertificate: rotator.GetCertificate,
-		RootCAs:        ca.CACertPool(),
-		ClientCAs:      ca.CACertPool(),
+		RootCAs:        caPool,
+		ClientCAs:      caPool,
 		ClientAuth:     tls.RequireAndVerifyClientCert,
 		MinVersion:     tls.VersionTLS13,
+		ServerName:     opts.expectedPeerServerName,
+		// Go verifies the DNS SAN and CA chain before this hook runs. The hook
+		// adds the HELM-specific SPIFFE URI authorization check.
+		VerifyConnection: verifyPeerConnection(caPool, opts.expectedPeerSPIFFEIDs),
 	}
 }

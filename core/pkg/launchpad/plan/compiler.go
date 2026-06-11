@@ -43,6 +43,7 @@ func CompileWithRoot(app registry.AppSpec, substrate registry.SubstrateSpec, pri
 		Principal:               principal,
 		ArtifactImage:           app.Install.Image,
 		ArtifactDigest:          app.Install.Digest,
+		SupportLevel:            app.SupportLevel,
 		RuntimeCommand:          cloneStrings(app.Runtime.Command),
 		RuntimeTimeout:          app.Runtime.Timeout,
 		RuntimeDetached:         app.Runtime.Detached,
@@ -63,15 +64,36 @@ func CompileWithRoot(app registry.AppSpec, substrate registry.SubstrateSpec, pri
 		StateDirEnv:             app.FilesystemPolicy.StateDirEnv,
 		MCPPolicy:               app.MCPPolicy,
 		Budgets:                 app.BudgetCeiling,
+		FrameworkContract:       app.FrameworkContract,
 		Nodes:                   map[string]any{"plan": "launch", "app": app.ID, "substrate": substrate.ID},
 		Edges:                   []any{},
 		TeardownPlan:            map[string]any{"required": true, "receipt": "teardown_receipt", "cascade_supported": substrate.SupportsTeardown},
 		EvidenceRequirements:    cloneStrings(app.EvidenceRequirements),
 	}
+	contractPreflight := BuildContractPreflight(app, substrate, base)
+	base.ContractPreflight = &contractPreflight
+	base.EvidenceRefs = cloneStrings(contractPreflight.EvidenceRefs)
+	base.Nodes["contract_preflight"] = contractPreflight.Verdict
+	base.Nodes["support_level"] = app.SupportLevel
+	if contractPreflight.Verdict != "ALLOW" {
+		base.KernelVerdict = "DENY"
+		base.Status = "DENIED"
+		base.ReasonCode = "ERR_LAUNCHPAD_F2_CONTRACT_REPAIR_REQUIRED"
+		base.ResultClass = contractPreflight.ResultClass
+		base.RepairClass = contractPreflight.RepairClass
+		base.Nodes["blocked"] = "f2_contract_preflight_failed"
+		finalizeStableIR(&base)
+		cpiOutput, _ := EvaluateActions(base, base.ActionIR)
+		base.CPIOutput = &cpiOutput
+		finalizeStableIR(&base)
+		return base, fmt.Errorf("app %s F2 contract preflight failed", app.ID)
+	}
 	if reason := artifactVerificationFailure(app); reason != "" {
 		base.KernelVerdict = "DENY"
 		base.Status = "DENIED"
 		base.ReasonCode = reason
+		base.ResultClass = ResultClassPlanDeny
+		base.RepairClass = RepairClassContractRepairRequired
 		base.Nodes["blocked"] = "artifact_verification_failed"
 		finalizeStableIR(&base)
 		cpiOutput, _ := EvaluateActions(base, base.ActionIR)
@@ -83,6 +105,8 @@ func CompileWithRoot(app registry.AppSpec, substrate registry.SubstrateSpec, pri
 		base.KernelVerdict = "ESCALATE"
 		base.Status = "ESCALATED"
 		base.ReasonCode = "ERR_LAUNCHPAD_REQUIRED_SECRET_MISSING"
+		base.ResultClass = ResultClassPlanEscalate
+		base.RepairClass = RepairClassProviderSecretRequired
 		base.Nodes["blocked"] = "required_secret_missing"
 		base.Nodes["missing_secret"] = missing
 		base.Nodes["required_secret_refs"] = base.RequiredSecretRefs
@@ -92,10 +116,12 @@ func CompileWithRoot(app registry.AppSpec, substrate registry.SubstrateSpec, pri
 		finalizeStableIR(&base)
 		return base, fmt.Errorf("app %s requires missing secret %s", app.ID, missing)
 	}
-	if app.Availability != registry.AvailabilityOSSSupported || !app.Conformance.FullyVerified() {
+	if app.SupportLevel != registry.SupportLevelVerifyOnly && (app.Availability != registry.AvailabilityOSSSupported || !app.Conformance.FullyVerified()) {
 		base.KernelVerdict = "ESCALATE"
 		base.Status = "ESCALATED"
 		base.ReasonCode = "ERR_LAUNCHPAD_APP_CONFORMANCE_REQUIRED"
+		base.ResultClass = ResultClassPlanEscalate
+		base.RepairClass = RepairClassContractRepairRequired
 		base.Nodes["blocked"] = "app_conformance_required"
 		finalizeStableIR(&base)
 		cpiOutput, _ := EvaluateActions(base, base.ActionIR)
@@ -105,12 +131,15 @@ func CompileWithRoot(app registry.AppSpec, substrate registry.SubstrateSpec, pri
 	}
 	base.KernelVerdict = "ALLOW"
 	base.Status = "VALIDATED"
+	base.RepairClass = RepairClassNone
 	finalizeStableIR(&base)
 	cpiOutput, err := EvaluateActions(base, base.ActionIR)
 	if err != nil {
 		base.KernelVerdict = "ESCALATE"
 		base.Status = "ESCALATED"
 		base.ReasonCode = "ERR_LAUNCHPAD_CPI_UNAVAILABLE"
+		base.ResultClass = ResultClassPlanEscalate
+		base.RepairClass = RepairClassContractRepairRequired
 		finalizeStableIR(&base)
 		return base, err
 	}
@@ -119,6 +148,8 @@ func CompileWithRoot(app registry.AppSpec, substrate registry.SubstrateSpec, pri
 		base.KernelVerdict = string(cpiOutput.Verdict)
 		base.Status = "ESCALATED"
 		base.ReasonCode = cpiOutput.ReasonCode
+		base.ResultClass = ResultClassPlanEscalate
+		base.RepairClass = RepairClassContractRepairRequired
 		finalizeStableIR(&base)
 		return base, fmt.Errorf("launchpad CPI verdict %s", cpiOutput.Verdict)
 	}
@@ -152,12 +183,39 @@ func FailurePlan(appID, substrateID, principal, verdict, status, reasonCode stri
 		KernelVerdict:        verdict,
 		Status:               status,
 		ReasonCode:           reasonCode,
+		ResultClass:          resultClassForFailurePlan(verdict, reasonCode),
+		RepairClass:          repairClassForFailurePlan(reasonCode),
 	}
 	finalizeStableIR(&base)
 	cpiOutput, _ := EvaluateActions(base, base.ActionIR)
 	base.CPIOutput = &cpiOutput
 	finalizeStableIR(&base)
 	return base
+}
+
+func resultClassForFailurePlan(verdict, reasonCode string) ResultClass {
+	switch verdict {
+	case "DENY":
+		if strings.Contains(reasonCode, "CONTRACT") {
+			return ResultClassRuntimeRepairRequired
+		}
+		return ResultClassPlanDeny
+	case "ALLOW":
+		return ""
+	default:
+		return ResultClassPlanEscalate
+	}
+}
+
+func repairClassForFailurePlan(reasonCode string) RepairClass {
+	switch {
+	case strings.Contains(reasonCode, "SECRET"):
+		return RepairClassProviderSecretRequired
+	case strings.Contains(reasonCode, "REPAIR"):
+		return RepairClassRuntimeRepairRequired
+	default:
+		return RepairClassContractRepairRequired
+	}
 }
 
 func hashCanonical(v any) string {

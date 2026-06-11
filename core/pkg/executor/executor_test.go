@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/safedep"
@@ -55,6 +56,42 @@ func (f safeDepGateFunc) Gate(ctx context.Context, req safedep.GateRequest) (saf
 	return f(ctx, req)
 }
 
+func testEffectDigest(t *testing.T, effect *contracts.Effect) string {
+	t.Helper()
+	effectBytes, err := canonicalize.JCS(testEffectDigestEnvelopeFrom(effect))
+	if err != nil {
+		t.Fatalf("canonicalize effect: %v", err)
+	}
+	return canonicalize.HashBytes(effectBytes)
+}
+
+type testEffectDigestEnvelope struct {
+	EffectType     string                    `json:"effect_type"`
+	Params         map[string]any            `json:"params,omitempty"`
+	IdempotencyKey string                    `json:"idempotency_key,omitempty"`
+	Irreversible   bool                      `json:"irreversible,omitempty"`
+	ArgsHash       string                    `json:"args_hash,omitempty"`
+	OutputHash     string                    `json:"output_hash,omitempty"`
+	Taint          []string                  `json:"taint,omitempty"`
+	Compensation   *testEffectDigestEnvelope `json:"compensation,omitempty"`
+}
+
+func testEffectDigestEnvelopeFrom(effect *contracts.Effect) *testEffectDigestEnvelope {
+	if effect == nil {
+		return nil
+	}
+	return &testEffectDigestEnvelope{
+		EffectType:     effect.EffectType,
+		Params:         effect.Params,
+		IdempotencyKey: effect.IdempotencyKey,
+		Irreversible:   effect.Irreversible,
+		ArgsHash:       effect.ArgsHash,
+		OutputHash:     effect.OutputHash,
+		Taint:          contracts.NormalizeTaintLabels(effect.Taint),
+		Compensation:   testEffectDigestEnvelopeFrom(effect.Compensation),
+	}
+}
+
 func TestSafeExecutor_Gating(t *testing.T) {
 	// Setup
 	signer, _ := crypto.NewEd25519Signer("test-key")
@@ -68,8 +105,9 @@ func TestSafeExecutor_Gating(t *testing.T) {
 
 	// 1. Valid Decision -> Execute
 	validDec := &contracts.DecisionRecord{
-		ID:      "dec-1",
-		Verdict: string(contracts.VerdictAllow),
+		ID:           "dec-1",
+		Verdict:      string(contracts.VerdictAllow),
+		EffectDigest: testEffectDigest(t, effect),
 	}
 	// Sign the decision so it passes signature validation
 	if err := signer.SignDecision(validDec); err != nil {
@@ -77,8 +115,9 @@ func TestSafeExecutor_Gating(t *testing.T) {
 	}
 
 	intent := &contracts.AuthorizedExecutionIntent{
-		DecisionID: "dec-1",
-		ExpiresAt:  time.Now().Add(1 * time.Hour), // Set expiry in the future
+		DecisionID:       "dec-1",
+		EffectDigestHash: validDec.EffectDigest,
+		ExpiresAt:        time.Now().Add(1 * time.Hour), // Set expiry in the future
 	}
 	// Sign the intent as well
 	if err := signer.SignIntent(intent); err != nil {
@@ -114,6 +153,48 @@ func TestSafeExecutor_Gating(t *testing.T) {
 	}
 	if mockDriver.Called {
 		t.Error("Driver called despite mismatch")
+	}
+}
+
+func TestSafeExecutorRejectsRuntimeEffectDigestMismatch(t *testing.T) {
+	signer, _ := crypto.NewEd25519Signer("test-key")
+	mockDriver := &MockDriver{}
+	executor := NewSafeExecutor(signer, signer, mockDriver, NewMemoryReceiptStore(), nil, nil, "", nil, nil, nil, nil)
+
+	approvedEffect := &contracts.Effect{
+		EffectID:   "eff-approved",
+		EffectType: "EXECUTE_TOOL",
+		Params:     map[string]any{"tool_name": "deploy", "target": "staging"},
+	}
+	decision := &contracts.DecisionRecord{
+		ID:           "dec-approved",
+		Verdict:      string(contracts.VerdictAllow),
+		EffectDigest: testEffectDigest(t, approvedEffect),
+	}
+	if err := signer.SignDecision(decision); err != nil {
+		t.Fatal(err)
+	}
+	intent := &contracts.AuthorizedExecutionIntent{
+		DecisionID:       decision.ID,
+		EffectDigestHash: decision.EffectDigest,
+		ExpiresAt:        time.Now().Add(time.Hour),
+		AllowedTool:      "deploy",
+	}
+	if err := signer.SignIntent(intent); err != nil {
+		t.Fatal(err)
+	}
+
+	substitutedEffect := &contracts.Effect{
+		EffectID:   "eff-substituted",
+		EffectType: "EXECUTE_TOOL",
+		Params:     map[string]any{"tool_name": "deploy", "target": "production"},
+	}
+	_, _, err := executor.Execute(context.Background(), substitutedEffect, decision, intent)
+	if err == nil {
+		t.Fatal("expected runtime effect digest mismatch")
+	}
+	if mockDriver.Called {
+		t.Fatal("driver dispatched after runtime effect digest mismatch")
 	}
 }
 
@@ -190,15 +271,15 @@ func TestSafeExecutorCopiesEmergencyAuthorityToReceipt(t *testing.T) {
 				},
 			}, nil
 		}))
-	decision := &contracts.DecisionRecord{ID: "dec-safedep-allow", Verdict: string(contracts.VerdictAllow)}
+	effect := &contracts.Effect{EffectID: "eff-safedep-allow", Params: map[string]any{"tool_name": "ls"}}
+	decision := &contracts.DecisionRecord{ID: "dec-safedep-allow", Verdict: string(contracts.VerdictAllow), EffectDigest: testEffectDigest(t, effect)}
 	if err := signer.SignDecision(decision); err != nil {
 		t.Fatal(err)
 	}
-	intent := &contracts.AuthorizedExecutionIntent{DecisionID: decision.ID, ExpiresAt: time.Now().Add(time.Hour)}
+	intent := &contracts.AuthorizedExecutionIntent{DecisionID: decision.ID, EffectDigestHash: decision.EffectDigest, ExpiresAt: time.Now().Add(time.Hour)}
 	if err := signer.SignIntent(intent); err != nil {
 		t.Fatal(err)
 	}
-	effect := &contracts.Effect{EffectID: "eff-safedep-allow", Params: map[string]any{"tool_name": "ls"}}
 	receipt, _, err := executor.Execute(context.Background(), effect, decision, intent)
 	if err != nil {
 		t.Fatal(err)
@@ -224,15 +305,17 @@ func TestSafeExecutor_WithClock(t *testing.T) {
 		Params:   map[string]any{"tool_name": "ls"},
 	}
 	dec := &contracts.DecisionRecord{
-		ID:      "dec-clock",
-		Verdict: string(contracts.VerdictAllow),
+		ID:           "dec-clock",
+		Verdict:      string(contracts.VerdictAllow),
+		EffectDigest: testEffectDigest(t, effect),
 	}
 	if err := signer.SignDecision(dec); err != nil {
 		t.Fatalf("Failed to sign decision: %v", err)
 	}
 	intent := &contracts.AuthorizedExecutionIntent{
-		DecisionID: "dec-clock",
-		ExpiresAt:  fixedTime.Add(1 * time.Hour),
+		DecisionID:       "dec-clock",
+		EffectDigestHash: dec.EffectDigest,
+		ExpiresAt:        fixedTime.Add(1 * time.Hour),
 	}
 	if err := signer.SignIntent(intent); err != nil {
 		t.Fatalf("Failed to sign intent: %v", err)
@@ -260,15 +343,17 @@ func TestSafeExecutor_ExpiredIntent(t *testing.T) {
 		Params:   map[string]any{"tool_name": "ls"},
 	}
 	dec := &contracts.DecisionRecord{
-		ID:      "dec-expired",
-		Verdict: string(contracts.VerdictAllow),
+		ID:           "dec-expired",
+		Verdict:      string(contracts.VerdictAllow),
+		EffectDigest: testEffectDigest(t, effect),
 	}
 	if err := signer.SignDecision(dec); err != nil {
 		t.Fatalf("Failed to sign decision: %v", err)
 	}
 	intent := &contracts.AuthorizedExecutionIntent{
-		DecisionID: "dec-expired",
-		ExpiresAt:  time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), // Expired relative to futureTime
+		DecisionID:       "dec-expired",
+		EffectDigestHash: dec.EffectDigest,
+		ExpiresAt:        time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), // Expired relative to futureTime
 	}
 	if err := signer.SignIntent(intent); err != nil {
 		t.Fatalf("Failed to sign intent: %v", err)

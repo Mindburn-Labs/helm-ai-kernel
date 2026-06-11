@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/siem/internal/safeurl"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -45,6 +46,8 @@ type Config struct {
 	ServiceLabel string
 	// HTTPClient is optional; defaults to a 10s-timeout client.
 	HTTPClient *http.Client
+	// AllowInsecureHTTP permits loopback http:// collectors for tests/dev only.
+	AllowInsecureHTTP bool
 }
 
 // Exporter implements sdktrace.SpanExporter for Grafana Loki.
@@ -58,6 +61,11 @@ type Exporter struct {
 func New(cfg Config) (*Exporter, error) {
 	if cfg.URL == "" {
 		return nil, errors.New("loki: URL is required")
+	}
+	if cfg.BasicAuthUser != "" || cfg.BasicAuthPass != "" {
+		if err := safeurl.RequireHTTPS(cfg.URL, "loki", cfg.AllowInsecureHTTP); err != nil {
+			return nil, err
+		}
 	}
 	if cfg.ServiceLabel == "" {
 		cfg.ServiceLabel = "helm-ai-kernel"

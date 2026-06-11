@@ -151,6 +151,24 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
+      - name: Free hosted runner disk before artifact build
+        run: |
+          set -euo pipefail
+          df -h
+          sudo rm -rf \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/local/lib/android \
+            /usr/local/share/boost \
+            /usr/local/share/powershell \
+            /usr/share/dotnet \
+            /usr/share/swift || true
+          sudo apt-get clean || true
+          docker buildx prune --force --all || true
+          docker builder prune --force --all || true
+          docker system prune --force || true
+          df -h
+
       - name: Install cosign
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
@@ -219,21 +237,32 @@ jobs:
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             > "cosign-${{ matrix.app_id }}.json"
 
+      - name: Free Docker build cache before image evidence scans
+        run: |
+          set -euo pipefail
+          docker buildx prune --force --all || true
+          docker builder prune --force --all || true
+          docker system prune --force || true
+          docker system df
+
       - name: Generate syft SBOM
         env:
           IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          SYFT_CHECK_FOR_APP_UPDATE: "false"
+          SYFT_SCOPE: squashed
         run: |
           set -euo pipefail
-          syft "${IMAGE_REF}" -o spdx-json="sbom-${{ matrix.app_id }}.spdx.json"
+          timeout 20m syft "${IMAGE_REF}" -o spdx-json="sbom-${{ matrix.app_id }}.spdx.json"
 
       - name: Run grype scan
         id: grype
         env:
           IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          GRYPE_CHECK_FOR_APP_UPDATE: "false"
         run: |
           set -euo pipefail
           status=completed
-          if ! grype "${IMAGE_REF}" -o json --file "grype-${{ matrix.app_id }}.json"; then
+          if ! timeout 20m grype "${IMAGE_REF}" -o json --file "grype-${{ matrix.app_id }}.json"; then
             status=failed
           fi
           echo "status=${status}" >> "$GITHUB_OUTPUT"
@@ -332,6 +361,23 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Free hosted runner disk before egress proxy build
+        run: |
+          set -euo pipefail
+          df -h
+          sudo rm -rf \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/local/lib/android \
+            /usr/local/share/boost \
+            /usr/local/share/powershell \
+            /usr/share/dotnet \
+            /usr/share/swift || true
+          sudo apt-get clean || true
+          docker buildx prune --force --all || true
+          docker builder prune --force --all || true
+          docker system prune --force || true
+          df -h
       - name: Install cosign
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
       - name: Install syft
@@ -389,14 +435,24 @@ jobs:
             --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/launchpad-artifacts.yml@${GITHUB_REF}" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             > cosign-egress-proxy.json
+      - name: Free Docker build cache before egress proxy evidence scans
+        run: |
+          set -euo pipefail
+          docker buildx prune --force --all || true
+          docker builder prune --force --all || true
+          docker system prune --force || true
+          docker system df
       - name: Generate egress proxy SBOM and vulnerability report
         env:
           IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          SYFT_CHECK_FOR_APP_UPDATE: "false"
+          SYFT_SCOPE: squashed
+          GRYPE_CHECK_FOR_APP_UPDATE: "false"
         run: |
           set -euo pipefail
-          syft "${IMAGE_REF}" -o spdx-json=sbom-egress-proxy.spdx.json
+          timeout 20m syft "${IMAGE_REF}" -o spdx-json=sbom-egress-proxy.spdx.json
           status=completed
-          if ! grype "${IMAGE_REF}" -o json --file grype-egress-proxy.json; then
+          if ! timeout 20m grype "${IMAGE_REF}" -o json --file grype-egress-proxy.json; then
             status=failed
           fi
           jq -n \
@@ -514,7 +570,7 @@ jobs:
       - name: Run gated live conformance
         env:
           HELM_LAUNCHPAD_LIVE_E2E: "1"
-          HELM_LAUNCHPAD_LIVE_APPS: openclaw,hermes,opencode,kilocode
+          HELM_LAUNCHPAD_LIVE_APPS: openclaw,hermes
           HELM_LAUNCHPAD_ARTIFACT_MANIFEST: /tmp/launchpad/launchpad-artifact-manifest.json
           HELM_LAUNCHPAD_LIVE_EVIDENCE_DIR: /tmp/launchpad-live-evidence
           HELM_LAUNCHPAD_LOCAL_CONTAINER_TIMEOUT: 8m
@@ -563,7 +619,7 @@ jobs:
           include-hidden-files: true
       - name: Write merged promotion manifest
         env:
-          LIVE_APPS: openclaw,hermes,opencode,kilocode
+          LIVE_APPS: openclaw,hermes
         run: |
           set -euo pipefail
           mkdir -p /tmp/launchpad-promotion

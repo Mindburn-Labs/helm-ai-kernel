@@ -10,6 +10,18 @@ const (
 	AvailabilityBlockedConformance         Availability = "blocked_conformance"
 )
 
+type SupportLevel string
+
+const (
+	SupportLevelOSSSupported          SupportLevel = "oss_supported"
+	SupportLevelExternalBYOAdapter    SupportLevel = "external_byo_adapter"
+	SupportLevelVerifyOnly            SupportLevel = "verify_only"
+	SupportLevelAgentLive             SupportLevel = "agent_live"
+	SupportLevelDemo                  SupportLevel = "demo"
+	SupportLevelImportQuarantined     SupportLevel = "import_quarantined"
+	SupportLevelBlockedRepairRequired SupportLevel = "blocked_repair_required"
+)
+
 type AppSpec struct {
 	ID                   string                  `json:"id" yaml:"id"`
 	Name                 string                  `json:"name" yaml:"name"`
@@ -17,6 +29,7 @@ type AppSpec struct {
 	License              LicenseSpec             `json:"license" yaml:"license"`
 	Redistribution       string                  `json:"redistribution" yaml:"redistribution"`
 	Availability         Availability            `json:"availability" yaml:"availability"`
+	SupportLevel         SupportLevel            `json:"support_level" yaml:"support_level"`
 	Install              InstallSpec             `json:"install" yaml:"install"`
 	Runtime              RuntimeSpec             `json:"runtime" yaml:"runtime"`
 	ModelGateway         ModelGatewaySpec        `json:"model_gateway,omitempty" yaml:"model_gateway,omitempty"`
@@ -29,11 +42,54 @@ type AppSpec struct {
 	Healthchecks         []HealthcheckSpec       `json:"healthchecks" yaml:"healthchecks"`
 	RiskClass            string                  `json:"risk_class" yaml:"risk_class"`
 	BudgetCeiling        BudgetCeiling           `json:"budget_ceiling" yaml:"budget_ceiling"`
+	FrameworkContract    FrameworkContractSpec   `json:"framework_contract" yaml:"framework_contract"`
 	EvidenceRequirements []string                `json:"evidence_requirements" yaml:"evidence_requirements"`
 	SupplyChainEvidence  SupplyChainEvidenceSpec `json:"supply_chain_evidence,omitempty" yaml:"supply_chain_evidence,omitempty"`
 	PromotionEvidence    PromotionEvidenceSpec   `json:"promotion_evidence,omitempty" yaml:"promotion_evidence,omitempty"`
 	Conformance          ConformanceSpec         `json:"conformance" yaml:"conformance"`
 	Metadata             map[string]string       `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+}
+
+type FrameworkContractSpec struct {
+	F2ContractPreflight             bool                         `json:"f2_contract_preflight" yaml:"f2_contract_preflight"`
+	ClaimLevel                      SupportLevel                 `json:"claim_level" yaml:"claim_level"`
+	LiveCommandKind                 string                       `json:"live_command_kind" yaml:"live_command_kind"`
+	RuntimeInstallPolicy            string                       `json:"runtime_install_policy" yaml:"runtime_install_policy"`
+	BakedDependencies               []string                     `json:"baked_dependencies,omitempty" yaml:"baked_dependencies,omitempty"`
+	ForbiddenRuntimeInstallPatterns []string                     `json:"forbidden_runtime_install_patterns,omitempty" yaml:"forbidden_runtime_install_patterns,omitempty"`
+	WritablePaths                   []WritablePathContractSpec   `json:"writable_paths,omitempty" yaml:"writable_paths,omitempty"`
+	ProviderHostGroups              []string                     `json:"provider_host_groups,omitempty" yaml:"provider_host_groups,omitempty"`
+	EgressProxy                     EgressProxyContractSpec      `json:"egress_proxy,omitempty" yaml:"egress_proxy,omitempty"`
+	MCPManifestRefs                 []string                     `json:"mcp_manifest_refs,omitempty" yaml:"mcp_manifest_refs,omitempty"`
+	Healthcheck                     string                       `json:"healthcheck" yaml:"healthcheck"`
+	EvidenceProfile                 string                       `json:"evidence_profile" yaml:"evidence_profile"`
+	Images                          []FrameworkImageContractSpec `json:"images,omitempty" yaml:"images,omitempty"`
+	EvidenceRefs                    []string                     `json:"evidence_refs,omitempty" yaml:"evidence_refs,omitempty"`
+}
+
+type WritablePathContractSpec struct {
+	Env      string `json:"env,omitempty" yaml:"env,omitempty"`
+	Path     string `json:"path" yaml:"path"`
+	Purpose  string `json:"purpose,omitempty" yaml:"purpose,omitempty"`
+	Required bool   `json:"required" yaml:"required"`
+}
+
+type EgressProxyContractSpec struct {
+	Required             bool   `json:"required" yaml:"required"`
+	Image                string `json:"image,omitempty" yaml:"image,omitempty"`
+	Digest               string `json:"digest,omitempty" yaml:"digest,omitempty"`
+	SignatureRef         string `json:"signature_ref,omitempty" yaml:"signature_ref,omitempty"`
+	SBOMRef              string `json:"sbom_ref,omitempty" yaml:"sbom_ref,omitempty"`
+	VulnerabilityScanRef string `json:"vulnerability_scan_ref,omitempty" yaml:"vulnerability_scan_ref,omitempty"`
+	ReceiptRef           string `json:"receipt_ref,omitempty" yaml:"receipt_ref,omitempty"`
+}
+
+type FrameworkImageContractSpec struct {
+	Name              string   `json:"name" yaml:"name"`
+	Image             string   `json:"image" yaml:"image"`
+	Digest            string   `json:"digest" yaml:"digest"`
+	Purpose           string   `json:"purpose" yaml:"purpose"`
+	BakedDependencies []string `json:"baked_dependencies,omitempty" yaml:"baked_dependencies,omitempty"`
 }
 
 type LicenseSpec struct {

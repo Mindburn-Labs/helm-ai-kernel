@@ -7,11 +7,12 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators"
 )
 
-func runPreflightChecks(cfg Config) []actuators.PreflightCheck {
+func runPreflightChecks(cfg Config, signer ManagedAgentReceiptSigner) []actuators.PreflightCheck {
 	return []actuators.PreflightCheck{
 		checkWorkerIdentity(cfg),
 		checkWorkerImageDigest(cfg),
 		checkSkillManifest(cfg),
+		checkReceiptSigner(signer),
 		checkEnvironmentKey(cfg),
 		checkNoOrgAPIKey(cfg),
 		checkEgress(cfg),
@@ -20,6 +21,26 @@ func runPreflightChecks(cfg Config) []actuators.PreflightCheck {
 		checkTLS(cfg),
 		checkMCPGateway(cfg),
 	}
+}
+
+func checkReceiptSigner(signer ManagedAgentReceiptSigner) actuators.PreflightCheck {
+	check := requiredCheck("managed_agent_receipt_signer")
+	if signer == nil {
+		check.Reason = "managed-agent receipt signer is not configured"
+		return check
+	}
+	keyID := strings.TrimSpace(signer.SignerKeyID())
+	if keyID == "" {
+		check.Reason = "managed-agent receipt signer key id is missing"
+		return check
+	}
+	if keyID == localPreviewSignerKeyID {
+		check.Reason = "local preview signer is not trusted for managed-agent execution receipts"
+		return check
+	}
+	check.Passed = true
+	check.Reason = "managed-agent receipt signer is configured"
+	return check
 }
 
 func checkWorkerIdentity(cfg Config) actuators.PreflightCheck {

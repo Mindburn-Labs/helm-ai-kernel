@@ -5,8 +5,8 @@ legacy_launchpad_ref: registry/launchpad/apps/openclaw.yaml
 availability: oss_supported
 install:
   strategy: signed_oci
-  image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e
-  digest: sha256:808d750ed3ce3e29ed45d68c00c9c77ff50990204b3fe563b9f45d00f1beb88e
+  image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995
+  digest: sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995
 policy: policy.default.yaml
 secrets: secrets.schema.yaml
 mcp_registry: mcp.registry.yaml

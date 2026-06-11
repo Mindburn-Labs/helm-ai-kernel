@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -292,7 +293,7 @@ func TestScopeAndHelperBranches(t *testing.T) {
 	if partial.Normalize().WorkspaceID != DefaultScope.WorkspaceID {
 		t.Fatalf("partial scope did not normalize: %+v", partial.Normalize())
 	}
-	if err := verifyExpectedHash("", []byte("x")); !errors.Is(err, ErrPolicyNotReady) {
+	if err := verifyExpectedPolicyHash(PolicyHead{}, []byte("x")); !errors.Is(err, ErrPolicyNotReady) {
 		t.Fatalf("expected empty hash not-ready, got %v", err)
 	}
 	data := mustJSON(map[string]any{"bad": func() {}})
@@ -304,5 +305,86 @@ func TestScopeAndHelperBranches(t *testing.T) {
 	}
 	if err := validateSnapshot(&EffectivePolicySnapshot{TenantID: "t", WorkspaceID: "w"}); !errors.Is(err, ErrPolicyNotReady) {
 		t.Fatalf("expected empty hash validation error, got %v", err)
+	}
+}
+
+func TestMountedFileSourceBindsReferencePackDigest(t *testing.T) {
+	dir := t.TempDir()
+	refDir := filepath.Join(dir, "reference_packs")
+	if err := os.MkdirAll(refDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	refPath := filepath.Join(refDir, "runtime.json")
+	if err := os.WriteFile(refPath, []byte(`{"pack_id":"runtime","version":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	policyPath := filepath.Join(dir, "policy.toml")
+	policyBytes := []byte(`
+name = "runtime"
+profile = "test"
+reference_pack = "./reference_packs/runtime.json"
+
+[server]
+bind = "127.0.0.1"
+port = 7714
+
+[receipts]
+store = "sqlite"
+path = "./data/receipts.db"
+`)
+	if err := os.WriteFile(policyPath, policyBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	source := NewMountedFileSource(policyPath, DefaultScope)
+	head, err := source.Head(context.Background(), DefaultScope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if head.PolicyHash == HashBytes(policyBytes) {
+		t.Fatalf("reference pack digest was not bound into policy hash")
+	}
+	refDigest := HashBytes([]byte(`{"pack_id":"runtime","version":1}`))
+	if len(head.SourceRefs) < 2 || !strings.Contains(strings.Join(head.SourceRefs, "\n"), "@"+refDigest) {
+		t.Fatalf("source refs missing reference pack digest: %+v", head.SourceRefs)
+	}
+	if err := verifyExpectedPolicyHash(head, policyBytes); err != nil {
+		t.Fatalf("composite policy hash did not verify: %v", err)
+	}
+
+	if err := os.WriteFile(refPath, []byte(`{"pack_id":"runtime","version":2}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tampered, err := source.Head(context.Background(), DefaultScope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tampered.PolicyHash == head.PolicyHash {
+		t.Fatal("reference pack mutation did not change mounted policy hash")
+	}
+}
+
+func TestMountedFileSourceRejectsReferencePackEscape(t *testing.T) {
+	dir := t.TempDir()
+	policyPath := filepath.Join(dir, "policy.toml")
+	if err := os.WriteFile(policyPath, []byte(`
+name = "runtime"
+profile = "test"
+reference_pack = "../outside.json"
+
+[server]
+bind = "127.0.0.1"
+port = 7714
+
+[receipts]
+store = "sqlite"
+path = "./data/receipts.db"
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	source := NewMountedFileSource(policyPath, DefaultScope)
+	if _, err := source.Head(context.Background(), DefaultScope); err == nil || !strings.Contains(err.Error(), "must not escape") {
+		t.Fatalf("expected reference_pack escape denial, got %v", err)
 	}
 }

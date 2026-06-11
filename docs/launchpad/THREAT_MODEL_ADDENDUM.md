@@ -48,10 +48,11 @@ must be added to the mediation proof harness before it appears in public claims.
 
 ## Supported App Claim Boundary
 
-OpenClaw, Hermes, OpenCode, and Kilo Code are the current `oss_supported`
-local-container set after workflow `26198407296` passed signed artifact build,
-SBOM, vulnerability scan, live model-provider launch, teardown, and offline
-EvidencePack verification for all four apps.
+OpenClaw and Hermes are the current live local-container set after workflow
+`26198407296` passed signed artifact build, contract preflight, SBOM,
+vulnerability scan, live model-provider launch, teardown, and offline
+EvidencePack verification. OpenCode and Kilo Code are `verify_only`; `--version`
+smoke checks do not count as live-agent F2 coverage.
 
 Any app outside that four-app set remains non-marketable as supported until the
 same evidence refs are present in the registry and the docs-truth gate passes.

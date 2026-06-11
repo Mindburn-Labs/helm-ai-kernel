@@ -19,6 +19,8 @@ After this page you should know what this surface is for, which source files own
 - Source document: `helm-ai-kernel/docs/INTEGRATIONS/mcp.md`
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
+- Launch demo: `scripts/launch/demo-mcp.sh`
+- Shell policy fixture: `examples/launch/policies/shell_mcp_server_boundary.json`
 - Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
@@ -64,6 +66,53 @@ The local boundary quickstart remains the entry point:
 
 ```bash
 helm-ai-kernel serve --policy ./release.high_risk.v3.toml
+```
+
+## Shell MCP Server Quickstart
+
+This example puts HELM in front of an upstream `shell-mcp-server` for local
+Claude/Cursor-style MCP usage. `shell-mcp-server` is not a HELM implementation;
+it is the upstream server identity that HELM discovers, quarantines, approves,
+and authorizes before each tool call.
+
+Create a wrapper profile:
+
+```bash
+./bin/helm-ai-kernel mcp wrap \
+  --server-id shell-mcp-server \
+  --upstream-command "npx -y shell-mcp-server" \
+  --require-pinned-schema=true \
+  --json
+```
+
+Install or print client configuration:
+
+```bash
+./bin/helm-ai-kernel mcp install --client claude-code
+./bin/helm-ai-kernel mcp pack --client claude-desktop --out helm-ai-kernel.mcpb
+./bin/helm-ai-kernel mcp print-config --client cursor
+```
+
+The minimal shell fixture is
+`examples/launch/policies/shell_mcp_server_boundary.json`. It documents the
+intended quickstart policy shape:
+
+| Command class | Verdict | Reason |
+| --- | --- | --- |
+| `ls` | `ALLOW` | Read-only directory listing |
+| `cat <path>` | `ALLOW` | Read-only file inspection |
+| `git status` | `ALLOW` | Read-only worktree status |
+| `rm -rf` and equivalent recursive force delete patterns | `DENY` | Destructive deletion |
+| `dd`, `mkfs`, and raw-device write patterns | `DENY` | Disk or filesystem destruction |
+| `git clean -f`, `git clean -fd`, `git clean -fdx`, `git clean --force` | `DENY` | Destructive worktree cleanup |
+
+The active policy bundle still decides enforcement. The fixture keeps docs and
+review discussion concrete without creating a second policy language.
+
+Receipt-bearing MCP decisions can be inspected with:
+
+```bash
+./bin/helm-ai-kernel receipts tail --agent mcp-demo-agent --server http://127.0.0.1:7714
 ```
 
 ## Run the Server

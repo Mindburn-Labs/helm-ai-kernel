@@ -11,10 +11,13 @@ import (
 )
 
 const (
-	tenantHeader       = "X-Helm-Tenant-ID"
-	principalHeader    = "X-Helm-Principal-ID"
-	serviceAPIKeyEnv   = "HELM_SERVICE_API_KEY"
-	servicePrincipalID = "service-internal"
+	tenantHeader           = "X-Helm-Tenant-ID"
+	principalHeader        = "X-Helm-Principal-ID"
+	runtimeTenantIDEnv     = "HELM_RUNTIME_TENANT_ID"
+	runtimePrincipalIDEnv  = "HELM_RUNTIME_PRINCIPAL_ID"
+	defaultRuntimeTenantID = "default"
+	serviceAPIKeyEnv       = "HELM_SERVICE_API_KEY"
+	servicePrincipalID     = "service-internal"
 )
 
 func protectRuntimeHandler(auth RouteAuth, handler http.HandlerFunc) http.HandlerFunc {
@@ -53,15 +56,30 @@ func requireRuntimeTenant(handler http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		tenantID := selectedTenantID(r)
-		if tenantID == "" {
-			api.WriteForbidden(w, "Tenant-scoped route requires X-Helm-Tenant-ID header or tenant_id query parameter")
+		tenantID := configuredRuntimeTenantID()
+		requestedTenantID := selectedTenantID(r)
+		if requestedTenantID == "" {
+			api.WriteForbidden(w, "Tenant-scoped route requires explicit tenant binding")
+			return
+		}
+		if requestedTenantID != tenantID {
+			api.WriteForbidden(w, "Tenant-scoped route tenant mismatch")
 			return
 		}
 
-		principalID := strings.TrimSpace(r.Header.Get(principalHeader))
+		principalID := configuredRuntimePrincipalID(adminPrincipal)
 		if principalID == "" {
-			principalID = adminPrincipal.GetID()
+			api.WriteForbidden(w, "Tenant-scoped route principal could not be resolved")
+			return
+		}
+		requestedPrincipalID := strings.TrimSpace(r.Header.Get(principalHeader))
+		if requestedPrincipalID == "" {
+			api.WriteForbidden(w, "Tenant-scoped route requires explicit principal binding")
+			return
+		}
+		if requestedPrincipalID != principalID {
+			api.WriteForbidden(w, "Tenant-scoped route principal mismatch")
+			return
 		}
 		principal := &helmauth.BasePrincipal{
 			ID:       principalID,
@@ -70,6 +88,20 @@ func requireRuntimeTenant(handler http.HandlerFunc) http.HandlerFunc {
 		}
 		handler(w, r.WithContext(helmauth.WithPrincipal(r.Context(), principal)))
 	}
+}
+
+func configuredRuntimeTenantID() string {
+	if tenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv)); tenantID != "" {
+		return tenantID
+	}
+	return defaultRuntimeTenantID
+}
+
+func configuredRuntimePrincipalID(adminPrincipal helmauth.Principal) string {
+	if principalID := strings.TrimSpace(os.Getenv(runtimePrincipalIDEnv)); principalID != "" {
+		return principalID
+	}
+	return strings.TrimSpace(adminPrincipal.GetID())
 }
 
 func requireRuntimeService(handler http.HandlerFunc) http.HandlerFunc {

@@ -12,6 +12,12 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
+func allowAutonomyAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+	})
+}
+
 // ──────────────────────────────────────────────────────────────
 // Autonomy Handler tests
 // ──────────────────────────────────────────────────────────────
@@ -277,7 +283,7 @@ func TestControlEndpoint_PauseAndResume(t *testing.T) {
 	provider.SetPosture(contracts.PostureTransact) // enough for PAUSE/RUN
 	handler := api.NewAutonomyHandler(provider)
 	mux := http.NewServeMux()
-	handler.Register(mux, nil)
+	handler.Register(mux, allowAutonomyAdmin)
 
 	// Pause
 	body := `{"action":"PAUSE"}`
@@ -321,7 +327,7 @@ func TestControlEndpoint_FreezeRequiresSovereign(t *testing.T) {
 	provider.SetPosture(contracts.PostureObserve) // too low for FREEZE
 	handler := api.NewAutonomyHandler(provider)
 	mux := http.NewServeMux()
-	handler.Register(mux, nil)
+	handler.Register(mux, allowAutonomyAdmin)
 
 	body := `{"action":"FREEZE"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/autonomy/control", bytes.NewBufferString(body))
@@ -347,7 +353,7 @@ func TestControlEndpoint_InvalidAction(t *testing.T) {
 	provider := api.NewInMemoryAutonomyProvider()
 	handler := api.NewAutonomyHandler(provider)
 	mux := http.NewServeMux()
-	handler.Register(mux, nil)
+	handler.Register(mux, allowAutonomyAdmin)
 
 	body := `{"action":"EXPLODE"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/autonomy/control", bytes.NewBufferString(body))
@@ -363,7 +369,7 @@ func TestControlEndpoint_MethodNotAllowed(t *testing.T) {
 	provider := api.NewInMemoryAutonomyProvider()
 	handler := api.NewAutonomyHandler(provider)
 	mux := http.NewServeMux()
-	handler.Register(mux, nil)
+	handler.Register(mux, allowAutonomyAdmin)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/autonomy/control", nil)
 	rec := httptest.NewRecorder()
@@ -371,6 +377,21 @@ func TestControlEndpoint_MethodNotAllowed(t *testing.T) {
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("expected 405 for GET on control endpoint, got %d", rec.Code)
+	}
+}
+
+func TestControlEndpoint_FailsClosedWithoutAdminAuth(t *testing.T) {
+	provider := api.NewInMemoryAutonomyProvider()
+	handler := api.NewAutonomyHandler(provider)
+	mux := http.NewServeMux()
+	handler.Register(mux, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/autonomy/control", bytes.NewBufferString(`{"action":"PAUSE"}`))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without admin auth wrapper, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

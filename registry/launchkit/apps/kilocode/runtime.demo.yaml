@@ -1,0 +1,8 @@
+mode: demo
+side_effects: disabled
+runtime_dry_run: true
+command:
+  - kilocode
+healthcheck:
+  type: command
+  command: kilocode --version

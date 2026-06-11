@@ -60,7 +60,7 @@ flowchart TD
 | Class | Runtime behavior |
 | --- | --- |
 | `public` | No runtime admin credential required by `protectRuntimeHandler`. |
-| `tenant_scoped` | Requires `Authorization: Bearer $HELM_ADMIN_API_KEY` and `X-Helm-Tenant-ID` or `tenant_id`. `X-Helm-Principal-ID` can narrow the principal recorded in context. |
+| `tenant_scoped` | Requires `Authorization: Bearer $HELM_ADMIN_API_KEY`. Effective tenant/principal come from `HELM_RUNTIME_TENANT_ID` and `HELM_RUNTIME_PRINCIPAL_ID` (defaulting to `default` and the system admin principal). Optional `X-Helm-Tenant-ID`, `tenant_id`, and `X-Helm-Principal-ID` values must match the server-bound identity or the request is rejected. |
 | `admin` / `authenticated` | Requires `Authorization: Bearer $HELM_ADMIN_API_KEY`. |
 | `service_internal` | Requires `Authorization: Bearer $HELM_SERVICE_API_KEY`; used for service-to-service kernel approval. |
 
@@ -113,6 +113,6 @@ make docs-truth
 
 | Symptom | First check |
 | --- | --- |
-| `401` or `403` on a protected route | Confirm `Authorization`, `HELM_ADMIN_API_KEY`, `HELM_SERVICE_API_KEY`, and tenant/principal headers match the route auth class. |
+| `401` or `403` on a protected route | Confirm `Authorization`, `HELM_ADMIN_API_KEY`, `HELM_SERVICE_API_KEY`, and that tenant/principal headers match `HELM_RUNTIME_TENANT_ID` / `HELM_RUNTIME_PRINCIPAL_ID` for tenant-scoped routes. |
 | A route appears in OpenAPI but not runtime | Compare `api/openapi/helm.openapi.yaml` with `core/cmd/helm-ai-kernel/route_registry.go` and run the route parity tests. |
 | SSE receipt tail does not stream | Verify the runtime was started with receipt storage enabled; add an `agent` query only when you want to filter the stream. |

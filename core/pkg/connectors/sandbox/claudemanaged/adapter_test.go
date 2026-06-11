@@ -41,6 +41,14 @@ func (d *fakeDispatcher) Dispatch(_ context.Context, _ ToolRequest) (ToolRespons
 	return d.resp, nil
 }
 
+type testReceiptSigner struct{}
+
+func (testReceiptSigner) Sign(data []byte) (string, error) {
+	return strings.TrimPrefix(hashBytes(append([]byte("managed-agent-test|"), data...)), "sha256:"), nil
+}
+
+func (testReceiptSigner) SignerKeyID() string { return "managed-agent-test-signer" }
+
 func testConfig(t *testing.T) Config {
 	t.Helper()
 	root := t.TempDir()
@@ -67,7 +75,7 @@ func testConfig(t *testing.T) Config {
 
 func testAdapter(t *testing.T, runner *fakeRunner) *Adapter {
 	t.Helper()
-	return New(testConfig(t), WithRunner(runner), WithClock(func() time.Time {
+	return New(testConfig(t), WithRunner(runner), WithReceiptSigner(testReceiptSigner{}), WithClock(func() time.Time {
 		return time.Unix(100, 0).UTC()
 	}))
 }
@@ -111,11 +119,28 @@ func TestPreflightDeniesUnsafeConfig(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cfg := testConfig(t)
 			mutate(&cfg)
-			report, err := New(cfg, WithRunner(&fakeRunner{})).Preflight(t.Context())
+			report, err := New(cfg, WithRunner(&fakeRunner{}), WithReceiptSigner(testReceiptSigner{})).Preflight(t.Context())
 			require.NoError(t, err)
 			require.False(t, report.StrictPassed)
 		})
 	}
+}
+
+func TestPreflightRequiresNonPreviewReceiptSigner(t *testing.T) {
+	cfg := testConfig(t)
+	report, err := New(cfg, WithRunner(&fakeRunner{})).Preflight(t.Context())
+	require.NoError(t, err)
+	require.False(t, report.StrictPassed)
+	require.False(t, checkReceiptSigner(nil).Passed)
+
+	report, err = New(cfg, WithRunner(&fakeRunner{}), WithReceiptSigner(deterministicPreviewSigner{})).Preflight(t.Context())
+	require.NoError(t, err)
+	require.False(t, report.StrictPassed)
+	require.False(t, checkReceiptSigner(deterministicPreviewSigner{}).Passed)
+
+	report, err = New(cfg, WithRunner(&fakeRunner{}), WithReceiptSigner(testReceiptSigner{})).Preflight(t.Context())
+	require.NoError(t, err)
+	require.True(t, report.StrictPassed)
 }
 
 func TestFilesystemRejectsTraversalSymlinkEscapeAndUndeclaredWrites(t *testing.T) {
@@ -143,6 +168,35 @@ func TestFilesystemRejectsTraversalSymlinkEscapeAndUndeclaredWrites(t *testing.T
 	require.NoError(t, os.Symlink(outside, filepath.Join(state.workspace, "allowed", "link")))
 	_, err = adapter.ReadFile(t.Context(), handle.ID, "/workspace/allowed/link")
 	require.Error(t, err)
+}
+
+func TestCreateUsesIsolatedSandboxRoots(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.WorkID = ""
+	cfg.SessionID = ""
+	adapter := New(cfg, WithRunner(&fakeRunner{}), WithReceiptSigner(testReceiptSigner{}))
+
+	first, err := adapter.Create(t.Context(), basicSpec())
+	require.NoError(t, err)
+	second, err := adapter.Create(t.Context(), basicSpec())
+	require.NoError(t, err)
+	require.NotEqual(t, first.ID, second.ID)
+
+	require.NoError(t, adapter.WriteFile(t.Context(), first.ID, "/workspace/only-first.txt", []byte("secret")))
+	entries, err := adapter.ListFiles(t.Context(), second.ID, "/workspace")
+	require.NoError(t, err)
+	for _, entry := range entries {
+		require.NotEqual(t, "/workspace/only-first.txt", entry.Path)
+	}
+
+	firstState, err := adapter.runningState(first.ID)
+	require.NoError(t, err)
+	secondState, err := adapter.runningState(second.ID)
+	require.NoError(t, err)
+	require.NotEqual(t, firstState.workspace, secondState.workspace)
+	require.NotEqual(t, firstState.outputs, secondState.outputs)
+	require.Contains(t, firstState.workspace, first.ID)
+	require.Contains(t, secondState.workspace, second.ID)
 }
 
 func TestExecReceiptBindsManagedAgentSpec(t *testing.T) {
@@ -254,7 +308,7 @@ func TestWorkerShimMCPGatewayResponseGetsManagedAgentReceipt(t *testing.T) {
 		CACertRefHash:           "sha256:4444444444444444444444444444444444444444444444444444444444444444",
 		AllowedUpstreamHostHash: "sha256:5555555555555555555555555555555555555555555555555555555555555555",
 	}
-	adapter := New(cfg, WithRunner(&fakeRunner{}), WithClock(func() time.Time {
+	adapter := New(cfg, WithRunner(&fakeRunner{}), WithReceiptSigner(testReceiptSigner{}), WithClock(func() time.Time {
 		return time.Unix(100, 0).UTC()
 	}))
 	handle, err := adapter.Create(t.Context(), &actuators.SandboxSpec{
@@ -351,7 +405,7 @@ func TestWorkerShimEmitsManagedAgentReceiptMetadata(t *testing.T) {
 	require.True(t, strings.HasPrefix(receipt.SandboxGrantHash, "sha256:"))
 	require.Len(t, receipt.ReceiptHash, 64)
 	require.NotEmpty(t, receipt.Signature)
-	require.Equal(t, localPreviewSignerKeyID, receipt.SignerKeyID)
+	require.Equal(t, testReceiptSigner{}.SignerKeyID(), receipt.SignerKeyID)
 	require.Len(t, receipt.ToolActions, 1)
 	require.Equal(t, "MANAGED_AGENT_MEMORY_WRITE", receipt.ToolActions[0].EffectType)
 	require.Equal(t, contracts.VerdictDeny, receipt.ToolActions[0].Verdict)

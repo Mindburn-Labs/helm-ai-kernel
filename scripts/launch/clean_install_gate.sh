@@ -9,7 +9,8 @@ HOST_KIND="developer_macos"
 OUTPUT="$ROOT/docs/launchpad/clean_install_report.json"
 TRANSCRIPT_DIR="${TMPDIR:-/tmp}/helm-launchpad-clean-install"
 INCLUDE_CANDIDATES=0
-SUPPORTED_APPS=(openclaw hermes opencode kilocode)
+SUPPORTED_APPS=(openclaw hermes)
+VERIFY_ONLY_APPS=(opencode kilocode)
 CANDIDATE_APPS=()
 
 usage() {
@@ -22,7 +23,7 @@ Options:
   --host-kind <kind>        developer_macos or github_macos_runner
   --output <path>           Redacted JSON report path
   --transcript-dir <path>   Directory for redacted command output and audit inputs
-  --include-candidates      Backward-compatible no-op; OpenCode/Kilo are supported by default
+  --include-candidates      Backward-compatible no-op; verify-only apps are not launched
 USAGE
 }
 
@@ -318,10 +319,11 @@ report = {
     "artifact_workflow_run_id": artifact_run_id,
     "host_kind": host_kind,
     "status": status,
-    "supported_apps": ["openclaw", "hermes", "opencode", "kilocode"],
+    "supported_apps": ["openclaw", "hermes"],
+    "verify_only_apps": ["opencode", "kilocode"],
     "candidate_promotion_apps": [],
     "candidate_promotion_included": False,
-    "deprecated_include_candidates_flag": "accepted_noop_all_four_apps_are_supported",
+    "deprecated_include_candidates_flag": "accepted_noop_verify_only_apps_are_not_launched",
     "commands": commands,
     "launch_ids": launch_ids,
     "ghcr_digest_confirmations": read_json(ghcr_path, []),

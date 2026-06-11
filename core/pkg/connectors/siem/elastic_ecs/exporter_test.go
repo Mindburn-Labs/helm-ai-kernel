@@ -70,7 +70,7 @@ func TestExportSpans_ProducesECSBulk(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	exp, err := New(Config{URL: ts.URL, Index: "helm-governance", APIKey: "api-key-1"})
+	exp, err := New(Config{URL: ts.URL, Index: "helm-governance", APIKey: "api-key-1", AllowInsecureHTTP: true})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -126,6 +126,12 @@ func TestNew_RequiredFields(t *testing.T) {
 	if _, err := New(Config{URL: "https://x"}); err == nil {
 		t.Fatal("expected Index required")
 	}
+	if _, err := New(Config{URL: "http://elastic.example", Index: "x", APIKey: "key"}); err == nil {
+		t.Fatal("expected non-TLS Elastic URL with API key to fail")
+	}
+	if _, err := New(Config{URL: "http://elastic.example", Index: "x", Username: "u", Password: "p"}); err == nil {
+		t.Fatal("expected non-TLS Elastic URL with basic auth to fail")
+	}
 }
 
 func TestExportSpans_BasicAuthFallback(t *testing.T) {
@@ -135,7 +141,7 @@ func TestExportSpans_BasicAuthFallback(t *testing.T) {
 		_, _ = w.Write([]byte(`{"errors":false}`))
 	}))
 	defer ts.Close()
-	exp, _ := New(Config{URL: ts.URL, Index: "x", Username: "u", Password: "p"})
+	exp, _ := New(Config{URL: ts.URL, Index: "x", Username: "u", Password: "p", AllowInsecureHTTP: true})
 	if err := exp.ExportSpans(context.Background(), []sdktrace.ReadOnlySpan{sampleSpan(t, "ALLOW")}); err != nil {
 		t.Fatalf("ExportSpans: %v", err)
 	}

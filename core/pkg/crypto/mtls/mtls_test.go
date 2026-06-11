@@ -55,9 +55,13 @@ func TestIssueCertificate(t *testing.T) {
 	leaf, err := x509.ParseCertificate(cert.TLSCert.Certificate[0])
 	require.NoError(t, err)
 	assert.Equal(t, "proxy", leaf.Subject.CommonName)
+	assert.Contains(t, leaf.DNSNames, "proxy.helm.local")
+	require.Len(t, leaf.URIs, 1)
+	assert.Equal(t, cert.SPIFFEID, leaf.URIs[0].String())
 
 	_, err = leaf.Verify(x509.VerifyOptions{
-		Roots: certPool,
+		Roots:   certPool,
+		DNSName: "proxy.helm.local",
 		KeyUsages: []x509.ExtKeyUsage{
 			x509.ExtKeyUsageClientAuth,
 			x509.ExtKeyUsageServerAuth,
@@ -98,15 +102,30 @@ func TestNewMutualTLSConfig(t *testing.T) {
 
 	cert, err := ca.IssueCertificate(context.Background(), "test-service")
 	require.NoError(t, err)
+	peer, err := ca.IssueCertificate(context.Background(), "expected-peer")
+	require.NoError(t, err)
 
-	cfg, err := NewMutualTLSConfig(cert)
+	cfg, err := NewMutualTLSConfig(cert, WithExpectedPeerSPIFFEID(peer.SPIFFEID))
 	require.NoError(t, err)
 
 	assert.Equal(t, tls.RequireAndVerifyClientCert, cfg.ClientAuth)
 	assert.Equal(t, uint16(tls.VersionTLS13), cfg.MinVersion)
+	assert.False(t, cfg.InsecureSkipVerify)
+	assert.Equal(t, "expected-peer.helm.local", cfg.ServerName)
 	assert.Len(t, cfg.Certificates, 1)
 	assert.NotNil(t, cfg.RootCAs)
 	assert.NotNil(t, cfg.ClientCAs)
+	require.NotNil(t, cfg.VerifyConnection)
+	require.NoError(t, cfg.VerifyConnection(tls.ConnectionState{PeerCertificates: []*x509.Certificate{leafFromIssued(t, peer)}}))
+
+	wrongPeer, err := ca.IssueCertificate(context.Background(), "wrong-peer")
+	require.NoError(t, err)
+	err = cfg.VerifyConnection(tls.ConnectionState{PeerCertificates: []*x509.Certificate{leafFromIssued(t, wrongPeer)}})
+	require.ErrorContains(t, err, "peer SPIFFE ID not allowed")
+
+	cfg, err = NewMutualTLSConfig(cert)
+	assert.Nil(t, cfg)
+	require.ErrorContains(t, err, "expected peer SPIFFE ID required")
 }
 
 func TestMultipleCertificates(t *testing.T) {
@@ -140,4 +159,11 @@ func TestCACertPEM(t *testing.T) {
 	// Should be parseable.
 	pool := x509.NewCertPool()
 	assert.True(t, pool.AppendCertsFromPEM(pemBytes))
+}
+
+func leafFromIssued(t *testing.T, cert *IssuedCertificate) *x509.Certificate {
+	t.Helper()
+	leaf, err := x509.ParseCertificate(cert.TLSCert.Certificate[0])
+	require.NoError(t, err)
+	return leaf
 }

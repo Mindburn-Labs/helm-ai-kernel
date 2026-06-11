@@ -28,6 +28,11 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Validate dispatch inputs
+        run: |
+          python3 scripts/ci/validate_workflow_dispatch_inputs.py publish \
+            --version "${{ inputs.version }}" \
+            --dry-run "${{ inputs.dry_run }}"
       - name: Version checks
         working-directory: sdk/rust
         run: |

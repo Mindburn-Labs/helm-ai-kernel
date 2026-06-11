@@ -34,7 +34,7 @@ func TestVerifyExternalReceiptCmdJSON(t *testing.T) {
 
 func TestEvidenceAttachHostChainAndCorrelateCLI(t *testing.T) {
 	root := t.TempDir()
-	chainPath, _ := writeCLIHostChain(t, root, "workload-1", "203.0.113.10")
+	chainPath, pubHex := writeCLIHostChain(t, root, "workload-1", "203.0.113.10")
 	packDir, err := lpreceipts.WriteEvidencePack(root, "launch-host-evidence", map[string][]byte{
 		"receipts/network.json": []byte(`{"receipt_id":"r-network","decision_id":"d-network","decision_hash":"sha256:test","type":"NETWORK_EGRESS_ALLOWED","effect_type":"WORKSTATION_NETWORK_EGRESS","status":"ALLOW","verdict":"ALLOW","lamport_clock":1,"timestamp":"2026-05-21T12:00:00Z","metadata":{"workload_id":"workload-1","destination_ip":"203.0.113.10","destination_port":"443","protocol":"tcp","max_egress_bytes":"1024"}}`),
 	})
@@ -50,7 +50,7 @@ func TestEvidenceAttachHostChainAndCorrelateCLI(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(outDir, "11_HOST_EVIDENCE", "test", filepath.Base(chainPath))); err != nil {
 		t.Fatalf("attached chain missing: %v", err)
 	}
-	verifyReport, err := verifier.VerifyBundle(outDir)
+	verifyReport, err := verifier.VerifyBundleWithOptions(outDir, verifier.VerifyOptions{ExternalHostKeyHex: pubHex})
 	if err != nil {
 		t.Fatal(err)
 	}

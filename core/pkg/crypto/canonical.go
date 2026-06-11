@@ -60,8 +60,14 @@ func CanonicalizeDecisionStrict(id, verdict, reason, phenotypeHash, policyConten
 }
 
 // CanonicalizeIntent creates a canonical string representation of an intent for signing.
-func CanonicalizeIntent(id, decisionID, allowedTool string) string {
-	return fmt.Sprintf("%s%s%s%s%s", id, SigSeparator, decisionID, SigSeparator, allowedTool)
+// New signing paths pass effectDigestHash to bind the intent to the exact
+// effect approved by the decision; the variadic form preserves old callers
+// that only need to inspect the legacy component ordering.
+func CanonicalizeIntent(id, decisionID, allowedTool string, effectDigestHash ...string) string {
+	if len(effectDigestHash) == 0 {
+		return fmt.Sprintf("%s%s%s%s%s", id, SigSeparator, decisionID, SigSeparator, allowedTool)
+	}
+	return fmt.Sprintf("%s%s%s%s%s%s%s", id, SigSeparator, decisionID, SigSeparator, allowedTool, SigSeparator, effectDigestHash[0])
 }
 
 // CanonicalizeReceipt creates a canonical string representation of a receipt for signing.

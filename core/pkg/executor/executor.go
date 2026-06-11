@@ -121,7 +121,7 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 	}
 
 	// 1. Gating & Verification
-	if err := e.validateGating(decision, intent); err != nil {
+	if err := e.validateGating(decision, intent, effect); err != nil {
 		return nil, nil, err
 	}
 
@@ -280,15 +280,34 @@ func (e *SafeExecutor) checkIdempotency(ctx context.Context, decisionID string) 
 	return nil, false
 }
 
-func (e *SafeExecutor) validateGating(decision *contracts.DecisionRecord, intent *contracts.AuthorizedExecutionIntent) error {
+func (e *SafeExecutor) validateGating(decision *contracts.DecisionRecord, intent *contracts.AuthorizedExecutionIntent, effect *contracts.Effect) error {
 	if decision == nil {
 		return errors.New("execution blocked: missing decision")
+	}
+	if effect == nil {
+		return errors.New("execution blocked: missing effect")
 	}
 	if intent == nil {
 		return errors.New("execution blocked: missing execution intent")
 	}
 	if intent.DecisionID != decision.ID {
 		return fmt.Errorf("intent mismatch: intent.decision_id %s != decision.id %s", intent.DecisionID, decision.ID)
+	}
+	effectDigest, err := canonicalEffectDigest(effect)
+	if err != nil {
+		return fmt.Errorf("execution blocked: canonical effect digest: %w", err)
+	}
+	if decision.EffectDigest == "" {
+		return errors.New("execution blocked: decision missing effect digest")
+	}
+	if decision.EffectDigest != effectDigest {
+		return fmt.Errorf("execution blocked: effect digest mismatch (decision=%s, runtime=%s)", decision.EffectDigest, effectDigest)
+	}
+	if intent.EffectDigestHash == "" {
+		return errors.New("execution blocked: intent missing effect digest hash")
+	}
+	if intent.EffectDigestHash != effectDigest {
+		return fmt.Errorf("execution blocked: intent effect digest mismatch (intent=%s, runtime=%s)", intent.EffectDigestHash, effectDigest)
 	}
 
 	// 1. Verify Decision Signature (Provenance)
@@ -312,6 +331,44 @@ func (e *SafeExecutor) validateGating(decision *contracts.DecisionRecord, intent
 	}
 
 	return nil
+}
+
+func canonicalEffectDigest(effect *contracts.Effect) (string, error) {
+	if effect == nil {
+		return "", fmt.Errorf("effect is nil")
+	}
+	effectBytes, err := canonicalize.JCS(effectDigestEnvelopeFrom(effect))
+	if err != nil {
+		return "", err
+	}
+	return canonicalize.HashBytes(effectBytes), nil
+}
+
+type effectDigestEnvelope struct {
+	EffectType     string                `json:"effect_type"`
+	Params         map[string]any        `json:"params,omitempty"`
+	IdempotencyKey string                `json:"idempotency_key,omitempty"`
+	Irreversible   bool                  `json:"irreversible,omitempty"`
+	ArgsHash       string                `json:"args_hash,omitempty"`
+	OutputHash     string                `json:"output_hash,omitempty"`
+	Taint          []string              `json:"taint,omitempty"`
+	Compensation   *effectDigestEnvelope `json:"compensation,omitempty"`
+}
+
+func effectDigestEnvelopeFrom(effect *contracts.Effect) *effectDigestEnvelope {
+	if effect == nil {
+		return nil
+	}
+	return &effectDigestEnvelope{
+		EffectType:     effect.EffectType,
+		Params:         effect.Params,
+		IdempotencyKey: effect.IdempotencyKey,
+		Irreversible:   effect.Irreversible,
+		ArgsHash:       effect.ArgsHash,
+		OutputHash:     effect.OutputHash,
+		Taint:          contracts.NormalizeTaintLabels(effect.Taint),
+		Compensation:   effectDigestEnvelopeFrom(effect.Compensation),
+	}
 }
 
 func (e *SafeExecutor) verifySnapshot(ctx context.Context, decision *contracts.DecisionRecord) (string, error) {

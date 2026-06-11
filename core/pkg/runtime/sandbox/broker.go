@@ -7,7 +7,10 @@
 package sandbox
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"sync"
@@ -16,13 +19,14 @@ import (
 
 // ScopedToken is a short-lived token issued to a sandbox.
 type ScopedToken struct {
-	TokenID   string    `json:"token_id"`
-	SandboxID string    `json:"sandbox_id"`
-	Scopes    []string  `json:"scopes"`
-	IssuedAt  time.Time `json:"issued_at"`
-	ExpiresAt time.Time `json:"expires_at"`
-	TokenHash string    `json:"token_hash"` // Hash of actual token value
-	Revoked   bool      `json:"revoked"`
+	TokenID     string    `json:"token_id"`
+	BearerToken string    `json:"bearer_token,omitempty"` // Returned only at issuance; never stored by the broker.
+	SandboxID   string    `json:"sandbox_id"`
+	Scopes      []string  `json:"scopes"`
+	IssuedAt    time.Time `json:"issued_at"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	TokenHash   string    `json:"token_hash"` // Hash of actual token value
+	Revoked     bool      `json:"revoked"`
 }
 
 // TokenRequest is a request for a scoped credential.
@@ -49,7 +53,6 @@ type CredentialBroker struct {
 	issuances     []TokenIssuance
 	maxTTLSeconds int
 	clock         func() time.Time
-	tokenCounter  int64
 }
 
 // NewCredentialBroker creates a new broker with a maximum token TTL.
@@ -109,12 +112,15 @@ func (b *CredentialBroker) IssueToken(req TokenRequest) (*ScopedToken, error) {
 		ttl = b.maxTTLSeconds
 	}
 
-	b.tokenCounter++
-	tokenID := fmt.Sprintf("tok-%s-%d", req.SandboxID, b.tokenCounter)
-
-	// Compute token hash (in real impl, the actual token value would be different)
-	h := sha256.Sum256([]byte(fmt.Sprintf("%s:%d:%d", tokenID, now.UnixNano(), b.tokenCounter)))
-	tokenHash := "sha256:" + hex.EncodeToString(h[:])
+	tokenID, err := randomTokenID()
+	if err != nil {
+		return nil, fmt.Errorf("generate token id: %w", err)
+	}
+	bearerToken, err := randomBearerToken()
+	if err != nil {
+		return nil, fmt.Errorf("generate bearer token: %w", err)
+	}
+	tokenHash := hashBearerToken(bearerToken)
 
 	token := &ScopedToken{
 		TokenID:   tokenID,
@@ -134,16 +140,25 @@ func (b *CredentialBroker) IssueToken(req TokenRequest) (*ScopedToken, error) {
 		ExpiresAt: token.ExpiresAt,
 	})
 
-	return token, nil
+	issued := *token
+	issued.BearerToken = bearerToken
+	return &issued, nil
 }
 
 // ValidateToken checks if a token is valid (not expired, not revoked).
-func (b *CredentialBroker) ValidateToken(tokenID string) (bool, string) {
+func (b *CredentialBroker) ValidateToken(bearerToken string) (bool, string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	token, ok := b.tokens[tokenID]
-	if !ok {
+	tokenHash := hashBearerToken(bearerToken)
+	var token *ScopedToken
+	for _, candidate := range b.tokens {
+		if subtle.ConstantTimeCompare([]byte(candidate.TokenHash), []byte(tokenHash)) == 1 {
+			token = candidate
+			break
+		}
+	}
+	if token == nil {
 		return false, "token not found"
 	}
 	if token.Revoked {
@@ -153,6 +168,35 @@ func (b *CredentialBroker) ValidateToken(tokenID string) (bool, string) {
 		return false, "token expired"
 	}
 	return true, "valid"
+}
+
+func randomTokenID() (string, error) {
+	material, err := randomTokenMaterial(16)
+	if err != nil {
+		return "", err
+	}
+	return "tok-" + material, nil
+}
+
+func randomBearerToken() (string, error) {
+	material, err := randomTokenMaterial(32)
+	if err != nil {
+		return "", err
+	}
+	return "hsk_" + material, nil
+}
+
+func randomTokenMaterial(size int) (string, error) {
+	buf := make([]byte, size)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+func hashBearerToken(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return "sha256:" + hex.EncodeToString(h[:])
 }
 
 // RevokeToken immediately invalidates a token.

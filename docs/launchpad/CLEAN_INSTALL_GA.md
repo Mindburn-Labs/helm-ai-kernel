@@ -91,8 +91,8 @@ helm-ai-kernel launch matrix --json
 helm-ai-kernel launch secrets set model_gateway --provider openai --value-env OPENAI_API_KEY
 helm-ai-kernel launch openclaw local-container --headless --output json
 helm-ai-kernel launch hermes local-container --headless --output json
-helm-ai-kernel launch opencode local-container --headless --output json
-helm-ai-kernel launch kilocode local-container --headless --output json
+helm-ai-kernel app preflight opencode --json
+helm-ai-kernel app preflight kilocode --json
 helm-ai-kernel launch delete <launch_id> --cascade
 helm-ai-kernel verify --bundle <pack>
 ```
@@ -109,22 +109,23 @@ bash scripts/launch/clean_install_gate.sh \
 ```
 
 The script downloads the signed Launchpad artifact manifest, resolves the
-immutable egress-proxy image, confirms app GHCR digests, launches the selected
+immutable egress-proxy image, confirms app GHCR digests, launches the supported
 app set through `local-container`, deletes each launch with `--cascade`, verifies every
 produced EvidencePack, and scans command output, GitHub logs, release
 notes/assets, reports, and EvidencePacks for the CI key and fixed-length key
 fragments without printing the secret. The default supported app set is
-OpenClaw, Hermes, OpenCode, and Kilo Code. `--include-candidates` remains
-accepted for backward compatibility.
+OpenClaw and Hermes. OpenCode and Kilo Code are `verify_only`; `--version`
+smoke checks do not count as live-agent F2 coverage. `--include-candidates`
+remains accepted for backward compatibility but does not launch verify-only apps.
 
 ## Supported App Digests
 
-| App | Availability | Image |
+| App | Support level | Image |
 | --- | --- | --- |
-| OpenClaw | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995` |
-| Hermes | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652` |
-| OpenCode | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550` |
-| Kilo Code | `oss_supported` | `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6` |
+| OpenClaw | `agent_live` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995` |
+| Hermes | `agent_live` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652` |
+| OpenCode | `verify_only` | `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550`; `--version` smoke checks do not count as live-agent F2 coverage |
+| Kilo Code | `verify_only` | `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6`; `--version` smoke checks do not count as live-agent F2 coverage |
 
 Codex, Claude Code, Cursor, and Junie remain external/BYO adapters.
 

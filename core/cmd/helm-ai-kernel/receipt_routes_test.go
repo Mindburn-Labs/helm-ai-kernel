@@ -194,6 +194,8 @@ func TestEvaluateRouteRequiresTenantAuthentication(t *testing.T) {
 
 func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
 	svc, receipts := newEvaluateRouteTestServices(t)
 	mux := http.NewServeMux()
 	registerReceiptRoutes(mux, svc)

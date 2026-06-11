@@ -9,11 +9,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHART="${HELM_CHART_PATH:-deploy/helm-chart}"
 RELEASE="${HELM_CHART_RELEASE:-helm-smoke}"
 NAMESPACE="${HELM_CHART_NAMESPACE:-helm-smoke}"
-KUBE_HELM_IMAGE="${KUBE_HELM_IMAGE:-alpine/helm:3.15.4}"
+KUBE_HELM_IMAGE="${KUBE_HELM_IMAGE:-docker.io/alpine/helm@sha256:105741fa6621ed9a3ea944066de78bb27d4b9bb93a56ce8e7cb4d621e1e4bbf2}"
 SIGNING_KEY="${HELM_CHART_SMOKE_SIGNING_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
 TRUST_PUBLIC_KEY="${HELM_CHART_SMOKE_POLICY_TRUST_PUBLIC_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
 ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-helm-admin-smoke}"
 SERVICE_KEY="${HELM_SMOKE_SERVICE_KEY:-helm-service-smoke}"
+TENANT_ID="${HELM_SMOKE_TENANT_ID:-tenant-smoke}"
+AGENT_ID="${HELM_SMOKE_AGENT_ID:-agent.smoke}"
 RENDER_DIR="${HELM_CHART_RENDER_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/helm-ai-kernel-chart.XXXXXX")}"
 
 cleanup() {
@@ -22,6 +24,13 @@ cleanup() {
     fi
 }
 trap cleanup EXIT
+
+require_pinned_helm_image() {
+    if [[ ! "$KUBE_HELM_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]; then
+        echo "::error::KUBE_HELM_IMAGE must be pinned by immutable sha256 digest, got: ${KUBE_HELM_IMAGE}"
+        exit 1
+    fi
+}
 
 helm_runner() {
     if [ -n "${KUBE_HELM_CMD:-}" ]; then
@@ -40,6 +49,7 @@ helm_runner() {
         echo "::error::Kubernetes Helm not found. Set KUBE_HELM_CMD or install docker for ${KUBE_HELM_IMAGE}."
         exit 1
     }
+    require_pinned_helm_image
     docker run --rm -v "$ROOT:/work" -w /work "$KUBE_HELM_IMAGE" "$@"
 }
 
@@ -73,6 +83,10 @@ assert_contains "$default_rendered" "HELM_POLICY_SOURCE_KIND"
 assert_contains "$default_rendered" "mountedFile"
 assert_contains "$default_rendered" "HELM_POLICY_SIGNATURE_REQUIRED"
 assert_contains "$default_rendered" "/etc/helm-ai-kernel/policy/serve-policy.toml"
+assert_contains "$default_rendered" "HELM_RUNTIME_TENANT_ID"
+assert_contains "$default_rendered" "HELM_RUNTIME_PRINCIPAL_ID"
+assert_contains "$default_rendered" "value: \"default\""
+assert_contains "$default_rendered" "value: \"system-admin\""
 assert_contains "$default_rendered" "automountServiceAccountToken: false"
 assert_not_contains "$default_rendered" "HELM_POLICY_TRUST_PUBLIC_KEY"
 assert_not_contains "$default_rendered" "checksum/config"
@@ -90,11 +104,101 @@ if helm_runner template "$RELEASE" "$CHART" \
 fi
 assert_contains "$fail_log" "requires helm.signing.key"
 
+tenant_fail_log="$RENDER_DIR/production-missing-runtime-tenant.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set-string helm.auth.tenantID= >"$RENDER_DIR/production-missing-runtime-tenant.yaml" 2>"$tenant_fail_log"; then
+    echo "::error::production render without runtime tenant unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$tenant_fail_log" "helm.auth.tenantID"
+
+principal_fail_log="$RENDER_DIR/production-missing-runtime-principal.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set-string helm.auth.principalID= >"$RENDER_DIR/production-missing-runtime-principal.yaml" 2>"$principal_fail_log"; then
+    echo "::error::production render without runtime principal unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$principal_fail_log" "helm.auth.principalID"
+
+postgres_inline_fail_log="$RENDER_DIR/postgres-inline-production.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.storage.type=postgres \
+    --set helm.storage.postgres.host=postgres.example.internal \
+    --set helm.storage.postgres.password=secret >"$RENDER_DIR/postgres-inline-production.yaml" 2>"$postgres_inline_fail_log"; then
+    echo "::error::production postgres render with inline credentials unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$postgres_inline_fail_log" "requires helm.storage.postgres.existingSecret"
+
+postgres_tls_fail_log="$RENDER_DIR/postgres-weak-tls-production.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.storage.type=postgres \
+    --set helm.storage.postgres.existingSecret=helm-postgres-url \
+    --set helm.storage.postgres.sslMode=disable >"$RENDER_DIR/postgres-weak-tls-production.yaml" 2>"$postgres_tls_fail_log"; then
+    echo "::error::production postgres render with weak sslMode unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$postgres_tls_fail_log" "requires helm.storage.postgres.sslMode"
+
+postgres_subchart_fail_log="$RENDER_DIR/postgres-subchart-production.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.storage.type=postgres \
+    --set helm.storage.postgres.existingSecret=helm-postgres-url \
+    --set postgresql.enabled=true >"$RENDER_DIR/postgres-subchart-production.yaml" 2>"$postgres_subchart_fail_log"; then
+    echo "::error::production postgres render with bundled subchart unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$postgres_subchart_fail_log" "does not support the bundled postgresql subchart"
+
+postgres_rendered="$RENDER_DIR/rendered-postgres-secret.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.storage.type=postgres \
+    --set helm.storage.postgres.existingSecret=helm-postgres-url \
+    --set helm.storage.postgres.sslMode=verify-full >"$postgres_rendered"
+assert_contains "$postgres_rendered" "name: DATABASE_URL"
+assert_contains "$postgres_rendered" "secretKeyRef:"
+assert_contains "$postgres_rendered" "name: helm-postgres-url"
+assert_not_contains "$postgres_rendered" "postgres://"
+assert_not_contains "$postgres_rendered" "POSTGRES_PASSWORD"
+assert_not_contains "$postgres_rendered" "sslmode=disable"
+
 helm_runner lint "$CHART" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
     --set helm.auth.adminAPIKey="$ADMIN_KEY" \
     --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.auth.tenantID="$TENANT_ID" \
+    --set helm.auth.principalID="$AGENT_ID" \
     --set image.repository=ghcr.io/mindburn-labs/helm-ai-kernel \
     --set image.tag=local \
     --set image.pullPolicy=IfNotPresent >/dev/null
@@ -106,6 +210,8 @@ helm_runner template "$RELEASE" "$CHART" \
     --set helm.signing.key="$SIGNING_KEY" \
     --set helm.auth.adminAPIKey="$ADMIN_KEY" \
     --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.auth.tenantID="$TENANT_ID" \
+    --set helm.auth.principalID="$AGENT_ID" \
     --set image.repository=ghcr.io/mindburn-labs/helm-ai-kernel \
     --set image.tag=local \
     --set image.pullPolicy=IfNotPresent >"$rendered"
@@ -125,6 +231,10 @@ assert_contains "$rendered" "/internal/policy/reconcile"
 assert_contains "$rendered" "EVIDENCE_SIGNING_KEY"
 assert_contains "$rendered" "HELM_ADMIN_API_KEY"
 assert_contains "$rendered" "HELM_SERVICE_API_KEY"
+assert_contains "$rendered" "HELM_RUNTIME_TENANT_ID"
+assert_contains "$rendered" "HELM_RUNTIME_PRINCIPAL_ID"
+assert_contains "$rendered" "value: \"$TENANT_ID\""
+assert_contains "$rendered" "value: \"$AGENT_ID\""
 assert_contains "$rendered" "readOnlyRootFilesystem: true"
 assert_contains "$rendered" "runAsNonRoot: true"
 assert_contains "$rendered" "persistentVolumeClaim:"

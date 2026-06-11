@@ -156,10 +156,11 @@ func newMockServer() (*httptest.Server, *mockE2B) {
 
 func newTestAdapter(server *httptest.Server) *Adapter {
 	cfg := Config{
-		APIURL:         server.URL,
-		APIKey:         "test-key-123",
-		TemplateID:     "default",
-		DefaultTimeout: 5 * time.Minute,
+		APIURL:                server.URL,
+		APIKey:                "test-key-123",
+		TemplateID:            "default",
+		DefaultTimeout:        5 * time.Minute,
+		AllowInsecureLoopback: true,
 	}
 	return New(cfg).WithHTTPClient(server.Client())
 }
@@ -208,6 +209,30 @@ func TestE2B_PreflightPasses(t *testing.T) {
 	report, err := adapter.Preflight(t.Context())
 	require.NoError(t, err)
 	assert.True(t, report.StrictPassed, "preflight must pass with valid config")
+}
+
+func TestE2B_PreflightRejectsNonTLSAPIURL(t *testing.T) {
+	adapter := New(Config{
+		APIURL:         "http://attacker.invalid",
+		APIKey:         "key-123",
+		DefaultTimeout: 5 * time.Minute,
+	})
+
+	report, err := adapter.Preflight(t.Context())
+	require.NoError(t, err)
+	assert.False(t, report.StrictPassed, "preflight must fail for non-TLS API URL")
+}
+
+func TestE2B_PreflightRejectsURLCredentials(t *testing.T) {
+	adapter := New(Config{
+		APIURL:         "https://user:pass@api.e2b.dev",
+		APIKey:         "key-123",
+		DefaultTimeout: 5 * time.Minute,
+	})
+
+	report, err := adapter.Preflight(t.Context())
+	require.NoError(t, err)
+	assert.False(t, report.StrictPassed, "preflight must fail for API URL with embedded credentials")
 }
 
 func TestE2B_PauseResumeSupported(t *testing.T) {

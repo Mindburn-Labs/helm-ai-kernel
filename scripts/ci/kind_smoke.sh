@@ -13,10 +13,11 @@ API_PORT="${HELM_SMOKE_API_PORT:-18080}"
 ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-helm-admin-smoke}"
 TENANT_ID="${HELM_SMOKE_TENANT_ID:-tenant-smoke}"
 AGENT_ID="${HELM_SMOKE_AGENT_ID:-agent.smoke}"
-KUBE_HELM_IMAGE="${KUBE_HELM_IMAGE:-alpine/helm:3.15.4}"
+KUBE_HELM_IMAGE="${KUBE_HELM_IMAGE:-docker.io/alpine/helm@sha256:105741fa6621ed9a3ea944066de78bb27d4b9bb93a56ce8e7cb4d621e1e4bbf2}"
 CREATED_CLUSTER=0
 PF_PID=""
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/helm-ai-kernel-kind-smoke.XXXXXX")"
+HELM_KUBECONFIG="$TMP_DIR/kubeconfig.helm"
 
 require() {
     command -v "$1" >/dev/null 2>&1 || {
@@ -30,6 +31,40 @@ require kind
 require kubectl
 require curl
 require python3
+
+require_pinned_helm_image() {
+    if [[ ! "$KUBE_HELM_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]; then
+        echo "::error::KUBE_HELM_IMAGE must be pinned by immutable sha256 digest, got: ${KUBE_HELM_IMAGE}"
+        exit 1
+    fi
+}
+
+prepare_helm_kubeconfig() {
+    if [ -s "$HELM_KUBECONFIG" ]; then
+        return
+    fi
+    kubectl config view --raw --minify --context "kind-${CLUSTER}" >"$HELM_KUBECONFIG"
+    python3 - "$HELM_KUBECONFIG" "$CLUSTER" <<'PY'
+import re
+import sys
+
+path, cluster = sys.argv[1], sys.argv[2]
+with open(path, "r", encoding="utf-8") as fh:
+    data = fh.read()
+rewritten, count = re.subn(
+    r"(^\s*server:\s*)https://\S+",
+    lambda match: f"{match.group(1)}https://{cluster}-control-plane:6443",
+    data,
+    count=1,
+    flags=re.MULTILINE,
+)
+if count != 1:
+    raise SystemExit("kind kubeconfig did not contain exactly one API server")
+with open(path, "w", encoding="utf-8") as fh:
+    fh.write(rewritten)
+PY
+    chmod 0600 "$HELM_KUBECONFIG"
+}
 
 cleanup() {
     if [ -n "$PF_PID" ]; then
@@ -56,11 +91,13 @@ helm_runner() {
         helm "$@"
         return
     fi
+    require_pinned_helm_image
+    prepare_helm_kubeconfig
     docker run --rm \
-        -v "$ROOT:/work" \
-        -v "${HOME}/.kube:/root/.kube" \
+        --mount "type=bind,source=${ROOT},target=/work,readonly" \
+        --mount "type=bind,source=${HELM_KUBECONFIG},target=/root/.kube/config,readonly" \
         -w /work \
-        --network host \
+        --network kind \
         "$KUBE_HELM_IMAGE" "$@"
 }
 
@@ -80,6 +117,8 @@ helm_runner upgrade --install "$RELEASE" deploy/helm-chart \
     --set helm.signing.key="$SIGNING_KEY" \
     --set helm.auth.adminAPIKey="$ADMIN_KEY" \
     --set helm.auth.serviceAPIKey="${HELM_SMOKE_SERVICE_KEY:-helm-service-smoke}" \
+    --set helm.auth.tenantID="$TENANT_ID" \
+    --set helm.auth.principalID="$AGENT_ID" \
     --set image.repository="${IMAGE%:*}" \
     --set image.tag="${IMAGE##*:}" \
     --set image.pullPolicy=IfNotPresent \

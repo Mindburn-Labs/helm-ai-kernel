@@ -54,8 +54,29 @@ func setupRequest() *PaymentRequest {
 		Description:    "test payment",
 		Method:         PaymentMethodBudget,
 		IdempotencyKey: "idem-001",
+		EnvelopeID:     "env-001",
 		CreatedAt:      time.Now(),
 		ExpiresAt:      time.Now().Add(1 * time.Hour),
+		Metadata:       map[string]string{"invoice": "inv-001"},
+	}
+}
+
+func validReceiptForRequest(req *PaymentRequest) *PaymentReceipt {
+	return &PaymentReceipt{
+		ReceiptID:       "rcpt-" + req.RequestID,
+		RequestID:       req.RequestID,
+		ChannelID:       req.ChannelID,
+		FromAgentID:     req.FromAgentID,
+		ToAgentID:       req.ToAgentID,
+		AmountCents:     req.AmountCents,
+		Currency:        req.Currency,
+		Status:          PaymentStatusCompleted,
+		Method:          req.Method,
+		SequenceNum:     1,
+		RequestHash:     req.Hash(),
+		IssuedAt:        req.CreatedAt.Add(time.Second),
+		BudgetReceiptID: "budget-allow-" + req.ToAgentID,
+		Metadata:        cloneStringMap(req.Metadata),
 	}
 }
 
@@ -73,11 +94,19 @@ func TestPaymentRequest_Hash_DiffersOnChange(t *testing.T) {
 	req1 := setupRequest()
 	h1 := req1.Hash()
 
-	req2 := setupRequest()
-	req2.AmountCents = 999
-	h2 := req2.Hash()
-
-	assert.NotEqual(t, h1, h2, "different amounts must produce different hashes")
+	mutations := map[string]func(*PaymentRequest){
+		"amount":   func(r *PaymentRequest) { r.AmountCents = 999 },
+		"method":   func(r *PaymentRequest) { r.Method = PaymentMethodEscrow },
+		"envelope": func(r *PaymentRequest) { r.EnvelopeID = "env-002" },
+		"metadata": func(r *PaymentRequest) { r.Metadata["invoice"] = "inv-002" },
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			req2 := setupRequest()
+			mutate(req2)
+			assert.NotEqual(t, h1, req2.Hash(), "mutated %s must change request hash", name)
+		})
+	}
 }
 
 func TestPaymentReceipt_SignableContent(t *testing.T) {
@@ -90,8 +119,10 @@ func TestPaymentReceipt_SignableContent(t *testing.T) {
 		AmountCents: 500,
 		Currency:    "USD",
 		Status:      PaymentStatusCompleted,
+		Method:      PaymentMethodBudget,
 		SequenceNum: 1,
 		RequestHash: "sha256:abc",
+		IssuedAt:    time.Now(),
 	}
 
 	content := receipt.SignableContent()
@@ -99,6 +130,18 @@ func TestPaymentReceipt_SignableContent(t *testing.T) {
 
 	// Must be deterministic
 	assert.Equal(t, content, receipt.SignableContent())
+
+	mutated := *receipt
+	mutated.Method = PaymentMethodEscrow
+	assert.NotEqual(t, content, mutated.SignableContent(), "method must be signed")
+
+	mutated = *receipt
+	mutated.BudgetReceiptID = "budget-001"
+	assert.NotEqual(t, content, mutated.SignableContent(), "budget receipt id must be signed")
+
+	mutated = *receipt
+	mutated.Metadata = map[string]string{"ap2": "bound"}
+	assert.NotEqual(t, content, mutated.SignableContent(), "metadata must be signed")
 }
 
 func TestPaymentReceipt_Hash(t *testing.T) {
@@ -159,17 +202,20 @@ func TestVerifier_SignAndVerifyReceipt(t *testing.T) {
 	require.NoError(t, verifier.RegisterRequest(req))
 
 	receipt := &PaymentReceipt{
-		ReceiptID:   "rcpt-001",
-		RequestID:   "req-001",
-		ChannelID:   "ch-001",
-		FromAgentID: "agent-alice",
-		ToAgentID:   "agent-bob",
-		AmountCents: 500,
-		Currency:    "USD",
-		Status:      PaymentStatusCompleted,
-		SequenceNum: 1,
-		RequestHash: req.Hash(),
-		IssuedAt:    time.Now(),
+		ReceiptID:       "rcpt-001",
+		RequestID:       "req-001",
+		ChannelID:       "ch-001",
+		FromAgentID:     "agent-alice",
+		ToAgentID:       "agent-bob",
+		AmountCents:     500,
+		Currency:        "USD",
+		Status:          PaymentStatusCompleted,
+		Method:          PaymentMethodBudget,
+		SequenceNum:     1,
+		RequestHash:     req.Hash(),
+		IssuedAt:        time.Now().Add(time.Second),
+		BudgetReceiptID: "budget-allow-agent-bob",
+		Metadata:        cloneStringMap(req.Metadata),
 	}
 
 	// Sign
@@ -179,6 +225,58 @@ func TestVerifier_SignAndVerifyReceipt(t *testing.T) {
 
 	// Verify
 	require.NoError(t, verifier.VerifyReceipt(ctx, receipt))
+}
+
+func TestVerifier_RejectReceiptRequestBindingTamper(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(*PaymentReceipt)
+		wantErr string
+	}{
+		{
+			name:    "method",
+			mutate:  func(r *PaymentReceipt) { r.Method = PaymentMethodEscrow },
+			wantErr: "method mismatch",
+		},
+		{
+			name:    "request_hash",
+			mutate:  func(r *PaymentReceipt) { r.RequestHash = "sha256:bad" },
+			wantErr: "request hash mismatch",
+		},
+		{
+			name:    "budget_receipt",
+			mutate:  func(r *PaymentReceipt) { r.BudgetReceiptID = "" },
+			wantErr: "budget receipt id",
+		},
+		{
+			name:    "metadata",
+			mutate:  func(r *PaymentReceipt) { r.Metadata = map[string]string{"invoice": "attacker"} },
+			wantErr: "metadata mismatch",
+		},
+		{
+			name:    "issued_at",
+			mutate:  func(r *PaymentReceipt) { r.IssuedAt = setupRequest().CreatedAt.Add(-time.Second) },
+			wantErr: "issued_at precedes",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hsmProvider, keyHandle := setupHSM(t)
+			ctx := context.Background()
+			verifier := NewReceiptVerifier(hsmProvider)
+			require.NoError(t, verifier.RegisterChannel(setupChannel()))
+			req := setupRequest()
+			require.NoError(t, verifier.RegisterRequest(req))
+
+			receipt := validReceiptForRequest(req)
+			tt.mutate(receipt)
+			require.NoError(t, verifier.SignReceipt(ctx, receipt, keyHandle))
+			err := verifier.VerifyReceipt(ctx, receipt)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
 }
 
 func TestVerifier_RejectUnsignedReceipt(t *testing.T) {
@@ -327,15 +425,19 @@ func TestVerifier_RejectAmountMismatch(t *testing.T) {
 	require.NoError(t, verifier.RegisterRequest(req))
 
 	receipt := &PaymentReceipt{
-		ReceiptID:   "rcpt-001",
-		RequestID:   "req-001",
-		ChannelID:   "ch-001",
-		FromAgentID: "agent-alice",
-		ToAgentID:   "agent-bob",
-		AmountCents: 999, // Mismatch!
-		Currency:    "USD",
-		SequenceNum: 1,
-		RequestHash: req.Hash(),
+		ReceiptID:       "rcpt-001",
+		RequestID:       "req-001",
+		ChannelID:       "ch-001",
+		FromAgentID:     "agent-alice",
+		ToAgentID:       "agent-bob",
+		AmountCents:     999, // Mismatch!
+		Currency:        "USD",
+		Method:          PaymentMethodBudget,
+		SequenceNum:     1,
+		RequestHash:     req.Hash(),
+		IssuedAt:        time.Now().Add(time.Second),
+		BudgetReceiptID: "budget-allow-agent-bob",
+		Metadata:        cloneStringMap(req.Metadata),
 	}
 	require.NoError(t, verifier.SignReceipt(ctx, receipt, keyHandle))
 

@@ -21,6 +21,9 @@ jobs:
           java-version: "21"
       - name: Download TLC
         id: tlc
+        env:
+          TLA_TOOLS_VERSION: v1.8.0
+          TLA_TOOLS_SHA256: 237332bdcc79a35c7d26efa7b82c77c85c2744591c5598673a8a45085ff2a4fb
         run: echo "jar=$(bash scripts/tla/download-tools.sh)" >> "$GITHUB_OUTPUT"
       - name: Guardian pipeline spec
         run: java -cp "${{ steps.tlc.outputs.jar }}" tlc2.TLC -deadlock -config proofs/guardian.cfg proofs/GuardianPipeline.tla

@@ -2,6 +2,7 @@ package boundary
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -149,6 +150,72 @@ func TestPerimeterEnforcer_Data(t *testing.T) {
 
 	if err := pe.CheckData(ctx, "restricted"); err == nil {
 		t.Errorf("Denied data class accepted")
+	}
+}
+
+func TestPerimeterEnforcer_RejectsUnsupportedDeclaredControls(t *testing.T) {
+	tests := []struct {
+		name        string
+		constraints Constraints
+		field       string
+	}{
+		{
+			name:        "network rate",
+			constraints: Constraints{Network: &NetworkConstraints{MaxRequestsPerMin: 1}},
+			field:       "network.max_requests_per_minute",
+		},
+		{
+			name:        "network bandwidth",
+			constraints: Constraints{Network: &NetworkConstraints{MaxBandwidthBytes: 1024}},
+			field:       "network.max_bandwidth_bytes",
+		},
+		{
+			name:        "tool concurrency",
+			constraints: Constraints{Tools: &ToolConstraints{MaxConcurrentCalls: 1}},
+			field:       "tools.max_concurrent_calls",
+		},
+		{
+			name:        "tool timeout",
+			constraints: Constraints{Tools: &ToolConstraints{TimeoutSeconds: 10}},
+			field:       "tools.timeout_seconds",
+		},
+		{
+			name:        "context token limit",
+			constraints: Constraints{Data: &DataConstraints{MaxContextTokens: 128}},
+			field:       "data.max_context_tokens",
+		},
+		{
+			name:        "response token limit",
+			constraints: Constraints{Data: &DataConstraints{MaxResponseTokens: 128}},
+			field:       "data.max_response_tokens",
+		},
+		{
+			name:        "redaction patterns",
+			constraints: Constraints{Data: &DataConstraints{RedactPatterns: []string{"secret"}}},
+			field:       "data.redact_patterns",
+		},
+		{
+			name:        "temporal controls",
+			constraints: Constraints{Temporal: &TemporalConstraints{AllowedDays: []string{"monday"}}},
+			field:       "temporal",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NewPerimeterEnforcer(&PerimeterPolicy{
+				Version:     PolicyVersion,
+				PolicyID:    "reject-unsupported",
+				Enforcement: Enforcement{Mode: ModeEnforce},
+				Constraints: tc.constraints,
+			})
+			if !errors.Is(err, ErrInvalidPolicy) {
+				t.Fatalf("expected ErrInvalidPolicy, got %v", err)
+			}
+			if !strings.Contains(err.Error(), tc.field) {
+				t.Fatalf("expected error to mention %q, got %v", tc.field, err)
+			}
+		})
 	}
 }
 

@@ -43,6 +43,12 @@ func run() int {
 	// Build the adapter registry.
 	registry := channels.NewAdapterRegistry()
 	enabled := parseChannelList(*channelsFlag)
+	signatureSecrets, err := signatureSecretsForEnabledChannels(enabled)
+	if err != nil {
+		logger.Error("invalid channel signature configuration", "error", err)
+		return 1
+	}
+	antiSpoof := channels.NewAntiSpoofValidatorWithSecrets(signatureSecrets)
 
 	for _, ch := range enabled {
 		switch ch {
@@ -70,59 +76,7 @@ func run() int {
 	mux := http.NewServeMux()
 
 	// POST /webhook/{channel} — receive webhook, normalise, and log envelope.
-	mux.HandleFunc("/webhook/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		// Extract channel name from path: /webhook/<channel>
-		parts := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/webhook/"), "/", 2)
-		if len(parts) == 0 || parts[0] == "" {
-			http.Error(w, "missing channel in path", http.StatusBadRequest)
-			return
-		}
-		channelName := parts[0]
-
-		adapter, err := registry.Get(channels.ChannelKind(channelName))
-		if err != nil {
-			http.Error(w, fmt.Sprintf("no adapter for channel %q", channelName), http.StatusNotFound)
-			return
-		}
-
-		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20)) // 1 MiB limit
-		if err != nil {
-			http.Error(w, "failed to read request body", http.StatusBadRequest)
-			return
-		}
-		defer r.Body.Close()
-
-		env, err := adapter.NormalizeInbound(r.Context(), body)
-		if err != nil {
-			logger.Warn("normalisation failed", "channel", channelName, "error", err)
-			http.Error(w, fmt.Sprintf("normalisation error: %v", err), http.StatusUnprocessableEntity)
-			return
-		}
-
-		// Log the normalised envelope as structured JSON.
-		envBytes, _ := json.Marshal(env)
-		logger.Info("envelope received",
-			"channel", channelName,
-			"envelope_id", env.EnvelopeID,
-			"sender_id", env.SenderID,
-			"tenant_id", env.TenantID,
-			"session_id", env.SessionID,
-			"envelope", json.RawMessage(envBytes),
-		)
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		resp := map[string]string{
-			"status":      "accepted",
-			"envelope_id": env.EnvelopeID,
-		}
-		_ = json.NewEncoder(w).Encode(resp)
-	})
+	mux.HandleFunc("/webhook/", webhookHandler(registry, antiSpoof, logger))
 
 	// GET /health — liveness probe.
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -170,6 +124,143 @@ func run() int {
 	}
 	logger.Info("channel_gateway stopped")
 	return 0
+}
+
+func webhookHandler(registry *channels.AdapterRegistry, antiSpoof channels.AntiSpoofValidator, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Extract channel name from path: /webhook/<channel>
+		parts := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/webhook/"), "/", 2)
+		if len(parts) == 0 || parts[0] == "" {
+			http.Error(w, "missing channel in path", http.StatusBadRequest)
+			return
+		}
+		channelName := parts[0]
+
+		adapter, err := registry.Get(channels.ChannelKind(channelName))
+		if err != nil {
+			http.Error(w, fmt.Sprintf("no adapter for channel %q", channelName), http.StatusNotFound)
+			return
+		}
+		if err := requireWebhookSignatureHeaders(channels.ChannelKind(channelName), r); err != nil {
+			logger.Warn("webhook rejected", "channel", channelName, "reason", err.Error())
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+
+		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20)) // 1 MiB limit
+		if err != nil {
+			http.Error(w, "failed to read request body", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		env, err := adapter.NormalizeInbound(r.Context(), body)
+		if err != nil {
+			logger.Warn("normalisation failed", "channel", channelName, "error", err)
+			http.Error(w, fmt.Sprintf("normalisation error: %v", err), http.StatusUnprocessableEntity)
+			return
+		}
+		attachWebhookSignatureMetadata(&env, r, body)
+		antiSpoofResult, err := antiSpoof.Validate(r.Context(), env)
+		if err != nil {
+			logger.Error("anti-spoof validation failed", "channel", channelName, "error", err)
+			http.Error(w, "anti-spoof validation failed", http.StatusUnauthorized)
+			return
+		}
+		if antiSpoofResult == nil || !antiSpoofResult.Passed {
+			reason := "anti-spoof validation failed"
+			if antiSpoofResult != nil && antiSpoofResult.Reason != "" {
+				reason = antiSpoofResult.Reason
+			}
+			logger.Warn("webhook rejected", "channel", channelName, "reason", reason)
+			http.Error(w, reason, http.StatusUnauthorized)
+			return
+		}
+
+		// Log the normalised envelope as structured JSON.
+		envBytes, _ := json.Marshal(env)
+		logger.Info("envelope received",
+			"channel", channelName,
+			"envelope_id", env.EnvelopeID,
+			"sender_id", env.SenderID,
+			"tenant_id", env.TenantID,
+			"session_id", env.SessionID,
+			"envelope", json.RawMessage(envBytes),
+		)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		resp := map[string]string{
+			"status":      "accepted",
+			"envelope_id": env.EnvelopeID,
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
+func requireWebhookSignatureHeaders(channel channels.ChannelKind, r *http.Request) error {
+	switch channel {
+	case channels.ChannelSlack:
+		if r.Header.Get("X-Slack-Signature") == "" {
+			return fmt.Errorf("missing X-Slack-Signature")
+		}
+		if r.Header.Get("X-Slack-Request-Timestamp") == "" {
+			return fmt.Errorf("missing X-Slack-Request-Timestamp")
+		}
+	case channels.ChannelTelegram:
+		if r.Header.Get("X-Telegram-Bot-Api-Secret-Token") == "" {
+			return fmt.Errorf("missing X-Telegram-Bot-Api-Secret-Token")
+		}
+	}
+	return nil
+}
+
+func attachWebhookSignatureMetadata(env *channels.ChannelEnvelope, r *http.Request, body []byte) {
+	if env.Metadata == nil {
+		env.Metadata = map[string]string{}
+	}
+	switch env.Channel {
+	case channels.ChannelSlack:
+		env.Metadata["slack_signature"] = r.Header.Get("X-Slack-Signature")
+		env.Metadata["slack_timestamp"] = r.Header.Get("X-Slack-Request-Timestamp")
+		env.SignatureRef = string(body)
+	case channels.ChannelTelegram:
+		env.Metadata["telegram_secret_token"] = r.Header.Get("X-Telegram-Bot-Api-Secret-Token")
+	}
+}
+
+func signatureSecretsForEnabledChannels(enabled []string) (channels.SignatureSecrets, error) {
+	secrets := channels.SignatureSecrets{
+		SlackSigningSecret: strings.TrimSpace(os.Getenv("SLACK_SIGNING_SECRET")),
+		TelegramBotToken:   strings.TrimSpace(firstNonEmpty(os.Getenv("TELEGRAM_WEBHOOK_SECRET_TOKEN"), os.Getenv("TELEGRAM_BOT_TOKEN"))),
+	}
+	for _, ch := range enabled {
+		switch ch {
+		case string(channels.ChannelSlack):
+			if secrets.SlackSigningSecret == "" {
+				return channels.SignatureSecrets{}, fmt.Errorf("SLACK_SIGNING_SECRET is required for slack webhooks")
+			}
+		case string(channels.ChannelTelegram):
+			if secrets.TelegramBotToken == "" {
+				return channels.SignatureSecrets{}, fmt.Errorf("TELEGRAM_WEBHOOK_SECRET_TOKEN is required for telegram webhooks")
+			}
+		}
+	}
+	return secrets, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // parseChannelList splits a comma-separated channel list and trims whitespace.

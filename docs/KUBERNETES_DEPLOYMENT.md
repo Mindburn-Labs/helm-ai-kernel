@@ -104,6 +104,8 @@ helm install helm-ai-kernel deploy/helm-chart \
   --set helm.signing.key=<64-char-ed25519-seed-hex> \
   --set helm.auth.adminAPIKey=<admin-api-key> \
   --set helm.auth.serviceAPIKey=<service-api-key> \
+  --set helm.auth.tenantID=<runtime-tenant-id> \
+  --set helm.auth.principalID=<runtime-principal-id> \
   --set persistence.enabled=true
 ```
 
@@ -127,7 +129,9 @@ helm upgrade --install helm-ai-kernel deploy/helm-chart \
   --set helm.policy.signature.required=true \
   --set helm.policy.signature.existingSecret=helm-policy-trust \
   --set helm.signing.existingSecret=helm-signing \
-  --set helm.auth.existingSecret=helm-auth
+  --set helm.auth.existingSecret=helm-auth \
+  --set helm.auth.tenantID=<runtime-tenant-id> \
+  --set helm.auth.principalID=<runtime-principal-id>
 ```
 
 ## Values That Control Runtime Behavior
@@ -143,6 +147,8 @@ helm upgrade --install helm-ai-kernel deploy/helm-chart \
 | `helm.production` | `false` | Production rendering refuses missing signing/auth material. |
 | `helm.dataDir` | `/data` | Mounted from the chart PVC or `emptyDir`. |
 | `helm.proxy.enabled` | `true` | Sets `HELM_ENABLE_OPENAI_PROXY=1` and `HELM_UPSTREAM_URL`. |
+| `helm.auth.tenantID` | `default` | Sets `HELM_RUNTIME_TENANT_ID`; tenant-scoped request headers must match this value. |
+| `helm.auth.principalID` | `system-admin` | Sets `HELM_RUNTIME_PRINCIPAL_ID`; tenant-scoped principal headers must match this value. |
 | `helm.policy.source.kind` | `mountedFile` | `controlplane`, `crd`, or `mountedFile`; production should use `controlplane`, or `crd` in builds that include a CRD source client. |
 | `helm.policy.source.pollInterval` | `10s` | Runtime polling interval; correctness does not depend on delivery hints. |
 | `helm.policy.signature.required` | `false` | When true, unsigned policy heads are rejected before compilation. Production control-plane renders require this. |

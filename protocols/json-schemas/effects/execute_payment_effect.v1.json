@@ -7,7 +7,10 @@
   "required": [
     "effect_id",
     "amount",
-    "currency"
+    "currency",
+    "payee",
+    "payment_request_hash",
+    "ap2_receipt_id"
   ],
   "properties": {
     "effect_id": {
@@ -15,13 +18,28 @@
       "const": "EXECUTE_PAYMENT"
     },
     "amount": {
-      "type": "number"
+      "type": "number",
+      "exclusiveMinimum": 0
     },
     "currency": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
     },
     "payee": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
+    },
+    "payment_request_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "ap2_receipt_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "budget_receipt_id": {
+      "type": "string",
+      "minLength": 1
     }
   },
   "additionalProperties": false,

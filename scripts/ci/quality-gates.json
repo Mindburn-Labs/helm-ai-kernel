@@ -122,6 +122,9 @@
     "security": {
       "description": "Security and supply-chain checks.",
       "gates": [
+        "docker-smoke-hardening",
+        "helm-smoke-hardening",
+        "tla-tools-hardening",
         "secrets",
         "vuln-audit",
         "sbom",
@@ -462,6 +465,42 @@
         "deploy/**",
         "core/**",
         "scripts/ci/*smoke*.sh"
+      ]
+    },
+    {
+      "id": "helm-smoke-hardening",
+      "title": "Containerized Helm smoke fallback hardening",
+      "command": "python3 scripts/ci/check_helm_smoke_hardening.py",
+      "timeout_seconds": 120,
+      "paths": [
+        "scripts/ci/kind_smoke.sh",
+        "scripts/ci/helm_chart_smoke.sh",
+        "scripts/ci/check_helm_smoke_hardening.py",
+        "scripts/ci/quality-gates.json"
+      ]
+    },
+    {
+      "id": "docker-smoke-hardening",
+      "title": "Docker smoke local exposure hardening",
+      "command": "python3 scripts/ci/check_docker_smoke_hardening.py",
+      "timeout_seconds": 120,
+      "paths": [
+        "scripts/ci/docker_smoke.sh",
+        "scripts/ci/check_docker_smoke_hardening.py",
+        "docker-compose.yml",
+        "scripts/ci/quality-gates.json"
+      ]
+    },
+    {
+      "id": "tla-tools-hardening",
+      "title": "TLA tools download integrity hardening",
+      "command": "python3 scripts/ci/check_tla_tools_hardening.py",
+      "timeout_seconds": 120,
+      "paths": [
+        "scripts/tla/download-tools.sh",
+        ".github/workflows/tla.yml",
+        "scripts/ci/check_tla_tools_hardening.py",
+        "scripts/ci/quality-gates.json"
       ]
     },
     {

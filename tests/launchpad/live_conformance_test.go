@@ -2,6 +2,7 @@ package launchpad_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -68,13 +69,28 @@ func TestLiveModelProviderLocalContainerConformance(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Promote: %v", err)
 			}
+			if manifest.EgressProxy != nil && manifest.EgressProxy.Image != "" && promoted.FrameworkContract.EgressProxy.Required {
+				if promoted.FrameworkContract.EgressProxy.Image != manifest.EgressProxy.Image {
+					t.Fatalf("%s promoted egress proxy image = %q, want run artifact %q", appID, promoted.FrameworkContract.EgressProxy.Image, manifest.EgressProxy.Image)
+				}
+				if promoted.FrameworkContract.EgressProxy.Digest != manifest.EgressProxy.Digest {
+					t.Fatalf("%s promoted egress proxy digest = %q, want run artifact %q", appID, promoted.FrameworkContract.EgressProxy.Digest, manifest.EgressProxy.Digest)
+				}
+			}
 			compiled, err := plan.CompileWithRoot(promoted, substrate, "ci.launchpad", catalog.Root)
 			if err != nil {
 				t.Fatalf("CompileWithRoot: %v", err)
 			}
+			if manifest.EgressProxy != nil && manifest.EgressProxy.Image != "" && compiled.FrameworkContract.EgressProxy.Required && compiled.FrameworkContract.EgressProxy.Image != manifest.EgressProxy.Image {
+				t.Fatalf("%s compiled egress proxy image = %q, want run artifact %q", appID, compiled.FrameworkContract.EgressProxy.Image, manifest.EgressProxy.Image)
+			}
+			if len(compiled.RuntimeCommand) == 0 {
+				t.Fatalf("%s compiled without an AppSpec runtime command", appID)
+			}
+			if len(compiled.Healthchecks) == 0 {
+				t.Fatalf("%s compiled without an AppSpec healthcheck", appID)
+			}
 			store := session.NewStore(t.TempDir())
-			compiled.RuntimeCommand = []string{"helm-launchpad-openrouter-check"}
-			compiled.Healthchecks = []registry.HealthcheckSpec{{Type: "command", Command: "helm-launchpad-openrouter-check"}}
 			opts := session.ExecuteOptions{
 				Reason:           "live BYO model-provider Launchpad conformance",
 				WorkspaceMount:   t.TempDir(),
@@ -91,6 +107,7 @@ func TestLiveModelProviderLocalContainerConformance(t *testing.T) {
 				t.Fatalf("ExecuteLaunch: %v", err)
 			}
 			if run.State != session.StateRunning {
+				copyLiveRunEvidenceBestEffort(t, appID, run)
 				t.Fatalf("state = %s, want RUNNING: %+v", run.State, run)
 			}
 			deleted, err := session.NewExecutor(store).DeleteLaunch(run.LaunchID, true)
@@ -158,7 +175,7 @@ func catalogEnvGroups(catalog modelproviders.Catalog) [][]string {
 }
 
 var (
-	defaultLiveConformanceApps   = []string{"openclaw", "hermes", "opencode", "kilocode"}
+	defaultLiveConformanceApps   = []string{"openclaw", "hermes"}
 	candidateLiveConformanceApps = []string{}
 )
 
@@ -233,13 +250,47 @@ func verifyLiveEvidenceRefs(t *testing.T, appID string, refs []string) {
 
 func copyLiveEvidenceRefs(t *testing.T, appID string, refs []string) {
 	t.Helper()
+	if err := copyLiveEvidenceRefsToOutput(appID, refs); err != nil {
+		t.Fatalf("copy live evidence for %s: %v", appID, err)
+	}
+}
+
+func copyLiveRunEvidenceBestEffort(t *testing.T, appID string, run session.LaunchRun) {
+	t.Helper()
+	if outputRoot := getenv("HELM_LAUNCHPAD_LIVE_EVIDENCE_DIR"); outputRoot != "" {
+		appRoot := filepath.Join(outputRoot, appID)
+		if err := os.MkdirAll(appRoot, 0o700); err != nil {
+			t.Logf("create failed-run evidence output dir for %s: %v", appID, err)
+		} else {
+			payload, err := json.MarshalIndent(run, "", "  ")
+			if err != nil {
+				t.Logf("marshal failed launch run for %s: %v", appID, err)
+			} else if err := os.WriteFile(filepath.Join(appRoot, "launch_run.json"), payload, 0o600); err != nil {
+				t.Logf("write failed launch run for %s: %v", appID, err)
+			}
+			if run.LogPath != "" {
+				if _, err := os.Stat(run.LogPath); err == nil {
+					target := filepath.Join(appRoot, "logs", filepath.Base(run.LogPath))
+					if err := copyFile(target, run.LogPath); err != nil {
+						t.Logf("copy failed launch log for %s: %v", appID, err)
+					}
+				}
+			}
+		}
+	}
+	if err := copyLiveEvidenceRefsToOutput(appID, run.EvidencePackRefs); err != nil {
+		t.Logf("copy failed-run EvidencePack refs for %s: %v", appID, err)
+	}
+}
+
+func copyLiveEvidenceRefsToOutput(appID string, refs []string) error {
 	outputRoot := getenv("HELM_LAUNCHPAD_LIVE_EVIDENCE_DIR")
 	if outputRoot == "" {
-		return
+		return nil
 	}
 	appRoot := filepath.Join(outputRoot, appID)
 	if err := os.MkdirAll(appRoot, 0o700); err != nil {
-		t.Fatalf("create live evidence output dir: %v", err)
+		return fmt.Errorf("create live evidence output dir: %w", err)
 	}
 	for _, ref := range refs {
 		info, err := os.Stat(ref)
@@ -249,14 +300,15 @@ func copyLiveEvidenceRefs(t *testing.T, appID string, refs []string) {
 		target := filepath.Join(appRoot, filepath.Base(ref))
 		if info.IsDir() {
 			if err := copyDir(target, ref); err != nil {
-				t.Fatalf("copy EvidencePack directory for %s: %v", appID, err)
+				return fmt.Errorf("copy EvidencePack directory: %w", err)
 			}
 			continue
 		}
 		if err := copyFile(target, ref); err != nil {
-			t.Fatalf("copy EvidencePack archive for %s: %v", appID, err)
+			return fmt.Errorf("copy EvidencePack archive: %w", err)
 		}
 	}
+	return nil
 }
 
 func copyDir(dst, src string) error {

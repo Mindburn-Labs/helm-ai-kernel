@@ -1,5 +1,10 @@
 package mcp
 
+import (
+	"strings"
+	"time"
+)
+
 type ToolEffect string
 
 const (
@@ -18,6 +23,13 @@ type ServerRecord struct {
 	RevokedTools map[string]bool   `json:"revoked_tools,omitempty"`
 	SchemaPins   map[string]string `json:"schema_pins"`
 	ApprovalRefs []string          `json:"approval_refs"`
+	Approvals    []ApprovalGrant   `json:"approvals,omitempty"`
+}
+
+type ApprovalGrant struct {
+	ReceiptRef string    `json:"receipt_ref"`
+	ToolNames  []string  `json:"tool_names"`
+	ExpiresAt  time.Time `json:"expires_at"`
 }
 
 type CallRequest struct {
@@ -43,6 +55,10 @@ type Decision struct {
 }
 
 func Authorize(record ServerRecord, req CallRequest) Decision {
+	return AuthorizeAt(record, req, time.Now().UTC())
+}
+
+func AuthorizeAt(record ServerRecord, req CallRequest, now time.Time) Decision {
 	decision := Decision{
 		LaunchID:   req.LaunchID,
 		AppID:      req.AppID,
@@ -91,11 +107,41 @@ func Authorize(record ServerRecord, req CallRequest) Decision {
 		decision.Reason = "ERR_MCP_APPROVAL_RECEIPT_REQUIRED"
 		return decision
 	}
+	if req.Effect == EffectSideEffect {
+		if !approvalGrantAllows(record.Approvals, req.ApprovalReceiptRef, req.ToolName, now) {
+			decision.Verdict = "DENY"
+			decision.Reason = "ERR_MCP_APPROVAL_SCOPE_OR_EXPIRY"
+			return decision
+		}
+	}
 	decision.Verdict = "ALLOW"
 	decision.Reason = "MCP_CALL_AUTHORIZED"
 	return decision
 }
 
 func sameScope(recordValue, requestValue string) bool {
-	return recordValue == "" || recordValue == requestValue
+	return strings.TrimSpace(recordValue) != "" && recordValue == requestValue
+}
+
+func approvalGrantAllows(grants []ApprovalGrant, receiptRef, toolName string, now time.Time) bool {
+	receiptRef = strings.TrimSpace(receiptRef)
+	toolName = strings.TrimSpace(toolName)
+	if receiptRef == "" || toolName == "" {
+		return false
+	}
+	for _, grant := range grants {
+		if strings.TrimSpace(grant.ReceiptRef) != receiptRef {
+			continue
+		}
+		if grant.ExpiresAt.IsZero() || !now.Before(grant.ExpiresAt) {
+			return false
+		}
+		for _, allowed := range grant.ToolNames {
+			if strings.TrimSpace(allowed) == toolName {
+				return true
+			}
+		}
+		return false
+	}
+	return false
 }

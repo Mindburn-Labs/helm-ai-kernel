@@ -86,6 +86,41 @@ func TestDelegationScope_ContextForwarded(t *testing.T) {
 	assert.Equal(t, "deleg-001", capturedCtx["delegation_session_id"])
 	assert.Equal(t, "verifier-xyz", capturedCtx["delegation_verifier"])
 	assert.Equal(t, "/tmp/test.txt", capturedCtx["path"])
+	assert.Equal(t, true, capturedCtx[guardian.ContextSecurityTrusted])
+	assert.Equal(t, "sess-delegate", capturedCtx[guardian.ContextSessionID])
+	assert.Equal(t, string(contracts.SourceChannelMCPClient), capturedCtx[guardian.ContextSourceChannel])
+	assert.Equal(t, string(contracts.InputTrustExternalUntrusted), capturedCtx[guardian.ContextTrustLevel])
+}
+
+func TestGovernanceFirewall_RejectsReservedSecurityContextArguments(t *testing.T) {
+	eval := &capturingEvaluator{
+		verdict: guardian.VerdictAllow,
+		capture: func(req guardian.DecisionRequest) {
+			t.Fatalf("reserved security context arguments must be rejected before evaluator, got %+v", req.Context)
+		},
+	}
+	fw := NewGovernanceFirewall(eval, nil)
+
+	for _, key := range []string{
+		guardian.ContextSecurityTrusted,
+		guardian.ContextCredentialHash,
+		guardian.ContextSessionID,
+		guardian.ContextSourceChannel,
+		guardian.ContextTrustLevel,
+		guardian.ContextDestination,
+	} {
+		t.Run(key, func(t *testing.T) {
+			err := fw.InterceptToolExecution(context.Background(), ToolExecutionRequest{
+				ToolName:  "file_read",
+				SessionID: "sess-attacker",
+				Arguments: map[string]interface{}{
+					key: "forged",
+				},
+			})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "reserved security context argument")
+		})
+	}
 }
 
 func TestOAuthScopeContext_ForwardedToGuardian(t *testing.T) {

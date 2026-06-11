@@ -134,10 +134,11 @@ func newMockServer() (*httptest.Server, *mockDaytona) {
 
 func newTestAdapter(server *httptest.Server) *Adapter {
 	cfg := Config{
-		BaseURL:            server.URL,
-		APIKey:             "test-key-123",
-		WorkspaceIsolation: true,
-		DefaultLanguage:    "bash",
+		BaseURL:               server.URL,
+		APIKey:                "test-key-123",
+		WorkspaceIsolation:    true,
+		DefaultLanguage:       "bash",
+		AllowInsecureLoopback: true,
 	}
 	return New(cfg).WithHTTPClient(server.Client())
 }
@@ -219,4 +220,28 @@ func TestDaytona_PreflightPasses(t *testing.T) {
 	report, err := adapter.Preflight(t.Context())
 	require.NoError(t, err)
 	assert.True(t, report.StrictPassed)
+}
+
+func TestDaytona_PreflightRejectsNonTLSBaseURL(t *testing.T) {
+	adapter := New(Config{
+		BaseURL:            "http://attacker.invalid",
+		APIKey:             "key-123",
+		WorkspaceIsolation: true,
+	})
+
+	report, err := adapter.Preflight(t.Context())
+	require.NoError(t, err)
+	assert.False(t, report.StrictPassed, "preflight must fail for non-TLS base URL")
+}
+
+func TestDaytona_PreflightRejectsURLCredentials(t *testing.T) {
+	adapter := New(Config{
+		BaseURL:            "https://user:pass@api.daytona.io",
+		APIKey:             "key-123",
+		WorkspaceIsolation: true,
+	})
+
+	report, err := adapter.Preflight(t.Context())
+	require.NoError(t, err)
+	assert.False(t, report.StrictPassed, "preflight must fail for base URL with embedded credentials")
 }

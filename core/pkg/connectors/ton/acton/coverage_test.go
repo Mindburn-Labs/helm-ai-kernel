@@ -643,8 +643,28 @@ func TestCoveragePolicySandboxWalletAndVerificationBranches(t *testing.T) {
 	if !HasPlaintextSecretRisk(&ActonCommandEnvelope{Metadata: map[string]interface{}{"note": "private key here"}}) {
 		t.Fatal("secret risk in metadata value not detected")
 	}
+	unlabeledSeed := "abandon ability able about above absent absorb abstract absurd abuse access accident"
+	if !HasPlaintextSecretRisk(&ActonCommandEnvelope{Argv: []string{unlabeledSeed}}) {
+		t.Fatal("unlabeled seed-like argv phrase not detected")
+	}
+	if !HasPlaintextSecretRisk(&ActonCommandEnvelope{Metadata: map[string]interface{}{"note": unlabeledSeed}}) {
+		t.Fatal("unlabeled seed-like metadata phrase not detected")
+	}
 	if HasPlaintextSecretRisk(nil) {
 		t.Fatal("nil env should not be secret risk")
+	}
+	walletEnv := *testnetEnv
+	walletEnv.WalletRef = "wallet:tenant-test-ton-1"
+	if err := ValidateWalletPolicy(&walletEnv); err != nil {
+		t.Fatalf("opaque wallet ref should be accepted: %v", err)
+	}
+	walletEnv.WalletRef = "wallet:tenant test ton 1"
+	if err := ValidateWalletPolicy(&walletEnv); reasonFromError(err, "") != ReasonWalletRefRequired {
+		t.Fatalf("freeform wallet ref should be rejected: %v", err)
+	}
+	walletEnv.WalletRef = "wallet:" + unlabeledSeed
+	if err := ValidateWalletPolicy(&walletEnv); reasonFromError(err, "") != ReasonWalletRefRequired {
+		t.Fatalf("seed-like wallet ref should be rejected before use: %v", err)
 	}
 	if RedactWalletRef("") != "" || RedactWalletRef("wallet:abc") != "wallet:REDACTED" || !strings.HasPrefix(RedactWalletRef("wallet:tenant-prod-ton-1"), "wallet:ten...") {
 		t.Fatal("wallet redaction mismatch")
@@ -663,6 +683,37 @@ func TestCoverageConnectorRunnerAndDriftBranches(t *testing.T) {
 	badPermit.ConnectorID = "other"
 	if _, err := connector.Execute(context.Background(), badPermit, string(ActionBuild), nil); err == nil {
 		t.Fatal("expected connector mismatch error")
+	}
+	buildParams := map[string]any{"acton_version": "fixture-acton-1.0.0", "tolk_compiler_version": "fixture-tolk-1.0.0"}
+	missingBindingAny, err := connector.Execute(context.Background(), effectPermit(), string(ActionBuild), buildParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipt := missingBindingAny.(*ActonReceipt); receipt.ReasonCode != ReasonSandboxGrantRequired {
+		t.Fatalf("expected missing grant binding deny, got %s", receipt.ReasonCode)
+	}
+	mismatchedPermit := effectPermit()
+	mismatchedPermit.EvidenceBindings = map[string]string{"sandbox_grant_hash": "sha256:mismatch"}
+	mismatchedAny, err := connector.Execute(context.Background(), mismatchedPermit, string(ActionBuild), buildParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipt := mismatchedAny.(*ActonReceipt); receipt.ReasonCode != ReasonSandboxGrantRequired {
+		t.Fatalf("expected mismatched grant binding deny, got %s", receipt.ReasonCode)
+	}
+	callerGrantPermit := effectPermit()
+	bindPermitToGrant(t, callerGrantPermit, connector.defaultGrant)
+	callerGrantParams := map[string]any{
+		"acton_version":         "fixture-acton-1.0.0",
+		"tolk_compiler_version": "fixture-tolk-1.0.0",
+		"sandbox_grant":         sealedGrant(t, false, true),
+	}
+	callerGrantAny, err := connector.Execute(context.Background(), callerGrantPermit, string(ActionBuild), callerGrantParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipt := callerGrantAny.(*ActonReceipt); receipt.ReasonCode != ReasonSandboxGrantRequired {
+		t.Fatalf("expected caller supplied grant deny, got %s", receipt.ReasonCode)
 	}
 	receiptAny, err := connector.Execute(context.Background(), effectPermit(), "missing.action", map[string]any{"command_id": "unknown-1"})
 	if err != nil {

@@ -60,7 +60,7 @@ func TestG1_DAGChainIntegrity(t *testing.T) {
 		_ = os.WriteFile(filepath.Join(receiptsDir, "r"+string(rune('0'+i))+".json"), data, 0600)
 	}
 
-	gate := &G1ProofReceipts{}
+	gate := trustedG1Gate()
 	result := gate.Run(ctx)
 	require.True(t, result.Pass, "valid DAG chain should pass: %v", result.Reasons)
 	require.Equal(t, 2, result.Metrics.Counts["receipts_verified"])
@@ -86,7 +86,7 @@ func TestG1_DAGParallelReceipts(t *testing.T) {
 		_ = os.WriteFile(filepath.Join(receiptsDir, fmt.Sprintf("r%d.json", i)), data, 0600)
 	}
 
-	gate := &G1ProofReceipts{}
+	gate := trustedG1Gate()
 	result := gate.Run(ctx)
 	require.True(t, result.Pass, "parallel DAG should pass: %v", result.Reasons)
 }
@@ -186,11 +186,48 @@ func TestG1_SignatureValid(t *testing.T) {
 	data, _ := json.MarshalIndent(r1, "", "  ")
 	_ = os.WriteFile(filepath.Join(receiptsDir, "r0.json"), data, 0600)
 
-	gate := &G1ProofReceipts{
-		Verifier: func(data []byte, sig string) error { return nil },
-	}
+	gate := trustedG1Gate()
 	result := gate.Run(ctx)
 	require.True(t, result.Pass, "valid signature should pass: %v", result.Reasons)
+}
+
+func TestG1_MissingVerifierFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	ctx := &conform.RunContext{
+		RunID:       "run-1",
+		EvidenceDir: dir,
+		Clock:       fixedClock,
+	}
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	_ = os.MkdirAll(receiptsDir, 0750)
+
+	r1 := makeDAGReceipt(1, "hash-1", []string{"genesis"}, "tenant-1", "env-1")
+	data, _ := json.MarshalIndent(r1, "", "  ")
+	_ = os.WriteFile(filepath.Join(receiptsDir, "r0.json"), data, 0600)
+
+	result := (&G1ProofReceipts{}).Run(ctx)
+	require.False(t, result.Pass)
+	require.Contains(t, result.Reasons, conform.ReasonTrustRootsMissing)
+}
+
+func TestG1_MissingSignatureFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	ctx := &conform.RunContext{
+		RunID:       "run-1",
+		EvidenceDir: dir,
+		Clock:       fixedClock,
+	}
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	_ = os.MkdirAll(receiptsDir, 0750)
+
+	r1 := makeDAGReceipt(1, "hash-1", []string{"genesis"}, "tenant-1", "env-1")
+	r1.Signature = ""
+	data, _ := json.MarshalIndent(r1, "", "  ")
+	_ = os.WriteFile(filepath.Join(receiptsDir, "r0.json"), data, 0600)
+
+	result := trustedG1Gate().Run(ctx)
+	require.False(t, result.Pass)
+	require.Contains(t, result.Reasons, conform.ReasonSignatureInvalid)
 }
 
 func TestG1_SignatureInvalid(t *testing.T) {
@@ -223,4 +260,10 @@ func TestPayloadCommitment(t *testing.T) {
 	commitment := ComputePayloadCommitment(salt, payload)
 	require.True(t, VerifyPayloadCommitment(salt, payload, commitment))
 	require.False(t, VerifyPayloadCommitment(salt, []byte("tampered"), commitment))
+}
+
+func trustedG1Gate() *G1ProofReceipts {
+	return &G1ProofReceipts{
+		Verifier: func(data []byte, sig string) error { return nil },
+	}
 }

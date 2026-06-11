@@ -12,6 +12,7 @@ package mcp
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -29,6 +30,9 @@ type DelegationClaim struct {
 // AIPOption configures optional AIPVerifier settings.
 type AIPOption func(*AIPVerifier)
 
+// DelegationSignatureVerifier validates the cryptographic binding for a claim.
+type DelegationSignatureVerifier func(DelegationClaim) error
+
 // WithAIPClock sets a custom clock function (primarily for testing).
 func WithAIPClock(clock func() time.Time) AIPOption {
 	return func(v *AIPVerifier) {
@@ -36,12 +40,20 @@ func WithAIPClock(clock func() time.Time) AIPOption {
 	}
 }
 
+// WithAIPSignatureVerifier installs the required delegation signature verifier.
+func WithAIPSignatureVerifier(verifier DelegationSignatureVerifier) AIPOption {
+	return func(v *AIPVerifier) {
+		v.verifySignature = verifier
+	}
+}
+
 // AIPVerifier verifies delegation chains for the Agent Identity Protocol.
 // All methods are safe for concurrent use from multiple goroutines.
 type AIPVerifier struct {
-	mu     sync.RWMutex
-	chains map[string][]DelegationClaim // delegateID -> chain of claims
-	clock  func() time.Time
+	mu              sync.RWMutex
+	chains          map[string][]DelegationClaim // delegateID -> chain of claims
+	clock           func() time.Time
+	verifySignature DelegationSignatureVerifier
 }
 
 // NewAIPVerifier creates a new AIP delegation verifier with the given options.
@@ -68,6 +80,15 @@ func (v *AIPVerifier) RegisterDelegation(claim DelegationClaim) error {
 	}
 	if len(claim.Scope) == 0 {
 		return fmt.Errorf("aip: scope must contain at least one tool/action")
+	}
+	if strings.TrimSpace(claim.Signature) == "" {
+		return fmt.Errorf("aip: delegation signature is required")
+	}
+	if v.verifySignature == nil {
+		return fmt.Errorf("aip: delegation signature verifier is required")
+	}
+	if err := v.verifySignature(claim); err != nil {
+		return fmt.Errorf("aip: delegation signature invalid: %w", err)
 	}
 
 	v.mu.Lock()

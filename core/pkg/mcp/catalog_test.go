@@ -74,11 +74,51 @@ func TestToolCatalog_AuditToolCall(t *testing.T) {
 	catalog := NewInMemoryCatalog()
 
 	t.Run("Successful audit", func(t *testing.T) {
-		receipt, err := catalog.AuditToolCall("test-tool", map[string]any{"key": "val"}, "ok")
+		receipt, err := catalog.AuditToolCall("test-tool", map[string]any{"path": "/tmp/input.txt"}, "ok")
 		require.NoError(t, err)
 		assert.Equal(t, "test-tool", receipt.ToolName)
-		assert.Contains(t, receipt.Inputs, "key")
+		assert.Contains(t, receipt.Inputs, "path")
 		assert.Contains(t, receipt.Outputs, "ok")
+	})
+
+	t.Run("Sensitive inputs and outputs are redacted", func(t *testing.T) {
+		receipt, err := catalog.AuditToolCall("test-tool", map[string]any{
+			"api_key": "sk-live-secret",
+			"nested":  map[string]any{"password": "p@ssw0rd", "path": "/tmp/input.txt"},
+		}, map[string]any{"seed": "mnemonic", "status": "ok"})
+		require.NoError(t, err)
+		assert.NotContains(t, receipt.Inputs, "sk-live-secret")
+		assert.NotContains(t, receipt.Inputs, "p@ssw0rd")
+		assert.NotContains(t, receipt.Outputs, "mnemonic")
+		assert.Contains(t, receipt.Inputs, "[REDACTED]")
+		assert.Contains(t, receipt.Outputs, "[REDACTED]")
+		assert.Contains(t, receipt.Inputs, "/tmp/input.txt")
+		assert.Contains(t, receipt.Outputs, "ok")
+	})
+
+	t.Run("Token-like values and customer payload fields are redacted", func(t *testing.T) {
+		receipt, err := catalog.AuditToolCall("test-tool", map[string]any{
+			"note": "Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6ImsxIn0.eyJzdWIiOiJhZ2VudCJ9.c2lnbmF0dXJl",
+			"safe": "ok",
+			"items": []any{
+				map[string]any{"description": "public"},
+				map[string]any{"description": "github_pat_1234567890abcdef"},
+			},
+		}, map[string]any{
+			"content": "customer secret text",
+			"status":  "ok",
+			"message": "sk-live-output-token",
+		})
+		require.NoError(t, err)
+		assert.NotContains(t, receipt.Inputs, "Bearer")
+		assert.NotContains(t, receipt.Inputs, "github_pat_")
+		assert.NotContains(t, receipt.Outputs, "customer secret text")
+		assert.NotContains(t, receipt.Outputs, "sk-live-output-token")
+		assert.Contains(t, receipt.Inputs, "public")
+		assert.Contains(t, receipt.Inputs, "ok")
+		assert.Contains(t, receipt.Outputs, "ok")
+		assert.Contains(t, receipt.Inputs, "[REDACTED]")
+		assert.Contains(t, receipt.Outputs, "[REDACTED]")
 	})
 
 	t.Run("Unmarshalable input returns error", func(t *testing.T) {

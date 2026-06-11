@@ -887,7 +887,7 @@ func handlePackVerify(args []string) int {
 	)
 
 	cmd.StringVar(&bundlePath, "bundle", "", "Path to evidence pack .tar (REQUIRED)")
-	cmd.BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	cmd.BoolVar(&jsonOutput, "json", false, "Output integrity/authenticity result as JSON")
 
 	if err := cmd.Parse(args); err != nil {
 		return 2
@@ -917,22 +917,26 @@ func handlePackVerify(args []string) int {
 
 	if jsonOutput {
 		result := map[string]any{
-			"bundle":      bundlePath,
-			"valid":       true,
-			"session_id":  manifest.SessionID,
-			"version":     manifest.Version,
-			"exported_at": manifest.ExportedAt,
-			"file_count":  len(manifest.FileHashes),
+			"bundle":          bundlePath,
+			"valid":           false,
+			"integrity_valid": true,
+			"authenticated":   false,
+			"error":           "pack authenticity is unverified: trusted signature verification is required",
+			"session_id":      manifest.SessionID,
+			"version":         manifest.Version,
+			"exported_at":     manifest.ExportedAt,
+			"file_count":      len(manifest.FileHashes),
 		}
 		data, _ := json.MarshalIndent(result, "", "  ")
 		fmt.Println(string(data))
 	} else {
-		fmt.Printf("✅ Pack verified: %s\n", bundlePath)
+		fmt.Fprintf(os.Stderr, "❌ Pack authenticity not verified: trusted signature verification is required\n")
+		fmt.Printf("Integrity check passed: %s\n", bundlePath)
 		fmt.Printf("   Session:  %s\n", manifest.SessionID)
 		fmt.Printf("   Version:  %s\n", manifest.Version)
 		fmt.Printf("   Exported: %s\n", manifest.ExportedAt)
 		fmt.Printf("   Files:    %d\n", len(manifest.FileHashes))
 	}
 
-	return 0
+	return 1
 }

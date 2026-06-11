@@ -33,6 +33,22 @@ func TestExportAndVerify_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestPackVerifyCLIRejectsUnsignedIntegrityOnlyPack(t *testing.T) {
+	tmpFile := t.TempDir() + "/unsigned.tar"
+	files := map[string][]byte{
+		"receipts/forged.json": []byte(`{"id":"forged","status":"SUCCESS"}`),
+	}
+	if err := ExportPack("session-forged", files, tmpFile); err != nil {
+		t.Fatalf("export failed: %v", err)
+	}
+	if _, err := VerifyPack(tmpFile); err != nil {
+		t.Fatalf("integrity check should still pass: %v", err)
+	}
+	if code := handlePackVerify([]string{"--bundle", tmpFile, "--json"}); code == 0 {
+		t.Fatal("pack verify CLI must not authenticate unsigned integrity-only packs")
+	}
+}
+
 func TestExportPack_Deterministic(t *testing.T) {
 	dir := t.TempDir()
 	path1 := dir + "/pack1.tar"

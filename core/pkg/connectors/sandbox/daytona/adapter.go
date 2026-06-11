@@ -32,6 +32,9 @@ type Config struct {
 
 	// DefaultLanguage is the default language for code execution.
 	DefaultLanguage string `json:"default_language"`
+
+	// AllowInsecureLoopback permits http:// loopback endpoints for local tests only.
+	AllowInsecureLoopback bool `json:"allow_insecure_loopback,omitempty"`
 }
 
 // DefaultConfig returns a config with strict defaults.

@@ -49,7 +49,7 @@ func (v *MLDSAVerifier) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bo
 	if i.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool)
+	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
 	sig, err := hex.DecodeString(i.Signature)
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)

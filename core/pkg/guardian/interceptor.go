@@ -3,6 +3,7 @@ package guardian
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -14,6 +15,26 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/threatscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust"
 )
+
+const (
+	ContextSecurityTrusted = "security_context_trusted"
+	ContextCredentialHash  = "credential_hash"
+	ContextSessionID       = "session_id"
+	ContextSourceChannel   = "source_channel"
+	ContextTrustLevel      = "trust_level"
+	ContextDestination     = "destination"
+)
+
+// IsReservedSecurityContextKey identifies context keys whose values must be
+// bound by a trusted transport or adapter boundary, never by caller arguments.
+func IsReservedSecurityContextKey(key string) bool {
+	switch strings.TrimSpace(key) {
+	case ContextSecurityTrusted, ContextCredentialHash, ContextSessionID, ContextSourceChannel, ContextTrustLevel, ContextDestination:
+		return true
+	default:
+		return false
+	}
+}
 
 // EvaluationContext encapsulates all parameter inputs and transient state
 // for a single evaluation transaction across the interceptor boundary.
@@ -113,8 +134,10 @@ func (t *TemporalInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationC
 				}
 				effect.Params["tool_name"] = evalCtx.Request.Resource
 			}
-			effectBytes, _ := canonicalize.JCS(effect)
-			effectDigest := canonicalize.HashBytes(effectBytes)
+			effectDigest, err := canonicalEffectDigest(effect)
+			if err != nil {
+				return nil, fmt.Errorf("canonicalize effect digest: %w", err)
+			}
 
 			envFP := t.g.envFprint
 			if envFP == "" {
@@ -230,42 +253,27 @@ func NewPDPInterceptor(g *Guardian) *PDPInterceptor {
 func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContext, next Handler) (*contracts.DecisionRecord, error) {
 	// Gate 2: Agent identity isolation — deny if credential reuse detected
 	if p.g.isolationChecker != nil && evalCtx.Request.Principal != "" {
-		credHash := ""
-		if ch, ok := evalCtx.Request.Context["credential_hash"].(string); ok {
-			credHash = ch
+		credHash, ok := trustedContextString(evalCtx.Request.Context, ContextCredentialHash)
+		if !ok {
+			decision, err := p.deny(evalCtx, contracts.ReasonIdentityIsolationViolation, "IDENTITY_ISOLATION_VIOLATION: missing trusted credential_hash")
+			if err != nil {
+				return nil, fmt.Errorf("failed to sign isolation-violation decision: %w", err)
+			}
+			return decision, nil
 		}
-		if credHash != "" {
-			sessionID := ""
-			if sid, ok := evalCtx.Request.Context["session_id"].(string); ok {
-				sessionID = sid
+		sessionID, _ := trustedContextString(evalCtx.Request.Context, ContextSessionID)
+		if err := p.g.isolationChecker.ValidateAgentIdentity(evalCtx.Request.Principal, credHash, sessionID); err != nil {
+			decision, signErr := p.deny(evalCtx, contracts.ReasonIdentityIsolationViolation, fmt.Sprintf("IDENTITY_ISOLATION_VIOLATION: %v", err))
+			if signErr != nil {
+				return nil, fmt.Errorf("failed to sign isolation-violation decision: %w", signErr)
 			}
-			if err := p.g.isolationChecker.ValidateAgentIdentity(evalCtx.Request.Principal, credHash, sessionID); err != nil {
-				now := p.g.clock.Now()
-				decision := &contracts.DecisionRecord{
-					ID:         newDecisionID(),
-					Timestamp:  now,
-					Verdict:    string(contracts.VerdictDeny),
-					Reason:     fmt.Sprintf("IDENTITY_ISOLATION_VIOLATION: %v", err),
-					ReasonCode: string(contracts.ReasonIdentityIsolationViolation),
-				}
-				if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
-					return nil, fmt.Errorf("failed to sign isolation-violation decision: %w", err)
-				}
-				return decision, nil
-			}
+			return decision, nil
 		}
 	}
 
 	// Gate 4: Threat signal scan — scan untrusted textual inputs
 	if p.g.threatScanner != nil {
-		channel := contracts.SourceChannelUnknown
-		if ch, ok := evalCtx.Request.Context["source_channel"].(string); ok {
-			channel = contracts.SourceChannel(ch)
-		}
-		trustLevel := contracts.InputTrustInternalUnverified
-		if tl, ok := evalCtx.Request.Context["trust_level"].(string); ok {
-			trustLevel = contracts.InputTrustLevel(tl)
-		}
+		channel, trustLevel := trustedInputProvenance(evalCtx.Request.Context)
 
 		var textToScan string
 		if input, ok := evalCtx.Request.Context["user_input"].(string); ok {
@@ -482,6 +490,61 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 	return next(ctx, evalCtx)
 }
 
+func (p *PDPInterceptor) deny(evalCtx *EvaluationContext, reasonCode contracts.ReasonCode, reason string) (*contracts.DecisionRecord, error) {
+	now := p.g.clock.Now()
+	decision := &contracts.DecisionRecord{
+		ID:         newDecisionID(),
+		Timestamp:  now,
+		Verdict:    string(contracts.VerdictDeny),
+		Reason:     reason,
+		ReasonCode: string(reasonCode),
+	}
+	if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
+		return nil, err
+	}
+	return decision, nil
+}
+
+func trustedSecurityContext(ctx map[string]interface{}) bool {
+	if ctx == nil {
+		return false
+	}
+	trusted, _ := ctx[ContextSecurityTrusted].(bool)
+	return trusted
+}
+
+func trustedContextString(ctx map[string]interface{}, key string) (string, bool) {
+	if !trustedSecurityContext(ctx) {
+		return "", false
+	}
+	value, ok := ctx[key].(string)
+	if !ok {
+		return "", false
+	}
+	value = strings.TrimSpace(value)
+	return value, value != ""
+}
+
+func trustedInputProvenance(ctx map[string]interface{}) (contracts.SourceChannel, contracts.InputTrustLevel) {
+	channel := contracts.SourceChannelUnknown
+	trustLevel := contracts.InputTrustExternalUntrusted
+	if !trustedSecurityContext(ctx) {
+		return channel, trustLevel
+	}
+	if ch, ok := trustedContextString(ctx, ContextSourceChannel); ok {
+		channel = contracts.SourceChannel(ch)
+	}
+	if tl, ok := trustedContextString(ctx, ContextTrustLevel); ok {
+		switch contracts.InputTrustLevel(tl) {
+		case contracts.InputTrustTrusted, contracts.InputTrustInternalUnverified, contracts.InputTrustExternalUntrusted, contracts.InputTrustTainted:
+			trustLevel = contracts.InputTrustLevel(tl)
+		default:
+			trustLevel = contracts.InputTrustExternalUntrusted
+		}
+	}
+	return channel, trustLevel
+}
+
 // ── TaintEgressInterceptor ──
 
 type TaintEgressInterceptor struct {
@@ -495,7 +558,7 @@ func NewTaintEgressInterceptor(g *Guardian) *TaintEgressInterceptor {
 func (t *TaintEgressInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContext, next Handler) (*contracts.DecisionRecord, error) {
 	// Gate 3: Egress control — deny if destination is blocked
 	if t.g.egressChecker != nil {
-		if dest, ok := evalCtx.Request.Context["destination"].(string); ok && dest != "" {
+		if dest, ok := trustedContextString(evalCtx.Request.Context, ContextDestination); ok && dest != "" {
 			var payloadSize int64
 			if ps, ok := evalCtx.Request.Context["payload_size"].(float64); ok {
 				payloadSize = int64(ps)

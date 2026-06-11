@@ -10,6 +10,7 @@
 package verifier
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -75,7 +76,19 @@ type VerifyOptions struct {
 	ConfigPath         string
 	StorageReceiptPath string
 	StorageObjectPath  string
-	Now                time.Time
+	ExternalHostKeyHex string
+	// ManagedAgentReceiptPublicKeyHex is the trusted Ed25519 public key used
+	// to verify embedded managed-agent execution receipts. The verifier never
+	// trusts public keys declared inside the bundle unless they match this root.
+	ManagedAgentReceiptPublicKeyHex string
+	// WitnessPublicKeysHex maps witness IDs to trusted Ed25519 public keys
+	// for verifying receipt witness_signatures (the k-of-n witness overlay).
+	// Witness signatures whose witness_id has no configured key are skipped —
+	// they anchor to the witness registry, not to embedded presence, so an
+	// unconfigured verifier neither trusts nor fails them. A configured key
+	// demands a valid signature over the receipt hash (fail-closed).
+	WitnessPublicKeysHex map[string]string
+	Now                  time.Time
 }
 
 // VerifyBundle performs offline verification of an EvidencePack directory.
@@ -139,7 +152,7 @@ func VerifyBundleWithOptions(bundlePath string, opts VerifyOptions) (*VerifyRepo
 	report.addCheck(checkReplayDeterminism(bundlePath))
 
 	// 9. Optional external host evidence verification.
-	hostEvidence := externalreceipt.VerifyBundle(bundlePath)
+	hostEvidence := externalreceipt.VerifyBundleWithOptions(bundlePath, externalreceipt.VerifyOptions{PublicKeyHex: opts.ExternalHostKeyHex})
 	if hostEvidence.Found {
 		for _, check := range hostEvidence.Checks {
 			report.addCheck(CheckResult{
@@ -150,8 +163,9 @@ func VerifyBundleWithOptions(bundlePath string, opts VerifyOptions) (*VerifyRepo
 			})
 		}
 	}
+	report.addCheck(checkEmbeddedSignatureTrust(bundlePath, opts))
 
-	enrichReportMetadata(bundlePath, report)
+	enrichReportMetadata(bundlePath, report, opts)
 
 	// Compute summary
 	failed := 0
@@ -213,7 +227,7 @@ func checkEvidencePackSeal(bundlePath string, report *VerifyReport, opts VerifyO
 	return CheckResult{Name: "evidence_pack_seal", Pass: false, Reason: reason}
 }
 
-func enrichReportMetadata(bundlePath string, report *VerifyReport) {
+func enrichReportMetadata(bundlePath string, report *VerifyReport, opts VerifyOptions) {
 	for _, name := range []string{"00_INDEX.json", "manifest.json"} {
 		data, err := os.ReadFile(filepath.Join(bundlePath, name))
 		if err != nil {
@@ -242,7 +256,7 @@ func enrichReportMetadata(bundlePath string, report *VerifyReport) {
 		}
 	}
 
-	valid, total := countEmbeddedSignatures(bundlePath)
+	valid, total := countEmbeddedSignatures(bundlePath, opts)
 	if report.SealState != "" {
 		total++
 		if report.SealSignatureValid {
@@ -283,9 +297,28 @@ func firstUint(document map[string]any, keys ...string) *uint64 {
 	return nil
 }
 
-func countEmbeddedSignatures(bundlePath string) (int, int) {
-	total := 0
+func checkEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) CheckResult {
+	valid, total := countEmbeddedSignatures(bundlePath, opts)
+	if total == 0 {
+		return CheckResult{Name: "embedded_signature_trust", Pass: true, Detail: "no embedded receipt or witness signatures require verification"}
+	}
+	if valid == total {
+		return CheckResult{
+			Name:   "embedded_signature_trust",
+			Pass:   true,
+			Detail: fmt.Sprintf("%d embedded receipt or witness signatures verified against configured trust roots", valid),
+		}
+	}
+	return CheckResult{
+		Name:   "embedded_signature_trust",
+		Pass:   false,
+		Reason: fmt.Sprintf("%d/%d embedded receipt or witness signatures require a configured verifier; none are trusted by presence alone", total-valid, total),
+	}
+}
+
+func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
 	valid := 0
+	total := 0
 	for _, dir := range []string{receiptPath(bundlePath), filepath.Join(bundlePath, "07_ATTESTATIONS")} {
 		if !dirExists(dir) {
 			continue
@@ -304,26 +337,159 @@ func countEmbeddedSignatures(bundlePath string) (int, int) {
 			}
 			if sig, ok := document["signature"].(string); ok && sig != "" {
 				total++
-				valid++
+				if verifyEmbeddedDocumentSignature(document, sig, opts) {
+					valid++
+				}
 			}
 			if witnesses, ok := document["witness_signatures"].([]any); ok {
 				for _, witness := range witnesses {
-					if item, ok := witness.(map[string]any); ok {
-						if sig, ok := item["signature"].(string); ok && sig != "" {
-							total++
-							valid++
-						}
+					item, ok := witness.(map[string]any)
+					if !ok {
+						continue
+					}
+					sig, ok := item["signature"].(string)
+					if !ok || sig == "" {
+						continue
+					}
+					keyHex := strings.TrimSpace(opts.WitnessPublicKeysHex[firstString(item, "witness_id")])
+					if keyHex == "" {
+						// Witness quorum signatures anchor to the witness
+						// registry; without a configured key they are
+						// skipped, never presence-trusted or auto-failed.
+						continue
+					}
+					total++
+					if verifyWitnessReceiptSignature(document, sig, keyHex) {
+						valid++
 					}
 				}
 			}
 			return nil
 		})
 	}
-	if fileExists(filepath.Join(bundlePath, "07_ATTESTATIONS", "conformance_report.sig")) {
-		total++
-		valid++
-	}
 	return valid, total
+}
+
+func verifyEmbeddedDocumentSignature(document map[string]any, sig string, opts VerifyOptions) bool {
+	switch firstString(document, "receipt_version") {
+	case "managed_agent_live_scenario_receipt.v1":
+		if firstString(document, "signature_payload") != "decision_hash" {
+			return false
+		}
+		return verifyManagedAgentEd25519Signature(document, sig, opts.ManagedAgentReceiptPublicKeyHex, firstString(document, "decision_hash"))
+	case "managed_agent_execution_receipt.v1":
+		return verifyManagedAgentEd25519Signature(document, sig, opts.ManagedAgentReceiptPublicKeyHex, firstString(document, "receipt_hash"))
+	default:
+		if firstString(document, "type") == "mcp_policy_decision" {
+			return verifyMCPPolicyDecisionReceiptSignature(document, sig, opts)
+		}
+		return false
+	}
+}
+
+// verifyMCPPolicyDecisionReceiptSignature verifies kernel-issued MCP proof
+// receipts (`mcp proof` quarantine scenarios). The signing key is disclosed in
+// receipt metadata and is integrity-anchored by the pack seal, so
+// disclosure-based trust is accepted only under the dev-local profile — the
+// same trust decision the seal check already makes for dev-local packs. Every
+// other profile requires out-of-band trust roots and fails closed here.
+func verifyMCPPolicyDecisionReceiptSignature(document map[string]any, sig string, opts VerifyOptions) bool {
+	profile := opts.Profile
+	if profile == "" {
+		profile = evidencepkg.EvidenceTrustProfileDevLocal
+	}
+	if profile != evidencepkg.EvidenceTrustProfileDevLocal {
+		return false
+	}
+	meta, _ := document["metadata"].(map[string]any)
+	if meta == nil {
+		return false
+	}
+	if firstString(meta, "signature_key_type") != "ed25519" {
+		return false
+	}
+	keyHex := strings.TrimSpace(firstString(meta, "signing_public_key_hex"))
+	if keyHex == "" {
+		return false
+	}
+	if ref := strings.TrimSpace(firstString(meta, "signature_key_ref")); ref != "" {
+		const refPrefix = "ed25519:"
+		if !strings.HasPrefix(ref, refPrefix) || !strings.HasPrefix(strings.ToLower(keyHex), strings.ToLower(strings.TrimPrefix(ref, refPrefix))) {
+			return false
+		}
+	}
+	pubBytes, err := hex.DecodeString(keyHex)
+	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
+		return false
+	}
+	sigBytes, err := hex.DecodeString(strings.TrimSpace(sig))
+	if err != nil || len(sigBytes) != ed25519.SignatureSize {
+		return false
+	}
+	var lamport uint64
+	if v := firstUint(document, "lamport_clock"); v != nil {
+		lamport = *v
+	}
+	// Mirrors crypto.CanonicalizeReceipt — receipt_id:decision_id:effect_id:
+	// status:output_hash:prev_hash:lamport_clock:args_hash.
+	payload := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%d:%s",
+		firstString(document, "receipt_id"),
+		firstString(document, "decision_id"),
+		firstString(document, "effect_id"),
+		firstString(document, "status"),
+		firstString(document, "output_hash"),
+		firstString(document, "prev_hash"),
+		lamport,
+		firstString(document, "args_hash"),
+	)
+	return ed25519.Verify(ed25519.PublicKey(pubBytes), []byte(payload), sigBytes)
+}
+
+// verifyWitnessReceiptSignature verifies a witness attestation: an Ed25519
+// signature by the configured witness key over the receipt's hex-decoded
+// receipt_hash (mirrors witness.VerifyAttestation). Missing or malformed
+// hash material fails closed — a configured witness demands verification.
+func verifyWitnessReceiptSignature(document map[string]any, sig, trustedPublicKeyHex string) bool {
+	receiptHashHex := strings.TrimSpace(firstString(document, "receipt_hash"))
+	if receiptHashHex == "" {
+		return false
+	}
+	receiptHashBytes, err := hex.DecodeString(strings.TrimPrefix(receiptHashHex, "sha256:"))
+	if err != nil || len(receiptHashBytes) == 0 {
+		return false
+	}
+	pubBytes, err := hex.DecodeString(strings.TrimSpace(trustedPublicKeyHex))
+	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
+		return false
+	}
+	sigBytes, err := hex.DecodeString(strings.TrimSpace(sig))
+	if err != nil || len(sigBytes) != ed25519.SignatureSize {
+		return false
+	}
+	return ed25519.Verify(ed25519.PublicKey(pubBytes), receiptHashBytes, sigBytes)
+}
+
+func verifyManagedAgentEd25519Signature(document map[string]any, sig, trustedPublicKeyHex, payload string) bool {
+	if payload == "" || firstString(document, "signature_algorithm") != "ed25519" {
+		return false
+	}
+	trustedPublicKeyHex = strings.TrimSpace(trustedPublicKeyHex)
+	if trustedPublicKeyHex == "" {
+		return false
+	}
+	declaredPublicKeyHex := strings.TrimSpace(firstString(document, "signing_public_key_hex", "public_key_hex"))
+	if declaredPublicKeyHex != "" && !strings.EqualFold(declaredPublicKeyHex, trustedPublicKeyHex) {
+		return false
+	}
+	pubBytes, err := hex.DecodeString(trustedPublicKeyHex)
+	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
+		return false
+	}
+	sigBytes, err := hex.DecodeString(strings.TrimSpace(sig))
+	if err != nil || len(sigBytes) != ed25519.SignatureSize {
+		return false
+	}
+	return ed25519.Verify(ed25519.PublicKey(pubBytes), []byte(payload), sigBytes)
 }
 
 func shortHash(value string) string {

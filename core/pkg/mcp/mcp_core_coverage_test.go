@@ -45,11 +45,12 @@ func TestCoverageJWKSValidator(t *testing.T) {
 	defer jwksServer.Close()
 
 	config := JWKSConfig{
-		JWKSURL:  jwksServer.URL,
-		Issuer:   "issuer",
-		Audience: "audience",
-		Resource: "https://resource.example/mcp",
-		Scopes:   []string{"mcp:tools", "helm:verify"},
+		JWKSURL:               jwksServer.URL,
+		Issuer:                "issuer",
+		Audience:              "audience",
+		Resource:              "https://resource.example/mcp",
+		Scopes:                []string{"mcp:tools", "helm:verify"},
+		AllowInsecureLoopback: true,
 	}
 	validator := NewJWKSValidator(config)
 	token := signMCPTestJWT(t, privateKey, "kid-1", jwksClaims{
@@ -82,11 +83,11 @@ func TestCoverageJWKSValidator(t *testing.T) {
 		t.Fatalf("cached ValidateAuthorization: %v", err)
 	}
 
-	missingScope := NewJWKSValidator(JWKSConfig{JWKSURL: jwksServer.URL, Issuer: "issuer", Audience: "audience", Scopes: []string{"missing"}})
+	missingScope := NewJWKSValidator(JWKSConfig{JWKSURL: jwksServer.URL, Issuer: "issuer", Audience: "audience", Scopes: []string{"missing"}, AllowInsecureLoopback: true})
 	if _, err := missingScope.ValidateAuthorization(token); !isJWKSKind(err, JWKSErrMissingScope) {
 		t.Fatalf("expected missing scope, got %v", err)
 	}
-	missingResource := NewJWKSValidator(JWKSConfig{JWKSURL: jwksServer.URL, Issuer: "issuer", Audience: "audience", Resource: "https://missing.example/mcp"})
+	missingResource := NewJWKSValidator(JWKSConfig{JWKSURL: jwksServer.URL, Issuer: "issuer", Audience: "audience", Resource: "https://missing.example/mcp", AllowInsecureLoopback: true})
 	if _, err := missingResource.ValidateAuthorization(token); !isJWKSKind(err, JWKSErrInvalidResource) {
 		t.Fatalf("expected invalid resource, got %v", err)
 	}
@@ -99,7 +100,7 @@ func TestCoverageJWKSValidator(t *testing.T) {
 			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
 		},
 	})
-	if _, err := NewJWKSValidator(JWKSConfig{JWKSURL: jwksServer.URL, Issuer: "issuer", Audience: "audience"}).ValidateAuthorization(wrongKid); err == nil || (!isJWKSKind(err, JWKSErrKeyNotFound) && (!isJWKSKind(err, JWKSErrMalformedToken) || !strings.Contains(err.Error(), "key_not_found"))) {
+	if _, err := NewJWKSValidator(JWKSConfig{JWKSURL: jwksServer.URL, Issuer: "issuer", Audience: "audience", AllowInsecureLoopback: true}).ValidateAuthorization(wrongKid); err == nil || (!isJWKSKind(err, JWKSErrKeyNotFound) && (!isJWKSKind(err, JWKSErrMalformedToken) || !strings.Contains(err.Error(), "key_not_found"))) {
 		t.Fatalf("expected key not found path, got %v", err)
 	}
 	noKid := signMCPTestJWT(t, privateKey, "", jwksClaims{
@@ -111,7 +112,7 @@ func TestCoverageJWKSValidator(t *testing.T) {
 			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
 		},
 	})
-	if _, err := NewJWKSValidator(JWKSConfig{JWKSURL: jwksServer.URL, Issuer: "issuer", Audience: "audience"}).ValidateAuthorization(noKid); err != nil {
+	if _, err := NewJWKSValidator(JWKSConfig{JWKSURL: jwksServer.URL, Issuer: "issuer", Audience: "audience", AllowInsecureLoopback: true}).ValidateAuthorization(noKid); err != nil {
 		t.Fatalf("no-kid token should use first available key: %v", err)
 	}
 
@@ -119,18 +120,21 @@ func TestCoverageJWKSValidator(t *testing.T) {
 		http.Error(w, "unavailable", http.StatusInternalServerError)
 	}))
 	defer badServer.Close()
-	if err := NewJWKSValidator(JWKSConfig{JWKSURL: badServer.URL}).refreshKeysIfNeeded(); !isJWKSKind(err, JWKSErrFetchFailed) {
+	if err := NewJWKSValidator(JWKSConfig{JWKSURL: badServer.URL, AllowInsecureLoopback: true}).refreshKeysIfNeeded(); !isJWKSKind(err, JWKSErrFetchFailed) {
 		t.Fatalf("expected fetch failed, got %v", err)
 	}
 	invalidJWKS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{`))
 	}))
 	defer invalidJWKS.Close()
-	if err := NewJWKSValidator(JWKSConfig{JWKSURL: invalidJWKS.URL}).forceRefreshKeys(); !isJWKSKind(err, JWKSErrFetchFailed) {
+	if err := NewJWKSValidator(JWKSConfig{JWKSURL: invalidJWKS.URL, AllowInsecureLoopback: true}).forceRefreshKeys(); !isJWKSKind(err, JWKSErrFetchFailed) {
 		t.Fatalf("expected parse JWKS failure, got %v", err)
 	}
 	if err := NewJWKSValidator(JWKSConfig{JWKSURL: "http://[::1"}).forceRefreshKeys(); !isJWKSKind(err, JWKSErrFetchFailed) {
 		t.Fatalf("expected bad URL failure, got %v", err)
+	}
+	if err := NewJWKSValidator(JWKSConfig{JWKSURL: "http://jwks.example.test/keys"}).forceRefreshKeys(); !isJWKSKind(err, JWKSErrFetchFailed) || !strings.Contains(err.Error(), "https") {
+		t.Fatalf("expected non-TLS JWKS endpoint rejection, got %v", err)
 	}
 	if _, err := NewJWKSValidator(config).ValidateAuthorization("not-a-jwt"); !isJWKSKind(err, JWKSErrMalformedToken) && !isJWKSKind(err, JWKSErrFetchFailed) {
 		t.Fatalf("expected malformed token or fetch failure, got %v", err)

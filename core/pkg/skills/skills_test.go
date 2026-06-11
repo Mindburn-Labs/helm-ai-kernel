@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -143,6 +144,7 @@ func TestFullPromotionLifecycle(t *testing.T) {
 	store := NewInMemorySkillStore()
 	graph := proofgraph.NewGraph()
 	forge := NewForge(store, graph)
+	forge.WithEvaluator(passingEvaluator())
 
 	// Step 1: Propose and approve a skill
 	proposal := &SkillProposal{
@@ -298,6 +300,61 @@ func TestEvalFailureBlocksPromotion(t *testing.T) {
 	assert.Equal(t, PromotionC0Sandbox, s.Level, "skill should remain at C0 when eval fails")
 }
 
+func TestDefaultEvaluatorFailsClosedWithoutBackends(t *testing.T) {
+	ctx := context.Background()
+	eval := NewEvaluator()
+	skill := &Skill{SkillID: "skill-no-backend", Level: PromotionC0Sandbox}
+
+	sandbox, err := eval.EvalSandbox(ctx, skill)
+	require.NoError(t, err)
+	require.NotNil(t, sandbox)
+	assert.False(t, sandbox.Passed)
+	assert.Equal(t, "missing-sandbox-evaluator", sandbox.BackendID)
+	assert.Contains(t, sandbox.Details, "not configured")
+
+	canary, err := eval.EvalCanary(ctx, skill, 25)
+	require.NoError(t, err)
+	require.NotNil(t, canary)
+	assert.False(t, canary.Passed)
+	assert.Equal(t, "missing-canary-evaluator", canary.BackendID)
+	assert.Equal(t, 25, canary.SampleSize)
+	assert.Contains(t, canary.Details, "not configured")
+}
+
+func TestDefaultForgePromotionFailsWithoutEvaluatorBackend(t *testing.T) {
+	ctx := context.Background()
+	store := NewInMemorySkillStore()
+	graph := proofgraph.NewGraph()
+	forge := NewForge(store, graph)
+
+	skill := &Skill{
+		SkillID:     "skill-default-evaluator",
+		Name:        "default-evaluator",
+		Class:       SkillClassInternal,
+		Version:     1,
+		Level:       PromotionC0Sandbox,
+		AuthorID:    "agent-1",
+		ManagerID:   "manager-1",
+		ContentHash: "default-eval",
+		Status:      "ACTIVE",
+	}
+	require.NoError(t, store.CreateSkill(ctx, skill))
+
+	err := forge.RequestPromotion(ctx, skill.SkillID, "agent-1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "evaluation did not pass")
+
+	stored, err := store.GetSkill(ctx, skill.SkillID)
+	require.NoError(t, err)
+	assert.Equal(t, PromotionC0Sandbox, stored.Level)
+
+	rejected := findPromotionByStatus(t, store, skill.SkillID, "REJECTED")
+	require.NotNil(t, rejected)
+	require.NotNil(t, rejected.EvalResult)
+	assert.False(t, rejected.EvalResult.Passed)
+	assert.Equal(t, "missing-sandbox-evaluator", rejected.EvalResult.BackendID)
+}
+
 // --- Test 8: Suspend and retire ---
 
 func TestSuspendAndRetire(t *testing.T) {
@@ -369,6 +426,7 @@ func TestLineageTracking(t *testing.T) {
 	store := NewInMemorySkillStore()
 	graph := proofgraph.NewGraph()
 	forge := NewForge(store, graph)
+	forge.WithEvaluator(passingEvaluator())
 
 	// Full lifecycle: propose → approve → promote C0→C1 → rollback
 	proposal := &SkillProposal{
@@ -419,6 +477,7 @@ func TestProofGraphIntegration(t *testing.T) {
 	store := NewInMemorySkillStore()
 	graph := proofgraph.NewGraph()
 	forge := NewForge(store, graph)
+	forge.WithEvaluator(passingEvaluator())
 
 	proposal := &SkillProposal{
 		ProposalID:  "prop-proof",
@@ -670,12 +729,44 @@ func TestRollbackFromC0Errors(t *testing.T) {
 // helper: find a pending promotion request for a given skill.
 func findPendingPromotion(t *testing.T, store *InMemorySkillStore, skillID string) *PromotionRequest {
 	t.Helper()
+	return findPromotionByStatus(t, store, skillID, "PENDING")
+}
+
+func findPromotionByStatus(t *testing.T, store *InMemorySkillStore, skillID, status string) *PromotionRequest {
+	t.Helper()
 	store.mu.RLock()
 	defer store.mu.RUnlock()
 	for _, req := range store.promotions {
-		if req.SkillID == skillID && req.Status == "PENDING" {
+		if req.SkillID == skillID && req.Status == status {
 			return req
 		}
 	}
 	return nil
+}
+
+func passingEvaluator() *Evaluator {
+	return NewEvaluator().
+		WithSandboxBackendID("test-sandbox-runner").
+		WithSandboxFunc(func(ctx context.Context, skill *Skill) (*EvalResult, error) {
+			return passingEvalResult(skill.SkillID, PromotionC0Sandbox, 100), nil
+		}).
+		WithCanaryBackendID("test-canary-runner").
+		WithCanaryFunc(func(ctx context.Context, skill *Skill, sampleSize int) (*EvalResult, error) {
+			return passingEvalResult(skill.SkillID, PromotionC2Canary, sampleSize), nil
+		})
+}
+
+func passingEvalResult(skillID string, level PromotionLevel, sampleSize int) *EvalResult {
+	return &EvalResult{
+		EvalID:      "eval-pass-" + skillID + "-" + string(level),
+		SkillID:     skillID,
+		Level:       level,
+		Passed:      true,
+		Score:       0.99,
+		ErrorCount:  0,
+		SampleSize:  sampleSize,
+		Duration:    time.Millisecond,
+		Details:     "test evaluator passed",
+		CompletedAt: time.Now(),
+	}
 }

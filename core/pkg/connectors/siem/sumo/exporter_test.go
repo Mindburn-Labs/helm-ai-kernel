@@ -50,8 +50,14 @@ func TestNew_RejectsMissingURL(t *testing.T) {
 	}
 }
 
+func TestNew_RejectsCollectorTokenOverNonTLS(t *testing.T) {
+	if _, err := New(Config{URL: "http://collector.example/receiver/v1/http/token"}); err == nil {
+		t.Fatal("expected non-TLS Sumo collector URL to fail")
+	}
+}
+
 func TestNew_AppliesDefaults(t *testing.T) {
-	e, err := New(Config{URL: "http://example/sumo"})
+	e, err := New(Config{URL: "https://example/sumo"})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -93,7 +99,7 @@ func TestExportSpans_ProducesNDJSON(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	e, err := New(Config{URL: ts.URL, Host: "host-a"})
+	e, err := New(Config{URL: ts.URL, Host: "host-a", AllowInsecureHTTP: true})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -143,7 +149,7 @@ func TestExportSpans_PropagatesServerError(t *testing.T) {
 		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
 	}))
 	defer ts.Close()
-	e, err := New(Config{URL: ts.URL})
+	e, err := New(Config{URL: ts.URL, AllowInsecureHTTP: true})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -159,7 +165,7 @@ func TestExportSpans_NoSpansIsNoOp(t *testing.T) {
 		called = true
 	}))
 	defer ts.Close()
-	e, _ := New(Config{URL: ts.URL})
+	e, _ := New(Config{URL: ts.URL, AllowInsecureHTTP: true})
 	if err := e.ExportSpans(context.Background(), nil); err != nil {
 		t.Errorf("ExportSpans nil: %v", err)
 	}

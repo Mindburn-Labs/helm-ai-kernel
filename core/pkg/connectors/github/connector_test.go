@@ -2,6 +2,9 @@ package github
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -11,20 +14,64 @@ import (
 )
 
 func validPermit() *effects.EffectPermit {
+	return permitFor("github.list_prs", "nonce-001", allowedParamsForTool("github.list_prs")...)
+}
+
+func permitFor(toolName, nonce string, allowedParams ...string) *effects.EffectPermit {
+	effectType, ok := toolEffectTypeMap[toolName]
+	if !ok {
+		effectType = effects.EffectTypeRead
+	}
 	return &effects.EffectPermit{
 		PermitID:    "permit-001",
 		IntentHash:  "sha256:aaa",
 		VerdictHash: "sha256:bbb",
-		EffectType:  effects.EffectTypeRead,
+		EffectType:  effectType,
 		ConnectorID: ConnectorID,
 		Scope: effects.EffectScope{
-			AllowedAction: "github.list_prs",
+			AllowedAction: toolName,
+			AllowedParams: allowedParams,
 		},
-		ExpiresAt: time.Now().Add(5 * time.Minute),
-		SingleUse: true,
-		Nonce:     "nonce-001",
-		IssuedAt:  time.Now(),
-		IssuerID:  "gateway-1",
+		ResourceRef: "owner/repo",
+		ExpiresAt:   time.Now().Add(5 * time.Minute),
+		SingleUse:   true,
+		Nonce:       nonce,
+		IssuedAt:    time.Now(),
+		IssuerID:    "gateway-1",
+	}
+}
+
+func permitWithEffect(toolName, nonce string, effectType effects.EffectType, allowedParams ...string) *effects.EffectPermit {
+	permit := permitFor(toolName, nonce, allowedParams...)
+	permit.EffectType = effectType
+	return permit
+}
+
+func expiredPermit(toolName, nonce string, allowedParams ...string) *effects.EffectPermit {
+	permit := permitFor(toolName, nonce, allowedParams...)
+	permit.IssuedAt = time.Now().Add(-10 * time.Minute)
+	permit.ExpiresAt = time.Now().Add(-5 * time.Minute)
+	return permit
+}
+
+func permitForOtherRepo(toolName, nonce string, allowedParams ...string) *effects.EffectPermit {
+	permit := permitFor(toolName, nonce, allowedParams...)
+	permit.ResourceRef = "other/repo"
+	return permit
+}
+
+func allowedParamsForTool(toolName string) []string {
+	switch toolName {
+	case "github.list_prs":
+		return []string{"repo", "state"}
+	case "github.read_pr":
+		return []string{"repo", "number"}
+	case "github.create_issue":
+		return []string{"repo", "title", "body", "labels", "assignees"}
+	case "github.add_comment":
+		return []string{"repo", "issue_number", "body"}
+	default:
+		return nil
 	}
 }
 
@@ -67,8 +114,7 @@ func TestDispatch_AllTools(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.tool, func(t *testing.T) {
-			permit := validPermit()
-			permit.Scope.AllowedAction = tt.tool
+			permit := permitFor(tt.tool, "nonce-dispatch-"+tt.tool, allowedParamsForTool(tt.tool)...)
 
 			_, err := c.Execute(ctx, permit, tt.tool, tt.params)
 			// All calls should fail with "not connected" since client is a fake
@@ -125,13 +171,127 @@ func TestExecute_GateEnforcesDataClass(t *testing.T) {
 		RateLimitPerMinute: 30,
 	})
 
-	permit := validPermit()
+	permit := permitFor("github.create_issue", "nonce-gate-data-class", allowedParamsForTool("github.create_issue")...)
 	_, err := c.Execute(ctx, permit, "github.create_issue", map[string]any{"repo": "owner/repo", "title": "Bug"})
 	if err == nil {
 		t.Fatal("expected gate denial for disallowed data class")
 	}
 	if !strings.Contains(err.Error(), "gate denied") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExecute_DeniesPermitScopeBeforeGitHubRequest(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		http.Error(w, "unexpected request", http.StatusTeapot)
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		name    string
+		tool    string
+		params  map[string]any
+		permit  *effects.EffectPermit
+		wantErr string
+	}{
+		{
+			name:    "action mismatch",
+			tool:    "github.create_issue",
+			params:  map[string]any{"repo": "owner/repo", "title": "Bug"},
+			permit:  permitFor("github.list_prs", "nonce-scope-action", allowedParamsForTool("github.list_prs")...),
+			wantErr: "does not authorize",
+		},
+		{
+			name:    "read permit cannot write",
+			tool:    "github.create_issue",
+			params:  map[string]any{"repo": "owner/repo", "title": "Bug"},
+			permit:  permitWithEffect("github.create_issue", "nonce-scope-effect", effects.EffectTypeRead, allowedParamsForTool("github.create_issue")...),
+			wantErr: "effect_type",
+		},
+		{
+			name:    "expired permit",
+			tool:    "github.list_prs",
+			params:  map[string]any{"repo": "owner/repo"},
+			permit:  expiredPermit("github.list_prs", "nonce-scope-expired", allowedParamsForTool("github.list_prs")...),
+			wantErr: "expired",
+		},
+		{
+			name:    "extra param outside scope",
+			tool:    "github.list_prs",
+			params:  map[string]any{"repo": "owner/repo", "state": "open"},
+			permit:  permitFor("github.list_prs", "nonce-scope-param", "repo"),
+			wantErr: "not authorized",
+		},
+		{
+			name:    "write missing param scope",
+			tool:    "github.create_issue",
+			params:  map[string]any{"repo": "owner/repo", "title": "Bug"},
+			permit:  permitFor("github.create_issue", "nonce-scope-empty"),
+			wantErr: "requires allowed_params",
+		},
+		{
+			name:    "repo resource mismatch",
+			tool:    "github.create_issue",
+			params:  map[string]any{"repo": "owner/repo", "title": "Bug"},
+			permit:  permitForOtherRepo("github.create_issue", "nonce-scope-resource", allowedParamsForTool("github.create_issue")...),
+			wantErr: "resource_ref",
+		},
+		{
+			name:    "exact param mismatch",
+			tool:    "github.add_comment",
+			params:  map[string]any{"repo": "owner/repo", "issue_number": 8, "body": "LGTM"},
+			permit:  permitFor("github.add_comment", "nonce-scope-exact", "repo", "issue_number=7", "body"),
+			wantErr: "does not match permit scope",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requests = 0
+			c := NewConnector(Config{BaseURL: server.URL, Token: "ghp-test"})
+			c.client.httpClient = server.Client()
+
+			_, err := c.Execute(context.Background(), tt.permit, tt.tool, tt.params)
+			if err == nil {
+				t.Fatal("expected permit scope error")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
+			}
+			if requests != 0 {
+				t.Fatalf("permit denial reached GitHub server %d times", requests)
+			}
+		})
+	}
+}
+
+func TestExecute_RejectsPermitNonceReplayBeforeGitHubRequest(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+
+	c := NewConnector(Config{BaseURL: server.URL, Token: "ghp-test"})
+	c.client.httpClient = server.Client()
+	permit := permitFor("github.list_prs", "nonce-replay", allowedParamsForTool("github.list_prs")...)
+	params := map[string]any{"repo": "owner/repo"}
+
+	if _, err := c.Execute(context.Background(), permit, "github.list_prs", params); err != nil {
+		t.Fatalf("first execute should pass permit validation: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("first execute reached GitHub server %d times, want 1", requests)
+	}
+	if _, err := c.Execute(context.Background(), permit, "github.list_prs", params); err == nil || !strings.Contains(err.Error(), "already used") {
+		t.Fatalf("expected replay denial, got %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("replayed permit reached GitHub server; requests=%d", requests)
 	}
 }
 
@@ -150,10 +310,9 @@ func TestExecute_GateEnforcesRateLimit(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	permit := validPermit()
-
 	// First two calls pass the gate (fail at client fake)
 	for i := 0; i < 2; i++ {
+		permit := permitFor("github.list_prs", fmt.Sprintf("nonce-rate-%d", i), allowedParamsForTool("github.list_prs")...)
 		_, err := c.Execute(ctx, permit, "github.list_prs", map[string]any{"repo": "owner/repo"})
 		if err == nil {
 			t.Fatal("expected fake error")
@@ -164,6 +323,7 @@ func TestExecute_GateEnforcesRateLimit(t *testing.T) {
 	}
 
 	// Third call should hit rate limit
+	permit := permitFor("github.list_prs", "nonce-rate-3", allowedParamsForTool("github.list_prs")...)
 	_, err := c.Execute(ctx, permit, "github.list_prs", map[string]any{"repo": "owner/repo"})
 	if err == nil {
 		t.Fatal("expected rate limit error")
@@ -199,10 +359,10 @@ func TestExecute_ProofGraphNodes(t *testing.T) {
 func TestExecute_ProofGraphMultipleCalls(t *testing.T) {
 	c := NewConnector(Config{BaseURL: "https://api.github.com"})
 	ctx := context.Background()
-	permit := validPermit()
 
 	// Execute three tool calls
 	for i := 0; i < 3; i++ {
+		permit := permitFor("github.list_prs", fmt.Sprintf("nonce-graph-%d", i), allowedParamsForTool("github.list_prs")...)
 		_, _ = c.Execute(ctx, permit, "github.list_prs", map[string]any{"repo": "owner/repo"})
 	}
 
@@ -224,7 +384,6 @@ func TestExecute_ProofGraphMultipleCalls(t *testing.T) {
 func TestDispatch_MissingRequiredParams(t *testing.T) {
 	c := NewConnector(Config{BaseURL: "https://api.github.com"})
 	ctx := context.Background()
-	permit := validPermit()
 
 	tests := []struct {
 		tool          string
@@ -243,6 +402,7 @@ func TestDispatch_MissingRequiredParams(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.tool+"_"+tt.expectContain, func(t *testing.T) {
+			permit := permitFor(tt.tool, "nonce-missing-"+tt.expectContain, allowedParamsForTool(tt.tool)...)
 			_, err := c.Execute(ctx, permit, tt.tool, tt.params)
 			if err == nil {
 				t.Fatal("expected error for missing params")

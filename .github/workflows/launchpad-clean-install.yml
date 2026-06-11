@@ -29,6 +29,12 @@ jobs:
       - name: Checkout HELM source
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
+      - name: Validate dispatch inputs
+        run: |
+          python3 scripts/ci/validate_workflow_dispatch_inputs.py clean-install \
+            --release-tag "${{ inputs.release_tag }}" \
+            --artifact-run-id "${{ inputs.artifact_run_id }}"
+
       - name: Install clean-install runtime dependencies
         run: |
           set -euo pipefail

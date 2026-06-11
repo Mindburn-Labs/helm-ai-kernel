@@ -241,11 +241,11 @@ type ToolCallReceipt struct {
 }
 
 func (c *ToolCatalog) AuditToolCall(name string, params map[string]any, result any) (ToolCallReceipt, error) {
-	inputJSON, err := json.Marshal(params)
+	inputJSON, err := json.Marshal(redactAuditValue(params))
 	if err != nil {
 		return ToolCallReceipt{}, fmt.Errorf("failed to marshal tool call inputs: %w", err)
 	}
-	outputJSON, err := json.Marshal(result)
+	outputJSON, err := json.Marshal(redactAuditValue(result))
 	if err != nil {
 		return ToolCallReceipt{}, fmt.Errorf("failed to marshal tool call outputs: %w", err)
 	}
@@ -257,4 +257,141 @@ func (c *ToolCatalog) AuditToolCall(name string, params map[string]any, result a
 		Outputs:   string(outputJSON),
 		Timestamp: time.Now(),
 	}, nil
+}
+
+func redactAuditValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		redacted := make(map[string]any, len(typed))
+		for key, nested := range typed {
+			if isSensitiveAuditKey(key) {
+				redacted[key] = "[REDACTED]"
+				continue
+			}
+			redacted[key] = redactAuditValue(nested)
+		}
+		return redacted
+	case map[string]string:
+		redacted := make(map[string]string, len(typed))
+		for key, nested := range typed {
+			if isSensitiveAuditKey(key) || looksSensitiveAuditString(nested) {
+				redacted[key] = "[REDACTED]"
+				continue
+			}
+			redacted[key] = nested
+		}
+		return redacted
+	case []string:
+		redacted := make([]string, len(typed))
+		for i, nested := range typed {
+			if looksSensitiveAuditString(nested) {
+				redacted[i] = "[REDACTED]"
+				continue
+			}
+			redacted[i] = nested
+		}
+		return redacted
+	case []any:
+		redacted := make([]any, len(typed))
+		for i, nested := range typed {
+			redacted[i] = redactAuditValue(nested)
+		}
+		return redacted
+	case []map[string]any:
+		redacted := make([]map[string]any, len(typed))
+		for i, nested := range typed {
+			redacted[i], _ = redactAuditValue(nested).(map[string]any)
+		}
+		return redacted
+	case string:
+		if looksSensitiveAuditString(typed) {
+			return "[REDACTED]"
+		}
+		return typed
+	default:
+		return value
+	}
+}
+
+func isSensitiveAuditKey(key string) bool {
+	normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(key), "-", "_"), " ", "_"))
+	for _, marker := range []string{
+		"secret",
+		"token",
+		"password",
+		"passwd",
+		"authorization",
+		"cookie",
+		"credential",
+		"content",
+		"body",
+		"text",
+		"raw",
+		"data",
+		"api_key",
+		"apikey",
+		"private_key",
+		"input",
+		"output",
+		"result",
+		"seed",
+		"session",
+	} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksSensitiveAuditString(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return false
+	}
+	lower := strings.ToLower(trimmed)
+	for _, marker := range []string{
+		"authorization: bearer ",
+		"bearer ",
+		"sk-live",
+		"sk_live",
+		"sk-test",
+		"sk_test",
+		"github_pat_",
+		"ghp_",
+		"xoxb-",
+		"xoxp-",
+		"aws_secret_access_key",
+		"-----begin private key-----",
+		"-----begin rsa private key-----",
+		"-----begin openssh private key-----",
+	} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	for _, field := range strings.Fields(trimmed) {
+		if looksLikeJWT(strings.Trim(field, "\"'`,;()[]{}")) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeJWT(value string) bool {
+	parts := strings.Split(value, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, part := range parts {
+		if len(part) < 8 {
+			return false
+		}
+		for _, r := range part {
+			if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != '_' {
+				return false
+			}
+		}
+	}
+	return true
 }

@@ -59,7 +59,7 @@ func TestExportSpans_ProducesDatadogLogs(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	exp, err := New(Config{URL: ts.URL, APIKey: "key-1", Env: "staging"})
+	exp, err := New(Config{URL: ts.URL, APIKey: "key-1", Env: "staging", AllowInsecureHTTP: true})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -112,6 +112,9 @@ func TestNew_RequiredFields(t *testing.T) {
 	if _, err := New(Config{APIKey: "x"}); err == nil {
 		t.Fatal("expected Site or URL required")
 	}
+	if _, err := New(Config{URL: "http://collector.example/api/v2/logs", APIKey: "x"}); err == nil {
+		t.Fatal("expected non-TLS Datadog URL with API key to fail")
+	}
 }
 
 func TestExportSpans_PropagatesNon2xx(t *testing.T) {
@@ -119,7 +122,7 @@ func TestExportSpans_PropagatesNon2xx(t *testing.T) {
 		http.Error(w, "rate-limited", http.StatusTooManyRequests)
 	}))
 	defer ts.Close()
-	exp, _ := New(Config{URL: ts.URL, APIKey: "k"})
+	exp, _ := New(Config{URL: ts.URL, APIKey: "k", AllowInsecureHTTP: true})
 	err := exp.ExportSpans(context.Background(), []sdktrace.ReadOnlySpan{sampleSpan(t, "ALLOW")})
 	if err == nil || !strings.Contains(err.Error(), "status 429") {
 		t.Fatalf("expected 429, got %v", err)

@@ -104,17 +104,20 @@ func TestSecretProxyFilter_InjectAndScrub(t *testing.T) {
 		t.Errorf("Unrelated header mutated: %q", injected["Content-Type"])
 	}
 
-	// 2. Verify FilterLogs (Log Scrubbing)
-	rawLog := "2026-05-21T12:00:00Z INFO Dispatching outbound request with Bearer x-api-key-sovereign-super-secure to api.openai.com"
+	// 2. Verify FilterLogs scrubs placeholders without retaining plaintext secrets in memory.
+	rawLog := "2026-05-21T12:00:00Z INFO Dispatching outbound request with Bearer HELM_SECRET{openai_api_key} to api.openai.com"
 	scrubbedLog := filter.FilterLogs(rawLog)
 
 	if strings.Contains(scrubbedLog, string(apiKeySecret)) {
 		t.Errorf("Scrubbed log still contains raw API key: %q", scrubbedLog)
 	}
 
-	expectedScrubbedLog := "2026-05-21T12:00:00Z INFO Dispatching outbound request with Bearer [REDACTED_HELM_SECRET{openai_api_key}] to api.openai.com"
+	expectedScrubbedLog := "2026-05-21T12:00:00Z INFO Dispatching outbound request with Bearer [REDACTED_HELM_SECRET{[REDACTED_SECRET_NAME]}] to api.openai.com"
 	if scrubbedLog != expectedScrubbedLog {
 		t.Errorf("Scrubbed log = %q, want %q", scrubbedLog, expectedScrubbedLog)
+	}
+	if len(filter.tokens) != 1 || len(filter.sealedStore) != 1 {
+		t.Fatalf("filter should keep only sealed handles and placeholders, got tokens=%d sealed=%d", len(filter.tokens), len(filter.sealedStore))
 	}
 }
 

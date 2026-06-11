@@ -19,7 +19,8 @@ import (
 // a single linear chain, supporting parallel tool calls and multi-agent DAGs.
 // A TopologyOrderRule recorded in 00_INDEX.json defines deterministic linearization.
 type G1ProofReceipts struct {
-	// Verifier checks a signature over data. If nil, uses basic hash check.
+	// Verifier checks a signature over data. It must be backed by a configured
+	// external trust root; missing verifier or signature fails closed.
 	Verifier func(data []byte, sig string) error
 }
 
@@ -250,11 +251,23 @@ func validateEnvelopeMeaningfulAction(result *conform.GateResult, env *ReceiptEn
 }
 
 func (g *G1ProofReceipts) validateEnvelopeSignature(result *conform.GateResult, env *ReceiptEnvelope) {
-	if g.Verifier == nil || env.Signature == "" {
+	if env.Signature == "" {
+		result.Pass = false
+		result.Reasons = append(result.Reasons, conform.ReasonSignatureInvalid)
+		return
+	}
+	if g.Verifier == nil {
+		result.Pass = false
+		result.Reasons = append(result.Reasons, conform.ReasonTrustRootsMissing)
 		return
 	}
 
-	canonical, _ := canonicalEnvelopeBytes(env)
+	canonical, err := canonicalEnvelopeBytes(env)
+	if err != nil {
+		result.Pass = false
+		result.Reasons = append(result.Reasons, conform.ReasonSignatureInvalid)
+		return
+	}
 	if err := g.Verifier(canonical, env.Signature); err != nil {
 		result.Pass = false
 		result.Reasons = append(result.Reasons, conform.ReasonSignatureInvalid)

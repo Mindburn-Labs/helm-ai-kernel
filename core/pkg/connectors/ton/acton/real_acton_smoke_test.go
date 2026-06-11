@@ -106,6 +106,7 @@ func TestRealActonSmokeTypedConnector(t *testing.T) {
 		IssuedAt:    time.Now().UTC(),
 		ExpiresAt:   time.Now().UTC().Add(time.Hour),
 	}
+	bindPermitToGrant(t, permit, grant)
 	connector := NewConnector(Config{
 		Runner:       Runner{Executor: realActonExecutor{actonBin: actonBin, homeDir: homeDir}, SandboxID: "real-acton-smoke"},
 		SandboxGrant: grant,

@@ -344,10 +344,11 @@ func (l *AdversarialLab) RunSuite(suiteID string) (*TestRun, error) {
 	for _, test := range suite.Tests {
 		if test.Runner == nil {
 			run.Results[test.TestID] = TestResult{
-				Passed:  true,
-				Message: "No runner (skipped)",
+				Passed:   false,
+				Message:  "No runner (non-certifying)",
+				Evidence: "non_certifying:no_runner",
 			}
-			run.PassCount++
+			run.FailCount++
 			continue
 		}
 

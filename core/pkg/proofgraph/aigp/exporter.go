@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
@@ -17,8 +18,8 @@ type ExporterConfig struct {
 	// ProofGraphVersion is the HELM standard version (e.g., "v1.2").
 	ProofGraphVersion string
 
-	// DefaultFourTests sets default 4TS compliance for exported PCDs.
-	// HELM's architecture inherently satisfies all four tests.
+	// DefaultFourTests is retained for API compatibility only. AIGP 4TS
+	// compliance is derived from each node's explicit evidence at export time.
 	DefaultFourTests FourTestsCompliance
 }
 
@@ -36,20 +37,6 @@ func NewExporter(cfg ExporterConfig) *Exporter {
 		cfg.Source = "helm"
 	}
 
-	// HELM's architecture inherently satisfies all four AIGP tests:
-	// - Stoppable: fail-closed PEP boundary, kill switch via guardian
-	// - Owned: every node has a Principal field
-	// - Replayable: deterministic ProofGraph with full hash chain
-	// - Escalatable: escalation package with human-in-the-loop
-	if !cfg.DefaultFourTests.Stoppable {
-		cfg.DefaultFourTests = FourTestsCompliance{
-			Stoppable:   true,
-			Owned:       true,
-			Replayable:  true,
-			Escalatable: true,
-		}
-	}
-
 	return &Exporter{cfg: cfg}
 }
 
@@ -59,20 +46,7 @@ func (e *Exporter) ExportNode(node *proofgraph.Node) (*ProofCarryingDecision, er
 		return nil, fmt.Errorf("aigp: nil node")
 	}
 
-	// Parse the node payload for action metadata.
-	var payloadMeta map[string]string
-	if len(node.Payload) > 0 {
-		// Try to extract key fields from the payload.
-		var raw map[string]interface{}
-		if err := json.Unmarshal(node.Payload, &raw); err == nil {
-			payloadMeta = make(map[string]string)
-			for k, v := range raw {
-				if s, ok := v.(string); ok {
-					payloadMeta[k] = s
-				}
-			}
-		}
-	}
+	payloadMeta := extractPayloadMeta(node.Payload)
 
 	// Determine the decision from the payload.
 	decision := "RECORDED"
@@ -84,8 +58,7 @@ func (e *Exporter) ExportNode(node *proofgraph.Node) (*ProofCarryingDecision, er
 	tool := payloadMeta["tool"]
 	policyRef := payloadMeta["policy"]
 
-	fourTests := e.cfg.DefaultFourTests
-	fourTests.OwnerPrincipal = node.Principal
+	fourTests := deriveFourTests(node, payloadMeta)
 
 	pcd := &ProofCarryingDecision{
 		Version:   PCDVersion,
@@ -173,27 +146,7 @@ func (e *Exporter) ExportBundle(ctx context.Context, store proofgraph.Store, fro
 		return nil, err
 	}
 
-	// Compute aggregate 4TS compliance.
-	summary := FourTestsCompliance{
-		Stoppable:   true,
-		Owned:       true,
-		Replayable:  true,
-		Escalatable: true,
-	}
-	for _, pcd := range pcds {
-		if !pcd.FourTests.Stoppable {
-			summary.Stoppable = false
-		}
-		if !pcd.FourTests.Owned {
-			summary.Owned = false
-		}
-		if !pcd.FourTests.Replayable {
-			summary.Replayable = false
-		}
-		if !pcd.FourTests.Escalatable {
-			summary.Escalatable = false
-		}
-	}
+	summary := summarizeFourTests(pcds)
 
 	return &PCDBundle{
 		Version:          PCDVersion,
@@ -205,4 +158,124 @@ func (e *Exporter) ExportBundle(ctx context.Context, store proofgraph.Store, fro
 		Count:            len(pcds),
 		FourTestsSummary: summary,
 	}, nil
+}
+
+func extractPayloadMeta(payload json.RawMessage) map[string]string {
+	meta := map[string]string{}
+	if len(payload) == 0 {
+		return meta
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		return meta
+	}
+	for k, v := range raw {
+		switch value := v.(type) {
+		case string:
+			meta[k] = strings.TrimSpace(value)
+		case bool:
+			meta[k] = fmt.Sprintf("%t", value)
+		case float64:
+			meta[k] = fmt.Sprintf("%g", value)
+		}
+	}
+	return meta
+}
+
+func deriveFourTests(node *proofgraph.Node, payloadMeta map[string]string) FourTestsCompliance {
+	return FourTestsCompliance{
+		Stoppable:      hasAnyMeta(payloadMeta, "stop_ref", "kill_switch_ref", "guardian_stop_ref", "stoppable_ref") || truthyMeta(payloadMeta, "stoppable"),
+		Owned:          strings.TrimSpace(node.Principal) != "",
+		Replayable:     hasReplayEvidence(node, payloadMeta),
+		Escalatable:    hasAnyMeta(payloadMeta, "escalation_ref", "human_approval_ref", "approval_ref", "escalation_policy", "escalation_queue") || truthyMeta(payloadMeta, "escalatable"),
+		OwnerPrincipal: node.Principal,
+	}
+}
+
+func hasReplayEvidence(node *proofgraph.Node, payloadMeta map[string]string) bool {
+	if node == nil || node.Lamport == 0 || strings.TrimSpace(node.Sig) == "" || node.SigPurpose == "" {
+		return false
+	}
+	if err := node.Validate(); err != nil {
+		return false
+	}
+	if len(node.Parents) > 0 {
+		return allValidSHA256(node.Parents)
+	}
+	if validAIGPSHA256(payloadMeta["replay_hash"]) {
+		return true
+	}
+	return hasAnyMeta(payloadMeta, "replay_ref", "replay_script_ref", "tape_ref", "parent_chain_ref")
+}
+
+func summarizeFourTests(pcds []*ProofCarryingDecision) FourTestsCompliance {
+	if len(pcds) == 0 {
+		return FourTestsCompliance{}
+	}
+
+	summary := FourTestsCompliance{
+		Stoppable:   true,
+		Owned:       true,
+		Replayable:  true,
+		Escalatable: true,
+	}
+	for _, pcd := range pcds {
+		if pcd == nil {
+			summary.Stoppable = false
+			summary.Owned = false
+			summary.Replayable = false
+			summary.Escalatable = false
+			continue
+		}
+		summary.Stoppable = summary.Stoppable && pcd.FourTests.Stoppable
+		summary.Owned = summary.Owned && pcd.FourTests.Owned
+		summary.Replayable = summary.Replayable && pcd.FourTests.Replayable
+		summary.Escalatable = summary.Escalatable && pcd.FourTests.Escalatable
+	}
+	return summary
+}
+
+func hasAnyMeta(meta map[string]string, keys ...string) bool {
+	for _, key := range keys {
+		if strings.TrimSpace(meta[key]) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func truthyMeta(meta map[string]string, key string) bool {
+	switch strings.ToLower(strings.TrimSpace(meta[key])) {
+	case "true", "1", "yes", "y":
+		return true
+	default:
+		return false
+	}
+}
+
+func allValidSHA256(values []string) bool {
+	if len(values) == 0 {
+		return false
+	}
+	for _, value := range values {
+		if !validAIGPSHA256(value) {
+			return false
+		}
+	}
+	return true
+}
+
+func validAIGPSHA256(value string) bool {
+	trimmed := strings.TrimSpace(strings.ToLower(value))
+	trimmed = strings.TrimPrefix(trimmed, "sha256:")
+	if len(trimmed) != 64 {
+		return false
+	}
+	for _, r := range trimmed {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }

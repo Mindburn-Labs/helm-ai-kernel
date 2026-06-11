@@ -92,7 +92,7 @@ func (e *PolicyEnforcer) CheckFS(path string, write bool) CheckResult {
 
 	// Denylist checked first (fail-closed)
 	for _, deny := range e.policy.FSDenylist {
-		if strings.HasPrefix(cleanPath, deny) {
+		if pathWithin(cleanPath, deny) {
 			v := PolicyViolation{
 				ViolationType: "FS_DENY",
 				Detail:        fmt.Sprintf("path %s matches denylist entry %s", cleanPath, deny),
@@ -119,7 +119,7 @@ func (e *PolicyEnforcer) CheckFS(path string, write bool) CheckResult {
 	// Allowlist check
 	allowed := false
 	for _, allow := range e.policy.FSAllowlist {
-		if strings.HasPrefix(cleanPath, allow) {
+		if pathWithin(cleanPath, allow) {
 			allowed = true
 			break
 		}
@@ -137,6 +137,18 @@ func (e *PolicyEnforcer) CheckFS(path string, write bool) CheckResult {
 	}
 
 	return CheckResult{Allowed: true, Reason: "within filesystem allowlist"}
+}
+
+func pathWithin(path, root string) bool {
+	cleanRoot := filepath.Clean(root)
+	if cleanRoot == "." || cleanRoot == "" {
+		return false
+	}
+	rel, err := filepath.Rel(cleanRoot, path)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 // CheckNetwork verifies a network host against the policy.

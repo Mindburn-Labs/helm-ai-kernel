@@ -131,8 +131,9 @@ func (g *BudgetGate) ProcessPayment(ctx context.Context, req *PaymentRequest) (*
 		Method:          req.Method,
 		SequenceNum:     ch.NextSequence(),
 		RequestHash:     req.Hash(),
-		IssuedAt:        time.Now(),
+		IssuedAt:        time.Now().UTC(),
 		BudgetReceiptID: budgetReceiptID,
+		Metadata:        cloneStringMap(req.Metadata),
 	}
 
 	// 5. Sign receipt
@@ -151,6 +152,7 @@ func (g *BudgetGate) ProcessPayment(ctx context.Context, req *PaymentRequest) (*
 
 	// 7. Store in verifier (outside verifier lock scope since we hold our own lock)
 	g.verifier.mu.Lock()
+	g.verifier.requests[req.RequestID] = clonePaymentRequest(req)
 	g.verifier.receipts[receipt.ReceiptID] = receipt
 
 	// Update channel state

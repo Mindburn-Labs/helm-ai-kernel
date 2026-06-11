@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
@@ -19,6 +20,9 @@ func compileServePolicySnapshot(ctx context.Context, head policyreconcile.Policy
 	runtimePolicy, err := loadServePolicyRuntimeFromBytes(head.BundleRef, bundle)
 	if err != nil {
 		return nil, err
+	}
+	if runtimePolicy.ReferencePackHash != "" && !sourceRefsContainDigest(head.SourceRefs, runtimePolicy.ReferencePackHash) {
+		return nil, fmt.Errorf("policy source refs missing reference_pack digest %s", runtimePolicy.ReferencePackHash)
 	}
 	scope := head.Scope.Normalize()
 
@@ -38,4 +42,13 @@ func compileServePolicySnapshot(ctx context.Context, head policyreconcile.Policy
 		Graph:           runtimePolicy.Graph,
 		PDP:             pdp.NewTelemetryPDP(innerPDP, shadowMode),
 	}, nil
+}
+
+func sourceRefsContainDigest(sourceRefs []string, digest string) bool {
+	for _, ref := range sourceRefs {
+		if strings.Contains(ref, "@"+digest) {
+			return true
+		}
+	}
+	return false
 }

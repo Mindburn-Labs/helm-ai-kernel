@@ -86,13 +86,19 @@ type PaymentRequest struct {
 // Hash returns a deterministic SHA-256 hash of the payment request.
 func (pr *PaymentRequest) Hash() string {
 	hashable := struct {
-		RequestID      string `json:"request_id"`
-		FromAgentID    string `json:"from_agent_id"`
-		ToAgentID      string `json:"to_agent_id"`
-		ChannelID      string `json:"channel_id"`
-		AmountCents    int64  `json:"amount_cents"`
-		Currency       string `json:"currency"`
-		IdempotencyKey string `json:"idempotency_key"`
+		RequestID      string            `json:"request_id"`
+		FromAgentID    string            `json:"from_agent_id"`
+		ToAgentID      string            `json:"to_agent_id"`
+		ChannelID      string            `json:"channel_id"`
+		AmountCents    int64             `json:"amount_cents"`
+		Currency       string            `json:"currency"`
+		Description    string            `json:"description"`
+		Method         PaymentMethod     `json:"method"`
+		IdempotencyKey string            `json:"idempotency_key"`
+		EnvelopeID     string            `json:"envelope_id"`
+		CreatedAt      time.Time         `json:"created_at"`
+		ExpiresAt      time.Time         `json:"expires_at"`
+		Metadata       map[string]string `json:"metadata,omitempty"`
 	}{
 		RequestID:      pr.RequestID,
 		FromAgentID:    pr.FromAgentID,
@@ -100,7 +106,13 @@ func (pr *PaymentRequest) Hash() string {
 		ChannelID:      pr.ChannelID,
 		AmountCents:    pr.AmountCents,
 		Currency:       pr.Currency,
+		Description:    pr.Description,
+		Method:         pr.Method,
 		IdempotencyKey: pr.IdempotencyKey,
+		EnvelopeID:     pr.EnvelopeID,
+		CreatedAt:      pr.CreatedAt.UTC(),
+		ExpiresAt:      pr.ExpiresAt.UTC(),
+		Metadata:       cloneStringMap(pr.Metadata),
 	}
 	data, _ := json.Marshal(hashable)
 	h := sha256.Sum256(data)
@@ -131,27 +143,39 @@ type PaymentReceipt struct {
 // SignableContent returns the canonical bytes to sign for this receipt.
 func (r *PaymentReceipt) SignableContent() []byte {
 	signable := struct {
-		ReceiptID   string `json:"receipt_id"`
-		RequestID   string `json:"request_id"`
-		ChannelID   string `json:"channel_id"`
-		FromAgentID string `json:"from_agent_id"`
-		ToAgentID   string `json:"to_agent_id"`
-		AmountCents int64  `json:"amount_cents"`
-		Currency    string `json:"currency"`
-		Status      string `json:"status"`
-		SequenceNum int64  `json:"sequence_num"`
-		RequestHash string `json:"request_hash"`
+		ReceiptID       string            `json:"receipt_id"`
+		RequestID       string            `json:"request_id"`
+		ChannelID       string            `json:"channel_id"`
+		FromAgentID     string            `json:"from_agent_id"`
+		ToAgentID       string            `json:"to_agent_id"`
+		AmountCents     int64             `json:"amount_cents"`
+		Currency        string            `json:"currency"`
+		Status          string            `json:"status"`
+		Method          PaymentMethod     `json:"method"`
+		SequenceNum     int64             `json:"sequence_num"`
+		RequestHash     string            `json:"request_hash"`
+		SignatureKID    string            `json:"signature_kid"`
+		SignatureAlg    string            `json:"signature_alg"`
+		IssuedAt        time.Time         `json:"issued_at"`
+		BudgetReceiptID string            `json:"budget_receipt_id,omitempty"`
+		Metadata        map[string]string `json:"metadata,omitempty"`
 	}{
-		ReceiptID:   r.ReceiptID,
-		RequestID:   r.RequestID,
-		ChannelID:   r.ChannelID,
-		FromAgentID: r.FromAgentID,
-		ToAgentID:   r.ToAgentID,
-		AmountCents: r.AmountCents,
-		Currency:    r.Currency,
-		Status:      string(r.Status),
-		SequenceNum: r.SequenceNum,
-		RequestHash: r.RequestHash,
+		ReceiptID:       r.ReceiptID,
+		RequestID:       r.RequestID,
+		ChannelID:       r.ChannelID,
+		FromAgentID:     r.FromAgentID,
+		ToAgentID:       r.ToAgentID,
+		AmountCents:     r.AmountCents,
+		Currency:        r.Currency,
+		Status:          string(r.Status),
+		Method:          r.Method,
+		SequenceNum:     r.SequenceNum,
+		RequestHash:     r.RequestHash,
+		SignatureKID:    r.SignatureKID,
+		SignatureAlg:    r.SignatureAlg,
+		IssuedAt:        r.IssuedAt.UTC(),
+		BudgetReceiptID: r.BudgetReceiptID,
+		Metadata:        cloneStringMap(r.Metadata),
 	}
 	data, _ := json.Marshal(signable)
 	return data
@@ -234,4 +258,24 @@ func (ch *PaymentChannel) Summarize() *ChannelSummary {
 		TotalVolume: ch.TotalVolumeA + ch.TotalVolumeB,
 		IsOpen:      ch.IsOpen,
 	}
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func clonePaymentRequest(in *PaymentRequest) *PaymentRequest {
+	if in == nil {
+		return nil
+	}
+	cp := *in
+	cp.Metadata = cloneStringMap(in.Metadata)
+	return &cp
 }

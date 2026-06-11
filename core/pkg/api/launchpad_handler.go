@@ -21,6 +21,12 @@ type launchpadPlanRequest struct {
 }
 
 func (s *Server) handleLaunchpad(w http.ResponseWriter, r *http.Request) {
+	principal, ok := s.requireAuthenticated(w, r)
+	if !ok {
+		return
+	}
+	r = r.WithContext(WithAuthenticatedPrincipal(r.Context(), principal))
+
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/launchpad/")
 	catalog, err := registry.LoadCatalog("")
 	if err != nil {
@@ -136,6 +142,9 @@ func decodeLaunchpadPlanRequest(w http.ResponseWriter, r *http.Request) (launchp
 	}
 	if req.Principal == "" {
 		req.Principal = "console"
+	}
+	if principal, ok := AuthenticatedPrincipalFromContext(r.Context()); ok {
+		req.Principal = principal.ID
 	}
 	return req, true
 }

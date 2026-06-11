@@ -724,12 +724,16 @@ func TestSovereignKMSVaultAndProxyErrorCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := NewSecretProxyFilter(otherVault).RegisterSecret(context.Background(), "bad", sealed); err == nil || !strings.Contains(err.Error(), "registry caching") {
-		t.Fatalf("expected register secret unseal error, got %v", err)
+	otherFilter := NewSecretProxyFilter(otherVault)
+	if err := otherFilter.RegisterSecret(context.Background(), "bad", sealed); err != nil {
+		t.Fatalf("registering sealed handle should not unseal plaintext: %v", err)
 	}
-	filter.plainToToken[""] = "HELM_SECRET{empty}"
+	if _, err := otherFilter.InjectHeaders(context.Background(), map[string]string{"Authorization": "HELM_SECRET{bad}"}); err == nil || !strings.Contains(err.Error(), "proxy decryption failed") {
+		t.Fatalf("expected on-demand decrypt error, got %v", err)
+	}
+	filter.tokens[""] = "HELM_SECRET{empty}"
 	if got := filter.FilterLogs("nothing to scrub"); got != "nothing to scrub" {
-		t.Fatalf("empty secret scrub changed log: %q", got)
+		t.Fatalf("empty placeholder scrub changed log: %q", got)
 	}
 }
 

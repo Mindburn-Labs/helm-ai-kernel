@@ -147,6 +147,44 @@ func TestAttestationVerifyRejectsTampered(t *testing.T) {
 	}
 }
 
+func TestAttestationVerifyRejectsMissingSignatures(t *testing.T) {
+	att := &ModuleAttestation{AttestationID: "att-unsigned"}
+	if err := att.Verify(map[string]ed25519.PublicKey{}); err == nil {
+		t.Fatal("expected verification failure for unsigned attestation")
+	}
+}
+
+func TestAttestationVerifyRejectsSignerMetadataTamper(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	c := NewCertifier("signer-1", "builder", priv)
+	att, _ := c.CreateAttestation(
+		ModuleIdentity{ModuleID: "m", ArtifactHash: "a", ManifestHash: "b"},
+		BuildProvenance{BuilderID: "ci"},
+		CertificationResults{},
+	)
+	c.Sign(att)
+	att.Signatures[0].SignerRole = "release-manager"
+	if err := att.Verify(map[string]ed25519.PublicKey{"signer-1": pub}); err == nil {
+		t.Fatal("expected verification failure after signer role tamper")
+	}
+}
+
+func TestAttestationVerifyRejectsValidityTamper(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	c := NewCertifier("signer-1", "builder", priv)
+	att, _ := c.CreateAttestation(
+		ModuleIdentity{ModuleID: "m", ArtifactHash: "a", ManifestHash: "b"},
+		BuildProvenance{BuilderID: "ci"},
+		CertificationResults{},
+	)
+	att.Validity.NotAfter = time.Now().Add(time.Hour)
+	c.Sign(att)
+	att.Validity.NotAfter = time.Now().Add(2 * time.Hour)
+	if err := att.Verify(map[string]ed25519.PublicKey{"signer-1": pub}); err == nil {
+		t.Fatal("expected verification failure after validity tamper")
+	}
+}
+
 func TestAttestationVerifyUnknownSigner(t *testing.T) {
 	_, priv, _ := ed25519.GenerateKey(rand.Reader)
 	c := NewCertifier("signer-1", "admin", priv)

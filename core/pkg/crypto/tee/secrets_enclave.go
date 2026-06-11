@@ -119,18 +119,18 @@ func (v *SovereignKMSVault) UnsealSecret(ctx context.Context, sealed *SealedSecr
 // SecretProxyFilter manages inline secret injection for outbound request headers,
 // ensuring plaintext keys remain isolated in enclave memory space and never hit host logs.
 type SecretProxyFilter struct {
-	mu           sync.RWMutex
-	vault        *SovereignKMSVault
-	sealedStore  map[string]*SealedSecret
-	plainToToken map[string]string // Reverse mapping to scrub plain values from logs
+	mu          sync.RWMutex
+	vault       *SovereignKMSVault
+	sealedStore map[string]*SealedSecret
+	tokens      map[string]string
 }
 
 // NewSecretProxyFilter initializes a proxy filter backed by the TEE KMS vault.
 func NewSecretProxyFilter(vault *SovereignKMSVault) *SecretProxyFilter {
 	return &SecretProxyFilter{
-		vault:        vault,
-		sealedStore:  make(map[string]*SealedSecret),
-		plainToToken: make(map[string]string),
+		vault:       vault,
+		sealedStore: make(map[string]*SealedSecret),
+		tokens:      make(map[string]string),
 	}
 }
 
@@ -140,14 +140,7 @@ func (f *SecretProxyFilter) RegisterSecret(ctx context.Context, name string, sea
 	defer f.mu.Unlock()
 
 	f.sealedStore[name] = sealed
-
-	// Pre-cache plain text in memory to construct scrubbing map for log filtering
-	plain, err := f.vault.UnsealSecret(ctx, sealed)
-	if err != nil {
-		return fmt.Errorf("tee/enclave: failed to unseal secret for registry caching: %w", err)
-	}
-
-	f.plainToToken[string(plain)] = fmt.Sprintf("HELM_SECRET{%s}", name)
+	f.tokens[name] = fmt.Sprintf("HELM_SECRET{%s}", name)
 	return nil
 }
 
@@ -182,11 +175,12 @@ func (f *SecretProxyFilter) FilterLogs(logOutput string) string {
 	defer f.mu.RUnlock()
 
 	scrubbed := logOutput
-	for plain, placeholder := range f.plainToToken {
-		if plain == "" {
-			continue
+	for name, placeholder := range f.tokens {
+		redacted := fmt.Sprintf("[REDACTED_%s]", placeholder)
+		scrubbed = strings.ReplaceAll(scrubbed, placeholder, redacted)
+		if name != "" {
+			scrubbed = strings.ReplaceAll(scrubbed, name, "[REDACTED_SECRET_NAME]")
 		}
-		scrubbed = strings.ReplaceAll(scrubbed, plain, fmt.Sprintf("[REDACTED_%s]", placeholder))
 	}
 	return scrubbed
 }

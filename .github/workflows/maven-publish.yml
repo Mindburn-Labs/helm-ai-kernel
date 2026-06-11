@@ -26,6 +26,10 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+      - name: Validate dispatch inputs
+        run: |
+          python3 scripts/ci/validate_workflow_dispatch_inputs.py publish \
+            --version "${{ inputs.version }}"
       - name: Version checks
         working-directory: sdk/java
         run: |
@@ -95,6 +99,7 @@ jobs:
             if GNUPGHOME="$verify_home" timeout 60s gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys "$fingerprint"; then
               exit 0
             fi
+            echo "::warning::Maven public key verification attempt $attempt failed"
             sleep 10
           done
           exit 1

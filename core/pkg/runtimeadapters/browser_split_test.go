@@ -107,6 +107,36 @@ func TestBrowserSplitAdapterRequiresPlannerRefForSideEffects(t *testing.T) {
 	}
 }
 
+func TestBrowserSplitAdapterClassifiesKnownSideEffectsDespiteCallerDowngrade(t *testing.T) {
+	graph := proofgraph.NewGraph()
+	adapter, err := NewBrowserSplitAdapter(BrowserSplitConfig{Graph: graph})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := adapter.InterceptBrowserAction(context.Background(), &BrowserSplitRequest{
+		PrincipalID: "browser-agent",
+		Observation: BrowserSplitObservation{
+			URL:          "https://example.com",
+			SentinelRisk: 95,
+		},
+		Plan: BrowserSplitPlan{
+			ToolName:   "browser.click",
+			PlannerRef: "sha256:planner",
+			SideEffect: false,
+		},
+	})
+	if err != nil {
+		t.Fatalf("intercept failed: %v", err)
+	}
+	if resp.Allowed {
+		t.Fatal("expected classified browser.click side effect to be denied")
+	}
+	if resp.DenyReason == nil || resp.DenyReason.Code != ReasonCognitiveFirewallSentinelDeny {
+		t.Fatalf("expected sentinel deny, got %+v", resp.DenyReason)
+	}
+}
+
 func TestBrowserSplitAdapterDeniesBlockedDomain(t *testing.T) {
 	graph := proofgraph.NewGraph()
 	adapter, err := NewBrowserSplitAdapter(BrowserSplitConfig{
@@ -164,6 +194,34 @@ func TestBrowserSplitAdapterInterceptMetadata(t *testing.T) {
 	}
 	if resp.Allowed {
 		t.Fatal("expected metadata-driven high-risk side effect to be denied")
+	}
+}
+
+func TestBrowserSplitAdapterInterceptMetadataCannotOmitSideEffectForSubmit(t *testing.T) {
+	graph := proofgraph.NewGraph()
+	adapter, err := NewBrowserSplitAdapter(BrowserSplitConfig{Graph: graph})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := adapter.Intercept(context.Background(), &AdaptedRequest{
+		RuntimeType: BrowserSplitRuntimeType,
+		ToolName:    "browser.submit",
+		PrincipalID: "browser-agent",
+		Arguments:   map[string]any{"url": "https://example.com/checkout"},
+		Metadata: map[string]string{
+			"browser.sentinel_risk": "80",
+			"browser.planner_ref":   "sha256:planner",
+		},
+	})
+	if err != nil {
+		t.Fatalf("intercept failed: %v", err)
+	}
+	if resp.Allowed {
+		t.Fatal("expected browser.submit without side_effect metadata to be denied")
+	}
+	if resp.DenyReason == nil || resp.DenyReason.Code != ReasonCognitiveFirewallSentinelDeny {
+		t.Fatalf("expected sentinel deny, got %+v", resp.DenyReason)
 	}
 }
 

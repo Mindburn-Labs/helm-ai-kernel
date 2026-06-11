@@ -33,7 +33,7 @@ func TestVerifyBundle_VerifiesHostEvidenceWhenPresent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	report, err := VerifyBundle(dir)
+	report, err := VerifyBundleWithOptions(dir, VerifyOptions{ExternalHostKeyHex: hex.EncodeToString(pub)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,6 +48,43 @@ func TestVerifyBundle_VerifiesHostEvidenceWhenPresent(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("host evidence signature check missing from report: %+v", report.Checks)
+	}
+}
+
+func TestVerifyBundle_RejectsSelfSuppliedHostEvidenceKey(t *testing.T) {
+	dir := createValidCanonicalBundleFixture(t)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := verifierTestChain(t, priv, hex.EncodeToString(pub))
+	data, err := json.MarshalIndent(chain, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostDir := filepath.Join(dir, "11_HOST_EVIDENCE", "test")
+	if err := os.MkdirAll(hostDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hostDir, "chain.json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := VerifyBundle(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified {
+		t.Fatalf("self-supplied host evidence key should fail: %+v", report.Checks)
+	}
+	found := false
+	for _, check := range report.Checks {
+		if check.Name == "11_HOST_EVIDENCE/test/chain.json:external_host:public_key" && !check.Pass {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("missing failed public key check: %+v", report.Checks)
 	}
 }
 

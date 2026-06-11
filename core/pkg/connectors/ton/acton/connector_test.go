@@ -250,6 +250,7 @@ func executeReceipt(t *testing.T, connector *Connector, action ActionURN, params
 		IssuedAt:    time.Now(),
 		ExpiresAt:   time.Now().Add(time.Hour),
 	}
+	bindPermitToGrant(t, permit, connector.defaultGrant)
 	out, err := connector.Execute(context.Background(), permit, string(action), params)
 	if err != nil {
 		t.Fatal(err)
@@ -259,6 +260,21 @@ func executeReceipt(t *testing.T, connector *Connector, action ActionURN, params
 		t.Fatalf("expected ActonReceipt, got %T", out)
 	}
 	return receipt
+}
+
+func bindPermitToGrant(t *testing.T, permit *effects.EffectPermit, grant *contracts.SandboxGrant) {
+	t.Helper()
+	if grant == nil {
+		t.Fatal("test grant is required")
+	}
+	sealed, err := grant.Seal()
+	if err != nil {
+		t.Fatalf("seal grant: %v", err)
+	}
+	if permit.EvidenceBindings == nil {
+		permit.EvidenceBindings = map[string]string{}
+	}
+	permit.EvidenceBindings["sandbox_grant_hash"] = sealed.GrantHash
 }
 
 func sealedGrant(t *testing.T, network bool, writable bool) *contracts.SandboxGrant {

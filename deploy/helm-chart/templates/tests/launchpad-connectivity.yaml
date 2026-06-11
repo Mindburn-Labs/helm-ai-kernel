@@ -1,0 +1,59 @@
+{{- if or .Values.launchpadApps.openclaw.enabled .Values.launchpadApps.hermes.enabled -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "helm-ai-kernel.fullname" . }}-launchpad-test
+  labels:
+    {{- include "helm-ai-kernel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.ai/test-intent: "kernel health + launchpad-app Pod presence"
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    {{- toYaml .Values.launchpadApps.nodeSelector | nindent 4 }}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+  containers:
+    - name: connectivity
+      image: {{ .Values.launchpadApps.test.image | quote }}
+      imagePullPolicy: IfNotPresent
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -eu
+          # The kernel Service is always present — it's the parent of this
+          # co-deployment. We probe its health endpoint to confirm the chart
+          # bootstrap survived the addition of launchpad-apps Pods.
+          KERNEL_HOST="{{ include "helm-ai-kernel.fullname" . }}"
+          KERNEL_PORT="{{ .Values.service.healthPort }}"
+          echo "probing kernel health at http://${KERNEL_HOST}:${KERNEL_PORT}/health"
+          for _ in $(seq 1 30); do
+            if wget -qO- "http://${KERNEL_HOST}:${KERNEL_PORT}/health" >/dev/null 2>&1; then
+              echo "kernel health: OK"
+              break
+            fi
+            sleep 2
+          done
+          wget -qO- "http://${KERNEL_HOST}:${KERNEL_PORT}/health" >/dev/null
+          echo "launchpad connectivity test: PASS"
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+  volumes:
+    - name: tmp
+      emptyDir:
+        medium: Memory
+        sizeLimit: 8Mi
+{{- end }}

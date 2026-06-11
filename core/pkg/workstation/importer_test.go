@@ -398,9 +398,10 @@ func TestWorkstationSchemas(t *testing.T) {
 	root := repoRoot(t)
 	receiptSchema := compileSchema(t, filepath.Join(root, "protocols", "json-schemas", "workstation", "agent_run_receipt.v1.schema.json"))
 	decisionSchema := compileSchema(t, filepath.Join(root, "protocols", "json-schemas", "workstation", "workstation_policy_decision_receipt.v1.schema.json"))
+	scopeAuditSchema := compileSchema(t, filepath.Join(root, "protocols", "json-schemas", "workstation", "scope_audit_report.v1.schema.json"))
 	profileSchema := compileSchema(t, filepath.Join(root, "protocols", "json-schemas", "policy", "workstation_policy_profile.v1.schema.json"))
 
-	for _, fixture := range []string{"allowed-observe", "denied-memory", "denied-recurring-loop"} {
+	for _, fixture := range []string{"allowed-observe", "denied-memory", "denied-recurring-loop", "scope-audit-all-boundaries"} {
 		result, err := ImportArtifactDir(filepath.Join(root, "fixtures", "workstation", fixture), ImportOptions{})
 		if err != nil {
 			t.Fatalf("import %s: %v", fixture, err)
@@ -425,6 +426,19 @@ func TestWorkstationSchemas(t *testing.T) {
 		t.Fatalf("decision receipt: %v", err)
 	}
 	validateSchemaValue(t, decisionSchema, decision)
+
+	scopeAuditImport, err := ImportArtifactDir(filepath.Join(root, "fixtures", "workstation", "scope-audit-all-boundaries"), ImportOptions{})
+	if err != nil {
+		t.Fatalf("scope audit fixture import: %v", err)
+	}
+	scopeAuditDir := t.TempDir()
+	scopeAuditReceipt := filepath.Join(scopeAuditDir, "scope-audit-all-boundaries.json")
+	writeJSONFixture(t, scopeAuditReceipt, scopeAuditImport.Receipt)
+	scopeAuditReport, err := BuildScopeAudit(scopeAuditReceipt)
+	if err != nil {
+		t.Fatalf("scope audit report: %v", err)
+	}
+	validateSchemaValue(t, scopeAuditSchema, scopeAuditReport)
 
 	invalidLoopReceipt := map[string]any{
 		"receipt_version":        contracts.AgentRunReceiptVersion,

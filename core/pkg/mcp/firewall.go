@@ -16,6 +16,28 @@ type ExecutionFirewall struct {
 	PolicyEpoch         string
 	RequirePinnedSchema bool
 	Clock               func() time.Time
+
+	// Observe, when non-nil and unexpired, switches the firewall into the
+	// shadow on-ramp: verdicts are computed and sealed exactly as in enforce
+	// mode, but every record is labeled with EnforcementMode "shadow" and the
+	// grant ID, and ShouldDispatch permits dispatch for onboarding visibility.
+	// It is an explicit, time-boxed grant — never a default. Expiry restores
+	// fail-closed enforcement automatically.
+	Observe *ObserveGrant
+}
+
+// ObserveGrant is the explicit grant that enables shadow (observe-only)
+// disposition at the MCP boundary.
+type ObserveGrant struct {
+	GrantID   string
+	Reason    string
+	ExpiresAt time.Time
+}
+
+// Active reports whether the grant is usable at the given time. A grant with
+// no ID or no expiry is never active — shadow mode cannot be open-ended.
+func (g *ObserveGrant) Active(now time.Time) bool {
+	return g != nil && g.GrantID != "" && !g.ExpiresAt.IsZero() && now.Before(g.ExpiresAt)
 }
 
 type ToolCallAuthorization struct {
@@ -75,6 +97,10 @@ func (f *ExecutionFirewall) AuthorizeToolCall(ctx context.Context, req ToolCallA
 		ReceiptID:     req.ReceiptID,
 		CreatedAt:     f.now().UTC(),
 	}
+	if f.Observe.Active(f.now()) {
+		record.EnforcementMode = contracts.EnforcementModeShadow
+		record.ObserveGrantID = f.Observe.GrantID
+	}
 
 	if err := f.Quarantine.RequireApproved(ctx, req.ServerID, f.now()); err != nil {
 		record.Verdict = contracts.VerdictDeny
@@ -114,6 +140,21 @@ func (f *ExecutionFirewall) AuthorizeToolCall(ctx context.Context, req ToolCallA
 
 	record.Verdict = contracts.VerdictAllow
 	return record.Seal()
+}
+
+// ShouldDispatch reports whether a sealed boundary record authorizes the
+// gateway to dispatch the tool call. Fail-closed: ALLOW always dispatches;
+// DENY and ESCALATE dispatch only when the record is explicitly labeled with
+// shadow enforcement mode (observe on-ramp). An unsealed or unlabeled
+// non-ALLOW record never dispatches.
+func ShouldDispatch(record contracts.ExecutionBoundaryRecord) bool {
+	if record.RecordHash == "" {
+		return false
+	}
+	if record.Verdict == contracts.VerdictAllow {
+		return true
+	}
+	return record.EnforcementMode == contracts.EnforcementModeShadow && record.ObserveGrantID != ""
 }
 
 func ToolSchemaHash(tool ToolRef) (string, error) {

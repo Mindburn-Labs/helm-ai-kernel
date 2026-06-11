@@ -15,6 +15,17 @@ The HELM Governance Protocol defines the wire format and semantics for AI govern
 
 This specification is language-agnostic and implementation-neutral.
 
+### 1.1 Vendor Neutrality and Implementation Independence
+
+This protocol and the companion wire-format specifications (receipt format, evidence pack, policy bundle, reason codes, artifact versioning, URN identifiers) are open specifications:
+
+- Independent implementations are permitted and encouraged. Conformance does not require HELM software, HELM services, or HELM branding.
+- Verification MUST be possible offline using only the published artifacts and cryptographic primitives (JCS RFC 8785, SHA-256, Ed25519). A verifier MUST NOT need to trust the producing implementation.
+- Compatibility is claimed through the conformance harness (`tests/conformance/`, golden vectors), not through brand affiliation. "Implements HELM Receipt Format v1.0" is a statement about wire behavior, verifiable by anyone.
+- The specifications are versioned under `protocols/` and licensed under this repository's Apache-2.0 license.
+
+The intent is that the receipt and evidence formats outlive any single vendor: proof is only proof when the verifier does not have to trust the prover.
+
 ## 2. Envelope Format
 
 ### 2.1 Autonomy Envelope

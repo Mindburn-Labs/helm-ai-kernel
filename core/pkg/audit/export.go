@@ -117,7 +117,7 @@ func (e *Exporter) GeneratePack(ctx context.Context, req ExportRequest) ([]byte,
 	if err != nil {
 		return nil, "", err
 	}
-	_, _ = fmt.Fprintf(f, "Evidence Pack for Tenant %s\nGenerated at %s\n", req.TenantID, time.Now())
+	_, _ = fmt.Fprintf(f, "EvidencePack for Tenant %s\nGenerated at %s\n", req.TenantID, time.Now())
 
 	if err := w.Close(); err != nil {
 		return nil, "", err

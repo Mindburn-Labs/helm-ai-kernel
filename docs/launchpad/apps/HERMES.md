@@ -1,11 +1,11 @@
 ---
-last_reviewed: "2026-05-28"
+last_reviewed: "2026-06-11"
 ---
 
 # Hermes on HELM
 
 ## What this proves
-Hermes runs through HELM’s fail-closed execution boundary.
+Hermes runs through HELM’s fail-closed execution boundary. The launch is driven by a registry-pinned app definition and a safe default-deny policy: HELM installs Hermes into a sandboxed local container, gates every tool call through the kernel verdict path, and emits a signed receipt for each lifecycle step, from install and healthcheck to teardown. The run ends with an exported EvidencePack that anyone can verify offline, so "it ran safely" is a checkable claim rather than an assertion.
 
 ```mermaid
 flowchart TD

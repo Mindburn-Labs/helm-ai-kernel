@@ -213,6 +213,15 @@ func (b *Builder) Build() (*Manifest, map[string][]byte, error) {
 	}
 	manifest.ManifestHash = manifestHash
 
+	// Additive (MIN-512): publish the entries Merkle root so single-entry
+	// inclusion proofs can verify without the full pack. Computed AFTER the
+	// manifest hash and excluded from it, so manifest hashes stay byte-stable.
+	merkleRoot, err := ComputeEntriesMerkleRoot(manifest.Entries)
+	if err != nil {
+		return nil, nil, fmt.Errorf("compute entries merkle root: %w", err)
+	}
+	manifest.EntriesMerkleRoot = merkleRoot
+
 	// Add the manifest itself to the content map
 	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {

@@ -102,6 +102,7 @@ as JSON and stored at the archive path `manifest.json`.
 | `policy_hash`  | string   | `sha256:<hex>` hash of the policy bundle active at creation time. |
 | `entries`      | array    | Ordered list of ManifestEntry objects (see Section 3.2).  |
 | `manifest_hash`| string   | `sha256:<hex>` hash of the manifest (see Section 5.1).   |
+| `entries_merkle_root` | string | OPTIONAL `sha256:<hex>` Merkle root over `entries`, enabling redacted single-entry verification (see Section 14). Additive: NOT an input to `manifest_hash`. |
 
 ### 3.2 Manifest Entry Fields
 
@@ -508,7 +509,119 @@ File extensions:
 - `.helmpack.tar` for uncompressed packs
 - `.helmpack.tar.gz` for compressed packs
 
-## 14. References
+## 14. Redacted Single-Entry Verification Profile (Privacy-Preserving)
+
+Third-party verification at scale requires that an auditor, insurer, or
+counterparty confirm a single fact — e.g. "this DENY happened under
+`policy_hash` X at time T" — WITHOUT receiving the pack's other entries or their
+payloads. This section specifies the deterministic, offline, non-ZK profile that
+makes that possible by combining a Merkle tree over manifest entries with SD-JWT
+selective disclosure (RFC 9901). It is the practical first step toward fully
+zero-knowledge audit; it relies only on JCS (RFC 8785), SHA-256, and Ed25519.
+
+### 14.1 Entries Merkle Root (additive manifest field)
+
+Compliant producers SHOULD publish an `entries_merkle_root` field in the
+manifest. It is `sha256:<hex>` and is computed as follows:
+
+1. Sort entries lexicographically by `path` (identical ordering to §5.1).
+2. For each entry, compute the leaf:
+   `leaf = SHA-256( 0x00 || JCS({path, content_hash, size, content_type}) )`.
+3. Combine adjacent nodes pairwise into inner nodes:
+   `inner = SHA-256( 0x01 || left || right )`. On an odd level, the final node
+   is duplicated (`right = left`).
+4. Repeat until a single root remains.
+
+The `0x00` (leaf) and `0x01` (inner) domain tags prevent second-preimage and
+type-confusion attacks. `entries_merkle_root` is ADDITIVE: it MUST NOT be an
+input to the manifest hash of §5.1, so existing manifest hashes and conformance
+fixtures are unaffected. A verifier that recomputes the root MUST obtain the
+same value as a producer for the same entry set.
+
+### 14.2 Inclusion Proof Artifact
+
+An inclusion proof is a self-contained JSON artifact that proves one entry
+belongs to a pack. It carries:
+
+```json
+{
+  "version": "1.0.0",
+  "binding": {
+    "pack_id":             "<string>",
+    "manifest_hash":       "<sha256:hex>",
+    "policy_hash":         "<sha256:hex>",
+    "created_at":          "<RFC 3339>",
+    "entries_merkle_root": "<sha256:hex>",
+    "entry_count":         "<integer>"
+  },
+  "entry":      { "path": "...", "content_hash": "...", "size": 0, "content_type": "..." },
+  "leaf_hash":  "<sha256:hex>",
+  "merkle_path": [ { "sibling_hash": "<sha256:hex>", "right": true } ],
+  "selective_disclosure": { "presentation": "<SD-JWT>", "public_claims": ["..."] },
+  "binding_hash": "<sha256:hex>"
+}
+```
+
+`binding_hash = SHA-256( JCS({version, binding, entry, leaf_hash}) )` and seals
+the proof's public binding to the disclosed entry. The `merkle_path` is the
+ordered list of sibling hashes from `leaf_hash` to `entries_merkle_root`; each
+step's `right` flag records whether the sibling sits to the right of the running
+hash. The `selective_disclosure` member is OPTIONAL.
+
+### 14.3 Always-Public vs Selectively-Disclosable Receipt Fields
+
+For ATTESTATION (receipt) entries, the following fields are ALWAYS PUBLIC and
+MUST appear in every redacted presentation, because they carry the audit fact
+without tenant payloads:
+
+- `verdict` (`ALLOW` | `DENY` | `ESCALATE`)
+- `policy_hash`
+- `timestamp`
+- `signature`
+- `receipt_id`
+- `decision_id`
+
+All other receipt fields (e.g. `prompt`, tool arguments, outputs, retrieved
+context) are SELECTIVELY DISCLOSABLE: they are carried as SD-JWT disclosures and
+are absent from a presentation unless the holder chooses to reveal them.
+Redaction MUST preserve verification — omitting a disclosable claim never breaks
+Merkle membership, because the leaf binds the entry's `content_hash`, not the
+cleartext receipt body.
+
+### 14.4 Single-Entry Verification Algorithm
+
+A compliant single-entry verifier MUST, fail-closed and offline:
+
+1. Recompute `binding_hash` over `{version, binding, entry, leaf_hash}` and
+   compare with the stored value. MUST match.
+2. Recompute the leaf hash from `entry` and compare with `leaf_hash`. MUST match.
+3. Fold `leaf_hash` along `merkle_path` and compare the result with
+   `binding.entries_merkle_root`. MUST match.
+4. If `selective_disclosure.presentation` is present, verify the SD-JWT per
+   RFC 9901 using the issuer's public key, and confirm every field listed in
+   §14.3 is present among the verified claims.
+
+Any failing step MUST cause the entire single-entry verification to fail. The
+following negative properties are normative and covered by conformance vectors:
+
+- A proof whose `entry`/`leaf_hash` are swapped for a sibling (wrong-entry
+  proof) MUST fail at step 1 or 3.
+- A proof with a tampered `entry.content_hash` MUST fail.
+- A proof with a tampered `entries_merkle_root` MUST fail.
+- A tampered DISCLOSED claim MUST fail SD-JWT verification (step 4).
+- An UNDISCLOSED claim is simply absent; its absence MUST NOT cause failure.
+
+### 14.5 Conformance Vectors
+
+The reference implementation ships deterministic golden vectors at
+`core/pkg/evidencepack/testdata/inclusion_proof_profile_v1.json` (one valid and
+three failing vectors). They regenerate byte-identically from a fixed pack via
+`HELM_UPDATE_VECTORS=1`. The reference producer is
+`evidencepack.BuildInclusionProof` and the reference verifier is
+`evidencepack.VerifyInclusionProof`; the CLI surfaces are
+`helm-ai-kernel evidence prove-entry` and `helm-ai-kernel verify --entry <path> --proof <file>`.
+
+## 15. References
 
 ### 14.1 Normative References
 

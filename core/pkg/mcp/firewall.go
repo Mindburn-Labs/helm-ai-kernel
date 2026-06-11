@@ -142,6 +142,39 @@ func (f *ExecutionFirewall) AuthorizeToolCall(ctx context.Context, req ToolCallA
 	return record.Seal()
 }
 
+// CounterfactualReceiptFor mints the signed-able would-have receipt for a
+// sealed boundary record produced under an active observe grant. It is the
+// observe-mode bridge: every action evaluated in shadow mode yields a
+// counterfactual receipt carrying the verdict the PDP WOULD have issued and its
+// reason code, with no enforcement and no side effect.
+//
+// It fails closed: a record that is not labeled shadow (or carries no grant id,
+// or is unsealed) has no counterfactual standing and is rejected — there is no
+// counterfactual receipt without an explicit grant, mirroring ObserveGrant.Active.
+func (f *ExecutionFirewall) CounterfactualReceiptFor(record contracts.ExecutionBoundaryRecord) (contracts.CounterfactualReceipt, error) {
+	if record.RecordHash == "" {
+		return contracts.CounterfactualReceipt{}, fmt.Errorf("boundary record must be sealed before a counterfactual receipt can be minted")
+	}
+	if record.EnforcementMode != contracts.EnforcementModeShadow || record.ObserveGrantID == "" {
+		return contracts.CounterfactualReceipt{}, fmt.Errorf("counterfactual receipts require a shadow-labeled record with an observe grant id")
+	}
+	receipt := contracts.CounterfactualReceipt{
+		ReceiptID:          fmt.Sprintf("cf-receipt-%s", record.RecordID),
+		Enforcement:        contracts.EnforcementCounterfactual,
+		WouldHaveVerdict:   record.Verdict,
+		ReasonCode:         record.ReasonCode,
+		ObserveGrantID:     record.ObserveGrantID,
+		BoundaryRecordID:   record.RecordID,
+		BoundaryRecordHash: record.RecordHash,
+		PolicyEpoch:        record.PolicyEpoch,
+		ToolName:           record.ToolName,
+		MCPServerID:        record.MCPServerID,
+		ArgsHash:           record.ArgsHash,
+		CreatedAt:          record.CreatedAt,
+	}
+	return receipt.Seal()
+}
+
 // ShouldDispatch reports whether a sealed boundary record authorizes the
 // gateway to dispatch the tool call. Fail-closed: ALLOW always dispatches;
 // DENY and ESCALATE dispatch only when the record is explicitly labeled with

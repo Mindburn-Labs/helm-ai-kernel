@@ -118,6 +118,40 @@ The `lamport` field MUST be a monotonically increasing unsigned integer.
 Each receipt MUST have a `lamport` value strictly greater than all
 previously issued receipts from the same HELM kernel instance.
 
+### 2.6 Enforcement and Counterfactual Receipts
+
+A receipt MAY carry an `enforcement` field with exactly one of two values:
+
+- `enforced` — the verdict was actually enforced at the boundary. This is the
+  default; a receipt with no `enforcement` field is treated as `enforced`.
+- `counterfactual` — the verdict is the one the PDP **would** have issued under
+  an explicit, time-boxed observe grant, computed without any enforcement or
+  side effect.
+
+A counterfactual receipt is signed, content-addressed, and verifiable exactly
+like any other receipt, but it confers **no execution authority**. It MUST be
+machine-distinct from an enforced receipt and MUST NOT be presentable or
+parseable as enforced. Conflating the two is false execution authority and is
+forbidden.
+
+A counterfactual receipt MUST:
+
+- carry `enforcement = counterfactual` (never `enforced`, never empty);
+- bind the `observe_grant_id` it was produced under — no grant, no
+  counterfactual receipt;
+- bind the sealed boundary record (`boundary_record_id`,
+  `boundary_record_hash`) whose verdict it mirrors, so an offline verifier can
+  re-derive the would-have decision;
+- carry the full `would_have_verdict` (`ALLOW | DENY | ESCALATE`) and, for
+  `DENY`/`ESCALATE`, a canonical `reason_code`.
+
+The signature over a counterfactual receipt MUST cover an enforcement-prefixed
+preimage (`"counterfactual:" + receipt_hash`) so a signature minted over a
+counterfactual receipt can never be replayed onto an enforced one. Golden
+vectors for this profile live in
+`core/pkg/contracts/testdata/counterfactual_receipt_v1.json`; the negative
+vector (coercion to `enforced` MUST fail) is the acceptance gate.
+
 ## 3. ProofGraph Integration
 
 Each receipt MUST correspond to exactly one node in the ProofGraph.

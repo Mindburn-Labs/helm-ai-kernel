@@ -37,7 +37,7 @@
     },
     "imagePullSecrets": {
       "type": "array",
-      "description": "References to Kubernetes Secrets used to pull the container image from a private registry. Each entry must be a {name: <secret>} object.",
+      "description": "References to Kubernetes Secrets used to pull chart-managed images from private registries. Applied to the kernel Deployment and optional launchpad app Pods/Jobs/test Pod. Each entry must be a {name: <secret>} object.",
       "items": {
         "type": "object",
         "additionalProperties": true,

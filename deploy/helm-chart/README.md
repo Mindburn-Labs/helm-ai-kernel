@@ -53,6 +53,7 @@ flowchart TD
 | --- | --- | --- |
 | `image.repository` | `ghcr.io/mindburn-labs/helm-ai-kernel` | Container image repository. |
 | `image.tag` | chart `appVersion` | Container image tag. |
+| `imagePullSecrets` | `[]` | Pull secrets applied to the kernel and optional launchpad app Pods/Jobs/test Pod. |
 | `helm.*` | retained | Legacy values root retained for one compatibility window. |
 | `helm.bindAddr` | `0.0.0.0` | Required inside Kubernetes pods. |
 | `helm.production` | `false` | Refuses generated signing/auth material when set to `true`. |

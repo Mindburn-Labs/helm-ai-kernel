@@ -1,0 +1,163 @@
+{
+  "profile": "evidence-pack-redacted-verification/v1",
+  "pack_id": "pack-min512-golden",
+  "manifest_hash": "sha256:34e5b6686a7caafdb3604c4b08d9a78e26c1dfebfa12d003fc329b939ce5716d",
+  "entries_merkle_root": "sha256:118c221aba244a9e1c8531371370da33a6b4f31f069b3e0c4a14f9209d68c407",
+  "public_receipt_fields": [
+    "verdict",
+    "policy_hash",
+    "timestamp",
+    "signature",
+    "receipt_id",
+    "decision_id"
+  ],
+  "vectors": [
+    {
+      "name": "valid_receipt_inclusion",
+      "mutation": "none",
+      "proof": {
+        "version": "1.0.0",
+        "binding": {
+          "pack_id": "pack-min512-golden",
+          "manifest_hash": "sha256:34e5b6686a7caafdb3604c4b08d9a78e26c1dfebfa12d003fc329b939ce5716d",
+          "policy_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "created_at": "2026-04-13T12:00:00Z",
+          "entries_merkle_root": "sha256:118c221aba244a9e1c8531371370da33a6b4f31f069b3e0c4a14f9209d68c407",
+          "entry_count": 4
+        },
+        "entry": {
+          "path": "receipts/decision-001.json",
+          "content_hash": "sha256:f7191735641221cfa27ce6d3503df25f2ef487627ca62dd50a194ed7fee56ab7",
+          "size": 128,
+          "content_type": "application/json"
+        },
+        "leaf_hash": "sha256:b7e78cc9c86a9d70b7ed459e6e482d504a387b54e381c9bcb0ad84de3c234596",
+        "merkle_path": [
+          {
+            "sibling_hash": "sha256:8348231f31a786523d0e71ce618263c4dcbb2e1064793315898eb6cb16fa7a2c",
+            "right": false
+          },
+          {
+            "sibling_hash": "sha256:7168c4767662bc845557a8e140a609d1545846572948db7badfc3dea1e9ec652",
+            "right": true
+          }
+        ],
+        "selective_disclosure": {
+          "presentation": "",
+          "public_claims": [
+            "verdict",
+            "policy_hash",
+            "timestamp",
+            "signature",
+            "receipt_id",
+            "decision_id"
+          ]
+        },
+        "binding_hash": "sha256:ec42c7b4d8b588991d84fa5803e183b04ab2300c254ec0f48dd468af11695701"
+      },
+      "expect_valid": true
+    },
+    {
+      "name": "wrong_entry_spliced",
+      "mutation": "entry+leaf swapped for a sibling",
+      "proof": {
+        "version": "1.0.0",
+        "binding": {
+          "pack_id": "pack-min512-golden",
+          "manifest_hash": "sha256:34e5b6686a7caafdb3604c4b08d9a78e26c1dfebfa12d003fc329b939ce5716d",
+          "policy_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "created_at": "2026-04-13T12:00:00Z",
+          "entries_merkle_root": "sha256:118c221aba244a9e1c8531371370da33a6b4f31f069b3e0c4a14f9209d68c407",
+          "entry_count": 4
+        },
+        "entry": {
+          "path": "receipts/decision-002.json",
+          "content_hash": "sha256:82bd468d4561f0cae66a43a808a91a8eafbbbc612c7b8944ee2fc38aea326b71",
+          "size": 129,
+          "content_type": "application/json"
+        },
+        "leaf_hash": "sha256:375437b22cb30b14478dd3f72985609b8417ca52b40ae6396dfe4b607a7c050b",
+        "merkle_path": [
+          {
+            "sibling_hash": "sha256:8348231f31a786523d0e71ce618263c4dcbb2e1064793315898eb6cb16fa7a2c",
+            "right": false
+          },
+          {
+            "sibling_hash": "sha256:7168c4767662bc845557a8e140a609d1545846572948db7badfc3dea1e9ec652",
+            "right": true
+          }
+        ],
+        "binding_hash": "sha256:ec42c7b4d8b588991d84fa5803e183b04ab2300c254ec0f48dd468af11695701"
+      },
+      "expect_valid": false
+    },
+    {
+      "name": "tampered_entry_content_hash",
+      "mutation": "entry.content_hash flipped",
+      "proof": {
+        "version": "1.0.0",
+        "binding": {
+          "pack_id": "pack-min512-golden",
+          "manifest_hash": "sha256:34e5b6686a7caafdb3604c4b08d9a78e26c1dfebfa12d003fc329b939ce5716d",
+          "policy_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "created_at": "2026-04-13T12:00:00Z",
+          "entries_merkle_root": "sha256:118c221aba244a9e1c8531371370da33a6b4f31f069b3e0c4a14f9209d68c407",
+          "entry_count": 4
+        },
+        "entry": {
+          "path": "receipts/decision-001.json",
+          "content_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+          "size": 128,
+          "content_type": "application/json"
+        },
+        "leaf_hash": "sha256:b7e78cc9c86a9d70b7ed459e6e482d504a387b54e381c9bcb0ad84de3c234596",
+        "merkle_path": [
+          {
+            "sibling_hash": "sha256:8348231f31a786523d0e71ce618263c4dcbb2e1064793315898eb6cb16fa7a2c",
+            "right": false
+          },
+          {
+            "sibling_hash": "sha256:7168c4767662bc845557a8e140a609d1545846572948db7badfc3dea1e9ec652",
+            "right": true
+          }
+        ],
+        "binding_hash": "sha256:ec42c7b4d8b588991d84fa5803e183b04ab2300c254ec0f48dd468af11695701"
+      },
+      "expect_valid": false
+    },
+    {
+      "name": "tampered_merkle_root",
+      "mutation": "binding.entries_merkle_root flipped",
+      "proof": {
+        "version": "1.0.0",
+        "binding": {
+          "pack_id": "pack-min512-golden",
+          "manifest_hash": "sha256:34e5b6686a7caafdb3604c4b08d9a78e26c1dfebfa12d003fc329b939ce5716d",
+          "policy_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "created_at": "2026-04-13T12:00:00Z",
+          "entries_merkle_root": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "entry_count": 4
+        },
+        "entry": {
+          "path": "receipts/decision-001.json",
+          "content_hash": "sha256:f7191735641221cfa27ce6d3503df25f2ef487627ca62dd50a194ed7fee56ab7",
+          "size": 128,
+          "content_type": "application/json"
+        },
+        "leaf_hash": "sha256:b7e78cc9c86a9d70b7ed459e6e482d504a387b54e381c9bcb0ad84de3c234596",
+        "merkle_path": [
+          {
+            "sibling_hash": "sha256:8348231f31a786523d0e71ce618263c4dcbb2e1064793315898eb6cb16fa7a2c",
+            "right": false
+          },
+          {
+            "sibling_hash": "sha256:7168c4767662bc845557a8e140a609d1545846572948db7badfc3dea1e9ec652",
+            "right": true
+          }
+        ],
+        "binding_hash": "sha256:ec42c7b4d8b588991d84fa5803e183b04ab2300c254ec0f48dd468af11695701"
+      },
+      "expect_valid": false
+    }
+  ]
+}

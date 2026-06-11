@@ -20,7 +20,7 @@ import (
 
 func runEvidenceCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel evidence <export|verify|seal|trust|envelope|scopes|inspect|diff|attach-host-chain|correlate-host> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel evidence <export|verify|seal|trust|envelope|scopes|inspect|diff|attach-host-chain|correlate-host|prove-entry> [flags]")
 		return 2
 	}
 	switch args[0] {
@@ -44,8 +44,10 @@ func runEvidenceCmd(args []string, stdout, stderr io.Writer) int {
 		return runEvidenceAttachHostChain(args[1:], stdout, stderr)
 	case "correlate-host":
 		return runEvidenceCorrelateHost(args[1:], stdout, stderr)
+	case "prove-entry":
+		return runEvidenceProveEntry(args[1:], stdout, stderr)
 	case "--help", "-h":
-		fmt.Fprintln(stdout, "Usage: helm-ai-kernel evidence <export|verify|seal|trust|envelope|scopes|inspect|diff|attach-host-chain|correlate-host> [flags]")
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel evidence <export|verify|seal|trust|envelope|scopes|inspect|diff|attach-host-chain|correlate-host|prove-entry> [flags]")
 		return 0
 	default:
 		fmt.Fprintf(stderr, "Unknown evidence subcommand: %s\n", args[0])

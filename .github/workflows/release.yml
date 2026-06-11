@@ -786,3 +786,95 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${GITHUB_REF_NAME}" version-status.json --clobber
+
+  downstream-fanout:
+    # Auto-open (do not auto-merge) downstream PRs that refresh the
+    # contracts-catalog spec copy and the app-docs-platform source pin to
+    # this release. These two surfaces previously went stale after a
+    # release; version-drift.yml only *detects* the drift daily, so this
+    # job *fixes* it at the source. Human review gates the merge.
+    runs-on: ubuntu-latest
+    needs: github-release
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - name: Require downstream PR token
+        env:
+          DOWNSTREAM_PR_TOKEN: ${{ secrets.DOWNSTREAM_PR_TOKEN }}
+        run: |
+          if [ -z "$DOWNSTREAM_PR_TOKEN" ]; then
+            echo "::error::DOWNSTREAM_PR_TOKEN not configured; cannot open cross-repo PRs to contracts-catalog and app-docs-platform. Add a fine-grained PAT (contents+pull-requests:write on Mindburn-Labs/contracts-catalog and Mindburn-Labs/app-docs-platform) as the DOWNSTREAM_PR_TOKEN repository secret."
+            exit 1
+          fi
+      - name: Open contracts-catalog spec-refresh PR
+        env:
+          GH_TOKEN: ${{ secrets.DOWNSTREAM_PR_TOKEN }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git config --global user.name "mindburn-release-bot"
+          git config --global user.email "release@mindburn.org"
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/Mindburn-Labs/contracts-catalog.git" catalog
+          mkdir -p catalog/api/specs
+          cp api/openapi/helm.openapi.yaml catalog/api/specs/helm.openapi.yaml
+          cd catalog
+          if git diff --quiet -- api/specs/helm.openapi.yaml; then
+            echo "contracts-catalog spec already matches ${RELEASE_TAG}; nothing to open."
+            exit 0
+          fi
+          branch="release/helm-spec-${RELEASE_TAG}"
+          git checkout -b "$branch"
+          git add api/specs/helm.openapi.yaml
+          commit_msg="$(printf 'chore(spec): refresh helm.openapi.yaml to helm-ai-kernel %s\n\nSource: Mindburn-Labs/helm-ai-kernel@%s\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>' "${RELEASE_TAG}" "${RELEASE_SHA}")"
+          git commit -m "$commit_msg"
+          git push origin "$branch" --force
+          pr_body="$(printf 'Automated refresh of `api/specs/helm.openapi.yaml` from the just-released helm-ai-kernel `%s` (`%s`).\n\nHuman review required — this PR is not auto-merged.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)' "${RELEASE_TAG}" "${RELEASE_SHA}")"
+          gh pr create \
+            --repo Mindburn-Labs/contracts-catalog \
+            --base main \
+            --head "$branch" \
+            --title "chore(spec): refresh helm.openapi.yaml to helm-ai-kernel ${RELEASE_TAG}" \
+            --body "$pr_body" \
+            || echo "::notice::contracts-catalog PR for ${RELEASE_TAG} already exists."
+      - name: Open app-docs-platform pin-bump PR
+        env:
+          GH_TOKEN: ${{ secrets.DOWNSTREAM_PR_TOKEN }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git config --global user.name "mindburn-release-bot"
+          git config --global user.email "release@mindburn.org"
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/Mindburn-Labs/app-docs-platform.git" docs-platform
+          cd docs-platform
+          python3 - "$RELEASE_SHA" <<'PY'
+          import json, sys
+          sha = sys.argv[1]
+          path = "source-pins.manifest.json"
+          with open(path) as f:
+              manifest = json.load(f)
+          for src in manifest.get("sources", []):
+              if src.get("site") == "helm":
+                  src["git_sha"] = sha
+          with open(path, "w") as f:
+              json.dump(manifest, f, indent=2)
+              f.write("\n")
+          PY
+          if git diff --quiet -- source-pins.manifest.json; then
+            echo "app-docs-platform helm pin already at ${RELEASE_SHA}; nothing to open."
+            exit 0
+          fi
+          branch="release/helm-pin-${RELEASE_TAG}"
+          git checkout -b "$branch"
+          git add source-pins.manifest.json
+          commit_msg="$(printf 'chore(pins): bump helm source pin to helm-ai-kernel %s\n\nSource: Mindburn-Labs/helm-ai-kernel@%s\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>' "${RELEASE_TAG}" "${RELEASE_SHA}")"
+          git commit -m "$commit_msg"
+          git push origin "$branch" --force
+          pr_body="$(printf 'Automated bump of the `helm` `git_sha` in `source-pins.manifest.json` to the helm-ai-kernel `%s` release commit (`%s`).\n\nHuman review required — this PR is not auto-merged.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)' "${RELEASE_TAG}" "${RELEASE_SHA}")"
+          gh pr create \
+            --repo Mindburn-Labs/app-docs-platform \
+            --base main \
+            --head "$branch" \
+            --title "chore(pins): bump helm source pin to helm-ai-kernel ${RELEASE_TAG}" \
+            --body "$pr_body" \
+            || echo "::notice::app-docs-platform PR for ${RELEASE_TAG} already exists."

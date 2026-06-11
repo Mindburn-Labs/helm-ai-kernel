@@ -105,9 +105,10 @@ Stops containers and proxy, revokes scoped secrets, revokes sandbox grants, quar
 
 ## Current Truth
 
-[KEEP] OpenClaw, Hermes, OpenCode, and Kilo Code are `oss_supported` from
-workflow `26198407296`, with signed artifacts, live local-container e2e,
-teardown receipts, and offline EvidencePack verification.
+[KEEP] OpenClaw and Hermes are live supported from workflow `26198407296`, with
+signed artifacts, contract preflight, live local-container e2e, teardown
+receipts, and offline EvidencePack verification. OpenCode and Kilo Code are
+`verify_only`; `--version` smoke checks do not count as live-agent F2 coverage.
 
 [REFACTOR] The CPI/PEP/boundary path still needs deeper action-by-action authority binding.
 

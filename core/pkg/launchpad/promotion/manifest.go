@@ -25,18 +25,12 @@ type Manifest struct {
 	GeneratedAt      string          `json:"generated_at"`
 	GitHubRunID      string          `json:"github_run_id,omitempty"`
 	GitHubRunAttempt string          `json:"github_run_attempt,omitempty"`
+	EgressProxy      *EgressProxy    `json:"egress_proxy,omitempty"`
 	Artifacts        []ArtifactEntry `json:"artifacts"`
 }
 
-type ArtifactEntry struct {
-	AppID                   string `json:"app_id"`
-	AppVersion              string `json:"app_version"`
-	UpstreamRepo            string `json:"upstream_repo"`
-	UpstreamRef             string `json:"upstream_ref"`
-	UpstreamCommit          string `json:"upstream_commit"`
-	LicenseSPDX             string `json:"license_spdx"`
-	LicenseRef              string `json:"license_ref"`
-	Redistribution          string `json:"redistribution"`
+type EgressProxy struct {
+	Component               string `json:"component,omitempty"`
 	Image                   string `json:"image"`
 	Digest                  string `json:"digest"`
 	SignatureTool           string `json:"signature_tool"`
@@ -47,10 +41,32 @@ type ArtifactEntry struct {
 	VulnerabilityScanRef    string `json:"vulnerability_scan_ref"`
 	VulnerabilityScanStatus string `json:"vulnerability_scan_status"`
 	ProvenanceRef           string `json:"provenance_ref"`
-	ArtifactVerificationRef string `json:"artifact_verification_ref,omitempty"`
-	LiveE2ERunID            string `json:"live_e2e_run_id,omitempty"`
-	EvidencePackRef         string `json:"evidence_pack_ref,omitempty"`
-	TeardownReceiptRef      string `json:"teardown_receipt_ref,omitempty"`
+}
+
+type ArtifactEntry struct {
+	AppID                   string       `json:"app_id"`
+	AppVersion              string       `json:"app_version"`
+	UpstreamRepo            string       `json:"upstream_repo"`
+	UpstreamRef             string       `json:"upstream_ref"`
+	UpstreamCommit          string       `json:"upstream_commit"`
+	LicenseSPDX             string       `json:"license_spdx"`
+	LicenseRef              string       `json:"license_ref"`
+	Redistribution          string       `json:"redistribution"`
+	Image                   string       `json:"image"`
+	Digest                  string       `json:"digest"`
+	SignatureTool           string       `json:"signature_tool"`
+	SignatureRef            string       `json:"signature_ref"`
+	SBOMTool                string       `json:"sbom_tool"`
+	SBOMRef                 string       `json:"sbom_ref"`
+	VulnerabilityScanTool   string       `json:"vulnerability_scan_tool"`
+	VulnerabilityScanRef    string       `json:"vulnerability_scan_ref"`
+	VulnerabilityScanStatus string       `json:"vulnerability_scan_status"`
+	ProvenanceRef           string       `json:"provenance_ref"`
+	ArtifactVerificationRef string       `json:"artifact_verification_ref,omitempty"`
+	LiveE2ERunID            string       `json:"live_e2e_run_id,omitempty"`
+	EvidencePackRef         string       `json:"evidence_pack_ref,omitempty"`
+	TeardownReceiptRef      string       `json:"teardown_receipt_ref,omitempty"`
+	EgressProxy             *EgressProxy `json:"-"`
 }
 
 type EvidenceRefs struct {
@@ -81,6 +97,10 @@ func LoadManifest(path string) (Manifest, error) {
 func (m Manifest) Entry(appID string) (ArtifactEntry, bool) {
 	for _, artifact := range m.Artifacts {
 		if artifact.AppID == appID {
+			if m.EgressProxy != nil && m.EgressProxy.Image != "" {
+				proxy := *m.EgressProxy
+				artifact.EgressProxy = &proxy
+			}
 			return artifact, true
 		}
 	}
@@ -125,6 +145,39 @@ func ValidateArtifact(entry ArtifactEntry) error {
 	}
 	if entry.ProvenanceRef == "" {
 		return fmt.Errorf("app %s artifact manifest requires provenance ref", entry.AppID)
+	}
+	return nil
+}
+
+func ValidateEgressProxyArtifact(proxy EgressProxy) error {
+	if proxy.Image == "" || proxy.Digest == "" || proxy.SignatureRef == "" || proxy.SBOMRef == "" || proxy.VulnerabilityScanRef == "" {
+		return errors.New("egress proxy artifact must declare image, digest, signature, SBOM, and vulnerability scan refs")
+	}
+	if proxy.Component != "" && proxy.Component != "egress-proxy" {
+		return fmt.Errorf("egress proxy artifact has unexpected component %q", proxy.Component)
+	}
+	if !registryDigest(proxy.Digest) {
+		return fmt.Errorf("egress proxy artifact digest must be sha256:<64 lowercase hex>")
+	}
+	if !strings.Contains(proxy.Image, "@"+proxy.Digest) {
+		return fmt.Errorf("egress proxy artifact image must be immutable image@%s", proxy.Digest)
+	}
+	if strings.ToLower(proxy.SignatureTool) != "cosign" {
+		return fmt.Errorf("egress proxy artifact requires cosign signature evidence")
+	}
+	if strings.ToLower(proxy.SBOMTool) != "syft" {
+		return fmt.Errorf("egress proxy artifact requires syft SBOM evidence")
+	}
+	switch strings.ToLower(proxy.VulnerabilityScanTool) {
+	case "grype", "trivy":
+	default:
+		return fmt.Errorf("egress proxy artifact requires grype or trivy vulnerability scan evidence")
+	}
+	if strings.EqualFold(proxy.VulnerabilityScanStatus, "failed") {
+		return fmt.Errorf("egress proxy vulnerability scan failed and cannot be promoted")
+	}
+	if proxy.ProvenanceRef == "" {
+		return fmt.Errorf("egress proxy artifact requires provenance ref")
 	}
 	return nil
 }
@@ -186,6 +239,27 @@ func Promote(app registry.AppSpec, entry ArtifactEntry, refs EvidenceRefs) (regi
 		SBOMRef:               entry.SBOMRef,
 		VulnerabilityScanTool: entry.VulnerabilityScanTool,
 		VulnerabilityScanRef:  entry.VulnerabilityScanRef,
+	}
+	if out.FrameworkContract.EgressProxy.Required {
+		if entry.EgressProxy == nil {
+			return registry.AppSpec{}, errors.New("promotion requires a signed egress proxy artifact for F2 provider-backed apps")
+		}
+		if err := ValidateEgressProxyArtifact(*entry.EgressProxy); err != nil {
+			return registry.AppSpec{}, err
+		}
+		receiptRef := out.FrameworkContract.EgressProxy.ReceiptRef
+		if strings.TrimSpace(receiptRef) == "" {
+			receiptRef = "receipts/launchpad-egress-proxy.json"
+		}
+		out.FrameworkContract.EgressProxy = registry.EgressProxyContractSpec{
+			Required:             true,
+			Image:                entry.EgressProxy.Image,
+			Digest:               entry.EgressProxy.Digest,
+			SignatureRef:         entry.EgressProxy.SignatureRef,
+			SBOMRef:              entry.EgressProxy.SBOMRef,
+			VulnerabilityScanRef: entry.EgressProxy.VulnerabilityScanRef,
+			ReceiptRef:           receiptRef,
+		}
 	}
 	out.PromotionEvidence = registry.PromotionEvidenceSpec{
 		ArtifactVerificationRef: refs.ArtifactVerificationRef,

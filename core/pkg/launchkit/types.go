@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
 )
 
@@ -60,20 +61,25 @@ type Options struct {
 }
 
 type Result struct {
-	AppID                string                `json:"app_id"`
-	Mode                 Mode                  `json:"mode"`
-	Target               Target                `json:"target"`
-	SubstrateID          string                `json:"substrate_id,omitempty"`
-	Run                  *session.LaunchRun    `json:"run,omitempty"`
-	Plan                 *plan.LaunchPlan      `json:"plan,omitempty"`
-	Gates                []Gate                `json:"gates"`
-	Provider             EnvironmentCapability `json:"provider"`
-	ConsoleURL           string                `json:"console_url,omitempty"`
-	OfflineVerifyCommand string                `json:"offline_verify_command,omitempty"`
-	ResumeCommand        string                `json:"resume_command,omitempty"`
-	VerifyOnly           bool                  `json:"verify_only"`
-	StartedRuntime       bool                  `json:"started_runtime"`
-	GeneratedAt          time.Time             `json:"generated_at"`
+	AppID                string                  `json:"app_id"`
+	Mode                 Mode                    `json:"mode"`
+	Target               Target                  `json:"target"`
+	SubstrateID          string                  `json:"substrate_id,omitempty"`
+	Run                  *session.LaunchRun      `json:"run,omitempty"`
+	Plan                 *plan.LaunchPlan        `json:"plan,omitempty"`
+	ContractPreflight    *plan.ContractPreflight `json:"contract_preflight,omitempty"`
+	ResultClass          plan.ResultClass        `json:"result_class,omitempty"`
+	RepairClass          plan.RepairClass        `json:"repair_class,omitempty"`
+	SupportLevel         registry.SupportLevel   `json:"support_level,omitempty"`
+	EvidenceRefs         []string                `json:"evidence_refs,omitempty"`
+	Gates                []Gate                  `json:"gates"`
+	Provider             EnvironmentCapability   `json:"provider"`
+	ConsoleURL           string                  `json:"console_url,omitempty"`
+	OfflineVerifyCommand string                  `json:"offline_verify_command,omitempty"`
+	ResumeCommand        string                  `json:"resume_command,omitempty"`
+	VerifyOnly           bool                    `json:"verify_only"`
+	StartedRuntime       bool                    `json:"started_runtime"`
+	GeneratedAt          time.Time               `json:"generated_at"`
 }
 
 type EnvironmentCapability struct {

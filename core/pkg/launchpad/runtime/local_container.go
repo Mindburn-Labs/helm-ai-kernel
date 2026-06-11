@@ -69,9 +69,11 @@ type ContainerHandle struct {
 	ContainerID       string            `json:"container_id"`
 	SandboxGrantRef   string            `json:"sandbox_grant_ref"`
 	EgressReceiptRef  string            `json:"egress_receipt_ref,omitempty"`
+	EgressReceiptPath string            `json:"egress_receipt_path,omitempty"`
 	EgressNetworkName string            `json:"egress_network_name,omitempty"`
 	EgressProxyID     string            `json:"egress_proxy_id,omitempty"`
 	EgressProxyName   string            `json:"egress_proxy_name,omitempty"`
+	EgressProxyImage  string            `json:"egress_proxy_image,omitempty"`
 	Isolation         IsolationEvidence `json:"isolation"`
 	ProjectedSecrets  map[string]string `json:"projected_secrets"`
 }
@@ -147,6 +149,12 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 		if proxyHandle.ProxyURL == "" || proxyHandle.ReceiptRef == "" {
 			return handle, fmt.Errorf("local-container egress proxy did not return proxy URL and receipt ref")
 		}
+		handle.EgressReceiptRef = proxyHandle.ReceiptRef
+		handle.EgressReceiptPath = proxyHandle.ReceiptPath
+		handle.EgressNetworkName = proxyHandle.NetworkName
+		handle.EgressProxyID = proxyHandle.ProxyContainerID
+		handle.EgressProxyName = proxyHandle.ProxyContainerName
+		handle.EgressProxyImage = proxyHandle.ProxyImage
 	}
 	command, args := containerCommand(req.Command, req.Args)
 	env := map[string]string{}
@@ -217,7 +225,6 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 		cleanupEgressProxy(proxyHandle)
 	}
 	handle.ContainerID = receipt.ExecutionID
-	handle.EgressReceiptRef = proxyHandle.ReceiptRef
 	// Daemon-style readiness: container started (docker run -d returned),
 	// now poll the AppSpec healthcheck commands via `docker exec` until
 	// one passes or ReadinessTimeout elapses. Failure here means the
@@ -230,9 +237,6 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 			return handle, fmt.Errorf("local-container daemon never became ready: %w", err)
 		}
 	}
-	handle.EgressNetworkName = proxyHandle.NetworkName
-	handle.EgressProxyID = proxyHandle.ProxyContainerID
-	handle.EgressProxyName = proxyHandle.ProxyContainerName
 	handle.Isolation.TokenBrokerEnabled = req.TokenBroker || proxyHandle.TokenBrokerEnabled
 	return handle, nil
 }

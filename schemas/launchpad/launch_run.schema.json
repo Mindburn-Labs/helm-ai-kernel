@@ -10,31 +10,89 @@
     "app_version": { "type": "string" },
     "substrate_id": { "type": "string" },
     "principal": { "type": "string" },
-    "state": { "enum": ["PLANNED", "VALIDATED", "ESCALATED", "DENIED", "PROVISIONING", "INSTALLING", "STARTING", "HEALTHCHECKING", "RUNNING", "REPAIR_REQUIRED", "TEARING_DOWN", "DELETED", "FAILED"] },
+    "artifact_image": { "type": "string" },
+    "artifact_digest": { "type": "string", "pattern": "^sha256:" },
+    "support_level": { "$ref": "#/$defs/support_level" },
+    "contract_preflight": { "$ref": "#/$defs/contract_preflight" },
+    "result_class": { "$ref": "#/$defs/result_class" },
+    "repair_class": { "type": "string" },
+    "evidence_refs": { "type": "array", "items": { "type": "string" } },
+    "state": { "enum": ["PLANNED", "VALIDATED", "ESCALATED", "DENIED", "PROVISIONING", "INSTALLING", "STARTING", "HEALTHCHECKING", "RUNNING", "REPAIR_REQUIRED", "REPAIRING", "TEARING_DOWN", "DELETED", "FAILED"] },
     "kernel_verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
     "reason": { "type": "string" },
     "plan_hash": { "type": "string", "pattern": "^sha256:" },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" },
     "boundary_record_refs": { "type": "array", "items": { "type": "string" } },
+    "contract_preflight_refs": { "type": "array", "items": { "type": "string" } },
     "cpi_refs": { "type": "array", "items": { "type": "string" } },
     "sandbox_grant_refs": { "type": "array", "items": { "type": "string" } },
+    "egress_receipt_refs": { "type": "array", "items": { "type": "string" } },
     "mcp_refs": { "type": "array", "items": { "type": "string" } },
+    "secret_grant_refs": { "type": "array", "items": { "type": "string" } },
+    "model_gateway_grant_refs": { "type": "array", "items": { "type": "string" } },
     "install_receipt_refs": { "type": "array", "items": { "type": "string" } },
     "launch_receipt_refs": { "type": "array", "items": { "type": "string" } },
+    "start_receipt_refs": { "type": "array", "items": { "type": "string" } },
     "healthcheck_receipt_refs": { "type": "array", "items": { "type": "string" } },
     "teardown_receipt_refs": { "type": "array", "items": { "type": "string" } },
     "evidence_pack_refs": { "type": "array", "items": { "type": "string" } },
+    "evidence_graph_refs": { "type": "array", "items": { "type": "string" } },
     "runtime_handles": {
       "type": "object",
       "properties": {
         "container_id": { "type": "string" },
+        "egress_network_name": { "type": "string" },
+        "egress_proxy_id": { "type": "string" },
+        "egress_proxy_name": { "type": "string" },
         "cloud_resource_ids": { "type": "object", "additionalProperties": { "type": "string" } }
       },
       "additionalProperties": true
     },
     "idempotency_keys": { "type": "object", "additionalProperties": { "type": "string" } },
+    "verification_command": { "type": "string" },
+    "teardown_command": { "type": "string" },
     "log_path": { "type": "string" }
+  },
+  "$defs": {
+    "support_level": {
+      "enum": ["oss_supported", "external_byo_adapter", "verify_only", "agent_live", "demo", "import_quarantined", "blocked_repair_required"]
+    },
+    "result_class": {
+      "enum": ["MODEL_REFUSED", "INPUT_BLOCKED", "TOOL_BLOCKED", "EGRESS_DENIED", "MCP_QUARANTINED", "PLAN_DENY", "PLAN_ESCALATE", "RUNTIME_REPAIR_REQUIRED", "ATTACK_BLOCKED"]
+    },
+    "contract_preflight": {
+      "type": "object",
+      "required": ["stage", "contract_status", "verdict", "repair_class", "support_level", "checks"],
+      "properties": {
+        "stage": { "const": "f2_contract_preflight" },
+        "contract_status": { "enum": ["PASS", "REPAIR_REQUIRED"] },
+        "verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+        "result_class": { "$ref": "#/$defs/result_class" },
+        "repair_class": { "type": "string" },
+        "support_level": { "$ref": "#/$defs/support_level" },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "verdict", "message"],
+            "properties": {
+              "id": { "type": "string" },
+              "verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+              "result_class": { "$ref": "#/$defs/result_class" },
+              "repair_class": { "type": "string" },
+              "message": { "type": "string" },
+              "evidence_ref": { "type": "string" },
+              "expected": {},
+              "actual": {}
+            },
+            "additionalProperties": true
+          }
+        },
+        "evidence_refs": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    }
   },
   "additionalProperties": true
 }

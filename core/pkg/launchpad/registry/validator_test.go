@@ -135,6 +135,9 @@ isolation_mode = "docker-default"
 hostile_agent_grade = false
 `)
 	catalog.Apps[0].Availability = AvailabilityExternalProprietaryAdapter
+	catalog.Apps[0].SupportLevel = SupportLevelExternalBYOAdapter
+	catalog.Apps[0].FrameworkContract.ClaimLevel = SupportLevelExternalBYOAdapter
+	catalog.Apps[0].FrameworkContract.LiveCommandKind = "workstation_adapter"
 	catalog.Apps[0].Install.Strategy = "signed_release_artifact"
 
 	err := catalog.Validate()
@@ -286,21 +289,59 @@ func testCatalog(t *testing.T, appPolicy, substratePolicy string) *Catalog {
 			Name:           "Test App",
 			Version:        "1.0.0",
 			Availability:   AvailabilityOSSSupported,
+			SupportLevel:   SupportLevelAgentLive,
 			Redistribution: "oss",
 			Install: InstallSpec{
 				Strategy: "signed_oci",
 				Image:    "registry.example/test-app@sha256:" + strings.Repeat("a", 64),
 				Digest:   digest,
 			},
-			FilesystemPolicy: PolicyRef{PolicyRef: "policies/launchpad/apps/test.toml"},
-			NetworkPolicy:    NetworkPolicy{Default: "deny"},
+			Runtime: RuntimeSpec{Command: []string{"test-app", "run"}},
+			FilesystemPolicy: PolicyRef{
+				Mode:      "scoped_workspace",
+				Mounts:    []string{"workspace:rw", "app_state:rw:/var/lib/test-app"},
+				PolicyRef: "policies/launchpad/apps/test.toml",
+			},
+			NetworkPolicy: NetworkPolicy{Default: "deny"},
 			MCPPolicy: MCPPolicy{
 				UnknownServerPolicy: "quarantine",
 				UnknownToolPolicy:   "ESCALATE",
 				RequireSchemaPin:    true,
 			},
 			MCPManifests: []string{"test-app.default"},
+			Healthchecks: []HealthcheckSpec{{Type: "command", Command: "test-app --version"}},
+			FrameworkContract: FrameworkContractSpec{
+				F2ContractPreflight:  true,
+				ClaimLevel:           SupportLevelAgentLive,
+				LiveCommandKind:      "agent_live",
+				RuntimeInstallPolicy: "forbidden",
+				BakedDependencies:    []string{"test-app-cli"},
+				ForbiddenRuntimeInstallPatterns: []string{
+					"npm install",
+					"pip install",
+					"playwright install",
+					"apt-get",
+					"curl | sh",
+				},
+				WritablePaths: []WritablePathContractSpec{{
+					Path:     "/var/lib/test-app",
+					Purpose:  "app_state",
+					Required: true,
+				}},
+				EgressProxy:     EgressProxyContractSpec{Required: false},
+				MCPManifestRefs: []string{"test-app.default"},
+				Healthcheck:     "test-app --version",
+				EvidenceProfile: "f2.contract.test",
+				Images: []FrameworkImageContractSpec{{
+					Name:    "test-app-production",
+					Image:   "registry.example/test-app@sha256:" + strings.Repeat("a", 64),
+					Digest:  digest,
+					Purpose: "production_proof",
+				}},
+				EvidenceRefs: []string{"contract_preflight.json", "launch_plan.json", "offline_verify.txt"},
+			},
 			EvidenceRequirements: []string{
+				"contract_preflight",
 				"cpi_output",
 				"kernel_verdict",
 				"sandbox_grant",
@@ -309,6 +350,7 @@ func testCatalog(t *testing.T, appPolicy, substratePolicy string) *Catalog {
 				"healthcheck_receipt",
 				"teardown_receipt",
 				"evidence_pack",
+				"offline_verify",
 				"evidence_graph",
 				"artifact_digest",
 				"mcp_manifest",

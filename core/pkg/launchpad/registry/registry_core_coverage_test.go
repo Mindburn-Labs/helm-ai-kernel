@@ -472,9 +472,19 @@ func TestCatalogValidateRejectsMCPReferenceAndManifestFailures(t *testing.T) {
 			wantErr: "package_digest must be sha256:<64 lowercase hex>",
 		},
 		{
+			name:    "package digest drift from AppSpec artifact",
+			mutate:  func(c *Catalog) { c.MCPManifests[0].PackageDigest = "sha256:" + strings.Repeat("d", 64) },
+			wantErr: "package_digest must match install digest",
+		},
+		{
 			name:    "missing signature ref",
 			mutate:  func(c *Catalog) { c.MCPManifests[0].SignatureRef = "" },
 			wantErr: "signature_ref is required",
+		},
+		{
+			name:    "signature ref drift from AppSpec supply chain",
+			mutate:  func(c *Catalog) { c.MCPManifests[0].SignatureRef = "cosign://registry.example/other:1.0.0.sig" },
+			wantErr: "signature_ref must match supply-chain signature_ref",
 		},
 		{
 			name:    "bad schema hash",
@@ -521,6 +531,25 @@ func TestCatalogValidateRejectsMCPReferenceAndManifestFailures(t *testing.T) {
 	if err := catalog.Validate(); err != nil {
 		t.Fatalf("Validate() accepted websocket manifest = %v, want nil", err)
 	}
+}
+
+func TestCatalogValidateRequiresLaunchKitParityWhenLaunchKitExists(t *testing.T) {
+	catalog := registryCoverageCatalog(t)
+	writeLaunchKitParityFixture(t, catalog)
+	if err := catalog.Validate(); err != nil {
+		t.Fatalf("Validate() rejected matching LaunchKit parity fixture: %v", err)
+	}
+
+	writeRegistryFile(t, catalog.Root, "registry/launchkit/apps/test-app/runtime.local.yaml", `mode: live
+target: local-container
+command:
+  - other
+healthcheck: test-app --version
+mcp_registry_ref: mcp.registry.yaml
+provider_host_groups: []
+egress_proxy_required: false
+`)
+	requireErrorContains(t, catalog.Validate(), "LaunchKit local command must match Launchpad runtime.command")
 }
 
 func TestOSSSupportedSupplyChainAdditionalEvidenceFailures(t *testing.T) {
@@ -629,6 +658,35 @@ func registryCoverageCatalog(t *testing.T) *Catalog {
 	return testCatalog(t, registryCoverageAppPolicy, registryCoverageSubstratePolicy)
 }
 
+func writeLaunchKitParityFixture(t *testing.T, catalog *Catalog) {
+	t.Helper()
+	app := catalog.Apps[0]
+	writeRegistryFile(t, catalog.Root, "registry/launchkit/apps/test-app/helm.app.yaml", `id: test-app
+legacy_launchpad_ref: registry/launchpad/apps/test-app.yaml
+availability: oss_supported
+install:
+  strategy: signed_oci
+  image: `+app.Install.Image+`
+  digest: `+app.Install.Digest+`
+policy: policy.default.yaml
+secrets: secrets.schema.yaml
+mcp_registry: mcp.registry.yaml
+runtimes:
+  local: runtime.local.yaml
+evidence_profile: evidence.profile.yaml
+`)
+	writeRegistryFile(t, catalog.Root, "registry/launchkit/apps/test-app/runtime.local.yaml", `mode: live
+target: local-container
+command:
+  - test-app
+  - run
+healthcheck: test-app --version
+mcp_registry_ref: mcp.registry.yaml
+provider_host_groups: []
+egress_proxy_required: false
+`)
+}
+
 func configureGateway(app *AppSpec) {
 	app.RequiredSecrets = []string{"model_gateway"}
 	app.ModelGatewayEnv = []string{"OPENAI_API_KEY"}
@@ -639,6 +697,16 @@ func configureGateway(app *AppSpec) {
 		RawProviderKeyProjected: true,
 	}
 	app.EvidenceRequirements = append(app.EvidenceRequirements, "model_gateway_broker")
+	app.FrameworkContract.ProviderHostGroups = []string{"openai"}
+	app.FrameworkContract.EgressProxy = EgressProxyContractSpec{
+		Required:             true,
+		Image:                "registry.example/egress-proxy@sha256:" + strings.Repeat("d", 64),
+		Digest:               "sha256:" + strings.Repeat("d", 64),
+		SignatureRef:         "cosign://registry.example/egress-proxy@sha256:" + strings.Repeat("d", 64),
+		SBOMRef:              "artifact://sbom-egress-proxy.spdx.json",
+		VulnerabilityScanRef: "artifact://grype-egress-proxy.json",
+		ReceiptRef:           "receipts/launchpad-egress-proxy.json",
+	}
 }
 
 func requireErrorContains(t *testing.T, err error, want string) {

@@ -1,0 +1,14 @@
+mode: verify-only
+target: local-container
+command:
+  - kilocode
+healthcheck: kilocode --version
+mcp_registry_ref: mcp.registry.yaml
+provider_host_groups: []
+egress_proxy_required: false
+live_agent_execution_supported: false
+support_note: "version smoke only; live agent execution remains blocked until deterministic noninteractive launch evidence is attached"
+requires:
+  - local.docker
+teardown:
+  cascade: true

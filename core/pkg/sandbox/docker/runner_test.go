@@ -99,6 +99,14 @@ func TestDockerRunnerValidateAndRun(t *testing.T) {
 		t.Fatalf("Run() timeout = result %#v receipt %#v err %v", result, receipt, err)
 	}
 
+	result, receipt, err = r.Run(dockerSpec(func(s *sandbox.SandboxSpec) {
+		s.Detached = true
+		s.Limits.Timeout = time.Nanosecond
+	}))
+	if err != nil || receipt == nil || result.ExitCode != -1 || !result.TimedOut {
+		t.Fatalf("Run() detached timeout = result %#v receipt %#v err %v", result, receipt, err)
+	}
+
 	t.Setenv("DOCKER_HELPER_MODE", "success")
 	r.dockerBin = filepath.Join(t.TempDir(), "missing-docker")
 	result, receipt, err = r.Run(dockerSpec())

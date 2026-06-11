@@ -61,9 +61,9 @@
     "hermes": {
       "availability": "oss_supported",
       "version": "v2026.5.16",
-      "image": "ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527",
-      "digest": "sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527",
-      "signature_ref": "cosign://ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527",
+      "image": "ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652",
+      "digest": "sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652",
+      "signature_ref": "cosign://ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652",
       "sbom_ref": "artifact://sbom-hermes.spdx.json",
       "vulnerability_scan_ref": "artifact://grype-hermes.json",
       "provenance_ref": "github-actions://26110916296/1",

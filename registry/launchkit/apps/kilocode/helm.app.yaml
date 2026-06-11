@@ -1,0 +1,17 @@
+id: kilocode
+name: Kilo Code
+version: v7.3.1
+legacy_launchpad_ref: registry/launchpad/apps/kilocode.yaml
+availability: oss_candidate
+install:
+  strategy: signed_oci
+  image: ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6
+  digest: sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6
+policy: policy.default.yaml
+secrets: secrets.schema.yaml
+mcp_registry: mcp.registry.yaml
+runtimes:
+  demo: runtime.demo.yaml
+  local: runtime.local.yaml
+  cloud: runtime.cloud.yaml
+evidence_profile: evidence.profile.yaml

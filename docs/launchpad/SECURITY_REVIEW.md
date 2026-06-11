@@ -1,7 +1,8 @@
 # Launchpad Security Review
 
-Status: Launchpad v1 local-container review passes for OpenClaw, Hermes,
-OpenCode, and Kilo Code from workflow `26198407296`. The `v0.5.9`
+Status: Launchpad v1 local-container review passes for OpenClaw and Hermes from
+workflow `26198407296`. OpenCode and Kilo Code are `verify_only`; `--version`
+smoke checks do not count as live-agent F2 coverage. The `v0.5.9`
 clean-install gate remains the package/install release gate.
 
 ## Results
@@ -9,15 +10,20 @@ clean-install gate remains the package/install release gate.
 - [KEEP] Registry validation blocks `oss_supported` apps unless license,
   redistribution, artifact/build, policy, sandbox, healthcheck, e2e, teardown,
   receipt, and EvidencePack evidence are present.
+- [KEEP] F2 attack matrices are blocked until `f2_contract_preflight` proves
+  digest parity, command parity, sandbox, egress proxy, writable state paths,
+  provider secret projection, MCP manifest parity, healthcheck, EvidencePack,
+  and offline verify output.
 - [KEEP] `helm-ai-kernel launch promote` blocks app promotion unless the merged
   CI promotion manifest records immutable image digest, cosign signature, syft
   SBOM, grype/trivy scan, provenance, live e2e, EvidencePack, and teardown refs.
 - [KEEP] Promotion refs must be tied to the same GitHub workflow run as the
   artifact manifest; stale or unrelated evidence refs are rejected.
-- [KEEP] OpenClaw, Hermes, OpenCode, and Kilo Code are promoted to
-  `oss_supported` from signed CI artifacts, live local-container evidence,
-  teardown receipts, and offline EvidencePack verification in workflow
-  `26198407296`.
+- [KEEP] OpenClaw and Hermes are promoted to live support from signed CI
+  artifacts, contract preflight, live local-container evidence, teardown
+  receipts, and offline EvidencePack verification in workflow `26198407296`.
+- [KEEP] OpenCode and Kilo Code stay `verify_only` until live-agent command
+  evidence beyond `--version` smoke checks is attached.
 - [KEEP] Codex, Claude Code, Cursor, and Junie remain external/BYO adapters; no
   proprietary redistribution claim is made.
 - [KEEP] CLI/API launch path returns `ESCALATE` for missing required secrets and
@@ -112,11 +118,11 @@ secrets, quarantines MCP by default, requires promotion evidence, validates
 skill metadata/policies, and emits signed receipts plus hash-chained
 EvidencePacks for the paths it exercises.
 
-[KEEP] OpenClaw, Hermes, OpenCode, and Kilo Code are artifact-backed for
-`local-container` Launchpad v1 support. Release `v0.5.9` packages the
+[KEEP] OpenClaw and Hermes are artifact-backed for live `local-container`
+Launchpad v1 support. Release `v0.5.9` packages the
 Launchpad registry/policy data required for Homebrew clean installs.
 
 [KEEP] The GitHub macOS clean-install gate passed for `v0.5.9` with Homebrew
-install, four supported app launches, cascade delete, offline EvidencePack
+install, supported app launches, cascade delete, offline EvidencePack
 verification, and a zero-finding secret-fragment audit. Hetzner live beta
 remains fail-closed until a scoped token is available.

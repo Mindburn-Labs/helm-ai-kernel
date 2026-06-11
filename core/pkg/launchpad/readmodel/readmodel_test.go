@@ -211,6 +211,15 @@ func TestGatesFromPlanCoversDenyRepairAndReceipts(t *testing.T) {
 		t.Fatalf("oss gate = %+v, want conformance escalation", ossGate)
 	}
 
+	// verify_only is a documented allowed support state: the support gate
+	// must not escalate what the verify-only contract preflight proves.
+	verifyOnly := unverified
+	verifyOnly.SupportLevel = registry.SupportLevelVerifyOnly
+	verifyOnlyGate := gateByID(t, GatesFromPlan(verifyOnly, substrate, plan.LaunchPlan{KernelVerdict: "ALLOW", Status: string(session.StateValidated)}, nil), "app.oss_supported")
+	if verifyOnlyGate.Verdict != "ALLOW" || verifyOnlyGate.ReasonCode != "LAUNCHPAD_APP_VERIFY_ONLY" {
+		t.Fatalf("verify-only oss gate = %+v, want ALLOW with verify-only reason", verifyOnlyGate)
+	}
+
 	run := fullRun()
 	receipted := GatesFromPlan(app, substrate, plan.LaunchPlan{KernelVerdict: "ALLOW", Status: string(session.StateRunning)}, &run)
 	for _, id := range []string{"mcp.quarantine", "runtime.start", "healthcheck", "receipts.emit", "evidence.export", "offline.verify", "teardown.cascade"} {

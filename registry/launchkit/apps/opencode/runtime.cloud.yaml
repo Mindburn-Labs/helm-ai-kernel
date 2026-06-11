@@ -1,0 +1,10 @@
+mode: blocked
+targets:
+  - cloud:helm
+  - cloud:aws
+  - cloud:kubernetes
+reason: verify_only_until_live_agent_contract_is_promoted
+requires:
+  - deterministic_noninteractive_launch_contract
+  - provider_egress_proof
+  - evidence_pack_verified

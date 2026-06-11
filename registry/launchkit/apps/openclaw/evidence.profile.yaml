@@ -1,13 +1,19 @@
 required:
+  - contract_preflight
   - cpi_output
   - kernel_verdict
   - sandbox_grant
+  - egress_proxy_receipt
   - launch_receipt
   - install_receipt
   - healthcheck_receipt
   - teardown_receipt
   - evidence_pack
+  - offline_verify
+  - evidence_graph
   - mcp_quarantine
+  - mcp_manifest
+  - model_gateway_broker
   - artifact_digest
   - cosign_signature
   - syft_sbom

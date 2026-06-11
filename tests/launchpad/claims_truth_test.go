@@ -9,7 +9,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 )
 
-func TestLaunchpadClaimsMarketPromotedAppsAsSupported(t *testing.T) {
+func TestLaunchpadClaimsReflectContractFirstSupportLevels(t *testing.T) {
 	root := repoRoot(t)
 	catalog, err := registry.LoadCatalog(root)
 	if err != nil {
@@ -20,8 +20,8 @@ func TestLaunchpadClaimsMarketPromotedAppsAsSupported(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s missing from catalog", appID)
 		}
-		if app.Availability != registry.AvailabilityOSSSupported {
-			t.Fatalf("%s availability = %s, want oss_supported after live conformance and EvidencePack verification", appID, app.Availability)
+		if app.Availability == registry.AvailabilityOSSSupported || app.SupportLevel != registry.SupportLevelVerifyOnly {
+			t.Fatalf("%s availability/support_level = %s/%s, want non-oss verify_only until live-agent command evidence exists", appID, app.Availability, app.SupportLevel)
 		}
 	}
 
@@ -31,24 +31,27 @@ func TestLaunchpadClaimsMarketPromotedAppsAsSupported(t *testing.T) {
 		"docs/launchpad/CONFORMANCE.md",
 	} {
 		body := readDoc(t, root, doc)
-		for _, supportedCommand := range []string{
-			"helm-ai-kernel launch opencode local-container --headless --output json",
-			"helm-ai-kernel launch kilocode local-container --headless --output json",
+		for _, verifyOnlyClaim := range []string{
+			"OpenCode | `verify_only`",
+			"Kilo Code | `verify_only`",
+			"`--version` smoke checks do not count as live-agent F2 coverage",
 		} {
-			requireContains(t, body, supportedCommand)
+			requireContains(t, body, verifyOnlyClaim)
 		}
 	}
 
 	cleanGate := readDoc(t, root, "scripts/launch/clean_install_gate.sh")
-	requireContains(t, cleanGate, "SUPPORTED_APPS=(openclaw hermes opencode kilocode)")
+	requireContains(t, cleanGate, "SUPPORTED_APPS=(openclaw hermes)")
+	requireContains(t, cleanGate, "VERIFY_ONLY_APPS=(opencode kilocode)")
 	requireContains(t, cleanGate, "--include-candidates")
 	requireContains(t, cleanGate, `RELEASE_TAG="v0.5.10"`)
 	requireContains(t, cleanGate, `ARTIFACT_RUN_ID="26198407296"`)
 	requireContains(t, cleanGate, "output, status, commands_path")
 	requireNotContains(t, cleanGate, "status = sys.stdin.read()", "scripts/launch/clean_install_gate.sh")
-	requireContains(t, cleanGate, `"supported_apps": ["openclaw", "hermes", "opencode", "kilocode"]`)
+	requireContains(t, cleanGate, `"supported_apps": ["openclaw", "hermes"]`)
+	requireContains(t, cleanGate, `"verify_only_apps": ["opencode", "kilocode"]`)
 	requireContains(t, cleanGate, `"candidate_promotion_apps": []`)
-	requireContains(t, cleanGate, `"deprecated_include_candidates_flag": "accepted_noop_all_four_apps_are_supported"`)
+	requireContains(t, cleanGate, `"deprecated_include_candidates_flag": "accepted_noop_verify_only_apps_are_not_launched"`)
 	requireContains(t, cleanGate, "gh run list --repo \"$REPO\" --workflow release.yml --branch \"$RELEASE_TAG\"")
 	requireNotContains(t, cleanGate, "gh run view 26131090671", "scripts/launch/clean_install_gate.sh")
 
@@ -63,20 +66,63 @@ func TestLaunchpadClaimsMarketPromotedAppsAsSupported(t *testing.T) {
 	requireContains(t, artifactWorkflow, "include_candidate_artifacts")
 	requireContains(t, artifactWorkflow, "Deprecated no-op")
 	requireContains(t, artifactWorkflow, "Resolve Launchpad artifact matrix")
-	requireContains(t, artifactWorkflow, "openclaw,hermes,opencode,kilocode")
-	requireContains(t, artifactWorkflow, "opencode,kilocode")
+	requireContains(t, artifactWorkflow, "openclaw,hermes")
+	requireContains(t, artifactWorkflow, `"app_id": "opencode"`)
+	requireContains(t, artifactWorkflow, `"app_id": "kilocode"`)
 	requireContains(t, artifactWorkflow, "artifact_only_no_live_conformance")
 	requireContains(t, artifactWorkflow, ".app_id as $appID")
 	requireContains(t, artifactWorkflow, "if: ${{ always() }}")
 }
 
+func TestLaunchpadF2ReportsRequireContractEvidenceArtifacts(t *testing.T) {
+	root := repoRoot(t)
+	report := readDoc(t, root, "docs/launchpad/v1_report.json")
+	for _, want := range []string{
+		`"stage": "f2_contract_preflight"`,
+		`"required_before_attack_matrix": true`,
+		`"setup_failures_count_as_attack_blocked": false`,
+		`"contract_preflight_json"`,
+		`"launch_plan"`,
+		`"kernel_verdict"`,
+		`"sandbox_grant"`,
+		`"egress_proxy_receipt"`,
+		`"mcp_quarantine_receipt"`,
+		`"healthcheck_receipt"`,
+		`"runtime_environment"`,
+		`"EvidencePack"`,
+		`"offline_verify_output"`,
+		`"raw_per_case_results"`,
+		`"MODEL_REFUSED"`,
+		`"INPUT_BLOCKED"`,
+		`"TOOL_BLOCKED"`,
+		`"EGRESS_DENIED"`,
+		`"MCP_QUARANTINED"`,
+		`"PLAN_DENY"`,
+		`"PLAN_ESCALATE"`,
+		`"RUNTIME_REPAIR_REQUIRED"`,
+		`"ATTACK_BLOCKED"`,
+		`"runtime_installs": "forbidden"`,
+		`"egress_proxy_artifact"`,
+		`"production_minimal"`,
+		`"eval_full"`,
+	} {
+		requireContains(t, report, want)
+	}
+	requireNotContains(t, report, `"controlled_live_apps": [
+        "openclaw",
+        "hermes",
+        "opencode",
+        "kilocode"
+      ]`, "docs/launchpad/v1_report.json")
+}
+
 func TestLiveConformanceDefaultsToSupportedAppsOnly(t *testing.T) {
 	t.Setenv("HELM_LAUNCHPAD_LIVE_APPS", "")
 	t.Setenv("HELM_LAUNCHPAD_LIVE_INCLUDE_CANDIDATES", "")
-	assertStringList(t, liveConformanceAppIDs(), []string{"openclaw", "hermes", "opencode", "kilocode"})
+	assertStringList(t, liveConformanceAppIDs(), []string{"openclaw", "hermes"})
 
 	t.Setenv("HELM_LAUNCHPAD_LIVE_INCLUDE_CANDIDATES", "1")
-	assertStringList(t, liveConformanceAppIDs(), []string{"openclaw", "hermes", "opencode", "kilocode"})
+	assertStringList(t, liveConformanceAppIDs(), []string{"openclaw", "hermes"})
 
 	t.Setenv("HELM_LAUNCHPAD_LIVE_APPS", " openclaw , hermes ")
 	assertStringList(t, liveConformanceAppIDs(), []string{"openclaw", "hermes"})
@@ -95,9 +141,9 @@ func TestLaunchpadCurrentDocsDoNotUseStaleCandidateLanguage(t *testing.T) {
 	} {
 		body := readDoc(t, root, doc)
 		for _, stale := range []string{
-			"OpenCode and Kilo Code remain `oss_candidate`",
-			"OpenCode and Kilo Code remain oss_candidate",
-			"OpenCode and Kilo Code must pass",
+			"OpenCode and Kilo Code are `oss_supported`",
+			"OpenCode and Kilo Code are oss_supported",
+			"OpenCode and Kilo Code pass live-agent F2",
 			"OpenClaw and Hermes are release-backed",
 			"OpenClaw and Hermes are `oss_supported` from signed `v0.5.4`",
 		} {

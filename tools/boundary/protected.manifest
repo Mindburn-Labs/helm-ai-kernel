@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-11T10:59:13Z
-# Commit: 43d69cfbbcc143efd715e91027468a9701b324d3
+# Generated: 2026-06-11T15:23:45Z
+# Commit: 3e10d0bb2bd8157b8935d2ae9d8106f40b29be28
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -925,10 +925,10 @@ d7c900a1bb62d23ba2c21d90c5e8e9a2c622ca14adea8baecde70118b34133e8  schemas/failur
 025a483a9c531dbe5fe053d7b34f81aee3fd3cdf180b3e67f367e196d0686456  schemas/failure_intelligence/source_snapshot.v1.json
 c80381c465d42548c625f229c2df5444ebe0a21f125a7384141c926b9522bf1e  schemas/failure_intelligence/verification_result.v1.json
 aaaf9c1039d26922320b3a83e15407e934d521770142d732889c89d911cf6133  schemas/knowledge_claim.json
-02bcbb935d8d9e8f8fe58c3291a53be165707e0ac2ed5673c898bf73da9587cd  schemas/launchpad/app_spec.schema.json
+d8c4bafc0a38a605e0161475dd38a45531efd51e93453d29bbfe43391d4b0d9a  schemas/launchpad/app_spec.schema.json
 7989c511df2a81d18d6e98a6ce5440f55b285d16035ec9aafda1e43a0860f437  schemas/launchpad/framework_adapter.schema.json
-e3f5e74f0f6fde149bac4a57740ce7c1168c5b9a5edc5c8e3c3d941ac8a9faf8  schemas/launchpad/launch_plan.schema.json
-f39136c6aabfcdd2f4a968e1fc354e0387a8bf01e815d2d11fd64dade79c14b8  schemas/launchpad/launch_run.schema.json
+b64833fb6b69e54560f2573b62d8e4e76e4bea5c9257f8e0d6d7e3ea46aaacf8  schemas/launchpad/launch_plan.schema.json
+c08f427277915551ab8882f34bd331506e7c3cf04ae9f18f9200acfaa915f29a  schemas/launchpad/launch_run.schema.json
 23b4f99d8a93d52fb556f6aeb76ab9e874124fac2fbbe77b9bdb358859cc2af4  schemas/launchpad/receipt.schema.json
 3a6999643c05d2bf0b0d60a26db025a541d33776f5afaa99ef736a2e9b828991  schemas/launchpad/substrate_spec.schema.json
 1b8ba8f6a9b316d2156c18a5030fc2ae04d82e66b72c530fc796e81bdd472561  schemas/receipts/README.md

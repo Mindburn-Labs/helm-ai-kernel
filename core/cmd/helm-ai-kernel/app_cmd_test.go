@@ -27,6 +27,27 @@ func TestParseAppCommandArgsAcceptsFlagsAroundAppID(t *testing.T) {
 			wantSubstrate: "local-container",
 			wantJSON:      true,
 		},
+		{
+			name:          "equals forms",
+			args:          []string{"opencode", "--substrate=local-container", "--json=true"},
+			wantApp:       "opencode",
+			wantSubstrate: "local-container",
+			wantJSON:      true,
+		},
+		{
+			name:          "single-dash forms",
+			args:          []string{"-json", "-substrate", "local-container", "opencode"},
+			wantApp:       "opencode",
+			wantSubstrate: "local-container",
+			wantJSON:      true,
+		},
+		{
+			name:          "json=false equals form",
+			args:          []string{"--json=false", "kilocode"},
+			wantApp:       "kilocode",
+			wantSubstrate: "local-container",
+			wantJSON:      false,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

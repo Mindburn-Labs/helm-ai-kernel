@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/readmodel"
@@ -117,34 +118,64 @@ func parseAppCommandArgs(name string, args []string, stderr io.Writer) (string, 
 	substrate := "local-container"
 	jsonOut := false
 	apps := []string{}
+	usage := func() (string, string, bool, int) {
+		fmt.Fprintf(stderr, "Usage: helm-ai-kernel %s <app> [--substrate local-container] [--json]\n", name)
+		return "", "", false, 2
+	}
 	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--json":
-			jsonOut = true
-		case "--substrate":
-			if i+1 >= len(args) {
-				fmt.Fprintf(stderr, "Usage: helm-ai-kernel %s <app> [--substrate local-container] [--json]\n", name)
-				return "", "", false, 2
+		arg := args[i]
+		if !strings.HasPrefix(arg, "-") {
+			apps = append(apps, arg)
+			continue
+		}
+		// Accept the standard Go flag forms: -flag, --flag, -flag=value,
+		// --flag=value, and -flag value.
+		flagName := strings.TrimPrefix(strings.TrimPrefix(arg, "-"), "-")
+		inlineValue := ""
+		hasInline := false
+		if eq := strings.Index(flagName, "="); eq >= 0 {
+			inlineValue = flagName[eq+1:]
+			flagName = flagName[:eq]
+			hasInline = true
+		}
+		takeValue := func() (string, bool) {
+			if hasInline {
+				return inlineValue, true
 			}
-			substrate = args[i+1]
-			i++
-		case "--resume":
-			if i+1 >= len(args) {
-				fmt.Fprintf(stderr, "Usage: helm-ai-kernel %s <app> [--substrate local-container] [--json]\n", name)
-				return "", "", false, 2
+			if i+1 < len(args) {
+				i++
+				return args[i], true
 			}
-			i++
+			return "", false
+		}
+		switch flagName {
+		case "json":
+			if hasInline {
+				parsed, err := strconv.ParseBool(inlineValue)
+				if err != nil {
+					return usage()
+				}
+				jsonOut = parsed
+			} else {
+				jsonOut = true
+			}
+		case "substrate":
+			value, ok := takeValue()
+			if !ok {
+				return usage()
+			}
+			substrate = value
+		case "resume":
+			if _, ok := takeValue(); !ok {
+				return usage()
+			}
 		default:
-			if strings.HasPrefix(args[i], "-") {
-				fmt.Fprintf(stderr, "unknown %s flag: %s\n", name, args[i])
-				return "", "", false, 2
-			}
-			apps = append(apps, args[i])
+			fmt.Fprintf(stderr, "unknown %s flag: %s\n", name, arg)
+			return "", "", false, 2
 		}
 	}
 	if len(apps) != 1 {
-		fmt.Fprintf(stderr, "Usage: helm-ai-kernel %s <app> [--substrate local-container] [--json]\n", name)
-		return "", "", false, 2
+		return usage()
 	}
 	return apps[0], substrate, jsonOut, 0
 }

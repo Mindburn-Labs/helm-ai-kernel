@@ -308,9 +308,21 @@ func GatesFromPlan(app registry.AppSpec, substrate registry.SubstrateSpec, compi
 		runtimeSummary = "Runtime requires repair before RUNNING."
 	}
 	ossSupported := app.Availability == registry.AvailabilityOSSSupported && app.Conformance.FullyVerified()
+	ossVerdict := verdictFor(ossSupported)
 	ossReason := ""
+	ossSummary := "OSS support and conformance were evaluated from AppSpec."
 	if !ossSupported {
-		ossReason = "ERR_LAUNCHPAD_APP_CONFORMANCE_REQUIRED"
+		if app.SupportLevel == registry.SupportLevelVerifyOnly {
+			// verify_only is a documented, allowed support state: the F2
+			// contract preflight proves an ALLOW verify-only plan, so the
+			// support gate must not escalate what the contract gate proves.
+			// Live execution stays gated until conformance evidence lands.
+			ossVerdict = "ALLOW"
+			ossReason = "LAUNCHPAD_APP_VERIFY_ONLY"
+			ossSummary = "AppSpec declares verify_only support; the verify-only contract preflight satisfies this gate while live execution remains gated on conformance evidence."
+		} else {
+			ossReason = "ERR_LAUNCHPAD_APP_CONFORMANCE_REQUIRED"
+		}
 	}
 	mcpVerdict, mcpReason, mcpSummary := mcpQuarantineState(compiled, run)
 	contractVerdict := "DENY"
@@ -325,7 +337,7 @@ func GatesFromPlan(app registry.AppSpec, substrate registry.SubstrateSpec, compi
 	}
 	return []GateResult{
 		gate("registry.read", "Preflight", "Read registry spec", "ALLOW", "", "proven", "Registry AppSpec was loaded from the local registry.", nil, nil),
-		gate("app.oss_supported", "Preflight", "Check oss_supported", verdictFor(ossSupported), ossReason, "proven", "OSS support and conformance were evaluated from AppSpec.", nil, nil),
+		gate("app.oss_supported", "Preflight", "Check oss_supported", ossVerdict, ossReason, "proven", ossSummary, nil, nil),
 		gate("f2.contract_preflight", "F2 contract", "Prove runtime contract", contractVerdict, compiled.ReasonCode, "proven", "Contract preflight proves image, command, sandbox, egress proxy, writable paths, secret projection, MCP manifests, healthcheck, EvidencePack export, and offline verify before prompts run.", runRefs(run, "contract"), evidenceRefs),
 		gate("artifact.digest", "Artifact verification", "Digest pinned", artifactVerdict, artifactReason, artifactProof, "Immutable artifact digest is pinned in AppSpec.", nil, nil),
 		gate("artifact.signature", "Artifact verification", "Signature valid", artifactVerdict, artifactReason, artifactProof, "Cosign signature evidence is declared by AppSpec.", nil, nil),

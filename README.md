@@ -1,3 +1,5 @@
+HELM AI Kernel is the fail-closed execution firewall for AI agents.
+
 # HELM AI Kernel
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -7,11 +9,13 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Mindburn-Labs/helm-ai-kernel/badge)](https://scorecard.dev/viewer/?uri=github.com/Mindburn-Labs/helm-ai-kernel)
 [![OpenSSF Best Practices](https://bestpractices.dev/projects/9876/badge)](https://bestpractices.dev/projects/9876)
 [![Release](https://img.shields.io/github/v/release/Mindburn-Labs/helm-ai-kernel?label=release)](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/latest)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Mindburn-Labs/helm-ai-kernel)](https://goreportcard.com/report/github.com/Mindburn-Labs/helm-ai-kernel)
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.mindburnlabs/helm-sdk?label=maven%20central)](https://central.sonatype.com/artifact/io.github.mindburnlabs/helm-sdk)
 [![npm](https://img.shields.io/npm/v/%40mindburn%2Fhelm-ai-kernel?label=npm)](https://www.npmjs.com/package/@mindburn/helm-ai-kernel)
 [![PyPI](https://img.shields.io/pypi/v/helm-sdk?label=pypi)](https://pypi.org/project/helm-sdk/)
 [![crates.io](https://img.shields.io/crates/v/helm-sdk?label=crates.io)](https://crates.io/crates/helm-sdk)
 [![Go Reference](https://pkg.go.dev/badge/github.com/Mindburn-Labs/helm-ai-kernel/sdk/go.svg)](https://pkg.go.dev/github.com/Mindburn-Labs/helm-ai-kernel/sdk/go)
+[![Homebrew](https://img.shields.io/badge/homebrew-mindburnlabs%2Ftap%2Fhelm--ai--kernel-orange?logo=homebrew)](https://github.com/mindburnlabs/homebrew-tap/blob/main/Formula/helm-ai-kernel.rb)
 [![Launchpad Artifacts](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/launchpad-artifacts.yml/badge.svg?branch=main)](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/launchpad-artifacts.yml)
 [![Release checksums](https://img.shields.io/badge/release%20checksums-available-success)](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/latest/download/SHA256SUMS.txt)
 [![Release attestations](https://img.shields.io/badge/release%20attestations-available-informational)](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/latest/download/release-attestation.json)
@@ -22,10 +26,7 @@
 [![GHCR chart](https://img.shields.io/badge/ghcr.io-helm--ai--kernel%20chart-0F1689?logo=helm&logoColor=white)](https://github.com/Mindburn-Labs/helm-ai-kernel/pkgs/container/charts%2Fhelm-ai-kernel)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/mindburn-labs)](https://artifacthub.io/packages/search?repo=mindburn-labs)
 
-HELM AI Kernel is the fail-closed execution firewall for AI agents.
-
-Mindburn Labs' HELM execution kernel for AI agents, not the Kubernetes package
-manager.
+This is Mindburn Labs’ HELM execution kernel for AI, not the Kubernetes package manager.
 
 HELM evaluates agent execution requests and records every ALLOW / DENY /
 ESCALATE decision as verifiable evidence.
@@ -142,8 +143,7 @@ agent tool calls and infrastructure side effects. It intercepts MCP tools and
 OpenAI-compatible requests, evaluates authority before dispatch, and emits
 signed receipts that can be verified offline.
 
-This is Mindburn Labs' HELM execution kernel for AI, not the Kubernetes package
-manager.
+This is Mindburn Labs’ HELM execution kernel for AI, not the Kubernetes package manager.
 
 ```text
 Agent proposal -> HELM boundary -> ALLOW / DENY / ESCALATE -> signed receipt

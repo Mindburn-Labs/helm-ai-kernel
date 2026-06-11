@@ -104,6 +104,8 @@ eval "$(minikube docker-env)"
 docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:smoke -f Dockerfile .
 
 # Real-key positive scenario
+export GHCR_USERNAME=<github-user>
+export GHCR_TOKEN=<github-token-with-read-packages>
 export OPENROUTER_API_KEY=<your-key>
 bash scripts/ci/launchpad_k8s_smoke.sh --mode positive
 
@@ -118,6 +120,14 @@ bash scripts/ci/launchpad_k8s_smoke.sh --mode baseline
 The driver always starts from a fresh minikube cluster (`minikube delete`
 then `minikube start`). Set `LAUNCHPAD_SMOKE_KEEP_CLUSTER=1` to skip the
 final delete during iteration.
+
+For `positive` and `negative`, the launchpad app images stay pinned as
+`repo@sha256` and are pulled by kubelet from GHCR through a docker-registry
+Secret named `ghcr-read` by default. Provide `GHCR_USERNAME` and `GHCR_TOKEN`
+(`read:packages`) before running those modes. Do not rely on `minikube image
+load` for private digest refs; `LAUNCHPAD_SMOKE_PRE_LOAD_LAUNCHPAD_IMAGES=1`
+exists only as a debug path and fails if the digest is not resolvable inside
+the minikube node.
 
 ## Scenario matrix
 
@@ -156,7 +166,8 @@ on the cluster — the k8s analogue of the docker sandbox-leak audit.
 
 | Symptom | First check |
 | --- | --- |
-| openclaw Pod never reaches Ready on positive | `kubectl logs <pod> -c egress-proxy`, then `kubectl logs <pod> -c openclaw`. Common causes: missing `HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY` Secret, OpenRouter rate-limit, kernel pulling images on a slow link. |
+| `ErrImagePull` / `ImagePullBackOff` on openclaw, hermes, or egress-proxy | Confirm Secret `ghcr-read` exists in the release namespace and that `GHCR_TOKEN` has `read:packages` for `ghcr.io/mindburn-labs/helm-launchpad/*`. |
+| openclaw Pod never reaches Ready on positive | `kubectl logs <pod> -c egress-proxy`, then `kubectl logs <pod> -c openclaw`. Common causes: missing `OPENROUTER_API_KEY`, OpenRouter rate-limit, private GHCR pull-secret failure, or kernel pulling images on a slow link. |
 | hermes Job hangs at Running | `shareProcessNamespace` and the workload's `preStop` SIGTERM are how the sidecar exits. If the sidecar image changes its process name from `egress-proxy`, the `pkill` pattern in `hermes-job.yaml` needs updating. |
 | Leftover resources after uninstall | The leak audit query `kubectl get all -A -l app.kubernetes.io/part-of=helm-ai-kernel`. Any non-empty result means something other than helm owns the resource — start with `kubectl describe` to see ownerReferences. |
 | `helm test` reports `no hooks for test`  | Either both launchpad apps were disabled or the chart was installed without rendering the test Pod. The test Pod is gated on `openclaw.enabled || hermes.enabled`. |

@@ -12,6 +12,10 @@ metadata:
     helm.ai/test-intent: "kernel health + launchpad-app Pod presence"
 spec:
   restartPolicy: Never
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   nodeSelector:
     {{- toYaml .Values.launchpadApps.nodeSelector | nindent 4 }}
   securityContext:

@@ -77,7 +77,6 @@ jobs:
           LAUNCHPAD_SMOKE_KERNEL_IMAGE: "ghcr.io/mindburn-labs/helm-ai-kernel:smoke"
           LAUNCHPAD_SMOKE_KEEP_CLUSTER: "1"
           LAUNCHPAD_SMOKE_PROFILE: minikube
-          LAUNCHPAD_SMOKE_PRE_PULL: "0"
         run: bash scripts/ci/launchpad_k8s_smoke.sh --mode baseline
 
   launchpad-positive:
@@ -127,6 +126,8 @@ jobs:
           LAUNCHPAD_SMOKE_KERNEL_IMAGE: "ghcr.io/mindburn-labs/helm-ai-kernel:smoke"
           LAUNCHPAD_SMOKE_KEEP_CLUSTER: "1"
           LAUNCHPAD_SMOKE_PROFILE: minikube
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
         run: |
           if [[ -z "${OPENROUTER_API_KEY}" ]]; then
             echo "::warning::HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY secret not configured — skipping positive scenario"
@@ -179,4 +180,6 @@ jobs:
           LAUNCHPAD_SMOKE_KERNEL_IMAGE: "ghcr.io/mindburn-labs/helm-ai-kernel:smoke"
           LAUNCHPAD_SMOKE_KEEP_CLUSTER: "1"
           LAUNCHPAD_SMOKE_PROFILE: minikube
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
         run: bash scripts/ci/launchpad_k8s_smoke.sh --mode negative

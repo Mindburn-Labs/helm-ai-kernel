@@ -163,11 +163,14 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 		CPUTimeLimit:     500 * time.Millisecond,
 		NetworkEnabled:   false,
 	}
-	s.Sandbox, err = sandbox.NewWasiSandbox(ctx, artStore, sandboxConfig)
+	// Pack execution is fail-closed until a PackVerifier (trust.PackLoader
+	// with TUF roots) is configured; the nil verifier is that explicit
+	// posture, not an oversight — Run refuses with ERR_PACK_TRUST_UNVERIFIED.
+	s.Sandbox, err = sandbox.NewWasiSandboxWithVerifier(ctx, artStore, sandboxConfig, nil)
 	if err != nil {
 		return nil, fmt.Errorf("sandbox init: %w", err)
 	}
-	logger.Info("subsystem ready", "component", " Sandbox initialized")
+	logger.Info("subsystem ready", "component", " Sandbox initialized (pack execution fail-closed: no PackVerifier configured)")
 
 	// --- 7. Boundary ---
 	// The version string must match boundary.PolicyVersion exactly; LoadPolicy

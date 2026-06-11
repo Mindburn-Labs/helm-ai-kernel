@@ -277,6 +277,21 @@ func TestCoverageHealthcheckRunnerBranches(t *testing.T) {
 	if _, err := runner.Run(failingHTTPPlan, RuntimeStartResult{ContainerID: "cloud-1", SandboxGrantRef: "grant", Runtime: "e2b"}, ExecuteOptions{}); err == nil {
 		t.Fatal("expected failing http healthcheck to block RUNNING")
 	}
+	// Host-side probes obey the plan egress policy: non-loopback targets are
+	// deny-by-default and allowlisted origins (any declared form) pass.
+	exfilPlan := p
+	exfilPlan.Healthchecks = []registry.HealthcheckSpec{{Type: "http", URL: "https://attacker.example/probe"}}
+	if _, err := runner.Run(exfilPlan, RuntimeStartResult{ContainerID: "cloud-1", SandboxGrantRef: "grant", Runtime: "e2b"}, ExecuteOptions{}); err == nil || !strings.Contains(err.Error(), "network allowlist") {
+		t.Fatalf("expected non-allowlisted http healthcheck to fail closed, got %v", err)
+	}
+	if _, err := runner.Run(exfilPlan, RuntimeStartResult{ContainerID: "cloud-1", SandboxGrantRef: "grant", Runtime: "e2b"}, ExecuteOptions{RuntimeDryRun: true}); err == nil {
+		t.Fatal("expected dry-run to enforce the same egress policy")
+	}
+	allowlistedPlan := exfilPlan
+	allowlistedPlan.NetworkAllowlist = []string{"attacker.example"}
+	if _, err := runner.Run(allowlistedPlan, RuntimeStartResult{ContainerID: "cloud-1", SandboxGrantRef: "grant", Runtime: "e2b"}, ExecuteOptions{RuntimeDryRun: true}); err != nil {
+		t.Fatalf("allowlisted http healthcheck should pass policy on dry-run: %v", err)
+	}
 	dryRun, err := runner.Run(p, RuntimeStartResult{ContainerID: "c", SandboxGrantRef: "grant", Runtime: "local-container"}, ExecuteOptions{RuntimeDryRun: true})
 	if err != nil {
 		t.Fatal(err)

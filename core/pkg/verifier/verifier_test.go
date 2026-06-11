@@ -3,6 +3,7 @@ package verifier
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -331,6 +332,72 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 		dir := createValidBundleFixture(t)
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signature, keyHex))
 		report, err := VerifyBundleWithOptions(dir, VerifyOptions{Profile: evidencepkg.EvidenceTrustProfileTeam})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+}
+
+func TestVerifyBundleWitnessSignatureTrust(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiptHash := sha256.Sum256([]byte("receipt-payload"))
+	receiptHashHex := hex.EncodeToString(receiptHash[:])
+	witnessSig := hex.EncodeToString(ed25519.Sign(priv, receiptHash[:]))
+	receipt := func(sig string) map[string]any {
+		return map[string]any{
+			"receipt_id":    "rcpt-001",
+			"decision_id":   "dec-001",
+			"decision_hash": "sha256:abc123",
+			"receipt_hash":  receiptHashHex,
+			"status":        "APPLIED",
+			"lamport_clock": 1,
+			"witness_signatures": []any{
+				map[string]any{"witness_id": "w1", "signature": sig},
+			},
+		}
+	}
+
+	t.Run("unconfigured witness keys are skipped, never auto-failed", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(witnessSig))
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, check := range report.Checks {
+			if check.Name == "embedded_signature_trust" && !check.Pass {
+				t.Fatalf("unconfigured witness signatures must not fail the pack: %+v", check)
+			}
+		}
+	})
+
+	t.Run("configured witness key verifies valid signature", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(witnessSig))
+		report, err := VerifyBundleWithOptions(dir, VerifyOptions{
+			WitnessPublicKeysHex: map[string]string{"w1": hex.EncodeToString(pub)},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, check := range report.Checks {
+			if check.Name == "embedded_signature_trust" && !check.Pass {
+				t.Fatalf("valid witness signature should verify against configured key: %+v", check)
+			}
+		}
+	})
+
+	t.Run("configured witness key fails tampered signature closed", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		forged := hex.EncodeToString(ed25519.Sign(priv, []byte("tampered")))
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(forged))
+		report, err := VerifyBundleWithOptions(dir, VerifyOptions{
+			WitnessPublicKeysHex: map[string]string{"w1": hex.EncodeToString(pub)},
+		})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -68,13 +68,8 @@ func containsLikelySeedPhrase(value string) bool {
 		return false
 	}
 	for _, n := range []int{12, 24} {
-		if len(words) == n {
+		if len(words) >= n {
 			return true
-		}
-		if len(words) > n {
-			for i := 0; i+n <= len(words); i++ {
-				return true
-			}
 		}
 	}
 	return false

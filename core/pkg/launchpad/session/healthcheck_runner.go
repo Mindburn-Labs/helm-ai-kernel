@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -45,15 +46,23 @@ func (DefaultHealthcheckRunner) Run(compiled plan.LaunchPlan, runtime RuntimeSta
 		}
 		return runCommandHealthcheck(compiled, runtime, opts, check.Command)
 	case "http":
-		return runHTTPHealthcheck(runtime, opts, check.URL)
+		return runHTTPHealthcheck(compiled, runtime, opts, check.URL)
 	default:
 		return HealthcheckResult{}, fmt.Errorf("unsupported healthcheck type %q", check.Type)
 	}
 }
 
-func runHTTPHealthcheck(runtime RuntimeStartResult, opts ExecuteOptions, rawURL string) (HealthcheckResult, error) {
+func runHTTPHealthcheck(compiled plan.LaunchPlan, runtime RuntimeStartResult, opts ExecuteOptions, rawURL string) (HealthcheckResult, error) {
 	probeURL, err := validateHealthcheckURL(rawURL)
 	if err != nil {
+		return HealthcheckResult{}, err
+	}
+	// Host-side probes must obey the same egress policy the sandboxed
+	// command path enforces: loopback (the launched container's published
+	// ports) is always reachable; anything else must be in the plan's
+	// network allowlist. Deny-by-default, even on dry runs — a dry run must
+	// not validate a plan that enforcement would reject.
+	if err := enforceHealthcheckEgress(probeURL, compiled.NetworkAllowlist); err != nil {
 		return HealthcheckResult{}, err
 	}
 	if opts.RuntimeDryRun {
@@ -147,6 +156,45 @@ func runCommandHealthcheck(compiled plan.LaunchPlan, runtime RuntimeStartResult,
 			"healthcheck_grant_ref": handle.SandboxGrantRef,
 		},
 	}, nil
+}
+
+// enforceHealthcheckEgress applies the plan's egress policy to host-side HTTP
+// probes. Loopback hosts are always allowed; every other origin must match an
+// entry in the plan's NetworkAllowlist (scheme://host[:port], matched with and
+// without the port). Fail-closed: an empty allowlist denies all non-loopback
+// probes.
+func enforceHealthcheckEgress(probeURL string, allowlist []string) error {
+	parsed, err := url.Parse(probeURL)
+	if err != nil {
+		return fmt.Errorf("invalid http healthcheck url %q", probeURL)
+	}
+	host := parsed.Hostname()
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return nil
+	}
+	// Allowlist entries appear both as origins (https://host[:port]) and as
+	// bare host[:port] pairs; match the probe against every equivalent form.
+	probeForms := []string{
+		parsed.Scheme + "://" + parsed.Host,
+		parsed.Scheme + "://" + host,
+		parsed.Host,
+		host,
+	}
+	for _, allowed := range allowlist {
+		candidate := strings.TrimRight(strings.TrimSpace(allowed), "/")
+		if candidate == "" {
+			continue
+		}
+		for _, form := range probeForms {
+			if strings.EqualFold(candidate, form) {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("http healthcheck url %q is outside the plan network allowlist; host egress is deny-by-default", probeURL)
 }
 
 func validateHealthcheckURL(rawURL string) (string, error) {

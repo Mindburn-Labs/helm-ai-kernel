@@ -81,7 +81,14 @@ type VerifyOptions struct {
 	// to verify embedded managed-agent execution receipts. The verifier never
 	// trusts public keys declared inside the bundle unless they match this root.
 	ManagedAgentReceiptPublicKeyHex string
-	Now                             time.Time
+	// WitnessPublicKeysHex maps witness IDs to trusted Ed25519 public keys
+	// for verifying receipt witness_signatures (the k-of-n witness overlay).
+	// Witness signatures whose witness_id has no configured key are skipped —
+	// they anchor to the witness registry, not to embedded presence, so an
+	// unconfigured verifier neither trusts nor fails them. A configured key
+	// demands a valid signature over the receipt hash (fail-closed).
+	WitnessPublicKeysHex map[string]string
+	Now                  time.Time
 }
 
 // VerifyBundle performs offline verification of an EvidencePack directory.
@@ -336,10 +343,24 @@ func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
 			}
 			if witnesses, ok := document["witness_signatures"].([]any); ok {
 				for _, witness := range witnesses {
-					if item, ok := witness.(map[string]any); ok {
-						if sig, ok := item["signature"].(string); ok && sig != "" {
-							total++
-						}
+					item, ok := witness.(map[string]any)
+					if !ok {
+						continue
+					}
+					sig, ok := item["signature"].(string)
+					if !ok || sig == "" {
+						continue
+					}
+					keyHex := strings.TrimSpace(opts.WitnessPublicKeysHex[firstString(item, "witness_id")])
+					if keyHex == "" {
+						// Witness quorum signatures anchor to the witness
+						// registry; without a configured key they are
+						// skipped, never presence-trusted or auto-failed.
+						continue
+					}
+					total++
+					if verifyWitnessReceiptSignature(document, sig, keyHex) {
+						valid++
 					}
 				}
 			}
@@ -422,6 +443,30 @@ func verifyMCPPolicyDecisionReceiptSignature(document map[string]any, sig string
 		firstString(document, "args_hash"),
 	)
 	return ed25519.Verify(ed25519.PublicKey(pubBytes), []byte(payload), sigBytes)
+}
+
+// verifyWitnessReceiptSignature verifies a witness attestation: an Ed25519
+// signature by the configured witness key over the receipt's hex-decoded
+// receipt_hash (mirrors witness.VerifyAttestation). Missing or malformed
+// hash material fails closed — a configured witness demands verification.
+func verifyWitnessReceiptSignature(document map[string]any, sig, trustedPublicKeyHex string) bool {
+	receiptHashHex := strings.TrimSpace(firstString(document, "receipt_hash"))
+	if receiptHashHex == "" {
+		return false
+	}
+	receiptHashBytes, err := hex.DecodeString(strings.TrimPrefix(receiptHashHex, "sha256:"))
+	if err != nil || len(receiptHashBytes) == 0 {
+		return false
+	}
+	pubBytes, err := hex.DecodeString(strings.TrimSpace(trustedPublicKeyHex))
+	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
+		return false
+	}
+	sigBytes, err := hex.DecodeString(strings.TrimSpace(sig))
+	if err != nil || len(sigBytes) != ed25519.SignatureSize {
+		return false
+	}
+	return ed25519.Verify(ed25519.PublicKey(pubBytes), receiptHashBytes, sigBytes)
 }
 
 func verifyManagedAgentEd25519Signature(document map[string]any, sig, trustedPublicKeyHex, payload string) bool {

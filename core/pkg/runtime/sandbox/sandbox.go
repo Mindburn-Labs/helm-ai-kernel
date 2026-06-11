@@ -66,12 +66,11 @@ type WasiSandbox struct {
 	packVerifier PackVerifier
 }
 
-// NewWasiSandbox creates a secure WASI sandbox.
-func NewWasiSandbox(ctx context.Context, artStore artifacts.Store, config SandboxConfig) (*WasiSandbox, error) {
-	return NewWasiSandboxWithVerifier(ctx, artStore, config, nil)
-}
-
-// NewWasiSandboxWithVerifier creates a secure WASI sandbox with pack trust verification.
+// NewWasiSandboxWithVerifier creates a secure WASI sandbox with pack trust
+// verification. Passing a nil verifier is an explicit fail-closed choice:
+// the sandbox constructs and tears down normally, but every pack execution
+// is refused with ERR_PACK_TRUST_UNVERIFIED until a PackVerifier
+// (trust.PackLoader backed by TUF roots) is configured.
 func NewWasiSandboxWithVerifier(ctx context.Context, artStore artifacts.Store, config SandboxConfig, verifier PackVerifier) (*WasiSandbox, error) {
 	if artStore == nil {
 		return nil, fmt.Errorf("artifact store is required")
@@ -104,7 +103,7 @@ func (s *WasiSandbox) Run(ctx context.Context, packRef trust.PackRef, input []by
 	if s.packVerifier == nil {
 		return nil, &SandboxError{
 			Code:    ErrPackTrustUnverified,
-			Message: "WASI pack execution requires a trusted PackLoader verifier",
+			Message: "WASI pack execution is fail-closed: no PackVerifier configured — construct the sandbox with NewWasiSandboxWithVerifier and a trust.PackLoader (TUF roots) to enable pack execution",
 		}
 	}
 	if err := s.packVerifier.ValidatePackLoad(packRef); err != nil {

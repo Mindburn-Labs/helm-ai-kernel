@@ -16,7 +16,7 @@
 #               Expects hermes Job failed; openclaw either CrashLoopBackOff or
 #               never reaches Ready within the timeout.
 #
-# Required tools: minikube, kubectl, helm. The driver fails fast if any are
+# Required tools: minikube, kubectl, helm, docker, python3. The driver fails fast if any are
 # missing.
 set -euo pipefail
 
@@ -33,7 +33,10 @@ OPENROUTER_KEY_REAL="${OPENROUTER_API_KEY:-}"
 OPENROUTER_KEY_FAKE="sk-fake-1234567890"
 KEEP_CLUSTER="${LAUNCHPAD_SMOKE_KEEP_CLUSTER:-0}"
 FRESH_CLUSTER="${LAUNCHPAD_SMOKE_FRESH_CLUSTER:-1}"
-PRE_PULL="${LAUNCHPAD_SMOKE_PRE_PULL:-1}"
+PRE_LOAD_LAUNCHPAD_IMAGES="${LAUNCHPAD_SMOKE_PRE_LOAD_LAUNCHPAD_IMAGES:-0}"
+GHCR_SECRET_NAME="${LAUNCHPAD_SMOKE_GHCR_SECRET_NAME:-ghcr-read}"
+GHCR_USERNAME="${GHCR_USERNAME:-}"
+GHCR_TOKEN="${GHCR_TOKEN:-}"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/launchpad-k8s-smoke.XXXXXX")"
 
 usage() {
@@ -48,7 +51,10 @@ Environment overrides:
   LAUNCHPAD_SMOKE_KERNEL_IMAGE  kernel image to load into minikube (default ghcr.io/mindburn-labs/helm-ai-kernel:local)
   LAUNCHPAD_SMOKE_KEEP_CLUSTER  set to 1 to skip the final minikube delete
   LAUNCHPAD_SMOKE_FRESH_CLUSTER set to 0 to reuse an existing minikube profile (assumes the cluster is already running and kernel image is loaded)
-  LAUNCHPAD_SMOKE_PRE_PULL      set to 0 to skip pulling openclaw/hermes/egress-proxy
+  LAUNCHPAD_SMOKE_GHCR_SECRET_NAME Secret name for private GHCR pulls (default ghcr-read)
+  LAUNCHPAD_SMOKE_PRE_LOAD_LAUNCHPAD_IMAGES set to 1 for debug-only host pull + minikube image load verification
+  GHCR_USERNAME                  GitHub/GHCR username for positive/negative launchpad app image pulls
+  GHCR_TOKEN                     GitHub token with read:packages for private GHCR launchpad app image pulls
   OPENROUTER_API_KEY            real key for the positive scenario; ignored on negative
 EOF
 }
@@ -78,9 +84,50 @@ require minikube
 require kubectl
 require helm
 require docker
+require python3
+
+apply_ghcr_pull_secret() {
+    GHCR_USERNAME="$GHCR_USERNAME" GHCR_TOKEN="$GHCR_TOKEN" \
+        python3 - "$GHCR_SECRET_NAME" <<'PY' | kubectl -n "$NAMESPACE" apply -f -
+import base64
+import json
+import os
+import sys
+
+name = sys.argv[1]
+username = os.environ["GHCR_USERNAME"]
+token = os.environ["GHCR_TOKEN"]
+auth = base64.b64encode(f"{username}:{token}".encode()).decode()
+dockerconfig = {
+    "auths": {
+        "ghcr.io": {
+            "username": username,
+            "password": token,
+            "auth": auth,
+        }
+    }
+}
+manifest = {
+    "apiVersion": "v1",
+    "kind": "Secret",
+    "metadata": {"name": name},
+    "type": "kubernetes.io/dockerconfigjson",
+    "data": {
+        ".dockerconfigjson": base64.b64encode(
+            json.dumps(dockerconfig, separators=(",", ":")).encode()
+        ).decode()
+    },
+}
+print(json.dumps(manifest))
+PY
+}
 
 if [ "$MODE" = "positive" ] && [ -z "$OPENROUTER_KEY_REAL" ]; then
     echo "::error::OPENROUTER_API_KEY env var is required for --mode positive" >&2
+    exit 1
+fi
+if [ "$MODE" != "baseline" ] && { [ -z "$GHCR_USERNAME" ] || [ -z "$GHCR_TOKEN" ]; }; then
+    echo "::error::GHCR_USERNAME and GHCR_TOKEN are required for launchpad app image pulls in --mode ${MODE}" >&2
     exit 1
 fi
 
@@ -133,7 +180,7 @@ kubectl config use-context "$PROFILE"
 kubectl cluster-info
 echo "::endgroup::"
 
-echo "::group::stage 2 — load images into minikube"
+echo "::group::stage 2 — local kernel image + optional launchpad image debug"
 # Kernel image: built locally by the caller (CI step or developer make target).
 # Skip the load if it is already inside minikube (common when the caller built
 # directly inside the minikube docker daemon via `eval $(minikube docker-env)`).
@@ -145,20 +192,24 @@ else
     echo "::warning::kernel image $KERNEL_IMAGE not in local docker; relying on imagePullPolicy=IfNotPresent against registry"
 fi
 
-if [ "$PRE_PULL" = "1" ] && [ "$MODE" != "baseline" ]; then
-    # Cold-pull on minikube is slow and prone to timing out helm install.
-    # Pull on the host first, then load into the cluster.
+if [ "$PRE_LOAD_LAUNCHPAD_IMAGES" = "1" ] && [ "$MODE" != "baseline" ]; then
+    # Debug-only path. Private digest-pinned GHCR refs have proven unreliable
+    # through `minikube image load`; the normal path below uses imagePullSecrets.
     for img in \
         "ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995" \
         "ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652" \
         "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:e09e0aec1e0e1f926f4cd18444e88310656b85551cbc10a6c340acb979a42e03"; do
         docker pull --platform=linux/amd64 "$img"
         minikube -p "$PROFILE" image load "$img"
+        if ! minikube -p "$PROFILE" image ls 2>/dev/null | grep -qF "$img"; then
+            echo "::error::minikube image load did not make $img resolvable in the node; use the GHCR imagePullSecret path" >&2
+            exit 1
+        fi
     done
 fi
 echo "::endgroup::"
 
-echo "::group::stage 3 — namespace + OpenRouter secret"
+echo "::group::stage 3 — namespace + runtime secrets"
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 if [ "$MODE" != "baseline" ]; then
@@ -169,6 +220,7 @@ if [ "$MODE" != "baseline" ]; then
     kubectl -n "$NAMESPACE" create secret generic openrouter-key \
         --from-literal=OPENROUTER_API_KEY="$key" \
         --dry-run=client -o yaml | kubectl apply -f -
+    apply_ghcr_pull_secret
 fi
 echo "::endgroup::"
 
@@ -191,6 +243,7 @@ case "$MODE" in
         helm_args+=(
             --set "launchpadApps.openclaw.enabled=true"
             --set "launchpadApps.hermes.enabled=true"
+            --set "imagePullSecrets[0].name=${GHCR_SECRET_NAME}"
         )
         ;;
 esac

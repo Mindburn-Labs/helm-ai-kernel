@@ -23,6 +23,10 @@ spec:
         {{- include "helm-ai-kernel.launchpadApp.labels" (dict "ctx" . "app" $app) | nindent 8 }}
     spec:
       restartPolicy: Always
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       nodeSelector:
         {{- toYaml .Values.launchpadApps.nodeSelector | nindent 8 }}
       securityContext:

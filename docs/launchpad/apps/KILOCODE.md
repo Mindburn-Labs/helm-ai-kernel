@@ -1,5 +1,5 @@
 ---
-last_reviewed: "2026-05-28"
+last_reviewed: "2026-06-11"
 ---
 
 # Kilo Code on HELM

@@ -89,6 +89,9 @@ func TestMCP20260728AuthorizationSEPVectors(t *testing.T) {
 		Issuer:   file.Issuer,
 		Audience: file.Audience,
 		Resource: file.Resource,
+		// httptest serves over http://127.0.0.1 — the explicit loopback
+		// opt-in keeps the https-only JWKS rule fail-closed everywhere else.
+		AllowInsecureLoopback: true,
 	})
 
 	// Shared execution firewall fixture for tool_call vectors.

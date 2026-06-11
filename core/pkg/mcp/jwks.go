@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -43,11 +45,12 @@ func (e *JWKSValidationError) Error() string {
 
 // JWKSConfig configures the JWKS validator.
 type JWKSConfig struct {
-	JWKSURL  string   // HELM_OAUTH_JWKS_URL — JWKS endpoint
-	Issuer   string   // HELM_OAUTH_ISSUER — expected iss claim
-	Audience string   // HELM_OAUTH_AUDIENCE — expected aud claim
-	Resource string   // HELM_OAUTH_RESOURCE — expected RFC 8707 resource indicator
-	Scopes   []string // HELM_OAUTH_SCOPES — required scopes
+	JWKSURL               string   // HELM_OAUTH_JWKS_URL — JWKS endpoint
+	Issuer                string   // HELM_OAUTH_ISSUER — expected iss claim
+	Audience              string   // HELM_OAUTH_AUDIENCE — expected aud claim
+	Resource              string   // HELM_OAUTH_RESOURCE — expected RFC 8707 resource indicator
+	Scopes                []string // HELM_OAUTH_SCOPES — required scopes
+	AllowInsecureLoopback bool     // test/dev-only allowance for httptest loopback JWKS endpoints
 }
 
 // OAuthTokenClaims contains validated token claims needed by MCP authorization.
@@ -252,7 +255,12 @@ func (v *JWKSValidator) forceRefreshKeys() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.config.JWKSURL, nil)
+	jwksURL, err := v.validatedJWKSURL()
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, jwksURL, nil)
 	if err != nil {
 		return &JWKSValidationError{Kind: JWKSErrFetchFailed, Message: err.Error()}
 	}
@@ -302,6 +310,32 @@ func (v *JWKSValidator) forceRefreshKeys() error {
 	v.mu.Unlock()
 
 	return nil
+}
+
+func (v *JWKSValidator) validatedJWKSURL() (string, error) {
+	parsed, err := url.Parse(v.config.JWKSURL)
+	if err != nil {
+		return "", &JWKSValidationError{Kind: JWKSErrFetchFailed, Message: err.Error()}
+	}
+	if parsed.Scheme == "https" {
+		return parsed.String(), nil
+	}
+	if parsed.Scheme == "http" && v.config.AllowInsecureLoopback && isLoopbackHost(parsed.Hostname()) {
+		return parsed.String(), nil
+	}
+	return "", &JWKSValidationError{
+		Kind:    JWKSErrFetchFailed,
+		Message: "JWKS endpoint must use https; http is only allowed for explicitly enabled loopback tests",
+	}
+}
+
+func isLoopbackHost(host string) bool {
+	host = strings.TrimSpace(strings.ToLower(host))
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func classifyJWTError(err error) error {

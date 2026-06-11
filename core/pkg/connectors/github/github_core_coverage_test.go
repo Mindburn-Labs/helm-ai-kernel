@@ -313,9 +313,8 @@ func TestConnectorExecuteSuccessWithLocalREST(t *testing.T) {
 	conn := NewConnector(Config{BaseURL: server.URL, Token: "ghp-test"})
 	conn.client.httpClient = server.Client()
 	ctx := context.Background()
-	permit := validPermit()
 
-	listed, err := conn.Execute(ctx, permit, "github.list_prs", map[string]any{"repo": "owner/repo", "state": "all"})
+	listed, err := conn.Execute(ctx, permitFor("github.list_prs", "nonce-local-list", allowedParamsForTool("github.list_prs")...), "github.list_prs", map[string]any{"repo": "owner/repo", "state": "all"})
 	if err != nil {
 		t.Fatalf("list execute: %v", err)
 	}
@@ -323,7 +322,7 @@ func TestConnectorExecuteSuccessWithLocalREST(t *testing.T) {
 		t.Fatalf("unexpected list result: %+v", listed)
 	}
 
-	read, err := conn.Execute(ctx, permit, "github.read_pr", map[string]any{"repo": "owner/repo", "number": float64(7)})
+	read, err := conn.Execute(ctx, permitFor("github.read_pr", "nonce-local-read", allowedParamsForTool("github.read_pr")...), "github.read_pr", map[string]any{"repo": "owner/repo", "number": float64(7)})
 	if err != nil {
 		t.Fatalf("read execute: %v", err)
 	}
@@ -331,7 +330,7 @@ func TestConnectorExecuteSuccessWithLocalREST(t *testing.T) {
 		t.Fatalf("unexpected read result: %+v", read)
 	}
 
-	created, err := conn.Execute(ctx, permit, "github.create_issue", map[string]any{
+	created, err := conn.Execute(ctx, permitFor("github.create_issue", "nonce-local-create", allowedParamsForTool("github.create_issue")...), "github.create_issue", map[string]any{
 		"repo":      "owner/repo",
 		"title":     "Bug",
 		"body":      "Details",
@@ -345,7 +344,7 @@ func TestConnectorExecuteSuccessWithLocalREST(t *testing.T) {
 		t.Fatalf("unexpected create result: %+v", created)
 	}
 
-	comment, err := conn.Execute(ctx, permit, "github.add_comment", map[string]any{
+	comment, err := conn.Execute(ctx, permitFor("github.add_comment", "nonce-local-comment", allowedParamsForTool("github.add_comment")...), "github.add_comment", map[string]any{
 		"repo":         "owner/repo",
 		"issue_number": int64(7),
 		"body":         "LGTM",
@@ -365,6 +364,7 @@ func TestConnectorExecuteSuccessWithLocalREST(t *testing.T) {
 func TestExecuteCanonicalHashError(t *testing.T) {
 	conn := NewConnector(Config{Token: "ghp-test"})
 	permit := validPermit()
+	permit.Scope.AllowedParams = append(permit.Scope.AllowedParams, "bad")
 	_, err := conn.Execute(context.Background(), permit, "github.list_prs", map[string]any{"repo": "owner/repo", "bad": func() {}})
 	if err == nil || !strings.Contains(err.Error(), "canonical hash of params") {
 		t.Fatalf("expected canonical hash error, got %v", err)

@@ -161,6 +161,67 @@ func TestWorkstationRemainingPhaseCommands(t *testing.T) {
 	}
 }
 
+func TestWorkstationCLIRejectsArgvSigningSeed(t *testing.T) {
+	root := kernelRepoRoot(t)
+	fixture := filepath.Join(root, "fixtures", "workstation", "denied-network")
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"helm-ai-kernel", "workstation", "import",
+		"--artifacts", fixture,
+		"--signing-seed-hex", strings.Repeat("0", 64),
+		"--json",
+	}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("unsafe seed flag exit = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "--signing-seed-hex is disabled") {
+		t.Fatalf("stderr missing unsafe seed error: %s", stderr.String())
+	}
+}
+
+func TestWorkstationCLIAcceptsSigningSeedFile(t *testing.T) {
+	root := kernelRepoRoot(t)
+	fixture := filepath.Join(root, "fixtures", "workstation", "denied-network")
+	seedFile := filepath.Join(t.TempDir(), "receipt.seed")
+	if err := os.WriteFile(seedFile, []byte(strings.Repeat("1", 64)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"helm-ai-kernel", "workstation", "import",
+		"--artifacts", fixture,
+		"--signing-seed-file", seedFile,
+		"--json",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("seed-file import exit = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "signer_key_id") {
+		t.Fatalf("json output missing signer key: %s", stdout.String())
+	}
+}
+
+func TestWorkstationEnforceRefusesObserveModeCommand(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	marker := filepath.Join(t.TempDir(), "observe-mode-executed")
+	code := Run([]string{
+		"helm-ai-kernel", "workstation", "enforce",
+		"--class", "shell",
+		"--", "/usr/bin/touch", marker,
+	}, &stdout, &stderr)
+	if code != 126 {
+		t.Fatalf("observe command exit = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("observe-mode command executed or marker stat failed: %v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "operate-mode ALLOW") {
+		t.Fatalf("stderr missing operate-mode refusal: %s", stderr.String())
+	}
+}
+
 func TestWorkstationCaptureCommands(t *testing.T) {
 	tmp := t.TempDir()
 	workspace := filepath.Join(tmp, "workspace")

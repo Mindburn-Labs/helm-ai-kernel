@@ -3,15 +3,26 @@ package gates
 
 import "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 
+// RegistryOptions configures gate registration for callers with external trust roots.
+type RegistryOptions struct {
+	G1ReceiptVerifier func(data []byte, sig string) error
+}
+
 // DefaultEngine returns a conformance engine pre-loaded with all gates
 // in canonical registration order (G0 → G12, G13–G15 L3, GX extensions).
 // This is the standard way to create an engine for CLI or CI usage.
 func DefaultEngine() *conform.Engine {
+	return DefaultEngineWithOptions(RegistryOptions{})
+}
+
+// DefaultEngineWithOptions returns a conformance engine with caller-supplied
+// trust-root integrations. Missing security verifiers remain fail-closed.
+func DefaultEngineWithOptions(opts RegistryOptions) *conform.Engine {
 	e := conform.NewEngine()
 
 	// L1/L2 core gates
 	e.RegisterGate(&G0BuildIdentity{})
-	e.RegisterGate(&G1ProofReceipts{})
+	e.RegisterGate(&G1ProofReceipts{Verifier: opts.G1ReceiptVerifier})
 	e.RegisterGate(&G2Replay{})
 	e.RegisterGate(&G2ASchemaFirst{})
 	e.RegisterGate(&G3Policy{})

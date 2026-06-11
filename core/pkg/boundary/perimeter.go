@@ -150,6 +150,9 @@ func (pe *PerimeterEnforcer) LoadPolicy(policy *PerimeterPolicy) error {
 	if policy.Version != PolicyVersion {
 		return fmt.Errorf("unsupported version: %s", policy.Version)
 	}
+	if err := rejectUnsupportedConstraints(policy); err != nil {
+		return err
+	}
 
 	pe.mu.Lock()
 	defer pe.mu.Unlock()
@@ -172,6 +175,50 @@ func (pe *PerimeterEnforcer) LoadPolicy(policy *PerimeterPolicy) error {
 	}
 
 	return nil
+}
+
+func rejectUnsupportedConstraints(policy *PerimeterPolicy) error {
+	if policy == nil {
+		return nil
+	}
+	nc := policy.Constraints.Network
+	if nc != nil {
+		if nc.MaxRequestsPerMin != 0 {
+			return unsupportedConstraint("network.max_requests_per_minute")
+		}
+		if nc.MaxBandwidthBytes != 0 {
+			return unsupportedConstraint("network.max_bandwidth_bytes")
+		}
+	}
+	tc := policy.Constraints.Tools
+	if tc != nil {
+		if tc.MaxConcurrentCalls != 0 {
+			return unsupportedConstraint("tools.max_concurrent_calls")
+		}
+		if tc.TimeoutSeconds != 0 {
+			return unsupportedConstraint("tools.timeout_seconds")
+		}
+	}
+	dc := policy.Constraints.Data
+	if dc != nil {
+		if dc.MaxContextTokens != 0 {
+			return unsupportedConstraint("data.max_context_tokens")
+		}
+		if dc.MaxResponseTokens != 0 {
+			return unsupportedConstraint("data.max_response_tokens")
+		}
+		if len(dc.RedactPatterns) != 0 {
+			return unsupportedConstraint("data.redact_patterns")
+		}
+	}
+	if policy.Constraints.Temporal != nil {
+		return unsupportedConstraint("temporal")
+	}
+	return nil
+}
+
+func unsupportedConstraint(field string) error {
+	return fmt.Errorf("%w: unsupported perimeter policy field %s cannot be accepted without enforcement", ErrInvalidPolicy, field)
 }
 
 // CheckNetwork verifies network access.

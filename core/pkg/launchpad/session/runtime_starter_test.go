@@ -207,6 +207,22 @@ func TestParseFilesystemMountRejectsInvalidMode(t *testing.T) {
 	}
 }
 
+func TestParseFilesystemMountRejectsUnsafeName(t *testing.T) {
+	for _, raw := range []string{
+		"../escape:rw:/var/lib/app",
+		"..:rw:/var/lib/app",
+		"/absolute:rw:/var/lib/app",
+		"nested/name:rw:/var/lib/app",
+		"name with spaces:rw:/var/lib/app",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			if _, err := parseFilesystemMount(raw, "app"); err == nil {
+				t.Fatal("expected unsafe mount name rejection")
+			}
+		})
+	}
+}
+
 func TestMaterializeFilesystemMountsSkipsWorkspace(t *testing.T) {
 	t.Setenv("HELM_LAUNCHPAD_HOME", t.TempDir())
 	compiled := plan.LaunchPlan{
@@ -220,6 +236,18 @@ func TestMaterializeFilesystemMountsSkipsWorkspace(t *testing.T) {
 	}
 	if len(mounts) != 0 {
 		t.Fatalf("expected workspace to be skipped, got %d mounts", len(mounts))
+	}
+}
+
+func TestMaterializeFilesystemMountsRejectsUnsafeLaunchID(t *testing.T) {
+	t.Setenv("HELM_LAUNCHPAD_HOME", t.TempDir())
+	compiled := plan.LaunchPlan{
+		LaunchID:         "../escape",
+		AppID:            "demo",
+		FilesystemMounts: []string{"app_state:rw:/var/lib/demo"},
+	}
+	if _, err := materializeFilesystemMounts(compiled, ExecuteOptions{}); err == nil {
+		t.Fatal("expected unsafe launch id rejection")
 	}
 }
 

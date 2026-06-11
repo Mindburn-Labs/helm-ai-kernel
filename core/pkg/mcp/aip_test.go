@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -13,9 +14,23 @@ func aipFixedClock(t time.Time) func() time.Time {
 	return func() time.Time { return t }
 }
 
+func aipTestSignatureVerifier(claim DelegationClaim) error {
+	if claim.Signature == "sig-fixture" {
+		return nil
+	}
+	return fmt.Errorf("unexpected test signature %q", claim.Signature)
+}
+
+func newTestAIPVerifier(now time.Time) *AIPVerifier {
+	return NewAIPVerifier(
+		WithAIPClock(aipFixedClock(now)),
+		WithAIPSignatureVerifier(aipTestSignatureVerifier),
+	)
+}
+
 func TestAIPVerifier_RegisterDelegation(t *testing.T) {
 	now := time.Date(2026, 4, 13, 0, 0, 0, 0, time.UTC)
-	v := NewAIPVerifier(WithAIPClock(aipFixedClock(now)))
+	v := newTestAIPVerifier(now)
 
 	err := v.RegisterDelegation(DelegationClaim{
 		DelegatorID: "user-1",
@@ -35,13 +50,14 @@ func TestAIPVerifier_RegisterDelegation(t *testing.T) {
 
 func TestAIPVerifier_VerifyAuthorityAllowed(t *testing.T) {
 	now := time.Date(2026, 4, 13, 0, 0, 0, 0, time.UTC)
-	v := NewAIPVerifier(WithAIPClock(aipFixedClock(now)))
+	v := newTestAIPVerifier(now)
 
 	err := v.RegisterDelegation(DelegationClaim{
 		DelegatorID: "user-1",
 		DelegateID:  "agent-1",
 		Scope:       []string{"file_read", "file_write"},
 		ExpiresAt:   now.Add(time.Hour),
+		Signature:   "sig-fixture",
 	})
 	require.NoError(t, err)
 
@@ -56,13 +72,14 @@ func TestAIPVerifier_VerifyAuthorityAllowed(t *testing.T) {
 
 func TestAIPVerifier_VerifyAuthorityRejected(t *testing.T) {
 	now := time.Date(2026, 4, 13, 0, 0, 0, 0, time.UTC)
-	v := NewAIPVerifier(WithAIPClock(aipFixedClock(now)))
+	v := newTestAIPVerifier(now)
 
 	err := v.RegisterDelegation(DelegationClaim{
 		DelegatorID: "user-1",
 		DelegateID:  "agent-1",
 		Scope:       []string{"file_read"},
 		ExpiresAt:   now.Add(time.Hour),
+		Signature:   "sig-fixture",
 	})
 	require.NoError(t, err)
 
@@ -76,17 +93,18 @@ func TestAIPVerifier_ExpiredDelegationRejected(t *testing.T) {
 	now := time.Date(2026, 4, 13, 0, 0, 0, 0, time.UTC)
 
 	// Register at past time.
-	v := NewAIPVerifier(WithAIPClock(aipFixedClock(past)))
+	v := newTestAIPVerifier(past)
 	err := v.RegisterDelegation(DelegationClaim{
 		DelegatorID: "user-1",
 		DelegateID:  "agent-1",
 		Scope:       []string{"file_read"},
 		ExpiresAt:   past.Add(time.Hour), // Expired relative to "now"
+		Signature:   "sig-fixture",
 	})
 	require.NoError(t, err)
 
 	// Verify at current time — delegation has expired.
-	v2 := NewAIPVerifier(WithAIPClock(aipFixedClock(now)))
+	v2 := newTestAIPVerifier(now)
 	// Copy the chain manually.
 	chain := v.GetChain("agent-1")
 	for _, c := range chain {
@@ -100,7 +118,7 @@ func TestAIPVerifier_ExpiredDelegationRejected(t *testing.T) {
 
 func TestAIPVerifier_ScopeNarrowingEnforced(t *testing.T) {
 	now := time.Date(2026, 4, 13, 0, 0, 0, 0, time.UTC)
-	v := NewAIPVerifier(WithAIPClock(aipFixedClock(now)))
+	v := newTestAIPVerifier(now)
 
 	// Delegator "agent-1" has scope [file_read, file_write].
 	err := v.RegisterDelegation(DelegationClaim{
@@ -108,6 +126,7 @@ func TestAIPVerifier_ScopeNarrowingEnforced(t *testing.T) {
 		DelegateID:  "agent-1",
 		Scope:       []string{"file_read", "file_write"},
 		ExpiresAt:   now.Add(time.Hour),
+		Signature:   "sig-fixture",
 	})
 	require.NoError(t, err)
 
@@ -117,6 +136,7 @@ func TestAIPVerifier_ScopeNarrowingEnforced(t *testing.T) {
 		DelegateID:  "agent-2",
 		Scope:       []string{"file_read"},
 		ExpiresAt:   now.Add(30 * time.Minute),
+		Signature:   "sig-fixture",
 	})
 	require.NoError(t, err)
 
@@ -126,6 +146,7 @@ func TestAIPVerifier_ScopeNarrowingEnforced(t *testing.T) {
 		DelegateID:  "agent-3",
 		Scope:       []string{"file_read", "file_delete"},
 		ExpiresAt:   now.Add(30 * time.Minute),
+		Signature:   "sig-fixture",
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "scope narrowing violation")
@@ -134,7 +155,7 @@ func TestAIPVerifier_ScopeNarrowingEnforced(t *testing.T) {
 
 func TestAIPVerifier_ChainOfDelegations(t *testing.T) {
 	now := time.Date(2026, 4, 13, 0, 0, 0, 0, time.UTC)
-	v := NewAIPVerifier(WithAIPClock(aipFixedClock(now)))
+	v := newTestAIPVerifier(now)
 
 	// User -> Agent-1 (file_read, file_write, db_query)
 	err := v.RegisterDelegation(DelegationClaim{
@@ -142,6 +163,7 @@ func TestAIPVerifier_ChainOfDelegations(t *testing.T) {
 		DelegateID:  "agent-1",
 		Scope:       []string{"file_read", "file_write", "db_query"},
 		ExpiresAt:   now.Add(2 * time.Hour),
+		Signature:   "sig-fixture",
 	})
 	require.NoError(t, err)
 
@@ -151,6 +173,7 @@ func TestAIPVerifier_ChainOfDelegations(t *testing.T) {
 		DelegateID:  "agent-2",
 		Scope:       []string{"file_read", "db_query"},
 		ExpiresAt:   now.Add(time.Hour),
+		Signature:   "sig-fixture",
 	})
 	require.NoError(t, err)
 
@@ -160,6 +183,7 @@ func TestAIPVerifier_ChainOfDelegations(t *testing.T) {
 		DelegateID:  "agent-3",
 		Scope:       []string{"file_read"},
 		ExpiresAt:   now.Add(30 * time.Minute),
+		Signature:   "sig-fixture",
 	})
 	require.NoError(t, err)
 
@@ -175,7 +199,7 @@ func TestAIPVerifier_ChainOfDelegations(t *testing.T) {
 
 func TestAIPVerifier_NoDelegationFailsClosed(t *testing.T) {
 	now := time.Date(2026, 4, 13, 0, 0, 0, 0, time.UTC)
-	v := NewAIPVerifier(WithAIPClock(aipFixedClock(now)))
+	v := newTestAIPVerifier(now)
 
 	ok, err := v.VerifyAuthority("unknown-agent", "file_read")
 	require.NoError(t, err)
@@ -184,13 +208,14 @@ func TestAIPVerifier_NoDelegationFailsClosed(t *testing.T) {
 
 func TestAIPVerifier_GetChainReturnsCopy(t *testing.T) {
 	now := time.Date(2026, 4, 13, 0, 0, 0, 0, time.UTC)
-	v := NewAIPVerifier(WithAIPClock(aipFixedClock(now)))
+	v := newTestAIPVerifier(now)
 
 	err := v.RegisterDelegation(DelegationClaim{
 		DelegatorID: "user-1",
 		DelegateID:  "agent-1",
 		Scope:       []string{"file_read"},
 		ExpiresAt:   now.Add(time.Hour),
+		Signature:   "sig-fixture",
 	})
 	require.NoError(t, err)
 
@@ -246,6 +271,42 @@ func TestAIPVerifier_ValidationErrors(t *testing.T) {
 		assert.Contains(t, err.Error(), "scope")
 	})
 
+	t.Run("missing signature", func(t *testing.T) {
+		err := v.RegisterDelegation(DelegationClaim{
+			DelegatorID: "user-1",
+			DelegateID:  "agent-1",
+			Scope:       []string{"tool"},
+			ExpiresAt:   time.Now().Add(time.Hour),
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "signature")
+	})
+
+	t.Run("missing signature verifier", func(t *testing.T) {
+		err := v.RegisterDelegation(DelegationClaim{
+			DelegatorID: "user-1",
+			DelegateID:  "agent-1",
+			Scope:       []string{"tool"},
+			ExpiresAt:   time.Now().Add(time.Hour),
+			Signature:   "sig-fixture",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "signature verifier")
+	})
+
+	t.Run("invalid signature", func(t *testing.T) {
+		signed := NewAIPVerifier(WithAIPSignatureVerifier(aipTestSignatureVerifier))
+		err := signed.RegisterDelegation(DelegationClaim{
+			DelegatorID: "user-1",
+			DelegateID:  "agent-1",
+			Scope:       []string{"tool"},
+			ExpiresAt:   time.Now().Add(time.Hour),
+			Signature:   "forged-signature",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "signature invalid")
+	})
+
 	t.Run("verify empty delegate ID", func(t *testing.T) {
 		_, err := v.VerifyAuthority("", "tool")
 		require.Error(t, err)
@@ -259,7 +320,7 @@ func TestAIPVerifier_ValidationErrors(t *testing.T) {
 
 func TestAIPVerifier_ConcurrentAccess(t *testing.T) {
 	now := time.Date(2026, 4, 13, 0, 0, 0, 0, time.UTC)
-	v := NewAIPVerifier(WithAIPClock(aipFixedClock(now)))
+	v := newTestAIPVerifier(now)
 
 	var wg sync.WaitGroup
 
@@ -273,6 +334,7 @@ func TestAIPVerifier_ConcurrentAccess(t *testing.T) {
 				DelegateID:  "agent-concurrent",
 				Scope:       []string{"tool_a", "tool_b"},
 				ExpiresAt:   now.Add(time.Hour),
+				Signature:   "sig-fixture",
 			})
 		}(i)
 	}

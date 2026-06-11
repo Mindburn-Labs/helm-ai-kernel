@@ -189,11 +189,10 @@ func New(cfg Config, opts ...Option) *Adapter {
 		cfg.OutputsRoot = DefaultOutputsRoot
 	}
 	a := &Adapter{
-		cfg:           cfg,
-		runner:        LocalCommandRunner{},
-		clock:         time.Now,
-		receiptSigner: deterministicPreviewSigner{},
-		sandboxes:     make(map[string]*sandboxState),
+		cfg:       cfg,
+		runner:    LocalCommandRunner{},
+		clock:     time.Now,
+		sandboxes: make(map[string]*sandboxState),
 	}
 	for _, opt := range opts {
 		opt(a)
@@ -204,7 +203,7 @@ func New(cfg Config, opts ...Option) *Adapter {
 func (a *Adapter) Provider() string { return ProviderID }
 
 func (a *Adapter) Preflight(_ context.Context) (*actuators.PreflightReport, error) {
-	checks := runPreflightChecks(a.cfg)
+	checks := runPreflightChecks(a.cfg, a.receiptSigner)
 	strictPassed := true
 	for _, check := range checks {
 		if check.Required && !check.Passed {
@@ -241,15 +240,24 @@ func (a *Adapter) Create(ctx context.Context, spec *actuators.SandboxSpec) (*act
 	}
 
 	a.mu.Lock()
-	defer a.mu.Unlock()
-
 	a.nextID++
 	id := a.sandboxID()
+	a.mu.Unlock()
+
+	workspace := filepath.Join(a.cfg.WorkspaceRoot, id, "workspace")
+	outputs := filepath.Join(a.cfg.OutputsRoot, id)
+	if err := os.MkdirAll(workspace, 0o700); err != nil {
+		return nil, fmt.Errorf("claude managed agents: create sandbox workspace: %w", err)
+	}
+	if err := os.MkdirAll(outputs, 0o700); err != nil {
+		return nil, fmt.Errorf("claude managed agents: create sandbox outputs: %w", err)
+	}
+
 	specCopy := *spec
 	if specCopy.WorkDir == "" {
 		specCopy.WorkDir = DefaultWorkspace
 	}
-	metadata := a.metadataFor(&specCopy)
+	metadata := a.metadataFor(&specCopy, workspace, outputs)
 	handle := &actuators.SandboxHandle{
 		ID:        id,
 		Provider:  ProviderID,
@@ -257,11 +265,16 @@ func (a *Adapter) Create(ctx context.Context, spec *actuators.SandboxSpec) (*act
 		CreatedAt: a.now(),
 		Metadata:  metadata,
 	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if _, exists := a.sandboxes[id]; exists {
+		return nil, fmt.Errorf("claude managed agents: sandbox id %q already exists", id)
+	}
 	a.sandboxes[id] = &sandboxState{
 		handle:    handle,
 		spec:      &specCopy,
-		workspace: a.cfg.WorkspaceRoot,
-		outputs:   a.cfg.OutputsRoot,
+		workspace: workspace,
+		outputs:   outputs,
 		metadata:  metadata,
 		logs:      make([]actuators.LogEntry, 0),
 	}
@@ -462,15 +475,15 @@ func (a *Adapter) executionContext(state *sandboxState) ExecutionContext {
 
 func (a *Adapter) sandboxID() string {
 	if a.cfg.WorkID != "" {
-		return "claude-work-" + a.cfg.WorkID
+		return fmt.Sprintf("claude-work-%s-%d", a.cfg.WorkID, a.nextID)
 	}
 	if a.cfg.SessionID != "" {
-		return "claude-session-" + a.cfg.SessionID
+		return fmt.Sprintf("claude-session-%s-%d", a.cfg.SessionID, a.nextID)
 	}
 	return fmt.Sprintf("claude-managed-%d", a.nextID)
 }
 
-func (a *Adapter) metadataFor(spec *actuators.SandboxSpec) map[string]string {
+func (a *Adapter) metadataFor(spec *actuators.SandboxSpec, workspace, outputs string) map[string]string {
 	return map[string]string{
 		"worker_id":           a.cfg.WorkerID,
 		metadataImageDigest:   a.cfg.WorkerImageDigest,
@@ -481,12 +494,12 @@ func (a *Adapter) metadataFor(spec *actuators.SandboxSpec) map[string]string {
 		"environment_id":      a.cfg.EnvironmentID,
 		"work_id":             a.cfg.WorkID,
 		"sandbox_spec_hash":   actuators.ComputeSandboxSpecHash(spec),
-		"sandbox_grant_hash":  a.sandboxGrantHash(spec),
+		"sandbox_grant_hash":  a.sandboxGrantHash(spec, workspace, outputs),
 		"policy_epoch":        defaultPolicyEpoch,
 	}
 }
 
-func (a *Adapter) sandboxGrantHash(spec *actuators.SandboxSpec) string {
+func (a *Adapter) sandboxGrantHash(spec *actuators.SandboxSpec, workspace, outputs string) string {
 	return hashAny(struct {
 		WorkerID          string `json:"worker_id"`
 		WorkerImageDigest string `json:"worker_image_digest"`
@@ -499,8 +512,8 @@ func (a *Adapter) sandboxGrantHash(spec *actuators.SandboxSpec) string {
 		WorkerImageDigest: a.cfg.WorkerImageDigest,
 		SkillManifestHash: a.cfg.SkillManifestHash,
 		SandboxSpecHash:   actuators.ComputeSandboxSpecHash(spec),
-		WorkspaceRoot:     a.cfg.WorkspaceRoot,
-		OutputsRoot:       a.cfg.OutputsRoot,
+		WorkspaceRoot:     workspace,
+		OutputsRoot:       outputs,
 	})
 }
 
@@ -627,8 +640,8 @@ func validateSandboxSpec(spec *actuators.SandboxSpec) error {
 		}
 	}
 	for name := range spec.Env {
-		if name == "ANTHROPIC_API_KEY" {
-			return fmt.Errorf("claude managed agents: organization-scoped ANTHROPIC_API_KEY must not be injected into worker tools")
+		if credentialEnvName(name) {
+			return fmt.Errorf("claude managed agents: secret-bearing env var %q must not be injected into worker tools", name)
 		}
 	}
 	return nil
@@ -703,9 +716,13 @@ func (a *Adapter) now() time.Time {
 // LocalCommandRunner executes commands directly in the worker context.
 type LocalCommandRunner struct{}
 
-func (LocalCommandRunner) Run(ctx context.Context, _ ExecutionContext, req *actuators.ExecRequest) (*RunnerResult, error) {
+func (LocalCommandRunner) Run(ctx context.Context, execCtx ExecutionContext, req *actuators.ExecRequest) (*RunnerResult, error) {
 	if req == nil || len(req.Command) == 0 {
 		return nil, fmt.Errorf("command is required")
+	}
+	env, err := commandEnvironment(execCtx, req)
+	if err != nil {
+		return nil, err
 	}
 	runCtx := ctx
 	cancel := func() {}
@@ -717,17 +734,14 @@ func (LocalCommandRunner) Run(ctx context.Context, _ ExecutionContext, req *actu
 	start := time.Now()
 	cmd := exec.CommandContext(runCtx, req.Command[0], req.Command[1:]...)
 	cmd.Dir = req.WorkDir
-	cmd.Env = os.Environ()
-	for k, v := range req.Env {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
+	cmd.Env = env
 	if len(req.Stdin) > 0 {
 		cmd.Stdin = bytes.NewReader(req.Stdin)
 	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err := cmd.Run()
+	err = cmd.Run()
 
 	result := &RunnerResult{
 		ExitCode: exitCode(err),
@@ -743,6 +757,60 @@ func (LocalCommandRunner) Run(ctx context.Context, _ ExecutionContext, req *actu
 		result.ExitCode = -1
 	}
 	return result, nil
+}
+
+func commandEnvironment(execCtx ExecutionContext, req *actuators.ExecRequest) ([]string, error) {
+	workspace := execCtx.WorkspaceRoot
+	if workspace == "" && req != nil {
+		workspace = req.WorkDir
+	}
+	if workspace == "" {
+		workspace = os.TempDir()
+	}
+	tmpDir := filepath.Join(workspace, "tmp")
+	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
+		return nil, fmt.Errorf("create sandbox tmp dir: %w", err)
+	}
+	env := []string{
+		"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+		"HOME=" + workspace,
+		"TMPDIR=" + tmpDir,
+	}
+	if req == nil || len(req.Env) == 0 {
+		return env, nil
+	}
+	keys := make([]string, 0, len(req.Env))
+	for key := range req.Env {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if invalidEnvName(key) {
+			return nil, fmt.Errorf("invalid env var name %q", key)
+		}
+		if credentialEnvName(key) {
+			return nil, fmt.Errorf("secret-bearing env var %q must not be passed to worker tools", key)
+		}
+		env = append(env, key+"="+req.Env[key])
+	}
+	return env, nil
+}
+
+func invalidEnvName(name string) bool {
+	return name == "" || strings.ContainsAny(name, "=\x00")
+}
+
+func credentialEnvName(name string) bool {
+	upper := strings.ToUpper(strings.TrimSpace(name))
+	for _, marker := range []string{"KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL", "AUTH", "COOKIE", "SESSION", "PRIVATE"} {
+		if upper == marker ||
+			strings.HasPrefix(upper, marker+"_") ||
+			strings.HasSuffix(upper, "_"+marker) ||
+			strings.Contains(upper, "_"+marker+"_") {
+			return true
+		}
+	}
+	return false
 }
 
 func exitCode(err error) int {

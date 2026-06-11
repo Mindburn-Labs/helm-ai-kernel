@@ -59,11 +59,13 @@ func runWorkstationImportCmd(args []string, stdout, stderr io.Writer) int {
 		out       string
 		jsonOut   bool
 		seedHex   string
+		seedFile  string
 	)
 	cmd.StringVar(&artifacts, "artifacts", "", "Artifact directory containing run.manifest.json")
 	cmd.StringVar(&out, "out", "", "Write canonical import result JSON to this path")
 	cmd.BoolVar(&jsonOut, "json", false, "Print canonical import result JSON")
-	cmd.StringVar(&seedHex, "signing-seed-hex", "", "Optional 32-byte Ed25519 seed as hex")
+	cmd.StringVar(&seedHex, "signing-seed-hex", "", "Deprecated unsafe argv seed input; use --signing-seed-file")
+	cmd.StringVar(&seedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
 
 	if err := cmd.Parse(args); err != nil {
 		return 2
@@ -72,7 +74,7 @@ func runWorkstationImportCmd(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "Error: --artifacts is required")
 		return 2
 	}
-	seed, err := parseSigningSeed(seedHex)
+	seed, err := loadSigningSeed(seedHex, seedFile)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
@@ -147,16 +149,34 @@ func runWorkstationViewCmd(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func parseSigningSeed(seedHex string) ([]byte, error) {
-	if strings.TrimSpace(seedHex) == "" {
+func loadSigningSeed(seedHex, seedFile string) ([]byte, error) {
+	if strings.TrimSpace(seedHex) != "" {
+		return nil, fmt.Errorf("--signing-seed-hex is disabled because argv exposes secrets; use --signing-seed-file")
+	}
+	if strings.TrimSpace(seedFile) == "" {
 		return nil, nil
 	}
+	info, err := os.Stat(seedFile)
+	if err != nil {
+		return nil, fmt.Errorf("stat --signing-seed-file: %w", err)
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return nil, fmt.Errorf("--signing-seed-file must not be readable by group or others")
+	}
+	data, err := os.ReadFile(seedFile)
+	if err != nil {
+		return nil, fmt.Errorf("read --signing-seed-file: %w", err)
+	}
+	return parseSigningSeedHex(strings.TrimSpace(string(data)))
+}
+
+func parseSigningSeedHex(seedHex string) ([]byte, error) {
 	seed, err := hex.DecodeString(seedHex)
 	if err != nil {
-		return nil, fmt.Errorf("--signing-seed-hex must be hex: %w", err)
+		return nil, fmt.Errorf("signing seed must be hex: %w", err)
 	}
 	if len(seed) != 32 {
-		return nil, fmt.Errorf("--signing-seed-hex must decode to 32 bytes")
+		return nil, fmt.Errorf("signing seed must decode to 32 bytes")
 	}
 	return seed, nil
 }

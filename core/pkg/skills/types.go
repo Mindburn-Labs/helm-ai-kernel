@@ -84,6 +84,7 @@ type EvalResult struct {
 	EvalID      string         `json:"eval_id"`
 	SkillID     string         `json:"skill_id"`
 	Level       PromotionLevel `json:"level"`
+	BackendID   string         `json:"backend_id,omitempty"`
 	Passed      bool           `json:"passed"`
 	Score       float64        `json:"score"` // 0.0-1.0
 	ErrorCount  int            `json:"error_count"`

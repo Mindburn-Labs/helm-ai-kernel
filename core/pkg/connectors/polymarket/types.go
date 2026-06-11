@@ -60,15 +60,16 @@ func DefaultP0() PolymarketP0 {
 type ReasonCode string
 
 const (
-	ReasonGeoBlocked       ReasonCode = "GEO_BLOCKED"
-	ReasonModeNotAllowed   ReasonCode = "MODE_NOT_ALLOWED"
-	ReasonOverNotional     ReasonCode = "OVER_NOTIONAL"
-	ReasonOverOrderCount   ReasonCode = "OVER_ORDER_COUNT"
-	ReasonOverDailyLoss    ReasonCode = "OVER_DAILY_LOSS"
-	ReasonMarketNotAllowed ReasonCode = "MARKET_NOT_ALLOWED"
-	ReasonOperatorNotArmed ReasonCode = "OPERATOR_NOT_ARMED"
-	ReasonVenueUnhealthy   ReasonCode = "VENUE_UNHEALTHY"
-	ReasonLiveNotAllowed   ReasonCode = "LIVE_NOT_ALLOWED"
+	ReasonGeoBlocked        ReasonCode = "GEO_BLOCKED"
+	ReasonModeNotAllowed    ReasonCode = "MODE_NOT_ALLOWED"
+	ReasonOverNotional      ReasonCode = "OVER_NOTIONAL"
+	ReasonOverOrderCount    ReasonCode = "OVER_ORDER_COUNT"
+	ReasonOverDailyLoss     ReasonCode = "OVER_DAILY_LOSS"
+	ReasonMarketNotAllowed  ReasonCode = "MARKET_NOT_ALLOWED"
+	ReasonOperatorNotArmed  ReasonCode = "OPERATOR_NOT_ARMED"
+	ReasonVenueUnhealthy    ReasonCode = "VENUE_UNHEALTHY"
+	ReasonLiveNotAllowed    ReasonCode = "LIVE_NOT_ALLOWED"
+	ReasonInvalidOrderValue ReasonCode = "INVALID_ORDER_VALUE"
 )
 
 // DenyResult is returned when a P0 check fails.

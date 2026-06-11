@@ -8,14 +8,17 @@ import (
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 )
 
-func TestTenantScopedRuntimeAuthRequiresExplicitTenant(t *testing.T) {
+func TestTenantScopedRuntimeAuthRejectsMissingTenantBinding(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "")
+	t.Setenv(runtimePrincipalIDEnv, "")
 	handler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("tenant-scoped handler should not run without an explicit tenant")
+		t.Fatal("tenant-scoped handler should not run without explicit tenant binding")
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts", nil)
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(principalHeader, "system-admin")
 	rec := httptest.NewRecorder()
 	handler(rec, req)
 
@@ -24,8 +27,10 @@ func TestTenantScopedRuntimeAuthRequiresExplicitTenant(t *testing.T) {
 	}
 }
 
-func TestTenantScopedRuntimeAuthInjectsSelectedTenant(t *testing.T) {
+func TestTenantScopedRuntimeAuthBindsConfiguredTenantAndPrincipal(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimePrincipalIDEnv, "principal-a")
 	handler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		principal, err := helmauth.GetPrincipal(r.Context())
 		if err != nil {
@@ -49,6 +54,63 @@ func TestTenantScopedRuntimeAuthInjectsSelectedTenant(t *testing.T) {
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("tenant-scoped route with tenant status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestTenantScopedRuntimeAuthRejectsTenantMismatch(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	handler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("tenant-scoped handler should not run on tenant mismatch")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts", nil)
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-b")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("tenant-scoped route with tenant mismatch status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestTenantScopedRuntimeAuthRejectsMissingPrincipalBinding(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimePrincipalIDEnv, "principal-a")
+	handler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("tenant-scoped handler should not run without explicit principal binding")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts", nil)
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-a")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("tenant-scoped route without principal status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestTenantScopedRuntimeAuthRejectsPrincipalMismatch(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimePrincipalIDEnv, "principal-a")
+	handler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("tenant-scoped handler should not run on principal mismatch")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts", nil)
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-a")
+	req.Header.Set(principalHeader, "principal-b")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("tenant-scoped route with principal mismatch status = %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

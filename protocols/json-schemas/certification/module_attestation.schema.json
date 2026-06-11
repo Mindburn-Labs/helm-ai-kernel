@@ -21,7 +21,7 @@
     "module": {
       "type": "object",
       "description": "Module identity and content addressing",
-      "required": ["module_id", "artifact_hash", "manifest_hash"],
+      "required": ["module_id", "artifact_hash", "manifest_hash", "commit_hash"],
       "additionalProperties": false,
       "properties": {
         "module_id": {
@@ -53,6 +53,7 @@
         },
         "commit_hash": {
           "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
           "description": "Git commit hash for reproducibility"
         }
       }

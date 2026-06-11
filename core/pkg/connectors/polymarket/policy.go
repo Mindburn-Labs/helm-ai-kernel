@@ -2,6 +2,7 @@ package polymarket
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 )
 
@@ -33,10 +34,24 @@ func ValidateIntent(intent PolymarketOrderIntent, p0 PolymarketP0) *DenyResult {
 		return &DenyResult{Denied: true, Reason: ReasonVenueUnhealthy, Detail: fmt.Sprintf("venue state is %s, not LIVE_ALLOWED", intent.VenueState)}
 	}
 
-	// 4. Single order size?
-	size, err := strconv.ParseFloat(intent.Size, 64)
-	if err == nil && size > p0.MaxSingleOrderUSD {
-		return &DenyResult{Denied: true, Reason: ReasonOverNotional, Detail: fmt.Sprintf("order size $%.2f exceeds P0 max $%.2f", size, p0.MaxSingleOrderUSD)}
+	// 4. Numeric amount checks.
+	size, deny := positiveFiniteDecimal("size", intent.Size)
+	if deny != nil {
+		return deny
+	}
+	price, deny := positiveFiniteDecimal("price", intent.Price)
+	if deny != nil {
+		return deny
+	}
+	notional := price * size
+	if math.IsInf(notional, 0) || math.IsNaN(notional) {
+		return &DenyResult{Denied: true, Reason: ReasonInvalidOrderValue, Detail: "order notional is not finite"}
+	}
+	if notional > p0.MaxSingleOrderUSD {
+		return &DenyResult{Denied: true, Reason: ReasonOverNotional, Detail: fmt.Sprintf("order notional $%.2f exceeds P0 single-order max $%.2f", notional, p0.MaxSingleOrderUSD)}
+	}
+	if notional > p0.MaxNotionalUSD {
+		return &DenyResult{Denied: true, Reason: ReasonOverNotional, Detail: fmt.Sprintf("order notional $%.2f exceeds P0 max notional $%.2f", notional, p0.MaxNotionalUSD)}
 	}
 
 	// 5. Market allowed? (if allowlist is set)
@@ -54,4 +69,15 @@ func ValidateIntent(intent PolymarketOrderIntent, p0 PolymarketP0) *DenyResult {
 	}
 
 	return nil // All checks passed
+}
+
+func positiveFiniteDecimal(field, raw string) (float64, *DenyResult) {
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0, &DenyResult{Denied: true, Reason: ReasonInvalidOrderValue, Detail: fmt.Sprintf("%s must be a finite decimal", field)}
+	}
+	if value <= 0 {
+		return 0, &DenyResult{Denied: true, Reason: ReasonInvalidOrderValue, Detail: fmt.Sprintf("%s must be greater than zero", field)}
+	}
+	return value, nil
 }

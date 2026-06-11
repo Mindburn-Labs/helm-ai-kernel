@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 )
 
@@ -55,9 +56,11 @@ func decodeServePolicy(path string, data []byte) (*servePolicy, error) {
 }
 
 type servePolicyRuntime struct {
-	Policy        *servePolicy
-	ReferencePack serveReferencePack
-	Graph         *prg.Graph
+	Policy            *servePolicy
+	ReferencePack     serveReferencePack
+	ReferencePackPath string
+	ReferencePackHash string
+	Graph             *prg.Graph
 }
 
 type serveReferencePack struct {
@@ -90,9 +93,9 @@ func loadServePolicyRuntimeFromBytes(path string, data []byte) (*servePolicyRunt
 	if err != nil {
 		return nil, err
 	}
-	refPath := policy.ReferencePack
-	if !filepath.IsAbs(refPath) {
-		refPath = filepath.Join(filepath.Dir(path), refPath)
+	refPath, err := policyreconcile.ResolveReferencePackPath(path, policy.ReferencePack)
+	if err != nil {
+		return nil, err
 	}
 	refData, err := os.ReadFile(refPath)
 	if err != nil {
@@ -114,7 +117,13 @@ func loadServePolicyRuntimeFromBytes(path string, data []byte) (*servePolicyRunt
 	if err != nil {
 		return nil, err
 	}
-	return &servePolicyRuntime{Policy: policy, ReferencePack: pack, Graph: graph}, nil
+	return &servePolicyRuntime{
+		Policy:            policy,
+		ReferencePack:     pack,
+		ReferencePackPath: refPath,
+		ReferencePackHash: policyreconcile.HashBytes(refData),
+		Graph:             graph,
+	}, nil
 }
 
 func (r *servePolicyRuntime) AllowMap() map[string]bool {

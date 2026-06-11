@@ -1,7 +1,6 @@
 package aigp
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -75,17 +74,7 @@ func TestExporter_ExportNode_NilNode(t *testing.T) {
 
 func TestExporter_ExportNode_ProducesValidPCD(t *testing.T) {
 	exp := NewExporter(ExporterConfig{Source: "test-helm"})
-	payload, _ := json.Marshal(map[string]string{"decision": "ALLOW", "tool": "read_file"})
-	node := &proofgraph.Node{
-		NodeHash:  "abc123",
-		Kind:      proofgraph.NodeTypeAttestation,
-		Parents:   []string{"parent1"},
-		Lamport:   42,
-		Principal: "agent-001",
-		Payload:   payload,
-		Sig:       "sig-hex",
-		Timestamp: time.Now().UnixMilli(),
-	}
+	node := newAIGPCompliantNode(t, proofgraph.NodeTypeAttestation, map[string]string{"tool": "read_file"}, 42, "agent-001", 1)
 	pcd, err := exp.ExportNode(node)
 	if err != nil {
 		t.Fatalf("ExportNode: %v", err)
@@ -100,7 +89,7 @@ func TestExporter_ExportNode_ProducesValidPCD(t *testing.T) {
 		t.Errorf("expected tool read_file, got %s", pcd.Action.Tool)
 	}
 	if !pcd.FourTests.Stoppable || !pcd.FourTests.Owned || !pcd.FourTests.Replayable || !pcd.FourTests.Escalatable {
-		t.Error("all four tests should be true by default")
+		t.Error("all four tests should be true with explicit node evidence")
 	}
 	if pcd.PCDHash == "" {
 		t.Error("PCDHash should be computed")

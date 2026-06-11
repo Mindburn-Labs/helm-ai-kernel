@@ -517,6 +517,55 @@ func TestSignEnvelopeCoverage(t *testing.T) {
 	}
 }
 
+func TestRegistryVerifyArtifactRejectsEnvelopeMetadataTamper(t *testing.T) {
+	ctx := context.Background()
+	signer, err := helmcrypto.NewEd25519Signer("artifact-key")
+	if err != nil {
+		t.Fatalf("NewEd25519Signer: %v", err)
+	}
+	verifier, err := helmcrypto.NewEd25519Verifier(signer.PublicKeyBytes())
+	if err != nil {
+		t.Fatalf("NewEd25519Verifier: %v", err)
+	}
+
+	store := &memoryStore{objects: map[string][]byte{}}
+	registry := NewRegistry(store, verifier)
+	env := testEnvelope()
+	if err := SignEnvelope(env, signer); err != nil {
+		t.Fatalf("SignEnvelope: %v", err)
+	}
+	store.objects["signed"] = mustJSON(t, env)
+
+	valid, reasons, err := registry.VerifyArtifact(ctx, "signed")
+	if err != nil {
+		t.Fatalf("VerifyArtifact signed: %v", err)
+	}
+	if !valid || len(reasons) != 0 {
+		t.Fatalf("expected signed artifact to verify, got valid=%v reasons=%v", valid, reasons)
+	}
+
+	for name, mutate := range map[string]func(*ArtifactEnvelope){
+		"type":           func(e *ArtifactEnvelope) { e.Type = TypeVerificationRecord },
+		"schema_version": func(e *ArtifactEnvelope) { e.SchemaVersion = "v2" },
+		"producer_id":    func(e *ArtifactEnvelope) { e.ProducerID = "other-producer" },
+		"timestamp":      func(e *ArtifactEnvelope) { e.Timestamp = e.Timestamp.Add(time.Second) },
+		"payload":        func(e *ArtifactEnvelope) { e.Payload = json.RawMessage(`{"ok":false}`) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			tampered := *env
+			mutate(&tampered)
+			store.objects["tampered"] = mustJSON(t, &tampered)
+			valid, reasons, err := registry.VerifyArtifact(ctx, "tampered")
+			if err != nil {
+				t.Fatalf("VerifyArtifact tampered: %v", err)
+			}
+			if valid || !containsReason(reasons, "signature invalid") {
+				t.Fatalf("expected signature invalid for %s tamper, got valid=%v reasons=%v", name, valid, reasons)
+			}
+		})
+	}
+}
+
 type memoryStore struct {
 	objects map[string][]byte
 	err     error

@@ -156,12 +156,29 @@ func TestInstall_Success(t *testing.T) {
 	m.BundleHash = bundleHash(bundleData)
 	m.State = SkillBundleStateCertified // should be overridden to candidate
 
-	err := Install(ctx, store, m, bundleData)
+	err := InstallVerified(ctx, store, m, bundleData, TrustedSignatureProof{
+		SignatureRef: m.SignatureRef,
+		SignerID:     "publisher-1",
+		SubjectHash:  "sha256:" + bundleHash(bundleData),
+		Verified:     true,
+	})
 	require.NoError(t, err)
 
 	got, err := store.Get(ctx, "inst")
 	require.NoError(t, err)
 	assert.Equal(t, SkillBundleStateCandidate, got.State, "install must force state to candidate")
+}
+
+func TestInstall_SelfConsistentWithoutTrustedProofFailsClosed(t *testing.T) {
+	ctx := context.Background()
+	store := NewInMemorySkillStore()
+	bundleData := []byte("test-bundle-inst")
+	m := testManifest("inst")
+	m.BundleHash = bundleHash(bundleData)
+
+	err := Install(ctx, store, m, bundleData)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "trusted signature proof is required")
 }
 
 func TestInstall_HashMismatch(t *testing.T) {
@@ -209,12 +226,58 @@ func TestInstall_NilStore(t *testing.T) {
 func TestVerifyBundle_Success(t *testing.T) {
 	data := []byte("hello-bundle")
 	m := SkillManifest{
-		ID:         "v1",
-		BundleHash: bundleHash(data),
+		ID:           "v1",
+		BundleHash:   bundleHash(data),
+		SignatureRef: "sig://ok",
+	}
+
+	err := VerifyBundleWithSignature(m, data, TrustedSignatureProof{
+		SignatureRef: "sig://ok",
+		SignerID:     "publisher-1",
+		SubjectHash:  "sha256:" + bundleHash(data),
+		Verified:     true,
+	})
+	require.NoError(t, err)
+}
+
+func TestVerifyBundle_SelfConsistentWithoutTrustedProofFailsClosed(t *testing.T) {
+	data := []byte("hello-bundle")
+	m := SkillManifest{
+		ID:           "v-unsigned",
+		BundleHash:   bundleHash(data),
+		SignatureRef: "sig://ok",
 	}
 
 	err := VerifyBundle(m, data)
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "trusted signature proof is required")
+}
+
+func TestVerifyBundle_SignatureProofMustBindHashAndRef(t *testing.T) {
+	data := []byte("hello-bundle")
+	m := SkillManifest{
+		ID:           "v-proof",
+		BundleHash:   bundleHash(data),
+		SignatureRef: "sig://ok",
+	}
+
+	err := VerifyBundleWithSignature(m, data, TrustedSignatureProof{
+		SignatureRef: "sig://other",
+		SignerID:     "publisher-1",
+		SubjectHash:  "sha256:" + bundleHash(data),
+		Verified:     true,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ref mismatch")
+
+	err = VerifyBundleWithSignature(m, data, TrustedSignatureProof{
+		SignatureRef: "sig://ok",
+		SignerID:     "publisher-1",
+		SubjectHash:  "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+		Verified:     true,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "subject hash mismatch")
 }
 
 func TestVerifyBundle_Mismatch(t *testing.T) {

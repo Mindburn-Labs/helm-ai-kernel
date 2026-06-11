@@ -22,6 +22,21 @@
 {{- if and .Values.helm.production (or (not .Values.helm.policy.agentSafety.denyUnknownTools) (not .Values.helm.policy.agentSafety.denyUnknownEgress) (not .Values.helm.policy.agentSafety.requireManifestValidation) (not .Values.helm.policy.agentSafety.requireOutputContractValidation) (not .Values.helm.policy.agentSafety.requireApprovedArgBinding) (not .Values.helm.policy.agentSafety.lksMemoryInfluenceOnly) (not .Values.helm.policy.agentSafety.requireA2ASignatures) (not .Values.helm.policy.agentSafety.enforceSafeDepGates) (not .Values.helm.policy.agentSafety.enforceBudgetCircuitBreakers) (not .Values.helm.policy.agentSafety.failClosedOnMissingContext)) -}}
 {{- fail "helm.production=true requires all helm.policy.agentSafety fail-closed guards enabled" -}}
 {{- end -}}
+{{- if and .Values.helm.production (eq .Values.helm.storage.type "postgres") (not .Values.helm.storage.postgres.existingSecret) -}}
+{{- fail "helm.production=true with helm.storage.type=postgres requires helm.storage.postgres.existingSecret; inline database credentials are not rendered into Deployments" -}}
+{{- end -}}
+{{- if and .Values.helm.production (eq .Values.helm.storage.type "postgres") .Values.postgresql.enabled -}}
+{{- fail "helm.production=true with helm.storage.type=postgres does not support the bundled postgresql subchart; provide an external TLS DATABASE_URL via helm.storage.postgres.existingSecret" -}}
+{{- end -}}
+{{- if and .Values.helm.production (eq .Values.helm.storage.type "postgres") (not (or (eq .Values.helm.storage.postgres.sslMode "require") (eq .Values.helm.storage.postgres.sslMode "verify-ca") (eq .Values.helm.storage.postgres.sslMode "verify-full"))) -}}
+{{- fail "helm.production=true with helm.storage.type=postgres requires helm.storage.postgres.sslMode=require, verify-ca, or verify-full" -}}
+{{- end -}}
+{{- if and .Values.helm.production (not .Values.helm.auth.tenantID) -}}
+{{- fail "helm.production=true requires helm.auth.tenantID so tenant-scoped runtime routes are server-bound" -}}
+{{- end -}}
+{{- if and .Values.helm.production (not .Values.helm.auth.principalID) -}}
+{{- fail "helm.production=true requires helm.auth.principalID so tenant-scoped runtime routes are server-bound" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -188,6 +203,10 @@ spec:
                   name: {{ include "helm-ai-kernel.authSecretName" . }}
                   key: {{ .Values.helm.auth.serviceAPIKeySecretKey }}
             {{- end }}
+            - name: HELM_RUNTIME_TENANT_ID
+              value: {{ .Values.helm.auth.tenantID | quote }}
+            - name: HELM_RUNTIME_PRINCIPAL_ID
+              value: {{ .Values.helm.auth.principalID | quote }}
             {{- if eq .Values.helm.storage.type "postgres" }}
             {{- if .Values.helm.storage.postgres.existingSecret }}
             - name: DATABASE_URL
@@ -197,7 +216,7 @@ spec:
                   key: {{ .Values.helm.storage.postgres.existingSecretKey }}
             {{- else if .Values.postgresql.enabled }}
             - name: DATABASE_URL
-              value: "postgres://{{ .Values.postgresql.auth.username }}:$(POSTGRES_PASSWORD)@{{ include "helm-ai-kernel.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}?sslmode=disable"
+              value: "postgres://{{ .Values.postgresql.auth.username }}:$(POSTGRES_PASSWORD)@{{ include "helm-ai-kernel.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}?sslmode={{ .Values.helm.storage.postgres.sslMode }}"
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:

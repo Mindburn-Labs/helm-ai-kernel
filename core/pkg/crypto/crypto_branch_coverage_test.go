@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -63,7 +64,10 @@ func TestAuditLogErrorAndMalformedEntryBranches(t *testing.T) {
 	}
 	malformedLog := &FileAuditLog{filePath: malformedPath}
 	if entries := malformedLog.Entries(); len(entries) != 0 {
-		t.Fatalf("malformed audit log should skip bad entries, got %#v", entries)
+		t.Fatalf("malformed audit log should fail closed, got %#v", entries)
+	}
+	if _, err := malformedLog.VerifiedEntries(); err == nil || !strings.Contains(err.Error(), "malformed entry") {
+		t.Fatalf("malformed audit log verification error = %v", err)
 	}
 
 	memoryLog := NewMemoryAuditLog()
@@ -74,42 +78,130 @@ func TestAuditLogErrorAndMalformedEntryBranches(t *testing.T) {
 
 func TestFileAuditLogEntriesReadsLargeJSONLRecords(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "large-audit.jsonl")
-	records := []AuditEvent{
-		{
-			Timestamp: "2026-06-05T00:00:00Z",
-			Actor:     "guardian",
-			Action:    "DECISION_MADE",
-			Payload:   map[string]any{"blob": strings.Repeat("x", 70*1024)},
-			Hash:      "hash-large",
-		},
-		{
-			Timestamp: "2026-06-05T00:00:01Z",
-			Actor:     "guardian",
-			Action:    "FOLLOWUP",
-			Payload:   map[string]any{"ok": true},
-			Hash:      "hash-followup",
-		},
+	log, err := NewFileAuditLog(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	var data []byte
-	for _, record := range records {
-		line, err := json.Marshal(record)
-		if err != nil {
-			t.Fatal(err)
-		}
-		data = append(data, line...)
-		data = append(data, '\n')
+	if err := log.Append("guardian", "DECISION_MADE", map[string]any{"blob": strings.Repeat("x", 70*1024)}); err != nil {
+		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := log.Append("guardian", "FOLLOWUP", map[string]any{"ok": true}); err != nil {
 		t.Fatal(err)
 	}
 
-	log := &FileAuditLog{filePath: path}
 	entries := log.Entries()
 	if len(entries) != 2 {
 		t.Fatalf("large JSONL entries = %d, want 2", len(entries))
 	}
 	if entries[0].Action != "DECISION_MADE" || entries[1].Action != "FOLLOWUP" {
 		t.Fatalf("unexpected entries: %#v", entries)
+	}
+}
+
+func TestFileAuditLogVerifiedEntriesRejectsTampering(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(t *testing.T, log *FileAuditLog, lines [][]byte)
+	}{
+		{
+			name: "edited content",
+			mutate: func(t *testing.T, log *FileAuditLog, lines [][]byte) {
+				event := decodeAuditLine(t, lines[0])
+				event.Action = "TAMPERED"
+				lines[0] = encodeAuditLine(t, event)
+				writeAuditLines(t, log.filePath, lines)
+			},
+		},
+		{
+			name: "recomputed row hash",
+			mutate: func(t *testing.T, log *FileAuditLog, lines [][]byte) {
+				event := decodeAuditLine(t, lines[0])
+				event.Action = "TAMPERED"
+				hash, err := hashAuditEvent(NewCanonicalHasher(), event)
+				if err != nil {
+					t.Fatal(err)
+				}
+				event.Hash = hash
+				lines[0] = encodeAuditLine(t, event)
+				writeAuditLines(t, log.filePath, lines)
+			},
+		},
+		{
+			name: "reordered entries",
+			mutate: func(t *testing.T, log *FileAuditLog, lines [][]byte) {
+				lines[0], lines[1] = lines[1], lines[0]
+				writeAuditLines(t, log.filePath, lines)
+			},
+		},
+		{
+			name: "deleted tail",
+			mutate: func(t *testing.T, log *FileAuditLog, lines [][]byte) {
+				writeAuditLines(t, log.filePath, lines[:2])
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			log, lines := seededFileAuditLog(t)
+			tt.mutate(t, log, lines)
+
+			if entries := log.Entries(); entries != nil {
+				t.Fatalf("Entries() = %#v, want fail-closed nil", entries)
+			}
+			if _, err := log.VerifiedEntries(); err == nil {
+				t.Fatal("VerifiedEntries() error = nil, want tamper rejection")
+			}
+		})
+	}
+}
+
+func seededFileAuditLog(t *testing.T) (*FileAuditLog, [][]byte) {
+	t.Helper()
+	log, err := NewFileAuditLog(filepath.Join(t.TempDir(), "audit.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range []string{"FIRST", "SECOND", "THIRD"} {
+		if err := log.Append("actor", action, map[string]any{"action": action}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := os.ReadFile(log.filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := bytes.Split(bytes.TrimSpace(raw), []byte("\n"))
+	if len(lines) != 3 {
+		t.Fatalf("seeded lines = %d, want 3", len(lines))
+	}
+	return log, lines
+}
+
+func decodeAuditLine(t *testing.T, line []byte) AuditEvent {
+	t.Helper()
+	var event AuditEvent
+	if err := json.Unmarshal(line, &event); err != nil {
+		t.Fatal(err)
+	}
+	return event
+}
+
+func encodeAuditLine(t *testing.T, event AuditEvent) []byte {
+	t.Helper()
+	line, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return line
+}
+
+func writeAuditLines(t *testing.T, path string, lines [][]byte) {
+	t.Helper()
+	data := bytes.Join(lines, []byte("\n"))
+	data = append(data, '\n')
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

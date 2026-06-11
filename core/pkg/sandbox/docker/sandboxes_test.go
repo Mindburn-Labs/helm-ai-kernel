@@ -96,7 +96,7 @@ func TestSandboxesRunnerRunSnapshotInspectStopRemove(t *testing.T) {
 		DockerBin:      helper,
 		SnapshotDir:    "snapshots",
 		RegistryPrefix: "registry.local",
-		DefaultTimeout: time.Second,
+		DefaultTimeout: 10 * time.Second,
 	}).WithClock(fixedClock(time.Unix(200, 0), time.Unix(201, 0), time.Unix(202, 0), time.Unix(203, 0)))
 
 	if _, _, err := r.Run(&sandbox.SandboxSpec{}); err == nil || !strings.Contains(err.Error(), "image is required") {

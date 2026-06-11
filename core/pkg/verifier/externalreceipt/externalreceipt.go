@@ -17,6 +17,10 @@ type BundleReport struct {
 	Checks       []externalhost.CheckResult         `json:"checks,omitempty"`
 }
 
+type VerifyOptions struct {
+	PublicKeyHex string
+}
+
 var (
 	receiptStat       = os.Stat
 	receiptWalkDir    = filepath.WalkDir
@@ -25,13 +29,17 @@ var (
 )
 
 func VerifyBundle(bundleRoot string) BundleReport {
+	return VerifyBundleWithOptions(bundleRoot, VerifyOptions{})
+}
+
+func VerifyBundleWithOptions(bundleRoot string, opts VerifyOptions) BundleReport {
 	files := FindChainFiles(bundleRoot)
 	report := BundleReport{Found: len(files) > 0, ChainFiles: files}
 	if len(files) == 0 {
 		return report
 	}
 	for _, file := range files {
-		chainReport, err := receiptVerifyFile(file, externalhost.VerifyOptions{RequireKey: true})
+		chainReport, err := receiptVerifyFile(file, externalhost.VerifyOptions{RequireKey: true, PublicKeyHex: opts.PublicKeyHex})
 		if err != nil {
 			report.Checks = append(report.Checks, externalhost.CheckResult{
 				Name:   "external_host:chain_file",

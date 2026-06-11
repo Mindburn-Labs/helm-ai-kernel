@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators"
@@ -19,6 +20,14 @@ func (exampleRunner) Run(_ context.Context, _ ExecutionContext, req *actuators.E
 		Duration: time.Millisecond,
 	}, nil
 }
+
+type exampleReceiptSigner struct{}
+
+func (exampleReceiptSigner) Sign(data []byte) (string, error) {
+	return strings.TrimPrefix(hashBytes(append([]byte("managed-agent-example|"), data...)), "sha256:"), nil
+}
+
+func (exampleReceiptSigner) SignerKeyID() string { return "example-managed-agent-signer" }
 
 func ExampleWorkerShim_HandleTool() {
 	root, err := os.MkdirTemp("", "helm-claude-managed-example-*")
@@ -42,7 +51,7 @@ func ExampleWorkerShim_HandleTool() {
 	cfg.EnvironmentKeyFromSecretStore = true
 	cfg.LogRetentionEnabled = true
 
-	adapter := New(cfg, WithRunner(exampleRunner{}))
+	adapter := New(cfg, WithRunner(exampleRunner{}), WithReceiptSigner(exampleReceiptSigner{}))
 	handle, err := adapter.Create(context.Background(), &actuators.SandboxSpec{
 		Runtime:   "claude-managed-worker",
 		Resources: actuators.ResourceSpec{MemoryMB: 256, Timeout: 30 * time.Second},

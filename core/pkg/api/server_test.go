@@ -17,7 +17,11 @@ func newTestServer(t *testing.T) *Server {
 		"list_dir":   true,
 		"write_file": true,
 	})
-	return NewServer(ServerConfig{PDP: helmPDP})
+	return NewServer(ServerConfig{PDP: helmPDP, Authenticator: testAPIAuthenticator})
+}
+
+func testAPIAuthenticator(_ *http.Request) (AuthenticatedPrincipal, error) {
+	return AuthenticatedPrincipal{ID: "operator-1", TenantID: "tenant-a", Roles: []string{"admin"}}, nil
 }
 
 func TestEvaluate_Allow(t *testing.T) {
@@ -62,7 +66,7 @@ func TestEvaluate_Deny(t *testing.T) {
 	denyPDP := pdp.NewHelmPDP("test-v1", map[string]bool{
 		"E4": false, // deny E4 (irreversible)
 	})
-	srv := NewServer(ServerConfig{PDP: denyPDP})
+	srv := NewServer(ServerConfig{PDP: denyPDP, Authenticator: testAPIAuthenticator})
 
 	body := EvaluateRequest{
 		Tool:        "delete_file",
@@ -79,6 +83,51 @@ func TestEvaluate_Deny(t *testing.T) {
 	json.NewDecoder(w.Body).Decode(&resp)
 	if resp.Allow {
 		t.Error("expected DENY for E4 effect level")
+	}
+}
+
+func TestEvaluate_RequiresAuthentication(t *testing.T) {
+	helmPDP := pdp.NewHelmPDP("test-v1", map[string]bool{"read_file": true})
+	srv := NewServer(ServerConfig{PDP: helmPDP})
+	reqBody, _ := json.Marshal(EvaluateRequest{Tool: "read_file", AgentID: "attacker", SessionID: "s"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected fail-closed 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestEvaluate_UsesAuthenticatedPrincipalNotCallerAgent(t *testing.T) {
+	srv := newTestServer(t)
+	reqBody, _ := json.Marshal(EvaluateRequest{Tool: "read_file", AgentID: "victim", SessionID: "s"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var evalResp EvaluateResponse
+	if err := json.NewDecoder(w.Body).Decode(&evalResp); err != nil {
+		t.Fatalf("decode evaluate: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/receipts/"+evalResp.ReceiptID, nil)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("receipt expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var receipt ReceiptDTO
+	if err := json.NewDecoder(w.Body).Decode(&receipt); err != nil {
+		t.Fatalf("decode receipt: %v", err)
+	}
+	if receipt.ExecutorID != "operator-1" {
+		t.Fatalf("receipt executor should come from authenticated principal, got %q", receipt.ExecutorID)
+	}
+	if got := receipt.Metadata["tenant_id"]; got != "tenant-a" {
+		t.Fatalf("receipt tenant metadata = %v, want tenant-a", got)
 	}
 }
 

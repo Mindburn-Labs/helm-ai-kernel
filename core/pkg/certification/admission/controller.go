@@ -283,6 +283,15 @@ func (c *Controller) checkPackAdmission(profile *PackAdmissionProfile, att *cert
 		})
 		return violations
 	}
+	if att == nil && profileRequiresAttestationData(profile) {
+		violations = append(violations, Violation{
+			Code:        "NO_ATTESTATION",
+			Message:     "Pack attestation is required by configured admission requirements",
+			Severity:    "critical",
+			Requirement: "attestation_required_by_policy",
+		})
+		return violations
+	}
 
 	// Check attestation age
 	if reqs.MaxAttestationAgeHours > 0 {
@@ -299,6 +308,14 @@ func (c *Controller) checkPackAdmission(profile *PackAdmissionProfile, att *cert
 
 	// Check signatures
 	if reqs.RequireValidSignatures {
+		if len(att.Signatures) == 0 {
+			violations = append(violations, Violation{
+				Code:        "NO_SIGNATURES",
+				Message:     "Valid signatures are required but attestation has no signatures",
+				Severity:    "critical",
+				Requirement: "require_valid_signatures",
+			})
+		}
 		if err := att.Verify(publicKeys); err != nil {
 			violations = append(violations, Violation{
 				Code:        "INVALID_SIGNATURE",
@@ -308,6 +325,25 @@ func (c *Controller) checkPackAdmission(profile *PackAdmissionProfile, att *cert
 			})
 		}
 	}
+	if !reqs.RequireValidSignatures && (len(reqs.RequiredSignerRoles) > 0 || profile.SignatureRequirements != nil) {
+		if len(att.Signatures) == 0 {
+			violations = append(violations, Violation{
+				Code:        "NO_SIGNATURES",
+				Message:     "Signer policy requires signatures but attestation has no signatures",
+				Severity:    "critical",
+				Requirement: "signature_bound_policy_metadata",
+			})
+		}
+		if err := att.Verify(publicKeys); err != nil {
+			violations = append(violations, Violation{
+				Code:        "INVALID_SIGNATURE",
+				Message:     fmt.Sprintf("Signature metadata verification failed: %v", err),
+				Severity:    "critical",
+				Requirement: "signature_bound_policy_metadata",
+			})
+		}
+	}
+	violations = append(violations, checkSignatureRequirements(profile.SignatureRequirements, att)...)
 
 	// Check minimum signers
 	if reqs.MinimumSigners > 0 && len(att.Signatures) < reqs.MinimumSigners {
@@ -382,6 +418,30 @@ func (c *Controller) checkPackAdmission(profile *PackAdmissionProfile, att *cert
 				Requirement: "require_source_repo",
 			})
 		}
+		if len(prov.AllowedBuilders) > 0 && !containsString(prov.AllowedBuilders, att.Provenance.BuilderID) {
+			violations = append(violations, Violation{
+				Code:        "BUILDER_NOT_ALLOWED",
+				Message:     fmt.Sprintf("Builder %s is not in the allowed builder list", att.Provenance.BuilderID),
+				Severity:    "high",
+				Requirement: "allowed_builders",
+			})
+		}
+		if len(prov.AllowedSourceRepos) > 0 && !containsString(prov.AllowedSourceRepos, att.Module.SourceRepo) {
+			violations = append(violations, Violation{
+				Code:        "SOURCE_REPO_NOT_ALLOWED",
+				Message:     fmt.Sprintf("Source repository %s is not in the allowed source repository list", att.Module.SourceRepo),
+				Severity:    "high",
+				Requirement: "allowed_source_repos",
+			})
+		}
+		if prov.RequireDependencyHashes && len(att.Provenance.DependencyHashes) == 0 {
+			violations = append(violations, Violation{
+				Code:        "NO_DEPENDENCY_HASHES",
+				Message:     "Dependency hashes are required",
+				Severity:    "high",
+				Requirement: "require_dependency_hashes",
+			})
+		}
 	}
 
 	// Check certification
@@ -411,9 +471,91 @@ func (c *Controller) checkPackAdmission(profile *PackAdmissionProfile, att *cert
 				Requirement: "min_determinism_test_count",
 			})
 		}
+		if cert.RequireSecurityAudit && (att.Certification.SecurityAudit == nil || !att.Certification.SecurityAudit.Audited || att.Certification.SecurityAudit.AuditReportHash == "") {
+			violations = append(violations, Violation{
+				Code:        "SECURITY_AUDIT_REQUIRED",
+				Message:     "Security audit evidence is required",
+				Severity:    "high",
+				Requirement: "require_security_audit",
+			})
+		}
+		if cert.MaxEffectTypes > 0 && len(att.Certification.PermissionsDeclared.EffectTypes) > cert.MaxEffectTypes {
+			violations = append(violations, Violation{
+				Code:        "TOO_MANY_EFFECT_TYPES",
+				Message:     fmt.Sprintf("Pack declares %d effect types but max is %d", len(att.Certification.PermissionsDeclared.EffectTypes), cert.MaxEffectTypes),
+				Severity:    "high",
+				Requirement: "max_effect_types",
+			})
+		}
+		for _, denied := range cert.DeniedEffectTypes {
+			if containsString(att.Certification.PermissionsDeclared.EffectTypes, denied) {
+				violations = append(violations, Violation{
+					Code:        "DENIED_EFFECT_TYPE",
+					Message:     fmt.Sprintf("Pack declares denied effect type %s", denied),
+					Severity:    "critical",
+					Requirement: "denied_effect_types",
+				})
+			}
+		}
 	}
 
 	return violations
+}
+
+func profileRequiresAttestationData(profile *PackAdmissionProfile) bool {
+	reqs := profile.AdmissionRequirements
+	return reqs.RequireValidSignatures ||
+		reqs.MinimumSigners > 0 ||
+		len(reqs.RequiredSignerRoles) > 0 ||
+		reqs.MaxAttestationAgeHours > 0 ||
+		profile.SignatureRequirements != nil ||
+		profile.ProvenanceRequirements != nil ||
+		profile.CertificationRequirements != nil
+}
+
+func checkSignatureRequirements(reqs *SignatureReqs, att *certification.ModuleAttestation) []Violation {
+	if reqs == nil {
+		return nil
+	}
+	var violations []Violation
+	for _, sig := range att.Signatures {
+		if len(reqs.AllowedAlgorithms) > 0 && !containsString(reqs.AllowedAlgorithms, sig.Algorithm) {
+			violations = append(violations, Violation{
+				Code:        "SIGNATURE_ALGORITHM_NOT_ALLOWED",
+				Message:     fmt.Sprintf("Signature algorithm %s is not allowed", sig.Algorithm),
+				Severity:    "critical",
+				Requirement: "allowed_algorithms",
+			})
+		}
+		if len(reqs.TrustedSigners) > 0 && !containsString(reqs.TrustedSigners, sig.SignerID) {
+			violations = append(violations, Violation{
+				Code:        "SIGNER_NOT_TRUSTED",
+				Message:     fmt.Sprintf("Signer %s is not trusted by this profile", sig.SignerID),
+				Severity:    "critical",
+				Requirement: "trusted_signers",
+			})
+		}
+		if reqs.KeyRotationMaxDays > 0 {
+			if sig.SignedAt.IsZero() || time.Since(sig.SignedAt).Hours() > float64(reqs.KeyRotationMaxDays*24) {
+				violations = append(violations, Violation{
+					Code:        "SIGNATURE_KEY_TOO_OLD",
+					Message:     fmt.Sprintf("Signature from %s exceeds key rotation max age", sig.SignerID),
+					Severity:    "high",
+					Requirement: "key_rotation_max_days",
+				})
+			}
+		}
+	}
+	return violations
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
 
 // AdmitDeploy checks if a deployment should be admitted.
@@ -451,6 +593,15 @@ func (c *Controller) AdmitDeploy(ctx context.Context, profileID string, packAtte
 
 	var violations []Violation
 
+	if len(profile.Environments) > 0 && !containsString(profile.Environments, env) {
+		violations = append(violations, Violation{
+			Code:        "ENVIRONMENT_NOT_ALLOWED",
+			Message:     fmt.Sprintf("Environment %s is not allowed by profile", env),
+			Severity:    "critical",
+			Requirement: "environments",
+		})
+	}
+
 	// Check environment requirements
 	envReqs := profile.EnvironmentRequirements
 	if envReqs.RequirePackAttestation && packAttestation == nil {
@@ -459,6 +610,46 @@ func (c *Controller) AdmitDeploy(ctx context.Context, profileID string, packAtte
 			Message:     "Pack attestation required for deployment",
 			Severity:    "critical",
 			Requirement: "require_pack_attestation",
+		})
+	}
+	if envReqs.RequirePriorEnvironment != "" {
+		violations = append(violations, Violation{
+			Code:        "PRIOR_ENVIRONMENT_EVIDENCE_REQUIRED",
+			Message:     fmt.Sprintf("Prior environment %s promotion evidence is required", envReqs.RequirePriorEnvironment),
+			Severity:    "high",
+			Requirement: "require_prior_environment",
+		})
+	}
+	if envReqs.MinSoakTimeHours > 0 {
+		violations = append(violations, Violation{
+			Code:        "SOAK_TIME_EVIDENCE_REQUIRED",
+			Message:     fmt.Sprintf("Soak time evidence is required for %d hours", envReqs.MinSoakTimeHours),
+			Severity:    "high",
+			Requirement: "min_soak_time_hours",
+		})
+	}
+	if envReqs.RequireHealthCheck {
+		violations = append(violations, Violation{
+			Code:        "HEALTH_CHECK_EVIDENCE_REQUIRED",
+			Message:     "Health check evidence is required",
+			Severity:    "high",
+			Requirement: "require_health_check",
+		})
+	}
+	if envReqs.RequireSmokeTests {
+		violations = append(violations, Violation{
+			Code:        "SMOKE_TEST_EVIDENCE_REQUIRED",
+			Message:     "Smoke test evidence is required",
+			Severity:    "high",
+			Requirement: "require_smoke_tests",
+		})
+	}
+	if envReqs.RequireErrorBudgetAvailable {
+		violations = append(violations, Violation{
+			Code:        "ERROR_BUDGET_EVIDENCE_REQUIRED",
+			Message:     "Error budget availability evidence is required",
+			Severity:    "high",
+			Requirement: "require_error_budget_available",
 		})
 	}
 
@@ -481,16 +672,83 @@ func (c *Controller) AdmitDeploy(ctx context.Context, profileID string, packAtte
 				Requirement: "min_fas_score",
 			})
 		}
+		if checks.RequireIntegrationTests {
+			violations = append(violations, Violation{
+				Code:        "INTEGRATION_TEST_EVIDENCE_REQUIRED",
+				Message:     "Integration test evidence is required",
+				Severity:    "high",
+				Requirement: "require_integration_tests",
+			})
+		}
+		if checks.RequireSecurityScan {
+			violations = append(violations, Violation{
+				Code:        "SECURITY_SCAN_EVIDENCE_REQUIRED",
+				Message:     "Security scan evidence is required",
+				Severity:    "high",
+				Requirement: "require_security_scan",
+			})
+		}
+		if checks.BlockedOnCVESeverity != "" {
+			violations = append(violations, Violation{
+				Code:        "CVE_GATE_EVIDENCE_REQUIRED",
+				Message:     fmt.Sprintf("CVE severity gate %s requires scan evidence", checks.BlockedOnCVESeverity),
+				Severity:    "high",
+				Requirement: "blocked_on_cve_severity",
+			})
+		}
 	}
 
 	// Check approval chain
-	if profile.ApprovalChain != nil && profile.ApprovalChain.RequiredApprovers > 0 {
-		if approvals < profile.ApprovalChain.RequiredApprovers {
+	if profile.ApprovalChain != nil {
+		if profile.ApprovalChain.RequiredApprovers > 0 && approvals < profile.ApprovalChain.RequiredApprovers {
 			violations = append(violations, Violation{
 				Code:        "INSUFFICIENT_APPROVALS",
 				Message:     fmt.Sprintf("Has %d approvals but requires %d", approvals, profile.ApprovalChain.RequiredApprovers),
 				Severity:    "high",
 				Requirement: "required_approvers",
+			})
+		}
+		if len(profile.ApprovalChain.ApproverRoles) > 0 {
+			violations = append(violations, Violation{
+				Code:        "APPROVER_ROLE_EVIDENCE_REQUIRED",
+				Message:     "Approver role evidence is required",
+				Severity:    "high",
+				Requirement: "approver_roles",
+			})
+		}
+		if profile.ApprovalChain.ApprovalTimeoutHours > 0 {
+			violations = append(violations, Violation{
+				Code:        "APPROVAL_TIMEOUT_EVIDENCE_REQUIRED",
+				Message:     "Approval timeout evidence is required",
+				Severity:    "medium",
+				Requirement: "approval_timeout_hours",
+			})
+		}
+		if profile.ApprovalChain.RequireDeployWindow {
+			violations = append(violations, Violation{
+				Code:        "DEPLOY_WINDOW_EVIDENCE_REQUIRED",
+				Message:     "Deploy window evidence is required",
+				Severity:    "high",
+				Requirement: "require_deploy_window",
+			})
+		}
+	}
+
+	if profile.RolloutPolicy != nil {
+		if profile.RolloutPolicy.Strategy == "" {
+			violations = append(violations, Violation{
+				Code:        "ROLLOUT_STRATEGY_REQUIRED",
+				Message:     "Rollout strategy is required",
+				Severity:    "high",
+				Requirement: "rollout_strategy",
+			})
+		}
+		if profile.RolloutPolicy.AutoRollback && len(profile.RolloutPolicy.RollbackTriggers) == 0 {
+			violations = append(violations, Violation{
+				Code:        "ROLLBACK_TRIGGERS_REQUIRED",
+				Message:     "Auto rollback requires rollback triggers",
+				Severity:    "high",
+				Requirement: "rollback_triggers",
 			})
 		}
 	}

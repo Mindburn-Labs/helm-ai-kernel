@@ -884,6 +884,7 @@ func extractCertifyArchive(archivePath, dstDir string) error {
 	}
 
 	tarReader := tar.NewReader(reader)
+	var extractedBytes int64
 	for {
 		header, tarErr := tarReader.Next()
 		if tarErr == io.EOF {
@@ -904,6 +905,15 @@ func extractCertifyArchive(archivePath, dstDir string) error {
 				return fmt.Errorf("create directory %s: %w", targetPath, mkErr)
 			}
 		case tar.TypeReg:
+			if header.Size < 0 {
+				return fmt.Errorf("archive entry %s has invalid size", header.Name)
+			}
+			if header.Size > maxEvidenceBundleBytes {
+				return fmt.Errorf("archive entry %s exceeds %d bytes", header.Name, maxEvidenceBundleBytes)
+			}
+			if extractedBytes+header.Size > maxEvidenceBundleBytes {
+				return fmt.Errorf("archive exceeds %d extracted bytes", maxEvidenceBundleBytes)
+			}
 			if mkErr := os.MkdirAll(filepath.Dir(targetPath), 0750); mkErr != nil {
 				return fmt.Errorf("prepare file %s: %w", targetPath, mkErr)
 			}
@@ -911,16 +921,21 @@ func extractCertifyArchive(archivePath, dstDir string) error {
 			if createErr != nil {
 				return fmt.Errorf("create file %s: %w", targetPath, createErr)
 			}
-			if _, copyErr := io.Copy(outFile, tarReader); copyErr != nil {
+			written, copyErr := io.Copy(outFile, tarReader)
+			if copyErr != nil {
 				outFile.Close()
 				return fmt.Errorf("extract file %s: %w", targetPath, copyErr)
 			}
+			if written != header.Size {
+				outFile.Close()
+				return fmt.Errorf("archive entry %s size mismatch", header.Name)
+			}
+			extractedBytes += written
 			if closeErr := outFile.Close(); closeErr != nil {
 				return fmt.Errorf("close file %s: %w", targetPath, closeErr)
 			}
 		default:
-			// Skip unsupported entry types (symlinks, etc.)
-			continue
+			return fmt.Errorf("unsupported archive entry %s", header.Name)
 		}
 	}
 }

@@ -37,6 +37,64 @@ func TestExtractEvidenceArchiveRejectsOversizedEntries(t *testing.T) {
 	}
 }
 
+func TestExtractCertifyArchiveRejectsOversizedEntries(t *testing.T) {
+	bundlePath := filepath.Join(t.TempDir(), "oversized.tar")
+	file, err := os.Create(bundlePath)
+	if err != nil {
+		t.Fatalf("create archive: %v", err)
+	}
+	tarWriter := tar.NewWriter(file)
+	if err := tarWriter.WriteHeader(&tar.Header{
+		Name: "receipts/oversized.json",
+		Mode: 0600,
+		Size: maxEvidenceBundleBytes + 1,
+	}); err != nil {
+		t.Fatalf("write tar header: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close archive: %v", err)
+	}
+
+	err = extractCertifyArchive(bundlePath, t.TempDir())
+	if err == nil {
+		t.Fatal("expected oversized archive entry to be rejected")
+	}
+	if !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("expected size-limit error, got %q", err.Error())
+	}
+}
+
+func TestExtractCertifyArchiveRejectsUnsupportedEntries(t *testing.T) {
+	bundlePath := filepath.Join(t.TempDir(), "symlink.tar")
+	file, err := os.Create(bundlePath)
+	if err != nil {
+		t.Fatalf("create archive: %v", err)
+	}
+	tarWriter := tar.NewWriter(file)
+	if err := tarWriter.WriteHeader(&tar.Header{
+		Name:     "receipts/link.json",
+		Typeflag: tar.TypeSymlink,
+		Linkname: "tool_receipt.json",
+		Mode:     0600,
+	}); err != nil {
+		t.Fatalf("write tar header: %v", err)
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatalf("close tar writer: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close archive: %v", err)
+	}
+
+	err = extractCertifyArchive(bundlePath, t.TempDir())
+	if err == nil {
+		t.Fatal("expected unsupported archive entry to be rejected")
+	}
+	if !strings.Contains(err.Error(), "unsupported archive entry") {
+		t.Fatalf("expected unsupported-entry error, got %q", err.Error())
+	}
+}
+
 func TestSafeArchiveEntryPathRejectsEscapes(t *testing.T) {
 	dst := t.TempDir()
 	for _, name := range []string{

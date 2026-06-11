@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -175,6 +176,7 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 		cfg := e2b.DefaultConfig()
 		cfg.APIKey = apiKey
 		cfg.APIURL = apiURL
+		cfg.AllowInsecureLoopback = allowInsecureLoopbackSandboxAPI()
 		if compiled.ArtifactImage != "" {
 			cfg.TemplateID = compiled.ArtifactImage
 		}
@@ -235,6 +237,7 @@ func (DefaultRuntimeStarter) Start(compiled plan.LaunchPlan, opts ExecuteOptions
 		cfg := daytona.DefaultConfig()
 		cfg.APIKey = apiKey
 		cfg.BaseURL = baseURL
+		cfg.AllowInsecureLoopback = allowInsecureLoopbackSandboxAPI()
 		if compiled.ArtifactImage != "" {
 			cfg.DefaultLanguage = compiled.ArtifactImage
 		}
@@ -382,12 +385,17 @@ type parsedMount struct {
 	Target   string
 }
 
+var launchpadPathComponentRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+
 func parseFilesystemMount(raw, appID string) (parsedMount, error) {
 	parts := strings.SplitN(raw, ":", 3)
 	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
 		return parsedMount{}, fmt.Errorf("invalid filesystem mount %q: empty name", raw)
 	}
 	m := parsedMount{Name: strings.TrimSpace(parts[0])}
+	if err := validateLaunchpadPathComponent("filesystem mount name", m.Name); err != nil {
+		return parsedMount{}, fmt.Errorf("invalid filesystem mount %q: %w", raw, err)
+	}
 	mode := "rw"
 	if len(parts) >= 2 && strings.TrimSpace(parts[1]) != "" {
 		mode = strings.TrimSpace(parts[1])
@@ -422,6 +430,11 @@ func materializeFilesystemMounts(compiled plan.LaunchPlan, opts ExecuteOptions) 
 		return nil, nil
 	}
 	stateRoot := launchpadStateRoot()
+	if !opts.RuntimeDryRun {
+		if err := validateLaunchpadPathComponent("launch id", compiled.LaunchID); err != nil {
+			return nil, err
+		}
+	}
 	var mounts []lpruntime.LaunchpadMount
 	for _, raw := range compiled.FilesystemMounts {
 		m, err := parseFilesystemMount(raw, compiled.AppID)
@@ -443,7 +456,11 @@ func materializeFilesystemMounts(compiled plan.LaunchPlan, opts ExecuteOptions) 
 		if stateRoot == "" {
 			return nil, fmt.Errorf("cannot materialize filesystem mount %q: HELM_LAUNCHPAD_HOME unset and user home directory not resolvable", m.Name)
 		}
-		hostDir := filepath.Join(stateRoot, "state", compiled.LaunchID, m.Name)
+		launchStateRoot := filepath.Join(stateRoot, "state", compiled.LaunchID)
+		hostDir := filepath.Join(launchStateRoot, m.Name)
+		if !pathInsideRoot(launchStateRoot, hostDir) {
+			return nil, fmt.Errorf("filesystem mount %q escapes launch state directory", m.Name)
+		}
 		if err := os.MkdirAll(hostDir, 0o700); err != nil {
 			return nil, fmt.Errorf("create host state dir %s: %w", hostDir, err)
 		}
@@ -460,6 +477,39 @@ func materializeFilesystemMounts(compiled plan.LaunchPlan, opts ExecuteOptions) 
 		})
 	}
 	return mounts, nil
+}
+
+func validateLaunchpadPathComponent(label, value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fmt.Errorf("%s is required", label)
+	}
+	if value == "." || value == ".." || filepath.IsAbs(value) || strings.ContainsAny(value, `/\`) {
+		return fmt.Errorf("%s must be a single safe path component", label)
+	}
+	if filepath.Clean(value) != value {
+		return fmt.Errorf("%s must be clean", label)
+	}
+	if !launchpadPathComponentRE.MatchString(value) {
+		return fmt.Errorf("%s must match %s", label, launchpadPathComponentRE.String())
+	}
+	return nil
+}
+
+func pathInsideRoot(root, path string) bool {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+	pathAbs, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(rootAbs, pathAbs)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
 }
 
 // substratesWithNetworkNamespace lists substrates whose workloads run in an
@@ -601,6 +651,15 @@ func firstEnvValue(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func allowInsecureLoopbackSandboxAPI() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("HELM_LAUNCHPAD_ALLOW_INSECURE_LOOPBACK_API"))) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
 }
 
 func cloudResourceName(compiled plan.LaunchPlan) string {

@@ -176,7 +176,10 @@ func dockerSpec(opts ...func(*sandbox.SandboxSpec)) *sandbox.SandboxSpec {
 		Args:    []string{"hello"},
 		Limits: sandbox.ResourceLimits{
 			MemoryMB: 128,
-			Timeout:  time.Second,
+			// Generous so loaded CI machines never turn helper-script exec
+			// into a spurious timeout; deliberate-timeout cases override
+			// this with an explicit nanosecond limit.
+			Timeout: 10 * time.Second,
 		},
 	}
 	for _, opt := range opts {

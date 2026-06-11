@@ -202,7 +202,7 @@ func TestExt2_MTLSEmptyIdentityRejected(t *testing.T) {
 func TestExt2_MTLSMutualTLSConfig(t *testing.T) {
 	ca, _ := mtls.NewCA(mtls.CAConfig{})
 	cert, _ := ca.IssueCertificate(context.Background(), "server")
-	cfg, err := mtls.NewMutualTLSConfig(cert)
+	cfg, err := mtls.NewMutualTLSConfig(cert, mtls.WithExpectedPeerIdentity("client"))
 	if err != nil {
 		t.Fatal(err)
 	}

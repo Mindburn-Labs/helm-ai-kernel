@@ -80,6 +80,17 @@ func TestConformManagedAgentsWritesVerifiableEvidencePack(t *testing.T) {
 
 	var verifyStdout, verifyStderr bytes.Buffer
 	verifyCode := runVerifyCmd([]string{"--bundle", filepath.Join(outDir, "evidence-pack.tar"), "--json"}, &verifyStdout, &verifyStderr)
+	if verifyCode == 0 {
+		t.Fatalf("verify without managed-agent trust root unexpectedly passed: stdout=%s stderr=%s", verifyStdout.String(), verifyStderr.String())
+	}
+
+	verifyStdout.Reset()
+	verifyStderr.Reset()
+	verifyCode = runVerifyCmd([]string{
+		"--bundle", filepath.Join(outDir, "evidence-pack.tar"),
+		"--json",
+		"--managed-agent-receipt-public-key", readManagedAgentSignerPublicKey(t, outDir),
+	}, &verifyStdout, &verifyStderr)
 	if verifyCode != 0 {
 		t.Fatalf("verify exit code = %d stdout=%s stderr=%s", verifyCode, verifyStdout.String(), verifyStderr.String())
 	}
@@ -213,6 +224,22 @@ func testManagedAgentHash(seed string) string {
 func writeTestManagedAgentConfig(t *testing.T, path string, cfg managedAgentLiveConfig) {
 	t.Helper()
 	writeTestManagedAgentJSON(t, path, cfg)
+}
+
+func readManagedAgentSignerPublicKey(t *testing.T, outDir string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(outDir, "live-evidence-report.sig.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sig map[string]string
+	if err := json.Unmarshal(data, &sig); err != nil {
+		t.Fatal(err)
+	}
+	if sig["public_key_hex"] == "" {
+		t.Fatalf("signature metadata missing public key: %#v", sig)
+	}
+	return sig["public_key_hex"]
 }
 
 func writeTestManagedAgentJSON(t *testing.T, path string, value any) {

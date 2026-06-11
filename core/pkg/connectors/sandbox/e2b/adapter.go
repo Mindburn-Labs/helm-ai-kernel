@@ -32,6 +32,9 @@ type Config struct {
 
 	// DefaultTimeout is the default sandbox timeout.
 	DefaultTimeout time.Duration `json:"default_timeout"`
+
+	// AllowInsecureLoopback permits http:// loopback endpoints for local tests only.
+	AllowInsecureLoopback bool `json:"allow_insecure_loopback,omitempty"`
 }
 
 // DefaultConfig returns a config with defaults.

@@ -1,6 +1,10 @@
 package e2b
 
 import (
+	"net"
+	"net/url"
+	"strings"
+
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/actuators"
 )
 
@@ -46,11 +50,40 @@ func checkAPIURL(cfg Config) actuators.PreflightCheck {
 	if cfg.APIURL == "" {
 		check.Passed = false
 		check.Reason = "E2B API URL is not configured"
+	} else if reason := validateSecureAPIURL(cfg.APIURL, cfg.AllowInsecureLoopback); reason != "" {
+		check.Passed = false
+		check.Reason = reason
 	} else {
 		check.Passed = true
-		check.Reason = "API URL is set"
+		check.Reason = "API URL is secure"
 	}
 	return check
+}
+
+func validateSecureAPIURL(raw string, allowInsecureLoopback bool) string {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" {
+		return "API URL must be a valid absolute URL"
+	}
+	if parsed.User != nil {
+		return "API URL must not include embedded credentials"
+	}
+	if parsed.Scheme == "https" {
+		return ""
+	}
+	if parsed.Scheme == "http" && allowInsecureLoopback && isLoopbackHost(parsed.Hostname()) {
+		return ""
+	}
+	return "API URL must use https; http is only allowed for explicitly enabled loopback tests"
+}
+
+func isLoopbackHost(host string) bool {
+	host = strings.TrimSpace(strings.ToLower(host))
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func checkTemplateID(cfg Config) actuators.PreflightCheck {

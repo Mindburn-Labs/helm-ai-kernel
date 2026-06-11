@@ -66,7 +66,7 @@ func TestExportSpans_ProducesHECEventBatch(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	exp, err := New(Config{URL: ts.URL, Token: "tok-1", Index: "main"})
+	exp, err := New(Config{URL: ts.URL, Token: "tok-1", Index: "main", AllowInsecureHTTP: true})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestExportSpans_PropagatesNon2xx(t *testing.T) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
 	defer ts.Close()
-	exp, _ := New(Config{URL: ts.URL, Token: "tok"})
+	exp, _ := New(Config{URL: ts.URL, Token: "tok", AllowInsecureHTTP: true})
 	err := exp.ExportSpans(context.Background(), []sdktrace.ReadOnlySpan{sampleSpan(t)})
 	if err == nil || !strings.Contains(err.Error(), "status 500") {
 		t.Fatalf("expected 500 error, got %v", err)
@@ -115,6 +115,9 @@ func TestNew_ValidatesRequiredFields(t *testing.T) {
 	}
 	if _, err := New(Config{URL: "https://x"}); err == nil {
 		t.Fatal("expected Token required error")
+	}
+	if _, err := New(Config{URL: "http://splunk.example/services/collector/event", Token: "tok"}); err == nil {
+		t.Fatal("expected non-TLS Splunk URL with token to fail")
 	}
 }
 

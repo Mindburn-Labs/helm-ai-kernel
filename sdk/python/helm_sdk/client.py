@@ -5,8 +5,10 @@ Typed client for HELM kernel API. Minimal deps (httpx).
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass
 from typing import Any, Optional, Union
+from urllib.parse import quote
 
 import httpx
 
@@ -22,6 +24,8 @@ from .types_gen import (
     VerificationResult,
     VersionInfo,
 )
+
+_PATH_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._:@=+~-]+$")
 
 
 @dataclass
@@ -134,6 +138,14 @@ def _json_body(model: Any) -> Any:
     if hasattr(model, "model_dump"):
         return model.model_dump(by_alias=True, exclude_none=True)
     return model
+
+
+def _path_segment(value: str, name: str) -> str:
+    if not isinstance(value, str) or value == "":
+        raise ValueError(f"{name} must be a non-empty path segment")
+    if value in {".", ".."} or not _PATH_SEGMENT_RE.fullmatch(value):
+        raise ValueError(f"{name} contains characters outside the allowed token format")
+    return quote(value, safe="")
 
 
 class HelmApiError(Exception):
@@ -249,7 +261,7 @@ class HelmClient:
 
     # ── ProofGraph ──────────────────────────────────
     def list_sessions(self, limit: int = 50, offset: int = 0) -> list[Session]:
-        resp = self._client.get(f"/api/v1/proofgraph/sessions?limit={limit}&offset={offset}")
+        resp = self._client.get("/api/v1/proofgraph/sessions", params={"limit": limit, "offset": offset})
         self._check(resp)
         sessions: list[Session] = []
         for item in resp.json():
@@ -259,7 +271,7 @@ class HelmClient:
         return sessions
 
     def get_receipts(self, session_id: str) -> list[Receipt]:
-        resp = self._client.get(f"/api/v1/proofgraph/sessions/{session_id}/receipts")
+        resp = self._client.get(f"/api/v1/proofgraph/sessions/{_path_segment(session_id, 'session_id')}/receipts")
         self._check(resp)
         receipts: list[Receipt] = []
         for item in resp.json():
@@ -269,7 +281,7 @@ class HelmClient:
         return receipts
 
     def get_receipt(self, receipt_hash: str) -> Receipt:
-        resp = self._client.get(f"/api/v1/proofgraph/receipts/{receipt_hash}")
+        resp = self._client.get(f"/api/v1/proofgraph/receipts/{_path_segment(receipt_hash, 'receipt_hash')}")
         self._check(resp)
         result = Receipt.from_dict(resp.json())
         assert result is not None
@@ -318,17 +330,17 @@ class HelmClient:
         return resp.json()
 
     def get_evidence_envelope_manifest(self, manifest_id: str) -> dict[str, Any]:
-        resp = self._client.get(f"/api/v1/evidence/envelopes/{manifest_id}")
+        resp = self._client.get(f"/api/v1/evidence/envelopes/{_path_segment(manifest_id, 'manifest_id')}")
         self._check(resp)
         return resp.json()
 
     def verify_evidence_envelope_manifest(self, manifest_id: str) -> dict[str, Any]:
-        resp = self._client.post(f"/api/v1/evidence/envelopes/{manifest_id}/verify")
+        resp = self._client.post(f"/api/v1/evidence/envelopes/{_path_segment(manifest_id, 'manifest_id')}/verify")
         self._check(resp)
         return resp.json()
 
     def get_evidence_envelope_payload(self, manifest_id: str) -> dict[str, Any]:
-        resp = self._client.get(f"/api/v1/evidence/envelopes/{manifest_id}/payload")
+        resp = self._client.get(f"/api/v1/evidence/envelopes/{_path_segment(manifest_id, 'manifest_id')}/payload")
         self._check(resp)
         return resp.json()
 
@@ -349,12 +361,12 @@ class HelmClient:
         return resp.json()
 
     def get_boundary_record(self, record_id: str) -> dict[str, Any]:
-        resp = self._client.get(f"/api/v1/boundary/records/{record_id}")
+        resp = self._client.get(f"/api/v1/boundary/records/{_path_segment(record_id, 'record_id')}")
         self._check(resp)
         return resp.json()
 
     def verify_boundary_record(self, record_id: str) -> dict[str, Any]:
-        resp = self._client.post(f"/api/v1/boundary/records/{record_id}/verify")
+        resp = self._client.post(f"/api/v1/boundary/records/{_path_segment(record_id, 'record_id')}/verify")
         self._check(resp)
         return resp.json()
 
@@ -369,7 +381,7 @@ class HelmClient:
         return resp.json()
 
     def verify_boundary_checkpoint(self, checkpoint_id: str) -> dict[str, Any]:
-        resp = self._client.post(f"/api/v1/boundary/checkpoints/{checkpoint_id}/verify")
+        resp = self._client.post(f"/api/v1/boundary/checkpoints/{_path_segment(checkpoint_id, 'checkpoint_id')}/verify")
         self._check(resp)
         return resp.json()
 
@@ -382,7 +394,7 @@ class HelmClient:
         return result
 
     def get_conformance_report(self, report_id: str) -> ConformanceResult:
-        resp = self._client.get(f"/api/v1/conformance/reports/{report_id}")
+        resp = self._client.get(f"/api/v1/conformance/reports/{_path_segment(report_id, 'report_id')}")
         self._check(resp)
         result = ConformanceResult.from_dict(resp.json())
         assert result is not None
@@ -426,17 +438,17 @@ class HelmClient:
         return MCPQuarantineRecord(**resp.json())
 
     def get_mcp_registry_record(self, server_id: str) -> MCPQuarantineRecord:
-        resp = self._client.get(f"/api/v1/mcp/registry/{server_id}")
+        resp = self._client.get(f"/api/v1/mcp/registry/{_path_segment(server_id, 'server_id')}")
         self._check(resp)
         return MCPQuarantineRecord(**resp.json())
 
     def approve_mcp_registry_record(self, server_id: str, req: dict[str, Any]) -> MCPQuarantineRecord:
-        resp = self._client.post(f"/api/v1/mcp/registry/{server_id}/approve", json=req)
+        resp = self._client.post(f"/api/v1/mcp/registry/{_path_segment(server_id, 'server_id')}/approve", json=req)
         self._check(resp)
         return MCPQuarantineRecord(**resp.json())
 
     def revoke_mcp_registry_record(self, server_id: str, reason: Optional[str] = None) -> MCPQuarantineRecord:
-        resp = self._client.post(f"/api/v1/mcp/registry/{server_id}/revoke", json={"reason": reason})
+        resp = self._client.post(f"/api/v1/mcp/registry/{_path_segment(server_id, 'server_id')}/revoke", json={"reason": reason})
         self._check(resp)
         return MCPQuarantineRecord(**resp.json())
 
@@ -451,7 +463,7 @@ class HelmClient:
         return resp.json()
 
     def put_mcp_auth_profile(self, profile_id: str, profile: dict[str, Any]) -> dict[str, Any]:
-        resp = self._client.put(f"/api/v1/mcp/auth-profiles/{profile_id}", json=profile)
+        resp = self._client.put(f"/api/v1/mcp/auth-profiles/{_path_segment(profile_id, 'profile_id')}", json=profile)
         self._check(resp)
         return resp.json()
 
@@ -499,12 +511,12 @@ class HelmClient:
         return SandboxGrant(**resp.json())
 
     def get_sandbox_grant(self, grant_id: str) -> SandboxGrant:
-        resp = self._client.get(f"/api/v1/sandbox/grants/{grant_id}")
+        resp = self._client.get(f"/api/v1/sandbox/grants/{_path_segment(grant_id, 'grant_id')}")
         self._check(resp)
         return SandboxGrant(**resp.json())
 
     def verify_sandbox_grant(self, grant_id: str) -> dict[str, Any]:
-        resp = self._client.post(f"/api/v1/sandbox/grants/{grant_id}/verify")
+        resp = self._client.post(f"/api/v1/sandbox/grants/{_path_segment(grant_id, 'grant_id')}/verify")
         self._check(resp)
         return resp.json()
 
@@ -535,7 +547,7 @@ class HelmClient:
         return resp.json()
 
     def get_authz_snapshot(self, snapshot_id: str) -> dict[str, Any]:
-        resp = self._client.get(f"/api/v1/authz/snapshots/{snapshot_id}")
+        resp = self._client.get(f"/api/v1/authz/snapshots/{_path_segment(snapshot_id, 'snapshot_id')}")
         self._check(resp)
         return resp.json()
 
@@ -550,17 +562,26 @@ class HelmClient:
         return resp.json()
 
     def transition_approval_ceremony(self, approval_id: str, action: str, req: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-        resp = self._client.post(f"/api/v1/approvals/{approval_id}/{action}", json=req or {})
+        resp = self._client.post(
+            f"/api/v1/approvals/{_path_segment(approval_id, 'approval_id')}/{_path_segment(action, 'action')}",
+            json=req or {},
+        )
         self._check(resp)
         return resp.json()
 
     def create_approval_webauthn_challenge(self, approval_id: str, req: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-        resp = self._client.post(f"/api/v1/approvals/{approval_id}/webauthn/challenge", json=req or {})
+        resp = self._client.post(
+            f"/api/v1/approvals/{_path_segment(approval_id, 'approval_id')}/webauthn/challenge",
+            json=req or {},
+        )
         self._check(resp)
         return resp.json()
 
     def assert_approval_webauthn_challenge(self, approval_id: str, req: dict[str, Any]) -> dict[str, Any]:
-        resp = self._client.post(f"/api/v1/approvals/{approval_id}/webauthn/assert", json=req)
+        resp = self._client.post(
+            f"/api/v1/approvals/{_path_segment(approval_id, 'approval_id')}/webauthn/assert",
+            json=req,
+        )
         self._check(resp)
         return resp.json()
 
@@ -570,7 +591,7 @@ class HelmClient:
         return resp.json()
 
     def put_budget_ceiling(self, budget_id: str, req: dict[str, Any]) -> dict[str, Any]:
-        resp = self._client.put(f"/api/v1/budgets/{budget_id}", json=req)
+        resp = self._client.put(f"/api/v1/budgets/{_path_segment(budget_id, 'budget_id')}", json=req)
         self._check(resp)
         return resp.json()
 

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust/registry"
 )
 
@@ -108,37 +109,92 @@ func TestHandlePostEvent(t *testing.T) {
 		t.Fatalf("expected missing subject, got %d %s", missingSubject.Code, missingSubject.Body.String())
 	}
 
-	handler.registry.State().Keys["kid-known"] = registry.KeyEntry{KID: "kid-known"}
+	signer, knownKey := trustTestAuthorKey(t, "kid-known")
+	handler.registry.State().Keys["kid-known"] = knownKey
+	handler.trustedAuthorPublicKeys = map[string]string{"kid-known": signer.PublicKey()}
+
+	unsigned := doJSON(handler.HandlePostEvent, registry.TrustEvent{
+		EventType: registry.EventTenantRegister,
+		SubjectID: "tenant-unsigned",
+		Payload:   json.RawMessage(`{"tenant_id":"tenant-unsigned"}`),
+		AuthorKID: "kid-known",
+	})
+	if unsigned.Code != http.StatusForbidden || !strings.Contains(unsigned.Body.String(), "author_sig is required") {
+		t.Fatalf("expected unsigned event rejected, got %d %s", unsigned.Code, unsigned.Body.String())
+	}
+
 	unknownAuthor := doJSON(handler.HandlePostEvent, registry.TrustEvent{
 		EventType: registry.EventTenantRegister,
 		SubjectID: "tenant-1",
 		Payload:   json.RawMessage(`{"tenant_id":"tenant-1"}`),
 		AuthorKID: "kid-unknown",
+		AuthorSig: "sig",
 	})
 	if unknownAuthor.Code != http.StatusForbidden || !strings.Contains(unknownAuthor.Body.String(), "author key not found") {
 		t.Fatalf("expected forbidden unknown key, got %d %s", unknownAuthor.Code, unknownAuthor.Body.String())
 	}
 
+	handler.trustedAuthorPublicKeys = nil
+	unconfigured := doJSON(handler.HandlePostEvent, signedTrustEvent(t, signer, registry.TrustEvent{
+		ID:        "evt-unconfigured",
+		EventType: registry.EventTenantRegister,
+		SubjectID: "tenant-unconfigured",
+		Payload:   json.RawMessage(`{"tenant_id":"tenant-unconfigured"}`),
+		AuthorKID: "kid-known",
+	}))
+	if unconfigured.Code != http.StatusForbidden || !strings.Contains(unconfigured.Body.String(), "not configured") {
+		t.Fatalf("expected unconfigured key rejected, got %d %s", unconfigured.Code, unconfigured.Body.String())
+	}
+	handler.trustedAuthorPublicKeys = map[string]string{"kid-known": signer.PublicKey()}
+
+	otherSigner, _ := trustTestAuthorKey(t, "kid-other")
+	handler.trustedAuthorPublicKeys = map[string]string{"kid-known": otherSigner.PublicKey()}
+	hashMismatch := doJSON(handler.HandlePostEvent, signedTrustEvent(t, otherSigner, registry.TrustEvent{
+		ID:        "evt-hash-mismatch",
+		EventType: registry.EventTenantRegister,
+		SubjectID: "tenant-hash-mismatch",
+		Payload:   json.RawMessage(`{"tenant_id":"tenant-hash-mismatch"}`),
+		AuthorKID: "kid-known",
+	}))
+	if hashMismatch.Code != http.StatusForbidden || !strings.Contains(hashMismatch.Body.String(), "does not match") {
+		t.Fatalf("expected key hash mismatch rejected, got %d %s", hashMismatch.Code, hashMismatch.Body.String())
+	}
+	handler.trustedAuthorPublicKeys = map[string]string{"kid-known": signer.PublicKey()}
+
+	tampered := signedTrustEvent(t, signer, registry.TrustEvent{
+		ID:        "evt-tampered",
+		EventType: registry.EventTenantRegister,
+		SubjectID: "tenant-tampered",
+		Payload:   json.RawMessage(`{"tenant_id":"tenant-tampered"}`),
+		AuthorKID: "kid-known",
+	})
+	tampered.Payload = json.RawMessage(`{"tenant_id":"tenant-attacker"}`)
+	tamperedResp := doJSON(handler.HandlePostEvent, tampered)
+	if tamperedResp.Code != http.StatusForbidden || !strings.Contains(tamperedResp.Body.String(), "signature verification failed") {
+		t.Fatalf("expected tampered payload rejected, got %d %s", tamperedResp.Code, tamperedResp.Body.String())
+	}
+
 	store.latestErr = errors.New("latest failed")
-	appendErr := doJSON(handler.HandlePostEvent, registry.TrustEvent{
+	appendErr := doJSON(handler.HandlePostEvent, signedTrustEvent(t, signer, registry.TrustEvent{
+		ID:        "evt-append-fail",
 		EventType: registry.EventTenantRegister,
 		SubjectID: "tenant-1",
 		Payload:   json.RawMessage(`{"tenant_id":"tenant-1"}`),
 		AuthorKID: "kid-known",
-	})
+	}))
 	if appendErr.Code != http.StatusConflict || !strings.Contains(appendErr.Body.String(), "get latest lamport") {
 		t.Fatalf("expected append conflict, got %d %s", appendErr.Code, appendErr.Body.String())
 	}
 	store.latestErr = nil
 
-	success := doJSON(handler.HandlePostEvent, registry.TrustEvent{
+	success := doJSON(handler.HandlePostEvent, signedTrustEvent(t, signer, registry.TrustEvent{
 		ID:          "evt-1",
 		EventType:   registry.EventTenantRegister,
 		SubjectID:   "tenant-1",
 		SubjectType: "tenant",
 		Payload:     json.RawMessage(`{"tenant_id":"tenant-1"}`),
 		AuthorKID:   "kid-known",
-	})
+	}))
 	if success.Code != http.StatusCreated {
 		t.Fatalf("expected created, got %d %s", success.Code, success.Body.String())
 	}
@@ -148,15 +204,16 @@ func TestHandlePostEvent(t *testing.T) {
 	}
 
 	bootstrapHandler, _ := newTestHandler()
-	bootstrap := doJSON(bootstrapHandler.HandlePostEvent, registry.TrustEvent{
+	bootstrapSigner, _ := trustTestAuthorKey(t, "kid-bootstrap")
+	bootstrap := doJSON(bootstrapHandler.HandlePostEvent, signedTrustEvent(t, bootstrapSigner, registry.TrustEvent{
 		ID:        "evt-bootstrap",
 		EventType: registry.EventTenantRegister,
 		SubjectID: "tenant-bootstrap",
 		Payload:   json.RawMessage(`{"tenant_id":"tenant-bootstrap"}`),
 		AuthorKID: "kid-bootstrap",
-	})
-	if bootstrap.Code != http.StatusCreated {
-		t.Fatalf("expected bootstrap author allowed, got %d %s", bootstrap.Code, bootstrap.Body.String())
+	}))
+	if bootstrap.Code != http.StatusForbidden || !strings.Contains(bootstrap.Body.String(), "bootstrapped offline") {
+		t.Fatalf("expected bootstrap network write rejected, got %d %s", bootstrap.Code, bootstrap.Body.String())
 	}
 }
 
@@ -331,6 +388,30 @@ func tenantRegisterEvent(tenantID string) *registry.TrustEvent {
 		SubjectType: "tenant",
 		Payload:     json.RawMessage(`{"tenant_id":"` + tenantID + `"}`),
 	}
+}
+
+func trustTestAuthorKey(t *testing.T, kid string) (*helmcrypto.Ed25519Signer, registry.KeyEntry) {
+	t.Helper()
+	signer, err := helmcrypto.NewEd25519Signer(kid)
+	if err != nil {
+		t.Fatalf("NewEd25519Signer: %v", err)
+	}
+	return signer, registry.KeyEntry{
+		KID:           kid,
+		Algorithm:     "ed25519",
+		PublicKeyHash: ed25519PublicKeyHash(signer.PublicKey()),
+		OwnerDID:      "did:helm:test",
+	}
+}
+
+func signedTrustEvent(t *testing.T, signer *helmcrypto.Ed25519Signer, event registry.TrustEvent) registry.TrustEvent {
+	t.Helper()
+	sig, err := signer.Sign(TrustEventAuthorSignatureMaterial(event))
+	if err != nil {
+		t.Fatalf("sign trust event: %v", err)
+	}
+	event.AuthorSig = sig
+	return event
 }
 
 func cloneEvents(events []*registry.TrustEvent) []*registry.TrustEvent {

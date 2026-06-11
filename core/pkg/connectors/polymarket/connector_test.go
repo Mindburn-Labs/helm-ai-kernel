@@ -117,9 +117,51 @@ func TestValidateIntentDenialsAndAllowances(t *testing.T) {
 		},
 		{
 			name:   "over single order notional",
-			intent: withIntentSize(baseIntent(), "11"),
+			intent: withIntentSize(baseIntent(), "30"),
 			p0:     allowingP0(),
 			reason: ReasonOverNotional,
+		},
+		{
+			name:   "over max notional",
+			intent: withIntentSize(baseIntent(), "20"),
+			p0:     withMaxNotional(allowingP0(), 5),
+			reason: ReasonOverNotional,
+		},
+		{
+			name:   "malformed size",
+			intent: withIntentSize(baseIntent(), "not-a-number"),
+			p0:     allowingP0(),
+			reason: ReasonInvalidOrderValue,
+		},
+		{
+			name:   "overflow size",
+			intent: withIntentSize(baseIntent(), "1e309"),
+			p0:     allowingP0(),
+			reason: ReasonInvalidOrderValue,
+		},
+		{
+			name:   "nan size",
+			intent: withIntentSize(baseIntent(), "NaN"),
+			p0:     allowingP0(),
+			reason: ReasonInvalidOrderValue,
+		},
+		{
+			name:   "infinite price",
+			intent: withIntentPrice(baseIntent(), "+Inf"),
+			p0:     allowingP0(),
+			reason: ReasonInvalidOrderValue,
+		},
+		{
+			name:   "zero size",
+			intent: withIntentSize(baseIntent(), "0"),
+			p0:     allowingP0(),
+			reason: ReasonInvalidOrderValue,
+		},
+		{
+			name:   "negative price",
+			intent: withIntentPrice(baseIntent(), "-0.01"),
+			p0:     allowingP0(),
+			reason: ReasonInvalidOrderValue,
 		},
 		{
 			name:   "market not allowed",
@@ -143,11 +185,6 @@ func TestValidateIntentDenialsAndAllowances(t *testing.T) {
 
 	if deny := ValidateIntent(baseIntent(), withAllowedMarkets(allowingP0(), []string{"token-1"})); deny != nil {
 		t.Fatalf("ValidateIntent() with allowed market = %#v, want nil", deny)
-	}
-
-	unparseableSize := withIntentSize(baseIntent(), "not-a-number")
-	if deny := ValidateIntent(unparseableSize, allowingP0()); deny != nil {
-		t.Fatalf("ValidateIntent() with unparseable size = %#v, want nil", deny)
 	}
 
 	noModeAllowlist := allowingP0()
@@ -218,6 +255,79 @@ func TestExecuteDeniedAndAllowed(t *testing.T) {
 	}
 	if allowed.Graph().Len() != 1 {
 		t.Fatalf("allowed Graph().Len() = %d, want 1", allowed.Graph().Len())
+	}
+}
+
+func TestExecuteDeniesMalformedOrderAmounts(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name   string
+		mutate func(map[string]any)
+		reason ReasonCode
+	}{
+		{
+			name: "malformed size",
+			mutate: func(params map[string]any) {
+				params["size"] = "not-a-number"
+			},
+			reason: ReasonInvalidOrderValue,
+		},
+		{
+			name: "overflow size",
+			mutate: func(params map[string]any) {
+				params["size"] = "1e309"
+			},
+			reason: ReasonInvalidOrderValue,
+		},
+		{
+			name: "nan price",
+			mutate: func(params map[string]any) {
+				params["price"] = "NaN"
+			},
+			reason: ReasonInvalidOrderValue,
+		},
+		{
+			name: "zero price",
+			mutate: func(params map[string]any) {
+				params["price"] = "0"
+			},
+			reason: ReasonInvalidOrderValue,
+		},
+		{
+			name: "negative size",
+			mutate: func(params map[string]any) {
+				params["size"] = "-1"
+			},
+			reason: ReasonInvalidOrderValue,
+		},
+		{
+			name: "over notional",
+			mutate: func(params map[string]any) {
+				params["price"] = "0.75"
+				params["size"] = "20"
+			},
+			reason: ReasonOverNotional,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p0 := allowingP0()
+			c := NewConnector(Config{P0: &p0})
+			params := validOrderParams("amount-" + strings.ReplaceAll(tt.name, " ", "-"))
+			tt.mutate(params)
+
+			out, err := c.Execute(ctx, permitFor(c), ToolPlaceOrder, params)
+			if err == nil || !strings.Contains(err.Error(), string(tt.reason)) {
+				t.Fatalf("Execute() error = %v, want reason %s", err, tt.reason)
+			}
+			if out != nil {
+				t.Fatalf("Execute() output = %#v, want nil", out)
+			}
+			if c.Graph().Len() != 1 {
+				t.Fatalf("Graph().Len() = %d, want denied evidence node", c.Graph().Len())
+			}
+		})
 	}
 }
 
@@ -375,6 +485,16 @@ func withIntentVenue(intent PolymarketOrderIntent, venue string) PolymarketOrder
 func withIntentSize(intent PolymarketOrderIntent, size string) PolymarketOrderIntent {
 	intent.Size = size
 	return intent
+}
+
+func withIntentPrice(intent PolymarketOrderIntent, price string) PolymarketOrderIntent {
+	intent.Price = price
+	return intent
+}
+
+func withMaxNotional(p0 PolymarketP0, max float64) PolymarketP0 {
+	p0.MaxNotionalUSD = max
+	return p0
 }
 
 func withAllowedMarkets(p0 PolymarketP0, ids []string) PolymarketP0 {

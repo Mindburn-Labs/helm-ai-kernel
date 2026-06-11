@@ -80,7 +80,7 @@ func TestAdapterEgressControllerAndIDBranches(t *testing.T) {
 	cfg := testConfig(t)
 	cfg.WorkID = ""
 	cfg.SessionID = "session-only"
-	adapter := New(cfg, WithRunner(&fakeRunner{}), WithEgressController(egress), WithClock(func() time.Time {
+	adapter := New(cfg, WithRunner(&fakeRunner{}), WithReceiptSigner(testReceiptSigner{}), WithEgressController(egress), WithClock(func() time.Time {
 		return time.Unix(300, 0).UTC()
 	}))
 	handle, err := adapter.Create(context.Background(), &actuators.SandboxSpec{
@@ -94,7 +94,7 @@ func TestAdapterEgressControllerAndIDBranches(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "claude-session-session-only", handle.ID)
+	require.Equal(t, "claude-session-session-only-1", handle.ID)
 	require.NoError(t, adapter.AllowEgress(context.Background(), handle.ID, nil))
 	require.NoError(t, adapter.AllowEgress(context.Background(), handle.ID, []actuators.EgressRule{{Host: "api.anthropic.com", Port: 443}}))
 	require.Equal(t, 1, egress.calls)
@@ -113,7 +113,7 @@ func TestAdapterEgressControllerAndIDBranches(t *testing.T) {
 	cfg = testConfig(t)
 	cfg.WorkID = ""
 	cfg.SessionID = ""
-	generic := New(cfg, WithRunner(&fakeRunner{}))
+	generic := New(cfg, WithRunner(&fakeRunner{}), WithReceiptSigner(testReceiptSigner{}))
 	genericHandle, err := generic.Create(context.Background(), basicSpec())
 	require.NoError(t, err)
 	require.Equal(t, "claude-managed-1", genericHandle.ID)
@@ -165,14 +165,30 @@ func TestLocalCommandRunnerBranches(t *testing.T) {
 	require.ErrorContains(t, err, "command is required")
 
 	ok, err := runner.Run(context.Background(), execCtx, &actuators.ExecRequest{
-		Command: []string{"/bin/sh", "-c", "printf ok"},
+		Command: []string{"/bin/sh", "-c", "printf %s \"$HELLO\""},
 		WorkDir: execCtx.WorkspaceRoot,
 		Env:     map[string]string{"HELLO": "world"},
 		Stdin:   []byte("ignored"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, 0, ok.ExitCode)
-	require.Equal(t, []byte("ok"), ok.Stdout)
+	require.Equal(t, []byte("world"), ok.Stdout)
+
+	t.Setenv("OPENAI_API_KEY", "sk-host-secret")
+	sanitized, err := runner.Run(context.Background(), execCtx, &actuators.ExecRequest{
+		Command: []string{"/bin/sh", "-c", "printf %s \"${OPENAI_API_KEY:-absent}\""},
+		WorkDir: execCtx.WorkspaceRoot,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, sanitized.ExitCode)
+	require.Equal(t, []byte("absent"), sanitized.Stdout)
+
+	_, err = runner.Run(context.Background(), execCtx, &actuators.ExecRequest{
+		Command: []string{"/bin/sh", "-c", "printf should-not-run"},
+		WorkDir: execCtx.WorkspaceRoot,
+		Env:     map[string]string{"ANTHROPIC_API_KEY": "sk-request"},
+	})
+	require.ErrorContains(t, err, "secret-bearing env var")
 
 	failed, err := runner.Run(context.Background(), execCtx, &actuators.ExecRequest{
 		Command: []string{"/bin/sh", "-c", "exit 7"},

@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/siem/internal/safeurl"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -45,6 +46,8 @@ type Config struct {
 	ServiceName string
 	// HTTPClient is optional; defaults to a 10s-timeout client.
 	HTTPClient *http.Client
+	// AllowInsecureHTTP permits loopback http:// collectors for tests/dev only.
+	AllowInsecureHTTP bool
 }
 
 // Exporter implements sdktrace.SpanExporter for Elasticsearch ECS.
@@ -60,6 +63,11 @@ func New(cfg Config) (*Exporter, error) {
 	}
 	if cfg.Index == "" {
 		return nil, errors.New("elastic_ecs: Index is required")
+	}
+	if cfg.APIKey != "" || cfg.Username != "" || cfg.Password != "" {
+		if err := safeurl.RequireHTTPS(cfg.URL, "elastic_ecs", cfg.AllowInsecureHTTP); err != nil {
+			return nil, err
+		}
 	}
 	if cfg.ServiceName == "" {
 		cfg.ServiceName = "helm-governance"

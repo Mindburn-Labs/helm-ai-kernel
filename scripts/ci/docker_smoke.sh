@@ -17,8 +17,6 @@ fi
 IMAGE="${HELM_SMOKE_IMAGE:-ghcr.io/mindburn-labs/helm-ai-kernel:local}"
 API_PORT="${HELM_SMOKE_API_PORT:-18080}"
 HEALTH_PORT="${HELM_SMOKE_HEALTH_PORT:-18081}"
-ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-helm-admin-smoke}"
-SERVICE_KEY="${HELM_SMOKE_SERVICE_KEY:-helm-service-smoke}"
 TENANT_ID="${HELM_SMOKE_TENANT_ID:-tenant-smoke}"
 AGENT_ID="${HELM_SMOKE_AGENT_ID:-agent.smoke}"
 CONTAINER_NAME="${HELM_SMOKE_CONTAINER_NAME:-helm-ai-kernel-smoke}"
@@ -37,6 +35,17 @@ require() {
 require docker
 require curl
 require python3
+
+random_key() {
+    python3 - <<'PY'
+import secrets
+print(secrets.token_urlsafe(32))
+PY
+}
+
+ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-$(random_key)}"
+SERVICE_KEY="${HELM_SMOKE_SERVICE_KEY:-$(random_key)}"
+EVIDENCE_SIGNING_KEY="${HELM_SMOKE_EVIDENCE_SIGNING_KEY:-$(random_key)}"
 
 if [ -z "$DATA_DIR" ]; then
     mkdir -p "$ROOT/tmp"
@@ -103,11 +112,13 @@ auth_headers=(
 start_docker() {
     docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
     docker run -d --name "$CONTAINER_NAME" \
-        -p "${API_PORT}:8080" \
-        -p "${HEALTH_PORT}:8081" \
+        -p "127.0.0.1:${API_PORT}:8080" \
+        -p "127.0.0.1:${HEALTH_PORT}:8081" \
         -e HELM_ADMIN_API_KEY="$ADMIN_KEY" \
         -e HELM_SERVICE_API_KEY="$SERVICE_KEY" \
-        -e EVIDENCE_SIGNING_KEY="helm-evidence-smoke" \
+        -e HELM_RUNTIME_TENANT_ID="$TENANT_ID" \
+        -e HELM_RUNTIME_PRINCIPAL_ID="$AGENT_ID" \
+        -e EVIDENCE_SIGNING_KEY="$EVIDENCE_SIGNING_KEY" \
         -e HELM_HEALTH_PORT=8081 \
         -v "${DATA_DIR}:/var/lib/helm-ai-kernel" \
         "$IMAGE" >/dev/null
@@ -117,7 +128,9 @@ start_compose() {
     (cd "$ROOT" && docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" down -v --remove-orphans >/dev/null 2>&1 || true)
     HELM_ADMIN_API_KEY="$ADMIN_KEY" \
     HELM_SERVICE_API_KEY="$SERVICE_KEY" \
-    EVIDENCE_SIGNING_KEY="helm-evidence-smoke" \
+    HELM_RUNTIME_TENANT_ID="$TENANT_ID" \
+    HELM_RUNTIME_PRINCIPAL_ID="$AGENT_ID" \
+    EVIDENCE_SIGNING_KEY="$EVIDENCE_SIGNING_KEY" \
     HELM_SMOKE_DATA_DIR="$DATA_DIR" \
     HELM_SMOKE_API_PORT="$API_PORT" \
     HELM_SMOKE_HEALTH_PORT="$HEALTH_PORT" \

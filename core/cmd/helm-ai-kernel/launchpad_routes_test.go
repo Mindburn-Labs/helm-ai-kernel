@@ -7,11 +7,53 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	launchsession "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
 )
+
+func TestLaunchpadMCPApprovalRequiresScopedExpiringTools(t *testing.T) {
+	valid := httptest.NewRecorder()
+	handleLaunchpadMCPApproval(valid, httptest.NewRequest(http.MethodPost, "/api/v1/launchpad/mcp/approvals", strings.NewReader(`{
+		"server_id":"srv-1",
+		"tools":["write","read","write"],
+		"ttl":"15m",
+		"reason":"operator reviewed MCP server",
+		"approver":"operator"
+	}`)))
+	if valid.Code != http.StatusCreated {
+		t.Fatalf("valid approval status=%d body=%s", valid.Code, valid.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(valid.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	approval := body["approval"].(map[string]any)
+	if approval["expires_at"] == "manual-revocation" || approval["tool_scope_hash"] == "" {
+		t.Fatalf("approval missing concrete expiry or scope hash: %#v", approval)
+	}
+	tools := approval["tool_names"].([]any)
+	if len(tools) != 2 || tools[0] != "read" || tools[1] != "write" {
+		t.Fatalf("tools not normalized and scoped: %#v", tools)
+	}
+
+	for name, payload := range map[string]string{
+		"bad_ttl":       `{"server_id":"srv-1","tools":["write"],"ttl":"never","reason":"reviewed"}`,
+		"nonpositive":   `{"server_id":"srv-1","tools":["write"],"ttl":"0s","reason":"reviewed"}`,
+		"wildcard_tool": `{"server_id":"srv-1","tools":["*"],"ttl":"15m","reason":"reviewed"}`,
+		"blank_tool":    `{"server_id":"srv-1","tools":[" "],"ttl":"15m","reason":"reviewed"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			handleLaunchpadMCPApproval(rec, httptest.NewRequest(http.MethodPost, "/api/v1/launchpad/mcp/approvals", strings.NewReader(payload)))
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("expected bad request, got %d body=%s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
 
 func TestLaunchpadServeRuntimeUsesConfiguredStore(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)

@@ -9,8 +9,14 @@
 set -euo pipefail
 
 DIR="${1:-dist}"
-IDENTITY_REGEX="${COSIGN_IDENTITY_REGEX:-https://github.com/Mindburn-Labs/helm-ai-kernel}"
+DEFAULT_IDENTITY_REGEX='^https://github\.com/Mindburn-Labs/helm-ai-kernel/\.github/workflows/release\.yml@refs/(heads/main|tags/v[0-9]+\.[0-9]+\.[0-9]+.*)$'
+IDENTITY_REGEX="${COSIGN_IDENTITY_REGEX:-$DEFAULT_IDENTITY_REGEX}"
 ISSUER="${COSIGN_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
+
+if ! printf '%s' "$IDENTITY_REGEX" | grep -Eq '^\^https://github\\?\.com/Mindburn-Labs/helm-ai-kernel/\\?\.github/workflows/[A-Za-z0-9_.-]+\\?\.ya?ml@refs/'; then
+    echo "::error::COSIGN_IDENTITY_REGEX must be anchored to a helm-ai-kernel GitHub Actions workflow identity and refs"
+    exit 1
+fi
 
 if ! command -v cosign >/dev/null 2>&1; then
     echo "::error::cosign not installed; install via https://github.com/sigstore/cosign/releases"

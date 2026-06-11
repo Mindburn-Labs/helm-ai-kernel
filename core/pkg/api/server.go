@@ -36,7 +36,22 @@ type Server struct {
 	lamport        uint64
 	mux            *http.ServeMux
 	allowedOrigins []string // CORS allowed origins (nil = no CORS headers)
+	authenticator  Authenticator
 }
+
+// AuthenticatedPrincipal is the identity the legacy API trusts for protected
+// routes. It is intentionally local to package api to avoid an auth->api import
+// cycle while still letting callers inject JWT/API-key validation.
+type AuthenticatedPrincipal struct {
+	ID       string
+	TenantID string
+	Roles    []string
+}
+
+// Authenticator validates a request and returns the caller identity.
+type Authenticator func(*http.Request) (AuthenticatedPrincipal, error)
+
+type authenticatedPrincipalContextKey struct{}
 
 // ReceiptDTO stored in-memory / external schema.
 type ReceiptDTO struct {
@@ -107,6 +122,7 @@ type ServerConfig struct {
 	PDP            pdp.PolicyDecisionPoint
 	Addr           string   // e.g., ":8443"
 	AllowedOrigins []string // CORS allowed origins (nil = no CORS headers emitted)
+	Authenticator  Authenticator
 }
 
 // NewServer creates a new HELM API server.
@@ -117,6 +133,7 @@ func NewServer(cfg ServerConfig) *Server {
 		sessions:       make(map[string][]string),
 		mux:            http.NewServeMux(),
 		allowedOrigins: cfg.AllowedOrigins,
+		authenticator:  cfg.Authenticator,
 	}
 	s.registerRoutes()
 	return s
@@ -173,6 +190,10 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	principal, ok := s.requireAuthenticated(w, r)
+	if !ok {
+		return
+	}
 
 	var req EvaluateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -180,16 +201,22 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	req.AgentID = principal.ID
+	if req.Context == nil {
+		req.Context = make(map[string]any)
+	}
+	req.Context["principal_id"] = principal.ID
+	req.Context["tenant_id"] = principal.TenantID
+
 	// Map to PDP DecisionRequest.
-	ctx := context.Background()
 	decReq := &pdp.DecisionRequest{
-		Principal: req.AgentID,
+		Principal: principal.ID,
 		Action:    req.Tool,
 		Resource:  req.EffectLevel,
 		Context:   req.Context,
 	}
 
-	decResp, err := s.pdp.Evaluate(ctx, decReq)
+	decResp, err := s.pdp.Evaluate(r.Context(), decReq)
 	if err != nil {
 		// Fail-closed: return DENY
 		writeJSON(w, http.StatusOK, EvaluateResponse{
@@ -238,7 +265,11 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		PrevHash:     prevHash,
 		LamportClock: lamport,
 		ArgsHash:     "sha256:" + hex.EncodeToString(argsHash[:]),
-		Metadata:     map[string]any{"decision_hash": decResp.DecisionHash},
+		Metadata: map[string]any{
+			"decision_hash": decResp.DecisionHash,
+			"principal_id":  principal.ID,
+			"tenant_id":     principal.TenantID,
+		},
 	}
 
 	s.receipts[receiptID] = receipt
@@ -264,16 +295,24 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleReceipts(w http.ResponseWriter, r *http.Request) {
+	principal, ok := s.requireAuthenticated(w, r)
+	if !ok {
+		return
+	}
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/receipts/")
 
 	// POST /api/v1/receipts/:id/complete
 	if strings.HasSuffix(path, "/complete") && r.Method == http.MethodPost {
 		receiptID := strings.TrimSuffix(path, "/complete")
 		s.mu.RLock()
-		_, exists := s.receipts[receiptID]
+		receipt, exists := s.receipts[receiptID]
 		s.mu.RUnlock()
 		if !exists {
 			http.Error(w, "receipt not found", http.StatusNotFound)
+			return
+		}
+		if !receiptVisibleToPrincipal(receipt, principal) {
+			WriteForbidden(w, "receipt belongs to another tenant")
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "recorded"})
@@ -289,6 +328,10 @@ func (s *Server) handleReceipts(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "receipt not found", http.StatusNotFound)
 			return
 		}
+		if !receiptVisibleToPrincipal(receipt, principal) {
+			WriteForbidden(w, "receipt belongs to another tenant")
+			return
+		}
 		writeJSON(w, http.StatusOK, FromCanonical(receipt))
 		return
 	}
@@ -298,6 +341,9 @@ func (s *Server) handleReceipts(w http.ResponseWriter, r *http.Request) {
 		s.mu.RLock()
 		all := make([]*ReceiptDTO, 0, len(s.receipts))
 		for _, r := range s.receipts {
+			if !receiptVisibleToPrincipal(r, principal) {
+				continue
+			}
 			all = append(all, FromCanonical(r))
 		}
 		s.mu.RUnlock()
@@ -311,6 +357,10 @@ func (s *Server) handleReceipts(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	principal, ok := s.requireAuthenticated(w, r)
+	if !ok {
 		return
 	}
 
@@ -330,6 +380,9 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	var receipts []*ReceiptDTO
 	for _, id := range receiptIDs {
 		if r, ok := s.receipts[id]; ok {
+			if !receiptVisibleToPrincipal(r, principal) {
+				continue
+			}
 			receipts = append(receipts, FromCanonical(r))
 		}
 	}
@@ -375,6 +428,47 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"receipts": receipts,
 		"lamport":  s.lamport,
 	})
+}
+
+func (s *Server) requireAuthenticated(w http.ResponseWriter, r *http.Request) (AuthenticatedPrincipal, bool) {
+	if s.authenticator == nil {
+		WriteUnauthorized(w, "Authentication not configured")
+		return AuthenticatedPrincipal{}, false
+	}
+	principal, err := s.authenticator(r)
+	if err != nil {
+		WriteUnauthorized(w, err.Error())
+		return AuthenticatedPrincipal{}, false
+	}
+	principal.ID = strings.TrimSpace(principal.ID)
+	principal.TenantID = strings.TrimSpace(principal.TenantID)
+	if principal.ID == "" || principal.TenantID == "" {
+		WriteUnauthorized(w, "Authenticated principal and tenant are required")
+		return AuthenticatedPrincipal{}, false
+	}
+	return principal, true
+}
+
+func WithAuthenticatedPrincipal(ctx context.Context, principal AuthenticatedPrincipal) context.Context {
+	return context.WithValue(ctx, authenticatedPrincipalContextKey{}, principal)
+}
+
+func AuthenticatedPrincipalFromContext(ctx context.Context) (AuthenticatedPrincipal, bool) {
+	principal, ok := ctx.Value(authenticatedPrincipalContextKey{}).(AuthenticatedPrincipal)
+	if !ok {
+		return AuthenticatedPrincipal{}, false
+	}
+	principal.ID = strings.TrimSpace(principal.ID)
+	principal.TenantID = strings.TrimSpace(principal.TenantID)
+	return principal, principal.ID != "" && principal.TenantID != ""
+}
+
+func receiptVisibleToPrincipal(receipt *contracts.Receipt, principal AuthenticatedPrincipal) bool {
+	if receipt == nil || receipt.Metadata == nil {
+		return false
+	}
+	tenantID, _ := receipt.Metadata["tenant_id"].(string)
+	return strings.TrimSpace(tenantID) == principal.TenantID
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

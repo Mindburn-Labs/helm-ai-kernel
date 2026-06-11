@@ -19,6 +19,24 @@ func bundleHash(data []byte) string {
 	return hex.EncodeToString(h[:])
 }
 
+func skillProof(m skills.SkillManifest, bundleData []byte) skills.TrustedSignatureProof {
+	return skills.TrustedSignatureProof{
+		SignatureRef: m.SignatureRef,
+		SignerID:     "conformance-skill-publisher",
+		SubjectHash:  "sha256:" + bundleHash(bundleData),
+		Verified:     true,
+	}
+}
+
+func connectorProof(release connectors.ConnectorRelease, binaryData []byte) connectors.TrustedSignatureProof {
+	return connectors.TrustedSignatureProof{
+		SignatureRef: release.SignatureRef,
+		SignerID:     "conformance-connector-publisher",
+		SubjectHash:  bundleHash(binaryData),
+		Verified:     true,
+	}
+}
+
 // newTestManifest builds a minimal valid SkillManifest for use in conformance tests.
 func newTestManifest(id string, bundleData []byte) skills.SkillManifest {
 	return skills.SkillManifest{
@@ -60,7 +78,7 @@ func TestSkillBundleLifecycle_InstallStartsAsCandidate(t *testing.T) {
 	m.State = skills.SkillBundleStateCertified // intentionally wrong — Install must override
 
 	t.Run("install_forces_candidate_state", func(t *testing.T) {
-		err := skills.Install(ctx, store, m, bundleData)
+		err := skills.InstallVerified(ctx, store, m, bundleData, skillProof(m, bundleData))
 		require.NoError(t, err)
 
 		got, err := store.Get(ctx, "lc-001")
@@ -77,7 +95,7 @@ func TestSkillBundleLifecycle_CandidateToCertified(t *testing.T) {
 	bundleData := []byte("conformance-bundle-v2")
 	m := newTestManifest("lc-002", bundleData)
 
-	require.NoError(t, skills.Install(ctx, store, m, bundleData))
+	require.NoError(t, skills.InstallVerified(ctx, store, m, bundleData, skillProof(m, bundleData)))
 
 	t.Run("candidate_to_certified", func(t *testing.T) {
 		err := skills.Transition(ctx, store, "lc-002", skills.SkillBundleStateCertified)
@@ -100,8 +118,8 @@ func TestSkillBundleLifecycle_CertifiedSkillsAreDiscoverable(t *testing.T) {
 	mA := newTestManifest("lc-disc-a", dataA)
 	mB := newTestManifest("lc-disc-b", dataB)
 
-	require.NoError(t, skills.Install(ctx, store, mA, dataA))
-	require.NoError(t, skills.Install(ctx, store, mB, dataB))
+	require.NoError(t, skills.InstallVerified(ctx, store, mA, dataA, skillProof(mA, dataA)))
+	require.NoError(t, skills.InstallVerified(ctx, store, mB, dataB, skillProof(mB, dataB)))
 	require.NoError(t, skills.Transition(ctx, store, "lc-disc-a", skills.SkillBundleStateCertified))
 
 	t.Run("certified_skills_are_discoverable", func(t *testing.T) {
@@ -119,7 +137,7 @@ func TestSkillBundleLifecycle_DeprecatedSkillsRemainAccessible(t *testing.T) {
 	bundleData := []byte("conformance-bundle-dep")
 	m := newTestManifest("lc-dep", bundleData)
 
-	require.NoError(t, skills.Install(ctx, store, m, bundleData))
+	require.NoError(t, skills.InstallVerified(ctx, store, m, bundleData, skillProof(m, bundleData)))
 	require.NoError(t, skills.Transition(ctx, store, "lc-dep", skills.SkillBundleStateCertified))
 
 	t.Run("transition_to_deprecated", func(t *testing.T) {
@@ -141,7 +159,7 @@ func TestSkillBundleLifecycle_RevokedSkillsAreNotReinstallable(t *testing.T) {
 	bundleData := []byte("conformance-bundle-rev")
 	m := newTestManifest("lc-rev", bundleData)
 
-	require.NoError(t, skills.Install(ctx, store, m, bundleData))
+	require.NoError(t, skills.InstallVerified(ctx, store, m, bundleData, skillProof(m, bundleData)))
 	require.NoError(t, skills.Transition(ctx, store, "lc-rev", skills.SkillBundleStateRevoked))
 
 	t.Run("revoked_skill_is_inaccessible_to_new_transitions", func(t *testing.T) {
@@ -197,17 +215,18 @@ func TestSkillBundleLifecycle_BundleHashVerificationCatchesTampering(t *testing.
 	tamperedData := []byte("tampered-bundle-payload!")
 
 	m := skills.SkillManifest{
-		ID:         "tamper-check",
-		BundleHash: bundleHash(originalData),
+		ID:           "tamper-check",
+		BundleHash:   bundleHash(originalData),
+		SignatureRef: "sig://conformance-tamper-check",
 	}
 
 	t.Run("correct_data_passes_verification", func(t *testing.T) {
-		err := skills.VerifyBundle(m, originalData)
+		err := skills.VerifyBundleWithSignature(m, originalData, skillProof(m, originalData))
 		require.NoError(t, err)
 	})
 
 	t.Run("tampered_data_fails_verification", func(t *testing.T) {
-		err := skills.VerifyBundle(m, tamperedData)
+		err := skills.VerifyBundleWithSignature(m, tamperedData, skillProof(m, originalData))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "hash mismatch")
 	})
@@ -225,7 +244,7 @@ func TestSkillBundleLifecycle_CapabilityValidation(t *testing.T) {
 		skills.CapChannelSend,
 	}
 
-	require.NoError(t, skills.Install(ctx, store, m, bundleData))
+	require.NoError(t, skills.InstallVerified(ctx, store, m, bundleData, skillProof(m, bundleData)))
 
 	t.Run("capabilities_are_stored_and_readable", func(t *testing.T) {
 		got, err := store.Get(ctx, "cap-001")
@@ -334,7 +353,7 @@ func TestConnectorRegistry_BasicLifecycle(t *testing.T) {
 	})
 
 	t.Run("binary_hash_verification_catches_tampering", func(t *testing.T) {
-		err := connectors.VerifyRelease(release, binaryData)
+		err := connectors.VerifyReleaseWithSignature(release, binaryData, connectorProof(release, binaryData))
 		require.NoError(t, err)
 
 		err = connectors.VerifyRelease(release, []byte("tampered!"))

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -77,26 +78,84 @@ type proxyReceipt struct {
 
 // receiptStore persists receipts to a JSONL file for auditability.
 type receiptStore struct {
-	mu       sync.Mutex
-	file     *os.File
-	prevHash string
+	mu          sync.Mutex
+	file        *os.File
+	prevHash    string
+	lastLamport uint64
 }
 
 func newReceiptStore(path string) (*receiptStore, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
 		return nil, err
 	}
+	prevHash, lastLamport, err := recoverReceiptStoreState(path)
+	if err != nil {
+		return nil, err
+	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return nil, err
 	}
-	return &receiptStore{file: f, prevHash: "GENESIS"}, nil
+	return &receiptStore{file: f, prevHash: prevHash, lastLamport: lastLamport}, nil
+}
+
+func recoverReceiptStoreState(path string) (string, uint64, error) {
+	f, err := os.Open(path)
+	if os.IsNotExist(err) {
+		return "GENESIS", 0, nil
+	}
+	if err != nil {
+		return "", 0, err
+	}
+	defer f.Close()
+
+	expectedPrevHash := "GENESIS"
+	var lastLamport uint64
+	reader := bufio.NewReader(f)
+	for lineNo := 1; ; lineNo++ {
+		line, readErr := reader.ReadBytes('\n')
+		if len(line) > 0 {
+			line = bytes.TrimRight(line, "\r\n")
+			if len(bytes.TrimSpace(line)) == 0 {
+				return "", 0, fmt.Errorf("receipt chain line %d is empty", lineNo)
+			}
+			var rcpt proxyReceipt
+			if err := json.Unmarshal(line, &rcpt); err != nil {
+				return "", 0, fmt.Errorf("receipt chain line %d is invalid JSON: %w", lineNo, err)
+			}
+			if rcpt.PrevHash != expectedPrevHash {
+				return "", 0, fmt.Errorf("receipt chain line %d prev_hash %q does not match expected %q", lineNo, rcpt.PrevHash, expectedPrevHash)
+			}
+			if rcpt.LamportClock == 0 {
+				return "", 0, fmt.Errorf("receipt chain line %d has zero lamport_clock", lineNo)
+			}
+			if lastLamport != 0 && rcpt.LamportClock != lastLamport+1 {
+				return "", 0, fmt.Errorf("receipt chain line %d lamport_clock %d does not follow %d", lineNo, rcpt.LamportClock, lastLamport)
+			}
+			h := sha256.Sum256(line)
+			expectedPrevHash = "sha256:" + hex.EncodeToString(h[:])
+			lastLamport = rcpt.LamportClock
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return "", 0, fmt.Errorf("read receipt chain line %d: %w", lineNo, readErr)
+		}
+	}
+	return expectedPrevHash, lastLamport, nil
 }
 
 func (s *receiptStore) Append(rcpt *proxyReceipt) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if rcpt.LamportClock == 0 {
+		return fmt.Errorf("receipt lamport_clock must be non-zero")
+	}
+	if rcpt.LamportClock != s.lastLamport+1 {
+		return fmt.Errorf("receipt lamport_clock %d does not follow %d", rcpt.LamportClock, s.lastLamport)
+	}
 	rcpt.PrevHash = s.prevHash
 
 	data, err := json.Marshal(rcpt)
@@ -106,11 +165,20 @@ func (s *receiptStore) Append(rcpt *proxyReceipt) error {
 
 	// Update causal chain: prevHash = SHA-256 of this receipt's JSON
 	h := sha256.Sum256(data)
-	s.prevHash = "sha256:" + hex.EncodeToString(h[:])
-
+	nextPrevHash := "sha256:" + hex.EncodeToString(h[:])
 	data = append(data, '\n')
-	_, err = s.file.Write(data)
-	return err
+	if _, err := s.file.Write(data); err != nil {
+		return err
+	}
+	s.prevHash = nextPrevHash
+	s.lastLamport = rcpt.LamportClock
+	return nil
+}
+
+func (s *receiptStore) LastLamport() uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastLamport
 }
 
 func (s *receiptStore) Close() error {
@@ -256,6 +324,17 @@ func deniedProxyResponseBody(status, reasonCode string, toolNames []string, corr
 		return []byte(`{"error":{"message":"HELM proxy blocked a governed tool call","type":"helm_governance_denied","code":"DENIED"}}`)
 	}
 	return data
+}
+
+func containDeniedProxyResponse(resp *http.Response, status, reasonCode string, toolNames []string, correlationID string) []byte {
+	body := deniedProxyResponseBody(status, reasonCode, toolNames, correlationID)
+	if resp != nil {
+		resp.StatusCode = http.StatusForbidden
+		resp.Status = "403 Forbidden"
+		resp.Header.Set("Content-Type", "application/json")
+		resp.Header.Del("Content-Length")
+	}
+	return body
 }
 
 // validateToolCallArgs performs PEP validation: validates tool arguments
@@ -428,7 +507,7 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 
 	genAISystem := inferGenAISystem(upstreamURL)
 
-	var lamport uint64
+	lamport := store.LastLamport()
 	var iterationCount int64
 	sessionStart := time.Now()
 
@@ -639,10 +718,7 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 				verdict = "DENY"
 			}
 			if proxyStatusBlocksBody(status) {
-				body = deniedProxyResponseBody(status, reasonCode, toolNames, correlationID)
-				resp.StatusCode = http.StatusForbidden
-				resp.Status = "403 Forbidden"
-				resp.Header.Set("Content-Type", "application/json")
+				body = containDeniedProxyResponse(resp, status, reasonCode, toolNames, correlationID)
 			}
 
 			// Hash the body that will be delivered to the client.

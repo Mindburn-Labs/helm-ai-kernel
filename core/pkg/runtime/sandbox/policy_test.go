@@ -12,6 +12,24 @@ func TestFSAllowed(t *testing.T) {
 	}
 }
 
+func TestFSAllowsExactAllowlistRoot(t *testing.T) {
+	e := NewPolicyEnforcer(DefaultPolicy())
+	r := e.CheckFS("/tmp/sandbox", false)
+	if !r.Allowed {
+		t.Fatalf("expected exact allowlist root allowed, got: %s", r.Reason)
+	}
+}
+
+func TestFSPrefixSiblingDoesNotBypassAllowlist(t *testing.T) {
+	e := NewPolicyEnforcer(DefaultPolicy())
+	for _, path := range []string{"/tmp/sandbox_evil/secret.txt", "/tmp/sandbox2/secret.txt"} {
+		r := e.CheckFS(path, false)
+		if r.Allowed {
+			t.Fatalf("expected prefix sibling %s denied", path)
+		}
+	}
+}
+
 func TestFSDenylistBlocks(t *testing.T) {
 	e := NewPolicyEnforcer(DefaultPolicy())
 	r := e.CheckFS("/etc/passwd", false)
@@ -120,6 +138,9 @@ func TestBrokerIssueToken(t *testing.T) {
 	if token.TokenHash == "" {
 		t.Fatal("expected token hash")
 	}
+	if token.BearerToken == "" {
+		t.Fatal("expected one-time bearer token")
+	}
 }
 
 func TestBrokerDeniesUnallowedScope(t *testing.T) {
@@ -158,9 +179,16 @@ func TestBrokerTokenValidation(t *testing.T) {
 		TTLSeconds:      60,
 	})
 
-	valid, _ := b.ValidateToken(token.TokenID)
+	valid, _ := b.ValidateToken(token.BearerToken)
 	if !valid {
 		t.Fatal("expected valid token")
+	}
+	valid, reason := b.ValidateToken(token.TokenID)
+	if valid {
+		t.Fatal("token ID should not validate as bearer credential")
+	}
+	if reason != "token not found" {
+		t.Fatalf("expected token ID validation to fail as not found, got %q", reason)
 	}
 }
 
@@ -175,7 +203,7 @@ func TestBrokerTokenRevocation(t *testing.T) {
 	})
 
 	_ = b.RevokeToken(token.TokenID)
-	valid, reason := b.ValidateToken(token.TokenID)
+	valid, reason := b.ValidateToken(token.BearerToken)
 	if valid {
 		t.Fatal("expected revoked token to be invalid")
 	}

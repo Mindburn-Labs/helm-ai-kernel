@@ -42,6 +42,11 @@ jobs:
         with:
           node-version: "22"
           registry-url: https://registry.npmjs.org
+      - name: Validate dispatch inputs
+        run: |
+          python3 scripts/ci/validate_workflow_dispatch_inputs.py publish \
+            --version "${{ inputs.version }}" \
+            --dry-run "${{ inputs.dry_run }}"
       - name: Version checks
         working-directory: ${{ matrix.package.path }}
         run: |

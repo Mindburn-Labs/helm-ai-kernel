@@ -72,6 +72,7 @@ core/benchmarks/results/*.json
 
 # ─── Temporary and logs ──────────────────────────────────────────────────────
 tmp/
+.cache/
 *.tmp
 *.log
 *.bak

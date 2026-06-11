@@ -64,6 +64,9 @@ flowchart TD
 - `core/cmd/helm-ai-kernel/verify_cmd.go`
 - `api/openapi/helm.openapi.yaml`
 - `release.high_risk.v3.toml`
+- `scripts/launch/demo-mcp.sh`
+- `scripts/launch/demo-openai-proxy.sh`
+- `examples/launch/policies/shell_mcp_server_boundary.json`
 
 The quickstart uses Console registration as the primary adoption path. Console
 provides the dashboard for receipts, evidence, and run history. The local CLI
@@ -163,7 +166,54 @@ Run the basic boundary checks in another shell:
 
 The MCP authorization example should fail closed until the server identity, tool schema, scopes, and policy state are approved.
 
-## 4. Run The Built-In Proof Demo
+## 4. Shell + MCP Quickstart
+
+Use this path when Claude Code, Claude Desktop, Cursor, or another MCP-capable
+client needs shell access through an upstream `shell-mcp-server`. The upstream
+server remains third-party; HELM sits in front of it as the MCP execution
+boundary.
+
+Generate a wrapper profile for the upstream stdio server:
+
+```bash
+./bin/helm-ai-kernel mcp wrap \
+  --server-id shell-mcp-server \
+  --upstream-command "npx -y shell-mcp-server" \
+  --require-pinned-schema=true \
+  --json
+```
+
+Install or print a local client configuration:
+
+```bash
+./bin/helm-ai-kernel mcp install --client claude-code
+./bin/helm-ai-kernel mcp pack --client claude-desktop --out helm-ai-kernel.mcpb
+./bin/helm-ai-kernel mcp print-config --client cursor
+```
+
+The minimal shell policy fixture is
+`examples/launch/policies/shell_mcp_server_boundary.json`. It allows read-only
+`ls`, `cat <path>`, and `git status`; it blocks destructive shell patterns
+including `rm -rf`, `dd`, `mkfs`, destructive `git clean` forms, and equivalent
+raw disk or worktree deletion attempts.
+
+Before a real tool dispatch, the HELM path must produce an MCP authorization
+decision and a receipt. Inspect it with:
+
+```bash
+./bin/helm-ai-kernel receipts tail --agent mcp-demo-agent --server http://127.0.0.1:7714
+```
+
+Run the maintained local proof:
+
+```bash
+./scripts/launch/demo-mcp.sh
+```
+
+The demo proves unknown servers, unknown tools, and missing schema pins return
+`DENY` or `ESCALATE` before fixture dispatch.
+
+## 5. Run The Built-In Proof Demo
 
 The local demo routes are implemented in the CLI server and exercise receipt verification without requiring a hosted service.
 
@@ -189,9 +239,9 @@ curl http://127.0.0.1:7714/api/demo/tamper \
   -d '{"receipt":{...},"expected_receipt_hash":"<receipt_hash>","mutation":"flip_verdict"}'
 ```
 
-## 5. Optional OpenAI-Compatible Proxy
+## 6. OpenAI-Compatible Proxy Quickstart
 
-Start the proxy only when an existing client can set an OpenAI-style base URL:
+Start the proxy when an existing client can set an OpenAI-style base URL:
 
 ```bash
 python3 scripts/launch/mock-openai-upstream.py --port 19090
@@ -212,9 +262,64 @@ Point the client at:
 http://localhost:9090/v1
 ```
 
-The retained source examples under `examples/*_openai_baseurl/` are HELM HTTP/SDK examples, not verified OpenAI SDK examples. Use [OpenAI-Compatible Proxy Integration](INTEGRATIONS/openai_baseurl.md) for the proxy contract.
+Frameworks use the same switch: configure the OpenAI-compatible endpoint to
+`http://127.0.0.1:9090/v1` instead of calling OpenAI directly.
 
-## 6. Inspect Receipts
+```bash
+export OPENAI_BASE_URL=http://127.0.0.1:9090/v1
+export OPENAI_API_KEY=local-dev-key
+```
+
+Agents SDK can use a default OpenAI client pointed at HELM:
+
+```python
+from openai import AsyncOpenAI
+from agents import Agent, Runner, set_default_openai_api, set_default_openai_client
+
+set_default_openai_client(
+    AsyncOpenAI(base_url="http://127.0.0.1:9090/v1", api_key="local-dev-key"),
+    use_for_tracing=False,
+)
+set_default_openai_api("chat_completions")
+
+agent = Agent(name="quickstart", instructions="Use governed tool calls only.")
+result = await Runner.run(agent, "hello through HELM")
+```
+
+LangGraph/LangChain apps can point `ChatOpenAI` at the same endpoint:
+
+```python
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+    model="helm-local-mock",
+    base_url="http://127.0.0.1:9090/v1",
+    api_key="local-dev-key",
+)
+```
+
+A custom runtime can call the proxy directly:
+
+```bash
+curl -sS http://127.0.0.1:9090/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -H 'authorization: Bearer local-dev-key' \
+  -d '{"model":"helm-local-mock","messages":[{"role":"user","content":"hello"}]}'
+```
+
+Risky upstream tool calls are denied by the proxy before the caller can execute
+them. The maintained demo sends a local fixture that returns an OpenAI-shaped
+`tool_calls` response; HELM returns `403`, sets `X-Helm-Status: DENIED`, removes
+executable `tool_calls` from the response body, and persists a denied receipt
+that can be exported into an EvidencePack.
+
+```bash
+./scripts/launch/demo-openai-proxy.sh
+```
+
+The retained source examples under `examples/*_openai_baseurl/` are HELM HTTP/SDK examples. Use [OpenAI-Compatible Proxy Integration](INTEGRATIONS/openai_baseurl.md) for the proxy contract.
+
+## 7. Inspect Receipts
 
 The CLI receipt tail requires an agent id:
 
@@ -228,7 +333,7 @@ For an unfiltered local list, use the HTTP API:
 curl 'http://127.0.0.1:7714/api/v1/receipts?limit=20'
 ```
 
-## 7. Verify Evidence
+## 8. Verify Evidence
 
 `helm-ai-kernel verify` is offline-first and succeeds only when the EvidencePack contains the required roots, proof material, and receipts.
 
@@ -239,7 +344,7 @@ curl 'http://127.0.0.1:7714/api/v1/receipts?limit=20'
 
 Use the `v0.5.10` release `evidence-pack.tar` after `version-status.json` confirms all lockstep channels, or use an operator-generated pack known to contain ProofGraph and receipt material. Do not treat the local onboarding demo export as verified unless it includes those records.
 
-## 8. Validate The Checkout
+## 9. Validate The Checkout
 
 ```bash
 make docs-coverage

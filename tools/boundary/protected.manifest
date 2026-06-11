@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-10T22:24:51Z
-# Commit: 0a918adc92fcf43cc77a0bc5bdd06a9353379c65
+# Generated: 2026-06-11T09:36:26Z
+# Commit: bcef2ebd3dfa6c85d1448cf307f4ce8b16bf8cf0
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -879,6 +879,7 @@ de0c086ae6fc3f8eaadeabc5cbea9bd3574ed06299e31c191ac149f23e2a97b8  protocols/spec
 2a18e0c35cba8d7d0536a36ab502e4cf667f0de1a7dafc07343cb0b1c3dc3214  protocols/specs/rfc/reason-codes-v1.md
 15dd251f21ee1568ae981928edc763210c08cbc1dbb0af70d800eea9ea843e22  protocols/specs/rfc/receipt-format-v1.md
 e98a649ea99d4f4dfac7989f326447ac49c42840f54237f20b621687a20d06e7  protocols/specs/rfc/receipt-pq-hybrid-profile-v1.md
+5518342de2a7bf11072f2e7283cdccba70382013adb0bed52eef4158551baa3f  protocols/specs/rfc/receipt-transparency-v1.md
 380c032e17308e7ab0969b085502eb9cdee21c57a516fe513ebef536a93b6022  protocols/specs/tla/HelmKernel.cfg
 d56a40be7ca0f41c92b226ce37bd2406efee20abc4bc7de7bfba57ccc0a91e15  protocols/specs/tla/HelmKernel.tla
 7f15ead74b2bc715f7db215d5576526a8a190a76f9fcd99c39af96197e39058a  protocols/specs/tool-manifest/tool_manifest.v1.schema.json

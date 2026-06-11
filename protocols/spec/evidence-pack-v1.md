@@ -148,6 +148,51 @@ Launchpad numbered EvidencePacks map native host evidence to
 `11_HOST_EVIDENCE/`. Verifiers MUST accept both `host_evidence/<source>/...`
 and `11_HOST_EVIDENCE/<source>/...` when validating imported host evidence.
 
+### 3.4 Minimal HELM Execution Pack
+
+A minimal HELM execution EvidencePack records enough material for an offline
+reviewer to answer four questions: what was requested, which tool effect was
+considered, which policy decision was made, and what result or denial was
+returned.
+
+The minimal event set is:
+
+| Event | Required evidence | Typical path |
+| --- | --- | --- |
+| Prompt or intent | User prompt summary, normalized intent id, actor/agent id, input content hash | `policy/` or native `01_INTENT/` |
+| Tool call | Tool/server id, action name, argument hash, proposed effect class | `transcripts/` or native `03_EFFECTS/` |
+| Policy decision | `decision_id`, policy id/hash, verdict, reason code, evaluated rules | `policy/` |
+| Result or completion | Output hash, completion status, upstream status when applicable | `transcripts/` |
+| Denied effect, when applicable | Denied tool/action, `effect_id`, reason code, `side_effect_dispatched: false` | `transcripts/` or native `03_EFFECTS/` |
+| Receipt | `receipt_id`, `decision_id`, verdict, timestamp, output hash, signature | `receipts/` or native `02_PROOFGRAPH/receipts/` |
+
+Every event that is stored as a file MUST be represented by a manifest entry
+with a `content_hash`. Related events SHOULD share stable identifiers:
+
+- `pack_id` identifies the archive as a whole.
+- `receipt_id` identifies the signed governance receipt.
+- `decision_id` identifies one policy decision.
+- `effect_id` identifies one proposed or denied side effect.
+- `content_hash` binds a manifest entry to its bytes.
+- `manifest_hash`, `entries_merkle_root`, or a native root hash binds the set
+  of indexed entries.
+
+HELM native packs MAY use the numbered layout with `00_INDEX.json` as the root
+index. In that layout the pack seal is stored at
+`07_ATTESTATIONS/evidence_pack.sig`; the verifier still checks indexed file
+hashes and the pack/root hash before accepting the seal.
+
+The minimal signature profile is:
+
+- Each receipt carries its own signature over the receipt signing payload.
+- The EvidencePack carries a pack-level seal over the root hash or manifest
+  hash.
+- A dev-local profile MAY use a local Ed25519 signer and report `anchor
+  offline`.
+- Customer or high-assurance profiles SHOULD bind the seal to an external
+  signer key and an external timestamp or transparency anchor, then retain a
+  storage receipt for the archived bytes.
+
 ## 4. Entry Types
 
 ### 4.1 Receipts (ATTESTATION)

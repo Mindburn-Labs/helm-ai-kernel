@@ -152,6 +152,47 @@ retention mode, and `retain_until` timestamp. When verification runs against a
 tar archive, the verifier compares the receipt object hash with the local
 archive bytes.
 
+## Receipt Tail Output
+
+Use `receipts tail` while an integration is running to prove the request crossed
+the HELM boundary:
+
+```bash
+helm-ai-kernel receipts tail --agent agent.demo.exec --server http://127.0.0.1:7714
+```
+
+The command prints durable receipt events for the selected agent. In compact
+output, the fields to read first are:
+
+| Field | What it tells the operator |
+| --- | --- |
+| `receipt_id` | The durable receipt to cite in an issue, audit note, or EvidencePack |
+| `decision_id` | The policy decision that produced the receipt |
+| `verdict` or `status` | `ALLOW`, `DENY`, `ESCALATE`, or proxy status such as `DENIED` |
+| `reason_code` | Why the boundary allowed, denied, or escalated the effect |
+| `output_hash` | The hash that binds the governed result or denial body |
+| `signature` | Receipt-level signature material; absence means the event is not audit-ready |
+
+For a denied shell or proxy tool-call test, the receipt should show a deny
+status/reason and the effect should not be dispatched. That receipt is the
+operator-facing handle that later appears inside the EvidencePack.
+
+## EvidencePack Verify Output
+
+Use offline verification for archives:
+
+```bash
+helm-ai-kernel verify evidence-pack.tar
+```
+
+The command succeeds only after the verifier has checked the archive/index
+shape, content hashes, required receipt material, root hash, and available
+signatures. A passing dev-local pack may report `anchor offline`; that means no
+external timestamp/transparency anchor was embedded, not that verification was
+skipped. Customer/high-assurance packs should additionally report a trusted seal
+signer, external anchor, and storage receipt verification when those inputs are
+provided.
+
 ## Online Proof Check
 
 ```bash

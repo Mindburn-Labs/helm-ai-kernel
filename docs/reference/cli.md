@@ -115,6 +115,33 @@ This table documents registered top-level `helm-ai-kernel` command families and 
 | `helm-ai-kernel evidence prove-entry` | Requires `--manifest <manifest.json>` and `--entry <path>`; writes a self-contained inclusion proof to `--out` (default stdout) for redacted single-entry verification. |
 | `helm-ai-kernel boundary` | Uses `status`, `capabilities`, `records`, `get`, `verify`, and `checkpoint` subcommands. |
 
+## Receipt And Verification Output
+
+`helm-ai-kernel receipts tail --agent <id>` is the live operator view over
+durable boundary events. The command is useful when proving that Claude, Cursor,
+LangGraph, or a custom runtime crossed HELM instead of calling a tool or model
+endpoint directly.
+
+Read the output as:
+
+| Output field | Meaning |
+| --- | --- |
+| `receipt_id` | Stable handle for the governed request; cite this in issues, reviews, and EvidencePacks |
+| `decision_id` | Policy decision that produced the receipt |
+| `verdict` / `status` | Boundary result such as `ALLOW`, `DENY`, `ESCALATE`, `APPROVED`, or `DENIED` |
+| `reason_code` | Machine-readable reason for the decision |
+| `effect_id` | Proposed or denied side effect when the runtime records one |
+| `output_hash` | Hash of the governed response, denial body, or completion |
+| `signature` | Receipt signature material; required before treating the event as audit evidence |
+
+`helm-ai-kernel verify evidence-pack.tar` is the offline archive verifier. A
+successful run means the verifier accepted the archive/index shape, checked the
+indexed content hashes, found required receipt/proof material, and verified the
+available seal/signature material. If the output says `anchor offline`, no
+external anchor was embedded; the local pack can still pass hash and signature
+checks, but customer/high-assurance review should add the trusted signer,
+external anchor, and storage receipt inputs.
+
 ## Boundary And API References
 
 - [HTTP API Reference](http-api.md) covers the route registry, auth classes, OpenAPI contract, and local API behavior.

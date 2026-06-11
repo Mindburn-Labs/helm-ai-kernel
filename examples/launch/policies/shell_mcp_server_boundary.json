@@ -1,0 +1,73 @@
+{
+  "pack_id": "shell-mcp-server-boundary-v1",
+  "label": "Shell MCP Server Boundary",
+  "version": 1,
+  "scope": {
+    "mcp_server_id": "shell-mcp-server",
+    "upstream": "third-party shell-mcp-server behind HELM"
+  },
+  "actions": [
+    {
+      "action": "shell.ls",
+      "enabled": true,
+      "effect": "read",
+      "command_patterns": [
+        "^ls(\\s|$)"
+      ],
+      "reason_code": "SHELL_READ_ALLOW"
+    },
+    {
+      "action": "shell.cat",
+      "enabled": true,
+      "effect": "read",
+      "command_patterns": [
+        "^cat\\s+[^|;&`$]+$"
+      ],
+      "reason_code": "SHELL_READ_ALLOW"
+    },
+    {
+      "action": "git.status",
+      "enabled": true,
+      "effect": "read",
+      "command_patterns": [
+        "^git\\s+status(\\s|$)"
+      ],
+      "reason_code": "GIT_STATUS_ALLOW"
+    },
+    {
+      "action": "shell.rm_rf",
+      "enabled": false,
+      "effect": "destructive_write",
+      "command_patterns": [
+        "\\brm\\s+-[^\\n]*r[^\\n]*f\\b",
+        "\\brm\\s+-[^\\n]*f[^\\n]*r\\b"
+      ],
+      "reason_code": "SHELL_DESTRUCTIVE_DELETE"
+    },
+    {
+      "action": "shell.raw_disk_write",
+      "enabled": false,
+      "effect": "destructive_write",
+      "command_patterns": [
+        "\\bdd\\s+",
+        "\\bmkfs(\\.[a-z0-9]+)?\\b"
+      ],
+      "reason_code": "SHELL_RAW_DEVICE_WRITE"
+    },
+    {
+      "action": "git.clean.destructive",
+      "enabled": false,
+      "effect": "destructive_write",
+      "command_patterns": [
+        "^git\\s+clean\\s+-[^\\n]*f",
+        "^git\\s+clean\\s+-[^\\n]*x",
+        "^git\\s+clean\\s+.*--force"
+      ],
+      "reason_code": "GIT_WORKTREE_DESTRUCTIVE_CLEAN"
+    }
+  ],
+  "notes": [
+    "Example fixture for quickstart documentation only; use the generated HELM wrapper and active policy bundle for enforcement.",
+    "shell-mcp-server is an upstream MCP server identity. HELM owns discovery, quarantine, schema-pin, authorization, receipt, and EvidencePack capture."
+  ]
+}

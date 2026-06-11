@@ -42,7 +42,11 @@ PROFILE_JSON="$(./bin/helm-ai-kernel mcp wrap \
 printf '%s\n' "$PROFILE_JSON" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["server_id"]=="local-fixture-mcp"; assert p["quarantine_default"]=="quarantined"; assert p["upstream_command"][:2]==["python3","scripts/launch/mcp-fixture-server.py"]; print(json.dumps({"wrapper":p["server_id"],"quarantine_default":p["quarantine_default"]}, sort_keys=True))'
 
 echo "==> Starting local HELM boundary"
-HELM_ADMIN_API_KEY="$ADMIN_KEY" HELM_HEALTH_PORT="$HEALTH_PORT" ./bin/helm-ai-kernel serve \
+env HELM_ADMIN_API_KEY="$ADMIN_KEY" \
+  HELM_HEALTH_PORT="$HEALTH_PORT" \
+  HELM_RUNTIME_TENANT_ID="$TENANT_ID" \
+  HELM_RUNTIME_PRINCIPAL_ID="mcp-demo-agent" \
+  ./bin/helm-ai-kernel serve \
   --policy examples/launch/policies/agent_tool_call_boundary.toml \
   --addr 127.0.0.1 \
   --port "$PORT" \

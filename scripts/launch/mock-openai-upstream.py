@@ -42,6 +42,10 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         model = request.get("model") or "helm-local-mock"
+        if model == "helm-local-tool-fixture" or _contains_deny_fixture_trigger(request):
+            self._json(200, deny_tool_call_fixture(model))
+            return
+
         self._json(
             200,
             {
@@ -66,6 +70,49 @@ class Handler(BaseHTTPRequestHandler):
                 },
             },
         )
+
+
+def _contains_deny_fixture_trigger(request: dict) -> bool:
+    for message in request.get("messages", []):
+        if not isinstance(message, dict):
+            continue
+        content = str(message.get("content", "")).lower()
+        if "denied tool" in content or "dangerous tool" in content:
+            return True
+    return False
+
+
+def deny_tool_call_fixture(model: str) -> dict:
+    return {
+        "id": "chatcmpl-helm-local-deny-fixture",
+        "object": "chat.completion",
+        "created": 1778587200,
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "tool_calls",
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "call_helm_denied",
+                            "type": "function",
+                            "function": {
+                                "name": "credential_export",
+                                "arguments": "{\"path\":\"/etc/passwd\"}",
+                            },
+                        }
+                    ],
+                },
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 1,
+            "completion_tokens": 1,
+            "total_tokens": 2,
+        },
+    }
 
 
 def main() -> None:

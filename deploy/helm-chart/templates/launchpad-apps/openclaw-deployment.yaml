@@ -68,6 +68,11 @@ spec:
               value: /opt/openclaw/.openclaw
             # No HTTP_PROXY/HTTPS_PROXY: egress is enforced transparently by the
             # egress-init iptables REDIRECT, not by the workload honoring proxy env.
+            # HELM_EGRESS_TRANSPARENT tells helm-launchpad-openrouter-check that
+            # egress is present via the transparent intercept (no proxy env to
+            # detect); without it the probe's proxy-presence guard exits 43.
+            - name: HELM_EGRESS_TRANSPARENT
+              value: "1"
             - name: OPENROUTER_API_KEY
               valueFrom:
                 secretKeyRef:

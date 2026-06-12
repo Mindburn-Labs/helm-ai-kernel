@@ -33,8 +33,9 @@ make docs-coverage docs-truth
 On tag builds, the Makefile derives `VERSION` from `GITHUB_REF_NAME` so the
 binary version, SBOM component version, OpenVEX filename, Homebrew formula, and
 release attestation all match the tag. `stage_release_assets.sh` requires the
-matching OpenVEX file and verifies `evidence-pack.tar` before it writes the
-final checksum manifest.
+matching OpenVEX file, generates a non-seeded release EvidencePack from release
+build inputs, verifies `evidence-pack.tar`, and writes the final checksum
+manifest.
 
 `verify_cosign.sh` verifies every bundle it finds. A run with zero
 `*.cosign.bundle` files proves no signature coverage; check that bundle files

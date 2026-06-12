@@ -464,6 +464,7 @@ jobs:
     needs: [validate, deployment-smoke, kind-smoke, container, cosign-container]
     permissions:
       contents: read
+      id-token: write
       packages: write
     outputs:
       chart-digest: ${{ steps.push.outputs.chart-digest }}
@@ -472,6 +473,12 @@ jobs:
       - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4  # v4.3.1
         with:
           version: v3.15.4
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
       - name: Login to GHCR
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" \
@@ -496,6 +503,14 @@ jobs:
           fi
           echo "chart-digest=${digest}" >> "${GITHUB_OUTPUT}"
           echo "Chart pushed with digest ${digest}"
+      - name: Sign helm chart OCI artifact keyless
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        # Sign in the same job immediately after helm push so ArtifactHub does
+        # not observe a long-lived unsigned chart version between jobs.
+        run: |
+          cosign sign --yes \
+            "ghcr.io/mindburn-labs/charts/helm-ai-kernel@${{ steps.push.outputs.chart-digest }}"
 
   artifacthub-repo:
     runs-on: ubuntu-latest
@@ -522,30 +537,6 @@ jobs:
             ghcr.io/mindburn-labs/charts/helm-ai-kernel:artifacthub.io \
             --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml \
             artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml
-
-  cosign-chart:
-    runs-on: ubuntu-latest
-    needs: chart
-    permissions:
-      contents: read
-      id-token: write
-      packages: write
-    steps:
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
-      - name: Sign helm chart OCI artifact keyless
-        env:
-          COSIGN_EXPERIMENTAL: "1"
-        # Sign by digest, not tag -- otherwise a re-push to the same tag
-        # would orphan the signature. ArtifactHub discovers the signature
-        # automatically on its next scan and lights the "Signed" badge.
-        run: |
-          cosign sign --yes \
-            "ghcr.io/mindburn-labs/charts/helm-ai-kernel@${{ needs.chart.outputs.chart-digest }}"
 
   npm-sdk:
     runs-on: ubuntu-latest
@@ -841,7 +832,6 @@ jobs:
       - container
       - chart
       - artifacthub-repo
-      - cosign-chart
       - npm-sdk
       - python-sdk
       - crates-sdk
@@ -865,7 +855,7 @@ jobs:
 
   github-release:
     runs-on: ubuntu-latest
-    needs: [binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, cosign-chart, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke]
+    needs: [binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke]
     permissions:
       actions: read
       contents: write

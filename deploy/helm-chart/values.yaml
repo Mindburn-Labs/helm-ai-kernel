@@ -337,7 +337,7 @@ launchpadApps:
     egressSidecar:
       image:
         repository: "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy"
-        digest: "sha256:e09e0aec1e0e1f926f4cd18444e88310656b85551cbc10a6c340acb979a42e03"
+        digest: "sha256:22d78073a11b911f372cd27fa7886101d319b60d367441b18208f2be9d9dfb34"
         pullPolicy: "IfNotPresent"
       port: 8080
       allowlist:
@@ -378,7 +378,7 @@ launchpadApps:
     egressSidecar:
       image:
         repository: "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy"
-        digest: "sha256:e09e0aec1e0e1f926f4cd18444e88310656b85551cbc10a6c340acb979a42e03"
+        digest: "sha256:22d78073a11b911f372cd27fa7886101d319b60d367441b18208f2be9d9dfb34"
         pullPolicy: "IfNotPresent"
       port: 8080
       allowlist:

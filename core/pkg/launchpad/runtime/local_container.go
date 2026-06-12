@@ -162,9 +162,13 @@ func (r LocalContainerRuntime) Start(req ContainerRequest) (ContainerHandle, err
 		env[key] = value
 	}
 	if proxyHandle.ProxyURL != "" {
-		env["HTTPS_PROXY"] = proxyHandle.ProxyURL
-		env["HTTP_PROXY"] = proxyHandle.ProxyURL
-		env["NO_PROXY"] = "127.0.0.1,localhost"
+		if proxyHandle.NetworkName != "" {
+			env["HELM_EGRESS_TRANSPARENT"] = "1"
+		} else {
+			env["HTTPS_PROXY"] = proxyHandle.ProxyURL
+			env["HTTP_PROXY"] = proxyHandle.ProxyURL
+			env["NO_PROXY"] = "127.0.0.1,localhost"
+		}
 	}
 	network := sandbox.NetworkPolicy{Disabled: true, EgressAllowlist: req.NetworkAllowlist}
 	if proxyHandle.NetworkName != "" {

@@ -231,6 +231,9 @@ jobs:
           provenance: true
           sbom: true
           platforms: linux/amd64
+          build-args: |
+            OPENCODE_VERSION=${{ matrix.version }}
+            KILO_VERSION=${{ matrix.version }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ matrix.upstream_repo }}
             org.opencontainers.image.revision=${{ steps.upstream.outputs.commit }}
@@ -260,6 +263,9 @@ jobs:
           provenance: true
           sbom: true
           platforms: linux/arm64
+          build-args: |
+            OPENCODE_VERSION=${{ matrix.version }}
+            KILO_VERSION=${{ matrix.version }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ matrix.upstream_repo }}
             org.opencontainers.image.revision=${{ steps.upstream.outputs.commit }}

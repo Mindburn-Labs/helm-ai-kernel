@@ -4,6 +4,9 @@
 # Build context: pinned upstream sst/opencode checkout.
 FROM oven/bun:1.3.14-debian@sha256:9dba1a1b43ce28c9d7931bfc4eb00feb63b0114720a0277a8f939ae4dfc9db6f AS build
 
+ARG OPENCODE_VERSION
+ENV OPENCODE_VERSION=${OPENCODE_VERSION}
+
 WORKDIR /src/opencode
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates g++ git make python3 \

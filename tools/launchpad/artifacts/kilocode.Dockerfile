@@ -4,6 +4,9 @@
 # Build context: pinned upstream Kilo-Org/kilocode checkout.
 FROM oven/bun:1.3.13-debian@sha256:e95356cb8e1de62ad69ab3bd3584ba947013d27650a226804d2fc0af4e17dac2 AS build
 
+ARG KILO_VERSION
+ENV KILO_VERSION=${KILO_VERSION}
+
 WORKDIR /src/kilocode
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates g++ git make python3 \

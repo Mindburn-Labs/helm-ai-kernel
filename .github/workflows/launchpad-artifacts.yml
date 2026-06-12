@@ -212,6 +212,8 @@ jobs:
       - id: build
         name: Build and push OCI image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        env:
+          BUILDKIT_PROGRESS: plain
         with:
           context: upstream
           file: ${{ matrix.dockerfile }}
@@ -443,6 +445,8 @@ jobs:
       - id: build
         name: Build and push egress proxy image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        env:
+          BUILDKIT_PROGRESS: plain
         with:
           context: helm
           file: helm/tools/launchpad/artifacts/egress-proxy.Dockerfile

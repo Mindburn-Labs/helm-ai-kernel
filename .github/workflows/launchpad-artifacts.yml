@@ -537,6 +537,86 @@ jobs:
           name: launchpad-artifact-manifest
           path: launchpad-artifact-manifest.json
 
+  pin-digests:
+    name: Re-pin launchpad image digests into chart values
+    runs-on: ubuntu-latest
+    needs: aggregate
+    # Only pin from authoritative main builds — these are the images actually
+    # published to GHCR. Satisfies the rule "never pin a digest before CI has
+    # published the rebuilt image": we pin the digest this run just pushed.
+    if: ${{ github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: launchpad-artifact-manifest
+          path: /tmp/launchpad
+      - name: Re-pin chart digests from the artifact manifest and open a PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          manifest=/tmp/launchpad/launchpad-artifact-manifest.json
+          values=deploy/helm-chart/values.yaml
+
+          # The aggregate manifest is the race-free source of truth: each digest
+          # comes from a single build leg's own evidence file, not from matrix
+          # job outputs (which can clobber each other across legs).
+          openclaw="$(jq -r '.artifacts[] | select(.app_id=="openclaw") | .digest' "$manifest")"
+          hermes="$(jq -r '.artifacts[] | select(.app_id=="hermes") | .digest' "$manifest")"
+          egress="$(jq -r '.egress_proxy.digest' "$manifest")"
+          for d in "$openclaw" "$hermes" "$egress"; do
+            case "$d" in
+              sha256:*) ;;
+              *) echo "::error::manifest yielded an invalid digest: '$d'"; exit 1 ;;
+            esac
+          done
+
+          # Surgical, minimal-diff rewrite: replace only the digest line that
+          # immediately follows each image's repository line. A YAML round-trip
+          # (yq -i) would reflow the whole file; awk touches just the 4 lines.
+          # egress-proxy is shared, so both sidecar copies move together — the
+          # exact two-copy sync that was missed manually in PR #275.
+          awk -v oc="$openclaw" -v he="$hermes" -v eg="$egress" '
+            /repository: ".*\/openclaw"/     { pend="oc"; print; next }
+            /repository: ".*\/hermes"/       { pend="he"; print; next }
+            /repository: ".*\/egress-proxy"/ { pend="eg"; print; next }
+            /^[[:space:]]*digest:/ && pend != "" {
+              d = (pend=="oc" ? oc : (pend=="he" ? he : eg))
+              sub(/digest:.*/, "digest: \"" d "\"")
+              pend=""
+            }
+            { print }
+          ' "$values" > "$values.tmp"
+          mv "$values.tmp" "$values"
+
+          for d in "$openclaw" "$hermes" "$egress"; do
+            grep -q "$d" "$values" || { echo "::error::digest $d missing after rewrite"; exit 1; }
+          done
+
+          if git diff --quiet -- "$values"; then
+            echo "Chart digests already current — nothing to pin."
+            exit 0
+          fi
+
+          branch="automation/pin-launchpad-digests-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add "$values"
+          git commit -m "ci(launchpad): re-pin launchpad image digests"
+          git push origin "$branch"
+          gh pr create \
+            --title "ci(launchpad): re-pin launchpad image digests" \
+            --body "$(printf 'Automated re-pin of launchpad image digests published by run %s.\n\n- openclaw: %s\n- hermes: %s\n- egress-proxy (both sidecars): %s\n' "${GITHUB_RUN_ID}" "$openclaw" "$hermes" "$egress")" \
+            --base main \
+            --head "$branch"
+
   live-conformance:
     name: Live BYO model-provider local-container conformance
     runs-on: ubuntu-latest

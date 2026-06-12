@@ -11,6 +11,7 @@ import (
 
 func TestLaunchpadClaimsReflectContractFirstSupportLevels(t *testing.T) {
 	root := repoRoot(t)
+	releaseTag := chartReleaseTag(t, root)
 	catalog, err := registry.LoadCatalog(root)
 	if err != nil {
 		t.Fatalf("LoadCatalog: %v", err)
@@ -44,7 +45,7 @@ func TestLaunchpadClaimsReflectContractFirstSupportLevels(t *testing.T) {
 	requireContains(t, cleanGate, "SUPPORTED_APPS=(openclaw hermes)")
 	requireContains(t, cleanGate, "VERIFY_ONLY_APPS=(opencode kilocode)")
 	requireContains(t, cleanGate, "--include-candidates")
-	requireContains(t, cleanGate, `RELEASE_TAG="v0.5.10"`)
+	requireContains(t, cleanGate, `RELEASE_TAG="`+releaseTag+`"`)
 	requireContains(t, cleanGate, `ARTIFACT_RUN_ID="26198407296"`)
 	requireContains(t, cleanGate, "output, status, commands_path")
 	requireNotContains(t, cleanGate, "status = sys.stdin.read()", "scripts/launch/clean_install_gate.sh")
@@ -56,7 +57,7 @@ func TestLaunchpadClaimsReflectContractFirstSupportLevels(t *testing.T) {
 	requireNotContains(t, cleanGate, "gh run view 26131090671", "scripts/launch/clean_install_gate.sh")
 
 	cleanWorkflow := readDoc(t, root, ".github/workflows/launchpad-clean-install.yml")
-	requireContains(t, cleanWorkflow, "default: v0.5.10")
+	requireContains(t, cleanWorkflow, "default: "+releaseTag)
 	requireContains(t, cleanWorkflow, `default: "26198407296"`)
 	requireContains(t, cleanWorkflow, "brew install colima docker jq qemu lima-additional-guestagents")
 	requireContains(t, cleanWorkflow, "colima delete -f")
@@ -205,6 +206,23 @@ func readDoc(t *testing.T, root, rel string) string {
 		t.Fatalf("read %s: %v", rel, err)
 	}
 	return string(data)
+}
+
+func chartReleaseTag(t *testing.T, root string) string {
+	t.Helper()
+	body := readDoc(t, root, "deploy/helm-chart/Chart.yaml")
+	for _, line := range strings.Split(body, "\n") {
+		if !strings.HasPrefix(line, "version:") {
+			continue
+		}
+		version := strings.Trim(strings.TrimSpace(strings.TrimPrefix(line, "version:")), `"'`)
+		if version == "" {
+			t.Fatalf("deploy/helm-chart/Chart.yaml has empty version")
+		}
+		return "v" + version
+	}
+	t.Fatalf("deploy/helm-chart/Chart.yaml missing version")
+	return ""
 }
 
 func requireContains(t *testing.T, content, want string) {

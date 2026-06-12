@@ -44,6 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      platform_matrix: ${{ steps.matrix.outputs.platform_matrix }}
     steps:
       - id: matrix
         run: |
@@ -87,23 +88,29 @@ jobs:
           }
           JSON
           echo "matrix=$(jq -c . matrix.json)" >> "$GITHUB_OUTPUT"
+          platform_matrix="$(
+            jq -c '{
+              include: [
+                .include[] as $app
+                | [
+                    $app + {platform: "linux/amd64", platform_name: "amd64", runner: "ubuntu-latest"},
+                    $app + {platform: "linux/arm64", platform_name: "arm64", runner: "ubuntu-24.04-arm"}
+                  ][]
+              ]
+            }' matrix.json
+          )"
+          echo "platform_matrix=${platform_matrix}" >> "$GITHUB_OUTPUT"
 
-  build:
-    name: Build and sign ${{ matrix.app_id }}
-    runs-on: ubuntu-latest
+  platform-build:
+    name: Build ${{ matrix.app_id }} ${{ matrix.platform_name }} artifact image
+    runs-on: ${{ matrix.runner }}
     needs: artifact-matrix
     permissions:
       contents: read
-      id-token: write
       packages: write
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.artifact-matrix.outputs.matrix) }}
-    outputs:
-      openclaw-digest: ${{ steps.digest.outputs.openclaw_digest }}
-      hermes-digest: ${{ steps.digest.outputs.hermes_digest }}
-      opencode-digest: ${{ steps.digest.outputs.opencode_digest }}
-      kilocode-digest: ${{ steps.digest.outputs.kilocode_digest }}
+      matrix: ${{ fromJson(needs.artifact-matrix.outputs.platform_matrix) }}
     steps:
       - name: Checkout HELM source
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -213,11 +220,15 @@ jobs:
         run: |
           set -euo pipefail
           image="${REGISTRY}/${IMAGE_PREFIX}/${{ matrix.app_id }}"
-          echo "image=${image}" >> "$GITHUB_OUTPUT"
-          echo "tag=${image}:${{ matrix.version }}" >> "$GITHUB_OUTPUT"
+          {
+            echo "image=${image}"
+            echo "tag=${image}:${{ matrix.version }}"
+            echo "platform_tag=${image}:${{ matrix.version }}-${{ matrix.platform_name }}"
+            echo "ref_platform_tag=${image}:${{ matrix.upstream_ref }}-${{ matrix.platform_name }}"
+          } >> "$GITHUB_OUTPUT"
 
-      - id: build_amd64
-        name: Build and push amd64 OCI image
+      - id: build
+        name: Build and push ${{ matrix.platform_name }} OCI image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         env:
           BUILDKIT_PROGRESS: plain
@@ -227,7 +238,10 @@ jobs:
           push: true
           provenance: true
           sbom: true
-          platforms: linux/amd64
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            OPENCODE_VERSION=${{ matrix.version }}
+            KILO_VERSION=${{ matrix.version }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ matrix.upstream_repo }}
             org.opencontainers.image.revision=${{ steps.upstream.outputs.commit }}
@@ -236,54 +250,168 @@ jobs:
             io.mindburn.helm.launchpad.app=${{ matrix.app_id }}
             io.mindburn.helm.launchpad.recipe=${{ matrix.dockerfile }}
           tags: |
-            ${{ steps.meta.outputs.tag }}-amd64
-            ${{ steps.meta.outputs.image }}:${{ matrix.upstream_ref }}-amd64
+            ${{ steps.meta.outputs.platform_tag }}
+            ${{ steps.meta.outputs.ref_platform_tag }}
 
-      - name: Free Docker build cache before arm64 image build
+      - name: Write platform build metadata
+        env:
+          APP_ID: ${{ matrix.app_id }}
+          VERSION: ${{ matrix.version }}
+          UPSTREAM_REPO: https://github.com/${{ matrix.upstream_repo }}
+          UPSTREAM_REF: ${{ matrix.upstream_ref }}
+          UPSTREAM_COMMIT: ${{ steps.upstream.outputs.commit }}
+          SOURCE_TREE_SHA256: ${{ steps.source-tree.outputs.sha256 }}
+          LICENSE_SPDX: ${{ matrix.license_spdx }}
+          IMAGE: ${{ steps.meta.outputs.image }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          PLATFORM: ${{ matrix.platform }}
+          PLATFORM_NAME: ${{ matrix.platform_name }}
+          PLATFORM_TAG: ${{ steps.meta.outputs.platform_tag }}
+          REF_PLATFORM_TAG: ${{ steps.meta.outputs.ref_platform_tag }}
+          PLATFORM_DIGEST: ${{ steps.build.outputs.digest }}
+          RUNNER: ${{ matrix.runner }}
         run: |
           set -euo pipefail
-          docker buildx prune --force --all || true
-          docker builder prune --force --all || true
-          docker system prune --force || true
-          docker system df
+          mkdir -p launchpad-platforms
+          jq -n \
+            --arg app_id "${APP_ID}" \
+            --arg app_version "${VERSION}" \
+            --arg upstream_repo "${UPSTREAM_REPO}" \
+            --arg upstream_ref "${UPSTREAM_REF}" \
+            --arg upstream_commit "${UPSTREAM_COMMIT}" \
+            --arg source_tree_sha256 "${SOURCE_TREE_SHA256}" \
+            --arg license_spdx "${LICENSE_SPDX}" \
+            --arg image "${IMAGE}" \
+            --arg tag "${TAG}" \
+            --arg platform "${PLATFORM}" \
+            --arg platform_name "${PLATFORM_NAME}" \
+            --arg platform_tag "${PLATFORM_TAG}" \
+            --arg ref_platform_tag "${REF_PLATFORM_TAG}" \
+            --arg platform_digest "${PLATFORM_DIGEST}" \
+            --arg runner "${RUNNER}" \
+            '{
+              app_id: $app_id,
+              app_version: $app_version,
+              upstream_repo: $upstream_repo,
+              upstream_ref: $upstream_ref,
+              upstream_commit: $upstream_commit,
+              source_tree_sha256: $source_tree_sha256,
+              license_spdx: $license_spdx,
+              image: $image,
+              tag: $tag,
+              platform: $platform,
+              platform_name: $platform_name,
+              platform_tag: $platform_tag,
+              ref_platform_tag: $ref_platform_tag,
+              platform_digest: $platform_digest,
+              runner: $runner
+            }' > "launchpad-platforms/${APP_ID}-${PLATFORM_NAME}.json"
 
-      - id: build_arm64
-        name: Build and push arm64 OCI image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+      - name: Upload platform build metadata
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          context: upstream
-          file: ${{ matrix.dockerfile }}
-          push: true
-          provenance: true
-          sbom: true
-          platforms: linux/arm64
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ matrix.upstream_repo }}
-            org.opencontainers.image.revision=${{ steps.upstream.outputs.commit }}
-            org.opencontainers.image.version=${{ matrix.version }}
-            org.opencontainers.image.licenses=${{ matrix.license_spdx }}
-            io.mindburn.helm.launchpad.app=${{ matrix.app_id }}
-            io.mindburn.helm.launchpad.recipe=${{ matrix.dockerfile }}
-          tags: |
-            ${{ steps.meta.outputs.tag }}-arm64
-            ${{ steps.meta.outputs.image }}:${{ matrix.upstream_ref }}-arm64
+          name: launchpad-platform-${{ matrix.app_id }}-${{ matrix.platform_name }}
+          path: launchpad-platforms/${{ matrix.app_id }}-${{ matrix.platform_name }}.json
+
+  build:
+    name: Sign ${{ matrix.app_id }} multi-arch artifact
+    runs-on: ubuntu-latest
+    needs: [artifact-matrix, platform-build]
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.artifact-matrix.outputs.matrix) }}
+    outputs:
+      openclaw-digest: ${{ steps.digest.outputs.openclaw_digest }}
+      hermes-digest: ${{ steps.digest.outputs.hermes_digest }}
+      opencode-digest: ${{ steps.digest.outputs.opencode_digest }}
+      kilocode-digest: ${{ steps.digest.outputs.kilocode_digest }}
+    steps:
+      - name: Download platform build metadata
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: launchpad-platform-${{ matrix.app_id }}-*
+          path: launchpad-platforms
+          merge-multiple: true
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@55dc4ee22412511ee8c3142cbea40418e6cec693 # v0.17.8
+
+      - name: Install grype
+        uses: anchore/scan-action/download-grype@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
+
+      - name: Expose grype on PATH
+        run: |
+          set -euo pipefail
+          GRYPE_BIN="$(find /opt/hostedtoolcache/grype -type f -name grype -perm -111 | sort | tail -n 1)"
+          if [ -z "${GRYPE_BIN}" ]; then
+            echo "grype binary not found after download" >&2
+            exit 1
+          fi
+          dirname "${GRYPE_BIN}" >> "$GITHUB_PATH"
+          "${GRYPE_BIN}" version
+
+      - name: Validate platform build metadata
+        env:
+          APP_ID: ${{ matrix.app_id }}
+        run: |
+          set -euo pipefail
+          amd64_metadata="launchpad-platforms/${APP_ID}-amd64.json"
+          arm64_metadata="launchpad-platforms/${APP_ID}-arm64.json"
+          test -f "${amd64_metadata}"
+          test -f "${arm64_metadata}"
+          jq -e -s '
+            .[0].app_id == .[1].app_id and
+            .[0].app_version == .[1].app_version and
+            .[0].upstream_repo == .[1].upstream_repo and
+            .[0].upstream_ref == .[1].upstream_ref and
+            .[0].upstream_commit == .[1].upstream_commit and
+            .[0].source_tree_sha256 == .[1].source_tree_sha256 and
+            .[0].license_spdx == .[1].license_spdx and
+            .[0].image == .[1].image and
+            .[0].tag == .[1].tag
+          ' "${amd64_metadata}" "${arm64_metadata}" >/dev/null
+          jq -e '.platform == "linux/amd64" and .platform_name == "amd64" and (.platform_digest | test("^sha256:"))' "${amd64_metadata}" >/dev/null
+          jq -e '.platform == "linux/arm64" and .platform_name == "arm64" and (.platform_digest | test("^sha256:"))' "${arm64_metadata}" >/dev/null
 
       - id: manifest
         name: Assemble and verify multi-arch OCI manifest
         env:
-          TAG: ${{ steps.meta.outputs.tag }}
-          REF_TAG: ${{ steps.meta.outputs.image }}:${{ matrix.upstream_ref }}
           APP_ID: ${{ matrix.app_id }}
         run: |
           set -euo pipefail
+          amd64_metadata="launchpad-platforms/${APP_ID}-amd64.json"
+          arm64_metadata="launchpad-platforms/${APP_ID}-arm64.json"
+          TAG="$(jq -r '.tag' "${amd64_metadata}")"
+          REF_TAG="$(jq -r '.image + ":" + .upstream_ref' "${amd64_metadata}")"
+          AMD64_TAG="$(jq -r '.platform_tag' "${amd64_metadata}")"
+          ARM64_TAG="$(jq -r '.platform_tag' "${arm64_metadata}")"
+          AMD64_REF_TAG="$(jq -r '.ref_platform_tag' "${amd64_metadata}")"
+          ARM64_REF_TAG="$(jq -r '.ref_platform_tag' "${arm64_metadata}")"
           docker buildx imagetools create \
             --tag "${TAG}" \
-            "${TAG}-amd64" \
-            "${TAG}-arm64"
+            "${AMD64_TAG}" \
+            "${ARM64_TAG}"
           docker buildx imagetools create \
             --tag "${REF_TAG}" \
-            "${REF_TAG}-amd64" \
-            "${REF_TAG}-arm64"
+            "${AMD64_REF_TAG}" \
+            "${ARM64_REF_TAG}"
 
           docker buildx imagetools inspect "${TAG}" --format '{{json .}}' > "platforms-${APP_ID}.json"
           jq -e '.manifest.digest | test("^sha256:")' "platforms-${APP_ID}.json" >/dev/null
@@ -295,17 +423,23 @@ jobs:
       - name: Sign image digest with keyless cosign
         env:
           COSIGN_EXPERIMENTAL: "1"
-          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.manifest.outputs.digest }}
+          APP_ID: ${{ matrix.app_id }}
+          DIGEST: ${{ steps.manifest.outputs.digest }}
         run: |
           set -euo pipefail
+          image="$(jq -r '.image' "launchpad-platforms/${APP_ID}-amd64.json")"
+          IMAGE_REF="${image}@${DIGEST}"
           cosign sign --yes "${IMAGE_REF}"
 
       - name: Verify cosign signature
         env:
           COSIGN_EXPERIMENTAL: "1"
-          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.manifest.outputs.digest }}
+          APP_ID: ${{ matrix.app_id }}
+          DIGEST: ${{ steps.manifest.outputs.digest }}
         run: |
           set -euo pipefail
+          image="$(jq -r '.image' "launchpad-platforms/${APP_ID}-amd64.json")"
+          IMAGE_REF="${image}@${DIGEST}"
           cosign verify "${IMAGE_REF}" \
             --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/launchpad-artifacts.yml@${GITHUB_REF}" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
@@ -321,20 +455,26 @@ jobs:
 
       - name: Generate syft SBOM
         env:
-          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.manifest.outputs.digest }}
+          APP_ID: ${{ matrix.app_id }}
+          DIGEST: ${{ steps.manifest.outputs.digest }}
           SYFT_CHECK_FOR_APP_UPDATE: "false"
           SYFT_SCOPE: squashed
         run: |
           set -euo pipefail
+          image="$(jq -r '.image' "launchpad-platforms/${APP_ID}-amd64.json")"
+          IMAGE_REF="${image}@${DIGEST}"
           timeout 20m syft "${IMAGE_REF}" -o spdx-json="sbom-${{ matrix.app_id }}.spdx.json"
 
       - name: Run grype scan
         id: grype
         env:
-          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.manifest.outputs.digest }}
+          APP_ID: ${{ matrix.app_id }}
+          DIGEST: ${{ steps.manifest.outputs.digest }}
           GRYPE_CHECK_FOR_APP_UPDATE: "false"
         run: |
           set -euo pipefail
+          image="$(jq -r '.image' "launchpad-platforms/${APP_ID}-amd64.json")"
+          IMAGE_REF="${image}@${DIGEST}"
           status=completed
           if ! timeout 20m grype "${IMAGE_REF}" -o json --file "grype-${{ matrix.app_id }}.json"; then
             status=failed
@@ -344,18 +484,19 @@ jobs:
       - name: Write artifact manifest entry
         env:
           APP_ID: ${{ matrix.app_id }}
-          VERSION: ${{ matrix.version }}
-          UPSTREAM_REPO: https://github.com/${{ matrix.upstream_repo }}
-          UPSTREAM_REF: ${{ matrix.upstream_ref }}
-          UPSTREAM_COMMIT: ${{ steps.upstream.outputs.commit }}
-          SOURCE_TREE_SHA256: ${{ steps.source-tree.outputs.sha256 }}
-          LICENSE_SPDX: ${{ matrix.license_spdx }}
-          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.manifest.outputs.digest }}
-          SUBJECT_NAME: ${{ steps.meta.outputs.image }}
           DIGEST: ${{ steps.manifest.outputs.digest }}
           GRYPE_STATUS: ${{ steps.grype.outputs.status }}
         run: |
           set -euo pipefail
+          metadata="launchpad-platforms/${APP_ID}-amd64.json"
+          VERSION="$(jq -r '.app_version' "${metadata}")"
+          UPSTREAM_REPO="$(jq -r '.upstream_repo' "${metadata}")"
+          UPSTREAM_REF="$(jq -r '.upstream_ref' "${metadata}")"
+          UPSTREAM_COMMIT="$(jq -r '.upstream_commit' "${metadata}")"
+          SOURCE_TREE_SHA256="$(jq -r '.source_tree_sha256' "${metadata}")"
+          LICENSE_SPDX="$(jq -r '.license_spdx' "${metadata}")"
+          SUBJECT_NAME="$(jq -r '.image' "${metadata}")"
+          IMAGE_REF="${SUBJECT_NAME}@${DIGEST}"
           mkdir -p launchpad-artifacts
           jq -n \
             --arg app_id "${APP_ID}" \
@@ -423,6 +564,8 @@ jobs:
           name: launchpad-artifact-${{ matrix.app_id }}
           path: |
             launchpad-artifacts/${{ matrix.app_id }}.json
+            launchpad-platforms/${{ matrix.app_id }}-amd64.json
+            launchpad-platforms/${{ matrix.app_id }}-arm64.json
             cosign-${{ matrix.app_id }}.json
             platforms-${{ matrix.app_id }}.json
             sbom-${{ matrix.app_id }}.spdx.json

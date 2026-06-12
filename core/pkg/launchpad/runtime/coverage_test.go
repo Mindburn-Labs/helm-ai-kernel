@@ -300,9 +300,14 @@ exit 0
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"--network launch-net", "-e TOKEN=secret", "-e APP_STATE_DIR=/var/lib/app/state", "-v", "app"} {
+	for _, want := range []string{"--network launch-net", "-e TOKEN=secret", "-e APP_STATE_DIR=/var/lib/app/state", "-e HELM_EGRESS_TRANSPARENT=1", "-v", "app"} {
 		if !strings.Contains(string(logData), want) {
 			t.Fatalf("docker run log missing %q: %s", want, logData)
+		}
+	}
+	for _, unwanted := range []string{"HTTP_PROXY=http://proxy:8080", "HTTPS_PROXY=http://proxy:8080"} {
+		if strings.Contains(string(logData), unwanted) {
+			t.Fatalf("transparent sidecar docker run log included %q: %s", unwanted, logData)
 		}
 	}
 

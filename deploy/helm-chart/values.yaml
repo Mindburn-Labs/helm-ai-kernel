@@ -286,9 +286,9 @@ openrouter:
 # docs/launchpad/K8S_SMOKE.md for the conformance map between
 # registry/launchpad/apps/{openclaw,hermes}.yaml and these templates.
 launchpadApps:
-  # All launchpad-app Pods land on amd64 nodes — openclaw/hermes images are
-  # built linux/amd64 only by .github/workflows/launchpad-artifacts.yml. Until
-  # multi-arch builds land (GAP #11 in audit), this is a hard constraint.
+  # Current chart-pinned launchpad app digests are linux/amd64-only. The
+  # launchpad artifact workflow now publishes multi-arch candidates, but keep
+  # this selector until a digest re-pin lands with linux/arm64 manifests.
   nodeSelector:
     kubernetes.io/arch: amd64
 

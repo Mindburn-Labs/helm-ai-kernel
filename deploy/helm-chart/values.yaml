@@ -286,10 +286,11 @@ openrouter:
 # docs/launchpad/K8S_SMOKE.md for the conformance map between
 # registry/launchpad/apps/{openclaw,hermes}.yaml and these templates.
 launchpadApps:
-  # Launchpad app images are published as multi-arch manifests. Leave empty to
-  # let Kubernetes schedule for the node architecture, or set an explicit
-  # selector such as kubernetes.io/arch: amd64 when operators want pinning.
-  nodeSelector: {}
+  # Current chart-pinned launchpad app digests are linux/amd64-only. The
+  # launchpad artifact workflow now publishes multi-arch candidates, but keep
+  # this selector until a digest re-pin lands with linux/arm64 manifests.
+  nodeSelector:
+    kubernetes.io/arch: amd64
 
   # NetworkPolicy default-deny with explicit DNS + 443 egress allowance for
   # the sidecar proxy. Enforcement requires a CNI that honors NetworkPolicy

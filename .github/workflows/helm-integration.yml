@@ -81,10 +81,11 @@ jobs:
 
   launchpad-positive:
     name: openclaw + hermes positive (real OPENROUTER_API_KEY)
-    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'launchpad-live-test') }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: [baseline]
+    env:
+      RUN_LIVE_POSITIVE: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'launchpad-live-test') }}
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -129,6 +130,10 @@ jobs:
           GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ github.token }}
         run: |
+          if [[ "${RUN_LIVE_POSITIVE}" != "true" ]]; then
+            echo "::notice::launchpad-live-test label not present; required positive check recorded without burning OpenRouter tokens"
+            exit 0
+          fi
           if [[ -z "${OPENROUTER_API_KEY}" ]]; then
             echo "::warning::HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY secret not configured — skipping positive scenario"
             exit 0

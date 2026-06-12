@@ -848,7 +848,7 @@
         "nodeSelector": {
           "type": "object",
           "additionalProperties": { "type": "string" },
-          "description": "nodeSelector applied to every launchpad-app Pod. Launchpad app images publish multi-arch manifests; leave empty for Kubernetes to schedule by node architecture, or set an explicit selector such as `kubernetes.io/arch: amd64` when operators want pinning."
+          "description": "nodeSelector applied to every launchpad-app Pod. Current chart-pinned launchpad app digests are linux/amd64-only; the artifact workflow publishes multi-arch candidates, but keep `kubernetes.io/arch: amd64` until a digest re-pin lands with linux/arm64 manifests."
         },
         "networkPolicy": {
           "type": "object",

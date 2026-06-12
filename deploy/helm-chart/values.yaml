@@ -309,7 +309,7 @@ launchpadApps:
     enabled: false
     image:
       repository: "ghcr.io/mindburn-labs/helm-launchpad/openclaw"
-      digest: "sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995"
+      digest: "sha256:e74e1915d3e6adba4fdcf01853a1c73041b00db6c0cbffa432d6b503b81e74d0"
       pullPolicy: "IfNotPresent"
     gatewayPort: 18789
     tmpfsSize: "256Mi"
@@ -337,7 +337,7 @@ launchpadApps:
     egressSidecar:
       image:
         repository: "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy"
-        digest: "sha256:22d78073a11b911f372cd27fa7886101d319b60d367441b18208f2be9d9dfb34"
+        digest: "sha256:2a92f405987d60f8974bd49b6cf8fbb41f71cd0e9e6caffd95d328cc6028a224"
         pullPolicy: "IfNotPresent"
       port: 8080
       allowlist:
@@ -354,7 +354,7 @@ launchpadApps:
     enabled: false
     image:
       repository: "ghcr.io/mindburn-labs/helm-launchpad/hermes"
-      digest: "sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652"
+      digest: "sha256:4123cc51d8e28137c5ab78a45f172b3b86f0d468ab8e3e547db49abe563fe5fd"
       pullPolicy: "IfNotPresent"
     # Mirror registry/launchpad/apps/hermes.yaml verbatim. The /bin/sh wrapper
     # bypasses a broken shebang in the published venv and pins HOME into the
@@ -378,7 +378,7 @@ launchpadApps:
     egressSidecar:
       image:
         repository: "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy"
-        digest: "sha256:22d78073a11b911f372cd27fa7886101d319b60d367441b18208f2be9d9dfb34"
+        digest: "sha256:2a92f405987d60f8974bd49b6cf8fbb41f71cd0e9e6caffd95d328cc6028a224"
         pullPolicy: "IfNotPresent"
       port: 8080
       allowlist:

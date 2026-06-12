@@ -47,6 +47,32 @@ Usage: {{ include "helm-ai-kernel.launchpadApp.image" (dict "image" .Values.laun
 {{- end -}}
 
 {{/*
+Hermes command renderer.
+Defaults stay mode-specific: Job runs the promoted single-query smoke path;
+Deployment runs the long-lived gateway process. commandOverride replaces the
+entire command array for operators with provider-specific runtime evidence.
+*/}}
+{{- define "helm-ai-kernel.launchpadApp.hermesCommand" -}}
+{{- $cfg := .cfg -}}
+{{- $mode := .mode -}}
+{{- if $cfg.commandOverride -}}
+{{- toYaml $cfg.commandOverride -}}
+{{- else if eq $mode "deployment" -}}
+- "/bin/sh"
+- "-c"
+- "HOME=/var/lib/hermes exec hermes --gateway"
+{{- else -}}
+{{- $query := $cfg.query | default "ping" -}}
+{{- $provider := $cfg.provider | default "openrouter" -}}
+{{- $model := $cfg.model | default "openai/gpt-4o-mini" -}}
+{{- $shellCommand := printf "HOME=/var/lib/hermes hermes --q %s --provider %s --model %s --ignore_user_config --quiet" ($query | quote) ($provider | quote) ($model | quote) -}}
+- "/bin/sh"
+- "-c"
+- {{ $shellCommand | quote }}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Egress sidecar container spec shared by openclaw and hermes Pods.
 The sidecar runs as a TRANSPARENT proxy: the companion init-container (see
 `helm-ai-kernel.launchpadApp.egressInit`) installs an iptables REDIRECT that

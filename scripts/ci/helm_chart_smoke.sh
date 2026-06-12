@@ -95,6 +95,47 @@ assert_not_contains "$default_rendered" "kind: CustomResourceDefinition"
 assert_not_contains "$default_rendered" "HelmPolicyBundle"
 assert_not_contains "$default_rendered" "policy-reader"
 
+hermes_job_rendered="$RENDER_DIR/rendered-hermes-job.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set launchpadApps.hermes.enabled=true \
+    --set launchpadApps.hermes.provider=anthropic \
+    --set-string launchpadApps.hermes.model=anthropic/claude-3-5-haiku \
+    --set-string launchpadApps.hermes.query="chart smoke" >"$hermes_job_rendered"
+assert_contains "$hermes_job_rendered" "kind: Job"
+assert_contains "$hermes_job_rendered" "helm-ai-kernel-hermes"
+assert_contains "$hermes_job_rendered" "anthropic/claude-3-5-haiku"
+assert_contains "$hermes_job_rendered" "chart smoke"
+assert_contains "$hermes_job_rendered" "--provider"
+
+hermes_deployment_rendered="$RENDER_DIR/rendered-hermes-deployment.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set launchpadApps.hermes.enabled=true \
+    --set launchpadApps.hermes.mode=deployment >"$hermes_deployment_rendered"
+assert_contains "$hermes_deployment_rendered" "kind: Deployment"
+assert_contains "$hermes_deployment_rendered" "gateway-mode-not-live-f2-promoted"
+assert_contains "$hermes_deployment_rendered" "HOME=/var/lib/hermes exec hermes --gateway"
+assert_contains "$hermes_deployment_rendered" "name: egress-proxy"
+
+hermes_override_rendered="$RENDER_DIR/rendered-hermes-command-override.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set launchpadApps.hermes.enabled=true \
+    --set-json 'launchpadApps.hermes.commandOverride=["/bin/sh","-c","echo custom-hermes-command"]' >"$hermes_override_rendered"
+assert_contains "$hermes_override_rendered" "custom-hermes-command"
+assert_not_contains "$hermes_override_rendered" "--provider"
+
+hermes_mode_fail_log="$RENDER_DIR/hermes-invalid-mode.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set launchpadApps.hermes.enabled=true \
+    --set launchpadApps.hermes.mode=daemon >"$RENDER_DIR/hermes-invalid-mode.yaml" 2>"$hermes_mode_fail_log"; then
+    echo "::error::Hermes render with invalid mode unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$hermes_mode_fail_log" "launchpadApps.hermes.mode"
+
 fail_log="$RENDER_DIR/production-missing-key.log"
 if helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \

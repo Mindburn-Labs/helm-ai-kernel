@@ -356,13 +356,17 @@ launchpadApps:
       repository: "ghcr.io/mindburn-labs/helm-launchpad/hermes"
       digest: "sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652"
       pullPolicy: "IfNotPresent"
-    # Mirror registry/launchpad/apps/hermes.yaml verbatim. The /bin/sh wrapper
-    # bypasses a broken shebang in the published venv and pins HOME into the
-    # writable app_state mount.
-    command:
-      - "/bin/sh"
-      - "-c"
-      - "HOME=/var/lib/hermes hermes --q ping --provider openrouter --model openai/gpt-4o-mini --ignore_user_config --quiet"
+    # job runs the proven single-query smoke path; deployment runs the
+    # long-lived Hermes gateway process. Gateway mode is not live-F2-promoted
+    # until separate runtime evidence lands.
+    mode: "job"
+    provider: "openrouter"
+    model: "openai/gpt-4o-mini"
+    query: "ping"
+    # Full command replacement for operators who need a provider-specific or
+    # custom Hermes invocation. Leave empty to use the chart-managed command
+    # for the selected mode.
+    commandOverride: []
     backoffLimit: 0
     activeDeadlineSeconds: 240
     ttlSecondsAfterFinished: 3600

@@ -35,9 +35,11 @@ OPENROUTER_KEY_FAKE="sk-fake-1234567890"
 KEEP_CLUSTER="${LAUNCHPAD_SMOKE_KEEP_CLUSTER:-0}"
 FRESH_CLUSTER="${LAUNCHPAD_SMOKE_FRESH_CLUSTER:-1}"
 PRE_LOAD_LAUNCHPAD_IMAGES="${LAUNCHPAD_SMOKE_PRE_LOAD_LAUNCHPAD_IMAGES:-0}"
+PRE_LOAD_LAUNCHPAD_PLATFORM="${LAUNCHPAD_SMOKE_PRE_LOAD_LAUNCHPAD_PLATFORM:-linux/amd64}"
 GHCR_SECRET_NAME="${LAUNCHPAD_SMOKE_GHCR_SECRET_NAME:-ghcr-read}"
 GHCR_USERNAME="${GHCR_USERNAME:-}"
 GHCR_TOKEN="${GHCR_TOKEN:-}"
+KUBE_HELM_CMD="${KUBE_HELM_CMD:-}"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/launchpad-k8s-smoke.XXXXXX")"
 
 usage() {
@@ -54,6 +56,8 @@ Environment overrides:
   LAUNCHPAD_SMOKE_FRESH_CLUSTER set to 0 to reuse an existing minikube profile (assumes the cluster is already running and kernel image is loaded)
   LAUNCHPAD_SMOKE_GHCR_SECRET_NAME Secret name for private GHCR pulls (default ghcr-read)
   LAUNCHPAD_SMOKE_PRE_LOAD_LAUNCHPAD_IMAGES set to 1 for debug-only host pull + minikube image load verification
+  LAUNCHPAD_SMOKE_PRE_LOAD_LAUNCHPAD_PLATFORM platform for debug-only launchpad image preload (default linux/amd64)
+  KUBE_HELM_CMD                  Kubernetes Helm binary to use when `helm` is occupied by HELM verifier
   GHCR_USERNAME                  GitHub/GHCR username for positive/negative launchpad app image pulls
   GHCR_TOKEN                     GitHub token with read:packages for private GHCR launchpad app image pulls
   OPENROUTER_API_KEY            real key for the positive scenario; ignored on negative
@@ -81,9 +85,25 @@ require() {
         exit 1
     }
 }
+kube_helm() {
+    if [ -n "$KUBE_HELM_CMD" ]; then
+        "$KUBE_HELM_CMD" "$@"
+        return
+    fi
+    if command -v kube-helm >/dev/null 2>&1; then
+        kube-helm "$@"
+        return
+    fi
+    if command -v helm >/dev/null 2>&1 && helm version --short 2>/dev/null | grep -q '^v3\.'; then
+        helm "$@"
+        return
+    fi
+    echo "::error::Kubernetes Helm v3 is required. Set KUBE_HELM_CMD when the helm command is occupied by the HELM verifier." >&2
+    exit 1
+}
 require minikube
 require kubectl
-require helm
+kube_helm version --short >/dev/null
 require docker
 require python3
 require jq
@@ -144,7 +164,7 @@ cleanup() {
         # Best-effort namespace teardown so the next run starts clean. The
         # cluster itself stays around when KEEP_CLUSTER=1 (local iteration);
         # only the smoke namespace is sacrificed.
-        helm uninstall "$RELEASE" -n "$NAMESPACE" --ignore-not-found --wait --timeout 60s 2>/dev/null || true
+        kube_helm uninstall "$RELEASE" -n "$NAMESPACE" --ignore-not-found --wait --timeout 60s 2>/dev/null || true
         kubectl delete namespace "$NAMESPACE" --wait=false 2>/dev/null || true
     fi
     rm -rf "$TMP_DIR"
@@ -210,7 +230,7 @@ if [ "$PRE_LOAD_LAUNCHPAD_IMAGES" = "1" ] && [ "$MODE" != "baseline" ]; then
         exit 1
     fi
     for img in "${preload_images[@]}"; do
-        docker pull --platform=linux/amd64 "$img"
+        docker pull --platform="$PRE_LOAD_LAUNCHPAD_PLATFORM" "$img"
         minikube -p "$PROFILE" image load "$img"
         if ! minikube -p "$PROFILE" image ls 2>/dev/null | grep -qF "$img"; then
             echo "::error::minikube image load did not make $img resolvable in the node; use the GHCR imagePullSecret path" >&2
@@ -266,7 +286,7 @@ case "$MODE" in
     negative) helm_args+=(--timeout 8m) ;;
 esac
 
-helm upgrade --install "${helm_args[@]}"
+kube_helm upgrade --install "${helm_args[@]}"
 echo "::endgroup::"
 
 assert_pod_ready() {
@@ -355,7 +375,7 @@ case "$MODE" in
     baseline)
         echo "::group::stage 5 — baseline assertions"
         kubectl -n "$NAMESPACE" rollout status "deployment/${RELEASE}-helm-ai-kernel" --timeout=180s
-        helm test "$RELEASE" -n "$NAMESPACE" 2>&1 || {
+        kube_helm test "$RELEASE" -n "$NAMESPACE" 2>&1 || {
             # Baseline has no launchpad apps and the test Pod is gated on at
             # least one app being enabled — `helm test` is a no-op then.
             echo "no test hooks rendered for baseline (expected)"
@@ -368,7 +388,7 @@ case "$MODE" in
         assert_pod_ready openclaw 6m
         assert_job_succeeded hermes 3m
         echo "helm test"
-        helm test "$RELEASE" -n "$NAMESPACE" --logs
+        kube_helm test "$RELEASE" -n "$NAMESPACE" --logs
         echo "openclaw kubectl exec healthcheck"
         kubectl -n "$NAMESPACE" exec \
             "deployment/${RELEASE}-helm-ai-kernel-openclaw" \
@@ -386,7 +406,7 @@ case "$MODE" in
 esac
 
 echo "::group::stage 6 — teardown + leak audit"
-helm uninstall "$RELEASE" -n "$NAMESPACE" --wait || true
+kube_helm uninstall "$RELEASE" -n "$NAMESPACE" --wait || true
 kubectl delete namespace "$NAMESPACE" --wait --timeout=120s || true
 
 # Leak audit (k8s analogue of GAP #17): after uninstall, no launchpad-app or

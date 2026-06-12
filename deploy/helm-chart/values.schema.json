@@ -848,7 +848,7 @@
         "nodeSelector": {
           "type": "object",
           "additionalProperties": { "type": "string" },
-          "description": "nodeSelector applied to every launchpad-app Pod. The published openclaw/hermes images are linux/amd64 only — until multi-arch builds land, keep `kubernetes.io/arch: amd64` here."
+          "description": "nodeSelector applied to every launchpad-app Pod. Launchpad app images publish multi-arch manifests; leave empty for Kubernetes to schedule by node architecture, or set an explicit selector such as `kubernetes.io/arch: amd64` when operators want pinning."
         },
         "networkPolicy": {
           "type": "object",

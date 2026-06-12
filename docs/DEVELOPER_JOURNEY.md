@@ -231,7 +231,7 @@ Run online verification only after offline verification passes:
 | TypeScript / JavaScript | `npm install @mindburn/helm-ai-kernel` | `make test-sdk-ts` |
 | Rust | `cargo add helm-sdk` | `make test-sdk-rust` |
 | Go | source/module path `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go`; pin `@main` or a commit until tagged module releases are aligned | `cd sdk/go && go test ./...` |
-| Java | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.10` | `make test-sdk-java` |
+| Java | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.11` | `make test-sdk-java` |
 
 Use [SDK Index](sdks/00_INDEX.md) before publishing SDK install instructions.
 

@@ -152,6 +152,16 @@ jobs:
         run: |
           set -euo pipefail
           cp helm/tools/launchpad/artifacts/model-gateway-check.sh upstream/.helm-launchpad-model-gateway-check.sh
+          cat > upstream/.dockerignore <<'EOF'
+          .git
+          .git/**
+          **/.git
+          **/.DS_Store
+          **/node_modules
+          **/.cache
+          **/.turbo
+          **/.next
+          EOF
 
       - name: Log in to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -209,8 +219,8 @@ jobs:
           echo "image=${image}" >> "$GITHUB_OUTPUT"
           echo "tag=${image}:${{ matrix.version }}" >> "$GITHUB_OUTPUT"
 
-      - id: build
-        name: Build and push OCI image
+      - id: build_amd64
+        name: Build and push amd64 OCI image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         env:
           BUILDKIT_PROGRESS: plain
@@ -220,7 +230,7 @@ jobs:
           push: true
           provenance: true
           sbom: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           labels: |
             org.opencontainers.image.source=https://github.com/${{ matrix.upstream_repo }}
             org.opencontainers.image.revision=${{ steps.upstream.outputs.commit }}
@@ -229,13 +239,66 @@ jobs:
             io.mindburn.helm.launchpad.app=${{ matrix.app_id }}
             io.mindburn.helm.launchpad.recipe=${{ matrix.dockerfile }}
           tags: |
-            ${{ steps.meta.outputs.tag }}
-            ${{ steps.meta.outputs.image }}:${{ matrix.upstream_ref }}
+            ${{ steps.meta.outputs.tag }}-amd64
+            ${{ steps.meta.outputs.image }}:${{ matrix.upstream_ref }}-amd64
+
+      - name: Free Docker build cache before arm64 image build
+        run: |
+          set -euo pipefail
+          docker buildx prune --force --all || true
+          docker builder prune --force --all || true
+          docker system prune --force || true
+          docker system df
+
+      - id: build_arm64
+        name: Build and push arm64 OCI image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: upstream
+          file: ${{ matrix.dockerfile }}
+          push: true
+          provenance: true
+          sbom: true
+          platforms: linux/arm64
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ matrix.upstream_repo }}
+            org.opencontainers.image.revision=${{ steps.upstream.outputs.commit }}
+            org.opencontainers.image.version=${{ matrix.version }}
+            org.opencontainers.image.licenses=${{ matrix.license_spdx }}
+            io.mindburn.helm.launchpad.app=${{ matrix.app_id }}
+            io.mindburn.helm.launchpad.recipe=${{ matrix.dockerfile }}
+          tags: |
+            ${{ steps.meta.outputs.tag }}-arm64
+            ${{ steps.meta.outputs.image }}:${{ matrix.upstream_ref }}-arm64
+
+      - id: manifest
+        name: Assemble and verify multi-arch OCI manifest
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+          REF_TAG: ${{ steps.meta.outputs.image }}:${{ matrix.upstream_ref }}
+          APP_ID: ${{ matrix.app_id }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --tag "${TAG}" \
+            "${TAG}-amd64" \
+            "${TAG}-arm64"
+          docker buildx imagetools create \
+            --tag "${REF_TAG}" \
+            "${REF_TAG}-amd64" \
+            "${REF_TAG}-arm64"
+
+          docker buildx imagetools inspect "${TAG}" --format '{{json .}}' > "platforms-${APP_ID}.json"
+          jq -e '.manifest.digest | test("^sha256:")' "platforms-${APP_ID}.json" >/dev/null
+          jq -e '.manifest.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64")' "platforms-${APP_ID}.json" >/dev/null
+          jq -e '.manifest.manifests[] | select(.platform.os == "linux" and .platform.architecture == "arm64")' "platforms-${APP_ID}.json" >/dev/null
+          digest="$(jq -r '.manifest.digest' "platforms-${APP_ID}.json")"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
       - name: Sign image digest with keyless cosign
         env:
           COSIGN_EXPERIMENTAL: "1"
-          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.manifest.outputs.digest }}
         run: |
           set -euo pipefail
           cosign sign --yes "${IMAGE_REF}"
@@ -243,7 +306,7 @@ jobs:
       - name: Verify cosign signature
         env:
           COSIGN_EXPERIMENTAL: "1"
-          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.manifest.outputs.digest }}
         run: |
           set -euo pipefail
           cosign verify "${IMAGE_REF}" \
@@ -261,7 +324,7 @@ jobs:
 
       - name: Generate syft SBOM
         env:
-          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.manifest.outputs.digest }}
           SYFT_CHECK_FOR_APP_UPDATE: "false"
           SYFT_SCOPE: squashed
         run: |
@@ -271,7 +334,7 @@ jobs:
       - name: Run grype scan
         id: grype
         env:
-          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.manifest.outputs.digest }}
           GRYPE_CHECK_FOR_APP_UPDATE: "false"
         run: |
           set -euo pipefail
@@ -290,9 +353,9 @@ jobs:
           UPSTREAM_COMMIT: ${{ steps.upstream.outputs.commit }}
           SOURCE_TREE_SHA256: ${{ steps.source-tree.outputs.sha256 }}
           LICENSE_SPDX: ${{ matrix.license_spdx }}
-          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.manifest.outputs.digest }}
           SUBJECT_NAME: ${{ steps.meta.outputs.image }}
-          DIGEST: ${{ steps.build.outputs.digest }}
+          DIGEST: ${{ steps.manifest.outputs.digest }}
           GRYPE_STATUS: ${{ steps.grype.outputs.status }}
         run: |
           set -euo pipefail
@@ -351,10 +414,10 @@ jobs:
         name: Expose digest output
         run: |
           case "${{ matrix.app_id }}" in
-            openclaw) echo "openclaw_digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT" ;;
-            hermes) echo "hermes_digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT" ;;
-            opencode) echo "opencode_digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT" ;;
-            kilocode) echo "kilocode_digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT" ;;
+            openclaw) echo "openclaw_digest=${{ steps.manifest.outputs.digest }}" >> "$GITHUB_OUTPUT" ;;
+            hermes) echo "hermes_digest=${{ steps.manifest.outputs.digest }}" >> "$GITHUB_OUTPUT" ;;
+            opencode) echo "opencode_digest=${{ steps.manifest.outputs.digest }}" >> "$GITHUB_OUTPUT" ;;
+            kilocode) echo "kilocode_digest=${{ steps.manifest.outputs.digest }}" >> "$GITHUB_OUTPUT" ;;
           esac
 
       - name: Upload Launchpad artifact evidence
@@ -364,6 +427,7 @@ jobs:
           path: |
             launchpad-artifacts/${{ matrix.app_id }}.json
             cosign-${{ matrix.app_id }}.json
+            platforms-${{ matrix.app_id }}.json
             sbom-${{ matrix.app_id }}.spdx.json
             grype-${{ matrix.app_id }}.json
 

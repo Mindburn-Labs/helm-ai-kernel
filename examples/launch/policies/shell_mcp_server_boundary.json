@@ -17,6 +17,15 @@
       "reason_code": "SHELL_READ_ALLOW"
     },
     {
+      "action": "shell.pwd",
+      "enabled": true,
+      "effect": "read",
+      "command_patterns": [
+        "^pwd(\\s|$)"
+      ],
+      "reason_code": "SHELL_READ_ALLOW"
+    },
+    {
       "action": "shell.cat",
       "enabled": true,
       "effect": "read",

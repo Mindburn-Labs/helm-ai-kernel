@@ -1,6 +1,6 @@
 ---
 title: MCP Integration
-last_reviewed: 2026-05-05
+last_reviewed: 2026-06-12
 ---
 
 # MCP Integration
@@ -100,6 +100,7 @@ intended quickstart policy shape:
 | Command class | Verdict | Reason |
 | --- | --- | --- |
 | `ls` | `ALLOW` | Read-only directory listing |
+| `pwd` | `ALLOW` | Read-only current-directory inspection |
 | `cat <path>` | `ALLOW` | Read-only file inspection |
 | `git status` | `ALLOW` | Read-only worktree status |
 | `rm -rf` and equivalent recursive force delete patterns | `DENY` | Destructive deletion |

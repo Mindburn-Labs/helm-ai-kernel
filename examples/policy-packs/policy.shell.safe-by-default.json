@@ -1,0 +1,53 @@
+{
+  "pack_id": "policy.shell.safe-by-default.v1",
+  "label": "Shell Safe By Default",
+  "version": 1,
+  "scope": {
+    "category": "shell",
+    "intended_use": "Local Shell MCP evaluation"
+  },
+  "actions": [
+    {
+      "action": "shell.pwd",
+      "enabled": true,
+      "description": "Allow printing the current working directory.",
+      "expression": "input.effect == 'read'"
+    },
+    {
+      "action": "shell.ls",
+      "enabled": true,
+      "description": "Allow read-only directory listing.",
+      "expression": "input.effect == 'read'"
+    },
+    {
+      "action": "shell.cat",
+      "enabled": true,
+      "description": "Allow simple file reads when the integration supplies a read effect.",
+      "expression": "input.effect == 'read'"
+    },
+    {
+      "action": "git.status",
+      "enabled": true,
+      "description": "Allow git status inspection.",
+      "expression": "input.effect == 'read'"
+    },
+    {
+      "action": "shell.rm_rf",
+      "enabled": false,
+      "description": "Destructive recursive delete must be denied or escalated by the active boundary."
+    },
+    {
+      "action": "shell.raw_disk_write",
+      "enabled": false,
+      "description": "Raw disk writes such as dd or mkfs must stay outside the allow graph."
+    },
+    {
+      "action": "git.clean.destructive",
+      "enabled": false,
+      "description": "Destructive git clean operations must stay outside the allow graph."
+    }
+  ],
+  "notes": [
+    "Example only: pair with a real MCP wrapper, receipt stream, and EvidencePack verification before using outside local fixtures."
+  ]
+}

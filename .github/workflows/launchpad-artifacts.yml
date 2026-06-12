@@ -218,7 +218,7 @@ jobs:
           push: true
           provenance: true
           sbom: true
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           labels: |
             org.opencontainers.image.source=https://github.com/${{ matrix.upstream_repo }}
             org.opencontainers.image.revision=${{ steps.upstream.outputs.commit }}
@@ -449,7 +449,7 @@ jobs:
           push: true
           provenance: true
           sbom: true
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}

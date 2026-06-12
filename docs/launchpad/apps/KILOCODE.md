@@ -9,6 +9,12 @@ Kilo Code currently has `verify_only` contract evidence. The pinned image and
 `kilocode --version` healthcheck are useful smoke proof, but `--version` smoke
 checks do not count as live-agent F2 coverage.
 
+The supported claim is deliberately limited. HELM proves that the Kilo Code app
+spec, signed OCI image reference, filesystem policy, MCP quarantine settings,
+and EvidencePack export path can be validated as a Launchpad contract. It does
+not prove that a live Kilo Code coding session, tool sequence, or model-backed
+workflow has passed the full F2 runtime bar.
+
 ```mermaid
 flowchart TD
     A[Kilo Code Agent] -->|Request Tool Call| B(HELM AI Kernel)
@@ -23,6 +29,18 @@ flowchart TD
 ```bash
 helm-ai-kernel app preflight kilocode --json
 ```
+
+## Operator boundary
+Kilo Code keeps a scoped workspace and app-state mount, denied default network
+egress, schema-pinned MCP manifests, and escalation for unknown MCP tools. The
+default profile requires no provider secret, keeps `runtime_install_policy`
+forbidden, and relies on baked dependencies such as `kilocode-cli` and
+`ripgrep` instead of launch-time downloads.
+
+Do not treat this page as a live-agent success claim until teardown receipts,
+offline verification, and EvidencePack material exist for a real Kilo Code
+command path. Until that evidence is present, the correct status is signed OCI
+plus verify-only contract preflight.
 
 ## Source Truth
 - Registry source: `registry/launchpad/apps/kilocode.yaml`

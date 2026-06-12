@@ -153,9 +153,6 @@ jobs:
           set -euo pipefail
           cp helm/tools/launchpad/artifacts/model-gateway-check.sh upstream/.helm-launchpad-model-gateway-check.sh
           cat > upstream/.dockerignore <<'EOF'
-          .git
-          .git/**
-          **/.git
           **/.DS_Store
           **/node_modules
           **/.cache

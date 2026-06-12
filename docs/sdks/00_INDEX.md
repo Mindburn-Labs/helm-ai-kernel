@@ -68,12 +68,12 @@ distribution promises.
 
 | Language | Public package status | Source | Validation |
 | --- | --- | --- | --- |
-| Python SDK | Package name `helm-sdk`; source manifest follows the repository `VERSION` (`0.5.10` for this release). Verify `version-status.json` or `make version-drift-published` before publishing pinned install claims. | `sdk/python/helm_sdk/client.py` | `make test-sdk-py` |
-| TypeScript | Package name `@mindburn/helm-ai-kernel`; source manifest follows the repository `VERSION` (`0.5.10` for this release). Verify `version-status.json` or `make version-drift-published` before publishing pinned install claims. | `sdk/ts/src/client.ts` | `make test-sdk-ts` |
+| Python SDK | Package name `helm-sdk`; source manifest follows the repository `VERSION` (`0.5.11` for this release). Verify `version-status.json` or `make version-drift-published` before publishing pinned install claims. | `sdk/python/helm_sdk/client.py` | `make test-sdk-py` |
+| TypeScript | Package name `@mindburn/helm-ai-kernel`; source manifest follows the repository `VERSION` (`0.5.11` for this release). Verify `version-status.json` or `make version-drift-published` before publishing pinned install claims. | `sdk/ts/src/client.ts` | `make test-sdk-ts` |
 | JavaScript | Uses `@mindburn/helm-ai-kernel` or raw HTTP/fetch | `sdk/ts/src/client.ts`, `examples/js_openai_baseurl/` | `make test-sdk-ts` |
 | Go SDK | Source/module path only; pin `@main` or a commit until tagged SDK modules are aligned | `sdk/go/client/client.go` | `cd sdk/go && go test ./...` |
-| Rust SDK | Package name `helm-sdk`; source manifest follows the repository `VERSION` (`0.5.10` for this release). Verify `version-status.json` or `make version-drift-published` before publishing pinned install claims. | `sdk/rust/src/client.rs` | `make test-sdk-rust` |
-| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.10`; verified by remote Maven resolution and repo1 artifacts. | `sdk/java/pom.xml` | `make test-sdk-java` |
+| Rust SDK | Package name `helm-sdk`; source manifest follows the repository `VERSION` (`0.5.11` for this release). Verify `version-status.json` or `make version-drift-published` before publishing pinned install claims. | `sdk/rust/src/client.rs` | `make test-sdk-rust` |
+| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.11`; verified by remote Maven resolution and repo1 artifacts. | `sdk/java/pom.xml` | `make test-sdk-java` |
 
 Use `http://127.0.0.1:7714` for the local `helm-ai-kernel serve --policy` quickstart, `http://localhost:8080` for `helm-ai-kernel server` or the current Docker Compose mapping, and `http://localhost:9090/v1` only for the OpenAI-compatible proxy.
 
@@ -145,7 +145,7 @@ Use the verified Maven Central coordinate:
 <dependency>
   <groupId>io.github.mindburnlabs</groupId>
   <artifactId>helm-sdk</artifactId>
-  <version>0.5.10</version>
+  <version>0.5.11</version>
 </dependency>
 ```
 

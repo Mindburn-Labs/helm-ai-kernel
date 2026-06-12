@@ -984,18 +984,65 @@ func runLaunchPromote(args []string, catalog *lpregistry.Catalog, stdout, stderr
 	fs.SetOutput(stderr)
 	manifestPath := fs.String("manifest", "", "Launchpad artifact manifest JSON from CI")
 	appID := fs.String("app", "", "app id to promote")
+	appIDs := fs.String("apps", "", "comma-separated app ids to promote")
 	specPath := fs.String("spec", "", "app spec path to write when --write is set")
 	artifactVerificationRef := fs.String("artifact-verification-ref", "", "artifact verification evidence ref")
 	liveE2ERunID := fs.String("live-e2e-run-id", "", "live local-container e2e run id")
 	evidencePackRef := fs.String("evidence-pack-ref", "", "offline-verifiable EvidencePack ref")
 	teardownReceiptRef := fs.String("teardown-receipt-ref", "", "teardown receipt ref")
 	writeSpec := fs.Bool("write", false, "write promoted app spec YAML")
+	syncDerived := fs.Bool("sync-derived", false, "sync generated Launchpad image references after promotion")
+	checkOnly := fs.Bool("check", false, "fail if committed Launchpad promotion references have drift")
 	jsonOut := fs.Bool("json", false, "emit JSON")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *manifestPath == "" || *appID == "" {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel launch promote --manifest <promotion-manifest.json> --app <app> [--artifact-verification-ref <ref> --live-e2e-run-id <id> --evidence-pack-ref <ref> --teardown-receipt-ref <ref>] [--write] [--json]")
+	selectedApps := parseLaunchPromoteApps(*appID, *appIDs)
+	if len(selectedApps) == 0 {
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel launch promote --manifest <promotion-manifest.json> (--app <app>|--apps <a,b>) [--artifact-verification-ref <ref> --live-e2e-run-id <id> --evidence-pack-ref <ref> --teardown-receipt-ref <ref>] [--write] [--sync-derived] [--check] [--json]")
+		return 2
+	}
+	if *specPath != "" && len(selectedApps) != 1 {
+		fmt.Fprintln(stderr, "launch promotion error: --spec can only be used with a single --app")
+		return 2
+	}
+	if *manifestPath == "" {
+		apps, err := lppromotion.AppsByID(catalog, selectedApps)
+		if err != nil {
+			fmt.Fprintf(stderr, "launch promotion check error: %v\n", err)
+			return 1
+		}
+		if *syncDerived && *writeSpec {
+			if err := lppromotion.SyncDerived(catalog.Root, apps); err != nil {
+				fmt.Fprintf(stderr, "launch promotion derived sync error: %v\n", err)
+				return 1
+			}
+		}
+		if *checkOnly {
+			drifts := lppromotion.CheckDerived(catalog.Root, apps)
+			if len(drifts) > 0 {
+				for _, drift := range drifts {
+					fmt.Fprintf(stderr, "launch promotion drift: %s\n", drift)
+				}
+				if *jsonOut {
+					_ = writeLaunchJSON(stdout, map[string]any{"ok": false, "apps": selectedApps, "drifts": drifts})
+				}
+				return 1
+			}
+			if *jsonOut {
+				return writeLaunchJSON(stdout, map[string]any{"ok": true, "apps": selectedApps})
+			}
+			fmt.Fprintf(stdout, "Launchpad promotion refs are in sync for %s.\n", strings.Join(selectedApps, ","))
+			return 0
+		}
+		if *syncDerived && *writeSpec {
+			if *jsonOut {
+				return writeLaunchJSON(stdout, map[string]any{"ok": true, "apps": selectedApps, "synced": true})
+			}
+			fmt.Fprintf(stdout, "Synced Launchpad derived refs for %s.\n", strings.Join(selectedApps, ","))
+			return 0
+		}
+		fmt.Fprintln(stderr, "launch promotion error: --manifest is required unless --check or --write --sync-derived is used")
 		return 2
 	}
 	manifest, err := lppromotion.LoadManifest(*manifestPath)
@@ -1003,50 +1050,118 @@ func runLaunchPromote(args []string, catalog *lpregistry.Catalog, stdout, stderr
 		fmt.Fprintf(stderr, "launch promotion manifest error: %v\n", err)
 		return 1
 	}
-	artifact, ok := manifest.Entry(*appID)
-	if !ok {
-		fmt.Fprintf(stderr, "launch promotion error: artifact for app %s not found\n", *appID)
-		return 1
-	}
-	app, ok := catalog.App(*appID)
-	if !ok {
-		fmt.Fprintf(stderr, "launch promotion error: app %s not found in registry\n", *appID)
-		return 1
-	}
-	refs, err := manifest.EvidenceRefsFor(artifact, lppromotion.EvidenceRefs{
-		ArtifactVerificationRef: *artifactVerificationRef,
-		LiveE2ERunID:            *liveE2ERunID,
-		EvidencePackRef:         *evidencePackRef,
-		TeardownReceiptRef:      *teardownReceiptRef,
-	})
+	manifestHash, err := manifest.Hash()
 	if err != nil {
-		fmt.Fprintf(stderr, "launch promotion denied: %v\n", err)
+		fmt.Fprintf(stderr, "launch promotion manifest hash error: %v\n", err)
 		return 1
 	}
-	promoted, err := lppromotion.Promote(app, artifact, refs)
-	if err != nil {
-		fmt.Fprintf(stderr, "launch promotion denied: %v\n", err)
-		return 1
-	}
-	if *writeSpec {
-		target := *specPath
-		if target == "" {
-			target = filepath.Join(catalog.Root, "registry", "launchpad", "apps", promoted.ID+".yaml")
+	promotedApps := make([]lpregistry.AppSpec, 0, len(selectedApps))
+	for _, selectedApp := range selectedApps {
+		artifact, ok := manifest.Entry(selectedApp)
+		if !ok {
+			fmt.Fprintf(stderr, "launch promotion error: artifact for app %s not found\n", selectedApp)
+			return 1
 		}
-		if err := lppromotion.WriteAppSpec(target, promoted); err != nil {
-			fmt.Fprintf(stderr, "launch promotion write error: %v\n", err)
+		app, ok := catalog.App(selectedApp)
+		if !ok {
+			fmt.Fprintf(stderr, "launch promotion error: app %s not found in registry\n", selectedApp)
+			return 1
+		}
+		refs, err := manifest.EvidenceRefsFor(artifact, lppromotion.EvidenceRefs{
+			ArtifactVerificationRef: *artifactVerificationRef,
+			LiveE2ERunID:            *liveE2ERunID,
+			EvidencePackRef:         *evidencePackRef,
+			TeardownReceiptRef:      *teardownReceiptRef,
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "launch promotion denied for %s: %v\n", selectedApp, err)
+			return 1
+		}
+		promoted, err := lppromotion.Promote(app, artifact, refs)
+		if err != nil {
+			fmt.Fprintf(stderr, "launch promotion denied for %s: %v\n", selectedApp, err)
+			return 1
+		}
+		if promoted.Metadata == nil {
+			promoted.Metadata = map[string]string{}
+		}
+		promoted.Metadata["promotion_manifest_hash"] = manifestHash
+		if *writeSpec {
+			target := *specPath
+			if target == "" {
+				target = filepath.Join(catalog.Root, "registry", "launchpad", "apps", promoted.ID+".yaml")
+			}
+			if err := lppromotion.WriteAppSpec(target, promoted); err != nil {
+				fmt.Fprintf(stderr, "launch promotion write error: %v\n", err)
+				return 1
+			}
+		}
+		promotedApps = append(promotedApps, promoted)
+	}
+	if *syncDerived {
+		if !*writeSpec {
+			fmt.Fprintln(stderr, "launch promotion error: --sync-derived requires --write when using a manifest")
+			return 2
+		}
+		if err := lppromotion.SyncDerived(catalog.Root, promotedApps); err != nil {
+			fmt.Fprintf(stderr, "launch promotion derived sync error: %v\n", err)
+			return 1
+		}
+	}
+	var drifts []string
+	if *checkOnly {
+		checkApps := promotedApps
+		if !*writeSpec {
+			checkApps, err = lppromotion.AppsByID(catalog, selectedApps)
+			if err != nil {
+				fmt.Fprintf(stderr, "launch promotion check error: %v\n", err)
+				return 1
+			}
+		}
+		drifts = lppromotion.CheckDerived(catalog.Root, checkApps)
+		if len(drifts) > 0 {
+			for _, drift := range drifts {
+				fmt.Fprintf(stderr, "launch promotion drift: %s\n", drift)
+			}
+			if *jsonOut {
+				_ = writeLaunchJSON(stdout, map[string]any{
+					"ok":            false,
+					"manifest_hash": manifestHash,
+					"apps":          promotedApps,
+					"drifts":        drifts,
+				})
+			}
 			return 1
 		}
 	}
 	if *jsonOut {
-		return writeLaunchJSON(stdout, promoted)
+		return writeLaunchJSON(stdout, map[string]any{
+			"ok":            len(drifts) == 0,
+			"manifest_hash": manifestHash,
+			"apps":          promotedApps,
+		})
 	}
 	if *writeSpec {
-		fmt.Fprintf(stdout, "Promoted %s to oss_supported from signed artifact manifest.\n", promoted.ID)
+		fmt.Fprintf(stdout, "Promoted %s to oss_supported from signed artifact manifest (%s).\n", strings.Join(selectedApps, ","), manifestHash)
 	} else {
-		fmt.Fprintf(stdout, "Promotion dry run for %s passed; use --write to update the app spec.\n", promoted.ID)
+		fmt.Fprintf(stdout, "Promotion dry run for %s passed; use --write to update app specs.\n", strings.Join(selectedApps, ","))
 	}
 	return 0
+}
+
+func parseLaunchPromoteApps(appID, appIDs string) []string {
+	var selected []string
+	add := func(value string) {
+		for _, part := range strings.Split(value, ",") {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				selected = append(selected, part)
+			}
+		}
+	}
+	add(appID)
+	add(appIDs)
+	return selected
 }
 
 func redactLaunchLog(value string, secrets ...string) string {

@@ -22,10 +22,6 @@ on:
     branches: ["main"]
     paths:
       - ".github/workflows/launchpad-artifacts.yml"
-      - "registry/launchpad/apps/openclaw.yaml"
-      - "registry/launchpad/apps/hermes.yaml"
-      - "registry/launchpad/apps/opencode.yaml"
-      - "registry/launchpad/apps/kilocode.yaml"
       - "policies/launchpad/apps/openclaw.safe.toml"
       - "policies/launchpad/apps/hermes.safe.toml"
       - "policies/launchpad/apps/opencode.safe.toml"
@@ -128,6 +124,20 @@ jobs:
         run: |
           set -euo pipefail
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Compute pinned upstream source tree hash
+        id: source-tree
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          source_tree_sha256="$(
+            git ls-files -z |
+              sort -z |
+              xargs -0 sha256sum |
+              sha256sum |
+              awk '{print "sha256:" $1}'
+          )"
+          echo "sha256=${source_tree_sha256}" >> "$GITHUB_OUTPUT"
 
       - name: Verify license marker
         working-directory: upstream
@@ -274,8 +284,10 @@ jobs:
           UPSTREAM_REPO: https://github.com/${{ matrix.upstream_repo }}
           UPSTREAM_REF: ${{ matrix.upstream_ref }}
           UPSTREAM_COMMIT: ${{ steps.upstream.outputs.commit }}
+          SOURCE_TREE_SHA256: ${{ steps.source-tree.outputs.sha256 }}
           LICENSE_SPDX: ${{ matrix.license_spdx }}
           IMAGE_REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          SUBJECT_NAME: ${{ steps.meta.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
           GRYPE_STATUS: ${{ steps.grype.outputs.status }}
         run: |
@@ -287,6 +299,11 @@ jobs:
             --arg upstream_repo "${UPSTREAM_REPO}" \
             --arg upstream_ref "${UPSTREAM_REF}" \
             --arg upstream_commit "${UPSTREAM_COMMIT}" \
+            --arg source_sha "${UPSTREAM_COMMIT}" \
+            --arg source_tree_sha256 "${SOURCE_TREE_SHA256}" \
+            --arg workflow_ref "${GITHUB_REPOSITORY}/.github/workflows/launchpad-artifacts.yml@${GITHUB_REF}" \
+            --arg subject_name "${SUBJECT_NAME}" \
+            --arg subject_digest "${DIGEST}" \
             --arg license_spdx "${LICENSE_SPDX}" \
             --arg license_ref "${UPSTREAM_REPO}/blob/${UPSTREAM_REF}/LICENSE" \
             --arg redistribution "allowed_by_${LICENSE_SPDX}_with_upstream_notice" \
@@ -306,6 +323,11 @@ jobs:
               upstream_repo: $upstream_repo,
               upstream_ref: $upstream_ref,
               upstream_commit: $upstream_commit,
+              source_sha: $source_sha,
+              source_tree_sha256: $source_tree_sha256,
+              workflow_ref: $workflow_ref,
+              subject_name: $subject_name,
+              subject_digest: $subject_digest,
               license_spdx: $license_spdx,
               license_ref: $license_ref,
               redistribution: $redistribution,
@@ -403,6 +425,19 @@ jobs:
           image="${REGISTRY}/${IMAGE_PREFIX}/egress-proxy"
           echo "image=${image}" >> "$GITHUB_OUTPUT"
           echo "tag=${image}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - name: Compute egress proxy source tree hash
+        id: source-tree
+        run: |
+          set -euo pipefail
+          source_tree_sha256="$(
+            cd helm
+            git ls-files -z tools/launchpad/egressproxy tools/launchpad/artifacts/egress-proxy.Dockerfile |
+              sort -z |
+              xargs -0 sha256sum |
+              sha256sum |
+              awk '{print "sha256:" $1}'
+          )"
+          echo "sha256=${source_tree_sha256}" >> "$GITHUB_OUTPUT"
       - id: build
         name: Build and push egress proxy image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
@@ -456,6 +491,11 @@ jobs:
             status=failed
           fi
           jq -n \
+            --arg source_sha "${GITHUB_SHA}" \
+            --arg source_tree_sha256 "${{ steps.source-tree.outputs.sha256 }}" \
+            --arg workflow_ref "${GITHUB_REPOSITORY}/.github/workflows/launchpad-artifacts.yml@${GITHUB_REF}" \
+            --arg subject_name "${{ steps.meta.outputs.image }}" \
+            --arg subject_digest "${{ steps.build.outputs.digest }}" \
             --arg image "${IMAGE_REF}" \
             --arg digest "${{ steps.build.outputs.digest }}" \
             --arg signature_ref "cosign://${IMAGE_REF}" \
@@ -465,6 +505,11 @@ jobs:
             --arg provenance_ref "github-actions://${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}" \
             '{
               component: "egress-proxy",
+              source_sha: $source_sha,
+              source_tree_sha256: $source_tree_sha256,
+              workflow_ref: $workflow_ref,
+              subject_name: $subject_name,
+              subject_digest: $subject_digest,
               image: $image,
               digest: $digest,
               signature_tool: "cosign",
@@ -518,16 +563,29 @@ jobs:
               manifests+=("${manifest}")
             fi
           done
+          source_tree_sha256="$(
+            find launchpad-artifacts -type f -name '*.json' -print0 |
+              sort -z |
+              xargs -0 sha256sum |
+              sha256sum |
+              awk '{print "sha256:" $1}'
+          )"
           jq -s \
             --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg github_run_id "${GITHUB_RUN_ID}" \
             --arg github_run_attempt "${GITHUB_RUN_ATTEMPT}" \
+            --arg source_sha "${GITHUB_SHA}" \
+            --arg source_tree_sha256 "${source_tree_sha256}" \
+            --arg workflow_ref "${GITHUB_REPOSITORY}/.github/workflows/launchpad-artifacts.yml@${GITHUB_REF}" \
             --slurpfile egress_proxy "${egress_manifest}" \
             '{
               schema_version: "helm.launchpad.artifacts.v1",
               generated_at: $generated_at,
               github_run_id: $github_run_id,
               github_run_attempt: $github_run_attempt,
+              source_sha: $source_sha,
+              source_tree_sha256: $source_tree_sha256,
+              workflow_ref: $workflow_ref,
               egress_proxy: $egress_proxy[0],
               artifacts: .
             }' "${manifests[@]}" > launchpad-artifact-manifest.json
@@ -537,91 +595,11 @@ jobs:
           name: launchpad-artifact-manifest
           path: launchpad-artifact-manifest.json
 
-  pin-digests:
-    name: Re-pin launchpad image digests into chart values
-    runs-on: ubuntu-latest
-    needs: aggregate
-    # Only pin from authoritative main builds — these are the images actually
-    # published to GHCR. Satisfies the rule "never pin a digest before CI has
-    # published the rebuilt image": we pin the digest this run just pushed.
-    if: ${{ github.ref == 'refs/heads/main' }}
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-        with:
-          fetch-depth: 0
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: launchpad-artifact-manifest
-          path: /tmp/launchpad
-      - name: Re-pin chart digests from the artifact manifest and open a PR
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          manifest=/tmp/launchpad/launchpad-artifact-manifest.json
-          values=deploy/helm-chart/values.yaml
-
-          # The aggregate manifest is the race-free source of truth: each digest
-          # comes from a single build leg's own evidence file, not from matrix
-          # job outputs (which can clobber each other across legs).
-          openclaw="$(jq -r '.artifacts[] | select(.app_id=="openclaw") | .digest' "$manifest")"
-          hermes="$(jq -r '.artifacts[] | select(.app_id=="hermes") | .digest' "$manifest")"
-          egress="$(jq -r '.egress_proxy.digest' "$manifest")"
-          for d in "$openclaw" "$hermes" "$egress"; do
-            case "$d" in
-              sha256:*) ;;
-              *) echo "::error::manifest yielded an invalid digest: '$d'"; exit 1 ;;
-            esac
-          done
-
-          # Surgical, minimal-diff rewrite: replace only the digest line that
-          # immediately follows each image's repository line. A YAML round-trip
-          # (yq -i) would reflow the whole file; awk touches just the 4 lines.
-          # egress-proxy is shared, so both sidecar copies move together — the
-          # exact two-copy sync that was missed manually in PR #275.
-          awk -v oc="$openclaw" -v he="$hermes" -v eg="$egress" '
-            /repository: ".*\/openclaw"/     { pend="oc"; print; next }
-            /repository: ".*\/hermes"/       { pend="he"; print; next }
-            /repository: ".*\/egress-proxy"/ { pend="eg"; print; next }
-            /^[[:space:]]*digest:/ && pend != "" {
-              d = (pend=="oc" ? oc : (pend=="he" ? he : eg))
-              sub(/digest:.*/, "digest: \"" d "\"")
-              pend=""
-            }
-            { print }
-          ' "$values" > "$values.tmp"
-          mv "$values.tmp" "$values"
-
-          for d in "$openclaw" "$hermes" "$egress"; do
-            grep -q "$d" "$values" || { echo "::error::digest $d missing after rewrite"; exit 1; }
-          done
-
-          if git diff --quiet -- "$values"; then
-            echo "Chart digests already current — nothing to pin."
-            exit 0
-          fi
-
-          branch="automation/pin-launchpad-digests-${GITHUB_RUN_ID}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
-          git add "$values"
-          git commit -m "ci(launchpad): re-pin launchpad image digests"
-          git push origin "$branch"
-          gh pr create \
-            --title "ci(launchpad): re-pin launchpad image digests" \
-            --body "$(printf 'Automated re-pin of launchpad image digests published by run %s.\n\n- openclaw: %s\n- hermes: %s\n- egress-proxy (both sidecars): %s\n' "${GITHUB_RUN_ID}" "$openclaw" "$hermes" "$egress")" \
-            --base main \
-            --head "$branch"
-
   live-conformance:
     name: Live BYO model-provider local-container conformance
     runs-on: ubuntu-latest
     needs: aggregate
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live_conformance }}
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.run_live_conformance)) }}
     permissions:
       contents: read
       packages: read
@@ -728,3 +706,100 @@ jobs:
         with:
           name: launchpad-promotion-manifest
           path: /tmp/launchpad-promotion/launchpad-promotion-manifest.json
+
+  promotion-pr:
+    name: Open Launchpad promotion PR
+    runs-on: ubuntu-latest
+    needs: live-conformance
+    if: ${{ github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: "1.25.10"
+          cache-dependency-path: "**/go.sum"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: launchpad-promotion-manifest
+          path: /tmp/launchpad-promotion
+      - name: Promote verified images and open a reference update PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          manifest=/tmp/launchpad-promotion/launchpad-promotion-manifest.json
+          result=/tmp/launchpad-promotion-result.json
+          go run ./core/cmd/helm-ai-kernel launch promote \
+            --manifest "${manifest}" \
+            --apps openclaw,hermes \
+            --write \
+            --sync-derived \
+            --check \
+            --json | tee "${result}"
+
+          changed_paths=(
+            registry/launchpad/apps/openclaw.yaml
+            registry/launchpad/apps/hermes.yaml
+            registry/launchpad/image-lock.json
+            deploy/helm-chart/values.yaml
+          )
+          if git diff --quiet -- "${changed_paths[@]}"; then
+            echo "Launchpad promoted refs already current — no PR needed."
+            exit 0
+          fi
+
+          manifest_hash="$(jq -r '.manifest_hash' "${result}")"
+          source_sha="$(jq -r '.source_sha // "n/a"' "${manifest}")"
+          source_tree_sha256="$(jq -r '.source_tree_sha256 // "n/a"' "${manifest}")"
+          workflow_ref="$(jq -r '.workflow_ref // "n/a"' "${manifest}")"
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          {
+            echo "| component | image | digest | cosign | sbom | provenance |"
+            echo "| --- | --- | --- | --- | --- | --- |"
+            jq -r '.artifacts[]
+              | select(.app_id == "openclaw" or .app_id == "hermes")
+              | "| \(.app_id) | `\(.image)` | `\(.digest)` | `\(.signature_ref)` | `\(.sbom_ref)` | `\(.provenance_ref)` |"' "${manifest}"
+            jq -r '.egress_proxy
+              | "| egress-proxy | `\(.image)` | `\(.digest)` | `\(.signature_ref)` | `\(.sbom_ref)` | `\(.provenance_ref)` |"' "${manifest}"
+          } > /tmp/launchpad-digest-table.md
+
+          cat > /tmp/launchpad-promotion-pr.md <<EOF
+          Automated Launchpad promotion from a verified CI manifest.
+
+          Source SHA: \`${source_sha}\`
+          Source tree SHA256: \`${source_tree_sha256}\`
+          Workflow ref: \`${workflow_ref}\`
+          Workflow run: ${run_url}
+          Promotion manifest hash: \`${manifest_hash}\`
+
+          ## Image refs
+          EOF
+          cat /tmp/launchpad-digest-table.md >> /tmp/launchpad-promotion-pr.md
+          cat >> /tmp/launchpad-promotion-pr.md <<'EOF'
+
+          ## Validation
+          - `go run ./core/cmd/helm-ai-kernel launch promote --manifest <manifest> --apps openclaw,hermes --write --sync-derived --check --json`
+          - `make launchpad-promotion-check`
+          - `go test ./tests/launchpad/... -run TestLiveModelProviderLocalContainerConformance -count=1 -timeout 30m -v`
+
+          Promotion commits update committed AppSpec evidence plus generated refs only. They intentionally do not retrigger the producer image build workflow.
+          EOF
+
+          branch="automation/launchpad-promotion-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${branch}"
+          git add "${changed_paths[@]}"
+          git commit -m "ci(launchpad): promote signed launchpad image refs"
+          git push origin "${branch}"
+          gh pr create \
+            --title "ci(launchpad): promote signed launchpad image refs" \
+            --body-file /tmp/launchpad-promotion-pr.md \
+            --base main \
+            --head "${branch}"

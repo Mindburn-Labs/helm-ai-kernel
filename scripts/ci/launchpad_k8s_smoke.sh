@@ -21,6 +21,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+IMAGE_LOCK="${ROOT}/registry/launchpad/image-lock.json"
 MODE="${LAUNCHPAD_SMOKE_MODE:-positive}"
 PROFILE="${LAUNCHPAD_SMOKE_PROFILE:-launchpad-smoke}"
 NAMESPACE="${LAUNCHPAD_SMOKE_NAMESPACE:-helm-launchpad-smoke}"
@@ -85,6 +86,7 @@ require kubectl
 require helm
 require docker
 require python3
+require jq
 
 apply_ghcr_pull_secret() {
     GHCR_USERNAME="$GHCR_USERNAME" GHCR_TOKEN="$GHCR_TOKEN" \
@@ -195,10 +197,19 @@ fi
 if [ "$PRE_LOAD_LAUNCHPAD_IMAGES" = "1" ] && [ "$MODE" != "baseline" ]; then
     # Debug-only path. Private digest-pinned GHCR refs have proven unreliable
     # through `minikube image load`; the normal path below uses imagePullSecrets.
-    for img in \
-        "ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995" \
-        "ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652" \
-        "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:e09e0aec1e0e1f926f4cd18444e88310656b85551cbc10a6c340acb979a42e03"; do
+    if [ ! -f "$IMAGE_LOCK" ]; then
+        echo "::error::Launchpad image lock not found: $IMAGE_LOCK" >&2
+        exit 1
+    fi
+    preload_images=()
+    while IFS= read -r img; do
+        preload_images+=("$img")
+    done < <(jq -r '.images[] | select(.preload != false) | .image' "$IMAGE_LOCK")
+    if [ "${#preload_images[@]}" -eq 0 ]; then
+        echo "::error::Launchpad image lock does not contain preload images: $IMAGE_LOCK" >&2
+        exit 1
+    fi
+    for img in "${preload_images[@]}"; do
         docker pull --platform=linux/amd64 "$img"
         minikube -p "$PROFILE" image load "$img"
         if ! minikube -p "$PROFILE" image ls 2>/dev/null | grep -qF "$img"; then

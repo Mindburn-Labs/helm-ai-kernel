@@ -266,14 +266,35 @@ func CheckSmokeScriptUsesImageLock(root string) error {
 	if !strings.Contains(text, "registry/launchpad/image-lock.json") {
 		issues = append(issues, "preload images must come from registry/launchpad/image-lock.json")
 	}
-	hardCoded := regexp.MustCompile(`ghcr\.io/mindburn-labs/helm-launchpad/[a-z0-9-]+@sha256:[0-9a-f]{64}`)
-	if hardCoded.MatchString(text) {
+	if hasHardCodedLaunchpadImageDigest(text) {
 		issues = append(issues, "hard-coded launchpad image digest found")
 	}
 	if len(issues) > 0 {
 		return fmt.Errorf("scripts/ci/launchpad_k8s_smoke.sh drift: %s", strings.Join(issues, "; "))
 	}
 	return nil
+}
+
+func hasHardCodedLaunchpadImageDigest(script string) bool {
+	const prefix = "ghcr.io/mindburn-labs/helm-launchpad/"
+	tokens := strings.FieldsFunc(script, func(r rune) bool {
+		switch r {
+		case ' ', '\t', '\r', '\n', '"', '\'', '`', '(', ')', '[', ']', '{', '}', '<', '>', ',', ';':
+			return true
+		default:
+			return false
+		}
+	})
+	for _, token := range tokens {
+		if !strings.HasPrefix(token, prefix) {
+			continue
+		}
+		_, digest, err := splitImageDigest(token)
+		if err == nil && registryDigest(digest) {
+			return true
+		}
+	}
+	return false
 }
 
 func validateAppSpecRefs(app registry.AppSpec) []string {

@@ -130,10 +130,12 @@ jobs:
         working-directory: upstream
         run: |
           set -euo pipefail
+          # Hash the Git index metadata instead of filesystem paths. Some upstream
+          # repos contain gitlinks or dangling symlinks, which `sha256sum <path>`
+          # cannot read even though the committed tree is valid.
           source_tree_sha256="$(
-            git ls-files -z |
-              sort -z |
-              xargs -0 sha256sum |
+            git ls-files -s -z |
+              LC_ALL=C sort -z |
               sha256sum |
               awk '{print "sha256:" $1}'
           )"

@@ -1,6 +1,8 @@
 package promotion
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,12 +27,23 @@ type Manifest struct {
 	GeneratedAt      string          `json:"generated_at"`
 	GitHubRunID      string          `json:"github_run_id,omitempty"`
 	GitHubRunAttempt string          `json:"github_run_attempt,omitempty"`
+	SourceSHA        string          `json:"source_sha,omitempty"`
+	SourceTreeSHA256 string          `json:"source_tree_sha256,omitempty"`
+	WorkflowRef      string          `json:"workflow_ref,omitempty"`
+	SubjectName      string          `json:"subject_name,omitempty"`
+	SubjectDigest    string          `json:"subject_digest,omitempty"`
+	ManifestHash     string          `json:"manifest_hash,omitempty"`
 	EgressProxy      *EgressProxy    `json:"egress_proxy,omitempty"`
 	Artifacts        []ArtifactEntry `json:"artifacts"`
 }
 
 type EgressProxy struct {
 	Component               string `json:"component,omitempty"`
+	SourceSHA               string `json:"source_sha,omitempty"`
+	SourceTreeSHA256        string `json:"source_tree_sha256,omitempty"`
+	WorkflowRef             string `json:"workflow_ref,omitempty"`
+	SubjectName             string `json:"subject_name,omitempty"`
+	SubjectDigest           string `json:"subject_digest,omitempty"`
 	Image                   string `json:"image"`
 	Digest                  string `json:"digest"`
 	SignatureTool           string `json:"signature_tool"`
@@ -46,6 +59,11 @@ type EgressProxy struct {
 type ArtifactEntry struct {
 	AppID                   string       `json:"app_id"`
 	AppVersion              string       `json:"app_version"`
+	SourceSHA               string       `json:"source_sha,omitempty"`
+	SourceTreeSHA256        string       `json:"source_tree_sha256,omitempty"`
+	WorkflowRef             string       `json:"workflow_ref,omitempty"`
+	SubjectName             string       `json:"subject_name,omitempty"`
+	SubjectDigest           string       `json:"subject_digest,omitempty"`
 	UpstreamRepo            string       `json:"upstream_repo"`
 	UpstreamRef             string       `json:"upstream_ref"`
 	UpstreamCommit          string       `json:"upstream_commit"`
@@ -94,6 +112,17 @@ func LoadManifest(path string) (Manifest, error) {
 	return manifest, nil
 }
 
+func (m Manifest) Hash() (string, error) {
+	clone := m
+	clone.ManifestHash = ""
+	data, err := json.Marshal(clone)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
 func (m Manifest) Entry(appID string) (ArtifactEntry, bool) {
 	for _, artifact := range m.Artifacts {
 		if artifact.AppID == appID {
@@ -125,6 +154,9 @@ func ValidateArtifact(entry ArtifactEntry) error {
 	}
 	if !strings.Contains(entry.Image, "@"+entry.Digest) {
 		return fmt.Errorf("app %s artifact manifest image must be immutable image@%s", entry.AppID, entry.Digest)
+	}
+	if err := validateSubjectBinding("app "+entry.AppID, entry.Image, entry.Digest, entry.SubjectName, entry.SubjectDigest); err != nil {
+		return err
 	}
 	if strings.ToLower(entry.SignatureTool) != "cosign" || entry.SignatureRef == "" {
 		return fmt.Errorf("app %s artifact manifest requires cosign signature evidence", entry.AppID)
@@ -161,6 +193,9 @@ func ValidateEgressProxyArtifact(proxy EgressProxy) error {
 	}
 	if !strings.Contains(proxy.Image, "@"+proxy.Digest) {
 		return fmt.Errorf("egress proxy artifact image must be immutable image@%s", proxy.Digest)
+	}
+	if err := validateSubjectBinding("egress proxy", proxy.Image, proxy.Digest, proxy.SubjectName, proxy.SubjectDigest); err != nil {
+		return err
 	}
 	if strings.ToLower(proxy.SignatureTool) != "cosign" {
 		return fmt.Errorf("egress proxy artifact requires cosign signature evidence")
@@ -222,6 +257,15 @@ func Promote(app registry.AppSpec, entry ArtifactEntry, refs EvidenceRefs) (regi
 	out := app
 	out.Version = entry.AppVersion
 	out.Availability = registry.AvailabilityOSSSupported
+	if out.SupportLevel == "" ||
+		out.SupportLevel == registry.SupportLevelVerifyOnly ||
+		out.SupportLevel == registry.SupportLevelDemo ||
+		out.SupportLevel == registry.SupportLevelBlockedRepairRequired {
+		out.SupportLevel = registry.SupportLevelOSSSupported
+		if out.FrameworkContract.EgressProxy.Required || out.ModelGateway.LogicalSecret != "" {
+			out.SupportLevel = registry.SupportLevelAgentLive
+		}
+	}
 	out.Redistribution = entry.Redistribution
 	out.Install.Strategy = "signed_oci"
 	out.Install.Image = entry.Image
@@ -261,6 +305,7 @@ func Promote(app registry.AppSpec, entry ArtifactEntry, refs EvidenceRefs) (regi
 			ReceiptRef:           receiptRef,
 		}
 	}
+	out.FrameworkContract.Images = syncFrameworkContractImages(out.FrameworkContract.Images, entry)
 	out.PromotionEvidence = registry.PromotionEvidenceSpec{
 		ArtifactVerificationRef: refs.ArtifactVerificationRef,
 		LiveE2ERunID:            refs.LiveE2ERunID,

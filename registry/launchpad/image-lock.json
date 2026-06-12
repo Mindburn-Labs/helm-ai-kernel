@@ -1,0 +1,36 @@
+{
+  "schema_version": "helm.launchpad.image-lock.v1",
+  "generated_from": [
+    "registry/launchpad/apps/openclaw.yaml",
+    "registry/launchpad/apps/hermes.yaml"
+  ],
+  "images": [
+    {
+      "name": "openclaw",
+      "role": "launchpad_app",
+      "image": "ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995",
+      "repository": "ghcr.io/mindburn-labs/helm-launchpad/openclaw",
+      "digest": "sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995",
+      "source": "registry/launchpad/apps/openclaw.yaml",
+      "preload": true
+    },
+    {
+      "name": "hermes",
+      "role": "launchpad_app",
+      "image": "ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652",
+      "repository": "ghcr.io/mindburn-labs/helm-launchpad/hermes",
+      "digest": "sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652",
+      "source": "registry/launchpad/apps/hermes.yaml",
+      "preload": true
+    },
+    {
+      "name": "egress-proxy",
+      "role": "egress_proxy",
+      "image": "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:395cd585d0e2345e649455953f0d7765b141440bfb2fc753a4ae944e2ba350f8",
+      "repository": "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy",
+      "digest": "sha256:395cd585d0e2345e649455953f0d7765b141440bfb2fc753a4ae944e2ba350f8",
+      "source": "registry/launchpad/apps/openclaw.yaml",
+      "preload": true
+    }
+  ]
+}

@@ -345,3 +345,7 @@ docs-coverage:
 
 docs-truth:
 	python3 scripts/check_documentation_truth.py
+
+.PHONY: launchpad-promotion-check
+launchpad-promotion-check:
+	cd core && go run ./cmd/helm-ai-kernel launch promote --apps openclaw,hermes --sync-derived --check

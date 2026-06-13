@@ -847,8 +847,11 @@ jobs:
             --expected-version "$VERSION" \
             --write-status dist/version-status/version-status.json \
             published \
-            --skip github-release \
-            --skip homebrew-tap
+            --only ghcr-image \
+            --only ghcr-chart \
+            --only npm-sdk \
+            --only pypi-sdk \
+            --only crates-sdk
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: version-status

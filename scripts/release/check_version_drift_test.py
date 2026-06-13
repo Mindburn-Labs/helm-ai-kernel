@@ -42,6 +42,60 @@ class VersionDriftMonitorTests(unittest.TestCase):
         }
         self.assertFalse(unsupported)
 
+    def test_published_only_skips_unselected_surfaces(self) -> None:
+        contract = {
+            "published_surfaces": [
+                {"id": "selected", "kind": "example", "url": "https://example.test/selected"},
+                {"id": "unselected", "kind": "example", "url": "https://example.test/unselected"},
+            ]
+        }
+        original = drift.PUBLISHED_CHECKS.copy()
+        drift.PUBLISHED_CHECKS["example"] = lambda surface, version: drift.SurfaceResult(
+            surface["id"],
+            "pass",
+            version,
+            version,
+            url=surface["url"],
+        )
+        try:
+            results = drift.check_published(contract, "0.5.12", set(), {"selected"})
+        finally:
+            drift.PUBLISHED_CHECKS.clear()
+            drift.PUBLISHED_CHECKS.update(original)
+
+        by_id = {result.id: result for result in results}
+        self.assertEqual(by_id["selected"].status, "pass")
+        self.assertEqual(by_id["unselected"].status, "skipped")
+        self.assertFalse(by_id["unselected"].blocking)
+        self.assertEqual(by_id["unselected"].detail, "not selected by caller")
+
+    def test_published_only_rejects_unknown_surfaces(self) -> None:
+        contract = {
+            "published_surfaces": [
+                {"id": "selected", "kind": "example", "url": "https://example.test/selected"},
+            ]
+        }
+        original = drift.PUBLISHED_CHECKS.copy()
+        drift.PUBLISHED_CHECKS["example"] = lambda surface, version: drift.SurfaceResult(
+            surface["id"],
+            "pass",
+            version,
+            version,
+            url=surface["url"],
+        )
+        try:
+            results = drift.check_published(contract, "0.5.12", set(), {"typo"})
+        finally:
+            drift.PUBLISHED_CHECKS.clear()
+            drift.PUBLISHED_CHECKS.update(original)
+
+        selection = results[0]
+        self.assertEqual(selection.id, "published-surface-selection")
+        self.assertEqual(selection.status, "fail")
+        self.assertTrue(selection.blocking)
+        self.assertEqual(selection.actual, ["typo"])
+        self.assertIn("unknown --only", selection.detail or "")
+
     def test_published_error_preserves_advisory_status(self) -> None:
         surface = {
             "id": "pkg-go-dev-sdk",

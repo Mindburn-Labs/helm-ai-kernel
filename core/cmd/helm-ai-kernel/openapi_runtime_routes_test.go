@@ -120,7 +120,7 @@ func TestProtectedRuntimeHandlersAreDeclaredInRouteRegistry(t *testing.T) {
 func TestProtectedPublicRoutesDeclareOpenAPISecurity(t *testing.T) {
 	operations := readOpenAPIOperationSecurity(t)
 	for _, spec := range PublicRuntimeRouteSpecs() {
-		if spec.Auth != RouteAuthAdmin && spec.Auth != RouteAuthAuthenticated && spec.Auth != RouteAuthTenant {
+		if spec.Auth != RouteAuthAdmin && spec.Auth != RouteAuthAuthenticated && spec.Auth != RouteAuthTenant && spec.Auth != RouteAuthService {
 			continue
 		}
 		key := spec.Method + " " + spec.Path
@@ -131,15 +131,61 @@ func TestProtectedPublicRoutesDeclareOpenAPISecurity(t *testing.T) {
 		if len(operation.Security) == 0 {
 			t.Fatalf("protected public route %s is missing OpenAPI security", key)
 		}
+		assertOpenAPISecurityScheme(t, key, operation, expectedOpenAPISecurityScheme(spec.Auth))
 		if _, ok := operation.Responses["401"]; !ok {
 			t.Fatalf("protected public route %s is missing OpenAPI 401 response", key)
+		}
+		if spec.Auth == RouteAuthTenant {
+			if _, ok := operation.Responses["403"]; !ok {
+				t.Fatalf("tenant-scoped public route %s is missing OpenAPI 403 response", key)
+			}
+			assertOpenAPIRequiredHeader(t, key, operation, "X-Helm-Tenant-ID", "#/components/parameters/HelmTenantIDHeader")
+			assertOpenAPIRequiredHeader(t, key, operation, "X-Helm-Principal-ID", "#/components/parameters/HelmPrincipalIDHeader")
 		}
 	}
 }
 
 type openAPIOperationSecurity struct {
-	Security  []map[string][]string `yaml:"security"`
-	Responses map[string]any        `yaml:"responses"`
+	Security   []map[string][]string `yaml:"security"`
+	Parameters []openAPIParameter    `yaml:"parameters"`
+	Responses  map[string]any        `yaml:"responses"`
+}
+
+type openAPIParameter struct {
+	Ref      string `yaml:"$ref"`
+	Name     string `yaml:"name"`
+	In       string `yaml:"in"`
+	Required bool   `yaml:"required"`
+}
+
+func expectedOpenAPISecurityScheme(auth RouteAuth) string {
+	if auth == RouteAuthService {
+		return "ServiceBearerAuth"
+	}
+	return "AdminBearerAuth"
+}
+
+func assertOpenAPISecurityScheme(t *testing.T, route string, operation openAPIOperationSecurity, scheme string) {
+	t.Helper()
+	for _, requirement := range operation.Security {
+		if _, ok := requirement[scheme]; ok {
+			return
+		}
+	}
+	t.Fatalf("protected public route %s is missing OpenAPI %s security requirement", route, scheme)
+}
+
+func assertOpenAPIRequiredHeader(t *testing.T, route string, operation openAPIOperationSecurity, headerName string, ref string) {
+	t.Helper()
+	for _, parameter := range operation.Parameters {
+		if parameter.Ref == ref {
+			return
+		}
+		if strings.EqualFold(parameter.Name, headerName) && parameter.In == "header" && parameter.Required {
+			return
+		}
+	}
+	t.Fatalf("tenant-scoped public route %s is missing required OpenAPI header %s", route, headerName)
 }
 
 func readOpenAPIOperationSecurity(t *testing.T) map[string]openAPIOperationSecurity {

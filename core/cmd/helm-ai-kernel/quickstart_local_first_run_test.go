@@ -169,6 +169,25 @@ func TestQuickstartOnboardingRequiresTenantPrincipalBinding(t *testing.T) {
 	}
 }
 
+func TestQuickstartOnboardingRejectsExpiredSession(t *testing.T) {
+	runtime := quickstartRouteRuntime()
+	runtime.ExpiresAt = time.Now().UTC().Add(-time.Minute)
+	t.Setenv("HELM_ADMIN_API_KEY", runtime.SessionToken)
+	t.Setenv(runtimeTenantIDEnv, runtime.TenantID)
+	t.Setenv(runtimePrincipalIDEnv, runtime.PrincipalID)
+
+	mux := http.NewServeMux()
+	RegisterLocalFirstRunRoutes(mux, &Services{}, serverOptions{Quickstart: runtime})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/onboarding/state", nil)
+	authorizeQuickstartRequest(req, runtime)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expired-session onboarding status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestQuickstartOnboardingRunStepSignsReceiptAndExportsEvidence(t *testing.T) {
 	runtime := quickstartRouteRuntime()
 	svc, cleanup := newContractRouteTestServices(t)

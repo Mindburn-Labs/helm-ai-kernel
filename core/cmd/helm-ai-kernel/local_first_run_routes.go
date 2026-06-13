@@ -85,6 +85,26 @@ func (q *quickstartRuntime) exchange(token string) (map[string]any, int, string)
 	return q.sessionDocument(), http.StatusOK, ""
 }
 
+func (q *quickstartRuntime) expired() bool {
+	// ExpiresAt is set once in newQuickstartRuntime and never mutated, so it is
+	// safe to read without q.mu (which only guards single-use `used`).
+	return q != nil && time.Now().UTC().After(q.ExpiresAt)
+}
+
+// enforceQuickstartTTL gates a quickstart onboarding handler on the session TTL.
+// The static admin-key check in protectRuntimeHandler never consults the
+// quickstart runtime, so without this the issued bearer token would keep working
+// past ExpiresAt as long as the quickstart server stays up.
+func enforceQuickstartTTL(q *quickstartRuntime, handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if q.expired() {
+			api.WriteUnauthorized(w, "Local quickstart session expired")
+			return
+		}
+		handler(w, r)
+	}
+}
+
 func (q *quickstartRuntime) sessionDocument() map[string]any {
 	return map[string]any{
 		"session_token": q.SessionToken,
@@ -142,14 +162,14 @@ func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverO
 		_ = json.NewEncoder(w).Encode(doc)
 	})
 
-	mux.HandleFunc("/api/v1/onboarding/state", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/onboarding/state", enforceQuickstartTTL(opts.Quickstart, protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
 		writeOnboardingState(w, r, svc, opts, nil)
-	}))
-	mux.HandleFunc("/api/v1/onboarding/run-step", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	})))
+	mux.HandleFunc("/api/v1/onboarding/run-step", enforceQuickstartTTL(opts.Quickstart, protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -172,8 +192,8 @@ func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverO
 			return
 		}
 		writeOnboardingState(w, r, svc, opts, map[string]string{step.ID: receiptRef})
-	}))
-	mux.HandleFunc("/api/v1/onboarding/export", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	})))
+	mux.HandleFunc("/api/v1/onboarding/export", enforceQuickstartTTL(opts.Quickstart, protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -185,7 +205,7 @@ func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverO
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(export)
-	}))
+	})))
 }
 
 func RegisterLocalConsoleAssetRoutes(mux *http.ServeMux, opts serverOptions, bindAddr string, port int) {

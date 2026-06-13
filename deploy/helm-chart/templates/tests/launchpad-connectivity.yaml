@@ -16,8 +16,10 @@ spec:
   imagePullSecrets:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- with .Values.launchpadApps.nodeSelector }}
   nodeSelector:
-    {{- toYaml .Values.launchpadApps.nodeSelector | nindent 4 }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   securityContext:
     runAsNonRoot: true
     runAsUser: 65534

@@ -231,7 +231,7 @@ Run online verification only after offline verification passes:
 | TypeScript / JavaScript | `npm install @mindburn/helm-ai-kernel` | `make test-sdk-ts` |
 | Rust | `cargo add helm-sdk` | `make test-sdk-rust` |
 | Go | source/module path `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go`; pin `@main` or a commit until tagged module releases are aligned | `cd sdk/go && go test ./...` |
-| Java | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.11` | `make test-sdk-java` |
+| Java | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.12` | `make test-sdk-java` |
 
 Use [SDK Index](sdks/00_INDEX.md) before publishing SDK install instructions.
 
@@ -267,9 +267,9 @@ If the `helm` command on your machine resolves to this HELM AI Kernel binary, us
 
 ## Release And Conformance Gates
 
-Current source release target: `v0.5.11`: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.11>.
+Current source release target: `v0.5.12`: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.12>.
 
-The release is complete only after the release page includes Darwin/Linux/Windows binaries, `SHA256SUMS.txt`, `sbom.json`, `v0.5.11.openvex.json`, `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.11.json`, `version-status.json`, and matching `*.cosign.bundle` files for each primary asset.
+The release is complete only after the release page includes Darwin/Linux/Windows binaries, `SHA256SUMS.txt`, `sbom.json`, `v0.5.12.openvex.json`, `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.12.json`, `version-status.json`, and matching `*.cosign.bundle` files for each primary asset.
 
 Run conformance and docs gates:
 

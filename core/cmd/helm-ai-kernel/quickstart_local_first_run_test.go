@@ -150,6 +150,9 @@ func TestQuickstartInstallsGeneratedRuntimeEnv(t *testing.T) {
 	if got := os.Getenv(runtimePrincipalIDEnv); got != runtime.PrincipalID {
 		t.Fatalf("principal env = %q, want %q", got, runtime.PrincipalID)
 	}
+	if got := os.Getenv(quickstartExpiresAtEnv); got != runtime.ExpiresAt.Format(time.RFC3339Nano) {
+		t.Fatalf("quickstart expiry env = %q, want %q", got, runtime.ExpiresAt.Format(time.RFC3339Nano))
+	}
 }
 
 func TestQuickstartLocalSessionExchangeRejectsNonLoopback(t *testing.T) {
@@ -176,6 +179,7 @@ func TestQuickstartOnboardingRejectsExpiredSession(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", runtime.SessionToken)
 	t.Setenv(runtimeTenantIDEnv, runtime.TenantID)
 	t.Setenv(runtimePrincipalIDEnv, runtime.PrincipalID)
+	t.Setenv(quickstartExpiresAtEnv, runtime.ExpiresAt.Format(time.RFC3339Nano))
 
 	mux := http.NewServeMux()
 	RegisterLocalFirstRunRoutes(mux, &Services{}, serverOptions{Quickstart: runtime})

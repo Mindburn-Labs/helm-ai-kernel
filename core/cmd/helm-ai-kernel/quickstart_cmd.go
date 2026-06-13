@@ -95,6 +95,7 @@ func installQuickstartRuntimeEnv(runtime *quickstartRuntime) {
 	_ = os.Setenv(helmauth.AdminAPIKeyEnv, runtime.SessionToken)
 	_ = os.Setenv(runtimeTenantIDEnv, runtime.TenantID)
 	_ = os.Setenv(runtimePrincipalIDEnv, runtime.PrincipalID)
+	_ = os.Setenv(quickstartExpiresAtEnv, runtime.ExpiresAt.Format(time.RFC3339Nano))
 }
 
 func parseQuickstartArgs(args []string, stderr io.Writer) (quickstartOptions, int) {

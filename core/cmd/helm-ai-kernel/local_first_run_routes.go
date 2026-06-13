@@ -149,14 +149,14 @@ func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverO
 		_ = json.NewEncoder(w).Encode(doc)
 	})
 
-	mux.HandleFunc("/api/v1/onboarding/state", protectQuickstartOnboarding(opts.Quickstart, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/onboarding/state", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
 		writeOnboardingState(w, r, svc, opts, nil)
 	}))
-	mux.HandleFunc("/api/v1/onboarding/run-step", protectQuickstartOnboarding(opts.Quickstart, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/onboarding/run-step", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -180,7 +180,7 @@ func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverO
 		}
 		writeOnboardingState(w, r, svc, opts, map[string]string{step.ID: receiptRef})
 	}))
-	mux.HandleFunc("/api/v1/onboarding/export", protectQuickstartOnboarding(opts.Quickstart, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/onboarding/export", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -193,16 +193,6 @@ func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverO
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(export)
 	}))
-}
-
-func protectQuickstartOnboarding(runtime *quickstartRuntime, handler http.HandlerFunc) http.HandlerFunc {
-	return protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
-		if runtime.expired(time.Now()) {
-			api.WriteUnauthorized(w, "Local quickstart session expired")
-			return
-		}
-		handler(w, r)
-	})
 }
 
 func RegisterLocalConsoleAssetRoutes(mux *http.ServeMux, opts serverOptions, bindAddr string, port int) {

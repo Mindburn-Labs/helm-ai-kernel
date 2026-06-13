@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 )
@@ -54,6 +55,65 @@ func TestTenantScopedRuntimeAuthBindsConfiguredTenantAndPrincipal(t *testing.T) 
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("tenant-scoped route with tenant status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestTenantScopedRuntimeAuthRejectsExpiredQuickstartSession(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", "quickstart-session")
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimePrincipalIDEnv, "principal-a")
+	t.Setenv(quickstartExpiresAtEnv, time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano))
+	handler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("tenant-scoped handler should not run after quickstart session expiry")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/evaluate", nil)
+	req.Header.Set("Authorization", "Bearer quickstart-session")
+	req.Header.Set(tenantHeader, "tenant-a")
+	req.Header.Set(principalHeader, "principal-a")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("tenant-scoped route with expired quickstart session status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAdminRuntimeAuthRejectsExpiredQuickstartSession(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", "quickstart-session")
+	t.Setenv(quickstartExpiresAtEnv, time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano))
+	handler := protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("admin handler should not run after quickstart session expiry")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/console/diagnostics", nil)
+	req.Header.Set("Authorization", "Bearer quickstart-session")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("admin route with expired quickstart session status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestTenantScopedRuntimeAuthAllowsUnexpiredQuickstartSession(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", "quickstart-session")
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimePrincipalIDEnv, "principal-a")
+	t.Setenv(quickstartExpiresAtEnv, time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano))
+	handler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/evaluate", nil)
+	req.Header.Set("Authorization", "Bearer quickstart-session")
+	req.Header.Set(tenantHeader, "tenant-a")
+	req.Header.Set(principalHeader, "principal-a")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("tenant-scoped route with unexpired quickstart session status = %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

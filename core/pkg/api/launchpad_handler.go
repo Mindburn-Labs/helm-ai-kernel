@@ -100,6 +100,10 @@ func (s *Server) handleLaunchpadRunPath(w http.ResponseWriter, r *http.Request, 
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 			return
 		}
+		if !launchpadRunAuthorized(r, run) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "not authorized for this launch"})
+			return
+		}
 		writeJSON(w, http.StatusOK, run)
 		return
 	}
@@ -107,6 +111,10 @@ func (s *Server) handleLaunchpadRunPath(w http.ResponseWriter, r *http.Request, 
 		run, err := store.Get(launchID)
 		if err != nil {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		if !launchpadRunAuthorized(r, run) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "not authorized for this launch"})
 			return
 		}
 		diagnostics := []repair.Diagnostic{{Code: "ERR_REPAIR_REQUIRES_OPERATOR_APPROVAL", Message: "repair is deterministic planning only until operator approval is recorded"}}
@@ -122,7 +130,10 @@ func (s *Server) handleLaunchpadRunPath(w http.ResponseWriter, r *http.Request, 
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 			return
 		}
-		_ = run
+		if !launchpadRunAuthorized(r, run) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "not authorized for this launch"})
+			return
+		}
 		deleted, err := session.NewExecutor(store).DeleteLaunch(launchID, true)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -166,4 +177,16 @@ func coalesce(left, right string) string {
 		return left
 	}
 	return right
+}
+
+// launchpadRunAuthorized reports whether the authenticated principal bound to the
+// request owns the given launch run. Launchpad runs are addressed by caller-supplied
+// IDs, so every read or mutation by ID must be scoped to the owning principal to
+// prevent cross-principal access (IDOR). Fails closed when no principal is bound.
+func launchpadRunAuthorized(r *http.Request, run session.LaunchRun) bool {
+	principal, ok := AuthenticatedPrincipalFromContext(r.Context())
+	if !ok || principal.ID == "" {
+		return false
+	}
+	return run.Principal == principal.ID
 }

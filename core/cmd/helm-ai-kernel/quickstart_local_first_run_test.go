@@ -133,6 +133,28 @@ func TestQuickstartLocalSessionExchangeLoopbackOneTimeAndExpiry(t *testing.T) {
 	}
 }
 
+func TestQuickstartInstallsGeneratedRuntimeEnv(t *testing.T) {
+	runtime := quickstartRouteRuntime()
+	t.Setenv("HELM_ADMIN_API_KEY", "external-admin-key")
+	t.Setenv(runtimeTenantIDEnv, "external-tenant")
+	t.Setenv(runtimePrincipalIDEnv, "external-principal")
+
+	installQuickstartRuntimeEnv(runtime)
+
+	if got := os.Getenv("HELM_ADMIN_API_KEY"); got != runtime.SessionToken {
+		t.Fatalf("admin api key = %q, want generated session token", got)
+	}
+	if got := os.Getenv(runtimeTenantIDEnv); got != runtime.TenantID {
+		t.Fatalf("tenant env = %q, want %q", got, runtime.TenantID)
+	}
+	if got := os.Getenv(runtimePrincipalIDEnv); got != runtime.PrincipalID {
+		t.Fatalf("principal env = %q, want %q", got, runtime.PrincipalID)
+	}
+	if got := os.Getenv(quickstartExpiresAtEnv); got != runtime.ExpiresAt.Format(time.RFC3339Nano) {
+		t.Fatalf("quickstart expiry env = %q, want %q", got, runtime.ExpiresAt.Format(time.RFC3339Nano))
+	}
+}
+
 func TestQuickstartLocalSessionExchangeRejectsNonLoopback(t *testing.T) {
 	runtime := &quickstartRuntime{
 		BootstrapToken: "bootstrap-token",
@@ -148,6 +170,26 @@ func TestQuickstartLocalSessionExchangeRejectsNonLoopback(t *testing.T) {
 	rec := postLocalExchange(t, mux, "bootstrap-token", "192.0.2.10:49152")
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("non-loopback status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestQuickstartOnboardingRejectsExpiredSession(t *testing.T) {
+	runtime := quickstartRouteRuntime()
+	runtime.ExpiresAt = time.Now().UTC().Add(-time.Minute)
+	t.Setenv("HELM_ADMIN_API_KEY", runtime.SessionToken)
+	t.Setenv(runtimeTenantIDEnv, runtime.TenantID)
+	t.Setenv(runtimePrincipalIDEnv, runtime.PrincipalID)
+	t.Setenv(quickstartExpiresAtEnv, runtime.ExpiresAt.Format(time.RFC3339Nano))
+
+	mux := http.NewServeMux()
+	RegisterLocalFirstRunRoutes(mux, &Services{}, serverOptions{Quickstart: runtime})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/onboarding/state", nil)
+	authorizeQuickstartRequest(req, runtime)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expired onboarding session status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

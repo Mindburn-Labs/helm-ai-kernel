@@ -69,7 +69,7 @@ func runOnboardCmd(args []string, stdout, stderr io.Writer) int {
 
 	// Step 3: Generate Ed25519 trust root
 	fmt.Fprintf(stdout, "%s[3/5]%s Generating trust root...    ", ColorBold, ColorReset)
-	signer, err := loadOrGenerateSigner()
+	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
 	if err != nil {
 		fmt.Fprintf(stderr, "\n❌ Failed: %v\n", err)
 		return 2

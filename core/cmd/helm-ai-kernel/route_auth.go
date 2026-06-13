@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
@@ -15,6 +16,7 @@ const (
 	principalHeader        = "X-Helm-Principal-ID"
 	runtimeTenantIDEnv     = "HELM_RUNTIME_TENANT_ID"
 	runtimePrincipalIDEnv  = "HELM_RUNTIME_PRINCIPAL_ID"
+	quickstartExpiresAtEnv = "HELM_QUICKSTART_SESSION_EXPIRES_AT"
 	defaultRuntimeTenantID = "default"
 	serviceAPIKeyEnv       = "HELM_SERVICE_API_KEY"
 	servicePrincipalID     = "service-internal"
@@ -43,6 +45,10 @@ func requireRuntimeAdmin(handler http.HandlerFunc) http.HandlerFunc {
 			api.WriteUnauthorized(w, detail)
 			return
 		}
+		if expired, configured := quickstartSessionExpired(time.Now()); configured && expired {
+			api.WriteUnauthorized(w, "Local quickstart session expired")
+			return
+		}
 		handler(w, r.WithContext(helmauth.WithPrincipal(r.Context(), principal)))
 	}
 }
@@ -53,6 +59,10 @@ func requireRuntimeTenant(handler http.HandlerFunc) http.HandlerFunc {
 		adminPrincipal, detail, ok := helmauth.AdminPrincipalFromRequest(r, adminKey)
 		if !ok {
 			api.WriteUnauthorized(w, detail)
+			return
+		}
+		if expired, configured := quickstartSessionExpired(time.Now()); configured && expired {
+			api.WriteUnauthorized(w, "Local quickstart session expired")
 			return
 		}
 
@@ -102,6 +112,18 @@ func configuredRuntimePrincipalID(adminPrincipal helmauth.Principal) string {
 		return principalID
 	}
 	return strings.TrimSpace(adminPrincipal.GetID())
+}
+
+func quickstartSessionExpired(now time.Time) (bool, bool) {
+	raw := strings.TrimSpace(os.Getenv(quickstartExpiresAtEnv))
+	if raw == "" {
+		return false, false
+	}
+	expiresAt, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		return true, true
+	}
+	return !now.UTC().Before(expiresAt.UTC()), true
 }
 
 func requireRuntimeService(handler http.HandlerFunc) http.HandlerFunc {

@@ -72,7 +72,7 @@ func (q *quickstartRuntime) exchange(token string) (map[string]any, int, string)
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if time.Now().UTC().After(q.ExpiresAt) {
+	if q.expired(time.Now()) {
 		return nil, http.StatusUnauthorized, "local quickstart token expired"
 	}
 	if q.used {
@@ -94,6 +94,13 @@ func (q *quickstartRuntime) sessionDocument() map[string]any {
 		"expires_at":    q.ExpiresAt.Format(time.RFC3339),
 		"entitlements":  []string{"OSS_CORE"},
 	}
+}
+
+func (q *quickstartRuntime) expired(now time.Time) bool {
+	if q == nil {
+		return true
+	}
+	return !now.UTC().Before(q.ExpiresAt)
 }
 
 func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverOptions) {

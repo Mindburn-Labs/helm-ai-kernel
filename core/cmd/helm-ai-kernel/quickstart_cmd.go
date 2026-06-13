@@ -57,15 +57,7 @@ func runQuickstartCmd(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	if os.Getenv(helmauth.AdminAPIKeyEnv) == "" {
-		_ = os.Setenv(helmauth.AdminAPIKeyEnv, prepared.Runtime.SessionToken)
-	}
-	if os.Getenv(runtimeTenantIDEnv) == "" {
-		_ = os.Setenv(runtimeTenantIDEnv, prepared.Runtime.TenantID)
-	}
-	if os.Getenv(runtimePrincipalIDEnv) == "" {
-		_ = os.Setenv(runtimePrincipalIDEnv, prepared.Runtime.PrincipalID)
-	}
+	installQuickstartRuntimeEnv(prepared.Runtime)
 
 	runServerWithOptions(serverOptions{
 		Mode:              "quickstart",
@@ -94,6 +86,16 @@ func runQuickstartCmd(args []string, stdout, stderr io.Writer) int {
 		Stderr: stderr,
 	})
 	return 0
+}
+
+func installQuickstartRuntimeEnv(runtime *quickstartRuntime) {
+	if runtime == nil {
+		return
+	}
+	_ = os.Setenv(helmauth.AdminAPIKeyEnv, runtime.SessionToken)
+	_ = os.Setenv(runtimeTenantIDEnv, runtime.TenantID)
+	_ = os.Setenv(runtimePrincipalIDEnv, runtime.PrincipalID)
+	_ = os.Setenv(quickstartExpiresAtEnv, runtime.ExpiresAt.Format(time.RFC3339Nano))
 }
 
 func parseQuickstartArgs(args []string, stderr io.Writer) (quickstartOptions, int) {

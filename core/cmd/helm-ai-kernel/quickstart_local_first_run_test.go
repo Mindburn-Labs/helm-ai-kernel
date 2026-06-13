@@ -269,6 +269,41 @@ func TestQuickstartServesSameOriginConsoleSPA(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "HELM Console") {
 		t.Fatalf("console did not serve index.html: %s", rec.Body.String())
 	}
+
+	assetReq := httptest.NewRequest(http.MethodGet, "/console/assets/app.js", nil)
+	assetRec := httptest.NewRecorder()
+	mux.ServeHTTP(assetRec, assetReq)
+	if assetRec.Code != http.StatusOK {
+		t.Fatalf("asset status=%d body=%s", assetRec.Code, assetRec.Body.String())
+	}
+	if !strings.Contains(assetRec.Body.String(), "console asset") {
+		t.Fatalf("console did not serve nested asset: %s", assetRec.Body.String())
+	}
+}
+
+func TestQuickstartConsoleAssetServerRejectsTraversal(t *testing.T) {
+	consoleAssets := makeConsoleAssets(t)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(consoleAssets), "secret.txt"), []byte("outside root"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	assetPaths, err := discoverConsoleAssetPaths(consoleAssets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := spaFileServer(consoleAssets, assetPaths)
+
+	req := httptest.NewRequest(http.MethodGet, "/../secret.txt", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("traversal fallback status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "outside root") {
+		t.Fatalf("traversal request served file outside console root: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "HELM Console") {
+		t.Fatalf("traversal request did not fall back to index.html: %s", rec.Body.String())
+	}
 }
 
 func postLocalExchange(t *testing.T, mux *http.ServeMux, token string, remoteAddr string) *httptest.ResponseRecorder {
@@ -301,6 +336,12 @@ func makeConsoleAssets(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<!doctype html><title>HELM Console</title>"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "assets"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "assets", "app.js"), []byte("console asset"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	return dir

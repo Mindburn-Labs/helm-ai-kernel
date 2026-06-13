@@ -9,9 +9,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -188,11 +190,19 @@ func RegisterLocalConsoleAssetRoutes(mux *http.ServeMux, opts serverOptions, bin
 	if assets == "" {
 		return
 	}
-	info, err := os.Stat(assets)
+	assetRoot, err := filepath.Abs(assets)
+	if err != nil {
+		return
+	}
+	info, err := os.Stat(assetRoot)
 	if err != nil || !info.IsDir() {
 		return
 	}
-	handler := spaFileServer(assets)
+	assetPaths, err := discoverConsoleAssetPaths(assetRoot)
+	if err != nil {
+		return
+	}
+	handler := spaFileServer(assetRoot, assetPaths)
 	mux.HandleFunc("/console", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/console/", http.StatusTemporaryRedirect)
 	})
@@ -201,22 +211,74 @@ func RegisterLocalConsoleAssetRoutes(mux *http.ServeMux, opts serverOptions, bin
 	_ = port
 }
 
-func spaFileServer(root string) http.Handler {
+func spaFileServer(root string, assetPaths map[string]struct{}) http.Handler {
 	fileServer := http.FileServer(http.Dir(root))
 	indexPath := filepath.Join(root, "index.html")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		clean := filepath.Clean(strings.TrimPrefix(r.URL.Path, "/"))
-		if clean == "." || clean == "/" {
-			http.ServeFile(w, r, indexPath)
+		assetPath, ok := localConsoleAssetPath(r.URL.Path)
+		if !ok || assetPath == "" {
+			serveConsoleIndex(w, r, indexPath)
 			return
 		}
-		path := filepath.Join(root, clean)
-		if info, err := os.Stat(path); err == nil && !info.IsDir() {
-			fileServer.ServeHTTP(w, r)
+		if _, ok := assetPaths[assetPath]; ok {
+			assetReq := r.Clone(r.Context())
+			assetURL := *r.URL
+			assetURL.Path = "/" + assetPath
+			assetURL.RawPath = ""
+			assetReq.URL = &assetURL
+			fileServer.ServeHTTP(w, assetReq)
 			return
 		}
-		http.ServeFile(w, r, indexPath)
+		serveConsoleIndex(w, r, indexPath)
 	})
+}
+
+func serveConsoleIndex(w http.ResponseWriter, r *http.Request, indexPath string) {
+	indexReq := r.Clone(r.Context())
+	indexURL := *r.URL
+	indexURL.Path = "/"
+	indexURL.RawPath = ""
+	indexReq.URL = &indexURL
+	http.ServeFile(w, indexReq, indexPath)
+}
+
+func discoverConsoleAssetPaths(root string) (map[string]struct{}, error) {
+	paths := make(map[string]struct{})
+	err := filepath.WalkDir(root, func(filePath string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !entry.Type().IsRegular() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, filePath)
+		if err != nil || rel == "." {
+			return err
+		}
+		paths[filepath.ToSlash(rel)] = struct{}{}
+		return nil
+	})
+	return paths, err
+}
+
+func localConsoleAssetPath(rawPath string) (string, bool) {
+	if strings.Contains(rawPath, "\\") {
+		return "", false
+	}
+	trimmed := strings.TrimPrefix(rawPath, "/")
+	if trimmed == "" {
+		return "", true
+	}
+	for _, segment := range strings.Split(trimmed, "/") {
+		if segment == ".." {
+			return "", false
+		}
+	}
+	clean := strings.TrimPrefix(path.Clean("/"+trimmed), "/")
+	if clean == "." {
+		return "", true
+	}
+	return clean, true
 }
 
 type onboardingStep struct {

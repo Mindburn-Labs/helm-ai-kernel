@@ -88,7 +88,7 @@ curl http://127.0.0.1:7714/healthz
 export HELM_URL=http://127.0.0.1:7714
 ```
 
-`helm-ai-kernel server` still defaults to `127.0.0.1:8080`. The public quickstart uses `helm-ai-kernel serve --policy ./release.high_risk.v3.toml`, which defaults to `127.0.0.1:7714`.
+`helm-ai-kernel server` still defaults to `127.0.0.1:8080`. The public quickstart uses `helm-ai-kernel quickstart`, which defaults to `127.0.0.1:7714`.
 The separate `helm-ai-kernel server` health endpoint uses `HELM_HEALTH_PORT` or `8081`;
 `helm-ai-kernel health` checks that health endpoint, not the main API port.
 

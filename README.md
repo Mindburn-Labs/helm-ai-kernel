@@ -77,7 +77,9 @@ but cannot grant itself authority. Setup is near-zero-touch by design —
 adoption friction is a security property:
 
 ```bash
-helm-ai-kernel onboard    # one command: local store + trust root + config,
+helm-ai-kernel quickstart # one command: local Kernel + same-origin Console,
+                          # backend-owned proof flow, no cloud account needed
+helm-ai-kernel onboard    # terminal-only local store + trust root + config,
                           # plus auto-detection of agent SDKs and MCP configs
 helm-ai-kernel scan       # boundary grade: what runs ungoverned here?
 helm-ai-kernel proxy --upstream <openai-compatible-url>   # wrap an agent
@@ -109,6 +111,15 @@ enforcement automatically.
 - Talk to Mindburn Labs about production execution authority: [Console](https://console.helm.mindburn.org?utm_source=github&utm_medium=readme&utm_campaign=oss-traction)
 
 ## Launchpad And Console
+
+Run the local OSS proof first:
+
+```bash
+helm-ai-kernel quickstart
+```
+
+After that proof succeeds, use hosted Console pairing when you want account,
+Launchpad, or commercial workflows:
 
 ```bash
 brew install mindburnlabs/tap/helm-ai-kernel

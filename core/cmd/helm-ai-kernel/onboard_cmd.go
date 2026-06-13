@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shadow"
 )
@@ -58,7 +59,7 @@ func runOnboardCmd(args []string, stdout, stderr io.Writer) int {
 	// Step 2: Initialize SQLite
 	fmt.Fprintf(stdout, "%s[2/5]%s Initializing local store...  ", ColorBold, ColorReset)
 	ctx := context.Background()
-	db, _, _, err := setupLiteMode(ctx)
+	db, _, _, err := setupLiteModeWithDataDir(ctx, dataDir)
 	if err != nil {
 		fmt.Fprintf(stderr, "\n❌ Failed: %v\n", err)
 		return 2
@@ -85,7 +86,7 @@ version: "0.2"
 kernel:
   profile: CORE
   store: sqlite
-  data_dir: data
+  data_dir: ` + strconv.Quote(dataDir) + `
 trust:
   root_public_key: "` + pubKeyHex + `"
 `

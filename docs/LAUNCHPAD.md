@@ -1,13 +1,15 @@
 ---
 title: HELM Launchpad
-last_reviewed: 2026-05-24
+last_reviewed: 2026-06-13
 ---
 
 # HELM Launchpad
 
-Run real AI apps through HELM's execution boundary. Register at
-<https://console.helm.mindburn.org>, install the CLI, and pair your workstation
-before launching. Receipts and evidence appear in the Console dashboard.
+Run real AI apps through HELM's execution boundary. Start with
+`helm-ai-kernel quickstart` to prove the local Kernel, same-origin Console,
+receipts, and EvidencePack export. Register at <https://console.helm.mindburn.org>
+and pair your workstation only when you want hosted Launchpad/account workflows.
+Receipts and evidence appear in hosted Console after pairing.
 
 Current local-container support levels:
 

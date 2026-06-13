@@ -20,6 +20,7 @@ func TestOpenAPIPathsAreRegisteredByHelmServeRuntime(t *testing.T) {
 	defer cleanup()
 	RegisterSubsystemRoutes(mux, svc)
 	RegisterConsoleRoutes(mux, svc, serverOptions{Mode: "serve", PolicyPath: "policy.toml"})
+	RegisterLocalFirstRunRoutes(mux, svc, serverOptions{Mode: "quickstart", BindAddr: "127.0.0.1", Port: 7714, Quickstart: quickstartRouteRuntime()})
 
 	for _, spec := range PublicRuntimeRouteSpecs() {
 		path := representativeRuntimePath(spec.Path)
@@ -97,6 +98,7 @@ func TestProtectedRuntimeHandlersAreDeclaredInRouteRegistry(t *testing.T) {
 		"subsystems.go",
 		"receipt_routes.go",
 		"console_routes.go",
+		"local_first_run_routes.go",
 		"console_agui_routes.go",
 		"launchpad_routes.go",
 		"contract_routes.go",

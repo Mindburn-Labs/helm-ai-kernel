@@ -8,27 +8,27 @@
     {
       "name": "openclaw",
       "role": "launchpad_app",
-      "image": "ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995",
+      "image": "ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:3c8c7069b9b8e69f584adc7de34b42a3f2b2721a19c069af342e1cbd7cf6d9af",
       "repository": "ghcr.io/mindburn-labs/helm-launchpad/openclaw",
-      "digest": "sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995",
+      "digest": "sha256:3c8c7069b9b8e69f584adc7de34b42a3f2b2721a19c069af342e1cbd7cf6d9af",
       "source": "registry/launchpad/apps/openclaw.yaml",
       "preload": true
     },
     {
       "name": "hermes",
       "role": "launchpad_app",
-      "image": "ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652",
+      "image": "ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:2dc8aea12cc42c850ef84ef5bd27790e80818a303e3b398a0eca50b4850075d7",
       "repository": "ghcr.io/mindburn-labs/helm-launchpad/hermes",
-      "digest": "sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652",
+      "digest": "sha256:2dc8aea12cc42c850ef84ef5bd27790e80818a303e3b398a0eca50b4850075d7",
       "source": "registry/launchpad/apps/hermes.yaml",
       "preload": true
     },
     {
       "name": "egress-proxy",
       "role": "egress_proxy",
-      "image": "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:395cd585d0e2345e649455953f0d7765b141440bfb2fc753a4ae944e2ba350f8",
+      "image": "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:a997086e0f589173ae87e1575d03b9194afbb87196203226a9e62af7bc160312",
       "repository": "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy",
-      "digest": "sha256:395cd585d0e2345e649455953f0d7765b141440bfb2fc753a4ae944e2ba350f8",
+      "digest": "sha256:a997086e0f589173ae87e1575d03b9194afbb87196203226a9e62af7bc160312",
       "source": "registry/launchpad/apps/openclaw.yaml",
       "preload": true
     }

@@ -1189,3 +1189,42 @@ func TestCoverageGuardianDecisionEdges(t *testing.T) {
 		t.Fatal("non-string and blank context values should not resolve")
 	}
 }
+
+// TestSignDecisionBindsEffectDigestForIntentIssuance pins the external-caller
+// contract: SignDecision binds the canonical effect digest (the decision
+// signature covers it), so a signed ALLOW decision can issue an execution
+// intent without reaching into package internals.
+func TestSignDecisionBindsEffectDigestForIntentIssuance(t *testing.T) {
+	ctx := context.Background()
+	ruleGraph := prg.NewGraph()
+	if err := ruleGraph.AddRule("bind-tool", prg.RequirementSet{ID: "req-bind", Logic: prg.AND}); err != nil {
+		t.Fatal(err)
+	}
+	g := NewGuardian(&testSigner{}, ruleGraph, nil)
+	effect := &contracts.Effect{
+		EffectID:   "eff-bind",
+		EffectType: "CUSTOM_TOOL",
+		Params:     map[string]interface{}{"tool_name": "bind-tool"},
+	}
+	decision := &contracts.DecisionRecord{ID: "dec-bind", ProposalID: "prop-bind", StepID: "step-bind", Timestamp: time.Now()}
+	if err := g.SignDecision(ctx, decision, effect, nil, nil); err != nil {
+		t.Fatalf("SignDecision: %v", err)
+	}
+	if decision.Verdict != string(contracts.VerdictAllow) {
+		t.Fatalf("verdict = %s reason=%s", decision.Verdict, decision.Reason)
+	}
+	want, err := canonicalEffectDigest(effect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.EffectDigest != want {
+		t.Fatalf("SignDecision must bind the canonical effect digest: got %q want %q", decision.EffectDigest, want)
+	}
+	intent, err := g.IssueExecutionIntent(ctx, decision, effect)
+	if err != nil {
+		t.Fatalf("IssueExecutionIntent after SignDecision: %v", err)
+	}
+	if intent.AllowedTool != "bind-tool" {
+		t.Fatalf("intent tool = %s", intent.AllowedTool)
+	}
+}

@@ -121,7 +121,7 @@ jobs:
           docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:smoke -f ./Dockerfile .
           docker image ls ghcr.io/mindburn-labs/helm-ai-kernel:smoke
 
-      - name: Run positive smoke
+      - name: Run positive smoke with OpenRouter token proof
         env:
           OPENROUTER_API_KEY: ${{ secrets.HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY }}
           LAUNCHPAD_SMOKE_KERNEL_IMAGE: "ghcr.io/mindburn-labs/helm-ai-kernel:smoke"
@@ -135,10 +135,22 @@ jobs:
             exit 0
           fi
           if [[ -z "${OPENROUTER_API_KEY}" ]]; then
-            echo "::warning::HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY secret not configured — skipping positive scenario"
-            exit 0
+            echo "::error::HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY secret not configured; main/dispatch positive smoke cannot be release proof"
+            exit 1
           fi
+          python3 scripts/ci/openrouter_token_meter.py probe \
+            --run "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --case helm-integration-openrouter-probe \
+            --out token-evidence \
+            --min-total 1
           bash scripts/ci/launchpad_k8s_smoke.sh --mode positive
+
+      - name: Upload OpenRouter token evidence
+        if: ${{ always() && env.RUN_LIVE_POSITIVE == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: helm-integration-openrouter-token-evidence
+          path: token-evidence
 
   launchpad-negative:
     name: openclaw + hermes negative (fake key)

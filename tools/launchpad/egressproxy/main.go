@@ -1,14 +1,9 @@
-// helm-launchpad-egress-proxy is the launchpad egress sidecar. It runs as a
-// transparent proxy: an init-container installs an iptables REDIRECT that funnels
-// every outbound TCP connection from the workload container into this listener.
-// For each intercepted connection the proxy recovers the original destination via
-// SO_ORIGINAL_DST, best-effort reads the TLS SNI for a hostname, checks the
-// allowlist, writes a receipt (ALLOW or DENY — every attempt is recorded), and
-// only then tunnels allowed traffic to its real destination.
-//
-// This replaces the earlier HTTP CONNECT forward-proxy model, where egress was
-// honor-based (the workload had to opt in via HTTP_PROXY) and direct connections
-// silently bypassed the sidecar without leaving a receipt.
+// helm-launchpad-egress-proxy is the launchpad egress sidecar. It supports two
+// enforced modes: Kubernetes transparent egress, where an init-container installs
+// an iptables REDIRECT and the proxy recovers SO_ORIGINAL_DST, and Docker
+// local-container egress, where the workload is on an internal network and must
+// use this sidecar through HTTP CONNECT proxy env. In both modes the proxy checks
+// the allowlist, writes a receipt, and only then tunnels allowed traffic.
 package main
 
 import (
@@ -19,6 +14,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -83,6 +79,11 @@ type proxy struct {
 // destination is recovered from the kernel via SO_ORIGINAL_DST; the hostname, when
 // present, comes from the TLS ClientHello SNI without terminating TLS.
 func (p *proxy) handle(client net.Conn) {
+	br := bufio.NewReaderSize(client, 8192)
+	if isConnectRequest(client, br) {
+		p.handleCONNECT(client, br)
+		return
+	}
 	tcp, ok := client.(*net.TCPConn)
 	if !ok {
 		_ = client.Close()
@@ -98,7 +99,6 @@ func (p *proxy) handle(client net.Conn) {
 	// Buffer the client side so the peeked ClientHello bytes are preserved for
 	// forwarding. SNI is best-effort: ECH, non-TLS, or IP-literal traffic yields
 	// no hostname and we fall back to the original IP:port for the allowlist.
-	br := bufio.NewReaderSize(client, 8192)
 	host := sniHost(br)
 	destination := origDst
 	if host != "" {
@@ -124,6 +124,59 @@ func (p *proxy) handle(client net.Conn) {
 	if err != nil {
 		_ = p.writeReceipt("ESCALATE", destination, "upstream_dial_failed")
 		_ = client.Close()
+		return
+	}
+	_ = p.writeReceipt("ALLOW", destination, "connect_allowed")
+	tunnel(client, br, upstream)
+}
+
+func isConnectRequest(conn net.Conn, br *bufio.Reader) bool {
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	head, err := br.Peek(len("CONNECT "))
+	_ = conn.SetReadDeadline(time.Time{})
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(string(head[:len("CONNECT")]), "CONNECT") && head[len("CONNECT")] == ' '
+}
+
+func (p *proxy) handleCONNECT(client net.Conn, br *bufio.Reader) {
+	request, err := http.ReadRequest(br)
+	if err != nil {
+		_ = p.writeReceipt("ESCALATE", "", "connect_request_parse_failed")
+		_ = client.Close()
+		return
+	}
+	if request.Method != http.MethodConnect {
+		_ = p.writeReceipt("DENY", request.Host, "unsupported_proxy_method")
+		_, _ = client.Write([]byte("HTTP/1.1 405 Method Not Allowed\r\n\r\n"))
+		_ = client.Close()
+		return
+	}
+	destination := normalizeDestination(request.Host)
+	if destination == "" && request.URL != nil {
+		destination = normalizeDestination(request.URL.Host)
+	}
+	if !networkAllowed(destination, p.allowlist) {
+		_ = p.writeReceipt("DENY", destination, "destination_not_allowlisted")
+		_, _ = client.Write([]byte("HTTP/1.1 403 Forbidden\r\n\r\n"))
+		_ = client.Close()
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	var d net.Dialer
+	upstream, err := d.DialContext(ctx, "tcp", destination)
+	if err != nil {
+		_ = p.writeReceipt("ESCALATE", destination, "upstream_dial_failed")
+		_, _ = client.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
+		_ = client.Close()
+		return
+	}
+	if _, err := client.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n")); err != nil {
+		_ = upstream.Close()
+		_ = client.Close()
+		_ = p.writeReceipt("ESCALATE", destination, "proxy_connect_response_failed")
 		return
 	}
 	_ = p.writeReceipt("ALLOW", destination, "connect_allowed")

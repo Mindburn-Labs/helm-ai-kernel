@@ -4,14 +4,16 @@ version: v2026.5.12
 legacy_launchpad_ref: registry/launchpad/apps/openclaw.yaml
 availability: oss_supported
 install:
-  strategy: signed_oci
-  image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995
-  digest: sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995
+    strategy: signed_oci
+    image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:3c8c7069b9b8e69f584adc7de34b42a3f2b2721a19c069af342e1cbd7cf6d9af
+    digest: sha256:3c8c7069b9b8e69f584adc7de34b42a3f2b2721a19c069af342e1cbd7cf6d9af
+    source: https://github.com/openclaw/openclaw
+    ref: v2026.5.12
 policy: policy.default.yaml
 secrets: secrets.schema.yaml
 mcp_registry: mcp.registry.yaml
 runtimes:
-  demo: runtime.demo.yaml
-  local: runtime.local.yaml
-  cloud: runtime.cloud.yaml
+    cloud: runtime.cloud.yaml
+    demo: runtime.demo.yaml
+    local: runtime.local.yaml
 evidence_profile: evidence.profile.yaml

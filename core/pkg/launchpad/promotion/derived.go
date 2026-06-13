@@ -61,7 +61,13 @@ func SyncDerived(root string, apps []registry.AppSpec) error {
 	if err := WriteImageLock(root, apps); err != nil {
 		return err
 	}
-	return SyncHelmValues(root, apps)
+	if err := SyncHelmValues(root, apps); err != nil {
+		return err
+	}
+	if err := SyncLaunchKitSpecs(root, apps); err != nil {
+		return err
+	}
+	return SyncMCPManifests(root, apps)
 }
 
 func CheckDerived(root string, apps []registry.AppSpec) []string {
@@ -73,6 +79,12 @@ func CheckDerived(root string, apps []registry.AppSpec) []string {
 		drifts = append(drifts, err.Error())
 	}
 	if err := CheckHelmValues(root, apps); err != nil {
+		drifts = append(drifts, err.Error())
+	}
+	if err := CheckLaunchKitSpecs(root, apps); err != nil {
+		drifts = append(drifts, err.Error())
+	}
+	if err := CheckMCPManifests(root, apps); err != nil {
 		drifts = append(drifts, err.Error())
 	}
 	if err := CheckSmokeScriptUsesImageLock(root); err != nil {
@@ -252,6 +264,108 @@ func CheckHelmValues(root string, apps []registry.AppSpec) error {
 				return fmt.Errorf("helm values drift for %s egress sidecar: got %s@%s want %s@%s", app.ID, chartApp.EgressSidecar.Image.Repository, chartApp.EgressSidecar.Image.Digest, proxyRepo, proxy.Digest)
 			}
 		}
+	}
+	return nil
+}
+
+type derivedLaunchKitAppSpec struct {
+	ID                 string               `yaml:"id"`
+	Name               string               `yaml:"name"`
+	Version            string               `yaml:"version"`
+	LegacyLaunchpadRef string               `yaml:"legacy_launchpad_ref"`
+	Availability       string               `yaml:"availability"`
+	Install            registry.InstallSpec `yaml:"install"`
+	Policy             string               `yaml:"policy"`
+	Secrets            string               `yaml:"secrets"`
+	MCPRegistry        string               `yaml:"mcp_registry"`
+	Runtimes           map[string]string    `yaml:"runtimes"`
+	EvidenceProfile    string               `yaml:"evidence_profile"`
+}
+
+func SyncLaunchKitSpecs(root string, apps []registry.AppSpec) error {
+	if !exists(launchKitRoot(root)) {
+		return nil
+	}
+	for _, app := range apps {
+		path := launchKitAppPath(root, app.ID)
+		var spec derivedLaunchKitAppSpec
+		if err := readYAMLFile(path, &spec); err != nil {
+			return fmt.Errorf("registry/launchkit/apps/%s/helm.app.yaml missing or unreadable: %w", app.ID, err)
+		}
+		spec.Availability = string(app.Availability)
+		spec.Install = app.Install
+		if err := writeYAMLFile(path, spec); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func CheckLaunchKitSpecs(root string, apps []registry.AppSpec) error {
+	if !exists(launchKitRoot(root)) {
+		return nil
+	}
+	var drifts []string
+	for _, app := range apps {
+		path := launchKitAppPath(root, app.ID)
+		var spec derivedLaunchKitAppSpec
+		if err := readYAMLFile(path, &spec); err != nil {
+			drifts = append(drifts, fmt.Sprintf("registry/launchkit/apps/%s/helm.app.yaml missing or unreadable: %v", app.ID, err))
+			continue
+		}
+		if spec.Availability != string(app.Availability) {
+			drifts = append(drifts, fmt.Sprintf("app %s LaunchKit availability drift: got %s want %s", app.ID, spec.Availability, app.Availability))
+		}
+		if spec.Install.Strategy != app.Install.Strategy || spec.Install.Image != app.Install.Image || spec.Install.Digest != app.Install.Digest {
+			drifts = append(drifts, fmt.Sprintf("app %s LaunchKit install drift: got %s/%s/%s want %s/%s/%s", app.ID, spec.Install.Strategy, spec.Install.Image, spec.Install.Digest, app.Install.Strategy, app.Install.Image, app.Install.Digest))
+		}
+	}
+	if len(drifts) > 0 {
+		return fmt.Errorf("registry/launchkit drift: %s", strings.Join(drifts, "; "))
+	}
+	return nil
+}
+
+func SyncMCPManifests(root string, apps []registry.AppSpec) error {
+	for _, app := range apps {
+		for _, ref := range app.MCPManifests {
+			path := mcpManifestPath(root, ref)
+			var manifest registry.MCPServerManifest
+			if err := readYAMLFile(path, &manifest); err != nil {
+				return fmt.Errorf("registry/launchpad/mcp/%s.yaml missing or unreadable: %w", ref, err)
+			}
+			manifest.PackageDigest = app.Install.Digest
+			if app.SupplyChainEvidence.SignatureRef != "" {
+				manifest.SignatureRef = app.SupplyChainEvidence.SignatureRef
+			}
+			if err := writeYAMLFile(path, manifest); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func CheckMCPManifests(root string, apps []registry.AppSpec) error {
+	var drifts []string
+	for _, app := range apps {
+		for _, ref := range app.MCPManifests {
+			path := mcpManifestPath(root, ref)
+			var manifest registry.MCPServerManifest
+			if err := readYAMLFile(path, &manifest); err != nil {
+				drifts = append(drifts, fmt.Sprintf("registry/launchpad/mcp/%s.yaml missing or unreadable: %v", ref, err))
+				continue
+			}
+			if manifest.PackageDigest != app.Install.Digest {
+				drifts = append(drifts, fmt.Sprintf("app %s MCP manifest %q package_digest drift: got %s want %s", app.ID, ref, manifest.PackageDigest, app.Install.Digest))
+			}
+			if app.SupplyChainEvidence.SignatureRef != "" && manifest.SignatureRef != app.SupplyChainEvidence.SignatureRef {
+				drifts = append(drifts, fmt.Sprintf("app %s MCP manifest %q signature_ref drift: got %s want %s", app.ID, ref, manifest.SignatureRef, app.SupplyChainEvidence.SignatureRef))
+			}
+		}
+	}
+	if len(drifts) > 0 {
+		return fmt.Errorf("registry/launchpad/mcp drift: %s", strings.Join(drifts, "; "))
 	}
 	return nil
 }
@@ -495,4 +609,40 @@ func imageLockPath(root string) string {
 
 func helmValuesPath(root string) string {
 	return filepath.Join(root, "deploy", "helm-chart", "values.yaml")
+}
+
+func launchKitRoot(root string) string {
+	return filepath.Join(root, "registry", "launchkit", "apps")
+}
+
+func launchKitAppPath(root, appID string) string {
+	return filepath.Join(launchKitRoot(root), appID, "helm.app.yaml")
+}
+
+func mcpManifestPath(root, ref string) string {
+	return filepath.Join(root, "registry", "launchpad", "mcp", ref+".yaml")
+}
+
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func readYAMLFile(path string, out any) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if err := yaml.Unmarshal(data, out); err != nil {
+		return fmt.Errorf("parse error: %w", err)
+	}
+	return nil
+}
+
+func writeYAMLFile(path string, value any) error {
+	data, err := yaml.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
 }

@@ -51,13 +51,13 @@ flowchart TD
 ```
 
 
-Current source release target: `v0.5.11`:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.11>. The
+Current source release target: `v0.5.12`:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.12>. The
 release is complete only when GitHub shows Darwin/Linux/Windows binaries,
-`SHA256SUMS.txt`, `sbom.json`, `v0.5.11.openvex.json`,
+`SHA256SUMS.txt`, `sbom.json`, `v0.5.12.openvex.json`,
 `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`,
 `sample-policy-material.tar`, `helm-ai-kernel-launchpad-data.tar`,
-`helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.11.json`,
+`helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.12.json`,
 `version-status.json`, and matching `*.cosign.bundle` files for each primary
 asset.
 

@@ -180,6 +180,13 @@
       "replacement": "Current source release target: `v{version}`"
     },
     {
+      "id": "verification-doc-complete-release",
+      "path": "docs/VERIFICATION.md",
+      "kind": "regex",
+      "pattern": "The `v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)` release is complete",
+      "replacement": "The `v{version}` release is complete"
+    },
+    {
       "id": "verification-doc-release-url",
       "path": "docs/VERIFICATION.md",
       "kind": "regex",
@@ -271,6 +278,41 @@
       "replacement": "v{version}.\\g<2>"
     },
     {
+      "id": "developer-journey-java-coordinate",
+      "path": "docs/DEVELOPER_JOURNEY.md",
+      "kind": "regex",
+      "pattern": "io\\.github\\.mindburnlabs:helm-sdk:(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "io.github.mindburnlabs:helm-sdk:{version}"
+    },
+    {
+      "id": "sdk-index-java-coordinate",
+      "path": "docs/sdks/00_INDEX.md",
+      "kind": "regex",
+      "pattern": "io\\.github\\.mindburnlabs:helm-sdk:(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "io.github.mindburnlabs:helm-sdk:{version}"
+    },
+    {
+      "id": "sdk-index-source-version-claims",
+      "path": "docs/sdks/00_INDEX.md",
+      "kind": "regex",
+      "pattern": "VERSION` \\(`(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)` for this release\\)",
+      "replacement": "VERSION` (`{version}` for this release)"
+    },
+    {
+      "id": "sdk-index-java-dependency-version",
+      "path": "docs/sdks/00_INDEX.md",
+      "kind": "regex",
+      "pattern": "<version>(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)</version>",
+      "replacement": "<version>{version}</version>"
+    },
+    {
+      "id": "examples-java-coordinate",
+      "path": "docs/EXAMPLES.md",
+      "kind": "regex",
+      "pattern": "io\\.github\\.mindburnlabs:helm-sdk:(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "io.github.mindburnlabs:helm-sdk:{version}"
+    },
+    {
       "id": "kubernetes-deployment-chart-default",
       "path": "docs/KUBERNETES_DEPLOYMENT.md",
       "kind": "regex",
@@ -290,6 +332,13 @@
       "kind": "regex",
       "pattern": "RELEASE_TAG=\"v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\"",
       "replacement": "RELEASE_TAG=\"v{version}\""
+    },
+    {
+      "id": "launchpad-clean-install-script-usage-default",
+      "path": "scripts/launch/clean_install_gate.sh",
+      "kind": "regex",
+      "pattern": "default: v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "default: v{version}"
     },
     {
       "id": "launchpad-clean-install-workflow-default",

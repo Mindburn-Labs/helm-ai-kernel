@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-13T11:40:15Z
-# Commit: b34f658c86da4d17946d310e45c11eab96609ac2
+# Generated: 2026-06-13T16:38:31Z
+# Commit: 04376c7d06748310b752eaf8cfa848562ebc8474
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -881,7 +881,7 @@ b5b0ad4ea4a936f16ab4bd82e6cfed5e8b52c3c1a9eb2ce30d5043f0c1939aa3  protocols/spec
 7495bc08d4567893585e139996edd9b6f7dbc9bb43dab7a4a5637ba1b1a5bb22  protocols/specs/commit/commit_token.v1.schema.json
 bb7362eb5130500f5751ea9dc761ce762cc8ad4bdcdcb1d9aa11e847dc44e88e  protocols/specs/context-capsule/context_capsule.v1.schema.json
 c64f6ab6e62d47460908d412efaf38c0a628065a6417c4e0f38e03778ed25c8f  protocols/specs/decision-record/decision_record.v1.schema.json
-567157ff7cbdb6df88e2edd2561c50c8acf96fe7d2e52ea8864e568d1f3db196  protocols/specs/effects/openapi.yaml
+ef0e9b1c502312c92c0ddf58b96bebf51be2c3ab990cb929635d467cd56a3c06  protocols/specs/effects/openapi.yaml
 eaf47ea80329b55ea5a4c4f6e24c94e71d02c9331f804a91e614d296febad91f  protocols/specs/effects/taxonomy.md
 de0c086ae6fc3f8eaadeabc5cbea9bd3574ed06299e31c191ac149f23e2a97b8  protocols/specs/observations/observation_artifact.v1.schema.json
 8f012b8b85b82c7533561abb94160108587648859ceecffa802f3df86f249b77  protocols/specs/rfc/artifact-versioning-v1.md

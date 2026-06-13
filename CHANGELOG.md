@@ -75,6 +75,22 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - **zkVM Guest Safety Checker**: Introduced the `ZKVMGuestSafetyChecker` and `SafetyGuestProgram` inside `pkg/crypto/zk` to simulate AST static analysis inside zero-knowledge execution enclaves.
 - **TEE Secrets Enclave**: Introduced `SovereignKMSVault` and `SecretProxyFilter` inside `pkg/crypto/tee` to enforce hardware-sealed secrets isolation and inline proxy token injection with constant-time verification.
 
+## [0.5.12] - 2026-06-13
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.12>.
+
+- Published the lockstep `0.5.12` release surfaces across the CLI, Helm chart,
+  OpenAPI metadata, SDK package manifests, generated SDK headers, verification
+  docs, Launchpad clean-install defaults, and release security references.
+- Promoted signed Launchpad image references after the multi-arch artifact
+  pipeline produced current OpenClaw, Hermes, OpenCode, Kilo Code, and egress
+  proxy artifacts.
+- Fixed the live OpenRouter/OpenClaw smoke path by proving token reachability
+  before the positive Kubernetes smoke and by preserving Helm test logs long
+  enough for CI diagnostics.
+- Bound `SignDecision` to the canonical effect digest and authenticated release
+  setup-protoc lookups to keep the release validation lane deterministic.
+
 ## [0.5.10] - 2026-06-04
 
 Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.10>.

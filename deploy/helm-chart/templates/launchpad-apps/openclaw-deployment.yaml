@@ -80,6 +80,22 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.openrouter.apiKeySecretRef.name | quote }}
                   key: {{ .Values.openrouter.apiKeySecretRef.key | quote }}
+            # Route openclaw's OpenAI-compatible agent calls through OpenRouter —
+            # the only host the egress allowlist permits. openclaw's built-in agent
+            # model defaults to the `openai/*` provider, which dials api.openai.com
+            # directly; under the transparent-egress REDIRECT that connection is
+            # dropped ("stream disconnected before completion"), so the embedded
+            # agent fails. OpenRouter is OpenAI-API-compatible, so pointing
+            # OPENAI_BASE_URL at it (authenticated with the same OpenRouter key)
+            # makes those calls leave through the allowed host. Mirrors hermes,
+            # which already runs `--provider openrouter`.
+            - name: OPENAI_BASE_URL
+              value: "https://openrouter.ai/api/v1"
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.openrouter.apiKeySecretRef.name | quote }}
+                  key: {{ .Values.openrouter.apiKeySecretRef.key | quote }}
           ports:
             - name: gateway
               containerPort: {{ $cfg.gatewayPort }}

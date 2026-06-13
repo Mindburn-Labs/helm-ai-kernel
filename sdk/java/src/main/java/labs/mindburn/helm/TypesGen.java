@@ -5,6 +5,7 @@ package labs.mindburn.helm;
 
 import java.io.IOException;
 import java.util.*;
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.math.BigDecimal;
@@ -41260,6 +41261,939 @@ public static class ListLaunchpadSubstrates200Response {
 
 
 /**
+ * LocalConsoleRuntimeConfig
+ */
+@JsonPropertyOrder({
+  LocalConsoleRuntimeConfig.JSON_PROPERTY_API_BASE_URL,
+  LocalConsoleRuntimeConfig.JSON_PROPERTY_LOCAL_MODE,
+  LocalConsoleRuntimeConfig.JSON_PROPERTY_START_ONBOARDING,
+  LocalConsoleRuntimeConfig.JSON_PROPERTY_TENANT_ID,
+  LocalConsoleRuntimeConfig.JSON_PROPERTY_PRINCIPAL_ID,
+  LocalConsoleRuntimeConfig.JSON_PROPERTY_PROFILE,
+  LocalConsoleRuntimeConfig.JSON_PROPERTY_ENTITLEMENTS
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class LocalConsoleRuntimeConfig {
+  public static final String JSON_PROPERTY_API_BASE_URL = "api_base_url";
+  private URI apiBaseUrl;
+
+  public static final String JSON_PROPERTY_LOCAL_MODE = "local_mode";
+  private Boolean localMode;
+
+  public static final String JSON_PROPERTY_START_ONBOARDING = "start_onboarding";
+  private Boolean startOnboarding;
+
+  public static final String JSON_PROPERTY_TENANT_ID = "tenant_id";
+  private String tenantId;
+
+  public static final String JSON_PROPERTY_PRINCIPAL_ID = "principal_id";
+  private String principalId;
+
+  /**
+   * Gets or Sets profile
+   */
+  public enum ProfileEnum {
+    CLAUDE("claude"),
+
+    CODEX("codex"),
+
+    MCP("mcp"),
+
+    OPENAI_COMPATIBLE("openai-compatible");
+
+    private String value;
+
+    ProfileEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static ProfileEnum fromValue(String value) {
+      for (ProfileEnum b : ProfileEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_PROFILE = "profile";
+  private ProfileEnum profile;
+
+  /**
+   * Gets or Sets entitlements
+   */
+  public enum EntitlementsEnum {
+    OSS_CORE("OSS_CORE");
+
+    private String value;
+
+    EntitlementsEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static EntitlementsEnum fromValue(String value) {
+      for (EntitlementsEnum b : EntitlementsEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_ENTITLEMENTS = "entitlements";
+  private List<EntitlementsEnum> entitlements = new ArrayList<>();
+
+  public LocalConsoleRuntimeConfig() {
+  }
+
+  public LocalConsoleRuntimeConfig apiBaseUrl(URI apiBaseUrl) {
+    this.apiBaseUrl = apiBaseUrl;
+    return this;
+  }
+
+   /**
+   * Get apiBaseUrl
+   * @return apiBaseUrl
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_API_BASE_URL)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public URI getApiBaseUrl() {
+    return apiBaseUrl;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_API_BASE_URL)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setApiBaseUrl(URI apiBaseUrl) {
+    this.apiBaseUrl = apiBaseUrl;
+  }
+
+
+  public LocalConsoleRuntimeConfig localMode(Boolean localMode) {
+    this.localMode = localMode;
+    return this;
+  }
+
+   /**
+   * Get localMode
+   * @return localMode
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_LOCAL_MODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public Boolean getLocalMode() {
+    return localMode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_LOCAL_MODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setLocalMode(Boolean localMode) {
+    this.localMode = localMode;
+  }
+
+
+  public LocalConsoleRuntimeConfig startOnboarding(Boolean startOnboarding) {
+    this.startOnboarding = startOnboarding;
+    return this;
+  }
+
+   /**
+   * Get startOnboarding
+   * @return startOnboarding
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_START_ONBOARDING)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public Boolean getStartOnboarding() {
+    return startOnboarding;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_START_ONBOARDING)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setStartOnboarding(Boolean startOnboarding) {
+    this.startOnboarding = startOnboarding;
+  }
+
+
+  public LocalConsoleRuntimeConfig tenantId(String tenantId) {
+    this.tenantId = tenantId;
+    return this;
+  }
+
+   /**
+   * Get tenantId
+   * @return tenantId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_TENANT_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getTenantId() {
+    return tenantId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TENANT_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setTenantId(String tenantId) {
+    this.tenantId = tenantId;
+  }
+
+
+  public LocalConsoleRuntimeConfig principalId(String principalId) {
+    this.principalId = principalId;
+    return this;
+  }
+
+   /**
+   * Get principalId
+   * @return principalId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getPrincipalId() {
+    return principalId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setPrincipalId(String principalId) {
+    this.principalId = principalId;
+  }
+
+
+  public LocalConsoleRuntimeConfig profile(ProfileEnum profile) {
+    this.profile = profile;
+    return this;
+  }
+
+   /**
+   * Get profile
+   * @return profile
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_PROFILE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public ProfileEnum getProfile() {
+    return profile;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PROFILE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setProfile(ProfileEnum profile) {
+    this.profile = profile;
+  }
+
+
+  public LocalConsoleRuntimeConfig entitlements(List<EntitlementsEnum> entitlements) {
+    this.entitlements = entitlements;
+    return this;
+  }
+
+  public LocalConsoleRuntimeConfig addEntitlementsItem(EntitlementsEnum entitlementsItem) {
+    if (this.entitlements == null) {
+      this.entitlements = new ArrayList<>();
+    }
+    this.entitlements.add(entitlementsItem);
+    return this;
+  }
+
+   /**
+   * Get entitlements
+   * @return entitlements
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_ENTITLEMENTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public List<EntitlementsEnum> getEntitlements() {
+    return entitlements;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ENTITLEMENTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setEntitlements(List<EntitlementsEnum> entitlements) {
+    this.entitlements = entitlements;
+  }
+
+
+  /**
+   * Return true if this LocalConsoleRuntimeConfig object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    LocalConsoleRuntimeConfig localConsoleRuntimeConfig = (LocalConsoleRuntimeConfig) o;
+    return Objects.equals(this.apiBaseUrl, localConsoleRuntimeConfig.apiBaseUrl) &&
+        Objects.equals(this.localMode, localConsoleRuntimeConfig.localMode) &&
+        Objects.equals(this.startOnboarding, localConsoleRuntimeConfig.startOnboarding) &&
+        Objects.equals(this.tenantId, localConsoleRuntimeConfig.tenantId) &&
+        Objects.equals(this.principalId, localConsoleRuntimeConfig.principalId) &&
+        Objects.equals(this.profile, localConsoleRuntimeConfig.profile) &&
+        Objects.equals(this.entitlements, localConsoleRuntimeConfig.entitlements);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(apiBaseUrl, localMode, startOnboarding, tenantId, principalId, profile, entitlements);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class LocalConsoleRuntimeConfig {\n");
+    sb.append("    apiBaseUrl: ").append(toIndentedString(apiBaseUrl)).append("\n");
+    sb.append("    localMode: ").append(toIndentedString(localMode)).append("\n");
+    sb.append("    startOnboarding: ").append(toIndentedString(startOnboarding)).append("\n");
+    sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
+    sb.append("    principalId: ").append(toIndentedString(principalId)).append("\n");
+    sb.append("    profile: ").append(toIndentedString(profile)).append("\n");
+    sb.append("    entitlements: ").append(toIndentedString(entitlements)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `api_base_url` to the URL query string
+    if (getApiBaseUrl() != null) {
+      joiner.add(String.format("%sapi_base_url%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getApiBaseUrl()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `local_mode` to the URL query string
+    if (getLocalMode() != null) {
+      joiner.add(String.format("%slocal_mode%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLocalMode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `start_onboarding` to the URL query string
+    if (getStartOnboarding() != null) {
+      joiner.add(String.format("%sstart_onboarding%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStartOnboarding()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `tenant_id` to the URL query string
+    if (getTenantId() != null) {
+      joiner.add(String.format("%stenant_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTenantId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `principal_id` to the URL query string
+    if (getPrincipalId() != null) {
+      joiner.add(String.format("%sprincipal_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPrincipalId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `profile` to the URL query string
+    if (getProfile() != null) {
+      joiner.add(String.format("%sprofile%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getProfile()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `entitlements` to the URL query string
+    if (getEntitlements() != null) {
+      for (int i = 0; i < getEntitlements().size(); i++) {
+        joiner.add(String.format("%sentitlements%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getEntitlements().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.12
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * LocalSessionExchangeRequest
+ */
+@JsonPropertyOrder({
+  LocalSessionExchangeRequest.JSON_PROPERTY_TOKEN
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class LocalSessionExchangeRequest {
+  public static final String JSON_PROPERTY_TOKEN = "token";
+  private String token;
+
+  public LocalSessionExchangeRequest() {
+  }
+
+  public LocalSessionExchangeRequest token(String token) {
+    this.token = token;
+    return this;
+  }
+
+   /**
+   * Get token
+   * @return token
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_TOKEN)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getToken() {
+    return token;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TOKEN)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setToken(String token) {
+    this.token = token;
+  }
+
+
+  /**
+   * Return true if this LocalSessionExchangeRequest object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    LocalSessionExchangeRequest localSessionExchangeRequest = (LocalSessionExchangeRequest) o;
+    return Objects.equals(this.token, localSessionExchangeRequest.token);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(token);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class LocalSessionExchangeRequest {\n");
+    sb.append("    token: ").append(toIndentedString(token)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `token` to the URL query string
+    if (getToken() != null) {
+      joiner.add(String.format("%stoken%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getToken()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.12
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * LocalSessionExchangeResponse
+ */
+@JsonPropertyOrder({
+  LocalSessionExchangeResponse.JSON_PROPERTY_SESSION_TOKEN,
+  LocalSessionExchangeResponse.JSON_PROPERTY_TENANT_ID,
+  LocalSessionExchangeResponse.JSON_PROPERTY_PRINCIPAL_ID,
+  LocalSessionExchangeResponse.JSON_PROPERTY_PRINCIPAL,
+  LocalSessionExchangeResponse.JSON_PROPERTY_EXPIRES_AT,
+  LocalSessionExchangeResponse.JSON_PROPERTY_ENTITLEMENTS
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class LocalSessionExchangeResponse {
+  public static final String JSON_PROPERTY_SESSION_TOKEN = "session_token";
+  private String sessionToken;
+
+  public static final String JSON_PROPERTY_TENANT_ID = "tenant_id";
+  private String tenantId;
+
+  public static final String JSON_PROPERTY_PRINCIPAL_ID = "principal_id";
+  private String principalId;
+
+  public static final String JSON_PROPERTY_PRINCIPAL = "principal";
+  private String principal;
+
+  public static final String JSON_PROPERTY_EXPIRES_AT = "expires_at";
+  private OffsetDateTime expiresAt;
+
+  /**
+   * Gets or Sets entitlements
+   */
+  public enum EntitlementsEnum {
+    OSS_CORE("OSS_CORE");
+
+    private String value;
+
+    EntitlementsEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static EntitlementsEnum fromValue(String value) {
+      for (EntitlementsEnum b : EntitlementsEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_ENTITLEMENTS = "entitlements";
+  private List<EntitlementsEnum> entitlements = new ArrayList<>();
+
+  public LocalSessionExchangeResponse() {
+  }
+
+  public LocalSessionExchangeResponse sessionToken(String sessionToken) {
+    this.sessionToken = sessionToken;
+    return this;
+  }
+
+   /**
+   * Get sessionToken
+   * @return sessionToken
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_SESSION_TOKEN)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getSessionToken() {
+    return sessionToken;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SESSION_TOKEN)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setSessionToken(String sessionToken) {
+    this.sessionToken = sessionToken;
+  }
+
+
+  public LocalSessionExchangeResponse tenantId(String tenantId) {
+    this.tenantId = tenantId;
+    return this;
+  }
+
+   /**
+   * Get tenantId
+   * @return tenantId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_TENANT_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getTenantId() {
+    return tenantId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TENANT_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setTenantId(String tenantId) {
+    this.tenantId = tenantId;
+  }
+
+
+  public LocalSessionExchangeResponse principalId(String principalId) {
+    this.principalId = principalId;
+    return this;
+  }
+
+   /**
+   * Get principalId
+   * @return principalId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getPrincipalId() {
+    return principalId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setPrincipalId(String principalId) {
+    this.principalId = principalId;
+  }
+
+
+  public LocalSessionExchangeResponse principal(String principal) {
+    this.principal = principal;
+    return this;
+  }
+
+   /**
+   * Get principal
+   * @return principal
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getPrincipal() {
+    return principal;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setPrincipal(String principal) {
+    this.principal = principal;
+  }
+
+
+  public LocalSessionExchangeResponse expiresAt(OffsetDateTime expiresAt) {
+    this.expiresAt = expiresAt;
+    return this;
+  }
+
+   /**
+   * Get expiresAt
+   * @return expiresAt
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_EXPIRES_AT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public OffsetDateTime getExpiresAt() {
+    return expiresAt;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EXPIRES_AT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setExpiresAt(OffsetDateTime expiresAt) {
+    this.expiresAt = expiresAt;
+  }
+
+
+  public LocalSessionExchangeResponse entitlements(List<EntitlementsEnum> entitlements) {
+    this.entitlements = entitlements;
+    return this;
+  }
+
+  public LocalSessionExchangeResponse addEntitlementsItem(EntitlementsEnum entitlementsItem) {
+    if (this.entitlements == null) {
+      this.entitlements = new ArrayList<>();
+    }
+    this.entitlements.add(entitlementsItem);
+    return this;
+  }
+
+   /**
+   * Get entitlements
+   * @return entitlements
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_ENTITLEMENTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public List<EntitlementsEnum> getEntitlements() {
+    return entitlements;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ENTITLEMENTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setEntitlements(List<EntitlementsEnum> entitlements) {
+    this.entitlements = entitlements;
+  }
+
+
+  /**
+   * Return true if this LocalSessionExchangeResponse object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    LocalSessionExchangeResponse localSessionExchangeResponse = (LocalSessionExchangeResponse) o;
+    return Objects.equals(this.sessionToken, localSessionExchangeResponse.sessionToken) &&
+        Objects.equals(this.tenantId, localSessionExchangeResponse.tenantId) &&
+        Objects.equals(this.principalId, localSessionExchangeResponse.principalId) &&
+        Objects.equals(this.principal, localSessionExchangeResponse.principal) &&
+        Objects.equals(this.expiresAt, localSessionExchangeResponse.expiresAt) &&
+        Objects.equals(this.entitlements, localSessionExchangeResponse.entitlements);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(sessionToken, tenantId, principalId, principal, expiresAt, entitlements);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class LocalSessionExchangeResponse {\n");
+    sb.append("    sessionToken: ").append(toIndentedString(sessionToken)).append("\n");
+    sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
+    sb.append("    principalId: ").append(toIndentedString(principalId)).append("\n");
+    sb.append("    principal: ").append(toIndentedString(principal)).append("\n");
+    sb.append("    expiresAt: ").append(toIndentedString(expiresAt)).append("\n");
+    sb.append("    entitlements: ").append(toIndentedString(entitlements)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `session_token` to the URL query string
+    if (getSessionToken() != null) {
+      joiner.add(String.format("%ssession_token%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSessionToken()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `tenant_id` to the URL query string
+    if (getTenantId() != null) {
+      joiner.add(String.format("%stenant_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTenantId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `principal_id` to the URL query string
+    if (getPrincipalId() != null) {
+      joiner.add(String.format("%sprincipal_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPrincipalId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `principal` to the URL query string
+    if (getPrincipal() != null) {
+      joiner.add(String.format("%sprincipal%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPrincipal()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `expires_at` to the URL query string
+    if (getExpiresAt() != null) {
+      joiner.add(String.format("%sexpires_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getExpiresAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `entitlements` to the URL query string
+    if (getEntitlements() != null) {
+      for (int i = 0; i < getEntitlements().size(); i++) {
+        joiner.add(String.format("%sentitlements%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getEntitlements().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.12
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * MCPAuthorizationProfile
  */
 @JsonPropertyOrder({
@@ -48526,6 +49460,1316 @@ public static class OAuthRequirement {
     // add `source` to the URL query string
     if (getSource() != null) {
       joiner.add(String.format("%ssource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.12
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * OnboardingEvidenceExport
+ */
+@JsonPropertyOrder({
+  OnboardingEvidenceExport.JSON_PROPERTY_EVIDENCE_PACK_REF,
+  OnboardingEvidenceExport.JSON_PROPERTY_SHA256,
+  OnboardingEvidenceExport.JSON_PROPERTY_RECEIPT_REFS,
+  OnboardingEvidenceExport.JSON_PROPERTY_STEPS
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class OnboardingEvidenceExport {
+  public static final String JSON_PROPERTY_EVIDENCE_PACK_REF = "evidence_pack_ref";
+  private String evidencePackRef;
+
+  public static final String JSON_PROPERTY_SHA256 = "sha256";
+  private String sha256;
+
+  public static final String JSON_PROPERTY_RECEIPT_REFS = "receipt_refs";
+  private Map<String, String> receiptRefs = new HashMap<>();
+
+  public static final String JSON_PROPERTY_STEPS = "steps";
+  private List<OnboardingStep> steps = new ArrayList<>();
+
+  public OnboardingEvidenceExport() {
+  }
+
+  public OnboardingEvidenceExport evidencePackRef(String evidencePackRef) {
+    this.evidencePackRef = evidencePackRef;
+    return this;
+  }
+
+   /**
+   * Get evidencePackRef
+   * @return evidencePackRef
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_PACK_REF)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getEvidencePackRef() {
+    return evidencePackRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_PACK_REF)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setEvidencePackRef(String evidencePackRef) {
+    this.evidencePackRef = evidencePackRef;
+  }
+
+
+  public OnboardingEvidenceExport sha256(String sha256) {
+    this.sha256 = sha256;
+    return this;
+  }
+
+   /**
+   * Get sha256
+   * @return sha256
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_SHA256)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getSha256() {
+    return sha256;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SHA256)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setSha256(String sha256) {
+    this.sha256 = sha256;
+  }
+
+
+  public OnboardingEvidenceExport receiptRefs(Map<String, String> receiptRefs) {
+    this.receiptRefs = receiptRefs;
+    return this;
+  }
+
+   /**
+   * Get receiptRefs
+   * @return receiptRefs
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_RECEIPT_REFS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public Map<String, String> getReceiptRefs() {
+    return receiptRefs;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RECEIPT_REFS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setReceiptRefs(Map<String, String> receiptRefs) {
+    this.receiptRefs = receiptRefs;
+  }
+
+
+  public OnboardingEvidenceExport steps(List<OnboardingStep> steps) {
+    this.steps = steps;
+    return this;
+  }
+
+  public OnboardingEvidenceExport addStepsItem(OnboardingStep stepsItem) {
+    if (this.steps == null) {
+      this.steps = new ArrayList<>();
+    }
+    this.steps.add(stepsItem);
+    return this;
+  }
+
+   /**
+   * Get steps
+   * @return steps
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_STEPS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public List<OnboardingStep> getSteps() {
+    return steps;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STEPS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setSteps(List<OnboardingStep> steps) {
+    this.steps = steps;
+  }
+
+
+  /**
+   * Return true if this OnboardingEvidenceExport object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    OnboardingEvidenceExport onboardingEvidenceExport = (OnboardingEvidenceExport) o;
+    return Objects.equals(this.evidencePackRef, onboardingEvidenceExport.evidencePackRef) &&
+        Objects.equals(this.sha256, onboardingEvidenceExport.sha256) &&
+        Objects.equals(this.receiptRefs, onboardingEvidenceExport.receiptRefs) &&
+        Objects.equals(this.steps, onboardingEvidenceExport.steps);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(evidencePackRef, sha256, receiptRefs, steps);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class OnboardingEvidenceExport {\n");
+    sb.append("    evidencePackRef: ").append(toIndentedString(evidencePackRef)).append("\n");
+    sb.append("    sha256: ").append(toIndentedString(sha256)).append("\n");
+    sb.append("    receiptRefs: ").append(toIndentedString(receiptRefs)).append("\n");
+    sb.append("    steps: ").append(toIndentedString(steps)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `evidence_pack_ref` to the URL query string
+    if (getEvidencePackRef() != null) {
+      joiner.add(String.format("%sevidence_pack_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEvidencePackRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `sha256` to the URL query string
+    if (getSha256() != null) {
+      joiner.add(String.format("%ssha256%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSha256()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `receipt_refs` to the URL query string
+    if (getReceiptRefs() != null) {
+      joiner.add(String.format("%sreceipt_refs%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReceiptRefs()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `steps` to the URL query string
+    if (getSteps() != null) {
+      for (int i = 0; i < getSteps().size(); i++) {
+        if (getSteps().get(i) != null) {
+          joiner.add(getSteps().get(i).toUrlQueryString(String.format("%ssteps%s%s", prefix, suffix,
+          "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
+        }
+      }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.12
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * OnboardingRunStepRequest
+ */
+@JsonPropertyOrder({
+  OnboardingRunStepRequest.JSON_PROPERTY_STEP_ID
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class OnboardingRunStepRequest {
+  /**
+   * Gets or Sets stepId
+   */
+  public enum StepIdEnum {
+    HEALTH("health"),
+
+    POLICY("policy"),
+
+    ALLOW("allow"),
+
+    DENY("deny"),
+
+    MCP("mcp"),
+
+    VERIFY("verify");
+
+    private String value;
+
+    StepIdEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static StepIdEnum fromValue(String value) {
+      for (StepIdEnum b : StepIdEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_STEP_ID = "step_id";
+  private StepIdEnum stepId;
+
+  public OnboardingRunStepRequest() {
+  }
+
+  public OnboardingRunStepRequest stepId(StepIdEnum stepId) {
+    this.stepId = stepId;
+    return this;
+  }
+
+   /**
+   * Get stepId
+   * @return stepId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_STEP_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public StepIdEnum getStepId() {
+    return stepId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STEP_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setStepId(StepIdEnum stepId) {
+    this.stepId = stepId;
+  }
+
+
+  /**
+   * Return true if this OnboardingRunStepRequest object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    OnboardingRunStepRequest onboardingRunStepRequest = (OnboardingRunStepRequest) o;
+    return Objects.equals(this.stepId, onboardingRunStepRequest.stepId);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(stepId);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class OnboardingRunStepRequest {\n");
+    sb.append("    stepId: ").append(toIndentedString(stepId)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `step_id` to the URL query string
+    if (getStepId() != null) {
+      joiner.add(String.format("%sstep_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStepId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.12
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * OnboardingState
+ */
+@JsonPropertyOrder({
+  OnboardingState.JSON_PROPERTY_MODE,
+  OnboardingState.JSON_PROPERTY_ENTITLEMENTS,
+  OnboardingState.JSON_PROPERTY_PROFILE,
+  OnboardingState.JSON_PROPERTY_POLICY_PATH,
+  OnboardingState.JSON_PROPERTY_EVIDENCE_PACK_REF,
+  OnboardingState.JSON_PROPERTY_STEPS
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class OnboardingState {
+  /**
+   * Gets or Sets mode
+   */
+  public enum ModeEnum {
+    SELF_HOSTED_OSS("self-hosted-oss");
+
+    private String value;
+
+    ModeEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static ModeEnum fromValue(String value) {
+      for (ModeEnum b : ModeEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_MODE = "mode";
+  private ModeEnum mode;
+
+  /**
+   * Gets or Sets entitlements
+   */
+  public enum EntitlementsEnum {
+    OSS_CORE("OSS_CORE");
+
+    private String value;
+
+    EntitlementsEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static EntitlementsEnum fromValue(String value) {
+      for (EntitlementsEnum b : EntitlementsEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_ENTITLEMENTS = "entitlements";
+  private List<EntitlementsEnum> entitlements = new ArrayList<>();
+
+  public static final String JSON_PROPERTY_PROFILE = "profile";
+  private String profile;
+
+  public static final String JSON_PROPERTY_POLICY_PATH = "policy_path";
+  private String policyPath;
+
+  public static final String JSON_PROPERTY_EVIDENCE_PACK_REF = "evidence_pack_ref";
+  private String evidencePackRef;
+
+  public static final String JSON_PROPERTY_STEPS = "steps";
+  private List<OnboardingStep> steps = new ArrayList<>();
+
+  public OnboardingState() {
+  }
+
+  public OnboardingState mode(ModeEnum mode) {
+    this.mode = mode;
+    return this;
+  }
+
+   /**
+   * Get mode
+   * @return mode
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_MODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public ModeEnum getMode() {
+    return mode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_MODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setMode(ModeEnum mode) {
+    this.mode = mode;
+  }
+
+
+  public OnboardingState entitlements(List<EntitlementsEnum> entitlements) {
+    this.entitlements = entitlements;
+    return this;
+  }
+
+  public OnboardingState addEntitlementsItem(EntitlementsEnum entitlementsItem) {
+    if (this.entitlements == null) {
+      this.entitlements = new ArrayList<>();
+    }
+    this.entitlements.add(entitlementsItem);
+    return this;
+  }
+
+   /**
+   * Get entitlements
+   * @return entitlements
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_ENTITLEMENTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public List<EntitlementsEnum> getEntitlements() {
+    return entitlements;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ENTITLEMENTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setEntitlements(List<EntitlementsEnum> entitlements) {
+    this.entitlements = entitlements;
+  }
+
+
+  public OnboardingState profile(String profile) {
+    this.profile = profile;
+    return this;
+  }
+
+   /**
+   * Get profile
+   * @return profile
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_PROFILE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getProfile() {
+    return profile;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PROFILE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setProfile(String profile) {
+    this.profile = profile;
+  }
+
+
+  public OnboardingState policyPath(String policyPath) {
+    this.policyPath = policyPath;
+    return this;
+  }
+
+   /**
+   * Get policyPath
+   * @return policyPath
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_PATH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPolicyPath() {
+    return policyPath;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_PATH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyPath(String policyPath) {
+    this.policyPath = policyPath;
+  }
+
+
+  public OnboardingState evidencePackRef(String evidencePackRef) {
+    this.evidencePackRef = evidencePackRef;
+    return this;
+  }
+
+   /**
+   * Get evidencePackRef
+   * @return evidencePackRef
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_PACK_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEvidencePackRef() {
+    return evidencePackRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_PACK_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEvidencePackRef(String evidencePackRef) {
+    this.evidencePackRef = evidencePackRef;
+  }
+
+
+  public OnboardingState steps(List<OnboardingStep> steps) {
+    this.steps = steps;
+    return this;
+  }
+
+  public OnboardingState addStepsItem(OnboardingStep stepsItem) {
+    if (this.steps == null) {
+      this.steps = new ArrayList<>();
+    }
+    this.steps.add(stepsItem);
+    return this;
+  }
+
+   /**
+   * Get steps
+   * @return steps
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_STEPS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public List<OnboardingStep> getSteps() {
+    return steps;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STEPS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setSteps(List<OnboardingStep> steps) {
+    this.steps = steps;
+  }
+
+
+  /**
+   * Return true if this OnboardingState object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    OnboardingState onboardingState = (OnboardingState) o;
+    return Objects.equals(this.mode, onboardingState.mode) &&
+        Objects.equals(this.entitlements, onboardingState.entitlements) &&
+        Objects.equals(this.profile, onboardingState.profile) &&
+        Objects.equals(this.policyPath, onboardingState.policyPath) &&
+        Objects.equals(this.evidencePackRef, onboardingState.evidencePackRef) &&
+        Objects.equals(this.steps, onboardingState.steps);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(mode, entitlements, profile, policyPath, evidencePackRef, steps);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class OnboardingState {\n");
+    sb.append("    mode: ").append(toIndentedString(mode)).append("\n");
+    sb.append("    entitlements: ").append(toIndentedString(entitlements)).append("\n");
+    sb.append("    profile: ").append(toIndentedString(profile)).append("\n");
+    sb.append("    policyPath: ").append(toIndentedString(policyPath)).append("\n");
+    sb.append("    evidencePackRef: ").append(toIndentedString(evidencePackRef)).append("\n");
+    sb.append("    steps: ").append(toIndentedString(steps)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `mode` to the URL query string
+    if (getMode() != null) {
+      joiner.add(String.format("%smode%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getMode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `entitlements` to the URL query string
+    if (getEntitlements() != null) {
+      for (int i = 0; i < getEntitlements().size(); i++) {
+        joiner.add(String.format("%sentitlements%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getEntitlements().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `profile` to the URL query string
+    if (getProfile() != null) {
+      joiner.add(String.format("%sprofile%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getProfile()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_path` to the URL query string
+    if (getPolicyPath() != null) {
+      joiner.add(String.format("%spolicy_path%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyPath()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `evidence_pack_ref` to the URL query string
+    if (getEvidencePackRef() != null) {
+      joiner.add(String.format("%sevidence_pack_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEvidencePackRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `steps` to the URL query string
+    if (getSteps() != null) {
+      for (int i = 0; i < getSteps().size(); i++) {
+        if (getSteps().get(i) != null) {
+          joiner.add(getSteps().get(i).toUrlQueryString(String.format("%ssteps%s%s", prefix, suffix,
+          "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
+        }
+      }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.5.12
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * OnboardingStep
+ */
+@JsonPropertyOrder({
+  OnboardingStep.JSON_PROPERTY_ID,
+  OnboardingStep.JSON_PROPERTY_TITLE,
+  OnboardingStep.JSON_PROPERTY_DESCRIPTION,
+  OnboardingStep.JSON_PROPERTY_STATUS,
+  OnboardingStep.JSON_PROPERTY_VERDICT,
+  OnboardingStep.JSON_PROPERTY_REASON_CODE,
+  OnboardingStep.JSON_PROPERTY_RECEIPT_REF
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class OnboardingStep {
+  /**
+   * Gets or Sets id
+   */
+  public enum IdEnum {
+    HEALTH("health"),
+
+    POLICY("policy"),
+
+    ALLOW("allow"),
+
+    DENY("deny"),
+
+    MCP("mcp"),
+
+    VERIFY("verify");
+
+    private String value;
+
+    IdEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static IdEnum fromValue(String value) {
+      for (IdEnum b : IdEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_ID = "id";
+  private IdEnum id;
+
+  public static final String JSON_PROPERTY_TITLE = "title";
+  private String title;
+
+  public static final String JSON_PROPERTY_DESCRIPTION = "description";
+  private String description;
+
+  /**
+   * Gets or Sets status
+   */
+  public enum StatusEnum {
+    PENDING("pending"),
+
+    PASS("pass");
+
+    private String value;
+
+    StatusEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static StatusEnum fromValue(String value) {
+      for (StatusEnum b : StatusEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_STATUS = "status";
+  private StatusEnum status;
+
+  /**
+   * Gets or Sets verdict
+   */
+  public enum VerdictEnum {
+    ALLOW("ALLOW"),
+
+    DENY("DENY"),
+
+    ESCALATE("ESCALATE");
+
+    private String value;
+
+    VerdictEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static VerdictEnum fromValue(String value) {
+      for (VerdictEnum b : VerdictEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_VERDICT = "verdict";
+  private VerdictEnum verdict;
+
+  public static final String JSON_PROPERTY_REASON_CODE = "reason_code";
+  private String reasonCode;
+
+  public static final String JSON_PROPERTY_RECEIPT_REF = "receipt_ref";
+  private String receiptRef;
+
+  public OnboardingStep() {
+  }
+
+  public OnboardingStep id(IdEnum id) {
+    this.id = id;
+    return this;
+  }
+
+   /**
+   * Get id
+   * @return id
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public IdEnum getId() {
+    return id;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setId(IdEnum id) {
+    this.id = id;
+  }
+
+
+  public OnboardingStep title(String title) {
+    this.title = title;
+    return this;
+  }
+
+   /**
+   * Get title
+   * @return title
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_TITLE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getTitle() {
+    return title;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TITLE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setTitle(String title) {
+    this.title = title;
+  }
+
+
+  public OnboardingStep description(String description) {
+    this.description = description;
+    return this;
+  }
+
+   /**
+   * Get description
+   * @return description
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_DESCRIPTION)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getDescription() {
+    return description;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DESCRIPTION)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setDescription(String description) {
+    this.description = description;
+  }
+
+
+  public OnboardingStep status(StatusEnum status) {
+    this.status = status;
+    return this;
+  }
+
+   /**
+   * Get status
+   * @return status
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public StatusEnum getStatus() {
+    return status;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setStatus(StatusEnum status) {
+    this.status = status;
+  }
+
+
+  public OnboardingStep verdict(VerdictEnum verdict) {
+    this.verdict = verdict;
+    return this;
+  }
+
+   /**
+   * Get verdict
+   * @return verdict
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_VERDICT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public VerdictEnum getVerdict() {
+    return verdict;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_VERDICT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setVerdict(VerdictEnum verdict) {
+    this.verdict = verdict;
+  }
+
+
+  public OnboardingStep reasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+    return this;
+  }
+
+   /**
+   * Get reasonCode
+   * @return reasonCode
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getReasonCode() {
+    return reasonCode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setReasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+  }
+
+
+  public OnboardingStep receiptRef(String receiptRef) {
+    this.receiptRef = receiptRef;
+    return this;
+  }
+
+   /**
+   * Get receiptRef
+   * @return receiptRef
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_RECEIPT_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getReceiptRef() {
+    return receiptRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RECEIPT_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReceiptRef(String receiptRef) {
+    this.receiptRef = receiptRef;
+  }
+
+
+  /**
+   * Return true if this OnboardingStep object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    OnboardingStep onboardingStep = (OnboardingStep) o;
+    return Objects.equals(this.id, onboardingStep.id) &&
+        Objects.equals(this.title, onboardingStep.title) &&
+        Objects.equals(this.description, onboardingStep.description) &&
+        Objects.equals(this.status, onboardingStep.status) &&
+        Objects.equals(this.verdict, onboardingStep.verdict) &&
+        Objects.equals(this.reasonCode, onboardingStep.reasonCode) &&
+        Objects.equals(this.receiptRef, onboardingStep.receiptRef);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(id, title, description, status, verdict, reasonCode, receiptRef);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class OnboardingStep {\n");
+    sb.append("    id: ").append(toIndentedString(id)).append("\n");
+    sb.append("    title: ").append(toIndentedString(title)).append("\n");
+    sb.append("    description: ").append(toIndentedString(description)).append("\n");
+    sb.append("    status: ").append(toIndentedString(status)).append("\n");
+    sb.append("    verdict: ").append(toIndentedString(verdict)).append("\n");
+    sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
+    sb.append("    receiptRef: ").append(toIndentedString(receiptRef)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `id` to the URL query string
+    if (getId() != null) {
+      joiner.add(String.format("%sid%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `title` to the URL query string
+    if (getTitle() != null) {
+      joiner.add(String.format("%stitle%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTitle()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `description` to the URL query string
+    if (getDescription() != null) {
+      joiner.add(String.format("%sdescription%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDescription()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `status` to the URL query string
+    if (getStatus() != null) {
+      joiner.add(String.format("%sstatus%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStatus()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `verdict` to the URL query string
+    if (getVerdict() != null) {
+      joiner.add(String.format("%sverdict%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getVerdict()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `reason_code` to the URL query string
+    if (getReasonCode() != null) {
+      joiner.add(String.format("%sreason_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReasonCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `receipt_ref` to the URL query string
+    if (getReceiptRef() != null) {
+      joiner.add(String.format("%sreceipt_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReceiptRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();

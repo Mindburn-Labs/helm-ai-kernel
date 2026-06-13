@@ -45,15 +45,18 @@ func main() {
 var startServer = runServer
 
 type serverOptions struct {
-	Mode       string
-	BindAddr   string
-	Port       int
-	DataDir    string
-	SQLitePath string
-	PolicyPath string
-	JSON       bool
-	Stdout     io.Writer
-	Stderr     io.Writer
+	Mode              string
+	BindAddr          string
+	Port              int
+	DataDir           string
+	SQLitePath        string
+	PolicyPath        string
+	ConsoleAssetsPath string
+	Quickstart        *quickstartRuntime
+	OnReady           func(bindAddr string, port int)
+	JSON              bool
+	Stdout            io.Writer
+	Stderr            io.Writer
 }
 
 // Run is the entrypoint for testing
@@ -343,6 +346,7 @@ func runServerWithOptions(opts serverOptions) {
 		extraRoutes = func(mux *http.ServeMux) {
 			RegisterSubsystemRoutes(mux, services)
 			RegisterConsoleRoutes(mux, services, opts)
+			RegisterLocalFirstRunRoutes(mux, services, opts)
 		}
 	}
 
@@ -369,6 +373,7 @@ func runServerWithOptions(opts serverOptions) {
 	if extraRoutes != nil {
 		extraRoutes(mux)
 	}
+	RegisterLocalConsoleAssetRoutes(mux, opts, bindAddr, port)
 	rateLimiter := helmapi.NewGlobalRateLimiter(60, 120)
 	if envBool("HELM_TRUST_PROXY_HEADERS") {
 		rateLimiter = rateLimiter.WithTrustProxy(true)
@@ -438,6 +443,9 @@ func runServerWithOptions(opts serverOptions) {
 		fmt.Fprintf(opts.Stdout, "helm-edge-local · listening :%d · ready\n", port)
 	} else {
 		log.Printf("[helm] ready: http://%s:%d", bindAddr, port)
+	}
+	if opts.OnReady != nil {
+		opts.OnReady(bindAddr, port)
 	}
 	log.Println("[helm] press ctrl+c to stop")
 

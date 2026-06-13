@@ -4,9 +4,9 @@ This tree is the canonical public documentation source for HELM AI Kernel. Publi
 
 ## Start
 
-- [Register at Console](https://console.helm.mindburn.org)
 - [Documentation index](index.md)
 - [Quickstart](QUICKSTART.md)
+- [Hosted Console after local proof](https://console.helm.mindburn.org)
 - [Developer journey](DEVELOPER_JOURNEY.md)
 - [Community](../COMMUNITY.md)
 - [Ecosystem map](ECOSYSTEM.md)

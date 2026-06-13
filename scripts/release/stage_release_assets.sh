@@ -193,6 +193,10 @@ ruby "$ROOT/scripts/release/homebrew_formula.rb" \
     --launchpad-data-sha256 "$launchpad_data_sha" \
     --repo Mindburn-Labs/helm-ai-kernel > "$ASSETS_DIR/helm-ai-kernel.rb"
 
+if [ -n "${HELM_CONSOLE_BUNDLE:-}" ] || [ "${REQUIRE_HELM_CONSOLE_BUNDLE:-0}" = "1" ]; then
+    bash "$ROOT/scripts/release/stage_console_bundle.sh" "$ASSETS_DIR"
+fi
+
 python3 - "$ROOT" "$ASSETS_DIR" "$TAG" <<'PY'
 import hashlib
 import json

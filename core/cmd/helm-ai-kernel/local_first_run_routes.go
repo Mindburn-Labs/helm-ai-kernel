@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -27,6 +29,7 @@ import (
 const (
 	defaultQuickstartTenantID    = "default"
 	defaultQuickstartPrincipalID = "local-operator"
+	maxConsoleAssetBundleBytes   = 256 * 1024 * 1024
 )
 
 type quickstartRuntime struct {
@@ -198,11 +201,11 @@ func RegisterLocalConsoleAssetRoutes(mux *http.ServeMux, opts serverOptions, bin
 	if err != nil || !info.IsDir() {
 		return
 	}
-	assetPaths, err := discoverConsoleAssetPaths(assetRoot)
+	bundle, err := loadConsoleAssetBundle(assetRoot)
 	if err != nil {
 		return
 	}
-	handler := spaFileServer(assetRoot, assetPaths)
+	handler := spaFileServer(bundle)
 	mux.HandleFunc("/console", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/console/", http.StatusTemporaryRedirect)
 	})
@@ -211,39 +214,43 @@ func RegisterLocalConsoleAssetRoutes(mux *http.ServeMux, opts serverOptions, bin
 	_ = port
 }
 
-func spaFileServer(root string, assetPaths map[string]struct{}) http.Handler {
-	fileServer := http.FileServer(http.Dir(root))
-	indexPath := filepath.Join(root, "index.html")
+type consoleAssetBundle struct {
+	index  consoleAsset
+	assets map[string]consoleAsset
+}
+
+type consoleAsset struct {
+	body        []byte
+	contentType string
+	modTime     time.Time
+}
+
+func spaFileServer(bundle consoleAssetBundle) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assetPath, ok := localConsoleAssetPath(r.URL.Path)
 		if !ok || assetPath == "" {
-			serveConsoleIndex(w, r, indexPath)
+			serveConsoleAsset(w, r, "index.html", bundle.index)
 			return
 		}
-		if _, ok := assetPaths[assetPath]; ok {
-			assetReq := r.Clone(r.Context())
-			assetURL := *r.URL
-			assetURL.Path = "/" + assetPath
-			assetURL.RawPath = ""
-			assetReq.URL = &assetURL
-			fileServer.ServeHTTP(w, assetReq)
+		if asset, ok := bundle.assets[assetPath]; ok {
+			serveConsoleAsset(w, r, assetPath, asset)
 			return
 		}
-		serveConsoleIndex(w, r, indexPath)
+		serveConsoleAsset(w, r, "index.html", bundle.index)
 	})
 }
 
-func serveConsoleIndex(w http.ResponseWriter, r *http.Request, indexPath string) {
-	indexReq := r.Clone(r.Context())
-	indexURL := *r.URL
-	indexURL.Path = "/"
-	indexURL.RawPath = ""
-	indexReq.URL = &indexURL
-	http.ServeFile(w, indexReq, indexPath)
+func serveConsoleAsset(w http.ResponseWriter, r *http.Request, name string, asset consoleAsset) {
+	if asset.contentType != "" {
+		w.Header().Set("Content-Type", asset.contentType)
+	}
+	http.ServeContent(w, r, name, asset.modTime, bytes.NewReader(asset.body))
 }
 
-func discoverConsoleAssetPaths(root string) (map[string]struct{}, error) {
-	paths := make(map[string]struct{})
+func loadConsoleAssetBundle(root string) (consoleAssetBundle, error) {
+	bundle := consoleAssetBundle{assets: make(map[string]consoleAsset)}
+	var total int64
+	var hasIndex bool
 	err := filepath.WalkDir(root, func(filePath string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -255,10 +262,55 @@ func discoverConsoleAssetPaths(root string) (map[string]struct{}, error) {
 		if err != nil || rel == "." {
 			return err
 		}
-		paths[filepath.ToSlash(rel)] = struct{}{}
+		assetPath := filepath.ToSlash(rel)
+		if clean, ok := localConsoleAssetPath("/" + assetPath); !ok || clean != assetPath {
+			return fmt.Errorf("unsafe console asset path: %s", rel)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Size() < 0 || total+info.Size() > maxConsoleAssetBundleBytes {
+			return fmt.Errorf("console asset bundle exceeds %d bytes", maxConsoleAssetBundleBytes)
+		}
+		body, err := readConsoleAssetFile(filePath)
+		if err != nil {
+			return err
+		}
+		total += int64(len(body))
+		asset := consoleAsset{
+			body:        body,
+			contentType: consoleAssetContentType(filePath, body),
+			modTime:     info.ModTime(),
+		}
+		if assetPath == "index.html" {
+			bundle.index = asset
+			hasIndex = true
+			return nil
+		}
+		bundle.assets[assetPath] = asset
 		return nil
 	})
-	return paths, err
+	if err != nil {
+		return consoleAssetBundle{}, err
+	}
+	if !hasIndex {
+		return consoleAssetBundle{}, fmt.Errorf("console bundle missing index.html")
+	}
+	return bundle, nil
+}
+
+func readConsoleAssetFile(filePath string) ([]byte, error) {
+
+	// codeql[go/path-injection] -- filePath is produced by WalkDir under the operator-selected Console bundle before serving starts; request paths never reach this read.
+	return os.ReadFile(filePath)
+}
+
+func consoleAssetContentType(filePath string, body []byte) string {
+	if contentType := mime.TypeByExtension(filepath.Ext(filePath)); contentType != "" {
+		return contentType
+	}
+	return http.DetectContentType(body)
 }
 
 func localConsoleAssetPath(rawPath string) (string, bool) {

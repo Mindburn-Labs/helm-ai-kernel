@@ -286,11 +286,11 @@ func TestQuickstartConsoleAssetServerRejectsTraversal(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(filepath.Dir(consoleAssets), "secret.txt"), []byte("outside root"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	assetPaths, err := discoverConsoleAssetPaths(consoleAssets)
+	bundle, err := loadConsoleAssetBundle(consoleAssets)
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := spaFileServer(consoleAssets, assetPaths)
+	handler := spaFileServer(bundle)
 
 	req := httptest.NewRequest(http.MethodGet, "/../secret.txt", nil)
 	rec := httptest.NewRecorder()

@@ -1,0 +1,46 @@
+{
+  "pack_id": "policy.cloud.mutations.v1",
+  "label": "Cloud Mutations",
+  "version": 1,
+  "scope": {
+    "category": "cloud",
+    "intended_use": "Cloud, Kubernetes, and infrastructure API mutation evaluation"
+  },
+  "actions": [
+    {
+      "action": "cloud.inventory.read",
+      "enabled": true,
+      "description": "Allow inventory, describe, and list operations.",
+      "expression": "input.effect == 'read'"
+    },
+    {
+      "action": "cloud.cost.read",
+      "enabled": true,
+      "description": "Allow budget and cost inspection.",
+      "expression": "input.effect == 'read'"
+    },
+    {
+      "action": "cloud.iam.mutate",
+      "enabled": false,
+      "description": "IAM changes require explicit approval and a production policy."
+    },
+    {
+      "action": "cloud.network.mutate",
+      "enabled": false,
+      "description": "Network changes are outside the example allow graph."
+    },
+    {
+      "action": "cloud.storage.delete",
+      "enabled": false,
+      "description": "Storage deletion is outside the example allow graph."
+    },
+    {
+      "action": "kubernetes.apply",
+      "enabled": false,
+      "description": "Kubernetes mutations require a separate reviewed policy and receipts."
+    }
+  ],
+  "notes": [
+    "Example only: this pack demonstrates mutation classes to keep outside default allow rules."
+  ]
+}

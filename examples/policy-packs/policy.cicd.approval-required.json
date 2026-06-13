@@ -1,0 +1,52 @@
+{
+  "pack_id": "policy.cicd.approval-required.v1",
+  "label": "CI/CD Approval Required",
+  "version": 1,
+  "scope": {
+    "category": "ci-cd",
+    "intended_use": "GitHub Actions, CI, deployment, and release workflow evaluation"
+  },
+  "actions": [
+    {
+      "action": "cicd.status.read",
+      "enabled": true,
+      "description": "Allow reading workflow, job, and check status.",
+      "expression": "input.effect == 'read'"
+    },
+    {
+      "action": "cicd.logs.read",
+      "enabled": true,
+      "description": "Allow reading sanitized build logs.",
+      "expression": "input.effect == 'read'"
+    },
+    {
+      "action": "cicd.artifact.read",
+      "enabled": true,
+      "description": "Allow reading published build artifacts.",
+      "expression": "input.effect == 'read'"
+    },
+    {
+      "action": "cicd.workflow.dispatch",
+      "enabled": false,
+      "description": "Workflow dispatch requires an approval ceremony in a real integration."
+    },
+    {
+      "action": "cicd.deploy.production",
+      "enabled": false,
+      "description": "Production deploys require explicit approval and receipt capture."
+    },
+    {
+      "action": "cicd.secret.write",
+      "enabled": false,
+      "description": "Secret writes are outside the example allow graph."
+    },
+    {
+      "action": "release.publish",
+      "enabled": false,
+      "description": "Release publication is outside the example allow graph."
+    }
+  ],
+  "notes": [
+    "Example only: approval semantics must be implemented by the active integration and verified by receipts."
+  ]
+}

@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel OSS Traction Plan
-last_reviewed: 2026-06-02
+last_reviewed: 2026-06-12
 ---
 
 # HELM AI Kernel OSS Traction Plan
@@ -127,6 +127,104 @@ Use LinkedIn, X, Product Hunt, DEV, and Hashnode only after technical audiences 
 Show HN title: `Show HN: HELM AI Kernel, a fail-closed execution firewall for AI agents`
 
 Short description: HELM AI Kernel quarantines unknown MCP tools before dispatch, governs OpenAI-compatible requests through ALLOW, DENY, and ESCALATE decisions, emits signed receipts, and verifies EvidencePacks offline.
+
+## Phase Operating Checklist
+
+Use this checklist to keep growth work evidence-gated. Each public ask should
+point at a runnable local command, fixture, receipt, EvidencePack, or issue.
+
+### Phase 2: High-Risk Demos
+
+Demo targets must stay localhost, fixture, container, emulator, or staging-safe
+until a maintainer explicitly approves external access. Track each demo as an
+integration issue with expected verdicts, proof command, receipt path, and
+offline verification command.
+
+Initial demo targets:
+
+- `helm-shell-mcp-demo`: `shell-mcp-server` behind HELM with safe read
+  commands allowed and destructive shell/git/disk operations denied or
+  escalated.
+- `helm-pandoras-shell-demo`: unrestricted-terminal risk shown inside an
+  isolated VM or disposable environment, with HELM as the execution boundary.
+- `helm-kilntainers-demo`: container sandbox plus HELM policy boundary, clearly
+  separating sandbox isolation from HELM receipts.
+- `helm-container-mcp-demo` or `helm-diaMCP-demo`: capability-specific policies
+  for filesystem write, shell, git, code execution, and HTTP actions.
+- `helm-termux-mcp-demo`: Android emulator or mobile-like constraints behind
+  HELM, with resource and UX limits noted.
+- `helm-claude-shellfirm-demo`: shellfirm pre-tool verdict followed by HELM
+  final decision and receipt.
+- `helm-openai-agents-demo`: OpenAI Agents SDK or compatible runtime pointed at
+  the HELM proxy, showing a denied mutating tool call.
+- `helm-mcp-playwright-demo`: mcp-playwright around a sensitive admin UI
+  fixture, with URL/action representation in receipts documented before public
+  posting.
+
+Policy-pack examples live under `examples/policy-packs/` and are examples only,
+not production defaults. They should remain parseable by the serve-policy
+runtime and describe their allow, deny, and escalation expectations.
+
+### Phase 3: Targeted Outreach
+
+Do not send broad launch messages before the local proof path is clean. For
+each maintainer, framework author, security reviewer, or OSS list, prepare:
+
+- a tailored HELM config or policy-pack example;
+- a high-risk workflow they can test in under an hour;
+- the exact expected verdict and receipt/EvidencePack inspection path;
+- a concrete ask: break the proof, open an issue, or critique the threat model.
+
+Target lanes:
+
+- MCP server authors: Kilntainers, dynamic-shell-server, Pandoras-Shell,
+  shell-mcp-server, container-mcp, diaMCP, and termux-mcp.
+- Coding-agent builders: shellfirm, IDE/runtime maintainers, and prior
+  incident-report authors.
+- Security and governance reviewers: AgentGuard, Microsoft Agent Governance
+  Toolkit, PromptShield/OpenClaw PromptShield, narthex, and agent-security
+  lecture or research authors.
+- OSS lists: awesome MCP lists and MCP marketplace/catalog surfaces only after
+  a working fixture or reproducible example exists.
+
+### Phase 4: Feedback-Driven Iteration
+
+Triage feedback weekly through issues and Discussions. Adjust only source-backed
+surfaces: policy defaults, EvidencePack fields, CLI messages, troubleshooting,
+and copy-paste quickstart commands. Tag commercial signals when users ask for
+shared policy repositories, retention/search, SIEM or observability
+integrations, SSO, role-based approvals, or hosted evidence workflows.
+
+Do not implement Basic or Enterprise layers in the OSS kernel. Record product
+requirements separately and keep the kernel boundary, receipt, and verifier
+contracts stable.
+
+### Phase 5: Feedback Capture
+
+Use `.github/ISSUE_TEMPLATE/feedback.yml` for structured public feedback.
+Capture install friction, proof-demo friction, policy/security expectations,
+production-readiness gaps, verdict observed, receipt and EvidencePack timing,
+unexpected failures, missing integrations, and commercial signal. Do not ask
+users to paste secrets, private endpoints, customer data, or unredacted
+production receipts.
+
+### Phase 6: Growth Targets
+
+Track activity and usage only when tied to real proof:
+
+- stars: +300 to +500;
+- forks: +30 to +50;
+- issues: 30 to 50 with integration, policy, receipt, or docs clarity signal;
+- external PRs: 10 to 15 for docs, fixtures, policy examples, or small
+  integrations;
+- local proof runs: at least 100 self-reported runs through feedback issues;
+- verified EvidencePacks: at least 30 unique user-referenced packs;
+- ecosystem mentions: at least 10 external mentions in MCP, agent-security, or
+  framework documentation.
+
+Manual tracking is acceptable at first, but count only reports that reference a
+command, receipt ID, EvidencePack path/hash, discussion, issue, PR, or external
+URL.
 
 ## UTM Links
 

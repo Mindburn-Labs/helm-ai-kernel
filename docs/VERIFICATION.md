@@ -1,6 +1,6 @@
 ---
 title: Verification
-last_reviewed: 2026-05-20
+last_reviewed: 2026-06-12
 ---
 
 # Verification
@@ -89,7 +89,7 @@ actual baseline when auditing the `v0.5.0` delta.
 
 ## v0.5.11 Asset Contract
 
-The `v0.5.10` release attaches these primary assets:
+The `v0.5.11` release is complete only when it attaches these primary assets:
 
 - `helm-ai-kernel-darwin-amd64`
 - `helm-ai-kernel-darwin-arm64`
@@ -112,6 +112,26 @@ The `v0.5.10` release attaches these primary assets:
 `reference_packs/eu_ai_act_high_risk.v1.json`. The release workflow signs each
 primary asset, including `SHA256SUMS.txt`, with a matching
 `*.cosign.bundle`.
+
+## EvidencePack Contents
+
+An EvidencePack is the portable verification bundle for a HELM-governed run or
+release path. A complete pack includes the indexed records needed to verify the
+decision chain without trusting the process that produced it:
+
+- prompts or request metadata when the surface records them for the run;
+- MCP tool calls, OpenAI-compatible proxy requests, policy decisions, and
+  outcomes that crossed the HELM boundary;
+- receipt bytes, receipt IDs, decision IDs, output hashes, and reason codes;
+- ProofGraph or boundary record roots that bind the decision path;
+- signature material and native seal metadata when the pack has been sealed;
+- optional external anchor and storage receipts for customer or
+  high-assurance profiles.
+
+The verifier checks the archive or directory shape, the indexed file hashes,
+the receipt material, root hashes, and available signatures. A demo receipt is
+not automatically a complete EvidencePack; use a pack produced by export,
+LaunchKit, release artifacts, or an operator-controlled evidence workflow.
 
 ## Offline Verification
 
@@ -176,6 +196,13 @@ output, the fields to read first are:
 For a denied shell or proxy tool-call test, the receipt should show a deny
 status/reason and the effect should not be dispatched. That receipt is the
 operator-facing handle that later appears inside the EvidencePack.
+
+The CLI requires `--agent`; use the HTTP list route when a local unfiltered
+view is more useful during a quickstart:
+
+```bash
+curl 'http://127.0.0.1:7714/api/v1/receipts?limit=20'
+```
 
 ## EvidencePack Verify Output
 

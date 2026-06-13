@@ -31,6 +31,16 @@ This is Mindburn Labs’ HELM execution kernel for AI, not the Kubernetes packag
 HELM evaluates agent execution requests and records every ALLOW / DENY /
 ESCALATE decision as verifiable evidence.
 
+HELM AI Kernel is a fail-closed execution firewall for AI agents. It sits
+between stochastic agent proposals, such as MCP tools and OpenAI-compatible
+requests, and infrastructure side effects. The kernel enforces default-deny
+policies, quarantines unknown MCP tools, and emits signed receipts plus
+EvidencePacks that can be verified offline.
+
+HELM AI Kernel is not an agent orchestration framework, a SaaS AI governance
+dashboard, or a vague trust layer with no enforcement mechanism. The public
+kernel is the local boundary, policy, receipt, and verification path.
+
 ## Try HELM AI Kernel Locally
 
 No account, hosted service, or production credential is required for the local
@@ -189,12 +199,25 @@ Cosign bundles, `evidence-pack.tar`, `helm-ai-kernel.mcpb`,
 HELM AI Kernel does not include hosted Mindburn operations, private operational
 tooling, or non-OSS downstream extensions.
 
+## Security Model And Limitations
+
+HELM AI Kernel provides a deterministic execution boundary: fail-closed policy
+evaluation, MCP interception, OpenAI-compatible proxying, signed receipts, and
+offline-verifiable EvidencePacks. It records ALLOW, DENY, and ESCALATE outcomes
+so reviewers can inspect the decision path after the run.
+
+It does not claim operating-system sandboxing beyond the sandbox and runtime
+surfaces present in this repository, and it does not claim seccomp or eBPF
+enforcement unless a specific source-backed integration says so. It is not a
+robot fleet controller, an AGI operating system, or a generic compliance
+guarantee.
+
 ## Quick Start
 
-Register at <https://console.helm.mindburn.org> to create your account, then
-install the published macOS CLI from the current GitHub release. The public
-Homebrew tap is current only when the release includes a passing
-`version-status.json`.
+Install the published macOS CLI from the current GitHub release, or use the
+source build path below when editing this repository. No Console account is
+required for the local proof path. The public Homebrew tap is current only when
+the release includes a passing `version-status.json`.
 
 ```bash
 curl -L -o helm-ai-kernel https://github.com/Mindburn-Labs/helm-ai-kernel/releases/latest/download/helm-ai-kernel-darwin-arm64

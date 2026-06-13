@@ -1,0 +1,11 @@
+name = "policy.db.readonly"
+profile = "example_db_readonly"
+reference_pack = "./policy.db.readonly.json"
+
+[server]
+bind = "127.0.0.1"
+port = 7714
+
+[receipts]
+store = "sqlite"
+path = "./data/policy-packs/db.readonly.receipts.db"

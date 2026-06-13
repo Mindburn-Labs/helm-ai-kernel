@@ -1,0 +1,11 @@
+name = "policy.shell.safe-by-default"
+profile = "example_shell_safe_by_default"
+reference_pack = "./policy.shell.safe-by-default.json"
+
+[server]
+bind = "127.0.0.1"
+port = 7714
+
+[receipts]
+store = "sqlite"
+path = "./data/policy-packs/shell.safe-by-default.receipts.db"

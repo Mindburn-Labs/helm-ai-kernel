@@ -1,0 +1,169 @@
+name: HELM proof feedback
+description: Share local proof, receipt, EvidencePack, policy, or integration feedback.
+title: "[Feedback]: "
+labels: ["community", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing HELM AI Kernel. Keep this public issue sanitized: do not include secrets, provider keys, private prompts, customer data, private endpoints, payment identifiers, or unredacted production receipts.
+  - type: input
+    id: lead_id
+    attributes:
+      label: Lead or feedback ID
+      description: Optional internal or self-chosen handle for follow-up.
+      placeholder: "feedback-2026-06-12-001"
+  - type: input
+    id: person
+    attributes:
+      label: Person or handle
+      description: Public name, GitHub handle, or anonymous label.
+      placeholder: "@octocat"
+  - type: input
+    id: company
+    attributes:
+      label: Company or project
+      description: Optional public organization, project, or repo.
+      placeholder: "Example MCP project"
+  - type: dropdown
+    id: segment
+    attributes:
+      label: Segment
+      description: Maintainers may add the matching segment label during triage.
+      options:
+        - DevAgents
+        - MCP-Builder
+        - Sec/DevSecOps
+        - Platform
+        - OSS-Reviewer
+        - Bridge
+    validations:
+      required: true
+  - type: input
+    id: workflow_tested
+    attributes:
+      label: Workflow tested
+      description: Name the quickstart, MCP server, proxy path, SDK, or policy pack.
+      placeholder: "Shell MCP quickstart"
+    validations:
+      required: true
+  - type: dropdown
+    id: install_success
+    attributes:
+      label: Install success
+      options:
+        - "yes"
+        - "no"
+    validations:
+      required: true
+  - type: input
+    id: time_to_first_boundary_run
+    attributes:
+      label: Time to first boundary run
+      description: Minutes from starting install to a local HELM boundary running.
+      placeholder: "12"
+  - type: input
+    id: time_to_first_receipt
+    attributes:
+      label: Time to first receipt
+      description: Minutes from starting install to seeing a receipt.
+      placeholder: "18"
+  - type: input
+    id: time_to_first_verified_evidence_pack
+    attributes:
+      label: Time to first verified EvidencePack
+      description: Minutes from starting install to an offline verification result.
+      placeholder: "25"
+  - type: input
+    id: blocked_action_tested
+    attributes:
+      label: Blocked action tested
+      description: The action, tool, command, URL, or policy path you expected HELM to block.
+      placeholder: "rm -rf fixture directory"
+  - type: dropdown
+    id: verdict_observed
+    attributes:
+      label: Verdict observed
+      options:
+        - allowed
+        - denied
+        - ask/escalate
+    validations:
+      required: true
+  - type: textarea
+    id: unexpected_failure
+    attributes:
+      label: Unexpected failure
+      description: What failed unexpectedly? Include sanitized command output if useful.
+      render: text
+  - type: textarea
+    id: missing_integration
+    attributes:
+      label: Missing integration
+      description: Which MCP server, agent framework, SDK, IDE, or platform should HELM cover next?
+  - type: textarea
+    id: docs_confusion
+    attributes:
+      label: Documentation confusion
+      description: Which page, command, output, or term was unclear?
+  - type: textarea
+    id: security_concern
+    attributes:
+      label: Security concern
+      description: Describe false positives, false negatives, threat-model gaps, or receipt/EvidencePack concerns.
+  - type: textarea
+    id: feature_request
+    attributes:
+      label: Feature request
+      description: What should HELM add or change for this workflow?
+  - type: dropdown
+    id: would_star_repo
+    attributes:
+      label: Would star repo
+      options:
+        - "yes"
+        - "no"
+  - type: dropdown
+    id: would_open_issue
+    attributes:
+      label: Would open issue
+      options:
+        - "yes"
+        - "no"
+  - type: dropdown
+    id: would_open_pr
+    attributes:
+      label: Would open PR
+      options:
+        - "yes"
+        - "no"
+  - type: dropdown
+    id: would_use_weekly
+    attributes:
+      label: Would use weekly
+      options:
+        - "yes"
+        - "no"
+        - "maybe"
+  - type: dropdown
+    id: would_recommend
+    attributes:
+      label: Would recommend
+      options:
+        - "yes"
+        - "no"
+  - type: textarea
+    id: commercial_signal
+    attributes:
+      label: Commercial signal
+      description: Optional. Mention retention, shared policy, hosted evidence, approval UI, SIEM, SSO, or team needs only if relevant.
+  - type: textarea
+    id: next_action
+    attributes:
+      label: Suggested next action
+      description: What should maintainers do next?
+  - type: textarea
+    id: source_links
+    attributes:
+      label: Source links
+      description: Public links to issues, PRs, discussions, repos, docs, receipts, or EvidencePack hashes.

@@ -1,0 +1,52 @@
+{
+  "pack_id": "policy.db.readonly.v1",
+  "label": "Database Readonly",
+  "version": 1,
+  "scope": {
+    "category": "database",
+    "intended_use": "Postgres, Neon, Redis, or SQL-like MCP evaluation"
+  },
+  "actions": [
+    {
+      "action": "db.query.select",
+      "enabled": true,
+      "description": "Allow read-only query execution.",
+      "expression": "input.effect == 'read'"
+    },
+    {
+      "action": "db.schema.inspect",
+      "enabled": true,
+      "description": "Allow schema inspection.",
+      "expression": "input.effect == 'read'"
+    },
+    {
+      "action": "db.query.explain",
+      "enabled": true,
+      "description": "Allow explain plans for reviewed queries.",
+      "expression": "input.effect == 'read'"
+    },
+    {
+      "action": "db.insert",
+      "enabled": false,
+      "description": "Writes are outside the readonly allow graph."
+    },
+    {
+      "action": "db.update",
+      "enabled": false,
+      "description": "Updates are outside the readonly allow graph."
+    },
+    {
+      "action": "db.delete",
+      "enabled": false,
+      "description": "Deletes are outside the readonly allow graph."
+    },
+    {
+      "action": "db.schema.mutate",
+      "enabled": false,
+      "description": "DDL and schema mutations require a separate reviewed policy."
+    }
+  ],
+  "notes": [
+    "Example only: do not attach to real databases without explicit resource scoping, credentials review, receipts, and EvidencePack verification."
+  ]
+}

@@ -1,14 +1,15 @@
 ---
 title: Quickstart
-last_reviewed: 2026-05-20
+last_reviewed: 2026-06-12
 ---
 
 # Quickstart
 
-This is the shortest current HELM AI Kernel path: register at the Console,
-install the CLI, pair your workstation, run a LaunchKit app through `helm up`,
-and inspect the receipt-backed Console run. The lower-level boundary demo
-remains available for local integration testing.
+This is the shortest current HELM AI Kernel OSS proof path: build or install
+the CLI, run a local boundary, trigger a denied or escalated action, inspect the
+receipt, and verify the evidence path offline. No account, hosted service, live
+model key, production credential, or private endpoint is required for the local
+proof.
 
 ## Audience
 
@@ -16,41 +17,46 @@ This quickstart is for developers, security reviewers, and integration owners wh
 
 ## Outcome
 
-By the end you should have a Console account, a paired local workstation, a
-LaunchKit run URL under `/runs/<run_id>`, a receipt chain visible in the
-Console dashboard, an offline verification command, and the narrow docs and
-route tests that prove this page still matches the CLI.
+By the end you should have a local HELM boundary on `127.0.0.1:7714`, an MCP
+quarantine proof, a denied or escalated receipt, a tamper-failure check, an
+offline verification command, and the validation commands that keep this page
+aligned with the CLI. Console pairing is optional after the OSS proof succeeds.
 
 ```mermaid
 flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
-        Register["Register at Console"]
-        Install["install or build helm"]
-        Pair["helm-ai-kernel console pair"]
-        Up["helm up openclaw"]
+        Install["install or build helm-ai-kernel"]
+        Serve["helm-ai-kernel serve --policy"]
+        MCP["MCP quarantine proof"]
+        Proxy["optional OpenAI-compatible proxy"]
     end
 
     subgraph Execution["3. Execution & Verdict Plane"]
-        Console["Console /runs/<run_id>"]
+        Verdict["ALLOW / DENY / ESCALATE"]
     end
 
     subgraph Ledger["4. Tamper-Evident Ledger Plane"]
         Receipts["signed receipts"]
+        Evidence["EvidencePack"]
         Verify["offline verification"]
     end
 
     %% Operational Flow Edges
-    Register --> Install
-    Install --> Pair
-    Pair --> Up
-    Up --> Console
-    Up --> Receipts
+    Install --> Serve
+    Serve --> MCP
+    Serve --> Proxy
+    MCP --> Verdict
+    Proxy --> Verdict
+    Verdict --> Receipts
     Receipts --> Verify
+    Receipts --> Evidence
+    Evidence --> Verify
 
     %% Premium Styling Rules
-    style Register fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
-    style Console fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style Serve fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style Verdict fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style Receipts fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    style Evidence fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
     style Verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
 
@@ -68,29 +74,15 @@ flowchart TD
 - `scripts/launch/demo-openai-proxy.sh`
 - `examples/launch/policies/shell_mcp_server_boundary.json`
 
-The quickstart uses Console registration as the primary adoption path. Console
-provides the dashboard for receipts, evidence, and run history. The local CLI
-remains the secondary path for offline proof verification and integration
-testing. `helm-ai-kernel serve` owns the boundary, demo routes create and
-verify a receipt, and the OpenAPI file is the route contract.
+The quickstart uses the local CLI as the primary OSS proof path. Console
+registration is an optional product path after the local boundary, receipt, and
+verification behavior are understood. `helm-ai-kernel serve` owns the boundary,
+the demo routes create and verify a receipt, the MCP and proxy scripts exercise
+high-risk integration surfaces, and the OpenAPI file is the route contract.
 
-## 0. Register At Console
+## 0. Build Or Install
 
-Create your account at <https://console.helm.mindburn.org>. The Console is the
-primary surface for managing runs, inspecting receipts, and reviewing evidence.
-
-## 1. Install And Pair
-
-Install the CLI via Homebrew, log in, and pair your workstation with the Console:
-
-```bash
-brew install mindburnlabs/tap/helm-ai-kernel
-helm-ai-kernel --version
-helm-ai-kernel login
-helm-ai-kernel console pair
-```
-
-Use a source build when editing this repository:
+Use a source build when editing this repository or proving the current checkout:
 
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
@@ -100,6 +92,13 @@ make build
 ./bin/helm --version
 ```
 
+Install the published macOS CLI when evaluating the current release:
+
+```bash
+brew install mindburnlabs/tap/helm-ai-kernel
+helm-ai-kernel --version
+```
+
 Use Docker when you want a clean local runtime:
 
 ```bash
@@ -107,7 +106,77 @@ docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:local .
 docker compose up -d
 ```
 
-## 2. Launch A Supported App
+## 1. Start A Local Boundary
+
+```bash
+./bin/helm-ai-kernel serve --policy ./release.high_risk.v3.toml
+```
+
+Expected ready line:
+
+```text
+helm-edge-local - listening :7714 - ready
+```
+
+If you installed with Homebrew, replace `./bin/helm-ai-kernel` with
+`helm-ai-kernel`.
+
+Run the basic boundary checks in another shell:
+
+```bash
+./bin/helm-ai-kernel boundary status --json
+./bin/helm-ai-kernel conform negative --json
+./bin/helm-ai-kernel mcp authorize-call --server-id new-server --tool-name file.delete --json
+./bin/helm-ai-kernel sandbox preflight --runtime wazero --json
+```
+
+The MCP authorization example should fail closed until the server identity,
+tool schema, scopes, and policy state are approved.
+
+## 2. Run Local Proof Demos
+
+Run the maintained MCP and receipt proof scripts:
+
+```bash
+./scripts/launch/demo-mcp.sh
+./scripts/launch/demo-proof.sh
+```
+
+Expected proof outcomes:
+
+| Check | Expected result |
+| --- | --- |
+| Unknown MCP server or tool | `DENY` or `ESCALATE` before fixture dispatch |
+| Missing schema pin | Fail-closed authorization decision |
+| Dangerous shell fixture | Signed `DENY` receipt |
+| Receipt verification | Original receipt verifies |
+| Tamper check | Flipped verdict fails verification |
+
+Use the receipt stream while the boundary is running:
+
+```bash
+./bin/helm-ai-kernel receipts tail --agent agent.demo.exec --server http://127.0.0.1:7714
+```
+
+For an unfiltered local list, use:
+
+```bash
+curl 'http://127.0.0.1:7714/api/v1/receipts?limit=20'
+```
+
+## 3. Optional Console And LaunchKit Path
+
+Create an account at <https://console.helm.mindburn.org> only when you want the
+hosted dashboard for runs, receipts, and evidence after the local OSS proof.
+
+Install, log in, and pair your workstation:
+
+```bash
+brew install mindburnlabs/tap/helm-ai-kernel
+helm-ai-kernel --version
+helm-ai-kernel login
+helm-ai-kernel console pair
+```
 
 For the instant demo path (no model key required), run demo mode:
 
@@ -141,31 +210,6 @@ Use `--verify-only` to compile and verify gates without starting runtime:
 ./bin/helm up hermes --verify-only
 ```
 
-## 3. Optional: Start A Local Boundary
-
-```bash
-./bin/helm-ai-kernel serve --policy ./release.high_risk.v3.toml
-```
-
-Expected ready line:
-
-```text
-helm-edge-local - listening :7714 - ready
-```
-
-If you installed with Homebrew, replace `./bin/helm-ai-kernel` with `helm-ai-kernel`.
-
-Run the basic boundary checks in another shell:
-
-```bash
-./bin/helm-ai-kernel boundary status --json
-./bin/helm-ai-kernel conform negative --json
-./bin/helm-ai-kernel mcp authorize-call --server-id new-server --tool-name file.delete --json
-./bin/helm-ai-kernel sandbox preflight --runtime wazero --json
-```
-
-The MCP authorization example should fail closed until the server identity, tool schema, scopes, and policy state are approved.
-
 ## 4. Shell + MCP Quickstart
 
 Use this path when Claude Code, Claude Desktop, Cursor, or another MCP-capable
@@ -193,7 +237,7 @@ Install or print a local client configuration:
 
 The minimal shell policy fixture is
 `examples/launch/policies/shell_mcp_server_boundary.json`. It allows read-only
-`ls`, `cat <path>`, and `git status`; it blocks destructive shell patterns
+`ls`, `cat <path>`, `pwd`, and `git status`; it blocks destructive shell patterns
 including `rm -rf`, `dd`, `mkfs`, destructive `git clean` forms, and equivalent
 raw disk or worktree deletion attempts.
 

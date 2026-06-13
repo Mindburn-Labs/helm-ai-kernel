@@ -3,6 +3,12 @@ name: SLSA L3 Provenance
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and upload provenance for, for example v0.5.12.
+        required: true
+        type: string
 
 permissions: read-all
 
@@ -13,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag || github.ref }}
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "1.25.10"
@@ -30,7 +38,8 @@ jobs:
       actions: read
       id-token: write
       contents: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@68bad40844440577b33778c9f29077a3388838e9 # v1.4.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
     with:
       base64-subjects: "${{ needs.build.outputs.hashes }}"
       upload-assets: true
+      upload-tag-name: ${{ github.event.release.tag_name || inputs.tag || '' }}

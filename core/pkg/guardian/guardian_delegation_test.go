@@ -256,3 +256,44 @@ func TestGuardian_Delegation_ActionScopeViolation_Deny(t *testing.T) {
 	assert.Equal(t, "DENY", decision.Verdict)
 	assert.Equal(t, string(contracts.ReasonDelegationScopeViolation), decision.ReasonCode)
 }
+
+// TestGuardian_Delegation_PrincipalMismatch_Deny verifies that a structurally
+// valid, in-scope delegation session issued for one delegate cannot be replayed
+// by a different requesting principal (MIN-712 / SUBAGENT-0161). Before the
+// principal-binding gate, this request was ALLOWED because the tool and action
+// were within session scope.
+func TestGuardian_Delegation_PrincipalMismatch_Deny(t *testing.T) {
+	g, store := setupGuardianWithDelegation(t)
+	ctx := context.Background()
+	now := time.Now()
+
+	// Session delegates authority to agent-bot1, fully in scope for the tool/action.
+	session := identity.NewDelegationSession(
+		"sess-mismatch", "user-alice", "agent-bot1",
+		"nonce-mismatch", "sha256:policy1", "trust-root-1",
+		100, now.Add(1*time.Hour), true, nil,
+	)
+	session.AddAllowedTool("allowed_tool")
+	_ = session.AddCapability(identity.CapabilityGrant{
+		Resource: "allowed_tool",
+		Actions:  []string{"EXECUTE_TOOL"},
+	})
+	_ = store.Store(session)
+
+	// A different principal presents the valid session for an in-scope tool+action.
+	req := DecisionRequest{
+		Principal: "agent-eve",
+		Action:    "EXECUTE_TOOL",
+		Resource:  "allowed_tool",
+		Context: map[string]interface{}{
+			"delegation_session_id": "sess-mismatch",
+		},
+	}
+
+	decision, err := g.EvaluateDecision(ctx, req)
+	require.NoError(t, err)
+	assert.Equal(t, "DENY", decision.Verdict)
+	assert.Equal(t, string(contracts.ReasonDelegationPrincipalMismatch), decision.ReasonCode)
+	assert.Contains(t, decision.Reason, "agent-eve")
+	assert.Contains(t, decision.Reason, "agent-bot1")
+}

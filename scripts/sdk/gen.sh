@@ -189,6 +189,11 @@ classmethod_validators = {
     "EntitlementDecision": {"user_state_validate_enum"},
     "EnvExposurePolicy": {"mode_validate_enum"},
     "EvidenceEnvelopeExportRequest": {"envelope_validate_enum"},
+    "LocalConsoleRuntimeConfig": {"profile_validate_enum", "entitlements_validate_enum"},
+    "LocalSessionExchangeResponse": {"entitlements_validate_enum"},
+    "OnboardingRunStepRequest": {"step_id_validate_enum"},
+    "OnboardingState": {"mode_validate_enum", "entitlements_validate_enum"},
+    "OnboardingStep": {"id_validate_enum", "status_validate_enum", "verdict_validate_enum"},
 }
 lines = s.splitlines()
 out = []

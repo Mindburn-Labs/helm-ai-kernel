@@ -43,3 +43,4 @@ jobs:
       base64-subjects: "${{ needs.build.outputs.hashes }}"
       upload-assets: true
       upload-tag-name: ${{ github.event.release.tag_name || inputs.tag || '' }}
+      compile-generator: true

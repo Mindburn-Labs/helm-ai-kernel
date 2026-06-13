@@ -322,11 +322,50 @@ PUBLISHED_CHECKS = {
 }
 
 
-def check_published(contract: dict[str, Any], version: str, skip: set[str]) -> list[SurfaceResult]:
+def check_published(contract: dict[str, Any], version: str, skip: set[str], only: set[str] | None = None) -> list[SurfaceResult]:
     results: list[SurfaceResult] = []
-    for surface in contract.get("published_surfaces", []):
+    surfaces = list(contract.get("published_surfaces", []))
+    known_ids = {surface["id"] for surface in surfaces}
+    if only is not None:
+        unknown_only = sorted(only - known_ids)
+        if unknown_only:
+            results.append(
+                SurfaceResult(
+                    "published-surface-selection",
+                    "fail",
+                    "known published surface id",
+                    unknown_only,
+                    detail=f"unknown --only surface id(s): {', '.join(unknown_only)}",
+                    blocking=True,
+                )
+            )
+
+    for surface in surfaces:
+        if only is not None and surface["id"] not in only:
+            results.append(
+                SurfaceResult(
+                    surface["id"],
+                    "skipped",
+                    version,
+                    None,
+                    url=fmt(surface.get("human_url") or surface.get("url", ""), version),
+                    detail="not selected by caller",
+                    blocking=False,
+                )
+            )
+            continue
         if surface["id"] in skip:
-            results.append(SurfaceResult(surface["id"], "skipped", version, None, url=fmt(surface.get("human_url") or surface.get("url", ""), version), detail="skipped by caller", blocking=False))
+            results.append(
+                SurfaceResult(
+                    surface["id"],
+                    "skipped",
+                    version,
+                    None,
+                    url=fmt(surface.get("human_url") or surface.get("url", ""), version),
+                    detail="skipped by caller",
+                    blocking=False,
+                )
+            )
             continue
         checker = PUBLISHED_CHECKS.get(surface["kind"])
         if checker is None:
@@ -392,6 +431,7 @@ def parse_args() -> argparse.Namespace:
     local.add_argument("--tag", help="tag ref to compare, for example v1.2.3")
     published = sub.add_parser("published", help="check public registry surfaces")
     published.add_argument("--skip", action="append", default=[], help="published surface id to skip; can be passed more than once")
+    published.add_argument("--only", action="append", default=[], help="published surface id to check; when passed, all other published surfaces are skipped")
     published.add_argument("--surface-timeout", type=float, default=REQUEST_TIMEOUT_SECONDS, help="timeout in seconds for each public surface request")
     return parser.parse_args()
 
@@ -411,7 +451,7 @@ def main() -> int:
         results = source_results
     elif args.mode == "published":
         source_results = check_local(contract, version, None)
-        registry_results = check_published(contract, version, set(args.skip))
+        registry_results = check_published(contract, version, set(args.skip), set(args.only) if args.only else None)
         results = source_results + registry_results
     else:
         raise AssertionError(args.mode)

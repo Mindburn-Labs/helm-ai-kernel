@@ -37,6 +37,8 @@ runtime:
 model_gateway:
     logical_secret: model_gateway
     provider: byo
+    provider_ids:
+        - openrouter
     mode: logical_binding_env_projection
     raw_provider_key_projected: true
 required_secrets:
@@ -94,7 +96,7 @@ framework_contract:
           purpose: app_cache_state
           required: true
     provider_host_groups:
-        - model_gateway_byo
+        - openrouter
     egress_proxy:
         required: true
         image: ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:395cd585d0e2345e649455953f0d7765b141440bfb2fc753a4ae944e2ba350f8

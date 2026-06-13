@@ -73,8 +73,8 @@ func TestMissingModelSecretEscalates(t *testing.T) {
 		t.Fatalf("unexpected missing secret plan: %#v", compiled)
 	}
 	missing, ok := compiled.Nodes["missing_secret"].(string)
-	if !ok || missing != "one complete catalog-backed provider env group" {
-		t.Fatalf("missing model gateway must name catalog-backed BYO env set, got %#v", compiled.Nodes["missing_secret"])
+	if !ok || missing != "OPENROUTER_API_KEY" {
+		t.Fatalf("missing model gateway must name OpenRouter key, got %#v", compiled.Nodes["missing_secret"])
 	}
 }
 

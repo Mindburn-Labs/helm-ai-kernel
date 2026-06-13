@@ -344,6 +344,18 @@ func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.Decisio
 }
 
 func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, evidenceHashes []string, intervention *contracts.InterventionMetadata, ruleGraph *prg.Graph) error {
+	// Bind the canonical effect digest before any signing path: the decision
+	// signature covers EffectDigest (crypto.CanonicalizeDecision), and intent
+	// issuance / execution verify the binding fail-closed. Without this, a
+	// SignDecision caller signs an empty digest and can never issue intents.
+	if decision.EffectDigest == "" {
+		digest, err := canonicalEffectDigest(effect)
+		if err != nil {
+			return fmt.Errorf("canonicalize effect digest: %w", err)
+		}
+		decision.EffectDigest = digest
+	}
+
 	artifacts := make([]*pkg_artifact.ArtifactEnvelope, 0, len(evidenceHashes))
 	for _, hash := range evidenceHashes {
 		env, err := g.registry.GetArtifact(ctx, hash)

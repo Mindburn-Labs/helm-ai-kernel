@@ -120,7 +120,9 @@ helm-ai-kernel quickstart
 ```
 
 The command defaults to `127.0.0.1:7714`, creates local data under `data/`, and
-opens a one-time bootstrap URL when a signed Console web bundle is available.
+opens a one-time bootstrap URL. The Homebrew release installs the signed
+Console web bundle under `share/helm-ai-kernel/console`; source and direct
+binary users can provide the same production bundle with `--console-assets`.
 Use `--no-open` for terminal-only validation:
 
 ```bash
@@ -438,7 +440,7 @@ curl 'http://127.0.0.1:7714/api/v1/receipts?limit=20'
 ./bin/helm-ai-kernel verify evidence-pack.tar --json
 ```
 
-Use the `v0.5.12` release `evidence-pack.tar` after `version-status.json` confirms all lockstep channels, or use an operator-generated pack known to contain ProofGraph and receipt material. Do not treat the local onboarding demo export as verified unless it includes those records.
+Use the `v0.5.13` release `evidence-pack.tar` after `version-status.json` confirms all lockstep channels, or use an operator-generated pack known to contain ProofGraph and receipt material. Do not treat the local onboarding demo export as verified unless it includes those records.
 
 ## 9. Validate The Checkout
 

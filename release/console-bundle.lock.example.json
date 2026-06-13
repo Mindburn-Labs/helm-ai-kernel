@@ -7,5 +7,6 @@
   "checksum": "helm-console-web-v0.0.0.tar.gz.sha256",
   "sbom": "helm-console-web-v0.0.0.tar.gz.sbom.spdx.json",
   "provenance": "helm-console-web-v0.0.0.tar.gz.provenance.json",
+  "manifest": "helm-console-web-v0.0.0.tar.gz.manifest.json",
   "cosign_bundle": "helm-console-web-v0.0.0.tar.gz.cosign.bundle"
 }

@@ -103,7 +103,7 @@ Every runnable example should produce at least one of these observable outputs:
 | --- | --- | --- |
 | example reaches the upstream provider directly | base URL bypassed HELM | set the framework base URL to `http://127.0.0.1:9090/v1` or use `HELM_PROXY_BASE_URL` where the example supports it |
 | receipt is missing | wrong server mode | use `helm-ai-kernel proxy` for OpenAI-compatible examples and `helm-ai-kernel serve` for runtime API examples |
-| Java package cannot be fetched from Maven Central | registry freshness or local Maven cache issue | verify `io.github.mindburnlabs:helm-sdk:0.5.12` against repo1 or `version-status.json`; build from `sdk/java` only when testing local source changes |
+| Java package cannot be fetched from Maven Central | registry freshness or local Maven cache issue | verify `io.github.mindburnlabs:helm-sdk:0.5.13` against repo1 or `version-status.json`; build from `sdk/java` only when testing local source changes |
 
 ## Not Covered
 

@@ -302,7 +302,7 @@ def main() -> int:
                 failures.append(f'docs/ARCHITECTURE.md contradicts a shipped browser UI with marker {marker!r}')
     elif architecture.exists():
         text = read_text(architecture)
-        for marker in ('ships no bundled browser client', 'headless kernel and API'):
+        for marker in ('does not include Console source code', 'headless kernel and API'):
             if marker not in text:
                 failures.append(f'docs/ARCHITECTURE.md is missing headless browser-split marker {marker!r}')
 

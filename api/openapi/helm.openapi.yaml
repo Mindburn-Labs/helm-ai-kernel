@@ -43,6 +43,8 @@ tags:
     description: Health and version
   - name: console
     description: HELM AI Kernel Console platform state
+  - name: onboarding
+    description: Local OSS quickstart Console onboarding and proof export
   - name: agent
     description: Self-hosted AG-UI runtime for the HELM AI Kernel Console assistant
   - name: launchpad
@@ -463,6 +465,144 @@ paths:
 
         '403':
           $ref: '#/components/responses/HelmError'
+
+  /__helm/config.json:
+    get:
+      operationId: getLocalConsoleRuntimeConfig
+      tags: [onboarding, console]
+      summary: Read same-origin Console runtime configuration
+      description: |
+        Public local quickstart config served only when quickstart mode is active.
+        It tells the shared Console where the same-origin API is and which local
+        OSS onboarding profile to start. It does not grant authority.
+      responses:
+        '200':
+          description: Local Console runtime config
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalConsoleRuntimeConfig'
+        '405':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/local-session/exchange:
+    post:
+      operationId: exchangeLocalQuickstartSession
+      tags: [onboarding]
+      summary: Exchange one-time local bootstrap token for a short-lived session
+      description: |
+        Loopback-only quickstart endpoint. The bootstrap token is one-time and
+        short-lived. The returned bearer token still requires tenant and
+        principal headers on tenant-scoped APIs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalSessionExchangeRequest'
+      responses:
+        '200':
+          description: Local quickstart session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalSessionExchangeResponse'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
+        '405':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/onboarding/state:
+    get:
+      operationId: getLocalOnboardingState
+      tags: [onboarding]
+      summary: Read backend-owned local onboarding proof state
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
+      responses:
+        '200':
+          description: Onboarding proof state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingState'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
+        '405':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/onboarding/run-step:
+    post:
+      operationId: runLocalOnboardingStep
+      tags: [onboarding]
+      summary: Run one backend-owned onboarding proof step
+      description: |
+        Creates signed receipts and proof artifacts in the backend. The Console
+        only displays the returned state and refs.
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardingRunStepRequest'
+      responses:
+        '200':
+          description: Updated onboarding state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingState'
+        '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
+        '405':
+          $ref: '#/components/responses/HelmError'
+        '500':
+          $ref: '#/components/responses/HelmError'
+
+  /api/v1/onboarding/export:
+    get:
+      operationId: exportLocalOnboardingEvidence
+      tags: [onboarding, evidence]
+      summary: Export local onboarding EvidencePack metadata
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
+      responses:
+        '200':
+          description: EvidencePack export metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingEvidenceExport'
+        '401':
+          $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
+        '405':
+          $ref: '#/components/responses/HelmError'
+        '500':
+          $ref: '#/components/responses/HelmError'
+
   /api/v1/console/bootstrap:
     get:
       operationId: getConsoleBootstrap
@@ -3976,6 +4116,111 @@ components:
         count: { type: integer }
         next_cursor: { type: string }
         has_more: { type: boolean }
+
+    LocalConsoleRuntimeConfig:
+      type: object
+      required: [api_base_url, local_mode, start_onboarding, tenant_id, principal_id, profile, entitlements]
+      properties:
+        api_base_url: { type: string, format: uri }
+        local_mode: { type: boolean }
+        start_onboarding: { type: boolean }
+        tenant_id: { type: string }
+        principal_id: { type: string }
+        profile:
+          type: string
+          enum: [claude, codex, mcp, openai-compatible]
+        entitlements:
+          type: array
+          items:
+            type: string
+            enum: [OSS_CORE]
+
+    LocalSessionExchangeRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          minLength: 1
+
+    LocalSessionExchangeResponse:
+      type: object
+      required: [session_token, tenant_id, principal_id, principal, expires_at, entitlements]
+      properties:
+        session_token: { type: string }
+        tenant_id: { type: string }
+        principal_id: { type: string }
+        principal: { type: string }
+        expires_at: { type: string, format: date-time }
+        entitlements:
+          type: array
+          items:
+            type: string
+            enum: [OSS_CORE]
+
+    OnboardingRunStepRequest:
+      type: object
+      required: [step_id]
+      properties:
+        step_id:
+          type: string
+          enum: [health, policy, allow, deny, mcp, verify]
+
+    OnboardingState:
+      type: object
+      required: [mode, entitlements, profile, steps]
+      properties:
+        mode:
+          type: string
+          enum: [self-hosted-oss]
+        entitlements:
+          type: array
+          items:
+            type: string
+            enum: [OSS_CORE]
+        profile:
+          type: string
+        policy_path:
+          type: string
+        evidence_pack_ref:
+          type: string
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingStep'
+
+    OnboardingStep:
+      type: object
+      required: [id, title, description, status, verdict, reason_code]
+      properties:
+        id:
+          type: string
+          enum: [health, policy, allow, deny, mcp, verify]
+        title: { type: string }
+        description: { type: string }
+        status:
+          type: string
+          enum: [pending, pass]
+        verdict:
+          type: string
+          enum: [ALLOW, DENY, ESCALATE]
+        reason_code: { type: string }
+        receipt_ref: { type: string }
+
+    OnboardingEvidenceExport:
+      type: object
+      required: [evidence_pack_ref, sha256, receipt_refs, steps]
+      properties:
+        evidence_pack_ref: { type: string }
+        sha256: { type: string }
+        receipt_refs:
+          type: object
+          additionalProperties:
+            type: string
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingStep'
 
     VerificationScope:
       type: object

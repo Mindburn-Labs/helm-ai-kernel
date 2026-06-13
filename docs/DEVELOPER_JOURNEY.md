@@ -1,6 +1,6 @@
 ---
 title: Developer Journey
-last_reviewed: 2026-05-20
+last_reviewed: 2026-06-13
 ---
 
 # Developer Journey
@@ -9,7 +9,7 @@ This page is the source-backed end-to-end path for evaluating HELM AI Kernel. It
 
 ## Audience
 
-This journey is for developers and platform teams evaluating HELM AI Kernel beyond the first quickstart. It is the source-backed path for proving Console registration, local runtime behavior, SDK calls, receipts, EvidencePack verification, conformance, deployment, and release verification.
+This journey is for developers and platform teams evaluating HELM AI Kernel beyond the first quickstart. It is the source-backed path for proving local Console onboarding, optional hosted Console registration, local runtime behavior, SDK calls, receipts, EvidencePack verification, conformance, deployment, and release verification.
 
 ## Outcome
 
@@ -18,8 +18,9 @@ After completing the path you should know which local command owns each public c
 ```mermaid
 flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
-        Register["Register at Console"]
+        Quickstart["helm-ai-kernel quickstart"]
         Install["install or build helm-ai-kernel"]
+        Register["optional hosted Console"]
         Pair["helm-ai-kernel console pair"]
         Proxy["optional helm-ai-kernel proxy"]
     end
@@ -36,8 +37,10 @@ flowchart TD
     end
 
     %% Operational Flow Edges
-    Register --> Install
-    Install --> Pair
+    Install --> Quickstart
+    Quickstart --> Serve
+    Quickstart --> Register
+    Register --> Pair
     Pair --> Serve
     Serve --> Demo
     Serve --> Proxy
@@ -46,7 +49,7 @@ flowchart TD
     Verify --> Gates
 
     %% Premium Styling Rules
-    style Register fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style Quickstart fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style Serve fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
     style Demo fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
     style Receipts fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
@@ -68,12 +71,21 @@ flowchart TD
 - `scripts/check_documentation_coverage.py`
 - `scripts/check_documentation_truth.py`
 
-## Register At Console
+## Local Console First
 
-Create your account at <https://console.helm.mindburn.org>. The Console is the
-primary surface for managing runs, inspecting receipts, and reviewing evidence.
-All local CLI operations sync receipts and evidence to the Console dashboard
-when the workstation is paired.
+Start with the OSS proof path:
+
+```bash
+helm-ai-kernel quickstart
+```
+
+This starts the local Kernel, serves the same-origin Console at `/console`, and
+uses backend-owned onboarding APIs to create receipts and EvidencePack refs. No
+hosted account is required.
+
+Create your account at <https://console.helm.mindburn.org> only when you want
+hosted dashboard, Launchpad, or commercial workflows after the local proof. Paid
+capabilities remain backend-entitlement gated.
 
 ## Install
 
@@ -83,6 +95,12 @@ source builds and Docker remain the portable paths for Linux and WSL.
 ```bash
 brew install mindburnlabs/tap/helm-ai-kernel
 helm-ai-kernel --version
+helm-ai-kernel quickstart
+```
+
+Use hosted pairing only after the local proof succeeds:
+
+```bash
 helm-ai-kernel login
 helm-ai-kernel console pair
 ```
@@ -99,7 +117,7 @@ docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:local .
 docker compose up -d
 ```
 
-Docker Compose exposes the service on its compose-configured port. The local source quickstart uses `helm-ai-kernel serve` on `127.0.0.1:7714`.
+Docker Compose exposes the service on its compose-configured port. The local source quickstart uses `helm-ai-kernel quickstart` on `127.0.0.1:7714`.
 
 ## Local Boundary
 

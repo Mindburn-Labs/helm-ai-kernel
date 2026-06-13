@@ -1,0 +1,11 @@
+{
+  "schema_version": "helm.console.web_bundle.lock.v1",
+  "source_repo": "Mindburn-Labs/app-helm-console",
+  "source_commit": "<app-helm-console commit>",
+  "bundle_name": "helm-console-web-v0.0.0.tar.gz",
+  "sha256": "<sha256 of bundle>",
+  "checksum": "helm-console-web-v0.0.0.tar.gz.sha256",
+  "sbom": "helm-console-web-v0.0.0.tar.gz.sbom.spdx.json",
+  "provenance": "helm-console-web-v0.0.0.tar.gz.provenance.json",
+  "cosign_bundle": "helm-console-web-v0.0.0.tar.gz.cosign.bundle"
+}

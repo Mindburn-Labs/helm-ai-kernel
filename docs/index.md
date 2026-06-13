@@ -1,11 +1,11 @@
 ---
 title: HELM AI Kernel
-last_reviewed: 2026-05-05
+last_reviewed: 2026-06-13
 ---
 
 # HELM AI Kernel Developer Portal
 
-HELM AI Kernel is the open-source execution firewall for MCP and AI agents. The CLI gives developers a local kernel, policy bundle loader, OpenAI-compatible proxy path, MCP firewall, receipts, EvidencePacks, and offline verification. The Console provides the hosted dashboard for managing runs, receipts, and evidence after the local OSS path is understood.
+HELM AI Kernel is the open-source execution firewall for MCP and AI agents. The CLI gives developers a local kernel, same-origin quickstart Console, policy bundle loader, OpenAI-compatible proxy path, MCP firewall, receipts, EvidencePacks, and offline verification. Hosted Console pairing is a later path for account and commercial workflows after the local OSS proof is understood.
 
 ## Audience
 
@@ -99,7 +99,8 @@ The code, command output, and verification artifacts override marketing language
 
 | Interface | Use When | Public Doc |
 | --- | --- | --- |
-| Console | You want the primary adoption surface: registration, run dashboard, receipts, and evidence. | <https://console.helm.mindburn.org> |
+| Local Console | You want the primary OSS adoption surface: guided local proof, receipts, and EvidencePack export. | [Quickstart](QUICKSTART.md) |
+| Hosted Console | You want account, Launchpad, or commercial workflows after the local proof. | <https://console.helm.mindburn.org> |
 | CLI | You want local serving, policy loading, receipts, or verification commands. | [Quickstart](QUICKSTART.md) |
 | OpenAI-compatible proxy | You have an existing OpenAI-style client and want a small integration diff. | [Proxy integration](INTEGRATIONS/openai_baseurl.md) |
 | MCP | You are exposing governed tools to MCP-capable clients. | [MCP integration](INTEGRATIONS/mcp.md) |

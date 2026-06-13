@@ -1,15 +1,15 @@
 ---
 title: Quickstart
-last_reviewed: 2026-06-12
+last_reviewed: 2026-06-13
 ---
 
 # Quickstart
 
-This is the shortest current HELM AI Kernel OSS proof path: build or install
-the CLI, run a local boundary, trigger a denied or escalated action, inspect the
-receipt, and verify the evidence path offline. No account, hosted service, live
-model key, production credential, or private endpoint is required for the local
-proof.
+This is the shortest current HELM AI Kernel OSS proof path: install or build
+the CLI, run `helm-ai-kernel quickstart`, open the same-origin local Console,
+and let the backend create signed proof artifacts. No account, hosted service,
+live model key, production credential, Docker daemon, or private endpoint is
+required for the local proof.
 
 ## Audience
 
@@ -17,18 +17,19 @@ This quickstart is for developers, security reviewers, and integration owners wh
 
 ## Outcome
 
-By the end you should have a local HELM boundary on `127.0.0.1:7714`, an MCP
-quarantine proof, a denied or escalated receipt, a tamper-failure check, an
-offline verification command, and the validation commands that keep this page
-aligned with the CLI. Console pairing is optional after the OSS proof succeeds.
+By the end you should have a local Kernel on `127.0.0.1:7714`, a Console served
+from the same origin at `/console`, `OSS_CORE` entitlement display, policy-load
+proof, signed `ALLOW`, signed `DENY`, MCP quarantine, tamper-failure proof, and
+an exported onboarding EvidencePack. Hosted Console pairing, paid tiers, and
+Enterprise automation remain next-step paths after the local proof succeeds.
 
 ```mermaid
 flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Install["install or build helm-ai-kernel"]
-        Serve["helm-ai-kernel serve --policy"]
-        MCP["MCP quarantine proof"]
-        Proxy["optional OpenAI-compatible proxy"]
+        Quickstart["helm-ai-kernel quickstart"]
+        Console["same-origin /console"]
+        API["onboarding API"]
     end
 
     subgraph Execution["3. Execution & Verdict Plane"]
@@ -42,18 +43,18 @@ flowchart TD
     end
 
     %% Operational Flow Edges
-    Install --> Serve
-    Serve --> MCP
-    Serve --> Proxy
-    MCP --> Verdict
-    Proxy --> Verdict
+    Install --> Quickstart
+    Quickstart --> Console
+    Console --> API
+    API --> Verdict
     Verdict --> Receipts
     Receipts --> Verify
     Receipts --> Evidence
     Evidence --> Verify
 
     %% Premium Styling Rules
-    style Serve fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style Quickstart fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    style Console fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style Verdict fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style Receipts fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
     style Evidence fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
@@ -63,22 +64,26 @@ flowchart TD
 
 ## Source Truth
 
+- `core/cmd/helm-ai-kernel/quickstart_cmd.go`
+- `core/cmd/helm-ai-kernel/local_first_run_routes.go`
 - `core/cmd/helm-ai-kernel/server_cmd.go`
-- `core/cmd/helm-ai-kernel/demo_routes.go`
+- `core/cmd/helm-ai-kernel/console_routes.go`
 - `core/cmd/helm-ai-kernel/proxy_cmd.go`
 - `core/cmd/helm-ai-kernel/receipts_cmd.go`
 - `core/cmd/helm-ai-kernel/verify_cmd.go`
 - `api/openapi/helm.openapi.yaml`
 - `release.high_risk.v3.toml`
+- `scripts/release/stage_console_bundle.sh`
+- `release/console-bundle.lock.example.json`
 - `scripts/launch/demo-mcp.sh`
 - `scripts/launch/demo-openai-proxy.sh`
 - `examples/launch/policies/shell_mcp_server_boundary.json`
 
-The quickstart uses the local CLI as the primary OSS proof path. Console
-registration is an optional product path after the local boundary, receipt, and
-verification behavior are understood. `helm-ai-kernel serve` owns the boundary,
-the demo routes create and verify a receipt, the MCP and proxy scripts exercise
-high-risk integration surfaces, and the OpenAPI file is the route contract.
+The quickstart uses the local CLI and same-origin Console as the primary OSS
+proof path. `helm-ai-kernel quickstart` prepares local state, writes a
+fail-closed starter policy when missing, starts the Kernel, serves the verified
+Console bundle from `/console`, and exposes backend-owned onboarding APIs. The
+Console displays proof state; the Kernel creates receipts and EvidencePack refs.
 
 ## 0. Build Or Install
 
@@ -106,7 +111,52 @@ docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:local .
 docker compose up -d
 ```
 
-## 1. Start A Local Boundary
+## 1. Run Local Console-First Quickstart
+
+Use the one-command path for a fresh OSS first run:
+
+```bash
+helm-ai-kernel quickstart
+```
+
+The command defaults to `127.0.0.1:7714`, creates local data under `data/`, and
+opens a one-time bootstrap URL when a signed Console web bundle is available.
+Use `--no-open` for terminal-only validation:
+
+```bash
+helm-ai-kernel quickstart --no-open --json
+```
+
+Useful flags:
+
+| Flag | Purpose |
+| --- | --- |
+| `--addr 127.0.0.1` | Loopback bind address. Non-loopback binds are rejected. |
+| `--port 7714` | Local Kernel port. |
+| `--data-dir <dir>` | SQLite, keys, policy, receipts, and EvidencePack location. |
+| `--reset` | Remove the quickstart data directory before initialization. |
+| `--console-assets <build/web>` | Serve a verified production Console bundle at `/console`. |
+| `--profile claude|codex|mcp|openai-compatible` | Label the onboarding path. |
+| `--dry-run --json` | Prepare and print machine-readable startup state without serving. |
+
+The browser URL carries a one-time bootstrap token. It can only be exchanged
+from loopback, expires quickly, and only returns a local bearer token. Calls to
+the onboarding APIs still require `X-Helm-Tenant-ID` and
+`X-Helm-Principal-ID`.
+
+The local Console walks through:
+
+| Step | Backend proof |
+| --- | --- |
+| Kernel health | local Kernel reachable |
+| Policy loaded | starter policy path active |
+| Signed allow | signed `ALLOW` receipt |
+| Signed deny | signed `DENY` receipt |
+| MCP quarantine | signed `ESCALATE` receipt for untrusted MCP |
+| Tamper check | receipt tampering rejected |
+| Export | onboarding EvidencePack metadata written under the data dir |
+
+## 2. Manual Boundary Path
 
 ```bash
 ./bin/helm-ai-kernel serve --policy ./release.high_risk.v3.toml
@@ -133,7 +183,7 @@ Run the basic boundary checks in another shell:
 The MCP authorization example should fail closed until the server identity,
 tool schema, scopes, and policy state are approved.
 
-## 2. Run Local Proof Demos
+## 3. Run Local Proof Demos
 
 Run the maintained MCP and receipt proof scripts:
 
@@ -164,10 +214,12 @@ For an unfiltered local list, use:
 curl 'http://127.0.0.1:7714/api/v1/receipts?limit=20'
 ```
 
-## 3. Optional Console And LaunchKit Path
+## 4. Hosted Console And LaunchKit Path
 
 Create an account at <https://console.helm.mindburn.org> only when you want the
 hosted dashboard for runs, receipts, and evidence after the local OSS proof.
+This quickstart does not claim hosted Enterprise production or commercial
+entitlement enforcement; paid capabilities remain backend-enforced.
 
 Install, log in, and pair your workstation:
 

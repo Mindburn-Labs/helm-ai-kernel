@@ -11011,6 +11011,7 @@ class LocalConsoleRuntimeConfig(BaseModel):
     __properties: ClassVar[List[str]] = ["api_base_url", "local_mode", "start_onboarding", "tenant_id", "principal_id", "profile", "entitlements"]
 
     @field_validator('profile')
+    @classmethod
     def profile_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['claude', 'codex', 'mcp', 'openai-compatible']):
@@ -11018,6 +11019,7 @@ class LocalConsoleRuntimeConfig(BaseModel):
         return value
 
     @field_validator('entitlements')
+    @classmethod
     def entitlements_validate_enum(cls, value):
         """Validates the enum"""
         for i in value:
@@ -11193,6 +11195,7 @@ class LocalSessionExchangeResponse(BaseModel):
     __properties: ClassVar[List[str]] = ["session_token", "tenant_id", "principal_id", "principal", "expires_at", "entitlements"]
 
     @field_validator('entitlements')
+    @classmethod
     def entitlements_validate_enum(cls, value):
         """Validates the enum"""
         for i in value:
@@ -13519,6 +13522,7 @@ class OnboardingRunStepRequest(BaseModel):
     __properties: ClassVar[List[str]] = ["step_id"]
 
     @field_validator('step_id')
+    @classmethod
     def step_id_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['health', 'policy', 'allow', 'deny', 'mcp', 'verify']):
@@ -13609,6 +13613,7 @@ class OnboardingState(BaseModel):
     __properties: ClassVar[List[str]] = ["mode", "entitlements", "profile", "policy_path", "evidence_pack_ref", "steps"]
 
     @field_validator('mode')
+    @classmethod
     def mode_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['self-hosted-oss']):
@@ -13616,6 +13621,7 @@ class OnboardingState(BaseModel):
         return value
 
     @field_validator('entitlements')
+    @classmethod
     def entitlements_validate_enum(cls, value):
         """Validates the enum"""
         for i in value:
@@ -13720,6 +13726,7 @@ class OnboardingStep(BaseModel):
     __properties: ClassVar[List[str]] = ["id", "title", "description", "status", "verdict", "reason_code", "receipt_ref"]
 
     @field_validator('id')
+    @classmethod
     def id_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['health', 'policy', 'allow', 'deny', 'mcp', 'verify']):
@@ -13727,6 +13734,7 @@ class OnboardingStep(BaseModel):
         return value
 
     @field_validator('status')
+    @classmethod
     def status_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['pending', 'pass']):
@@ -13734,6 +13742,7 @@ class OnboardingStep(BaseModel):
         return value
 
     @field_validator('verdict')
+    @classmethod
     def verdict_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['ALLOW', 'DENY', 'ESCALATE']):

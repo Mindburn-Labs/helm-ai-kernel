@@ -301,6 +301,8 @@ paths:
         RFC-005 approval ceremony endpoint.
         Requires intent_hash, Ed25519 signature, and public key.
         Returns an approval receipt with causal chain linkage.
+      security:
+        - ServiceBearerAuth: []
       requestBody:
         required: true
         content:
@@ -326,6 +328,8 @@ paths:
                 output_hash: "sha256:7f83b1..."
         '400':
           $ref: '#/components/responses/HelmError'
+        '401':
+          $ref: '#/components/responses/HelmError'
         '403':
           $ref: '#/components/responses/HelmError'
 
@@ -336,6 +340,9 @@ paths:
       summary: Evaluate a governed intent and emit a receipt
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         required: true
         content:
@@ -366,6 +373,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: limit
           in: query
           schema: { type: integer, default: 100, maximum: 1000 }
@@ -389,6 +398,8 @@ paths:
         '503':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/receipts/tail:
     get:
       operationId: tailReceipts
@@ -397,6 +408,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: limit
           in: query
           schema: { type: integer, default: 100, maximum: 1000 }
@@ -420,6 +433,8 @@ paths:
         '503':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/receipts/{receipt_id}:
     get:
       operationId: getConsoleReceipt
@@ -428,6 +443,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: receipt_id
           in: path
           required: true
@@ -444,6 +461,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/console/bootstrap:
     get:
       operationId: getConsoleBootstrap
@@ -454,6 +473,9 @@ paths:
       description: |
         Consolidated read-only platform state used by the HELM AI Kernel Console shell.
         Values are derived from kernel services and local configuration.
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: Console bootstrap state
@@ -464,6 +486,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /v1/meta/capabilities:
     get:
       operationId: getCanonicalMetaCapabilities
@@ -521,6 +545,9 @@ paths:
       summary: List Console surfaces and their backing source contracts
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: Console surface catalog
@@ -536,6 +563,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/console/surfaces/{surface_id}:
     get:
       operationId: getConsoleSurface
@@ -544,6 +573,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: surface_id
           in: path
           required: true
@@ -562,6 +593,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/agent-ui/info:
     get:
       operationId: getAgentUIRuntimeInfo
@@ -569,6 +602,9 @@ paths:
       summary: Read OSS Agent UI runtime capabilities
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: AG-UI runtime metadata and read-only tool catalog
@@ -590,6 +626,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/agent-ui/run:
     post:
       operationId: runAgentUIRuntime
@@ -597,6 +635,9 @@ paths:
       summary: Run the OSS read-only Agent UI assistant
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         required: true
         content:
@@ -633,6 +674,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/apps:
     get:
       operationId: listLaunchpadApps
@@ -640,6 +683,9 @@ paths:
       summary: List Launchpad app specs
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: Launchpad apps
@@ -656,6 +702,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/substrates:
     get:
       operationId: listLaunchpadSubstrates
@@ -663,6 +711,9 @@ paths:
       summary: List Launchpad substrate specs
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: Launchpad substrates
@@ -679,6 +730,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/matrix:
     get:
       operationId: getLaunchpadMatrix
@@ -686,6 +739,9 @@ paths:
       summary: Read Launchpad app/substrate compatibility matrix
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: Launchpad matrix
@@ -702,6 +758,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/plan:
     post:
       operationId: planLaunchpadRun
@@ -709,6 +767,9 @@ paths:
       summary: Compile a Launchpad plan without starting side effects
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         required: true
         content:
@@ -727,6 +788,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/launch:
     post:
       operationId: createLaunchpadRun
@@ -734,6 +797,9 @@ paths:
       summary: Start a governed Launchpad run
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         required: true
         content:
@@ -752,6 +818,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/imports:
     get:
       operationId: listLaunchpadImports
@@ -759,6 +827,9 @@ paths:
       summary: List universal repo-to-runtime imports
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: Launchpad imports
@@ -775,12 +846,17 @@ paths:
                   cli_equivalent: { type: string }
         '401':
           $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
     post:
       operationId: createLaunchpadImport
       tags: [launchpad]
       summary: Inspect a GitHub or local repository and generate untrusted launch candidates
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         required: true
         content:
@@ -804,6 +880,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/imports/{import_id}:
     get:
       operationId: getLaunchpadImport
@@ -812,6 +890,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: import_id
           in: path
           required: true
@@ -832,6 +912,8 @@ paths:
         '404':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/imports/{import_id}/preflight:
     post:
       operationId: preflightLaunchpadImport
@@ -840,6 +922,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: import_id
           in: path
           required: true
@@ -863,6 +947,8 @@ paths:
         '404':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/imports/{import_id}/promote:
     post:
       operationId: promoteLaunchpadImport
@@ -871,6 +957,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: import_id
           in: path
           required: true
@@ -890,6 +978,8 @@ paths:
         '409':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/imports/{import_id}/launch:
     post:
       operationId: launchImportedApp
@@ -898,6 +988,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: import_id
           in: path
           required: true
@@ -916,6 +1008,8 @@ paths:
         '409':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/imports/{import_id}/teardown:
     post:
       operationId: teardownLaunchpadImport
@@ -924,6 +1018,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: import_id
           in: path
           required: true
@@ -945,6 +1041,8 @@ paths:
         '404':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/runs:
     get:
       operationId: listLaunchpadRuns
@@ -952,6 +1050,9 @@ paths:
       summary: List HELM runtime instances
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: Launchpad runs and runtime instances
@@ -970,12 +1071,17 @@ paths:
                       $ref: '#/components/schemas/LaunchpadRuntimeInstance'
         '401':
           $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
     post:
       operationId: createLaunchpadRuntimeRun
       tags: [launchpad]
       summary: Compile gates and launch only after fail-closed boundary ALLOW
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         required: true
         content:
@@ -994,6 +1100,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/runs/{run_id}:
     get:
       operationId: getLaunchpadRuntimeRun
@@ -1002,6 +1110,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: run_id
           in: path
           required: true
@@ -1018,6 +1128,8 @@ paths:
         '404':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/runs/{run_id}/events:
     get:
       operationId: listLaunchpadRunEvents
@@ -1026,6 +1138,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: run_id
           in: path
           required: true
@@ -1047,6 +1161,8 @@ paths:
         '404':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/runs/{run_id}/receipts:
     get:
       operationId: listLaunchpadRunReceipts
@@ -1055,6 +1171,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: run_id
           in: path
           required: true
@@ -1072,6 +1190,8 @@ paths:
         '404':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/runs/{run_id}/logs:
     get:
       operationId: getLaunchpadRunLogs
@@ -1080,6 +1200,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: run_id
           in: path
           required: true
@@ -1097,6 +1219,8 @@ paths:
         '404':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/runs/{run_id}/evidence/export:
     post:
       operationId: exportLaunchpadRunEvidence
@@ -1105,6 +1229,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: run_id
           in: path
           required: true
@@ -1122,6 +1248,8 @@ paths:
         '404':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/runs/{run_id}/teardown:
     post:
       operationId: teardownLaunchpadRuntimeRun
@@ -1130,6 +1258,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: run_id
           in: path
           required: true
@@ -1153,6 +1283,8 @@ paths:
         '404':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/policy/simulate:
     post:
       operationId: simulateLaunchpadPolicy
@@ -1160,6 +1292,9 @@ paths:
       summary: Simulate least-privilege Launchpad policy for an app
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         required: true
         content:
@@ -1178,6 +1313,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/sandbox/{run_id}:
     get:
       operationId: inspectLaunchpadSandbox
@@ -1186,6 +1323,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: run_id
           in: path
           required: true
@@ -1203,6 +1342,8 @@ paths:
         '404':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/mcp/threat-reviews:
     get:
       operationId: listLaunchpadMcpThreatReviews
@@ -1210,6 +1351,9 @@ paths:
       summary: List MCP threat reviews and quarantine state
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: MCP threat reviews
@@ -1221,6 +1365,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/mcp/approvals:
     post:
       operationId: approveLaunchpadMcpTools
@@ -1228,6 +1374,9 @@ paths:
       summary: Create a scoped MCP approval receipt record
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         required: true
         content:
@@ -1256,6 +1405,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/secrets:
     get:
       operationId: listLaunchpadSecretGrants
@@ -1263,6 +1414,9 @@ paths:
       summary: List env-backed Launchpad secret grant statuses without secret values
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: Secret grant statuses
@@ -1277,12 +1431,17 @@ paths:
                       $ref: '#/components/schemas/LaunchpadSecretGrant'
         '401':
           $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
     post:
       operationId: bindLaunchpadSecretGrant
       tags: [launchpad]
       summary: Bind a logical Launchpad secret to an environment variable
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         required: true
         content:
@@ -1307,6 +1466,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/launches/{launch_id}:
     get:
       operationId: getLaunchpadRun
@@ -1315,6 +1476,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: launch_id
           in: path
           required: true
@@ -1331,6 +1494,8 @@ paths:
         '404':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/launches/{launch_id}/repair:
     post:
       operationId: repairLaunchpadRun
@@ -1339,6 +1504,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: launch_id
           in: path
           required: true
@@ -1356,6 +1523,8 @@ paths:
         '404':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/launchpad/launches/{launch_id}/delete:
     post:
       operationId: deleteLaunchpadRun
@@ -1364,6 +1533,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: launch_id
           in: path
           required: true
@@ -1387,6 +1558,8 @@ paths:
         '404':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/ag-ui/info:
     get:
       operationId: getAGUIRuntimeInfoCompat
@@ -1394,6 +1567,9 @@ paths:
       summary: Read OSS AG-UI runtime capabilities compatibility route
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: AG-UI runtime metadata and read-only tool catalog
@@ -1415,6 +1591,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/ag-ui/run:
     post:
       operationId: runAGUIRuntimeCompat
@@ -1422,6 +1600,9 @@ paths:
       summary: Run the OSS read-only AG-UI assistant compatibility route
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         required: true
         content:
@@ -1458,6 +1639,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/trust/keys/add:
     post:
       operationId: addTrustKey
@@ -1600,6 +1783,9 @@ paths:
       summary: Read execution-boundary health and authority status
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: Boundary status
@@ -1610,6 +1796,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/boundary/capabilities:
     get:
       operationId: listBoundaryCapabilities
@@ -1617,6 +1805,9 @@ paths:
       summary: List proof-bearing boundary capabilities
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: Capability summaries
@@ -1629,6 +1820,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/boundary/records:
     get:
       operationId: listBoundaryRecords
@@ -1637,6 +1830,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - { name: verdict, in: query, schema: { type: string } }
         - { name: reason_code, in: query, schema: { type: string } }
         - { name: tool_name, in: query, schema: { type: string } }
@@ -1656,6 +1851,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/boundary/records/{record_id}:
     get:
       operationId: getBoundaryRecord
@@ -1664,6 +1861,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: record_id
           in: path
           required: true
@@ -1680,6 +1879,8 @@ paths:
         '404':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/boundary/records/{record_id}/verify:
     post:
       operationId: verifyBoundaryRecord
@@ -1688,6 +1889,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: record_id
           in: path
           required: true
@@ -1702,6 +1905,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/boundary/checkpoints:
     get:
       operationId: listBoundaryCheckpoints
@@ -1769,6 +1974,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: limit
           in: query
           schema: { type: integer, default: 50 }
@@ -1787,6 +1994,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/proofgraph/sessions/{session_id}/receipts:
     get:
       operationId: getSessionReceipts
@@ -1795,6 +2004,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: session_id
           in: path
           required: true
@@ -1813,6 +2024,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/proofgraph/receipts/{receipt_hash}:
     get:
       operationId: getReceipt
@@ -1821,6 +2034,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: receipt_hash
           in: path
           required: true
@@ -1838,6 +2053,8 @@ paths:
           $ref: '#/components/responses/HelmError'
 
   # ── EvidencePack ────────────────────────────────────
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/evidence/export:
     post:
       operationId: exportEvidence
@@ -1848,6 +2065,9 @@ paths:
       description: |
         Exports a deterministic .tar.gz containing all receipts, ProofGraph nodes, and metadata.
         Same content always produces same SHA-256.
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         content:
           application/json:
@@ -1869,6 +2089,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/evidence/verify:
     post:
       operationId: verifyEvidence
@@ -1912,6 +2134,9 @@ paths:
       summary: List verification scopes
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: Verification scopes
@@ -1923,12 +2148,17 @@ paths:
                   $ref: '#/components/schemas/VerificationScope'
         '401':
           $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
     post:
       operationId: createVerificationScope
       tags: [evidence]
       summary: Create a sealed verification scope
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         required: true
         content:
@@ -1945,6 +2175,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/evidence/verification-scopes/{scope_id}:
     get:
       operationId: getVerificationScope
@@ -1953,6 +2185,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: scope_id
           in: path
           required: true
@@ -1967,6 +2201,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/evidence/verification-scopes/{scope_id}/verify:
     post:
       operationId: verifyVerificationScope
@@ -1975,6 +2211,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: scope_id
           in: path
           required: true
@@ -1990,6 +2228,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/telemetry/harness-traces:
     get:
       operationId: listHarnessTraces
@@ -1997,6 +2237,9 @@ paths:
       summary: List harness traces
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: Harness traces
@@ -2008,12 +2251,17 @@ paths:
                   $ref: '#/components/schemas/HarnessTrace'
         '401':
           $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
     post:
       operationId: createHarnessTrace
       tags: [telemetry]
       summary: Create a sealed harness trace
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         required: true
         content:
@@ -2030,6 +2278,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/telemetry/harness-traces/{trace_id}:
     get:
       operationId: getHarnessTrace
@@ -2038,6 +2288,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: trace_id
           in: path
           required: true
@@ -2052,6 +2304,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/telemetry/harness-traces/{trace_id}/verify:
     post:
       operationId: verifyHarnessTrace
@@ -2060,6 +2314,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: trace_id
           in: path
           required: true
@@ -2075,6 +2331,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/plans/transactions:
     get:
       operationId: listPlanTransactions
@@ -2082,6 +2340,9 @@ paths:
       summary: List plan transactions
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: Plan transactions
@@ -2093,12 +2354,17 @@ paths:
                   $ref: '#/components/schemas/PlanTransaction'
         '401':
           $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
     post:
       operationId: createPlanTransaction
       tags: [plans]
       summary: Create a sealed plan transaction
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         required: true
         content:
@@ -2115,6 +2381,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/plans/transactions/{transaction_id}:
     get:
       operationId: getPlanTransaction
@@ -2123,6 +2391,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: transaction_id
           in: path
           required: true
@@ -2137,6 +2407,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/plans/transactions/{transaction_id}/verify:
     post:
       operationId: verifyPlanTransaction
@@ -2145,6 +2417,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: transaction_id
           in: path
           required: true
@@ -2160,6 +2434,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/harness/change-contracts:
     get:
       operationId: listHarnessChangeContracts
@@ -2167,6 +2443,9 @@ paths:
       summary: List harness change contracts
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: Harness change contracts
@@ -2178,12 +2457,17 @@ paths:
                   $ref: '#/components/schemas/HarnessChangeContract'
         '401':
           $ref: '#/components/responses/HelmError'
+        '403':
+          $ref: '#/components/responses/HelmError'
     post:
       operationId: createHarnessChangeContract
       tags: [harness]
       summary: Create a sealed harness change contract
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         required: true
         content:
@@ -2200,6 +2484,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/harness/change-contracts/{change_id}:
     get:
       operationId: getHarnessChangeContract
@@ -2208,6 +2494,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: change_id
           in: path
           required: true
@@ -2222,6 +2510,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/harness/change-contracts/{change_id}/approve:
     post:
       operationId: approveHarnessChangeContract
@@ -2230,6 +2520,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: change_id
           in: path
           required: true
@@ -2244,6 +2536,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/harness/change-contracts/{change_id}/verify:
     post:
       operationId: verifyHarnessChangeContract
@@ -2252,6 +2546,8 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - name: change_id
           in: path
           required: true
@@ -2267,6 +2563,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/gui/receipts/verify:
     post:
       operationId: verifyGUIActionReceipt
@@ -2274,6 +2572,9 @@ paths:
       summary: Verify a grounded GUI action receipt
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
         required: true
         content:
@@ -2291,6 +2592,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/evidence/envelopes:
     get:
       operationId: listEvidenceEnvelopeManifests
@@ -3353,6 +3656,9 @@ paths:
       summary: Read scanner/gateway coexistence capability manifest
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: Coexistence capability manifest
@@ -3363,6 +3669,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/telemetry/otel/config:
     get:
       operationId: getTelemetryOTelConfig
@@ -3370,6 +3678,9 @@ paths:
       summary: Read non-authoritative OTel GenAI export configuration
       security:
         - AdminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       responses:
         '200':
           description: OTel export configuration
@@ -3380,6 +3691,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
 
+        '403':
+          $ref: '#/components/responses/HelmError'
   /api/v1/telemetry/export:
     post:
       operationId: exportTelemetry
@@ -3446,6 +3759,37 @@ components:
       description: |
         Self-hosted OSS admin bearer key. Set HELM_ADMIN_API_KEY on the server
         and send Authorization: Bearer <key> for protected runtime APIs.
+
+    ServiceBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: HELM_SERVICE_API_KEY
+      description: |
+        Self-hosted OSS service bearer key. Set HELM_SERVICE_API_KEY on the server
+        and send Authorization: Bearer <key> for protected service-to-kernel APIs.
+
+  parameters:
+    HelmTenantIDHeader:
+      name: X-Helm-Tenant-ID
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+      description: |
+        Tenant binding required by tenant-scoped runtime routes. The value must
+        match HELM_RUNTIME_TENANT_ID, or the route fails closed with 403.
+    HelmPrincipalIDHeader:
+      name: X-Helm-Principal-ID
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+      description: |
+        Principal binding required by tenant-scoped runtime routes. The value must
+        match HELM_RUNTIME_PRINCIPAL_ID, or the authenticated admin principal when
+        HELM_RUNTIME_PRINCIPAL_ID is unset.
 
   # ── Schemas ─────────────────────────────────────────
   schemas:

@@ -848,7 +848,7 @@
         "nodeSelector": {
           "type": "object",
           "additionalProperties": { "type": "string" },
-          "description": "nodeSelector applied to every launchpad-app Pod. Current chart-pinned launchpad app digests are linux/amd64-only; the artifact workflow publishes multi-arch candidates, but keep `kubernetes.io/arch: amd64` until a digest re-pin lands with linux/arm64 manifests."
+          "description": "Optional nodeSelector applied to every launchpad-app Pod. Launchpad app images are published as linux/amd64 + linux/arm64 manifests; set this map explicitly only when architecture or node pool pinning is required."
         },
         "networkPolicy": {
           "type": "object",

@@ -143,11 +143,11 @@ on the cluster — the k8s analogue of the docker sandbox-leak audit.
 
 ## Known limitations
 
-- **Image architecture pinning.** The launchpad artifact workflow now
-  publishes `linux/amd64,linux/arm64` candidates, but the chart-pinned
-  openclaw, hermes, and egress-proxy digests remain `linux/amd64` until a
-  follow-up digest re-pin lands. The chart keeps
-  `launchpadApps.nodeSelector.kubernetes.io/arch: amd64` during that gap.
+- **Optional image architecture pinning.** The default chart-pinned openclaw,
+  hermes, and egress-proxy digests are multi-arch
+  `linux/amd64,linux/arm64` manifests. The chart leaves
+  `launchpadApps.nodeSelector` empty by default; operators can set it
+  explicitly when they need architecture or node pool pinning.
 - **CNI enforcement.** The NetworkPolicy object is created
   unconditionally, but enforcement requires a CNI that honors it. The
   smoke driver opts minikube into Calico (`--cni=calico`). On the

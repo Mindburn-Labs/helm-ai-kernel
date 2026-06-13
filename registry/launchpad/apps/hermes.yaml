@@ -10,8 +10,8 @@ availability: oss_supported
 support_level: agent_live
 install:
     strategy: signed_oci
-    image: ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b7f1914e616a820fd9af5b8256c649d89853ba0eaed9e4146a6b28b713960c10
-    digest: sha256:b7f1914e616a820fd9af5b8256c649d89853ba0eaed9e4146a6b28b713960c10
+    image: ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:2dc8aea12cc42c850ef84ef5bd27790e80818a303e3b398a0eca50b4850075d7
+    digest: sha256:2dc8aea12cc42c850ef84ef5bd27790e80818a303e3b398a0eca50b4850075d7
     source: https://github.com/NousResearch/hermes-agent
     ref: v2026.5.16
 runtime:
@@ -83,9 +83,9 @@ framework_contract:
         - openrouter
     egress_proxy:
         required: true
-        image: ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:c485d613c6211d694bfb4d84bd99e3c115b5ebd8a3dd4206e6521efdbb53cbe4
-        digest: sha256:c485d613c6211d694bfb4d84bd99e3c115b5ebd8a3dd4206e6521efdbb53cbe4
-        signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:c485d613c6211d694bfb4d84bd99e3c115b5ebd8a3dd4206e6521efdbb53cbe4
+        image: ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:a997086e0f589173ae87e1575d03b9194afbb87196203226a9e62af7bc160312
+        digest: sha256:a997086e0f589173ae87e1575d03b9194afbb87196203226a9e62af7bc160312
+        signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:a997086e0f589173ae87e1575d03b9194afbb87196203226a9e62af7bc160312
         sbom_ref: artifact://sbom-egress-proxy.spdx.json
         vulnerability_scan_ref: artifact://grype-egress-proxy.json
         receipt_ref: receipts/launchpad-egress-proxy.json
@@ -95,8 +95,8 @@ framework_contract:
     evidence_profile: f2.contract.v1
     images:
         - name: hermes-production-minimal
-          image: ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b7f1914e616a820fd9af5b8256c649d89853ba0eaed9e4146a6b28b713960c10
-          digest: sha256:b7f1914e616a820fd9af5b8256c649d89853ba0eaed9e4146a6b28b713960c10
+          image: ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:2dc8aea12cc42c850ef84ef5bd27790e80818a303e3b398a0eca50b4850075d7
+          digest: sha256:2dc8aea12cc42c850ef84ef5bd27790e80818a303e3b398a0eca50b4850075d7
           purpose: production_proof
           baked_dependencies:
             - python
@@ -145,18 +145,18 @@ evidence_requirements:
     - syft_sbom
     - grype_vulnerability_scan
 supply_chain_evidence:
-    artifact_digest: sha256:b7f1914e616a820fd9af5b8256c649d89853ba0eaed9e4146a6b28b713960c10
+    artifact_digest: sha256:2dc8aea12cc42c850ef84ef5bd27790e80818a303e3b398a0eca50b4850075d7
     signature_tool: cosign
-    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:b7f1914e616a820fd9af5b8256c649d89853ba0eaed9e4146a6b28b713960c10
+    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:2dc8aea12cc42c850ef84ef5bd27790e80818a303e3b398a0eca50b4850075d7
     sbom_tool: syft
     sbom_ref: artifact://sbom-hermes.spdx.json
     vulnerability_scan_tool: grype
     vulnerability_scan_ref: artifact://grype-hermes.json
 promotion_evidence:
-    artifact_verification_ref: github-actions://27464618490/1/artifact-verification/hermes
-    live_e2e_run_id: github-actions://27464618490/1/live-e2e/hermes
-    evidence_pack_ref: github-actions://27464618490/1/evidencepack/hermes
-    teardown_receipt_ref: github-actions://27464618490/1/teardown/hermes
+    artifact_verification_ref: github-actions://27470020822/1/artifact-verification/hermes
+    live_e2e_run_id: github-actions://27470020822/1/live-e2e/hermes
+    evidence_pack_ref: github-actions://27470020822/1/evidencepack/hermes
+    teardown_receipt_ref: github-actions://27470020822/1/teardown/hermes
 conformance:
     license_verified: true
     artifact_verified: true
@@ -168,12 +168,12 @@ conformance:
     receipt_verified: true
     evidence_pack_verified: true
 metadata:
-    artifact_workflow_run: github-actions://27464618490/1
+    artifact_workflow_run: github-actions://27470020822/1
     helm_oci_status: promoted_from_signed_ci_artifact_manifest
     helm_oci_target: ghcr.io/mindburn-labs/helm-launchpad/hermes:v2026.5.16
     latest_release: v2026.5.16
-    promotion_manifest_hash: sha256:d17508c2f32fef316be7e43b45fa742f52ac65bf2d9210f0fdf4f0a22a555176
-    promotion_provenance_ref: github-actions://27464618490/1
+    promotion_manifest_hash: sha256:e2b22d493c3acb0c57389cfb4aba23455dc23a14a7d23ad4cb8c10ad9435baef
+    promotion_provenance_ref: github-actions://27470020822/1
     release_published_at: "2026-05-16T09:59:15Z"
     upstream_commit: a91a57fa5a13d516c38b07a141a9ce8a3daabeb0
     upstream_repo: https://github.com/NousResearch/hermes-agent

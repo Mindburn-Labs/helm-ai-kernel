@@ -13,7 +13,9 @@ ARCHES = {
 options = {
   repo: "Mindburn-Labs/helm-ai-kernel",
   checksums: File.expand_path("../../bin/SHA256SUMS.txt", __dir__),
-  launchpad_data_checksum: nil
+  launchpad_data_checksum: nil,
+  console_bundle: nil,
+  console_bundle_checksum: nil
 }
 
 OptionParser.new do |opts|
@@ -22,6 +24,8 @@ OptionParser.new do |opts|
   opts.on("--checksums PATH", "Path to SHA256SUMS.txt from make release-binaries") { |p| options[:checksums] = p }
   opts.on("--repo OWNER/REPO", "GitHub repository path") { |r| options[:repo] = r }
   opts.on("--launchpad-data-sha256 SHA256", "SHA256 for helm-ai-kernel-launchpad-data.tar") { |v| options[:launchpad_data_checksum] = v }
+  opts.on("--console-bundle NAME", "Optional Console web bundle release asset name") { |v| options[:console_bundle] = v }
+  opts.on("--console-bundle-sha256 SHA256", "SHA256 for optional Console web bundle") { |v| options[:console_bundle_checksum] = v }
 end.parse!
 
 abort "missing --version" if options[:version].to_s.strip.empty?
@@ -43,9 +47,33 @@ abort "missing SHA256 entries for: #{missing.join(", ")}" unless missing.empty?
 if options[:launchpad_data_checksum].to_s.empty? || !options[:launchpad_data_checksum].match?(/\A[0-9a-f]{64}\z/i)
   abort "missing --launchpad-data-sha256"
 end
+if options[:console_bundle].to_s.empty? != options[:console_bundle_checksum].to_s.empty?
+  abort "--console-bundle and --console-bundle-sha256 must be provided together"
+end
+if !options[:console_bundle_checksum].to_s.empty? && !options[:console_bundle_checksum].match?(/\A[0-9a-f]{64}\z/i)
+  abort "invalid --console-bundle-sha256"
+end
 
 def asset_url(repo, tag, artifact)
   "https://github.com/#{repo}/releases/download/#{tag}/#{artifact}"
+end
+
+console_resource = ""
+console_install = ""
+if !options[:console_bundle].to_s.empty?
+  console_resource = %Q[
+
+    resource "console-web" do
+      url "#{asset_url(options[:repo], tag, options[:console_bundle])}"
+      sha256 "#{options[:console_bundle_checksum]}"
+    end
+]
+  console_install = %Q[
+
+      resource("console-web").stage do
+        (pkgshare/"console").install Dir["*"]
+      end
+]
 end
 
 puts <<~RUBY
@@ -61,6 +89,7 @@ puts <<~RUBY
       url "#{asset_url(options[:repo], tag, "helm-ai-kernel-launchpad-data.tar")}"
       sha256 "#{options[:launchpad_data_checksum]}"
     end
+#{console_resource}
 
     on_macos do
       if Hardware::CPU.arm?
@@ -89,11 +118,13 @@ puts <<~RUBY
         pkgshare.install "registry"
         pkgshare.install "policies"
       end
+#{console_install}
     end
 
     test do
       assert_match version.to_s, shell_output("\#{bin}/helm-ai-kernel version 2>&1")
       assert_match "openclaw", shell_output("\#{bin}/helm-ai-kernel launch matrix --json")
+      assert_path_exists pkgshare/"console/index.html" if resources.map(&:name).include?("console-web")
     end
   end
 RUBY

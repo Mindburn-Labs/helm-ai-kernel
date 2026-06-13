@@ -77,6 +77,7 @@ framework_contract:
     baked_dependencies:
         - python
         - node
+        - npm
         - hermes-cli
         - launchpad-openrouter-check
     forbidden_runtime_install_patterns:
@@ -117,6 +118,7 @@ framework_contract:
           baked_dependencies:
               - python
               - node
+              - npm
               - hermes-cli
         - name: hermes-eval-full
           image: ghcr.io/mindburn-labs/helm-launchpad/hermes-eval-full@sha256:b970c2308182384377670704f6769e200eef89e18cc1a1102de9cba0d2437527

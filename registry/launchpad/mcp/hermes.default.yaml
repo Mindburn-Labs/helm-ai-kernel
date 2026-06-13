@@ -3,8 +3,8 @@ app_id: hermes
 server_id: hermes-default
 transport: stdio
 command: ["hermes", "mcp", "serve"]
-package_digest: sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652
-signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652
+package_digest: sha256:069cad233553951ff14fb1acc4adca31d19810ae1509c465a9155403cee67b0c
+signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:069cad233553951ff14fb1acc4adca31d19810ae1509c465a9155403cee67b0c
 schema_hash: sha256:2222222222222222222222222222222222222222222222222222222222222222
 tools:
   - name: model_gateway.complete

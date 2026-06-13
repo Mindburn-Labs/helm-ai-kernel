@@ -339,6 +339,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	runtimeEnvironment := map[string]any{"state": "RUNNING", "container_id": runtimeResult.ContainerID}
 	addRuntimeStartEvidence(runtimeEnvironment, runtimeResult)
 	addJSON(artifacts, "runtime_environment.json", runtimeEnvironment)
+	addRuntimeTelemetryEvidence(artifacts, compiled, run, runtimeResult, "running")
 	return e.persist(run, artifacts)
 }
 
@@ -789,6 +790,49 @@ func addRuntimeStartEvidence(dst map[string]any, result RuntimeStartResult) {
 		dst["egress_network_name"] = result.EgressNetworkName
 	}
 	dst["token_broker_enabled"] = result.TokenBrokerEnabled
+}
+
+func addRuntimeTelemetryEvidence(dst map[string][]byte, compiled plan.LaunchPlan, run LaunchRun, result RuntimeStartResult, status string) {
+	telemetry := map[string]any{
+		"schema_version":             "helm.launchpad.runtime_telemetry.v1",
+		"source":                     "launchpad-session-executor",
+		"generated_at":               time.Now().UTC().Format(time.RFC3339),
+		"launch_id":                  run.LaunchID,
+		"app_id":                     run.AppID,
+		"app_version":                run.AppVersion,
+		"substrate_id":               run.SubstrateID,
+		"principal":                  run.Principal,
+		"plan_hash":                  run.PlanHash,
+		"artifact_digest":            run.ArtifactDigest,
+		"kernel_verdict":             run.KernelVerdict,
+		"state":                      string(run.State),
+		"status":                     status,
+		"runtime":                    result.Runtime,
+		"container_observed":         result.ContainerID != "",
+		"egress_receipt_ref_present": result.EgressReceiptRef != "",
+		"egress_proxy_present":       result.EgressProxyID != "" || result.EgressProxyName != "" || result.EgressProxyImage != "",
+		"isolation_mode":             result.IsolationMode,
+		"isolation_hardened":         result.IsolationHardened,
+		"runtime_class":              result.RuntimeClass,
+		"payload_inspection":         result.PayloadInspection,
+		"network_proof":              result.NetworkProof,
+		"token_broker_enabled":       result.TokenBrokerEnabled,
+		"healthcheck_count":          len(compiled.Healthchecks),
+		"network_allowlist_count":    len(compiled.NetworkAllowlist),
+		"model_gateway_provider":     compiled.ModelGatewayProvider,
+		"model_gateway_mode":         compiled.ModelGatewayMode,
+	}
+	addOptionalCIField(telemetry, "github_run_id", "GITHUB_RUN_ID")
+	addOptionalCIField(telemetry, "github_run_attempt", "GITHUB_RUN_ATTEMPT")
+	addOptionalCIField(telemetry, "github_sha", "GITHUB_SHA")
+	addOptionalCIField(telemetry, "github_workflow", "GITHUB_WORKFLOW")
+	addJSON(dst, "03_TELEMETRY/runtime.json", telemetry)
+}
+
+func addOptionalCIField(dst map[string]any, key, envName string) {
+	if value := strings.TrimSpace(os.Getenv(envName)); value != "" {
+		dst[key] = value
+	}
 }
 
 func appendUnique(values []string, next string) []string {

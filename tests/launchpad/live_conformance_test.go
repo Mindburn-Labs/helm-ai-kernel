@@ -239,12 +239,37 @@ func verifyLiveEvidenceRefs(t *testing.T, appID string, refs []string) {
 	if !report.Verified {
 		t.Fatalf("%s EvidencePack directory did not verify: %s", appID, report.Summary)
 	}
+	verifyLiveRuntimeTelemetry(t, appID, dirRef)
 	root := repoRoot(t)
 	cmd := exec.Command("go", "run", "./core/cmd/helm-ai-kernel", "verify", "--bundle", archiveRef, "--json")
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("%s EvidencePack tar did not verify offline: %v\n%s", appID, err, string(out))
+	}
+}
+
+func verifyLiveRuntimeTelemetry(t *testing.T, appID, dirRef string) {
+	t.Helper()
+	path := filepath.Join(dirRef, "03_TELEMETRY", "runtime.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("%s EvidencePack missing runtime telemetry proof %s: %v", appID, path, err)
+	}
+	var telemetry map[string]any
+	if err := json.Unmarshal(data, &telemetry); err != nil {
+		t.Fatalf("%s runtime telemetry proof is not JSON: %v", appID, err)
+	}
+	for _, key := range []string{"schema_version", "launch_id", "app_id", "state", "runtime", "kernel_verdict"} {
+		if strings.TrimSpace(fmt.Sprint(telemetry[key])) == "" {
+			t.Fatalf("%s runtime telemetry proof missing %s: %#v", appID, key, telemetry)
+		}
+	}
+	if telemetry["app_id"] != appID {
+		t.Fatalf("%s runtime telemetry app_id = %#v, want %q", appID, telemetry["app_id"], appID)
+	}
+	if telemetry["state"] != "RUNNING" && telemetry["state"] != "DELETED" {
+		t.Fatalf("%s runtime telemetry state = %#v, want RUNNING or DELETED", appID, telemetry["state"])
 	}
 }
 

@@ -275,6 +275,47 @@ func TestExecutorRunsNetworkedLaunchWithEgressReceipt(t *testing.T) {
 	}
 }
 
+func TestExecutorWritesRuntimeTelemetryEvidence(t *testing.T) {
+	store := NewStore(t.TempDir())
+	t.Setenv("GITHUB_RUN_ID", "12345")
+	t.Setenv("GITHUB_RUN_ATTEMPT", "2")
+	t.Setenv("GITHUB_SHA", "0123456789abcdef0123456789abcdef01234567")
+
+	run, err := NewExecutor(store).ExecuteLaunch(allowPlan(), ExecuteOptions{
+		Reason:            "test",
+		RuntimeStarter:    &fakeNetworkStarter{},
+		HealthcheckRunner: &fakeHealthcheck{},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteLaunch: %v", err)
+	}
+	if len(run.EvidencePackRefs) == 0 {
+		t.Fatalf("evidence pack missing: %#v", run)
+	}
+
+	var telemetry map[string]any
+	readJSON(t, filepath.Join(run.EvidencePackRefs[0], "03_TELEMETRY/runtime.json"), &telemetry)
+	for key, want := range map[string]string{
+		"schema_version":     "helm.launchpad.runtime_telemetry.v1",
+		"launch_id":          "launch-allow",
+		"app_id":             "openclaw",
+		"state":              "RUNNING",
+		"kernel_verdict":     "ALLOW",
+		"runtime":            "local-container",
+		"github_run_id":      "12345",
+		"github_run_attempt": "2",
+		"github_sha":         "0123456789abcdef0123456789abcdef01234567",
+	} {
+		if telemetry[key] != want {
+			t.Fatalf("runtime telemetry %s = %#v, want %q in %#v", key, telemetry[key], want, telemetry)
+		}
+	}
+	if telemetry["egress_receipt_ref_present"] != true {
+		t.Fatalf("runtime telemetry missing egress receipt marker: %#v", telemetry)
+	}
+	assertTarContains(t, run.EvidencePackRefs[len(run.EvidencePackRefs)-1], "03_TELEMETRY/runtime.json")
+}
+
 func TestExecutorBundlesEgressProxyReceiptOnRuntimeFailure(t *testing.T) {
 	receiptPath := filepath.Join(t.TempDir(), "egress-receipt.json")
 	if err := os.WriteFile(receiptPath, []byte(`{"receipt_id":"receipt:egress","subject":{"proxy_image":"proxy@sha256:abc"}}`+"\n"), 0o600); err != nil {

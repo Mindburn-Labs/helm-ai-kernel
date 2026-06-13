@@ -142,7 +142,7 @@ jobs:
             --run "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             --case helm-integration-openrouter-probe \
             --out token-evidence \
-            --min-total 1 \
+            --min-total 1
           bash scripts/ci/launchpad_k8s_smoke.sh --mode positive
 
       - name: Upload OpenRouter token evidence

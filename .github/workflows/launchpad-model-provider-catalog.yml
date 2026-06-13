@@ -38,7 +38,7 @@ jobs:
       - name: Summarize catalog coverage
         run: python3 scripts/launch/update_model_provider_catalog.py --summary >> "$GITHUB_STEP_SUMMARY"
       - name: Ensure generated catalog artifacts are committed
-        run: git diff --exit-code -- core/pkg/launchpad/modelproviders/catalog.json scripts/launch/update_model_provider_catalog.py tools/launchpad/artifacts/model-gateway-check.sh
+        run: git diff --exit-code -- core/pkg/launchpad/modelproviders/catalog.json core/pkg/launchpad/modelproviders/source_fingerprints.json scripts/launch/update_model_provider_catalog.py tools/launchpad/artifacts/model-gateway-check.sh
 
   open-refresh-pr:
     if: github.event_name != 'pull_request'
@@ -72,8 +72,11 @@ jobs:
           git add core/pkg/launchpad/modelproviders/catalog.json core/pkg/launchpad/modelproviders/source_fingerprints.json scripts/launch/update_model_provider_catalog.py tools/launchpad/artifacts/model-gateway-check.sh
           git commit -m "chore: refresh Launchpad model provider catalog"
           git push origin "$branch"
-          gh pr create \
+          if gh pr create \
             --title "chore: refresh Launchpad model provider catalog" \
             --body "Automated Launchpad BYO model provider catalog refresh." \
             --base main \
-            --head "$branch"
+            --head "$branch"; then
+            exit 0
+          fi
+          echo "::warning::Catalog refresh branch was pushed as ${branch}, but this workflow token could not create a PR. Open the PR manually from the pushed branch."

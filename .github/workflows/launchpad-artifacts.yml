@@ -1013,8 +1013,12 @@ jobs:
           git add "${changed_paths[@]}"
           git commit -m "ci(launchpad): promote signed launchpad image refs"
           git push origin "${branch}"
-          gh pr create \
+          if gh pr create \
             --title "ci(launchpad): promote signed launchpad image refs" \
             --body-file /tmp/launchpad-promotion-pr.md \
             --base main \
-            --head "${branch}"
+            --head "${branch}"; then
+            exit 0
+          fi
+
+          echo "::warning::Launchpad promotion branch was pushed as ${branch}, but this workflow token could not create a PR. Open the PR manually from the pushed branch."

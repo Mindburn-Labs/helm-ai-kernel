@@ -10,8 +10,8 @@ availability: oss_supported
 support_level: agent_live
 install:
     strategy: signed_oci
-    image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:5a80f884f7615a232971cfebed95cbc5322452a04de4519afa12e57409f9a12d
-    digest: sha256:5a80f884f7615a232971cfebed95cbc5322452a04de4519afa12e57409f9a12d
+    image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:9c96ac049c9da8058e1493bea61cb21dac3cac64d3db03c469ca95a09827a463
+    digest: sha256:9c96ac049c9da8058e1493bea61cb21dac3cac64d3db03c469ca95a09827a463
     source: https://github.com/openclaw/openclaw
     ref: v2026.5.12
 runtime:
@@ -89,9 +89,9 @@ framework_contract:
         - openrouter
     egress_proxy:
         required: true
-        image: ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:3dd670b2ba65ab766ec897bc649251ce54580715ff0108f9f10ff8395af73a17
-        digest: sha256:3dd670b2ba65ab766ec897bc649251ce54580715ff0108f9f10ff8395af73a17
-        signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:3dd670b2ba65ab766ec897bc649251ce54580715ff0108f9f10ff8395af73a17
+        image: ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:d17fb073ae30948703e6f9be836fd6f06a3c7a17ee42b4f62579b019ab7724ce
+        digest: sha256:d17fb073ae30948703e6f9be836fd6f06a3c7a17ee42b4f62579b019ab7724ce
+        signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:d17fb073ae30948703e6f9be836fd6f06a3c7a17ee42b4f62579b019ab7724ce
         sbom_ref: artifact://sbom-egress-proxy.spdx.json
         vulnerability_scan_ref: artifact://grype-egress-proxy.json
         receipt_ref: receipts/launchpad-egress-proxy.json
@@ -101,8 +101,8 @@ framework_contract:
     evidence_profile: f2.contract.v1
     images:
         - name: openclaw-production
-          image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:5a80f884f7615a232971cfebed95cbc5322452a04de4519afa12e57409f9a12d
-          digest: sha256:5a80f884f7615a232971cfebed95cbc5322452a04de4519afa12e57409f9a12d
+          image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:9c96ac049c9da8058e1493bea61cb21dac3cac64d3db03c469ca95a09827a463
+          digest: sha256:9c96ac049c9da8058e1493bea61cb21dac3cac64d3db03c469ca95a09827a463
           purpose: production_proof
           baked_dependencies:
             - openclaw-cli
@@ -139,18 +139,18 @@ evidence_requirements:
     - syft_sbom
     - grype_vulnerability_scan
 supply_chain_evidence:
-    artifact_digest: sha256:5a80f884f7615a232971cfebed95cbc5322452a04de4519afa12e57409f9a12d
+    artifact_digest: sha256:9c96ac049c9da8058e1493bea61cb21dac3cac64d3db03c469ca95a09827a463
     signature_tool: cosign
-    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:5a80f884f7615a232971cfebed95cbc5322452a04de4519afa12e57409f9a12d
+    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:9c96ac049c9da8058e1493bea61cb21dac3cac64d3db03c469ca95a09827a463
     sbom_tool: syft
     sbom_ref: artifact://sbom-openclaw.spdx.json
     vulnerability_scan_tool: grype
     vulnerability_scan_ref: artifact://grype-openclaw.json
 promotion_evidence:
-    artifact_verification_ref: github-actions://27452635722/1/artifact-verification/openclaw
-    live_e2e_run_id: github-actions://27452635722/1/live-e2e/openclaw
-    evidence_pack_ref: github-actions://27452635722/1/evidencepack/openclaw
-    teardown_receipt_ref: github-actions://27452635722/1/teardown/openclaw
+    artifact_verification_ref: github-actions://27453055635/1/artifact-verification/openclaw
+    live_e2e_run_id: github-actions://27453055635/1/live-e2e/openclaw
+    evidence_pack_ref: github-actions://27453055635/1/evidencepack/openclaw
+    teardown_receipt_ref: github-actions://27453055635/1/teardown/openclaw
 conformance:
     license_verified: true
     artifact_verified: true
@@ -162,12 +162,12 @@ conformance:
     receipt_verified: true
     evidence_pack_verified: true
 metadata:
-    artifact_workflow_run: github-actions://27452635722/1
+    artifact_workflow_run: github-actions://27453055635/1
     helm_oci_status: promoted_from_signed_ci_artifact_manifest
     helm_oci_target: ghcr.io/mindburn-labs/helm-launchpad/openclaw:v2026.5.12
     latest_release: v2026.5.12
-    promotion_manifest_hash: sha256:4568b71645177bdc95a831e3c09bd25fd6cc65cb80cb0254650863395b717e1e
-    promotion_provenance_ref: github-actions://27452635722/1
+    promotion_manifest_hash: sha256:ee6a7acb4f0963e1414973138ef02ee3a5e16ff79f501b63f3455e5bc0fadcd1
+    promotion_provenance_ref: github-actions://27453055635/1
     release_published_at: "2026-05-14T18:28:04Z"
     upstream_commit: f066dd2f31c231f38fbcaacd6f6dfce0801143b3
     upstream_repo: https://github.com/openclaw/openclaw

@@ -2,17 +2,29 @@ id: openclaw.default
 app_id: openclaw
 server_id: openclaw-default
 transport: stdio
-command: ["openclaw", "mcp", "serve"]
-package_digest: sha256:5a80f884f7615a232971cfebed95cbc5322452a04de4519afa12e57409f9a12d
-signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:5a80f884f7615a232971cfebed95cbc5322452a04de4519afa12e57409f9a12d
+command:
+    - openclaw
+    - mcp
+    - serve
+package_digest: sha256:9c96ac049c9da8058e1493bea61cb21dac3cac64d3db03c469ca95a09827a463
+signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:9c96ac049c9da8058e1493bea61cb21dac3cac64d3db03c469ca95a09827a463
 schema_hash: sha256:1111111111111111111111111111111111111111111111111111111111111111
 tools:
-  - name: model_gateway.complete
-    schema_hash: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-    effect: side_effect
-    description: Model gateway request mediated by HELM policy and receipts.
-    labels: ["model", "egress"]
-effect_labels: ["model", "egress", "side_effect"]
-required_secrets: ["model_gateway"]
-network_grants: ["catalog:model-providers"]
-filesystem_grants: ["workspace:rw", "app_state:rw"]
+    - name: model_gateway.complete
+      schema_hash: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      effect: side_effect
+      description: Model gateway request mediated by HELM policy and receipts.
+      labels:
+        - model
+        - egress
+effect_labels:
+    - model
+    - egress
+    - side_effect
+required_secrets:
+    - model_gateway
+network_grants:
+    - catalog:model-providers
+filesystem_grants:
+    - workspace:rw
+    - app_state:rw

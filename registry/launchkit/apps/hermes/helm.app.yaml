@@ -5,8 +5,8 @@ legacy_launchpad_ref: registry/launchpad/apps/hermes.yaml
 availability: oss_supported
 install:
     strategy: signed_oci
-    image: ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:2f0ed099d76b454857a4909da3c38f93b4958a819159ec069b7a3ec88113d07b
-    digest: sha256:2f0ed099d76b454857a4909da3c38f93b4958a819159ec069b7a3ec88113d07b
+    image: ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:6d106d351db159fd4ae5788a68bc383115472eb1d00c05afc1fae1f011e2b3fe
+    digest: sha256:6d106d351db159fd4ae5788a68bc383115472eb1d00c05afc1fae1f011e2b3fe
     source: https://github.com/NousResearch/hermes-agent
     ref: v2026.5.16
 policy: policy.default.yaml

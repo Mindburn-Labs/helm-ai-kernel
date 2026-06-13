@@ -6,8 +6,8 @@ command:
     - hermes
     - mcp
     - serve
-package_digest: sha256:2f0ed099d76b454857a4909da3c38f93b4958a819159ec069b7a3ec88113d07b
-signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:2f0ed099d76b454857a4909da3c38f93b4958a819159ec069b7a3ec88113d07b
+package_digest: sha256:6d106d351db159fd4ae5788a68bc383115472eb1d00c05afc1fae1f011e2b3fe
+signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:6d106d351db159fd4ae5788a68bc383115472eb1d00c05afc1fae1f011e2b3fe
 schema_hash: sha256:2222222222222222222222222222222222222222222222222222222222222222
 tools:
     - name: model_gateway.complete

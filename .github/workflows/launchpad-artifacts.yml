@@ -951,10 +951,15 @@ jobs:
             --sync-derived \
             --check \
             --json | tee "${result}"
+          make launchpad-promotion-check
 
           changed_paths=(
             registry/launchpad/apps/openclaw.yaml
             registry/launchpad/apps/hermes.yaml
+            registry/launchkit/apps/openclaw/helm.app.yaml
+            registry/launchkit/apps/hermes/helm.app.yaml
+            registry/launchpad/mcp/openclaw.default.yaml
+            registry/launchpad/mcp/hermes.default.yaml
             registry/launchpad/image-lock.json
             deploy/helm-chart/values.yaml
           )

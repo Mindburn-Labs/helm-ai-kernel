@@ -307,7 +307,7 @@ launchpadApps:
     enabled: false
     image:
       repository: "ghcr.io/mindburn-labs/helm-launchpad/openclaw"
-      digest: "sha256:5a80f884f7615a232971cfebed95cbc5322452a04de4519afa12e57409f9a12d"
+      digest: "sha256:9c96ac049c9da8058e1493bea61cb21dac3cac64d3db03c469ca95a09827a463"
       pullPolicy: "IfNotPresent"
     gatewayPort: 18789
     tmpfsSize: "256Mi"
@@ -335,7 +335,7 @@ launchpadApps:
     egressSidecar:
       image:
         repository: "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy"
-        digest: "sha256:3dd670b2ba65ab766ec897bc649251ce54580715ff0108f9f10ff8395af73a17"
+        digest: "sha256:d17fb073ae30948703e6f9be836fd6f06a3c7a17ee42b4f62579b019ab7724ce"
         pullPolicy: "IfNotPresent"
       port: 8080
       allowlist:
@@ -380,7 +380,7 @@ launchpadApps:
     egressSidecar:
       image:
         repository: "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy"
-        digest: "sha256:3dd670b2ba65ab766ec897bc649251ce54580715ff0108f9f10ff8395af73a17"
+        digest: "sha256:d17fb073ae30948703e6f9be836fd6f06a3c7a17ee42b4f62579b019ab7724ce"
         pullPolicy: "IfNotPresent"
       port: 8080
       allowlist:

@@ -6,8 +6,8 @@ command:
     - openclaw
     - mcp
     - serve
-package_digest: sha256:3c8c7069b9b8e69f584adc7de34b42a3f2b2721a19c069af342e1cbd7cf6d9af
-signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:3c8c7069b9b8e69f584adc7de34b42a3f2b2721a19c069af342e1cbd7cf6d9af
+package_digest: sha256:479f74c0724cb81213b4e279f21765dbc59b8d46dc6048aef233058eeddbb14f
+signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:479f74c0724cb81213b4e279f21765dbc59b8d46dc6048aef233058eeddbb14f
 schema_hash: sha256:1111111111111111111111111111111111111111111111111111111111111111
 tools:
     - name: model_gateway.complete

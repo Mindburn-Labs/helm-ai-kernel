@@ -94,3 +94,43 @@ func TestLaunchpadAPIFailsClosedWithoutAuthentication(t *testing.T) {
 		})
 	}
 }
+
+// TestLaunchpadAPIRejectsCrossPrincipalAccess verifies a launch owned by one
+// principal cannot be read or deleted by a different authenticated principal
+// (MIN-712 / SUBAGENT-0053 + 0162). Runs are addressed by caller-supplied launch
+// IDs, so read and destructive operations must be scoped to the owning principal.
+func TestLaunchpadAPIRejectsCrossPrincipalAccess(t *testing.T) {
+	t.Setenv("HELM_LAUNCHPAD_HOME", t.TempDir())
+	t.Setenv("model_gateway", "")
+	srv := newTestServer(t) // authenticates every request as operator-1
+
+	// Seed a run owned by a different principal.
+	store := session.NewStore("")
+	if err := store.Save(session.LaunchRun{
+		LaunchID:  "lp-victim",
+		AppID:     "openclaw",
+		Principal: "victim-7",
+		State:     session.StatePlanned,
+	}); err != nil {
+		t.Fatalf("seed victim run: %v", err)
+	}
+
+	// operator-1 must not be able to read the victim's run.
+	getRec := httptest.NewRecorder()
+	srv.ServeHTTP(getRec, httptest.NewRequest(http.MethodGet, "/api/v1/launchpad/launches/lp-victim", nil))
+	if getRec.Code != http.StatusForbidden {
+		t.Fatalf("cross-principal GET status=%d, want 403; body=%s", getRec.Code, getRec.Body.String())
+	}
+
+	// operator-1 must not be able to delete the victim's run.
+	delRec := httptest.NewRecorder()
+	srv.ServeHTTP(delRec, httptest.NewRequest(http.MethodPost, "/api/v1/launchpad/launches/lp-victim/delete", bytes.NewReader([]byte(`{"cascade":true}`))))
+	if delRec.Code != http.StatusForbidden {
+		t.Fatalf("cross-principal delete status=%d, want 403; body=%s", delRec.Code, delRec.Body.String())
+	}
+
+	// The victim's run must still exist — the unauthorized delete must not take effect.
+	if _, err := store.Get("lp-victim"); err != nil {
+		t.Fatalf("victim run was removed by unauthorized delete: %v", err)
+	}
+}

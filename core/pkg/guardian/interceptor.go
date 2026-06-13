@@ -377,6 +377,28 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 				return decision, nil
 			}
 
+			// Gate 5.1: Principal binding — the requesting principal must be the
+			// session's delegate. A valid session issued for one delegate must not be
+			// usable by a different principal even when the requested tool and action
+			// are within the session's scope.
+			if evalCtx.Request.Principal != session.DelegatePrincipal {
+				decision := &contracts.DecisionRecord{
+					ID:         newDecisionID(),
+					Timestamp:  now,
+					Verdict:    string(contracts.VerdictDeny),
+					Reason:     fmt.Sprintf("DELEGATION_PRINCIPAL_MISMATCH: requesting principal %q does not match delegated principal %q", evalCtx.Request.Principal, session.DelegatePrincipal),
+					ReasonCode: string(contracts.ReasonDelegationPrincipalMismatch),
+				}
+				if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
+					return nil, fmt.Errorf("failed to sign delegation-principal-mismatch decision: %w", err)
+				}
+				if p.g.auditLog != nil {
+					decisionBytes, _ := canonicalize.JCS(decision)
+					_, _ = p.g.auditLog.Append("guardian", "DELEGATION_PRINCIPAL_MISMATCH", decision.ID, string(decisionBytes))
+				}
+				return decision, nil
+			}
+
 			p.g.delegationStore.MarkNonceUsed(session.SessionNonce)
 
 			if evalCtx.Request.Resource != "" && !session.IsToolAllowed(evalCtx.Request.Resource) {

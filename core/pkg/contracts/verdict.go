@@ -78,8 +78,9 @@ const (
 	ReasonApprovalTimeout            ReasonCode = "APPROVAL_TIMEOUT"
 
 	// ── Delegation Reasons (v1.3) ───────────────────────────
-	ReasonDelegationInvalid        ReasonCode = "DELEGATION_INVALID"
-	ReasonDelegationScopeViolation ReasonCode = "DELEGATION_SCOPE_VIOLATION"
+	ReasonDelegationInvalid           ReasonCode = "DELEGATION_INVALID"
+	ReasonDelegationScopeViolation    ReasonCode = "DELEGATION_SCOPE_VIOLATION"
+	ReasonDelegationPrincipalMismatch ReasonCode = "DELEGATION_PRINCIPAL_MISMATCH"
 
 	// ── Privilege Tier Reasons ──────────────
 	ReasonInsufficientPrivilege ReasonCode = "INSUFFICIENT_PRIVILEGE"
@@ -200,6 +201,7 @@ func CoreReasonCodes() []ReasonCode {
 		ReasonApprovalTimeout,
 		ReasonDelegationInvalid,
 		ReasonDelegationScopeViolation,
+		ReasonDelegationPrincipalMismatch,
 		ReasonInsufficientPrivilege,
 		ReasonAgentKilled,
 		ReasonTaintedInputDeny,

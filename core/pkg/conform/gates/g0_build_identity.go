@@ -1,9 +1,13 @@
 package gates
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 )
@@ -127,6 +131,16 @@ func (g *G0BuildIdentity) Run(ctx *conform.RunContext) *conform.GateResult {
 		result.Reasons = append(result.Reasons, conform.ReasonTrustRootsMissing)
 	}
 
+	if result.Pass && os.Getenv("HELM_RELEASE_EVIDENCE_RECEIPT") == "1" {
+		if relPath, err := writeReleaseEvidenceReceipt(ctx); err == nil {
+			result.EvidencePaths = append(result.EvidencePaths, relPath)
+			result.Metrics.Counts["release_receipts"] = 1
+		} else {
+			result.Pass = false
+			result.Reasons = append(result.Reasons, conform.ReasonReceiptChainBroken)
+		}
+	}
+
 	return result
 }
 
@@ -147,4 +161,55 @@ func copyToEvidence(src, dst string) {
 	}
 	_ = os.MkdirAll(filepath.Dir(dst), 0750)
 	_ = os.WriteFile(dst, data, 0600)
+}
+
+func writeReleaseEvidenceReceipt(ctx *conform.RunContext) (string, error) {
+	const relPath = "02_PROOFGRAPH/receipts/001_release_build_identity.json"
+	if ctx == nil {
+		return "", fmt.Errorf("missing run context")
+	}
+	issuedAt := time.Now().UTC()
+	if ctx.Clock != nil {
+		issuedAt = ctx.Clock().UTC()
+	}
+	decisionHash := releaseReceiptHash(ctx.RunID, string(ctx.Profile), ctx.ProjectRoot)
+	receipt := map[string]any{
+		"schema_version":        "helm.release_receipt.v1",
+		"receipt_id":            "release-build-identity",
+		"run_id":                ctx.RunID,
+		"seq":                   1,
+		"lamport_clock":         1,
+		"tenant_id":             "tenant:release",
+		"timestamp_virtual":     issuedAt.Format(time.RFC3339),
+		"actor":                 "release-workflow",
+		"action_type":           "policy_decision",
+		"effect_class":          "REVERSIBLE",
+		"effect_type":           "release_asset_staging",
+		"decision_id":           "decision:" + decisionHash,
+		"decision_hash":         decisionHash,
+		"intent_id":             "intent:" + ctx.RunID,
+		"parent_receipt_hashes": []string{"genesis"},
+		"status":                "allow",
+	}
+	data, err := json.MarshalIndent(receipt, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(ctx.EvidenceDir, relPath)
+	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0600); err != nil {
+		return "", err
+	}
+	return relPath, nil
+}
+
+func releaseReceiptHash(parts ...string) string {
+	h := sha256.New()
+	for _, part := range parts {
+		h.Write([]byte(part))
+		h.Write([]byte{0})
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }

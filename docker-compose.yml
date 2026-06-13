@@ -7,6 +7,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        BUILD_VERSION: "${HELM_BUILD_VERSION:-dev}"
+        BUILD_COMMIT: "${HELM_BUILD_COMMIT:-unknown}"
+        BUILD_TIME: "${HELM_BUILD_TIME:-unknown}"
     command:
       - serve
       - --policy

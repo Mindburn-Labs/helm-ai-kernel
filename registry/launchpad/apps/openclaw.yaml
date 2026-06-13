@@ -10,16 +10,11 @@ availability: oss_supported
 support_level: agent_live
 install:
     strategy: signed_oci
-    image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995
-    digest: sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995
+    image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:12fd0c07be068dbf32159583160aa066152d53efa2b617351ba2cf5083f5b62e
+    digest: sha256:12fd0c07be068dbf32159583160aa066152d53efa2b617351ba2cf5083f5b62e
     source: https://github.com/openclaw/openclaw
     ref: v2026.5.12
 runtime:
-    # Headless launch: default `openclaw` invocation drops into the Crestodian
-    # TUI and exits 1 without a TTY ("Crestodian needs an interactive TTY").
-    # Use `gateway run` for a foreground HTTP gateway bound to container
-    # loopback; the readiness/healthcheck reaches it via `docker exec`, not
-    # via a published port, so loopback bind is safe here.
     command:
         - openclaw
         - gateway
@@ -37,20 +32,17 @@ runtime:
 model_gateway:
     logical_secret: model_gateway
     provider: byo
+    provider_ids:
+        - openrouter
     mode: logical_binding_env_projection
     raw_provider_key_projected: true
+model_gateway_env: []
 required_secrets:
     - model_gateway
 filesystem_policy:
     mode: scoped_workspace
     mounts:
         - workspace:rw
-        # openclaw hard-codes its writable state at /opt/openclaw/.openclaw
-        # (plugins, browser auth, heartbeat all mkdir there). The rootfs is
-        # read-only, so without this explicit target the plugin subsystem
-        # crashes with ENOENT. Pin the mount target on the AppSpec side so
-        # the kernel runtime materializer creates the path and the workload
-        # finds a writable directory.
         - app_state:rw:/opt/openclaw/.openclaw
     policy_ref: policies/launchpad/apps/openclaw.safe.toml
 network_policy:
@@ -94,12 +86,12 @@ framework_contract:
           purpose: app_cache_state
           required: true
     provider_host_groups:
-        - model_gateway_byo
+        - openrouter
     egress_proxy:
         required: true
-        image: ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:395cd585d0e2345e649455953f0d7765b141440bfb2fc753a4ae944e2ba350f8
-        digest: sha256:395cd585d0e2345e649455953f0d7765b141440bfb2fc753a4ae944e2ba350f8
-        signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:395cd585d0e2345e649455953f0d7765b141440bfb2fc753a4ae944e2ba350f8
+        image: ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:83c77bd60f74f94b00b8315bbfcb71435b7314d8cf0b0093de17339231706caf
+        digest: sha256:83c77bd60f74f94b00b8315bbfcb71435b7314d8cf0b0093de17339231706caf
+        signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@sha256:83c77bd60f74f94b00b8315bbfcb71435b7314d8cf0b0093de17339231706caf
         sbom_ref: artifact://sbom-egress-proxy.spdx.json
         vulnerability_scan_ref: artifact://grype-egress-proxy.json
         receipt_ref: receipts/launchpad-egress-proxy.json
@@ -109,12 +101,12 @@ framework_contract:
     evidence_profile: f2.contract.v1
     images:
         - name: openclaw-production
-          image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995
-          digest: sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995
+          image: ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:12fd0c07be068dbf32159583160aa066152d53efa2b617351ba2cf5083f5b62e
+          digest: sha256:12fd0c07be068dbf32159583160aa066152d53efa2b617351ba2cf5083f5b62e
           purpose: production_proof
           baked_dependencies:
-              - openclaw-cli
-              - gateway-runtime
+            - openclaw-cli
+            - gateway-runtime
     evidence_refs:
         - contract_preflight.json
         - launch_plan.json
@@ -147,18 +139,18 @@ evidence_requirements:
     - syft_sbom
     - grype_vulnerability_scan
 supply_chain_evidence:
-    artifact_digest: sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995
+    artifact_digest: sha256:12fd0c07be068dbf32159583160aa066152d53efa2b617351ba2cf5083f5b62e
     signature_tool: cosign
-    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995
+    signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:12fd0c07be068dbf32159583160aa066152d53efa2b617351ba2cf5083f5b62e
     sbom_tool: syft
     sbom_ref: artifact://sbom-openclaw.spdx.json
     vulnerability_scan_tool: grype
     vulnerability_scan_ref: artifact://grype-openclaw.json
 promotion_evidence:
-    artifact_verification_ref: github-actions://26198407296/1/artifact-verification/openclaw
-    live_e2e_run_id: github-actions://26198407296/1/live-e2e/openclaw
-    evidence_pack_ref: github-actions://26198407296/1/evidencepack/openclaw
-    teardown_receipt_ref: github-actions://26198407296/1/teardown/openclaw
+    artifact_verification_ref: github-actions://27455536990/1/artifact-verification/openclaw
+    live_e2e_run_id: github-actions://27455536990/1/live-e2e/openclaw
+    evidence_pack_ref: github-actions://27455536990/1/evidencepack/openclaw
+    teardown_receipt_ref: github-actions://27455536990/1/teardown/openclaw
 conformance:
     license_verified: true
     artifact_verified: true
@@ -170,24 +162,12 @@ conformance:
     receipt_verified: true
     evidence_pack_verified: true
 metadata:
-    artifact_workflow_run: github-actions://26198407296/1
+    artifact_workflow_run: github-actions://27455536990/1
     helm_oci_status: promoted_from_signed_ci_artifact_manifest
     helm_oci_target: ghcr.io/mindburn-labs/helm-launchpad/openclaw:v2026.5.12
     latest_release: v2026.5.12
-    promotion_provenance_ref: github-actions://26198407296/1
+    promotion_manifest_hash: sha256:fb0f4a7a9fe839d708228df6367e8a624aff97a6e8f343168f6bf61bbface2a6
+    promotion_provenance_ref: github-actions://27455536990/1
     release_published_at: "2026-05-14T18:28:04Z"
     upstream_commit: f066dd2f31c231f38fbcaacd6f6dfce0801143b3
     upstream_repo: https://github.com/openclaw/openclaw
-
-display:
-  headline: "Run OpenClaw through HELM"
-  short_description: "Launch OpenClaw behind HELM’s fail-closed execution boundary."
-  primary_command: "helm up openclaw"
-  proof_summary:
-    - "signed OCI artifact"
-    - "deny-by-default network policy"
-    - "MCP quarantine"
-    - "signed receipts"
-    - "offline EvidencePack verification"
-  docs_path: "docs/launchpad/apps/OPENCLAW.md"
-  contribution_label: "framework-integration"

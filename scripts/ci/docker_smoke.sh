@@ -25,6 +25,10 @@ COMPOSE_PROJECT="${HELM_SMOKE_COMPOSE_PROJECT:-helmoss_smoke}"
 COMPOSE_FILE="${HELM_SMOKE_COMPOSE_FILE:-docker-compose.yml}"
 cleanup_data=0
 
+BUILD_VERSION="${HELM_BUILD_VERSION:-$(cat "$ROOT/VERSION" 2>/dev/null || echo dev)}"
+BUILD_COMMIT="${HELM_BUILD_COMMIT:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)}"
+BUILD_TIME="${HELM_BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+
 require() {
     command -v "$1" >/dev/null 2>&1 || {
         echo "::error::$1 is required for docker smoke"
@@ -134,6 +138,9 @@ start_compose() {
     HELM_SMOKE_DATA_DIR="$DATA_DIR" \
     HELM_SMOKE_API_PORT="$API_PORT" \
     HELM_SMOKE_HEALTH_PORT="$HEALTH_PORT" \
+    HELM_BUILD_VERSION="$BUILD_VERSION" \
+    HELM_BUILD_COMMIT="$BUILD_COMMIT" \
+    HELM_BUILD_TIME="$BUILD_TIME" \
         docker compose -p "$COMPOSE_PROJECT" -f "$ROOT/$COMPOSE_FILE" up -d --build >/dev/null
 }
 
@@ -145,6 +152,29 @@ start_runtime() {
     fi
     wait_http "$(health_url)"
     wait_http "$(base_url)/healthz"
+}
+
+assert_compose_build_metadata() {
+    if [ "$MODE" != "compose" ]; then
+        return
+    fi
+    curl -fsS "$(base_url)/version" >"$DATA_DIR/version.json"
+    python3 - "$DATA_DIR/version.json" "$BUILD_COMMIT" <<'PY'
+import json, sys
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+expected_commit = sys.argv[2]
+version = str(payload.get("version", ""))
+commit = str(payload.get("commit", ""))
+build_time = str(payload.get("build_time", ""))
+if not version or version in {"unknown", "vunknown"}:
+    raise SystemExit(f"/version missing build version: {payload}")
+if not commit or commit == "unknown":
+    raise SystemExit(f"/version missing build commit: {payload}")
+if expected_commit != "unknown" and commit != expected_commit[:12]:
+    raise SystemExit(f"/version commit {commit!r} does not match expected {expected_commit[:12]!r}: {payload}")
+if not build_time or build_time == "unknown":
+    raise SystemExit(f"/version missing build_time: {payload}")
+PY
 }
 
 stop_runtime() {
@@ -260,6 +290,7 @@ assert_persistence_after_restart() {
 
 echo "docker smoke mode=$MODE image=$IMAGE api_port=$API_PORT health_port=$HEALTH_PORT data_dir=$DATA_DIR"
 start_runtime
+assert_compose_build_metadata
 evaluate_unknown_tool
 receipt_id="$(list_receipts)"
 fetch_receipt "$receipt_id"

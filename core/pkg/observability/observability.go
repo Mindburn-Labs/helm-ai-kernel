@@ -22,7 +22,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -94,7 +94,7 @@ func New(ctx context.Context, config *Config) (*Provider, error) {
 			semconv.SchemaURL,
 			semconv.ServiceName(config.ServiceName),
 			semconv.ServiceVersion(config.ServiceVersion),
-			semconv.DeploymentEnvironment(config.Environment),
+			semconv.DeploymentEnvironmentName(config.Environment),
 			attribute.String("helm.component", "core"),
 		),
 	)

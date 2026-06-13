@@ -2,17 +2,29 @@ id: hermes.default
 app_id: hermes
 server_id: hermes-default
 transport: stdio
-command: ["hermes", "mcp", "serve"]
-package_digest: sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652
-signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652
+command:
+    - hermes
+    - mcp
+    - serve
+package_digest: sha256:6d106d351db159fd4ae5788a68bc383115472eb1d00c05afc1fae1f011e2b3fe
+signature_ref: cosign://ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:6d106d351db159fd4ae5788a68bc383115472eb1d00c05afc1fae1f011e2b3fe
 schema_hash: sha256:2222222222222222222222222222222222222222222222222222222222222222
 tools:
-  - name: model_gateway.complete
-    schema_hash: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-    effect: side_effect
-    description: Model gateway request mediated by HELM policy and receipts.
-    labels: ["model", "egress"]
-effect_labels: ["model", "egress", "side_effect"]
-required_secrets: ["model_gateway"]
-network_grants: ["catalog:model-providers"]
-filesystem_grants: ["workspace:rw", "app_state:rw"]
+    - name: model_gateway.complete
+      schema_hash: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      effect: side_effect
+      description: Model gateway request mediated by HELM policy and receipts.
+      labels:
+        - model
+        - egress
+effect_labels:
+    - model
+    - egress
+    - side_effect
+required_secrets:
+    - model_gateway
+network_grants:
+    - catalog:model-providers
+filesystem_grants:
+    - workspace:rw
+    - app_state:rw

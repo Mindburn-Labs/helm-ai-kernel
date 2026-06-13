@@ -121,13 +121,24 @@ with tarfile.open(out, "w") as tar:
             tar.addfile(info, fh)
 PY
 
-log_step "generating L2 conformance evidence"
-if ! "$ROOT/bin/helm-ai-kernel" conform --level L2 --output "$TMP_DIR/conformance" --json > "$TMP_DIR/conformance-report.json"; then
-    echo "::error file=scripts/release/stage_release_assets.sh::conformance failed during release asset staging" >&2
-    print_conformance_failures "$TMP_DIR/conformance-report.json"
-    exit 1
+log_step "generating release conformance evidence"
+conformance_dir="$TMP_DIR/conformance"
+conformance_report="$conformance_dir/conform_report.json"
+HELM_CONFORMANCE_ARTIFACTS_DIR="$ROOT/artifacts" bash "$ROOT/scripts/release/prepare_conformance_release_inputs.sh"
+if ! HELM_RELEASE_EVIDENCE_RECEIPT=1 "$ROOT/bin/helm-ai-kernel" conform --profile SMB --gate G0 --signed --output "$conformance_dir" > "$TMP_DIR/conformance-run.log"; then
+	echo "::error file=scripts/release/stage_release_assets.sh::conformance failed during release asset staging" >&2
+	if [ -f "$conformance_report" ]; then
+		print_conformance_failures "$conformance_report"
+	else
+		cat "$TMP_DIR/conformance-run.log" >&2
+	fi
+	exit 1
 fi
-pack_root="$(find "$TMP_DIR/conformance" -mindepth 2 -maxdepth 2 -type d -name 'run-*' | sort | tail -n 1)"
+if ! bash "$ROOT/scripts/release/conformance_release_gate.sh" "$conformance_report"; then
+	echo "::error file=scripts/release/stage_release_assets.sh::release conformance gate rejected staged EvidencePack" >&2
+	exit 1
+fi
+pack_root="$(find "$conformance_dir" -mindepth 2 -maxdepth 2 -type d -name 'run-*' | sort | tail -n 1)"
 if [ -z "$pack_root" ]; then
     echo "::error file=scripts/release/stage_release_assets.sh::conformance did not produce an EvidencePack directory" >&2
     exit 1

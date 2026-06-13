@@ -1,6 +1,7 @@
 package gates
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -41,6 +42,29 @@ func TestG0_SBOMPresent(t *testing.T) {
 	require.NotEmpty(t, gate.Name())
 	result := gate.Run(ctx)
 	require.True(t, result.Pass, "all artifacts present: %v", result.Reasons)
+}
+
+func TestG0ReleaseEvidenceReceiptOptIn(t *testing.T) {
+	_, ctx := setupG0(t)
+	t.Setenv("HELM_RELEASE_EVIDENCE_RECEIPT", "1")
+
+	require.NoError(t, os.WriteFile(filepath.Join(ctx.ProjectRoot, "go.sum"), []byte("dep-lock"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(ctx.ProjectRoot, "artifacts", "build_identity.json"), []byte(`{"version":"1.0"}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(ctx.ProjectRoot, "artifacts", "sbom.json"), []byte(`{"components":[]}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(ctx.ProjectRoot, "artifacts", "provenance.json"), []byte(`{"predicate":{}}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(ctx.ProjectRoot, "artifacts", "trust_roots.json"), []byte(`{"keys":[]}`), 0600))
+
+	result := (&G0BuildIdentity{}).Run(ctx)
+	require.True(t, result.Pass, "all artifacts present: %v", result.Reasons)
+	require.Equal(t, 1, result.Metrics.Counts["release_receipts"])
+
+	receiptPath := filepath.Join(ctx.EvidenceDir, "02_PROOFGRAPH", "receipts", "001_release_build_identity.json")
+	data, err := os.ReadFile(receiptPath)
+	require.NoError(t, err)
+	var receipt map[string]any
+	require.NoError(t, json.Unmarshal(data, &receipt))
+	require.Equal(t, "policy_decision", receipt["action_type"])
+	require.NotEmpty(t, receipt["decision_hash"])
 }
 
 func TestG0_SBOMAbsent(t *testing.T) {

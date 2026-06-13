@@ -100,6 +100,8 @@ jobs:
         run: bash scripts/ci/go_module_tests.sh
       - name: Command tests
         run: go test ./core/cmd/helm-ai-kernel -count=1
+      - name: Launchpad promotion drift
+        run: make launchpad-promotion-check
       - name: Fetch main ref for proto compatibility checks
         run: |
           if [ "$(git symbolic-ref --short -q HEAD || true)" = "main" ]; then

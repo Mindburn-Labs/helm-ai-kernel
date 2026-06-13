@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/component: test
   annotations:
     helm.sh/hook: test
-    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.sh/hook-delete-policy: before-hook-creation
     helm.ai/test-intent: "kernel health + launchpad-app Pod presence"
 spec:
   restartPolicy: Never
@@ -16,8 +16,10 @@ spec:
   imagePullSecrets:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- with .Values.launchpadApps.nodeSelector }}
   nodeSelector:
-    {{- toYaml .Values.launchpadApps.nodeSelector | nindent 4 }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   securityContext:
     runAsNonRoot: true
     runAsUser: 65534

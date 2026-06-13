@@ -14,7 +14,7 @@ command:
 healthcheck: helm-launchpad-openrouter-check
 mcp_registry_ref: mcp.registry.yaml
 provider_host_groups:
-  - model_gateway_byo
+  - openrouter
 egress_proxy_required: true
 timeout: 300s
 detached: true

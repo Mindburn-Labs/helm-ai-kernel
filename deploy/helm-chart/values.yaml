@@ -286,11 +286,9 @@ openrouter:
 # docs/launchpad/K8S_SMOKE.md for the conformance map between
 # registry/launchpad/apps/{openclaw,hermes}.yaml and these templates.
 launchpadApps:
-  # All launchpad-app Pods land on amd64 nodes — openclaw/hermes images are
-  # built linux/amd64 only by .github/workflows/launchpad-artifacts.yml. Until
-  # multi-arch builds land (GAP #11 in audit), this is a hard constraint.
-  nodeSelector:
-    kubernetes.io/arch: amd64
+  # Launchpad app images are published as linux/amd64 + linux/arm64 manifests.
+  # Operators who need architecture pinning can set this map explicitly.
+  nodeSelector: {}
 
   # NetworkPolicy default-deny with explicit DNS + 443 egress allowance for
   # the sidecar proxy. Enforcement requires a CNI that honors NetworkPolicy
@@ -309,7 +307,7 @@ launchpadApps:
     enabled: false
     image:
       repository: "ghcr.io/mindburn-labs/helm-launchpad/openclaw"
-      digest: "sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995"
+      digest: "sha256:12fd0c07be068dbf32159583160aa066152d53efa2b617351ba2cf5083f5b62e"
       pullPolicy: "IfNotPresent"
     gatewayPort: 18789
     tmpfsSize: "256Mi"
@@ -337,7 +335,7 @@ launchpadApps:
     egressSidecar:
       image:
         repository: "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy"
-        digest: "sha256:22d78073a11b911f372cd27fa7886101d319b60d367441b18208f2be9d9dfb34"
+        digest: "sha256:83c77bd60f74f94b00b8315bbfcb71435b7314d8cf0b0093de17339231706caf"
         pullPolicy: "IfNotPresent"
       port: 8080
       allowlist:
@@ -354,15 +352,19 @@ launchpadApps:
     enabled: false
     image:
       repository: "ghcr.io/mindburn-labs/helm-launchpad/hermes"
-      digest: "sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652"
+      digest: "sha256:6d106d351db159fd4ae5788a68bc383115472eb1d00c05afc1fae1f011e2b3fe"
       pullPolicy: "IfNotPresent"
-    # Mirror registry/launchpad/apps/hermes.yaml verbatim. The /bin/sh wrapper
-    # bypasses a broken shebang in the published venv and pins HOME into the
-    # writable app_state mount.
-    command:
-      - "/bin/sh"
-      - "-c"
-      - "HOME=/var/lib/hermes hermes --q ping --provider openrouter --model openai/gpt-4o-mini --ignore_user_config --quiet"
+    # job runs the proven single-query smoke path; deployment runs the
+    # long-lived Hermes gateway process. Gateway mode is not live-F2-promoted
+    # until separate runtime evidence lands.
+    mode: "job"
+    provider: "openrouter"
+    model: "openai/gpt-4o-mini"
+    query: "ping"
+    # Full command replacement for operators who need a provider-specific or
+    # custom Hermes invocation. Leave empty to use the chart-managed command
+    # for the selected mode.
+    commandOverride: []
     backoffLimit: 0
     activeDeadlineSeconds: 240
     ttlSecondsAfterFinished: 3600
@@ -378,7 +380,7 @@ launchpadApps:
     egressSidecar:
       image:
         repository: "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy"
-        digest: "sha256:22d78073a11b911f372cd27fa7886101d319b60d367441b18208f2be9d9dfb34"
+        digest: "sha256:83c77bd60f74f94b00b8315bbfcb71435b7314d8cf0b0093de17339231706caf"
         pullPolicy: "IfNotPresent"
       port: 8080
       allowlist:

@@ -1,6 +1,91 @@
 {{- if .Values.launchpadApps.hermes.enabled -}}
 {{- $app := "hermes" -}}
 {{- $cfg := .Values.launchpadApps.hermes -}}
+{{- $mode := $cfg.mode | default "job" -}}
+{{- if not (has $mode (list "job" "deployment")) -}}
+{{- fail (printf "launchpadApps.hermes.mode must be one of job or deployment, got %q" $mode) -}}
+{{- end -}}
+{{- if eq $mode "deployment" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "helm-ai-kernel.launchpadApp.fullname" (dict "ctx" . "app" $app) }}
+  labels:
+    {{- include "helm-ai-kernel.launchpadApp.labels" (dict "ctx" . "app" $app) | nindent 4 }}
+  annotations:
+    helm.ai/upstream-source: "https://github.com/NousResearch/hermes-agent"
+    helm.ai/registry-ref: "registry/launchpad/apps/hermes.yaml"
+    helm.ai/runtime-evidence: "gateway-mode-not-live-f2-promoted"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "helm-ai-kernel.launchpadApp.selectorLabels" (dict "ctx" . "app" $app) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "helm-ai-kernel.launchpadApp.labels" (dict "ctx" . "app" $app) | nindent 8 }}
+    spec:
+      restartPolicy: Always
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.launchpadApps.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      initContainers:
+        {{- include "helm-ai-kernel.launchpadApp.egressInit" (dict "sidecar" $cfg.egressSidecar) | nindent 8 }}
+      containers:
+        - name: {{ $app }}
+          image: {{ include "helm-ai-kernel.launchpadApp.image" (dict "image" $cfg.image) | quote }}
+          imagePullPolicy: {{ $cfg.image.pullPolicy | default "IfNotPresent" }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            {{- include "helm-ai-kernel.launchpadApp.hermesCommand" (dict "cfg" $cfg "mode" $mode) | nindent 12 }}
+          env:
+            - name: HOME
+              value: /var/lib/hermes
+            # No HTTP_PROXY/HTTPS_PROXY: egress is enforced transparently by the
+            # egress-init iptables REDIRECT, not by the workload honoring proxy env.
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.openrouter.apiKeySecretRef.name | quote }}
+                  key: {{ .Values.openrouter.apiKeySecretRef.key | quote }}
+          resources:
+            {{- toYaml $cfg.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: app-state
+              mountPath: /var/lib/hermes
+        {{- include "helm-ai-kernel.launchpadApp.egressSidecar" (dict "sidecar" $cfg.egressSidecar) | nindent 8 }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ $cfg.tmpfsSize | default "128Mi" }}
+        - name: app-state
+          emptyDir:
+            sizeLimit: {{ $cfg.appStateSize }}
+        - name: egress-receipts
+          emptyDir:
+            sizeLimit: 64Mi
+{{- else -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -29,8 +114,10 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.launchpadApps.nodeSelector }}
       nodeSelector:
-        {{- toYaml .Values.launchpadApps.nodeSelector | nindent 8 }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -55,7 +142,7 @@ spec:
               drop:
                 - ALL
           command:
-            {{- toYaml $cfg.command | nindent 12 }}
+            {{- include "helm-ai-kernel.launchpadApp.hermesCommand" (dict "cfg" $cfg "mode" $mode) | nindent 12 }}
           env:
             - name: HOME
               value: /var/lib/hermes
@@ -84,4 +171,5 @@ spec:
         - name: egress-receipts
           emptyDir:
             sizeLimit: 64Mi
+{{- end -}}
 {{- end }}

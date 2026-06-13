@@ -94,7 +94,11 @@ proxy: build
 	./bin/helm-ai-kernel proxy --upstream http://127.0.0.1:19090/v1
 
 docker: build
-	docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:local .
+	docker build \
+		--build-arg BUILD_VERSION=$(VERSION) \
+		--build-arg BUILD_COMMIT=$(GIT_COMMIT) \
+		--build-arg BUILD_TIME=$(BUILD_TIME) \
+		-t ghcr.io/mindburn-labs/helm-ai-kernel:local .
 
 docker-up:
 	docker compose up -d
@@ -345,3 +349,7 @@ docs-coverage:
 
 docs-truth:
 	python3 scripts/check_documentation_truth.py
+
+.PHONY: launchpad-promotion-check
+launchpad-promotion-check:
+	cd core && go run ./cmd/helm-ai-kernel launch promote --apps openclaw,hermes --sync-derived --check

@@ -848,7 +848,7 @@
         "nodeSelector": {
           "type": "object",
           "additionalProperties": { "type": "string" },
-          "description": "nodeSelector applied to every launchpad-app Pod. The published openclaw/hermes images are linux/amd64 only — until multi-arch builds land, keep `kubernetes.io/arch: amd64` here."
+          "description": "Optional nodeSelector applied to every launchpad-app Pod. Launchpad app images are published as linux/amd64 + linux/arm64 manifests; set this map explicitly only when architecture or node pool pinning is required."
         },
         "networkPolicy": {
           "type": "object",
@@ -986,19 +986,42 @@
     "launchpadAppJob": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Short-lived launchpad app deployed as a Kubernetes Job.",
+      "description": "Hermes launchpad app deployed either as the proven short-lived smoke Job or as a long-lived gateway Deployment.",
       "properties": {
         "enabled": {
           "type": "boolean",
           "default": false,
-          "description": "Render the Job and supporting resources for this app."
+          "description": "Render the selected Hermes workload mode and supporting resources."
         },
         "image": { "$ref": "#/$defs/launchpadAppImage" },
-        "command": {
+        "mode": {
+          "type": "string",
+          "enum": ["job", "deployment"],
+          "default": "job",
+          "description": "Hermes workload shape. `job` runs the single-query smoke path; `deployment` runs the long-lived Hermes gateway process."
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "default": "openrouter",
+          "description": "Provider passed to the default Hermes Job command."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "default": "openai/gpt-4o-mini",
+          "description": "Model passed to the default Hermes Job command."
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "default": "ping",
+          "description": "Single query passed to the default Hermes Job command."
+        },
+        "commandOverride": {
           "type": "array",
-          "minItems": 1,
           "items": { "type": "string" },
-          "description": "Command and args for the workload container. Mirrors the runtime.command field in registry/launchpad/apps/<id>.yaml verbatim."
+          "description": "Full command array replacement. Leave empty to use the chart-managed command for the selected Hermes mode."
         },
         "backoffLimit": {
           "type": "integer",

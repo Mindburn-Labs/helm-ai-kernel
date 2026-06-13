@@ -26,7 +26,7 @@
       "final_url": "https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:05150139b9680e1f042d9a20fbe0128136f4afb8d1c807540472b0a899315b5f",
+      "content_sha256": "sha256:b53ad162cb320ed4de32d71eb8039c57401a3bac8d6f462dd975c13f7bd79b8d",
       "content_length": 195811
     },
     {
@@ -62,8 +62,8 @@
       "final_url": "https://platform.claude.com/docs/en/api/messages",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:10c054ef4912aaaefdf0387ebc62bdc8d91c34ebce801ffccb3576f94a2edd06",
-      "content_length": 622270
+      "content_sha256": "sha256:2fbd2b667baae1bf6b74ecfdf78f46807edb9f704de72aa0adca6e00fff89052",
+      "content_length": 622271
     },
     {
       "provider_id": "azure-ai-foundry",
@@ -152,8 +152,8 @@
       "final_url": "https://docs.cohere.com/reference/chat",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:96c903a2d8b6fbab996236e50752e60cf6177745f6ceca0fe96336e88de43b8f",
-      "content_length": 4151604
+      "content_sha256": "sha256:9ce0258e1198dbedc6fe24fbddf7801dc0ff435e3de9137a962fb9b2a6c12411",
+      "content_length": 4230267
     },
     {
       "provider_id": "deepinfra",
@@ -233,8 +233,8 @@
       "final_url": "https://ai.google.dev/api/generate-content",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:9d6b52dcd21da27f17586826ee1b85afc95239927f14f150b41734fe27dbf76f",
-      "content_length": 1004429
+      "content_sha256": "sha256:64116036f6a66a5863554dd6954c552fa96e7ca5cbfe6dbb29197def14d7c1f5",
+      "content_length": 1004433
     },
     {
       "provider_id": "google-vertex-ai",
@@ -242,8 +242,8 @@
       "final_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/resources/locations",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:0615631b5423981ebda705b76b7e5cfbee6d59091fd9fb76f1d7005707cd3c9a",
-      "content_length": 960359
+      "content_sha256": "sha256:54fdd1bbd3d8dbb4422cffb78d3d9fe4cbb515ac03c8419748b245650b0cda36",
+      "content_length": 960355
     },
     {
       "provider_id": "google-vertex-ai",
@@ -251,7 +251,7 @@
       "final_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/migrate/openai/auth-and-credentials",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:2f14b00907fcaebc01eea40efe6bac8b2248333e187fd05088be9e22eb4b3056",
+      "content_sha256": "sha256:59e133153fe81c2ec652077005a4338b6238655b96d5ffad4e3c42fe29b350e6",
       "content_length": 372397
     },
     {
@@ -260,7 +260,7 @@
       "final_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/openai",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:ee0ba69777cb5877bd1ff2a73d6cf424c1625b155b698e80333bfa59f2db8673",
+      "content_sha256": "sha256:24f9ae2f3f74e8bb7b522c89687387ffae4a46903e1a00f4c777248f532ed5ce",
       "content_length": 403187
     },
     {
@@ -269,8 +269,8 @@
       "final_url": "https://console.groq.com/docs/api-reference",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:d21c38c474c3540de3fbaa14dd03669d211737bd573fcd47bce5bc994fb93535",
-      "content_length": 1525766
+      "content_sha256": "sha256:b2d1a418e63ee335e615f48f4c6d295739869a085264d0219a24720ac95a1604",
+      "content_length": 1525806
     },
     {
       "provider_id": "hugging-face",
@@ -278,7 +278,7 @@
       "final_url": "https://huggingface.co/docs/inference-providers/index",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:89994aa2ef0fca22a275852eaeb8563ca69f39d2c2e15309e9d89edcec9928e0",
+      "content_sha256": "sha256:0f7f28b655f42d531c990b7f1fdfac78ff7abc05c477dad29083ea1543635204",
       "content_length": 193407
     },
     {
@@ -287,7 +287,7 @@
       "final_url": "https://huggingface.co/docs/inference-providers/en/index",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:6cd657b729670fc60860ed2f03935b110e44e280d88a9f571ff8b9734fe803f6",
+      "content_sha256": "sha256:2f7080a69c61cee1cae9a8ecd398ef519c57912c168b3c4ea6c26a5a3e3aba22",
       "content_length": 193773
     },
     {
@@ -296,7 +296,7 @@
       "final_url": "https://huggingface.co/docs/inference-providers/providers/hf-inference",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:43fe8e1f8504bebd3ba496abc2c4dd216311dd4424d9ced8a2e59c52633c518b",
+      "content_sha256": "sha256:1921ef2645dcd2109f5a24efff09a9b312915edefdec89324fad780679e072d2",
       "content_length": 277566
     },
     {
@@ -305,7 +305,7 @@
       "final_url": "https://cloud.ibm.com/apidocs/watsonx-ai",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:e81795a3d18f93d277f7d209c0fcd008bfabcdff5cb26d8bbf150f14580bf428",
+      "content_sha256": "sha256:8e96daac1e02985b2ebc7216453b14719db56d2afa92402abd4dcf0474443840",
       "content_length": 4732966
     },
     {
@@ -431,7 +431,7 @@
       "final_url": "https://docs.api.nvidia.com/nim/reference/llm-apis",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:254c806dd367561343c1a907a6baa02a4cbe9afab77a480a28fa258fff9f94dd",
+      "content_sha256": "sha256:b5d40d9fc539039d811527a65c442108b1c1a6505c015bc1369adf02275f1997",
       "content_length": 1376343
     },
     {
@@ -449,8 +449,8 @@
       "final_url": "https://openrouter.ai/docs/api/reference/overview",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:acfc67ee2dbb6ef6d8ab03fc04d44473807fb6a5822495ac93000b2c95f94056",
-      "content_length": 753118
+      "content_sha256": "sha256:1eccb358ef4319aecb83e35a7498c6c4ed5c1f2be8934816102480f5b5308750",
+      "content_length": 759703
     },
     {
       "provider_id": "ovhcloud-ai-endpoints",
@@ -593,7 +593,7 @@
       "final_url": "https://cloud.tencent.com/document/product/1729",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:5facb60ddb92de618cf09f71826787f6fa2aa7a81966516418dcd957af2e8b7d",
+      "content_sha256": "sha256:8385585940927cfd55737d08eb8bc7b54bdda602cd8bdf817fd618fb1627b37b",
       "content_length": 31468
     },
     {
@@ -611,7 +611,7 @@
       "final_url": "https://vercel.com/docs/ai-gateway",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:cf9bcdc895cf7720bdff379e46633ac3c9edd8c55ded9d8ffd7459df8f0cf74c",
+      "content_sha256": "sha256:3a64fa5ce3b78e488f5ec923d6393f5dc6c602387eda80523a2fab941ebceb53",
       "content_length": 785571
     },
     {
@@ -620,7 +620,7 @@
       "final_url": "https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:3763b33b014ef61055bbb98553eacb56988ec3a7362e5de6dcc023f98bfadc39",
+      "content_sha256": "sha256:f5e308c1701be5747452e7946832611665cd488735b82f887b3b817bf6cd5941",
       "content_length": 935549
     },
     {
@@ -629,7 +629,7 @@
       "final_url": "https://vercel.com/docs/ai-gateway/sdks-and-apis",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:99c491c4e737a128ab62c450b37336a922926b541264a82cd544fab9f40e936d",
+      "content_sha256": "sha256:e35a1feaac3cc242e39b81b1e09936a1258d8f1844b3377ffaf18a3eddf5aadd",
       "content_length": 846885
     },
     {
@@ -638,7 +638,7 @@
       "final_url": "https://www.volcengine.com/docs/82379",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:32c3893d80582d5f1037b4aa993ab6982fb76f5dc15feaf225e258d1cc6f299c",
+      "content_sha256": "sha256:e03847e430b24de1b2b2a5485805caea1bcf83113d08af96ac81fa34a3a920f5",
       "content_length": 686234
     },
     {
@@ -647,8 +647,8 @@
       "final_url": "https://docs.x.ai/developers/rest-api-reference/inference/chat",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:0743502a377ff09338cb7d4f0e5337538fc8c0ea70b0e1a4c4823a32631d6435",
-      "content_length": 995983
+      "content_sha256": "sha256:5e220a4401742495d3109ef73e2cf2e7e92e44b4943660551ca3de60ec29ee88",
+      "content_length": 865048
     },
     {
       "provider_id": "zhipu-bigmodel",
@@ -656,8 +656,8 @@
       "final_url": "https://docs.bigmodel.cn/cn/guide/start/introduction",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:474291a62dd1b23479721abd8c5e8e49725b668834f9d4e01ed303eb506d66d4",
-      "content_length": 354912
+      "content_sha256": "sha256:8d40169d541c3bb1b648caab3dafc093f5239674f3f64fa5bd12045262e49486",
+      "content_length": 354928
     }
   ]
 }

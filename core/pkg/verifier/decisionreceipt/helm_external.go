@@ -19,8 +19,10 @@ func init() { Register(helmExternalAdapter{}) }
 
 type helmExternalAdapter struct{}
 
-func (helmExternalAdapter) FormatID() string                    { return HelmExternalFormatID }
-func (helmExternalAdapter) Kind() contracts.ExternalReceiptKind { return contracts.KindExternalDecision }
+func (helmExternalAdapter) FormatID() string { return HelmExternalFormatID }
+func (helmExternalAdapter) Kind() contracts.ExternalReceiptKind {
+	return contracts.KindExternalDecision
+}
 
 func (helmExternalAdapter) Detect(raw []byte) bool {
 	return strings.Contains(string(raw), HelmExternalFormatID)

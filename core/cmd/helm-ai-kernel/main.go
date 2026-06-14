@@ -345,10 +345,12 @@ func runServerWithOptions(opts serverOptions) {
 		services.PolicySnapshotStore = policyStore
 		services.PolicyScope = policyScope
 
-		// Receipt transparency log: anchor every issued receipt hash. Sharing
-		// the signer's public key as the log identity matches `helm-ai-kernel
-		// log` (see translog_cmd.go). Fail-closed by default; degrade only when
-		// HELM_TRANSPARENCY_DEGRADE is explicitly set.
+		// Receipt transparency log: anchor decision-record receipt hashes at
+		// issuance (see persistDecisionReceipt -> anchorReceiptTransparency). The
+		// anchor (LogID/LeafIndex/Transparency) is persisted with the receipt.
+		// Sharing the signer's public key as the log identity matches
+		// `helm-ai-kernel log` (see translog_cmd.go). Fail-closed by default;
+		// degrade only when HELM_TRANSPARENCY_DEGRADE is explicitly set.
 		transpLog, transpErr := translog.Open(filepath.Join(dataDir, "translog"))
 		if transpErr != nil {
 			if envBool("HELM_PRODUCTION") {

@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-14T03:17:56Z
-# Commit: 9601bc52982467aed69ee8cb7fb71682920589bc
+# Generated: 2026-06-14T11:27:51Z
+# Commit: a138b7edf7327792ec9fd283ba18b437cbe54c91
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -206,7 +206,7 @@ c9aefcaefb9565ba86fdf087f6d05c6c6c49873172a5ba720ff6dccbce0b7f47  core/pkg/contr
 9a102cb08f0bc539c18ca998d3a3fd54ba3cde0a4114731f136be6ef1f25aa55  core/pkg/contracts/proposals.go
 72d9e3269a98849270c5f5afdb0bb8d07238e67a8f571fe81500b7785ff95736  core/pkg/contracts/receipt.go
 15026d4ed482963f29113ffdb0252ee6fb7b8192e93a0af0767f1270ae2f7f8c  core/pkg/contracts/receipt_fuzz_test.go
-3fa9fa9aa737572cf7213e619c3571dc2c9a1b00b147f08c5e3e6a0b7c077503  core/pkg/contracts/receipt_hash.go
+2f88edd4537defbaf6e01c52007567d7fefc406770ea9599d137d7a507f6f963  core/pkg/contracts/receipt_hash.go
 13cd995836c12a34fccd699fed492b360b4f82c1c10a9f4ae458b65d7faa9dad  core/pkg/contracts/receipt_hash_parity_test.go
 645e952db7dfa6b9686fee7393e06d353fcdd3284476c0ec21635895407f31f0  core/pkg/contracts/receipt_hash_test.go
 672deac85fda9170c31686a07c372d225d192666e84b05c66c1d6ce195050799  core/pkg/contracts/receipt_v5_test.go

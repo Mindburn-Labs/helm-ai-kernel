@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -9,8 +10,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
+	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidencepack"
 )
 
 // runDemoCmd implements `helm-ai-kernel demo` — run governed demonstrations.
@@ -54,18 +60,19 @@ func runDemoCmd(args []string, stdout, stderr io.Writer) int {
 
 // demoReceipt represents a receipt emitted during the demo.
 type demoReceipt struct {
-	ReceiptID  string            `json:"receipt_id"`
-	Timestamp  string            `json:"timestamp"`
-	Principal  string            `json:"principal"`
-	Action     string            `json:"action"`
-	Tool       string            `json:"tool,omitempty"`
-	Verdict    string            `json:"verdict"`
-	ReasonCode string            `json:"reason_code"`
-	Hash       string            `json:"hash"`
-	Lamport    uint64            `json:"lamport_clock"`
-	PrevHash   string            `json:"prev_hash"`
-	Mode       string            `json:"mode,omitempty"`
-	Metadata   map[string]string `json:"metadata,omitempty"`
+	ReceiptID    string            `json:"receipt_id"`
+	Timestamp    string            `json:"timestamp"`
+	Principal    string            `json:"principal"`
+	Action       string            `json:"action"`
+	Tool         string            `json:"tool,omitempty"`
+	Verdict      string            `json:"verdict"`
+	ReasonCode   string            `json:"reason_code"`
+	Hash         string            `json:"hash"`
+	DecisionHash string            `json:"decision_hash"`
+	Lamport      uint64            `json:"lamport_clock"`
+	PrevHash     string            `json:"prev_hash"`
+	Mode         string            `json:"mode,omitempty"`
+	Metadata     map[string]string `json:"metadata,omitempty"`
 }
 
 type demoActor struct {
@@ -262,17 +269,18 @@ func runDemoScenario(kind string, args []string, stdout, stderr io.Writer) int {
 		principalID := strings.ReplaceAll(strings.ToLower(principal), " ", "_")
 
 		r := demoReceipt{
-			ReceiptID:  fmt.Sprintf("rcpt-%s-%d", hash[:8], lamport),
-			Timestamp:  ts,
-			Principal:  principal,
-			Action:     action,
-			Tool:       tool,
-			Verdict:    verdict,
-			ReasonCode: reason,
-			Hash:       hash,
-			Lamport:    lamport,
-			PrevHash:   prevHash,
-			Mode:       mode,
+			ReceiptID:    fmt.Sprintf("rcpt-%s-%d", hash[:8], lamport),
+			Timestamp:    ts,
+			Principal:    principal,
+			Action:       action,
+			Tool:         tool,
+			Verdict:      verdict,
+			ReasonCode:   reason,
+			Hash:         hash,
+			DecisionHash: hash,
+			Lamport:      lamport,
+			PrevHash:     prevHash,
+			Mode:         mode,
 			Metadata: map[string]string{
 				"organization_id": cfg.organizationID,
 				"scope_id":        cfg.scopeID,
@@ -404,47 +412,17 @@ func runDemoScenario(kind string, args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "\n%s━━━ All Phases Complete ━━━%s\n\n", ColorBold+ColorCyan, ColorReset)
 
 	fmt.Fprintf(stdout, "%sExporting EvidencePack...%s\n", ColorBold, ColorReset)
-	if err := os.MkdirAll(outDir, 0750); err != nil {
-		fmt.Fprintf(stderr, "Error creating evidence dir: %v\n", err)
-		return 2
-	}
-
-	for i, r := range receipts {
-		data, _ := json.MarshalIndent(r, "", "  ")
-		fname := fmt.Sprintf("%03d_%s.json", i+1, r.ReceiptID)
-		if err := os.WriteFile(filepath.Join(outDir, fname), data, 0644); err != nil {
-			fmt.Fprintf(stderr, "Error writing receipt: %v\n", err)
-			return 2
-		}
-	}
-
-	manifest := map[string]any{
-		"session_id":       "demo-starter-" + time.Now().UTC().Format("20060102-150405"),
-		"template":         template,
-		"provider":         provider,
-		"scenario":         cfg.key,
-		"organization_id":  cfg.organizationID,
-		"scope_id":         cfg.scopeID,
-		"execution_mode":   mode,
-		"receipts":         len(receipts),
-		"exported_at":      time.Now().UTC().Format(time.RFC3339),
-		"final_hash":       prevHash,
-		"lamport":          lamport,
-		"features":         []string{"skill_lifecycle", "maintenance_loop", "approval_gate", "sandbox_exec", "deny_path", "organization_scoping"},
-		"authority_scope":  map[string]any{"organization_id": cfg.organizationID, "scope_id": cfg.scopeID},
-		"principal_fields": []string{"principal_id", "organization_id", "scope_id"},
-	}
-	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
-	if err := os.WriteFile(filepath.Join(outDir, "manifest.json"), manifestData, 0644); err != nil {
-		fmt.Fprintf(stderr, "Error writing manifest: %v\n", err)
+	if err := writeVerifiableEvidencePack(outDir, cfg, receipts, template, provider, mode, prevHash, lamport); err != nil {
+		fmt.Fprintf(stderr, "Error sealing EvidencePack: %v\n", err)
 		return 2
 	}
 
 	fmt.Fprintf(stdout, "  📦 %d receipts → %s/\n", len(receipts), outDir)
+	fmt.Fprintf(stdout, "  🔏 Sealed (dev-local) → %s/%s\n", outDir, evidencepkg.EvidencePackSealPath)
 	if err := generateProofReportJSON(receipts, outDir, template, provider); err != nil {
 		fmt.Fprintf(stderr, "Warning: could not generate JSON report: %v\n", err)
 	} else {
-		fmt.Fprintf(stdout, "  📊 Run Report → %s/run-report.json\n", outDir)
+		fmt.Fprintf(stdout, "  📊 Run Report → %s/%s\n", outDir, demoRunReportRelPath)
 	}
 
 	fmt.Fprintf(stdout, "\n%sVerifying EvidencePack...%s\n", ColorBold, ColorReset)
@@ -471,14 +449,13 @@ func runDemoScenario(kind string, args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "\n%s🎉 Demo complete.%s Evidence at %s/\n", ColorBold+ColorGreen, ColorReset, outDir)
 	fmt.Fprintf(stdout, "%s   Bound scope:%s org=%s scope=%s mode=%s\n", ColorGray, ColorReset, cfg.organizationID, cfg.scopeID, mode)
 
-	reportPath := filepath.Join(outDir, "run-report.json")
+	reportPath := filepath.Join(outDir, demoRunReportRelPath)
 	fmt.Fprintf(stdout, "\n%s╔════════════════════════════════════════════════════════════╗%s\n", ColorBold+ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s║  HELM Demo Complete                                        ║%s\n", ColorBold+ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s╠════════════════════════════════════════════════════════════╣%s\n", ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s║%s  📊 Report:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorBold, reportPath, ColorReset, ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s║%s  📦 Evidence: %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorBold, outDir+"/", ColorReset, ColorCyan, ColorReset)
-	fmt.Fprintf(stdout, "%s║%s  🔍 Verify:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, "helm-ai-kernel export --evidence "+outDir+" --out e.tar", ColorReset, ColorCyan, ColorReset)
-	fmt.Fprintf(stdout, "%s║%s              %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, "helm-ai-kernel verify e.tar", ColorReset, ColorCyan, ColorReset)
+	fmt.Fprintf(stdout, "%s║%s  🔍 Verify:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, "helm-ai-kernel verify "+outDir, ColorReset, ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s║%s  🔄 Switch:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, "helm-ai-kernel demo organization --provider opensandbox", ColorReset, ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", ColorCyan, ColorReset)
 
@@ -492,6 +469,185 @@ func runDemoScenario(kind string, args []string, stdout, stderr io.Writer) int {
 // through the canonical organization scenario.
 func runDemoCompany(args []string, stdout, stderr io.Writer) int {
 	return runDemoScenario("organization", args, stdout, stderr)
+}
+
+// writeVerifiableEvidencePack emits a canonical, dev-local-sealed EvidencePack
+// under outDir so that `helm-ai-kernel verify <outDir>` accepts it out of the
+// box (MIN-738). The pack follows the §3.1 directory layout, carries receipts
+// under 02_PROOFGRAPH/receipts/, derives a canonical manifest via the evidence
+// pack Builder, and is sealed in place under the dev-local trust profile. The
+// dev-local signer key is auto-provisioned in the HELM data dir on first use,
+// so no env var or HELM_SIGNING_KEY_HEX is required. Fail-closed: any error
+// here aborts the demo before a success/verify instruction is printed.
+func writeVerifiableEvidencePack(outDir string, cfg demoScenarioConfig, receipts []demoReceipt, template, provider, mode, finalHash string, lamport uint64) error {
+	if len(receipts) == 0 {
+		return fmt.Errorf("no receipts to seal")
+	}
+	if err := conform.CreateEvidencePackDirs(outDir); err != nil {
+		return err
+	}
+
+	// Canonical manifest via the evidence pack Builder (JCS + Merkle root).
+	packID := "demo-" + cfg.key
+	builder := evidencepack.NewBuilder(packID, cfg.organizationID, cfg.scopeID, demoPolicyID)
+	for i, r := range receipts {
+		if err := builder.AddReceipt(fmt.Sprintf("%03d_%s", i+1, r.ReceiptID), r); err != nil {
+			return err
+		}
+	}
+	manifest, _, err := builder.Build()
+	if err != nil {
+		return err
+	}
+	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(outDir, "04_EXPORTS", "evidence_manifest.json"), append(manifestJSON, '\n'), 0o600); err != nil {
+		return err
+	}
+
+	// Receipts in canonical proofgraph layout (Lamport-ordered).
+	receiptsDir := filepath.Join(outDir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		return err
+	}
+	for i, r := range receipts {
+		data, err := json.MarshalIndent(r, "", "  ")
+		if err != nil {
+			return err
+		}
+		fname := fmt.Sprintf("%03d_%s.json", i+1, r.ReceiptID)
+		if err := os.WriteFile(filepath.Join(receiptsDir, fname), append(data, '\n'), 0o600); err != nil {
+			return err
+		}
+	}
+
+	// Proof graph summary (deterministic — no wall clock in the chain).
+	proofGraph := map[string]any{
+		"version":         "1.0.0",
+		"pack_id":         packID,
+		"scenario":        cfg.key,
+		"organization_id": cfg.organizationID,
+		"scope_id":        cfg.scopeID,
+		"execution_mode":  mode,
+		"receipt_count":   len(receipts),
+		"lamport_final":   lamport,
+		"root_hash":       finalHash,
+		"topo_order_rule": "lamport_monotonic",
+		"manifest_hash":   manifest.ManifestHash,
+		"entries_root":    manifest.EntriesMerkleRoot,
+	}
+	proofGraphJSON, err := json.MarshalIndent(proofGraph, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(outDir, "02_PROOFGRAPH", "proofgraph.json"), append(proofGraphJSON, '\n'), 0o600); err != nil {
+		return err
+	}
+
+	// 01_SCORE.json (+ sha256 sidecar) — required by the canonical layout.
+	score := map[string]any{
+		"pass":            true,
+		"run_id":          packID,
+		"scope":           "demo",
+		"template":        template,
+		"provider":        provider,
+		"execution_mode":  mode,
+		"receipt_count":   len(receipts),
+		"deny_path":       "fail-closed",
+		"organization_id": cfg.organizationID,
+		"scope_id":        cfg.scopeID,
+	}
+	scoreJSON, err := json.MarshalIndent(score, "", "  ")
+	if err != nil {
+		return err
+	}
+	scoreJSON = append(scoreJSON, '\n')
+	if err := os.WriteFile(filepath.Join(outDir, "01_SCORE.json"), scoreJSON, 0o600); err != nil {
+		return err
+	}
+	scoreSum := sha256.Sum256(scoreJSON)
+	if err := os.WriteFile(filepath.Join(outDir, "01_SCORE.json.sha256"), []byte(hex.EncodeToString(scoreSum[:])+"\n"), 0o600); err != nil {
+		return err
+	}
+
+	// 00_INDEX.json over every pack file (excluding the index itself and the
+	// seal, which is written after the index is hashed).
+	if err := writeDemoEvidenceIndex(outDir, packID); err != nil {
+		return err
+	}
+
+	// Seal in place with the dev-local profile. The file-dev signer
+	// auto-generates its Ed25519 key under the data dir if absent.
+	if _, err := evidencepkg.SealEvidencePack(context.Background(), outDir, evidencepkg.SealEvidencePackOptions{
+		PackID:  packID,
+		Profile: evidencepkg.EvidenceTrustProfileDevLocal,
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+// writeDemoEvidenceIndex walks the pack directory and writes 00_INDEX.json,
+// mirroring the conform engine's index format. Entries are sorted by path for
+// deterministic output.
+func writeDemoEvidenceIndex(outDir, runID string) error {
+	type indexEntry struct {
+		Path        string `json:"path"`
+		SHA256      string `json:"sha256"`
+		SizeBytes   int64  `json:"size_bytes"`
+		ContentType string `json:"content_type"`
+	}
+	var entries []indexEntry
+	err := filepath.Walk(outDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(outDir, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "00_INDEX.json" || rel == evidencepkg.EvidencePackSealPath {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256(data)
+		ct := "application/json"
+		if !strings.HasSuffix(rel, ".json") {
+			ct = "text/plain"
+		}
+		entries = append(entries, indexEntry{
+			Path:        rel,
+			SHA256:      hex.EncodeToString(sum[:]),
+			SizeBytes:   info.Size(),
+			ContentType: ct,
+		})
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
+	index := map[string]any{
+		"run_id":          runID,
+		"profile":         string(conform.ProfileCore),
+		"created_at":      time.Now().UTC(),
+		"topo_order_rule": "lamport_monotonic",
+		"entries":         entries,
+	}
+	data, err := json.MarshalIndent(index, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(outDir, "00_INDEX.json"), append(data, '\n'), 0o600)
 }
 
 func init() {

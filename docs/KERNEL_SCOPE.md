@@ -23,6 +23,14 @@ After this page you should know what this surface is for, which source files own
 
 Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
 
+## RLM Input Evidence Boundary
+
+RLM outputs can help maintainers inspect large repos, logs, PDFs, receipts, and
+EvidencePacks. They are input evidence only until represented through existing
+Kernel contracts: verdicts, signed receipts, ProofGraph refs, EvidencePacks,
+conformance fixtures, verifier code, or release evidence. Do not add a new RLM
+proof universe or describe RLM output itself as Kernel verification.
+
 > **Canonical architecture**: see [ARCHITECTURE.md](ARCHITECTURE.md) for the
 > normative trust boundary model and TCB definition. For the canonical
 > 8-package TCB inventory, see [ARCHITECTURE.md](ARCHITECTURE.md).

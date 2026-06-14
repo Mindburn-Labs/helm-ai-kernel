@@ -11,9 +11,12 @@ HELM does **not** claim to have "the only" or "the first" receipts.
 
 What HELM does claim, and this spec makes precise:
 
-> **HELM verifies AAR, ACTA, and HELM receipts. HELM-native receipts add a
-> verdict-bound effect permit and a compliance-mapped EvidencePack for *admissible
-> execution proof*. External decision receipts are *decision-level proof* only.**
+> **HELM is built to verify AAR, ACTA, and HELM receipts through pluggable format
+> adapters. This release ships the verify+classify engine and the `helm_external.v1`
+> reference adapter; the AAR/ACTA/Pipelock adapters are pending vendor test vectors
+> (§6) and are not yet claimed as supported. HELM-native receipts add a verdict-bound
+> effect permit and a compliance-mapped EvidencePack for *admissible execution
+> proof*; external decision receipts are *decision-level proof* only.**
 
 The defensible position is neutrality + binding: HELM is a verifier neutral enough
 that an auditor, insurer, or counterparty can check a receipt **without trusting the

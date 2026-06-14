@@ -4,7 +4,6 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
-	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -25,7 +24,24 @@ func (helmExternalAdapter) Kind() contracts.ExternalReceiptKind {
 }
 
 func (helmExternalAdapter) Detect(raw []byte) bool {
-	return strings.Contains(string(raw), HelmExternalFormatID)
+	var probe struct {
+		FormatID string `json:"format_id"`
+		Receipts []struct {
+			FormatID string `json:"format_id"`
+		} `json:"receipts"`
+	}
+	if json.Unmarshal(raw, &probe) != nil {
+		return false
+	}
+	if probe.FormatID == HelmExternalFormatID {
+		return true
+	}
+	for _, r := range probe.Receipts {
+		if r.FormatID == HelmExternalFormatID {
+			return true
+		}
+	}
+	return false
 }
 
 func (helmExternalAdapter) Parse(raw []byte) ([]contracts.ExternalDecisionReceipt, error) {

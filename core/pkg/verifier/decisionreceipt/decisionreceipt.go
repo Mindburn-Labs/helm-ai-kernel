@@ -1,6 +1,8 @@
-// Package decisionreceipt verifies external decision receipts (e.g. AAR, ACTA,
-// Pipelock) against HELM's neutral classification ladder and normalizes them
-// into contracts.ExternalDecisionReceipt for import into EvidencePacks.
+// Package decisionreceipt verifies external decision receipts against HELM's
+// neutral classification ladder and normalizes them into
+// contracts.ExternalDecisionReceipt for import into EvidencePacks. Target formats
+// (AAR, ACTA, Pipelock) plug in as FormatAdapters; this release ships the
+// helm_external.v1 reference adapter only.
 //
 // HELM verifies external receipts; it does NOT promote them to HELM-native
 // authority. The strongest level an external decision receipt can reach is
@@ -127,16 +129,23 @@ func VerifyReceipt(a FormatAdapter, r contracts.ExternalDecisionReceipt, bundleK
 	var checks []DecisionCheck
 	id := r.ReceiptID
 
-	computed, err := ComputeReceiptHash(a, r)
+	data, err := a.CanonicalSignedBytes(r)
 	if err != nil {
 		checks = append(checks, DecisionCheck{Name: "decision:" + id + ":hash", Pass: false, Reason: "canonicalization failed: " + err.Error()})
 		return contracts.ClassUnverified, checks
 	}
-	if r.ReceiptHash != "" && r.ReceiptHash != computed {
+	computed := "sha256:" + canonicalize.HashBytes(data)
+	switch {
+	case r.ReceiptHash == "":
+		// No producer-supplied hash; the signature below is the authoritative
+		// check. Record this honestly rather than implying a stored hash matched.
+		checks = append(checks, DecisionCheck{Name: "decision:" + id + ":hash", Pass: true, Detail: "no stored receipt_hash (computed " + computed + ")"})
+	case r.ReceiptHash != computed:
 		checks = append(checks, DecisionCheck{Name: "decision:" + id + ":hash", Pass: false, Reason: fmt.Sprintf("receipt_hash=%q computed=%q", r.ReceiptHash, computed)})
 		return contracts.ClassUnverified, checks
+	default:
+		checks = append(checks, DecisionCheck{Name: "decision:" + id + ":hash", Pass: true, Detail: computed})
 	}
-	checks = append(checks, DecisionCheck{Name: "decision:" + id + ":hash", Pass: true, Detail: computed})
 
 	if strings.TrimSpace(r.Signature) == "" {
 		checks = append(checks, DecisionCheck{Name: "decision:" + id + ":signature", Pass: false, Reason: "missing signature"})
@@ -162,7 +171,6 @@ func VerifyReceipt(a FormatAdapter, r contracts.ExternalDecisionReceipt, bundleK
 		checks = append(checks, DecisionCheck{Name: "decision:" + id + ":signature", Pass: false, Reason: "invalid signature encoding: " + err.Error()})
 		return contracts.ClassUnverified, checks
 	}
-	data, _ := a.CanonicalSignedBytes(r) // err handled above
 	if !ed25519.Verify(pub, data, sig) {
 		checks = append(checks, DecisionCheck{Name: "decision:" + id + ":signature", Pass: false, Reason: "Ed25519 signature mismatch"})
 		return contracts.ClassUnverified, checks
@@ -226,7 +234,9 @@ func (r *Registry) VerifyBundle(raw []byte, formatID, trustedKeyHex string) (Dec
 		weakest = weaker(weakest, class)
 
 		if i > 0 {
-			if receipts[i].PrevReceiptHash != prevHash {
+			// prevHash == "" means the previous receipt was skipped/uncomputable
+			// (e.g. it forged a helm_native kind); the chain is broken there.
+			if prevHash == "" || receipts[i].PrevReceiptHash != prevHash {
 				report.Verified = false
 				weakest = contracts.ClassUnverified
 				report.Checks = append(report.Checks, DecisionCheck{Name: "decision:" + receipts[i].ReceiptID + ":chain", Pass: false, Reason: fmt.Sprintf("prev_receipt_hash=%q expected %q", receipts[i].PrevReceiptHash, prevHash)})
@@ -290,7 +300,12 @@ func decodeSignature(value string) ([]byte, error) {
 	if decoded, err := hex.DecodeString(value); err == nil {
 		return decoded, nil
 	}
-	return base64.StdEncoding.DecodeString(value)
+	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.URLEncoding, base64.RawStdEncoding, base64.RawURLEncoding} {
+		if decoded, err := enc.DecodeString(value); err == nil {
+			return decoded, nil
+		}
+	}
+	return nil, fmt.Errorf("signature is neither valid hex nor base64")
 }
 
 func decodePublicKey(keyHex string) (ed25519.PublicKey, error) {

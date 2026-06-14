@@ -359,7 +359,7 @@ The complete diagram doctrine lives in
 | Surface | Current install or status |
 | --- | --- |
 | CLI | GitHub Release binaries; the latest release attaches a `helm-ai-kernel.rb` formula asset. Verify the public tap before relying on `brew install mindburnlabs/tap/helm-ai-kernel` for the latest version |
-| Go SDK | `go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@main`; tagged module versions are tracked as an OSS-readiness follow-up |
+| Go SDK | `go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.5.14` |
 | Python SDK | `pip install helm-sdk` |
 | TypeScript SDK | `npm install @mindburn/helm-ai-kernel` |
 | Rust SDK | `cargo add helm-sdk` |

@@ -298,12 +298,36 @@ def check_http_contains(surface: dict[str, Any], version: str) -> SurfaceResult:
     return SurfaceResult(surface["id"], "pass" if not missing and not rejected else "fail", expected, actual, url=fmt(surface.get("human_url", url), version), blocking=is_blocking(surface))
 
 
+def check_go_proxy_module(surface: dict[str, Any], version: str) -> SurfaceResult:
+    url = fmt(surface["url"], version)
+    payload = request_json(url)
+    origin = payload.get("Origin") or {}
+    expected = {
+        "version": f"v{version}",
+        "origin_subdir": surface.get("origin_subdir"),
+        "origin_ref": fmt(surface.get("origin_ref", "refs/tags/sdk/go/v{version}"), version),
+    }
+    actual = {
+        "version": payload.get("Version"),
+        "origin_subdir": origin.get("Subdir"),
+        "origin_ref": origin.get("Ref"),
+    }
+    return SurfaceResult(
+        surface["id"],
+        "pass" if actual == expected else "fail",
+        expected,
+        actual,
+        url=fmt(surface.get("human_url", url), version),
+        blocking=is_blocking(surface),
+    )
+
+
 def check_pkg_go_dev(surface: dict[str, Any], version: str) -> SurfaceResult:
     url = fmt(surface["url"], version)
     text = request_text(url)
     versions = unique(re.findall(r"\bv[0-9]+\.[0-9]+\.[0-9]+\b", text))
     expected = f"v{version}"
-    detail = None if expected in versions else "pkg.go.dev has not indexed the aligned SDK module tag yet"
+    detail = None if expected in versions else "pkg.go.dev has not indexed the required SDK module tag yet"
     return SurfaceResult(surface["id"], "pass" if expected in versions else "fail", expected, versions, url=fmt(surface.get("human_url", url), version), detail=detail, blocking=is_blocking(surface))
 
 
@@ -318,6 +342,7 @@ PUBLISHED_CHECKS = {
     "ghcr_tags": check_ghcr_tags,
     "http_exists": check_http_exists,
     "http_contains": check_http_contains,
+    "go_proxy_module": check_go_proxy_module,
     "pkg_go_dev": check_pkg_go_dev,
 }
 

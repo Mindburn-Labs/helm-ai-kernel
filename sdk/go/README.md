@@ -5,12 +5,11 @@ Typed Go client for the HELM kernel HTTP API.
 ## Install
 
 ```bash
-go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@main
+go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.5.14
 ```
 
 Version truth is the repository `VERSION` file (`0.5.14` for this release).
-Go consumers should pin by commit or `@main` until SDK module release tags are
-realigned with the repository release version.
+Tagged Go module releases use the subdirectory tag form `sdk/go/v0.5.14`.
 
 ## Local Test
 

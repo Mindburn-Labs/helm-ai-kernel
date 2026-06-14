@@ -33,5 +33,30 @@ receipt as proof it cannot verify. The strongest level an external decision rece
 can reach is `crypto_conformant` (decision-level proof) — execution proof requires a
 HELM verdict-bound effect permit, which these formats do not carry.
 
+## Re-anchor it as an EvidencePack
+
+Importing a verified external receipt turns it into a content-addressed,
+tamper-evident HELM **EvidencePack** — the verbatim source, the normalized
+receipt, and a `compatibility/import_manifest.json` that records the
+classification and limitations (so it is never mistaken for execution proof):
+
+```sh
+helm-ai-kernel import receipt \
+  examples/decision-receipt/helm_external_example.json \
+  --out ./imported-pack \
+  --public-key "$(cat examples/decision-receipt/public_key.hex)"
+```
+
+```
+Imported helm_external.v1  classification=crypto_conformant
+EvidencePack: ./imported-pack
+  manifest_hash: sha256:...
+  entries (4):
+    compatibility/import_manifest.json
+    host_evidence/helm_external.v1/source.json
+    manifest.json
+    receipts/external_edr-demo-0001.json
+```
+
 See `protocols/specs/receipts/HELM_RECEIPT_SPEC_v1.0.md` for the full taxonomy and
 classification ladder.

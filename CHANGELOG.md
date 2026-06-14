@@ -75,6 +75,22 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - **zkVM Guest Safety Checker**: Introduced the `ZKVMGuestSafetyChecker` and `SafetyGuestProgram` inside `pkg/crypto/zk` to simulate AST static analysis inside zero-knowledge execution enclaves.
 - **TEE Secrets Enclave**: Introduced `SovereignKMSVault` and `SecretProxyFilter` inside `pkg/crypto/tee` to enforce hardware-sealed secrets isolation and inline proxy token injection with constant-time verification.
 
+## [0.5.15] - 2026-06-14
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.15>.
+
+- Anchored receipt issuance into the append-only transparency log and persisted
+  the receipt transparency anchor fields (`log_id`, `leaf_index`, transparency
+  payload) across the Postgres and SQLite receipt stores (MIN-720).
+- Added the certification evidence gate, verifier telemetry, demo MCP surface,
+  and receipt comparison tooling (MIN-719/568/609/570).
+- Fixed the self-serve proof loop so `demo` emits a canonical sealed
+  EvidencePack that offline `verify` accepts out of the box (MIN-738).
+- Scoped the `scripts/proof-path.sh` conformance steps as a gate-engine smoke
+  test against the seeded local baseline (fail-closed by design) rather than a
+  hard release gate, so a clean run exits 0 (MIN-740).
+- Hardened the release pipeline to block stale Go SDK publication.
+
 ## [0.5.13] - 2026-06-13
 
 Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.13>.

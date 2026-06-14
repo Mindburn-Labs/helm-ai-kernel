@@ -1,6 +1,6 @@
 {
   "name": "@app-mindburn-web/ui-core",
-  "version": "0.5.14",
+  "version": "0.5.15",
   "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

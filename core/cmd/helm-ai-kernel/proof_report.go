@@ -110,8 +110,16 @@ func verifyChain(receipts []demoReceipt) (chainOK, lamportMonotonic, denyPresent
 	return
 }
 
+// demoRunReportRelPath is the in-pack location of the human-readable run
+// report. It lives under the canonical 12_REPORTS/ subdir so it does not trip
+// the conform top-level structure check during `helm-ai-kernel verify <dir>`.
+const demoRunReportRelPath = "12_REPORTS/run-report.json"
+
 func generateProofReportJSON(receipts []demoReceipt, outDir, template, provider string) error {
-	reportPath := filepath.Join(outDir, "run-report.json")
+	reportPath := filepath.Join(outDir, demoRunReportRelPath)
+	if err := os.MkdirAll(filepath.Dir(reportPath), 0o750); err != nil {
+		return err
+	}
 
 	if len(receipts) == 0 {
 		return fmt.Errorf("no receipts to report")

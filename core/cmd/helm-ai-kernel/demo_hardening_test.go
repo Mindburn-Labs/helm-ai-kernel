@@ -91,7 +91,7 @@ func TestDemoProofReportGenerated(t *testing.T) {
 	}
 
 	htmlPath := filepath.Join(dir, "data", "evidence", "run-report."+"html")
-	jsonPath := filepath.Join(dir, "data", "evidence", "run-report.json")
+	jsonPath := filepath.Join(dir, "data", "evidence", "12_REPORTS", "run-report.json")
 
 	if _, err := os.Stat(htmlPath); !os.IsNotExist(err) {
 		t.Error("HTML report should not be generated")
@@ -253,21 +253,17 @@ func TestNoWallClockInHashPreimage(t *testing.T) {
 	}
 }
 
-// readDemoReceipts reads receipt JSON files from directory in sorted order.
+// readDemoReceipts reads receipt JSON files from the canonical
+// 02_PROOFGRAPH/receipts/ layout in sorted order.
 func readDemoReceipts(t *testing.T, dir string) []demoReceipt {
 	t.Helper()
-	files, err := filepath.Glob(filepath.Join(dir, "*.json"))
+	files, err := filepath.Glob(filepath.Join(dir, "02_PROOFGRAPH", "receipts", "*.json"))
 	if err != nil {
 		t.Fatalf("glob error: %v", err)
 	}
 
 	var receipts []demoReceipt
 	for _, f := range files {
-		base := filepath.Base(f)
-		// Skip manifest and report files
-		if base == "manifest.json" || strings.HasPrefix(base, "run-report") {
-			continue
-		}
 		data, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatalf("read %s: %v", f, err)

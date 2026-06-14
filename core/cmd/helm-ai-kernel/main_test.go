@@ -16,6 +16,9 @@ func chdirTempDir(t *testing.T) string {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
+	// Isolate HELM data dir so dev-local evidence sealing (auto-generated
+	// signing keys, trust config) never touches the real ~/.helm.
+	t.Setenv("HELM_DATA_DIR", t.TempDir())
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}

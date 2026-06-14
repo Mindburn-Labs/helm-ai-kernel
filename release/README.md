@@ -10,21 +10,23 @@ files. It is not a complete copy of any GitHub release.
 | `vex.openvex.json` | Baseline OpenVEX document kept in-tree for policy review. |
 | `vex/policies.yaml` | Maintainer policy file consumed by `scripts/release/generate_vex.sh`. |
 
-## Current Public Release
+## Current Release Target
 
-The current public GitHub release is `v0.5.10`. Its
+The current source release target is `v0.5.13`. Its
 visible release assets are platform binaries for Darwin, Linux, and Windows,
 `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `SHA256SUMS.txt`, `sbom.json`,
-`v0.5.10.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
-`release.high_risk.v3.toml`, `sample-policy-material.tar`, and matching
-`*.cosign.bundle` files for every primary asset.
+`v0.5.13.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
+`release.high_risk.v3.toml`, `sample-policy-material.tar`,
+`helm-ai-kernel-launchpad-data.tar`, `helm-console-web-v0.5.13.tar.gz` with
+checksum/SBOM/provenance/lock/manifest sidecars, and matching `*.cosign.bundle`
+files for every primary asset.
 
 There is no public GitHub Release object for `v0.4.1`; the actual public
 baseline for the `v0.5.0` delta is `v0.4.0`.
 
-## v0.5.10 Asset Contract
+## v0.5.13 Asset Contract
 
-`make release-assets` stages the `v0.5.10` asset set under
+`make release-assets` stages the `v0.5.13` asset set under
 `dist/release-assets/`, and the release workflow attached that set to the
 GitHub release:
 
@@ -36,6 +38,13 @@ GitHub release:
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
 - `sample-policy-material.tar`
+- `helm-ai-kernel-launchpad-data.tar`
+- `helm-console-web-v0.5.13.tar.gz`
+- `helm-console-web-v0.5.13.tar.gz.sha256`
+- `helm-console-web-v0.5.13.tar.gz.sbom.spdx.json`
+- `helm-console-web-v0.5.13.tar.gz.provenance.json`
+- `helm-console-web-v0.5.13.tar.gz.lock.json`
+- `helm-console-web-v0.5.13.tar.gz.manifest.json`
 - `helm-ai-kernel.mcpb`
 - `helm-ai-kernel.rb`
 
@@ -43,11 +52,9 @@ The sample policy material archive contains `release.high_risk.v3.toml` and
 `reference_packs/eu_ai_act_high_risk.v1.json`. The GitHub release workflow
 attaches `*.cosign.bundle` files generated for each primary asset.
 
-Agent Scope Audit is a CLI/reporting surface. A release that includes it should
-mention `helm-ai-kernel audit scope` in release notes and docs, but it does not
-change the Homebrew formula contract, platform binary list, SBOM/OpenVEX shape,
-release attestation shape, EvidencePack release asset, or Kubernetes Helm chart
-runtime behavior unless a future API route is added.
+The Console web bundle is a release asset because `helm-ai-kernel quickstart`
+serves `/console` for the OSS local proof. Homebrew installs it under
+`share/helm-ai-kernel/console`, and quickstart auto-discovers that path.
 
 ## Validation
 

@@ -90,10 +90,17 @@ import json, pathlib, sys
 print(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")).get("cosign_bundle", ""))
 PY
 )"
+manifest="$(python3 - "$LOCK" <<'PY'
+import json, pathlib, sys
+metadata = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(metadata.get("manifest", metadata.get("bundle_name", "") + ".manifest.json"))
+PY
+)"
 
 copy_sidecar "$checksum" "$STRICT"
 copy_sidecar "$sbom" "$STRICT"
 copy_sidecar "$provenance" "$STRICT"
+copy_sidecar "$manifest" "$STRICT"
 copy_sidecar "$cosign_bundle" "$STRICT"
 
 echo "console bundle: staged $(basename "$BUNDLE") into $ASSETS_DIR"

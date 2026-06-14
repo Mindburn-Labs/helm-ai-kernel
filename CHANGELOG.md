@@ -75,6 +75,22 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - **zkVM Guest Safety Checker**: Introduced the `ZKVMGuestSafetyChecker` and `SafetyGuestProgram` inside `pkg/crypto/zk` to simulate AST static analysis inside zero-knowledge execution enclaves.
 - **TEE Secrets Enclave**: Introduced `SovereignKMSVault` and `SecretProxyFilter` inside `pkg/crypto/tee` to enforce hardware-sealed secrets isolation and inline proxy token injection with constant-time verification.
 
+## [0.5.13] - 2026-06-13
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.13>.
+
+- Added `helm-ai-kernel quickstart` as the OSS local-first path with loopback
+  Kernel startup, same-origin `/console`, starter fail-closed policy material,
+  one-time local session exchange, backend-owned onboarding proof APIs, signed
+  ALLOW/DENY/ESCALATE receipts, tamper verification, and onboarding
+  EvidencePack export.
+- Added release workflow wiring that builds the production `app-helm-console`
+  web bundle, runs the Console fixture-leak gate, stages bundle
+  checksum/SBOM/provenance/lock/manifest sidecars into the kernel release
+  assets, and installs the Console bundle through the Homebrew formula.
+- Hardened local quickstart auth so the generated session token expires in the
+  shared admin/tenant auth path, not only on onboarding routes.
+
 ## [0.5.12] - 2026-06-13
 
 Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.12>.

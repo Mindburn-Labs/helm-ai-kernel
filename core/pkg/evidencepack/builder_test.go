@@ -146,6 +146,40 @@ func TestAddReplayManifest(t *testing.T) {
 	}
 }
 
+func TestAddTransparencySTH(t *testing.T) {
+	b := newTestBuilder()
+	sth := map[string]any{
+		"tree_size": 42,
+		"root_hash": "abc123",
+		"log_id":    "log-1",
+		"signature": "sig-1",
+	}
+	if err := b.AddTransparencySTH("checkpoint", sth); err != nil {
+		t.Fatal(err)
+	}
+
+	manifest, content, err := b.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := content["transparency/checkpoint.json"]; !ok {
+		t.Fatal("expected transparency/checkpoint.json in content map")
+	}
+
+	found := false
+	for _, e := range manifest.Entries {
+		if e.Path == "transparency/checkpoint.json" {
+			found = true
+			if e.ContentHash == "" {
+				t.Fatal("expected non-empty hash for transparency entry")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected transparency/checkpoint.json in manifest entries")
+	}
+}
+
 func TestAllNewEntryTypes_InSinglePack(t *testing.T) {
 	b := newTestBuilder()
 

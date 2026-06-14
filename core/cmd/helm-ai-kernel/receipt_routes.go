@@ -263,10 +263,63 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 		if err := svc.ReceiptSigner.SignReceipt(receipt); err != nil {
 			return nil, fmt.Errorf("sign receipt %s: %w", receiptID, err)
 		}
+		// Anchor the signed receipt hash in the transparency log before it is
+		// persisted. Fail-closed: an append failure aborts the builder, which
+		// rolls back AppendCausal so no receipt is stored. Degrade mode is the
+		// only escape and must be explicitly enabled in config.
+		if err := anchorReceiptTransparency(svc, receipt); err != nil {
+			return nil, err
+		}
 		return receipt, nil
 	})
 	if err != nil {
 		return fmt.Errorf("store receipt %s: %w", receiptID, err)
+	}
+	return nil
+}
+
+// TransparencyAppender is the subset of the receipt transparency log needed at
+// issuance time: append a receipt-hash leaf and report its assigned index.
+type TransparencyAppender interface {
+	Append(leafInput []byte) (uint64, error)
+}
+
+// anchorReceiptTransparency appends the signed receipt's content hash to the
+// transparency log and records the resulting leaf on the receipt. It is
+// fail-closed by default: if the log is configured but the append fails,
+// issuance is aborted. When svc.TranspLogDegrade is set, an append failure
+// instead records a deferred anchor so the receipt can be backfilled later.
+// A nil log leaves the receipt unanchored (no transparency configured).
+func anchorReceiptTransparency(svc *Services, receipt *contracts.Receipt) error {
+	if svc == nil || svc.TranspLog == nil {
+		return nil
+	}
+	leafHashHex, err := contracts.ReceiptChainHash(receipt)
+	if err != nil {
+		return fmt.Errorf("transparency leaf hash for %s: %w", receipt.ReceiptID, err)
+	}
+	leafInput, err := hex.DecodeString(leafHashHex)
+	if err != nil {
+		return fmt.Errorf("decode transparency leaf hash for %s: %w", receipt.ReceiptID, err)
+	}
+	index, appendErr := svc.TranspLog.Append(leafInput)
+	if appendErr != nil {
+		if !svc.TranspLogDegrade {
+			return fmt.Errorf("transparency log append for %s: %w", receipt.ReceiptID, appendErr)
+		}
+		receipt.LogID = svc.TranspLogID
+		receipt.Transparency = &contracts.TransparencyAnchor{
+			Backend:  "translog",
+			LogID:    svc.TranspLogID,
+			Deferred: true,
+		}
+		return nil
+	}
+	receipt.LogID = svc.TranspLogID
+	receipt.LeafIndex = index
+	receipt.Transparency = &contracts.TransparencyAnchor{
+		Backend: "translog",
+		LogID:   svc.TranspLogID,
 	}
 	return nil
 }

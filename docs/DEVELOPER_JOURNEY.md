@@ -248,7 +248,7 @@ Run online verification only after offline verification passes:
 | Python | `pip install helm-sdk` | `make test-sdk-py` |
 | TypeScript / JavaScript | `npm install @mindburn/helm-ai-kernel` | `make test-sdk-ts` |
 | Rust | `cargo add helm-sdk` | `make test-sdk-rust` |
-| Go | source/module path `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go`; pin `@main` or a commit until tagged module releases are aligned | `cd sdk/go && go test ./...` |
+| Go | `go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.5.14`; the Go module is released by the subdirectory tag `sdk/go/v0.5.14` | `cd sdk/go && go test ./...` |
 | Java | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.14` | `make test-sdk-java` |
 
 Use [SDK Index](sdks/00_INDEX.md) before publishing SDK install instructions.

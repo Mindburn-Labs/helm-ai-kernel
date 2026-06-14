@@ -194,6 +194,13 @@
       "replacement": "io.github.mindburnlabs:helm-sdk:{version}"
     },
     {
+      "id": "publishing-doc-go-module",
+      "path": "docs/PUBLISHING.md",
+      "kind": "regex",
+      "pattern": "github\\.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v{version}"
+    },
+    {
       "id": "verification-doc-current-release",
       "path": "docs/VERIFICATION.md",
       "kind": "regex",
@@ -292,6 +299,13 @@
       "replacement": "io.github.mindburnlabs:helm-sdk:{version}"
     },
     {
+      "id": "readme-current-go-module",
+      "path": "README.md",
+      "kind": "regex",
+      "pattern": "github\\.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v{version}"
+    },
+    {
       "id": "developer-journey-current-release-target",
       "path": "docs/DEVELOPER_JOURNEY.md",
       "kind": "regex",
@@ -327,11 +341,25 @@
       "replacement": "io.github.mindburnlabs:helm-sdk:{version}"
     },
     {
+      "id": "developer-journey-go-module",
+      "path": "docs/DEVELOPER_JOURNEY.md",
+      "kind": "regex",
+      "pattern": "github\\.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v{version}"
+    },
+    {
       "id": "sdk-index-java-coordinate",
       "path": "docs/sdks/00_INDEX.md",
       "kind": "regex",
       "pattern": "io\\.github\\.mindburnlabs:helm-sdk:(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
       "replacement": "io.github.mindburnlabs:helm-sdk:{version}"
+    },
+    {
+      "id": "sdk-index-go-module",
+      "path": "docs/sdks/00_INDEX.md",
+      "kind": "regex",
+      "pattern": "github\\.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v{version}"
     },
     {
       "id": "sdk-index-source-version-claims",
@@ -533,6 +561,13 @@
       "blocking": false
     },
     {
+      "id": "sdk-go-readme-module-version",
+      "path": "sdk/go/README.md",
+      "kind": "regex",
+      "pattern": "github\\.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v{version}"
+    },
+    {
       "id": "sdk-java-src-main-java-labs-mindburn-helm-typesgen-java-generated-openapi",
       "path": "sdk/java/src/main/java/labs/mindburn/helm/TypesGen.java",
       "kind": "regex",
@@ -632,11 +667,18 @@
       "human_url": "https://github.com/Mindburn-Labs/homebrew-tap/blob/main/Formula/helm-ai-kernel.rb"
     },
     {
+      "id": "go-proxy-sdk",
+      "kind": "go_proxy_module",
+      "url": "https://proxy.golang.org/github.com/!mindburn-!labs/helm-ai-kernel/sdk/go/@v/v{version}.info",
+      "human_url": "https://pkg.go.dev/github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v{version}",
+      "origin_subdir": "sdk/go",
+      "origin_ref": "refs/tags/sdk/go/v{version}"
+    },
+    {
       "id": "pkg-go-dev-sdk",
       "kind": "pkg_go_dev",
       "url": "https://pkg.go.dev/github.com/Mindburn-Labs/helm-ai-kernel/sdk/go?tab=versions",
-      "human_url": "https://pkg.go.dev/github.com/Mindburn-Labs/helm-ai-kernel/sdk/go",
-      "blocking": false
+      "human_url": "https://pkg.go.dev/github.com/Mindburn-Labs/helm-ai-kernel/sdk/go"
     },
     {
       "id": "docs-site-developer-journey",
@@ -644,10 +686,15 @@
       "url": "https://helm.docs.mindburn.org/helm-ai-kernel/developer-journey",
       "human_url": "https://helm.docs.mindburn.org/helm-ai-kernel/developer-journey",
       "contains": [
-        "io.github.mindburnlabs:helm-sdk:{version}"
+        "io.github.mindburnlabs:helm-sdk:{version}",
+        "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v{version}",
+        "sdk/go/v{version}"
       ],
       "rejects": [
-        "io.github.mindburnlabs:helm-sdk:0.5.2"
+        "io.github.mindburnlabs:helm-sdk:0.5.2",
+        "sdk/go@main",
+        "pin <code>@main</code>",
+        "until tagged module releases are aligned"
       ]
     },
     {
@@ -657,11 +704,16 @@
       "human_url": "https://helm.docs.mindburn.org/helm-ai-kernel/sdks",
       "contains": [
         "io.github.mindburnlabs:helm-sdk:{version}",
+        "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v{version}",
+        "sdk/go/v{version}",
         "version-status.json"
       ],
       "rejects": [
         "source manifest currently declares",
-        "io.github.mindburnlabs:helm-sdk:0.5.2"
+        "io.github.mindburnlabs:helm-sdk:0.5.2",
+        "sdk/go@main",
+        "pin <code>@main</code>",
+        "until tagged SDK modules are aligned"
       ]
     },
     {

@@ -21,8 +21,33 @@ echo "Distributing HELM $VERSION across all ecosystems..."
 
 # 1. Go (via Git Tags)
 echo "🐹 Tagging Go SDK..."
-git tag -f "sdk/go/v$VERSION"
-git push -f origin "sdk/go/v$VERSION"
+GO_TAG="sdk/go/v$VERSION"
+GO_TAG_TARGET="$(git rev-parse HEAD^{commit})"
+if git rev-parse -q --verify "refs/tags/$GO_TAG" >/dev/null; then
+    EXISTING_GO_TAG_TARGET="$(git rev-parse "$GO_TAG^{commit}")"
+    if [ "$EXISTING_GO_TAG_TARGET" != "$GO_TAG_TARGET" ]; then
+        echo "❌ Go SDK tag $GO_TAG points at $EXISTING_GO_TAG_TARGET, expected $GO_TAG_TARGET."
+        echo "   Refusing to move an existing release tag."
+        exit 1
+    fi
+else
+    git tag -a "$GO_TAG" -m "Release Go SDK v$VERSION"
+fi
+
+REMOTE_GO_TAG_TARGET="$(git ls-remote --tags origin "refs/tags/$GO_TAG^{}" | awk '{print $1}')"
+if [ -z "$REMOTE_GO_TAG_TARGET" ]; then
+    REMOTE_GO_TAG_TARGET="$(git ls-remote --tags origin "refs/tags/$GO_TAG" | awk '{print $1}')"
+fi
+if [ -n "$REMOTE_GO_TAG_TARGET" ]; then
+    if [ "$REMOTE_GO_TAG_TARGET" != "$GO_TAG_TARGET" ]; then
+        echo "❌ Remote Go SDK tag $GO_TAG points at $REMOTE_GO_TAG_TARGET, expected $GO_TAG_TARGET."
+        echo "   Refusing to overwrite an existing release tag."
+        exit 1
+    fi
+    echo "ℹ️  Go SDK tag $GO_TAG already exists on origin."
+else
+    git push origin "refs/tags/$GO_TAG"
+fi
 echo "✅ Go SDK tagged (v$VERSION)."
 
 # 2. Rust (Crates.io)

@@ -71,7 +71,7 @@ distribution promises.
 | Python SDK | Package name `helm-sdk`; source manifest follows the repository `VERSION` (`0.5.15` for this release). Verify `version-status.json` or `make version-drift-published` before publishing pinned install claims. | `sdk/python/helm_sdk/client.py` | `make test-sdk-py` |
 | TypeScript | Package name `@mindburn/helm-ai-kernel`; source manifest follows the repository `VERSION` (`0.5.15` for this release). Verify `version-status.json` or `make version-drift-published` before publishing pinned install claims. | `sdk/ts/src/client.ts` | `make test-sdk-ts` |
 | JavaScript | Uses `@mindburn/helm-ai-kernel` or raw HTTP/fetch | `sdk/ts/src/client.ts`, `examples/js_openai_baseurl/` | `make test-sdk-ts` |
-| Go SDK | Module path `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.5.15`; released by the subdirectory tag `sdk/go/v0.5.14` | `sdk/go/client/client.go` | `cd sdk/go && go test ./...` |
+| Go SDK | Module path `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.5.15`; released by the subdirectory tag `sdk/go/v0.5.15` | `sdk/go/client/client.go` | `cd sdk/go && go test ./...` |
 | Rust SDK | Package name `helm-sdk`; source manifest follows the repository `VERSION` (`0.5.15` for this release). Verify `version-status.json` or `make version-drift-published` before publishing pinned install claims. | `sdk/rust/src/client.rs` | `make test-sdk-rust` |
 | Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.15`; verified by remote Maven resolution and repo1 artifacts. | `sdk/java/pom.xml` | `make test-sdk-java` |
 

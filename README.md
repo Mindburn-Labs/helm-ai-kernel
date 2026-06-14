@@ -185,18 +185,18 @@ If your agent can execute tools without receipts, it is not production-grade.
 
 - Repository: `Mindburn-Labs/helm-ai-kernel`
 - Root package identity: `helm-ai-kernel-root`
-- Source release target: `v0.5.13`
+- Source release target: `v0.5.14`
 - License: Apache-2.0
 - Supported security line: `0.5.x`; `0.4.x` is best effort
 - Canonical docs: <https://helm.docs.mindburn.org/helm-ai-kernel>
 
-The `v0.5.13` release is complete only when the GitHub Release includes
+The `v0.5.14` release is complete only when the GitHub Release includes
 CLI binaries, checksums, SBOM JSON, OpenVEX, release-attestation metadata,
 Cosign bundles, `evidence-pack.tar`, `helm-ai-kernel.mcpb`,
 `helm-ai-kernel.rb`, sample policy material, the signed Console web bundle
 with checksum/SBOM/provenance/lock/manifest sidecars, and a passing
 `version-status.json` for all lockstep package channels:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.13>.
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.14>.
 
 ## What HELM AI Kernel Does
 
@@ -363,7 +363,7 @@ The complete diagram doctrine lives in
 | Python SDK | `pip install helm-sdk` |
 | TypeScript SDK | `npm install @mindburn/helm-ai-kernel` |
 | Rust SDK | `cargo add helm-sdk` |
-| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.13` |
+| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.14` |
 
 HTTP clients are generated from
 [`api/openapi/helm.openapi.yaml`](api/openapi/helm.openapi.yaml). Protobuf
@@ -394,8 +394,8 @@ Public OSS docs are sourced from this repo and published through
 
 ## Release Verification
 
-For `v0.5.13`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
-`v0.5.13.openvex.json`, `release-attestation.json`, the platform binary assets,
+For `v0.5.14`, verify downloads with `SHA256SUMS.txt`, `sbom.json`,
+`v0.5.14.openvex.json`, `release-attestation.json`, the platform binary assets,
 the Console web bundle lock/SBOM/provenance sidecars, matching
 `*.cosign.bundle` files, and offline `evidence-pack.tar` verification.
 

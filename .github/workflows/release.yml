@@ -466,8 +466,9 @@ jobs:
             echo "::error::Released kernel spec not found at api/openapi/helm.openapi.yaml"
             exit 1
           fi
-          git clone "https://x-access-token:${DOWNSTREAM_FANOUT_TOKEN}@github.com/Mindburn-Labs/contracts-catalog.git" cc
-          cd cc
+          mkdir -p fanout-work
+          git clone "https://x-access-token:${DOWNSTREAM_FANOUT_TOKEN}@github.com/Mindburn-Labs/contracts-catalog.git" fanout-work/contracts-catalog
+          cd fanout-work/contracts-catalog
           dest="api/specs/helm.openapi.yaml"
           mkdir -p "$(dirname "$dest")"
           cp "$src" "$dest"
@@ -499,8 +500,9 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          git clone "https://x-access-token:${DOWNSTREAM_FANOUT_TOKEN}@github.com/Mindburn-Labs/app-docs-platform.git" docs
-          cd docs
+          mkdir -p fanout-work
+          git clone "https://x-access-token:${DOWNSTREAM_FANOUT_TOKEN}@github.com/Mindburn-Labs/app-docs-platform.git" fanout-work/app-docs-platform
+          cd fanout-work/app-docs-platform
           manifest="source-pins.manifest.json"
           if [ ! -f "$manifest" ]; then
             echo "::error::app-docs-platform source-pins.manifest.json not found"

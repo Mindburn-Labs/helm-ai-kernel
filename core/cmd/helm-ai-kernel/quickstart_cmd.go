@@ -263,16 +263,7 @@ func resolveConsoleAssets(flagPath, dataDir string) (string, error) {
 		}
 		return "", fmt.Errorf("--console-assets must point to a Flutter web bundle containing index.html: %s", flagPath)
 	}
-	candidates := []string{
-		os.Getenv("HELM_CONSOLE_ASSETS"),
-		filepath.Join(dataDir, "console"),
-		"console",
-		filepath.Join("dist", "console"),
-	}
-	if exe, err := os.Executable(); err == nil {
-		candidates = append(candidates, filepath.Join(filepath.Dir(exe), "console"))
-	}
-	for _, candidate := range candidates {
+	for _, candidate := range consoleAssetCandidates(dataDir, executablePath()) {
 		candidate = strings.TrimSpace(candidate)
 		if candidate == "" {
 			continue
@@ -282,6 +273,32 @@ func resolveConsoleAssets(flagPath, dataDir string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+func executablePath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return exe
+}
+
+func consoleAssetCandidates(dataDir, exePath string) []string {
+	candidates := []string{
+		os.Getenv("HELM_CONSOLE_ASSETS"),
+		filepath.Join(dataDir, "console"),
+		"console",
+		filepath.Join("dist", "console"),
+	}
+	if strings.TrimSpace(exePath) != "" {
+		exeDir := filepath.Dir(exePath)
+		candidates = append(candidates,
+			filepath.Join(exeDir, "console"),
+			filepath.Clean(filepath.Join(exeDir, "..", "share", "helm-ai-kernel", "console")),
+			filepath.Clean(filepath.Join(exeDir, "..", "..", "share", "helm-ai-kernel", "console")),
+		)
+	}
+	return candidates
 }
 
 func hasConsoleIndex(path string) bool {

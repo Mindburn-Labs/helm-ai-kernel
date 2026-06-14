@@ -3,7 +3,7 @@ members = ["."]
 
 [package]
 name = "helm-sdk"
-version = "0.5.12"
+version = "0.5.13"
 edition = "2021"
 description = "Rust SDK for HELM — fail-closed tool calling for AI agents"
 license = "Apache-2.0"

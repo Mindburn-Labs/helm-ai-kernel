@@ -88,6 +88,18 @@ func TestQuickstartRejectsInvalidExplicitConsoleAssets(t *testing.T) {
 	}
 }
 
+func TestQuickstartConsoleAssetCandidatesIncludeHomebrewPackageShare(t *testing.T) {
+	exe := filepath.Join(string(filepath.Separator), "opt", "homebrew", "Cellar", "helm-ai-kernel", "0.5.13", "bin", "helm-ai-kernel")
+	candidates := consoleAssetCandidates("data", exe)
+	want := filepath.Join(string(filepath.Separator), "opt", "homebrew", "Cellar", "helm-ai-kernel", "0.5.13", "share", "helm-ai-kernel", "console")
+	for _, candidate := range candidates {
+		if candidate == want {
+			return
+		}
+	}
+	t.Fatalf("homebrew package-share console path %q missing from candidates: %#v", want, candidates)
+}
+
 func TestQuickstartLocalSessionExchangeLoopbackOneTimeAndExpiry(t *testing.T) {
 	runtime := &quickstartRuntime{
 		BootstrapToken: "bootstrap-token",

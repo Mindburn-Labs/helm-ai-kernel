@@ -100,7 +100,7 @@ PY
 copy_sidecar "$checksum" "$STRICT"
 copy_sidecar "$sbom" "$STRICT"
 copy_sidecar "$provenance" "$STRICT"
-copy_sidecar "$manifest" "0"
+copy_sidecar "$manifest" "$STRICT"
 copy_sidecar "$cosign_bundle" "$STRICT"
 
 echo "console bundle: staged $(basename "$BUNDLE") into $ASSETS_DIR"

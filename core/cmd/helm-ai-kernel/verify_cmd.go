@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
+	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
@@ -239,6 +241,13 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	finalizeVerifyReport(report)
+
+	recordVerification(context.Background(), helmotel.VerificationEvent{
+		EnvelopeID:  report.EnvelopeID,
+		Verified:    report.Verified,
+		CheckCount:  len(report.Checks),
+		EvidenceRef: bundle,
+	})
 
 	// Write auditor JSON report to file if requested
 	if jsonOutFile != "" {

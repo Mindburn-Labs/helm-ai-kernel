@@ -71,7 +71,7 @@ The repository retains packaging metadata for the kernel binaries, container ima
 | Python SDK | `helm-sdk` |
 | Rust SDK | `helm-sdk` |
 | Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.14` |
-| Go SDK | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@main`; pin `@main` or a commit until tagged module releases are aligned |
+| Go SDK | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.5.14`; publish with the subdirectory tag `sdk/go/v0.5.14` |
 
 ## Release Inputs
 

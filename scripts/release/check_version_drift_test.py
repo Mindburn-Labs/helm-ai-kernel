@@ -22,6 +22,7 @@ class VersionDriftMonitorTests(unittest.TestCase):
             "pypi-sdk",
             "crates-sdk",
             "maven-sdk",
+            "go-proxy-sdk",
             "pkg-go-dev-sdk",
             "docs-site-developer-journey",
             "docs-site-sdk-index",
@@ -30,8 +31,12 @@ class VersionDriftMonitorTests(unittest.TestCase):
         self.assertFalse(required - ids)
 
         kinds = {surface["id"]: surface["kind"] for surface in contract["published_surfaces"]}
+        blocking = {surface["id"]: drift.is_blocking(surface) for surface in contract["published_surfaces"]}
+        self.assertEqual(kinds["go-proxy-sdk"], "go_proxy_module")
         self.assertEqual(kinds["pkg-go-dev-sdk"], "pkg_go_dev")
         self.assertEqual(kinds["docs-site-sdk-index"], "http_contains")
+        self.assertTrue(blocking["go-proxy-sdk"])
+        self.assertTrue(blocking["pkg-go-dev-sdk"])
 
     def test_all_published_surface_kinds_are_supported(self) -> None:
         contract = drift.load_contract(drift.DEFAULT_CONTRACT)
@@ -98,8 +103,8 @@ class VersionDriftMonitorTests(unittest.TestCase):
 
     def test_published_error_preserves_advisory_status(self) -> None:
         surface = {
-            "id": "pkg-go-dev-sdk",
-            "url": "https://pkg.go.dev/example",
+            "id": "optional-docs-cache",
+            "url": "https://example.test/cache",
             "blocking": False,
         }
         result = drift.published_error(surface, "0.5.10", TimeoutError("timed out"))
@@ -121,8 +126,8 @@ class VersionDriftMonitorTests(unittest.TestCase):
         )
         advisory = drift.published_error(
             {
-                "id": "pkg-go-dev-sdk",
-                "url": "https://pkg.go.dev/example",
+                "id": "optional-docs-cache",
+                "url": "https://example.test/cache",
                 "blocking": False,
             },
             "0.5.10",
@@ -135,12 +140,37 @@ class VersionDriftMonitorTests(unittest.TestCase):
         self.assertEqual(payload["registry_versions"][0]["status"], "fail")
         self.assertTrue(payload["registry_versions"][0]["blocking"])
         self.assertIn("TimeoutError", payload["registry_versions"][0]["detail"])
-        self.assertEqual(payload["registry_versions"][1]["id"], "pkg-go-dev-sdk")
+        self.assertEqual(payload["registry_versions"][1]["id"], "optional-docs-cache")
         self.assertFalse(payload["registry_versions"][1]["blocking"])
 
         advisory_only = drift.status_payload("published", "0.5.10", [advisory], [], [advisory])
         self.assertEqual(advisory_only["status"], "pass")
         self.assertEqual(advisory_only["registry_versions"][0]["status"], "fail")
+
+    def test_go_proxy_module_validates_subdirectory_tag(self) -> None:
+        original = drift.request_json
+        drift.request_json = lambda _url: {
+            "Version": "v0.5.14",
+            "Origin": {
+                "Subdir": "sdk/go",
+                "Ref": "refs/tags/sdk/go/v0.5.14",
+            },
+        }
+        try:
+            surface = {
+                "id": "go-proxy-sdk",
+                "kind": "go_proxy_module",
+                "url": "https://proxy.golang.org/github.com/!mindburn-!labs/helm-ai-kernel/sdk/go/@v/v{version}.info",
+                "origin_subdir": "sdk/go",
+                "origin_ref": "refs/tags/sdk/go/v{version}",
+            }
+            result = drift.check_go_proxy_module(surface, "0.5.14")
+        finally:
+            drift.request_json = original
+
+        self.assertEqual(result.status, "pass")
+        self.assertTrue(result.blocking)
+        self.assertEqual(result.actual["origin_ref"], "refs/tags/sdk/go/v0.5.14")
 
     def test_http_contains_reports_missing_tokens(self) -> None:
         original = drift.request_text

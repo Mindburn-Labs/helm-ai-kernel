@@ -62,6 +62,13 @@ const (
 	AttrA2AOriginAgent       = "helm.a2a.origin_agent"
 	AttrA2ATargetAgent       = "helm.a2a.target_agent"
 	AttrA2ANegotiationResult = "helm.a2a.negotiation_result"
+
+	// Verifier attributes
+	AttrVerifierEnvelopeID  = "helm.verifier.envelope_id"
+	AttrVerifierVerified    = "helm.verifier.verified"
+	AttrVerifierCheckCount  = "helm.verifier.check_count"
+	AttrVerifierReceiptRef  = "helm.verifier.receipt_ref"
+	AttrVerifierEvidenceRef = "helm.verifier.evidence_ref"
 )
 
 // Config holds configuration for the governance telemetry exporter.
@@ -79,10 +86,11 @@ type GovernanceTracer struct {
 	meterProvider  *sdkmetric.MeterProvider
 
 	// Metrics
-	decisionCounter metric.Int64Counter
-	denialCounter   metric.Int64Counter
-	budgetGauge     metric.Float64Gauge
-	latencyHist     metric.Float64Histogram
+	decisionCounter     metric.Int64Counter
+	denialCounter       metric.Int64Counter
+	verificationCounter metric.Int64Counter
+	budgetGauge         metric.Float64Gauge
+	latencyHist         metric.Float64Histogram
 }
 
 // NewGovernanceTracer creates a new governance telemetry exporter.
@@ -137,6 +145,9 @@ func NewGovernanceTracer(cfg Config) (*GovernanceTracer, error) {
 	)
 	gt.denialCounter, _ = gt.meter.Int64Counter("helm.denials.total",
 		metric.WithDescription("Total governance denials"),
+	)
+	gt.verificationCounter, _ = gt.meter.Int64Counter("helm.verifications.total",
+		metric.WithDescription("Total EvidencePack verification runs"),
 	)
 	gt.budgetGauge, _ = gt.meter.Float64Gauge("helm.budget.utilization",
 		metric.WithDescription("Budget utilization ratio"),
@@ -463,6 +474,47 @@ func (gt *GovernanceTracer) TraceDenial(ctx context.Context, d DenialEvent) {
 	))
 }
 
+// VerificationEvent represents one EvidencePack verification run to trace.
+//
+// Verifications by parties other than the operator are the north-star adoption
+// signal (the category is won when receipts are verified by auditors, customers,
+// and counterparties — not just produced). This span lets OTel backends count
+// and inspect verifications alongside the decisions/denials they attest to.
+type VerificationEvent struct {
+	EnvelopeID  string
+	Verified    bool
+	CheckCount  int
+	ReceiptRef  string
+	EvidenceRef string
+}
+
+// TraceVerification records an EvidencePack verification run as an OTel span and
+// metric. The span name is "helm.verifier.verification".
+func (gt *GovernanceTracer) TraceVerification(ctx context.Context, e VerificationEvent) {
+	attrs := []attribute.KeyValue{
+		attribute.Bool(AttrVerifierVerified, e.Verified),
+		attribute.Int64(AttrVerifierCheckCount, int64(e.CheckCount)),
+	}
+	if e.EnvelopeID != "" {
+		attrs = append(attrs, attribute.String(AttrVerifierEnvelopeID, e.EnvelopeID))
+	}
+	if e.ReceiptRef != "" {
+		attrs = append(attrs, attribute.String(AttrVerifierReceiptRef, e.ReceiptRef))
+	}
+	if e.EvidenceRef != "" {
+		attrs = append(attrs, attribute.String(AttrVerifierEvidenceRef, e.EvidenceRef))
+	}
+
+	_, span := gt.tracer.Start(ctx, "helm.verifier.verification",
+		trace.WithAttributes(attrs...),
+	)
+	span.End()
+
+	gt.verificationCounter.Add(ctx, 1, metric.WithAttributes(
+		attribute.Bool(AttrVerifierVerified, e.Verified),
+	))
+}
+
 // InjectTraceparent writes the active span context from ctx into the outgoing
 // HTTP headers as a W3C traceparent. Use this before forwarding a request to
 // an upstream model provider so the downstream span tree links back to the
@@ -498,15 +550,17 @@ func NoopTracer() *GovernanceTracer {
 	meter := sdkmetric.NewMeterProvider().Meter("helm.governance.noop")
 	counter, _ := meter.Int64Counter("helm.decisions.total")
 	denials, _ := meter.Int64Counter("helm.denials.total")
+	verifications, _ := meter.Int64Counter("helm.verifications.total")
 	gauge, _ := meter.Float64Gauge("helm.budget.utilization")
 	hist, _ := meter.Float64Histogram("helm.decision.latency")
 	return &GovernanceTracer{
-		tracer:          otel.Tracer("helm.governance.noop"),
-		meter:           meter,
-		decisionCounter: counter,
-		denialCounter:   denials,
-		budgetGauge:     gauge,
-		latencyHist:     hist,
+		tracer:              otel.Tracer("helm.governance.noop"),
+		meter:               meter,
+		decisionCounter:     counter,
+		denialCounter:       denials,
+		verificationCounter: verifications,
+		budgetGauge:         gauge,
+		latencyHist:         hist,
 	}
 }
 

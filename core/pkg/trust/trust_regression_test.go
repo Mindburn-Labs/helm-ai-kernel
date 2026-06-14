@@ -845,14 +845,18 @@ func TestClosing_CertificationLevel_Values(t *testing.T) {
 func TestClosing_CertificationGate_CheckInstall(t *testing.T) {
 	gate := NewCertificationGate()
 	gate.SetRequirement("production", CertProduction)
-	gate.RecordCertification(&CertificationRecord{PackName: "pack1", PackVersion: "1.0", Level: CertBasic})
+	if err := gate.RecordCertification(&CertificationRecord{PackName: "pack1", PackVersion: "1.0", Level: CertBasic}); err != nil {
+		t.Fatal(err)
+	}
 	t.Run("basic_fails_production", func(t *testing.T) {
 		err := gate.CheckInstall("pack1", "1.0", "production")
 		if err == nil {
 			t.Fatal("basic cert should fail production requirement")
 		}
 	})
-	gate.RecordCertification(&CertificationRecord{PackName: "pack2", PackVersion: "1.0", Level: CertProduction})
+	if err := gate.RecordCertification(&CertificationRecord{PackName: "pack2", PackVersion: "1.0", Level: CertProduction, TestsPassed: 50, TestsTotal: 50}); err != nil {
+		t.Fatal(err)
+	}
 	t.Run("production_passes", func(t *testing.T) {
 		err := gate.CheckInstall("pack2", "1.0", "production")
 		if err != nil {
@@ -866,7 +870,9 @@ func TestClosing_CertificationGate_CheckInstall(t *testing.T) {
 		}
 	})
 	t.Run("default_requires_basic", func(t *testing.T) {
-		gate.RecordCertification(&CertificationRecord{PackName: "pack3", PackVersion: "1.0", Level: CertNone})
+		if err := gate.RecordCertification(&CertificationRecord{PackName: "pack3", PackVersion: "1.0", Level: CertNone}); err != nil {
+			t.Fatal(err)
+		}
 		err := gate.CheckInstall("pack3", "1.0", "unset-context")
 		if err == nil {
 			t.Fatal("NONE should fail default BASIC requirement")
@@ -876,7 +882,9 @@ func TestClosing_CertificationGate_CheckInstall(t *testing.T) {
 
 func TestClosing_CertificationGate_GetCertification(t *testing.T) {
 	gate := NewCertificationGate()
-	gate.RecordCertification(&CertificationRecord{PackName: "p1", PackVersion: "2.0", Level: CertVerified})
+	if err := gate.RecordCertification(&CertificationRecord{PackName: "p1", PackVersion: "2.0", Level: CertVerified, TestsPassed: 7, TestsTotal: 7}); err != nil {
+		t.Fatal(err)
+	}
 	t.Run("found", func(t *testing.T) {
 		r, err := gate.GetCertification("p1", "2.0")
 		if err != nil {

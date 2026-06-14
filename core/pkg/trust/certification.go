@@ -60,11 +60,23 @@ func (g *CertificationGate) SetRequirement(context string, level CertificationLe
 }
 
 // RecordCertification records a pack's certification level.
-func (g *CertificationGate) RecordCertification(record *CertificationRecord) {
+//
+// VERIFIED and higher certifications must carry signed test-suite evidence: a
+// non-zero TestsTotal where every test passed. A record that claims VERIFIED or
+// PRODUCTION without a clean, non-empty test run is rejected and not stored, so
+// CheckInstall can never grant an install on an unsubstantiated certification.
+func (g *CertificationGate) RecordCertification(record *CertificationRecord) error {
+	if certOrder[record.Level] >= certOrder[CertVerified] {
+		if record.TestsTotal == 0 || record.TestsPassed != record.TestsTotal {
+			return fmt.Errorf("certification %s for %s@%s requires a complete test suite: %d/%d tests passed",
+				record.Level, record.PackName, record.PackVersion, record.TestsPassed, record.TestsTotal)
+		}
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	key := record.PackName + "@" + record.PackVersion
 	g.records[key] = record
+	return nil
 }
 
 // CheckInstall verifies a pack meets the certification requirement for a context.

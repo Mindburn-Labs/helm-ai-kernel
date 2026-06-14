@@ -84,6 +84,14 @@ type Receipt struct {
 	EmergencyScopeHash           string `json:"emergency_scope_hash,omitempty"`
 	SafeDepState                 string `json:"safe_dep_state,omitempty"`
 	SafeDepReasonCode            string `json:"safe_dep_reason_code,omitempty"`
+
+	// Receipt Transparency Log (RFC 6962) anchoring. Populated when the
+	// receipt hash is appended to the append-only transparency log during
+	// issuance. LogID and LeafIndex identify the leaf; Transparency carries
+	// the log backend identity for verifiers.
+	Transparency *TransparencyAnchor `json:"transparency,omitempty"`
+	LogID        string              `json:"log_id,omitempty"`
+	LeafIndex    uint64              `json:"leaf_index,omitempty"`
 }
 
 type Projection struct {

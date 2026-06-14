@@ -168,6 +168,23 @@ func (b *Builder) AddReplayManifest(name string, manifest interface{}) error {
 	return nil
 }
 
+// AddTransparencySTH captures a signed tree head (RFC 6962 checkpoint) of the
+// receipt transparency log at pack-build time. Embedding the STH lets a
+// verifier prove every receipt in the pack was anchored under a log root the
+// kernel signed at export time, without trusting the exporter. The sth value
+// is any JSON-serializable signed tree head (e.g. translog.SignedTreeHead).
+func (b *Builder) AddTransparencySTH(name string, sth interface{}) error {
+	data, err := json.MarshalIndent(sth, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal transparency sth %s: %w", name, err)
+	}
+	b.entries["transparency/"+name+".json"] = entryData{
+		content:     data,
+		contentType: "application/json",
+	}
+	return nil
+}
+
 func safeEvidenceName(value string) string {
 	value = strings.TrimSpace(value)
 	value = strings.Trim(value, "/")

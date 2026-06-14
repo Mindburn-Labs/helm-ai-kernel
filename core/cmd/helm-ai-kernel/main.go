@@ -32,6 +32,7 @@ import (
 	dockersandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox/docker"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store/ledger"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/translog"
 
 	_ "github.com/lib/pq" // Postgres Driver
 )
@@ -343,6 +344,22 @@ func runServerWithOptions(opts serverOptions) {
 		services.PolicyReconciler = policyReconciler
 		services.PolicySnapshotStore = policyStore
 		services.PolicyScope = policyScope
+
+		// Receipt transparency log: anchor every issued receipt hash. Sharing
+		// the signer's public key as the log identity matches `helm-ai-kernel
+		// log` (see translog_cmd.go). Fail-closed by default; degrade only when
+		// HELM_TRANSPARENCY_DEGRADE is explicitly set.
+		transpLog, transpErr := translog.Open(filepath.Join(dataDir, "translog"))
+		if transpErr != nil {
+			if envBool("HELM_PRODUCTION") {
+				log.Fatalf("Failed to open receipt transparency log: %v", transpErr)
+			}
+			log.Printf("[helm] receipt transparency log disabled (dev): %v", transpErr)
+		} else {
+			services.TranspLog = transpLog
+			services.TranspLogID = translog.LogIDFromPublicKey(signer.PublicKeyBytes())
+			services.TranspLogDegrade = envBool("HELM_TRANSPARENCY_DEGRADE")
+		}
 		extraRoutes = func(mux *http.ServeMux) {
 			RegisterSubsystemRoutes(mux, services)
 			RegisterConsoleRoutes(mux, services, opts)

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
@@ -55,7 +56,10 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 			lamport_clock BIGINT,
 			output_hash TEXT DEFAULT '',
 			args_hash TEXT DEFAULT '',
-			blob_hash TEXT DEFAULT ''
+			blob_hash TEXT DEFAULT '',
+			log_id TEXT DEFAULT '',
+			leaf_index BIGINT DEFAULT 0,
+			transparency JSONB
 		);
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS effect_id TEXT;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS external_reference_id TEXT;
@@ -65,6 +69,9 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS output_hash TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS args_hash TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS blob_hash TEXT DEFAULT '';
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS log_id TEXT DEFAULT '';
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS leaf_index BIGINT DEFAULT 0;
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS transparency JSONB;
 		CREATE INDEX IF NOT EXISTS idx_receipts_executor_id ON receipts(executor_id);
 		CREATE INDEX IF NOT EXISTS idx_receipts_decision_id ON receipts(decision_id);
 		CREATE INDEX IF NOT EXISTS idx_receipts_executor_lamport ON receipts(executor_id, lamport_clock);
@@ -78,7 +85,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 }
 
 // receiptColumns is the canonical column list for receipt queries.
-const receiptColumns = `receipt_id, decision_id, COALESCE(effect_id, execution_intent_id, '') AS effect_id, COALESCE(external_reference_id, '') AS external_reference_id, status, blob_hash, output_hash, timestamp, COALESCE(executor_id, '') AS executor_id, metadata, signature, merkle_root, COALESCE(prev_hash, '') AS prev_hash, COALESCE(lamport_clock, 0) AS lamport_clock, args_hash`
+const receiptColumns = `receipt_id, decision_id, COALESCE(effect_id, execution_intent_id, '') AS effect_id, COALESCE(external_reference_id, '') AS external_reference_id, status, blob_hash, output_hash, timestamp, COALESCE(executor_id, '') AS executor_id, metadata, signature, merkle_root, COALESCE(prev_hash, '') AS prev_hash, COALESCE(lamport_clock, 0) AS lamport_clock, args_hash, COALESCE(log_id, '') AS log_id, COALESCE(leaf_index, 0) AS leaf_index, transparency`
 
 func (s *PostgresReceiptStore) Get(ctx context.Context, decisionID string) (*contracts.Receipt, error) {
 	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE decision_id = $1`
@@ -166,10 +173,11 @@ func scanReceipt(s scanner) (*contracts.Receipt, error) {
 	var metadata []byte
 	var signature sql.NullString
 	var merkleRoot sql.NullString
+	var transparency []byte
 	err := s.Scan(
 		&r.ReceiptID, &r.DecisionID, &r.EffectID, &r.ExternalReferenceID, &r.Status,
 		&r.BlobHash, &r.OutputHash, &r.Timestamp, &r.ExecutorID, &metadata, &signature,
-		&merkleRoot, &r.PrevHash, &r.LamportClock, &r.ArgsHash,
+		&merkleRoot, &r.PrevHash, &r.LamportClock, &r.ArgsHash, &r.LogID, &r.LeafIndex, &transparency,
 	)
 	if err != nil {
 		return nil, err
@@ -179,9 +187,49 @@ func scanReceipt(s scanner) (*contracts.Receipt, error) {
 			return nil, fmt.Errorf("decode receipt metadata: %w", err)
 		}
 	}
+	if err := decodeTransparencyAnchor(transparency, &r); err != nil {
+		return nil, err
+	}
 	r.Signature = signature.String
 	r.MerkleRoot = merkleRoot.String
 	return &r, nil
+}
+
+// decodeTransparencyAnchor deserializes the persisted transparency anchor JSON
+// onto the receipt. An absent/null column leaves Transparency nil.
+func decodeTransparencyAnchor(raw []byte, r *contracts.Receipt) error {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var anchor contracts.TransparencyAnchor
+	if err := json.Unmarshal(raw, &anchor); err != nil {
+		return fmt.Errorf("decode receipt transparency: %w", err)
+	}
+	r.Transparency = &anchor
+	return nil
+}
+
+// encodeTransparencyAnchor serializes the receipt's transparency anchor as
+// canonical JSON for persistence. A nil anchor yields a nil byte slice so the
+// column is stored as SQL NULL.
+func encodeTransparencyAnchor(r *contracts.Receipt) ([]byte, error) {
+	if r.Transparency == nil {
+		return nil, nil
+	}
+	encoded, err := canonicalize.JCS(r.Transparency)
+	if err != nil {
+		return nil, fmt.Errorf("marshal receipt transparency: %w", err)
+	}
+	return encoded, nil
+}
+
+// nullableJSON maps an empty JSON payload to a nil driver value so the column
+// is persisted as SQL NULL rather than an empty/invalid JSON string.
+func nullableJSON(raw []byte) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	return string(raw)
 }
 
 func (s *PostgresReceiptStore) queryOne(ctx context.Context, query string, arg any) (*contracts.Receipt, error) {
@@ -208,13 +256,18 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 	query := `
 		INSERT INTO receipts (
 			receipt_id, decision_id, effect_id, external_reference_id, status, result, timestamp, executor_id,
-			metadata, signature, merkle_root, prev_hash, lamport_clock, output_hash, args_hash, blob_hash
+			metadata, signature, merkle_root, prev_hash, lamport_clock, output_hash, args_hash, blob_hash,
+			log_id, leaf_index, transparency
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb)
 	`
 	metaJSON, err := json.Marshal(r.Metadata)
 	if err != nil {
 		return fmt.Errorf("marshal receipt metadata: %w", err)
+	}
+	transparencyJSON, err := encodeTransparencyAnchor(r)
+	if err != nil {
+		return err
 	}
 	_, err = execer.ExecContext(ctx, query,
 		r.ReceiptID,
@@ -233,6 +286,9 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 		r.OutputHash,
 		r.ArgsHash,
 		r.BlobHash,
+		r.LogID,
+		r.LeafIndex,
+		nullableJSON(transparencyJSON),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert receipt: %w", err)

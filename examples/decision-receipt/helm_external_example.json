@@ -1,0 +1,22 @@
+{
+  "schema_version": "external_decision_receipt_bundle.v1",
+  "format_id": "helm_external.v1",
+  "source_vendor": "example-vendor",
+  "receipts": [
+    {
+      "schema_version": "external_decision_receipt.v1",
+      "kind": "external_decision_receipt",
+      "format_id": "helm_external.v1",
+      "receipt_id": "edr-demo-0001",
+      "receipt_hash": "sha256:aee7bc0a189479ab08e216f9047ded2bdbb7f55e39e9ef44d62ca66d6547894c",
+      "action": "github.create_issue",
+      "verdict": "allow",
+      "subject": "did:helm:agent:demo",
+      "decision_time": "0001-01-01T00:00:00Z",
+      "signature_algorithm": "Ed25519",
+      "signature": "2e512adf9abe57ceefce6cd4c1e587e9a1017aec65041a51b96039b1146de991778737363c1bc92f7bbc7a015d24c0a7f0dbef82364700773c30e57854d06e0f",
+      "signing_key_id": "demo-key-1",
+      "source_vendor": "example-vendor"
+    }
+  ]
+}

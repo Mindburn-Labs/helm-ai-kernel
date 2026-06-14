@@ -70,6 +70,16 @@ type Services struct {
 	ReceiptStore  store.ReceiptStore
 	ReceiptSigner helmcrypto.Signer
 
+	// --- Receipt Transparency Log (RFC 6962) ---
+	// TranspLog anchors every issued receipt hash in an append-only Merkle
+	// log. TranspLogID is the log identity (hex SHA-256 of the kernel public
+	// key). TranspLogDegrade, when true, downgrades a transparency append
+	// failure from fail-closed (issuance blocked) to a deferred anchor; the
+	// production default is false (fail-closed).
+	TranspLog        TransparencyAppender
+	TranspLogID      string
+	TranspLogDegrade bool
+
 	// --- Cross-cutting ---
 	KernelRT *kernelruntime.Server
 

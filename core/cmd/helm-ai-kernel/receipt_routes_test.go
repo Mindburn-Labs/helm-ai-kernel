@@ -159,6 +159,108 @@ func TestPersistDecisionReceiptLinksToCanonicalPreviousReceiptHash(t *testing.T)
 	}
 }
 
+type fakeTransparencyLog struct {
+	appended  [][]byte
+	appendErr error
+	nextIndex uint64
+}
+
+func (l *fakeTransparencyLog) Append(leafInput []byte) (uint64, error) {
+	if l.appendErr != nil {
+		return 0, l.appendErr
+	}
+	l.appended = append(l.appended, append([]byte(nil), leafInput...))
+	idx := l.nextIndex
+	l.nextIndex++
+	return idx, nil
+}
+
+func newTransparencyDecision() *contracts.DecisionRecord {
+	return &contracts.DecisionRecord{
+		ID:                 "dec-tl",
+		Action:             "EXECUTE_TOOL",
+		Verdict:            string(contracts.VerdictAllow),
+		PolicyDecisionHash: "sha256:pdp",
+		Timestamp:          time.Unix(1700000000, 0).UTC(),
+	}
+}
+
+func TestPersistDecisionReceiptAnchorsTransparencyLeaf(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rcptStore := &captureReceiptStore{}
+	tl := &fakeTransparencyLog{nextIndex: 5}
+	svc := &Services{ReceiptStore: rcptStore, ReceiptSigner: signer, TranspLog: tl, TranspLogID: "log-abc"}
+
+	if err := persistDecisionReceipt(context.Background(), svc, newTransparencyDecision(), "agent.test", []byte("EXECUTE_TOOL:tool"), map[string]any{"source": "test"}); err != nil {
+		t.Fatalf("persist receipt: %v", err)
+	}
+	if rcptStore.stored == nil {
+		t.Fatal("receipt was not stored")
+	}
+	if len(tl.appended) != 1 {
+		t.Fatalf("expected exactly one transparency append, got %d", len(tl.appended))
+	}
+	if rcptStore.stored.LogID != "log-abc" {
+		t.Fatalf("receipt log_id = %q, want log-abc", rcptStore.stored.LogID)
+	}
+	if rcptStore.stored.LeafIndex != 5 {
+		t.Fatalf("receipt leaf_index = %d, want 5", rcptStore.stored.LeafIndex)
+	}
+	if rcptStore.stored.Transparency == nil || rcptStore.stored.Transparency.Deferred {
+		t.Fatalf("expected non-deferred transparency anchor, got %+v", rcptStore.stored.Transparency)
+	}
+}
+
+func TestPersistDecisionReceiptBlocksWhenTransparencyAppendFailsFailClosed(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rcptStore := &captureReceiptStore{}
+	appendErr := errors.New("transparency log unavailable")
+	// Default posture: TranspLogDegrade is false (fail-closed).
+	svc := &Services{ReceiptStore: rcptStore, ReceiptSigner: signer, TranspLog: &fakeTransparencyLog{appendErr: appendErr}, TranspLogID: "log-abc"}
+
+	err = persistDecisionReceipt(context.Background(), svc, newTransparencyDecision(), "agent.test", []byte("EXECUTE_TOOL:tool"), map[string]any{"source": "test"})
+	if !errors.Is(err, appendErr) {
+		t.Fatalf("expected transparency append error to block issuance, got %v", err)
+	}
+	if rcptStore.stored != nil {
+		t.Fatalf("fail-closed issuance must not store a receipt, got %+v", rcptStore.stored)
+	}
+}
+
+func TestPersistDecisionReceiptDegradesWhenExplicitlyAllowed(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rcptStore := &captureReceiptStore{}
+	svc := &Services{
+		ReceiptStore:     rcptStore,
+		ReceiptSigner:    signer,
+		TranspLog:        &fakeTransparencyLog{appendErr: errors.New("transparency log unavailable")},
+		TranspLogID:      "log-abc",
+		TranspLogDegrade: true,
+	}
+
+	if err := persistDecisionReceipt(context.Background(), svc, newTransparencyDecision(), "agent.test", []byte("EXECUTE_TOOL:tool"), map[string]any{"source": "test"}); err != nil {
+		t.Fatalf("degrade mode must not block issuance: %v", err)
+	}
+	if rcptStore.stored == nil {
+		t.Fatal("degrade mode should still store the receipt")
+	}
+	if rcptStore.stored.Transparency == nil || !rcptStore.stored.Transparency.Deferred {
+		t.Fatalf("expected deferred transparency anchor under degrade, got %+v", rcptStore.stored.Transparency)
+	}
+	if rcptStore.stored.LeafIndex != 0 {
+		t.Fatalf("deferred anchor must not claim a leaf index, got %d", rcptStore.stored.LeafIndex)
+	}
+}
+
 func TestPersistDecisionReceiptReturnsStoreError(t *testing.T) {
 	signer, err := helmcrypto.NewEd25519Signer("test")
 	if err != nil {

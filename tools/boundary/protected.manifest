@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-14T02:09:40Z
-# Commit: 3a4896b9cd201862be729cae305839882c5b73f1
+# Generated: 2026-06-14T03:17:56Z
+# Commit: 9601bc52982467aed69ee8cb7fb71682920589bc
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -204,7 +204,7 @@ c9aefcaefb9565ba86fdf087f6d05c6c6c49873172a5ba720ff6dccbce0b7f47  core/pkg/contr
 0ffa51fc3b14fe46dddd1610386859d7196c03d7f0e0b17986e8724731cb8506  core/pkg/contracts/posture_budget_corridor_test.go
 72cbfdedd6cd7d9a859bdf9cf227fbda0262748c73c3c0570bb500beb43d9d12  core/pkg/contracts/proofs.go
 9a102cb08f0bc539c18ca998d3a3fd54ba3cde0a4114731f136be6ef1f25aa55  core/pkg/contracts/proposals.go
-a3799381a176b814101bd51818daf971a28f8709c188aa87b8293081c76f985f  core/pkg/contracts/receipt.go
+72d9e3269a98849270c5f5afdb0bb8d07238e67a8f571fe81500b7785ff95736  core/pkg/contracts/receipt.go
 15026d4ed482963f29113ffdb0252ee6fb7b8192e93a0af0767f1270ae2f7f8c  core/pkg/contracts/receipt_fuzz_test.go
 3fa9fa9aa737572cf7213e619c3571dc2c9a1b00b147f08c5e3e6a0b7c077503  core/pkg/contracts/receipt_hash.go
 13cd995836c12a34fccd699fed492b360b4f82c1c10a9f4ae458b65d7faa9dad  core/pkg/contracts/receipt_hash_parity_test.go
@@ -309,8 +309,8 @@ b747620621ea158e1bb12b77c15c265f8701aa9a33cb608c9ad1026dc218845d  core/pkg/crypt
 0686f9c57e9ddbb46d7a4e85d60eff54e38d53d422c022e7e6f7389f319b1871  core/pkg/crypto/zk/safety_checker_test.go
 8739c7e4d2df1d7752b28e89d5b590705959f9be623a783182720d86db6bdb4a  core/pkg/evidencepack/README.md
 3d6a8c4c2a29d59f9d37df6ca68c90c5afe8d0525aa36530fdb2ad5dd01b76d8  core/pkg/evidencepack/archive.go
-4a7951a170e8bea3bdc1090bb0edeeb6da5ddae5a7e85b99f3166173517b35aa  core/pkg/evidencepack/builder.go
-4833006a321a206e7fbf1417ccff655ff556f4bc92a6df64d38123d3971ef2b4  core/pkg/evidencepack/builder_test.go
+0916a3df70d15dd977beb773d1035e97995f8069382e36b77522c6cbc24e575a  core/pkg/evidencepack/builder.go
+314a0568858a1744478f437ec9b22f072c0d2e5d028e5a8b4acaab0bbd5174aa  core/pkg/evidencepack/builder_test.go
 3cd6a38836549c616bed8ec4ed4b80703d0a7ab1380aab8f29c3c9b47a197e63  core/pkg/evidencepack/chaos_test.go
 3a8fc2a7e02a595353921b68baefe4f444644ba991bb380f8063be40749dbb63  core/pkg/evidencepack/evidencepack_behavior_coverage_test.go
 b0282931372d24fc5a0d12acab58ab374e6d6cf3a43130b7fc7f445811697a26  core/pkg/evidencepack/evidencepack_contracts_test.go

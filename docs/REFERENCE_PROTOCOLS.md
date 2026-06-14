@@ -76,9 +76,10 @@ cybernetics, effects, identity, intent, intervention, jurisdiction, kernel,
 module provenance, organization DNA, packs, policy, profiles, reason codes,
 receipts, registry, safety, telemetry, tooling, truth, and verification.
 
-Use `/openapi.yaml` for the public HTTP API where available. Use the schema
-index and protocol files for non-REST interfaces such as receipts, evidence
-packs, policy bundles, effects, MCP-adjacent contracts, and conformance vectors.
+Use the schema index and protocol files for source-owned Kernel interfaces such
+as receipts, evidence packs, policy bundles, effects, MCP-adjacent contracts,
+and conformance vectors. Enterprise-backed HTTP API references are gated through
+the commercial Helm docs surface.
 
 ## Source Truth
 

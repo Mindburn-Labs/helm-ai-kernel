@@ -23,6 +23,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
+	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
 	runtimesandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox"
 )
 
@@ -1626,7 +1627,14 @@ func verifyEvidenceRequest(r *http.Request) map[string]any {
 		}
 		receipts = append(receipts, &receipt)
 	}
-	return verificationResult(verifyReceiptBundle(parsed, receipts), receipts)
+	errs := verifyReceiptBundle(parsed, receipts)
+	recordVerification(r.Context(), helmotel.VerificationEvent{
+		EnvelopeID:  parsed.Manifest.SessionID,
+		Verified:    len(errs) == 0,
+		CheckCount:  len(receipts),
+		EvidenceRef: parsed.Manifest.SessionID,
+	})
+	return verificationResult(errs, receipts)
 }
 
 func readEvidenceBundleRequest(r *http.Request) ([]byte, error) {

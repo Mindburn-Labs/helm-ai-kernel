@@ -32,7 +32,7 @@ func runVerifyDecisionReceiptCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&format, "format", "", "Format id (e.g. helm_external.v1); empty = auto-detect")
 	cmd.StringVar(&publicKey, "public-key", "", "Trusted Ed25519 public key hex. Without it, a bundle-disclosed key caps the result at crypto_compatible_non_conformant")
 	cmd.BoolVar(&jsonOutput, "json", false, "Output the DecisionReport as JSON")
-	if err := cmd.Parse(reorderFlagsFirst(args)); err != nil {
+	if err := cmd.Parse(reorderFlagsFirst(args, map[string]bool{"file": true, "format": true, "public-key": true})); err != nil {
 		return 2
 	}
 	if file == "" && cmd.NArg() > 0 {
@@ -91,8 +91,7 @@ func runVerifyDecisionReceiptCmd(args []string, stdout, stderr io.Writer) int {
 // args so `decision-receipt <file> --public-key <hex>` parses the same as
 // `decision-receipt --public-key <hex> <file>` (Go's flag package stops at the
 // first positional otherwise).
-func reorderFlagsFirst(args []string) []string {
-	valueFlags := map[string]bool{"file": true, "format": true, "public-key": true}
+func reorderFlagsFirst(args []string, valueFlags map[string]bool) []string {
 	var flags, positionals []string
 	for i := 0; i < len(args); i++ {
 		a := args[i]

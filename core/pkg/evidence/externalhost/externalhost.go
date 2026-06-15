@@ -250,21 +250,51 @@ func normalizeChain(chain *contracts.ExternalReceiptChain) {
 }
 
 func validateReceipt(r *contracts.ExternalHostReceipt) error {
-	switch {
-	case r.ReceiptID == "":
+	if r.ReceiptID == "" {
 		return fmt.Errorf("receipt_id is required")
-	case r.HostID == "":
+	}
+	if r.HostID == "" {
 		return fmt.Errorf("host_id is required")
-	case r.Event.DestinationIP == "" && r.Event.DestinationHost == "":
-		return fmt.Errorf("event destination is required")
-	case r.Event.DestinationPort <= 0:
-		return fmt.Errorf("event.destination_port must be positive")
-	case strings.TrimSpace(r.Event.Protocol) == "":
-		return fmt.Errorf("event.protocol is required")
-	case r.Event.Timestamp.IsZero():
-		return fmt.Errorf("event.timestamp is required")
-	case r.ReceiptHash == "":
+	}
+	if r.ReceiptHash == "" {
 		return fmt.Errorf("receipt_hash is required")
+	}
+	switch r.EventKind {
+	case "", contracts.EventKindNetworkEgress:
+		return validateNetworkEgressEvent(&r.Event)
+	case contracts.EventKindActionEffect:
+		return validateActionEffectEvent(r.ActionEvent)
+	default:
+		return fmt.Errorf("unsupported event_kind %q", r.EventKind)
+	}
+}
+
+func validateNetworkEgressEvent(e *contracts.NetworkEgressEvent) error {
+	switch {
+	case e.DestinationIP == "" && e.DestinationHost == "":
+		return fmt.Errorf("event destination is required")
+	case e.DestinationPort <= 0:
+		return fmt.Errorf("event.destination_port must be positive")
+	case strings.TrimSpace(e.Protocol) == "":
+		return fmt.Errorf("event.protocol is required")
+	case e.Timestamp.IsZero():
+		return fmt.Errorf("event.timestamp is required")
+	}
+	return nil
+}
+
+func validateActionEffectEvent(e *contracts.ActionEffectEvent) error {
+	if e == nil {
+		return fmt.Errorf("action_event is required when event_kind=%q", contracts.EventKindActionEffect)
+	}
+	if strings.TrimSpace(e.ActionID) == "" {
+		return fmt.Errorf("action_event.action_id is required")
+	}
+	if strings.TrimSpace(e.ToolName) == "" {
+		return fmt.Errorf("action_event.tool_name is required")
+	}
+	if e.Timestamp.IsZero() {
+		return fmt.Errorf("action_event.timestamp is required")
 	}
 	return nil
 }

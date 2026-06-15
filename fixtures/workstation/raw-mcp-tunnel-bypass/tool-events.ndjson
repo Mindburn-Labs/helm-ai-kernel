@@ -1,0 +1,1 @@
+{"event_id":"evt_raw_mcp_tunnel","type":"mcp_tool_call","tool_id":"raw.mcp.tunnel","action":"mutate","effect_mode":"operate","status":"blocked","target":"mcp://raw-tunnel/execute","occurred_at":"2026-05-20T16:00:20Z","metadata":{"adapter_path":"raw_mcp_tunnel","bypass_attempt":"true"}}

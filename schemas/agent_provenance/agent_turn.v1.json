@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindburn.ai/agent_provenance/agent_turn.v1.json",
+  "title": "AgentTurn v1",
+  "type": "object",
+  "required": ["version", "session_id", "turn_id", "tool_action_refs", "file_effect_refs", "validation_refs", "commit_binding_refs", "capture_status", "created_at"],
+  "properties": {
+    "version": { "const": "agent_turn.v1" },
+    "session_id": { "type": "string", "minLength": 1 },
+    "turn_id": { "type": "string", "minLength": 1 },
+    "turn_hash": { "$ref": "#/$defs/sha256" },
+    "parent_turn_hash": { "$ref": "#/$defs/sha256" },
+    "prompt_hash": { "$ref": "#/$defs/sha256" },
+    "prompt_object_ref": { "$ref": "#/$defs/sha256" },
+    "prompt_label": { "type": "string" },
+    "assistant_hash": { "$ref": "#/$defs/sha256" },
+    "assistant_object_ref": { "$ref": "#/$defs/sha256" },
+    "assistant_label": { "type": "string" },
+    "tool_action_refs": { "type": "array", "items": { "$ref": "#/$defs/sha256" } },
+    "file_effect_refs": { "type": "array", "items": { "$ref": "#/$defs/sha256" } },
+    "validation_refs": { "type": "array", "items": { "$ref": "#/$defs/sha256" } },
+    "commit_binding_refs": { "type": "array", "items": { "$ref": "#/$defs/sha256" } },
+    "redaction_report_ref": { "$ref": "#/$defs/sha256" },
+    "capture_status": { "enum": ["captured", "redaction_failed", "skipped"] },
+    "issue_refs": { "type": "array", "items": { "type": "string" } },
+    "created_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindburn.ai/agent_provenance/code_effect.v1.json",
+  "title": "CodeEffect v1",
+  "type": "object",
+  "required": ["version", "session_id", "turn_id", "path", "status", "capture_status", "created_at"],
+  "properties": {
+    "version": { "const": "code_effect.v1" },
+    "code_effect_hash": { "$ref": "#/$defs/sha256" },
+    "session_id": { "type": "string", "minLength": 1 },
+    "turn_id": { "type": "string", "minLength": 1 },
+    "path": { "type": "string", "minLength": 1, "not": { "pattern": "(^/|\\.\\.)" } },
+    "status": { "type": "string", "minLength": 1 },
+    "additions": { "type": "integer", "minimum": 0 },
+    "deletions": { "type": "integer", "minimum": 0 },
+    "before_hash": { "$ref": "#/$defs/sha256" },
+    "after_hash": { "$ref": "#/$defs/sha256" },
+    "diff_hash": { "$ref": "#/$defs/sha256" },
+    "diff_object_ref": { "$ref": "#/$defs/sha256" },
+    "line_provenance_hash": { "$ref": "#/$defs/sha256" },
+    "capture_status": { "enum": ["captured", "redaction_failed", "skipped"] },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "additionalProperties": false
+}

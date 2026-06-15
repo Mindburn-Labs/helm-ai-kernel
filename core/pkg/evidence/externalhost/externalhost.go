@@ -4,7 +4,11 @@ package externalhost
 import (
 	"bufio"
 	"bytes"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -105,21 +109,30 @@ func VerifyChain(chain *contracts.ExternalReceiptChain, opts VerifyOptions) (*Ve
 	}
 	report.add(CheckResult{Name: "external_host:receipts", Pass: true, Detail: fmt.Sprintf("%d host receipts", len(chain.Receipts))})
 
-	keyHex := strings.TrimSpace(opts.PublicKeyHex)
-	if keyHex == "" && !opts.RequireKey {
-		keyHex = firstChainPublicKey(chain)
-	}
-	if keyHex == "" && opts.RequireKey {
+	explicitKeyHex := strings.TrimSpace(opts.PublicKeyHex)
+	if explicitKeyHex == "" && opts.RequireKey {
 		report.add(CheckResult{Name: "external_host:public_key", Pass: false, Reason: "missing Ed25519 public key"})
 	}
-	if keyHex != "" {
-		report.PublicKeyUsed = keyHex
+	if explicitKeyHex != "" {
+		report.PublicKeyUsed = explicitKeyHex
 	}
 
 	receiptHashes := make([]string, 0, len(chain.Receipts))
 	var prevHash string
 	for i := range chain.Receipts {
 		r := &chain.Receipts[i]
+
+		// Resolve the key for this receipt.
+		// RequireKey+explicit key: always use the caller-supplied key (chain embedded keys stay untrusted).
+		// No RequireKey + no explicit key: select from chain by the receipt's algorithm.
+		keyHex := explicitKeyHex
+		if keyHex == "" && !opts.RequireKey {
+			keyHex = selectChainPublicKey(chain, r.SignatureAlgorithm)
+			if keyHex != "" && report.PublicKeyUsed == "" {
+				report.PublicKeyUsed = keyHex
+			}
+		}
+
 		if err := validateReceipt(r); err != nil {
 			report.add(CheckResult{Name: "external_host:receipt_schema", Pass: false, Reason: fmt.Sprintf("%s: %v", r.ReceiptID, err)})
 			continue
@@ -182,6 +195,17 @@ func ComputeReceiptHash(receipt contracts.ExternalHostReceipt) (string, error) {
 
 func CanonicalReceiptBytes(receipt contracts.ExternalHostReceipt) ([]byte, error) {
 	return canonicalize.JCS(receipt)
+}
+
+// signedBytesFor returns the exact bytes a signature is verified against:
+// the vendor's preserved original bytes when present, else HELM's JCS canonicalization.
+func signedBytesFor(receipt contracts.ExternalHostReceipt) ([]byte, error) {
+	if strings.TrimSpace(receipt.SignedPayloadB64) != "" {
+		return base64.StdEncoding.DecodeString(strings.TrimSpace(receipt.SignedPayloadB64))
+	}
+	hashable := receipt
+	hashable.Signature = ""
+	return CanonicalReceiptBytes(hashable)
 }
 
 func SignReceipt(receipt contracts.ExternalHostReceipt, privateKey ed25519.PrivateKey) (contracts.ExternalHostReceipt, error) {
@@ -309,25 +333,37 @@ func verifySignatureCheck(receipt contracts.ExternalHostReceipt, keyHex string, 
 	if keyHex == "" {
 		return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s has signature but no public key", receipt.ReceiptID)}
 	}
-	if alg := strings.TrimSpace(receipt.SignatureAlgorithm); alg != "" && !strings.EqualFold(alg, "Ed25519") {
-		return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s unsupported signature_algorithm=%q", receipt.ReceiptID, alg)}
+	alg := strings.TrimSpace(receipt.SignatureAlgorithm)
+	if alg == "" {
+		alg = "Ed25519"
 	}
-	pub, err := hex.DecodeString(strings.TrimPrefix(keyHex, "ed25519:"))
-	if err != nil || len(pub) != ed25519.PublicKeySize {
-		return CheckResult{Name: "external_host:signature", Pass: false, Reason: "invalid Ed25519 public key"}
+	data, err := signedBytesFor(receipt)
+	if err != nil {
+		return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s payload decode failed: %v", receipt.ReceiptID, err)}
 	}
 	sig, err := decodeSignature(receipt.Signature)
 	if err != nil {
 		return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s invalid signature encoding: %v", receipt.ReceiptID, err)}
 	}
-	hashable := receipt
-	hashable.Signature = ""
-	data, err := CanonicalReceiptBytes(hashable)
-	if err != nil {
-		return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s canonicalization failed: %v", receipt.ReceiptID, err)}
-	}
-	if !ed25519.Verify(ed25519.PublicKey(pub), data, sig) {
-		return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s Ed25519 signature mismatch", receipt.ReceiptID)}
+	switch {
+	case strings.EqualFold(alg, "Ed25519"):
+		pub, err := hex.DecodeString(strings.TrimPrefix(keyHex, "ed25519:"))
+		if err != nil || len(pub) != ed25519.PublicKeySize {
+			return CheckResult{Name: "external_host:signature", Pass: false, Reason: "invalid Ed25519 public key"}
+		}
+		if !ed25519.Verify(ed25519.PublicKey(pub), data, sig) {
+			return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s Ed25519 signature mismatch", receipt.ReceiptID)}
+		}
+	case strings.EqualFold(alg, "ECDSA-P256") || strings.EqualFold(alg, "ES256"):
+		ok, verr := verifyECDSAP256(keyHex, data, sig)
+		if verr != nil {
+			return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s ECDSA-P256 key/sig error: %v", receipt.ReceiptID, verr)}
+		}
+		if !ok {
+			return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s ECDSA-P256 signature mismatch", receipt.ReceiptID)}
+		}
+	default:
+		return CheckResult{Name: "external_host:signature", Pass: false, Reason: fmt.Sprintf("%s unsupported signature_algorithm=%q", receipt.ReceiptID, alg)}
 	}
 	return CheckResult{Name: "external_host:signature", Pass: true, Detail: receipt.ReceiptID}
 }
@@ -362,13 +398,70 @@ func decodeSignature(value string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(value)
 }
 
-func firstChainPublicKey(chain *contracts.ExternalReceiptChain) string {
+// selectChainPublicKey returns the first public key from the chain whose
+// Algorithm matches alg (empty Algorithm is treated as Ed25519).
+func selectChainPublicKey(chain *contracts.ExternalReceiptChain, alg string) string {
+	if alg == "" {
+		alg = "Ed25519"
+	}
 	for _, key := range chain.PublicKeys {
-		if key.PublicKeyHex != "" && (key.Algorithm == "" || strings.EqualFold(key.Algorithm, "Ed25519")) {
+		keyAlg := key.Algorithm
+		if keyAlg == "" {
+			keyAlg = "Ed25519"
+		}
+		if key.PublicKeyHex != "" && strings.EqualFold(keyAlg, alg) {
 			return key.PublicKeyHex
 		}
 	}
 	return ""
+}
+
+// firstChainPublicKey is a thin wrapper for backward compatibility with
+// existing callers that only need an Ed25519 key.
+func firstChainPublicKey(chain *contracts.ExternalReceiptChain) string {
+	return selectChainPublicKey(chain, "Ed25519")
+}
+
+// verifyECDSAP256 verifies an ASN.1 DER ECDSA-P256 signature over sha256(data).
+// keyHex may be an uncompressed (04...) or compressed (02.../03...) P-256 point
+// encoded as hex (with optional "ecdsa-p256:" or "0x" prefix), or a
+// hex-encoded SubjectPublicKeyInfo DER blob. Returns (false, err) on any parse
+// failure — fail-closed.
+func verifyECDSAP256(keyHex string, data, sig []byte) (bool, error) {
+	raw := strings.TrimPrefix(strings.TrimPrefix(keyHex, "ecdsa-p256:"), "0x")
+	keyBytes, err := hex.DecodeString(raw)
+	if err != nil {
+		return false, fmt.Errorf("hex decode public key: %w", err)
+	}
+	var pub *ecdsa.PublicKey
+	// Try uncompressed (04 || X || Y) or compressed (02/03 || X) EC point first.
+	if len(keyBytes) > 0 && (keyBytes[0] == 0x04 || keyBytes[0] == 0x02 || keyBytes[0] == 0x03) {
+		x, y := elliptic.Unmarshal(elliptic.P256(), keyBytes)
+		if x == nil {
+			// Try compressed
+			x, y = elliptic.UnmarshalCompressed(elliptic.P256(), keyBytes)
+		}
+		if x == nil {
+			return false, fmt.Errorf("failed to unmarshal P-256 point")
+		}
+		pub = &ecdsa.PublicKey{Curve: elliptic.P256(), X: x, Y: y}
+	} else {
+		// Fall back to SubjectPublicKeyInfo DER.
+		iface, err := x509.ParsePKIXPublicKey(keyBytes)
+		if err != nil {
+			return false, fmt.Errorf("parse SubjectPublicKeyInfo: %w", err)
+		}
+		var ok bool
+		pub, ok = iface.(*ecdsa.PublicKey)
+		if !ok {
+			return false, fmt.Errorf("key is not ECDSA")
+		}
+		if pub.Curve != elliptic.P256() {
+			return false, fmt.Errorf("key curve is not P-256")
+		}
+	}
+	h := sha256.Sum256(data)
+	return ecdsa.VerifyASN1(pub, h[:], sig), nil
 }
 
 func (r *VerificationReport) add(check CheckResult) {

@@ -23,6 +23,7 @@
     "signing_key_id": { "type": "string" },
     "signature_algorithm": { "type": "string" },
     "signature": { "type": "string" },
+    "signed_payload_b64": { "type": "string", "contentEncoding": "base64" },
     "public_key_ref": { "type": "string" },
     "hardware_root": { "$ref": "hardware_root_claim.v1.json" },
     "verifier_profile": { "type": "string" },

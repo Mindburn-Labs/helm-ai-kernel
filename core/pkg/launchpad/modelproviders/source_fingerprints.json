@@ -26,7 +26,7 @@
       "final_url": "https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:05150139b9680e1f042d9a20fbe0128136f4afb8d1c807540472b0a899315b5f",
+      "content_sha256": "sha256:4467e66e5ee67dd7700fcc6cfbf8109af788460d67e390f8e6ce91d942224e46",
       "content_length": 195811
     },
     {
@@ -62,8 +62,8 @@
       "final_url": "https://platform.claude.com/docs/en/api/messages",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:10c054ef4912aaaefdf0387ebc62bdc8d91c34ebce801ffccb3576f94a2edd06",
-      "content_length": 622270
+      "content_sha256": "sha256:9eaf03feacd88c539cbdfc6db7027426e45e481a79387ea7fb0434c1fe3234e4",
+      "content_length": 622271
     },
     {
       "provider_id": "azure-ai-foundry",
@@ -125,8 +125,8 @@
       "final_url": "https://inference-docs.cerebras.ai/api-reference/chat-completions",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:f393a40cedf08080d24211dc619cbe11aa24fabedbc650d306316bd2b30243c1",
-      "content_length": 971356
+      "content_sha256": "sha256:e9ccd2c12aabc893ab054182c5f628e10b1018c3703b03dd4400fb8c5b2d1aae",
+      "content_length": 971406
     },
     {
       "provider_id": "cloudflare-ai-gateway",
@@ -152,8 +152,8 @@
       "final_url": "https://docs.cohere.com/reference/chat",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:96c903a2d8b6fbab996236e50752e60cf6177745f6ceca0fe96336e88de43b8f",
-      "content_length": 4151604
+      "content_sha256": "sha256:6f3579b7c7a725b28f57e137be119d0155a2a8c8914b792f0853fe6f83aca181",
+      "content_length": 4230041
     },
     {
       "provider_id": "deepinfra",
@@ -161,8 +161,8 @@
       "final_url": "https://docs.deepinfra.com",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:ef4a878abf880cd27bc2ae89710a19882e7b33683413e12f6fe2ba33bfd336f9",
-      "content_length": 353233
+      "content_sha256": "sha256:306b40fe15abfb6dced30cc880b8315398b7c246e73cd64ddd40f5b90742ad6d",
+      "content_length": 353283
     },
     {
       "provider_id": "deepinfra",
@@ -170,8 +170,8 @@
       "final_url": "https://docs.deepinfra.com/api-reference/introduction",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:186428b21b1a6a120b2d32a9426a1cec033d3a14e4eae66081748ec1a258983b",
-      "content_length": 393549
+      "content_sha256": "sha256:26e72dd013b78be722bed2d1a7570fe94cb45f3bad9fc3fa131e0b8d6b1ce98a",
+      "content_length": 393599
     },
     {
       "provider_id": "deepinfra",
@@ -179,8 +179,8 @@
       "final_url": "https://docs.deepinfra.com/chat/overview",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:82f8b5cf6627ea1af203ae2e6a055b913a090b388d785af6ea2a059406f2ee60",
-      "content_length": 619669
+      "content_sha256": "sha256:08718649ac7e0cc2213a1fbad9a5ffb7bdc3c01dce0ca43c91ac8d8aeb443464",
+      "content_length": 619732
     },
     {
       "provider_id": "deepseek",
@@ -197,8 +197,8 @@
       "final_url": "https://docs.fireworks.ai/api-reference/post-chatcompletions",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:8d170c9d9cccc5f6bc56cd870bcc09f5191112d1be4218a613066749c200ff15",
-      "content_length": 874412
+      "content_sha256": "sha256:1915b358458e8f30fcb9dc48b3a0c9125a0726af569f8e5f7f18f092e6cdd575",
+      "content_length": 874462
     },
     {
       "provider_id": "github-models",
@@ -206,7 +206,7 @@
       "final_url": "https://docs.github.com/en/github-models/about-github-models",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:4047c7f441e9e15964c153c1332ee7d0406b7ad947edb7b439f5197b3bcd9f2b",
+      "content_sha256": "sha256:be4836e615dec81f707008f5a9842e7d219fac42ba28cbfe6b110b9b7c855b8c",
       "content_length": 81060
     },
     {
@@ -215,7 +215,7 @@
       "final_url": "https://docs.github.com/en/rest/models/catalog",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:43c16e8bd4289b3707ec6b907c8262e9362bee6421d4dbe1d93f789a8469e214",
+      "content_sha256": "sha256:1f75957afeb06ab201300f64c40bc85e7cbfb30425d899a039aacc7a5023b9af",
       "content_length": 259725
     },
     {
@@ -224,7 +224,7 @@
       "final_url": "https://docs.github.com/en/rest/models/inference",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:37de68e768a7c4c06a70c841e8e0a08b8563f3db9db889c1c8a0dbec4d7326ad",
+      "content_sha256": "sha256:5831e741b5c278b58c821ddcd005df81a9a029a0b248157d4a988ac19b0b1d0d",
       "content_length": 321129
     },
     {
@@ -233,8 +233,8 @@
       "final_url": "https://ai.google.dev/api/generate-content",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:9d6b52dcd21da27f17586826ee1b85afc95239927f14f150b41734fe27dbf76f",
-      "content_length": 1004429
+      "content_sha256": "sha256:4ce1d545811ed367ea9777a1f8f9717df0dbd9c5d39b5ca1ab0088b59ba993b8",
+      "content_length": 1004433
     },
     {
       "provider_id": "google-vertex-ai",
@@ -242,7 +242,7 @@
       "final_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/resources/locations",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:0615631b5423981ebda705b76b7e5cfbee6d59091fd9fb76f1d7005707cd3c9a",
+      "content_sha256": "sha256:96b762593ee5cfc8bcfbe74252aa0725e62218404d5b516aba0c77829672be1b",
       "content_length": 960359
     },
     {
@@ -251,7 +251,7 @@
       "final_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/migrate/openai/auth-and-credentials",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:2f14b00907fcaebc01eea40efe6bac8b2248333e187fd05088be9e22eb4b3056",
+      "content_sha256": "sha256:b0113d35ec123e3588edac7f0030314f566065d59fec01c66f678c192030349a",
       "content_length": 372397
     },
     {
@@ -260,7 +260,7 @@
       "final_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/openai",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:ee0ba69777cb5877bd1ff2a73d6cf424c1625b155b698e80333bfa59f2db8673",
+      "content_sha256": "sha256:316f3628a7f8f95c6219487a54bbba75061fc14d1025eea98ebf7c2d5194da59",
       "content_length": 403187
     },
     {
@@ -269,8 +269,8 @@
       "final_url": "https://console.groq.com/docs/api-reference",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:d21c38c474c3540de3fbaa14dd03669d211737bd573fcd47bce5bc994fb93535",
-      "content_length": 1525766
+      "content_sha256": "sha256:da7fbd2fc1320cd6c49e27a4ef3b6acbd63b2db389af206d0671e2c5c32cfd55",
+      "content_length": 1525760
     },
     {
       "provider_id": "hugging-face",
@@ -278,8 +278,8 @@
       "final_url": "https://huggingface.co/docs/inference-providers/index",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:89994aa2ef0fca22a275852eaeb8563ca69f39d2c2e15309e9d89edcec9928e0",
-      "content_length": 193407
+      "content_sha256": "sha256:d1ccd9be1deb631bf014468497e8e4c47eb2a7d6f91da8ef4932db3990fde825",
+      "content_length": 193408
     },
     {
       "provider_id": "hugging-face",
@@ -287,8 +287,8 @@
       "final_url": "https://huggingface.co/docs/inference-providers/en/index",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:6cd657b729670fc60860ed2f03935b110e44e280d88a9f571ff8b9734fe803f6",
-      "content_length": 193773
+      "content_sha256": "sha256:cf9852c8da0cf3afed0349054972d680c1b33245d17b0be6bf786e029cc37983",
+      "content_length": 193774
     },
     {
       "provider_id": "hugging-face",
@@ -296,8 +296,8 @@
       "final_url": "https://huggingface.co/docs/inference-providers/providers/hf-inference",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:43fe8e1f8504bebd3ba496abc2c4dd216311dd4424d9ced8a2e59c52633c518b",
-      "content_length": 277566
+      "content_sha256": "sha256:e3d48c655be13028f0816194da8232bc2b9f7b79594f5fac421c8b9511841dda",
+      "content_length": 277564
     },
     {
       "provider_id": "ibm-watsonx",
@@ -305,8 +305,8 @@
       "final_url": "https://cloud.ibm.com/apidocs/watsonx-ai",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:e81795a3d18f93d277f7d209c0fcd008bfabcdff5cb26d8bbf150f14580bf428",
-      "content_length": 4732966
+      "content_sha256": "sha256:560644e408403be986fb57559006718ae47e000053103f078b3e966a8aa1d33a",
+      "content_length": 4732959
     },
     {
       "provider_id": "iflytek-spark",
@@ -341,8 +341,8 @@
       "final_url": "https://docs.ionos.com/cloud/ai/ai-model-hub/how-tos/tool-integration",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:9ae5318e6c903153e206a0cf9eecb311fd5d22e7111a60a919ab56fbaa4e9d27",
-      "content_length": 909097
+      "content_sha256": "sha256:291a2cd869f51f46170ae6b2b61b2a29c14a95357c2e0feb81f94e31094cf5d2",
+      "content_length": 909011
     },
     {
       "provider_id": "minimax",
@@ -350,8 +350,8 @@
       "final_url": "https://platform.minimax.io/docs/api-reference/api-overview",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:c3bc2604e9e0f1141af248b481fe380bac33eceeb01d1f1ed1a4ffcd19cd1cbf",
-      "content_length": 542331
+      "content_sha256": "sha256:eab5d3f2e2c6f8da0264eb12765b7d02fb4f5685bebb93adf3a2f637836ef4ea",
+      "content_length": 542420
     },
     {
       "provider_id": "minimax",
@@ -359,8 +359,8 @@
       "final_url": "https://platform.minimaxi.com/docs/api-reference/api-overview",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:fb5cfd1ddef3b0873dad92fa6da71a1aadb7673465493391c6d182263e1f5726",
-      "content_length": 591457
+      "content_sha256": "sha256:b7741ca522092863662a6340e25e75cb0dde6bc0315f2070246d897fc8b0cc87",
+      "content_length": 591503
     },
     {
       "provider_id": "mistral",
@@ -395,8 +395,8 @@
       "final_url": "https://platform.kimi.ai/docs/overview",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:26fe5f54ed6ea1163c4149ccf27f6cdf64113b805a1d0e5ff1b66989692c3b96",
-      "content_length": 251097
+      "content_sha256": "sha256:8e9b7f0c70652afc27594c643aa259d143f1e566effcb6ef68df122ae2a32f3a",
+      "content_length": 251160
     },
     {
       "provider_id": "nebius",
@@ -413,8 +413,8 @@
       "final_url": "https://docs.tokenfactory.nebius.com/quickstart",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:8cb642bf6f680ce653a24cb915f679241d146f2b0cf1f618ac1c488ba222e0f1",
-      "content_length": 402216
+      "content_sha256": "sha256:63ea84126caae1370a9f034015c537d6fc6e2f8e212bf9440a3c55a31c38ca3f",
+      "content_length": 402266
     },
     {
       "provider_id": "nebius",
@@ -422,8 +422,8 @@
       "final_url": "https://docs.tokenfactory.nebius.com/api-reference/introduction",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:170fd6786898a5c14a2ea994db56e6f5f1fa88148bea1be59d9b761994933187",
-      "content_length": 373027
+      "content_sha256": "sha256:dbc55eac5e120d9821d4ae4b40b657f7b7f924ccaab7cc365947d1bc2e183d6e",
+      "content_length": 373077
     },
     {
       "provider_id": "nvidia-nim",
@@ -431,8 +431,8 @@
       "final_url": "https://docs.api.nvidia.com/nim/reference/llm-apis",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:254c806dd367561343c1a907a6baa02a4cbe9afab77a480a28fa258fff9f94dd",
-      "content_length": 1376343
+      "content_sha256": "sha256:865b126a51da6bf12bf40e0d6d11e468390a67c5d5935a52633cf8458819792b",
+      "content_length": 1376345
     },
     {
       "provider_id": "openai",
@@ -440,8 +440,8 @@
       "final_url": "https://developers.openai.com/api/reference/overview",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:b57b1e471218e796963531b44786739cb0061e9bdff3a0873ee84da8c7874fba",
-      "content_length": 387176
+      "content_sha256": "sha256:2f4713101f0309dbfed67a7b2f7b7afef95afac062ef6ac9ad4f4343b6f75c2b",
+      "content_length": 387183
     },
     {
       "provider_id": "openrouter",
@@ -449,8 +449,8 @@
       "final_url": "https://openrouter.ai/docs/api/reference/overview",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:acfc67ee2dbb6ef6d8ab03fc04d44473807fb6a5822495ac93000b2c95f94056",
-      "content_length": 753118
+      "content_sha256": "sha256:9b3b268e754e16378bfe6741fd927f25c2a0f90c67130718176e49e0012dd0c5",
+      "content_length": 1515363
     },
     {
       "provider_id": "ovhcloud-ai-endpoints",
@@ -476,8 +476,8 @@
       "final_url": "https://docs.perplexity.ai/api-reference/sonar-post",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:dac57b3c3f082052fb90bb51dd4ee2db8e8d1f8b9cdef0cff839ccfb9d693302",
-      "content_length": 692994
+      "content_sha256": "sha256:13d9a295f8ca9f6264f287171bbec3e0fbe779faa3f61f889a53f6fce3e8b168",
+      "content_length": 692997
     },
     {
       "provider_id": "replicate",
@@ -512,8 +512,8 @@
       "final_url": "https://docs.sambanova.ai/docs/en/features/openai-compatibility",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:20a999fb6341ed743c6af9455e575d8dde20ae4773cc77c923a5b8c6b54bf157",
-      "content_length": 599888
+      "content_sha256": "sha256:a2a03fe8a261f8459b24da41a4f9f38f3a7ebdd06aadc6f7b1c74e735a18673e",
+      "content_length": 599938
     },
     {
       "provider_id": "sambanova",
@@ -521,8 +521,8 @@
       "final_url": "https://docs.sambanova.ai/docs/en/get-started/api-keys-urls",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:359031f97f8d8a17409a1b90e6f40933c3b0d22f5dffc98ba4303b0daec686e2",
-      "content_length": 494567
+      "content_sha256": "sha256:303e4d379b9aec908acc5c4ab53529984ebc7c647ccb198affa3964d7a35f312",
+      "content_length": 494617
     },
     {
       "provider_id": "scaleway-generative-apis",
@@ -566,8 +566,8 @@
       "final_url": "https://docs.siliconflow.com/en/api-reference/chat-completions/chat-completions",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:4f73664808c51df663b52972d3bb6a8b2c1acfab12f26199f67f28f4bc507991",
-      "content_length": 459118
+      "content_sha256": "sha256:99ff12a60bb19b43d105dcf5e3cb4faf2b950b2e7e13c9897e7b3de72db1f3ae",
+      "content_length": 459168
     },
     {
       "provider_id": "stepfun",
@@ -575,8 +575,8 @@
       "final_url": "https://platform.stepfun.ai/docs/en/guides/developer/openai",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:bc1f6c42d862df0b310c4e33472216e2427556cef190e1c1f1f5bf4eb8f42906",
-      "content_length": 506169
+      "content_sha256": "sha256:ae9bb96b6c2eec04332999eee71a38042578431890ce31d0dfca0015b8899524",
+      "content_length": 506219
     },
     {
       "provider_id": "stepfun",
@@ -584,8 +584,8 @@
       "final_url": "https://platform.stepfun.ai/docs/en/step-plan/quick-start",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:08714813aa9f8aca589082bf6e2bf3a1614e19f34e5ecedefb0768bcf51dc895",
-      "content_length": 408100
+      "content_sha256": "sha256:ac11b5b24212703754c24d02cf985150a4b9cff5153e38386be99a951c9f762c",
+      "content_length": 408150
     },
     {
       "provider_id": "tencent-hunyuan",
@@ -593,8 +593,8 @@
       "final_url": "https://cloud.tencent.com/document/product/1729",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:5facb60ddb92de618cf09f71826787f6fa2aa7a81966516418dcd957af2e8b7d",
-      "content_length": 31468
+      "content_sha256": "sha256:89e9fd9cc166b565174c026344c634812f427e255855b76b55b39e57c439ab8d",
+      "content_length": 31444
     },
     {
       "provider_id": "together-ai",
@@ -602,8 +602,8 @@
       "final_url": "https://docs.together.ai/reference/chat-completions",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:637892c75ca2a9885326192bc232be293f0c75526af3555c063ca290179fb180",
-      "content_length": 623625
+      "content_sha256": "sha256:14f7f0dd6013c3a750b1a5dcb3d12aab5fdcb69c59766e907bd13073807d21dc",
+      "content_length": 623675
     },
     {
       "provider_id": "vercel-ai-gateway",
@@ -611,8 +611,8 @@
       "final_url": "https://vercel.com/docs/ai-gateway",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:cf9bcdc895cf7720bdff379e46633ac3c9edd8c55ded9d8ffd7459df8f0cf74c",
-      "content_length": 785571
+      "content_sha256": "sha256:88202ebd00342418119a342b21cad1370e8437d16ebab8c2e852feeae027faf2",
+      "content_length": 785747
     },
     {
       "provider_id": "vercel-ai-gateway",
@@ -620,8 +620,8 @@
       "final_url": "https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:3763b33b014ef61055bbb98553eacb56988ec3a7362e5de6dcc023f98bfadc39",
-      "content_length": 935549
+      "content_sha256": "sha256:ed5e8af62af85c9618a06e71c9134d1275239ee2fad88b0d07d9fc56f80bb921",
+      "content_length": 935725
     },
     {
       "provider_id": "vercel-ai-gateway",
@@ -629,8 +629,8 @@
       "final_url": "https://vercel.com/docs/ai-gateway/sdks-and-apis",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:99c491c4e737a128ab62c450b37336a922926b541264a82cd544fab9f40e936d",
-      "content_length": 846885
+      "content_sha256": "sha256:6053b40af44e061730ccc0d50c5da51f2b2d9b0b016add54d727a0cff88faece",
+      "content_length": 847061
     },
     {
       "provider_id": "volcengine-ark",
@@ -638,8 +638,8 @@
       "final_url": "https://www.volcengine.com/docs/82379",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:32c3893d80582d5f1037b4aa993ab6982fb76f5dc15feaf225e258d1cc6f299c",
-      "content_length": 686234
+      "content_sha256": "sha256:21dedc36baed86b6ce466a665bdeb1cacb3967e1534d964d74c72a9e53503b12",
+      "content_length": 686227
     },
     {
       "provider_id": "xai",
@@ -647,8 +647,8 @@
       "final_url": "https://docs.x.ai/developers/rest-api-reference/inference/chat",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:0743502a377ff09338cb7d4f0e5337538fc8c0ea70b0e1a4c4823a32631d6435",
-      "content_length": 995983
+      "content_sha256": "sha256:ab5c34ad7ebbe0f2adf6c7d7c618e5a6c8672300a7064841ec43a497c8a1d4b7",
+      "content_length": 996106
     },
     {
       "provider_id": "zhipu-bigmodel",
@@ -656,8 +656,8 @@
       "final_url": "https://docs.bigmodel.cn/cn/guide/start/introduction",
       "http_status": 200,
       "content_type": "text/html",
-      "content_sha256": "sha256:474291a62dd1b23479721abd8c5e8e49725b668834f9d4e01ed303eb506d66d4",
-      "content_length": 354912
+      "content_sha256": "sha256:643fe6d49d364ab06289cbe241550573a6eaec7bae9d48b4b456fce63311c0ad",
+      "content_length": 354974
     }
   ]
 }

@@ -33,5 +33,10 @@
       "additionalProperties": { "type": "string" }
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "allOf": [
+    { "if": { "not": { "required": ["event_kind"] } }, "then": { "required": ["event"] } },
+    { "if": { "required": ["event_kind"], "properties": { "event_kind": { "const": "network_egress" } } }, "then": { "required": ["event"] } },
+    { "if": { "required": ["event_kind"], "properties": { "event_kind": { "const": "action_effect" } } }, "then": { "required": ["action_event"] } }
+  ]
 }

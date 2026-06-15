@@ -8,6 +8,8 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -348,6 +350,30 @@ func TestVerifyChain_NetworkEgressUnchanged(t *testing.T) {
 
 // TestVerifySignature_PreservedBytesEd25519 verifies that when SignedPayloadB64 is
 // set, the signature is checked against the preserved original bytes, not JCS.
+// testToolBindingChecker binds action_event.tool_name to a `{"tool":...}` signed
+// payload. Registered for the empty and "test-vendor" source_profiles so the
+// preserved-bytes tests below exercise the (now fail-closed) binding path.
+func testToolBindingChecker(payload []byte, r *contracts.ExternalHostReceipt) error {
+	var p struct {
+		Tool string `json:"tool"`
+	}
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return err
+	}
+	if r.ActionEvent == nil {
+		return fmt.Errorf("no action_event")
+	}
+	if p.Tool != r.ActionEvent.ToolName {
+		return fmt.Errorf("tool mismatch: signed=%q exposed=%q", p.Tool, r.ActionEvent.ToolName)
+	}
+	return nil
+}
+
+func init() {
+	RegisterBindingChecker("", testToolBindingChecker)
+	RegisterBindingChecker("test-vendor", testToolBindingChecker)
+}
+
 func TestVerifySignature_PreservedBytesEd25519(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -575,6 +601,119 @@ func TestVerifySignature_HelmNativeUnchanged(t *testing.T) {
 	}
 	if !report.Verified {
 		t.Fatalf("HELM-native JCS path regression: expected verified, got checks: %+v", report.Checks)
+	}
+}
+
+// TestVerifyBinding_TamperedActionFieldFails is the P1 regression: a foreign
+// receipt whose normalized action_event.tool_name disagrees with the signed
+// payload (vendor signature still valid, receipt_hash recomputed) must FAIL the
+// binding check rather than verify.
+func TestVerifyBinding_TamperedActionFieldFails(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vendorPayload := []byte(`{"tool":"github.create_pr","action_id":"act-1","ts":"2026-06-15T00:00:00Z"}`)
+	sig := ed25519.Sign(priv, vendorPayload)
+	ts := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	r := contracts.ExternalHostReceipt{
+		SchemaVersion:      contracts.ExternalHostReceiptVersion,
+		ReceiptID:          "bind-tamper-1",
+		HostID:             "vendor-host",
+		SourceProfile:      "test-vendor",
+		EventKind:          contracts.EventKindActionEffect,
+		SignatureAlgorithm: "Ed25519",
+		Signature:          hex.EncodeToString(sig),
+		SignedPayloadB64:   base64.StdEncoding.EncodeToString(vendorPayload),
+		// Attacker-controlled normalized field that disagrees with the signed payload.
+		ActionEvent: &contracts.ActionEffectEvent{ActionID: "act-1", ToolName: "evil.delete_repo", Timestamp: ts},
+	}
+	r, err = computeHashOnly(r) // recompute receipt_hash over the tampered struct
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion:    contracts.ExternalReceiptChainVersion,
+		ReceiptChainHash: ComputeChainHash([]string{r.ReceiptHash}),
+		Receipts:         []contracts.ExternalHostReceipt{r},
+	}
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified {
+		t.Fatal("tampered normalized field must not verify (binding check)")
+	}
+	assertFailedCheck(t, report, "external_host:binding")
+}
+
+// TestVerifyBinding_NoCheckerFailsClosed: a foreign receipt whose source_profile
+// has no registered binding checker must fail closed.
+func TestVerifyBinding_NoCheckerFailsClosed(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vendorPayload := []byte(`{"tool":"x","action_id":"a","ts":"2026-06-15T00:00:00Z"}`)
+	sig := ed25519.Sign(priv, vendorPayload)
+	ts := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	r := contracts.ExternalHostReceipt{
+		SchemaVersion:      contracts.ExternalHostReceiptVersion,
+		ReceiptID:          "no-checker-1",
+		HostID:             "vendor-host",
+		SourceProfile:      "unregistered-vendor",
+		EventKind:          contracts.EventKindActionEffect,
+		SignatureAlgorithm: "Ed25519",
+		Signature:          hex.EncodeToString(sig),
+		SignedPayloadB64:   base64.StdEncoding.EncodeToString(vendorPayload),
+		ActionEvent:        &contracts.ActionEffectEvent{ActionID: "a", ToolName: "x", Timestamp: ts},
+	}
+	r, err = computeHashOnly(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion:    contracts.ExternalReceiptChainVersion,
+		ReceiptChainHash: ComputeChainHash([]string{r.ReceiptHash}),
+		Receipts:         []contracts.ExternalHostReceipt{r},
+	}
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified {
+		t.Fatal("foreign receipt with no binding checker must fail closed")
+	}
+	assertFailedCheck(t, report, "external_host:binding")
+}
+
+// TestVerifyECDSAP256_RawSignature covers the JWS/ES256 raw r||s (64-byte)
+// signature encoding, not just ASN.1 DER.
+func TestVerifyECDSAP256_RawSignature(t *testing.T) {
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubHex := hex.EncodeToString(elliptic.Marshal(elliptic.P256(), priv.PublicKey.X, priv.PublicKey.Y))
+	data := []byte("payload-bytes-for-es256-raw")
+	h := sha256.Sum256(data)
+	r, s, err := ecdsa.Sign(rand.Reader, priv, h[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := make([]byte, 64)
+	r.FillBytes(raw[:32])
+	s.FillBytes(raw[32:])
+	ok, err := verifyECDSAP256(pubHex, data, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("raw r||s ES256 signature must verify")
+	}
+	raw[0] ^= 0xFF
+	if ok, _ := verifyECDSAP256(pubHex, data, raw); ok {
+		t.Fatal("tampered raw signature must not verify")
 	}
 }
 

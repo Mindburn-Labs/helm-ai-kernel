@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"os"
 	"strings"
 
@@ -163,6 +164,7 @@ func VerifyChain(chain *contracts.ExternalReceiptChain, opts VerifyOptions) (*Ve
 		prevHash = computed
 
 		report.add(verifySignatureCheck(*r, keyHex, opts.RequireKey || keyHex != ""))
+		report.add(verifyBindingCheck(*r))
 		report.add(verifyHardwareRootCheck(*r))
 	}
 
@@ -323,6 +325,48 @@ func validateActionEffectEvent(e *contracts.ActionEffectEvent) error {
 	return nil
 }
 
+// BindingChecker re-derives the normalized fields a verifier exposes (tool name,
+// target, etc.) from a foreign receipt's signed payload and returns an error if
+// they do not match what the receipt carries. Adapters register one per
+// source_profile so VerifyChain can fail-closed when it cannot prove that an
+// imported receipt's normalized fields are the ones the vendor actually signed.
+type BindingChecker func(signedPayload []byte, receipt *contracts.ExternalHostReceipt) error
+
+// ponytail: package-global registry (database/sql driver pattern) so adapters
+// can register checkers without an import cycle — adapters import externalhost,
+// not the reverse.
+var bindingCheckers = map[string]BindingChecker{}
+
+// RegisterBindingChecker registers a binding checker for a source_profile.
+func RegisterBindingChecker(sourceProfile string, fn BindingChecker) {
+	bindingCheckers[sourceProfile] = fn
+}
+
+// verifyBindingCheck binds a foreign receipt's normalized fields to its signed
+// payload. A native receipt (no signed_payload_b64) is bound by the receipt
+// signature + hash over the whole struct, so it passes. A foreign receipt
+// (preserved-bytes) is authenticated only over signed_payload_b64, so its
+// normalized fields are unauthenticated unless a registered checker proves they
+// match the signed bytes; a missing checker is fail-closed.
+func verifyBindingCheck(receipt contracts.ExternalHostReceipt) CheckResult {
+	const name = "external_host:binding"
+	if strings.TrimSpace(receipt.SignedPayloadB64) == "" {
+		return CheckResult{Name: name, Pass: true, Detail: fmt.Sprintf("%s native; normalized fields covered by receipt signature", receipt.ReceiptID)}
+	}
+	payload, err := base64.StdEncoding.DecodeString(strings.TrimSpace(receipt.SignedPayloadB64))
+	if err != nil {
+		return CheckResult{Name: name, Pass: false, Reason: fmt.Sprintf("%s signed_payload_b64 decode failed: %v", receipt.ReceiptID, err)}
+	}
+	fn, ok := bindingCheckers[receipt.SourceProfile]
+	if !ok {
+		return CheckResult{Name: name, Pass: false, Reason: fmt.Sprintf("%s no binding checker for source_profile %q; normalized fields are not bound to the signed payload", receipt.ReceiptID, receipt.SourceProfile)}
+	}
+	if err := fn(payload, &receipt); err != nil {
+		return CheckResult{Name: name, Pass: false, Reason: fmt.Sprintf("%s binding check failed: %v", receipt.ReceiptID, err)}
+	}
+	return CheckResult{Name: name, Pass: true, Detail: receipt.ReceiptID}
+}
+
 func verifySignatureCheck(receipt contracts.ExternalHostReceipt, keyHex string, require bool) CheckResult {
 	if strings.TrimSpace(receipt.Signature) == "" {
 		if require {
@@ -461,7 +505,17 @@ func verifyECDSAP256(keyHex string, data, sig []byte) (bool, error) {
 		}
 	}
 	h := sha256.Sum256(data)
-	return ecdsa.VerifyASN1(pub, h[:], sig), nil
+	if ecdsa.VerifyASN1(pub, h[:], sig) {
+		return true, nil
+	}
+	// Standard ES256/JWS signers emit the P-256 signature as raw r||s (64 bytes)
+	// rather than ASN.1 DER; accept that form too.
+	if len(sig) == 64 {
+		r := new(big.Int).SetBytes(sig[:32])
+		s := new(big.Int).SetBytes(sig[32:])
+		return ecdsa.Verify(pub, h[:], r, s), nil
+	}
+	return false, nil
 }
 
 func (r *VerificationReport) add(check CheckResult) {

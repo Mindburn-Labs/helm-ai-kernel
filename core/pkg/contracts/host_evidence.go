@@ -13,6 +13,9 @@ const (
 	ReceiptTypeNetworkEgressUncorr  = "NETWORK_EGRESS_UNCORRELATED"
 	ReceiptTypeBoundaryDrift        = "BOUNDARY_DRIFT"
 
+	EventKindNetworkEgress = "network_egress"
+	EventKindActionEffect  = "action_effect"
+
 	HostCorrelationCorrelated             = "CORRELATED"
 	HostCorrelationPartiallyCorrelated    = "PARTIALLY_CORRELATED"
 	HostCorrelationUncorrelatedHostEgress = "UNCORRELATED_HOST_EGRESS"
@@ -61,6 +64,8 @@ type ExternalHostReceipt struct {
 	WorkloadID         string             `json:"workload_id,omitempty"`
 	SandboxLeaseID     string             `json:"sandbox_lease_id,omitempty"`
 	Event              NetworkEgressEvent `json:"event"`
+	EventKind          string             `json:"event_kind,omitempty"`
+	ActionEvent        *ActionEffectEvent `json:"action_event,omitempty"`
 	ReceiptHash        string             `json:"receipt_hash"`
 	PrevReceiptHash    string             `json:"prev_receipt_hash,omitempty"`
 	SigningKeyID       string             `json:"signing_key_id,omitempty"`
@@ -90,6 +95,23 @@ type NetworkEgressEvent struct {
 	Verdict          string            `json:"verdict,omitempty"`
 	ObservedBy       string            `json:"observed_by,omitempty"`
 	CorrelationHints map[string]string `json:"correlation_hints,omitempty"`
+}
+
+// ActionEffectEvent is a host/mediator-observed agent tool/action effect — the
+// vendor-neutral analogue of a competitor "action receipt" (Signet, AGT, Pipelock/AAR).
+// Used when ExternalHostReceipt.EventKind == "action_effect".
+type ActionEffectEvent struct {
+	ActionID        string    `json:"action_id"`
+	ToolName        string    `json:"tool_name"`
+	TargetRef       string    `json:"target_ref,omitempty"`
+	Transport       string    `json:"transport,omitempty"`
+	ParamsHash      string    `json:"params_hash,omitempty"`
+	OutputHash      string    `json:"output_hash,omitempty"`
+	ResultCount     int64     `json:"result_count,omitempty"`
+	SideEffectClass string    `json:"side_effect_class,omitempty"`
+	Reversibility   string    `json:"reversibility,omitempty"`
+	Decision        string    `json:"decision,omitempty"`
+	Timestamp       time.Time `json:"timestamp"`
 }
 
 // HardwareRootClaim is structural evidence only unless a local verifier checks

@@ -120,3 +120,4 @@ helm.yaml
 *.tgz
 sdk/ts/*.tgz
 version-status.json
+/helm-ai-kernel

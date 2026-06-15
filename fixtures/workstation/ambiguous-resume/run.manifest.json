@@ -1,0 +1,17 @@
+{
+  "run_id": "run_ambiguous_resume",
+  "goal": "Demonstrate that ambiguous resume does not restore operate permissions.",
+  "actor_id": "agent.codex.local",
+  "actor_type": "agent",
+  "workspace_id": "workspace-demo",
+  "workspace_path": "/workspace/demo",
+  "repository": "helm-ai-kernel",
+  "agent_surface": "codex",
+  "policy_profile": "workstation.observe_draft.v1",
+  "started_at": "2026-05-20T16:10:00Z",
+  "completed_at": "2026-05-20T16:11:00Z",
+  "metadata": {
+    "resume_boundary": "ambiguous",
+    "trust_reset_required": "true"
+  }
+}

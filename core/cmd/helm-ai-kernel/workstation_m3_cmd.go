@@ -73,6 +73,66 @@ func runWorkstationEnforceCmd(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+func runWorkstationVerifyDecisionCmd(args []string, stdout, stderr io.Writer) int {
+	cmd := flag.NewFlagSet("workstation verify-decision", flag.ContinueOnError)
+	cmd.SetOutput(stderr)
+	var receiptPath string
+	var jsonOut bool
+	cmd.StringVar(&receiptPath, "receipt", "", "Workstation policy decision receipt JSON")
+	cmd.BoolVar(&jsonOut, "json", false, "Print JSON")
+	if err := cmd.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
+		return 2
+	}
+	if receiptPath == "" && cmd.NArg() == 1 {
+		receiptPath = cmd.Arg(0)
+	}
+	if receiptPath == "" {
+		_, _ = fmt.Fprintln(stderr, "Error: --receipt is required")
+		return 2
+	}
+	receipt, err := workstation.LoadDecisionReceipt(receiptPath)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: cannot load decision receipt: %v\n", err)
+		return 1
+	}
+	ok, err := workstation.VerifyDecisionReceiptSignature(receipt)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: decision receipt signature check failed: %v\n", err)
+		return 1
+	}
+	result := map[string]any{
+		"receipt":         receiptPath,
+		"decision_id":     receipt.DecisionID,
+		"verdict":         receipt.Verdict,
+		"reason_code":     receipt.ReasonCode,
+		"effect_type":     receipt.Request.EffectType,
+		"target":          receipt.Request.Target,
+		"receipt_hash":    receipt.ReceiptHash,
+		"signature_valid": ok,
+	}
+	if jsonOut {
+		data, _ := json.MarshalIndent(result, "", "  ")
+		_, _ = fmt.Fprintln(stdout, string(data))
+	} else {
+		_, _ = fmt.Fprintf(stdout, "%sWorkstation Policy Decision Verification%s\n", ColorBold, ColorReset)
+		_, _ = fmt.Fprintf(stdout, "  receipt:   %s\n", receiptPath)
+		_, _ = fmt.Fprintf(stdout, "  decision:  %s\n", receipt.DecisionID)
+		_, _ = fmt.Fprintf(stdout, "  verdict:   %s\n", receipt.Verdict)
+		_, _ = fmt.Fprintf(stdout, "  reason:    %s\n", receipt.ReasonCode)
+		_, _ = fmt.Fprintf(stdout, "  effect:    %s\n", receipt.Request.EffectType)
+		_, _ = fmt.Fprintf(stdout, "  target:    %s\n", receipt.Request.Target)
+		_, _ = fmt.Fprintf(stdout, "  hash:      %s\n", receipt.ReceiptHash)
+		_, _ = fmt.Fprintf(stdout, "  signature: %v\n", ok)
+	}
+	if !ok {
+		return 1
+	}
+	return 0
+}
+
 func runWorkstationOperatorCmd(section string, args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("workstation "+section, flag.ContinueOnError)
 	cmd.SetOutput(stderr)

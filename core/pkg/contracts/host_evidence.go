@@ -74,12 +74,12 @@ type ExternalHostReceipt struct {
 	// SignedPayloadB64 is the Base64 of the vendor's EXACT original signed bytes.
 	// When set, the signature is verified over these bytes (foreign receipts), not
 	// over HELM's JCS re-canonicalization.
-	SignedPayloadB64   string             `json:"signed_payload_b64,omitempty"`
-	PublicKeyRef       string             `json:"public_key_ref,omitempty"`
-	HardwareRoot       *HardwareRootClaim `json:"hardware_root,omitempty"`
-	VerifierProfile    string             `json:"verifier_profile,omitempty"`
-	RecordedAt         time.Time          `json:"recorded_at,omitempty"`
-	Metadata           map[string]string  `json:"metadata,omitempty"`
+	SignedPayloadB64 string             `json:"signed_payload_b64,omitempty"`
+	PublicKeyRef     string             `json:"public_key_ref,omitempty"`
+	HardwareRoot     *HardwareRootClaim `json:"hardware_root,omitempty"`
+	VerifierProfile  string             `json:"verifier_profile,omitempty"`
+	RecordedAt       time.Time          `json:"recorded_at,omitempty"`
+	Metadata         map[string]string  `json:"metadata,omitempty"`
 }
 
 // NetworkEgressEvent is the canonical host-observed outbound network event.

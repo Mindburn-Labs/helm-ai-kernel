@@ -215,3 +215,129 @@ func assertFailedCheck(t *testing.T, report *VerificationReport, name string) {
 	}
 	t.Fatalf("missing failed check %s in %+v", name, report.Checks)
 }
+
+func TestVerifyChain_ActionEffectReceiptVerifies(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub := priv.Public().(ed25519.PublicKey)
+	ts := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
+	r := contracts.ExternalHostReceipt{
+		SchemaVersion: contracts.ExternalHostReceiptVersion,
+		ReceiptID:     "action-receipt-1",
+		HostID:        "host-b",
+		AgentID:       "agent-2",
+		EventKind:     contracts.EventKindActionEffect,
+		ActionEvent: &contracts.ActionEffectEvent{
+			ActionID:  "act-001",
+			ToolName:  "github.create_issue",
+			TargetRef: "org/repo",
+			Timestamp: ts,
+		},
+	}
+	r, err = SignReceipt(r, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion: contracts.ExternalReceiptChainVersion,
+		ChainID:       "action-chain-1",
+		PublicKeys: []contracts.ExternalVerifierKey{{
+			KeyID:        "key-1",
+			Algorithm:    "Ed25519",
+			PublicKeyHex: hex.EncodeToString(pub),
+		}},
+		Receipts: []contracts.ExternalHostReceipt{r},
+	}
+	chain.ReceiptChainHash = ComputeChainHash([]string{r.ReceiptHash})
+
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Verified {
+		t.Fatalf("action_effect receipt should verify, got checks: %+v", report.Checks)
+	}
+}
+
+func TestValidateReceipt_ActionEffectMissingActionEventFails(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := contracts.ExternalHostReceipt{
+		SchemaVersion: contracts.ExternalHostReceiptVersion,
+		ReceiptID:     "bad-action-receipt",
+		HostID:        "host-c",
+		EventKind:     contracts.EventKindActionEffect,
+		// ActionEvent intentionally nil
+	}
+	r, err = SignReceipt(r, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion: contracts.ExternalReceiptChainVersion,
+		Receipts:      []contracts.ExternalHostReceipt{r},
+	}
+	report, err := VerifyChain(chain, VerifyOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified {
+		t.Fatal("nil action_event should fail validation")
+	}
+	assertFailedCheck(t, report, "external_host:receipt_schema")
+}
+
+func TestValidateReceipt_UnknownEventKindFails(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := contracts.ExternalHostReceipt{
+		SchemaVersion: contracts.ExternalHostReceiptVersion,
+		ReceiptID:     "bogus-kind-receipt",
+		HostID:        "host-d",
+		EventKind:     "bogus",
+	}
+	r, err = SignReceipt(r, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion: contracts.ExternalReceiptChainVersion,
+		Receipts:      []contracts.ExternalHostReceipt{r},
+	}
+	report, err := VerifyChain(chain, VerifyOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified {
+		t.Fatal("unknown event_kind should fail validation")
+	}
+	assertFailedCheck(t, report, "external_host:receipt_schema")
+}
+
+func TestVerifyChain_NetworkEgressUnchanged(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := signedTestChain(t, priv)
+	chain.PublicKeys = []contracts.ExternalVerifierKey{{
+		KeyID:        "host-key-1",
+		Algorithm:    "Ed25519",
+		PublicKeyHex: hex.EncodeToString(pub),
+	}}
+	chain.ReceiptChainHash = ComputeChainHash([]string{chain.Receipts[0].ReceiptHash, chain.Receipts[1].ReceiptHash})
+
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Verified {
+		t.Fatalf("egress chain regression: expected verified, got checks: %+v", report.Checks)
+	}
+}

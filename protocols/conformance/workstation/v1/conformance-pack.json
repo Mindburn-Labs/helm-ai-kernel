@@ -31,6 +31,10 @@
         "memory write effects with ttl_days and sensitivity",
         "recurring loop effects with schedule, max_runtime, tool_scope, and expires_at",
         "prompt-injection taint preserved through receipt import",
+        "raw MCP tunnel bypass denied and recorded",
+        "ambiguous resume permissions denied and recorded",
+        "subagent sidechain summary recorded without raw transcript dependency",
+        "tainted browser or PDF context cannot authorize operate-class effects",
         "reference EvidencePack export"
       ]
     }
@@ -42,6 +46,10 @@
     "denied_memory": "fixtures/workstation/denied-memory",
     "denied_recurring_loop": "fixtures/workstation/denied-recurring-loop",
     "prompt_injection_tainted": "fixtures/workstation/prompt-injection-tainted",
+    "raw_mcp_tunnel_bypass": "fixtures/workstation/raw-mcp-tunnel-bypass",
+    "ambiguous_resume": "fixtures/workstation/ambiguous-resume",
+    "subagent_sidechain_summary": "fixtures/workstation/subagent-sidechain-summary",
+    "tainted_browser_pdf_authorization": "fixtures/workstation/tainted-browser-pdf-authorization",
     "scope_audit_all_boundaries": "fixtures/workstation/scope-audit-all-boundaries"
   },
   "commands": [

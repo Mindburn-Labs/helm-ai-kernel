@@ -1,0 +1,1 @@
+{"event_id":"evt_resume_restore_attempt","type":"mcp_tool_call","tool_id":"restored.session.tool","action":"mutate","effect_mode":"operate","status":"blocked","target":"mcp://restored-session/tool","occurred_at":"2026-05-20T16:10:20Z","metadata":{"resume_boundary":"ambiguous","restored_permissions":"attempted"}}

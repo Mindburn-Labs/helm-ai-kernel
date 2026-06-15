@@ -53,6 +53,10 @@ func CertifyAdapterFixtures(adapterID, fixtureRoot, requested string) AdapterCer
 			"denied-memory",
 			"denied-recurring-loop",
 			"prompt-injection-tainted",
+			"raw-mcp-tunnel-bypass",
+			"ambiguous-resume",
+			"subagent-sidechain-summary",
+			"tainted-browser-pdf-authorization",
 			"demo",
 		},
 		ObservedOnly: requested == CertificationObserveOnly,
@@ -162,6 +166,22 @@ func certifyHighRiskFixtures(root string) (bool, string) {
 	if err != nil {
 		return false, err.Error()
 	}
+	rawMCP, err := ImportArtifactDir(filepath.Join(root, "raw-mcp-tunnel-bypass"), ImportOptions{})
+	if err != nil {
+		return false, err.Error()
+	}
+	resume, err := ImportArtifactDir(filepath.Join(root, "ambiguous-resume"), ImportOptions{})
+	if err != nil {
+		return false, err.Error()
+	}
+	sidechain, err := ImportArtifactDir(filepath.Join(root, "subagent-sidechain-summary"), ImportOptions{})
+	if err != nil {
+		return false, err.Error()
+	}
+	taintedDoc, err := ImportArtifactDir(filepath.Join(root, "tainted-browser-pdf-authorization"), ImportOptions{})
+	if err != nil {
+		return false, err.Error()
+	}
 	demo, err := ImportArtifactDir(filepath.Join(root, "demo"), ImportOptions{})
 	if err != nil {
 		return false, err.Error()
@@ -179,10 +199,22 @@ func certifyHighRiskFixtures(root string) (bool, string) {
 	if !receiptContainsTaint(tainted.Receipt, "prompt_injection") || len(tainted.Receipt.DeniedEffects) == 0 {
 		return false, "tainted-context fixture must preserve taint and denial"
 	}
+	if !receiptHasDeniedReason(rawMCP.Receipt, "OPERATE_PERMISSIONS_EMPTY") {
+		return false, "raw MCP tunnel fixture must deny bypassed operate effects"
+	}
+	if !receiptHasDeniedReason(resume.Receipt, "OPERATE_PERMISSIONS_EMPTY") {
+		return false, "ambiguous resume fixture must deny restored session permissions"
+	}
+	if !receiptActionHasMetadata(sidechain.Receipt, "evt_subagent_summary", "sidechain_ref") || receiptActionHasMetadata(sidechain.Receipt, "evt_subagent_summary", "raw_transcript") {
+		return false, "subagent sidechain fixture must keep summary refs without raw transcript"
+	}
+	if !receiptContainsTaint(taintedDoc.Receipt, "tainted_context") || !receiptHasDeniedReason(taintedDoc.Receipt, "TAINTED_CONTEXT_REQUIRES_DENY") {
+		return false, "tainted browser/PDF fixture must deny operate authorization from tainted context"
+	}
 	if len(demo.Receipt.ChangedFiles) == 0 || len(demo.Receipt.MemoryEffects) == 0 || len(demo.Receipt.RecurringLoopEffects) == 0 || len(demo.Receipt.DeniedEffects) < 4 {
 		return false, "demo fixture must cover draft, denied network, memory, recurring loop, and tainted MCP"
 	}
-	return true, "memory, recurring loop, and tainted-context fixtures are represented as governed effects"
+	return true, "memory, recurring loop, taint, raw MCP, resume, and sidechain fixtures are represented as governed effects"
 }
 
 func requiredFixtureFilesExist(root, fixture string) bool {
@@ -224,6 +256,25 @@ func receiptContainsTaint(receipt *contracts.AgentRunReceipt, label string) bool
 			if candidate == label {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func receiptHasDeniedReason(receipt *contracts.AgentRunReceipt, reasonCode string) bool {
+	for _, effect := range receipt.DeniedEffects {
+		if effect.ReasonCode == reasonCode {
+			return true
+		}
+	}
+	return false
+}
+
+func receiptActionHasMetadata(receipt *contracts.AgentRunReceipt, actionID, key string) bool {
+	for _, action := range receipt.ToolActions {
+		if action.ActionID == actionID {
+			_, ok := action.Metadata[key]
+			return ok
 		}
 	}
 	return false

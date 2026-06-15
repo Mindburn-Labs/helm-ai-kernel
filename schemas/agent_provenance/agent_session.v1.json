@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindburn.ai/agent_provenance/agent_session.v1.json",
+  "title": "AgentSession v1",
+  "type": "object",
+  "required": ["version", "origin", "external_session_id", "canonical_session_id", "repo_target", "workspace_path", "capture_profile", "started_at", "last_seen_at"],
+  "properties": {
+    "version": { "const": "agent_session.v1" },
+    "origin": { "type": "string", "minLength": 1 },
+    "external_session_id": { "type": "string", "minLength": 1 },
+    "canonical_session_id": { "type": "string", "minLength": 1 },
+    "repo_target": { "type": "string", "minLength": 1 },
+    "workspace_path": { "type": "string", "minLength": 1 },
+    "model": { "type": "string" },
+    "permission_mode": { "type": "string" },
+    "capture_profile": { "enum": ["hash_only", "local_minimized", "dev_raw"] },
+    "issue_refs": { "type": "array", "items": { "type": "string" } },
+    "started_at": { "type": "string", "format": "date-time" },
+    "last_seen_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

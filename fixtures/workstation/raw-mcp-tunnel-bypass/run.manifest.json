@@ -1,0 +1,13 @@
+{
+  "run_id": "run_raw_mcp_tunnel_bypass",
+  "goal": "Demonstrate raw MCP tunnel bypass denial in a workstation receipt.",
+  "actor_id": "agent.codex.local",
+  "actor_type": "agent",
+  "workspace_id": "workspace-demo",
+  "workspace_path": "/workspace/demo",
+  "repository": "helm-ai-kernel",
+  "agent_surface": "codex",
+  "policy_profile": "workstation.observe_draft.v1",
+  "started_at": "2026-05-20T16:00:00Z",
+  "completed_at": "2026-05-20T16:01:00Z"
+}

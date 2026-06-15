@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindburn.ai/agent_provenance/tool_invocation.v1.json",
+  "title": "ToolInvocation v1",
+  "type": "object",
+  "required": ["version", "session_id", "turn_id", "tool_id", "action", "normalized_effect_type", "status", "created_at"],
+  "properties": {
+    "version": { "const": "tool_invocation.v1" },
+    "tool_invocation_hash": { "$ref": "#/$defs/sha256" },
+    "session_id": { "type": "string", "minLength": 1 },
+    "turn_id": { "type": "string", "minLength": 1 },
+    "tool_id": { "type": "string", "minLength": 1 },
+    "action": { "type": "string", "minLength": 1 },
+    "normalized_effect_type": { "type": "string", "minLength": 1 },
+    "input_hash": { "$ref": "#/$defs/sha256" },
+    "input_object_ref": { "$ref": "#/$defs/sha256" },
+    "output_hash": { "$ref": "#/$defs/sha256" },
+    "output_object_ref": { "$ref": "#/$defs/sha256" },
+    "status": { "type": "string", "minLength": 1 },
+    "verdict": { "type": "string" },
+    "reason_code": { "type": "string" },
+    "taint_labels": { "type": "array", "items": { "type": "string" } },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "additionalProperties": false
+}

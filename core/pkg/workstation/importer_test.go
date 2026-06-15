@@ -401,7 +401,7 @@ func TestWorkstationSchemas(t *testing.T) {
 	scopeAuditSchema := compileSchema(t, filepath.Join(root, "protocols", "json-schemas", "workstation", "scope_audit_report.v1.schema.json"))
 	profileSchema := compileSchema(t, filepath.Join(root, "protocols", "json-schemas", "policy", "workstation_policy_profile.v1.schema.json"))
 
-	for _, fixture := range []string{"allowed-observe", "denied-memory", "denied-recurring-loop", "scope-audit-all-boundaries"} {
+	for _, fixture := range []string{"allowed-observe", "denied-memory", "denied-recurring-loop", "raw-mcp-tunnel-bypass", "ambiguous-resume", "subagent-sidechain-summary", "tainted-browser-pdf-authorization", "scope-audit-all-boundaries"} {
 		result, err := ImportArtifactDir(filepath.Join(root, "fixtures", "workstation", fixture), ImportOptions{})
 		if err != nil {
 			t.Fatalf("import %s: %v", fixture, err)

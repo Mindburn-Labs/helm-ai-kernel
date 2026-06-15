@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mindburn.ai/agent_provenance/agent_provenance_pack.v1.json",
+  "title": "AgentProvenancePack Manifest v1",
+  "type": "object",
+  "required": ["version", "pack_id", "root_hash", "capture_profile", "created_at", "object_hash_alg", "canonical_json", "objects", "redaction_report", "signing", "limitations"],
+  "properties": {
+    "version": { "const": "agent_provenance_pack.v1" },
+    "pack_id": { "type": "string", "minLength": 1 },
+    "root_hash": { "$ref": "#/$defs/sha256" },
+    "capture_profile": { "enum": ["hash_only", "local_minimized", "dev_raw"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "object_hash_alg": { "const": "sha256" },
+    "canonical_json": { "type": "string", "pattern": "^jcs" },
+    "objects": { "type": "array", "items": { "$ref": "#/$defs/object" } },
+    "redaction_report": { "$ref": "#/$defs/object" },
+    "agent_run_receipt": { "$ref": "#/$defs/object" },
+    "signing": {
+      "type": "object",
+      "required": ["signer_key_id", "signature_hex"],
+      "properties": {
+        "signer_key_id": { "type": "string", "minLength": 1 },
+        "public_key_hex": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "signature_hex": { "type": "string", "pattern": "^[a-f0-9]+$" },
+        "signed_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "limitations": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "object": {
+      "type": "object",
+      "required": ["kind", "path", "hash", "size"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "pattern": "^objects/[a-f0-9]{2}/[a-f0-9]{64}$" },
+        "hash": { "$ref": "#/$defs/sha256" },
+        "size": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

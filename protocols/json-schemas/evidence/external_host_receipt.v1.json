@@ -3,7 +3,7 @@
   "$id": "https://schemas.helm.ai/evidence/external_host_receipt.v1.json",
   "title": "HELM External Host Receipt v1",
   "type": "object",
-  "required": ["receipt_id", "host_id", "event", "receipt_hash"],
+  "required": ["receipt_id", "host_id", "receipt_hash"],
   "properties": {
     "schema_version": { "const": "external_host_receipt.v1" },
     "receipt_id": { "type": "string" },
@@ -16,6 +16,8 @@
     "workload_id": { "type": "string" },
     "sandbox_lease_id": { "type": "string" },
     "event": { "$ref": "network_egress_event.v1.json" },
+    "event_kind": { "type": "string", "enum": ["network_egress", "action_effect"] },
+    "action_event": { "$ref": "action_effect_event.v1.json" },
     "receipt_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
     "prev_receipt_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
     "signing_key_id": { "type": "string" },

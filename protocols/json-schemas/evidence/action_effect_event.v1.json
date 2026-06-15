@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/evidence/action_effect_event.v1.json",
+  "title": "HELM Action Effect Event v1",
+  "type": "object",
+  "required": ["action_id", "tool_name", "timestamp"],
+  "properties": {
+    "action_id": { "type": "string" },
+    "tool_name": { "type": "string" },
+    "target_ref": { "type": "string" },
+    "transport": { "type": "string" },
+    "params_hash": { "type": "string" },
+    "output_hash": { "type": "string" },
+    "result_count": { "type": "integer" },
+    "side_effect_class": { "type": "string" },
+    "reversibility": { "type": "string" },
+    "decision": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

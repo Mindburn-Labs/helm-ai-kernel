@@ -130,17 +130,17 @@ func ParseTrustedKeysJSON(raw []byte) (TrustedKeySet, error) {
 
 func VerifyPack(path string, trustedKeys TrustedKeySet, opts VerifyOptions) (AgentProvenanceReport, error) {
 	root := path
-	cleanup := func() {}
 	info, err := os.Stat(path)
 	if err != nil {
 		return AgentProvenanceReport{}, err
 	}
 	if !info.IsDir() {
-		root, cleanup, err = unpackTar(path)
+		root, cleanup, err := unpackTar(path)
 		if err != nil {
 			return AgentProvenanceReport{}, err
 		}
 		defer cleanup()
+		return verifyPackDir(root, trustedKeys, opts)
 	}
 	return verifyPackDir(root, trustedKeys, opts)
 }

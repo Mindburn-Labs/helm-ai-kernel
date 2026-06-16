@@ -38,8 +38,9 @@ type agtReceipt struct {
 // agtCanonicalPayload reproduces AGT's canonical_payload() method in Go.
 // Python: json.dumps({...fields...}, sort_keys=True, separators=(",",":")).
 // Signed fields: agent_did, args_hash, cedar_decision, cedar_policy_id,
-//   receipt_id, timestamp, tool_name — and optionally parent_receipt_hash,
-//   session_id when non-nil.
+//
+//	receipt_id, timestamp, tool_name — and optionally parent_receipt_hash,
+//	session_id when non-nil.
 func agtCanonicalPayload(r agtReceipt) ([]byte, error) {
 	m := map[string]interface{}{
 		"agent_did":       r.AgentDID,
@@ -217,11 +218,11 @@ func agtReceiptToHELM(r agtReceipt, prevHelmReceiptHash string, idx int) (contra
 		Signature:          hex.EncodeToString(sigBytes),
 		SignatureAlgorithm: "Ed25519",
 		PublicKeyRef:       r.SignerPublicKey,
-		SourceVendor:    "microsoft-agt",
-		SourceProfile:   "agt-cedar-v1",
-		PrevReceiptHash: prevHelmReceiptHash,
-		VerifierProfile: "cedar_policy_id=" + r.CedarPolicyID,
-		Metadata:        meta,
+		SourceVendor:       "microsoft-agt",
+		SourceProfile:      "agt-cedar-v1",
+		PrevReceiptHash:    prevHelmReceiptHash,
+		VerifierProfile:    "cedar_policy_id=" + r.CedarPolicyID,
+		Metadata:           meta,
 	}
 
 	hash, err := externalhost.ComputeReceiptHash(receipt)

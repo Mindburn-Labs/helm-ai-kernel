@@ -341,3 +341,48 @@ func assertFailedCheck(t *testing.T, report *externalhost.VerificationReport, na
 	}
 	t.Fatalf("missing failed check %q in %+v", name, report.Checks)
 }
+
+// TestSignetToExternalReceiptChain_BrokenChainFails proves a deleted/reordered/
+// spliced Signet audit export is rejected at import: corrupting record[1].prev_hash
+// breaks the vendor prev_hash -> record_hash chain.
+func TestSignetToExternalReceiptChain_BrokenChainFails(t *testing.T) {
+	raw := testdataFile(t, "signet_v1_synthetic.json")
+	var m map[string]interface{}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	recs, ok := m["audit_records"].([]interface{})
+	if !ok || len(recs) < 2 {
+		t.Fatalf("expected >=2 audit_records in synthetic vector, got %v", m["audit_records"])
+	}
+	recs[1].(map[string]interface{})["prev_hash"] = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef0"
+	tampered, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SignetToExternalReceiptChain(tampered); err == nil {
+		t.Fatal("expected error for broken Signet prev_hash chain, got nil")
+	}
+}
+
+// TestAGTToExternalReceiptChain_BrokenChainFails proves a broken AGT parent chain
+// is rejected: corrupting receipt[1].parent_receipt_hash breaks contiguity.
+func TestAGTToExternalReceiptChain_BrokenChainFails(t *testing.T) {
+	raw := testdataFile(t, "agt_cedar_v1_synthetic.json")
+	var m map[string]interface{}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	recs, ok := m["receipts"].([]interface{})
+	if !ok || len(recs) < 2 {
+		t.Fatalf("expected >=2 receipts in synthetic vector, got %v", m["receipts"])
+	}
+	recs[1].(map[string]interface{})["parent_receipt_hash"] = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef0"
+	tampered, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AGTToExternalReceiptChain(tampered); err == nil {
+		t.Fatal("expected error for broken AGT parent chain, got nil")
+	}
+}

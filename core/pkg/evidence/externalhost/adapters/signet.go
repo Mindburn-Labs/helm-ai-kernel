@@ -117,9 +117,22 @@ func SignetToExternalReceiptChain(raw []byte) (*contracts.ExternalReceiptChain, 
 	}}
 
 	var prevReceiptHash string
+	var prevRecordHash string // the Signet record_hash of the previous audit record
 	receiptHashes := make([]string, 0, len(file.AuditRecords))
 
 	for i, record := range file.AuditRecords {
+		// Validate the vendor (Signet) audit hash chain before re-chaining into a
+		// fresh HELM chain. Without this, a deleted/reordered/spliced set of
+		// individually-signed records would still pass VerifyChain because HELM
+		// rebuilds its own chain over whatever order the JSON supplies.
+		if i == 0 {
+			if record.PrevHash != "" {
+				return nil, fmt.Errorf("signet: record[0] id=%s has prev_hash %q but is the first record", record.Receipt.ID, record.PrevHash)
+			}
+		} else if record.PrevHash != prevRecordHash {
+			return nil, fmt.Errorf("signet: record[%d] id=%s prev_hash=%q does not chain to previous record_hash=%q (reordered/deleted/spliced)", i, record.Receipt.ID, record.PrevHash, prevRecordHash)
+		}
+
 		r := record.Receipt
 		receipt, hash, err := signetRecordToHELM(r, record.PrevHash, prevReceiptHash, i)
 		if err != nil {
@@ -128,6 +141,7 @@ func SignetToExternalReceiptChain(raw []byte) (*contracts.ExternalReceiptChain, 
 		chain.Receipts = append(chain.Receipts, receipt)
 		receiptHashes = append(receiptHashes, hash)
 		prevReceiptHash = hash
+		prevRecordHash = record.RecordHash
 	}
 
 	chain.ReceiptChainHash = externalhost.ComputeChainHash(receiptHashes)

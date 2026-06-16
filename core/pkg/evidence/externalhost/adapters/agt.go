@@ -139,9 +139,26 @@ func AGTToExternalReceiptChain(raw []byte) (*contracts.ExternalReceiptChain, err
 	}}
 
 	var prevReceiptHash string
+	var prevPayloadHash string // the AGT payload_hash of the previous receipt
 	receiptHashes := make([]string, 0, len(file.Receipts))
 
 	for i, r := range file.Receipts {
+		// Validate the vendor (AGT) hash chain before re-chaining into a fresh HELM
+		// chain: the signed parent_receipt_hash must point at the previous receipt's
+		// payload_hash, otherwise a deleted/reordered/spliced set of individually
+		// signed receipts would still pass VerifyChain.
+		parent := ""
+		if r.ParentReceiptHash != nil {
+			parent = *r.ParentReceiptHash
+		}
+		if i == 0 {
+			if parent != "" {
+				return nil, fmt.Errorf("agt: receipt[0] id=%s has parent_receipt_hash %q but is the first receipt", r.ReceiptID, parent)
+			}
+		} else if parent != prevPayloadHash {
+			return nil, fmt.Errorf("agt: receipt[%d] id=%s parent_receipt_hash=%q does not chain to previous payload_hash=%q (reordered/deleted/spliced)", i, r.ReceiptID, parent, prevPayloadHash)
+		}
+
 		receipt, hash, err := agtReceiptToHELM(r, prevReceiptHash, i)
 		if err != nil {
 			return nil, fmt.Errorf("agt: receipt[%d] id=%s: %w", i, r.ReceiptID, err)
@@ -149,6 +166,7 @@ func AGTToExternalReceiptChain(raw []byte) (*contracts.ExternalReceiptChain, err
 		chain.Receipts = append(chain.Receipts, receipt)
 		receiptHashes = append(receiptHashes, hash)
 		prevReceiptHash = hash
+		prevPayloadHash = r.PayloadHash
 	}
 
 	chain.ReceiptChainHash = externalhost.ComputeChainHash(receiptHashes)
@@ -164,7 +182,10 @@ func agtReceiptToHELM(r agtReceipt, prevHelmReceiptHash string, idx int) (contra
 
 	// Verify that the embedded payload_hash matches our reconstruction.
 	computedPayloadHash := fmt.Sprintf("%x", sha256.Sum256(signedBytes))
-	if r.PayloadHash != "" && r.PayloadHash != computedPayloadHash {
+	if r.PayloadHash == "" {
+		return contracts.ExternalHostReceipt{}, "", fmt.Errorf("payload_hash is required")
+	}
+	if r.PayloadHash != computedPayloadHash {
 		return contracts.ExternalHostReceipt{}, "", fmt.Errorf(
 			"payload_hash mismatch: embedded=%q computed=%q — signed payload reconstruction failed",
 			r.PayloadHash, computedPayloadHash,

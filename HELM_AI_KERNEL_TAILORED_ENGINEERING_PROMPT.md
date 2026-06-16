@@ -104,10 +104,9 @@ Technology stack:
   KMS/HSM-related packages, object stores, proof/evidence/replay packages.
 - Frontend: React 19, Vite 7, TypeScript, Vitest, React Testing Library,
   `openapi-fetch`, `openapi-typescript`, `lucide-react`, `shiki`.
-- Design system: `packages/design-system-core`, public package
-  `@mindburn/ui-core`; owns tokens, CSS, React primitives, layout,
-  tables, forms, feedback, inspection, semantic state, providers, and package
-  smoke contracts.
+- Design system: shared brand, token, CSS, React primitive, and Flutter token
+  authority lives in `platform-design-system` and is consumed as
+  `@mindburn/design`; product repos may own local composition and skins only.
 - Database/storage: SQLite by default for Lite Mode (`data/helm.db`), optional
   Postgres through `DATABASE_URL`; receipt stores, ledger stores, credential
   migrations, trust migrations, idempotency migrations, filesystem artifact
@@ -578,7 +577,8 @@ Evaluate whether HELM uses a coherent design system.
 
 The verified design-system architecture is:
 
-- `packages/design-system-core` is the public React/token package.
+- `platform-design-system` is the public React/token/CSS/Flutter token package
+  source and is consumed as `@mindburn/design`.
 - `app-helm-console` consumes it.
 - The Console must not create a second component system, Tailwind layer,
   private package, or styling fork.

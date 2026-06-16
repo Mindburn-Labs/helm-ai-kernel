@@ -519,15 +519,6 @@
       "blocking": false
     },
     {
-      "id": "packages-design-system-core-package-json",
-      "path": "packages/design-system-core/package.json",
-      "kind": "json",
-      "field": "version",
-      "expected": "{version}",
-      "blocking": false,
-      "replacement_note": "first-party manifest version"
-    },
-    {
       "id": "packages-design-system-core-compat-package-json",
       "path": "packages/design-system-core-compat/package.json",
       "kind": "json",

@@ -386,8 +386,7 @@
         "docker-compose.yml",
         "sdk/README.md",
         "sdk/*/**",
-        "packages/README.md",
-        "packages/design-system-core/package.json"
+        "packages/README.md"
       ],
       "owner_doc_path": "examples/README.md",
       "public_doc_slugs": [

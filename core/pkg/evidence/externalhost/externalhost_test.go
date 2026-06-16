@@ -1,9 +1,15 @@
 package externalhost
 
 import (
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -214,4 +220,510 @@ func assertFailedCheck(t *testing.T, report *VerificationReport, name string) {
 		}
 	}
 	t.Fatalf("missing failed check %s in %+v", name, report.Checks)
+}
+
+func TestVerifyChain_ActionEffectReceiptVerifies(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub := priv.Public().(ed25519.PublicKey)
+	ts := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
+	r := contracts.ExternalHostReceipt{
+		SchemaVersion: contracts.ExternalHostReceiptVersion,
+		ReceiptID:     "action-receipt-1",
+		HostID:        "host-b",
+		AgentID:       "agent-2",
+		EventKind:     contracts.EventKindActionEffect,
+		ActionEvent: &contracts.ActionEffectEvent{
+			ActionID:  "act-001",
+			ToolName:  "github.create_issue",
+			TargetRef: "org/repo",
+			Timestamp: ts,
+		},
+	}
+	r, err = SignReceipt(r, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion: contracts.ExternalReceiptChainVersion,
+		ChainID:       "action-chain-1",
+		PublicKeys: []contracts.ExternalVerifierKey{{
+			KeyID:        "key-1",
+			Algorithm:    "Ed25519",
+			PublicKeyHex: hex.EncodeToString(pub),
+		}},
+		Receipts: []contracts.ExternalHostReceipt{r},
+	}
+	chain.ReceiptChainHash = ComputeChainHash([]string{r.ReceiptHash})
+
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Verified {
+		t.Fatalf("action_effect receipt should verify, got checks: %+v", report.Checks)
+	}
+}
+
+func TestValidateReceipt_ActionEffectMissingActionEventFails(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := contracts.ExternalHostReceipt{
+		SchemaVersion: contracts.ExternalHostReceiptVersion,
+		ReceiptID:     "bad-action-receipt",
+		HostID:        "host-c",
+		EventKind:     contracts.EventKindActionEffect,
+		// ActionEvent intentionally nil
+	}
+	r, err = SignReceipt(r, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion: contracts.ExternalReceiptChainVersion,
+		Receipts:      []contracts.ExternalHostReceipt{r},
+	}
+	report, err := VerifyChain(chain, VerifyOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified {
+		t.Fatal("nil action_event should fail validation")
+	}
+	assertFailedCheck(t, report, "external_host:receipt_schema")
+}
+
+func TestValidateReceipt_UnknownEventKindFails(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := contracts.ExternalHostReceipt{
+		SchemaVersion: contracts.ExternalHostReceiptVersion,
+		ReceiptID:     "bogus-kind-receipt",
+		HostID:        "host-d",
+		EventKind:     "bogus",
+	}
+	r, err = SignReceipt(r, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion: contracts.ExternalReceiptChainVersion,
+		Receipts:      []contracts.ExternalHostReceipt{r},
+	}
+	report, err := VerifyChain(chain, VerifyOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified {
+		t.Fatal("unknown event_kind should fail validation")
+	}
+	assertFailedCheck(t, report, "external_host:receipt_schema")
+}
+
+func TestVerifyChain_NetworkEgressUnchanged(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := signedTestChain(t, priv)
+	chain.PublicKeys = []contracts.ExternalVerifierKey{{
+		KeyID:        "host-key-1",
+		Algorithm:    "Ed25519",
+		PublicKeyHex: hex.EncodeToString(pub),
+	}}
+	chain.ReceiptChainHash = ComputeChainHash([]string{chain.Receipts[0].ReceiptHash, chain.Receipts[1].ReceiptHash})
+
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Verified {
+		t.Fatalf("egress chain regression: expected verified, got checks: %+v", report.Checks)
+	}
+}
+
+// TestVerifySignature_PreservedBytesEd25519 verifies that when SignedPayloadB64 is
+// set, the signature is checked against the preserved original bytes, not JCS.
+// testToolBindingChecker binds action_event.tool_name to a `{"tool":...}` signed
+// payload. Registered for the empty and "test-vendor" source_profiles so the
+// preserved-bytes tests below exercise the (now fail-closed) binding path.
+func testToolBindingChecker(payload []byte, r *contracts.ExternalHostReceipt) error {
+	var p struct {
+		Tool string `json:"tool"`
+	}
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return err
+	}
+	if r.ActionEvent == nil {
+		return fmt.Errorf("no action_event")
+	}
+	if p.Tool != r.ActionEvent.ToolName {
+		return fmt.Errorf("tool mismatch: signed=%q exposed=%q", p.Tool, r.ActionEvent.ToolName)
+	}
+	return nil
+}
+
+func init() {
+	RegisterBindingChecker("", testToolBindingChecker)
+	RegisterBindingChecker("test-vendor", testToolBindingChecker)
+}
+
+func TestVerifySignature_PreservedBytesEd25519(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Vendor's original payload bytes (not JCS-canonicalized).
+	vendorPayload := []byte(`{"tool":"github.create_pr","action_id":"act-999","ts":"2026-06-15T00:00:00Z"}`)
+	sig := ed25519.Sign(priv, vendorPayload)
+
+	ts := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	r := contracts.ExternalHostReceipt{
+		SchemaVersion:      contracts.ExternalHostReceiptVersion,
+		ReceiptID:          "foreign-1",
+		HostID:             "vendor-host",
+		EventKind:          contracts.EventKindActionEffect,
+		SignatureAlgorithm: "Ed25519",
+		Signature:          hex.EncodeToString(sig),
+		SignedPayloadB64:   base64.StdEncoding.EncodeToString(vendorPayload),
+		ActionEvent: &contracts.ActionEffectEvent{
+			ActionID:  "act-999",
+			ToolName:  "github.create_pr",
+			Timestamp: ts,
+		},
+	}
+	// Compute receipt_hash (HELM JCS chain integrity — independent of signed payload).
+	r, err = computeHashOnly(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion: contracts.ExternalReceiptChainVersion,
+		ChainID:       "foreign-chain-1",
+		PublicKeys: []contracts.ExternalVerifierKey{{
+			KeyID:        "vendor-key-1",
+			Algorithm:    "Ed25519",
+			PublicKeyHex: hex.EncodeToString(pub),
+		}},
+		Receipts: []contracts.ExternalHostReceipt{r},
+	}
+	chain.ReceiptChainHash = ComputeChainHash([]string{r.ReceiptHash})
+
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Verified {
+		t.Fatalf("preserved-bytes Ed25519: expected verified, got checks: %+v", report.Checks)
+	}
+
+	// Tamper the preserved payload — signature should now fail.
+	r2 := r
+	tampered := make([]byte, len(vendorPayload))
+	copy(tampered, vendorPayload)
+	tampered[0] = 'X'
+	r2.SignedPayloadB64 = base64.StdEncoding.EncodeToString(tampered)
+	chain2 := &contracts.ExternalReceiptChain{
+		SchemaVersion: contracts.ExternalReceiptChainVersion,
+		ChainID:       "foreign-chain-1",
+		PublicKeys:    chain.PublicKeys,
+		Receipts:      []contracts.ExternalHostReceipt{r2},
+	}
+	report2, err := VerifyChain(chain2, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report2.Verified {
+		t.Fatal("tampered preserved payload must not verify")
+	}
+	assertFailedCheck(t, report2, "external_host:signature")
+}
+
+// TestVerifySignature_ECDSAP256 verifies ECDSA-P256 signature over preserved bytes.
+func TestVerifySignature_ECDSAP256(t *testing.T) {
+	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubBytes := elliptic.Marshal(elliptic.P256(), privKey.PublicKey.X, privKey.PublicKey.Y)
+	pubHex := hex.EncodeToString(pubBytes)
+
+	vendorPayload := []byte(`{"tool":"linear.create_issue","action_id":"act-p256","ts":"2026-06-15T00:00:00Z"}`)
+	h := sha256.Sum256(vendorPayload)
+	sigBytes, err := ecdsa.SignASN1(rand.Reader, privKey, h[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ts := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	r := contracts.ExternalHostReceipt{
+		SchemaVersion:      contracts.ExternalHostReceiptVersion,
+		ReceiptID:          "foreign-p256-1",
+		HostID:             "vendor-host-p256",
+		EventKind:          contracts.EventKindActionEffect,
+		SignatureAlgorithm: "ECDSA-P256",
+		Signature:          hex.EncodeToString(sigBytes),
+		SignedPayloadB64:   base64.StdEncoding.EncodeToString(vendorPayload),
+		ActionEvent: &contracts.ActionEffectEvent{
+			ActionID:  "act-p256",
+			ToolName:  "linear.create_issue",
+			Timestamp: ts,
+		},
+	}
+	r, err = computeHashOnly(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion: contracts.ExternalReceiptChainVersion,
+		ChainID:       "p256-chain-1",
+		PublicKeys: []contracts.ExternalVerifierKey{{
+			KeyID:        "vendor-p256-key",
+			Algorithm:    "ECDSA-P256",
+			PublicKeyHex: pubHex,
+		}},
+		Receipts: []contracts.ExternalHostReceipt{r},
+	}
+	chain.ReceiptChainHash = ComputeChainHash([]string{r.ReceiptHash})
+
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: pubHex})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Verified {
+		t.Fatalf("ECDSA-P256: expected verified, got checks: %+v", report.Checks)
+	}
+
+	// Tamper the payload — should fail.
+	r2 := r
+	tampered := make([]byte, len(vendorPayload))
+	copy(tampered, vendorPayload)
+	tampered[len(tampered)-1] ^= 0xFF
+	r2.SignedPayloadB64 = base64.StdEncoding.EncodeToString(tampered)
+	chain2 := &contracts.ExternalReceiptChain{
+		SchemaVersion: contracts.ExternalReceiptChainVersion,
+		PublicKeys:    chain.PublicKeys,
+		Receipts:      []contracts.ExternalHostReceipt{r2},
+	}
+	report2, err := VerifyChain(chain2, VerifyOptions{RequireKey: true, PublicKeyHex: pubHex})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report2.Verified {
+		t.Fatal("tampered ECDSA-P256 payload must not verify")
+	}
+	assertFailedCheck(t, report2, "external_host:signature")
+}
+
+// TestVerifySignature_AlgorithmKeyMismatchFails ensures an Ed25519 key supplied
+// for an ECDSA-P256 receipt causes a signature failure, not a silent pass.
+func TestVerifySignature_AlgorithmKeyMismatchFails(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ts := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	vendorPayload := []byte(`{"tool":"test","action_id":"act-mismatch","ts":"2026-06-15T00:00:00Z"}`)
+	r := contracts.ExternalHostReceipt{
+		SchemaVersion:      contracts.ExternalHostReceiptVersion,
+		ReceiptID:          "mismatch-1",
+		HostID:             "vendor-host-x",
+		EventKind:          contracts.EventKindActionEffect,
+		SignatureAlgorithm: "ECDSA-P256",
+		// Signature is arbitrary hex; verification must fail before it even gets to crypto.
+		Signature:        hex.EncodeToString(make([]byte, 64)),
+		SignedPayloadB64: base64.StdEncoding.EncodeToString(vendorPayload),
+		ActionEvent: &contracts.ActionEffectEvent{
+			ActionID:  "act-mismatch",
+			ToolName:  "test",
+			Timestamp: ts,
+		},
+	}
+	r, err = computeHashOnly(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion: contracts.ExternalReceiptChainVersion,
+		Receipts:      []contracts.ExternalHostReceipt{r},
+	}
+	// Supply an Ed25519 key for a receipt that declares ECDSA-P256.
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified {
+		t.Fatal("Ed25519 key vs ECDSA-P256 receipt must not verify")
+	}
+	assertFailedCheck(t, report, "external_host:signature")
+}
+
+// TestVerifySignature_HelmNativeUnchanged is a regression test: HELM-native receipts
+// (no SignedPayloadB64) continue to verify over JCS canonicalization.
+func TestVerifySignature_HelmNativeUnchanged(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	r := testReceipt("native-1", "", ts)
+	// Ensure no SignedPayloadB64 is set.
+	r.SignedPayloadB64 = ""
+	r, err = SignReceipt(r, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion: contracts.ExternalReceiptChainVersion,
+		ChainID:       "native-chain-1",
+		PublicKeys: []contracts.ExternalVerifierKey{{
+			KeyID:        "helm-key-1",
+			Algorithm:    "Ed25519",
+			PublicKeyHex: hex.EncodeToString(pub),
+		}},
+		Receipts: []contracts.ExternalHostReceipt{r},
+	}
+	chain.ReceiptChainHash = ComputeChainHash([]string{r.ReceiptHash})
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Verified {
+		t.Fatalf("HELM-native JCS path regression: expected verified, got checks: %+v", report.Checks)
+	}
+}
+
+// TestVerifyBinding_TamperedActionFieldFails is the P1 regression: a foreign
+// receipt whose normalized action_event.tool_name disagrees with the signed
+// payload (vendor signature still valid, receipt_hash recomputed) must FAIL the
+// binding check rather than verify.
+func TestVerifyBinding_TamperedActionFieldFails(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vendorPayload := []byte(`{"tool":"github.create_pr","action_id":"act-1","ts":"2026-06-15T00:00:00Z"}`)
+	sig := ed25519.Sign(priv, vendorPayload)
+	ts := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	r := contracts.ExternalHostReceipt{
+		SchemaVersion:      contracts.ExternalHostReceiptVersion,
+		ReceiptID:          "bind-tamper-1",
+		HostID:             "vendor-host",
+		SourceProfile:      "test-vendor",
+		EventKind:          contracts.EventKindActionEffect,
+		SignatureAlgorithm: "Ed25519",
+		Signature:          hex.EncodeToString(sig),
+		SignedPayloadB64:   base64.StdEncoding.EncodeToString(vendorPayload),
+		// Attacker-controlled normalized field that disagrees with the signed payload.
+		ActionEvent: &contracts.ActionEffectEvent{ActionID: "act-1", ToolName: "evil.delete_repo", Timestamp: ts},
+	}
+	r, err = computeHashOnly(r) // recompute receipt_hash over the tampered struct
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion:    contracts.ExternalReceiptChainVersion,
+		ReceiptChainHash: ComputeChainHash([]string{r.ReceiptHash}),
+		Receipts:         []contracts.ExternalHostReceipt{r},
+	}
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified {
+		t.Fatal("tampered normalized field must not verify (binding check)")
+	}
+	assertFailedCheck(t, report, "external_host:binding")
+}
+
+// TestVerifyBinding_NoCheckerFailsClosed: a foreign receipt whose source_profile
+// has no registered binding checker must fail closed.
+func TestVerifyBinding_NoCheckerFailsClosed(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vendorPayload := []byte(`{"tool":"x","action_id":"a","ts":"2026-06-15T00:00:00Z"}`)
+	sig := ed25519.Sign(priv, vendorPayload)
+	ts := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	r := contracts.ExternalHostReceipt{
+		SchemaVersion:      contracts.ExternalHostReceiptVersion,
+		ReceiptID:          "no-checker-1",
+		HostID:             "vendor-host",
+		SourceProfile:      "unregistered-vendor",
+		EventKind:          contracts.EventKindActionEffect,
+		SignatureAlgorithm: "Ed25519",
+		Signature:          hex.EncodeToString(sig),
+		SignedPayloadB64:   base64.StdEncoding.EncodeToString(vendorPayload),
+		ActionEvent:        &contracts.ActionEffectEvent{ActionID: "a", ToolName: "x", Timestamp: ts},
+	}
+	r, err = computeHashOnly(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := &contracts.ExternalReceiptChain{
+		SchemaVersion:    contracts.ExternalReceiptChainVersion,
+		ReceiptChainHash: ComputeChainHash([]string{r.ReceiptHash}),
+		Receipts:         []contracts.ExternalHostReceipt{r},
+	}
+	report, err := VerifyChain(chain, VerifyOptions{RequireKey: true, PublicKeyHex: hex.EncodeToString(pub)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Verified {
+		t.Fatal("foreign receipt with no binding checker must fail closed")
+	}
+	assertFailedCheck(t, report, "external_host:binding")
+}
+
+// TestVerifyECDSAP256_RawSignature covers the JWS/ES256 raw r||s (64-byte)
+// signature encoding, not just ASN.1 DER.
+func TestVerifyECDSAP256_RawSignature(t *testing.T) {
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubHex := hex.EncodeToString(elliptic.Marshal(elliptic.P256(), priv.PublicKey.X, priv.PublicKey.Y))
+	data := []byte("payload-bytes-for-es256-raw")
+	h := sha256.Sum256(data)
+	r, s, err := ecdsa.Sign(rand.Reader, priv, h[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := make([]byte, 64)
+	r.FillBytes(raw[:32])
+	s.FillBytes(raw[32:])
+	ok, err := verifyECDSAP256(pubHex, data, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("raw r||s ES256 signature must verify")
+	}
+	raw[0] ^= 0xFF
+	if ok, _ := verifyECDSAP256(pubHex, data, raw); ok {
+		t.Fatal("tampered raw signature must not verify")
+	}
+}
+
+// computeHashOnly sets ReceiptHash without re-signing (used for foreign receipts
+// where HELM owns the hash chain but not the signature).
+func computeHashOnly(r contracts.ExternalHostReceipt) (contracts.ExternalHostReceipt, error) {
+	hash, err := ComputeReceiptHash(r)
+	if err != nil {
+		return r, err
+	}
+	r.ReceiptHash = hash
+	return r, nil
 }

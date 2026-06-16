@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-15T18:04:21Z
-# Commit: dcb46a0e56fa2dcf768552a03f28aa2fb5e1ee5d
+# Generated: 2026-06-15T18:54:20Z
+# Commit: bdfb0e710c6819f617df593cb1cabbec51d642e9
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -189,7 +189,7 @@ ab5eddf2db83e466a543df784900fd961bc6ec65416b7058cd607a30c0cb453a  core/pkg/contr
 820de4c24e905a9156aa9cb463309868412d1bf5d1e10f33adb7c07297fc951b  core/pkg/contracts/governance_gaps.go
 46137df086e9970941712158bc421696fb4f2abe44a641d3ff504f1434aaf387  core/pkg/contracts/harness_engineering.go
 d3123513cee57f8e89f4279ff417cc975428092f9d064c5da5dd6aa54de47a4c  core/pkg/contracts/harness_engineering_test.go
-d58759c8d578e02ac9b7a04e52e53d53fe11a7ca2f04f6fc53608da70d5a3dd4  core/pkg/contracts/host_evidence.go
+84ed705390c247203747306d9a14481f13323b4070f8af375499cedb1bee5a56  core/pkg/contracts/host_evidence.go
 f14bd0e793ba130633b3a136a6ec63850cf80b071efe6401dc255b7350be1678  core/pkg/contracts/host_evidence_test.go
 bcfd4bc7c3f9463be26db2922ad02336c8f987812e7efe442b879359cd652bf6  core/pkg/contracts/judgment.go
 98833e4bc7dfc694f1815fd5a7c6592457f9c4c96db337dae8f39fb4b860d293  core/pkg/contracts/lane.go
@@ -720,7 +720,8 @@ e04b9b3f27d4921643b4b9adfa96ea7c207cffeb3774e9add08be9e944e73274  protocols/json
 3b1133bf2044f1288d8c7c89610f0ccba9c5539aab8dcdcdb84614030f0c1445  protocols/json-schemas/effects/threat/tunnel_start.json
 f6a1d96a3c27225df6a2a4501624b23e1283c79b6976a2ced58c1db5e0506482  protocols/json-schemas/effects/update_doc_effect.v1.json
 f25b71cb08c762856bbbd3ebbc6f54f37ad31abe9de5170c9b15b0ddbfc4249d  protocols/json-schemas/effects/visual_evidence.v1.schema.json
-7289c5c43a07c695a9befe316a6c0248ed9c0460800b587b976c6d7201b7a8f1  protocols/json-schemas/evidence/external_host_receipt.v1.json
+3fc574cf245f3edd7f1491e72829edc42dc6a88b6759ab42928e32039f4229b0  protocols/json-schemas/evidence/action_effect_event.v1.json
+765a4e1be6188d6a024908982cd5119a56a259d9f7eb380b0747463ac9154a9c  protocols/json-schemas/evidence/external_host_receipt.v1.json
 b098cf1a1c196958d9837725197070deee0c80fceacc845894491180d375adb3  protocols/json-schemas/evidence/external_receipt_chain.v1.json
 5215f837244ea9175340afca5d4ecd0e7e4f470d9a41007edcc77f4322809aac  protocols/json-schemas/evidence/hardware_root_claim.v1.json
 439df70ea6dd0e239abddc3d84491fea190a034edfbd7b9927487b95baa8c8f4  protocols/json-schemas/evidence/host_correlation_result.v1.json

@@ -183,6 +183,9 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 	case strings.EqualFold(tool, "Edit"), strings.EqualFold(tool, "Write"), strings.EqualFold(tool, "MultiEdit"), strings.EqualFold(tool, "apply_patch"):
 		target := inputString(payload.ToolInput, "file_path", "path", "target_file")
 		if target == "" && strings.EqualFold(tool, "apply_patch") {
+			target = sensitiveApplyPatchTarget(inputString(payload.ToolInput, "command", "cmd", "patch"))
+		}
+		if target == "" && strings.EqualFold(tool, "apply_patch") {
 			target = "apply_patch"
 		}
 		if isSensitiveWriteTarget(target) {
@@ -262,6 +265,21 @@ func isDestructiveShellCommand(command string) bool {
 		}
 	}
 	return false
+}
+
+func sensitiveApplyPatchTarget(command string) string {
+	for _, line := range strings.Split(command, "\n") {
+		line = strings.TrimSpace(line)
+		for _, prefix := range []string{"*** Add File:", "*** Update File:", "*** Delete File:"} {
+			if strings.HasPrefix(line, prefix) {
+				target := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+				if isSensitiveWriteTarget(target) {
+					return target
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func isHelmSelfMCPTool(tool string) bool {

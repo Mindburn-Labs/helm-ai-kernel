@@ -134,6 +134,31 @@ func TestHookPreToolDeniesSensitiveWrite(t *testing.T) {
 	}
 }
 
+func TestHookPreToolDeniesCodexApplyPatchSensitiveWrite(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	payload := `{"toolName":"apply_patch","toolInput":{"command":"*** Begin Patch\n*** Update File: .env\n+SECRET=value\n*** End Patch\n"}}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
+		t.Fatalf("apply_patch sensitive write should be denied, output = %s", stdout.String())
+	}
+	receipts := globReceipts(t, tmp)
+	if len(receipts) != 1 {
+		t.Fatalf("receipts = %v, want one", receipts)
+	}
+	receipt, err := workstation.LoadDecisionReceipt(receipts[0])
+	if err != nil {
+		t.Fatalf("load receipt: %v", err)
+	}
+	if receipt.Request.Target != ".env" {
+		t.Fatalf("receipt target = %q, want .env", receipt.Request.Target)
+	}
+}
+
 func restoreHookClock(t *testing.T) {
 	t.Helper()
 	old := hookNow

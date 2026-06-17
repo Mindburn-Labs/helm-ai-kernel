@@ -66,6 +66,35 @@ func TestSetupInstallClaudeWritesHookAndRunsQuickstart(t *testing.T) {
 	}
 }
 
+func TestSetupInstallJSONKeepsQuickstartOutputOffStdout(t *testing.T) {
+	tmp := t.TempDir()
+	oldWD, _ := os.Getwd()
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWD) })
+	stubSetupSideEffects(t)
+
+	var stdout, stderr bytes.Buffer
+	dataDir := filepath.Join(tmp, "helm")
+	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--yes", "--json", "--no-open", "--data-dir", dataDir}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("setup exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
+	}
+	dec := json.NewDecoder(&stdout)
+	var summary setupSummary
+	if err := dec.Decode(&summary); err != nil {
+		t.Fatalf("summary JSON: %v\n%s", err, stdout.String())
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		t.Fatalf("stdout should contain only one JSON value, extra=%#v err=%v stdout=%s", extra, err, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "quickstart ready") {
+		t.Fatalf("quickstart output should move to stderr in JSON mode, stderr=%s", stderr.String())
+	}
+}
+
 func TestSetupCodexProjectRemoveUndoLocalConfig(t *testing.T) {
 	tmp := t.TempDir()
 	oldWD, _ := os.Getwd()
@@ -151,6 +180,7 @@ func stubSetupSideEffects(t *testing.T) *setupStubState {
 	}
 	setupRunQuickstart = func(args []string, stdout, stderr io.Writer) int {
 		state.quickstartArgs = append([]string{}, args...)
+		_, _ = io.WriteString(stdout, "quickstart ready\n")
 		return 0
 	}
 	t.Cleanup(func() {

@@ -125,7 +125,11 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 	if opts.NoOpen {
 		quickstartArgs = append(quickstartArgs, "--no-open")
 	}
-	return setupRunQuickstart(quickstartArgs, stdout, stderr)
+	quickstartStdout := stdout
+	if opts.JSON {
+		quickstartStdout = stderr
+	}
+	return setupRunQuickstart(quickstartArgs, quickstartStdout, stderr)
 }
 
 func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {

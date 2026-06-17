@@ -1,0 +1,16 @@
+$ helm-ai-kernel setup codex --dry-run --json --data-dir ~/.helm-ai-kernel --no-open
+{"target":"codex","binary_path":"<repo>/bin/helm-ai-kernel","client_config_path":"~/.codex/config.toml","hook_config_path":"~/.codex/hooks.json","data_dir":"~/.helm-ai-kernel","kernel_url":"http://127.0.0.1:7714","console_url":"http://127.0.0.1:7714/console/onboarding","scan_grade":"not_run","draft_policy_path":"~/.helm-ai-kernel/autoconfigure/policy.draft.json","uninstall_command":"helm-ai-kernel setup remove codex --scope user --yes --data-dir '~/.helm-ai-kernel'","scope":"user"}
+
+$ printf <codex PreToolUse payload> | helm-ai-kernel hook pre-tool --client codex --data-dir ~/.helm-ai-kernel
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"HELM denied shell operation: OPERATE_PERMISSIONS_EMPTY (receipt: ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json)"}}
+
+$ helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json
+Workstation Policy Decision Verification
+  receipt:   ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json
+  decision:  wpd_<decision>
+  verdict:   DENY
+  reason:    OPERATE_PERMISSIONS_EMPTY
+  effect:    WORKSTATION_SHELL_COMMAND
+  target:    rm -rf /tmp/helm-risky-cleanup
+  hash:      <sha256>
+  signature: true

@@ -219,8 +219,12 @@ func certifyHighRiskFixtures(root string) (bool, string) {
 	if mama.Receipt.AgentSurface != "mama" || len(mama.Receipt.ToolActions) == 0 || len(mama.Receipt.DeniedEffects) != 0 {
 		return false, "MAMA fixture must import as a receipt-bound allowed run with no denied effects"
 	}
-	if !receiptActionHasMetadata(mama.Receipt, "evt_mama_deploy_publish", "policy_decision_ref") {
-		return false, "MAMA fixture must bind the allowed operate effect to a policy decision receipt ref"
+	decision, err := loadReferencedDecisionReceipt(filepath.Join(root, "mama-receipt-bound-execution"), mama.Receipt, "evt_mama_deploy_publish")
+	if err != nil {
+		return false, err.Error()
+	}
+	if !decisionMatchesAction(decision, mama.Receipt, "evt_mama_deploy_publish") {
+		return false, "MAMA policy decision receipt must match the allowed operate effect"
 	}
 	if len(demo.Receipt.ChangedFiles) == 0 || len(demo.Receipt.MemoryEffects) == 0 || len(demo.Receipt.RecurringLoopEffects) == 0 || len(demo.Receipt.DeniedEffects) < 4 {
 		return false, "demo fixture must cover draft, denied network, memory, recurring loop, and tainted MCP"
@@ -289,4 +293,44 @@ func receiptActionHasMetadata(receipt *contracts.AgentRunReceipt, actionID, key 
 		}
 	}
 	return false
+}
+
+func loadReferencedDecisionReceipt(dir string, receipt *contracts.AgentRunReceipt, actionID string) (*contracts.WorkstationPolicyDecisionReceipt, error) {
+	ref := receiptActionMetadata(receipt, actionID, "policy_decision_ref")
+	if ref == "" {
+		return nil, fmt.Errorf("%s missing policy_decision_ref metadata", actionID)
+	}
+	decision, err := LoadDecisionReceipt(filepath.Join(dir, "receipts", ref+".json"))
+	if err != nil {
+		return nil, fmt.Errorf("load MAMA policy decision receipt: %w", err)
+	}
+	if ok, err := VerifyDecisionReceiptSignature(decision); err != nil || !ok {
+		return nil, fmt.Errorf("verify MAMA policy decision receipt: %v", err)
+	}
+	if decision.DecisionID != ref || decision.Verdict != contracts.WorkstationVerdictAllow {
+		return nil, fmt.Errorf("MAMA policy decision receipt must be an ALLOW receipt for %s", ref)
+	}
+	return decision, nil
+}
+
+func decisionMatchesAction(decision *contracts.WorkstationPolicyDecisionReceipt, receipt *contracts.AgentRunReceipt, actionID string) bool {
+	for _, action := range receipt.ToolActions {
+		if action.ActionID == actionID {
+			return decision.Request.ToolID == action.ToolID &&
+				decision.Request.Action == action.Action &&
+				decision.Request.EffectType == action.EffectType &&
+				decision.Request.EffectMode == action.EffectMode &&
+				decision.Request.Target == action.Target
+		}
+	}
+	return false
+}
+
+func receiptActionMetadata(receipt *contracts.AgentRunReceipt, actionID, key string) string {
+	for _, action := range receipt.ToolActions {
+		if action.ActionID == actionID {
+			return action.Metadata[key]
+		}
+	}
+	return ""
 }

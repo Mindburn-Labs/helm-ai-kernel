@@ -124,6 +124,16 @@ func ImportArtifactDir(dir string, opts ImportOptions) (*ImportResult, error) {
 	if _, err := os.Stat(filepath.Join(dir, ToolEventsFile)); err == nil {
 		artifactHashes[ToolEventsFile] = mustHashFile(filepath.Join(dir, ToolEventsFile))
 	}
+	if _, err := os.Stat(filepath.Join(dir, PolicyProfileFile)); err == nil {
+		artifactHashes[PolicyProfileFile] = mustHashFile(filepath.Join(dir, PolicyProfileFile))
+	}
+	for _, path := range mustGlob(filepath.Join(dir, "receipts", "*.json")) {
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return nil, err
+		}
+		artifactHashes[filepath.ToSlash(rel)] = mustHashFile(path)
+	}
 	profile, err := readPolicyProfile(dir)
 	if err != nil {
 		return nil, err
@@ -1005,6 +1015,15 @@ func mustHashFile(path string) string {
 		panic(err)
 	}
 	return hashBytes(data)
+}
+
+func mustGlob(pattern string) []string {
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		panic(err)
+	}
+	sort.Strings(matches)
+	return matches
 }
 
 func hashBytes(data []byte) string {

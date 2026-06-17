@@ -78,6 +78,12 @@ func TestMamaReceiptBoundExecutionFixture(t *testing.T) {
 	if !receiptActionHasMetadata(result.Receipt, "evt_mama_deploy_publish", "policy_decision_ref") {
 		t.Fatal("MAMA operate action missing policy_decision_ref metadata")
 	}
+	if result.Receipt.ArtifactHashes[PolicyProfileFile] == "" {
+		t.Fatal("MAMA fixture receipt missing policy profile artifact hash")
+	}
+	if result.Receipt.ArtifactHashes["receipts/wpd_4b3e8dee9e4894e592e2594f.json"] == "" {
+		t.Fatal("MAMA fixture receipt missing policy decision receipt artifact hash")
+	}
 }
 
 func TestImportDeterministicForSameArtifacts(t *testing.T) {

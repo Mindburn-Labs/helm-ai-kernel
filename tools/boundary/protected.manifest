@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-15T18:54:20Z
-# Commit: bdfb0e710c6819f617df593cb1cabbec51d642e9
+# Generated: 2026-06-17T12:57:19Z
+# Commit: b31c7b4d60e564af9e7b0a678ede7981aac3c164
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -632,7 +632,7 @@ b084e586791f8a6ca882cb8ec49cae843a10ee13a3b94f527eeb2af34acf3494  protocols/conf
 004c25cc2a15ede420ba266e935156e8ad05913e5f87b69f28ea0315125805b0  protocols/conformance/v1/compatibility-registry.json
 9d6f6ac7638ec07f1d1cdea870f536a67ff157a9af9d0360014bab69238c7c21  protocols/conformance/v1/owasp/owasp_threat_vectors.json
 35149966be79226039f1cfe611f70da36c2e9f93e2d9e96a91bb995a3bfb2cc9  protocols/conformance/v1/test-vectors.json
-c3ee4089971d651b69389259de605741ffb632f0b859a09174bc0605ccba6f9f  protocols/conformance/workstation/v1/conformance-pack.json
+9b81d0320f3dfd15d5f50f031fc41ed1d0bf19f78653f81ac03dac9f0e8cc131  protocols/conformance/workstation/v1/conformance-pack.json
 cabc519027fc1c737db0b8008ccbb7fbe32bd473a407334aee32f5fb1d1e7314  protocols/json-schemas/README.md
 a7a8eacc859443aba4a51b26b03021758922ae5e06947428b4c37629f651bb8d  protocols/json-schemas/SCHEMA_INDEX.md
 44d2b23e718d7d3e6011c5cabbcf7653553a265b96a24020a9db18e44ce49e9f  protocols/json-schemas/access/OperatorAccessPolicy.v1.json

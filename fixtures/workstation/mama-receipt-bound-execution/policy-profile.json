@@ -1,0 +1,28 @@
+{
+  "id": "workstation.observe_draft.v1",
+  "mode": "high_risk_effect_capable",
+  "observe": {
+    "allowed_actions": ["git.status", "git.diff", "shell.read", "shell.test", "shell.build"]
+  },
+  "draft": {
+    "workspace_roots": ["."],
+    "allow_generated_artifacts": true
+  },
+  "operate": {
+    "permissions": ["deploy.publish"]
+  },
+  "egress": {
+    "allowlist": []
+  },
+  "memory": {
+    "default_ttl_days": 30,
+    "max_ttl_days": 30,
+    "allowed_classes": ["M1_EPISODIC", "M3_SEMANTIC", "M4_PROCEDURAL"]
+  },
+  "recurring_loops": {
+    "require_schedule": true,
+    "require_max_runtime": true,
+    "require_tool_scope": true,
+    "require_expiration": true
+  }
+}

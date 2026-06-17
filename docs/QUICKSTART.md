@@ -22,7 +22,7 @@ By the end you should have a local Claude Code or Codex MCP entry, a PreToolUse
 hook, draft policy artifacts under `~/.helm-ai-kernel`, a local Kernel on
 `127.0.0.1:7714`, a Console served from the same origin at `/console`, a signed
 `DENY` receipt for a blocked tool call, and offline-verifiable proof artifacts.
-Hosted Console pairing, paid tiers, and Enterprise automation remain next-step
+Hosted console pairing, paid plans, and Enterprise automation remain next-step
 paths after the local proof succeeds.
 
 ```mermaid

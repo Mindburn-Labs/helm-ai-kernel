@@ -24,7 +24,7 @@ drafts a policy from a scan, then starts the local Kernel and Console proof.
 
 ## Trust Box
 
-- No cloud account required for the local proof.
+- No signup required for the local proof.
 - No model API key required.
 - No Docker required.
 - No production credentials required.

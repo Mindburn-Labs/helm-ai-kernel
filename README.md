@@ -75,10 +75,16 @@ Verify the DENY receipt offline:
 helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json
 ```
 
-![HELM MCP quarantine and receipt proof board](docs/assets/helm-mcp-quarantine-demo.svg)
+![HELM real CLI setup, DENY hook, and offline receipt verification](docs/assets/helm-real-use-deny-verify.gif)
 
-Sanitized transcripts are checked in under
-[`examples/launch/assets`](examples/launch/assets).
+This GIF is generated from real CLI output in a temporary home directory:
+`setup codex --dry-run`, `hook pre-tool`, and
+`workstation verify-decision`. It is not generated from the launch demo
+scripts. The sanitized transcript and provenance are checked in beside the
+GIF: [`transcript`](docs/assets/helm-real-use-deny-verify.transcript.txt) and
+[`provenance`](docs/assets/helm-real-use-deny-verify.provenance.json).
+
+![HELM MCP quarantine and receipt proof board](docs/assets/helm-mcp-quarantine-demo.svg)
 
 Star HELM AI Kernel if you want to follow fail-closed AI agent execution, MCP
 quarantine, signed receipts, and offline-verifiable EvidencePacks:

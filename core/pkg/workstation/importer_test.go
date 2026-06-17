@@ -29,6 +29,7 @@ func TestImportFixtures(t *testing.T) {
 		{name: "denied-memory", wantDenied: 1, wantMemory: 1},
 		{name: "denied-recurring-loop", wantDenied: 1, wantLoops: 1},
 		{name: "prompt-injection-tainted", wantDenied: 1, wantTaintLabel: "prompt_injection"},
+		{name: "mama-receipt-bound-execution", wantDenied: 0},
 		{name: "demo", wantDenied: 4, wantMemory: 1, wantLoops: 1, wantChanged: 1, wantTaintLabel: "prompt_injection"},
 	}
 	for _, tc := range cases {
@@ -60,6 +61,22 @@ func TestImportFixtures(t *testing.T) {
 				t.Fatal("receipt signature did not verify")
 			}
 		})
+	}
+}
+
+func TestMamaReceiptBoundExecutionFixture(t *testing.T) {
+	result, err := ImportArtifactDir(filepath.Join(repoRoot(t), "fixtures", "workstation", "mama-receipt-bound-execution"), ImportOptions{})
+	if err != nil {
+		t.Fatalf("ImportArtifactDir() error = %v", err)
+	}
+	if result.Receipt.AgentSurface != "mama" {
+		t.Fatalf("agent surface = %q, want mama", result.Receipt.AgentSurface)
+	}
+	if len(result.Receipt.DeniedEffects) != 0 {
+		t.Fatalf("denied effects = %d, want 0", len(result.Receipt.DeniedEffects))
+	}
+	if !receiptActionHasMetadata(result.Receipt, "evt_mama_deploy_publish", "policy_decision_ref") {
+		t.Fatal("MAMA operate action missing policy_decision_ref metadata")
 	}
 }
 
@@ -401,7 +418,7 @@ func TestWorkstationSchemas(t *testing.T) {
 	scopeAuditSchema := compileSchema(t, filepath.Join(root, "protocols", "json-schemas", "workstation", "scope_audit_report.v1.schema.json"))
 	profileSchema := compileSchema(t, filepath.Join(root, "protocols", "json-schemas", "policy", "workstation_policy_profile.v1.schema.json"))
 
-	for _, fixture := range []string{"allowed-observe", "denied-memory", "denied-recurring-loop", "raw-mcp-tunnel-bypass", "ambiguous-resume", "subagent-sidechain-summary", "tainted-browser-pdf-authorization", "scope-audit-all-boundaries"} {
+	for _, fixture := range []string{"allowed-observe", "denied-memory", "denied-recurring-loop", "raw-mcp-tunnel-bypass", "ambiguous-resume", "subagent-sidechain-summary", "tainted-browser-pdf-authorization", "mama-receipt-bound-execution", "scope-audit-all-boundaries"} {
 		result, err := ImportArtifactDir(filepath.Join(root, "fixtures", "workstation", fixture), ImportOptions{})
 		if err != nil {
 			t.Fatalf("import %s: %v", fixture, err)

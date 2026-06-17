@@ -50,6 +50,7 @@
     "ambiguous_resume": "fixtures/workstation/ambiguous-resume",
     "subagent_sidechain_summary": "fixtures/workstation/subagent-sidechain-summary",
     "tainted_browser_pdf_authorization": "fixtures/workstation/tainted-browser-pdf-authorization",
+    "mama_receipt_bound_execution": "fixtures/workstation/mama-receipt-bound-execution",
     "scope_audit_all_boundaries": "fixtures/workstation/scope-audit-all-boundaries"
   },
   "commands": [

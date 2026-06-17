@@ -1,0 +1,17 @@
+{
+  "run_id": "run_mama_receipt_bound_execution",
+  "goal": "Demonstrate that MAMA operate effects require receipt-bound authority.",
+  "actor_id": "agent.mama.local",
+  "actor_type": "agent",
+  "workspace_id": "workspace-demo",
+  "workspace_path": "/workspace/demo",
+  "repository": "helm-ai-enterprise",
+  "agent_surface": "mama",
+  "policy_profile": "workstation.observe_draft.v1",
+  "started_at": "2026-06-17T09:00:00Z",
+  "completed_at": "2026-06-17T09:01:00Z",
+  "metadata": {
+    "permission_epoch": "epoch-mama-demo-001",
+    "authority_model": "task_effect_receipt_bound"
+  }
+}

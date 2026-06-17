@@ -1,0 +1,6 @@
+{
+  "repository": "helm-ai-enterprise",
+  "base_ref": "origin/main",
+  "head_ref": "mama-harness-parity",
+  "changed_files": []
+}

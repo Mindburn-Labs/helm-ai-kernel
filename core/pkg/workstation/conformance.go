@@ -57,6 +57,7 @@ func CertifyAdapterFixtures(adapterID, fixtureRoot, requested string) AdapterCer
 			"ambiguous-resume",
 			"subagent-sidechain-summary",
 			"tainted-browser-pdf-authorization",
+			"mama-receipt-bound-execution",
 			"demo",
 		},
 		ObservedOnly: requested == CertificationObserveOnly,
@@ -182,6 +183,10 @@ func certifyHighRiskFixtures(root string) (bool, string) {
 	if err != nil {
 		return false, err.Error()
 	}
+	mama, err := ImportArtifactDir(filepath.Join(root, "mama-receipt-bound-execution"), ImportOptions{})
+	if err != nil {
+		return false, err.Error()
+	}
 	demo, err := ImportArtifactDir(filepath.Join(root, "demo"), ImportOptions{})
 	if err != nil {
 		return false, err.Error()
@@ -211,10 +216,16 @@ func certifyHighRiskFixtures(root string) (bool, string) {
 	if !receiptContainsTaint(taintedDoc.Receipt, "tainted_context") || !receiptHasDeniedReason(taintedDoc.Receipt, "TAINTED_CONTEXT_REQUIRES_DENY") {
 		return false, "tainted browser/PDF fixture must deny operate authorization from tainted context"
 	}
+	if mama.Receipt.AgentSurface != "mama" || len(mama.Receipt.ToolActions) == 0 || len(mama.Receipt.DeniedEffects) != 0 {
+		return false, "MAMA fixture must import as a receipt-bound allowed run with no denied effects"
+	}
+	if !receiptActionHasMetadata(mama.Receipt, "evt_mama_deploy_publish", "policy_decision_ref") {
+		return false, "MAMA fixture must bind the allowed operate effect to a policy decision receipt ref"
+	}
 	if len(demo.Receipt.ChangedFiles) == 0 || len(demo.Receipt.MemoryEffects) == 0 || len(demo.Receipt.RecurringLoopEffects) == 0 || len(demo.Receipt.DeniedEffects) < 4 {
 		return false, "demo fixture must cover draft, denied network, memory, recurring loop, and tainted MCP"
 	}
-	return true, "memory, recurring loop, taint, raw MCP, resume, and sidechain fixtures are represented as governed effects"
+	return true, "memory, recurring loop, taint, raw MCP, resume, sidechain, and MAMA receipt-bound fixtures are represented as governed effects"
 }
 
 func requiredFixtureFilesExist(root, fixture string) bool {

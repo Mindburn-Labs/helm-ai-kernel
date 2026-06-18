@@ -57,6 +57,30 @@ func TestValidateEvidencePackStructure_ExtraDir(t *testing.T) {
 	require.Contains(t, issues[0], "unexpected top-level entry")
 }
 
+func TestValidateEvidencePackStructure_DeclaredFormalProofExtension(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "pack")
+	require.NoError(t, CreateEvidencePackDirs(root))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "00_INDEX.json"), []byte(`{"extensions":["helm-formal-proof"]}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "01_SCORE.json"), []byte("{}"), 0600))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "99_EXT", "helm-formal-proof"), 0750))
+
+	require.Empty(t, ValidateEvidencePackStructure(root, "helm-formal-proof"))
+	require.Contains(t, ValidateEvidencePackStructure(root), "undeclared extension: 99_EXT/helm-formal-proof")
+}
+
+func TestValidateEvidencePackStructure_RejectsTopLevelFormalProofDir(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "pack")
+	require.NoError(t, CreateEvidencePackDirs(root))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "00_INDEX.json"), []byte("{}"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "01_SCORE.json"), []byte("{}"), 0600))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "formal_proof"), 0750))
+
+	issues := ValidateEvidencePackStructure(root, "helm-formal-proof")
+	require.Contains(t, issues, "unexpected top-level entry: formal_proof")
+}
+
 func TestValidateEvidencePackStructure_MissingSubdir(t *testing.T) {
 	dir := t.TempDir()
 	root := filepath.Join(dir, "pack")

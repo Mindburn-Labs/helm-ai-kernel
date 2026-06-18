@@ -81,3 +81,25 @@ bin/helm-ai-kernel setup claude-code --yes
 
 Apache-2.0. See [LICENSE](LICENSE), [SECURITY.md](SECURITY.md), and
 [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Where HELM Fits
+
+Examples are illustrative. HELM is the execution boundary, not the agent,
+orchestrator, cloud control plane, or observability tool.
+
+| Category | Examples | What They Do | Where They Stop | HELM AI Kernel |
+| --- | --- | --- | --- | --- |
+| **Agent permission modes** | Claude Code Auto Mode | Let agents work faster with fewer prompts. | Permission automation is not execution governance. | **HELM makes every governed action produce a verdict and proof.** |
+| **Model-vendor agents** | OpenAI Agents, ChatGPT Agent, Claude agents | Provide agent runtimes, tools, guardrails, and HITL flows. | They are tied to their own agent stack and do not create neutral execution evidence. | **HELM is model-neutral: any agent can route actions through the same boundary.** |
+| **Coding agents** | GitHub Copilot, Devin, Cursor, Replit Agent | Write, edit, test, and ship code faster. | They optimize developer productivity, not cross-runtime authority. | **HELM governs what the agent is allowed to execute.** |
+| **Agent orchestration** | LangGraph, CrewAI, AutoGen, n8n | Decide what agents should do next. | Orchestration chooses attempts; it does not prove authorization. | **HELM decides whether the attempted action may happen.** |
+| **MCP gateways and security** | Runlayer, Lasso, Obot, MintMCP, Operant | Route, scan, filter, and secure MCP/tool traffic. | Gateways protect traffic; they do not define the final authority record. | **HELM quarantines tools, issues verdicts, and records signed receipts.** |
+| **Enterprise agent control planes** | Microsoft Agent 365, Entra Agent ID, ServiceNow AI Control Tower | Register, manage, and monitor agents inside enterprise platforms. | Identity and control-plane visibility are not portable execution proof. | **HELM proves whether a side effect was authorized under policy.** |
+| **Cloud-native agent governance** | AWS Bedrock AgentCore, Google Agent Gateway / Model Armor | Govern agents inside cloud-provider ecosystems. | Strong inside one cloud estate; weaker as neutral cross-platform evidence. | **HELM provides a portable boundary and verifier.** |
+| **Observability and evals** | LangSmith, Braintrust, Arize, Helicone, Weave | Show traces, metrics, evals, and debugging timelines. | Logs explain what happened after the fact. | **HELM decides before execution and leaves verifiable proof after.** |
+| **AI security platforms** | Zenity, Noma, WitnessAI, HiddenLayer, Lakera | Detect, scan, monitor, and protect AI systems broadly. | Broad security coverage can blur runtime authority. | **HELM is narrow by design: fail-closed execution control.** |
+| **Receipt and proof projects** | PipeLab / AAR, ACTA, Signet, ZeroClaw | Create receipts, signed records, or action proof. | Receipts alone do not equal governed execution. | **HELM binds receipt to policy verdict, effect, reason code, and EvidencePack.** |
+
+**Bottom line:** most tools help agents act. HELM decides whether the action is
+allowed, blocks it when it is not, and leaves proof an outside reviewer can
+verify.

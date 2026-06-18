@@ -1,30 +1,62 @@
 # HELM AI Kernel
 
-Protect Claude Code or Codex with a local fail-closed execution firewall for AI
-agents.
+**Protect Claude Code or Codex before tools run.**
 
-HELM AI Kernel sits between agent tool calls and side effects. It denies
-unknown or high-risk actions by default, writes signed receipts, and gives you a
-local Console to inspect what happened. It is not the whole Company AI OS. The
-first proof is narrow: one local denial, one receipt, one Console.
+HELM AI Kernel is a local, fail-closed execution firewall for AI agents. It sits
+between agent tool calls and side effects, blocks risky Bash/edit/MCP calls where
+hooks are supported, writes signed receipts, and opens a local Console so you can
+inspect what happened.
 
 ```bash
 brew install mindburnlabs/tap/helm-ai-kernel
 helm-ai-kernel setup claude-code --yes
 ```
 
-Using Codex instead:
+Using Codex:
 
 ```bash
 helm-ai-kernel setup codex --yes
 ```
 
-Leave that terminal open. The setup command installs the local integration,
-drafts a policy from a scan, then starts the local Kernel and Console proof.
+Leave that terminal open. Ask your agent to run a risky local action. HELM
+should return `DENY` before the tool dispatches, write a receipt, and keep the
+Console open for inspection.
 
-## Trust Box
+## See It Work
 
-- No signup required for the local proof.
+![HELM real CLI setup, DENY hook, and offline receipt verification](docs/assets/helm-real-use-deny-verify.gif)
+
+This GIF was recorded from real CLI use in a temporary home directory:
+`setup codex --dry-run`, `hook pre-tool`, and `workstation verify-decision`. It
+is not generated from launch demo scripts. The sanitized
+[`transcript`](docs/assets/helm-real-use-deny-verify.transcript.txt) and
+[`provenance`](docs/assets/helm-real-use-deny-verify.provenance.json) are
+checked in beside the GIF.
+
+## Why Use It
+
+| Without HELM | With HELM |
+| --- | --- |
+| Agent tools run straight from client config. | Tool calls cross a local policy gate first. |
+| Risk is often discovered after side effects. | Risky Bash/edit/MCP calls can be denied before dispatch. |
+| Logs are mostly narrative. | Decisions produce signed, offline-verifiable receipts. |
+| Each client needs manual setup. | `setup` wires Claude Code or Codex locally. |
+
+## The 15-Second Version
+
+- Installs local MCP and hook config for Claude Code or Codex.
+- Starts a local Kernel and Console proof.
+- Drafts policy from a local scan; never self-approves tools.
+- Denies risky Bash/edit/MCP calls where hooks are supported.
+- Writes receipts under `~/.helm-ai-kernel`.
+- Removes cleanly with `setup remove`.
+
+It is not the whole Company AI OS, and it is not Kubernetes Helm. The first proof
+is narrow: one local denial, one receipt, one Console.
+
+## Trust
+
+- No cloud account or signup required for the local proof.
 - No model API key required.
 - No Docker required.
 - No production credentials required.
@@ -32,18 +64,7 @@ drafts a policy from a scan, then starts the local Kernel and Console proof.
 - Approvals remain explicit. HELM drafts policy and quarantine records; it does
   not approve tools for itself.
 
-## What Setup Does
-
-`helm-ai-kernel setup <claude-code|codex> --yes`:
-
-- initializes local HELM state under `~/.helm-ai-kernel`
-- registers the local stdio MCP server with Claude Code or Codex
-- installs a PreToolUse hook for Bash, edit/write, and MCP calls where the
-  client supports hooks
-- runs the autoconfigure scan and writes draft policy artifacts into the HELM
-  data dir
-- starts `helm-ai-kernel quickstart` so the local Console opens against the
-  same Kernel that is issuing receipts
+## Commands
 
 Inspect or undo the integration:
 
@@ -62,27 +83,11 @@ The JSON summary includes the target, binary path, client config path, hook
 config path, data dir, Kernel URL, Console URL, scan grade, draft policy path,
 and uninstall command.
 
-## First Proof
-
-After setup, ask Claude Code or Codex to run a high-risk local action such as a
-destructive shell command. The hook should return a `DENY`, write a signed
-receipt under `~/.helm-ai-kernel/receipts/hooks/`, and keep the terminal Console
-available for inspection.
-
-Verify the DENY receipt offline:
+Verify a DENY receipt offline:
 
 ```bash
 helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json
 ```
-
-![HELM real CLI setup, DENY hook, and offline receipt verification](docs/assets/helm-real-use-deny-verify.gif)
-
-This GIF is generated from real CLI output in a temporary home directory:
-`setup codex --dry-run`, `hook pre-tool`, and
-`workstation verify-decision`. It is not generated from the launch demo
-scripts. The sanitized transcript and provenance are checked in beside the
-GIF: [`transcript`](docs/assets/helm-real-use-deny-verify.transcript.txt) and
-[`provenance`](docs/assets/helm-real-use-deny-verify.provenance.json).
 
 ![HELM MCP quarantine and receipt proof board](docs/assets/helm-mcp-quarantine-demo.svg)
 
@@ -116,22 +121,6 @@ quarantine, signed receipts, and offline-verifiable EvidencePacks:
 [![GHCR chart](https://img.shields.io/badge/ghcr.io-helm--ai--kernel%20chart-0F1689?logo=helm&logoColor=white)](https://github.com/Mindburn-Labs/helm-ai-kernel/pkgs/container/charts%2Fhelm-ai-kernel)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/mindburn-labs)](https://artifacthub.io/packages/search?repo=mindburn-labs)
 
-This is Mindburn Labs’ HELM execution kernel for AI, not the Kubernetes package
-manager.
-
-HELM evaluates agent execution requests and records every ALLOW / DENY /
-ESCALATE decision as verifiable evidence.
-
-HELM AI Kernel is a fail-closed execution firewall for AI agents. It sits
-between stochastic agent proposals, such as MCP tools and OpenAI-compatible
-requests, and infrastructure side effects. The kernel enforces default-deny
-policies, quarantines unknown MCP tools, and emits signed receipts plus
-EvidencePacks that can be verified offline.
-
-HELM AI Kernel is not an agent orchestration framework, a SaaS AI governance
-dashboard, or a vague trust layer with no enforcement mechanism. The public
-kernel is the local boundary, policy, receipt, and verification path.
-
 ## Source Build Proof
 
 Use this path when editing the repository itself:
@@ -149,8 +138,6 @@ The older fixture proofs are still useful for release validation:
 bash scripts/launch/demo-mcp.sh
 bash scripts/launch/demo-proof.sh
 ```
-
-The local proof path shows the public value proposition in one frame:
 
 ## From First Proof To Verified
 

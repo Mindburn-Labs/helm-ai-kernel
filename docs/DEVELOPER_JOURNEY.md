@@ -248,8 +248,8 @@ Run online verification only after offline verification passes:
 | Python | `pip install helm-sdk` | `make test-sdk-py` |
 | TypeScript / JavaScript | `npm install @mindburn/helm-ai-kernel` | `make test-sdk-ts` |
 | Rust | `cargo add helm-sdk` | `make test-sdk-rust` |
-| Go | `go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.5.16`; the Go module is released by the subdirectory tag `sdk/go/v0.5.16` | `cd sdk/go && go test ./...` |
-| Java | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.16` | `make test-sdk-java` |
+| Go | `go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.5.17`; the Go module is released by the subdirectory tag `sdk/go/v0.5.17` | `cd sdk/go && go test ./...` |
+| Java | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.5.17` | `make test-sdk-java` |
 
 Use [SDK Index](sdks/00_INDEX.md) before publishing SDK install instructions.
 
@@ -285,9 +285,9 @@ If the `helm` command on your machine resolves to this HELM AI Kernel binary, us
 
 ## Release And Conformance Gates
 
-Current source release target: `v0.5.16`: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.16>.
+Current source release target: `v0.5.17`: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.17>.
 
-The release is complete only after the release page includes Darwin/Linux/Windows binaries, `SHA256SUMS.txt`, `sbom.json`, `v0.5.16.openvex.json`, `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm-ai-kernel-launchpad-data.tar`, `helm-console-web-v0.5.16.tar.gz` with checksum/SBOM/provenance/lock/manifest sidecars, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.16.json`, `version-status.json`, and matching `*.cosign.bundle` files for each primary asset.
+The release is complete only after the release page includes Darwin/Linux/Windows binaries, `SHA256SUMS.txt`, `sbom.json`, `v0.5.17.openvex.json`, `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm-ai-kernel-launchpad-data.tar`, `helm-console-web-v0.5.17.tar.gz` with checksum/SBOM/provenance/lock/manifest sidecars, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.17.json`, `version-status.json`, and matching `*.cosign.bundle` files for each primary asset.
 
 Run conformance and docs gates:
 

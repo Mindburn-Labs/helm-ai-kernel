@@ -408,6 +408,26 @@
       ]
     },
     {
+      "id": "external-environment-adapters",
+      "label": "External environment adapters, boundary shims, and adapter self-checks",
+      "classification": "public-hub",
+      "source_patterns": [
+        "adapters/README.md",
+        "adapters/*/**"
+      ],
+      "owner_doc_path": "adapters/README.md",
+      "public_doc_slugs": [
+        "helm-ai-kernel/developer-journey",
+        "helm-ai-kernel/deployment-and-examples",
+        "helm-ai-kernel/source-map"
+      ],
+      "rationale": "Adapter code is integration proof material for external runtimes and must remain classified without promoting every adapter as a first-class runtime surface.",
+      "validation_commands": [
+        "python3 adapters/openenv/helm_boundary_env/self_check.py",
+        "make docs-truth"
+      ]
+    },
+    {
       "id": "conformance-fixtures-evidence",
       "label": "Conformance tests, fixtures, golden artifacts, proofs, benchmarks, and release evidence",
       "classification": "public-hub",
@@ -474,7 +494,8 @@
       "classification": "public-hub",
       "source_patterns": [
         "COMMUNITY.md",
-        "docs/**"
+        "docs/**",
+        "research/**"
       ],
       "owner_doc_path": "docs/README.md",
       "public_doc_slugs": [

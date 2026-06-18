@@ -1,70 +1,39 @@
 # HELM AI Kernel
 
-**Protect Claude Code or Codex before tools run.**
+**A local firewall for Claude Code and Codex tool calls.**
 
-HELM AI Kernel is a local, fail-closed execution firewall for AI agents. It sits
-between agent tool calls and side effects, blocks risky Bash/edit/MCP calls where
-hooks are supported, writes signed receipts, and opens a local Console so you can
-inspect what happened.
+HELM blocks risky local tool calls before they run, then writes a receipt you
+can verify.
 
 ```bash
 brew install mindburnlabs/tap/helm-ai-kernel
 helm-ai-kernel setup claude-code --yes
+# Codex: helm-ai-kernel setup codex --yes
 ```
 
-Using Codex:
-
-```bash
-helm-ai-kernel setup codex --yes
-```
-
-Leave that terminal open. Ask your agent to run a risky local action. HELM
-should return `DENY` before the tool dispatches, write a receipt, and keep the
-Console open for inspection.
-
-## See It Work
+Ask your agent for a risky command. HELM gives you: `DENY -> receipt -> local
+Console`.
 
 ![HELM real CLI setup, DENY hook, and offline receipt verification](docs/assets/helm-real-use-deny-verify.gif)
 
-This GIF was recorded from real CLI use in a temporary home directory:
-`setup codex --dry-run`, `hook pre-tool`, and `workstation verify-decision`. It
-is not generated from launch demo scripts. The sanitized
-[`transcript`](docs/assets/helm-real-use-deny-verify.transcript.txt) and
-[`provenance`](docs/assets/helm-real-use-deny-verify.provenance.json) are
-checked in beside the GIF.
+Local proof needs no cloud account, model key, Docker, or production
+credentials.
 
-## Why Use It
+<details>
+<summary>What HELM does</summary>
 
-| Without HELM | With HELM |
-| --- | --- |
-| Agent tools run straight from client config. | Tool calls cross a local policy gate first. |
-| Risk is often discovered after side effects. | Risky Bash/edit/MCP calls can be denied before dispatch. |
-| Logs are mostly narrative. | Decisions produce signed, offline-verifiable receipts. |
-| Each client needs manual setup. | `setup` wires Claude Code or Codex locally. |
-
-## The 15-Second Version
-
-- Installs local MCP and hook config for Claude Code or Codex.
-- Starts a local Kernel and Console proof.
-- Drafts policy from a local scan; never self-approves tools.
-- Denies risky Bash/edit/MCP calls where hooks are supported.
+- Registers a local MCP server for Claude Code or Codex.
+- Hooks Bash/edit/MCP calls where the client supports hooks.
+- Drafts policy from a local scan; it never approves tools for itself.
 - Writes receipts under `~/.helm-ai-kernel`.
-- Removes cleanly with `setup remove`.
 
-It is not the whole Company AI OS, and it is not Kubernetes Helm. The first proof
-is narrow: one local denial, one receipt, one Console.
+It is not the whole Company AI OS, and it is not Kubernetes Helm. The first
+proof is narrow: one local denial, one receipt, one Console.
 
-## Trust
+</details>
 
-- No cloud account or signup required for the local proof.
-- No model API key required.
-- No Docker required.
-- No production credentials required.
-- Installs only local MCP and hook configuration for the selected client.
-- Approvals remain explicit. HELM drafts policy and quarantine records; it does
-  not approve tools for itself.
-
-## Commands
+<details>
+<summary>Useful commands</summary>
 
 Inspect or undo the integration:
 
@@ -89,13 +58,24 @@ Verify a DENY receipt offline:
 helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json
 ```
 
+</details>
+
+<details>
+<summary>Real-use GIF provenance</summary>
+
+The GIF above was recorded from real CLI use in a temporary home directory:
+`setup codex --dry-run`, `hook pre-tool`, and `workstation verify-decision`. It
+is not generated from launch demo scripts. The sanitized
+[`transcript`](docs/assets/helm-real-use-deny-verify.transcript.txt) and
+[`provenance`](docs/assets/helm-real-use-deny-verify.provenance.json) are
+checked in beside the GIF.
+
 ![HELM MCP quarantine and receipt proof board](docs/assets/helm-mcp-quarantine-demo.svg)
 
-Star HELM AI Kernel if you want to follow fail-closed AI agent execution, MCP
-quarantine, signed receipts, and offline-verifiable EvidencePacks:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/stargazers>
+</details>
 
-## Badges And Release Signals
+<details>
+<summary>Badges and release signals</summary>
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![CI](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Mindburn-Labs/helm-ai-kernel/actions/workflows/ci.yml)
@@ -120,6 +100,8 @@ quarantine, signed receipts, and offline-verifiable EvidencePacks:
 [![GHCR kernel](https://img.shields.io/badge/ghcr.io-helm--ai--kernel-2496ED?logo=docker&logoColor=white)](https://github.com/Mindburn-Labs/helm-ai-kernel/pkgs/container/helm-ai-kernel)
 [![GHCR chart](https://img.shields.io/badge/ghcr.io-helm--ai--kernel%20chart-0F1689?logo=helm&logoColor=white)](https://github.com/Mindburn-Labs/helm-ai-kernel/pkgs/container/charts%2Fhelm-ai-kernel)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/mindburn-labs)](https://artifacthub.io/packages/search?repo=mindburn-labs)
+
+</details>
 
 ## Source Build Proof
 

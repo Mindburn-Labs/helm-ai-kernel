@@ -140,9 +140,11 @@
 
 ### Verification (`verification/`)
 
-| Schema                       | Conformance | Status    | Description                          |
-| ---------------------------- | ----------- | --------- | ------------------------------------ |
-| `verification_scope.v1.json` | L2          | normative | Verification coverage and risk scope |
+| Schema                         | Conformance | Status    | Description                          |
+| ------------------------------ | ----------- | --------- | ------------------------------------ |
+| `proof_obligation.schema.json` | L3          | normative | Formal proof obligation input        |
+| `proof_result.schema.json`     | L3          | normative | Formal proof verifier result         |
+| `verification_scope.v1.json`   | L2          | normative | Verification coverage and risk scope |
 
 ### Telemetry (`telemetry/`)
 

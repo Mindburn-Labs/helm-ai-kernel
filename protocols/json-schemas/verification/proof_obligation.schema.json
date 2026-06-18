@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/verification/proof_obligation.schema.json",
+  "title": "ProofObligation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "obligation_id",
+    "source_kind",
+    "invariant",
+    "canonical_input_hash",
+    "risk_class",
+    "allowed_toolchain",
+    "plan"
+  ],
+  "properties": {
+    "obligation_id": { "type": "string", "minLength": 1 },
+    "source_kind": {
+      "type": "string",
+      "enum": ["PlanIR", "GeneratedSpec", "OrgGenomePolicy", "ConnectorContract", "EvidencePack"]
+    },
+    "invariant": { "type": "string", "minLength": 1 },
+    "canonical_input_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "risk_class": { "type": "string", "enum": ["T0", "T1", "T2", "T3"] },
+    "allowed_toolchain": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_nodes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes"],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/plan_node" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "plan_node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_id"],
+      "properties": {
+        "node_id": { "type": "string", "minLength": 1 },
+        "side_effect": { "type": "boolean" },
+        "effect_class": { "type": "string" },
+        "approval_checkpoint": { "type": "boolean" }
+      }
+    }
+  }
+}

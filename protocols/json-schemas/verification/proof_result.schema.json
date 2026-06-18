@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/verification/proof_result.schema.json",
+  "title": "ProofResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "obligation_id",
+    "status",
+    "proof_artifact_hash",
+    "verifier_log_hash",
+    "toolchain_digest",
+    "proof_search_merkle_root",
+    "result_hash"
+  ],
+  "properties": {
+    "obligation_id": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["PROVED", "REFUTED", "UNKNOWN", "BUDGET_EXHAUSTED", "TOOLCHAIN_ERROR"]
+    },
+    "proof_artifact_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "verifier_log_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "toolchain_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "proof_search_merkle_root": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "accepted_nodes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "failed_nodes_summary": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "result_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+  }
+}

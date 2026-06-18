@@ -352,6 +352,15 @@
       "sensitivity": "public"
     },
     {
+      "slug": "helm-ai-kernel/integrations/codebase-memory-mcp",
+      "title": "Codebase Memory MCP Integration",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/codebase_memory_mcp.md",
+      "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "helm-ai-kernel/integrations/microsoft-agent-governance-toolkit",
       "title": "Microsoft Agent Governance Toolkit Coexistence",
       "section": "integrations",

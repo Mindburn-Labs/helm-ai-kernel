@@ -76,8 +76,8 @@ bin/helm-ai-kernel setup claude-code --yes
 
 | Current release | SDK pointers |
 | --- | --- |
-| `v0.5.15` | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.5.15` |
-| `v0.5.15` | `io.github.mindburnlabs:helm-sdk:0.5.15` |
+| `v0.5.16` | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.5.16` |
+| `v0.5.16` | `io.github.mindburnlabs:helm-sdk:0.5.16` |
 
 Apache-2.0. See [LICENSE](LICENSE), [SECURITY.md](SECURITY.md), and
 [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -1,15 +1,16 @@
 ---
 title: Quickstart
-last_reviewed: 2026-06-13
+last_reviewed: 2026-06-15
 ---
 
 # Quickstart
 
 This is the shortest current HELM AI Kernel OSS proof path: install or build
-the CLI, run `helm-ai-kernel quickstart`, open the same-origin local Console,
-and let the backend create signed proof artifacts. No account, hosted service,
-live model key, production credential, Docker daemon, or private endpoint is
-required for the local proof.
+the CLI, run `helm-ai-kernel setup claude-code --yes` or
+`helm-ai-kernel setup codex --yes`, keep the terminal open, and watch HELM
+protect a local coding agent with a signed denial and the same-origin Console.
+No account, hosted service, live model key, production credential, Docker
+daemon, or private endpoint is required for the local proof.
 
 ## Audience
 
@@ -17,17 +18,19 @@ This quickstart is for developers, security reviewers, and integration owners wh
 
 ## Outcome
 
-By the end you should have a local Kernel on `127.0.0.1:7714`, a Console served
-from the same origin at `/console`, `OSS_CORE` entitlement display, policy-load
-proof, signed `ALLOW`, signed `DENY`, MCP quarantine, tamper-failure proof, and
-an exported onboarding EvidencePack. Hosted Console pairing, paid tiers, and
-Enterprise automation remain next-step paths after the local proof succeeds.
+By the end you should have a local Claude Code or Codex MCP entry, a PreToolUse
+hook, draft policy artifacts under `~/.helm-ai-kernel`, a local Kernel on
+`127.0.0.1:7714`, a Console served from the same origin at `/console`, a signed
+`DENY` receipt for a blocked tool call, and offline-verifiable proof artifacts.
+Hosted console pairing, paid plans, and Enterprise automation remain next-step
+paths after the local proof succeeds.
 
 ```mermaid
 flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Install["install or build helm-ai-kernel"]
-        Quickstart["helm-ai-kernel quickstart"]
+        Setup["helm-ai-kernel setup"]
+        Quickstart["local quickstart Console"]
         Console["same-origin /console"]
         API["onboarding API"]
     end
@@ -43,7 +46,8 @@ flowchart TD
     end
 
     %% Operational Flow Edges
-    Install --> Quickstart
+    Install --> Setup
+    Setup --> Quickstart
     Quickstart --> Console
     Console --> API
     API --> Verdict
@@ -53,6 +57,7 @@ flowchart TD
     Evidence --> Verify
 
     %% Premium Styling Rules
+    style Setup fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style Quickstart fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style Console fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style Verdict fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
@@ -64,6 +69,8 @@ flowchart TD
 
 ## Source Truth
 
+- `core/cmd/helm-ai-kernel/setup_cmd.go`
+- `core/cmd/helm-ai-kernel/hook_cmd.go`
 - `core/cmd/helm-ai-kernel/quickstart_cmd.go`
 - `core/cmd/helm-ai-kernel/local_first_run_routes.go`
 - `core/cmd/helm-ai-kernel/server_cmd.go`
@@ -79,11 +86,13 @@ flowchart TD
 - `scripts/launch/demo-openai-proxy.sh`
 - `examples/launch/policies/shell_mcp_server_boundary.json`
 
-The quickstart uses the local CLI and same-origin Console as the primary OSS
-proof path. `helm-ai-kernel quickstart` prepares local state, writes a
-fail-closed starter policy when missing, starts the Kernel, serves the verified
-Console bundle from `/console`, and exposes backend-owned onboarding APIs. The
-Console displays proof state; the Kernel creates receipts and EvidencePack refs.
+The setup path uses the local CLI, client MCP config, client hook config, and
+same-origin Console as the primary OSS proof path. `helm-ai-kernel setup`
+prepares local state, registers the stdio MCP server, installs a PreToolUse
+hook where supported, drafts policy artifacts without approval, starts the
+Kernel, serves the verified Console bundle from `/console`, and exposes
+backend-owned onboarding APIs. The hook writes DENY receipts for blocked local
+tool calls; the Kernel creates the Console proof receipts and EvidencePack refs.
 
 ## 0. Build Or Install
 
@@ -111,9 +120,56 @@ docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:local .
 docker compose up -d
 ```
 
-## 1. Run Local Console-First Quickstart
+## 1. Protect Claude Code Or Codex
 
-Use the one-command path for a fresh OSS first run:
+Use the one-command front door for a fresh local proof:
+
+```bash
+helm-ai-kernel setup claude-code --yes
+```
+
+For Codex:
+
+```bash
+helm-ai-kernel setup codex --yes
+```
+
+The command defaults to `--scope user` and data under `~/.helm-ai-kernel`.
+Project scope is explicit:
+
+```bash
+helm-ai-kernel setup codex --scope project --yes
+```
+
+Inspect or undo the local integration:
+
+```bash
+helm-ai-kernel setup status claude-code
+helm-ai-kernel setup remove claude-code --yes
+```
+
+Use `--dry-run --json` to inspect the exact binary path, client config path,
+hook config path, data dir, Kernel URL, Console URL, scan grade, draft policy
+path, and uninstall command before writing anything:
+
+```bash
+helm-ai-kernel setup codex --dry-run --json
+```
+
+Setup never approves detected tools. It writes draft policy and quarantine
+artifacts only; approvals remain explicit.
+
+When a PreToolUse hook denies a high-risk call, verify the signed decision
+receipt offline:
+
+```bash
+helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json
+```
+
+## 2. Run Local Console-First Quickstart Directly
+
+Use this lower-level command when you only want the local Kernel and Console,
+without modifying Claude Code or Codex config:
 
 ```bash
 helm-ai-kernel quickstart
@@ -158,7 +214,7 @@ The local Console walks through:
 | Tamper check | receipt tampering rejected |
 | Export | onboarding EvidencePack metadata written under the data dir |
 
-## 2. Manual Boundary Path
+## 3. Manual Boundary Path
 
 ```bash
 ./bin/helm-ai-kernel serve --policy ./release.high_risk.v3.toml
@@ -264,12 +320,14 @@ Use `--verify-only` to compile and verify gates without starting runtime:
 ./bin/helm up hermes --verify-only
 ```
 
-## 4. Shell + MCP Quickstart
+## 5. Shell + MCP Quickstart
 
-Use this path when Claude Code, Claude Desktop, Cursor, or another MCP-capable
-client needs shell access through an upstream `shell-mcp-server`. The upstream
-server remains third-party; HELM sits in front of it as the MCP execution
-boundary.
+Use `helm-ai-kernel setup claude-code --yes` or
+`helm-ai-kernel setup codex --yes` first when the target is Claude Code or
+Codex. Use this lower-level path when Claude Desktop, Cursor, or another
+MCP-capable client needs shell access through an upstream `shell-mcp-server`.
+The upstream server remains third-party; HELM sits in front of it as the MCP
+execution boundary.
 
 Generate a wrapper profile for the upstream stdio server:
 
@@ -311,7 +369,7 @@ Run the maintained local proof:
 The demo proves unknown servers, unknown tools, and missing schema pins return
 `DENY` or `ESCALATE` before fixture dispatch.
 
-## 5. Run The Built-In Proof Demo
+## 6. Run The Built-In Proof Demo
 
 The local demo routes are implemented in the CLI server and exercise receipt verification without requiring a hosted service.
 

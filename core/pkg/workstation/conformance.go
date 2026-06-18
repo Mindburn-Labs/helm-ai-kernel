@@ -57,6 +57,7 @@ func CertifyAdapterFixtures(adapterID, fixtureRoot, requested string) AdapterCer
 			"ambiguous-resume",
 			"subagent-sidechain-summary",
 			"tainted-browser-pdf-authorization",
+			"mama-receipt-bound-execution",
 			"demo",
 		},
 		ObservedOnly: requested == CertificationObserveOnly,
@@ -182,6 +183,10 @@ func certifyHighRiskFixtures(root string) (bool, string) {
 	if err != nil {
 		return false, err.Error()
 	}
+	mama, err := ImportArtifactDir(filepath.Join(root, "mama-receipt-bound-execution"), ImportOptions{})
+	if err != nil {
+		return false, err.Error()
+	}
 	demo, err := ImportArtifactDir(filepath.Join(root, "demo"), ImportOptions{})
 	if err != nil {
 		return false, err.Error()
@@ -211,10 +216,20 @@ func certifyHighRiskFixtures(root string) (bool, string) {
 	if !receiptContainsTaint(taintedDoc.Receipt, "tainted_context") || !receiptHasDeniedReason(taintedDoc.Receipt, "TAINTED_CONTEXT_REQUIRES_DENY") {
 		return false, "tainted browser/PDF fixture must deny operate authorization from tainted context"
 	}
+	if mama.Receipt.AgentSurface != "mama" || len(mama.Receipt.ToolActions) == 0 || len(mama.Receipt.DeniedEffects) != 0 {
+		return false, "MAMA fixture must import as a receipt-bound allowed run with no denied effects"
+	}
+	decision, err := loadReferencedDecisionReceipt(filepath.Join(root, "mama-receipt-bound-execution"), mama.Receipt, "evt_mama_deploy_publish")
+	if err != nil {
+		return false, err.Error()
+	}
+	if !decisionMatchesAction(decision, mama.Receipt, "evt_mama_deploy_publish") {
+		return false, "MAMA policy decision receipt must match the allowed operate effect"
+	}
 	if len(demo.Receipt.ChangedFiles) == 0 || len(demo.Receipt.MemoryEffects) == 0 || len(demo.Receipt.RecurringLoopEffects) == 0 || len(demo.Receipt.DeniedEffects) < 4 {
 		return false, "demo fixture must cover draft, denied network, memory, recurring loop, and tainted MCP"
 	}
-	return true, "memory, recurring loop, taint, raw MCP, resume, and sidechain fixtures are represented as governed effects"
+	return true, "memory, recurring loop, taint, raw MCP, resume, sidechain, and MAMA receipt-bound fixtures are represented as governed effects"
 }
 
 func requiredFixtureFilesExist(root, fixture string) bool {
@@ -278,4 +293,44 @@ func receiptActionHasMetadata(receipt *contracts.AgentRunReceipt, actionID, key 
 		}
 	}
 	return false
+}
+
+func loadReferencedDecisionReceipt(dir string, receipt *contracts.AgentRunReceipt, actionID string) (*contracts.WorkstationPolicyDecisionReceipt, error) {
+	ref := receiptActionMetadata(receipt, actionID, "policy_decision_ref")
+	if ref == "" {
+		return nil, fmt.Errorf("%s missing policy_decision_ref metadata", actionID)
+	}
+	decision, err := LoadDecisionReceipt(filepath.Join(dir, "receipts", ref+".json"))
+	if err != nil {
+		return nil, fmt.Errorf("load MAMA policy decision receipt: %w", err)
+	}
+	if ok, err := VerifyDecisionReceiptSignature(decision); err != nil || !ok {
+		return nil, fmt.Errorf("verify MAMA policy decision receipt: %v", err)
+	}
+	if decision.DecisionID != ref || decision.Verdict != contracts.WorkstationVerdictAllow {
+		return nil, fmt.Errorf("MAMA policy decision receipt must be an ALLOW receipt for %s", ref)
+	}
+	return decision, nil
+}
+
+func decisionMatchesAction(decision *contracts.WorkstationPolicyDecisionReceipt, receipt *contracts.AgentRunReceipt, actionID string) bool {
+	for _, action := range receipt.ToolActions {
+		if action.ActionID == actionID {
+			return decision.Request.ToolID == action.ToolID &&
+				decision.Request.Action == action.Action &&
+				decision.Request.EffectType == action.EffectType &&
+				decision.Request.EffectMode == action.EffectMode &&
+				decision.Request.Target == action.Target
+		}
+	}
+	return false
+}
+
+func receiptActionMetadata(receipt *contracts.AgentRunReceipt, actionID, key string) string {
+	for _, action := range receipt.ToolActions {
+		if action.ActionID == actionID {
+			return action.Metadata[key]
+		}
+	}
+	return ""
 }

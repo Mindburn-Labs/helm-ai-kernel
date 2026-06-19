@@ -57,6 +57,10 @@ func BenchmarkGuardian_EvaluateDecisionCachedInterceptors(b *testing.B) {
 }
 
 func TestGuardianEvaluateDecisionAllocBudget(t *testing.T) {
+	if raceEnabled {
+		t.Skip("allocation budget is not stable under race instrumentation")
+	}
+
 	g := benchGuardian(t)
 	req := DecisionRequest{
 		Principal: "bench-principal",

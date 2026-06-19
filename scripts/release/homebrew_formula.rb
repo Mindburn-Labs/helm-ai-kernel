@@ -58,73 +58,72 @@ def asset_url(repo, tag, artifact)
   "https://github.com/#{repo}/releases/download/#{tag}/#{artifact}"
 end
 
-console_resource = ""
+console_resource = "\n"
 console_install = ""
 if !options[:console_bundle].to_s.empty?
-  console_resource = %Q[
-
-    resource "console-web" do
-      url "#{asset_url(options[:repo], tag, options[:console_bundle])}"
-      sha256 "#{options[:console_bundle_checksum]}"
-    end
-]
-  console_install = %Q[
-
-      resource("console-web").stage do
-        (pkgshare/"console").install Dir["*"]
-      end
-]
+  console_resource = [
+    "",
+    '  resource "console-web" do',
+    "    url \"#{asset_url(options[:repo], tag, options[:console_bundle])}\"",
+    "    sha256 \"#{options[:console_bundle_checksum]}\"",
+    "  end",
+    ""
+  ].join("\n")
+  console_install = [
+    "",
+    '    resource("console-web").stage do',
+    '      (pkgshare/"console").install Dir["*"]',
+    "    end"
+  ].join("\n")
 end
 
 puts <<~RUBY
-  # frozen_string_literal: true
+# frozen_string_literal: true
 
-  class HelmAiKernel < Formula
-    desc "Fail-closed execution firewall for AI agents"
-    homepage "https://github.com/#{options[:repo]}"
-    version "#{version}"
-    license "Apache-2.0"
+class HelmAiKernel < Formula
+  desc "Fail-closed execution firewall for AI agents"
+  homepage "https://github.com/#{options[:repo]}"
+  version "#{version}"
+  license "Apache-2.0"
 
-    resource "launchpad-data" do
-      url "#{asset_url(options[:repo], tag, "helm-ai-kernel-launchpad-data.tar")}"
-      sha256 "#{options[:launchpad_data_checksum]}"
-    end
-#{console_resource}
-
-    on_macos do
-      if Hardware::CPU.arm?
-        url "#{asset_url(options[:repo], tag, ARCHES["darwin-arm64"])}"
-        sha256 "#{checksums[ARCHES["darwin-arm64"]]}"
-      else
-        url "#{asset_url(options[:repo], tag, ARCHES["darwin-amd64"])}"
-        sha256 "#{checksums[ARCHES["darwin-amd64"]]}"
-      end
-    end
-
-    on_linux do
-      if Hardware::CPU.arm?
-        url "#{asset_url(options[:repo], tag, ARCHES["linux-arm64"])}"
-        sha256 "#{checksums[ARCHES["linux-arm64"]]}"
-      else
-        url "#{asset_url(options[:repo], tag, ARCHES["linux-amd64"])}"
-        sha256 "#{checksums[ARCHES["linux-amd64"]]}"
-      end
-    end
-
-    def install
-      binary = Dir["helm-ai-kernel-*"].first || "helm-ai-kernel"
-      bin.install binary => "helm-ai-kernel"
-      resource("launchpad-data").stage do
-        pkgshare.install "registry"
-        pkgshare.install "policies"
-      end
-#{console_install}
-    end
-
-    test do
-      assert_match version.to_s, shell_output("\#{bin}/helm-ai-kernel version 2>&1")
-      assert_match "openclaw", shell_output("\#{bin}/helm-ai-kernel launch matrix --json")
-      assert_path_exists pkgshare/"console/index.html" if resources.map(&:name).include?("console-web")
+  on_macos do
+    if Hardware::CPU.arm?
+      url "#{asset_url(options[:repo], tag, ARCHES["darwin-arm64"])}"
+      sha256 "#{checksums[ARCHES["darwin-arm64"]]}"
+    else
+      url "#{asset_url(options[:repo], tag, ARCHES["darwin-amd64"])}"
+      sha256 "#{checksums[ARCHES["darwin-amd64"]]}"
     end
   end
+
+  on_linux do
+    if Hardware::CPU.arm?
+      url "#{asset_url(options[:repo], tag, ARCHES["linux-arm64"])}"
+      sha256 "#{checksums[ARCHES["linux-arm64"]]}"
+    else
+      url "#{asset_url(options[:repo], tag, ARCHES["linux-amd64"])}"
+      sha256 "#{checksums[ARCHES["linux-amd64"]]}"
+    end
+  end
+
+  resource "launchpad-data" do
+    url "#{asset_url(options[:repo], tag, "helm-ai-kernel-launchpad-data.tar")}"
+    sha256 "#{options[:launchpad_data_checksum]}"
+  end#{console_resource}
+  def install
+    binary = Dir["helm-ai-kernel-*"].first || "helm-ai-kernel"
+    bin.install binary => "helm-ai-kernel"
+
+    resource("launchpad-data").stage do
+      pkgshare.install "registry"
+      pkgshare.install "policies"
+    end#{console_install}
+  end
+
+  test do
+    assert_match version.to_s, shell_output("\#{bin}/helm-ai-kernel version 2>&1")
+    assert_match "openclaw", shell_output("\#{bin}/helm-ai-kernel launch matrix --json")
+    assert_path_exists pkgshare/"console/index.html" if resources.map(&:name).include?("console-web")
+  end
+end
 RUBY

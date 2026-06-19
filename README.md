@@ -36,6 +36,12 @@ No cloud account. No model key. No Docker. No production credentials.
 | Run approved work | `ALLOW` | receipt + evidence |
 | Export a review bundle | verify offline | EvidencePack |
 
+HELM only governs effects that reach its boundary. For example, evals showed
+network egress blocks firing when an agent actually dispatched a LAN or
+non-allowlisted HTTPS request. Prompt-only manipulation, model refusal, or an
+agent that never attempts the tool call needs model, app, and sandbox controls
+alongside HELM.
+
 ## One Example
 
 ```text

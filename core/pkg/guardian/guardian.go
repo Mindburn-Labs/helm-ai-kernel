@@ -214,6 +214,11 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 	if ruleGraph == nil {
 		ruleGraph = prg.NewGraph()
 	}
+	if pe != nil {
+		if err := pe.WarmGraph(ruleGraph); err != nil {
+			slog.Warn("[guardian] PRG warm compile failed", "error", err)
+		}
+	}
 
 	g := &Guardian{
 		signer:   signer,

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 )
 
 func compileServePolicySnapshot(ctx context.Context, head policyreconcile.PolicyHead, bundle []byte) (*policyreconcile.EffectivePolicySnapshot, error) {
@@ -28,6 +29,15 @@ func compileServePolicySnapshot(ctx context.Context, head policyreconcile.Policy
 
 	shadowMode := os.Getenv("HELM_SHADOW_MODE") == "true" || os.Getenv("HELM_DRY_RUN") == "true"
 	innerPDP := pdp.NewHelmPDP(runtimePolicy.Policy.Name, runtimePolicy.AllowMap())
+	if runtimePolicy.Graph != nil {
+		engine, err := prg.NewPolicyEngine()
+		if err != nil {
+			return nil, err
+		}
+		if err := engine.WarmGraph(runtimePolicy.Graph); err != nil {
+			return nil, err
+		}
+	}
 
 	return &policyreconcile.EffectivePolicySnapshot{
 		TenantID:        scope.TenantID,

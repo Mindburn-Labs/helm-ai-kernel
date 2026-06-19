@@ -36,33 +36,10 @@ func NewPolicyEngine() (*PolicyEngine, error) {
 func (pe *PolicyEngine) Evaluate(expression string, input map[string]interface{}) (bool, error) {
 	expression = policycel.RewritePRGTaintContains(expression)
 
-	// 1. Check Cache
-	pe.mu.RLock()
-	prg, hit := pe.prgCache[expression]
-	pe.mu.RUnlock()
-
-	if !hit {
-		// 2. Compile (Double Checked Locking)
-		pe.mu.Lock()
-		if prg, hit = pe.prgCache[expression]; !hit {
-			ast, issues := pe.env.Compile(expression)
-			if issues != nil && issues.Err() != nil {
-				pe.mu.Unlock()
-				return false, fmt.Errorf("CEL compile error: %w", issues.Err())
-			}
-
-			p, err := pe.env.Program(ast)
-			if err != nil {
-				pe.mu.Unlock()
-				return false, fmt.Errorf("CEL program error: %w", err)
-			}
-			pe.prgCache[expression] = p
-			prg = p
-		}
-		pe.mu.Unlock()
+	prg, err := pe.programForExpression(expression)
+	if err != nil {
+		return false, err
 	}
-
-	// 3. Eval
 	out, _, err := prg.Eval(input)
 	if err != nil {
 		return false, fmt.Errorf("CEL eval error: %w", err)
@@ -74,6 +51,75 @@ func (pe *PolicyEngine) Evaluate(expression string, input map[string]interface{}
 	}
 
 	return allowed, nil
+}
+
+func (pe *PolicyEngine) programForExpression(expression string) (cel.Program, error) {
+	pe.mu.RLock()
+	prg, hit := pe.prgCache[expression]
+	pe.mu.RUnlock()
+	if hit {
+		return prg, nil
+	}
+
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
+	if prg, hit = pe.prgCache[expression]; hit {
+		return prg, nil
+	}
+	ast, issues := pe.env.Compile(expression)
+	if issues != nil && issues.Err() != nil {
+		return nil, fmt.Errorf("CEL compile error: %w", issues.Err())
+	}
+	prg, err := pe.env.Program(ast)
+	if err != nil {
+		return nil, fmt.Errorf("CEL program error: %w", err)
+	}
+	pe.prgCache[expression] = prg
+	return prg, nil
+}
+
+func (pe *PolicyEngine) WarmGraph(g *Graph) error {
+	if g == nil {
+		return nil
+	}
+	for actionID, set := range g.Rules {
+		if err := pe.WarmRequirementSet(&set); err != nil {
+			return fmt.Errorf("warm policy %s: %w", actionID, err)
+		}
+		g.Rules[actionID] = set
+	}
+	return nil
+}
+
+func (pe *PolicyEngine) WarmRequirementSet(rs *RequirementSet) error {
+	if rs == nil {
+		return nil
+	}
+	if err := pe.warmRequirements(rs.Requirements); err != nil {
+		return err
+	}
+	for i := range rs.Children {
+		if err := pe.WarmRequirementSet(&rs.Children[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (pe *PolicyEngine) warmRequirements(reqs []Requirement) error {
+	for i := range reqs {
+		if reqs[i].Expression == "" {
+			continue
+		}
+		expression := policycel.RewritePRGTaintContains(reqs[i].Expression)
+		prog, err := pe.programForExpression(expression)
+		if err != nil {
+			return fmt.Errorf("compile error in req %s: %w", reqs[i].ID, err)
+		}
+		reqs[i].compiledExpression = expression
+		reqs[i].program = prog
+	}
+	return nil
 }
 
 // EvaluateRequirementSet recursively evaluates a RequirementSet against the input.
@@ -103,13 +149,13 @@ func (pe *PolicyEngine) evaluateLeaves(reqs []Requirement, input map[string]inte
 		// If CEL expression exists, it takes precedence
 		if req.Expression != "" {
 			expression := policycel.RewritePRGTaintContains(req.Expression)
-			ast, issues := pe.env.Compile(expression)
-			if issues != nil && issues.Err() != nil {
-				return nil, fmt.Errorf("compile error in req %s: %w", req.ID, issues.Err())
-			}
-			prog, err := pe.env.Program(ast)
-			if err != nil {
-				return nil, fmt.Errorf("program error in req %s: %w", req.ID, err)
+			prog := req.program
+			if prog == nil || req.compiledExpression != expression {
+				var err error
+				prog, err = pe.programForExpression(expression)
+				if err != nil {
+					return nil, fmt.Errorf("compile error in req %s: %w", req.ID, err)
+				}
 			}
 			out, _, err := prog.Eval(activation)
 			if err != nil {

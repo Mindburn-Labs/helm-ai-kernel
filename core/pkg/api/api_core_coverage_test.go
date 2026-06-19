@@ -503,7 +503,7 @@ func TestCoverageMemoryIdempotencyStoreBranches(t *testing.T) {
 		done <- cached
 	}()
 	time.Sleep(10 * time.Millisecond)
-	if err := raceStore.Set("race", http.StatusCreated, http.Header{"Content-Type": []string{"text/plain"}}, []byte("created")); err != nil {
+	if err := raceStore.Set("race", "request-hash", http.StatusCreated, http.Header{"Content-Type": []string{"text/plain"}}, []byte("created")); err != nil {
 		t.Fatalf("set race cache: %v", err)
 	}
 	raceStore.Release("race")
@@ -525,26 +525,26 @@ func TestCoveragePostgresIdempotencyStore(t *testing.T) {
 	defer db.Close()
 	store := NewPostgresIdempotencyStore(db, time.Minute)
 
-	mock.ExpectQuery("SELECT status_code, headers, body, cached_at FROM idempotency_keys").
+	mock.ExpectQuery("SELECT request_hash, status_code, headers, body, cached_at FROM idempotency_keys").
 		WithArgs("missing").
 		WillReturnError(sql.ErrNoRows)
 	if cached, ok := store.Check("missing"); ok || cached != nil {
 		t.Fatalf("missing check got ok=%v cached=%+v", ok, cached)
 	}
 
-	mock.ExpectQuery("SELECT status_code, headers, body, cached_at FROM idempotency_keys").
+	mock.ExpectQuery("SELECT request_hash, status_code, headers, body, cached_at FROM idempotency_keys").
 		WithArgs("hit").
-		WillReturnRows(sqlmock.NewRows([]string{"status_code", "headers", "body", "cached_at"}).
-			AddRow(http.StatusOK, []byte("{}"), []byte(`{"ok":true}`), time.Now()))
+		WillReturnRows(sqlmock.NewRows([]string{"request_hash", "status_code", "headers", "body", "cached_at"}).
+			AddRow("request-hash", http.StatusOK, []byte("{}"), []byte(`{"ok":true}`), time.Now()))
 	cached, ok := store.Check("hit")
 	if !ok || cached == nil || cached.StatusCode != http.StatusOK || cached.Headers.Get("Content-Type") != "application/json" {
 		t.Fatalf("hit check got ok=%v cached=%+v", ok, cached)
 	}
 
-	mock.ExpectQuery("SELECT status_code, headers, body, cached_at FROM idempotency_keys").
+	mock.ExpectQuery("SELECT request_hash, status_code, headers, body, cached_at FROM idempotency_keys").
 		WithArgs("expired").
-		WillReturnRows(sqlmock.NewRows([]string{"status_code", "headers", "body", "cached_at"}).
-			AddRow(http.StatusOK, []byte("{}"), []byte(`{}`), time.Now().Add(-time.Hour)))
+		WillReturnRows(sqlmock.NewRows([]string{"request_hash", "status_code", "headers", "body", "cached_at"}).
+			AddRow("request-hash", http.StatusOK, []byte("{}"), []byte(`{}`), time.Now().Add(-time.Hour)))
 	mock.ExpectExec("DELETE FROM idempotency_keys WHERE key = ").
 		WithArgs("expired").
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -553,16 +553,16 @@ func TestCoveragePostgresIdempotencyStore(t *testing.T) {
 	}
 
 	mock.ExpectExec("INSERT INTO idempotency_keys").
-		WithArgs("set-key", http.StatusCreated, []byte("{}"), []byte("body")).
+		WithArgs("set-key", "request-hash", http.StatusCreated, []byte("{}"), []byte("body")).
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	if err := store.Set("set-key", http.StatusCreated, http.Header{"Content-Type": []string{"text/plain"}}, []byte("body")); err != nil {
+	if err := store.Set("set-key", "request-hash", http.StatusCreated, http.Header{"Content-Type": []string{"text/plain"}}, []byte("body")); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
 
 	mock.ExpectExec("INSERT INTO idempotency_keys").
-		WithArgs("set-error", http.StatusOK, []byte("{}"), []byte("body")).
+		WithArgs("set-error", "request-hash", http.StatusOK, []byte("{}"), []byte("body")).
 		WillReturnError(errors.New("insert failed"))
-	if err := store.Set("set-error", http.StatusOK, nil, []byte("body")); err == nil {
+	if err := store.Set("set-error", "request-hash", http.StatusOK, nil, []byte("body")); err == nil {
 		t.Fatal("expected Set error")
 	}
 

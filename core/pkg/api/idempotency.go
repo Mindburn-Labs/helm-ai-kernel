@@ -2,6 +2,10 @@ package api
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -9,16 +13,17 @@ import (
 
 // cachedResponse stores a previously-seen response for idempotent replay.
 type cachedResponse struct {
-	StatusCode int
-	Headers    http.Header
-	Body       []byte
-	CachedAt   time.Time
+	RequestHash string
+	StatusCode  int
+	Headers     http.Header
+	Body        []byte
+	CachedAt    time.Time
 }
 
 // IdempotencyStorer defines the interface for idempotency backends.
 type IdempotencyStorer interface {
 	Check(key string) (*cachedResponse, bool)
-	Set(key string, statusCode int, headers http.Header, body []byte) error
+	Set(key string, requestHash string, statusCode int, headers http.Header, body []byte) error
 }
 
 // MemoryIdempotencyStore holds cached responses keyed by idempotency key (in-memory).
@@ -113,14 +118,15 @@ func (s *MemoryIdempotencyStore) Check(key string) (*cachedResponse, bool) {
 }
 
 // Set stores a response.
-func (s *MemoryIdempotencyStore) Set(key string, statusCode int, headers http.Header, body []byte) error {
+func (s *MemoryIdempotencyStore) Set(key string, requestHash string, statusCode int, headers http.Header, body []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.entries[key] = &cachedResponse{
-		StatusCode: statusCode,
-		Headers:    headers,
-		Body:       body,
-		CachedAt:   time.Now(),
+		RequestHash: requestHash,
+		StatusCode:  statusCode,
+		Headers:     headers,
+		Body:        body,
+		CachedAt:    time.Now(),
 	}
 	return nil
 }
@@ -167,11 +173,20 @@ func IdempotencyMiddleware(store IdempotencyStorer) func(http.Handler) http.Hand
 				next.ServeHTTP(w, r)
 				return
 			}
+			requestHash, err := idempotencyRequestHash(r)
+			if err != nil {
+				WriteBadRequest(w, "invalid idempotent request body")
+				return
+			}
 
 			// Use atomic acquire if available (prevents TOCTOU race)
 			if hasAcquire {
 				cached, hit := acq.Acquire(key)
 				if hit && cached != nil {
+					if !idempotencyHashMatches(cached.RequestHash, requestHash) {
+						writeIdempotencyMismatch(w)
+						return
+					}
 					replayCached(w, cached)
 					return
 				}
@@ -180,6 +195,10 @@ func IdempotencyMiddleware(store IdempotencyStorer) func(http.Handler) http.Hand
 				// Fallback for non-MemoryIdempotencyStore implementations
 				cached, exists := store.Check(key)
 				if exists {
+					if !idempotencyHashMatches(cached.RequestHash, requestHash) {
+						writeIdempotencyMismatch(w)
+						return
+					}
 					replayCached(w, cached)
 					return
 				}
@@ -189,12 +208,34 @@ func IdempotencyMiddleware(store IdempotencyStorer) func(http.Handler) http.Hand
 			capture := &responseCapture{ResponseWriter: w, statusCode: http.StatusOK}
 			next.ServeHTTP(capture, r)
 
-			// Cache successful responses (2xx)
-			if capture.statusCode >= 200 && capture.statusCode < 300 {
-				_ = store.Set(key, capture.statusCode, w.Header().Clone(), capture.body.Bytes())
-			}
+			_ = store.Set(key, requestHash, capture.statusCode, w.Header().Clone(), capture.body.Bytes())
 		})
 	}
+}
+
+func idempotencyHashMatches(cachedHash string, requestHash string) bool {
+	return cachedHash == "" || cachedHash == requestHash
+}
+
+func idempotencyRequestHash(r *http.Request) (string, error) {
+	var body []byte
+	if r.Body != nil {
+		var err error
+		body, err = io.ReadAll(r.Body)
+		if err != nil {
+			return "", err
+		}
+		_ = r.Body.Close()
+		r.Body = io.NopCloser(bytes.NewReader(body))
+	}
+	h := sha256.New()
+	_, _ = fmt.Fprintf(h, "%s\n%s\n%s\n", r.Method, r.URL.EscapedPath(), r.URL.RawQuery)
+	_, _ = h.Write(body)
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func writeIdempotencyMismatch(w http.ResponseWriter) {
+	WriteError(w, http.StatusConflict, "Idempotency key conflict", "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST")
 }
 
 func replayCached(w http.ResponseWriter, cached *cachedResponse) {
@@ -203,6 +244,7 @@ func replayCached(w http.ResponseWriter, cached *cachedResponse) {
 			w.Header().Set(k, v)
 		}
 	}
+	w.Header().Set("X-Helm-Idempotency-Replayed", "true")
 	w.WriteHeader(cached.StatusCode)
 	_, _ = w.Write(cached.Body)
 }

@@ -197,6 +197,7 @@ type Guardian struct {
 	warmLeaseMgr      *sandbox.WarmLeaseManager    // Warm lease manager for sandboxes
 	zeroidInterceptor *ZeroIDInterceptor           // ZeroID identity validator
 	safeDepController *safedep.Controller          // Safe Deprecation emergency release plane
+	boundaryChain     []BoundaryInterceptor        // Cached request interceptors
 }
 
 // ZeroID returns the registered ZeroIDInterceptor.
@@ -213,6 +214,11 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 	}
 	if ruleGraph == nil {
 		ruleGraph = prg.NewGraph()
+	}
+	if pe != nil {
+		if err := pe.WarmGraph(ruleGraph); err != nil {
+			slog.Warn("[guardian] PRG warm compile failed", "error", err)
+		}
 	}
 
 	g := &Guardian{
@@ -232,6 +238,14 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 
 	if g.clock == nil {
 		g.clock = wallClock{}
+	}
+	g.boundaryChain = []BoundaryInterceptor{
+		g.zeroidInterceptor,
+		NewTemporalInterceptor(g),
+		NewFreezeInterceptor(g),
+		NewPDPInterceptor(g),
+		NewTaintEgressInterceptor(g),
+		NewSandboxAllocationInterceptor(g),
 	}
 
 	return g
@@ -991,14 +1005,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		return decision, nil
 	}
 
-	chain := NewInterceptorChain([]BoundaryInterceptor{
-		g.zeroidInterceptor,
-		NewTemporalInterceptor(g),
-		NewFreezeInterceptor(g),
-		NewPDPInterceptor(g),
-		NewTaintEgressInterceptor(g),
-		NewSandboxAllocationInterceptor(g),
-	}, finalHandler)
+	chain := NewInterceptorChain(g.boundaryChain, finalHandler)
 
 	return chain.Execute(ctx, evalCtx)
 }

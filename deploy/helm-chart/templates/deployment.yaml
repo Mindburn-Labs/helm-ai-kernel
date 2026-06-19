@@ -100,6 +100,24 @@ spec:
               value: {{ .Values.helm.dataDir | quote }}
             - name: HELM_HEALTH_PORT
               value: {{ .Values.service.healthPort | quote }}
+            - name: HELM_METRICS_ENABLED
+              value: {{ ternary "1" "0" .Values.helm.metrics.enabled | quote }}
+            - name: HELM_METRICS_PORT
+              value: {{ .Values.service.metricsPort | quote }}
+            - name: HELM_LIMIT_GLOBAL_RPS
+              value: {{ .Values.helm.limits.global.rps | quote }}
+            - name: HELM_LIMIT_GLOBAL_BURST
+              value: {{ .Values.helm.limits.global.burst | quote }}
+            - name: HELM_LIMIT_ACTOR_RPS
+              value: {{ .Values.helm.limits.actor.rps | quote }}
+            - name: HELM_LIMIT_ACTOR_BURST
+              value: {{ .Values.helm.limits.actor.burst | quote }}
+            - name: HELM_CONCURRENCY_MAX
+              value: {{ .Values.helm.limits.concurrency.max | quote }}
+            - name: HELM_LOAD_SHED_ENABLED
+              value: {{ ternary "1" "0" .Values.helm.limits.loadShed.enabled | quote }}
+            - name: HELM_LOAD_SHED_LOW_PRIORITY_MAX
+              value: {{ .Values.helm.limits.loadShed.lowPriorityMax | quote }}
             - name: HELM_POLICY_SOURCE_KIND
               value: {{ .Values.helm.policy.source.kind | quote }}
             - name: HELM_POLICY_POLL_INTERVAL
@@ -208,6 +226,12 @@ spec:
             - name: HELM_RUNTIME_PRINCIPAL_ID
               value: {{ .Values.helm.auth.principalID | quote }}
             {{- if eq .Values.helm.storage.type "postgres" }}
+            - name: HELM_DB_MAX_OPEN_CONNS
+              value: {{ .Values.helm.storage.postgres.maxOpenConns | quote }}
+            - name: HELM_DB_MAX_IDLE_CONNS
+              value: {{ .Values.helm.storage.postgres.maxIdleConns | quote }}
+            - name: HELM_DB_CONN_MAX_LIFETIME
+              value: {{ .Values.helm.storage.postgres.connMaxLifetime | quote }}
             {{- if .Values.helm.storage.postgres.existingSecret }}
             - name: DATABASE_URL
               valueFrom:

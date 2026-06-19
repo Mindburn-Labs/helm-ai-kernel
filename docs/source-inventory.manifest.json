@@ -27,7 +27,6 @@
         "CODE_OF_CONDUCT.md",
         "CONTRIBUTING.md",
         "GOVERNANCE.md",
-        "HELM_AI_KERNEL_TAILORED_ENGINEERING_PROMPT.md",
         "LICENSE",
         "MAINTAINERS.md",
         "Makefile",
@@ -386,8 +385,7 @@
         "docker-compose.yml",
         "sdk/README.md",
         "sdk/*/**",
-        "packages/README.md",
-        "packages/design-system-core/package.json"
+        "packages/README.md"
       ],
       "owner_doc_path": "examples/README.md",
       "public_doc_slugs": [

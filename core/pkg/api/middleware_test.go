@@ -65,3 +65,82 @@ func TestWithContextRateLimit_Passthrough(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 }
+
+func TestRateLimitMiddleware_EndpointReason(t *testing.T) {
+	limiter := NewGlobalRateLimiter(100, 100).WithEndpointLimits(func(*http.Request) string {
+		return "kernel"
+	}, map[string]RateLimitProfile{"kernel": {RPS: 1, Burst: 1}})
+	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/evaluate", nil)
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusTooManyRequests, rec.Code)
+	assert.Equal(t, "ENDPOINT_RATE_LIMIT_EXCEEDED", rec.Header().Get("X-Helm-Limiter-Reason"))
+}
+
+func TestRateLimitMiddleware_ActorResourceReason(t *testing.T) {
+	limiter := NewGlobalRateLimiter(100, 100).WithActorLimit(RateLimitProfile{RPS: 1, Burst: 1})
+	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", nil)
+	req.Header.Set("X-Helm-Tenant-ID", "tenant")
+	req.Header.Set("X-Helm-Principal-ID", "principal")
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusTooManyRequests, rec.Code)
+	assert.Equal(t, "ACTOR_RESOURCE_RATE_LIMIT_EXCEEDED", rec.Header().Get("X-Helm-Limiter-Reason"))
+}
+
+func TestRateLimitMiddleware_ConcurrencyReason(t *testing.T) {
+	limiter := NewGlobalRateLimiter(100, 100).WithConcurrencyLimit(1)
+	entered := make(chan struct{})
+	releaseHandler := make(chan struct{})
+	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(entered)
+		<-releaseHandler
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	go handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	<-entered
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	close(releaseHandler)
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Equal(t, "CONCURRENCY_LIMIT_EXCEEDED", rec.Header().Get("X-Helm-Limiter-Reason"))
+}
+
+func TestRateLimitMiddleware_LowPriorityShedReason(t *testing.T) {
+	limiter := NewGlobalRateLimiter(100, 100).WithLowPriorityLoadShed(1)
+	entered := make(chan struct{})
+	releaseHandler := make(chan struct{})
+	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(entered)
+		<-releaseHandler
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req1.Header.Set("X-Helm-Priority", "low")
+	go handler.ServeHTTP(httptest.NewRecorder(), req1)
+	<-entered
+
+	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req2.Header.Set("X-Helm-Priority", "low")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req2)
+	close(releaseHandler)
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Equal(t, "LOW_PRIORITY_LOAD_SHED", rec.Header().Get("X-Helm-Limiter-Reason"))
+}

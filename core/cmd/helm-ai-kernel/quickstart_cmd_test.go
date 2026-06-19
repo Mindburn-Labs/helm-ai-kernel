@@ -268,11 +268,11 @@ func TestReceiptsTailRequiresAgent(t *testing.T) {
 }
 
 func TestBuildReceiptsTailURL(t *testing.T) {
-	got, err := buildReceiptsTailURL("http://127.0.0.1:7714", "agent.titan.exec", "12", 5)
+	got, err := buildReceiptsTailURL("http://127.0.0.1:7714", "agent.demo.exec", "12", 5)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "http://127.0.0.1:7714/api/v1/receipts/tail?agent=agent.titan.exec&limit=5&since=12" {
+	if got != "http://127.0.0.1:7714/api/v1/receipts/tail?agent=agent.demo.exec&limit=5&since=12" {
 		t.Fatalf("url = %s", got)
 	}
 }

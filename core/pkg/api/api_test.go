@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -169,7 +170,7 @@ func TestMemoryIdempotencyStore_SetAndCheck(t *testing.T) {
 
 	headers := make(http.Header)
 	headers.Set("Content-Type", "application/json")
-	store.Set("key-1", 200, headers, []byte(`{"ok":true}`))
+	store.Set("key-1", "request-hash", 200, headers, []byte(`{"ok":true}`))
 
 	cached, exists := store.Check("key-1")
 	if !exists {
@@ -202,7 +203,7 @@ func TestMemoryIdempotencyStore_TTLExpiry(t *testing.T) {
 		ttl:     1 * time.Millisecond, // Very short TTL
 	}
 
-	store.Set("key-expired", 200, nil, []byte("data"))
+	store.Set("key-expired", "request-hash", 200, nil, []byte("data"))
 	time.Sleep(5 * time.Millisecond)
 
 	_, exists := store.Check("key-expired")
@@ -251,7 +252,7 @@ func TestIdempotencyMiddleware_POST_CachesAndReplays(t *testing.T) {
 	}))
 
 	// First call
-	req1 := httptest.NewRequest(http.MethodPost, "/", nil)
+	req1 := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte(`{"name":"first"}`)))
 	req1.Header.Set("Idempotency-Key", "create-123")
 	rr1 := httptest.NewRecorder()
 	handler.ServeHTTP(rr1, req1)
@@ -261,13 +262,68 @@ func TestIdempotencyMiddleware_POST_CachesAndReplays(t *testing.T) {
 	}
 
 	// Second call with same key — should replay from cache
-	req2 := httptest.NewRequest(http.MethodPost, "/", nil)
+	req2 := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte(`{"name":"first"}`)))
 	req2.Header.Set("Idempotency-Key", "create-123")
 	rr2 := httptest.NewRecorder()
 	handler.ServeHTTP(rr2, req2)
 
 	if callCount != 1 {
 		t.Errorf("expected handler NOT called again, got %d", callCount)
+	}
+	if rr2.Header().Get("X-Helm-Idempotency-Replayed") != "true" {
+		t.Fatal("expected replay header")
+	}
+}
+
+func TestIdempotencyMiddleware_POST_MismatchReturnsConflict(t *testing.T) {
+	store := NewIdempotencyStore(time.Minute)
+	callCount := 0
+	handler := IdempotencyMiddleware(store)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"123"}`))
+	}))
+
+	req1 := httptest.NewRequest(http.MethodPost, "/create?mode=a", bytes.NewReader([]byte(`{"name":"first"}`)))
+	req1.Header.Set("Idempotency-Key", "create-mismatch")
+	handler.ServeHTTP(httptest.NewRecorder(), req1)
+
+	req2 := httptest.NewRequest(http.MethodPost, "/create?mode=a", bytes.NewReader([]byte(`{"name":"second"}`)))
+	req2.Header.Set("Idempotency-Key", "create-mismatch")
+	rr2 := httptest.NewRecorder()
+	handler.ServeHTTP(rr2, req2)
+
+	if rr2.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", rr2.Code)
+	}
+	if !strings.Contains(rr2.Body.String(), "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST") {
+		t.Fatalf("expected mismatch reason, got %s", rr2.Body.String())
+	}
+	if callCount != 1 {
+		t.Fatalf("mismatched replay should not call handler again, got %d", callCount)
+	}
+}
+
+func TestIdempotencyMiddleware_POST_ReplaysServerError(t *testing.T) {
+	store := NewIdempotencyStore(time.Minute)
+	callCount := 0
+	handler := IdempotencyMiddleware(store)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("failed"))
+	}))
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/fail", bytes.NewReader([]byte(`{"same":true}`)))
+		req.Header.Set("Idempotency-Key", "error-key")
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Fatalf("expected 500, got %d", rr.Code)
+		}
+	}
+	if callCount != 1 {
+		t.Fatalf("expected cached 500 to replay, got %d calls", callCount)
 	}
 }
 

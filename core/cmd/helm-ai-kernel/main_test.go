@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -100,4 +102,38 @@ func TestRun_Health_Fail(t *testing.T) {
 	// Health check fails when no server is running on the target port
 	combined := stdout.String() + stderr.String()
 	assert.True(t, len(combined) > 0 || exitCode == 1, "Health check should fail")
+}
+
+func TestRuntimeRateClassForRequest(t *testing.T) {
+	req, err := http.NewRequest(http.MethodPost, "/api/v1/evaluate", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(RouteRateKernel), runtimeRateClassForRequest(req))
+
+	req, err = http.NewRequest(http.MethodGet, "/unknown", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(RouteRatePublic), runtimeRateClassForRequest(req))
+}
+
+func TestEnvIntFallback(t *testing.T) {
+	t.Setenv("HELM_LIMIT_GLOBAL_RPS", "bad")
+	assert.Equal(t, 60, envInt("HELM_LIMIT_GLOBAL_RPS", 60))
+}
+
+func TestConfigurePostgresPoolFromEnv(t *testing.T) {
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	t.Setenv("HELM_DB_MAX_OPEN_CONNS", "7")
+	t.Setenv("HELM_DB_MAX_IDLE_CONNS", "12")
+	t.Setenv("HELM_DB_CONN_MAX_LIFETIME", "2m")
+	configurePostgresPool(db)
+
+	assert.Equal(t, 7, db.Stats().MaxOpenConnections)
 }

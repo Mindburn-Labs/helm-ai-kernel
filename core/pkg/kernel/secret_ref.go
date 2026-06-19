@@ -7,6 +7,22 @@ import (
 	"time"
 )
 
+var (
+	secretKeyPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)password$`),
+		regexp.MustCompile(`(?i)api_key$`),
+		regexp.MustCompile(`(?i)secret$`),
+		regexp.MustCompile(`(?i)secret_key$`),
+	}
+	secretValuePatterns = []*regexp.Regexp{
+		regexp.MustCompile(`-----BEGIN.*PRIVATE KEY-----`),
+		regexp.MustCompile(`^sk_live_`),
+		regexp.MustCompile(`^AKIA[0-9A-Z]{16}$`),
+		regexp.MustCompile(`(?i)password\W*[:=]\W*\w+`),
+		regexp.MustCompile(`(?i)secret\W*[:=]\W*\w+`),
+	}
+)
+
 // SecretProvider identifiers for supported secret stores.
 type SecretProvider string
 
@@ -153,21 +169,8 @@ func ScanForPlaintextSecrets(artifact interface{}) error {
 }
 
 func isSecretKey(path string) bool {
-	// Simple heuristic: check suffix of path
-	// In a robust implementation, we'd split path by '.' and check the last segment
-	// Since we don't have strings imported, we rely on regex or simple checks.
-	// But let's assume we can use regex.
-	// Or check the mock patterns.
-
-	sensitiveKeys := []string{
-		`password$`,
-		`api_key$`,
-		`secret$`,
-		`secret_key$`,
-	}
-
-	for _, p := range sensitiveKeys {
-		if regexp.MustCompile("(?i)" + p).MatchString(path) {
+	for _, p := range secretKeyPatterns {
+		if p.MatchString(path) {
 			return true
 		}
 	}
@@ -180,16 +183,8 @@ func looksLikeSecret(value interface{}) bool {
 		return false
 	}
 
-	patterns := []string{
-		`-----BEGIN.*PRIVATE KEY-----`,
-		`^sk_live_`,
-		`^AKIA[0-9A-Z]{16}$`,
-		`(?i)password\W*[:=]\W*\w+`,
-		`(?i)secret\W*[:=]\W*\w+`,
-	}
-
-	for _, p := range patterns {
-		if regexp.MustCompile(p).MatchString(str) {
+	for _, p := range secretValuePatterns {
+		if p.MatchString(str) {
 			return true
 		}
 	}

@@ -471,6 +471,37 @@ func TestEvaluateRequirementSet_CELWithInput(t *testing.T) {
 	}
 }
 
+func TestEvaluateRequirementSet_UsesWarmedProgram(t *testing.T) {
+	pe, _ := NewPolicyEngine()
+	rs := RequirementSet{
+		Requirements: []Requirement{
+			{ID: "r1", Expression: `input["level"] > 3`},
+		},
+	}
+	if err := pe.WarmRequirementSet(&rs); err != nil {
+		t.Fatal(err)
+	}
+	pe.mu.Lock()
+	for k := range pe.prgCache {
+		delete(pe.prgCache, k)
+	}
+	pe.mu.Unlock()
+
+	result, err := pe.EvaluateRequirementSet(rs, map[string]interface{}{"level": 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result {
+		t.Fatal("expected warmed requirement to evaluate true")
+	}
+	pe.mu.RLock()
+	cacheSize := len(pe.prgCache)
+	pe.mu.RUnlock()
+	if cacheSize != 0 {
+		t.Fatalf("warmed requirement should not compile during evaluation, cache size=%d", cacheSize)
+	}
+}
+
 func TestEvaluateRequirementSet_TaintContainsHelper(t *testing.T) {
 	pe, _ := NewPolicyEngine()
 	rs := RequirementSet{

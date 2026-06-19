@@ -433,15 +433,6 @@
       "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/governance"
     },
     {
-      "slug": "internal/helm-ai-kernel/helm_ai_kernel_tailored_engineering_prompt",
-      "title": "HELM AI Kernel Tailored Engineering Review And Implementation Prompt",
-      "section": "internal",
-      "source_path": "HELM_AI_KERNEL_TAILORED_ENGINEERING_PROMPT.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/helm_ai_kernel_tailored_engineering_prompt"
-    },
-    {
       "slug": "internal/helm-ai-kernel/maintainers",
       "title": "Maintainers",
       "section": "internal",

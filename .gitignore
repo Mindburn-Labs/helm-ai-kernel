@@ -57,7 +57,6 @@ mise.*.local.*
 # ─── Internal docs (not for public OSS) ───────────────────────────────────────
 /HELM_Investment_Memo*.md
 /HELM_Unified_Canonical_Standard_FINAL*.md
-/titan-*.md
 /CONFORMANCE.md
 /TCB_POLICY.md
 

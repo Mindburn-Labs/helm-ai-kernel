@@ -32,7 +32,7 @@ test-sdk-py:
 	cd sdk/python && python -m pip install -q '.[dev]' && pytest -v --tb=short
 
 test-sdk-rust:
-	cd sdk/rust && cargo test
+	cd sdk/rust && CARGO_HTTP_MULTIPLEXING=false cargo test
 
 test-sdk-java:
 	cd sdk/java && mvn -q test

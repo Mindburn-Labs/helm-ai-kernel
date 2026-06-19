@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -21,6 +22,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/memory"
 	trustregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust/registry"
 )
+
+const governedOpenAIRequestMaxBytes = 10 << 20
 
 // RegisterSubsystemRoutes registers all subsystem API routes on the given mux.
 // This wires kernel-critical packages into the HTTP API surface.
@@ -45,76 +48,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	// Wraps api.HandleOpenAIProxy with Guardian governance enforcement and receipt headers.
 	// Requires HELM_UPSTREAM_URL to be set for real upstream forwarding.
 	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			api.WriteMethodNotAllowed(w)
-			return
-		}
-
-		// Pre-flight: Guardian governance check
-		if svc.Guardian != nil {
-			// Read and buffer the body so it can be re-read by the proxy
-			bodyBytes, err := io.ReadAll(r.Body)
-			if err != nil {
-				api.WriteBadRequest(w, "Failed to read request body")
-				return
-			}
-			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-
-			var body map[string]interface{}
-			if err := json.Unmarshal(bodyBytes, &body); err != nil {
-				api.WriteBadRequest(w, "Invalid JSON body")
-				return
-			}
-
-			model, _ := body["model"].(string)
-			req := guardian.DecisionRequest{
-				Principal: r.Header.Get("X-Helm-Principal"),
-				Action:    "LLM_INFERENCE",
-				Resource:  model,
-				Context:   body,
-			}
-			if req.Principal == "" {
-				req.Principal = "anonymous"
-			}
-
-			decision, err := svc.Guardian.EvaluateDecision(r.Context(), req)
-			if err != nil {
-				api.WriteInternal(w, err)
-				return
-			}
-
-			// Emit receipt headers on every response (allow or deny)
-			w.Header().Set("X-Helm-Decision-ID", decision.ID)
-			w.Header().Set("X-Helm-Verdict", decision.Verdict)
-			w.Header().Set("X-Helm-Policy-Version", decision.PolicyVersion)
-			if decision.PolicyDecisionHash != "" {
-				w.Header().Set("X-Helm-Decision-Hash", decision.PolicyDecisionHash)
-			}
-			agentID := r.Header.Get("X-Helm-Agent")
-			if agentID == "" {
-				agentID = r.Header.Get("X-Agent-ID")
-			}
-			if agentID == "" {
-				agentID = req.Principal
-			}
-			persistDecisionReceipt(r.Context(), svc, decision, agentID, bodyBytes, map[string]any{
-				"source":   "openai.proxy",
-				"action":   req.Action,
-				"resource": req.Resource,
-				"reason":   decision.Reason,
-			})
-
-			if contracts.Verdict(decision.Verdict) != contracts.VerdictAllow {
-				api.WriteError(w, http.StatusForbidden, "Governance Blocked", decision.Reason)
-				return
-			}
-
-			// Re-buffer body for the proxy handler
-			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		}
-
-		// Delegate to the real upstream proxy handler
-		api.HandleOpenAIProxy(w, r)
+		handleGovernedOpenAIProxy(w, r, svc)
 	})
 
 	// --- Evidence Export ---
@@ -399,6 +333,87 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	_ = ctx
 
 	log.Println("[helm] routes: All subsystem routes registered")
+}
+
+func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Services) {
+	if r.Method != http.MethodPost {
+		api.WriteMethodNotAllowed(w)
+		return
+	}
+
+	if svc != nil && svc.Guardian != nil {
+		bodyBytes, body, ok := readGovernedOpenAIRequest(w, r)
+		if !ok {
+			return
+		}
+
+		model, _ := body["model"].(string)
+		req := guardian.DecisionRequest{
+			Principal: r.Header.Get("X-Helm-Principal"),
+			Action:    "LLM_INFERENCE",
+			Resource:  model,
+			Context:   body,
+		}
+		if req.Principal == "" {
+			req.Principal = "anonymous"
+		}
+
+		decision, err := svc.Guardian.EvaluateDecision(r.Context(), req)
+		if err != nil {
+			api.WriteInternal(w, err)
+			return
+		}
+
+		w.Header().Set("X-Helm-Decision-ID", decision.ID)
+		w.Header().Set("X-Helm-Verdict", decision.Verdict)
+		w.Header().Set("X-Helm-Policy-Version", decision.PolicyVersion)
+		if decision.PolicyDecisionHash != "" {
+			w.Header().Set("X-Helm-Decision-Hash", decision.PolicyDecisionHash)
+		}
+		agentID := r.Header.Get("X-Helm-Agent")
+		if agentID == "" {
+			agentID = r.Header.Get("X-Agent-ID")
+		}
+		if agentID == "" {
+			agentID = req.Principal
+		}
+		persistDecisionReceipt(r.Context(), svc, decision, agentID, bodyBytes, map[string]any{
+			"source":   "openai.proxy",
+			"action":   req.Action,
+			"resource": req.Resource,
+			"reason":   decision.Reason,
+		})
+
+		if contracts.Verdict(decision.Verdict) != contracts.VerdictAllow {
+			api.WriteError(w, http.StatusForbidden, "Governance Blocked", decision.Reason)
+			return
+		}
+	}
+
+	api.HandleOpenAIProxy(w, r)
+}
+
+func readGovernedOpenAIRequest(w http.ResponseWriter, r *http.Request) ([]byte, map[string]interface{}, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, governedOpenAIRequestMaxBytes)
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			api.WriteError(w, http.StatusRequestEntityTooLarge, "Request Too Large", "request body exceeds 10 MiB")
+		} else {
+			api.WriteBadRequest(w, "Failed to read request body")
+		}
+		return nil, nil, false
+	}
+	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+	var body map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &body); err != nil {
+		api.WriteBadRequest(w, "Invalid JSON body")
+		return nil, nil, false
+	}
+	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	return bodyBytes, body, true
 }
 
 func csvEnv(key string) []string {

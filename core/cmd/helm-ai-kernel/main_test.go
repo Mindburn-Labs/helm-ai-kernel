@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -100,4 +101,23 @@ func TestRun_Health_Fail(t *testing.T) {
 	// Health check fails when no server is running on the target port
 	combined := stdout.String() + stderr.String()
 	assert.True(t, len(combined) > 0 || exitCode == 1, "Health check should fail")
+}
+
+func TestRuntimeRateClassForRequest(t *testing.T) {
+	req, err := http.NewRequest(http.MethodPost, "/api/v1/evaluate", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(RouteRateKernel), runtimeRateClassForRequest(req))
+
+	req, err = http.NewRequest(http.MethodGet, "/unknown", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, string(RouteRatePublic), runtimeRateClassForRequest(req))
+}
+
+func TestEnvIntFallback(t *testing.T) {
+	t.Setenv("HELM_LIMIT_GLOBAL_RPS", "bad")
+	assert.Equal(t, 60, envInt("HELM_LIMIT_GLOBAL_RPS", 60))
 }

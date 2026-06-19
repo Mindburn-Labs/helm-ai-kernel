@@ -393,10 +393,7 @@ func runServerWithOptions(opts serverOptions) {
 		extraRoutes(mux)
 	}
 	RegisterLocalConsoleAssetRoutes(mux, opts, bindAddr, port)
-	rateLimiter := helmapi.NewGlobalRateLimiter(60, 120)
-	if envBool("HELM_TRUST_PROXY_HEADERS") {
-		rateLimiter = rateLimiter.WithTrustProxy(true)
-	}
+	rateLimiter := buildRuntimeRateLimiter()
 	server := &http.Server{
 		Addr: fmt.Sprintf("%s:%d", bindAddr, port),
 		Handler: helmauth.SecurityHeaders(
@@ -489,6 +486,81 @@ func runServerWithOptions(opts serverOptions) {
 func envBool(key string) bool {
 	value := os.Getenv(key)
 	return value == "1" || value == "true" || value == "TRUE" || value == "yes" || value == "YES"
+}
+
+func envInt(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func buildRuntimeRateLimiter() *helmapi.GlobalRateLimiter {
+	rateLimiter := helmapi.NewGlobalRateLimiter(
+		envInt("HELM_LIMIT_GLOBAL_RPS", envInt("HELM_LIMIT_RPS", 60)),
+		envInt("HELM_LIMIT_GLOBAL_BURST", envInt("HELM_LIMIT_BURST", 120)),
+	)
+	rateLimiter = rateLimiter.WithEndpointLimits(runtimeRateClassForRequest, map[string]helmapi.RateLimitProfile{
+		string(RouteRatePublic):   endpointRateProfile(RouteRatePublic, 120, 240),
+		string(RouteRateKernel):   endpointRateProfile(RouteRateKernel, 60, 120),
+		string(RouteRateEvidence): endpointRateProfile(RouteRateEvidence, 40, 80),
+		string(RouteRateAdmin):    endpointRateProfile(RouteRateAdmin, 20, 40),
+		string(RouteRateStream):   endpointRateProfile(RouteRateStream, 20, 40),
+	})
+	rateLimiter = rateLimiter.WithActorLimit(helmapi.RateLimitProfile{
+		RPS:   envInt("HELM_LIMIT_ACTOR_RPS", 60),
+		Burst: envInt("HELM_LIMIT_ACTOR_BURST", 120),
+	})
+	rateLimiter = rateLimiter.WithConcurrencyLimit(envInt("HELM_CONCURRENCY_MAX", 0))
+	if envBool("HELM_LOAD_SHED_ENABLED") {
+		rateLimiter = rateLimiter.WithLowPriorityLoadShed(envInt("HELM_LOAD_SHED_LOW_PRIORITY_MAX", 0))
+	}
+	if envBool("HELM_TRUST_PROXY_HEADERS") {
+		rateLimiter = rateLimiter.WithTrustProxy(true)
+	}
+	return rateLimiter
+}
+
+func endpointRateProfile(class RouteRateLimit, defaultRPS, defaultBurst int) helmapi.RateLimitProfile {
+	name := strings.ToUpper(string(class))
+	return helmapi.RateLimitProfile{
+		RPS:   envInt("HELM_LIMIT_"+name+"_RPS", envInt("HELM_LIMIT_ENDPOINT_RPS", defaultRPS)),
+		Burst: envInt("HELM_LIMIT_"+name+"_BURST", envInt("HELM_LIMIT_ENDPOINT_BURST", defaultBurst)),
+	}
+}
+
+func runtimeRateClassForRequest(r *http.Request) string {
+	path := r.URL.EscapedPath()
+	bestClass := string(RouteRatePublic)
+	bestLen := -1
+	for _, spec := range RuntimeRouteSpecs() {
+		if spec.Method != "" && spec.Method != r.Method {
+			continue
+		}
+		if !runtimeRouteMatches(spec.MuxPattern, path) {
+			continue
+		}
+		if len(spec.MuxPattern) > bestLen {
+			bestLen = len(spec.MuxPattern)
+			bestClass = string(spec.RateLimit)
+		}
+	}
+	return bestClass
+}
+
+func runtimeRouteMatches(pattern string, path string) bool {
+	if pattern == "" {
+		return false
+	}
+	if pattern == path {
+		return true
+	}
+	return strings.HasSuffix(pattern, "/") && strings.HasPrefix(path, pattern)
 }
 
 func policyPollIntervalFromEnv() time.Duration {

@@ -421,6 +421,105 @@ func TestReconcilerInvalidUpdateKeepsLastKnownGood(t *testing.T) {
 	}
 }
 
+func TestReconcilerCompileFaultKeepsFreshLastKnownGood(t *testing.T) {
+	scope := DefaultScope
+	bundle := []byte("policy-v1")
+	compileFails := false
+	source := &mutableSource{
+		head:   PolicyHead{Scope: scope, PolicyEpoch: 1, PolicyHash: HashBytes(bundle)},
+		bundle: bundle,
+	}
+	store := NewAtomicSnapshotStore()
+	reconciler, err := NewReconciler(ReconcilerConfig{
+		Source: source,
+		Store:  store,
+		Compiler: func(ctx context.Context, head PolicyHead, bundle []byte) (*EffectivePolicySnapshot, error) {
+			if compileFails {
+				return nil, errors.New("broken TOML")
+			}
+			return testCompiler(ctx, head, bundle)
+		},
+		KeepLastKnownGood: true,
+	})
+	if err != nil {
+		t.Fatalf("new reconciler: %v", err)
+	}
+	if _, err := reconciler.Reconcile(context.Background(), scope); err != nil {
+		t.Fatalf("initial reconcile: %v", err)
+	}
+
+	next := []byte("policy-v2")
+	source.head = PolicyHead{Scope: scope, PolicyEpoch: 2, PolicyHash: HashBytes(next)}
+	source.bundle = next
+	compileFails = true
+	status, err := reconciler.Reconcile(context.Background(), scope)
+	if err == nil || status.ReconcileStatus != StatusCompileError {
+		t.Fatalf("expected compile failure, got status=%+v err=%v", status, err)
+	}
+	current, ok := store.Get(scope)
+	if !ok || current.PolicyEpoch != 1 || current.PolicyHash != HashBytes(bundle) || current.Validation.Status != StatusActive {
+		t.Fatalf("fresh last-known-good was not preserved after compile fault: %+v", current)
+	}
+	if status.SnapshotStatus != StatusActive || status.InstalledPolicyEpoch != 1 {
+		t.Fatalf("status did not report preserved last-known-good: %+v", status)
+	}
+}
+
+func TestReconcilerSourceOutageExpiresLastKnownGoodFailClosed(t *testing.T) {
+	scope := DefaultScope
+	now := time.Date(2026, 6, 19, 12, 0, 0, 0, time.UTC)
+	bundle := []byte("policy-v1")
+	source := &mutableSource{
+		head:   PolicyHead{Scope: scope, PolicyEpoch: 1, PolicyHash: HashBytes(bundle)},
+		bundle: bundle,
+	}
+	store := NewAtomicSnapshotStore()
+	reconciler, err := NewReconciler(ReconcilerConfig{
+		Source:              source,
+		Store:               store,
+		Compiler:            testCompiler,
+		KeepLastKnownGood:   true,
+		LastKnownGoodMaxAge: 10 * time.Minute,
+		Clock:               func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("new reconciler: %v", err)
+	}
+	if _, err := reconciler.Reconcile(context.Background(), scope); err != nil {
+		t.Fatalf("initial reconcile: %v", err)
+	}
+
+	source.err = errors.New("control plane unavailable")
+	now = now.Add(5 * time.Minute)
+	status, err := reconciler.Reconcile(context.Background(), scope)
+	if err == nil || status.ReconcileStatus != StatusSourceError {
+		t.Fatalf("expected source outage, got status=%+v err=%v", status, err)
+	}
+	current, ok := store.Get(scope)
+	if !ok || current.PolicyEpoch != 1 || current.Validation.Status != StatusActive {
+		t.Fatalf("last-known-good should remain active during fresh outage: %+v", current)
+	}
+	if status.SnapshotStatus != StatusActive || status.InstalledPolicyEpoch != 1 {
+		t.Fatalf("status did not bind fresh last-known-good: %+v", status)
+	}
+
+	now = now.Add(10*time.Minute + time.Nanosecond)
+	status, err = reconciler.Reconcile(context.Background(), scope)
+	if err == nil || status.SnapshotStatus != StatusInvalid || !strings.Contains(status.Reason, lkgExpiredReasonText) {
+		t.Fatalf("expected expired LKG failure, got status=%+v err=%v", status, err)
+	}
+	current, ok = store.Get(scope)
+	if !ok {
+		t.Fatal("expired snapshot should remain available as invalid evidence")
+	}
+	if current.Validation.Status != StatusInvalid || !strings.Contains(current.Validation.Reason, lkgExpiredReasonText) {
+		t.Fatalf("expired LKG was not invalidated: %+v", current)
+	}
+	if current.Graph != nil || current.PDP != nil || len(current.PolicyLayers) != 0 {
+		t.Fatalf("expired LKG retained executable policy material: %+v", current)
+	}
+}
+
 func TestReconcilerInitialSnapshotRequired(t *testing.T) {
 	scope := DefaultScope
 	source := &mutableSource{head: PolicyHead{Scope: scope}, err: ErrPolicyNotReady}

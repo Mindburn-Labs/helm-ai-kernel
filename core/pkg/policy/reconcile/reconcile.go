@@ -39,7 +39,10 @@ const (
 	StatusSourceError   = "source_error"
 	StatusCompileError  = "compile_error"
 	StatusValidateError = "validate_error"
+	DefaultLKGMaxAge    = 10 * time.Minute
 )
+
+const lkgExpiredReasonText = "last-known-good snapshot expired"
 
 var (
 	ErrPolicyNotReady          = errors.New("policy not ready")
@@ -116,6 +119,7 @@ type EffectivePolicySnapshot struct {
 	EmergencyExpiresAt   time.Time        `json:"emergency_expires_at,omitempty"`
 	SourceRefs           []string         `json:"source_refs,omitempty"`
 	Validation           ValidationStatus `json:"validation"`
+	InstalledAt          time.Time        `json:"installed_at,omitempty"`
 
 	Graph        *prg.Graph              `json:"-"`
 	PDP          pdp.PolicyDecisionPoint `json:"-"`
@@ -133,6 +137,7 @@ func (s *EffectivePolicySnapshot) Scope() PolicyScope {
 type PolicySnapshotStore interface {
 	Get(scope PolicyScope) (*EffectivePolicySnapshot, bool)
 	Swap(scope PolicyScope, snapshot *EffectivePolicySnapshot) error
+	Invalidate(scope PolicyScope, reason string) (*EffectivePolicySnapshot, bool)
 }
 
 // SnapshotCompiler turns verified policy bytes into an effective snapshot.
@@ -210,19 +215,23 @@ type Reconciler struct {
 	emergencyVerifier EmergencyCapsuleVerifier
 	requireSignature  bool
 	keepLastKnownGood bool
+	lkgMaxAge         time.Duration
+	now               func() time.Time
 
 	mu     sync.Mutex
 	status map[string]ReconcileStatus
 }
 
 type ReconcilerConfig struct {
-	Source            PolicySource
-	Store             PolicySnapshotStore
-	Compiler          SnapshotCompiler
-	Verifier          SignatureVerifier
-	EmergencyVerifier EmergencyCapsuleVerifier
-	RequireSignature  bool
-	KeepLastKnownGood bool
+	Source              PolicySource
+	Store               PolicySnapshotStore
+	Compiler            SnapshotCompiler
+	Verifier            SignatureVerifier
+	EmergencyVerifier   EmergencyCapsuleVerifier
+	RequireSignature    bool
+	KeepLastKnownGood   bool
+	LastKnownGoodMaxAge time.Duration
+	Clock               func() time.Time
 }
 
 func NewReconciler(cfg ReconcilerConfig) (*Reconciler, error) {
@@ -235,6 +244,14 @@ func NewReconciler(cfg ReconcilerConfig) (*Reconciler, error) {
 	if cfg.Compiler == nil {
 		return nil, fmt.Errorf("policy reconciler compiler is required")
 	}
+	now := cfg.Clock
+	if now == nil {
+		now = func() time.Time { return time.Now().UTC() }
+	}
+	lkgMaxAge := cfg.LastKnownGoodMaxAge
+	if cfg.KeepLastKnownGood && lkgMaxAge <= 0 {
+		lkgMaxAge = DefaultLKGMaxAge
+	}
 	return &Reconciler{
 		source:            cfg.Source,
 		store:             cfg.Store,
@@ -243,6 +260,8 @@ func NewReconciler(cfg ReconcilerConfig) (*Reconciler, error) {
 		emergencyVerifier: cfg.EmergencyVerifier,
 		requireSignature:  cfg.RequireSignature,
 		keepLastKnownGood: cfg.KeepLastKnownGood,
+		lkgMaxAge:         lkgMaxAge,
+		now:               now,
 		status:            make(map[string]ReconcileStatus),
 	}, nil
 }
@@ -276,8 +295,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, scope PolicyScope) (Reconcil
 	head, err := r.source.Head(ctx, scope)
 	if err != nil {
 		status.Reason = err.Error()
-		r.remember(status)
-		return status, err
+		return r.invalid(status, err)
 	}
 	head.Scope = head.Scope.Normalize()
 	if head.Scope.Key() != scope.Key() {
@@ -360,6 +378,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, scope PolicyScope) (Reconcil
 		status.Reason = err.Error()
 		return r.invalid(status, err)
 	}
+	snapshot.InstalledAt = r.now()
 	if err := r.store.Swap(scope, snapshot); err != nil {
 		status.Reason = err.Error()
 		return status, err
@@ -402,19 +421,48 @@ func (r *Reconciler) LastStatus(scope PolicyScope) (ReconcileStatus, bool) {
 }
 
 func (r *Reconciler) invalid(status ReconcileStatus, err error) (ReconcileStatus, error) {
-	status.SnapshotStatus = StatusInvalid
-	if installed, ok := r.store.Get(PolicyScope{TenantID: status.TenantID, WorkspaceID: status.WorkspaceID}); ok && r.keepLastKnownGood {
+	scope := PolicyScope{TenantID: status.TenantID, WorkspaceID: status.WorkspaceID}
+	if installed, ok := r.store.Get(scope); ok && r.keepLastKnownGood {
 		status.PolicyHash = installed.PolicyHash
 		status.PolicyEpoch = installed.PolicyEpoch
 		status.InstalledPolicyHash = installed.PolicyHash
 		status.InstalledPolicyEpoch = installed.PolicyEpoch
-		status.SnapshotStatus = installed.Validation.Status
+		if r.lastKnownGoodFresh(installed) {
+			status.SnapshotStatus = installed.Validation.Status
+			r.remember(status)
+			return status, err
+		}
+		reason := fmt.Sprintf("%s after %s", lkgExpiredReasonText, r.lkgMaxAge)
+		status.SnapshotStatus = StatusInvalid
+		if status.Reason == "" {
+			status.Reason = reason
+		} else {
+			status.Reason += "; " + reason
+		}
+		if expired, expiredOK := r.store.Invalidate(scope, reason); expiredOK && expired != nil {
+			status.SnapshotStatus = expired.Validation.Status
+		}
+		r.remember(status)
+		return status, err
 	}
-	if status.ReconcileStatus == StatusSourceError {
-		status.ReconcileStatus = StatusInvalid
+	if status.SnapshotStatus == "" {
+		status.SnapshotStatus = StatusInvalid
 	}
 	r.remember(status)
 	return status, err
+}
+
+func (r *Reconciler) lastKnownGoodFresh(snapshot *EffectivePolicySnapshot) bool {
+	if snapshot == nil || !r.keepLastKnownGood {
+		return false
+	}
+	if snapshot.Validation.Status != "" && snapshot.Validation.Status != StatusActive {
+		return false
+	}
+	if r.lkgMaxAge <= 0 || snapshot.InstalledAt.IsZero() {
+		return true
+	}
+	return r.now().Sub(snapshot.InstalledAt) <= r.lkgMaxAge
 }
 
 func (r *Reconciler) remember(status ReconcileStatus) {
@@ -583,10 +631,30 @@ func (s *AtomicSnapshotStore) Swap(scope PolicyScope, snapshot *EffectivePolicyS
 	if snapshot == nil {
 		return fmt.Errorf("nil policy snapshot")
 	}
+	if snapshot.InstalledAt.IsZero() {
+		snapshot.InstalledAt = time.Now().UTC()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.snapshots[scope.Normalize().Key()] = snapshot
 	return nil
+}
+
+func (s *AtomicSnapshotStore) Invalidate(scope PolicyScope, reason string) (*EffectivePolicySnapshot, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := scope.Normalize().Key()
+	snapshot, ok := s.snapshots[key]
+	if !ok || snapshot == nil {
+		return nil, false
+	}
+	expired := *snapshot
+	expired.Validation = ValidationStatus{Status: StatusInvalid, Reason: strings.TrimSpace(reason), Hash: snapshot.PolicyHash}
+	expired.Graph = nil
+	expired.PDP = nil
+	expired.PolicyLayers = nil
+	s.snapshots[key] = &expired
+	return &expired, true
 }
 
 // MountedFileSource is the OSS/local policy backend. The mounted file is

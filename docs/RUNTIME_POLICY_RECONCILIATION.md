@@ -17,6 +17,9 @@ verification, compile, validation, and atomic snapshot swap.
 - Bad signatures do not install a snapshot.
 - Malformed bundles do not partially install.
 - Unavailable sources preserve last-known-good snapshots when one exists.
+- Last-known-good snapshots are bounded to 10 minutes by default; after expiry,
+  source, compile, validation, signature, or hash faults invalidate the snapshot
+  so Guardian fails closed.
 - Initial startup without a valid source fails closed.
 - Reconcile status records policy epoch/hash, bundle ref, source refs, and the
   `policy_reconcile` audit event marker for operator evidence.

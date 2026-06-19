@@ -59,6 +59,24 @@ func (s *guardianCoverageSnapshotStore) Swap(scope policyreconcile.PolicyScope, 
 	return nil
 }
 
+func (s *guardianCoverageSnapshotStore) Invalidate(scope policyreconcile.PolicyScope, reason string) (*policyreconcile.EffectivePolicySnapshot, bool) {
+	if s.snapshots == nil {
+		return nil, false
+	}
+	key := scope.Normalize().Key()
+	snapshot, ok := s.snapshots[key]
+	if !ok || snapshot == nil {
+		return nil, false
+	}
+	expired := *snapshot
+	expired.Validation = policyreconcile.ValidationStatus{Status: policyreconcile.StatusInvalid, Reason: strings.TrimSpace(reason), Hash: snapshot.PolicyHash}
+	expired.Graph = nil
+	expired.PDP = nil
+	expired.PolicyLayers = nil
+	s.snapshots[key] = &expired
+	return &expired, true
+}
+
 type guardianCoverageSignOnly struct {
 	failIntent bool
 }

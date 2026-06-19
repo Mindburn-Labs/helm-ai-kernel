@@ -397,6 +397,7 @@
         "helm-ai-kernel/deployment/kubernetes",
         "helm-ai-kernel/sdks",
         "helm-ai-kernel/integrations/openai-compatible-proxy",
+        "helm-ai-kernel/integrations/codebase-memory-mcp",
         "helm-ai-kernel/integrations/mcp"
       ],
       "rationale": "Developers need install, SDK, framework, and deployment paths from the public docs, with examples and package docs as executable proof.",

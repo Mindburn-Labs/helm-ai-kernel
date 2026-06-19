@@ -1,0 +1,85 @@
+{
+  "baseline_p99_us": 2,
+  "competitive_comparison": {
+    "helm": {
+      "measured_cel_eval_mean_us": 0.0316,
+      "measured_cel_eval_p99_us": 0,
+      "measured_signing_mean_us": 13.2881,
+      "measured_signing_p99_us": 18,
+      "measured_throughput_ops_sec": 6813154,
+      "measured_total_allow_p99_us": 112
+    },
+    "microsoft_agent_os": {
+      "claimed_policy_eval_us": 12,
+      "claimed_throughput_ops_sec": 72000
+    }
+  },
+  "go_arch": "arm64",
+  "go_os": "darwin",
+  "go_version": "go1.25.10",
+  "helm_version": "0.5.18",
+  "hot_path_p99_us": 112,
+  "num_cpu": 16,
+  "overhead_p99_us": 110,
+  "overhead_under_5ms": true,
+  "p99_gate_pass": true,
+  "p99_gate_us": 25000,
+  "scenarios": [
+    {
+      "name": "baseline_no_helm",
+      "iterations": 10000,
+      "p50_us": 0,
+      "p95_us": 1,
+      "p99_us": 2,
+      "mean_us": 0.1647,
+      "stddev_us": 2.0516271371767325,
+      "min_us": 0,
+      "max_us": 88
+    },
+    {
+      "name": "helm_allow",
+      "iterations": 10000,
+      "p50_us": 50,
+      "p95_us": 66,
+      "p99_us": 112,
+      "mean_us": 52.7696,
+      "stddev_us": 16.056902436024057,
+      "min_us": 40,
+      "max_us": 463
+    },
+    {
+      "name": "helm_deny",
+      "iterations": 10000,
+      "p50_us": 18,
+      "p95_us": 23,
+      "p99_us": 31,
+      "mean_us": 18.9783,
+      "stddev_us": 8.228792688481091,
+      "min_us": 14,
+      "max_us": 239
+    },
+    {
+      "name": "cel_eval_only",
+      "iterations": 10000,
+      "p50_us": 0,
+      "p95_us": 0,
+      "p99_us": 0,
+      "mean_us": 0.0316,
+      "stddev_us": 0.9527861459949971,
+      "min_us": 0,
+      "max_us": 64
+    },
+    {
+      "name": "ed25519_sign_only",
+      "iterations": 10000,
+      "p50_us": 13,
+      "p95_us": 15,
+      "p99_us": 18,
+      "mean_us": 13.2881,
+      "stddev_us": 2.802623483452617,
+      "min_us": 11,
+      "max_us": 93
+    }
+  ],
+  "timestamp": "2026-06-19T17:59:44Z"
+}

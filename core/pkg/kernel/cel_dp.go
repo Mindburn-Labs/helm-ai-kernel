@@ -3,7 +3,9 @@ package kernel
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/google/cel-go/cel"
 )
@@ -221,12 +223,15 @@ type CELDPResult struct {
 // CELDPEvaluator provides deterministic CEL evaluation.
 type CELDPEvaluator struct {
 	validator *CELDPValidator
+	mu        sync.RWMutex
+	programs  map[string]cel.Program
 }
 
 // NewCELDPEvaluator creates a new CEL-DP evaluator.
 func NewCELDPEvaluator() *CELDPEvaluator {
 	return &CELDPEvaluator{
 		validator: NewCELDPValidator(),
+		programs:  make(map[string]cel.Program),
 	}
 }
 
@@ -262,6 +267,31 @@ func (e *CELDPEvaluator) Evaluate(expr string, input map[string]any) (CELDPResul
 // the static validator to catch forbidden constructs (like time/float usage)
 // before execution.
 func (e *CELDPEvaluator) evaluateWithCEL(expr string, input map[string]any) (any, error) {
+	prog, err := e.programFor(expr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Note: v0.27.0 Eval signature is Eval(vars). We rely on CostLimit for resource bounding.
+	val, _, err := prog.Eval(input)
+	if err != nil {
+		return nil, fmt.Errorf("CEL evaluation failed: %w", err)
+	}
+
+	return val.Value(), nil
+}
+
+func (e *CELDPEvaluator) programFor(expr string) (cel.Program, error) {
+	cost := e.validator.budget.MaxEvaluationCost
+	key := strconv.FormatInt(cost, 10) + "\x00" + expr
+
+	e.mu.RLock()
+	prog, ok := e.programs[key]
+	e.mu.RUnlock()
+	if ok {
+		return prog, nil
+	}
+
 	env, err := cel.NewEnv(
 		cel.StdLib(),
 		cel.Variable("modules", cel.ListType(cel.DynType)),
@@ -273,32 +303,27 @@ func (e *CELDPEvaluator) evaluateWithCEL(expr string, input map[string]any) (any
 		return nil, fmt.Errorf("failed to create CEL env: %w", err)
 	}
 
-	// 2. Compile expression
 	ast, issues := env.Compile(expr)
 	if issues.Err() != nil {
 		return nil, fmt.Errorf("CEL compile check failed: %w", issues.Err())
 	}
 
-	// 3. Create program with deterministic options
-	// - CostLimit: Enforce computation budget
-	// - InterruptCheckFrequency: Ensure timeout/cancellation is checked
-	prog, err := env.Program(ast,
-		cel.CostLimit(uint64(e.validator.budget.MaxEvaluationCost)), //nolint:gosec // MaxEvaluationCost is always positive
+	prog, err = env.Program(ast,
+		cel.CostLimit(uint64(cost)), //nolint:gosec // MaxEvaluationCost is always positive
 		cel.InterruptCheckFrequency(100),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CEL program: %w", err)
 	}
 
-	// 5. Evaluate
-	// Note: v0.27.0 Eval signature is Eval(vars). We rely on CostLimit for resource bounding.
-	val, _, err := prog.Eval(input)
-	if err != nil {
-		return nil, fmt.Errorf("CEL evaluation failed: %w", err)
+	e.mu.Lock()
+	if cached, ok := e.programs[key]; ok {
+		e.mu.Unlock()
+		return cached, nil
 	}
-
-	// 6. Convert result to Go native type
-	return val.Value(), nil
+	e.programs[key] = prog
+	e.mu.Unlock()
+	return prog, nil
 }
 
 // Helper functions

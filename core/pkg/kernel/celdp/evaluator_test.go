@@ -78,3 +78,25 @@ func TestEvaluator(t *testing.T) {
 		})
 	}
 }
+
+func TestEvaluatorCachesProgram(t *testing.T) {
+	eval, err := NewEvaluator()
+	if err != nil {
+		t.Fatalf("Failed to create evaluator: %v", err)
+	}
+	activation := map[string]interface{}{
+		"input": map[string]interface{}{"foo": "bar"},
+	}
+	for i := 0; i < 2; i++ {
+		res, err := eval.Evaluate("input.foo == 'bar'", activation)
+		if err != nil {
+			t.Fatalf("Evaluate unexpected error: %v", err)
+		}
+		if res.Error != nil || res.Value != true {
+			t.Fatalf("Evaluate result = %#v", res)
+		}
+	}
+	if got := len(eval.programs); got != 1 {
+		t.Fatalf("program cache size = %d, want 1", got)
+	}
+}

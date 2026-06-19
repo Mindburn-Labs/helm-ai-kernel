@@ -35,6 +35,38 @@ jobs:
         run: python3 scripts/launch/update_model_provider_catalog.py --network
       - name: Validate and normalize catalog
         run: python3 scripts/launch/update_model_provider_catalog.py --write
+      - name: Assert transparent egress readiness helper behavior
+        run: |
+          set -euo pipefail
+          tempbin="$(mktemp -d)"
+          trap 'rm -rf "$tempbin"' EXIT
+          cat > "$tempbin/curl" <<'SH'
+          #!/bin/sh
+          printf '401'
+          SH
+          chmod +x "$tempbin/curl"
+
+          set +e
+          output="$(
+            env -i \
+              PATH="$tempbin:/usr/bin:/bin" \
+              HELM_MODEL_GATEWAY_PROVIDER=openrouter \
+              OPENROUTER_API_KEY=sk-fake \
+              tools/launchpad/artifacts/model-gateway-check.sh 2>&1
+          )"
+          rc=$?
+          set -e
+
+          printf '%s\n' "$output"
+          if [ "$rc" = "43" ]; then
+            echo "::error::readiness helper still hard-requires HTTP(S)_PROXY env"
+            exit 1
+          fi
+          if [ "$rc" != "44" ]; then
+            echo "::error::expected helper to exit 44 after rejected probe, got ${rc}"
+            exit 1
+          fi
+          grep -q 'HTTP 401' <<< "$output"
       - name: Summarize catalog coverage
         run: python3 scripts/launch/update_model_provider_catalog.py --summary >> "$GITHUB_STEP_SUMMARY"
       - name: Ensure generated catalog artifacts are committed

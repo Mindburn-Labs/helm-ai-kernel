@@ -87,6 +87,14 @@ if "Mindburn-Labs/helm-ai-kernel" not in formula:
     raise SystemExit("Homebrew formula does not point at Mindburn-Labs/helm-ai-kernel")
 if "helm-ai-kernel-launchpad-data.tar" not in formula or "launch matrix --json" not in formula:
     raise SystemExit("Homebrew formula does not install or test Launchpad data")
+if not formula.startswith("# frozen_string_literal: true\n\nclass HelmAiKernel < Formula\n"):
+    raise SystemExit("Homebrew formula has invalid leading indentation")
+if "\n\n\n" in formula:
+    raise SystemExit("Homebrew formula contains extra blank lines")
+if formula.find("on_macos do") > formula.find('resource "launchpad-data" do'):
+    raise SystemExit("Homebrew formula platform blocks must precede resources")
+if '\nresource("console-web").stage do' in formula:
+    raise SystemExit("Homebrew formula console install block is under-indented")
 
 with tarfile.open(assets / "sample-policy-material.tar", "r") as tar:
     members = set(tar.getnames())

@@ -331,7 +331,7 @@ codegen-java:
 		-I$(PROTO_DIR) $(PROTO_FILES)
 
 codegen-rust:
-	cd sdk/rust && cargo build --features codegen
+	cd sdk/rust && CARGO_HTTP_MULTIPLEXING=false cargo build --features codegen
 
 codegen-check: codegen
 	@git diff --exit-code -- \

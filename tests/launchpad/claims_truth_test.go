@@ -117,6 +117,31 @@ func TestLaunchpadF2ReportsRequireContractEvidenceArtifacts(t *testing.T) {
       ]`, "docs/launchpad/v1_report.json")
 }
 
+func TestLaunchConformanceReviewOracleIsWired(t *testing.T) {
+	root := repoRoot(t)
+	oracle := readDoc(t, root, "docs/launchpad/launch-conformance.md")
+	for _, want := range []string{
+		"U-LAUNCH-02",
+		"U-LAUNCH-03",
+		"ERR_LAUNCHPAD_F2_CONTRACT_REPAIR_REQUIRED",
+		"ERR_LAUNCHPAD_REQUIRED_SECRET_MISSING",
+		"ERR_MCP_SERVER_QUARANTINED",
+		"`curl | bash`",
+		"`git pull` in `current/`",
+		"`npm install` in `current/`",
+		"`launchpad-egress-proxy.json`",
+		"`helm-ai-kernel verify --bundle <pack>`",
+	} {
+		requireContains(t, oracle, want)
+	}
+
+	conformance := readDoc(t, root, "docs/launchpad/CONFORMANCE.md")
+	requireContains(t, conformance, "docs/launchpad/launch-conformance.md")
+
+	prTemplate := readDoc(t, root, ".github/PULL_REQUEST_TEMPLATE.md")
+	requireContains(t, prTemplate, "docs/launchpad/launch-conformance.md")
+}
+
 func TestLiveConformanceDefaultsToSupportedAppsOnly(t *testing.T) {
 	t.Setenv("HELM_LAUNCHPAD_LIVE_APPS", "")
 	t.Setenv("HELM_LAUNCHPAD_LIVE_INCLUDE_CANDIDATES", "")

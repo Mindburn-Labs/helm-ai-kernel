@@ -1,6 +1,7 @@
 package externalreceipt
 
 import (
+	"encoding/json"
 	"errors"
 	iofs "io/fs"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence/externalhost"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence/externalhost/adapters"
 )
 
 func TestVerifyBundleNoFiles(t *testing.T) {
@@ -148,6 +150,81 @@ func TestRelFallback(t *testing.T) {
 	}
 	if got := rel("root", "root/file.jsonl"); got != "root/file.jsonl" {
 		t.Fatalf("expected fallback path, got %q", got)
+	}
+}
+
+// TestVerifyBundleWithAdapterChain_Signet is an end-to-end integration test that:
+//  1. Loads the SYNTHETIC Signet audit-file vector from testdata.
+//  2. Converts it via adapters.SignetToExternalReceiptChain.
+//  3. Writes the resulting ExternalReceiptChain JSON into a temp host_evidence dir.
+//  4. Calls VerifyBundleWithOptions with the issuer's public key hex.
+//  5. Asserts that all checks pass — proving the full adapter→verifier pipeline works.
+func TestVerifyBundleWithAdapterChain_Signet(t *testing.T) {
+	const signetIssuerKeyHex = "8d312fa3abb0100e320bd8cdf1c608e5226ca8e23db5f0af177542043db765b0"
+	vectorPath := filepath.Join("..", "..", "evidence", "externalhost", "testdata", "signet_v1_synthetic.json")
+	raw, err := os.ReadFile(vectorPath)
+	if err != nil {
+		t.Fatalf("read signet vector: %v", err)
+	}
+	chain, err := adapters.SignetToExternalReceiptChain(raw)
+	if err != nil {
+		t.Fatalf("SignetToExternalReceiptChain: %v", err)
+	}
+	chainJSON, err := json.Marshal(chain)
+	if err != nil {
+		t.Fatalf("marshal chain: %v", err)
+	}
+	root := t.TempDir()
+	hostDir := filepath.Join(root, "host_evidence")
+	if err := os.MkdirAll(hostDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(hostDir, "signet_chain.json"), chainJSON, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	report := VerifyBundleWithOptions(root, VerifyOptions{PublicKeyHex: signetIssuerKeyHex})
+	if !report.Found {
+		t.Fatalf("bundle not found; no host_evidence chain files detected")
+	}
+	for _, chk := range report.Checks {
+		if !chk.Pass {
+			t.Errorf("check %q failed: reason=%q detail=%q", chk.Name, chk.Reason, chk.Detail)
+		}
+	}
+}
+
+// TestVerifyBundleWithAdapterChain_AGT is the AGT counterpart of the Signet test above.
+func TestVerifyBundleWithAdapterChain_AGT(t *testing.T) {
+	const agtIssuerKeyHex = "935738043db9209ce367587eb258e8f61a2ba733703b6dbb21bb7fcc30536f70"
+	vectorPath := filepath.Join("..", "..", "evidence", "externalhost", "testdata", "agt_cedar_v1_synthetic.json")
+	raw, err := os.ReadFile(vectorPath)
+	if err != nil {
+		t.Fatalf("read agt vector: %v", err)
+	}
+	chain, err := adapters.AGTToExternalReceiptChain(raw)
+	if err != nil {
+		t.Fatalf("AGTToExternalReceiptChain: %v", err)
+	}
+	chainJSON, err := json.Marshal(chain)
+	if err != nil {
+		t.Fatalf("marshal chain: %v", err)
+	}
+	root := t.TempDir()
+	hostDir := filepath.Join(root, "host_evidence")
+	if err := os.MkdirAll(hostDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(hostDir, "agt_chain.json"), chainJSON, 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	report := VerifyBundleWithOptions(root, VerifyOptions{PublicKeyHex: agtIssuerKeyHex})
+	if !report.Found {
+		t.Fatalf("bundle not found; no host_evidence chain files detected")
+	}
+	for _, chk := range report.Checks {
+		if !chk.Pass {
+			t.Errorf("check %q failed: reason=%q detail=%q", chk.Name, chk.Reason, chk.Detail)
+		}
 	}
 }
 

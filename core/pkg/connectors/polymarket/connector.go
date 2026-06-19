@@ -7,8 +7,8 @@
 //   - connector.go: High-level connector composing ZeroTrust gate + ProofGraph
 //
 // IMPORTANT: This connector does NOT submit orders to Polymarket directly.
-// It evaluates HELM policy and produces ProofGraph nodes. The Rust execution
-// engine (titan-execution-rs) handles actual venue submission.
+// It evaluates HELM policy and produces ProofGraph nodes. A downstream
+// execution engine handles actual venue submission.
 //
 // Per HELM Standard v1.2: every tool call produces an INTENT node chain
 // in the ProofGraph DAG. Denied intents produce INTENT nodes with denial payloads.

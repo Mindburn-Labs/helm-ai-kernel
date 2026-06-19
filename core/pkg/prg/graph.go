@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
+	"github.com/google/cel-go/cel"
 )
 
 // LogicOperator defines how requirements are combined.
@@ -31,6 +32,9 @@ type Requirement struct {
 	// CEL Expression (The Node 8 core feature)
 	// Input: "intent", "state", "artifacts" (list of artifacts)
 	Expression string `json:"expression,omitempty"`
+
+	compiledExpression string
+	program            cel.Program
 }
 
 // RequirementSet is a recursive logic tree.

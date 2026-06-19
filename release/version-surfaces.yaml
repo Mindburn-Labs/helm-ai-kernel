@@ -474,15 +474,6 @@
       "replacement": "default: v{version}"
     },
     {
-      "id": "agents-skills-hallmark-package-json",
-      "path": ".agents/skills/hallmark/package.json",
-      "kind": "json",
-      "field": "version",
-      "expected": "{version}",
-      "blocking": false,
-      "replacement_note": "first-party manifest version"
-    },
-    {
       "id": "api-openapi-helm-openapi-yaml-openapi-version",
       "path": "api/openapi/helm.openapi.yaml",
       "kind": "regex",
@@ -490,15 +481,6 @@
       "replacement": "  version: \"{version}\"",
       "expected": "{version}",
       "blocking": false
-    },
-    {
-      "id": "apps-console-package-json",
-      "path": "app-helm-console/package.json",
-      "kind": "json",
-      "field": "version",
-      "expected": "{version}",
-      "blocking": false,
-      "replacement_note": "first-party manifest version"
     },
     {
       "id": "deploy-helm-chart-chart-yaml-chart-version",
@@ -517,24 +499,6 @@
       "replacement": "appVersion: \"v{version}\"",
       "expected": "v{version}",
       "blocking": false
-    },
-    {
-      "id": "packages-design-system-core-package-json",
-      "path": "packages/design-system-core/package.json",
-      "kind": "json",
-      "field": "version",
-      "expected": "{version}",
-      "blocking": false,
-      "replacement_note": "first-party manifest version"
-    },
-    {
-      "id": "packages-design-system-core-compat-package-json",
-      "path": "packages/design-system-core-compat/package.json",
-      "kind": "json",
-      "field": "version",
-      "expected": "{version}",
-      "blocking": false,
-      "replacement_note": "first-party manifest version"
     },
     {
       "id": "protocols-specs-effects-openapi-yaml-openapi-version",

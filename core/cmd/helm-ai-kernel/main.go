@@ -184,6 +184,7 @@ func runServerWithOptions(opts serverOptions) {
 		if err != nil {
 			log.Fatalf("Failed to connect to DB: %v", err)
 		}
+		configurePostgresPool(db)
 		if err := db.PingContext(ctx); err != nil {
 			log.Fatalf("DB Ping failed: %v", err)
 		}
@@ -393,10 +394,7 @@ func runServerWithOptions(opts serverOptions) {
 		extraRoutes(mux)
 	}
 	RegisterLocalConsoleAssetRoutes(mux, opts, bindAddr, port)
-	rateLimiter := helmapi.NewGlobalRateLimiter(60, 120)
-	if envBool("HELM_TRUST_PROXY_HEADERS") {
-		rateLimiter = rateLimiter.WithTrustProxy(true)
-	}
+	rateLimiter := buildRuntimeRateLimiter()
 	server := &http.Server{
 		Addr: fmt.Sprintf("%s:%d", bindAddr, port),
 		Handler: helmauth.SecurityHeaders(
@@ -435,6 +433,11 @@ func runServerWithOptions(opts serverOptions) {
 	}
 	healthMux.HandleFunc("/health", healthHandler)
 	healthMux.HandleFunc("/healthz", healthHandler)
+	metricsPort := envInt("HELM_METRICS_PORT", healthPort)
+	metricsEnabled := envBool("HELM_METRICS_ENABLED")
+	if metricsEnabled && metricsPort == healthPort {
+		healthMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandler())
+	}
 	healthServer := &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", bindAddr, healthPort),
 		Handler:           healthMux,
@@ -449,6 +452,25 @@ func runServerWithOptions(opts serverOptions) {
 			log.Printf("[helm] health server error: %v", err)
 		}
 	}()
+	var metricsServer *http.Server
+	if metricsEnabled && metricsPort != healthPort {
+		metricsMux := http.NewServeMux()
+		metricsMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandler())
+		metricsServer = &http.Server{
+			Addr:              fmt.Sprintf("%s:%d", bindAddr, metricsPort),
+			Handler:           metricsMux,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       5 * time.Second,
+			WriteTimeout:      5 * time.Second,
+			IdleTimeout:       30 * time.Second,
+		}
+		go func() {
+			log.Printf("[helm] metrics server: %s:%d", bindAddr, metricsPort)
+			if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("[helm] metrics server error: %v", err)
+			}
+		}()
+	}
 
 	if opts.JSON {
 		_ = json.NewEncoder(opts.Stdout).Encode(map[string]any{
@@ -483,12 +505,103 @@ func runServerWithOptions(opts serverOptions) {
 	if err := healthServer.Shutdown(shutdownCtx); err != nil {
 		log.Printf("[helm] health server shutdown error: %v", err)
 	}
+	if metricsServer != nil {
+		if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("[helm] metrics server shutdown error: %v", err)
+		}
+	}
 	log.Println("[helm] shutdown complete")
 }
 
 func envBool(key string) bool {
 	value := os.Getenv(key)
 	return value == "1" || value == "true" || value == "TRUE" || value == "yes" || value == "YES"
+}
+
+func envInt(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func buildRuntimeRateLimiter() *helmapi.GlobalRateLimiter {
+	rateLimiter := helmapi.NewGlobalRateLimiter(
+		envInt("HELM_LIMIT_GLOBAL_RPS", envInt("HELM_LIMIT_RPS", 60)),
+		envInt("HELM_LIMIT_GLOBAL_BURST", envInt("HELM_LIMIT_BURST", 120)),
+	)
+	rateLimiter = rateLimiter.WithEndpointLimits(runtimeRateClassForRequest, map[string]helmapi.RateLimitProfile{
+		string(RouteRatePublic):   endpointRateProfile(RouteRatePublic, 120, 240),
+		string(RouteRateKernel):   endpointRateProfile(RouteRateKernel, 60, 120),
+		string(RouteRateEvidence): endpointRateProfile(RouteRateEvidence, 40, 80),
+		string(RouteRateAdmin):    endpointRateProfile(RouteRateAdmin, 20, 40),
+		string(RouteRateStream):   endpointRateProfile(RouteRateStream, 20, 40),
+	})
+	rateLimiter = rateLimiter.WithActorLimit(helmapi.RateLimitProfile{
+		RPS:   envInt("HELM_LIMIT_ACTOR_RPS", 60),
+		Burst: envInt("HELM_LIMIT_ACTOR_BURST", 120),
+	})
+	rateLimiter = rateLimiter.WithConcurrencyLimit(envInt("HELM_CONCURRENCY_MAX", 0))
+	if envBool("HELM_LOAD_SHED_ENABLED") {
+		rateLimiter = rateLimiter.WithLowPriorityLoadShed(envInt("HELM_LOAD_SHED_LOW_PRIORITY_MAX", 0))
+	}
+	if envBool("HELM_TRUST_PROXY_HEADERS") {
+		rateLimiter = rateLimiter.WithTrustProxy(true)
+	}
+	return rateLimiter
+}
+
+func configurePostgresPool(db *sql.DB) {
+	maxOpen := envInt("HELM_DB_MAX_OPEN_CONNS", 25)
+	maxIdle := envInt("HELM_DB_MAX_IDLE_CONNS", 10)
+	if maxIdle > maxOpen && maxOpen > 0 {
+		maxIdle = maxOpen
+	}
+	db.SetMaxOpenConns(maxOpen)
+	db.SetMaxIdleConns(maxIdle)
+	db.SetConnMaxLifetime(durationFromEnv("HELM_DB_CONN_MAX_LIFETIME", 30*time.Minute))
+}
+
+func endpointRateProfile(class RouteRateLimit, defaultRPS, defaultBurst int) helmapi.RateLimitProfile {
+	name := strings.ToUpper(string(class))
+	return helmapi.RateLimitProfile{
+		RPS:   envInt("HELM_LIMIT_"+name+"_RPS", envInt("HELM_LIMIT_ENDPOINT_RPS", defaultRPS)),
+		Burst: envInt("HELM_LIMIT_"+name+"_BURST", envInt("HELM_LIMIT_ENDPOINT_BURST", defaultBurst)),
+	}
+}
+
+func runtimeRateClassForRequest(r *http.Request) string {
+	path := r.URL.EscapedPath()
+	bestClass := string(RouteRatePublic)
+	bestLen := -1
+	for _, spec := range RuntimeRouteSpecs() {
+		if spec.Method != "" && spec.Method != r.Method {
+			continue
+		}
+		if !runtimeRouteMatches(spec.MuxPattern, path) {
+			continue
+		}
+		if len(spec.MuxPattern) > bestLen {
+			bestLen = len(spec.MuxPattern)
+			bestClass = string(spec.RateLimit)
+		}
+	}
+	return bestClass
+}
+
+func runtimeRouteMatches(pattern string, path string) bool {
+	if pattern == "" {
+		return false
+	}
+	if pattern == path {
+		return true
+	}
+	return strings.HasSuffix(pattern, "/") && strings.HasPrefix(path, pattern)
 }
 
 func policyPollIntervalFromEnv() time.Duration {

@@ -2,6 +2,7 @@ package celdp
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/google/cel-go/cel"
 )
@@ -9,6 +10,8 @@ import (
 type CELDPEvaluator struct {
 	validator *CELDPValidator
 	env       *cel.Env
+	mu        sync.RWMutex
+	programs  map[string]cel.Program
 }
 
 type CELDPResult struct {
@@ -33,7 +36,7 @@ func NewEvaluator() (*CELDPEvaluator, error) {
 		return nil, err
 	}
 	v := &CELDPValidator{env: env}
-	return &CELDPEvaluator{validator: v, env: env}, nil
+	return &CELDPEvaluator{validator: v, env: env, programs: make(map[string]cel.Program)}, nil
 }
 
 func (e *CELDPEvaluator) Evaluate(expr string, input interface{}) (*CELDPResult, error) {
@@ -55,19 +58,11 @@ func (e *CELDPEvaluator) Evaluate(expr string, input interface{}) (*CELDPResult,
 		}, nil
 	}
 
-	// 2. Compile
-	ast, issues := e.env.Compile(expr)
-	if issues != nil && issues.Err() != nil {
-		return nil, issues.Err()
-	}
-
-	// 3. Program
-	prg, err := e.env.Program(ast)
+	prg, err := e.programFor(expr)
 	if err != nil {
 		return nil, err
 	}
 
-	// 4. Evaluate
 	val, _, err := prg.Eval(input)
 	if err != nil {
 		return &CELDPResult{
@@ -80,6 +75,33 @@ func (e *CELDPEvaluator) Evaluate(expr string, input interface{}) (*CELDPResult,
 
 	// Return value
 	return &CELDPResult{Value: val.Value()}, nil
+}
+
+func (e *CELDPEvaluator) programFor(expr string) (cel.Program, error) {
+	e.mu.RLock()
+	prg, ok := e.programs[expr]
+	e.mu.RUnlock()
+	if ok {
+		return prg, nil
+	}
+
+	ast, issues := e.env.Compile(expr)
+	if issues != nil && issues.Err() != nil {
+		return nil, issues.Err()
+	}
+	prg, err := e.env.Program(ast)
+	if err != nil {
+		return nil, err
+	}
+
+	e.mu.Lock()
+	if cached, ok := e.programs[expr]; ok {
+		e.mu.Unlock()
+		return cached, nil
+	}
+	e.programs[expr] = prg
+	e.mu.Unlock()
+	return prg, nil
 }
 
 func (e *CELError) Initial() string {

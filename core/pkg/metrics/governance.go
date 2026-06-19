@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,14 +20,14 @@ type GovernanceMetrics struct {
 	verifications  int64
 	latencySum     int64 // microseconds
 	latencyCount   int64
-	latencyP99     int64 // microseconds
 	toolCounts     map[string]int64
 	reasonCounts   map[string]int64
 	activeAgents   map[string]time.Time
 	budgetUsed     int64
 	budgetCeiling  int64
 	chainLength    int64
-	latencyBuckets []int64 // histogram buckets
+	latencySamples []int64 // bounded recent decision latencies in microseconds
+	latencyNext    int
 }
 
 // NewGovernanceMetrics creates a new metrics collector.
@@ -56,6 +57,12 @@ func (m *GovernanceMetrics) RecordDecision(allowed bool, tool, reasonCode, agent
 		m.reasonCounts[reasonCode]++
 	}
 	m.activeAgents[agentID] = time.Now()
+	if len(m.latencySamples) < 1024 {
+		m.latencySamples = append(m.latencySamples, latencyUs)
+	} else {
+		m.latencySamples[m.latencyNext] = latencyUs
+		m.latencyNext = (m.latencyNext + 1) % len(m.latencySamples)
+	}
 	m.mu.Unlock()
 }
 
@@ -81,6 +88,7 @@ type MetricsSnapshot struct {
 	Verifications int64            `json:"verifications_total"`
 	DenyRate      float64          `json:"deny_rate"`
 	AvgLatencyMs  float64          `json:"avg_latency_ms"`
+	P95LatencyMs  float64          `json:"p95_latency_ms"`
 	P99LatencyMs  float64          `json:"p99_latency_ms"`
 	ChainLength   int64            `json:"chain_length"`
 	ActiveAgents  int              `json:"active_agents"`
@@ -122,6 +130,7 @@ func (m *GovernanceMetrics) Snapshot() MetricsSnapshot {
 	for k, v := range m.reasonCounts {
 		reasons[k] = v
 	}
+	samples := append([]int64(nil), m.latencySamples...)
 	// Count active agents (seen in last 5 minutes).
 	cutoff := time.Now().Add(-5 * time.Minute)
 	active := 0
@@ -139,6 +148,8 @@ func (m *GovernanceMetrics) Snapshot() MetricsSnapshot {
 		Verifications: verifications,
 		DenyRate:      denyRate,
 		AvgLatencyMs:  avgLatency,
+		P95LatencyMs:  latencyQuantileMs(samples, 0.95),
+		P99LatencyMs:  latencyQuantileMs(samples, 0.99),
 		ChainLength:   chain,
 		ActiveAgents:  active,
 		BudgetUsed:    budgetPct,
@@ -146,6 +157,15 @@ func (m *GovernanceMetrics) Snapshot() MetricsSnapshot {
 		ReasonCounts:  reasons,
 		Timestamp:     time.Now().UTC().Format(time.RFC3339),
 	}
+}
+
+func latencyQuantileMs(samples []int64, q float64) float64 {
+	if len(samples) == 0 {
+		return 0
+	}
+	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+	idx := int(float64(len(samples)-1) * q)
+	return float64(samples[idx]) / 1000.0
 }
 
 // Handler returns an http.HandlerFunc that serves metrics as JSON.
@@ -178,6 +198,12 @@ func (m *GovernanceMetrics) PrometheusHandler() http.HandlerFunc {
 		fmt.Fprintf(w, "# HELP helm_decision_latency_ms Average decision latency\n")
 		fmt.Fprintf(w, "# TYPE helm_decision_latency_ms gauge\n")
 		fmt.Fprintf(w, "helm_decision_latency_ms %.3f\n", snap.AvgLatencyMs)
+		fmt.Fprintf(w, "# HELP helm_decision_latency_p95_ms Recent p95 decision latency\n")
+		fmt.Fprintf(w, "# TYPE helm_decision_latency_p95_ms gauge\n")
+		fmt.Fprintf(w, "helm_decision_latency_p95_ms %.3f\n", snap.P95LatencyMs)
+		fmt.Fprintf(w, "# HELP helm_decision_latency_p99_ms Recent p99 decision latency\n")
+		fmt.Fprintf(w, "# TYPE helm_decision_latency_p99_ms gauge\n")
+		fmt.Fprintf(w, "helm_decision_latency_p99_ms %.3f\n", snap.P99LatencyMs)
 		fmt.Fprintf(w, "# HELP helm_chain_length Current receipt chain length\n")
 		fmt.Fprintf(w, "# TYPE helm_chain_length gauge\n")
 		fmt.Fprintf(w, "helm_chain_length %d\n", snap.ChainLength)

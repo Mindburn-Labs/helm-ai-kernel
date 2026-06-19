@@ -1,0 +1,35 @@
+{
+  "receipts": [
+    {
+      "receipt_id": "3f5a1b2c-4d6e-7f8a-9b0c-1d2e3f4a5b6c",
+      "tool_name": "github_create_issue",
+      "agent_did": "did:web:agent.mindburn-labs.com:test-agent-001",
+      "cedar_policy_id": "policy-github-tools-v1",
+      "cedar_decision": "allow",
+      "args_hash": "b878192252cbdcc6b3b42c0c8e75e3c3db0b5a2b8e3f4a4d5e6f7a8b9c0d1e2f",
+      "timestamp": 1749988800,
+      "session_id": null,
+      "parent_receipt_hash": null,
+      "payload_hash": "66ca7b92e8b690c51aa0e96bd50d406dbdf4f8cec90e657c0780407c233643bc",
+      "signature": "675e71f7915e51207ae59c182d664d1f04ad2c9812c9f02c3ad4d75229f28b258b3c1c33a10468fd9b39b88d22a33a265a1398845f7cd87e83bddf548d3b890f",
+      "signer_public_key": "935738043db9209ce367587eb258e8f61a2ba733703b6dbb21bb7fcc30536f70",
+      "error": null
+    },
+    {
+      "receipt_id": "7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+      "tool_name": "github_add_comment",
+      "agent_did": "did:web:agent.mindburn-labs.com:test-agent-001",
+      "cedar_policy_id": "policy-github-tools-v1",
+      "cedar_decision": "allow",
+      "args_hash": "c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8",
+      "timestamp": 1749988801,
+      "session_id": null,
+      "parent_receipt_hash": "66ca7b92e8b690c51aa0e96bd50d406dbdf4f8cec90e657c0780407c233643bc",
+      "payload_hash": "d58e40b246b1b79f27a9c72e9b61add7156c9f83944302322cefe85f22634e7c",
+      "signature": "a26de4264517d5809f5d3425b9cb52049fb9b406b91cc8b9f67af25fd0b07b1ddffc78584802cd10c7c658da4f1bad82fc8efc12703051d7c72ad900886f9800",
+      "signer_public_key": "935738043db9209ce367587eb258e8f61a2ba733703b6dbb21bb7fcc30536f70",
+      "error": null
+    }
+  ],
+  "issuer_public_key_hex": "935738043db9209ce367587eb258e8f61a2ba733703b6dbb21bb7fcc30536f70"
+}

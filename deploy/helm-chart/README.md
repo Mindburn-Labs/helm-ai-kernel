@@ -72,6 +72,15 @@ flowchart TD
 | `helm.storage.type` | `sqlite` | `sqlite` or `postgres`. |
 | `helm.storage.postgres.existingSecret` | empty | Existing secret containing `DATABASE_URL`; required for production Postgres. |
 | `helm.storage.postgres.sslMode` | `require` | PostgreSQL TLS mode. Production requires `require`, `verify-ca`, or `verify-full`. |
+| `helm.storage.postgres.maxOpenConns` | `25` | PostgreSQL pool open-connection ceiling. |
+| `helm.storage.postgres.maxIdleConns` | `10` | PostgreSQL pool idle-connection ceiling. |
+| `helm.storage.postgres.connMaxLifetime` | `30m` | PostgreSQL pooled connection lifetime. |
+| `helm.limits.global.rps` | `60` | Process-wide per-client request rate. |
+| `helm.limits.global.burst` | `120` | Process-wide per-client burst. |
+| `helm.limits.actor.rps` | `60` | Actor/resource request rate. |
+| `helm.limits.actor.burst` | `120` | Actor/resource burst. |
+| `helm.limits.concurrency.max` | `0` | Process in-flight request cap; `0` disables. |
+| `helm.limits.loadShed.enabled` | `false` | Enable low-priority load shedding. |
 | `helm.policy.source.kind` | `mountedFile` | `controlplane`, `crd`, or `mountedFile`; Kubernetes delivery is not policy truth. |
 | `helm.policy.source.pollInterval` | `10s` | Runtime reconciler polling interval. Lost hints are recovered by polling. |
 | `helm.policy.signature.required` | `false` | Rejects unsigned policy heads during reconciliation when enabled. |
@@ -81,6 +90,7 @@ flowchart TD
 | `helm.policy.reloadHints.configReloaderSidecar.enabled` | `false` | Optional mounted-file wake hint; disabled by default. |
 | `persistence.enabled` | `true` | Creates or uses a PVC for `/data`. |
 | `ingress.enabled` | `false` | Enables Kubernetes ingress. |
+| `helm.metrics.enabled` | `false` | Enables `/metrics` on `service.metricsPort`. |
 | `helm.metrics.serviceMonitor.enabled` | `false` | Emits a Prometheus Operator `ServiceMonitor`. |
 
 ## Production Notes

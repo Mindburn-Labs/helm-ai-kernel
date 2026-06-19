@@ -18,16 +18,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_NAME_RE = re.compile(r'^\s*(?:export\s+)?([A-Z][A-Z0-9_]+)\s*=')
-PRIVATE_TITAN_PATTERNS = (
-    '/investor/',
-    '/fund',
-    'credential',
-    'secret',
-    'runbooks/kill_switch',
-    'runbooks/key_rotation',
-    'runbooks/production_guide',
-    'runbooks/policy_bundle_signing_ceremony',
-)
 
 OSS_CONSOLE_CONTRADICTIONS = (
     'No bundled interactive client',
@@ -379,10 +369,6 @@ def main() -> int:
                 continue
             if not (ROOT / source_path).exists():
                 failures.append(f'docs/public-docs.manifest.json source does not exist for {slug}: {source_path}')
-            if EXPECTED_REPO_NAME == 'titan':
-                normalized = source_path.lower()
-                if any(pattern in normalized for pattern in PRIVATE_TITAN_PATTERNS):
-                    failures.append(f'Titan public docs manifest exposes private path for {slug}: {source_path}')
         public_slugs = slugs
 
     validate_source_inventory(failures, public_slugs)

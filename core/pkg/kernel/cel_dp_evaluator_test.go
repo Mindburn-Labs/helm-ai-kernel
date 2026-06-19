@@ -48,6 +48,27 @@ func TestCELDPEvaluatorFake(t *testing.T) {
 	})
 }
 
+func TestCELDPEvaluatorCachesProgram(t *testing.T) {
+	eval := NewCELDPEvaluator()
+	input := map[string]any{
+		"meta": map[string]any{"risk": int64(1)},
+	}
+	expr := `meta.risk == 1`
+
+	for i := 0; i < 2; i++ {
+		result, err := eval.Evaluate(expr, input)
+		if err != nil {
+			t.Fatalf("Evaluate failed: %v", err)
+		}
+		if result.Error != nil {
+			t.Fatalf("Evaluate error: %v", result.Error)
+		}
+	}
+	if got := len(eval.programs); got != 1 {
+		t.Fatalf("program cache size = %d, want 1", got)
+	}
+}
+
 //nolint:gocognit // test complexity is acceptable
 func TestCELDPValidatorEdgeCases(t *testing.T) {
 	t.Run("Deep nesting at limit", func(t *testing.T) {

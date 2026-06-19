@@ -75,6 +75,19 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 - **zkVM Guest Safety Checker**: Introduced the `ZKVMGuestSafetyChecker` and `SafetyGuestProgram` inside `pkg/crypto/zk` to simulate AST static analysis inside zero-knowledge execution enclaves.
 - **TEE Secrets Enclave**: Introduced `SovereignKMSVault` and `SecretProxyFilter` inside `pkg/crypto/tee` to enforce hardware-sealed secrets isolation and inline proxy token injection with constant-time verification.
 
+## [0.5.16] - 2026-06-18
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.16>.
+
+- Added Formal Verification Worker v0 contracts, deterministic proof-result
+  hashing, CPI status mapping, EvidencePack extension validation, and
+  conformance vectors for the no-side-effect-before-approval invariant.
+- Added docs-only LEAP research notes under `research/leap/` to record the
+  verifier-guided proof-search pattern without adding a LEAP, Lean, or SMT
+  runtime dependency.
+- Included optional OpenEnv safety fixtures and the sharpened README front-door
+  copy shipped after `v0.5.15`.
+
 ## [0.5.15] - 2026-06-14
 
 Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.15>.
@@ -268,5 +281,5 @@ on 2026-05-13T09:15:00Z.
   `SHA256SUMS.txt`, `sbom.json`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, and
   `release-attestation.json`.
 - Documented that the included `evidence-pack.tar` verifies offline and reports
-  `anchor offline`; public proof anchoring depends on the Titan proof deployment
+  `anchor offline`; public proof anchoring depends on the public proof deployment
   and public proof credentials.

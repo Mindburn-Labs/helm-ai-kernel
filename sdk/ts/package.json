@@ -1,6 +1,6 @@
 {
   "name": "@mindburn/helm-ai-kernel",
-  "version": "0.5.15",
+  "version": "0.5.18",
   "description": "TypeScript SDK for HELM — fail-closed tool calling for AI agents",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,10 +21,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.1",
-    "@vitest/coverage-v8": "^4.0.18",
     "@grpc/grpc-js": "^1.14.3",
-    "@types/google-protobuf": "^3.15.12",
-    "google-protobuf": "^4.0.2",
+    "@vitest/coverage-v8": "^4.0.18",
     "ts-proto": "^2.11.5",
     "typescript": "^6.0.3",
     "vitest": "^4.0.18"

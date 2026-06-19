@@ -526,7 +526,32 @@ func TestKMSEvidenceSignerRejectsMalformedExternalSignerOutput(t *testing.T) {
 	}
 }
 
-func writeSealTestPack(t *testing.T, files map[string][]byte) string {
+func BenchmarkVerifyEvidencePackSeal(b *testing.B) {
+	files := make(map[string][]byte, 129)
+	files["01_SCORE.json"] = []byte(`{"pass":true}`)
+	payload := strings.Repeat("0123456789abcdef", 256)
+	for i := 0; i < 128; i++ {
+		files[fmt.Sprintf("04_ARTIFACTS/file-%03d.json", i)] = []byte(fmt.Sprintf(`{"id":%d,"payload":%q}`, i, payload))
+	}
+	packDir := writeSealTestPack(b, files)
+	if _, err := SealEvidencePack(context.Background(), packDir, SealEvidencePackOptions{
+		DataDir:  b.TempDir(),
+		SignedAt: fixedSealTime(),
+	}); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		result := VerifyEvidencePackSeal(packDir, VerifyEvidencePackSealOptions{Profile: EvidenceTrustProfileDevLocal})
+		if result.State != "valid" || !result.SignatureValid {
+			b.Fatalf("seal did not verify: %+v", result)
+		}
+	}
+}
+
+func writeSealTestPack(t testing.TB, files map[string][]byte) string {
 	t.Helper()
 	dir := t.TempDir()
 	for rel, data := range files {
@@ -549,7 +574,7 @@ func writeSealTestPack(t *testing.T, files map[string][]byte) string {
 	return dir
 }
 
-func writeSealTestIndex(t *testing.T, dir string, paths []string) {
+func writeSealTestIndex(t testing.TB, dir string, paths []string) {
 	t.Helper()
 	entries := make([]map[string]string, 0, len(paths))
 	for _, rel := range paths {

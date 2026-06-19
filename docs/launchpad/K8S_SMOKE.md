@@ -1,12 +1,13 @@
 ---
 title: Launchpad Kubernetes Smoke
-last_reviewed: 2026-05-27
+last_reviewed: 2026-06-19
 ---
 
 # Launchpad Kubernetes Smoke
 
-Status: minikube-only first iteration. Generic-cluster mode (vanilla k8s,
-EKS, GKE, bare-metal) is tracked as a follow-up.
+Status: minikube by default, with reused-cluster mode for an existing
+kubeconfig on vanilla Kubernetes, EKS, GKE, kubeadm, DigitalOcean
+Kubernetes, or bare-metal clusters.
 
 ## Audience
 
@@ -98,6 +99,8 @@ is "every **TCP** egress goes through the sidecar and leaves a receipt".
 
 ## Quick start
 
+### Minikube
+
 ```bash
 # Build kernel image and load into minikube docker daemon
 eval "$(minikube docker-env)"
@@ -117,9 +120,41 @@ bash scripts/ci/launchpad_k8s_smoke.sh --mode negative
 bash scripts/ci/launchpad_k8s_smoke.sh --mode baseline
 ```
 
-The driver always starts from a fresh minikube cluster (`minikube delete`
+The driver starts from a fresh minikube cluster by default (`minikube delete`
 then `minikube start`). Set `LAUNCHPAD_SMOKE_KEEP_CLUSTER=1` to skip the
-final delete during iteration.
+final delete during iteration, or set `LAUNCHPAD_SMOKE_FRESH_CLUSTER=0` to
+reuse an already-running minikube profile.
+
+### Reused kubeconfig
+
+Use `--reuse-cluster` when the kubeconfig already points at a running
+cluster. The smoke will run `kubectl cluster-info`, render the chart with
+`helm template`, install only namespace-scoped resources, uninstall the
+release, and audit for leftovers in the smoke namespace.
+
+```bash
+# Chart-only baseline on the current kube context.
+LAUNCHPAD_SMOKE_KERNEL_IMAGE=ghcr.io/mindburn-labs/helm-ai-kernel:latest \
+bash scripts/ci/launchpad_k8s_smoke.sh \
+  --mode baseline \
+  --reuse-cluster \
+  --ephemeral-namespace \
+  --context <kube-context>
+```
+
+For a namespace-scoped kubeconfig, pre-create the namespace out of band and
+run without namespace creation/deletion:
+
+```bash
+LAUNCHPAD_SMOKE_NAMESPACE=helm-launchpad-smoke \
+LAUNCHPAD_SMOKE_MANAGE_NAMESPACE=0 \
+LAUNCHPAD_SMOKE_KERNEL_IMAGE=ghcr.io/mindburn-labs/helm-ai-kernel:latest \
+bash scripts/ci/launchpad_k8s_smoke.sh --mode baseline --reuse-cluster
+```
+
+If the target cluster has no default `StorageClass`, set
+`LAUNCHPAD_SMOKE_STORAGE_CLASS=<class>` or use
+`LAUNCHPAD_SMOKE_PERSISTENCE_ENABLED=false` for a storage-less baseline smoke.
 
 For `positive` and `negative`, the launchpad app images stay pinned as
 `repo@sha256` and are pulled by kubelet from GHCR through a docker-registry
@@ -138,8 +173,24 @@ the minikube node.
 | `negative` | both apps enabled, Secret holds `sk-fake-…` | openclaw Pod fails to reach Ready within 90s; hermes Job reaches Failed within ~3m |
 
 After every scenario the driver runs `helm uninstall` and asserts that
-no resources labelled `app.kubernetes.io/part-of=helm-ai-kernel` remain
-on the cluster — the k8s analogue of the docker sandbox-leak audit.
+no resources labelled `app.kubernetes.io/part-of=helm-ai-kernel` remain in
+the smoke namespace — the k8s analogue of the docker sandbox-leak audit.
+
+## RBAC minimum
+
+The chart renders namespace-scoped Kubernetes resources only. `helm template`
+fails the smoke if it sees `ClusterRole`, `ClusterRoleBinding`,
+`CustomResourceDefinition`, `Namespace`, `PersistentVolume`, or
+`StorageClass`.
+
+For `LAUNCHPAD_SMOKE_MANAGE_NAMESPACE=0`, the kubeconfig needs namespaced
+permissions in the target namespace for Secrets, ConfigMaps, Services,
+Deployments, Pods, Jobs, PVCs, Roles, RoleBindings, NetworkPolicies, Events,
+and Helm release Secrets. It must also be able to `get`, `list`, `watch`,
+`create`, `patch`, `update`, and `delete` those namespaced resources as
+needed by `helm upgrade --install`, `kubectl wait`, `kubectl logs`, `kubectl
+exec`, `helm test`, and `helm uninstall`. Namespace creation/deletion is only
+needed for the default managed namespace path and for `--ephemeral-namespace`.
 
 ## Known limitations
 
@@ -150,9 +201,10 @@ on the cluster — the k8s analogue of the docker sandbox-leak audit.
   explicitly when they need architecture or node pool pinning.
 - **CNI enforcement.** The NetworkPolicy object is created
   unconditionally, but enforcement requires a CNI that honors it. The
-  smoke driver opts minikube into Calico (`--cni=calico`). On the
-  default kindnet CNI the object is recorded but not enforced — useful
-  as a positive control, not as proof of isolation.
+  smoke driver opts minikube into Calico (`--cni=calico`). On reused
+  clusters, the active CNI determines whether the NetworkPolicy is enforced.
+  On default kindnet the object is recorded but not enforced — useful as a
+  positive control, not as proof of isolation.
 - **No prompt round-trip.** This smoke validates Pod liveness, the
   OpenRouter healthcheck script, and Job completion. End-to-end
   assistant behaviour (real prompts, MCP runtime quarantine, persistent
@@ -170,5 +222,5 @@ on the cluster — the k8s analogue of the docker sandbox-leak audit.
 | `ErrImagePull` / `ImagePullBackOff` on openclaw, hermes, or egress-proxy | Confirm Secret `ghcr-read` exists in the release namespace and that `GHCR_TOKEN` has `read:packages` for `ghcr.io/mindburn-labs/helm-launchpad/*`. |
 | openclaw Pod never reaches Ready on positive | `kubectl logs <pod> -c egress-proxy`, then `kubectl logs <pod> -c openclaw`. Common causes: missing `OPENROUTER_API_KEY`, OpenRouter rate-limit, private GHCR pull-secret failure, or kernel pulling images on a slow link. |
 | hermes Job hangs at Running | `shareProcessNamespace` and the workload's `preStop` SIGTERM are how the sidecar exits. If the sidecar image changes its process name from `egress-proxy`, the `pkill` pattern in `hermes-job.yaml` needs updating. |
-| Leftover resources after uninstall | The leak audit query `kubectl get all -A -l app.kubernetes.io/part-of=helm-ai-kernel`. Any non-empty result means something other than helm owns the resource — start with `kubectl describe` to see ownerReferences. |
+| Leftover resources after uninstall | The leak audit query `kubectl -n <namespace> get all -l app.kubernetes.io/part-of=helm-ai-kernel`. Any non-empty result means something other than helm owns the resource — start with `kubectl describe` to see ownerReferences. |
 | `helm test` reports `no hooks for test`  | Either both launchpad apps were disabled or the chart was installed without rendering the test Pod. The test Pod is gated on `openclaw.enabled || hermes.enabled`. |

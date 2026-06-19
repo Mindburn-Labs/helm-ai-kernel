@@ -281,5 +281,5 @@ on 2026-05-13T09:15:00Z.
   `SHA256SUMS.txt`, `sbom.json`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, and
   `release-attestation.json`.
 - Documented that the included `evidence-pack.tar` verifies offline and reports
-  `anchor offline`; public proof anchoring depends on the Titan proof deployment
+  `anchor offline`; public proof anchoring depends on the public proof deployment
   and public proof credentials.

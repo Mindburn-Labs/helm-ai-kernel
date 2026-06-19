@@ -411,6 +411,23 @@
                   "default": "require",
                   "description": "libpq sslmode. Production postgres storage requires require, verify-ca, or verify-full; use verify-full against managed PostgreSQL services that ship a CA bundle."
                 },
+                "maxOpenConns": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 25,
+                  "description": "Maximum open PostgreSQL connections. Zero leaves database/sql unlimited; production should set an explicit ceiling."
+                },
+                "maxIdleConns": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 10,
+                  "description": "Maximum idle PostgreSQL connections retained by the pool."
+                },
+                "connMaxLifetime": {
+                  "type": "string",
+                  "default": "30m",
+                  "description": "Maximum PostgreSQL connection lifetime as a Go duration string."
+                },
                 "existingSecret": {
                   "type": "string",
                   "description": "Existing Secret containing a DATABASE_URL entry; overrides inline host/port/database/user/password fields."
@@ -427,12 +444,12 @@
         "metrics": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Prometheus metrics exposure. Disabled until the Prometheus handler is wired in the kernel (tracked as chart-metrics-backend-implementation).",
+          "description": "Prometheus metrics exposure.",
           "properties": {
             "enabled": {
               "type": "boolean",
               "default": false,
-              "description": "Bind the metrics container port and render the metrics Service entry. Keep off until the kernel ships a Prometheus handler; enabling produces unbound-port errors today."
+              "description": "Enable the kernel Prometheus /metrics handler, metrics container port, and metrics Service entry."
             },
             "serviceMonitor": {
               "type": "object",
@@ -454,6 +471,44 @@
                   "additionalProperties": { "type": "string" },
                   "description": "Extra labels for the ServiceMonitor (e.g. team, prometheus instance selector labels)."
                 }
+              }
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Runtime limiter gates for global rate, actor/resource rate, process concurrency, and low-priority shedding.",
+          "properties": {
+            "global": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "rps": { "type": "integer", "minimum": 0, "default": 60 },
+                "burst": { "type": "integer", "minimum": 0, "default": 120 }
+              }
+            },
+            "actor": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "rps": { "type": "integer", "minimum": 0, "default": 60 },
+                "burst": { "type": "integer", "minimum": 0, "default": 120 }
+              }
+            },
+            "concurrency": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "max": { "type": "integer", "minimum": 0, "default": 0 }
+              }
+            },
+            "loadShed": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean", "default": false },
+                "lowPriorityMax": { "type": "integer", "minimum": 0, "default": 0 }
               }
             }
           }

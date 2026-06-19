@@ -100,7 +100,7 @@ func TestCFTCEngine_RegisterAgent(t *testing.T) {
 
 	err := engine.RegisterAgent(ctx, &AIAgentRegistration{
 		AgentID:      "agent-001",
-		EntityName:   "Titan Brain",
+		EntityName:   "Example Brain",
 		DirectAccess: true,
 		MarketTypes:  []string{"prediction_markets", "binary_options"},
 	})

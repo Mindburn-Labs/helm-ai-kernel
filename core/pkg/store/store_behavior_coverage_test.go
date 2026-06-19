@@ -171,7 +171,7 @@ func TestSQLiteReceiptRoundTripsChainFieldsAndAgentFilter(t *testing.T) {
 			EffectID:     "e",
 			Status:       "OK",
 			Timestamp:    time.Now().Add(-time.Second),
-			ExecutorID:   "agent.titan.exec",
+			ExecutorID:   "agent.demo.exec",
 			PrevHash:     "prev-0",
 			LamportClock: 1,
 			ArgsHash:     "args-1",
@@ -183,7 +183,7 @@ func TestSQLiteReceiptRoundTripsChainFieldsAndAgentFilter(t *testing.T) {
 			EffectID:     "e",
 			Status:       "OK",
 			Timestamp:    time.Now(),
-			ExecutorID:   "agent.titan.exec",
+			ExecutorID:   "agent.demo.exec",
 			PrevHash:     "prev-1",
 			LamportClock: 2,
 			ArgsHash:     "args-2",
@@ -213,7 +213,7 @@ func TestSQLiteReceiptRoundTripsChainFieldsAndAgentFilter(t *testing.T) {
 		t.Fatalf("chain fields did not round-trip: %+v", got)
 	}
 
-	filtered, err := store.ListByAgent(ctx, "agent.titan.exec", 1, 10)
+	filtered, err := store.ListByAgent(ctx, "agent.demo.exec", 1, 10)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,7 +1,7 @@
 openapi: "3.1.0"
 info:
   title: HELM Kernel API
-  version: "0.5.17"
+  version: "0.5.18"
   description: |
     Deterministic execution kernel for AI tool calls.
     Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
@@ -69,6 +69,12 @@ x-helm-reason-codes:
     - DENY_POLICY_VIOLATION
     - DENY_TRUST_KEY_REVOKED
     - DENY_IDEMPOTENCY_DUPLICATE
+    - IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST
+    - GLOBAL_RATE_LIMIT_EXCEEDED
+    - ENDPOINT_RATE_LIMIT_EXCEEDED
+    - ACTOR_RESOURCE_RATE_LIMIT_EXCEEDED
+    - CONCURRENCY_LIMIT_EXCEEDED
+    - LOW_PRIORITY_LOAD_SHED
     - ERROR_INTERNAL
 
 paths:
@@ -249,6 +255,8 @@ paths:
         Drop-in replacement for OpenAI /v1/chat/completions.
         Tool calls are intercepted, schema-validated, and receipted.
         Response includes X-Helm-Receipt-ID, X-Helm-Output-Hash, X-Helm-Lamport-Clock headers.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
       requestBody:
         required: true
         content:
@@ -282,6 +290,9 @@ paths:
             X-Helm-Lamport-Clock:
               schema: { type: integer }
               description: Causal ordering clock
+            X-Helm-Idempotency-Replayed:
+              schema: { type: string, enum: ["true"] }
+              description: Present when this response was replayed from the idempotency cache.
           content:
             application/json:
               schema:
@@ -290,6 +301,12 @@ paths:
           $ref: '#/components/responses/HelmError'
         '403':
           $ref: '#/components/responses/HelmError'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         '500':
           $ref: '#/components/responses/HelmError'
 
@@ -343,6 +360,7 @@ paths:
       security:
         - AdminBearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
         - $ref: '#/components/parameters/HelmTenantIDHeader'
         - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
@@ -354,6 +372,10 @@ paths:
       responses:
         '200':
           description: Guardian decision record
+          headers:
+            X-Helm-Idempotency-Replayed:
+              schema: { type: string, enum: ["true"] }
+              description: Present when this response was replayed from the idempotency cache.
           content:
             application/json:
               schema:
@@ -364,6 +386,12 @@ paths:
           $ref: '#/components/responses/HelmError'
         '403':
           $ref: '#/components/responses/HelmError'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         '500':
           $ref: '#/components/responses/HelmError'
 
@@ -3930,6 +3958,17 @@ components:
         Principal binding required by tenant-scoped runtime routes. The value must
         match HELM_RUNTIME_PRINCIPAL_ID, or the authenticated admin principal when
         HELM_RUNTIME_PRINCIPAL_ID is unset.
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        minLength: 1
+      description: |
+        Optional key for mutating requests. Replays return the original
+        status/body and X-Helm-Idempotency-Replayed: true. Reusing the same key
+        with a different method, path, query, or body returns 409.
 
   # ── Schemas ─────────────────────────────────────────
   schemas:
@@ -6211,3 +6250,44 @@ components:
               type: "invalid_request"
               code: "tool_not_found"
               reason_code: "DENY_TOOL_NOT_FOUND"
+    IdempotencyConflict:
+      description: Idempotency key was reused with a different request fingerprint
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/HelmError'
+          example:
+            type: "https://helm.mindburn.run/errors/409"
+            title: "Idempotency key conflict"
+            status: 409
+            detail: "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST"
+    TooManyRequests:
+      description: Request rejected by a rate limiter
+      headers:
+        Retry-After:
+          schema: { type: string }
+          description: Suggested retry delay in seconds.
+        X-Helm-Limiter-Reason:
+          schema:
+            type: string
+            enum: [GLOBAL_RATE_LIMIT_EXCEEDED, ENDPOINT_RATE_LIMIT_EXCEEDED, ACTOR_RESOURCE_RATE_LIMIT_EXCEEDED]
+          description: Deterministic limiter reason code.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/HelmError'
+    ServiceUnavailable:
+      description: Request rejected by concurrency or load-shed guard
+      headers:
+        Retry-After:
+          schema: { type: string }
+          description: Suggested retry delay in seconds.
+        X-Helm-Limiter-Reason:
+          schema:
+            type: string
+            enum: [CONCURRENCY_LIMIT_EXCEEDED, LOW_PRIORITY_LOAD_SHED]
+          description: Deterministic limiter reason code.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/HelmError'

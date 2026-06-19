@@ -127,22 +127,37 @@ helm:
       user: "helm"
       password: ""
       sslMode: "require"
+      maxOpenConns: 25
+      maxIdleConns: 10
+      connMaxLifetime: "30m"
       # Use an existing secret containing DATABASE_URL
       existingSecret: ""
       # Key in the existing secret that contains the database URL
       existingSecretKey: "DATABASE_URL"
 
   # Metrics and observability.
-  # NOTE: as of chart 0.5.2 the kernel does not yet expose a Prometheus
-  # handler on a separate port, so enabling this just opens an unbound port
-  # in the Service and produces ServiceMonitor scrape failures. Keep this
-  # disabled until the backend lands (tracked as chart-metrics-backend-implementation).
   metrics:
     enabled: false
     serviceMonitor:
       enabled: false
       interval: 30s
       labels: {}
+
+  # Runtime limiter defaults. Endpoint-class defaults are built into the
+  # kernel; these values set the global, actor/resource, concurrency, and
+  # low-priority shed gates.
+  limits:
+    global:
+      rps: 60
+      burst: 120
+    actor:
+      rps: 60
+      burst: 120
+    concurrency:
+      max: 0
+    loadShed:
+      enabled: false
+      lowPriorityMax: 0
 
   # Policy configuration
   policy:

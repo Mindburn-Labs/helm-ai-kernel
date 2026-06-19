@@ -26,6 +26,8 @@ helm install helm-ai-kernel deploy/helm-chart \
   --set helm.auth.serviceAPIKey=<service-api-key> \
   --set helm.auth.tenantID=<runtime-tenant-id> \
   --set helm.auth.principalID=<runtime-principal-id>
+
+helm test helm-ai-kernel
 ```
 
 Review `values.yaml` before use in a real environment.
@@ -112,6 +114,8 @@ flowchart TD
   evidence.
 - Keep `serviceAccount.automountServiceAccountToken=false` unless CRD mode is
   enabled or another integration explicitly requires Kubernetes API access.
+- Use `helm test <release>` on an installed chart to run the built-in kernel
+  health hook.
 - Use `make kind-smoke` to prove install, health, receipt persistence,
   evidence export, replay verification, and signing-key stability across pod
   restart.

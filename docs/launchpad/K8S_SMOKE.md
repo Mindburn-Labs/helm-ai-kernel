@@ -18,8 +18,8 @@ that the bundle tears down without leaks.
 
 You can install the `helm-ai-kernel` chart with `launchpadApps.openclaw`
 and `launchpadApps.hermes` enabled, see the openclaw Pod reach Ready and
-the hermes Job reach Complete, run `helm test` to confirm kernel health,
-and uninstall with no residual resources.
+the hermes Job reach Complete, run `helm test` to confirm kernel health and
+launchpad connectivity, and uninstall with no residual resources.
 
 ## Topology
 
@@ -133,7 +133,7 @@ the minikube node.
 
 | Mode | Setup | Expected outcome |
 | --- | --- | --- |
-| `baseline` | `launchpadApps.openclaw.enabled=false`, `launchpadApps.hermes.enabled=false` (defaults) | kernel Deployment rolls out, no launchpad-app Pods rendered |
+| `baseline` | `launchpadApps.openclaw.enabled=false`, `launchpadApps.hermes.enabled=false` (defaults) | kernel Deployment rolls out, baseline `helm test` PASS, no launchpad-app Pods rendered |
 | `positive` | both apps enabled, Secret `openrouter-key` holds a real OpenRouter key | openclaw Pod Ready within ~6m; hermes Job Complete within ~3m; `helm test` PASS; openclaw `kubectl exec helm-launchpad-openrouter-check` exits 0 |
 | `negative` | both apps enabled, Secret holds `sk-fake-…` | openclaw Pod fails to reach Ready within 90s; hermes Job reaches Failed within ~3m |
 
@@ -171,4 +171,4 @@ on the cluster — the k8s analogue of the docker sandbox-leak audit.
 | openclaw Pod never reaches Ready on positive | `kubectl logs <pod> -c egress-proxy`, then `kubectl logs <pod> -c openclaw`. Common causes: missing `OPENROUTER_API_KEY`, OpenRouter rate-limit, private GHCR pull-secret failure, or kernel pulling images on a slow link. |
 | hermes Job hangs at Running | `shareProcessNamespace` and the workload's `preStop` SIGTERM are how the sidecar exits. If the sidecar image changes its process name from `egress-proxy`, the `pkill` pattern in `hermes-job.yaml` needs updating. |
 | Leftover resources after uninstall | The leak audit query `kubectl get all -A -l app.kubernetes.io/part-of=helm-ai-kernel`. Any non-empty result means something other than helm owns the resource — start with `kubectl describe` to see ownerReferences. |
-| `helm test` reports `no hooks for test`  | Either both launchpad apps were disabled or the chart was installed without rendering the test Pod. The test Pod is gated on `openclaw.enabled || hermes.enabled`. |
+| `helm test` reports `no hooks for test`  | The baseline kernel health hook should always render. Check that `deploy/helm-chart/templates/tests/test-connection.yaml` is present and the chart was installed from the expected revision. |

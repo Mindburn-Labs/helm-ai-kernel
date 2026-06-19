@@ -1,0 +1,70 @@
+{{- $testName := printf "%s-test-connection" (include "helm-ai-kernel.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- $testAppName := printf "%s-test" (include "helm-ai-kernel.name" .) | trunc 63 | trimSuffix "-" -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $testName }}
+  labels:
+    helm.sh/chart: {{ include "helm-ai-kernel.chart" . }}
+    app.kubernetes.io/name: {{ $testAppName }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: test
+    app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: helm-ai-kernel
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+    helm.ai/test-intent: "kernel health"
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: {{ include "helm-ai-kernel.chart" . }}
+        app.kubernetes.io/name: {{ $testAppName }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: test
+        app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/part-of: helm-ai-kernel
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: test-connection
+          image: {{ .Values.launchpadApps.test.image | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              KERNEL_HOST="{{ include "helm-ai-kernel.fullname" . }}"
+              KERNEL_PORT="{{ .Values.service.healthPort }}"
+              URL="http://${KERNEL_HOST}:${KERNEL_PORT}/health"
+              echo "probing kernel health at ${URL}"
+              for _ in $(seq 1 60); do
+                if wget -qO- "${URL}" >/dev/null 2>&1; then
+                  echo "kernel health: OK"
+                  exit 0
+                fi
+                sleep 2
+              done
+              echo "kernel health probe failed after 120s" >&2
+              wget -S -O- "${URL}" >&2

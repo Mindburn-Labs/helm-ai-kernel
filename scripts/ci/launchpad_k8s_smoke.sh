@@ -375,11 +375,8 @@ case "$MODE" in
     baseline)
         echo "::group::stage 5 — baseline assertions"
         kubectl -n "$NAMESPACE" rollout status "deployment/${RELEASE}-helm-ai-kernel" --timeout=180s
-        kube_helm test "$RELEASE" -n "$NAMESPACE" 2>&1 || {
-            # Baseline has no launchpad apps and the test Pod is gated on at
-            # least one app being enabled — `helm test` is a no-op then.
-            echo "no test hooks rendered for baseline (expected)"
-        }
+        echo "helm test"
+        kube_helm test "$RELEASE" -n "$NAMESPACE"
         echo "::endgroup::"
         ;;
     positive)
@@ -388,7 +385,7 @@ case "$MODE" in
         assert_pod_ready openclaw 6m
         assert_job_succeeded hermes 3m
         echo "helm test"
-        kube_helm test "$RELEASE" -n "$NAMESPACE" --logs
+        kube_helm test "$RELEASE" -n "$NAMESPACE"
         echo "openclaw kubectl exec healthcheck"
         kubectl -n "$NAMESPACE" exec \
             "deployment/${RELEASE}-helm-ai-kernel-openclaw" \

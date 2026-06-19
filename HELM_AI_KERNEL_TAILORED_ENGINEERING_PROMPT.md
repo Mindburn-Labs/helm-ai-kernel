@@ -210,7 +210,7 @@ Follow these principles throughout the project:
 16. No inconsistent UX.
     Console components, spacing, typography, colors, interactions, forms,
     loading states, error states, empty states, status states, and operator
-    language must follow `@mindburn/ui-core`.
+    language must follow `@mindburn/design`.
 
 17. No happy-path-only implementation.
     Every feature must handle loading, error, empty, unauthorized, validation,
@@ -463,7 +463,7 @@ Review:
 - Empty states and not-configured states
 - Responsive behavior
 - Accessibility, focus, keyboard navigation, semantics, labels, and ARIA
-- Styling strategy in Console CSS versus `@mindburn/ui-core`
+- Styling strategy in Console CSS versus `@mindburn/design`
 - Data fetching with `openapi-fetch`, generated `schema.ts`, and direct `fetch`
   escape hatches
 - Caching, live updates, optimistic UI, and stale data behavior

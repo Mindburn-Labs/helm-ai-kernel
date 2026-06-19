@@ -234,6 +234,12 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 		g.clock = wallClock{}
 	}
 
+	if g.pe != nil {
+		if err := g.pe.CompileGraph(g.prg); err != nil {
+			slog.Warn("[guardian] PRG graph precompile failed", "error", err)
+		}
+	}
+
 	return g
 }
 

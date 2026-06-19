@@ -583,6 +583,15 @@ func (s *AtomicSnapshotStore) Swap(scope PolicyScope, snapshot *EffectivePolicyS
 	if snapshot == nil {
 		return fmt.Errorf("nil policy snapshot")
 	}
+	if snapshot.Graph != nil {
+		engine, err := prg.NewPolicyEngine()
+		if err != nil {
+			return fmt.Errorf("create policy engine for snapshot graph: %w", err)
+		}
+		if err := engine.CompileGraph(snapshot.Graph); err != nil {
+			return fmt.Errorf("compile policy snapshot graph: %w", err)
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.snapshots[scope.Normalize().Key()] = snapshot

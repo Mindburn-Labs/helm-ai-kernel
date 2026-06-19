@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-18T22:46:51Z
-# Commit: b31a6f3108fb6d270df5e5f435591445f0574a5a
+# Generated: 2026-06-19T15:34:02Z
+# Commit: 570511dbd5ccce7457d650a881d2d70cf3f6bad1
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -556,7 +556,7 @@ dc423304ca0632036914933638314609e621ab311743a2b320338b5bfe8028f6  core/pkg/guard
 3bf046b9f5630ade87ed4fc4d31c5a0223e5ef3e24b9427ec7fa268282a2e555  core/pkg/guardian/compliance_checker_test.go
 33b80ff2f4dc9eba8c135cb61ac232deb9be30e84fe63585e31f6ddfeadd19b1  core/pkg/guardian/decision_fuzz_test.go
 d23c84456f34f27e6cb7fd113211028dbd88c34980fe81e3b74a307d701a4bfd  core/pkg/guardian/extended2_test.go
-8363f8d303578652aec17a8732f58e86e5cb9074497e3558adfa85fbf5bd33b3  core/pkg/guardian/guardian.go
+970e43223496a9a6b72615b4922cb4132408282857ed0e9549fa143ba4662f27  core/pkg/guardian/guardian.go
 aa4ea979d3f36460d50808f0ccee6bd48eb97cbc3c888d53b2971701b704e462  core/pkg/guardian/guardian_additional_coverage_test.go
 05d2907a744570e725955e9967f578b098389dee199fa7af7d54c2381f770a54  core/pkg/guardian/guardian_behavior_coverage_test.go
 56f3550cf20de46141e69f9ebccfdb54b3b83d9425d60ac92587f6ca74a4399b  core/pkg/guardian/guardian_bench_test.go

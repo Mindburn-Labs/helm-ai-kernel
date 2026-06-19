@@ -75,6 +75,39 @@ func testCompiler(_ context.Context, head PolicyHead, _ []byte) (*EffectivePolic
 	}, nil
 }
 
+func TestAtomicSnapshotStoreRejectsInvalidPRGGraph(t *testing.T) {
+	scope := DefaultScope
+	graph := prg.NewGraph()
+	if err := graph.AddRule("deploy", prg.RequirementSet{
+		ID:    "bad-rule",
+		Logic: prg.AND,
+		Requirements: []prg.Requirement{
+			{ID: "bad", Expression: "not valid cel !!!"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	store := NewAtomicSnapshotStore()
+	err := store.Swap(scope, &EffectivePolicySnapshot{
+		TenantID:    scope.TenantID,
+		WorkspaceID: scope.WorkspaceID,
+		PolicyEpoch: 1,
+		PolicyHash:  "sha256:bad",
+		Validation:  ValidationStatus{Status: StatusActive},
+		Graph:       graph,
+	})
+	if err == nil {
+		t.Fatal("expected invalid graph to be rejected before activation")
+	}
+	if !strings.Contains(err.Error(), "compile policy snapshot graph") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := store.Get(scope); ok {
+		t.Fatal("invalid snapshot graph should not be installed")
+	}
+}
+
 func TestReconcilerInstallsInitialSnapshotAndUpdatesOnPoll(t *testing.T) {
 	scope := DefaultScope
 	bundle := []byte("policy-v1")

@@ -1,0 +1,63 @@
+{
+  "audit_records": [
+    {
+      "prev_hash": "",
+      "receipt": {
+        "action": {
+          "call_id": "call_001",
+          "params": {
+            "title": "fix bug"
+          },
+          "params_hash": "sha256:b878192252cbdcc6b3b42c0c8e75e3c3db0b5a2b8e3f4a4d5e6f7a8b9c0d1e2f",
+          "target": "mcp://github.local",
+          "tool": "github_create_issue",
+          "transport": "stdio"
+        },
+        "id": "rec_2e8a6bee5ceb63ec",
+        "nonce": "rnd_4a3b2c1d0e9f8a7b",
+        "policy": {
+          "decision": "allow",
+          "matched_rules": ["rule-allow-github"],
+          "policy_hash": "sha256:a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+          "policy_name": "test-policy-v1",
+          "reason": "tool allowed by rule-allow-github"
+        },
+        "sig": "ed25519:DvuRM3Pi4suQYS0c1wHgvENS722wS2aRy3so5Aqwj/MAP6Q+DxARKJDgUUUwmt7jrGm+vrFfkwAlMFESkhHhCg==",
+        "signer": {
+          "name": "helm-test-agent",
+          "owner": "mindburn-labs",
+          "pubkey": "ed25519:jTEvo6uwEA4yC9jN8cYI5SJsqOI9tfCvF3VCBD23ZbA="
+        },
+        "ts": "2026-06-15T12:00:00.000Z",
+        "v": 1
+      },
+      "record_hash": "b609155532e7246d57858a798b07e15b4e34f2fea0de6763e8fe9bb0508eec5f"
+    },
+    {
+      "prev_hash": "b609155532e7246d57858a798b07e15b4e34f2fea0de6763e8fe9bb0508eec5f",
+      "receipt": {
+        "action": {
+          "params": {
+            "body": "commenting on issue"
+          },
+          "params_hash": "sha256:c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8",
+          "target": "mcp://github.local",
+          "tool": "github_add_comment",
+          "transport": "stdio"
+        },
+        "id": "rec_db6d4463e53f3bf6",
+        "nonce": "rnd_1b2c3d4e5f6a7b8c",
+        "sig": "ed25519:2rY7HyqO7PaaTCGofxjVRPMGJ9gcV4FUPXWLt1lxO8v7diQIMz2jWoiDolEe7SSFtoN0WTGIGk0H1dCPkEsZAA==",
+        "signer": {
+          "name": "helm-test-agent",
+          "owner": "mindburn-labs",
+          "pubkey": "ed25519:jTEvo6uwEA4yC9jN8cYI5SJsqOI9tfCvF3VCBD23ZbA="
+        },
+        "ts": "2026-06-15T12:00:01.000Z",
+        "v": 1
+      },
+      "record_hash": "dececf9a7ca6ed6a85b0e2deb70acd84b29497dfc214dfbe638d5bc2afd7d5c4"
+    }
+  ],
+  "issuer_public_key_hex": "8d312fa3abb0100e320bd8cdf1c608e5226ca8e23db5f0af177542043db765b0"
+}

@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-18T22:46:51Z
-# Commit: b31a6f3108fb6d270df5e5f435591445f0574a5a
+# Generated: 2026-06-19T17:20:28Z
+# Commit: 183c76da201b7406ae9f99761c205edfc9ce0368
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -401,7 +401,7 @@ f2229d08f1b6ad50f51e976305814161e9269884bf563c18fb57bb7416285d10  core/pkg/verif
 3c3181f50c8321f85ab9dce8faeeabf817b5e4211ec6edc2126374d41c4334c0  core/pkg/verifier/decisionreceipt/importer_test.go
 81adca07361da634b11d365a1507f57c6eced998e843f34548ff859189bfac61  core/pkg/verifier/eu_ai_act.go
 bfbe8e2d25ff38dc49eb34028cfede4e449bdc63e3b810f1b19913a11b72442b  core/pkg/verifier/externalreceipt/externalreceipt.go
-2e2f9f3aacbc0666d9ea840908631c320b262d4ed71aad46decbd50b6be6020f  core/pkg/verifier/externalreceipt/externalreceipt_test.go
+fdb3835dc6315a0730a961d458a0c1e4f9f5d79059f33b8908718f075718e12f  core/pkg/verifier/externalreceipt/externalreceipt_test.go
 c259bc6c06d816d1c5711ab639664680addac76a96674132ffcb8316987c1c0c  core/pkg/verifier/host_evidence_test.go
 c3cef5ababcdd88b60d76183bcec9082e3517e3ec574608608f19d8efa533e0a  core/pkg/verifier/verifier.go
 ce266e57a125c5f28989b6a9e50932b26c37289ea94fc8aa26ef8c83abc194da  core/pkg/verifier/verifier_behavior_coverage_test.go

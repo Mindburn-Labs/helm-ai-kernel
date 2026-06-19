@@ -22,16 +22,26 @@ type SQLiteReceiptStore struct {
 func NewSQLiteReceiptStore(db *sql.DB) (*SQLiteReceiptStore, error) {
 	s := &SQLiteReceiptStore{db: db}
 
-	// Database connection pool tuning for extreme concurrent workloads
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(5)
+	// SQLite remains the dependency-free local default. Keep one pooled
+	// connection because writes are serialized and SQLite has one writer.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(1 * time.Hour)
 
-	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		return nil, fmt.Errorf("enable WAL: %w", err)
+	pragmas := []struct {
+		stmt string
+		name string
+	}{
+		{"PRAGMA journal_mode=WAL;", "enable WAL"},
+		{"PRAGMA synchronous=NORMAL;", "set synchronous mode"},
+		{"PRAGMA busy_timeout=5000;", "set busy timeout"},
+		{"PRAGMA temp_store=MEMORY;", "set temp store"},
+		{"PRAGMA wal_autocheckpoint=1000;", "set WAL autocheckpoint"},
 	}
-	if _, err := db.Exec("PRAGMA busy_timeout=5000;"); err != nil {
-		return nil, fmt.Errorf("set busy timeout: %w", err)
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma.stmt); err != nil {
+			return nil, fmt.Errorf("%s: %w", pragma.name, err)
+		}
 	}
 	if err := s.migrate(); err != nil {
 		return nil, err

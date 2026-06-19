@@ -422,6 +422,7 @@ func TestCoverageSQLiteReceiptMigrationAndParsingBranches(t *testing.T) {
 	dbBusy, mockBusy, cleanupBusy := newStoreCoverageSQLMock(t)
 	defer cleanupBusy()
 	mockBusy.ExpectExec("PRAGMA journal_mode").WillReturnResult(sqlmock.NewResult(0, 0))
+	mockBusy.ExpectExec("PRAGMA synchronous").WillReturnResult(sqlmock.NewResult(0, 0))
 	mockBusy.ExpectExec("PRAGMA busy_timeout").WillReturnError(errors.New("busy failed"))
 	if _, err := NewSQLiteReceiptStore(dbBusy); err == nil {
 		t.Fatal("expected busy timeout setup error")
@@ -473,11 +474,12 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 		t.Fatal("expected missing session error")
 	}
 
+	mock.ExpectExec("SELECT pg_advisory_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectBegin()
-	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
 	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(19)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
+	mock.ExpectExec("SELECT pg_advisory_unlock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	if err := store.AppendCausal(ctx, "agent", func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		if previous != nil || lamport != 1 || prevHash != "" {
 			t.Fatalf("unexpected genesis inputs previous=%+v lamport=%d prev=%q", previous, lamport, prevHash)
@@ -488,11 +490,12 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 	}
 
 	previous := storeCoverageReceipt("receipt-prev", "decision-prev", "agent", 3, now)
+	mock.ExpectExec("SELECT pg_advisory_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectBegin()
-	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnRows(storePostgresReceiptRows(previous, nil))
 	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(19)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
+	mock.ExpectExec("SELECT pg_advisory_unlock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	if err := store.AppendCausal(ctx, "agent", func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		if previous == nil || previous.ReceiptID != "receipt-prev" || lamport != 4 || prevHash == "" {
 			t.Fatalf("unexpected chained inputs previous=%+v lamport=%d prev=%q", previous, lamport, prevHash)
@@ -504,47 +507,49 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 		t.Fatalf("AppendCausal chained: %v", err)
 	}
 
-	mock.ExpectBegin()
-	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnError(errors.New("lock failed"))
-	mock.ExpectRollback()
+	mock.ExpectExec("SELECT pg_advisory_lock").WithArgs("agent").WillReturnError(errors.New("lock failed"))
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) { return nil, nil }); err == nil {
 		t.Fatal("expected lock error")
 	}
 
+	mock.ExpectExec("SELECT pg_advisory_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectBegin()
-	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnError(errors.New("last failed"))
 	mock.ExpectRollback()
+	mock.ExpectExec("SELECT pg_advisory_unlock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) { return nil, nil }); err == nil {
 		t.Fatal("expected last receipt error")
 	}
 
+	mock.ExpectExec("SELECT pg_advisory_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectBegin()
-	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
 	mock.ExpectRollback()
+	mock.ExpectExec("SELECT pg_advisory_unlock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
 		return nil, errors.New("builder failed")
 	}); err == nil {
 		t.Fatal("expected builder error")
 	}
 
+	mock.ExpectExec("SELECT pg_advisory_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectBegin()
-	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
 	mock.ExpectExec("INSERT INTO receipts").WillReturnError(errors.New("insert failed"))
 	mock.ExpectRollback()
+	mock.ExpectExec("SELECT pg_advisory_unlock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
 		return storeCoverageReceipt("receipt-insert-fail", "decision-insert-fail", "agent", 1, now), nil
 	}); err == nil {
 		t.Fatal("expected insert error")
 	}
 
+	mock.ExpectExec("SELECT pg_advisory_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectBegin()
-	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
 	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(19)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
+	mock.ExpectExec("SELECT pg_advisory_unlock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
 		return storeCoverageReceipt("receipt-commit-fail", "decision-commit-fail", "agent", 1, now), nil
 	}); err == nil {

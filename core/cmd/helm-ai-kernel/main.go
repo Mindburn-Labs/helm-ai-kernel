@@ -184,6 +184,7 @@ func runServerWithOptions(opts serverOptions) {
 		if err != nil {
 			log.Fatalf("Failed to connect to DB: %v", err)
 		}
+		configurePostgresPool(db)
 		if err := db.PingContext(ctx); err != nil {
 			log.Fatalf("DB Ping failed: %v", err)
 		}
@@ -524,6 +525,17 @@ func buildRuntimeRateLimiter() *helmapi.GlobalRateLimiter {
 		rateLimiter = rateLimiter.WithTrustProxy(true)
 	}
 	return rateLimiter
+}
+
+func configurePostgresPool(db *sql.DB) {
+	maxOpen := envInt("HELM_DB_MAX_OPEN_CONNS", 25)
+	maxIdle := envInt("HELM_DB_MAX_IDLE_CONNS", 10)
+	if maxIdle > maxOpen && maxOpen > 0 {
+		maxIdle = maxOpen
+	}
+	db.SetMaxOpenConns(maxOpen)
+	db.SetMaxIdleConns(maxIdle)
+	db.SetConnMaxLifetime(durationFromEnv("HELM_DB_CONN_MAX_LIFETIME", 30*time.Minute))
 }
 
 func endpointRateProfile(class RouteRateLimit, defaultRPS, defaultBurst int) helmapi.RateLimitProfile {

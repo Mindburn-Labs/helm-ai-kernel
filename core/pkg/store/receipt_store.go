@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -75,6 +76,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		CREATE INDEX IF NOT EXISTS idx_receipts_executor_id ON receipts(executor_id);
 		CREATE INDEX IF NOT EXISTS idx_receipts_decision_id ON receipts(decision_id);
 		CREATE INDEX IF NOT EXISTS idx_receipts_executor_lamport ON receipts(executor_id, lamport_clock);
+		CREATE INDEX IF NOT EXISTS idx_receipts_executor_lamport_desc ON receipts(executor_id, lamport_clock DESC);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_executor_lamport_unique ON receipts(executor_id, lamport_clock)
 			WHERE executor_id IS NOT NULL AND executor_id <> '' AND lamport_clock > 0;
 		CREATE INDEX IF NOT EXISTS idx_receipts_lamport_timestamp ON receipts(lamport_clock, timestamp);
@@ -303,7 +305,27 @@ func (s *PostgresReceiptStore) AppendCausal(ctx context.Context, sessionID strin
 	if sessionID == "" {
 		return fmt.Errorf("session id is required")
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("open receipt connection: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	locked := false
+	defer func() {
+		if locked {
+			unlockCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, _ = conn.ExecContext(unlockCtx, `SELECT pg_advisory_unlock(hashtext($1))`, sessionID)
+		}
+	}()
+
+	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock(hashtext($1))`, sessionID); err != nil {
+		return fmt.Errorf("lock receipt session %s: %w", sessionID, err)
+	}
+	locked = true
+
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin receipt transaction: %w", err)
 	}
@@ -313,10 +335,6 @@ func (s *PostgresReceiptStore) AppendCausal(ctx context.Context, sessionID strin
 			_ = tx.Rollback()
 		}
 	}()
-
-	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, sessionID); err != nil {
-		return fmt.Errorf("lock receipt session %s: %w", sessionID, err)
-	}
 	last, err := queryLastPostgresReceipt(ctx, tx, sessionID)
 	if err != nil {
 		return err

@@ -11,8 +11,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -402,10 +404,11 @@ func VerifyEvidencePackSeal(packDir string, opts VerifyEvidencePackSealOptions) 
 	if seal.Version != EvidencePackSealVersion {
 		result.Errors = append(result.Errors, fmt.Sprintf("unsupported seal version %q", seal.Version))
 	}
-	roots, err := ComputeEvidencePackIndexRoots(packDir)
+	inventory, err := computeEvidencePackInventory(packDir, true)
 	if err != nil {
 		result.Errors = append(result.Errors, err.Error())
 	} else {
+		roots := inventory.Roots
 		if seal.IndexHash != roots.IndexHash {
 			result.Errors = append(result.Errors, fmt.Sprintf("index_hash mismatch: seal=%s current=%s", seal.IndexHash, roots.IndexHash))
 		}
@@ -465,16 +468,26 @@ type EvidencePackIndexRoots struct {
 	EntryCount int
 }
 
+type evidencePackInventory struct {
+	Roots   EvidencePackIndexRoots
+	Entries []indexRootEntry
+}
+
 // ComputeEvidencePackIndexRoots derives the seal roots from 00_INDEX.json.
 func ComputeEvidencePackIndexRoots(packDir string) (EvidencePackIndexRoots, error) {
+	inventory, err := computeEvidencePackInventory(packDir, false)
+	return inventory.Roots, err
+}
+
+func computeEvidencePackInventory(packDir string, verifyFiles bool) (evidencePackInventory, error) {
 	indexPath := filepath.Join(packDir, "00_INDEX.json")
 	indexData, err := os.ReadFile(indexPath)
 	if err != nil {
-		return EvidencePackIndexRoots{}, fmt.Errorf("read 00_INDEX.json: %w", err)
+		return evidencePackInventory{}, fmt.Errorf("read 00_INDEX.json: %w", err)
 	}
 	var index indexRootFile
 	if err := json.Unmarshal(indexData, &index); err != nil {
-		return EvidencePackIndexRoots{}, fmt.Errorf("parse 00_INDEX.json: %w", err)
+		return evidencePackInventory{}, fmt.Errorf("parse 00_INDEX.json: %w", err)
 	}
 	sort.Slice(index.Entries, func(i, j int) bool {
 		return index.Entries[i].Path < index.Entries[j].Path
@@ -483,7 +496,7 @@ func ComputeEvidencePackIndexRoots(packDir string) (EvidencePackIndexRoots, erro
 	for _, entry := range index.Entries {
 		clean := filepath.Clean(entry.Path)
 		if filepath.IsAbs(clean) || strings.HasPrefix(clean, "..") {
-			return EvidencePackIndexRoots{}, fmt.Errorf("index entry escapes bundle: %s", entry.Path)
+			return evidencePackInventory{}, fmt.Errorf("index entry escapes bundle: %s", entry.Path)
 		}
 		hashValue := strings.TrimPrefix(strings.TrimSpace(entry.SHA256), "sha256:")
 		digest, err := hex.DecodeString(hashValue)
@@ -491,17 +504,76 @@ func ComputeEvidencePackIndexRoots(packDir string) (EvidencePackIndexRoots, erro
 			if err == nil {
 				err = fmt.Errorf("expected %d bytes, got %d", sha256.Size, len(digest))
 			}
-			return EvidencePackIndexRoots{}, fmt.Errorf("invalid sha256 for %s: %w", entry.Path, err)
+			return evidencePackInventory{}, fmt.Errorf("invalid sha256 for %s: %w", entry.Path, err)
 		}
 		leafInput := append([]byte{0x00}, digest...)
 		leaf := sha256.Sum256(leafInput)
 		leaves = append(leaves, leaf[:])
 	}
-	return EvidencePackIndexRoots{
+	if verifyFiles {
+		if err := verifyEvidencePackIndexedFiles(packDir, index.Entries); err != nil {
+			return evidencePackInventory{}, err
+		}
+	}
+	return evidencePackInventory{Roots: EvidencePackIndexRoots{
 		IndexHash:  sha256HexEvidence(indexData),
 		MerkleRoot: merkleRootHexEvidence(leaves),
 		EntryCount: len(index.Entries),
-	}, nil
+	}, Entries: index.Entries}, nil
+}
+
+func verifyEvidencePackIndexedFiles(packDir string, entries []indexRootEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	workers := runtime.GOMAXPROCS(0)
+	if workers > 8 {
+		workers = 8
+	}
+	if workers > len(entries) {
+		workers = len(entries)
+	}
+	jobs := make(chan indexRootEntry)
+	errCh := make(chan error, 1)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for entry := range jobs {
+				if err := verifyEvidencePackIndexedFile(packDir, entry); err != nil {
+					select {
+					case errCh <- err:
+					default:
+					}
+				}
+			}
+		}()
+	}
+	for _, entry := range entries {
+		jobs <- entry
+	}
+	close(jobs)
+	wg.Wait()
+	select {
+	case err := <-errCh:
+		return err
+	default:
+		return nil
+	}
+}
+
+func verifyEvidencePackIndexedFile(packDir string, entry indexRootEntry) error {
+	clean := filepath.Clean(entry.Path)
+	actual, err := HashFile(filepath.Join(packDir, clean))
+	if err != nil {
+		return fmt.Errorf("hash indexed file %s: %w", entry.Path, err)
+	}
+	expected := strings.TrimPrefix(strings.TrimSpace(entry.SHA256), "sha256:")
+	if !strings.EqualFold(strings.TrimPrefix(actual, "sha256:"), expected) {
+		return fmt.Errorf("indexed file hash mismatch for %s: index=sha256:%s current=%s", entry.Path, expected, actual)
+	}
+	return nil
 }
 
 // ResolveEvidenceSigner creates the configured signer. KMS is fail-closed unless

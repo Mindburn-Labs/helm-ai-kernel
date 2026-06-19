@@ -433,6 +433,11 @@ func runServerWithOptions(opts serverOptions) {
 	}
 	healthMux.HandleFunc("/health", healthHandler)
 	healthMux.HandleFunc("/healthz", healthHandler)
+	metricsPort := envInt("HELM_METRICS_PORT", healthPort)
+	metricsEnabled := envBool("HELM_METRICS_ENABLED")
+	if metricsEnabled && metricsPort == healthPort {
+		healthMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandler())
+	}
 	healthServer := &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", bindAddr, healthPort),
 		Handler:           healthMux,
@@ -447,6 +452,25 @@ func runServerWithOptions(opts serverOptions) {
 			log.Printf("[helm] health server error: %v", err)
 		}
 	}()
+	var metricsServer *http.Server
+	if metricsEnabled && metricsPort != healthPort {
+		metricsMux := http.NewServeMux()
+		metricsMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandler())
+		metricsServer = &http.Server{
+			Addr:              fmt.Sprintf("%s:%d", bindAddr, metricsPort),
+			Handler:           metricsMux,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       5 * time.Second,
+			WriteTimeout:      5 * time.Second,
+			IdleTimeout:       30 * time.Second,
+		}
+		go func() {
+			log.Printf("[helm] metrics server: %s:%d", bindAddr, metricsPort)
+			if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("[helm] metrics server error: %v", err)
+			}
+		}()
+	}
 
 	if opts.JSON {
 		_ = json.NewEncoder(opts.Stdout).Encode(map[string]any{
@@ -480,6 +504,11 @@ func runServerWithOptions(opts serverOptions) {
 	}
 	if err := healthServer.Shutdown(shutdownCtx); err != nil {
 		log.Printf("[helm] health server shutdown error: %v", err)
+	}
+	if metricsServer != nil {
+		if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("[helm] metrics server shutdown error: %v", err)
+		}
 	}
 	log.Println("[helm] shutdown complete")
 }

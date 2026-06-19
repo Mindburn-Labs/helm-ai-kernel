@@ -336,6 +336,25 @@ func TestVerifyEvidencePackSealRejectsRegeneratedIndexWithOldSeal(t *testing.T) 
 	}
 }
 
+func TestVerifyEvidencePackSealRejectsIndexedFileTamper(t *testing.T) {
+	packDir := writeSealTestPack(t, map[string][]byte{
+		"01_SCORE.json": []byte(`{"pass":true}`),
+	})
+	if _, err := SealEvidencePack(context.Background(), packDir, SealEvidencePackOptions{DataDir: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(packDir, "01_SCORE.json"), []byte(`{"pass":false}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := VerifyEvidencePackSeal(packDir, VerifyEvidencePackSealOptions{Profile: EvidenceTrustProfileDevLocal})
+	if result.State == "valid" {
+		t.Fatalf("tampered indexed file accepted: %+v", result)
+	}
+	if !strings.Contains(strings.Join(result.Errors, "; "), "indexed file hash mismatch") {
+		t.Fatalf("expected indexed file hash mismatch, got %+v", result.Errors)
+	}
+}
+
 func TestVerifyStorageReceiptForSealRequiresCustomerGradeS3(t *testing.T) {
 	archivePath := filepath.Join(t.TempDir(), "pack.tar")
 	if err := os.WriteFile(archivePath, []byte("sealed archive"), 0o600); err != nil {

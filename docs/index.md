@@ -88,6 +88,7 @@ The code, command output, and verification artifacts override marketing language
 5. Pick an integration:
    - [OpenAI-compatible proxy](INTEGRATIONS/openai_baseurl.md)
    - [MCP integration](INTEGRATIONS/mcp.md)
+   - [Codebase Memory MCP integration](INTEGRATIONS/codebase_memory_mcp.md)
    - [Highflame ZeroID Integration](INTEGRATIONS/zeroid.md)
    - [Vaultak State Transaction Bridge](INTEGRATIONS/vaultak.md)
    - [BGT Labs Sentinel Authorization Gateway](INTEGRATIONS/sentinel.md)
@@ -104,6 +105,7 @@ The code, command output, and verification artifacts override marketing language
 | CLI | You want local serving, policy loading, receipts, or verification commands. | [Quickstart](QUICKSTART.md) |
 | OpenAI-compatible proxy | You have an existing OpenAI-style client and want a small integration diff. | [Proxy integration](INTEGRATIONS/openai_baseurl.md) |
 | MCP | You are exposing governed tools to MCP-capable clients. | [MCP integration](INTEGRATIONS/mcp.md) |
+| Codebase Memory MCP | You want local read/query code intelligence before editing HELM source. | [Codebase Memory MCP integration](INTEGRATIONS/codebase_memory_mcp.md) |
 | SDKs | You need typed wrappers or generated examples. | [SDK index](sdks/00_INDEX.md) |
 | Verifier | You need replayable evidence independent of the model provider. | [Verification](VERIFICATION.md) |
 

@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
+	"sync"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -31,11 +31,19 @@ type CausalReceiptBuilder func(previous *contracts.Receipt, lamport uint64, prev
 
 // PostgresReceiptStore is a durable SQL-based implementation.
 type PostgresReceiptStore struct {
-	db *sql.DB
+	db            *sql.DB
+	lastMu        sync.Mutex
+	lastBySession map[string]*contracts.Receipt
+	locksMu       sync.Mutex
+	sessionLocks  map[string]*sync.Mutex
 }
 
 func NewPostgresReceiptStore(db *sql.DB) *PostgresReceiptStore {
-	return &PostgresReceiptStore{db: db}
+	return &PostgresReceiptStore{
+		db:            db,
+		lastBySession: map[string]*contracts.Receipt{},
+		sessionLocks:  map[string]*sync.Mutex{},
+	}
 }
 
 func (s *PostgresReceiptStore) Init(ctx context.Context) error {
@@ -247,7 +255,11 @@ func (s *PostgresReceiptStore) queryOne(ctx context.Context, query string, arg a
 }
 
 func (s *PostgresReceiptStore) Store(ctx context.Context, r *contracts.Receipt) error {
-	return insertPostgresReceipt(ctx, s.db, r)
+	if err := insertPostgresReceipt(ctx, s.db, r); err != nil {
+		return err
+	}
+	s.rememberLastReceipt(r)
+	return nil
 }
 
 type sqlExecer interface {
@@ -305,27 +317,24 @@ func (s *PostgresReceiptStore) AppendCausal(ctx context.Context, sessionID strin
 	if sessionID == "" {
 		return fmt.Errorf("session id is required")
 	}
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
-		return fmt.Errorf("open receipt connection: %w", err)
-	}
-	defer func() { _ = conn.Close() }()
+	localLock := s.sessionLock(sessionID)
+	localLock.Lock()
+	defer localLock.Unlock()
 
-	locked := false
-	defer func() {
-		if locked {
-			unlockCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_, _ = conn.ExecContext(unlockCtx, `SELECT pg_advisory_unlock(hashtext($1))`, sessionID)
+	if last := s.cachedLastReceipt(sessionID); last != nil {
+		receipt, err := buildNextCausalReceipt(sessionID, last, build)
+		if err != nil {
+			return err
 		}
-	}()
-
-	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock(hashtext($1))`, sessionID); err != nil {
-		return fmt.Errorf("lock receipt session %s: %w", sessionID, err)
+		if err := insertPostgresReceipt(ctx, s.db, receipt); err != nil {
+			s.forgetLastReceipt(sessionID)
+			return err
+		}
+		s.rememberLastReceipt(receipt)
+		return nil
 	}
-	locked = true
 
-	tx, err := conn.BeginTx(ctx, nil)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin receipt transaction: %w", err)
 	}
@@ -335,6 +344,9 @@ func (s *PostgresReceiptStore) AppendCausal(ctx context.Context, sessionID strin
 			_ = tx.Rollback()
 		}
 	}()
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, sessionID); err != nil {
+		return fmt.Errorf("lock receipt session %s: %w", sessionID, err)
+	}
 	last, err := queryLastPostgresReceipt(ctx, tx, sessionID)
 	if err != nil {
 		return err
@@ -350,12 +362,68 @@ func (s *PostgresReceiptStore) AppendCausal(ctx context.Context, sessionID strin
 		return fmt.Errorf("commit receipt transaction: %w", err)
 	}
 	committed = true
+	s.rememberLastReceipt(receipt)
 	return nil
 }
 
 // GetLastForSession returns the most recent receipt for a session (by executor_id) for causal DAG chaining.
 func (s *PostgresReceiptStore) GetLastForSession(ctx context.Context, sessionID string) (*contracts.Receipt, error) {
 	return queryLastPostgresReceipt(ctx, s.db, sessionID)
+}
+
+func (s *PostgresReceiptStore) cachedLastReceipt(sessionID string) *contracts.Receipt {
+	s.lastMu.Lock()
+	defer s.lastMu.Unlock()
+	return cloneReceipt(s.lastBySession[sessionID])
+}
+
+func (s *PostgresReceiptStore) rememberLastReceipt(r *contracts.Receipt) {
+	if r == nil || r.ExecutorID == "" || r.LamportClock == 0 {
+		return
+	}
+	s.lastMu.Lock()
+	defer s.lastMu.Unlock()
+	if s.lastBySession == nil {
+		s.lastBySession = map[string]*contracts.Receipt{}
+	}
+	current := s.lastBySession[r.ExecutorID]
+	if current == nil || r.LamportClock >= current.LamportClock {
+		s.lastBySession[r.ExecutorID] = cloneReceipt(r)
+	}
+}
+
+func (s *PostgresReceiptStore) forgetLastReceipt(sessionID string) {
+	s.lastMu.Lock()
+	defer s.lastMu.Unlock()
+	delete(s.lastBySession, sessionID)
+}
+
+func (s *PostgresReceiptStore) sessionLock(sessionID string) *sync.Mutex {
+	s.locksMu.Lock()
+	defer s.locksMu.Unlock()
+	if s.sessionLocks == nil {
+		s.sessionLocks = map[string]*sync.Mutex{}
+	}
+	lock := s.sessionLocks[sessionID]
+	if lock == nil {
+		lock = &sync.Mutex{}
+		s.sessionLocks[sessionID] = lock
+	}
+	return lock
+}
+
+func cloneReceipt(r *contracts.Receipt) *contracts.Receipt {
+	if r == nil {
+		return nil
+	}
+	clone := *r
+	if r.Metadata != nil {
+		clone.Metadata = make(map[string]any, len(r.Metadata))
+		for k, v := range r.Metadata {
+			clone.Metadata[k] = v
+		}
+	}
+	return &clone
 }
 
 type sqlQueryer interface {

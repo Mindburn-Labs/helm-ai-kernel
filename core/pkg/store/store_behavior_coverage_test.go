@@ -5,13 +5,16 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 
+	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
 )
 
@@ -313,6 +316,111 @@ func TestSQLiteReceiptAppendCausalAssignsChainInsideStore(t *testing.T) {
 	if got.LamportClock != 2 || got.PrevHash != expectedPrevHash {
 		t.Fatalf("causal fields = lamport %d prev %q, want 2 %q", got.LamportClock, got.PrevHash, expectedPrevHash)
 	}
+}
+
+func TestPostgresReceiptAppendCausalParallelOutperformsSQLite(t *testing.T) {
+	postgresURL := os.Getenv("HELM_TEST_POSTGRES_URL")
+	if postgresURL == "" {
+		t.Skip("set HELM_TEST_POSTGRES_URL to run Postgres receipt throughput gate")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	const sessions = 64
+	const appendsPerSession = 50
+
+	sqliteDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "receipts.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqliteStore, err := NewSQLiteReceiptStore(sqliteDB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sqliteDB.Close() }()
+
+	schema := fmt.Sprintf("helm_receipts_%d", time.Now().UnixNano())
+	pgURL := postgresURLWithSearchPath(t, postgresURL, schema)
+	postgresDB, err := sql.Open("postgres", pgURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	postgresDB.SetMaxOpenConns(sessions)
+	postgresDB.SetMaxIdleConns(sessions)
+	postgresDB.SetConnMaxLifetime(time.Minute)
+	defer func() { _ = postgresDB.Close() }()
+	if _, err := postgresDB.ExecContext(ctx, `CREATE SCHEMA IF NOT EXISTS `+schema); err != nil {
+		t.Fatalf("create test schema: %v", err)
+	}
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		_, _ = postgresDB.ExecContext(cleanupCtx, `DROP SCHEMA IF EXISTS `+schema+` CASCADE`)
+	}()
+	postgresStore := NewPostgresReceiptStore(postgresDB)
+	if err := postgresStore.Init(ctx); err != nil {
+		t.Fatalf("init postgres store: %v", err)
+	}
+
+	sqliteDuration := runReceiptAppendCausalLoad(t, ctx, sqliteStore, "sqlite", sessions, appendsPerSession)
+	postgresDuration := runReceiptAppendCausalLoad(t, ctx, postgresStore, "postgres", sessions, appendsPerSession)
+	t.Logf("parallel causal append: sqlite=%s postgres=%s sessions=%d appends_per_session=%d", sqliteDuration, postgresDuration, sessions, appendsPerSession)
+	if postgresDuration >= sqliteDuration {
+		t.Fatalf("parallel Postgres receipt append did not outperform SQLite: postgres=%s sqlite=%s", postgresDuration, sqliteDuration)
+	}
+}
+
+func postgresURLWithSearchPath(t *testing.T, rawURL, schema string) string {
+	t.Helper()
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme == "" {
+		t.Fatalf("HELM_TEST_POSTGRES_URL must be a URL-style Postgres DSN for schema isolation: %v", err)
+	}
+	query := parsed.Query()
+	query.Set("search_path", schema)
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
+}
+
+func runReceiptAppendCausalLoad(t *testing.T, ctx context.Context, store ReceiptStore, prefix string, sessions, appendsPerSession int) time.Duration {
+	t.Helper()
+	start := time.Now()
+	var wg sync.WaitGroup
+	errCh := make(chan error, sessions)
+	for sessionIndex := 0; sessionIndex < sessions; sessionIndex++ {
+		sessionIndex := sessionIndex
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sessionID := fmt.Sprintf("%s-session-%02d", prefix, sessionIndex)
+			for appendIndex := 0; appendIndex < appendsPerSession; appendIndex++ {
+				appendIndex := appendIndex
+				if err := store.AppendCausal(ctx, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+					return &contracts.Receipt{
+						ReceiptID:    fmt.Sprintf("%s-receipt-%02d-%03d", prefix, sessionIndex, appendIndex),
+						DecisionID:   fmt.Sprintf("%s-decision-%02d-%03d", prefix, sessionIndex, appendIndex),
+						EffectID:     "receipt-throughput",
+						Status:       "OK",
+						Timestamp:    time.Unix(1700000000+int64(appendIndex), 0).UTC(),
+						ExecutorID:   sessionID,
+						PrevHash:     prevHash,
+						LamportClock: lamport,
+						Signature:    "sig",
+					}, nil
+				}); err != nil {
+					errCh <- fmt.Errorf("%s append %d: %w", sessionID, appendIndex, err)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	return time.Since(start)
 }
 
 func TestSQLiteReceiptRejectsUnmarshalableMetadata(t *testing.T) {

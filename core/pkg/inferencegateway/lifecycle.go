@@ -129,6 +129,8 @@ func movementKind(t economic.BalanceMovementType) string {
 		return "platfee"
 	case economic.BalanceMovementInvoiceAccrual:
 		return "invoice"
+	case economic.BalanceMovementTaxAccrual:
+		return "tax"
 	default:
 		return "movement"
 	}
@@ -365,6 +367,8 @@ func (l *BalanceLedger) Accrue(receiptID string, accrualType economic.BalanceMov
 		l.platformFeeAccruedCents += amountCents
 	case economic.BalanceMovementInvoiceAccrual:
 		l.invoiceAccruedCents += amountCents
+	case economic.BalanceMovementTaxAccrual:
+		l.taxBasisAccruedCents += amountCents
 	}
 	return &MovementResult{Receipt: receipt, Entry: entry, BalanceAfterCents: l.account.BalanceCents, HoldAfterCents: l.account.HoldCents}, nil
 }

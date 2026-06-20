@@ -121,6 +121,7 @@ type BalanceLedger struct {
 	providerCostAccruedCents int64
 	platformFeeAccruedCents  int64
 	invoiceAccruedCents      int64
+	taxBasisAccruedCents     int64
 	accrualEntryIDs          map[string]struct{}
 }
 

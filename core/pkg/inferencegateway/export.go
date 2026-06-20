@@ -33,6 +33,7 @@ type FinanceExport struct {
 	ProviderCostCents     int64               `json:"provider_cost_cents"`
 	PlatformFeeCents      int64               `json:"platform_fee_cents"`
 	InvoiceAccruedCents   int64               `json:"invoice_accrued_cents"`
+	TaxBasisCents         int64               `json:"tax_basis_cents"`
 	NetBalanceDeltaCents  int64               `json:"net_balance_delta_cents"`
 	OpenReservationsCents int64               `json:"open_reservations_cents"`
 	EntryCount            int                 `json:"entry_count"`
@@ -107,6 +108,7 @@ func (l *BalanceLedger) FinanceExport() FinanceExport {
 		ProviderCostCents:     l.providerCostAccruedCents,
 		PlatformFeeCents:      l.platformFeeAccruedCents,
 		InvoiceAccruedCents:   l.invoiceAccruedCents,
+		TaxBasisCents:         l.taxBasisAccruedCents,
 		NetBalanceDeltaCents:  credits - debits,
 		OpenReservationsCents: openHolds,
 		EntryCount:            len(l.entries),

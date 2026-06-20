@@ -182,6 +182,32 @@ func (s *ProviderPriceSnapshot) Stale(now time.Time) bool {
 	return s == nil || !now.Before(s.ExpiresAt)
 }
 
+// QuoteCents computes the quoted cost in whole cents for the given token usage.
+//
+// Token prices are expressed in micro-cents (1e-6 cents) per token so that
+// sub-cent per-token rates remain exact integers. The running total is kept in
+// micro-cents and rounded up to the next whole cent so a quote never
+// under-charges the envelope. RequestCents is a flat per-request surcharge.
+func (s *ProviderPriceSnapshot) QuoteCents(inputTokens, outputTokens int64) (int64, error) {
+	if s == nil {
+		return 0, errors.New("provider_price_snapshot: snapshot is nil")
+	}
+	if inputTokens < 0 || outputTokens < 0 {
+		return 0, errors.New("provider_price_snapshot: token counts cannot be negative")
+	}
+	microCents := inputTokens*s.InputTokenMicroCents + outputTokens*s.OutputTokenMicroCents
+	if microCents < 0 {
+		return 0, errors.New("provider_price_snapshot: token cost overflow")
+	}
+	// Round up to the next whole cent (ceil division), then add the flat surcharge.
+	cents := (microCents + 999_999) / 1_000_000
+	total := cents + s.RequestCents
+	if total <= 0 {
+		return 0, errors.New("provider_price_snapshot: quoted cost must be positive")
+	}
+	return total, nil
+}
+
 func (s *ProviderPriceSnapshot) computeHash() string {
 	return hashSpendAuthorityCanonical(struct {
 		ID                    string `json:"id"`

@@ -396,6 +396,30 @@ func (q *RouteQuote) Expired(now time.Time) bool {
 	return q == nil || !now.Before(q.ExpiresAt)
 }
 
+// Reseal recomputes ContentHash after hash-relevant fields (e.g. ReceiptHash)
+// are set following construction. It returns the engine's deterministic hash.
+func (q *RouteQuote) Reseal() string {
+	if q == nil {
+		return ""
+	}
+	q.ContentHash = q.computeHash()
+	return q.ContentHash
+}
+
+// CanonicalContentHash returns the deterministic hash for the quote body without
+// mutating ContentHash. Used by offline EvidencePack verification.
+func (q *RouteQuote) CanonicalContentHash() string {
+	if q == nil {
+		return ""
+	}
+	return q.computeHash()
+}
+
+// HasCanonicalContentHash reports whether ContentHash matches the quote body.
+func (q *RouteQuote) HasCanonicalContentHash() bool {
+	return q != nil && q.ContentHash != "" && q.ContentHash == q.computeHash()
+}
+
 // Validate ensures the route quote is dispatch-safe.
 func (q *RouteQuote) Validate() error {
 	if q == nil {
@@ -623,6 +647,17 @@ func (r *BudgetVerdictReceipt) CanonicalContentHash() string {
 	return r.computeHash()
 }
 
+// Reseal recomputes ContentHash after hash-relevant fields (e.g. PrincipalID)
+// are set following construction, before the receipt is signed or bound. It
+// returns the deterministic hash.
+func (r *BudgetVerdictReceipt) Reseal() string {
+	if r == nil {
+		return ""
+	}
+	r.ContentHash = r.computeHash()
+	return r.ContentHash
+}
+
 func (r *BudgetVerdictReceipt) validateCore() error {
 	if r == nil {
 		return errors.New("budget_verdict_receipt: receipt is nil")
@@ -804,6 +839,30 @@ func NewUsageReceipt(id, tenantID, routeQuoteID, spendIntentID, envelopeID, agen
 	return r
 }
 
+// Reseal recomputes ContentHash after settlement-linkage fields
+// (SettlementReceiptHash, LedgerEntryIDs) are populated post-construction.
+func (r *UsageReceipt) Reseal() string {
+	if r == nil {
+		return ""
+	}
+	r.ContentHash = r.computeHash()
+	return r.ContentHash
+}
+
+// CanonicalContentHash returns the deterministic hash for the usage receipt body
+// without mutating ContentHash. Used by offline EvidencePack verification.
+func (r *UsageReceipt) CanonicalContentHash() string {
+	if r == nil {
+		return ""
+	}
+	return r.computeHash()
+}
+
+// HasCanonicalContentHash reports whether ContentHash matches the receipt body.
+func (r *UsageReceipt) HasCanonicalContentHash() bool {
+	return r != nil && r.ContentHash != "" && r.ContentHash == r.computeHash()
+}
+
 // Validate ensures the usage receipt can support reconciliation.
 func (r *UsageReceipt) Validate() error {
 	if r == nil {
@@ -967,6 +1026,30 @@ func (s *SettlementReceipt) Balanced() bool {
 		}
 	}
 	return debits == credits && debits > 0
+}
+
+// Reseal recomputes ContentHash after SourceUsageReceiptHash is bound to the
+// final usage-receipt hash post-construction.
+func (s *SettlementReceipt) Reseal() string {
+	if s == nil {
+		return ""
+	}
+	s.ContentHash = s.computeHash()
+	return s.ContentHash
+}
+
+// CanonicalContentHash returns the deterministic hash for the settlement receipt
+// body without mutating ContentHash. Used by offline EvidencePack verification.
+func (s *SettlementReceipt) CanonicalContentHash() string {
+	if s == nil {
+		return ""
+	}
+	return s.computeHash()
+}
+
+// HasCanonicalContentHash reports whether ContentHash matches the receipt body.
+func (s *SettlementReceipt) HasCanonicalContentHash() bool {
+	return s != nil && s.ContentHash != "" && s.ContentHash == s.computeHash()
 }
 
 // Validate ensures the settlement can be used as financial evidence.

@@ -1,0 +1,62 @@
+name: Performance and latency feedback
+description: Report HELM latency for policy, receipt, SDK, MCP, or proxy paths.
+title: "[Performance]: "
+labels: ["community", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Include sanitized local measurements only. Do not include secrets, private prompts, customer data, or production endpoints.
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, hardware, container, or CI runner.
+      placeholder: "macOS arm64, 32 GB RAM"
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: HELM command or path
+      description: Command, SDK call, MCP route, or proxy path that was slow.
+      placeholder: "helm-ai-kernel proxy /v1/chat/completions"
+    validations:
+      required: true
+  - type: input
+    id: observed_latency
+    attributes:
+      label: Observed latency
+      description: Include units and sample size.
+      placeholder: "p95 42 ms over 100 calls"
+    validations:
+      required: true
+  - type: input
+    id: expected_latency
+    attributes:
+      label: Expected latency
+      description: What would be acceptable for your workflow?
+      placeholder: "p95 under 20 ms"
+  - type: input
+    id: concurrency
+    attributes:
+      label: Concurrent agents or calls
+      placeholder: "8 agents, 40 calls/sec"
+  - type: textarea
+    id: tool_context
+    attributes:
+      label: MCP server or tool type
+      description: Shell, DB, filesystem, cloud, browser, code, or other tool class.
+  - type: dropdown
+    id: suspected_area
+    attributes:
+      label: Suspected latency area
+      options:
+        - policy evaluation
+        - receipt signing
+        - evidence export
+        - network/proxy
+        - SDK/client
+        - unknown
+    validations:
+      required: true

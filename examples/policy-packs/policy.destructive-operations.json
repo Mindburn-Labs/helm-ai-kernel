@@ -1,0 +1,69 @@
+{
+  "pack_id": "policy.destructive-operations.v1",
+  "label": "Destructive Operations",
+  "version": 1,
+  "scope": {
+    "category": "multi-surface",
+    "intended_use": "Local deny/escalate evaluation for destructive shell, database, cloud, git, and secret-exposure actions"
+  },
+  "actions": [
+    {
+      "action": "safe.readonly.inspect",
+      "enabled": true,
+      "description": "Allow readonly status, list, explain, and dry-run inspection.",
+      "expression": "input.effect == 'read' || input.effect == 'dry_run'"
+    },
+    {
+      "action": "shell.recursive_force_delete",
+      "enabled": false,
+      "description": "DENY rm -rf and recursive force deletion. False-positive risk: temp-fixture cleanup; use a scoped ESCALATE review when cleanup is expected.",
+      "patterns": ["rm -rf", "rm -fr"],
+      "recommended_verdict": "DENY",
+      "escalate_variant": "ESCALATE only for reviewed temp directories with receipt capture"
+    },
+    {
+      "action": "shell.raw_disk_or_fs_destroy",
+      "enabled": false,
+      "description": "DENY raw disk and filesystem destruction. False-positive risk: lab image creation; require explicit reviewed fixture scope.",
+      "patterns": ["dd if=", "mkfs", "shred", "wipefs"],
+      "recommended_verdict": "DENY",
+      "escalate_variant": "ESCALATE for disposable lab devices only"
+    },
+    {
+      "action": "db.destructive_mutation",
+      "enabled": false,
+      "description": "DENY destructive SQL mutations. False-positive risk: isolated migration test DB; require reviewed database identity.",
+      "patterns": ["DROP DATABASE", "DROP TABLE", "TRUNCATE", "DELETE FROM"],
+      "recommended_verdict": "DENY",
+      "escalate_variant": "ESCALATE for named non-production databases with backup proof"
+    },
+    {
+      "action": "cloud.destroy_or_namespace_delete",
+      "enabled": false,
+      "description": "DENY infrastructure destruction. False-positive risk: preview-stack teardown; require deployment target, approver, and rollback evidence.",
+      "patterns": ["terraform destroy", "kubectl delete namespace"],
+      "recommended_verdict": "DENY",
+      "escalate_variant": "ESCALATE for preview environments with owner approval"
+    },
+    {
+      "action": "git.destructive_history_or_clean",
+      "enabled": false,
+      "description": "DENY destructive git history/worktree commands. False-positive risk: local scratch branches; require branch and remotes proof.",
+      "patterns": ["git push --force", "git clean -fdx"],
+      "recommended_verdict": "DENY",
+      "escalate_variant": "ESCALATE for explicitly named local-only scratch worktrees"
+    },
+    {
+      "action": "secrets.print_known_paths",
+      "enabled": false,
+      "description": "DENY printing known secret paths or environment dumps. False-positive risk: redacted secret inventory; require sanitizer proof.",
+      "patterns": ["cat .env", "cat ~/.ssh/", "printenv", "env"],
+      "recommended_verdict": "DENY",
+      "escalate_variant": "ESCALATE for redacted inventory commands with output filter receipts"
+    }
+  ],
+  "notes": [
+    "Example only: disabled actions stay outside the allow graph. A real integration should map raw commands to action IDs, emit receipts, and verify the EvidencePack.",
+    "The ESCALATE variants are guidance for review policy authors; this file does not grant approval by itself."
+  ]
+}

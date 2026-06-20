@@ -28,11 +28,12 @@ import (
 //	2 = config error
 func runDemoCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel demo <organization|research-lab|mcp> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel demo <organization|research-lab|finance|mcp> [flags]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Subcommands:")
 		fmt.Fprintln(stderr, "  organization  Run the canonical starter organization demo")
 		fmt.Fprintln(stderr, "  research-lab  Run a research-lab reference scenario")
+		fmt.Fprintln(stderr, "  finance       Run the finance payment-approval escalation demo")
 		fmt.Fprintln(stderr, "  mcp           Run the MCP governance proof scenarios")
 		return 2
 	}
@@ -42,14 +43,17 @@ func runDemoCmd(args []string, stdout, stderr io.Writer) int {
 		return runDemoScenario("organization", args[1:], stdout, stderr)
 	case "research-lab":
 		return runDemoScenario("research-lab", args[1:], stdout, stderr)
+	case "finance":
+		return runDemoFinance(args[1:], stdout, stderr)
 	case "mcp":
 		return runMCPProof(args[1:], stdout, stderr)
 	case "--help", "-h":
-		fmt.Fprintln(stdout, "Usage: helm-ai-kernel demo <organization|research-lab|mcp> [flags]")
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel demo <organization|research-lab|finance|mcp> [flags]")
 		fmt.Fprintln(stdout, "")
 		fmt.Fprintln(stdout, "Subcommands:")
 		fmt.Fprintln(stdout, "  organization  Run the canonical starter organization demo")
 		fmt.Fprintln(stdout, "  research-lab  Run a research-lab reference scenario")
+		fmt.Fprintln(stdout, "  finance       Run the finance payment-approval escalation demo")
 		fmt.Fprintln(stdout, "  mcp           Run the MCP governance proof scenarios")
 		return 0
 	default:

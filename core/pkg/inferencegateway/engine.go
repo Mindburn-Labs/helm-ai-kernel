@@ -278,6 +278,11 @@ func (e *Engine) Quote(env *economic.AgentSpendEnvelope, req RouteRequest) (*Quo
 		snapshot.ContentHash, e.routePolicyHash, evidenceRef, decision,
 	)
 	receipt.PrincipalID = req.PrincipalID
+	// PrincipalID is part of the receipt's canonical hash, so reseal after
+	// setting it; otherwise the stored ContentHash (computed pre-PrincipalID)
+	// would not match the receipt body and the receipt would fail offline
+	// canonical-hash verification. Bind the quote to the resealed hash.
+	receipt.Reseal()
 	quote.ReceiptHash = receipt.ContentHash
 	quote.Reseal()
 	result.Receipt = receipt
@@ -360,6 +365,11 @@ func (e *Engine) Settle(
 	usage.Reseal()
 	settlement.SourceUsageReceiptHash = usage.ContentHash
 	settlement.Reseal()
+
+	// Drop any dispatch reservation for this quote so its hold is not
+	// double-counted against the actual debit that follows. No-op when the
+	// caller did not pre-reserve.
+	e.cfg.Ledger.consumeReservationForDebit(quote.ID)
 
 	rec, err := e.cfg.Ledger.commit(idem, usage, settlement)
 	if err != nil {

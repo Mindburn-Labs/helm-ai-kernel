@@ -32,6 +32,10 @@ const (
 	BalanceMovementPlatformFeeAccrual BalanceMovementType = "PLATFORM_FEE_ACCRUAL"
 	// BalanceMovementInvoiceAccrual accrues enterprise-invoiced (deferred) spend.
 	BalanceMovementInvoiceAccrual BalanceMovementType = "INVOICE_ACCRUAL"
+	// BalanceMovementTaxAccrual accrues the tax basis (e.g. VAT/sales tax) owed on
+	// resold usage, for the finance export. Like the other accruals it is
+	// bookkeeping-only and never moves the cash balance.
+	BalanceMovementTaxAccrual BalanceMovementType = "TAX_ACCRUAL"
 )
 
 // fundingDirection reports the credit/debit direction a funding movement posts
@@ -47,7 +51,7 @@ func (t BalanceMovementType) fundingDirection() SettlementDirection {
 // available usage balance.
 func (t BalanceMovementType) IsAccrual() bool {
 	switch t {
-	case BalanceMovementProviderCostAccrual, BalanceMovementPlatformFeeAccrual, BalanceMovementInvoiceAccrual:
+	case BalanceMovementProviderCostAccrual, BalanceMovementPlatformFeeAccrual, BalanceMovementInvoiceAccrual, BalanceMovementTaxAccrual:
 		return true
 	default:
 		return false

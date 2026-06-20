@@ -1,0 +1,11 @@
+name = "policy.destructive-operations"
+profile = "example_destructive_operations"
+reference_pack = "./policy.destructive-operations.json"
+
+[server]
+bind = "127.0.0.1"
+port = 7714
+
+[receipts]
+store = "sqlite"
+path = "./data/policy-packs/destructive-operations.receipts.db"

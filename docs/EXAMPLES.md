@@ -76,6 +76,7 @@ flowchart TD
 | OpenTelemetry GenAI | `helm-ai-kernel proxy` with telemetry enabled | telemetry export shape | [`examples/otel-genai`](../examples/otel-genai) | `go test ./examples/otel-genai/...` |
 | OpenCLAW | local example harness | compatibility with OpenCLAW-style policy material | [`examples/openclaw`](../examples/openclaw) | `make docs-truth` |
 | Policy examples | `helm-ai-kernel bundle build <source>` | CEL, Rego, Cedar bundle inputs | [`examples/policies`](../examples/policies) | `make docs-truth` |
+| Policy-pack examples | `helm-ai-kernel serve --policy examples/policy-packs/<pack>.toml` | runnable allow/deny reference packs, including destructive operation deny/escalate guidance | [`examples/policy-packs`](../examples/policy-packs) | `cd core/cmd/helm-ai-kernel && go test . -run TestPolicyPackExamplesLoad -count=1` |
 | Starters | selected starter README | scaffolded integrations only where source exists | [`examples/starters`](../examples/starters) | `make docs-truth` |
 
 ## Common Environment

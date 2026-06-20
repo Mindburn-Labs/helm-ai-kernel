@@ -1,0 +1,43 @@
+name: Receipt and EvidencePack feedback
+description: Report missing or confusing proof fields from receipts or EvidencePacks.
+title: "[Proof feedback]: "
+labels: ["community", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep public issues sanitized. Do not include secrets, private prompts, customer data, private endpoints, or unredacted production receipts.
+  - type: textarea
+    id: receipt_fields
+    attributes:
+      label: Receipt fields reviewed
+      description: Which receipt, ProofGraph, or EvidencePack fields did you inspect?
+    validations:
+      required: true
+  - type: textarea
+    id: missing_information
+    attributes:
+      label: Missing information
+      description: What information did your audit, incident-response, or integration workflow need but not find?
+    validations:
+      required: true
+  - type: textarea
+    id: confusing_information
+    attributes:
+      label: Confusing or redundant information
+      description: What was present but unclear, duplicated, or hard to trust?
+  - type: textarea
+    id: workflow_requirements
+    attributes:
+      label: Audit or incident-response requirement
+      description: What would your real workflow require before accepting this proof?
+  - type: textarea
+    id: integration_context
+    attributes:
+      label: Agent framework or MCP context
+      description: Name the agent framework, MCP server, tool class, or local fixture involved.
+  - type: textarea
+    id: source_links
+    attributes:
+      label: Sanitized source links
+      description: Public docs, fixture hashes, demo output, or issue links.

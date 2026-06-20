@@ -15,6 +15,30 @@ body:
       placeholder: "Local MCP stdio server"
     validations:
       required: true
+  - type: input
+    id: project_link
+    attributes:
+      label: Project link
+      description: Public repository, package, or docs URL for the target.
+      placeholder: "https://github.com/example/project"
+    validations:
+      required: true
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: Tools or capabilities involved
+      description: List the shell, DB, filesystem, cloud, browser, code, or other side-effecting capabilities.
+      placeholder: "shell.run_command, filesystem.read_file"
+    validations:
+      required: true
+  - type: textarea
+    id: side_effect_risk
+    attributes:
+      label: Side-effect risk
+      description: What could go wrong if the tool call executes without HELM governance?
+      placeholder: "destructive filesystem writes, credential exposure, production deploy"
+    validations:
+      required: true
   - type: textarea
     id: workflow
     attributes:
@@ -41,3 +65,8 @@ body:
       description: Explain how this can be tested with localhost services, temp directories, or sample policy data.
     validations:
       required: true
+  - type: textarea
+    id: policy_metadata
+    attributes:
+      label: Policy metadata needed
+      description: Name the tool args, identity, resource, risk, or receipt fields HELM would need to decide safely.

@@ -19,6 +19,7 @@ go test . -run TestPolicyPackExamplesLoad -count=1
 | Pack | Purpose |
 | --- | --- |
 | `policy.shell.safe-by-default.toml` | Allow read-only shell and git status actions; keep destructive shell and git operations outside the allow graph. |
+| `policy.destructive-operations.toml` | Multi-surface deny/escalate template for destructive shell, DB, cloud, Kubernetes, git, and secret-exposure actions. |
 | `policy.db.readonly.toml` | Allow database reads and explains; keep writes, schema changes, and destructive operations outside the allow graph. |
 | `policy.cicd.approval-required.toml` | Allow CI status/log reads; keep deploys, secret changes, and workflow mutations outside the allow graph. |
 | `policy.cloud.mutations.toml` | Allow cloud inventory reads; keep IAM, network, storage, and Kubernetes mutations outside the allow graph. |

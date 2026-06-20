@@ -81,6 +81,25 @@ HELM implements three independent, composable layers of execution security.
 Each layer addresses a distinct class of threat and operates at a different
 point in the execution lifecycle. No single layer is sufficient on its own.
 
+## Guarantees And Non-Guarantees
+
+HELM AI Kernel does:
+
+- enforce deny-by-default policy at MCP and OpenAI-compatible dispatch boundaries;
+- emit signed receipts for `ALLOW`, `DENY`, and `ESCALATE` decisions;
+- quarantine unknown MCP servers and tools until they are inspected and approved;
+- produce offline-verifiable EvidencePacks for source-backed receipt material.
+
+HELM AI Kernel does not:
+
+- protect against a compromised host kernel, runtime, or operator account;
+- make reads safe when policy already allows the agent to read sensitive files;
+- replace secret scanning, network firewalls, endpoint controls, or OS sandboxing;
+- prevent prompt injection at generation time; enforcement happens at dispatch;
+- capture side effects from tools that bypass the HELM proxy or MCP boundary;
+- certify every MCP tool schema through static analysis;
+- certify compliance with a regulatory standard by itself.
+
 ```
                 ┌─────────────────────────────────────────┐
                 │        Agent / Orchestrator              │

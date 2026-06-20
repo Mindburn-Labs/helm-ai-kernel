@@ -59,7 +59,7 @@ Or run the binary directly with an explicit port:
 | `mcp_client/` | Simple MCP and OpenAI-compatible invocation flow | `cd examples/mcp_client && HELM_URL=http://127.0.0.1:7714 bash main.sh` |
 | `openclaw/` | Browser split-compute runtime-adapter contract | Documentation-only contract example. |
 | `otel-genai/` | OpenTelemetry GenAI semantic convention smoke example | `cd examples/otel-genai && go test ./...` |
-| `policy-packs/` | Runnable example serve-policy wrappers plus JSON reference packs for shell, DB, CI/CD, and cloud mutation scenarios | `cd core/cmd/helm-ai-kernel && go test . -run TestPolicyPackExamplesLoad -count=1` |
+| `policy-packs/` | Runnable example serve-policy wrappers plus JSON reference packs for shell, destructive operations, DB, CI/CD, and cloud mutation scenarios | `cd core/cmd/helm-ai-kernel && go test . -run TestPolicyPackExamplesLoad -count=1` |
 | `policies/` | CEL, Rego, and Cedar policy fixtures | See `examples/policies/README.md`. |
 | `receipt_verification/` | Python and TypeScript receipt verification examples | Requires a running HELM boundary with receipts. |
 | `starters/` | Provider starter layouts for OpenAI, Anthropic, Google, and Codex profiles | See `examples/starters/README.md`. |

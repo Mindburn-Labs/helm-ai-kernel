@@ -322,7 +322,7 @@ launchpadApps:
     enabled: false
     image:
       repository: "ghcr.io/mindburn-labs/helm-launchpad/openclaw"
-      digest: "sha256:3c8c7069b9b8e69f584adc7de34b42a3f2b2721a19c069af342e1cbd7cf6d9af"
+      digest: "sha256:51e03ddb56070040b484bf295720badc313e4e57c0d6941c7d0960f92900e47a"
       pullPolicy: "IfNotPresent"
     gatewayPort: 18789
     tmpfsSize: "256Mi"
@@ -350,7 +350,7 @@ launchpadApps:
     egressSidecar:
       image:
         repository: "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy"
-        digest: "sha256:a997086e0f589173ae87e1575d03b9194afbb87196203226a9e62af7bc160312"
+        digest: "sha256:8d5c5a446ea4979236af821997e6121aec494a8f5df91f5f54cba150a22ee3f7"
         pullPolicy: "IfNotPresent"
       port: 8080
       allowlist:
@@ -367,7 +367,7 @@ launchpadApps:
     enabled: false
     image:
       repository: "ghcr.io/mindburn-labs/helm-launchpad/hermes"
-      digest: "sha256:2dc8aea12cc42c850ef84ef5bd27790e80818a303e3b398a0eca50b4850075d7"
+      digest: "sha256:ebc8cd6f23687b981c2e0ff474555a6aadea4236c1ef3bd28fc6a6ae91717e88"
       pullPolicy: "IfNotPresent"
     # job runs the proven single-query smoke path; deployment runs the
     # long-lived Hermes gateway process. Gateway mode is not live-F2-promoted
@@ -395,7 +395,7 @@ launchpadApps:
     egressSidecar:
       image:
         repository: "ghcr.io/mindburn-labs/helm-launchpad/egress-proxy"
-        digest: "sha256:a997086e0f589173ae87e1575d03b9194afbb87196203226a9e62af7bc160312"
+        digest: "sha256:8d5c5a446ea4979236af821997e6121aec494a8f5df91f5f54cba150a22ee3f7"
         pullPolicy: "IfNotPresent"
       port: 8080
       allowlist:

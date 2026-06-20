@@ -361,6 +361,11 @@ func (e *Engine) Settle(
 	settlement.SourceUsageReceiptHash = usage.ContentHash
 	settlement.Reseal()
 
+	// Drop any dispatch reservation for this quote so its hold is not
+	// double-counted against the actual debit that follows. No-op when the
+	// caller did not pre-reserve.
+	e.cfg.Ledger.consumeReservationForDebit(quote.ID)
+
 	rec, err := e.cfg.Ledger.commit(idem, usage, settlement)
 	if err != nil {
 		return nil, err

@@ -98,12 +98,42 @@ func (b *MemoryTermsBook) Terms(providerID string) (*economic.ProviderTermsProfi
 // gateway. It holds the canonical economic.BalanceAccount, the immutable list
 // of posted economic.UsageLedgerEntry rows, and an idempotency index so a
 // replayed request never debits twice.
+//
+// Beyond the SPEND3 settle/debit path it owns the full SPEND5 balance lifecycle
+// (top-up, reserve, release, refund, promo, accrual, and approved correction).
+// Every method appends an immutable, receipt-hash-bound economic.UsageLedgerEntry;
+// no method ever edits or deletes a prior entry, so the ledger is append-only.
 type BalanceLedger struct {
-	mu          sync.Mutex
-	account     *economic.BalanceAccount
-	entries     []*economic.UsageLedgerEntry
-	settled     map[string]*SettlementRecord // idempotency key -> committed settlement
-	nextEntryID int64
+	mu           sync.Mutex
+	account      *economic.BalanceAccount
+	entries      []*economic.UsageLedgerEntry
+	settled      map[string]*SettlementRecord          // settle idempotency key -> committed settlement
+	movements    map[string]*economic.UsageLedgerEntry // movement idempotency key -> posted entry
+	reservations map[string]*Reservation               // reservation key -> open hold
+	nextEntryID  int64
+	// allowNegativeBalance permits the balance to go below zero. It is only set
+	// when enterprise invoicing (deferred billing) is enabled for the account.
+	allowNegativeBalance bool
+	// Accrual roll-ups feed the finance export. They are bookkeeping totals only
+	// and never move the cash balance. accrualEntryIDs marks which posted entries
+	// are accruals so the export excludes them from the cash balance delta
+	// without re-deriving type from the entry id.
+	providerCostAccruedCents int64
+	platformFeeAccruedCents  int64
+	invoiceAccruedCents      int64
+	accrualEntryIDs          map[string]struct{}
+}
+
+// Reservation is an open hold placed against the balance for a dispatch's
+// estimated max cost. It is consumed by a debit at settlement or freed by a
+// release when the run fails.
+type Reservation struct {
+	Key         string
+	AmountCents int64
+	ReceiptHash string
+	EntryID     string
+	Released    bool
+	Consumed    bool
 }
 
 // SettlementRecord is the committed financial outcome for one governed request.
@@ -122,9 +152,23 @@ func NewBalanceLedger(account *economic.BalanceAccount) (*BalanceLedger, error) 
 		return nil, err
 	}
 	return &BalanceLedger{
-		account: account,
-		settled: make(map[string]*SettlementRecord),
+		account:              account,
+		settled:              make(map[string]*SettlementRecord),
+		movements:            make(map[string]*economic.UsageLedgerEntry),
+		reservations:         make(map[string]*Reservation),
+		accrualEntryIDs:      make(map[string]struct{}),
+		allowNegativeBalance: account.Type == economic.BalanceAccountInvoiceAccrual,
 	}, nil
+}
+
+// EnableEnterpriseInvoicing turns on deferred (invoice-accrual) billing for the
+// account, which is the only condition under which the balance may go negative.
+// It is fail-closed by default: a plain USAGE_BALANCE account never goes
+// negative unless this is explicitly enabled.
+func (l *BalanceLedger) EnableEnterpriseInvoicing() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.allowNegativeBalance = true
 }
 
 // AvailableCents returns funds currently available for debit.

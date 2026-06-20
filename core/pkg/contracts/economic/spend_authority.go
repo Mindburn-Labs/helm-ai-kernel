@@ -396,6 +396,16 @@ func (q *RouteQuote) Expired(now time.Time) bool {
 	return q == nil || !now.Before(q.ExpiresAt)
 }
 
+// Reseal recomputes ContentHash after hash-relevant fields (e.g. ReceiptHash)
+// are set following construction. It returns the engine's deterministic hash.
+func (q *RouteQuote) Reseal() string {
+	if q == nil {
+		return ""
+	}
+	q.ContentHash = q.computeHash()
+	return q.ContentHash
+}
+
 // Validate ensures the route quote is dispatch-safe.
 func (q *RouteQuote) Validate() error {
 	if q == nil {
@@ -804,6 +814,16 @@ func NewUsageReceipt(id, tenantID, routeQuoteID, spendIntentID, envelopeID, agen
 	return r
 }
 
+// Reseal recomputes ContentHash after settlement-linkage fields
+// (SettlementReceiptHash, LedgerEntryIDs) are populated post-construction.
+func (r *UsageReceipt) Reseal() string {
+	if r == nil {
+		return ""
+	}
+	r.ContentHash = r.computeHash()
+	return r.ContentHash
+}
+
 // Validate ensures the usage receipt can support reconciliation.
 func (r *UsageReceipt) Validate() error {
 	if r == nil {
@@ -967,6 +987,16 @@ func (s *SettlementReceipt) Balanced() bool {
 		}
 	}
 	return debits == credits && debits > 0
+}
+
+// Reseal recomputes ContentHash after SourceUsageReceiptHash is bound to the
+// final usage-receipt hash post-construction.
+func (s *SettlementReceipt) Reseal() string {
+	if s == nil {
+		return ""
+	}
+	s.ContentHash = s.computeHash()
+	return s.ContentHash
 }
 
 // Validate ensures the settlement can be used as financial evidence.

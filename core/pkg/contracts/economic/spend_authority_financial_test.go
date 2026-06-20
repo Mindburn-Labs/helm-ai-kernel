@@ -64,6 +64,53 @@ func TestProviderPriceSnapshotValidationAndStaleness(t *testing.T) {
 	requireEconomicErrorContains(t, snapshot.Validate(), "expires_at must be after effective_at")
 }
 
+func TestProviderPriceSnapshotQuoteCents(t *testing.T) {
+	now := time.Now().UTC()
+	s := NewProviderPriceSnapshot("price-1", "openai", "gpt-4o", "USD", "terms-1", "sha256:source", now, now.Add(time.Hour))
+	s.InputTokenMicroCents = 500   // 0.0005 cents/token
+	s.OutputTokenMicroCents = 1500 // 0.0015 cents/token
+
+	// 1000*500 + 500*1500 = 1_250_000 micro-cents -> ceil to 2 cents.
+	got, err := s.QuoteCents(1000, 500)
+	if err != nil {
+		t.Fatalf("QuoteCents() = %v, want nil", err)
+	}
+	if got != 2 {
+		t.Fatalf("QuoteCents(1000,500) = %d, want 2", got)
+	}
+
+	// Sub-cent usage must round UP so a quote never under-charges.
+	got, err = s.QuoteCents(1, 0) // 500 micro-cents -> 1 cent
+	if err != nil {
+		t.Fatalf("QuoteCents() = %v", err)
+	}
+	if got != 1 {
+		t.Fatalf("QuoteCents(1,0) = %d, want 1 (round up)", got)
+	}
+
+	// Flat request surcharge is added on top of token cost.
+	s.RequestCents = 3
+	got, err = s.QuoteCents(0, 0) // 0 token micro-cents + 3 flat
+	if err != nil {
+		t.Fatalf("QuoteCents() = %v", err)
+	}
+	if got != 3 {
+		t.Fatalf("QuoteCents(0,0) with surcharge = %d, want 3", got)
+	}
+
+	// Negative token counts are rejected.
+	if _, err := s.QuoteCents(-1, 0); err == nil {
+		t.Fatal("QuoteCents with negative tokens must error")
+	}
+
+	// A zero-priced request must not produce a non-positive quote.
+	zero := NewProviderPriceSnapshot("price-z", "openai", "gpt-4o", "USD", "terms-1", "sha256:source", now, now.Add(time.Hour))
+	zero.InputTokenMicroCents = 1
+	if _, err := zero.QuoteCents(0, 0); err == nil {
+		t.Fatal("QuoteCents must reject a zero total")
+	}
+}
+
 func TestBalanceAccountValidationAndAvailability(t *testing.T) {
 	account := NewBalanceAccount("balance-1", "tenant-1", "USD", 1000, "evidence://pack-1")
 	account.HoldCents = 250

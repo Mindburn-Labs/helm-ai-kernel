@@ -12,7 +12,7 @@ type PackChannel string
 
 const (
 	PackChannelCore       PackChannel = "core"
-	PackChannelIndividual PackChannel = "individual"
+	PackChannelDeveloper  PackChannel = "developer"
 	PackChannelCommunity  PackChannel = "community"
 	PackChannelTeams      PackChannel = "teams"
 	PackChannelEnterprise PackChannel = "enterprise"

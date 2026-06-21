@@ -184,4 +184,4 @@ Then run a governed request through the public API or OpenAI-compatible proxy an
 
 ## Not Covered
 
-This page documents the repository-owned HELM AI Kernel chart only. Managed deployment, tenant migrations, SSO, SIEM, and retention controls belong to the HELM AI Enterprise docs.
+This page documents the repository-owned HELM AI Kernel chart only. Managed deployment, tenant migrations, SSO, SIEM, and retention controls belong to the Paid HELM AI Enterprise docs.

@@ -1586,7 +1586,11 @@ public static class AccountEntitlements {
   public enum PlanEnum {
     FREE("free"),
 
-    INDIVIDUAL("individual"),
+    DEVELOPER("developer"),
+
+    TEAM("team"),
+
+    SCALE("scale"),
 
     ENTERPRISE("enterprise");
 
@@ -2072,7 +2076,11 @@ public static class AccountSession {
   public enum PlanEnum {
     FREE("free"),
 
-    INDIVIDUAL("individual"),
+    DEVELOPER("developer"),
+
+    TEAM("team"),
+
+    SCALE("scale"),
 
     ENTERPRISE("enterprise");
 

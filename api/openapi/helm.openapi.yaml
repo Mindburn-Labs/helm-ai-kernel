@@ -4940,7 +4940,7 @@ components:
         workspace_id: { type: string }
         plan:
           type: string
-          enum: [free, individual, enterprise]
+          enum: [free, developer, team, scale, enterprise]
         plan_alias: { type: string }
         edition: { type: string }
         deployment_mode: { type: string }
@@ -4958,7 +4958,7 @@ components:
         workspace_id: { type: string }
         plan:
           type: string
-          enum: [free, individual, enterprise]
+          enum: [free, developer, team, scale, enterprise]
         plan_alias: { type: string }
         capabilities:
           $ref: '#/components/schemas/EntitlementCapabilities'

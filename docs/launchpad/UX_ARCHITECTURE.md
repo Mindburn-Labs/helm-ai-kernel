@@ -25,7 +25,7 @@ Paste repo URL -> inspect source -> capability graph -> generated target plans -
 ```
 
 Simple Mode and Developer Mode are depth controls on the same backend facts.
-They are not Free / Individual / Enterprise variants.
+They are not Free / Developer / Team / Scale / Enterprise variants.
 
 ## Source Of Truth
 

@@ -98,8 +98,8 @@ and off-host immutable storage proof together.
 
 ## Account and Entitlement Boundary
 
-The Kernel repo exposes headless Launchpad APIs. Free, Individual, and
-Enterprise hosted account entitlements are target architecture, not production
+The Kernel repo exposes headless Launchpad APIs. Free, Developer, Team, Scale,
+and Enterprise hosted account entitlements are target architecture, not production
 Kernel behavior in this repo. External clients must not infer account tier or
 invent entitlement state; they may only render explicit backend fields or
 clearly labeled test fixtures. The hosted integration contract lives in

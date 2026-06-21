@@ -1,4 +1,4 @@
-// Package tenants implements multi-tenant isolation for HELM AI Enterprise deployments.
+// Package tenants implements multi-tenant isolation for Paid HELM AI Enterprise deployments.
 // Every principal, resource, and policy evaluation is scoped to a tenant.
 // Fail-closed: any error in tenant resolution or isolation check results in denial.
 package tenants

@@ -204,7 +204,7 @@ and copy-paste quickstart commands. Tag commercial signals when users ask for
 shared policy repositories, retention/search, SIEM or observability
 integrations, SSO, role-based approvals, or hosted evidence workflows.
 
-Do not implement Basic or Enterprise layers in the OSS kernel. Record product
+Do not implement hosted commercial layers in the OSS kernel. Record product
 requirements separately and keep the kernel boundary, receipt, and verifier
 contracts stable.
 
@@ -309,8 +309,8 @@ Engagement:
 
 Commercial bridge:
 
-- HELM AI Enterprise Individual interest CTA clicks
-- docs path from Kernel to Individual
+- Paid HELM AI Developer interest CTA clicks
+- docs path from Kernel to Paid HELM AI Developer
 - inbound team-use requests
 
 GitHub traffic windows are short, so export private analytics daily, publish a weekly channel cohort report, keep a launch-post UTM map, and log README hook changes.
@@ -327,7 +327,7 @@ Run this checklist before publishing README edits, launch posts, diagrams, video
 - Does not claim a hosted control plane for OSS Kernel.
 - Does not claim certification unless certification exists.
 - Does not describe Enterprise features as Kernel features.
-- Does not imply Individual or Enterprise weakens or forks Kernel semantics.
+- Does not imply Developer, Team, Scale, or Enterprise weakens or forks Kernel semantics.
 - Does not mention robot fleets, AGI OS, OrgDNA compiler, Titan, or physical-world control in OSS copy.
 
 ## Diagram Doctrine
@@ -365,11 +365,11 @@ Use this bridge after local Kernel proof:
 
 ```text
 Try HELM AI Kernel locally.
-Use HELM AI Enterprise Individual for shared approvals, receipts, policies, and short-retention evidence.
+Use Paid HELM AI Developer for shared approvals, receipts, policies, and short-retention evidence.
 Talk to Mindburn Labs about production execution authority.
 ```
 
-HELM AI Enterprise Individual gives operators a shared control plane for governed AI actions: workspaces, approvals, receipts, API access, custom policies, and short-retention evidence, all built on HELM AI Kernel.
+Paid HELM AI Developer gives operators a shared control plane for governed AI actions: workspaces, approvals, receipts, API access, custom policies, and short-retention evidence, all built on HELM AI Kernel.
 
 ## Source Truth
 

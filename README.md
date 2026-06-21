@@ -64,7 +64,7 @@ You get:  a signed receipt you can verify offline
 ## What It Is Not
 
 - Not Kubernetes Helm.
-- Not the hosted HELM Enterprise product.
+- Not the hosted Paid HELM AI Enterprise product.
 - Not a vague AI-safety claim.
 
 It is the open-source execution boundary: policy in, action checked, receipt out.

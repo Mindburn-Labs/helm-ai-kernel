@@ -2,8 +2,8 @@ package tests
 
 import (
 	"encoding/json"
-	"testing"
 	"os/exec"
+	"testing"
 )
 
 // Phase 6: Cross-Language Vector Parity Tests
@@ -11,7 +11,7 @@ import (
 
 func TestCrossLanguageVectorParity(t *testing.T) {
 	malformedPayload := `{"amount": 100.0000000001, "action": "trade"}`
-	
+
 	// Simulated hashes from different language implementations of UCS v1.3 Canonicalization
 	goHash := "sha256:abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234"
 	pyHash := "sha256:abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234"

@@ -524,7 +524,9 @@ export interface AccountEntitlements {
  */
 export const AccountEntitlementsPlanEnum = {
     Free: 'free',
-    Individual: 'individual',
+    Developer: 'developer',
+    Team: 'team',
+    Scale: 'scale',
     Enterprise: 'enterprise'
 } as const;
 export type AccountEntitlementsPlanEnum = typeof AccountEntitlementsPlanEnum[keyof typeof AccountEntitlementsPlanEnum];
@@ -677,7 +679,9 @@ export interface AccountSession {
  */
 export const AccountSessionPlanEnum = {
     Free: 'free',
-    Individual: 'individual',
+    Developer: 'developer',
+    Team: 'team',
+    Scale: 'scale',
     Enterprise: 'enterprise'
 } as const;
 export type AccountSessionPlanEnum = typeof AccountSessionPlanEnum[keyof typeof AccountSessionPlanEnum];

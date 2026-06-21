@@ -6,7 +6,7 @@ last_reviewed: 2026-05-23
 # Mindburn Account Entitlements Integration Contract
 
 Status: integration contract plus optional Kernel adapter. `helm-ai-enterprise`
-Control Plane owns hosted Free / Individual / Enterprise account decisions.
+Control Plane owns hosted Free / Developer / Team / Scale / Enterprise account decisions.
 `helm-ai-kernel` remains self-hostable and does not infer account tier when the
 hosted adapter is not configured.
 
@@ -51,17 +51,13 @@ Canonical hosted plans are:
 
 ```text
 free
-individual
+developer
+team
+scale
 enterprise
 ```
 
-Compatibility aliases are normalized before decisions:
-
-```text
-oss-free, free, trial -> free
-basic, pro -> individual
-enterprise -> enterprise
-```
+Public docs and generated SDKs must use these canonical IDs only.
 
 The decision endpoint returns action-level access state and must be called
 before mutating Launchpad side effects when hosted gating is enabled.
@@ -75,7 +71,7 @@ Future hosted integration should expose an authenticated session payload with:
   "principal_id": "user_123",
   "tenant_id": "tenant_abc",
   "account_id": "acct_abc",
-  "plan": "individual",
+  "plan": "developer",
   "source": "mindburn-hosted",
   "expires_at": "2026-05-22T23:00:00Z"
 }
@@ -203,6 +199,6 @@ fallback data.
 - One app catalog.
 - One Launchpad route family.
 - One AppSpec / LaunchPlan / Receipt / EvidencePack model.
-- No Free, Individual, or Enterprise Kernel forks.
+- No Free, Developer, Team, Scale, or Enterprise Kernel forks.
 - No UI-only launchability, verdict, proof, secret, sandbox, MCP, or teardown
   claims.

@@ -4944,8 +4944,8 @@ components:
         workspace_id: { type: string }
         plan:
           type: string
-          enum: [free, individual, enterprise]
-        plan_alias: { type: string }
+          enum: [free, individual, developer, team, scale, enterprise]
+        plan_id: { type: string }
         edition: { type: string }
         deployment_mode: { type: string }
         account_lifecycle: { type: string }
@@ -4962,8 +4962,8 @@ components:
         workspace_id: { type: string }
         plan:
           type: string
-          enum: [free, individual, enterprise]
-        plan_alias: { type: string }
+          enum: [free, individual, developer, team, scale, enterprise]
+        plan_id: { type: string }
         capabilities:
           $ref: '#/components/schemas/EntitlementCapabilities'
         limits:

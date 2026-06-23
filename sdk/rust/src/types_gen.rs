@@ -192,8 +192,8 @@ pub struct AccountEntitlements {
     pub workspace_id: Option<String>,
     #[serde(rename = "plan", default, skip_serializing_if = "Option::is_none")]
     pub plan: Option<Option<AccountEntitlementsPlan>>,
-    #[serde(rename = "plan_alias", skip_serializing_if = "Option::is_none")]
-    pub plan_alias: Option<String>,
+    #[serde(rename = "plan_id", skip_serializing_if = "Option::is_none")]
+    pub plan_id: Option<String>,
     #[serde(rename = "capabilities", skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<Box<EntitlementCapabilities>>,
     #[serde(rename = "limits", skip_serializing_if = "Option::is_none")]
@@ -211,7 +211,7 @@ impl AccountEntitlements {
             tenant_id: None,
             workspace_id: None,
             plan: None,
-            plan_alias: None,
+            plan_id: None,
             capabilities: None,
             limits: None,
             source: None,
@@ -226,6 +226,12 @@ pub enum AccountEntitlementsPlan {
     Free,
     #[serde(rename = "individual")]
     Individual,
+    #[serde(rename = "developer")]
+    Developer,
+    #[serde(rename = "team")]
+    Team,
+    #[serde(rename = "scale")]
+    Scale,
     #[serde(rename = "enterprise")]
     Enterprise,
 }
@@ -259,8 +265,8 @@ pub struct AccountSession {
     pub workspace_id: Option<String>,
     #[serde(rename = "plan", default, skip_serializing_if = "Option::is_none")]
     pub plan: Option<Option<AccountSessionPlan>>,
-    #[serde(rename = "plan_alias", skip_serializing_if = "Option::is_none")]
-    pub plan_alias: Option<String>,
+    #[serde(rename = "plan_id", skip_serializing_if = "Option::is_none")]
+    pub plan_id: Option<String>,
     #[serde(rename = "edition", skip_serializing_if = "Option::is_none")]
     pub edition: Option<String>,
     #[serde(rename = "deployment_mode", skip_serializing_if = "Option::is_none")]
@@ -283,7 +289,7 @@ impl AccountSession {
             tenant_id: None,
             workspace_id: None,
             plan: None,
-            plan_alias: None,
+            plan_id: None,
             edition: None,
             deployment_mode: None,
             account_lifecycle: None,
@@ -300,6 +306,12 @@ pub enum AccountSessionPlan {
     Free,
     #[serde(rename = "individual")]
     Individual,
+    #[serde(rename = "developer")]
+    Developer,
+    #[serde(rename = "team")]
+    Team,
+    #[serde(rename = "scale")]
+    Scale,
     #[serde(rename = "enterprise")]
     Enterprise,
 }

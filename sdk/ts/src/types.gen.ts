@@ -491,7 +491,7 @@ export interface AccountEntitlements {
      * @type {string}
      * @memberof AccountEntitlements
      */
-    plan_alias?: string;
+    plan_id?: string;
     /**
      *
      * @type {EntitlementCapabilities}
@@ -525,6 +525,9 @@ export interface AccountEntitlements {
 export const AccountEntitlementsPlanEnum = {
     Free: 'free',
     Individual: 'individual',
+    Developer: 'developer',
+    Team: 'team',
+    Scale: 'scale',
     Enterprise: 'enterprise'
 } as const;
 export type AccountEntitlementsPlanEnum = typeof AccountEntitlementsPlanEnum[keyof typeof AccountEntitlementsPlanEnum];
@@ -551,7 +554,7 @@ export function AccountEntitlementsFromJSONTyped(json: any, ignoreDiscriminator:
         'tenant_id': json['tenant_id'] == null ? undefined : json['tenant_id'],
         'workspace_id': json['workspace_id'] == null ? undefined : json['workspace_id'],
         'plan': json['plan'] == null ? undefined : json['plan'],
-        'plan_alias': json['plan_alias'] == null ? undefined : json['plan_alias'],
+        'plan_id': json['plan_id'] == null ? undefined : json['plan_id'],
         'capabilities': json['capabilities'] == null ? undefined : EntitlementCapabilitiesFromJSON(json['capabilities']),
         'limits': json['limits'] == null ? undefined : EntitlementLimitsFromJSON(json['limits']),
         'source': json['source'] == null ? undefined : json['source'],
@@ -569,7 +572,7 @@ export function AccountEntitlementsToJSON(value?: AccountEntitlements | null): a
         'tenant_id': value['tenant_id'],
         'workspace_id': value['workspace_id'],
         'plan': value['plan'],
-        'plan_alias': value['plan_alias'],
+        'plan_id': value['plan_id'],
         'capabilities': EntitlementCapabilitiesToJSON(value['capabilities']),
         'limits': EntitlementLimitsToJSON(value['limits']),
         'source': value['source'],
@@ -632,7 +635,7 @@ export interface AccountSession {
      * @type {string}
      * @memberof AccountSession
      */
-    plan_alias?: string;
+    plan_id?: string;
     /**
      *
      * @type {string}
@@ -678,6 +681,9 @@ export interface AccountSession {
 export const AccountSessionPlanEnum = {
     Free: 'free',
     Individual: 'individual',
+    Developer: 'developer',
+    Team: 'team',
+    Scale: 'scale',
     Enterprise: 'enterprise'
 } as const;
 export type AccountSessionPlanEnum = typeof AccountSessionPlanEnum[keyof typeof AccountSessionPlanEnum];
@@ -705,7 +711,7 @@ export function AccountSessionFromJSONTyped(json: any, ignoreDiscriminator: bool
         'tenant_id': json['tenant_id'] == null ? undefined : json['tenant_id'],
         'workspace_id': json['workspace_id'] == null ? undefined : json['workspace_id'],
         'plan': json['plan'] == null ? undefined : json['plan'],
-        'plan_alias': json['plan_alias'] == null ? undefined : json['plan_alias'],
+        'plan_id': json['plan_id'] == null ? undefined : json['plan_id'],
         'edition': json['edition'] == null ? undefined : json['edition'],
         'deployment_mode': json['deployment_mode'] == null ? undefined : json['deployment_mode'],
         'account_lifecycle': json['account_lifecycle'] == null ? undefined : json['account_lifecycle'],
@@ -726,7 +732,7 @@ export function AccountSessionToJSON(value?: AccountSession | null): any {
         'tenant_id': value['tenant_id'],
         'workspace_id': value['workspace_id'],
         'plan': value['plan'],
-        'plan_alias': value['plan_alias'],
+        'plan_id': value['plan_id'],
         'edition': value['edition'],
         'deployment_mode': value['deployment_mode'],
         'account_lifecycle': value['account_lifecycle'],

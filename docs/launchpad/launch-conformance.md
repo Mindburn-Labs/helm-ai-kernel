@@ -1,6 +1,6 @@
 ---
 title: Launchpad Launch Conformance Review Oracle
-last_reviewed: 2026-06-19
+last_reviewed: 2026-06-24
 ---
 
 # Launchpad Launch Conformance Review Oracle

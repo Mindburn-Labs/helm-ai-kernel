@@ -951,6 +951,13 @@ func transparencyArtifactsForPackCreate(dataDir string, files map[string][]byte)
 		if err != nil {
 			return nil, nil, fmt.Errorf("build inclusion proof for %s: %w", name, err)
 		}
+		expectedLeafHash, err := receiptTranslogLeafHash(&receipt)
+		if err != nil {
+			return nil, nil, fmt.Errorf("compute transparency leaf for %s: %w", name, err)
+		}
+		if !strings.EqualFold(proof.LeafHash, expectedLeafHash) {
+			return nil, nil, fmt.Errorf("receipt %s transparency proof leaf hash mismatch: proof leaf %s, receipt leaf %s", name, proof.LeafHash, expectedLeafHash)
+		}
 		proofData, err := json.MarshalIndent(proof, "", "  ")
 		if err != nil {
 			return nil, nil, fmt.Errorf("marshal inclusion proof for %s: %w", name, err)
@@ -963,6 +970,19 @@ func transparencyArtifactsForPackCreate(dataDir string, files map[string][]byte)
 	}
 
 	return sth, proofs, nil
+}
+
+func receiptTranslogLeafHash(receipt *contracts.Receipt) (string, error) {
+	receiptHashHex, err := contracts.ReceiptChainHash(receipt)
+	if err != nil {
+		return "", err
+	}
+	leafInput, err := hex.DecodeString(receiptHashHex)
+	if err != nil {
+		return "", fmt.Errorf("decode receipt chain hash: %w", err)
+	}
+	leafHash := translog.LeafHash(leafInput)
+	return hex.EncodeToString(leafHash[:]), nil
 }
 
 func transparencyProofEntryName(receiptPath string) string {

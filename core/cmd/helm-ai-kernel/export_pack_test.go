@@ -3,12 +3,12 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -164,23 +164,11 @@ func TestExportPackWithOptions_TransparencySTH(t *testing.T) {
 
 func TestPackCreateEmbedsTransparencySTHFromDataDir(t *testing.T) {
 	dir := t.TempDir()
-	receiptHash := sha256.Sum256([]byte("receipt-1"))
-	code, _, errOut := runLogCLI(t, "log", "append",
-		"--leaf-hash", hex.EncodeToString(receiptHash[:]),
-		"--data-dir", dir)
-	if code != 0 {
-		t.Fatalf("append failed (%d): %s", code, errOut)
-	}
 	signer, err := loadOrGenerateSignerWithDataDir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	logID := translog.LogIDFromPublicKey(signer.PublicKeyBytes())
-
-	receiptsDir := filepath.Join(dir, "receipts")
-	if err := os.MkdirAll(receiptsDir, 0750); err != nil {
-		t.Fatal(err)
-	}
 	receipt := contracts.Receipt{
 		ReceiptID: "rec-001",
 		Status:    "SUCCESS",
@@ -190,6 +178,21 @@ func TestPackCreateEmbedsTransparencySTHFromDataDir(t *testing.T) {
 			Backend: "translog",
 			LogID:   logID,
 		},
+	}
+	receiptHash, err := contracts.ReceiptChainHash(&receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, _, errOut := runLogCLI(t, "log", "append",
+		"--leaf-hash", receiptHash,
+		"--data-dir", dir)
+	if code != 0 {
+		t.Fatalf("append failed (%d): %s", code, errOut)
+	}
+
+	receiptsDir := filepath.Join(dir, "receipts")
+	if err := os.MkdirAll(receiptsDir, 0750); err != nil {
+		t.Fatal(err)
 	}
 	receiptData, err := json.Marshal(receipt)
 	if err != nil {
@@ -238,8 +241,60 @@ func TestPackCreateEmbedsTransparencySTHFromDataDir(t *testing.T) {
 	if proof.LeafIndex != 0 || proof.TreeSize != 1 {
 		t.Fatalf("unexpected inclusion proof: %+v", proof)
 	}
+	leafInput, err := hex.DecodeString(receiptHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedLeaf := translog.LeafHash(leafInput)
+	if proof.LeafHash != hex.EncodeToString(expectedLeaf[:]) {
+		t.Fatalf("proof leaf hash = %s, want %x", proof.LeafHash, expectedLeaf[:])
+	}
 	if err := translog.VerifyInclusion(&proof, sth.RootHash); err != nil {
 		t.Fatalf("inclusion proof does not verify: %v", err)
+	}
+}
+
+func TestTransparencyArtifactsRejectReceiptLeafMismatch(t *testing.T) {
+	dir := t.TempDir()
+	signer, err := loadOrGenerateSignerWithDataDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logID := translog.LogIDFromPublicKey(signer.PublicKeyBytes())
+	receipt := contracts.Receipt{
+		ReceiptID: "rec-001",
+		Status:    "SUCCESS",
+		LogID:     logID,
+		LeafIndex: 0,
+		Transparency: &contracts.TransparencyAnchor{
+			Backend: "translog",
+			LogID:   logID,
+		},
+	}
+	receiptHash, err := contracts.ReceiptChainHash(&receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, _, errOut := runLogCLI(t, "log", "append",
+		"--leaf-hash", receiptHash,
+		"--data-dir", dir)
+	if code != 0 {
+		t.Fatalf("append failed (%d): %s", code, errOut)
+	}
+
+	receipt.Status = "DENIED"
+	receiptData, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = transparencyArtifactsForPackCreate(dir, map[string][]byte{
+		"receipts/rec-001.json": receiptData,
+	})
+	if err == nil {
+		t.Fatal("expected transparency leaf mismatch")
+	}
+	if !strings.Contains(err.Error(), "transparency proof leaf hash mismatch") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

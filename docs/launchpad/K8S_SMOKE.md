@@ -128,9 +128,9 @@ reuse an already-running minikube profile.
 ### Reused kubeconfig
 
 Use `--reuse-cluster` when the kubeconfig already points at a running
-cluster. The smoke will run `kubectl cluster-info`, render the chart with
-`helm template`, install only namespace-scoped resources, uninstall the
-release, and audit for leftovers in the smoke namespace.
+cluster. The smoke will verify API-server reachability with `kubectl version`,
+render the chart with `helm template`, install only namespace-scoped resources,
+uninstall the release, and audit for leftovers in the smoke namespace.
 
 ```bash
 # Chart-only baseline on the current kube context.
@@ -172,9 +172,10 @@ the minikube node.
 | `positive` | both apps enabled, Secret `openrouter-key` holds a real OpenRouter key | openclaw Pod Ready within ~6m; hermes Job Complete within ~3m; `helm test` PASS; openclaw `kubectl exec helm-launchpad-openrouter-check` exits 0 |
 | `negative` | both apps enabled, Secret holds `sk-fake-…` | openclaw Pod fails to reach Ready within 90s; hermes Job reaches Failed within ~3m |
 
-After every scenario the driver runs `helm uninstall` and asserts that
-no resources labelled `app.kubernetes.io/part-of=helm-ai-kernel` remain in
-the smoke namespace — the k8s analogue of the docker sandbox-leak audit.
+After every scenario the driver runs `helm uninstall`, deletes the ad-hoc
+runtime Secrets created for positive/negative modes, and asserts that no
+resources labelled `app.kubernetes.io/part-of=helm-ai-kernel` remain in the
+smoke namespace — the k8s analogue of the docker sandbox-leak audit.
 
 ## RBAC minimum
 
@@ -191,6 +192,8 @@ and Helm release Secrets. It must also be able to `get`, `list`, `watch`,
 needed by `helm upgrade --install`, `kubectl wait`, `kubectl logs`, `kubectl
 exec`, `helm test`, and `helm uninstall`. Namespace creation/deletion is only
 needed for the default managed namespace path and for `--ephemeral-namespace`.
+Reused-cluster setup does not call `kubectl cluster-info`, so it does not need
+kube-system service listing access.
 
 ## Known limitations
 

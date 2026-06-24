@@ -179,6 +179,13 @@ print(json.dumps(manifest))
 PY
 }
 
+cleanup_ad_hoc_runtime_secrets() {
+    if [ "$MODE" = "baseline" ]; then
+        return 0
+    fi
+    kubectl -n "$NAMESPACE" delete secret openrouter-key "$GHCR_SECRET_NAME" --ignore-not-found
+}
+
 if [ "$MODE" = "positive" ] && [ -z "$OPENROUTER_KEY_REAL" ]; then
     echo "::error::OPENROUTER_API_KEY env var is required for --mode positive" >&2
     exit 1
@@ -199,6 +206,7 @@ cleanup() {
         # Best-effort namespace-scoped teardown so the next run starts clean.
         # The cluster itself stays around when KEEP_CLUSTER=1.
         kube_helm uninstall "$RELEASE" -n "$NAMESPACE" --ignore-not-found --wait --timeout 60s 2>/dev/null || true
+        cleanup_ad_hoc_runtime_secrets 2>/dev/null || true
         if [ "$MANAGE_NAMESPACE" = "1" ]; then
             kubectl delete namespace "$NAMESPACE" --wait=false 2>/dev/null || true
         fi
@@ -242,7 +250,11 @@ else
     fi
     echo "reusing kube context: $(kubectl config current-context)"
 fi
-kubectl cluster-info
+if [ "$CLUSTER_MODE" = "minikube" ]; then
+    kubectl cluster-info
+else
+    kubectl version --request-timeout=10s >/dev/null
+fi
 echo "::endgroup::"
 
 echo "::group::stage 2 — local kernel image + optional launchpad image debug"
@@ -470,6 +482,7 @@ esac
 
 echo "::group::stage 6 — teardown + leak audit"
 kube_helm uninstall "$RELEASE" -n "$NAMESPACE" --wait || true
+cleanup_ad_hoc_runtime_secrets
 
 # Leak audit (k8s analogue of GAP #17): after uninstall, no launchpad-app or
 # kernel resources should remain in the smoke namespace.

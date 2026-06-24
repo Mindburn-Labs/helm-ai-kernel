@@ -56,7 +56,7 @@ func ExportPackWithOptions(sessionID string, files map[string][]byte, outPath st
 		if err != nil {
 			return fmt.Errorf("marshal transparency STH: %w", err)
 		}
-		exportFiles = make(map[string][]byte, len(files)+1)
+		exportFiles = make(map[string][]byte, len(files))
 		for name, data := range files {
 			exportFiles[name] = data
 		}

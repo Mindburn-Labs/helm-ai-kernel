@@ -138,17 +138,19 @@ type quickstartPrepared struct {
 
 func (p quickstartPrepared) summary() map[string]any {
 	return map[string]any{
-		"kernel_url":         p.KernelURL,
-		"policy_path":        p.PolicyPath,
-		"tenant_id":          p.Runtime.TenantID,
-		"principal_id":       p.Runtime.PrincipalID,
-		"profile":            p.Runtime.Profile,
-		"entitlements":       []string{"OSS_CORE"},
-		"local_session_ttl":  time.Until(p.Runtime.ExpiresAt).String(),
-		"start_onboarding":   true,
-		"requires_cloud":     false,
-		"requires_docker":    false,
-		"requires_model_key": false,
+		"kernel_url":                 p.KernelURL,
+		"policy_path":                p.PolicyPath,
+		"tenant_id":                  p.Runtime.TenantID,
+		"principal_id":               p.Runtime.PrincipalID,
+		"profile":                    p.Runtime.Profile,
+		"entitlements":               []string{"OSS_CORE"},
+		"local_session_ttl":          time.Until(p.Runtime.ExpiresAt).String(),
+		"local_session_exchange_url": p.KernelURL + "/api/v1/local-session/exchange",
+		"bootstrap_token":            p.Runtime.BootstrapToken,
+		"start_onboarding":           true,
+		"requires_cloud":             false,
+		"requires_docker":            false,
+		"requires_model_key":         false,
 	}
 }
 

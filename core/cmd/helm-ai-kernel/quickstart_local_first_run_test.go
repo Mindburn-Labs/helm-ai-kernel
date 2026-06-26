@@ -36,6 +36,15 @@ func TestQuickstartDryRunJSONPreparesLocalOSSFirstRun(t *testing.T) {
 	if summary["kernel_url"] != "http://127.0.0.1:7714" {
 		t.Fatalf("kernel_url = %v", summary["kernel_url"])
 	}
+	if summary["local_session_exchange_url"] != "http://127.0.0.1:7714/api/v1/local-session/exchange" {
+		t.Fatalf("local_session_exchange_url = %v", summary["local_session_exchange_url"])
+	}
+	if token, _ := summary["bootstrap_token"].(string); token == "" {
+		t.Fatalf("bootstrap_token missing: %+v", summary)
+	}
+	if _, ok := summary["session_token"]; ok {
+		t.Fatalf("quickstart summary must not expose session_token: %+v", summary)
+	}
 	if summary["requires_cloud"] != false || summary["requires_docker"] != false || summary["requires_model_key"] != false {
 		t.Fatalf("unexpected first-run requirements: %+v", summary)
 	}

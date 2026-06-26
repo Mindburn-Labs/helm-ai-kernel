@@ -124,7 +124,7 @@ The public client surface is:
 - Rust SDK in `sdk/rust`
 - Java SDK in `sdk/java`
 
-The repository does not include browser UI source or bundled UI assets. It
+The repository does not include Console source code, browser UI source, or bundled UI assets. It
 remains a headless kernel and API engine over the kernel contracts, CLI/API JSON
 output, SDKs, evidence bundles, and conformance reports. External frontends must
 integrate through the retained HTTP routes, OpenAPI schema, SDKs, CORS controls,

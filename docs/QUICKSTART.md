@@ -104,7 +104,9 @@ make build
 Install the published macOS CLI when evaluating the current release:
 
 ```bash
-brew install mindburnlabs/tap/helm-ai-kernel
+brew tap mindburn-labs/tap
+brew trust mindburn-labs/tap   # recent Homebrew requires trusting third-party taps
+brew install helm-ai-kernel
 helm-ai-kernel --version
 ```
 
@@ -273,7 +275,9 @@ capabilities remain backend-enforced.
 Install, log in, and pair your workstation:
 
 ```bash
-brew install mindburnlabs/tap/helm-ai-kernel
+brew tap mindburn-labs/tap
+brew trust mindburn-labs/tap   # recent Homebrew requires trusting third-party taps
+brew install helm-ai-kernel
 helm-ai-kernel --version
 helm-ai-kernel login
 helm-ai-kernel control-plane pair

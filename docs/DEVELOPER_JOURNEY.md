@@ -92,7 +92,9 @@ Use one of these current paths. The published Homebrew path is the macOS path;
 source builds and Docker remain the portable paths for Linux and WSL.
 
 ```bash
-brew install mindburnlabs/tap/helm-ai-kernel
+brew tap mindburn-labs/tap
+brew trust mindburn-labs/tap   # recent Homebrew requires trusting third-party taps
+brew install helm-ai-kernel
 helm-ai-kernel --version
 helm-ai-kernel quickstart
 ```

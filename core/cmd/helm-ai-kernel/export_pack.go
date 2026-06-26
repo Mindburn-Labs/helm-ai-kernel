@@ -29,8 +29,9 @@ type ExportManifest struct {
 
 // ExportPackOptions controls optional evidence profile metadata.
 type ExportPackOptions struct {
-	EUAIActProfile *contracts.EUAIActEvidenceProfile
-	RedactionMeta  map[string]string
+	EUAIActProfile  *contracts.EUAIActEvidenceProfile
+	RedactionMeta   map[string]string
+	TransparencySTH any
 }
 
 // ExportPack creates a deterministic tar.gz evidence pack.
@@ -46,6 +47,21 @@ func ExportPackWithOptions(sessionID string, files map[string][]byte, outPath st
 	if issues := contracts.ValidateEUAIActEvidenceProfile(opts.EUAIActProfile); len(issues) > 0 {
 		return fmt.Errorf("invalid EU AI Act evidence profile: %s", strings.Join(issues, "; "))
 	}
+	exportFiles := files
+	if opts.TransparencySTH != nil {
+		if _, exists := files["transparency/sth.json"]; exists {
+			return fmt.Errorf("transparency/sth.json already supplied by caller")
+		}
+		sthBytes, err := json.MarshalIndent(opts.TransparencySTH, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal transparency STH: %w", err)
+		}
+		exportFiles = make(map[string][]byte, len(files))
+		for name, data := range files {
+			exportFiles[name] = data
+		}
+		exportFiles["transparency/sth.json"] = sthBytes
+	}
 	f, err := os.Create(outPath)
 	if err != nil {
 		return fmt.Errorf("create output: %w", err)
@@ -59,8 +75,8 @@ func ExportPackWithOptions(sessionID string, files map[string][]byte, outPath st
 	defer tw.Close()
 
 	// Sort file names for determinism
-	names := make([]string, 0, len(files))
-	for name := range files {
+	names := make([]string, 0, len(exportFiles))
+	for name := range exportFiles {
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -68,7 +84,7 @@ func ExportPackWithOptions(sessionID string, files map[string][]byte, outPath st
 	// Compute file hashes
 	fileHashes := make(map[string]string)
 	for _, name := range names {
-		h := sha256.Sum256(files[name])
+		h := sha256.Sum256(exportFiles[name])
 		fileHashes[name] = hex.EncodeToString(h[:])
 	}
 
@@ -93,7 +109,7 @@ func ExportPackWithOptions(sessionID string, files map[string][]byte, outPath st
 
 	// Write files
 	for _, name := range names {
-		if err := writeEntry(tw, name, files[name]); err != nil {
+		if err := writeEntry(tw, name, exportFiles[name]); err != nil {
 			return err
 		}
 	}

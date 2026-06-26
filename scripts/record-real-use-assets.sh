@@ -38,8 +38,8 @@ run_capture() {
   export XDG_DATA_HOME="$HOME_DIR/.local/share"
 
   {
-    echo "$ helm-ai-kernel setup codex --dry-run --json --data-dir ~/.helm-ai-kernel --no-open"
-    "$BIN" setup codex --dry-run --json --data-dir "$DATA_DIR" --no-open
+    echo "$ helm-ai-kernel setup codex --dry-run --json --data-dir ~/.helm-ai-kernel"
+    "$BIN" setup codex --dry-run --json --data-dir "$DATA_DIR"
     echo
     echo "$ printf <codex PreToolUse payload> | helm-ai-kernel hook pre-tool --client codex --data-dir ~/.helm-ai-kernel"
     printf '%s\n' '{"toolName":"Bash","toolInput":{"command":"rm -rf /tmp/helm-risky-cleanup"},"session_id":"real-use-capture","cwd":"/tmp/helm-real-workspace"}' |
@@ -88,7 +88,7 @@ cat >"$PROVENANCE" <<JSON
   "demo_script": false,
   "generated_by": "scripts/record-real-use-assets.sh",
   "commands": [
-    "helm-ai-kernel setup codex --dry-run --json --data-dir ~/.helm-ai-kernel --no-open",
+    "helm-ai-kernel setup codex --dry-run --json --data-dir ~/.helm-ai-kernel",
     "printf <codex PreToolUse payload> | helm-ai-kernel hook pre-tool --client codex --data-dir ~/.helm-ai-kernel",
     "helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json"
   ],
@@ -112,13 +112,13 @@ write_frame() {
 
 write_frame 1 <<'FRAME'
 $ helm-ai-kernel setup codex --dry-run --json \
-    --data-dir ~/.helm-ai-kernel --no-open
+    --data-dir ~/.helm-ai-kernel
 
 target:             codex
 client_config_path: ~/.codex/config.toml
 hook_config_path:   ~/.codex/hooks.json
 data_dir:           ~/.helm-ai-kernel
-console_url:        http://127.0.0.1:7714/console/onboarding
+kernel_url:         http://127.0.0.1:7714
 
 This is a dry-run setup preview, not a demo script.
 FRAME

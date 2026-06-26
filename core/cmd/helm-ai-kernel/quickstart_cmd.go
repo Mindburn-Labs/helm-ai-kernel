@@ -16,22 +16,20 @@ import (
 )
 
 type quickstartOptions struct {
-	NoOpen            bool
-	Addr              string
-	Port              int
-	DataDir           string
-	Reset             bool
-	Offline           bool
-	ConsoleAssetsPath string
-	Profile           string
-	JSON              bool
-	DryRun            bool
+	Addr    string
+	Port    int
+	DataDir string
+	Reset   bool
+	Offline bool
+	Profile string
+	JSON    bool
+	DryRun  bool
 }
 
 func init() {
 	Register(Subcommand{
 		Name:  "quickstart",
-		Usage: "Start local Kernel + Console onboarding proof path",
+		Usage: "Start local Kernel onboarding proof path",
 		RunFn: runQuickstartCmd,
 	})
 }
@@ -60,26 +58,17 @@ func runQuickstartCmd(args []string, stdout, stderr io.Writer) int {
 	installQuickstartRuntimeEnv(prepared.Runtime)
 
 	runServerWithOptions(serverOptions{
-		Mode:              "quickstart",
-		BindAddr:          opts.Addr,
-		Port:              opts.Port,
-		DataDir:           opts.DataDir,
-		PolicyPath:        prepared.PolicyPath,
-		ConsoleAssetsPath: prepared.ConsoleAssetsPath,
-		Quickstart:        prepared.Runtime,
+		Mode:       "quickstart",
+		BindAddr:   opts.Addr,
+		Port:       opts.Port,
+		DataDir:    opts.DataDir,
+		PolicyPath: prepared.PolicyPath,
+		Quickstart: prepared.Runtime,
 		OnReady: func(bindAddr string, port int) {
 			if !opts.JSON {
 				fmt.Fprintf(stdout, "HELM quickstart ready\n\n")
 				fmt.Fprintf(stdout, "Kernel:  http://%s:%d\n", bindAddr, port)
-				if prepared.ConsoleAssetsPath != "" {
-					fmt.Fprintf(stdout, "Console: %s\n", prepared.ConsoleURL)
-				} else {
-					fmt.Fprintf(stdout, "Console assets not found; start again with --console-assets <build/web>\n")
-				}
 				fmt.Fprintf(stdout, "Policy:  %s\n\n", prepared.PolicyPath)
-			}
-			if prepared.ConsoleAssetsPath != "" && !opts.NoOpen && shouldOpenConsole() {
-				_ = openConsole(prepared.ConsoleURL)
 			}
 		},
 		Stdout: stdout,
@@ -107,13 +96,11 @@ func parseQuickstartArgs(args []string, stderr io.Writer) (quickstartOptions, in
 	}
 	fs := flag.NewFlagSet("quickstart", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	fs.BoolVar(&opts.NoOpen, "no-open", false, "Do not open the browser")
 	fs.StringVar(&opts.Addr, "addr", opts.Addr, "Loopback bind address")
 	fs.IntVar(&opts.Port, "port", opts.Port, "Local Kernel port")
 	fs.StringVar(&opts.DataDir, "data-dir", opts.DataDir, "Directory for local SQLite state, keys, policy, and evidence")
 	fs.BoolVar(&opts.Reset, "reset", false, "Remove the quickstart data directory before initialization")
 	fs.BoolVar(&opts.Offline, "offline", false, "Refuse optional network checks during setup")
-	fs.StringVar(&opts.ConsoleAssetsPath, "console-assets", "", "Path to production Flutter web assets")
 	fs.StringVar(&opts.Profile, "profile", opts.Profile, "Onboarding profile: claude, codex, mcp, openai-compatible")
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable startup summary")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "Prepare and print startup summary without starting the server")
@@ -144,28 +131,26 @@ func validateQuickstartOptions(opts quickstartOptions) error {
 }
 
 type quickstartPrepared struct {
-	KernelURL         string
-	PolicyPath        string
-	ConsoleAssetsPath string
-	ConsoleURL        string
-	Runtime           *quickstartRuntime
+	KernelURL  string
+	PolicyPath string
+	Runtime    *quickstartRuntime
 }
 
 func (p quickstartPrepared) summary() map[string]any {
 	return map[string]any{
-		"kernel_url":         p.KernelURL,
-		"console_url":        p.ConsoleURL,
-		"policy_path":        p.PolicyPath,
-		"console_assets":     p.ConsoleAssetsPath,
-		"tenant_id":          p.Runtime.TenantID,
-		"principal_id":       p.Runtime.PrincipalID,
-		"profile":            p.Runtime.Profile,
-		"entitlements":       []string{"OSS_CORE"},
-		"local_session_ttl":  time.Until(p.Runtime.ExpiresAt).String(),
-		"start_onboarding":   true,
-		"requires_cloud":     false,
-		"requires_docker":    false,
-		"requires_model_key": false,
+		"kernel_url":                 p.KernelURL,
+		"policy_path":                p.PolicyPath,
+		"tenant_id":                  p.Runtime.TenantID,
+		"principal_id":               p.Runtime.PrincipalID,
+		"profile":                    p.Runtime.Profile,
+		"entitlements":               []string{"OSS_CORE"},
+		"local_session_ttl":          time.Until(p.Runtime.ExpiresAt).String(),
+		"local_session_exchange_url": p.KernelURL + "/api/v1/local-session/exchange",
+		"bootstrap_token":            p.Runtime.BootstrapToken,
+		"start_onboarding":           true,
+		"requires_cloud":             false,
+		"requires_docker":            false,
+		"requires_model_key":         false,
 	}
 }
 
@@ -197,18 +182,11 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 	if err != nil {
 		return quickstartPrepared{}, fmt.Errorf("generate local session: %w", err)
 	}
-	consoleAssets, err := resolveConsoleAssets(opts.ConsoleAssetsPath, opts.DataDir)
-	if err != nil {
-		return quickstartPrepared{}, err
-	}
 	kernelURL := fmt.Sprintf("http://%s:%d", opts.Addr, opts.Port)
-	consoleURL := fmt.Sprintf("%s/console/onboarding?helm_bootstrap_token=%s", kernelURL, runtime.BootstrapToken)
 	return quickstartPrepared{
-		KernelURL:         kernelURL,
-		PolicyPath:        policyPath,
-		ConsoleAssetsPath: consoleAssets,
-		ConsoleURL:        consoleURL,
-		Runtime:           runtime,
+		KernelURL:  kernelURL,
+		PolicyPath: policyPath,
+		Runtime:    runtime,
 	}, nil
 }
 
@@ -254,61 +232,4 @@ path = "../helm.db"
 		}
 	}
 	return policyPath, nil
-}
-
-func resolveConsoleAssets(flagPath, dataDir string) (string, error) {
-	if strings.TrimSpace(flagPath) != "" {
-		if hasConsoleIndex(flagPath) {
-			return flagPath, nil
-		}
-		return "", fmt.Errorf("--console-assets must point to a Flutter web bundle containing index.html: %s", flagPath)
-	}
-	for _, candidate := range consoleAssetCandidates(dataDir, executablePath()) {
-		candidate = strings.TrimSpace(candidate)
-		if candidate == "" {
-			continue
-		}
-		if hasConsoleIndex(candidate) {
-			return candidate, nil
-		}
-	}
-	return "", nil
-}
-
-func executablePath() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	return exe
-}
-
-func consoleAssetCandidates(dataDir, exePath string) []string {
-	candidates := []string{
-		os.Getenv("HELM_CONSOLE_ASSETS"),
-		filepath.Join(dataDir, "console"),
-		"console",
-		filepath.Join("dist", "console"),
-	}
-	if strings.TrimSpace(exePath) != "" {
-		exeDir := filepath.Dir(exePath)
-		candidates = append(candidates,
-			filepath.Join(exeDir, "console"),
-			filepath.Clean(filepath.Join(exeDir, "..", "share", "helm-ai-kernel", "console")),
-			filepath.Clean(filepath.Join(exeDir, "..", "..", "share", "helm-ai-kernel", "console")),
-		)
-	}
-	return candidates
-}
-
-func hasConsoleIndex(path string) bool {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return false
-	}
-	if info, err := os.Stat(path); err != nil || !info.IsDir() {
-		return false
-	}
-	_, err := os.Stat(filepath.Join(path, "index.html"))
-	return err == nil
 }

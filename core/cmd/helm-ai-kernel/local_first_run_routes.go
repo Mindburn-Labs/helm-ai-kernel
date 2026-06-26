@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -10,12 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/fs"
-	"mime"
 	"net"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -29,7 +25,6 @@ import (
 const (
 	defaultQuickstartTenantID    = "default"
 	defaultQuickstartPrincipalID = "local-operator"
-	maxConsoleAssetBundleBytes   = 256 * 1024 * 1024
 )
 
 type quickstartRuntime struct {
@@ -193,151 +188,6 @@ func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverO
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(export)
 	}))
-}
-
-func RegisterLocalConsoleAssetRoutes(mux *http.ServeMux, opts serverOptions, bindAddr string, port int) {
-	assets := strings.TrimSpace(opts.ConsoleAssetsPath)
-	if assets == "" {
-		return
-	}
-	assetRoot, err := filepath.Abs(assets)
-	if err != nil {
-		return
-	}
-	info, err := os.Stat(assetRoot)
-	if err != nil || !info.IsDir() {
-		return
-	}
-	bundle, err := loadConsoleAssetBundle(assetRoot)
-	if err != nil {
-		return
-	}
-	handler := spaFileServer(bundle)
-	mux.HandleFunc("/console", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/console/", http.StatusTemporaryRedirect)
-	})
-	mux.Handle("/console/", http.StripPrefix("/console/", handler))
-	_ = bindAddr
-	_ = port
-}
-
-type consoleAssetBundle struct {
-	index  consoleAsset
-	assets map[string]consoleAsset
-}
-
-type consoleAsset struct {
-	body        []byte
-	contentType string
-	modTime     time.Time
-}
-
-func spaFileServer(bundle consoleAssetBundle) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assetPath, ok := localConsoleAssetPath(r.URL.Path)
-		if !ok || assetPath == "" {
-			serveConsoleAsset(w, r, "index.html", bundle.index)
-			return
-		}
-		if asset, ok := bundle.assets[assetPath]; ok {
-			serveConsoleAsset(w, r, assetPath, asset)
-			return
-		}
-		serveConsoleAsset(w, r, "index.html", bundle.index)
-	})
-}
-
-func serveConsoleAsset(w http.ResponseWriter, r *http.Request, name string, asset consoleAsset) {
-	if asset.contentType != "" {
-		w.Header().Set("Content-Type", asset.contentType)
-	}
-	http.ServeContent(w, r, name, asset.modTime, bytes.NewReader(asset.body))
-}
-
-func loadConsoleAssetBundle(root string) (consoleAssetBundle, error) {
-	bundle := consoleAssetBundle{assets: make(map[string]consoleAsset)}
-	var total int64
-	var hasIndex bool
-	err := filepath.WalkDir(root, func(filePath string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() || !entry.Type().IsRegular() {
-			return nil
-		}
-		rel, err := filepath.Rel(root, filePath)
-		if err != nil || rel == "." {
-			return err
-		}
-		assetPath := filepath.ToSlash(rel)
-		if clean, ok := localConsoleAssetPath("/" + assetPath); !ok || clean != assetPath {
-			return fmt.Errorf("unsafe console asset path: %s", rel)
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if info.Size() < 0 || total+info.Size() > maxConsoleAssetBundleBytes {
-			return fmt.Errorf("console asset bundle exceeds %d bytes", maxConsoleAssetBundleBytes)
-		}
-		body, err := readConsoleAssetFile(filePath)
-		if err != nil {
-			return err
-		}
-		total += int64(len(body))
-		asset := consoleAsset{
-			body:        body,
-			contentType: consoleAssetContentType(filePath, body),
-			modTime:     info.ModTime(),
-		}
-		if assetPath == "index.html" {
-			bundle.index = asset
-			hasIndex = true
-			return nil
-		}
-		bundle.assets[assetPath] = asset
-		return nil
-	})
-	if err != nil {
-		return consoleAssetBundle{}, err
-	}
-	if !hasIndex {
-		return consoleAssetBundle{}, fmt.Errorf("console bundle missing index.html")
-	}
-	return bundle, nil
-}
-
-func readConsoleAssetFile(filePath string) ([]byte, error) {
-
-	// codeql[go/path-injection] -- filePath is produced by WalkDir under the operator-selected Console bundle before serving starts; request paths never reach this read.
-	return os.ReadFile(filePath)
-}
-
-func consoleAssetContentType(filePath string, body []byte) string {
-	if contentType := mime.TypeByExtension(filepath.Ext(filePath)); contentType != "" {
-		return contentType
-	}
-	return http.DetectContentType(body)
-}
-
-func localConsoleAssetPath(rawPath string) (string, bool) {
-	if strings.Contains(rawPath, "\\") {
-		return "", false
-	}
-	trimmed := strings.TrimPrefix(rawPath, "/")
-	if trimmed == "" {
-		return "", true
-	}
-	for _, segment := range strings.Split(trimmed, "/") {
-		if segment == ".." {
-			return "", false
-		}
-	}
-	clean := strings.TrimPrefix(path.Clean("/"+trimmed), "/")
-	if clean == "." {
-		return "", true
-	}
-	return clean, true
 }
 
 type onboardingStep struct {

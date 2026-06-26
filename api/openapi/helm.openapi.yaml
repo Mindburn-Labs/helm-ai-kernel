@@ -662,9 +662,9 @@ paths:
       tags: [console, system]
       summary: Read canonical Console capability metadata
       description: |
-        Public read-only capability discovery endpoint used by app-helm-console to
-        choose OSS Launchpad versus commercial UX states. Authorization decisions
-        remain backend-enforced.
+        Public read-only capability discovery endpoint used by external clients
+        to choose OSS Launchpad versus commercial UX states. Authorization
+        decisions remain backend-enforced.
       responses:
         '200':
           description: Console capability metadata

@@ -130,22 +130,14 @@ The release workflow attaches these assets:
 - `release.high_risk.v3.toml`
 - `sample-policy-material.tar`
 - `helm-ai-kernel-launchpad-data.tar`
-- `helm-console-web-v0.5.18.tar.gz`
-- `helm-console-web-v0.5.18.tar.gz.sha256`
-- `helm-console-web-v0.5.18.tar.gz.sbom.spdx.json`
-- `helm-console-web-v0.5.18.tar.gz.provenance.json`
-- `helm-console-web-v0.5.18.tar.gz.lock.json`
-- `helm-console-web-v0.5.18.tar.gz.manifest.json`
 - `helm-ai-kernel.mcpb`
 - `helm-ai-kernel.rb`
 - `v0.5.18.json`
 - matching `*.cosign.bundle` files for every primary asset
 
 `sample-policy-material.tar` includes the sample policy and its referenced EU
-AI Act high-risk reference pack. The Console web bundle is built from the
-private `Mindburn-Labs/app-helm-console` repository during the tag workflow,
-passes the production fixture-leak gate, and is installed by the Homebrew
-formula under `share/helm-ai-kernel/console` for local quickstart discovery.
+AI Act high-risk reference pack. Browser UI bundles are not Kernel release
+assets and are not installed by the Homebrew formula.
 The `v0.5.16` release attaches a
 `helm-ai-kernel.rb` formula asset for version `0.5.18` and publishes the same
 version to `mindburnlabs/homebrew-tap`; `version-status.json` must include a
@@ -173,9 +165,8 @@ writes the final `SHA256SUMS.txt`.
 
 Every public release must include enough material to verify what was downloaded.
 For `v0.5.16`, use `SHA256SUMS.txt`, `sbom.json`, `v0.5.18.openvex.json`,
-`release-attestation.json`, the platform binary assets, the Console web bundle
-lock/SBOM/provenance sidecars, attached `*.cosign.bundle` files, and the
-offline `evidence-pack.tar`.
+`release-attestation.json`, the platform binary assets, attached
+`*.cosign.bundle` files, and the offline `evidence-pack.tar`.
 
 Verify a downloaded binary blob:
 

@@ -46,18 +46,17 @@ func main() {
 var startServer = runServer
 
 type serverOptions struct {
-	Mode              string
-	BindAddr          string
-	Port              int
-	DataDir           string
-	SQLitePath        string
-	PolicyPath        string
-	ConsoleAssetsPath string
-	Quickstart        *quickstartRuntime
-	OnReady           func(bindAddr string, port int)
-	JSON              bool
-	Stdout            io.Writer
-	Stderr            io.Writer
+	Mode       string
+	BindAddr   string
+	Port       int
+	DataDir    string
+	SQLitePath string
+	PolicyPath string
+	Quickstart *quickstartRuntime
+	OnReady    func(bindAddr string, port int)
+	JSON       bool
+	Stdout     io.Writer
+	Stderr     io.Writer
 }
 
 // Run is the entrypoint for testing
@@ -393,7 +392,6 @@ func runServerWithOptions(opts serverOptions) {
 	if extraRoutes != nil {
 		extraRoutes(mux)
 	}
-	RegisterLocalConsoleAssetRoutes(mux, opts, bindAddr, port)
 	rateLimiter := buildRuntimeRateLimiter()
 	server := &http.Server{
 		Addr: fmt.Sprintf("%s:%d", bindAddr, port),

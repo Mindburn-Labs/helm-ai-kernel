@@ -139,7 +139,6 @@ func (o Orchestrator) Up(opts Options) (Result, error) {
 	result.RepairClass = run.RepairClass
 	result.EvidenceRefs = append([]string{}, run.EvidenceRefs...)
 	result.StartedRuntime = run.RuntimeHandles.ContainerID != ""
-	result.ConsoleURL = consoleURL(opts.ConsoleBaseURL, run.LaunchID)
 	result.OfflineVerifyCommand = run.VerificationCommand
 	result.ResumeCommand = "helm up " + app.ID + " --resume " + run.LaunchID
 	result.Gates = bindRunGates(result.Gates, run)
@@ -210,7 +209,6 @@ func (o Orchestrator) persistBlocked(result Result, compiled lpplan.LaunchPlan, 
 	result.ResultClass = run.ResultClass
 	result.RepairClass = run.RepairClass
 	result.EvidenceRefs = append([]string{}, run.EvidenceRefs...)
-	result.ConsoleURL = consoleURL("", run.LaunchID)
 	result.OfflineVerifyCommand = run.VerificationCommand
 	result.ResumeCommand = "helm up " + compiled.AppID + " --resume " + run.LaunchID
 	result.Gates = bindRunGates(result.Gates, run)
@@ -354,7 +352,7 @@ func canonicalGates() []Gate {
 		gate("receipts.emit", "Receipts", "helm run receipts <run_id>"),
 		gate("evidence.export", "EvidencePack export", "helm evidence export <run_id>"),
 		gate("offline.verify", "Offline verify command", "helm-ai-kernel verify --bundle <file>"),
-		gate("console.deeplink", "Console deep link", "helm run open <run_id>"),
+		gate("cli.inspect", "CLI inspection", "helm run open <run_id>"),
 	}
 }
 
@@ -452,7 +450,7 @@ func bindRunGates(gates []Gate, run session.LaunchRun) []Gate {
 	gates = setGate(gates, "receipts.emit", receiptStatus, receiptReason, receiptSummary)
 	gates = setGate(gates, "evidence.export", evidenceStatus, evidenceReason, "EvidencePack refs are attached to the run.")
 	gates = setGate(gates, "offline.verify", verifyStatus, verifyReason, run.VerificationCommand)
-	gates = setGate(gates, "console.deeplink", status, run.ReasonCode, "Console can open the receipt-backed run.")
+	gates = setGate(gates, "cli.inspect", status, run.ReasonCode, "CLI can inspect the receipt-backed run.")
 	return gates
 }
 
@@ -512,15 +510,4 @@ func secretSummary(mode Mode, refs []string) string {
 		return "No required runtime secrets."
 	}
 	return "Required runtime secret grants are present."
-}
-
-func consoleURL(baseURL, runID string) string {
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if baseURL == "" {
-		baseURL = "http://127.0.0.1:7714"
-	}
-	if runID == "" {
-		return baseURL
-	}
-	return baseURL + "/runs/" + runID
 }

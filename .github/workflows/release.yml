@@ -103,71 +103,9 @@ jobs:
       - name: Reproducibility, SBOM, and VEX smoke
         run: make release-smoke
 
-  console-bundle:
-    runs-on: ubuntu-latest
-    needs: validate
-    permissions:
-      actions: read
-      attestations: write
-      contents: read
-      id-token: write
-    steps:
-      - name: Require private Console checkout token
-        env:
-          CONSOLE_BUNDLE_TOKEN: ${{ secrets.CONSOLE_BUNDLE_TOKEN }}
-        run: |
-          if [ -z "$CONSOLE_BUNDLE_TOKEN" ]; then
-            echo "::error::CONSOLE_BUNDLE_TOKEN is required to build the private app-helm-console web bundle for the OSS quickstart release."
-            exit 1
-          fi
-      - name: Checkout Console repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-        with:
-          repository: Mindburn-Labs/app-helm-console
-          ref: main
-          token: ${{ secrets.CONSOLE_BUNDLE_TOKEN }}
-      - name: Set up Flutter
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
-        with:
-          flutter-version: "3.29.0"
-          channel: stable
-          cache: true
-      - name: Validate Console workspace
-        run: |
-          make setup
-          make lint
-          make test
-      - name: Package production Console web bundle
-        env:
-          HELM_CONSOLE_VERSION: ${{ github.ref_name }}
-        run: make release-web-bundle
-      - name: Install cosign
-        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
-      - name: Sign Console web bundle artifacts
-        env:
-          COSIGN_EXPERIMENTAL: "1"
-        run: |
-          set -euo pipefail
-          for artifact in dist/web-bundle/*; do
-            case "$artifact" in
-              *.tar.gz|*.sha256|*.spdx.json|*.provenance.json|*.lock.json|*.manifest.json)
-                cosign sign-blob --yes --bundle "${artifact}.cosign.bundle" "$artifact"
-                ;;
-            esac
-          done
-      - name: Attest Console web bundle provenance
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
-        with:
-          subject-path: dist/web-bundle/helm-console-web-*.tar.gz
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: helm-console-web-bundle
-          path: dist/web-bundle/*
-          if-no-files-found: error
-
   binaries:
     runs-on: ubuntu-latest
-    needs: [validate, deployment-smoke, kind-smoke, release-smoke, console-bundle]
+    needs: [validate, deployment-smoke, kind-smoke, release-smoke]
     permissions:
       actions: read
       attestations: write
@@ -181,27 +119,8 @@ jobs:
         with:
           go-version: "1.25.10"
           cache-dependency-path: "**/go.sum"
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: helm-console-web-bundle
-          path: console-bundle/
       - name: Build and stage release assets
-        run: |
-          set -euo pipefail
-          bundle="$(find console-bundle -maxdepth 1 -name "helm-console-web-${GITHUB_REF_NAME}.tar.gz" -type f | head -n 1)"
-          if [ -z "$bundle" ]; then
-            echo "::error::Console bundle for ${GITHUB_REF_NAME} was not downloaded"
-            exit 1
-          fi
-          lock="${bundle}.lock.json"
-          if [ ! -f "$lock" ]; then
-            echo "::error::Console bundle lock missing: $lock"
-            exit 1
-          fi
-          HELM_CONSOLE_BUNDLE="$bundle" \
-            HELM_CONSOLE_BUNDLE_LOCK="$lock" \
-            REQUIRE_HELM_CONSOLE_BUNDLE=1 \
-            make release-assets
+        run: make release-assets
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:

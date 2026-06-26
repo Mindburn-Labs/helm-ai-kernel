@@ -11,7 +11,7 @@ func TestUpCommandAcceptsProductSyntaxWithFlagsAfterApp(t *testing.T) {
 	t.Setenv("OPENROUTER_API_KEY", "")
 	t.Setenv("HELM_LAUNCHPAD_HOME", t.TempDir())
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"helm", "up", "openclaw", "--demo", "--no-open", "--json"}, &stdout, &stderr)
+	code := Run([]string{"helm", "up", "openclaw", "--demo", "--json"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("up command exit = %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}
@@ -22,8 +22,11 @@ func TestUpCommandAcceptsProductSyntaxWithFlagsAfterApp(t *testing.T) {
 	if payload["mode"] != "demo" {
 		t.Fatalf("mode = %v", payload["mode"])
 	}
-	if !strings.Contains(stdout.String(), "/runs/") {
-		t.Fatalf("console run deep link missing: %s", stdout.String())
+	if strings.Contains(stdout.String(), "console_url") {
+		t.Fatalf("headless launch output should not include console_url: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "offline_verify_command") {
+		t.Fatalf("headless launch output missing offline verifier command: %s", stdout.String())
 	}
 }
 
@@ -31,7 +34,7 @@ func TestUpCommandVerifyOnlyDoesNotRequireRuntime(t *testing.T) {
 	t.Setenv("OPENROUTER_API_KEY", "test-key")
 	t.Setenv("HELM_LAUNCHPAD_HOME", t.TempDir())
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"helm", "up", "openclaw", "--verify-only", "--no-open", "--json"}, &stdout, &stderr)
+	code := Run([]string{"helm", "up", "openclaw", "--verify-only", "--json"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("verify-only exit = %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}

@@ -4,9 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
-	"os/exec"
-	"runtime"
 	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchkit"
@@ -46,9 +43,6 @@ func runUpCmd(args []string, stdout, stderr io.Writer) int {
 		return writeLaunchJSON(stdout, result)
 	}
 	printUpSummary(stdout, result)
-	if !opts.NoOpen && result.ConsoleURL != "" && shouldOpenConsole() {
-		_ = openConsole(result.ConsoleURL)
-	}
 	if result.Run != nil && result.Run.KernelVerdict == "ALLOW" {
 		return 0
 	}
@@ -65,7 +59,7 @@ func parseUpArgs(args []string, stderr io.Writer) (launchkit.Options, bool, int)
 	fs := flag.NewFlagSet("up", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: helm up <app> [--target local|cloud|cloud:helm|cloud:aws|cloud:kubernetes] [--demo|--verify-only|--live] [--resume <run_id>] [--yes] [--no-open] [--json]")
+		fmt.Fprintln(stderr, "Usage: helm up <app> [--target local|cloud|cloud:helm|cloud:aws|cloud:kubernetes] [--demo|--verify-only|--live] [--resume <run_id>] [--yes] [--json]")
 	}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -107,17 +101,8 @@ func parseUpArgs(args []string, stderr io.Writer) (launchkit.Options, bool, int)
 			i++
 		case "--yes", "-y":
 			opts.Yes = true
-		case "--no-open":
-			opts.NoOpen = true
 		case "--json":
 			jsonOut = true
-		case "--console-url":
-			if i+1 >= len(args) {
-				fs.Usage()
-				return opts, false, 2
-			}
-			opts.ConsoleBaseURL = args[i+1]
-			i++
 		case "--help", "-h":
 			fs.Usage()
 			return opts, false, 0
@@ -148,9 +133,6 @@ func parseUpArgs(args []string, stderr io.Writer) (launchkit.Options, bool, int)
 	}
 	if opts.Mode == "" {
 		opts.Mode = launchkit.ModeAuto
-	}
-	if opts.ConsoleBaseURL == "" {
-		opts.ConsoleBaseURL = os.Getenv("HELM_CONSOLE_URL")
 	}
 	return opts, jsonOut, 0
 }
@@ -188,9 +170,6 @@ func printUpSummary(stdout io.Writer, result launchkit.Result) {
 	if result.Run != nil && result.Run.KernelVerdict == "ALLOW" {
 		fmt.Fprintf(stdout, "\nStatus: %s\n", result.Run.State)
 	}
-	if result.ConsoleURL != "" {
-		fmt.Fprintf(stdout, "\nConsole:\n%s\n", result.ConsoleURL)
-	}
 	if result.OfflineVerifyCommand != "" {
 		fmt.Fprintf(stdout, "\nVerify offline:\n%s\n", result.OfflineVerifyCommand)
 	}
@@ -200,28 +179,4 @@ func printUpSummary(stdout io.Writer, result launchkit.Result) {
 	if result.VerifyOnly && result.Plan != nil {
 		fmt.Fprintf(stdout, "\nVerify-only completed with verdict %s.\n", result.Plan.KernelVerdict)
 	}
-}
-
-func shouldOpenConsole() bool {
-	if os.Getenv("CI") != "" || os.Getenv("HELM_NO_OPEN") != "" {
-		return false
-	}
-	return true
-}
-
-func openConsole(url string) error {
-	var command string
-	var args []string
-	switch runtime.GOOS {
-	case "darwin":
-		command = "open"
-		args = []string{url}
-	case "windows":
-		command = "rundll32"
-		args = []string{"url.dll,FileProtocolHandler", url}
-	default:
-		command = "xdg-open"
-		args = []string{url}
-	}
-	return exec.Command(command, args...).Start()
 }

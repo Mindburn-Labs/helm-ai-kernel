@@ -173,13 +173,6 @@
       "replacement": "v{version}.json"
     },
     {
-      "id": "publishing-doc-console-bundle-assets",
-      "path": "docs/PUBLISHING.md",
-      "kind": "regex",
-      "pattern": "helm-console-web-v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.tar\\.gz",
-      "replacement": "helm-console-web-v{version}.tar.gz"
-    },
-    {
       "id": "publishing-doc-formula-version",
       "path": "docs/PUBLISHING.md",
       "kind": "regex",
@@ -250,13 +243,6 @@
       "replacement": "v{version}.json"
     },
     {
-      "id": "verification-doc-console-bundle-assets",
-      "path": "docs/VERIFICATION.md",
-      "kind": "regex",
-      "pattern": "helm-console-web-v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.tar\\.gz",
-      "replacement": "helm-console-web-v{version}.tar.gz"
-    },
-    {
       "id": "release-security-doc-current-release",
       "path": "docs/RELEASE_SECURITY.md",
       "kind": "regex",
@@ -283,13 +269,6 @@
       "kind": "regex",
       "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.json",
       "replacement": "v{version}.json"
-    },
-    {
-      "id": "release-security-doc-console-bundle-assets",
-      "path": "docs/RELEASE_SECURITY.md",
-      "kind": "regex",
-      "pattern": "helm-console-web-v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.tar\\.gz",
-      "replacement": "helm-console-web-v{version}.tar.gz"
     },
     {
       "id": "readme-current-tag",
@@ -332,13 +311,6 @@
       "kind": "regex",
       "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.(openvex\\.json|json)",
       "replacement": "v{version}.\\g<2>"
-    },
-    {
-      "id": "developer-journey-console-bundle-assets",
-      "path": "docs/DEVELOPER_JOURNEY.md",
-      "kind": "regex",
-      "pattern": "helm-console-web-v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.tar\\.gz",
-      "replacement": "helm-console-web-v{version}.tar.gz"
     },
     {
       "id": "developer-journey-java-coordinate",
@@ -430,13 +402,6 @@
       "kind": "regex",
       "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.openvex\\.json",
       "replacement": "v{version}.openvex.json"
-    },
-    {
-      "id": "release-readme-console-bundle-assets",
-      "path": "release/README.md",
-      "kind": "regex",
-      "pattern": "helm-console-web-v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.tar\\.gz",
-      "replacement": "helm-console-web-v{version}.tar.gz"
     },
     {
       "id": "release-readme-asset-contract-heading",

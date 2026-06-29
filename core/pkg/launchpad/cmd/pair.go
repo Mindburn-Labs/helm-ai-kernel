@@ -23,7 +23,7 @@ type Pairing struct {
 	APIURL      string `json:"api_url"`
 }
 
-// PairOptions configures the console pair command behaviour.
+// PairOptions configures the control-plane pair command behaviour.
 type PairOptions struct {
 	WorkspaceID string
 	APIURL      string
@@ -39,7 +39,7 @@ type entitlementsResponse struct {
 	} `json:"workspaces"`
 }
 
-// RunPair pairs the local kernel with a HELM Console workspace.
+// RunPair pairs the local kernel with a HELM control-plane workspace.
 func RunPair(opts PairOptions) error {
 	if opts.Stdout == nil {
 		opts.Stdout = os.Stdout
@@ -60,7 +60,7 @@ func RunPair(opts PairOptions) error {
 		return errors.New("session token has expired; run 'helm-ai-kernel login' to re-authenticate")
 	}
 
-	apiURL := resolveConsoleURL(opts.APIURL)
+	apiURL := resolveControlPlaneURL(opts.APIURL)
 	workspaceID := opts.WorkspaceID
 
 	// Auto-discover workspace if not specified.
@@ -170,7 +170,7 @@ func LoadPairing() (Pairing, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return Pairing{}, fmt.Errorf("no pairing found; run 'helm-ai-kernel console pair' first")
+			return Pairing{}, fmt.Errorf("no pairing found; run 'helm-ai-kernel control-plane pair' first")
 		}
 		return Pairing{}, fmt.Errorf("read pairing: %w", err)
 	}

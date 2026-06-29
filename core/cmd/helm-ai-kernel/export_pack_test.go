@@ -1,10 +1,18 @@
 package main
 
 import (
+	"archive/tar"
+	"compress/gzip"
+	"encoding/hex"
+	"encoding/json"
+	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/translog"
 )
 
 func TestExportAndVerify_RoundTrip(t *testing.T) {
@@ -120,6 +128,176 @@ func TestExportPackWithOptions_EUAIActProfile(t *testing.T) {
 	}
 }
 
+func TestExportPackWithOptions_TransparencySTH(t *testing.T) {
+	path := t.TempDir() + "/sth.tar"
+	sth := translog.SignedTreeHead{
+		TreeSize:  3,
+		RootHash:  "abc123",
+		Timestamp: "2026-06-24T00:00:00Z",
+		LogID:     "log-test",
+		PublicKey: "pub",
+		Signature: "sig",
+	}
+
+	if err := ExportPackWithOptions("sess-sth", map[string][]byte{
+		"receipts/rec-001.json": []byte(`{"id":"rec-001"}`),
+	}, path, ExportPackOptions{TransparencySTH: sth}); err != nil {
+		t.Fatalf("export failed: %v", err)
+	}
+
+	manifest, err := VerifyPack(path)
+	if err != nil {
+		t.Fatalf("verify failed: %v", err)
+	}
+	if _, ok := manifest.FileHashes["transparency/sth.json"]; !ok {
+		t.Fatal("manifest is missing transparency/sth.json")
+	}
+
+	var got translog.SignedTreeHead
+	if err := json.Unmarshal(readPackEntry(t, path, "transparency/sth.json"), &got); err != nil {
+		t.Fatalf("decode STH: %v", err)
+	}
+	if got.LogID != sth.LogID || got.TreeSize != sth.TreeSize {
+		t.Fatalf("STH mismatch: got %+v want %+v", got, sth)
+	}
+}
+
+func TestPackCreateEmbedsTransparencySTHFromDataDir(t *testing.T) {
+	dir := t.TempDir()
+	signer, err := loadOrGenerateSignerWithDataDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logID := translog.LogIDFromPublicKey(signer.PublicKeyBytes())
+	receipt := contracts.Receipt{
+		ReceiptID: "rec-001",
+		Status:    "SUCCESS",
+		LogID:     logID,
+		LeafIndex: 0,
+		Transparency: &contracts.TransparencyAnchor{
+			Backend: "translog",
+			LogID:   logID,
+		},
+	}
+	receiptHash, err := contracts.ReceiptChainHash(&receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, _, errOut := runLogCLI(t, "log", "append",
+		"--leaf-hash", receiptHash,
+		"--data-dir", dir)
+	if code != 0 {
+		t.Fatalf("append failed (%d): %s", code, errOut)
+	}
+
+	receiptsDir := filepath.Join(dir, "receipts")
+	if err := os.MkdirAll(receiptsDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	receiptData, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(receiptsDir, "rec-001.json"), receiptData, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	out := filepath.Join(dir, "evidencepack.tar")
+	if code := handlePackCreate([]string{
+		"--session", "sess-sth-cli",
+		"--receipts", receiptsDir,
+		"--out", out,
+		"--data-dir", dir,
+	}); code != 0 {
+		t.Fatalf("pack create exit %d", code)
+	}
+
+	manifest, err := VerifyPack(out)
+	if err != nil {
+		t.Fatalf("verify failed: %v", err)
+	}
+	if _, ok := manifest.FileHashes["transparency/sth.json"]; !ok {
+		t.Fatal("manifest is missing transparency/sth.json")
+	}
+	if _, ok := manifest.FileHashes["transparency/inclusion/rec-001.json"]; !ok {
+		t.Fatal("manifest is missing transparency/inclusion/rec-001.json")
+	}
+
+	var sth translog.SignedTreeHead
+	if err := json.Unmarshal(readPackEntry(t, out, "transparency/sth.json"), &sth); err != nil {
+		t.Fatalf("decode STH: %v", err)
+	}
+	if sth.TreeSize != 1 || sth.LogID == "" || sth.Signature == "" {
+		t.Fatalf("unexpected STH: %+v", sth)
+	}
+	if err := translog.VerifyTreeHead(&sth, sth.PublicKey); err != nil {
+		t.Fatalf("STH does not verify: %v", err)
+	}
+
+	var proof translog.InclusionProof
+	if err := json.Unmarshal(readPackEntry(t, out, "transparency/inclusion/rec-001.json"), &proof); err != nil {
+		t.Fatalf("decode proof: %v", err)
+	}
+	if proof.LeafIndex != 0 || proof.TreeSize != 1 {
+		t.Fatalf("unexpected inclusion proof: %+v", proof)
+	}
+	leafInput, err := hex.DecodeString(receiptHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedLeaf := translog.LeafHash(leafInput)
+	if proof.LeafHash != hex.EncodeToString(expectedLeaf[:]) {
+		t.Fatalf("proof leaf hash = %s, want %x", proof.LeafHash, expectedLeaf[:])
+	}
+	if err := translog.VerifyInclusion(&proof, sth.RootHash); err != nil {
+		t.Fatalf("inclusion proof does not verify: %v", err)
+	}
+}
+
+func TestTransparencyArtifactsRejectReceiptLeafMismatch(t *testing.T) {
+	dir := t.TempDir()
+	signer, err := loadOrGenerateSignerWithDataDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logID := translog.LogIDFromPublicKey(signer.PublicKeyBytes())
+	receipt := contracts.Receipt{
+		ReceiptID: "rec-001",
+		Status:    "SUCCESS",
+		LogID:     logID,
+		LeafIndex: 0,
+		Transparency: &contracts.TransparencyAnchor{
+			Backend: "translog",
+			LogID:   logID,
+		},
+	}
+	receiptHash, err := contracts.ReceiptChainHash(&receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, _, errOut := runLogCLI(t, "log", "append",
+		"--leaf-hash", receiptHash,
+		"--data-dir", dir)
+	if code != 0 {
+		t.Fatalf("append failed (%d): %s", code, errOut)
+	}
+
+	receipt.Status = "DENIED"
+	receiptData, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = transparencyArtifactsForPackCreate(dir, map[string][]byte{
+		"receipts/rec-001.json": receiptData,
+	})
+	if err == nil {
+		t.Fatal("expected transparency leaf mismatch")
+	}
+	if !strings.Contains(err.Error(), "transparency proof leaf hash mismatch") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestExportPackWithOptions_RejectsIncompleteEUAIActProfile(t *testing.T) {
 	path := t.TempDir() + "/bad-ai-act.tar"
 	err := ExportPackWithOptions("sess-ai-act", map[string][]byte{
@@ -136,6 +314,41 @@ func TestExportPackWithOptions_RejectsIncompleteEUAIActProfile(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected incomplete profile export to fail")
 	}
+}
+
+func readPackEntry(t *testing.T, packPath, entryName string) []byte {
+	t.Helper()
+	f, err := os.Open(packPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	gr, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gr.Close()
+
+	tr := tar.NewReader(gr)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(tr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hdr.Name == entryName {
+			return data
+		}
+	}
+	t.Fatalf("entry %s not found", entryName)
+	return nil
 }
 
 func completeExportEUAIActProfile() *contracts.EUAIActEvidenceProfile {

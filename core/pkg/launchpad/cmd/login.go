@@ -1,4 +1,4 @@
-// Package cmd implements CLI commands for authenticating with the HELM Console
+// Package cmd implements CLI commands for authenticating with the HELM control plane
 // and pairing a local helm-ai-kernel instance with a remote workspace.
 package cmd
 
@@ -16,8 +16,8 @@ import (
 	"time"
 )
 
-// Default API endpoint for the HELM Console backend.
-const defaultConsoleURL = "https://console.helm.mindburn.org"
+// Default API endpoint for the HELM control plane.
+const defaultControlPlaneURL = "https://api.helm.mindburn.org"
 
 // SessionFile is the canonical filename for stored JWT sessions.
 const SessionFile = "session.json"
@@ -66,8 +66,8 @@ func RunLogin(opts LoginOptions) error {
 		opts.Stderr = os.Stderr
 	}
 
-	apiURL := resolveConsoleURL(opts.APIURL)
-	slog.Info("authenticating with HELM Console", "api_url", apiURL)
+	apiURL := resolveControlPlaneURL(opts.APIURL)
+	slog.Info("authenticating with HELM control plane", "api_url", apiURL)
 
 	// Build request body.
 	body, err := json.Marshal(map[string]string{
@@ -197,13 +197,13 @@ func IsTokenExpired(s Session) bool {
 	return time.Now().After(expiry)
 }
 
-// resolveConsoleURL picks the console backend URL from explicit flag, env, or default.
-func resolveConsoleURL(explicit string) string {
+// resolveControlPlaneURL picks the control-plane URL from explicit flag, env, or default.
+func resolveControlPlaneURL(explicit string) string {
 	if explicit != "" {
 		return strings.TrimRight(explicit, "/")
 	}
-	if envURL := os.Getenv("HELM_CONSOLE_URL"); envURL != "" {
+	if envURL := os.Getenv("HELM_CONTROL_PLANE_URL"); envURL != "" {
 		return strings.TrimRight(envURL, "/")
 	}
-	return defaultConsoleURL
+	return defaultControlPlaneURL
 }

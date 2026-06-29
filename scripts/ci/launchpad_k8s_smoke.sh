@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
-# Launchpad k8s smoke driver. Brings up a clean minikube cluster, installs the
-# helm chart with openclaw and hermes co-deployed, runs the canonical positive
-# or negative scenario, and audits for leaks after teardown.
-#
-# Generic-cluster mode (vanilla k8s, EKS, GKE, bare-metal) is tracked as a
-# follow-up task `launchpad-k8s-smoke-generic-cluster`. This driver intentionally
-# owns the cluster lifecycle so smoke iterations start from a known empty state.
+# Launchpad k8s smoke driver. Installs the helm chart with openclaw and hermes
+# co-deployed, runs the canonical positive or negative scenario, and audits for
+# leaks after teardown. The default path owns a clean minikube lifecycle; generic
+# clusters can be reused with --reuse-cluster and an already-selected kubeconfig.
 #
 # Modes (--mode):
 #   baseline  — chart-only install, no launchpad apps. Confirms the kernel still
@@ -16,13 +13,14 @@
 #               Expects hermes Job failed; openclaw either CrashLoopBackOff or
 #               never reaches Ready within the timeout.
 #
-# Required tools: minikube, kubectl, helm, docker, python3. The driver fails fast if any are
-# missing.
+# Required tools: kubectl, helm, python3, jq. Minikube mode also requires
+# minikube and docker.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IMAGE_LOCK="${ROOT}/registry/launchpad/image-lock.json"
 MODE="${LAUNCHPAD_SMOKE_MODE:-positive}"
+CLUSTER_MODE="${LAUNCHPAD_SMOKE_CLUSTER_MODE:-minikube}"
 PROFILE="${LAUNCHPAD_SMOKE_PROFILE:-launchpad-smoke}"
 NAMESPACE="${LAUNCHPAD_SMOKE_NAMESPACE:-helm-launchpad-smoke}"
 RELEASE="${LAUNCHPAD_SMOKE_RELEASE:-kernel}"
@@ -34,6 +32,11 @@ OPENROUTER_KEY_REAL="${OPENROUTER_API_KEY:-}"
 OPENROUTER_KEY_FAKE="sk-fake-1234567890"
 KEEP_CLUSTER="${LAUNCHPAD_SMOKE_KEEP_CLUSTER:-0}"
 FRESH_CLUSTER="${LAUNCHPAD_SMOKE_FRESH_CLUSTER:-1}"
+MANAGE_NAMESPACE="${LAUNCHPAD_SMOKE_MANAGE_NAMESPACE:-1}"
+EPHEMERAL_NAMESPACE="${LAUNCHPAD_SMOKE_EPHEMERAL_NAMESPACE:-0}"
+KUBE_CONTEXT="${LAUNCHPAD_SMOKE_CONTEXT:-}"
+STORAGE_CLASS="${LAUNCHPAD_SMOKE_STORAGE_CLASS:-}"
+PERSISTENCE_ENABLED="${LAUNCHPAD_SMOKE_PERSISTENCE_ENABLED:-true}"
 PRE_LOAD_LAUNCHPAD_IMAGES="${LAUNCHPAD_SMOKE_PRE_LOAD_LAUNCHPAD_IMAGES:-0}"
 PRE_LOAD_LAUNCHPAD_PLATFORM="${LAUNCHPAD_SMOKE_PRE_LOAD_LAUNCHPAD_PLATFORM:-linux/amd64}"
 GHCR_SECRET_NAME="${LAUNCHPAD_SMOKE_GHCR_SECRET_NAME:-ghcr-read}"
@@ -44,16 +47,22 @@ TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/launchpad-k8s-smoke.XXXXXX")"
 
 usage() {
     cat <<EOF
-Usage: $0 [--mode baseline|positive|negative]
+Usage: $0 [--mode baseline|positive|negative] [--reuse-cluster] [--ephemeral-namespace]
 
 Environment overrides:
   LAUNCHPAD_SMOKE_MODE          one of baseline|positive|negative (default positive)
+  LAUNCHPAD_SMOKE_CLUSTER_MODE  one of minikube|reuse (default minikube)
+  LAUNCHPAD_SMOKE_CONTEXT       optional kube context to select before running
   LAUNCHPAD_SMOKE_PROFILE       minikube profile name (default launchpad-smoke)
   LAUNCHPAD_SMOKE_NAMESPACE     release namespace (default helm-launchpad-smoke)
   LAUNCHPAD_SMOKE_RELEASE       helm release name (default kernel)
   LAUNCHPAD_SMOKE_KERNEL_IMAGE  kernel image to load into minikube (default ghcr.io/mindburn-labs/helm-ai-kernel:local)
   LAUNCHPAD_SMOKE_KEEP_CLUSTER  set to 1 to skip the final minikube delete
   LAUNCHPAD_SMOKE_FRESH_CLUSTER set to 0 to reuse an existing minikube profile (assumes the cluster is already running and kernel image is loaded)
+  LAUNCHPAD_SMOKE_MANAGE_NAMESPACE set to 0 when the namespace already exists and the kubeconfig has namespace-scoped RBAC only
+  LAUNCHPAD_SMOKE_EPHEMERAL_NAMESPACE set to 1 to append a unique suffix to LAUNCHPAD_SMOKE_NAMESPACE
+  LAUNCHPAD_SMOKE_STORAGE_CLASS optional persistence.storageClass override; empty uses the cluster default
+  LAUNCHPAD_SMOKE_PERSISTENCE_ENABLED set to false to disable the chart PVC in storage-less smoke clusters
   LAUNCHPAD_SMOKE_GHCR_SECRET_NAME Secret name for private GHCR pulls (default ghcr-read)
   LAUNCHPAD_SMOKE_PRE_LOAD_LAUNCHPAD_IMAGES set to 1 for debug-only host pull + minikube image load verification
   LAUNCHPAD_SMOKE_PRE_LOAD_LAUNCHPAD_PLATFORM platform for debug-only launchpad image preload (default linux/amd64)
@@ -68,7 +77,12 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --mode) MODE="$2"; shift 2;;
         --mode=*) MODE="${1#--mode=}"; shift;;
+        --context) KUBE_CONTEXT="$2"; shift 2;;
+        --context=*) KUBE_CONTEXT="${1#--context=}"; shift;;
         --keep-cluster) KEEP_CLUSTER=1; shift;;
+        --reuse-cluster) CLUSTER_MODE="reuse"; FRESH_CLUSTER=0; KEEP_CLUSTER=1; shift;;
+        --ephemeral-namespace) EPHEMERAL_NAMESPACE=1; MANAGE_NAMESPACE=1; shift;;
+        --existing-namespace) MANAGE_NAMESPACE=0; shift;;
         -h|--help) usage; exit 0;;
         *) echo "unknown arg: $1" >&2; usage >&2; exit 2;;
     esac
@@ -78,6 +92,21 @@ case "$MODE" in
     baseline|positive|negative) ;;
     *) echo "::error::invalid --mode '$MODE' (expected baseline|positive|negative)" >&2; exit 2;;
 esac
+case "$CLUSTER_MODE" in
+    minikube|reuse) ;;
+    *) echo "::error::invalid LAUNCHPAD_SMOKE_CLUSTER_MODE '$CLUSTER_MODE' (expected minikube|reuse)" >&2; exit 2;;
+esac
+if [ "$CLUSTER_MODE" = "reuse" ]; then
+    FRESH_CLUSTER=0
+    KEEP_CLUSTER=1
+fi
+if [ "$EPHEMERAL_NAMESPACE" = "1" ]; then
+    NAMESPACE="${NAMESPACE}-$(date +%s)-$$"
+    if [ "${#NAMESPACE}" -gt 63 ]; then
+        echo "::error::ephemeral namespace name is too long: $NAMESPACE" >&2
+        exit 2
+    fi
+fi
 
 require() {
     command -v "$1" >/dev/null 2>&1 || {
@@ -101,12 +130,18 @@ kube_helm() {
     echo "::error::Kubernetes Helm v3 is required. Set KUBE_HELM_CMD when the helm command is occupied by the HELM verifier." >&2
     exit 1
 }
-require minikube
 require kubectl
 kube_helm version --short >/dev/null
-require docker
 require python3
 require jq
+if [ "$CLUSTER_MODE" = "minikube" ]; then
+    require minikube
+    require docker
+fi
+if [ "$PRE_LOAD_LAUNCHPAD_IMAGES" = "1" ] && [ "$CLUSTER_MODE" != "minikube" ]; then
+    echo "::error::LAUNCHPAD_SMOKE_PRE_LOAD_LAUNCHPAD_IMAGES=1 is only supported in minikube mode" >&2
+    exit 2
+fi
 
 apply_ghcr_pull_secret() {
     GHCR_USERNAME="$GHCR_USERNAME" GHCR_TOKEN="$GHCR_TOKEN" \
@@ -144,6 +179,13 @@ print(json.dumps(manifest))
 PY
 }
 
+cleanup_ad_hoc_runtime_secrets() {
+    if [ "$MODE" = "baseline" ]; then
+        return 0
+    fi
+    kubectl -n "$NAMESPACE" delete secret openrouter-key "$GHCR_SECRET_NAME" --ignore-not-found
+}
+
 if [ "$MODE" = "positive" ] && [ -z "$OPENROUTER_KEY_REAL" ]; then
     echo "::error::OPENROUTER_API_KEY env var is required for --mode positive" >&2
     exit 1
@@ -161,57 +203,74 @@ cleanup() {
         kubectl describe pods -n "$NAMESPACE" 2>/dev/null | tail -200 || true
         kubectl logs -n "$NAMESPACE" -l app.kubernetes.io/component=launchpad-app --all-containers --tail=200 2>/dev/null || true
         echo "::endgroup::"
-        # Best-effort namespace teardown so the next run starts clean. The
-        # cluster itself stays around when KEEP_CLUSTER=1 (local iteration);
-        # only the smoke namespace is sacrificed.
+        # Best-effort namespace-scoped teardown so the next run starts clean.
+        # The cluster itself stays around when KEEP_CLUSTER=1.
         kube_helm uninstall "$RELEASE" -n "$NAMESPACE" --ignore-not-found --wait --timeout 60s 2>/dev/null || true
-        kubectl delete namespace "$NAMESPACE" --wait=false 2>/dev/null || true
+        cleanup_ad_hoc_runtime_secrets 2>/dev/null || true
+        if [ "$MANAGE_NAMESPACE" = "1" ]; then
+            kubectl delete namespace "$NAMESPACE" --wait=false 2>/dev/null || true
+        fi
     fi
     rm -rf "$TMP_DIR"
-    if [ "$KEEP_CLUSTER" != "1" ] && [ "$FRESH_CLUSTER" = "1" ]; then
+    if [ "$CLUSTER_MODE" = "minikube" ] && [ "$KEEP_CLUSTER" != "1" ] && [ "$FRESH_CLUSTER" = "1" ]; then
         minikube delete -p "$PROFILE" >/dev/null 2>&1 || true
     fi
     exit "$rc"
 }
 trap cleanup EXIT
 
-echo "::group::stage 1 — minikube cluster"
-# CI default: always start from a clean slate (FRESH_CLUSTER=1). Local verify
-# loops set FRESH_CLUSTER=0 to reuse the cluster between scenario runs so the
-# kernel image built inside minikube docker doesn't have to be rebuilt every
-# time. The chart's NetworkPolicy needs a CNI that enforces it; calico is the
-# lightest option that ships with minikube addons.
-if [ "$FRESH_CLUSTER" = "1" ]; then
-    minikube delete -p "$PROFILE" >/dev/null 2>&1 || true
-fi
-# Use `apiserver: Running` as the reuse signal rather than the overall
-# `minikube status` exit code, which goes non-zero on `InsufficientStorage`
-# and other non-fatal warnings even when the cluster is usable.
-if minikube -p "$PROFILE" status 2>/dev/null | grep -q '^apiserver: Running'; then
-    echo "reusing existing minikube profile '$PROFILE'"
+echo "::group::stage 1 — kubernetes cluster"
+if [ "$CLUSTER_MODE" = "minikube" ]; then
+    # CI default: always start from a clean slate (FRESH_CLUSTER=1). Local verify
+    # loops set FRESH_CLUSTER=0 to reuse the cluster between scenario runs so the
+    # kernel image built inside minikube docker doesn't have to be rebuilt every
+    # time. The chart's NetworkPolicy needs a CNI that enforces it; calico is the
+    # lightest option that ships with minikube addons.
+    if [ "$FRESH_CLUSTER" = "1" ]; then
+        minikube delete -p "$PROFILE" >/dev/null 2>&1 || true
+    fi
+    # Use `apiserver: Running` as the reuse signal rather than the overall
+    # `minikube status` exit code, which goes non-zero on `InsufficientStorage`
+    # and other non-fatal warnings even when the cluster is usable.
+    if minikube -p "$PROFILE" status 2>/dev/null | grep -q '^apiserver: Running'; then
+        echo "reusing existing minikube profile '$PROFILE'"
+    else
+        minikube start -p "$PROFILE" \
+            --cpus="${LAUNCHPAD_SMOKE_CPUS:-4}" \
+            --memory="${LAUNCHPAD_SMOKE_MEMORY:-5g}" \
+            --disk-size="${LAUNCHPAD_SMOKE_DISK:-20g}" \
+            --kubernetes-version="${LAUNCHPAD_SMOKE_K8S_VERSION:-v1.30.0}" \
+            --cni=calico \
+            --driver="${LAUNCHPAD_SMOKE_DRIVER:-docker}"
+    fi
+    kubectl config use-context "$PROFILE"
 else
-    minikube start -p "$PROFILE" \
-        --cpus="${LAUNCHPAD_SMOKE_CPUS:-4}" \
-        --memory="${LAUNCHPAD_SMOKE_MEMORY:-5g}" \
-        --disk-size="${LAUNCHPAD_SMOKE_DISK:-20g}" \
-        --kubernetes-version="${LAUNCHPAD_SMOKE_K8S_VERSION:-v1.30.0}" \
-        --cni=calico \
-        --driver="${LAUNCHPAD_SMOKE_DRIVER:-docker}"
+    if [ -n "$KUBE_CONTEXT" ]; then
+        kubectl config use-context "$KUBE_CONTEXT"
+    fi
+    echo "reusing kube context: $(kubectl config current-context)"
 fi
-kubectl config use-context "$PROFILE"
-kubectl cluster-info
+if [ "$CLUSTER_MODE" = "minikube" ]; then
+    kubectl cluster-info
+else
+    kubectl version --request-timeout=10s >/dev/null
+fi
 echo "::endgroup::"
 
 echo "::group::stage 2 — local kernel image + optional launchpad image debug"
-# Kernel image: built locally by the caller (CI step or developer make target).
-# Skip the load if it is already inside minikube (common when the caller built
-# directly inside the minikube docker daemon via `eval $(minikube docker-env)`).
-if minikube -p "$PROFILE" image ls 2>/dev/null | grep -qF "$KERNEL_IMAGE"; then
-    echo "kernel image already present in minikube: $KERNEL_IMAGE"
-elif docker image inspect "$KERNEL_IMAGE" >/dev/null 2>&1; then
-    minikube -p "$PROFILE" image load "$KERNEL_IMAGE"
+if [ "$CLUSTER_MODE" = "minikube" ]; then
+    # Kernel image: built locally by the caller (CI step or developer make target).
+    # Skip the load if it is already inside minikube (common when the caller built
+    # directly inside the minikube docker daemon via `eval $(minikube docker-env)`).
+    if minikube -p "$PROFILE" image ls 2>/dev/null | grep -qF "$KERNEL_IMAGE"; then
+        echo "kernel image already present in minikube: $KERNEL_IMAGE"
+    elif docker image inspect "$KERNEL_IMAGE" >/dev/null 2>&1; then
+        minikube -p "$PROFILE" image load "$KERNEL_IMAGE"
+    else
+        echo "::warning::kernel image $KERNEL_IMAGE not in local docker; relying on imagePullPolicy=IfNotPresent against registry"
+    fi
 else
-    echo "::warning::kernel image $KERNEL_IMAGE not in local docker; relying on imagePullPolicy=IfNotPresent against registry"
+    echo "reused-cluster mode: kubelet must pull kernel image $KERNEL_IMAGE from a registry or node cache"
 fi
 
 if [ "$PRE_LOAD_LAUNCHPAD_IMAGES" = "1" ] && [ "$MODE" != "baseline" ]; then
@@ -241,7 +300,11 @@ fi
 echo "::endgroup::"
 
 echo "::group::stage 3 — namespace + runtime secrets"
-kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+if [ "$MANAGE_NAMESPACE" = "1" ]; then
+    kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+else
+    kubectl auth can-i get pods -n "$NAMESPACE" >/dev/null
+fi
 
 if [ "$MODE" != "baseline" ]; then
     case "$MODE" in
@@ -255,7 +318,7 @@ if [ "$MODE" != "baseline" ]; then
 fi
 echo "::endgroup::"
 
-echo "::group::stage 4 — helm install"
+echo "::group::stage 4 — helm render + install"
 helm_args=(
     "$RELEASE" "${ROOT}/deploy/helm-chart"
     --namespace "$NAMESPACE"
@@ -266,8 +329,11 @@ helm_args=(
     --set "image.repository=${KERNEL_IMAGE%:*}"
     --set "image.tag=${KERNEL_IMAGE##*:}"
     --set "image.pullPolicy=IfNotPresent"
-    --set "persistence.enabled=true"
+    --set "persistence.enabled=${PERSISTENCE_ENABLED}"
 )
+if [ -n "$STORAGE_CLASS" ]; then
+    helm_args+=(--set "persistence.storageClass=${STORAGE_CLASS}")
+fi
 case "$MODE" in
     baseline) : ;;
     positive|negative)
@@ -279,14 +345,23 @@ case "$MODE" in
         ;;
 esac
 
+rendered_manifest="${TMP_DIR}/rendered.yaml"
+kube_helm template "${helm_args[@]}" > "$rendered_manifest"
+if grep -Eq '^kind: (ClusterRole|ClusterRoleBinding|CustomResourceDefinition|Namespace|PersistentVolume|StorageClass)$' "$rendered_manifest"; then
+    echo "::error::helm template rendered cluster-scoped resources; launchpad smoke must stay namespace-scoped" >&2
+    grep -E '^kind: (ClusterRole|ClusterRoleBinding|CustomResourceDefinition|Namespace|PersistentVolume|StorageClass)$' "$rendered_manifest" >&2 || true
+    exit 1
+fi
+
+install_args=("${helm_args[@]}")
 case "$MODE" in
-    positive|baseline) helm_args+=(--wait --timeout 8m) ;;
+    positive|baseline) install_args+=(--wait --timeout 8m) ;;
     # On negative we expect openclaw never to become Ready — don't make helm
     # block on it. We assert the failure ourselves below.
-    negative) helm_args+=(--timeout 8m) ;;
+    negative) install_args+=(--timeout 8m) ;;
 esac
 
-kube_helm upgrade --install "${helm_args[@]}"
+kube_helm upgrade --install "${install_args[@]}"
 echo "::endgroup::"
 
 assert_pod_ready() {
@@ -407,15 +482,18 @@ esac
 
 echo "::group::stage 6 — teardown + leak audit"
 kube_helm uninstall "$RELEASE" -n "$NAMESPACE" --wait || true
-kubectl delete namespace "$NAMESPACE" --wait --timeout=120s || true
+cleanup_ad_hoc_runtime_secrets
 
 # Leak audit (k8s analogue of GAP #17): after uninstall, no launchpad-app or
-# kernel resources should remain anywhere on the cluster.
-leftover="$(kubectl get all -A -l app.kubernetes.io/part-of=helm-ai-kernel --no-headers 2>/dev/null || true)"
+# kernel resources should remain in the smoke namespace.
+leftover="$(kubectl -n "$NAMESPACE" get all -l app.kubernetes.io/part-of=helm-ai-kernel --no-headers 2>/dev/null || true)"
 if [ -n "$leftover" ]; then
     echo "::error::leftover resources detected after helm uninstall:"
     echo "$leftover"
     exit 1
+fi
+if [ "$MANAGE_NAMESPACE" = "1" ]; then
+    kubectl delete namespace "$NAMESPACE" --wait --timeout=120s || true
 fi
 echo "no leftover resources — teardown clean"
 echo "::endgroup::"

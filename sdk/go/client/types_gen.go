@@ -17611,8 +17611,10 @@ type GroundedActionRef struct {
 	ActionType           string     `json:"action_type"`
 	Precondition         string     `json:"precondition"`
 	Postcondition        string     `json:"postcondition"`
+	PostconditionRef     string     `json:"postcondition_ref"`
 	VerificationScopeRef string     `json:"verification_scope_ref"`
 	PolicyHash           string     `json:"policy_hash"`
+	ProofGraphNodeRef    string     `json:"proof_graph_node_ref"`
 	SandboxGrantHash     *string    `json:"sandbox_grant_hash,omitempty"`
 	CreatedAt            *time.Time `json:"created_at,omitempty"`
 	GroundingHash        *string    `json:"grounding_hash,omitempty"`
@@ -17624,7 +17626,7 @@ type _GroundedActionRef GroundedActionRef
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewGroundedActionRef(groundedActionId string, screenshotHash string, domOrAxSnapshotHash string, targetRef string, bboxOrElementId string, actionType string, precondition string, postcondition string, verificationScopeRef string, policyHash string) *GroundedActionRef {
+func NewGroundedActionRef(groundedActionId string, screenshotHash string, domOrAxSnapshotHash string, targetRef string, bboxOrElementId string, actionType string, precondition string, postcondition string, postconditionRef string, verificationScopeRef string, policyHash string, proofGraphNodeRef string) *GroundedActionRef {
 	this := GroundedActionRef{}
 	this.GroundedActionId = groundedActionId
 	this.ScreenshotHash = screenshotHash
@@ -17634,8 +17636,10 @@ func NewGroundedActionRef(groundedActionId string, screenshotHash string, domOrA
 	this.ActionType = actionType
 	this.Precondition = precondition
 	this.Postcondition = postcondition
+	this.PostconditionRef = postconditionRef
 	this.VerificationScopeRef = verificationScopeRef
 	this.PolicyHash = policyHash
+	this.ProofGraphNodeRef = proofGraphNodeRef
 	return &this
 }
 
@@ -17839,6 +17843,30 @@ func (o *GroundedActionRef) SetPostcondition(v string) {
 	o.Postcondition = v
 }
 
+// GetPostconditionRef returns the PostconditionRef field value
+func (o *GroundedActionRef) GetPostconditionRef() string {
+	if o == nil {
+		var ret string
+		return ret
+	}
+
+	return o.PostconditionRef
+}
+
+// GetPostconditionRefOk returns a tuple with the PostconditionRef field value
+// and a boolean to check if the value has been set.
+func (o *GroundedActionRef) GetPostconditionRefOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.PostconditionRef, true
+}
+
+// SetPostconditionRef sets field value
+func (o *GroundedActionRef) SetPostconditionRef(v string) {
+	o.PostconditionRef = v
+}
+
 // GetVerificationScopeRef returns the VerificationScopeRef field value
 func (o *GroundedActionRef) GetVerificationScopeRef() string {
 	if o == nil {
@@ -17885,6 +17913,30 @@ func (o *GroundedActionRef) GetPolicyHashOk() (*string, bool) {
 // SetPolicyHash sets field value
 func (o *GroundedActionRef) SetPolicyHash(v string) {
 	o.PolicyHash = v
+}
+
+// GetProofGraphNodeRef returns the ProofGraphNodeRef field value
+func (o *GroundedActionRef) GetProofGraphNodeRef() string {
+	if o == nil {
+		var ret string
+		return ret
+	}
+
+	return o.ProofGraphNodeRef
+}
+
+// GetProofGraphNodeRefOk returns a tuple with the ProofGraphNodeRef field value
+// and a boolean to check if the value has been set.
+func (o *GroundedActionRef) GetProofGraphNodeRefOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.ProofGraphNodeRef, true
+}
+
+// SetProofGraphNodeRef sets field value
+func (o *GroundedActionRef) SetProofGraphNodeRef(v string) {
+	o.ProofGraphNodeRef = v
 }
 
 // GetSandboxGrantHash returns the SandboxGrantHash field value if set, zero value otherwise.
@@ -18001,8 +18053,10 @@ func (o GroundedActionRef) ToMap() (map[string]interface{}, error) {
 	toSerialize["action_type"] = o.ActionType
 	toSerialize["precondition"] = o.Precondition
 	toSerialize["postcondition"] = o.Postcondition
+	toSerialize["postcondition_ref"] = o.PostconditionRef
 	toSerialize["verification_scope_ref"] = o.VerificationScopeRef
 	toSerialize["policy_hash"] = o.PolicyHash
+	toSerialize["proof_graph_node_ref"] = o.ProofGraphNodeRef
 	if !IsNil(o.SandboxGrantHash) {
 		toSerialize["sandbox_grant_hash"] = o.SandboxGrantHash
 	}
@@ -18028,8 +18082,10 @@ func (o *GroundedActionRef) UnmarshalJSON(data []byte) (err error) {
 		"action_type",
 		"precondition",
 		"postcondition",
+		"postcondition_ref",
 		"verification_scope_ref",
 		"policy_hash",
+		"proof_graph_node_ref",
 	}
 
 	allProperties := make(map[string]interface{})
@@ -18121,9 +18177,11 @@ type GUIActionReceipt struct {
 	ActionType            string     `json:"action_type"`
 	Precondition          string     `json:"precondition"`
 	Postcondition         string     `json:"postcondition"`
+	PostconditionRef      string     `json:"postcondition_ref"`
 	PostconditionVerified bool       `json:"postcondition_verified"`
 	VerificationScopeRef  string     `json:"verification_scope_ref"`
 	PolicyHash            string     `json:"policy_hash"`
+	ProofGraphNodeRef     string     `json:"proof_graph_node_ref"`
 	SandboxGrantHash      *string    `json:"sandbox_grant_hash,omitempty"`
 	CreatedAt             *time.Time `json:"created_at,omitempty"`
 	ReceiptHash           *string    `json:"receipt_hash,omitempty"`
@@ -18135,7 +18193,7 @@ type _GUIActionReceipt GUIActionReceipt
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewGUIActionReceipt(receiptId string, groundedActionRef string, screenshotHash string, domOrAxSnapshotHash string, targetRef string, bboxOrElementId string, actionType string, precondition string, postcondition string, postconditionVerified bool, verificationScopeRef string, policyHash string) *GUIActionReceipt {
+func NewGUIActionReceipt(receiptId string, groundedActionRef string, screenshotHash string, domOrAxSnapshotHash string, targetRef string, bboxOrElementId string, actionType string, precondition string, postcondition string, postconditionRef string, postconditionVerified bool, verificationScopeRef string, policyHash string, proofGraphNodeRef string) *GUIActionReceipt {
 	this := GUIActionReceipt{}
 	this.ReceiptId = receiptId
 	this.GroundedActionRef = groundedActionRef
@@ -18146,9 +18204,11 @@ func NewGUIActionReceipt(receiptId string, groundedActionRef string, screenshotH
 	this.ActionType = actionType
 	this.Precondition = precondition
 	this.Postcondition = postcondition
+	this.PostconditionRef = postconditionRef
 	this.PostconditionVerified = postconditionVerified
 	this.VerificationScopeRef = verificationScopeRef
 	this.PolicyHash = policyHash
+	this.ProofGraphNodeRef = proofGraphNodeRef
 	return &this
 }
 
@@ -18376,6 +18436,30 @@ func (o *GUIActionReceipt) SetPostcondition(v string) {
 	o.Postcondition = v
 }
 
+// GetPostconditionRef returns the PostconditionRef field value
+func (o *GUIActionReceipt) GetPostconditionRef() string {
+	if o == nil {
+		var ret string
+		return ret
+	}
+
+	return o.PostconditionRef
+}
+
+// GetPostconditionRefOk returns a tuple with the PostconditionRef field value
+// and a boolean to check if the value has been set.
+func (o *GUIActionReceipt) GetPostconditionRefOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.PostconditionRef, true
+}
+
+// SetPostconditionRef sets field value
+func (o *GUIActionReceipt) SetPostconditionRef(v string) {
+	o.PostconditionRef = v
+}
+
 // GetPostconditionVerified returns the PostconditionVerified field value
 func (o *GUIActionReceipt) GetPostconditionVerified() bool {
 	if o == nil {
@@ -18446,6 +18530,30 @@ func (o *GUIActionReceipt) GetPolicyHashOk() (*string, bool) {
 // SetPolicyHash sets field value
 func (o *GUIActionReceipt) SetPolicyHash(v string) {
 	o.PolicyHash = v
+}
+
+// GetProofGraphNodeRef returns the ProofGraphNodeRef field value
+func (o *GUIActionReceipt) GetProofGraphNodeRef() string {
+	if o == nil {
+		var ret string
+		return ret
+	}
+
+	return o.ProofGraphNodeRef
+}
+
+// GetProofGraphNodeRefOk returns a tuple with the ProofGraphNodeRef field value
+// and a boolean to check if the value has been set.
+func (o *GUIActionReceipt) GetProofGraphNodeRefOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.ProofGraphNodeRef, true
+}
+
+// SetProofGraphNodeRef sets field value
+func (o *GUIActionReceipt) SetProofGraphNodeRef(v string) {
+	o.ProofGraphNodeRef = v
 }
 
 // GetSandboxGrantHash returns the SandboxGrantHash field value if set, zero value otherwise.
@@ -18563,9 +18671,11 @@ func (o GUIActionReceipt) ToMap() (map[string]interface{}, error) {
 	toSerialize["action_type"] = o.ActionType
 	toSerialize["precondition"] = o.Precondition
 	toSerialize["postcondition"] = o.Postcondition
+	toSerialize["postcondition_ref"] = o.PostconditionRef
 	toSerialize["postcondition_verified"] = o.PostconditionVerified
 	toSerialize["verification_scope_ref"] = o.VerificationScopeRef
 	toSerialize["policy_hash"] = o.PolicyHash
+	toSerialize["proof_graph_node_ref"] = o.ProofGraphNodeRef
 	if !IsNil(o.SandboxGrantHash) {
 		toSerialize["sandbox_grant_hash"] = o.SandboxGrantHash
 	}
@@ -18592,9 +18702,11 @@ func (o *GUIActionReceipt) UnmarshalJSON(data []byte) (err error) {
 		"action_type",
 		"precondition",
 		"postcondition",
+		"postcondition_ref",
 		"postcondition_verified",
 		"verification_scope_ref",
 		"policy_hash",
+		"proof_graph_node_ref",
 	}
 
 	allProperties := make(map[string]interface{})

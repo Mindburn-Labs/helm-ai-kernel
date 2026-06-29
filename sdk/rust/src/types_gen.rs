@@ -3312,10 +3312,14 @@ pub struct GroundedActionRef {
     pub precondition: String,
     #[serde(rename = "postcondition")]
     pub postcondition: String,
+    #[serde(rename = "postcondition_ref")]
+    pub postcondition_ref: String,
     #[serde(rename = "verification_scope_ref")]
     pub verification_scope_ref: String,
     #[serde(rename = "policy_hash")]
     pub policy_hash: String,
+    #[serde(rename = "proof_graph_node_ref")]
+    pub proof_graph_node_ref: String,
     #[serde(rename = "sandbox_grant_hash", skip_serializing_if = "Option::is_none")]
     pub sandbox_grant_hash: Option<String>,
     #[serde(rename = "created_at", skip_serializing_if = "Option::is_none")]
@@ -3325,7 +3329,7 @@ pub struct GroundedActionRef {
 }
 
 impl GroundedActionRef {
-    pub fn new(grounded_action_id: String, screenshot_hash: String, dom_or_ax_snapshot_hash: String, target_ref: String, bbox_or_element_id: String, action_type: GroundedActionRefActionType, precondition: String, postcondition: String, verification_scope_ref: String, policy_hash: String) -> GroundedActionRef {
+    pub fn new(grounded_action_id: String, screenshot_hash: String, dom_or_ax_snapshot_hash: String, target_ref: String, bbox_or_element_id: String, action_type: GroundedActionRefActionType, precondition: String, postcondition: String, postcondition_ref: String, verification_scope_ref: String, policy_hash: String, proof_graph_node_ref: String) -> GroundedActionRef {
         GroundedActionRef {
             grounded_action_id,
             screenshot_hash,
@@ -3335,8 +3339,10 @@ impl GroundedActionRef {
             action_type,
             precondition,
             postcondition,
+            postcondition_ref,
             verification_scope_ref,
             policy_hash,
+            proof_graph_node_ref,
             sandbox_grant_hash: None,
             created_at: None,
             grounding_hash: None,
@@ -3395,12 +3401,16 @@ pub struct GuiActionReceipt {
     pub precondition: String,
     #[serde(rename = "postcondition")]
     pub postcondition: String,
+    #[serde(rename = "postcondition_ref")]
+    pub postcondition_ref: String,
     #[serde(rename = "postcondition_verified")]
     pub postcondition_verified: bool,
     #[serde(rename = "verification_scope_ref")]
     pub verification_scope_ref: String,
     #[serde(rename = "policy_hash")]
     pub policy_hash: String,
+    #[serde(rename = "proof_graph_node_ref")]
+    pub proof_graph_node_ref: String,
     #[serde(rename = "sandbox_grant_hash", skip_serializing_if = "Option::is_none")]
     pub sandbox_grant_hash: Option<String>,
     #[serde(rename = "created_at", skip_serializing_if = "Option::is_none")]
@@ -3410,7 +3420,7 @@ pub struct GuiActionReceipt {
 }
 
 impl GuiActionReceipt {
-    pub fn new(receipt_id: String, grounded_action_ref: String, screenshot_hash: String, dom_or_ax_snapshot_hash: String, target_ref: String, bbox_or_element_id: String, action_type: GuiActionReceiptActionType, precondition: String, postcondition: String, postcondition_verified: bool, verification_scope_ref: String, policy_hash: String) -> GuiActionReceipt {
+    pub fn new(receipt_id: String, grounded_action_ref: String, screenshot_hash: String, dom_or_ax_snapshot_hash: String, target_ref: String, bbox_or_element_id: String, action_type: GuiActionReceiptActionType, precondition: String, postcondition: String, postcondition_ref: String, postcondition_verified: bool, verification_scope_ref: String, policy_hash: String, proof_graph_node_ref: String) -> GuiActionReceipt {
         GuiActionReceipt {
             receipt_id,
             grounded_action_ref,
@@ -3421,9 +3431,11 @@ impl GuiActionReceipt {
             action_type,
             precondition,
             postcondition,
+            postcondition_ref,
             postcondition_verified,
             verification_scope_ref,
             policy_hash,
+            proof_graph_node_ref,
             sandbox_grant_hash: None,
             created_at: None,
             receipt_hash: None,

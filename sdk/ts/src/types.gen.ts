@@ -7318,6 +7318,12 @@ export interface GUIActionReceipt {
     postcondition: string;
     /**
      *
+     * @type {string}
+     * @memberof GUIActionReceipt
+     */
+    postcondition_ref: string;
+    /**
+     *
      * @type {boolean}
      * @memberof GUIActionReceipt
      */
@@ -7334,6 +7340,12 @@ export interface GUIActionReceipt {
      * @memberof GUIActionReceipt
      */
     policy_hash: string;
+    /**
+     *
+     * @type {string}
+     * @memberof GUIActionReceipt
+     */
+    proof_graph_node_ref: string;
     /**
      *
      * @type {string}
@@ -7381,9 +7393,11 @@ export function instanceOfGUIActionReceipt(value: object): boolean {
     if (!('action_type' in value)) return false;
     if (!('precondition' in value)) return false;
     if (!('postcondition' in value)) return false;
+    if (!('postcondition_ref' in value)) return false;
     if (!('postcondition_verified' in value)) return false;
     if (!('verification_scope_ref' in value)) return false;
     if (!('policy_hash' in value)) return false;
+    if (!('proof_graph_node_ref' in value)) return false;
     return true;
 }
 
@@ -7406,9 +7420,11 @@ export function GUIActionReceiptFromJSONTyped(json: any, ignoreDiscriminator: bo
         'action_type': json['action_type'],
         'precondition': json['precondition'],
         'postcondition': json['postcondition'],
+        'postcondition_ref': json['postcondition_ref'],
         'postcondition_verified': json['postcondition_verified'],
         'verification_scope_ref': json['verification_scope_ref'],
         'policy_hash': json['policy_hash'],
+        'proof_graph_node_ref': json['proof_graph_node_ref'],
         'sandbox_grant_hash': json['sandbox_grant_hash'] == null ? undefined : json['sandbox_grant_hash'],
         'created_at': json['created_at'] == null ? undefined : (new Date(json['created_at'])),
         'receipt_hash': json['receipt_hash'] == null ? undefined : json['receipt_hash'],
@@ -7430,9 +7446,11 @@ export function GUIActionReceiptToJSON(value?: GUIActionReceipt | null): any {
         'action_type': value['action_type'],
         'precondition': value['precondition'],
         'postcondition': value['postcondition'],
+        'postcondition_ref': value['postcondition_ref'],
         'postcondition_verified': value['postcondition_verified'],
         'verification_scope_ref': value['verification_scope_ref'],
         'policy_hash': value['policy_hash'],
+        'proof_graph_node_ref': value['proof_graph_node_ref'],
         'sandbox_grant_hash': value['sandbox_grant_hash'],
         'created_at': value['created_at'] == null ? undefined : ((value['created_at']).toISOString()),
         'receipt_hash': value['receipt_hash'],
@@ -8041,6 +8059,12 @@ export interface GroundedActionRef {
      * @type {string}
      * @memberof GroundedActionRef
      */
+    postcondition_ref: string;
+    /**
+     *
+     * @type {string}
+     * @memberof GroundedActionRef
+     */
     verification_scope_ref: string;
     /**
      *
@@ -8048,6 +8072,12 @@ export interface GroundedActionRef {
      * @memberof GroundedActionRef
      */
     policy_hash: string;
+    /**
+     *
+     * @type {string}
+     * @memberof GroundedActionRef
+     */
+    proof_graph_node_ref: string;
     /**
      *
      * @type {string}
@@ -8094,8 +8124,10 @@ export function instanceOfGroundedActionRef(value: object): boolean {
     if (!('action_type' in value)) return false;
     if (!('precondition' in value)) return false;
     if (!('postcondition' in value)) return false;
+    if (!('postcondition_ref' in value)) return false;
     if (!('verification_scope_ref' in value)) return false;
     if (!('policy_hash' in value)) return false;
+    if (!('proof_graph_node_ref' in value)) return false;
     return true;
 }
 
@@ -8117,8 +8149,10 @@ export function GroundedActionRefFromJSONTyped(json: any, ignoreDiscriminator: b
         'action_type': json['action_type'],
         'precondition': json['precondition'],
         'postcondition': json['postcondition'],
+        'postcondition_ref': json['postcondition_ref'],
         'verification_scope_ref': json['verification_scope_ref'],
         'policy_hash': json['policy_hash'],
+        'proof_graph_node_ref': json['proof_graph_node_ref'],
         'sandbox_grant_hash': json['sandbox_grant_hash'] == null ? undefined : json['sandbox_grant_hash'],
         'created_at': json['created_at'] == null ? undefined : (new Date(json['created_at'])),
         'grounding_hash': json['grounding_hash'] == null ? undefined : json['grounding_hash'],
@@ -8139,8 +8173,10 @@ export function GroundedActionRefToJSON(value?: GroundedActionRef | null): any {
         'action_type': value['action_type'],
         'precondition': value['precondition'],
         'postcondition': value['postcondition'],
+        'postcondition_ref': value['postcondition_ref'],
         'verification_scope_ref': value['verification_scope_ref'],
         'policy_hash': value['policy_hash'],
+        'proof_graph_node_ref': value['proof_graph_node_ref'],
         'sandbox_grant_hash': value['sandbox_grant_hash'],
         'created_at': value['created_at'] == null ? undefined : ((value['created_at']).toISOString()),
         'grounding_hash': value['grounding_hash'],

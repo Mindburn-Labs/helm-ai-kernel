@@ -7308,12 +7308,14 @@ class GroundedActionRef(BaseModel):
     action_type: StrictStr
     precondition: StrictStr
     postcondition: StrictStr
+    postcondition_ref: StrictStr
     verification_scope_ref: StrictStr
     policy_hash: StrictStr
+    proof_graph_node_ref: StrictStr
     sandbox_grant_hash: Optional[StrictStr] = None
     created_at: Optional[datetime] = None
     grounding_hash: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["grounded_action_id", "screenshot_hash", "dom_or_ax_snapshot_hash", "target_ref", "bbox_or_element_id", "action_type", "precondition", "postcondition", "verification_scope_ref", "policy_hash", "sandbox_grant_hash", "created_at", "grounding_hash"]
+    __properties: ClassVar[List[str]] = ["grounded_action_id", "screenshot_hash", "dom_or_ax_snapshot_hash", "target_ref", "bbox_or_element_id", "action_type", "precondition", "postcondition", "postcondition_ref", "verification_scope_ref", "policy_hash", "proof_graph_node_ref", "sandbox_grant_hash", "created_at", "grounding_hash"]
 
     @field_validator('action_type')
     def action_type_validate_enum(cls, value):
@@ -7381,8 +7383,10 @@ class GroundedActionRef(BaseModel):
             "action_type": obj.get("action_type"),
             "precondition": obj.get("precondition"),
             "postcondition": obj.get("postcondition"),
+            "postcondition_ref": obj.get("postcondition_ref"),
             "verification_scope_ref": obj.get("verification_scope_ref"),
             "policy_hash": obj.get("policy_hash"),
+            "proof_graph_node_ref": obj.get("proof_graph_node_ref"),
             "sandbox_grant_hash": obj.get("sandbox_grant_hash"),
             "created_at": obj.get("created_at"),
             "grounding_hash": obj.get("grounding_hash")
@@ -7418,13 +7422,15 @@ class GUIActionReceipt(BaseModel):
     action_type: StrictStr
     precondition: StrictStr
     postcondition: StrictStr
+    postcondition_ref: StrictStr
     postcondition_verified: StrictBool
     verification_scope_ref: StrictStr
     policy_hash: StrictStr
+    proof_graph_node_ref: StrictStr
     sandbox_grant_hash: Optional[StrictStr] = None
     created_at: Optional[datetime] = None
     receipt_hash: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["receipt_id", "grounded_action_ref", "screenshot_hash", "dom_or_ax_snapshot_hash", "target_ref", "bbox_or_element_id", "action_type", "precondition", "postcondition", "postcondition_verified", "verification_scope_ref", "policy_hash", "sandbox_grant_hash", "created_at", "receipt_hash"]
+    __properties: ClassVar[List[str]] = ["receipt_id", "grounded_action_ref", "screenshot_hash", "dom_or_ax_snapshot_hash", "target_ref", "bbox_or_element_id", "action_type", "precondition", "postcondition", "postcondition_ref", "postcondition_verified", "verification_scope_ref", "policy_hash", "proof_graph_node_ref", "sandbox_grant_hash", "created_at", "receipt_hash"]
 
     @field_validator('action_type')
     def action_type_validate_enum(cls, value):
@@ -7493,9 +7499,11 @@ class GUIActionReceipt(BaseModel):
             "action_type": obj.get("action_type"),
             "precondition": obj.get("precondition"),
             "postcondition": obj.get("postcondition"),
+            "postcondition_ref": obj.get("postcondition_ref"),
             "postcondition_verified": obj.get("postcondition_verified"),
             "verification_scope_ref": obj.get("verification_scope_ref"),
             "policy_hash": obj.get("policy_hash"),
+            "proof_graph_node_ref": obj.get("proof_graph_node_ref"),
             "sandbox_grant_hash": obj.get("sandbox_grant_hash"),
             "created_at": obj.get("created_at"),
             "receipt_hash": obj.get("receipt_hash")

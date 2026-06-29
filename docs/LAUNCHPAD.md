@@ -1,41 +1,30 @@
 ---
 title: HELM Launchpad
-last_reviewed: 2026-06-13
+last_reviewed: 2026-06-29
 ---
 
 # HELM Launchpad
 
-Run real AI apps through HELM's execution boundary. Start with
-`helm-ai-kernel quickstart` to prove the local Kernel, same-origin Console,
-receipts, and EvidencePack export. Register at <https://console.helm.mindburn.org>
-and pair your workstation only when you want hosted Launchpad/account workflows.
-Receipts and evidence appear in hosted Console after pairing.
+Launchpad runs selected AI app contracts through the HELM AI Kernel execution
+boundary. The public claim is intentionally narrow: local-container proof for
+supported apps, verify-only contract checks for candidates, signed receipts, and
+offline EvidencePack verification.
 
-Current local-container support levels:
+Start with `helm-ai-kernel quickstart` before using Launchpad. Hosted account
+pairing, cloud substrates, and commercial workflows are outside this public
+Kernel proof path.
 
-| App | Support level | Command | Proof |
+## Current Local Support
+
+| App | Public status | Command | What is proven |
 | --- | --- | --- | --- |
-| OpenClaw | `agent_live` | `helm up openclaw` | contract preflight + receipts + EvidencePack |
-| Hermes | `agent_live` | `helm up hermes --target local` | contract preflight + receipts + EvidencePack |
-| OpenCode | `verify_only` | `helm-ai-kernel app preflight opencode --json` | contract proof only; `--version` smoke checks do not count as live-agent F2 coverage |
-| Kilo Code | `verify_only` | `helm-ai-kernel app preflight kilocode --json` | contract proof only; `--version` smoke checks do not count as live-agent F2 coverage |
+| OpenClaw | local app proof | `helm up openclaw` | contract preflight, local-container launch, receipts, EvidencePack |
+| Hermes | local app proof | `helm up hermes --target local` | contract preflight, local-container launch, receipts, EvidencePack |
+| OpenCode | `verify_only` | `helm-ai-kernel app preflight opencode --json` | signed artifact and contract preflight only |
+| Kilo Code | `verify_only` | `helm-ai-kernel app preflight kilocode --json` | signed artifact and contract preflight only |
 
-## What happens during launch
-
-1. Resolve app registry entry.
-2. Run `f2_contract_preflight` before any prompt or attack matrix.
-3. Validate policy pack.
-4. Verify signed artifact digest.
-5. Prepare sandbox and scoped filesystem.
-6. Apply network deny-by-default policy.
-7. Set model gateway secret only inside launch scope.
-8. Run healthcheck.
-9. Emit launch/install/healthcheck receipts.
-10. Export EvidencePack.
-11. Seal `07_ATTESTATIONS/evidence_pack.sig`.
-12. In customer/high-assurance profile, create external anchor and S3 Object Lock storage receipts.
-13. Teardown and emit teardown receipt.
-14. Verify offline.
+Verify-only pages do not claim a live agent workload. They prove registry,
+artifact, policy, and preflight shape only. `--version` smoke checks do not count as live-agent F2 coverage.
 
 ## Source Truth
 
@@ -44,217 +33,50 @@ Current local-container support levels:
 - App and substrate registry: `registry/launchpad/`
 - Policy packs: `policies/launchpad/`
 - Contract schemas: `schemas/launchpad/`
-- Universal importer: `core/pkg/launchpad/importer`
-- Universal importer docs: `docs/launchpad/UNIVERSAL_IMPORTER.md`
-- UX architecture: `docs/launchpad/UX_ARCHITECTURE.md`
-- Hosted account/entitlement target contract:
-  `docs/launchpad/MINDBURN_ACCOUNT_ENTITLEMENTS_SPEC.md`
-- Release report: `docs/launchpad/final_report.json`
-- Clean-install GA gate: `docs/launchpad/CLEAN_INSTALL_GA.md`
-- v1.0 redacted evidence report: `docs/launchpad/v1_report.json`
 
-## Current CLI
+## Local Commands
 
 ```bash
 helm up openclaw
 helm up hermes --target local
-helm up openclaw --demo
-helm up hermes --verify-only
-helm up hermes --target cloud:aws --yes
-helm up openclaw --resume <run_id>
-helm-ai-kernel launch matrix --json
-helm-ai-kernel launch apps --json
-helm-ai-kernel launch substrates --json
-helm-ai-kernel launch secrets set model_gateway --provider openrouter --value-env OPENROUTER_API_KEY
-helm-ai-kernel launch secrets status
-helm-ai-kernel launch plan openclaw local-container --json
-helm-ai-kernel launch openclaw local-container --headless --output json
-helm-ai-kernel launch hermes local-container --headless --output json
 helm-ai-kernel app preflight opencode --json
 helm-ai-kernel app preflight kilocode --json
-helm-ai-kernel launch openclaw digitalocean --live-cloud-beta --approval <approval_id> --cost-ceiling-usd <n> --headless --output json
-helm-ai-kernel launch hermes hetzner --live-cloud-beta --approval <approval_id> --cost-ceiling-usd <n> --headless --output json
-helm-ai-kernel launch status <launch_id> --json
-helm-ai-kernel launch logs <launch_id>
-helm-ai-kernel launch repair <launch_id>
-helm-ai-kernel launch delete <launch_id> --cascade
-helm-ai-kernel launch evidence <launch_id> --export --json
-helm-ai-kernel launch evidence <launch_id> --output <dir>
-helm-ai-kernel evidence inspect <pack>
-helm-ai-kernel evidence diff <pack-a> <pack-b>
 helm-ai-kernel verify --bundle <pack>
-helm-ai-kernel verify --bundle <pack.tar> --profile customer --storage-receipt <pack.tar.storage.json>
 ```
 
-`helm-ai-kernel` remains the backwards-compatible binary and command namespace.
-Release builds also ship `helm` as the primary product command.
-
-Launchpad reads native EvidencePack trust config from `helm/helm.yaml`,
+Launchpad reads local EvidencePack trust config from `helm/helm.yaml`,
 `HELM_EVIDENCE_TRUST_CONFIG`, or `$HELM_DATA_DIR/trust/evidence-pack.json`.
-Dev-local launches keep the compact `helm-ai-kernel verify --bundle <pack>`
-command. Customer and high-assurance launches include `--profile` and
-`--storage-receipt` so auditors verify the signed native seal, external anchor,
-and off-host immutable storage proof together.
 
-## Account and Entitlement Boundary
-
-The Kernel repo exposes headless Launchpad APIs. Free, Individual, and
-Enterprise hosted account entitlements are target architecture, not production
-Kernel behavior in this repo. External clients must not infer account tier or
-invent entitlement state; they may only render explicit backend fields or
-clearly labeled test fixtures. The hosted integration contract lives in
-`docs/launchpad/MINDBURN_ACCOUNT_ENTITLEMENTS_SPEC.md`.
-
-## Universal Importer
-
-Launchpad now has an additive repo-to-runtime importer for GitHub URLs and
-local paths. It generates SourceSnapshot, CapabilityGraph, LaunchRecipe,
-TargetPlan, untrusted AppSpec candidates, preflight checks, and import evidence
-ledger records.
-
-```text
-POST /api/v1/launchpad/imports
-GET  /api/v1/launchpad/imports
-GET  /api/v1/launchpad/imports/{id}
-POST /api/v1/launchpad/imports/{id}/preflight
-POST /api/v1/launchpad/imports/{id}/promote
-POST /api/v1/launchpad/imports/{id}/launch
-POST /api/v1/launchpad/imports/{id}/teardown
-```
-
-Current boundary: the importer inspects and plans; it does not execute unknown
-repository code. Generated AppSpecs remain `oss_candidate`,
-`generated_untrusted`, and `trusted=false` until sandbox build, SBOM,
-vulnerability scan, license review, smoke test, teardown, and evidence refs are
-complete. `launch` blocks before LaunchKit execution for unpromoted imports.
-
-See `docs/launchpad/UNIVERSAL_IMPORTER.md` for adapter and promotion details.
-
-## App Classification
-
-| App | Availability | Support level | Evidence |
-| --- | --- | --- | --- |
-| OpenClaw | `oss_supported` | `agent_live` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995`; workflow `26198407296`; contract preflight, live conformance, teardown, receipts, and offline EvidencePack verification passed |
-| Hermes | `oss_supported` | `agent_live` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652`; workflow `26198407296`; contract preflight, live conformance, teardown, receipts, and offline EvidencePack verification passed |
-| OpenCode | `oss_candidate` | `verify_only` | `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550`; version smoke only; `--version` smoke checks do not count as live-agent F2 coverage |
-| Kilo Code | `oss_candidate` | `verify_only` | `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6`; version smoke only; `--version` smoke checks do not count as live-agent F2 coverage |
-| Codex / Claude Code / Cursor / Junie | `external_proprietary_adapter` | `external_byo_adapter` | BYO/external adapters only; HELM records workstation contract evidence and does not redistribute them |
-
-## Safety Model
+## Safety Boundary
 
 - Runtime verdicts are only `ALLOW`, `DENY`, or `ESCALATE`.
-- F2 is invalid until `f2_contract_preflight` proves image digest parity,
-  command parity, sandbox, egress proxy, writable HOME/cache/state paths,
-  scoped secret projection, MCP manifests, healthcheck, EvidencePack export,
-  and offline verify. Setup/runtime failures never count as `ATTACK_BLOCKED`.
-- `oss_supported` requires license, immutable signed OCI artifact, policy pack,
-  sandbox, healthcheck, e2e, signed MCP manifest refs, teardown, signed
-  receipts, a hash-chained EvidencePack graph, and offline-verifiable proof.
-- Local default substrate is `local-container`.
-- Registry substrate metadata now declares isolation strength, network
-  enforcement, secret mode, receipt support, teardown proof, and lifecycle
-  support. Substrates without receipts or teardown proof cannot graduate beyond
-  experimental.
-- OpenRouter egress uses launch-scoped proxy receipts; non-OpenRouter allowlists
-  are rejected.
-- Current local-container model access uses a logical `model_gateway` secret
-  binding that projects the provider env var only inside the launch process.
-  Proxy-only secretless model access remains the stricter target and is not yet
-  a public GA claim.
-- Supported apps route MCP through HELM-owned signed manifest refs. Unknown
-  servers/tools quarantine, schema pins are required, and side-effect tools
-  require approval receipts.
-- DigitalOcean and Hetzner cloud substrates remain opt-in beta and dry-run by
-  default. CLI live paths require `--live-cloud-beta`, an approval receipt, a
-  cost ceiling, provider readiness, and idempotency reconciliation before any
-  public claim can move beyond beta.
-- Host `curl | bash`, mutable live git update, and package-manager mutation
-  inside the current worktree are denied by installer tests.
-
-```mermaid
-flowchart TD
-    subgraph Ingestion["1. Ingestion & Context Plane"]
-        Registry["Registry entry"]
-        Plan["Deterministic launch plan"]
-    end
-
-    subgraph Evaluation["2. Evaluation & Policy Plane"]
-        Policy["Policy pack"]
-    end
-
-    subgraph Execution["3. Execution & Verdict Plane"]
-        Gate["ALLOW / DENY / ESCALATE"]
-    end
-
-    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
-        Receipt["Signed receipt"]
-        Evidence["Offline EvidencePack"]
-    end
-
-    %% Operational Flow Edges
-    Registry --> Policy
-    Policy --> Plan
-    Plan --> Gate
-    Gate --> Receipt
-    Receipt --> Evidence
-
-    %% Premium Styling Rules
-    style Policy fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
-    style Gate fill:#e53e3e,stroke:#9b2c2c,stroke-width:2px,color:#fff
-    style Receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
-    style Evidence fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
-```
-
+- Unknown MCP servers and tools are quarantined or escalated before dispatch.
+- Supported app proof requires signed artifact references, policy pack,
+  sandbox, healthcheck, teardown, signed receipts, EvidencePack export, and
+  offline verification.
+- Local-container is the only public default substrate in this page.
+- Cloud substrates are opt-in beta/dry-run material and are not part of this
+  public Kernel proof.
+- Generated import candidates remain untrusted until sandbox build, SBOM,
+  vulnerability scan, license review, smoke test, teardown, and evidence refs
+  are complete.
 
 ## Evidence Inspection
 
-Every generated Launchpad EvidencePack includes `04_EXPORTS/launchpad_evidence_graph.json`.
-The graph hash-chains receipts for plan/verdict, sandbox preflight, MCP
-quarantine, model gateway grant, install, start, healthcheck, teardown, and
-failure paths when present.
-
 ```bash
+helm-ai-kernel launch evidence <launch_id> --output <dir>
 helm-ai-kernel evidence inspect <pack>
-helm-ai-kernel evidence inspect <pack> --json
-helm-ai-kernel evidence diff <pack-a> <pack-b>
 helm-ai-kernel verify --bundle <pack>
 ```
 
-## Clean Install Gate
-
-Clean-install validation is intentionally separate from the build machine:
-
-```bash
-brew update
-brew tap mindburn-labs/tap
-brew trust mindburn-labs/tap   # recent Homebrew requires trusting third-party taps
-brew install helm-ai-kernel
-helm-ai-kernel launch matrix --json
-helm-ai-kernel launch openclaw local-container --headless --output json
-helm-ai-kernel launch hermes local-container --headless --output json
-helm-ai-kernel app preflight opencode --json
-helm-ai-kernel app preflight kilocode --json
-helm-ai-kernel launch delete <launch_id> --cascade
-helm-ai-kernel verify --bundle <pack>
-```
-
-The reusable gate is `scripts/launch/clean_install_gate.sh`. It writes only
-redacted JSON evidence to `docs/launchpad/clean_install_report.json`; raw logs,
-provider keys, key fragments, and host identifiers are not committed.
-
-`--include-candidates` remains accepted for backward compatibility, but
-OpenCode and Kilo Code are part of the supported clean-install app set after
-workflow `26198407296`.
-
-For current source-backed details, use the Launchpad specs and conformance docs:
-`docs/launchpad/APP_SPEC.md`, `docs/launchpad/SUBSTRATE_SPEC.md`,
-`docs/launchpad/POLICY_PACKS.md`, `docs/launchpad/SECURITY_REVIEW.md`,
-`docs/launchpad/CONFORMANCE.md`, and `docs/launchpad/CLEAN_INSTALL_GA.md`.
+Evidence must include lifecycle receipts, artifact refs, policy refs, and a
+verifier result. If a required receipt is missing, hold the claim.
 
 ## Troubleshooting
 
 | Symptom | First check |
 | --- | --- |
-| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
-| A launch reaches `REPAIR_REQUIRED` | Check `helm-ai-kernel launch logs <launch_id>` and `helm-ai-kernel launch evidence <launch_id> --export --json`; logs redact scoped provider keys. |
-| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
+| App launch fails before healthcheck | Run the app preflight command and inspect the registry entry. |
+| Verify-only app is described as live | Correct the copy to `verify-only` until live workload evidence exists. |
+| EvidencePack does not verify | Re-export the pack and verify the original file before editing or copying it. |
+| Cloud path appears in public copy | Move it to maintainer evidence or mark it beta/dry-run outside the public proof path. |

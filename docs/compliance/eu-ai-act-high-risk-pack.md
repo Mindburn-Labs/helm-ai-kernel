@@ -5,6 +5,10 @@ last_reviewed: 2026-05-05
 
 # EU AI Act High-Risk Pack
 
+This page is a mapping only. It is not legal advice, conformity assessment,
+certification, auditor acceptance, or proof that a deployment satisfies the EU
+AI Act.
+
 ## Audience
 
 Compliance reviewers using HELM AI Kernel evidence outputs to map, not certify, EU AI Act high-risk controls.

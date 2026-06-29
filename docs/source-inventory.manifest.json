@@ -133,8 +133,6 @@
         "conformance",
         "reference/execution-boundary",
         "launchpad",
-        "launchpad/conformance",
-        "launchpad/clean-install-ga",
         "launchpad/apps/openclaw",
         "launchpad/apps/hermes",
         "launchpad/apps/opencode",
@@ -165,8 +163,7 @@
       "owner_doc_path": "core/README.md",
       "public_doc_slugs": [
         "reference/cli",
-        "architecture",
-        "benchmarks"
+        "architecture"
       ],
       "rationale": "Core build and benchmark files are runtime evidence, but they are not allowed to stand in for command, API, or package source ownership.",
       "validation_commands": [
@@ -457,7 +454,6 @@
       "public_doc_slugs": [
         "conformance",
         "verification",
-        "benchmarks",
         "publishing",
         "security/release-security"
       ],
@@ -501,7 +497,6 @@
         "index",
         "community",
         "ecosystem",
-        "oss-traction",
         "source-map",
         "quickstart",
         "compatibility",

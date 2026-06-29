@@ -53,10 +53,10 @@ helm-ai-kernel launch hermes local-container --headless --output json
 | Hermes cannot write config or cache files | `HOME` is redirected to the writable app-state mount at `/var/lib/hermes`; check the filesystem policy mounts and state directory. |
 | An MCP tool is refused | Unknown MCP servers are quarantined and unknown MCP tools return `ESCALATE`; add a pinned schema before broadening access. |
 
-## Production claim boundary
-Hermes production proof uses explicit `--live` mode with OpenRouter-only model
-gateway scope and team-grade EvidencePack trust. It is a Mindburn-owned
-production proof, not a customer/high-assurance claim.
+## Claim boundary
+Hermes public status is local app proof. Do not expand this page into managed,
+hosted, or third-party deployment language unless the exact claim is backed by
+source-owned tests, receipts, and EvidencePack material.
 
 ## Evidence requirements
 - cpi_output

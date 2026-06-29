@@ -35,7 +35,7 @@ flowchart TD
     end
 
     subgraph Execution["3. Execution & Verdict Plane"]
-        Boundary["boundary / mcp / sandbox / authz"]
+        Boundary["boundary / mcp"]
     end
 
     subgraph Ledger["4. Tamper-Evident Ledger Plane"]
@@ -66,7 +66,7 @@ flowchart TD
 
 | Command | Purpose | Source truth |
 | --- | --- | --- |
-| `helm up <app>` / `helm-ai-kernel up <app>` | Launch any supported AppSpec through HELM LaunchKit with environment preflight, supply-chain checks, policy/CPI compile, scoped secrets, sandbox grants, MCP quarantine, receipts, EvidencePack export, offline verify command, and CLI inspection command. | [`up_cmd.go`](../../core/cmd/helm-ai-kernel/up_cmd.go), [`core/pkg/launchkit`](../../core/pkg/launchkit) |
+| `helm up <app>` / `helm-ai-kernel up <app>` | Run a supported local AppSpec through environment preflight, supply-chain checks, policy/CPI compile, MCP quarantine, receipts, EvidencePack export, offline verify command, and CLI inspection command. | [`up_cmd.go`](../../core/cmd/helm-ai-kernel/up_cmd.go), [`core/pkg/launchkit`](../../core/pkg/launchkit) |
 | `helm-ai-kernel serve` | Start the local execution boundary from a policy file. | [`server_cmd.go`](../../core/cmd/helm-ai-kernel/server_cmd.go), [`serve_policy.go`](../../core/cmd/helm-ai-kernel/serve_policy.go) |
 | `helm-ai-kernel server` | Start the default Guardian API and proxy services. | [`main.go`](../../core/cmd/helm-ai-kernel/main.go), [`subsystems.go`](../../core/cmd/helm-ai-kernel/subsystems.go) |
 | `helm-ai-kernel proxy` | Run the OpenAI-compatible governance proxy. | [`proxy_cmd.go`](../../core/cmd/helm-ai-kernel/proxy_cmd.go) |
@@ -76,31 +76,20 @@ flowchart TD
 | `helm-ai-kernel export` | Export an EvidencePack from local evidence material. | [`export_cmd.go`](../../core/cmd/helm-ai-kernel/export_cmd.go), [`export_pack.go`](../../core/cmd/helm-ai-kernel/export_pack.go) |
 | `helm-ai-kernel export aat` | Export audit entries as an IETF draft-sharif-agent-audit-trail (AAT) conformant JSON Lines hash chain (`--in`, `--agent-id`, optional `--sign-key`), or verify an existing chain (`--verify`). | [`export_aat_cmd.go`](../../core/cmd/helm-ai-kernel/export_aat_cmd.go), [`core/pkg/audit`](../../core/pkg/audit) |
 | `helm-ai-kernel verify` | Verify an EvidencePack directory or archive offline, with optional online proof checks. Use `--entry <path> --proof <file>` for privacy-preserving single-entry verification — confirm one manifest entry belongs to a pack via a Merkle inclusion path without possessing the other entries (see `evidence prove-entry` and evidence-pack-v1.md Section 14). | [`verify_cmd.go`](../../core/cmd/helm-ai-kernel/verify_cmd.go), [`verify_entry_cmd.go`](../../core/cmd/helm-ai-kernel/verify_entry_cmd.go), [`core/pkg/verifier`](../../core/pkg/verifier) |
-| `helm-ai-kernel log` | Operate the receipt transparency log: append receipt hashes, emit signed tree heads, and build or verify RFC 6962 inclusion and consistency proofs. | [`translog_cmd.go`](../../core/cmd/helm-ai-kernel/translog_cmd.go), [`core/pkg/translog`](../../core/pkg/translog), [`receipt-transparency-v1.md`](../../protocols/specs/rfc/receipt-transparency-v1.md) |
-| `helm-ai-kernel counterfactual summary` | Aggregate signed observe-mode counterfactual receipts (the verdicts the PDP would have issued under an observe grant) into a deterministic would-have summary: DENY/ESCALATE counts by policy epoch, tool, MCP server, and reason code. Counterfactual receipts confer no execution authority. | [`counterfactual_cmd.go`](../../core/cmd/helm-ai-kernel/counterfactual_cmd.go), [`core/pkg/contracts`](../../core/pkg/contracts), [`receipt-format-v1.md`](../../protocols/specs/rfc/receipt-format-v1.md) |
 | `helm-ai-kernel bundle` | List, inspect, verify, or build policy bundles. | [`bundle_cmd.go`](../../core/cmd/helm-ai-kernel/bundle_cmd.go), [`core/pkg/policybundles`](../../core/pkg/policybundles) |
 | `helm-ai-kernel conform` | Run conformance gates and list negative boundary vectors. | [`conform.go`](../../core/cmd/helm-ai-kernel/conform.go), [`core/pkg/conformance`](../../core/pkg/conformance) |
 | `helm-ai-kernel mcp` | Serve, package, scan, quarantine, approve, and authorize MCP surfaces. | [`mcp_cmd.go`](../../core/cmd/helm-ai-kernel/mcp_cmd.go), [`mcp_boundary_cmd.go`](../../core/cmd/helm-ai-kernel/mcp_boundary_cmd.go), [`mcp_runtime.go`](../../core/cmd/helm-ai-kernel/mcp_runtime.go) |
 | `helm-ai-kernel hook pre-tool` | Local client hook handler. It reads Claude Code or Codex PreToolUse JSON on stdin, emits hook denial JSON for selected high-risk effects, and writes signed workstation policy decision receipts. | [`hook_cmd.go`](../../core/cmd/helm-ai-kernel/hook_cmd.go), [`workstation_m3_cmd.go`](../../core/cmd/helm-ai-kernel/workstation_m3_cmd.go) |
 | `helm-ai-kernel boundary` | Inspect execution-boundary status, capabilities, records, verification, and checkpoints. | [`boundary_surface_cmd.go`](../../core/cmd/helm-ai-kernel/boundary_surface_cmd.go), [`core/pkg/boundary`](../../core/pkg/boundary) |
-| `helm-ai-kernel identity` | Inspect HELM AI Kernel agent identities. | [`boundary_surface_cmd.go`](../../core/cmd/helm-ai-kernel/boundary_surface_cmd.go), [`core/pkg/identity`](../../core/pkg/identity) |
-| `helm-ai-kernel sandbox` | Run governed sandbox execution and inspect sandbox grants. | [`sandbox_cmd.go`](../../core/cmd/helm-ai-kernel/sandbox_cmd.go), [`sandbox_inspect_cmd.go`](../../core/cmd/helm-ai-kernel/sandbox_inspect_cmd.go) |
-| `helm-ai-kernel authz`, `helm-ai-kernel approvals`, `helm-ai-kernel budget` | Inspect ReBAC snapshots, approval ceremonies, and budget ceilings. | [`boundary_surface_cmd.go`](../../core/cmd/helm-ai-kernel/boundary_surface_cmd.go), [`core/pkg/contracts`](../../core/pkg/contracts) |
-| `helm-ai-kernel telemetry`, `helm-ai-kernel coexistence`, `helm-ai-kernel integrate` | Emit non-authoritative telemetry, coexistence, and pre-dispatch integration scaffolds. | [`boundary_surface_cmd.go`](../../core/cmd/helm-ai-kernel/boundary_surface_cmd.go) |
-| `helm-ai-kernel policy`, `helm-ai-kernel plan`, `helm-ai-kernel pack` | Work with policy tests, execution plans, and governed self-extension packs. | [`policy_cmd.go`](../../core/cmd/helm-ai-kernel/policy_cmd.go), [`plan_cmd.go`](../../core/cmd/helm-ai-kernel/plan_cmd.go), [`pack_cmd.go`](../../core/cmd/helm-ai-kernel/pack_cmd.go) |
+| `helm-ai-kernel policy` | Work with local policy tests used by the public proof path. | [`policy_cmd.go`](../../core/cmd/helm-ai-kernel/policy_cmd.go) |
 | `helm-ai-kernel test` | Run local HELM smoke checks exposed by the CLI. | [`test_cmd.go`](../../core/cmd/helm-ai-kernel/test_cmd.go) |
-| `helm-ai-kernel scaffold`, `helm-ai-kernel dev` | Create a local governance scaffold and start HELM in development mode. | [`init_cmd.go`](../../core/cmd/helm-ai-kernel/init_cmd.go) |
-| `helm-ai-kernel pack coverage` | Show governed self-extension pack coverage statistics. | [`pack_cmd.go`](../../core/cmd/helm-ai-kernel/pack_cmd.go) |
 | `helm-ai-kernel workstation verify-decision` | Verify a signed workstation policy decision receipt, including hook DENY receipts. | [`workstation_m3_cmd.go`](../../core/cmd/helm-ai-kernel/workstation_m3_cmd.go), [`core/pkg/workstation`](../../core/pkg/workstation) |
 | `helm-ai-kernel doctor`, `helm-ai-kernel init`, `helm-ai-kernel onboard`, `helm-ai-kernel demo` | Initialize, diagnose, and run local demonstration flows. | [`doctor_cmd.go`](../../core/cmd/helm-ai-kernel/doctor_cmd.go), [`doctor_init_trust.go`](../../core/cmd/helm-ai-kernel/doctor_init_trust.go), [`onboard_cmd.go`](../../core/cmd/helm-ai-kernel/onboard_cmd.go), [`demo_cmd.go`](../../core/cmd/helm-ai-kernel/demo_cmd.go) |
-| `helm-ai-kernel replay`, `helm-ai-kernel report`, `helm-ai-kernel certify`, `helm-ai-kernel rollup` | Replay evidence, report compliance, certify packs, and build receipt rollups. | [`replay_cmd.go`](../../core/cmd/helm-ai-kernel/replay_cmd.go), [`report_cmd.go`](../../core/cmd/helm-ai-kernel/report_cmd.go), [`certify_cmd.go`](../../core/cmd/helm-ai-kernel/certify_cmd.go), [`rollup_cmd.go`](../../core/cmd/helm-ai-kernel/rollup_cmd.go) |
-| `helm-ai-kernel freeze`, `helm-ai-kernel unfreeze`, `helm-ai-kernel incident`, `helm-ai-kernel brief`, `helm-ai-kernel risk-summary` | Operate local safety, incident, brief, and risk surfaces. | [`freeze_cmd.go`](../../core/cmd/helm-ai-kernel/freeze_cmd.go), [`incident_cmd.go`](../../core/cmd/helm-ai-kernel/incident_cmd.go), [`risk_cmd.go`](../../core/cmd/helm-ai-kernel/risk_cmd.go) |
-| `helm-ai-kernel trust`, `helm-ai-kernel threat`, `helm-ai-kernel shadow`, `helm-ai-kernel did`, `helm-ai-kernel tee`, `helm-ai-kernel local` | Inspect trust roots, threats, shadow-AI patterns, identifiers, TEE attestations, and local provider profiles. | [`trust_cmd.go`](../../core/cmd/helm-ai-kernel/trust_cmd.go), [`threat_cmd.go`](../../core/cmd/helm-ai-kernel/threat_cmd.go), [`shadow_cmd.go`](../../core/cmd/helm-ai-kernel/shadow_cmd.go), [`did_cmd.go`](../../core/cmd/helm-ai-kernel/did_cmd.go), [`tee_cmd.go`](../../core/cmd/helm-ai-kernel/tee_cmd.go), [`local_cmd.go`](../../core/cmd/helm-ai-kernel/local_cmd.go) |
 | `helm-ai-kernel health`, `helm-ai-kernel version`, `helm-ai-kernel help` | Global utility commands for local health checks, version reporting, and usage output. | [`main.go`](../../core/cmd/helm-ai-kernel/main.go), [`registry.go`](../../core/cmd/helm-ai-kernel/registry.go) |
 
 Auxiliary binaries under `core/cmd/bootstrap`, `core/cmd/channel_gateway`, `core/cmd/pack_verify`, `core/cmd/skill_lint`, and `core/cmd/skill_pack` are source-owned helpers. They are not top-level `helm-ai-kernel` subcommands unless wired through `core/cmd/helm-ai-kernel`.
 
-This table documents registered top-level `helm-ai-kernel` command families and global utility commands. Aliases are documented in source and should be exposed here only when public examples rely on them.
+This table documents the public proof-path `helm-ai-kernel` command families and global utility commands. Additional registered commands remain source-owned until the public docs policy and evidence gates explicitly add them.
 
 ## Key Flag Contracts
 

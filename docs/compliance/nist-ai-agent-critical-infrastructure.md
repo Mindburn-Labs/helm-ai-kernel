@@ -5,6 +5,9 @@ last_reviewed: 2026-05-05
 
 # NIST AI Agent Critical Infrastructure Alignment
 
+This page is a mapping only. It is not NIST endorsement, critical-infrastructure
+authorization, certification, auditor acceptance, or proof of a deployed system.
+
 ## Audience
 
 Security and compliance reviewers mapping HELM AI Kernel receipts and conformance evidence to NIST critical-infrastructure concerns.

@@ -385,12 +385,3 @@ make sdk-examples-smoke
 make launch-ready
 make release-smoke
 ```
-
-## Benchmarks
-
-```bash
-make bench
-make bench-report
-```
-
-The benchmark report writes a local artifact under `benchmarks/results/`; benchmark output is generated locally or in CI and is not committed as a release-truth artifact in the repository tree.

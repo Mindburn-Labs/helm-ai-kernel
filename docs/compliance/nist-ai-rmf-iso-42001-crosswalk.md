@@ -5,6 +5,9 @@ last_reviewed: 2026-05-05
 
 # NIST AI RMF to ISO 42001 Crosswalk
 
+This page is a mapping only. It is not certification, auditor acceptance, SOC 2,
+legal advice, or proof of a deployed management system.
+
 ## Audience
 
 Compliance reviewers comparing HELM AI Kernel evidence surfaces with NIST AI RMF and ISO 42001 control language.

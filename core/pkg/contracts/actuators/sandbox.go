@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -224,12 +225,14 @@ type ExecRequest struct {
 
 // ExecResult is the outcome of a sandbox command execution.
 type ExecResult struct {
-	ExitCode  int           `json:"exit_code"`
-	Stdout    []byte        `json:"stdout"`
-	Stderr    []byte        `json:"stderr"`
-	Duration  time.Duration `json:"duration"`
-	OOMKilled bool          `json:"oom_killed"`
-	TimedOut  bool          `json:"timed_out"`
+	ExitCode        int           `json:"exit_code"`
+	Stdout          []byte        `json:"stdout"`
+	Stderr          []byte        `json:"stderr"`
+	Duration        time.Duration `json:"duration"`
+	OOMKilled       bool          `json:"oom_killed"`
+	TimedOut        bool          `json:"timed_out"`
+	StdoutTruncated bool          `json:"stdout_truncated,omitempty"`
+	StderrTruncated bool          `json:"stderr_truncated,omitempty"`
 
 	// Receipt is the deterministic receipt fragment for this execution.
 	Receipt ReceiptFragment `json:"receipt"`
@@ -238,6 +241,103 @@ type ExecResult struct {
 // Success returns true if the execution succeeded cleanly.
 func (r *ExecResult) Success() bool {
 	return r.ExitCode == 0 && !r.OOMKilled && !r.TimedOut
+}
+
+const (
+	defaultExecTimeout = 5 * time.Minute
+	maxExecOutputBytes = 256 * 1024
+)
+
+// PrepareExecRequest returns a normalized execution request with a bounded
+// timeout and fail-closed environment validation.
+func PrepareExecRequest(req *ExecRequest, spec *SandboxSpec) (*ExecRequest, error) {
+	if req == nil {
+		return nil, fmt.Errorf("sandbox exec: request is required")
+	}
+	if len(req.Command) == 0 {
+		return nil, fmt.Errorf("sandbox exec: command is required")
+	}
+
+	normalized := &ExecRequest{
+		Command: append([]string(nil), req.Command...),
+		Stdin:   append([]byte(nil), req.Stdin...),
+		WorkDir: req.WorkDir,
+		Timeout: effectiveExecTimeout(req, spec),
+	}
+	if len(req.Env) > 0 {
+		normalized.Env = make(map[string]string, len(req.Env))
+		for key, value := range req.Env {
+			if invalidExecEnvName(key) {
+				return nil, fmt.Errorf("sandbox exec: invalid env var name %q", key)
+			}
+			if secretBearingEnvName(key) {
+				return nil, fmt.Errorf("sandbox exec: secret-bearing env var %q denied; use secret grants instead", key)
+			}
+			normalized.Env[key] = value
+		}
+	}
+	return normalized, nil
+}
+
+// BuildExecResult creates a deterministic ExecResult after applying local
+// output caps to limit what the caller and receipt path retain in memory.
+func BuildExecResult(req *ExecRequest, stdout, stderr []byte, exitCode int, duration time.Duration, oomKilled, timedOut bool, provider string, executedAt time.Time, spec *SandboxSpec, effect EffectClass) *ExecResult {
+	stdout, stdoutTruncated := capExecOutput(stdout)
+	stderr, stderrTruncated := capExecOutput(stderr)
+	return &ExecResult{
+		ExitCode:        exitCode,
+		Stdout:          stdout,
+		Stderr:          stderr,
+		Duration:        duration,
+		OOMKilled:       oomKilled,
+		TimedOut:        timedOut,
+		StdoutTruncated: stdoutTruncated,
+		StderrTruncated: stderrTruncated,
+		Receipt:         ComputeReceiptFragment(req, stdout, stderr, provider, executedAt, spec, effect),
+	}
+}
+
+func effectiveExecTimeout(req *ExecRequest, spec *SandboxSpec) time.Duration {
+	timeout := defaultExecTimeout
+	if spec != nil && spec.Resources.Timeout > 0 {
+		timeout = spec.Resources.Timeout
+	}
+	if req != nil && req.Timeout > 0 {
+		timeout = req.Timeout
+		if spec != nil && spec.Resources.Timeout > 0 && timeout > spec.Resources.Timeout {
+			timeout = spec.Resources.Timeout
+		}
+	}
+	if timeout <= 0 {
+		return defaultExecTimeout
+	}
+	return timeout
+}
+
+func capExecOutput(data []byte) ([]byte, bool) {
+	if len(data) <= maxExecOutputBytes {
+		return data, false
+	}
+	capped := make([]byte, maxExecOutputBytes)
+	copy(capped, data[:maxExecOutputBytes])
+	return capped, true
+}
+
+func invalidExecEnvName(name string) bool {
+	return name == "" || strings.ContainsAny(name, "=\x00")
+}
+
+func secretBearingEnvName(name string) bool {
+	upper := strings.ToUpper(strings.TrimSpace(name))
+	for _, marker := range []string{"KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL", "AUTH", "COOKIE", "SESSION", "PRIVATE"} {
+		if upper == marker ||
+			strings.HasPrefix(upper, marker+"_") ||
+			strings.HasSuffix(upper, "_"+marker) ||
+			strings.Contains(upper, "_"+marker+"_") {
+			return true
+		}
+	}
+	return false
 }
 
 // ReceiptFragment is a self-contained proof of execution that maps into

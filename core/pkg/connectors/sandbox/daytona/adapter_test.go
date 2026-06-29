@@ -245,3 +245,22 @@ func TestDaytona_PreflightRejectsURLCredentials(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, report.StrictPassed, "preflight must fail for base URL with embedded credentials")
 }
+
+func TestDaytona_ExecRejectsSecretEnv(t *testing.T) {
+	server, _ := newMockServer()
+	defer server.Close()
+	adapter := newTestAdapter(server)
+
+	ctx := t.Context()
+	handle, err := adapter.Create(ctx, &actuators.SandboxSpec{
+		Runtime:   "default",
+		Resources: actuators.ResourceSpec{MemoryMB: 256, Timeout: 30 * time.Second},
+	})
+	require.NoError(t, err)
+
+	_, err = adapter.Exec(ctx, handle.ID, &actuators.ExecRequest{
+		Command: []string{"echo", "nope"},
+		Env:     map[string]string{"OPENAI_API_KEY": "secret"},
+	})
+	require.ErrorContains(t, err, "secret-bearing env var")
+}

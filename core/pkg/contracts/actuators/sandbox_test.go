@@ -50,6 +50,57 @@ func TestExecResultSuccess(t *testing.T) {
 	}
 }
 
+func TestPrepareExecRequestAppliesTimeoutCapAndRejectsSecretEnv(t *testing.T) {
+	spec := &SandboxSpec{
+		Resources: ResourceSpec{
+			Timeout: 30 * time.Second,
+		},
+	}
+
+	normalized, err := PrepareExecRequest(&ExecRequest{
+		Command: []string{"echo", "hello"},
+	}, spec)
+	if err != nil {
+		t.Fatalf("PrepareExecRequest() error = %v", err)
+	}
+	if normalized.Timeout != 30*time.Second {
+		t.Fatalf("PrepareExecRequest() timeout = %s, want %s", normalized.Timeout, 30*time.Second)
+	}
+
+	normalized, err = PrepareExecRequest(&ExecRequest{
+		Command: []string{"echo", "hello"},
+		Timeout: time.Minute,
+	}, spec)
+	if err != nil {
+		t.Fatalf("PrepareExecRequest() cap error = %v", err)
+	}
+	if normalized.Timeout != 30*time.Second {
+		t.Fatalf("PrepareExecRequest() capped timeout = %s, want %s", normalized.Timeout, 30*time.Second)
+	}
+
+	_, err = PrepareExecRequest(&ExecRequest{
+		Command: []string{"echo", "hello"},
+		Env:     map[string]string{"API_TOKEN": "secret"},
+	}, spec)
+	if err == nil || !strings.Contains(err.Error(), "secret-bearing env var") {
+		t.Fatalf("PrepareExecRequest() secret env error = %v", err)
+	}
+}
+
+func TestBuildExecResultCapsOutput(t *testing.T) {
+	req := &ExecRequest{Command: []string{"echo", "hello"}, Timeout: time.Second}
+	stdout := make([]byte, maxExecOutputBytes+128)
+	stderr := make([]byte, maxExecOutputBytes+64)
+	result := BuildExecResult(req, stdout, stderr, 0, time.Second, false, false, "test", time.Unix(1700000000, 0).UTC(), nil, EffectExecShell)
+
+	if len(result.Stdout) != maxExecOutputBytes || !result.StdoutTruncated {
+		t.Fatalf("stdout cap mismatch: len=%d truncated=%t", len(result.Stdout), result.StdoutTruncated)
+	}
+	if len(result.Stderr) != maxExecOutputBytes || !result.StderrTruncated {
+		t.Fatalf("stderr cap mismatch: len=%d truncated=%t", len(result.Stderr), result.StderrTruncated)
+	}
+}
+
 func TestComputeSandboxSpecHashAndReceiptFragment(t *testing.T) {
 	emptyHash := sha256.Sum256(nil)
 	wantEmpty := "sha256:" + hex.EncodeToString(emptyHash[:])

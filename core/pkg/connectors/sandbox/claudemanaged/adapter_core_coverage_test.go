@@ -43,7 +43,7 @@ func TestAdapterLifecycleListFilesLogsAndStateBranches(t *testing.T) {
 	require.Empty(t, missingEntries)
 
 	_, err = adapter.Exec(context.Background(), handle.ID, nil)
-	require.ErrorContains(t, err, "command is required")
+	require.ErrorContains(t, err, "request is required")
 	_, err = adapter.Exec(context.Background(), handle.ID, &actuators.ExecRequest{Command: []string{}})
 	require.ErrorContains(t, err, "command is required")
 

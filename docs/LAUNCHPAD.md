@@ -20,11 +20,11 @@ Kernel proof path.
 | --- | --- | --- | --- |
 | OpenClaw | local app proof | `helm up openclaw` | contract preflight, local-container launch, receipts, EvidencePack |
 | Hermes | local app proof | `helm up hermes --target local` | contract preflight, local-container launch, receipts, EvidencePack |
-| OpenCode | verify-only | `helm-ai-kernel app preflight opencode --json` | signed artifact and contract preflight only |
-| Kilo Code | verify-only | `helm-ai-kernel app preflight kilocode --json` | signed artifact and contract preflight only |
+| OpenCode | `verify_only` | `helm-ai-kernel app preflight opencode --json` | signed artifact and contract preflight only |
+| Kilo Code | `verify_only` | `helm-ai-kernel app preflight kilocode --json` | signed artifact and contract preflight only |
 
 Verify-only pages do not claim a live agent workload. They prove registry,
-artifact, policy, and preflight shape only.
+artifact, policy, and preflight shape only. `--version` smoke checks do not count as live-agent F2 coverage.
 
 ## Source Truth
 

@@ -17,9 +17,8 @@ visible release assets are platform binaries for Darwin, Linux, and Windows,
 `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `SHA256SUMS.txt`, `sbom.json`,
 `v0.5.18.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
-`helm-ai-kernel-launchpad-data.tar`, `helm-console-web-v0.5.18.tar.gz` with
-checksum/SBOM/provenance/lock/manifest sidecars, and matching `*.cosign.bundle`
-files for every primary asset.
+`helm-ai-kernel-launchpad-data.tar`, and matching `*.cosign.bundle` files for
+every primary asset.
 
 There is no public GitHub Release object for `v0.4.1`; the actual public
 baseline for the `v0.5.0` delta is `v0.4.0`.
@@ -39,12 +38,6 @@ GitHub release:
 - `release.high_risk.v3.toml`
 - `sample-policy-material.tar`
 - `helm-ai-kernel-launchpad-data.tar`
-- `helm-console-web-v0.5.18.tar.gz`
-- `helm-console-web-v0.5.18.tar.gz.sha256`
-- `helm-console-web-v0.5.18.tar.gz.sbom.spdx.json`
-- `helm-console-web-v0.5.18.tar.gz.provenance.json`
-- `helm-console-web-v0.5.18.tar.gz.lock.json`
-- `helm-console-web-v0.5.18.tar.gz.manifest.json`
 - `helm-ai-kernel.mcpb`
 - `helm-ai-kernel.rb`
 
@@ -52,9 +45,8 @@ The sample policy material archive contains `release.high_risk.v3.toml` and
 `reference_packs/eu_ai_act_high_risk.v1.json`. The GitHub release workflow
 attaches `*.cosign.bundle` files generated for each primary asset.
 
-The Console web bundle is a release asset because `helm-ai-kernel quickstart`
-serves `/console` for the OSS local proof. Homebrew installs it under
-`share/helm-ai-kernel/console`, and quickstart auto-discovers that path.
+Kernel releases are headless. Browser UI assets are not Kernel release assets
+and are not installed by Homebrew.
 
 ## Validation
 

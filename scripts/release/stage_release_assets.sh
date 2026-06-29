@@ -188,29 +188,11 @@ with tarfile.open(out, "w") as tar:
 PY
 launchpad_data_sha="$(shasum -a 256 "$ASSETS_DIR/helm-ai-kernel-launchpad-data.tar" | awk '{print $1}')"
 
-console_formula_args=()
-if [ -n "${HELM_CONSOLE_BUNDLE:-}" ] || [ "${REQUIRE_HELM_CONSOLE_BUNDLE:-0}" = "1" ]; then
-    bash "$ROOT/scripts/release/stage_console_bundle.sh" "$ASSETS_DIR"
-    console_lock="${HELM_CONSOLE_BUNDLE_LOCK:-$ROOT/release/console-bundle.lock.json}"
-    console_bundle_name="$(python3 - "$console_lock" <<'PY'
-import json, pathlib, sys
-print(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))["bundle_name"])
-PY
-)"
-    console_bundle_sha="$(python3 - "$console_lock" <<'PY'
-import json, pathlib, sys
-print(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))["sha256"])
-PY
-)"
-    console_formula_args=(--console-bundle "$console_bundle_name" --console-bundle-sha256 "$console_bundle_sha")
-fi
-
 ruby "$ROOT/scripts/release/homebrew_formula.rb" \
     --version "$VERSION" \
     --checksums "$TMP_DIR/binary-SHA256SUMS.txt" \
     --launchpad-data-sha256 "$launchpad_data_sha" \
-    --repo Mindburn-Labs/helm-ai-kernel \
-    "${console_formula_args[@]}" > "$ASSETS_DIR/helm-ai-kernel.rb"
+    --repo Mindburn-Labs/helm-ai-kernel > "$ASSETS_DIR/helm-ai-kernel.rb"
 
 python3 - "$ROOT" "$ASSETS_DIR" "$TAG" <<'PY'
 import hashlib

@@ -41,7 +41,7 @@ func TestUpDemoUsesScopedDemoSecretsAndDoesNotRequireDocker(t *testing.T) {
 
 	orch := New(catalog, store)
 	orch.Providers[TargetLocal] = fakeProvider{available: false}
-	result, err := orch.Up(Options{AppID: "openclaw", Mode: ModeDemo, Target: TargetLocal, NoOpen: true})
+	result, err := orch.Up(Options{AppID: "openclaw", Mode: ModeDemo, Target: TargetLocal})
 	if err != nil {
 		t.Fatalf("Up: %v", err)
 	}
@@ -54,8 +54,8 @@ func TestUpDemoUsesScopedDemoSecretsAndDoesNotRequireDocker(t *testing.T) {
 	if os.Getenv("OPENROUTER_API_KEY") != "" {
 		t.Fatal("demo secret leaked into process environment after launch")
 	}
-	if result.ConsoleURL == "" || result.OfflineVerifyCommand == "" {
-		t.Fatalf("developer output missing console/evidence refs: %#v", result)
+	if result.OfflineVerifyCommand == "" {
+		t.Fatalf("developer output missing offline evidence command: %#v", result)
 	}
 }
 
@@ -66,7 +66,7 @@ func TestUpLiveEscalatesWhenLocalRuntimeUnavailable(t *testing.T) {
 
 	orch := New(catalog, store)
 	orch.Providers[TargetLocal] = fakeProvider{available: false}
-	result, err := orch.Up(Options{AppID: "openclaw", Mode: ModeLive, Target: TargetLocal, NoOpen: true})
+	result, err := orch.Up(Options{AppID: "openclaw", Mode: ModeLive, Target: TargetLocal})
 	if err != nil {
 		t.Fatalf("Up: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestUpVerifyOnlyDoesNotCreateRun(t *testing.T) {
 
 	orch := New(catalog, session.NewStore(t.TempDir()))
 	orch.Providers[TargetLocal] = fakeProvider{available: true}
-	result, err := orch.Up(Options{AppID: "openclaw", Mode: ModeVerifyOnly, Target: TargetLocal, NoOpen: true})
+	result, err := orch.Up(Options{AppID: "openclaw", Mode: ModeVerifyOnly, Target: TargetLocal})
 	if err != nil {
 		t.Fatalf("Up: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestUpVerifyOnlyDoesNotCreateRun(t *testing.T) {
 func TestUpCloudEscalatesWithProofAndNoRuntime(t *testing.T) {
 	catalog := loadTestCatalog(t)
 	orch := New(catalog, session.NewStore(t.TempDir()))
-	result, err := orch.Up(Options{AppID: "openclaw", Mode: ModeLive, Target: TargetCloudAWS, NoOpen: true})
+	result, err := orch.Up(Options{AppID: "openclaw", Mode: ModeLive, Target: TargetCloudAWS})
 	if err != nil {
 		t.Fatalf("Up: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestSupplyChainRejectsDigestMismatch(t *testing.T) {
 	}
 	orch := New(catalog, session.NewStore(t.TempDir()))
 	orch.Providers[TargetLocal] = fakeProvider{available: true}
-	result, err := orch.Up(Options{AppID: "openclaw", Mode: ModeDemo, Target: TargetLocal, NoOpen: true})
+	result, err := orch.Up(Options{AppID: "openclaw", Mode: ModeDemo, Target: TargetLocal})
 	if err != nil {
 		t.Fatalf("Up: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestHermesProductionScopeIsOpenRouterOnly(t *testing.T) {
 	t.Setenv("OPENROUTER_API_KEY", "test-openrouter")
 	orch := New(catalog, session.NewStore(t.TempDir()))
 	orch.Providers[TargetLocal] = fakeProvider{available: true}
-	result, err := orch.Up(Options{AppID: "hermes", Mode: ModeVerifyOnly, Target: TargetLocal, NoOpen: true})
+	result, err := orch.Up(Options{AppID: "hermes", Mode: ModeVerifyOnly, Target: TargetLocal})
 	if err != nil {
 		t.Fatalf("Up verify-only: %v", err)
 	}

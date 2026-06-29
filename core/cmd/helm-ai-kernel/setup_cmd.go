@@ -31,7 +31,6 @@ type setupOptions struct {
 	Yes     bool
 	DryRun  bool
 	JSON    bool
-	NoOpen  bool
 	DataDir string
 }
 
@@ -42,7 +41,6 @@ type setupSummary struct {
 	HookConfigPath   string `json:"hook_config_path"`
 	DataDir          string `json:"data_dir"`
 	KernelURL        string `json:"kernel_url"`
-	ConsoleURL       string `json:"console_url"`
 	ScanGrade        string `json:"scan_grade"`
 	DraftPolicyPath  string `json:"draft_policy_path"`
 	UninstallCommand string `json:"uninstall_command"`
@@ -54,7 +52,7 @@ type setupSummary struct {
 func init() {
 	Register(Subcommand{
 		Name:  "setup",
-		Usage: "Install local Claude Code or Codex MCP/hook integration and start the Console proof",
+		Usage: "Install local Claude Code or Codex MCP/hook integration and start the headless proof path",
 		RunFn: runSetupCmd,
 	})
 }
@@ -119,12 +117,9 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 	printSetupSummary(stdout, summary, opts.JSON)
 	if !opts.JSON {
 		fmt.Fprintln(stdout)
-		fmt.Fprintln(stdout, "Leave this terminal open. HELM is starting the local Kernel and Console proof now.")
+		fmt.Fprintln(stdout, "Leave this terminal open. HELM is starting the local Kernel proof path now.")
 	}
 	quickstartArgs := []string{"--profile", setupQuickstartProfile(opts.Target), "--data-dir", filepath.Join(opts.DataDir, "quickstart")}
-	if opts.NoOpen {
-		quickstartArgs = append(quickstartArgs, "--no-open")
-	}
 	quickstartStdout := stdout
 	if opts.JSON {
 		quickstartStdout = stderr
@@ -184,7 +179,7 @@ func runSetupRemoveCmd(args []string, stdout, stderr io.Writer) int {
 
 func printSetupUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  helm-ai-kernel setup <claude-code|codex> [--scope user|project] [--yes] [--dry-run] [--json] [--no-open] [--data-dir DIR]")
+	fmt.Fprintln(w, "  helm-ai-kernel setup <claude-code|codex> [--scope user|project] [--yes] [--dry-run] [--json] [--data-dir DIR]")
 	fmt.Fprintln(w, "  helm-ai-kernel setup status <claude-code|codex> [--scope user|project] [--json] [--data-dir DIR]")
 	fmt.Fprintln(w, "  helm-ai-kernel setup remove <claude-code|codex> [--scope user|project] [--yes] [--dry-run] [--json] [--data-dir DIR]")
 }
@@ -197,7 +192,6 @@ func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) 
 	fs.BoolVar(&opts.Yes, "yes", false, "Install without prompting")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "Print planned changes without writing config")
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable summary")
-	fs.BoolVar(&opts.NoOpen, "no-open", false, "Do not open the browser when quickstart starts")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
 	if err := fs.Parse(args[1:]); err != nil {
 		return opts, 2
@@ -279,7 +273,6 @@ func buildSetupSummary(opts setupOptions) (setupSummary, error) {
 		HookConfigPath:   setupHookConfigPath(opts),
 		DataDir:          opts.DataDir,
 		KernelURL:        "http://127.0.0.1:7714",
-		ConsoleURL:       "http://127.0.0.1:7714/console/onboarding",
 		ScanGrade:        "not_run",
 		DraftPolicyPath:  filepath.Join(opts.DataDir, "autoconfigure", "policy.draft.json"),
 		UninstallCommand: fmt.Sprintf("helm-ai-kernel setup remove %s --scope %s --yes --data-dir %s", opts.Target, opts.Scope, shellQuote(opts.DataDir)),
@@ -297,7 +290,6 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 	fmt.Fprintf(stdout, "  Hook config:   %s\n", summary.HookConfigPath)
 	fmt.Fprintf(stdout, "  Data dir:      %s\n", summary.DataDir)
 	fmt.Fprintf(stdout, "  Kernel:        %s\n", summary.KernelURL)
-	fmt.Fprintf(stdout, "  Console:       %s\n", summary.ConsoleURL)
 	fmt.Fprintf(stdout, "  Scan grade:    %s\n", summary.ScanGrade)
 	fmt.Fprintf(stdout, "  Draft policy:  %s\n", summary.DraftPolicyPath)
 	fmt.Fprintf(stdout, "  Uninstall:     %s\n", summary.UninstallCommand)

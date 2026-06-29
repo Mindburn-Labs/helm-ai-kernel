@@ -16,6 +16,13 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
+# sha256 helper: prefer coreutils sha256sum (Linux), fall back to shasum (macOS)
+sha256_of() {
+    if   command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+    elif command -v shasum    >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
+    else echo "__NO_SHA_TOOL__"; fi
+}
+
 echo -e "${BOLD}HELM Installer${NC}"
 echo -e "${BLUE}Fail-closed execution controls for AI agents.${NC}"
 echo ""
@@ -33,30 +40,28 @@ fi
 echo -e "  • Detected OS:   ${BOLD}${OS}${NC}"
 echo -e "  • Detected Arch: ${BOLD}${ARCH}${NC}"
 
-# 2. Find Latest Release
-echo -e "  • Finding latest release..."
-LATEST_RELEASE=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-
-if [ -z "$LATEST_RELEASE" ]; then
-    echo -e "${RED}❌ Error: Could not find latest release.${NC}"
-    exit 1
+# 2. Resolve download source (API-free: latest/download redirect, or HELM_VERSION pin)
+if [ -n "${HELM_VERSION:-}" ]; then
+    BASE="https://github.com/$REPO/releases/download/${HELM_VERSION}"
+    echo -e "  • Version:       ${GREEN}${HELM_VERSION}${NC} (pinned)"
+else
+    BASE="https://github.com/$REPO/releases/latest/download"
+    echo -e "  • Version:       ${GREEN}latest${NC}"
 fi
 
-echo -e "  • Version:       ${GREEN}${LATEST_RELEASE}${NC}"
-
 # 3. Download Binary
-BINARY_URL="https://github.com/$REPO/releases/download/$LATEST_RELEASE/${BIN_NAME}-${OS}-${ARCH}"
+BINARY_URL="${BASE}/${BIN_NAME}-${OS}-${ARCH}"
 DOWNLOAD_PATH="/tmp/${BIN_NAME}"
 
 echo -e "  • Downloading... (${BINARY_URL})"
-curl -L -o "$DOWNLOAD_PATH" "$BINARY_URL" --progress-bar
+curl -fL --retry 3 --retry-delay 2 --retry-all-errors -o "$DOWNLOAD_PATH" "$BINARY_URL" --progress-bar
 
 # 4. Verify Checksum
-CHECKSUM_URL="https://github.com/$REPO/releases/download/$LATEST_RELEASE/SHA256SUMS.txt"
+CHECKSUM_URL="${BASE}/SHA256SUMS.txt"
 CHECKSUM_PATH="${DOWNLOAD_PATH}.sha256"
 
 echo -e "  • Verifying checksum..."
-if ! curl -fsSL -o "$CHECKSUM_PATH" "$CHECKSUM_URL" 2>/dev/null; then
+if ! curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o "$CHECKSUM_PATH" "$CHECKSUM_URL" 2>/dev/null; then
 	echo -e "${RED}❌ Checksum file not found at ${CHECKSUM_URL}${NC}"
     echo -e "   HELM enforces supply-chain trust. Cannot install without checksum verification."
     echo -e "   If this is a pre-release or local build, use: HELM_SKIP_VERIFY=1"
@@ -72,16 +77,26 @@ else
 		rm -f "$DOWNLOAD_PATH" "$CHECKSUM_PATH"
 		exit 1
 	fi
-	ACTUAL=$(shasum -a 256 "$DOWNLOAD_PATH" | awk '{print $1}')
-	if [ "$EXPECTED" != "$ACTUAL" ]; then
+	ACTUAL=$(sha256_of "$DOWNLOAD_PATH")
+	if [ "$ACTUAL" = "__NO_SHA_TOOL__" ]; then
+		if [ "${HELM_SKIP_VERIFY:-0}" = "1" ]; then
+			echo -e "${BLUE}  ⚠️  No sha256 tool found — HELM_SKIP_VERIFY set, skipping checksum.${NC}"
+		else
+			echo -e "${RED}❌ No sha256 tool (sha256sum or shasum) found to verify the download.${NC}"
+			echo -e "   Install coreutils (Linux) or set HELM_SKIP_VERIFY=1 to bypass."
+			rm -f "$DOWNLOAD_PATH" "$CHECKSUM_PATH"
+			exit 1
+		fi
+	elif [ "$EXPECTED" != "$ACTUAL" ]; then
         echo -e "${RED}❌ Checksum verification FAILED.${NC}"
         echo -e "   Expected: $EXPECTED"
         echo -e "   Got:      $ACTUAL"
         echo -e "   The downloaded binary may have been tampered with."
         rm -f "$DOWNLOAD_PATH" "$CHECKSUM_PATH"
         exit 1
+    else
+        echo -e "  • Checksum: ${GREEN}✔ verified${NC}"
     fi
-    echo -e "  • Checksum: ${GREEN}✔ verified${NC}"
     rm -f "$CHECKSUM_PATH"
 fi
 
@@ -109,7 +124,7 @@ INSTALLED_VERSION=$("$INSTALLED_BIN" version 2>/dev/null || echo "unknown")
 echo ""
 echo -e "${GREEN}✅ HELM Installed Successfully!${NC}"
 echo -e "   Location: $INSTALLED_BIN"
-# echo -e "   Version:  $INSTALLED_VERSION"
+echo -e "   Version:  $INSTALLED_VERSION"
 echo ""
 echo -e "Try it now:"
 echo -e "   ${BOLD}helm-ai-kernel help${NC}"

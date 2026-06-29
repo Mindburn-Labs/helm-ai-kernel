@@ -10,38 +10,38 @@ import (
 
 func init() {
 	Register(Subcommand{
-		Name:    "console",
+		Name:    "control-plane",
 		Aliases: []string{},
-		Usage:   "Console pairing commands (pair, status)",
-		RunFn:   runConsoleCmd,
+		Usage:   "Hosted control-plane pairing commands (pair, status)",
+		RunFn:   runControlPlaneCmd,
 	})
 }
 
-func runConsoleCmd(args []string, stdout, stderr io.Writer) int {
+func runControlPlaneCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel console <pair|status> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel control-plane <pair|status> [flags]")
 		return 2
 	}
 
 	switch args[0] {
 	case "pair":
-		return runConsolePairCmd(args[1:], stdout, stderr)
+		return runControlPlanePairCmd(args[1:], stdout, stderr)
 	case "status":
-		return runConsoleStatusCmd(stdout, stderr)
+		return runControlPlaneStatusCmd(stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "unknown console subcommand: %s\n", args[0])
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel console <pair|status> [flags]")
+		fmt.Fprintf(stderr, "unknown control-plane subcommand: %s\n", args[0])
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel control-plane <pair|status> [flags]")
 		return 2
 	}
 }
 
-func runConsolePairCmd(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("console pair", flag.ContinueOnError)
+func runControlPlanePairCmd(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("control-plane pair", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	var workspaceID, apiURL string
 	fs.StringVar(&workspaceID, "workspace", "", "Workspace ID to pair with (auto-discovers if not set)")
-	fs.StringVar(&apiURL, "api-url", "", "Console API base URL (default: https://console.helm.mindburn.org)")
+	fs.StringVar(&apiURL, "api-url", "", "Control-plane API base URL")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -55,16 +55,16 @@ func runConsolePairCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if err := lpcmd.RunPair(opts); err != nil {
-		fmt.Fprintf(stderr, "console pair: %v\n", err)
+		fmt.Fprintf(stderr, "control-plane pair: %v\n", err)
 		return 1
 	}
 	return 0
 }
 
-func runConsoleStatusCmd(stdout, stderr io.Writer) int {
+func runControlPlaneStatusCmd(stdout, stderr io.Writer) int {
 	pairing, err := lpcmd.LoadPairing()
 	if err != nil {
-		fmt.Fprintf(stderr, "console status: %v\n", err)
+		fmt.Fprintf(stderr, "control-plane status: %v\n", err)
 		return 1
 	}
 

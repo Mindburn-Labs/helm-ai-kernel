@@ -123,6 +123,10 @@ Verify an exported EvidencePack without network access:
 helm-ai-kernel verify --bundle <pack>
 ```
 
+Use the `v0.5.18` release `evidence-pack.tar` only when validating the
+published release artifact set. Local quickstart proof can use a locally
+exported pack from the current checkout instead.
+
 Tampering with a receipt or EvidencePack must fail verification.
 
 ## Troubleshooting

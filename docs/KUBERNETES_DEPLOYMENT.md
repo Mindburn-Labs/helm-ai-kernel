@@ -1,77 +1,31 @@
 ---
 title: Kubernetes Deployment
-last_reviewed: 2026-05-19
+last_reviewed: 2026-06-29
 ---
 
 # Kubernetes Deployment
 
-This page is for operators deploying the HELM AI Kernel runtime with the repository-owned Kubernetes Helm chart. The outcome is a chart render, a production-safe value set, and a smoke path for health, receipts, and evidence persistence.
+This page documents the repository-owned HELM AI Kernel chart for self-hosted
+evaluation and staging smoke tests. It is not a managed-service runbook and it
+does not publish tenant, control-plane, signing, or operator-secret procedures.
 
 ## Audience
 
-Use this page if you operate Kubernetes and need to run HELM AI Kernel as a self-hosted execution boundary with durable receipts, signing keys, and optional ingress.
+Kubernetes operators who need to render the chart, understand the Kernel
+runtime boundary, and run a staging smoke path for health, receipts, and
+evidence persistence.
 
 ## Outcome
 
-After this page you should be able to lint the chart, render manifests, provide production signing and API-key material, install the chart, and smoke health plus receipt persistence.
+After this page you should be able to lint the chart, render manifests, install
+a staging release with local test material, and verify that health and receipt
+persistence behave as expected.
 
 ## Source Truth
 
-The chart source is [`deploy/helm-chart`](../deploy/helm-chart). Runtime container wiring is in [`deploy/helm-chart/templates/deployment.yaml`](../deploy/helm-chart/templates/deployment.yaml), values are in [`deploy/helm-chart/values.yaml`](../deploy/helm-chart/values.yaml), and chart-level production notes live in [`deploy/helm-chart/README.md`](../deploy/helm-chart/README.md).
-
-## Deployment Topology
-
-```mermaid
-flowchart TD
-    subgraph Ingestion["1. Ingestion & Context Plane"]
-        Values["values.yaml"]
-        ControlPlane["controlplane source"]
-        Mounted["ConfigMap/Secret mounted file"]
-        PVC["persistent /data PVC"]
-        Pod["helm-ai-kernel serve pod"]
-        Service["ClusterIP service"]
-        Ingress["optional ingress TLS"]
-        Metrics["metrics port / ServiceMonitor"]
-    end
-
-    subgraph Evaluation["2. Evaluation & Policy Plane"]
-        Source["policy.source config"]
-        CRD["HelmPolicyBundle CRD"]
-        Snapshot["verified EffectivePolicySnapshot"]
-    end
-
-    subgraph Execution["3. Execution & Verdict Plane"]
-        Runtime["runtime reconciler"]
-    end
-
-    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
-        Secrets["signing and API-key Secrets"]
-    end
-
-    %% Operational Flow Edges
-    Values --> Source
-    Source --> Runtime
-    ControlPlane --> Runtime
-    CRD --> Runtime
-    Mounted --> Runtime
-    Runtime --> Snapshot
-    Values --> Secrets
-    Values --> PVC
-    Snapshot --> Pod
-    Secrets --> Pod
-    PVC --> Pod
-    Pod --> Service
-    Service --> Ingress
-    Pod --> Metrics
-
-    %% Premium Styling Rules
-    style Source fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
-    style Runtime fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
-    style CRD fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
-    style Snapshot fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
-    style Secrets fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
-```
-
+The chart source is `deploy/helm-chart`. Runtime container wiring is in
+`deploy/helm-chart/templates/deployment.yaml`; values are in
+`deploy/helm-chart/values.yaml`.
 
 ## Validate The Chart
 
@@ -81,57 +35,32 @@ helm lint deploy/helm-chart
 helm template helm-ai-kernel deploy/helm-chart
 ```
 
-Expected output: lint succeeds, `helm template` emits Deployment, Service, ConfigMap, Secret, PVC, and optional ServiceMonitor manifests, and `make helm-chart-smoke` completes without rendering a production chart that lacks signing or API key material.
+Expected output: lint succeeds, `helm template` emits Deployment, Service,
+ConfigMap, Secret, PVC, and optional ServiceMonitor manifests, and
+`make helm-chart-smoke` completes without rendering a protected chart that lacks
+required local test material.
 
 ## Policy Authority Boundary
 
-The chart does not make Kubernetes objects the HELM execution authority. It
-deploys the runtime and configures a `policy.source` backend. The runtime
-reconciler owns policy truth: it reads the active head, loads the canonical
-bundle, verifies the expected hash and signature/provenance, compiles a
-snapshot, validates it, then atomically swaps the per-scope
-`EffectivePolicySnapshot`.
+Kubernetes objects do not become HELM execution authority. The chart deploys the
+runtime and configures a `policy.source` backend. The runtime reconciler owns
+policy truth: it reads the active head, loads the canonical bundle, verifies the
+expected hash and signature/provenance, compiles a snapshot, validates it, then
+atomically swaps the per-scope `EffectivePolicySnapshot`.
 
-`POST /internal/policy/reconcile` is a wake-up hint protected by service auth.
-It does not accept policy bytes and does not directly install policy. Lost
-hints are recovered by `helm.policy.source.pollInterval`.
+## Staging Install Skeleton
 
-## Production Install Skeleton
+Use existing Kubernetes Secrets for any sensitive values. Do not put real keys
+in shell history or public issues.
 
 ```bash
-helm install helm-ai-kernel deploy/helm-chart \
-  --set helm.production=true \
-  --set helm.signing.key=<64-char-ed25519-seed-hex> \
-  --set helm.auth.adminAPIKey=<admin-api-key> \
-  --set helm.auth.serviceAPIKey=<service-api-key> \
-  --set helm.auth.tenantID=<runtime-tenant-id> \
-  --set helm.auth.principalID=<runtime-principal-id> \
-  --set persistence.enabled=true
-```
-
-For production, prefer existing Kubernetes Secrets over inline values:
-
-```bash
-kubectl create secret generic helm-signing \
-  --from-literal=signing-key=<64-char-ed25519-seed-hex>
-
 kubectl create secret generic helm-auth \
-  --from-literal=HELM_ADMIN_API_KEY=<admin-api-key> \
-  --from-literal=HELM_SERVICE_API_KEY=<service-api-key>
-
-kubectl create secret generic helm-policy-trust \
-  --from-literal=HELM_POLICY_TRUST_PUBLIC_KEY=<64-char-ed25519-public-key-hex>
+  --from-literal=HELM_ADMIN_API_KEY='<local-test-admin-key>' \
+  --from-literal=HELM_SERVICE_API_KEY='<local-test-service-key>'
 
 helm upgrade --install helm-ai-kernel deploy/helm-chart \
-  --set helm.production=true \
-  --set helm.policy.source.kind=controlplane \
-  --set helm.policy.source.controlplane.url=https://helm-controlplane.example.internal \
-  --set helm.policy.signature.required=true \
-  --set helm.policy.signature.existingSecret=helm-policy-trust \
-  --set helm.signing.existingSecret=helm-signing \
   --set helm.auth.existingSecret=helm-auth \
-  --set helm.auth.tenantID=<runtime-tenant-id> \
-  --set helm.auth.principalID=<runtime-principal-id>
+  --set persistence.enabled=true
 ```
 
 ## Values That Control Runtime Behavior
@@ -139,24 +68,13 @@ helm upgrade --install helm-ai-kernel deploy/helm-chart \
 | Value | Default | Source-backed behavior |
 | --- | --- | --- |
 | `image.repository` | `ghcr.io/mindburn-labs/helm-ai-kernel` | Container image used by the Deployment. |
-| `image.tag` | chart `appVersion` | Defaults to `v0.5.18` from `Chart.yaml`. |
+| `image.tag` | chart `appVersion` | Defaults from `Chart.yaml`. |
 | `helm.bindAddr` | `0.0.0.0` | Required because the pod must bind beyond loopback. |
 | `service.port` | `8080` | Runtime HTTP port passed to `helm-ai-kernel serve --port`. |
 | `service.healthPort` | `8081` | Health probe port via `HELM_HEALTH_PORT`. |
-| `service.metricsPort` | `9090` | Metrics container port when metrics are enabled. |
-| `helm.production` | `false` | Production rendering refuses missing signing/auth material. |
 | `helm.dataDir` | `/data` | Mounted from the chart PVC or `emptyDir`. |
 | `helm.proxy.enabled` | `true` | Sets `HELM_ENABLE_OPENAI_PROXY=1` and `HELM_UPSTREAM_URL`. |
-| `helm.auth.tenantID` | `default` | Sets `HELM_RUNTIME_TENANT_ID`; tenant-scoped request headers must match this value. |
-| `helm.auth.principalID` | `system-admin` | Sets `HELM_RUNTIME_PRINCIPAL_ID`; tenant-scoped principal headers must match this value. |
-| `helm.policy.source.kind` | `mountedFile` | `controlplane`, `crd`, or `mountedFile`; production should use `controlplane`, or `crd` in builds that include a CRD source client. |
-| `helm.policy.source.pollInterval` | `10s` | Runtime polling interval; correctness does not depend on delivery hints. |
-| `helm.policy.signature.required` | `false` | When true, unsigned policy heads are rejected before compilation. Production control-plane renders require this. |
-| `helm.policy.signature.publicKey` | empty | 64-char hex Ed25519 public key for canonical policy bundle verification. |
-| `helm.policy.signature.existingSecret` | empty | Existing secret containing `HELM_POLICY_TRUST_PUBLIC_KEY`. |
-| `helm.policy.reloadHints.httpWakeEndpoint` | `/internal/policy/reconcile` | Service-auth wake-only route for reconciler hints. |
-| `helm.policy.reloadHints.configReloaderSidecar.enabled` | `false` | Optional mounted-file hint sidecar, disabled by default. |
-| `helm.storage.type` | `sqlite` | Uses local SQLite unless Postgres is configured. |
+| `helm.storage.type` | `sqlite` | Uses local SQLite unless another supported store is configured. |
 | `persistence.enabled` | `true` | Creates or reuses a PVC for receipts, state, and artifacts. |
 | `ingress.enabled` | `false` | Optional ingress; provide TLS and ingress class explicitly. |
 
@@ -168,20 +86,12 @@ kubectl port-forward svc/helm-ai-kernel 8080:8080
 curl -fsS http://127.0.0.1:8080/health
 ```
 
-Then run a governed request through the public API or OpenAI-compatible proxy and verify that receipts persist after pod restart when `persistence.enabled=true`.
-
-## Troubleshooting
-
-| Symptom | Likely cause | Fix |
-| --- | --- | --- |
-| pod starts but readiness fails | health port or initial snapshot failure | inspect `HELM_HEALTH_PORT`, policy source env, mounted-file bytes, and pod logs |
-| `/internal/policy/reconcile` returns unauthorized | missing service API key | set `helm.auth.serviceAPIKey` or `helm.auth.existingSecret` |
-| policy ConfigMap changed but decisions did not | ConfigMap delivery is only a source backend | verify the bundle hash/signature and reconciler status; enable sidecar only as a wake hint |
-| policy reconcile fails with signature error | missing trust public key, missing signature, or invalid bundle signature | set `helm.policy.signature.existingSecret` or `publicKey`, and verify the active source signs canonical bundle bytes |
-| production render fails | missing signing key or API key material | set `helm.signing.existingSecret` and `helm.auth.existingSecret`, or provide explicit values |
-| receipts disappear after restart | persistence disabled or PVC not bound | set `persistence.enabled=true` and verify PVC status |
-| ingress works but upstream calls bypass HELM | client points at upstream provider | point clients at the service or ingress URL for HELM, not the provider URL |
+Then run a governed request through the public API or OpenAI-compatible proxy
+and verify that receipts persist after pod restart when `persistence.enabled`
+is true.
 
 ## Not Covered
 
-This page documents the repository-owned HELM AI Kernel chart only. Managed deployment, tenant migrations, SSO, SIEM, and retention controls belong to the HELM AI Enterprise docs.
+Managed deployments, tenant migrations, SSO, SIEM, retention controls, private
+control-plane wiring, and operator key ceremonies belong outside the anonymous
+public Kernel docs.

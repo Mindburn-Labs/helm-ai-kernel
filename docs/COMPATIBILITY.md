@@ -68,7 +68,7 @@ This page is backed by:
 | Go kernel and CLI | Supported | `make build`, `make test` |
 | OpenAI-compatible proxy | Supported | `core/cmd/helm-ai-kernel/proxy_cmd.go`, proxy examples |
 | MCP server, OAuth scope enforcement, and bundle generation | Supported | `core/cmd/helm-ai-kernel/mcp_*`, MCP tests |
-| Boundary records, MCP quarantine, sandbox grants, authz snapshots, approvals, budgets, telemetry, and coexistence APIs | Supported | `api/openapi/helm.openapi.yaml`, `core/cmd/helm-ai-kernel/route_registry.go`, `core/cmd/helm-ai-kernel/contract_routes.go` |
+| Boundary records, MCP quarantine, receipts, evidence export/verify, conformance, and local onboarding proof APIs | Supported public proof path | `api/openapi/helm.openapi.yaml`, `core/cmd/helm-ai-kernel/route_registry.go`, `core/cmd/helm-ai-kernel/contract_routes.go` |
 | Evidence export and offline verification | Supported | `core/cmd/helm-ai-kernel/export_cmd.go`, `core/cmd/helm-ai-kernel/verify_cmd.go` |
 | Headless API contract for external clients | Supported | `api/openapi/helm.openapi.yaml`, `core/cmd/helm-ai-kernel/route_registry.go`, `make sdk-openapi-check` |
 | Python SDK | Supported | `make test-sdk-py` |
@@ -77,7 +77,7 @@ This page is backed by:
 | Rust SDK | Supported | `make test-sdk-rust` |
 | Java SDK | Supported | `make test-sdk-java` |
 | Docker and Docker Compose | Supported | `Dockerfile`, `docker-compose.yml` |
-| Kubernetes Helm chart | Supported | `deploy/helm-chart/` |
+| Kubernetes Helm chart | Staging/self-hosted guidance | `deploy/helm-chart/` |
 
 ## Framework Adapter Helpers
 

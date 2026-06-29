@@ -5,7 +5,10 @@ last_reviewed: 2026-06-13
 
 # HELM AI Kernel Developer Portal
 
-HELM AI Kernel is the open-source execution firewall for MCP and AI agents. The CLI gives developers a local kernel, same-origin quickstart Console, policy bundle loader, OpenAI-compatible proxy path, MCP firewall, receipts, EvidencePacks, and offline verification. Hosted Console pairing is a later path for account and commercial workflows after the local OSS proof is understood.
+HELM AI Kernel is the open-source execution firewall for MCP and AI agents. The
+CLI gives developers a local kernel, policy bundle loader,
+OpenAI-compatible proxy path, MCP firewall, receipts, EvidencePacks, and
+offline verification.
 
 ## Audience
 
@@ -21,7 +24,7 @@ After this page you should know which public HELM AI Kernel surface to use:
 - CLI and SDKs for integration;
 - MCP and OpenAI-compatible proxy for agent frameworks;
 - conformance and verification for CI and audits;
-- publishing and compatibility docs for release consumers.
+- compatibility docs for release consumers.
 
 ## OSS Boundary Map
 
@@ -71,7 +74,6 @@ This portal is assembled from source-owned docs:
 - `docs/CONFORMANCE.md`
 - `docs/VERIFICATION.md`
 - `docs/COMPATIBILITY.md`
-- `docs/PUBLISHING.md`
 - `docs/INTEGRATIONS/`
 - `docs/security/`
 - `docs/compliance/`
@@ -100,8 +102,6 @@ The code, command output, and verification artifacts override marketing language
 
 | Interface | Use When | Public Doc |
 | --- | --- | --- |
-| Local Console | You want the primary OSS adoption surface: guided local proof, receipts, and EvidencePack export. | [Quickstart](QUICKSTART.md) |
-| Hosted Console | You want account, Launchpad, or commercial workflows after the local proof. | <https://console.helm.mindburn.org> |
 | CLI | You want local serving, policy loading, receipts, or verification commands. | [Quickstart](QUICKSTART.md) |
 | OpenAI-compatible proxy | You have an existing OpenAI-style client and want a small integration diff. | [Proxy integration](INTEGRATIONS/openai_baseurl.md) |
 | MCP | You are exposing governed tools to MCP-capable clients. | [MCP integration](INTEGRATIONS/mcp.md) |
@@ -120,7 +120,9 @@ HELM AI Kernel docs separate implementation security from compliance mapping:
 
 ## Compatibility and Publishing
 
-Use [Compatibility](COMPATIBILITY.md) before relying on a public surface. Use [Publishing](PUBLISHING.md) before consuming release artifacts or publishing downstream packages. The docs intentionally distinguish retained compatibility paths from preferred paths so agents and humans can choose the least surprising integration.
+Use [Compatibility](COMPATIBILITY.md) before relying on a public surface. The
+docs intentionally distinguish retained compatibility paths from preferred paths
+so agents and humans can choose the least surprising integration.
 
 ## Troubleshooting
 
@@ -129,9 +131,10 @@ Use [Compatibility](COMPATIBILITY.md) before relying on a public surface. Use [P
 | Local proxy starts but receipts are missing | [Troubleshooting](TROUBLESHOOTING.md) and [Proxy integration](INTEGRATIONS/openai_baseurl.md) |
 | A bundle does not verify | [Verification](VERIFICATION.md) |
 | A framework adapter behaves differently from direct CLI use | [Compatibility](COMPATIBILITY.md) |
-| A public release artifact cannot be trusted | [Publishing](PUBLISHING.md) |
 | A security reviewer asks what is in the trust boundary | [Execution Security Model](EXECUTION_SECURITY_MODEL.md) |
 
 ## Support Path
 
-For bugs, include the HELM version, policy bundle hash, command used, receipt ID or bundle path, and verifier output. Do not include provider keys, private prompts, customer data, or unredacted receipts from production tenants.
+For bugs, include the HELM version, policy bundle hash, command used, receipt ID
+or bundle path, and verifier output. Do not include provider keys, private
+prompts, private endpoints, or unredacted sensitive receipts.

@@ -55,15 +55,6 @@
       "sensitivity": "public"
     },
     {
-      "slug": "oss-traction",
-      "title": "HELM AI Kernel OSS Traction Plan",
-      "section": "start-here",
-      "source_path": "docs/TRACTION.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/oss-traction",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
       "slug": "use-cases/mcp-execution-firewall",
       "title": "MCP Tool Quarantine",
       "section": "use-cases",
@@ -181,24 +172,6 @@
       "sensitivity": "public"
     },
     {
-      "slug": "launchpad/conformance",
-      "title": "Launchpad Conformance",
-      "section": "start-here",
-      "source_path": "docs/launchpad/CONFORMANCE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/launchpad/conformance",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "launchpad/clean-install-ga",
-      "title": "Launchpad Clean Install GA",
-      "section": "start-here",
-      "source_path": "docs/launchpad/CLEAN_INSTALL_GA.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/launchpad/clean-install-ga",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
       "slug": "launchpad/apps/openclaw",
       "title": "OpenClaw on HELM",
       "section": "start-here",
@@ -311,15 +284,6 @@
       "title": "SDK Index",
       "section": "interfaces",
       "source_path": "docs/sdks/00_INDEX.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "benchmarks",
-      "title": "Benchmarks",
-      "section": "supporting-material",
-      "source_path": "docs/BENCHMARKS.md",
       "docs_origin_hint": "helm.docs.mindburn.org",
       "access": "public",
       "sensitivity": "public"

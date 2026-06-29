@@ -70,10 +70,10 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
-### Added
-- **UCS v1.5 Super-Sovereign Execution Standard**: Scaffolded zero-knowledge execution proof boundaries and Trusted Execution Environment (TEE) sealed secrets vault.
-- **zkVM Guest Safety Checker**: Introduced the `ZKVMGuestSafetyChecker` and `SafetyGuestProgram` inside `pkg/crypto/zk` to simulate AST static analysis inside zero-knowledge execution enclaves.
-- **TEE Secrets Enclave**: Introduced `SovereignKMSVault` and `SecretProxyFilter` inside `pkg/crypto/tee` to enforce hardware-sealed secrets isolation and inline proxy token injection with constant-time verification.
+No public feature claim is active in this section. Keep research scaffolds and
+hardware-backed enforcement language out of the public changelog until a tagged
+release ships source-owned tests, verifier evidence, and release artifacts for
+that exact capability.
 
 ## [0.5.16] - 2026-06-18
 

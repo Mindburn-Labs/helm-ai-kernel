@@ -15,7 +15,7 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-ai-kernel/architecture/cognitive-firewall`
+- Public route: `architecture/cognitive-firewall`
 - Source document: `helm-ai-kernel/docs/architecture/cognitive-firewall.md`
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`

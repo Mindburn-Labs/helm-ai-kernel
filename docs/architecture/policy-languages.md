@@ -15,7 +15,7 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-ai-kernel/architecture/policy-languages`
+- Public route: `architecture/policy-languages`
 - Source document: `helm-ai-kernel/docs/architecture/policy-languages.md`
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
@@ -187,4 +187,3 @@ flowchart TD
     style decision fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
     style receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
-

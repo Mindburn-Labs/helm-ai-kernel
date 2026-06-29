@@ -10,7 +10,7 @@
   },
   "documents": [
     {
-      "slug": "helm-ai-kernel",
+      "slug": "index",
       "title": "HELM AI Kernel",
       "section": "helm-ai-kernel",
       "source_path": "docs/index.md",
@@ -19,7 +19,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/quickstart",
+      "slug": "quickstart",
       "title": "Quickstart",
       "section": "start-here",
       "source_path": "docs/QUICKSTART.md",
@@ -28,7 +28,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/developer-journey",
+      "slug": "developer-journey",
       "title": "Developer Journey",
       "section": "start-here",
       "source_path": "docs/DEVELOPER_JOURNEY.md",
@@ -37,7 +37,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/community",
+      "slug": "community",
       "title": "Community",
       "section": "start-here",
       "source_path": "COMMUNITY.md",
@@ -46,7 +46,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/ecosystem",
+      "slug": "ecosystem",
       "title": "Ecosystem",
       "section": "start-here",
       "source_path": "docs/ECOSYSTEM.md",
@@ -55,7 +55,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/oss-traction",
+      "slug": "oss-traction",
       "title": "HELM AI Kernel OSS Traction Plan",
       "section": "start-here",
       "source_path": "docs/TRACTION.md",
@@ -64,7 +64,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/use-cases/mcp-execution-firewall",
+      "slug": "use-cases/mcp-execution-firewall",
       "title": "MCP Tool Quarantine",
       "section": "use-cases",
       "source_path": "docs/use-cases/mcp-execution-firewall.md",
@@ -73,7 +73,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/use-cases/ai-agent-security",
+      "slug": "use-cases/ai-agent-security",
       "title": "AI Agent Security",
       "section": "use-cases",
       "source_path": "docs/use-cases/ai-agent-security.md",
@@ -82,7 +82,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/use-cases/openai-compatible-ai-gateway-policy",
+      "slug": "use-cases/openai-compatible-ai-gateway-policy",
       "title": "OpenAI-Compatible Execution Boundary",
       "section": "use-cases",
       "source_path": "docs/use-cases/openai-compatible-ai-gateway-policy.md",
@@ -91,7 +91,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/use-cases/llm-audit-receipts",
+      "slug": "use-cases/llm-audit-receipts",
       "title": "Signed Receipts for AI Agent Actions",
       "section": "use-cases",
       "source_path": "docs/use-cases/llm-audit-receipts.md",
@@ -100,7 +100,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/use-cases/agent-tool-call-governance",
+      "slug": "use-cases/agent-tool-call-governance",
       "title": "AI Agent Side-Effect Governance",
       "section": "use-cases",
       "source_path": "docs/use-cases/agent-tool-call-governance.md",
@@ -109,7 +109,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/posts/why-ai-agents-need-an-execution-firewall",
+      "slug": "posts/why-ai-agents-need-an-execution-firewall",
       "title": "Why AI Agents Need an Execution Firewall",
       "section": "posts",
       "source_path": "docs/posts/why-ai-agents-need-an-execution-firewall.md",
@@ -118,7 +118,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/posts/mcp-quarantine-before-tool-dispatch",
+      "slug": "posts/mcp-quarantine-before-tool-dispatch",
       "title": "MCP Quarantine Before Tool Dispatch",
       "section": "posts",
       "source_path": "docs/posts/mcp-quarantine-before-tool-dispatch.md",
@@ -127,7 +127,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/posts/receipts-beat-logs-for-agent-audit-trails",
+      "slug": "posts/receipts-beat-logs-for-agent-audit-trails",
       "title": "Receipts Beat Logs for Agent Audit Trails",
       "section": "posts",
       "source_path": "docs/posts/receipts-beat-logs-for-agent-audit-trails.md",
@@ -136,7 +136,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/posts/how-to-fail-closed-on-agent-tool-calls",
+      "slug": "posts/how-to-fail-closed-on-agent-tool-calls",
       "title": "How To Fail Closed on Agent Tool Calls",
       "section": "posts",
       "source_path": "docs/posts/how-to-fail-closed-on-agent-tool-calls.md",
@@ -145,7 +145,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/architecture",
+      "slug": "architecture",
       "title": "Architecture",
       "section": "start-here",
       "source_path": "docs/ARCHITECTURE.md",
@@ -154,7 +154,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/architecture/canonical-diagrams",
+      "slug": "architecture/canonical-diagrams",
       "title": "Canonical Diagrams",
       "section": "architecture",
       "source_path": "docs/architecture/canonical-diagrams.md",
@@ -163,7 +163,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/conformance",
+      "slug": "conformance",
       "title": "Conformance",
       "section": "start-here",
       "source_path": "docs/CONFORMANCE.md",
@@ -172,7 +172,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/launchpad",
+      "slug": "launchpad",
       "title": "Launchpad",
       "section": "start-here",
       "source_path": "docs/LAUNCHPAD.md",
@@ -181,7 +181,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/launchpad/conformance",
+      "slug": "launchpad/conformance",
       "title": "Launchpad Conformance",
       "section": "start-here",
       "source_path": "docs/launchpad/CONFORMANCE.md",
@@ -190,7 +190,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/launchpad/clean-install-ga",
+      "slug": "launchpad/clean-install-ga",
       "title": "Launchpad Clean Install GA",
       "section": "start-here",
       "source_path": "docs/launchpad/CLEAN_INSTALL_GA.md",
@@ -199,7 +199,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/launchpad/apps/openclaw",
+      "slug": "launchpad/apps/openclaw",
       "title": "OpenClaw on HELM",
       "section": "start-here",
       "source_path": "docs/launchpad/apps/OPENCLAW.md",
@@ -208,7 +208,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/launchpad/apps/hermes",
+      "slug": "launchpad/apps/hermes",
       "title": "Hermes on HELM",
       "section": "start-here",
       "source_path": "docs/launchpad/apps/HERMES.md",
@@ -217,7 +217,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/launchpad/apps/opencode",
+      "slug": "launchpad/apps/opencode",
       "title": "OpenCode on HELM",
       "section": "start-here",
       "source_path": "docs/launchpad/apps/OPENCODE.md",
@@ -226,7 +226,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/launchpad/apps/kilocode",
+      "slug": "launchpad/apps/kilocode",
       "title": "Kilo Code on HELM",
       "section": "start-here",
       "source_path": "docs/launchpad/apps/KILOCODE.md",
@@ -235,7 +235,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/skills/flow-catalog",
+      "slug": "skills/flow-catalog",
       "title": "Skill Packs Flow Catalog",
       "section": "interfaces",
       "source_path": "docs/skills/FLOW_CATALOG.md",
@@ -244,7 +244,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/launchpad/flow-catalog",
+      "slug": "launchpad/flow-catalog",
       "title": "Launchpad Flow Catalog",
       "section": "interfaces",
       "source_path": "docs/launchpad/FLOW_CATALOG.md",
@@ -253,7 +253,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/verification",
+      "slug": "verification",
       "title": "Verification",
       "section": "start-here",
       "source_path": "docs/VERIFICATION.md",
@@ -262,7 +262,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/compatibility",
+      "slug": "compatibility",
       "title": "Compatibility",
       "section": "start-here",
       "source_path": "docs/COMPATIBILITY.md",
@@ -271,7 +271,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/publishing",
+      "slug": "publishing",
       "title": "Publishing",
       "section": "start-here",
       "source_path": "docs/PUBLISHING.md",
@@ -280,7 +280,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/changelog",
+      "slug": "changelog",
       "title": "HELM AI Kernel Changelog",
       "section": "helm-ai-kernel",
       "source_path": "CHANGELOG.md",
@@ -289,7 +289,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/execution-security-model",
+      "slug": "execution-security-model",
       "title": "Execution Security Model",
       "section": "interfaces",
       "source_path": "docs/EXECUTION_SECURITY_MODEL.md",
@@ -298,7 +298,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/owasp-mcp-threat-mapping",
+      "slug": "owasp-mcp-threat-mapping",
       "title": "OWASP MCP Threat Mapping",
       "section": "interfaces",
       "source_path": "docs/OWASP_MCP_THREAT_MAPPING.md",
@@ -307,7 +307,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/sdks",
+      "slug": "sdks",
       "title": "SDK Index",
       "section": "interfaces",
       "source_path": "docs/sdks/00_INDEX.md",
@@ -316,7 +316,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/benchmarks",
+      "slug": "benchmarks",
       "title": "Benchmarks",
       "section": "supporting-material",
       "source_path": "docs/BENCHMARKS.md",
@@ -325,7 +325,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/troubleshooting",
+      "slug": "troubleshooting",
       "title": "Troubleshooting",
       "section": "supporting-material",
       "source_path": "docs/TROUBLESHOOTING.md",
@@ -334,7 +334,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/integrations/openai-compatible-proxy",
+      "slug": "integrations/openai-compatible-proxy",
       "title": "OpenAI-Compatible Proxy Integration",
       "section": "integrations",
       "source_path": "docs/INTEGRATIONS/openai_baseurl.md",
@@ -343,7 +343,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/integrations/mcp",
+      "slug": "integrations/mcp",
       "title": "MCP Integration",
       "section": "integrations",
       "source_path": "docs/INTEGRATIONS/mcp.md",
@@ -352,7 +352,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/integrations/codebase-memory-mcp",
+      "slug": "integrations/codebase-memory-mcp",
       "title": "Codebase Memory MCP Integration",
       "section": "integrations",
       "source_path": "docs/INTEGRATIONS/codebase_memory_mcp.md",
@@ -361,7 +361,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/integrations/microsoft-agent-governance-toolkit",
+      "slug": "integrations/microsoft-agent-governance-toolkit",
       "title": "Microsoft Agent Governance Toolkit Coexistence",
       "section": "integrations",
       "source_path": "docs/INTEGRATIONS/microsoft_agent_governance_toolkit.md",
@@ -370,7 +370,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/security/owasp-agentic-top10-mapping",
+      "slug": "security/owasp-agentic-top10-mapping",
       "title": "OWASP Agentic Top 10 Mapping",
       "section": "security",
       "source_path": "docs/security/owasp-agentic-top10-coverage.md",
@@ -379,7 +379,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/security/prompt-injection-watchlist-2026-04",
+      "slug": "security/prompt-injection-watchlist-2026-04",
       "title": "Prompt Injection Watchlist - April 2026",
       "section": "security",
       "source_path": "docs/security/prompt-injection-watchlist-2026-04.md",
@@ -388,7 +388,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/compliance/nist-ai-agent-critical-infrastructure",
+      "slug": "compliance/nist-ai-agent-critical-infrastructure",
       "title": "NIST AI Agent Critical Infrastructure Alignment",
       "section": "compliance",
       "source_path": "docs/compliance/nist-ai-agent-critical-infrastructure.md",
@@ -397,7 +397,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/compliance/eu-ai-act-high-risk-pack",
+      "slug": "compliance/eu-ai-act-high-risk-pack",
       "title": "EU AI Act High-Risk Pack",
       "section": "compliance",
       "source_path": "docs/compliance/eu-ai-act-high-risk-pack.md",
@@ -406,7 +406,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/compliance/nist-ai-rmf-iso-42001-crosswalk",
+      "slug": "compliance/nist-ai-rmf-iso-42001-crosswalk",
       "title": "NIST AI RMF to ISO 42001 Crosswalk",
       "section": "compliance",
       "source_path": "docs/compliance/nist-ai-rmf-iso-42001-crosswalk.md",
@@ -415,7 +415,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/source-map",
+      "slug": "source-map",
       "title": "Developer Surface Map",
       "section": "helm-ai-kernel",
       "source_path": "docs/DEVELOPER_SURFACE_MAP.md",
@@ -424,7 +424,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/kernel-scope",
+      "slug": "kernel-scope",
       "title": "Kernel Scope",
       "section": "helm-ai-kernel",
       "source_path": "docs/KERNEL_SCOPE.md",
@@ -433,7 +433,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/deployment-and-examples",
+      "slug": "deployment-and-examples",
       "title": "Deployment and Examples",
       "section": "deployment",
       "source_path": "docs/DEPLOYMENT_AND_EXAMPLES.md",
@@ -442,7 +442,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/examples",
+      "slug": "examples",
       "title": "HELM AI Kernel Examples Matrix",
       "section": "deployment",
       "source_path": "docs/EXAMPLES.md",
@@ -451,7 +451,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/deployment/kubernetes",
+      "slug": "deployment/kubernetes",
       "title": "Kubernetes Deployment",
       "section": "deployment",
       "source_path": "docs/KUBERNETES_DEPLOYMENT.md",
@@ -460,7 +460,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/reference/cli",
+      "slug": "reference/cli",
       "title": "HELM AI Kernel CLI Reference",
       "section": "reference",
       "source_path": "docs/reference/cli.md",
@@ -469,7 +469,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/reference/http-api",
+      "slug": "reference/http-api",
       "title": "HELM AI Kernel HTTP API Reference",
       "section": "reference",
       "source_path": "docs/reference/http-api.md",
@@ -478,7 +478,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/reference/execution-boundary",
+      "slug": "reference/execution-boundary",
       "title": "Execution Boundary Reference",
       "section": "reference",
       "source_path": "docs/reference/execution-boundary.md",
@@ -487,7 +487,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/reference/json-schemas",
+      "slug": "reference/json-schemas",
       "title": "HELM AI Kernel JSON Schema Reference",
       "section": "reference",
       "source_path": "docs/reference/json-schemas.md",
@@ -496,7 +496,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/reference/protocols-and-schemas",
+      "slug": "reference/protocols-and-schemas",
       "title": "Protocols and Schemas",
       "section": "reference",
       "source_path": "docs/REFERENCE_PROTOCOLS.md",
@@ -505,7 +505,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/architecture/cognitive-firewall",
+      "slug": "architecture/cognitive-firewall",
       "title": "Cognitive Firewall Pattern",
       "section": "architecture",
       "source_path": "docs/architecture/cognitive-firewall.md",
@@ -514,7 +514,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/architecture/eidas-qtsp",
+      "slug": "architecture/eidas-qtsp",
       "title": "eIDAS QTSP Anchoring",
       "section": "architecture",
       "source_path": "docs/architecture/eidas-qtsp.md",
@@ -523,7 +523,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/architecture/policy-languages",
+      "slug": "architecture/policy-languages",
       "title": "Policy Languages",
       "section": "architecture",
       "source_path": "docs/architecture/policy-languages.md",
@@ -532,7 +532,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/security/clawguard-taint-tracking",
+      "slug": "security/clawguard-taint-tracking",
       "title": "ClawGuard Taint Tracking",
       "section": "security",
       "source_path": "docs/security/clawguard-taint-tracking.md",
@@ -541,7 +541,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/security/session-risk-memory",
+      "slug": "security/session-risk-memory",
       "title": "Session Risk Memory",
       "section": "security",
       "source_path": "docs/security/session-risk-memory.md",
@@ -550,7 +550,7 @@
       "sensitivity": "public"
     },
     {
-      "slug": "helm-ai-kernel/security/release-security",
+      "slug": "security/release-security",
       "title": "Release and Security Evidence",
       "section": "security",
       "source_path": "docs/RELEASE_SECURITY.md",

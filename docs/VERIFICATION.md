@@ -17,7 +17,7 @@ You should be able to run local offline verification, distinguish release metada
 
 ## Source Truth
 
-- Public route: `helm-ai-kernel/verification`
+- Public route: `verification`
 - Source document: `helm-ai-kernel/docs/VERIFICATION.md`
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`

@@ -15,7 +15,7 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-ai-kernel/security/clawguard-taint-tracking`
+- Public route: `security/clawguard-taint-tracking`
 - Source document: `helm-ai-kernel/docs/security/clawguard-taint-tracking.md`
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`

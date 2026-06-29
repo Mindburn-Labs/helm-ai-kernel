@@ -23707,9 +23707,11 @@ public static class FrameworkAdapter {
   GUIActionReceipt.JSON_PROPERTY_ACTION_TYPE,
   GUIActionReceipt.JSON_PROPERTY_PRECONDITION,
   GUIActionReceipt.JSON_PROPERTY_POSTCONDITION,
+  GUIActionReceipt.JSON_PROPERTY_POSTCONDITION_REF,
   GUIActionReceipt.JSON_PROPERTY_POSTCONDITION_VERIFIED,
   GUIActionReceipt.JSON_PROPERTY_VERIFICATION_SCOPE_REF,
   GUIActionReceipt.JSON_PROPERTY_POLICY_HASH,
+  GUIActionReceipt.JSON_PROPERTY_PROOF_GRAPH_NODE_REF,
   GUIActionReceipt.JSON_PROPERTY_SANDBOX_GRANT_HASH,
   GUIActionReceipt.JSON_PROPERTY_CREATED_AT,
   GUIActionReceipt.JSON_PROPERTY_RECEIPT_HASH
@@ -23784,6 +23786,9 @@ public static class GUIActionReceipt {
   public static final String JSON_PROPERTY_POSTCONDITION = "postcondition";
   private String postcondition;
 
+  public static final String JSON_PROPERTY_POSTCONDITION_REF = "postcondition_ref";
+  private String postconditionRef;
+
   public static final String JSON_PROPERTY_POSTCONDITION_VERIFIED = "postcondition_verified";
   private Boolean postconditionVerified;
 
@@ -23792,6 +23797,9 @@ public static class GUIActionReceipt {
 
   public static final String JSON_PROPERTY_POLICY_HASH = "policy_hash";
   private String policyHash;
+
+  public static final String JSON_PROPERTY_PROOF_GRAPH_NODE_REF = "proof_graph_node_ref";
+  private String proofGraphNodeRef;
 
   public static final String JSON_PROPERTY_SANDBOX_GRANT_HASH = "sandbox_grant_hash";
   private String sandboxGrantHash;
@@ -24030,6 +24038,31 @@ public static class GUIActionReceipt {
   }
 
 
+  public GUIActionReceipt postconditionRef(String postconditionRef) {
+    this.postconditionRef = postconditionRef;
+    return this;
+  }
+
+   /**
+   * Get postconditionRef
+   * @return postconditionRef
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_POSTCONDITION_REF)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getPostconditionRef() {
+    return postconditionRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POSTCONDITION_REF)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setPostconditionRef(String postconditionRef) {
+    this.postconditionRef = postconditionRef;
+  }
+
+
   public GUIActionReceipt postconditionVerified(Boolean postconditionVerified) {
     this.postconditionVerified = postconditionVerified;
     return this;
@@ -24102,6 +24135,31 @@ public static class GUIActionReceipt {
   @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setPolicyHash(String policyHash) {
     this.policyHash = policyHash;
+  }
+
+
+  public GUIActionReceipt proofGraphNodeRef(String proofGraphNodeRef) {
+    this.proofGraphNodeRef = proofGraphNodeRef;
+    return this;
+  }
+
+   /**
+   * Get proofGraphNodeRef
+   * @return proofGraphNodeRef
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_PROOF_GRAPH_NODE_REF)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getProofGraphNodeRef() {
+    return proofGraphNodeRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PROOF_GRAPH_NODE_REF)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setProofGraphNodeRef(String proofGraphNodeRef) {
+    this.proofGraphNodeRef = proofGraphNodeRef;
   }
 
 
@@ -24201,9 +24259,11 @@ public static class GUIActionReceipt {
         Objects.equals(this.actionType, guIActionReceipt.actionType) &&
         Objects.equals(this.precondition, guIActionReceipt.precondition) &&
         Objects.equals(this.postcondition, guIActionReceipt.postcondition) &&
+        Objects.equals(this.postconditionRef, guIActionReceipt.postconditionRef) &&
         Objects.equals(this.postconditionVerified, guIActionReceipt.postconditionVerified) &&
         Objects.equals(this.verificationScopeRef, guIActionReceipt.verificationScopeRef) &&
         Objects.equals(this.policyHash, guIActionReceipt.policyHash) &&
+        Objects.equals(this.proofGraphNodeRef, guIActionReceipt.proofGraphNodeRef) &&
         Objects.equals(this.sandboxGrantHash, guIActionReceipt.sandboxGrantHash) &&
         Objects.equals(this.createdAt, guIActionReceipt.createdAt) &&
         Objects.equals(this.receiptHash, guIActionReceipt.receiptHash);
@@ -24211,7 +24271,7 @@ public static class GUIActionReceipt {
 
   @Override
   public int hashCode() {
-    return Objects.hash(receiptId, groundedActionRef, screenshotHash, domOrAxSnapshotHash, targetRef, bboxOrElementId, actionType, precondition, postcondition, postconditionVerified, verificationScopeRef, policyHash, sandboxGrantHash, createdAt, receiptHash);
+    return Objects.hash(receiptId, groundedActionRef, screenshotHash, domOrAxSnapshotHash, targetRef, bboxOrElementId, actionType, precondition, postcondition, postconditionRef, postconditionVerified, verificationScopeRef, policyHash, proofGraphNodeRef, sandboxGrantHash, createdAt, receiptHash);
   }
 
   @Override
@@ -24227,9 +24287,11 @@ public static class GUIActionReceipt {
     sb.append("    actionType: ").append(toIndentedString(actionType)).append("\n");
     sb.append("    precondition: ").append(toIndentedString(precondition)).append("\n");
     sb.append("    postcondition: ").append(toIndentedString(postcondition)).append("\n");
+    sb.append("    postconditionRef: ").append(toIndentedString(postconditionRef)).append("\n");
     sb.append("    postconditionVerified: ").append(toIndentedString(postconditionVerified)).append("\n");
     sb.append("    verificationScopeRef: ").append(toIndentedString(verificationScopeRef)).append("\n");
     sb.append("    policyHash: ").append(toIndentedString(policyHash)).append("\n");
+    sb.append("    proofGraphNodeRef: ").append(toIndentedString(proofGraphNodeRef)).append("\n");
     sb.append("    sandboxGrantHash: ").append(toIndentedString(sandboxGrantHash)).append("\n");
     sb.append("    createdAt: ").append(toIndentedString(createdAt)).append("\n");
     sb.append("    receiptHash: ").append(toIndentedString(receiptHash)).append("\n");
@@ -24325,6 +24387,11 @@ public static class GUIActionReceipt {
       joiner.add(String.format("%spostcondition%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPostcondition()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `postcondition_ref` to the URL query string
+    if (getPostconditionRef() != null) {
+      joiner.add(String.format("%spostcondition_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPostconditionRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `postcondition_verified` to the URL query string
     if (getPostconditionVerified() != null) {
       joiner.add(String.format("%spostcondition_verified%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPostconditionVerified()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
@@ -24338,6 +24405,11 @@ public static class GUIActionReceipt {
     // add `policy_hash` to the URL query string
     if (getPolicyHash() != null) {
       joiner.add(String.format("%spolicy_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `proof_graph_node_ref` to the URL query string
+    if (getProofGraphNodeRef() != null) {
+      joiner.add(String.format("%sproof_graph_node_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getProofGraphNodeRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `sandbox_grant_hash` to the URL query string
@@ -25955,8 +26027,10 @@ public static class GovernanceDecision {
   GroundedActionRef.JSON_PROPERTY_ACTION_TYPE,
   GroundedActionRef.JSON_PROPERTY_PRECONDITION,
   GroundedActionRef.JSON_PROPERTY_POSTCONDITION,
+  GroundedActionRef.JSON_PROPERTY_POSTCONDITION_REF,
   GroundedActionRef.JSON_PROPERTY_VERIFICATION_SCOPE_REF,
   GroundedActionRef.JSON_PROPERTY_POLICY_HASH,
+  GroundedActionRef.JSON_PROPERTY_PROOF_GRAPH_NODE_REF,
   GroundedActionRef.JSON_PROPERTY_SANDBOX_GRANT_HASH,
   GroundedActionRef.JSON_PROPERTY_CREATED_AT,
   GroundedActionRef.JSON_PROPERTY_GROUNDING_HASH
@@ -26028,11 +26102,17 @@ public static class GroundedActionRef {
   public static final String JSON_PROPERTY_POSTCONDITION = "postcondition";
   private String postcondition;
 
+  public static final String JSON_PROPERTY_POSTCONDITION_REF = "postcondition_ref";
+  private String postconditionRef;
+
   public static final String JSON_PROPERTY_VERIFICATION_SCOPE_REF = "verification_scope_ref";
   private String verificationScopeRef;
 
   public static final String JSON_PROPERTY_POLICY_HASH = "policy_hash";
   private String policyHash;
+
+  public static final String JSON_PROPERTY_PROOF_GRAPH_NODE_REF = "proof_graph_node_ref";
+  private String proofGraphNodeRef;
 
   public static final String JSON_PROPERTY_SANDBOX_GRANT_HASH = "sandbox_grant_hash";
   private String sandboxGrantHash;
@@ -26246,6 +26326,31 @@ public static class GroundedActionRef {
   }
 
 
+  public GroundedActionRef postconditionRef(String postconditionRef) {
+    this.postconditionRef = postconditionRef;
+    return this;
+  }
+
+   /**
+   * Get postconditionRef
+   * @return postconditionRef
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_POSTCONDITION_REF)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getPostconditionRef() {
+    return postconditionRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POSTCONDITION_REF)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setPostconditionRef(String postconditionRef) {
+    this.postconditionRef = postconditionRef;
+  }
+
+
   public GroundedActionRef verificationScopeRef(String verificationScopeRef) {
     this.verificationScopeRef = verificationScopeRef;
     return this;
@@ -26293,6 +26398,31 @@ public static class GroundedActionRef {
   @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setPolicyHash(String policyHash) {
     this.policyHash = policyHash;
+  }
+
+
+  public GroundedActionRef proofGraphNodeRef(String proofGraphNodeRef) {
+    this.proofGraphNodeRef = proofGraphNodeRef;
+    return this;
+  }
+
+   /**
+   * Get proofGraphNodeRef
+   * @return proofGraphNodeRef
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_PROOF_GRAPH_NODE_REF)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getProofGraphNodeRef() {
+    return proofGraphNodeRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PROOF_GRAPH_NODE_REF)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setProofGraphNodeRef(String proofGraphNodeRef) {
+    this.proofGraphNodeRef = proofGraphNodeRef;
   }
 
 
@@ -26391,8 +26521,10 @@ public static class GroundedActionRef {
         Objects.equals(this.actionType, groundedActionRef.actionType) &&
         Objects.equals(this.precondition, groundedActionRef.precondition) &&
         Objects.equals(this.postcondition, groundedActionRef.postcondition) &&
+        Objects.equals(this.postconditionRef, groundedActionRef.postconditionRef) &&
         Objects.equals(this.verificationScopeRef, groundedActionRef.verificationScopeRef) &&
         Objects.equals(this.policyHash, groundedActionRef.policyHash) &&
+        Objects.equals(this.proofGraphNodeRef, groundedActionRef.proofGraphNodeRef) &&
         Objects.equals(this.sandboxGrantHash, groundedActionRef.sandboxGrantHash) &&
         Objects.equals(this.createdAt, groundedActionRef.createdAt) &&
         Objects.equals(this.groundingHash, groundedActionRef.groundingHash);
@@ -26400,7 +26532,7 @@ public static class GroundedActionRef {
 
   @Override
   public int hashCode() {
-    return Objects.hash(groundedActionId, screenshotHash, domOrAxSnapshotHash, targetRef, bboxOrElementId, actionType, precondition, postcondition, verificationScopeRef, policyHash, sandboxGrantHash, createdAt, groundingHash);
+    return Objects.hash(groundedActionId, screenshotHash, domOrAxSnapshotHash, targetRef, bboxOrElementId, actionType, precondition, postcondition, postconditionRef, verificationScopeRef, policyHash, proofGraphNodeRef, sandboxGrantHash, createdAt, groundingHash);
   }
 
   @Override
@@ -26415,8 +26547,10 @@ public static class GroundedActionRef {
     sb.append("    actionType: ").append(toIndentedString(actionType)).append("\n");
     sb.append("    precondition: ").append(toIndentedString(precondition)).append("\n");
     sb.append("    postcondition: ").append(toIndentedString(postcondition)).append("\n");
+    sb.append("    postconditionRef: ").append(toIndentedString(postconditionRef)).append("\n");
     sb.append("    verificationScopeRef: ").append(toIndentedString(verificationScopeRef)).append("\n");
     sb.append("    policyHash: ").append(toIndentedString(policyHash)).append("\n");
+    sb.append("    proofGraphNodeRef: ").append(toIndentedString(proofGraphNodeRef)).append("\n");
     sb.append("    sandboxGrantHash: ").append(toIndentedString(sandboxGrantHash)).append("\n");
     sb.append("    createdAt: ").append(toIndentedString(createdAt)).append("\n");
     sb.append("    groundingHash: ").append(toIndentedString(groundingHash)).append("\n");
@@ -26507,6 +26641,11 @@ public static class GroundedActionRef {
       joiner.add(String.format("%spostcondition%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPostcondition()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `postcondition_ref` to the URL query string
+    if (getPostconditionRef() != null) {
+      joiner.add(String.format("%spostcondition_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPostconditionRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `verification_scope_ref` to the URL query string
     if (getVerificationScopeRef() != null) {
       joiner.add(String.format("%sverification_scope_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getVerificationScopeRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
@@ -26515,6 +26654,11 @@ public static class GroundedActionRef {
     // add `policy_hash` to the URL query string
     if (getPolicyHash() != null) {
       joiner.add(String.format("%spolicy_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `proof_graph_node_ref` to the URL query string
+    if (getProofGraphNodeRef() != null) {
+      joiner.add(String.format("%sproof_graph_node_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getProofGraphNodeRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `sandbox_grant_hash` to the URL query string

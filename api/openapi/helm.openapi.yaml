@@ -4403,7 +4403,7 @@ components:
 
     GroundedActionRef:
       type: object
-      required: [grounded_action_id, screenshot_hash, dom_or_ax_snapshot_hash, target_ref, bbox_or_element_id, action_type, precondition, postcondition, verification_scope_ref, policy_hash]
+      required: [grounded_action_id, screenshot_hash, dom_or_ax_snapshot_hash, target_ref, bbox_or_element_id, action_type, precondition, postcondition, postcondition_ref, verification_scope_ref, policy_hash, proof_graph_node_ref]
       properties:
         grounded_action_id: { type: string }
         screenshot_hash: { type: string }
@@ -4415,15 +4415,17 @@ components:
           enum: [click, type, select, submit, navigate]
         precondition: { type: string }
         postcondition: { type: string }
+        postcondition_ref: { type: string }
         verification_scope_ref: { type: string }
         policy_hash: { type: string }
+        proof_graph_node_ref: { type: string }
         sandbox_grant_hash: { type: string }
         created_at: { type: string, format: date-time }
         grounding_hash: { type: string }
 
     GUIActionReceipt:
       type: object
-      required: [receipt_id, grounded_action_ref, screenshot_hash, dom_or_ax_snapshot_hash, target_ref, bbox_or_element_id, action_type, precondition, postcondition, postcondition_verified, verification_scope_ref, policy_hash]
+      required: [receipt_id, grounded_action_ref, screenshot_hash, dom_or_ax_snapshot_hash, target_ref, bbox_or_element_id, action_type, precondition, postcondition, postcondition_ref, postcondition_verified, verification_scope_ref, policy_hash, proof_graph_node_ref]
       properties:
         receipt_id: { type: string }
         grounded_action_ref: { type: string }
@@ -4436,9 +4438,11 @@ components:
           enum: [click, type, select, submit, navigate]
         precondition: { type: string }
         postcondition: { type: string }
+        postcondition_ref: { type: string }
         postcondition_verified: { type: boolean }
         verification_scope_ref: { type: string }
         policy_hash: { type: string }
+        proof_graph_node_ref: { type: string }
         sandbox_grant_hash: { type: string }
         created_at: { type: string, format: date-time }
         receipt_hash: { type: string }

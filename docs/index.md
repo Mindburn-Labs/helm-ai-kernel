@@ -1,143 +1,84 @@
 ---
 title: HELM AI Kernel
-last_reviewed: 2026-06-30
+last_reviewed: 2026-07-01
 ---
 
-# HELM AI Kernel Developer Portal
+# HELM AI Kernel
 
-HELM AI Kernel is the open-source execution firewall for MCP and AI agents. The
-CLI gives developers a local kernel, policy bundle loader,
-OpenAI-compatible proxy path, MCP firewall, receipts, EvidencePacks, and
-offline verification.
+HELM AI Kernel is a local execution firewall for AI agents. Put it between an
+agent and side-effecting tools, get an `ALLOW`, `DENY`, or `ESCALATE` decision,
+and keep a signed receipt that can be verified later.
 
-## Audience
+## Start
 
-This page is for open-source developers, platform teams, security reviewers, and framework authors who need to integrate or inspect the HELM AI Kernel kernel directly.
+| Goal | Start here |
+| --- | --- |
+| Protect a local coding agent | [Quickstart](QUICKSTART.md) |
+| Scan an agent before enforcement | [Agent Risk Scan](reference/agent-risk-scan.md) |
+| Install the CLI | [Installation](DEVELOPER_JOURNEY.md#install) |
+| Call the HTTP API | [API introduction](reference/http-api.md) |
+| Use an SDK | [SDKs](sdks/00_INDEX.md) |
+| Route MCP tools | [MCP integration](INTEGRATIONS/mcp.md) |
+| Use an OpenAI-compatible base URL | [OpenAI-compatible proxy](INTEGRATIONS/openai_baseurl.md) |
 
-## Outcome
+## First Command
 
-After this page you should know which public HELM AI Kernel surface to use:
-
-- quickstart for a local boundary;
-- agent risk scan for a local, anonymized audit surface;
-- developer journey for end-to-end install, runtime, SDK, deployment, and verification coverage;
-- architecture for the trust and execution model;
-- CLI and SDKs for integration;
-- MCP and OpenAI-compatible proxy for agent frameworks;
-- conformance and verification for CI and audits;
-- compatibility docs for release consumers.
-
-## OSS Boundary Map
-
-```mermaid
-flowchart TD
-    subgraph Ingestion["1. Ingestion & Context Plane"]
-        Dev["Developer app"]
-        Proxy["OpenAI-compatible proxy"]
-        Agent["MCP or agent client"]
-        MCP["MCP integration"]
-        Kernel["HELM AI Kernel kernel"]
-    end
-
-    subgraph Evaluation["2. Evaluation & Policy Plane"]
-        Policy["Policy bundle"]
-    end
-
-    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
-        Receipt["Receipt and evidence pack"]
-        Verify["Offline verifier"]
-    end
-
-    %% Operational Flow Edges
-    Dev --> Proxy
-    Agent --> MCP
-    Proxy --> Kernel
-    MCP --> Kernel
-    Kernel --> Policy
-    Kernel --> Receipt
-    Receipt --> Verify
-    Policy --> Verify
-
-    %% Premium Styling Rules
-    style Policy fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
-    style Receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
-    style Verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+```bash
+helm-ai-kernel setup codex --yes
 ```
 
+For Claude Code:
+
+```bash
+helm-ai-kernel setup claude-code --yes
+```
+
+Both commands keep the proof local. They write draft policy material, configure
+the supported client integration, start the local Kernel path, and leave signed
+receipts for blocked actions.
+
+## Main Paths
+
+- [Quickstart](QUICKSTART.md) - first local denial and receipt verification.
+- [Agent Risk Scan](reference/agent-risk-scan.md) - local-first scan,
+  anonymized risk envelope, and EvidencePack path.
+- [Developer journey](DEVELOPER_JOURNEY.md) - choose the next path after the
+  first proof.
+- [Claude Code](INTEGRATIONS/claude-code.md) - one-command setup, status,
+  remove, and receipt verification.
+- [Codex](INTEGRATIONS/codex.md) - user or project-scoped setup for Codex.
+- [MCP tools](INTEGRATIONS/mcp.md) - wrap, quarantine, approve, and inspect MCP
+  tool calls.
+- [OpenAI-compatible proxy](INTEGRATIONS/openai_baseurl.md) - keep an
+  OpenAI-shaped client while moving enforcement into HELM.
+- [Verification](VERIFICATION.md) - verify receipts and EvidencePacks offline.
+- [Troubleshooting](TROUBLESHOOTING.md) - diagnose setup, ports, receipts, and
+  policy behavior.
+
+## Capabilities
+
+| Capability | What to read |
+| --- | --- |
+| Fail-closed execution | [Execution security model](EXECUTION_SECURITY_MODEL.md) |
+| MCP quarantine | [MCP tool quarantine](use-cases/mcp-execution-firewall.md) |
+| Signed receipts | [Signed receipts](capabilities/signed-receipts.md) |
+| EvidencePack verification | [EvidencePack verification](capabilities/evidencepack-verification.md) |
+| Agent Risk Scan | [Agent Risk Scan](reference/agent-risk-scan.md) |
+| Policy bundles | [Policy bundles](capabilities/policy-bundles.md) |
+| OpenAI-compatible proxy | [Proxy integration](INTEGRATIONS/openai_baseurl.md) |
+
+## Reference
+
+- [CLI reference](reference/cli.md)
+- [HTTP API reference](reference/http-api.md)
+- [JSON schemas](reference/json-schemas.md)
+- [Protocols and schemas](reference/protocols-and-schemas.md)
+- [Compatibility](COMPATIBILITY.md)
+- [Publishing](PUBLISHING.md)
 
 ## Source Truth
 
-This portal is assembled from source-owned docs:
-
-- `docs/QUICKSTART.md`
-- `docs/DEVELOPER_JOURNEY.md`
-- `docs/ARCHITECTURE.md`
-- `docs/CONFORMANCE.md`
-- `docs/VERIFICATION.md`
-- `docs/COMPATIBILITY.md`
-- `docs/INTEGRATIONS/`
-- `docs/security/`
-- `docs/compliance/`
-
-The code, command output, and verification artifacts override marketing language. If a doc claim cannot be mapped to a source file, command, or artifact, remove or qualify it.
-
-## Start Here
-
-1. Run the local quickstart: [Quickstart](QUICKSTART.md).
-2. Run the local anonymized audit: [Agent Risk Scan](reference/agent-risk-scan.md).
-3. Try MCP quarantine with `bash scripts/launch/demo-mcp.sh`.
-4. Verify receipt tamper failure with `bash scripts/launch/demo-proof.sh`.
-5. Use the complete source-backed path: [Developer Journey](DEVELOPER_JOURNEY.md).
-6. Read the execution model: [Architecture](ARCHITECTURE.md).
-7. Pick an integration:
-   - [OpenAI-compatible proxy](INTEGRATIONS/openai_baseurl.md)
-   - [MCP integration](INTEGRATIONS/mcp.md)
-   - [Codebase Memory MCP integration](INTEGRATIONS/codebase_memory_mcp.md)
-   - [Highflame ZeroID Integration](INTEGRATIONS/zeroid.md)
-   - [Vaultak State Transaction Bridge](INTEGRATIONS/vaultak.md)
-   - [BGT Labs Sentinel Authorization Gateway](INTEGRATIONS/sentinel.md)
-   - [SDK index](sdks/00_INDEX.md)
-8. Verify an output: [Verification](VERIFICATION.md).
-9. Add conformance checks: [Conformance](CONFORMANCE.md).
-
-## Interfaces
-
-| Interface | Use When | Public Doc |
-| --- | --- | --- |
-| CLI | You want local serving, policy loading, receipts, or verification commands. | [Quickstart](QUICKSTART.md) |
-| Agent Risk Scan | You want a local anonymized scan before upload or enforcement. | [Agent Risk Scan](reference/agent-risk-scan.md) |
-| OpenAI-compatible proxy | You have an existing OpenAI-style client and want a small integration diff. | [Proxy integration](INTEGRATIONS/openai_baseurl.md) |
-| MCP | You are exposing governed tools to MCP-capable clients. | [MCP integration](INTEGRATIONS/mcp.md) |
-| Codebase Memory MCP | You want local read/query code intelligence before editing HELM source. | [Codebase Memory MCP integration](INTEGRATIONS/codebase_memory_mcp.md) |
-| SDKs | You need typed wrappers or generated examples. | [SDK index](sdks/00_INDEX.md) |
-| Verifier | You need replayable evidence independent of the model provider. | [Verification](VERIFICATION.md) |
-
-## Trust and Compliance
-
-HELM AI Kernel docs separate implementation security from compliance mapping:
-
-- [Execution Security Model](EXECUTION_SECURITY_MODEL.md) describes containment, policy evaluation, receipts, and evidence.
-- [OWASP MCP Threat Mapping](OWASP_MCP_THREAT_MAPPING.md) maps MCP-specific risks to HELM controls.
-- [OWASP Agentic Top 10 Mapping](security/owasp-agentic-top10-coverage.md) maps agentic failure modes to boundary controls.
-- [NIST AI RMF to ISO 42001 Crosswalk](compliance/nist-ai-rmf-iso-42001-crosswalk.md) explains how reference packs can support operator evidence without claiming certification.
-
-## Compatibility and Publishing
-
-Use [Compatibility](COMPATIBILITY.md) before relying on a public surface. The
-docs intentionally distinguish retained compatibility paths from preferred paths
-so agents and humans can choose the least surprising integration.
-
-## Troubleshooting
-
-| Problem | Where to Go |
-| --- | --- |
-| Local proxy starts but receipts are missing | [Troubleshooting](TROUBLESHOOTING.md) and [Proxy integration](INTEGRATIONS/openai_baseurl.md) |
-| A bundle does not verify | [Verification](VERIFICATION.md) |
-| A framework adapter behaves differently from direct CLI use | [Compatibility](COMPATIBILITY.md) |
-| A security reviewer asks what is in the trust boundary | [Execution Security Model](EXECUTION_SECURITY_MODEL.md) |
-
-## Support Path
-
-For bugs, include the HELM version, policy bundle hash, command used, receipt ID
-or bundle path, and verifier output. Do not include provider keys, private
-prompts, private endpoints, or unredacted sensitive receipts.
+This site is built from source-owned docs in this repository. Runtime behavior
+is owned by `core/`, `api/openapi/helm.openapi.yaml`, SDK README files,
+examples, and verification tests. If a public claim cannot be tied to those
+sources, remove it or qualify it.

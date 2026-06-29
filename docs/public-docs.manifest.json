@@ -64,6 +64,60 @@
       "sensitivity": "public"
     },
     {
+      "slug": "guides/govern-mcp-tools",
+      "title": "Govern MCP Tools",
+      "section": "guides",
+      "source_path": "docs/guides/govern-mcp-tools.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/guides/govern-mcp-tools",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "guides/use-openai-compatible-proxy",
+      "title": "Use The OpenAI-Compatible Proxy",
+      "section": "guides",
+      "source_path": "docs/guides/use-openai-compatible-proxy.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/guides/use-openai-compatible-proxy",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "guides/export-verify-evidencepacks",
+      "title": "Export And Verify EvidencePacks",
+      "section": "guides",
+      "source_path": "docs/guides/export-verify-evidencepacks.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/guides/export-verify-evidencepacks",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "capabilities/signed-receipts",
+      "title": "Signed Receipts",
+      "section": "capabilities",
+      "source_path": "docs/capabilities/signed-receipts.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/capabilities/signed-receipts",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "capabilities/evidencepack-verification",
+      "title": "EvidencePack Verification",
+      "section": "capabilities",
+      "source_path": "docs/capabilities/evidencepack-verification.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/capabilities/evidencepack-verification",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "capabilities/policy-bundles",
+      "title": "Policy Bundles",
+      "section": "capabilities",
+      "source_path": "docs/capabilities/policy-bundles.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/capabilities/policy-bundles",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "community",
       "title": "Community",
       "section": "start-here",
@@ -330,6 +384,51 @@
       "section": "integrations",
       "source_path": "docs/INTEGRATIONS/openai_baseurl.md",
       "docs_origin_hint": "helm.docs.mindburn.org",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "integrations/claude-code",
+      "title": "Claude Code Integration",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/claude-code.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/integrations/claude-code",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "integrations/codex",
+      "title": "Codex Integration",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/codex.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/integrations/codex",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "integrations/cursor",
+      "title": "Cursor Integration",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/cursor.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/integrations/cursor",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "integrations/vscode",
+      "title": "VS Code Integration",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/vscode.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/integrations/vscode",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "integrations/windsurf",
+      "title": "Windsurf Integration",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/windsurf.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/integrations/windsurf",
       "access": "public",
       "sensitivity": "public"
     },

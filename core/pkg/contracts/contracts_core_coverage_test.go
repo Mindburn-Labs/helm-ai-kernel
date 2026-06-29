@@ -442,6 +442,8 @@ func TestCoverageHarnessValidatorsAndSealers(t *testing.T) {
 		ActionType:           "click",
 		Precondition:         "form is valid",
 		Postcondition:        "submission toast appears",
+		PostconditionRef:     "proof:postcondition:submit-toast",
+		ProofGraphNodeRef:    "proofgraph:gui-action:submit",
 		VerificationScopeRef: "scope-1",
 		PolicyHash:           "sha256:policy",
 		SandboxGrantHash:     "sha256:grant",
@@ -458,6 +460,12 @@ func TestCoverageHarnessValidatorsAndSealers(t *testing.T) {
 		"missing created": func(a *GroundedActionRef) { a.CreatedAt = time.Time{} },
 		"missing bbox":    func(a *GroundedActionRef) { a.BBoxOrElementID = "" },
 		"missing post":    func(a *GroundedActionRef) { a.Postcondition = "" },
+		"missing post ref": func(a *GroundedActionRef) {
+			a.PostconditionRef = ""
+		},
+		"missing proofgraph node": func(a *GroundedActionRef) {
+			a.ProofGraphNodeRef = ""
+		},
 		"bad policy hash": func(a *GroundedActionRef) { a.PolicyHash = "policy" },
 		"bad snapshot hash": func(a *GroundedActionRef) {
 			a.DOMOrAXSnapshotHash = "dom"
@@ -496,7 +504,9 @@ func TestCoverageHarnessValidatorsAndSealers(t *testing.T) {
 		ActionType:            action.ActionType,
 		Precondition:          action.Precondition,
 		Postcondition:         action.Postcondition,
+		PostconditionRef:      action.PostconditionRef,
 		PostconditionVerified: true,
+		ProofGraphNodeRef:     action.ProofGraphNodeRef,
 		VerificationScopeRef:  action.VerificationScopeRef,
 		PolicyHash:            action.PolicyHash,
 		SandboxGrantHash:      action.SandboxGrantHash,
@@ -507,6 +517,12 @@ func TestCoverageHarnessValidatorsAndSealers(t *testing.T) {
 		"missing ref":  func(r *GUIActionReceipt) { r.GroundedActionRef = "" },
 		"bad ref data": func(r *GUIActionReceipt) { r.TargetRef = "" },
 		"unverified":   func(r *GUIActionReceipt) { r.PostconditionVerified = false },
+		"missing postcondition ref": func(r *GUIActionReceipt) {
+			r.PostconditionRef = ""
+		},
+		"missing proofgraph node": func(r *GUIActionReceipt) {
+			r.ProofGraphNodeRef = ""
+		},
 	} {
 		t.Run("receipt "+name, func(t *testing.T) {
 			candidate := receipt

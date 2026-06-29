@@ -62,6 +62,8 @@ type GroundedActionRef struct {
 	ActionType           string    `json:"action_type"`
 	Precondition         string    `json:"precondition"`
 	Postcondition        string    `json:"postcondition"`
+	PostconditionRef     string    `json:"postcondition_ref"`
+	ProofGraphNodeRef    string    `json:"proof_graph_node_ref"`
 	VerificationScopeRef string    `json:"verification_scope_ref"`
 	PolicyHash           string    `json:"policy_hash"`
 	SandboxGrantHash     string    `json:"sandbox_grant_hash,omitempty"`
@@ -80,7 +82,9 @@ type GUIActionReceipt struct {
 	ActionType            string    `json:"action_type"`
 	Precondition          string    `json:"precondition"`
 	Postcondition         string    `json:"postcondition"`
+	PostconditionRef      string    `json:"postcondition_ref"`
 	PostconditionVerified bool      `json:"postcondition_verified"`
+	ProofGraphNodeRef     string    `json:"proof_graph_node_ref"`
 	VerificationScopeRef  string    `json:"verification_scope_ref"`
 	PolicyHash            string    `json:"policy_hash"`
 	SandboxGrantHash      string    `json:"sandbox_grant_hash,omitempty"`
@@ -270,8 +274,11 @@ func (a GroundedActionRef) Validate() error {
 	if !isGUIActionType(a.ActionType) {
 		return fmt.Errorf("invalid action_type %q", a.ActionType)
 	}
-	if strings.TrimSpace(a.Precondition) == "" || strings.TrimSpace(a.Postcondition) == "" {
-		return fmt.Errorf("precondition and postcondition are required")
+	if strings.TrimSpace(a.Precondition) == "" || strings.TrimSpace(a.Postcondition) == "" || strings.TrimSpace(a.PostconditionRef) == "" {
+		return fmt.Errorf("precondition, postcondition, and postcondition_ref are required")
+	}
+	if strings.TrimSpace(a.ProofGraphNodeRef) == "" {
+		return fmt.Errorf("proof_graph_node_ref is required")
 	}
 	if strings.TrimSpace(a.VerificationScopeRef) == "" {
 		return fmt.Errorf("verification_scope_ref is required")
@@ -311,6 +318,8 @@ func (r GUIActionReceipt) Validate() error {
 		ActionType:           r.ActionType,
 		Precondition:         r.Precondition,
 		Postcondition:        r.Postcondition,
+		PostconditionRef:     r.PostconditionRef,
+		ProofGraphNodeRef:    r.ProofGraphNodeRef,
 		VerificationScopeRef: r.VerificationScopeRef,
 		PolicyHash:           r.PolicyHash,
 		SandboxGrantHash:     r.SandboxGrantHash,

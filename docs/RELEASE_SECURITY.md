@@ -57,10 +57,9 @@ release is complete only when GitHub shows Darwin/Linux/Windows binaries,
 `SHA256SUMS.txt`, `sbom.json`, `v0.5.18.openvex.json`,
 `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`,
 `sample-policy-material.tar`, `helm-ai-kernel-launchpad-data.tar`,
-`helm-console-web-v0.5.18.tar.gz` with checksum/SBOM/provenance/lock/manifest
-sidecars, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.18.json`,
+`helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.18.json`,
 `version-status.json`, and matching `*.cosign.bundle` files for each primary
-asset.
+asset. Browser UI bundles are not Kernel release assets.
 
 ## Public Release Material
 

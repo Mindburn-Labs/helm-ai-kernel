@@ -43,14 +43,14 @@ func TestSetupInstallClaudeWritesHookAndRunsQuickstart(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	dataDir := filepath.Join(tmp, "helm")
-	code := Run([]string{"helm-ai-kernel", "setup", "claude-code", "--yes", "--no-open", "--data-dir", dataDir}, &stdout, &stderr)
+	code := Run([]string{"helm-ai-kernel", "setup", "claude-code", "--yes", "--data-dir", dataDir}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("setup exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
 	}
 	if len(restore.execCalls) != 1 || !strings.Contains(strings.Join(restore.execCalls[0], " "), "claude mcp add") {
 		t.Fatalf("exec calls = %#v, want claude mcp add", restore.execCalls)
 	}
-	if strings.Join(restore.quickstartArgs, " ") != "--profile claude --data-dir "+filepath.Join(dataDir, "quickstart")+" --no-open" {
+	if strings.Join(restore.quickstartArgs, " ") != "--profile claude --data-dir "+filepath.Join(dataDir, "quickstart") {
 		t.Fatalf("quickstart args = %#v", restore.quickstartArgs)
 	}
 	hookPath := filepath.Join(home, ".claude", "settings.json")
@@ -77,7 +77,7 @@ func TestSetupInstallJSONKeepsQuickstartOutputOffStdout(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	dataDir := filepath.Join(tmp, "helm")
-	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--yes", "--json", "--no-open", "--data-dir", dataDir}, &stdout, &stderr)
+	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--yes", "--json", "--data-dir", dataDir}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("setup exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
 	}
@@ -106,7 +106,7 @@ func TestSetupCodexProjectRemoveUndoLocalConfig(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	dataDir := filepath.Join(tmp, "helm")
-	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--yes", "--no-open", "--data-dir", dataDir}, &stdout, &stderr)
+	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--yes", "--data-dir", dataDir}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("setup exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
 	}

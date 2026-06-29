@@ -9,7 +9,7 @@ This page is the source-backed end-to-end path for evaluating HELM AI Kernel. It
 
 ## Audience
 
-This journey is for developers and platform teams evaluating HELM AI Kernel beyond the first quickstart. It is the source-backed path for proving local Console onboarding, optional hosted Console registration, local runtime behavior, SDK calls, receipts, EvidencePack verification, conformance, deployment, and release verification.
+This journey is for developers and platform teams evaluating HELM AI Kernel beyond the first quickstart. It is the source-backed path for proving local headless onboarding, optional hosted control-plane pairing, local runtime behavior, SDK calls, receipts, EvidencePack verification, conformance, deployment, and release verification.
 
 ## Outcome
 
@@ -20,8 +20,8 @@ flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Quickstart["helm-ai-kernel quickstart"]
         Install["install or build helm-ai-kernel"]
-        Register["optional hosted Console"]
-        Pair["helm-ai-kernel console pair"]
+        Register["optional hosted control plane"]
+        Pair["helm-ai-kernel control-plane pair"]
         Proxy["optional helm-ai-kernel proxy"]
     end
 
@@ -71,7 +71,7 @@ flowchart TD
 - `scripts/check_documentation_coverage.py`
 - `scripts/check_documentation_truth.py`
 
-## Local Console First
+## Local Headless Proof First
 
 Start with the OSS proof path:
 
@@ -79,13 +79,12 @@ Start with the OSS proof path:
 helm-ai-kernel quickstart
 ```
 
-This starts the local Kernel, serves the same-origin Console at `/console`, and
-uses backend-owned onboarding APIs to create receipts and EvidencePack refs. No
-hosted account is required.
+This starts the local Kernel and uses backend-owned onboarding APIs to create
+receipts and EvidencePack refs. No hosted account is required.
 
-Create your account at <https://console.helm.mindburn.org> only when you want
-hosted dashboard, Launchpad, or commercial workflows after the local proof. Paid
-capabilities remain backend-entitlement gated.
+Pair with a hosted control plane only when you want workspace-scoped Launchpad
+or commercial workflows after the local proof. Paid capabilities remain
+backend-entitlement gated.
 
 ## Install
 
@@ -93,7 +92,9 @@ Use one of these current paths. The published Homebrew path is the macOS path;
 source builds and Docker remain the portable paths for Linux and WSL.
 
 ```bash
-brew install mindburnlabs/tap/helm-ai-kernel
+brew tap mindburn-labs/tap
+brew trust mindburn-labs/tap   # recent Homebrew requires trusting third-party taps
+brew install helm-ai-kernel
 helm-ai-kernel --version
 helm-ai-kernel quickstart
 ```
@@ -102,7 +103,7 @@ Use hosted pairing only after the local proof succeeds:
 
 ```bash
 helm-ai-kernel login
-helm-ai-kernel console pair
+helm-ai-kernel control-plane pair
 ```
 
 ```bash
@@ -131,7 +132,7 @@ Expected ready line:
 helm-edge-local - listening :7714 - ready
 ```
 
-Point the Console or an API client at the local kernel endpoint:
+Point an API client at the local kernel endpoint:
 
 ```bash
 http://127.0.0.1:7714
@@ -197,7 +198,7 @@ For workstation runs, `audit scope` turns signed `AgentRunReceipt` and `Workstat
   --evidence-pack
 ```
 
-The report covers MCP tools, filesystem, network egress, memory, secrets, deploys, payments, loops, and shell only when those actions appear in HELM receipts, wrapper decisions, or imported artifacts. It is not a hosted Console or OS-wide enforcement claim.
+The report covers MCP tools, filesystem, network egress, memory, secrets, deploys, payments, loops, and shell only when those actions appear in HELM receipts, wrapper decisions, or imported artifacts. It is not a hosted UI or OS-wide enforcement claim.
 
 ## Policy Fixtures
 
@@ -287,7 +288,7 @@ If the `helm` command on your machine resolves to this HELM AI Kernel binary, us
 
 Current source release target: `v0.5.18`: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.18>.
 
-The release is complete only after the release page includes Darwin/Linux/Windows binaries, `SHA256SUMS.txt`, `sbom.json`, `v0.5.18.openvex.json`, `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm-ai-kernel-launchpad-data.tar`, `helm-console-web-v0.5.18.tar.gz` with checksum/SBOM/provenance/lock/manifest sidecars, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.18.json`, `version-status.json`, and matching `*.cosign.bundle` files for each primary asset.
+The release is complete only after the release page includes Darwin/Linux/Windows binaries, `SHA256SUMS.txt`, `sbom.json`, `v0.5.18.openvex.json`, `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`, `sample-policy-material.tar`, `helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.5.18.json`, `version-status.json`, and matching `*.cosign.bundle` files for each primary asset. Browser UI bundles are not Kernel release assets.
 
 Run conformance and docs gates:
 

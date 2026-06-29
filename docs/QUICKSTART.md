@@ -8,7 +8,7 @@ last_reviewed: 2026-06-15
 This is the shortest current HELM AI Kernel OSS proof path: install or build
 the CLI, run `helm-ai-kernel setup claude-code --yes` or
 `helm-ai-kernel setup codex --yes`, keep the terminal open, and watch HELM
-protect a local coding agent with a signed denial and the same-origin Console.
+protect a local coding agent with a signed denial and headless API proof path.
 No account, hosted service, live model key, production credential, Docker
 daemon, or private endpoint is required for the local proof.
 
@@ -20,9 +20,9 @@ This quickstart is for developers, security reviewers, and integration owners wh
 
 By the end you should have a local Claude Code or Codex MCP entry, a PreToolUse
 hook, draft policy artifacts under `~/.helm-ai-kernel`, a local Kernel on
-`127.0.0.1:7714`, a Console served from the same origin at `/console`, a signed
-`DENY` receipt for a blocked tool call, and offline-verifiable proof artifacts.
-Hosted console pairing, paid plans, and Enterprise automation remain next-step
+`127.0.0.1:7714`, a signed `DENY` receipt for a blocked tool call, and
+offline-verifiable proof artifacts. Hosted control-plane pairing, paid plans,
+and Enterprise automation remain next-step
 paths after the local proof succeeds.
 
 ```mermaid
@@ -30,8 +30,7 @@ flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Install["install or build helm-ai-kernel"]
         Setup["helm-ai-kernel setup"]
-        Quickstart["local quickstart Console"]
-        Console["same-origin /console"]
+        Quickstart["local quickstart"]
         API["onboarding API"]
     end
 
@@ -48,8 +47,7 @@ flowchart TD
     %% Operational Flow Edges
     Install --> Setup
     Setup --> Quickstart
-    Quickstart --> Console
-    Console --> API
+    Quickstart --> API
     API --> Verdict
     Verdict --> Receipts
     Receipts --> Verify
@@ -59,7 +57,6 @@ flowchart TD
     %% Premium Styling Rules
     style Setup fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style Quickstart fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
-    style Console fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style Verdict fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
     style Receipts fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
     style Evidence fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
@@ -80,19 +77,17 @@ flowchart TD
 - `core/cmd/helm-ai-kernel/verify_cmd.go`
 - `api/openapi/helm.openapi.yaml`
 - `release.high_risk.v3.toml`
-- `scripts/release/stage_console_bundle.sh`
-- `release/console-bundle.lock.example.json`
 - `scripts/launch/demo-mcp.sh`
 - `scripts/launch/demo-openai-proxy.sh`
 - `examples/launch/policies/shell_mcp_server_boundary.json`
 
 The setup path uses the local CLI, client MCP config, client hook config, and
-same-origin Console as the primary OSS proof path. `helm-ai-kernel setup`
+headless API routes as the primary OSS proof path. `helm-ai-kernel setup`
 prepares local state, registers the stdio MCP server, installs a PreToolUse
 hook where supported, drafts policy artifacts without approval, starts the
-Kernel, serves the verified Console bundle from `/console`, and exposes
-backend-owned onboarding APIs. The hook writes DENY receipts for blocked local
-tool calls; the Kernel creates the Console proof receipts and EvidencePack refs.
+Kernel, and exposes backend-owned onboarding APIs. The hook writes DENY
+receipts for blocked local tool calls; the Kernel creates proof receipts and
+EvidencePack refs.
 
 ## 0. Build Or Install
 
@@ -109,7 +104,9 @@ make build
 Install the published macOS CLI when evaluating the current release:
 
 ```bash
-brew install mindburnlabs/tap/helm-ai-kernel
+brew tap mindburn-labs/tap
+brew trust mindburn-labs/tap   # recent Homebrew requires trusting third-party taps
+brew install helm-ai-kernel
 helm-ai-kernel --version
 ```
 
@@ -149,7 +146,7 @@ helm-ai-kernel setup remove claude-code --yes
 ```
 
 Use `--dry-run --json` to inspect the exact binary path, client config path,
-hook config path, data dir, Kernel URL, Console URL, scan grade, draft policy
+hook config path, data dir, Kernel URL, scan grade, draft policy
 path, and uninstall command before writing anything:
 
 ```bash
@@ -166,9 +163,9 @@ receipt offline:
 helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json
 ```
 
-## 2. Run Local Console-First Quickstart Directly
+## 2. Run Local Headless Quickstart Directly
 
-Use this lower-level command when you only want the local Kernel and Console,
+Use this lower-level command when you only want the local Kernel API proof path
 without modifying Claude Code or Codex config:
 
 ```bash
@@ -176,13 +173,10 @@ helm-ai-kernel quickstart
 ```
 
 The command defaults to `127.0.0.1:7714`, creates local data under `data/`, and
-opens a one-time bootstrap URL. The Homebrew release installs the signed
-Console web bundle under `share/helm-ai-kernel/console`; source and direct
-binary users can provide the same production bundle with `--console-assets`.
-Use `--no-open` for terminal-only validation:
+prints machine-readable startup state for terminal/API validation:
 
 ```bash
-helm-ai-kernel quickstart --no-open --json
+helm-ai-kernel quickstart --json
 ```
 
 Useful flags:
@@ -193,16 +187,15 @@ Useful flags:
 | `--port 7714` | Local Kernel port. |
 | `--data-dir <dir>` | SQLite, keys, policy, receipts, and EvidencePack location. |
 | `--reset` | Remove the quickstart data directory before initialization. |
-| `--console-assets <build/web>` | Serve a verified production Console bundle at `/console`. |
 | `--profile claude|codex|mcp|openai-compatible` | Label the onboarding path. |
 | `--dry-run --json` | Prepare and print machine-readable startup state without serving. |
 
-The browser URL carries a one-time bootstrap token. It can only be exchanged
+The generated local session carries a one-time bootstrap token. It can only be exchanged
 from loopback, expires quickly, and only returns a local bearer token. Calls to
 the onboarding APIs still require `X-Helm-Tenant-ID` and
 `X-Helm-Principal-ID`.
 
-The local Console walks through:
+The local onboarding API walks through:
 
 | Step | Backend proof |
 | --- | --- |
@@ -272,26 +265,28 @@ For an unfiltered local list, use:
 curl 'http://127.0.0.1:7714/api/v1/receipts?limit=20'
 ```
 
-## 4. Hosted Console And LaunchKit Path
+## 4. Hosted Control Plane And LaunchKit Path
 
-Create an account at <https://console.helm.mindburn.org> only when you want the
-hosted dashboard for runs, receipts, and evidence after the local OSS proof.
-This quickstart does not claim hosted Enterprise production or commercial
-entitlement enforcement; paid capabilities remain backend-enforced.
+Pair with a hosted control plane only when you want workspace-scoped runs,
+receipts, and evidence after the local OSS proof. This quickstart does not claim
+hosted Enterprise production or commercial entitlement enforcement; paid
+capabilities remain backend-enforced.
 
 Install, log in, and pair your workstation:
 
 ```bash
-brew install mindburnlabs/tap/helm-ai-kernel
+brew tap mindburn-labs/tap
+brew trust mindburn-labs/tap   # recent Homebrew requires trusting third-party taps
+brew install helm-ai-kernel
 helm-ai-kernel --version
 helm-ai-kernel login
-helm-ai-kernel console pair
+helm-ai-kernel control-plane pair
 ```
 
 For the instant demo path (no model key required), run demo mode:
 
 ```bash
-./bin/helm up openclaw --demo --no-open
+./bin/helm up openclaw --demo
 ```
 
 For live mode, bind a scoped model secret first:
@@ -302,13 +297,7 @@ export OPENROUTER_API_KEY='<key>'
 ./bin/helm up openclaw --live
 ```
 
-The command prints a Console URL like:
-
-```text
-http://127.0.0.1:7714/runs/<run_id>
-```
-
-It also prints an offline verifier command:
+The command prints an offline verifier command:
 
 ```bash
 helm evidence verify <evidence-pack> --offline

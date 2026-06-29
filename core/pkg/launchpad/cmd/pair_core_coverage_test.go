@@ -161,16 +161,16 @@ func TestPairingLoadMissingAndInvalidJSON(t *testing.T) {
 	}
 }
 
-func TestResolveConsoleURLPrecedence(t *testing.T) {
-	t.Setenv("HELM_CONSOLE_URL", "https://env.example.test///")
-	if got := resolveConsoleURL("https://explicit.example.test/"); got != "https://explicit.example.test" {
+func TestResolveControlPlaneURLPrecedence(t *testing.T) {
+	t.Setenv("HELM_CONTROL_PLANE_URL", "https://env.example.test///")
+	if got := resolveControlPlaneURL("https://explicit.example.test/"); got != "https://explicit.example.test" {
 		t.Fatalf("explicit URL = %q", got)
 	}
-	if got := resolveConsoleURL(""); got != "https://env.example.test" {
+	if got := resolveControlPlaneURL(""); got != "https://env.example.test" {
 		t.Fatalf("env URL = %q", got)
 	}
-	t.Setenv("HELM_CONSOLE_URL", "")
-	if got := resolveConsoleURL(""); got != defaultConsoleURL {
+	t.Setenv("HELM_CONTROL_PLANE_URL", "")
+	if got := resolveControlPlaneURL(""); got != defaultControlPlaneURL {
 		t.Fatalf("default URL = %q", got)
 	}
 }

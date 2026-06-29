@@ -30,7 +30,7 @@ flowchart TD
 
 ## One-command path
 ```bash
-helm-ai-kernel up hermes --target local --live --json --no-open
+helm-ai-kernel up hermes --target local --live --json
 ```
 
 ## Headless path

@@ -11,7 +11,9 @@ you can verify later.
 ## Try It
 
 ```bash
-brew install mindburnlabs/tap/helm-ai-kernel
+brew tap mindburn-labs/tap
+brew trust mindburn-labs/tap   # recent Homebrew requires trusting third-party taps
+brew install helm-ai-kernel
 helm-ai-kernel setup claude-code --yes
 # Codex: helm-ai-kernel setup codex --yes
 ```

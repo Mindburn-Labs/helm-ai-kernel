@@ -4,7 +4,7 @@
   "demo_script": false,
   "generated_by": "scripts/record-real-use-assets.sh",
   "commands": [
-    "helm-ai-kernel setup codex --dry-run --json --data-dir ~/.helm-ai-kernel --no-open",
+    "helm-ai-kernel setup codex --dry-run --json --data-dir ~/.helm-ai-kernel",
     "printf <codex PreToolUse payload> | helm-ai-kernel hook pre-tool --client codex --data-dir ~/.helm-ai-kernel",
     "helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json"
   ],

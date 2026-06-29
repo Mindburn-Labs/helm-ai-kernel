@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 
@@ -234,7 +233,6 @@ func printRunSummary(stdout io.Writer, run session.LaunchRun) {
 		fmt.Fprintf(stdout, "  helm app run %s --resume %s\n", run.AppID, run.LaunchID)
 	}
 	fmt.Fprintf(stdout, "Inspect: helm run open %s\n", run.LaunchID)
-	fmt.Fprintf(stdout, "Console: %s/runs/%s\n", strings.TrimRight(firstNonEmpty(os.Getenv("HELM_CONSOLE_URL"), "http://127.0.0.1:7714"), "/"), run.LaunchID)
 }
 
 func exitForVerdict(verdict string) int {

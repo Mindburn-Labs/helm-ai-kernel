@@ -21,6 +21,11 @@ You can see which Launchpad checks are release-backed, which apps are promoted,
 and which commands prove the local-container app launcher and EvidencePacks on
 a clean machine.
 
+Use `docs/launchpad/launch-conformance.md` as the PR-review checklist for
+changes that can affect OpenClaw or Hermes live local-container launch behavior,
+including registry, policy, artifact, runtime, receipt, EvidencePack, or F2
+report changes.
+
 ## Source Truth
 
 - Runtime package and tests: `core/pkg/launchpad/`

@@ -15,7 +15,7 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-ai-kernel/compliance/nist-ai-rmf-iso-42001-crosswalk`
+- Public route: `compliance/nist-ai-rmf-iso-42001-crosswalk`
 - Source document: `helm-ai-kernel/docs/compliance/nist-ai-rmf-iso-42001-crosswalk.md`
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`

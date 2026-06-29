@@ -15,7 +15,7 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-ai-kernel/compliance/nist-ai-agent-critical-infrastructure`
+- Public route: `compliance/nist-ai-agent-critical-infrastructure`
 - Source document: `helm-ai-kernel/docs/compliance/nist-ai-agent-critical-infrastructure.md`
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`

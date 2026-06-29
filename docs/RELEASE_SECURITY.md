@@ -65,13 +65,13 @@ asset. Browser UI bundles are not Kernel release assets.
 
 | Need | Source path | Public route |
 | --- | --- | --- |
-| Release preparation | `RELEASE.md`, `VERSION`, `CHANGELOG.md` | `/helm-ai-kernel/publishing`, `/helm-ai-kernel/changelog` |
-| Vulnerability reporting | `SECURITY.md` | This page and `/helm-ai-kernel/publishing` |
+| Release preparation | `RELEASE.md`, `VERSION`, `CHANGELOG.md` | `/publishing`, `/changelog` |
+| Vulnerability reporting | `SECURITY.md` | This page and `/publishing` |
 | OpenSSF mapping | `BEST_PRACTICES.md` | This page |
 | SBOM and release metadata | `release/README.md`, `scripts/ci/generate_sbom.sh`, release asset `sbom.json`, release asset `release-attestation.json` | This page |
 | OpenVEX policy source | `release/vex.openvex.json`, `release/vex/policies.yaml` | This page; only claim published VEX when attached to the GitHub release |
-| Cosign and reproducible binaries | `.github/workflows/release.yml`, `scripts/release/`, `docs/VERIFICATION.md` | `/helm-ai-kernel/verification`, `/helm-ai-kernel/publishing`; Cosign verification requires attached `*.cosign.bundle` files |
-| Fuzzing | `oss-fuzz/`, Go fuzz tests under `core/pkg/` | This page and `/helm-ai-kernel/execution-security-model` |
+| Cosign and reproducible binaries | `.github/workflows/release.yml`, `scripts/release/`, `docs/VERIFICATION.md` | `/verification`, `/publishing`; Cosign verification requires attached `*.cosign.bundle` files |
+| Fuzzing | `oss-fuzz/`, Go fuzz tests under `core/pkg/` | This page and `/execution-security-model` |
 
 ## Verification Commands
 

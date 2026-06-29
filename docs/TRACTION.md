@@ -239,13 +239,13 @@ URL.
 
 | Channel | Docs link |
 | --- | --- |
-| GitHub README | `https://helm.docs.mindburn.org/helm-ai-kernel?utm_source=github&utm_medium=readme&utm_campaign=oss-traction` |
-| GitHub Discussions | `https://helm.docs.mindburn.org/helm-ai-kernel?utm_source=github&utm_medium=discussions&utm_campaign=oss-traction` |
-| Hacker News | `https://helm.docs.mindburn.org/helm-ai-kernel?utm_source=hackernews&utm_medium=showhn&utm_campaign=oss-traction` |
-| Reddit | `https://helm.docs.mindburn.org/helm-ai-kernel?utm_source=reddit&utm_medium=community&utm_campaign=oss-traction` |
-| Product Hunt | `https://helm.docs.mindburn.org/helm-ai-kernel?utm_source=producthunt&utm_medium=launch&utm_campaign=oss-traction` |
-| LinkedIn | `https://helm.docs.mindburn.org/helm-ai-kernel?utm_source=linkedin&utm_medium=social&utm_campaign=oss-traction` |
-| X | `https://helm.docs.mindburn.org/helm-ai-kernel?utm_source=x&utm_medium=social&utm_campaign=oss-traction` |
+| GitHub README | `https://helm.docs.mindburn.org?utm_source=github&utm_medium=readme&utm_campaign=oss-traction` |
+| GitHub Discussions | `https://helm.docs.mindburn.org?utm_source=github&utm_medium=discussions&utm_campaign=oss-traction` |
+| Hacker News | `https://helm.docs.mindburn.org?utm_source=hackernews&utm_medium=showhn&utm_campaign=oss-traction` |
+| Reddit | `https://helm.docs.mindburn.org?utm_source=reddit&utm_medium=community&utm_campaign=oss-traction` |
+| Product Hunt | `https://helm.docs.mindburn.org?utm_source=producthunt&utm_medium=launch&utm_campaign=oss-traction` |
+| LinkedIn | `https://helm.docs.mindburn.org?utm_source=linkedin&utm_medium=social&utm_campaign=oss-traction` |
+| X | `https://helm.docs.mindburn.org?utm_source=x&utm_medium=social&utm_campaign=oss-traction` |
 
 ## Discussions
 

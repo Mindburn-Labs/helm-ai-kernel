@@ -633,8 +633,8 @@
     {
       "id": "docs-site-developer-journey",
       "kind": "http_contains",
-      "url": "https://helm.docs.mindburn.org/helm-ai-kernel/developer-journey",
-      "human_url": "https://helm.docs.mindburn.org/helm-ai-kernel/developer-journey",
+      "url": "https://helm.docs.mindburn.org/developer-journey",
+      "human_url": "https://helm.docs.mindburn.org/developer-journey",
       "contains": [
         "io.github.mindburnlabs:helm-sdk:{version}",
         "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v{version}",
@@ -650,8 +650,8 @@
     {
       "id": "docs-site-sdk-index",
       "kind": "http_contains",
-      "url": "https://helm.docs.mindburn.org/helm-ai-kernel/sdks",
-      "human_url": "https://helm.docs.mindburn.org/helm-ai-kernel/sdks",
+      "url": "https://helm.docs.mindburn.org/sdks",
+      "human_url": "https://helm.docs.mindburn.org/sdks",
       "contains": [
         "io.github.mindburnlabs:helm-sdk:{version}",
         "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v{version}",
@@ -669,8 +669,8 @@
     {
       "id": "docs-site-examples",
       "kind": "http_contains",
-      "url": "https://helm.docs.mindburn.org/helm-ai-kernel/examples",
-      "human_url": "https://helm.docs.mindburn.org/helm-ai-kernel/examples",
+      "url": "https://helm.docs.mindburn.org/examples",
+      "human_url": "https://helm.docs.mindburn.org/examples",
       "contains": [
         "io.github.mindburnlabs:helm-sdk:{version}"
       ],

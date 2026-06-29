@@ -7,7 +7,7 @@ contact_links:
     url: https://github.com/Mindburn-Labs/helm-ai-kernel/discussions
     about: Ask usage questions or discuss proposals before filing an issue.
   - name: Local quickstart and docs
-    url: https://helm.docs.mindburn.org/helm-ai-kernel/quickstart?utm_source=github&utm_medium=issue-template&utm_campaign=oss-traction
+    url: https://helm.docs.mindburn.org/?utm_source=github&utm_medium=issue-template&utm_campaign=oss-traction#quickstart
     about: Try the OSS kernel locally before filing integration or setup requests.
   - name: Ecosystem and first contributions
     url: https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/COMMUNITY.md

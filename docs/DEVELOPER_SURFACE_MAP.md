@@ -65,16 +65,16 @@ flowchart TD
 
 | Need | Public page | Source truth |
 | --- | --- | --- |
-| Install on macOS, Linux, Windows/WSL, Docker, or source | `/helm-ai-kernel/developer-journey` | `docs/DEVELOPER_JOURNEY.md`, `docs/QUICKSTART.md`, `Makefile`, `.goreleaser.yml` |
-| Run the first local boundary | `/helm-ai-kernel/developer-journey` | `core/cmd/helm-ai-kernel/server_cmd.go`, `core/cmd/helm-ai-kernel/proxy_cmd.go` |
-| Point OpenAI-compatible clients at HELM | `/helm-ai-kernel/integrations/openai-compatible-proxy` | `docs/INTEGRATIONS/openai_baseurl.md`, `examples/python_openai_baseurl/`, `examples/ts_openai_baseurl/` |
-| Use MCP | `/helm-ai-kernel/integrations/mcp` | `docs/INTEGRATIONS/mcp.md`, `examples/mcp_client/`, `mcp-bundle.json` |
-| Use Python, TypeScript, JavaScript, Go, Rust, or Java | `/helm-ai-kernel/sdks` | `sdk/`, `examples/*_client/`, `examples/*openai_baseurl/` |
-| Understand policy languages and bundles | `/helm-ai-kernel/reference/protocols-and-schemas`, `/helm-ai-kernel/compatibility` | `docs/architecture/policy-languages.md`, `protocols/bundles/`, `examples/policies/` |
-| Validate conformance | `/helm-ai-kernel/conformance` | `docs/CONFORMANCE.md`, `protocols/conformance/v1/`, `tests/conformance/` |
-| Verify receipts and evidence packs | `/helm-ai-kernel/verification`, `/helm-ai-kernel/developer-journey` | `docs/VERIFICATION.md`, `examples/receipt_verification/`, `protocols/spec/evidence-pack-v1.md` |
-| Deploy with Docker or Kubernetes | `/helm-ai-kernel/deployment-and-examples` | `docker-compose.yml`, `deploy/`, `deploy/helm-chart/` |
-| Verify release artifacts | `/helm-ai-kernel/security/release-security`, `/helm-ai-kernel/publishing` | `SECURITY.md`, `RELEASE.md`, `release/`, `.github/workflows/release.yml` |
+| Install on macOS, Linux, Windows/WSL, Docker, or source | `/developer-journey` | `docs/DEVELOPER_JOURNEY.md`, `docs/QUICKSTART.md`, `Makefile`, `.goreleaser.yml` |
+| Run the first local boundary | `/developer-journey` | `core/cmd/helm-ai-kernel/server_cmd.go`, `core/cmd/helm-ai-kernel/proxy_cmd.go` |
+| Point OpenAI-compatible clients at HELM | `/integrations/openai-compatible-proxy` | `docs/INTEGRATIONS/openai_baseurl.md`, `examples/python_openai_baseurl/`, `examples/ts_openai_baseurl/` |
+| Use MCP | `/integrations/mcp` | `docs/INTEGRATIONS/mcp.md`, `examples/mcp_client/`, `mcp-bundle.json` |
+| Use Python, TypeScript, JavaScript, Go, Rust, or Java | `/sdks` | `sdk/`, `examples/*_client/`, `examples/*openai_baseurl/` |
+| Understand policy languages and bundles | `/reference/protocols-and-schemas`, `/compatibility` | `docs/architecture/policy-languages.md`, `protocols/bundles/`, `examples/policies/` |
+| Validate conformance | `/conformance` | `docs/CONFORMANCE.md`, `protocols/conformance/v1/`, `tests/conformance/` |
+| Verify receipts and evidence packs | `/verification`, `/developer-journey` | `docs/VERIFICATION.md`, `examples/receipt_verification/`, `protocols/spec/evidence-pack-v1.md` |
+| Deploy with Docker or Kubernetes | `/deployment-and-examples` | `docker-compose.yml`, `deploy/`, `deploy/helm-chart/` |
+| Verify release artifacts | `/security/release-security`, `/publishing` | `SECURITY.md`, `RELEASE.md`, `release/`, `.github/workflows/release.yml` |
 
 ## Source Truth
 

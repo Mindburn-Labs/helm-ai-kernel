@@ -15,7 +15,7 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-ai-kernel/integrations/microsoft-agent-governance-toolkit`
+- Public route: `integrations/microsoft-agent-governance-toolkit`
 - Source document: `helm-ai-kernel/docs/INTEGRATIONS/microsoft_agent_governance_toolkit.md`
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`

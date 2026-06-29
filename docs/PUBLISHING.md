@@ -17,7 +17,7 @@ You should know which package identities are source-backed, which registry claim
 
 ## Source Truth
 
-- Public route: `helm-ai-kernel/publishing`
+- Public route: `publishing`
 - Source document: `helm-ai-kernel/docs/PUBLISHING.md`
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`

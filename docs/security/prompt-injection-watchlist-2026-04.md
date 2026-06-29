@@ -15,7 +15,7 @@ After this page you should know what this surface is for, which source files own
 
 ## Source Truth
 
-- Public route: `helm-ai-kernel/security/prompt-injection-watchlist-2026-04`
+- Public route: `security/prompt-injection-watchlist-2026-04`
 - Source document: `helm-ai-kernel/docs/security/prompt-injection-watchlist-2026-04.md`
 - Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
 - Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`

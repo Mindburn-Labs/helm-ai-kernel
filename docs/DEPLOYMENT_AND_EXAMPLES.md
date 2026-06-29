@@ -51,7 +51,7 @@ flowchart TD
 
 | Target | Source path | Public contract |
 | --- | --- | --- |
-| Local CLI or proxy | `core/cmd/helm-ai-kernel/`, `docs/QUICKSTART.md` | Start with `/helm-ai-kernel/developer-journey`. |
+| Local CLI or proxy | `core/cmd/helm-ai-kernel/`, `docs/QUICKSTART.md` | Start with `/developer-journey`. |
 | Docker image | `Dockerfile`, `Makefile`, `docker-compose.yml` | Build and run through the retained Docker targets. |
 | Docker Compose | `docker-compose.yml` | Use for local boundary testing and example orchestration. |
 | Kubernetes Helm chart | `deploy/helm-chart/Chart.yaml`, `deploy/helm-chart/values.yaml`, `deploy/helm-chart/templates/` | Lint with `helm lint deploy/helm-chart` before applying. |
@@ -102,7 +102,7 @@ as example-only or omit a support claim.
 | Docker build fails | Confirm the local tree builds with `make build`, then rerun the Docker target. |
 | Helm chart lint fails | Check `deploy/helm-chart/values.yaml` and required Kubernetes settings. |
 | Example cannot reach the proxy | Confirm `helm-ai-kernel proxy` is running and the client base URL points at the HELM boundary. |
-| Receipt verification fails | Use `/helm-ai-kernel/verification` and compare against `examples/golden/`. |
+| Receipt verification fails | Use `/verification` and compare against `examples/golden/`. |
 
 <!-- docs-depth-final-pass -->
 

@@ -48,10 +48,10 @@
       ],
       "owner_doc_path": "README.md",
       "public_doc_slugs": [
-        "helm-ai-kernel",
-        "helm-ai-kernel/source-map",
-        "helm-ai-kernel/security/release-security",
-        "helm-ai-kernel/changelog"
+        "index",
+        "source-map",
+        "security/release-security",
+        "changelog"
       ],
       "rationale": "Top-level tracked files define install, release, contribution, governance, and security behavior without masking runtime trees behind a repository-wide wildcard.",
       "validation_commands": [
@@ -75,8 +75,8 @@
       ],
       "owner_doc_path": ".github/SURFACE.md",
       "public_doc_slugs": [
-        "helm-ai-kernel/source-map",
-        "helm-ai-kernel/security/release-security"
+        "source-map",
+        "security/release-security"
       ],
       "rationale": "CI and tooling are externally relevant as validation gates and release evidence, but individual workflow files remain source-owned.",
       "validation_commands": [
@@ -95,8 +95,8 @@
       ],
       "owner_doc_path": "api/openapi/README.md",
       "public_doc_slugs": [
-        "helm-ai-kernel/reference/http-api",
-        "helm-ai-kernel/reference/execution-boundary"
+        "reference/http-api",
+        "reference/execution-boundary"
       ],
       "rationale": "The OpenAPI contract is a direct public reference surface and must stay tied to route parity tests and the HTTP API page.",
       "validation_commands": [
@@ -128,19 +128,19 @@
       ],
       "owner_doc_path": "protocols/README.md",
       "public_doc_slugs": [
-        "helm-ai-kernel/reference/protocols-and-schemas",
-        "helm-ai-kernel/reference/json-schemas",
-        "helm-ai-kernel/conformance",
-        "helm-ai-kernel/reference/execution-boundary",
-        "helm-ai-kernel/launchpad",
-        "helm-ai-kernel/launchpad/conformance",
-        "helm-ai-kernel/launchpad/clean-install-ga",
-        "helm-ai-kernel/launchpad/apps/openclaw",
-        "helm-ai-kernel/launchpad/apps/hermes",
-        "helm-ai-kernel/launchpad/apps/opencode",
-        "helm-ai-kernel/launchpad/apps/kilocode",
-        "helm-ai-kernel/launchpad/flow-catalog",
-        "helm-ai-kernel/skills/flow-catalog"
+        "reference/protocols-and-schemas",
+        "reference/json-schemas",
+        "conformance",
+        "reference/execution-boundary",
+        "launchpad",
+        "launchpad/conformance",
+        "launchpad/clean-install-ga",
+        "launchpad/apps/openclaw",
+        "launchpad/apps/hermes",
+        "launchpad/apps/opencode",
+        "launchpad/apps/kilocode",
+        "launchpad/flow-catalog",
+        "skills/flow-catalog"
       ],
       "rationale": "Protocol and schema truth must be public and agent-readable, with detailed source ownership kept in protocol README files.",
       "validation_commands": [
@@ -164,9 +164,9 @@
       ],
       "owner_doc_path": "core/README.md",
       "public_doc_slugs": [
-        "helm-ai-kernel/reference/cli",
-        "helm-ai-kernel/architecture",
-        "helm-ai-kernel/benchmarks"
+        "reference/cli",
+        "architecture",
+        "benchmarks"
       ],
       "rationale": "Core build and benchmark files are runtime evidence, but they are not allowed to stand in for command, API, or package source ownership.",
       "validation_commands": [
@@ -185,9 +185,9 @@
       ],
       "owner_doc_path": "core/cmd/README.md",
       "public_doc_slugs": [
-        "helm-ai-kernel/reference/cli",
-        "helm-ai-kernel/developer-journey",
-        "helm-ai-kernel/troubleshooting"
+        "reference/cli",
+        "developer-journey",
+        "troubleshooting"
       ],
       "rationale": "The CLI is a first-class public runtime surface; flags and subcommands must be source-linked to the CLI reference rather than hidden behind core/**.",
       "validation_commands": [
@@ -233,8 +233,8 @@
       ],
       "owner_doc_path": "core/cmd/README.md",
       "public_doc_slugs": [
-        "helm-ai-kernel/reference/http-api",
-        "helm-ai-kernel/reference/execution-boundary"
+        "reference/http-api",
+        "reference/execution-boundary"
       ],
       "rationale": "HTTP route behavior is enforceable at file-level granularity through the route registry, auth wrapper, handler files, and OpenAPI/SDK contract checks.",
       "validation_commands": [
@@ -263,11 +263,11 @@
       ],
       "owner_doc_path": "core/pkg/README.md",
       "public_doc_slugs": [
-        "helm-ai-kernel/reference/execution-boundary",
-        "helm-ai-kernel/reference/http-api",
-        "helm-ai-kernel/conformance",
-        "helm-ai-kernel/verification",
-        "helm-ai-kernel/integrations/mcp"
+        "reference/execution-boundary",
+        "reference/http-api",
+        "conformance",
+        "verification",
+        "integrations/mcp"
       ],
       "rationale": "Boundary behavior is the highest-value OSS runtime reference surface and must remain directly linked to package families, HTTP routes, CLI commands, receipt schemas, and conformance vectors.",
       "validation_commands": [
@@ -305,10 +305,10 @@
       ],
       "owner_doc_path": "core/pkg/README.md",
       "public_doc_slugs": [
-        "helm-ai-kernel/architecture",
-        "helm-ai-kernel/execution-security-model",
-        "helm-ai-kernel/reference/execution-boundary",
-        "helm-ai-kernel/reference/protocols-and-schemas"
+        "architecture",
+        "execution-security-model",
+        "reference/execution-boundary",
+        "reference/protocols-and-schemas"
       ],
       "rationale": "Kernel and policy packages back public runtime guarantees, but public docs should describe supported behavior through architecture, execution-boundary, and protocol references.",
       "validation_commands": [
@@ -362,8 +362,8 @@
       ],
       "owner_doc_path": "core/pkg/README.md",
       "public_doc_slugs": [
-        "helm-ai-kernel/architecture",
-        "helm-ai-kernel/source-map"
+        "architecture",
+        "source-map"
       ],
       "rationale": "Remaining runtime libraries stay documented through owner docs and architecture/source-map pages without diluting the direct CLI/API/boundary rows.",
       "validation_commands": [
@@ -389,14 +389,14 @@
       ],
       "owner_doc_path": "examples/README.md",
       "public_doc_slugs": [
-        "helm-ai-kernel/developer-journey",
-        "helm-ai-kernel/deployment-and-examples",
-        "helm-ai-kernel/examples",
-        "helm-ai-kernel/deployment/kubernetes",
-        "helm-ai-kernel/sdks",
-        "helm-ai-kernel/integrations/openai-compatible-proxy",
-        "helm-ai-kernel/integrations/codebase-memory-mcp",
-        "helm-ai-kernel/integrations/mcp"
+        "developer-journey",
+        "deployment-and-examples",
+        "examples",
+        "deployment/kubernetes",
+        "sdks",
+        "integrations/openai-compatible-proxy",
+        "integrations/codebase-memory-mcp",
+        "integrations/mcp"
       ],
       "rationale": "Developers need install, SDK, framework, and deployment paths from the public docs, with examples and package docs as executable proof.",
       "validation_commands": [
@@ -416,9 +416,9 @@
       ],
       "owner_doc_path": "adapters/README.md",
       "public_doc_slugs": [
-        "helm-ai-kernel/developer-journey",
-        "helm-ai-kernel/deployment-and-examples",
-        "helm-ai-kernel/source-map"
+        "developer-journey",
+        "deployment-and-examples",
+        "source-map"
       ],
       "rationale": "Adapter code is integration proof material for external runtimes and must remain classified without promoting every adapter as a first-class runtime surface.",
       "validation_commands": [
@@ -455,11 +455,11 @@
       ],
       "owner_doc_path": "tests/conformance/README.md",
       "public_doc_slugs": [
-        "helm-ai-kernel/conformance",
-        "helm-ai-kernel/verification",
-        "helm-ai-kernel/benchmarks",
-        "helm-ai-kernel/publishing",
-        "helm-ai-kernel/security/release-security"
+        "conformance",
+        "verification",
+        "benchmarks",
+        "publishing",
+        "security/release-security"
       ],
       "rationale": "Evidence and conformance material is public proof material; generated artifacts are linked through verification and publishing docs rather than duplicated.",
       "validation_commands": [
@@ -478,8 +478,8 @@
       ],
       "owner_doc_path": "docs/skills/FLOW_CATALOG.md",
       "public_doc_slugs": [
-        "helm-ai-kernel/skills/flow-catalog",
-        "helm-ai-kernel/compatibility"
+        "skills/flow-catalog",
+        "compatibility"
       ],
       "rationale": "Skill packs are source-backed procedural guidance. Public docs expose the flow catalog and authority boundary while registry internals remain source-owned.",
       "validation_commands": [
@@ -498,36 +498,36 @@
       ],
       "owner_doc_path": "docs/README.md",
       "public_doc_slugs": [
-        "helm-ai-kernel",
-        "helm-ai-kernel/community",
-        "helm-ai-kernel/ecosystem",
-        "helm-ai-kernel/oss-traction",
-        "helm-ai-kernel/source-map",
-        "helm-ai-kernel/quickstart",
-        "helm-ai-kernel/compatibility",
-        "helm-ai-kernel/use-cases/mcp-execution-firewall",
-        "helm-ai-kernel/use-cases/ai-agent-security",
-        "helm-ai-kernel/use-cases/openai-compatible-ai-gateway-policy",
-        "helm-ai-kernel/use-cases/llm-audit-receipts",
-        "helm-ai-kernel/use-cases/agent-tool-call-governance",
-        "helm-ai-kernel/posts/why-ai-agents-need-an-execution-firewall",
-        "helm-ai-kernel/posts/mcp-quarantine-before-tool-dispatch",
-        "helm-ai-kernel/posts/receipts-beat-logs-for-agent-audit-trails",
-        "helm-ai-kernel/posts/how-to-fail-closed-on-agent-tool-calls",
-        "helm-ai-kernel/owasp-mcp-threat-mapping",
-        "helm-ai-kernel/integrations/microsoft-agent-governance-toolkit",
-        "helm-ai-kernel/security/owasp-agentic-top10-mapping",
-        "helm-ai-kernel/security/prompt-injection-watchlist-2026-04",
-        "helm-ai-kernel/compliance/nist-ai-agent-critical-infrastructure",
-        "helm-ai-kernel/compliance/eu-ai-act-high-risk-pack",
-        "helm-ai-kernel/compliance/nist-ai-rmf-iso-42001-crosswalk",
-        "helm-ai-kernel/kernel-scope",
-        "helm-ai-kernel/architecture/cognitive-firewall",
-        "helm-ai-kernel/architecture/eidas-qtsp",
-        "helm-ai-kernel/architecture/policy-languages",
-        "helm-ai-kernel/security/clawguard-taint-tracking",
-        "helm-ai-kernel/security/session-risk-memory",
-        "helm-ai-kernel/architecture/canonical-diagrams"
+        "index",
+        "community",
+        "ecosystem",
+        "oss-traction",
+        "source-map",
+        "quickstart",
+        "compatibility",
+        "use-cases/mcp-execution-firewall",
+        "use-cases/ai-agent-security",
+        "use-cases/openai-compatible-ai-gateway-policy",
+        "use-cases/llm-audit-receipts",
+        "use-cases/agent-tool-call-governance",
+        "posts/why-ai-agents-need-an-execution-firewall",
+        "posts/mcp-quarantine-before-tool-dispatch",
+        "posts/receipts-beat-logs-for-agent-audit-trails",
+        "posts/how-to-fail-closed-on-agent-tool-calls",
+        "owasp-mcp-threat-mapping",
+        "integrations/microsoft-agent-governance-toolkit",
+        "security/owasp-agentic-top10-mapping",
+        "security/prompt-injection-watchlist-2026-04",
+        "compliance/nist-ai-agent-critical-infrastructure",
+        "compliance/eu-ai-act-high-risk-pack",
+        "compliance/nist-ai-rmf-iso-42001-crosswalk",
+        "kernel-scope",
+        "architecture/cognitive-firewall",
+        "architecture/eidas-qtsp",
+        "architecture/policy-languages",
+        "security/clawguard-taint-tracking",
+        "security/session-risk-memory",
+        "architecture/canonical-diagrams"
       ],
       "rationale": "Docs files are source material for the public site and are checked through manifest, LLM, search, and source-inventory gates.",
       "validation_commands": [

@@ -48,16 +48,14 @@ type Gate struct {
 }
 
 type Options struct {
-	AppID          string
-	Target         Target
-	Mode           Mode
-	ResumeRunID    string
-	Yes            bool
-	Principal      string
-	CatalogRoot    string
-	StoreRoot      string
-	ConsoleBaseURL string
-	NoOpen         bool
+	AppID       string
+	Target      Target
+	Mode        Mode
+	ResumeRunID string
+	Yes         bool
+	Principal   string
+	CatalogRoot string
+	StoreRoot   string
 }
 
 type Result struct {
@@ -74,7 +72,6 @@ type Result struct {
 	EvidenceRefs         []string                `json:"evidence_refs,omitempty"`
 	Gates                []Gate                  `json:"gates"`
 	Provider             EnvironmentCapability   `json:"provider"`
-	ConsoleURL           string                  `json:"console_url,omitempty"`
 	OfflineVerifyCommand string                  `json:"offline_verify_command,omitempty"`
 	ResumeCommand        string                  `json:"resume_command,omitempty"`
 	VerifyOnly           bool                    `json:"verify_only"`

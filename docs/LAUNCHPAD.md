@@ -226,7 +226,9 @@ Clean-install validation is intentionally separate from the build machine:
 
 ```bash
 brew update
-brew install mindburnlabs/tap/helm-ai-kernel
+brew tap mindburn-labs/tap
+brew trust mindburn-labs/tap   # recent Homebrew requires trusting third-party taps
+brew install helm-ai-kernel
 helm-ai-kernel launch matrix --json
 helm-ai-kernel launch openclaw local-container --headless --output json
 helm-ai-kernel launch hermes local-container --headless --output json

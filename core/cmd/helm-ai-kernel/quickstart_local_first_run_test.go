@@ -15,7 +15,6 @@ import (
 )
 
 func TestQuickstartDryRunJSONPreparesLocalOSSFirstRun(t *testing.T) {
-	consoleAssets := makeConsoleAssets(t)
 	dataDir := t.TempDir()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -23,9 +22,7 @@ func TestQuickstartDryRunJSONPreparesLocalOSSFirstRun(t *testing.T) {
 	code := runQuickstartCmd([]string{
 		"--dry-run",
 		"--json",
-		"--no-open",
 		"--data-dir", dataDir,
-		"--console-assets", consoleAssets,
 		"--profile", "claude",
 	}, &stdout, &stderr)
 	if code != 0 {
@@ -39,8 +36,14 @@ func TestQuickstartDryRunJSONPreparesLocalOSSFirstRun(t *testing.T) {
 	if summary["kernel_url"] != "http://127.0.0.1:7714" {
 		t.Fatalf("kernel_url = %v", summary["kernel_url"])
 	}
-	if !strings.Contains(summary["console_url"].(string), "/console/onboarding?helm_bootstrap_token=") {
-		t.Fatalf("console_url missing bootstrap token: %v", summary["console_url"])
+	if summary["local_session_exchange_url"] != "http://127.0.0.1:7714/api/v1/local-session/exchange" {
+		t.Fatalf("local_session_exchange_url = %v", summary["local_session_exchange_url"])
+	}
+	if token, _ := summary["bootstrap_token"].(string); token == "" {
+		t.Fatalf("bootstrap_token missing: %+v", summary)
+	}
+	if _, ok := summary["session_token"]; ok {
+		t.Fatalf("quickstart summary must not expose session_token: %+v", summary)
 	}
 	if summary["requires_cloud"] != false || summary["requires_docker"] != false || summary["requires_model_key"] != false {
 		t.Fatalf("unexpected first-run requirements: %+v", summary)
@@ -69,35 +72,6 @@ func TestQuickstartRejectsNonLoopbackBind(t *testing.T) {
 	if !strings.Contains(stderr.String(), "loopback") {
 		t.Fatalf("stderr did not explain loopback requirement: %s", stderr.String())
 	}
-}
-
-func TestQuickstartRejectsInvalidExplicitConsoleAssets(t *testing.T) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	code := runQuickstartCmd([]string{
-		"--dry-run",
-		"--console-assets", t.TempDir(),
-		"--data-dir", t.TempDir(),
-	}, &stdout, &stderr)
-	if code != 1 {
-		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
-	}
-	if !strings.Contains(stderr.String(), "index.html") {
-		t.Fatalf("stderr did not explain missing index.html: %s", stderr.String())
-	}
-}
-
-func TestQuickstartConsoleAssetCandidatesIncludeHomebrewPackageShare(t *testing.T) {
-	exe := filepath.Join(string(filepath.Separator), "opt", "homebrew", "Cellar", "helm-ai-kernel", "0.5.13", "bin", "helm-ai-kernel")
-	candidates := consoleAssetCandidates("data", exe)
-	want := filepath.Join(string(filepath.Separator), "opt", "homebrew", "Cellar", "helm-ai-kernel", "0.5.13", "share", "helm-ai-kernel", "console")
-	for _, candidate := range candidates {
-		if candidate == want {
-			return
-		}
-	}
-	t.Fatalf("homebrew package-share console path %q missing from candidates: %#v", want, candidates)
 }
 
 func TestQuickstartLocalSessionExchangeLoopbackOneTimeAndExpiry(t *testing.T) {
@@ -309,57 +283,6 @@ func TestQuickstartOnboardingRunStepSignsReceiptAndExportsEvidence(t *testing.T)
 	}
 }
 
-func TestQuickstartServesSameOriginConsoleSPA(t *testing.T) {
-	consoleAssets := makeConsoleAssets(t)
-	mux := http.NewServeMux()
-	RegisterLocalConsoleAssetRoutes(mux, serverOptions{ConsoleAssetsPath: consoleAssets}, "127.0.0.1", 7714)
-
-	req := httptest.NewRequest(http.MethodGet, "/console/onboarding", nil)
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("console status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	if !strings.Contains(rec.Body.String(), "HELM Console") {
-		t.Fatalf("console did not serve index.html: %s", rec.Body.String())
-	}
-
-	assetReq := httptest.NewRequest(http.MethodGet, "/console/assets/app.js", nil)
-	assetRec := httptest.NewRecorder()
-	mux.ServeHTTP(assetRec, assetReq)
-	if assetRec.Code != http.StatusOK {
-		t.Fatalf("asset status=%d body=%s", assetRec.Code, assetRec.Body.String())
-	}
-	if !strings.Contains(assetRec.Body.String(), "console asset") {
-		t.Fatalf("console did not serve nested asset: %s", assetRec.Body.String())
-	}
-}
-
-func TestQuickstartConsoleAssetServerRejectsTraversal(t *testing.T) {
-	consoleAssets := makeConsoleAssets(t)
-	if err := os.WriteFile(filepath.Join(filepath.Dir(consoleAssets), "secret.txt"), []byte("outside root"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	bundle, err := loadConsoleAssetBundle(consoleAssets)
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := spaFileServer(bundle)
-
-	req := httptest.NewRequest(http.MethodGet, "/../secret.txt", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("traversal fallback status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	if strings.Contains(rec.Body.String(), "outside root") {
-		t.Fatalf("traversal request served file outside console root: %s", rec.Body.String())
-	}
-	if !strings.Contains(rec.Body.String(), "HELM Console") {
-		t.Fatalf("traversal request did not fall back to index.html: %s", rec.Body.String())
-	}
-}
-
 func postLocalExchange(t *testing.T, mux *http.ServeMux, token string, remoteAddr string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/local-session/exchange", strings.NewReader(`{"token":"`+token+`"}`))
@@ -384,19 +307,4 @@ func authorizeQuickstartRequest(req *http.Request, runtime *quickstartRuntime) {
 	req.Header.Set("Authorization", "Bearer "+runtime.SessionToken)
 	req.Header.Set(tenantHeader, runtime.TenantID)
 	req.Header.Set(principalHeader, runtime.PrincipalID)
-}
-
-func makeConsoleAssets(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<!doctype html><title>HELM Console</title>"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "assets"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "assets", "app.js"), []byte("console asset"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	return dir
 }

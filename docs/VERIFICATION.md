@@ -80,8 +80,7 @@ release is complete only when the page attaches platform binaries,
 `SHA256SUMS.txt`, `sbom.json`, `v0.5.18.openvex.json`,
 `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
-`helm-ai-kernel-launchpad-data.tar`, `helm-console-web-v0.5.18.tar.gz`,
-its checksum/SBOM/provenance/lock/manifest sidecars, `helm-ai-kernel.mcpb`,
+`helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`,
 `helm-ai-kernel.rb`, `v0.5.18.json`, `version-status.json`, and matching
 `*.cosign.bundle` files for each primary asset.
 
@@ -105,12 +104,6 @@ The `v0.5.18` release is complete only when it attaches these primary assets:
 - `release.high_risk.v3.toml`
 - `sample-policy-material.tar`
 - `helm-ai-kernel-launchpad-data.tar`
-- `helm-console-web-v0.5.18.tar.gz`
-- `helm-console-web-v0.5.18.tar.gz.sha256`
-- `helm-console-web-v0.5.18.tar.gz.sbom.spdx.json`
-- `helm-console-web-v0.5.18.tar.gz.provenance.json`
-- `helm-console-web-v0.5.18.tar.gz.lock.json`
-- `helm-console-web-v0.5.18.tar.gz.manifest.json`
 - `helm-ai-kernel.mcpb`
 - `helm-ai-kernel.rb`
 

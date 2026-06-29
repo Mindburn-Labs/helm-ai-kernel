@@ -86,7 +86,7 @@ grep -A4 '^model_gateway:' \
   "$HELM_LAUNCHPAD_REGISTRY_ROOT/registry/launchpad/apps/hermes.yaml" |
   grep -q 'openrouter'
 
-helm-ai-kernel up hermes --target local --verify-only --json --no-open |
+helm-ai-kernel up hermes --target local --verify-only --json |
   jq -e '
     .mode == "verify-only" and
     .started_runtime == false and
@@ -157,7 +157,7 @@ set -euo pipefail
 mkdir -p "$HELM_LAUNCHPAD_HOME/proof"
 proof_json="$HELM_LAUNCHPAD_HOME/proof/hermes-live.json"
 
-helm-ai-kernel up hermes --target local --live --json --no-open | tee "$proof_json"
+helm-ai-kernel up hermes --target local --live --json | tee "$proof_json"
 
 jq -e '
   .mode == "live" and

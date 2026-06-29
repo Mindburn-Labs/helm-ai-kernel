@@ -12,6 +12,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/translog"
 )
 
 // ── SkillCandidate ──────────────────────────────────────────────────────────
@@ -782,12 +785,14 @@ func handlePackCreate(args []string) int {
 		sessionID   string
 		receiptsDir string
 		outPath     string
+		dataDir     string
 		jsonOutput  bool
 	)
 
 	cmd.StringVar(&sessionID, "session", "", "Session ID for the evidence pack (REQUIRED)")
 	cmd.StringVar(&receiptsDir, "receipts", "", "Directory containing receipt files (REQUIRED)")
 	cmd.StringVar(&outPath, "out", "", "Output path for the .tar pack (REQUIRED)")
+	cmd.StringVar(&dataDir, "data-dir", "", "Kernel data directory for transparency checkpoint (default $HELM_DATA_DIR or ./data)")
 	cmd.BoolVar(&jsonOutput, "json", false, "Output result as JSON")
 
 	if err := cmd.Parse(args); err != nil {
@@ -855,8 +860,25 @@ func handlePackCreate(args []string) int {
 		}
 	}
 
+	opts := ExportPackOptions{}
+	sth, transparencyFiles, err := transparencyArtifactsForPackCreate(translogDataDir(dataDir), files)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating transparency checkpoint: %v\n", err)
+		return 2
+	}
+	if sth != nil {
+		opts.TransparencySTH = sth
+	}
+	for name, data := range transparencyFiles {
+		if _, exists := files[name]; exists {
+			fmt.Fprintf(os.Stderr, "Error creating transparency proof: %s already exists\n", name)
+			return 2
+		}
+		files[name] = data
+	}
+
 	// Create the pack
-	if err := ExportPack(sessionID, files, outPath); err != nil {
+	if err := ExportPackWithOptions(sessionID, files, outPath, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating pack: %v\n", err)
 		return 2
 	}
@@ -875,6 +897,105 @@ func handlePackCreate(args []string) int {
 	}
 
 	return 0
+}
+
+func transparencyArtifactsForPackCreate(dataDir string, files map[string][]byte) (*translog.SignedTreeHead, map[string][]byte, error) {
+	if dataDir == "" {
+		dataDir = "data"
+	}
+	logDir := filepath.Join(dataDir, "translog")
+	if _, err := os.Stat(logDir); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil, nil
+		}
+		return nil, nil, err
+	}
+	l, err := openTranslog(dataDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	treeSize := l.Size()
+	if treeSize == 0 {
+		return nil, nil, nil
+	}
+	root, err := l.Root(treeSize)
+	if err != nil {
+		return nil, nil, err
+	}
+	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	logID := translog.LogIDFromPublicKey(signer.PublicKeyBytes())
+	sth, err := translog.SignTreeHead(signer, logID, treeSize, root, time.Now())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	proofs := make(map[string][]byte)
+	for name, data := range files {
+		if !strings.HasSuffix(strings.ToLower(name), ".json") {
+			continue
+		}
+		var receipt contracts.Receipt
+		if err := json.Unmarshal(data, &receipt); err != nil {
+			continue
+		}
+		if receipt.LogID == "" || receipt.Transparency == nil || receipt.Transparency.Deferred {
+			continue
+		}
+		if receipt.LogID != logID || (receipt.Transparency.LogID != "" && receipt.Transparency.LogID != logID) {
+			return nil, nil, fmt.Errorf("receipt %s is anchored to log %q, exporter log is %q", name, receipt.LogID, logID)
+		}
+		proof, err := l.InclusionProof(receipt.LeafIndex, treeSize)
+		if err != nil {
+			return nil, nil, fmt.Errorf("build inclusion proof for %s: %w", name, err)
+		}
+		expectedLeafHash, err := receiptTranslogLeafHash(&receipt)
+		if err != nil {
+			return nil, nil, fmt.Errorf("compute transparency leaf for %s: %w", name, err)
+		}
+		if !strings.EqualFold(proof.LeafHash, expectedLeafHash) {
+			return nil, nil, fmt.Errorf("receipt %s transparency proof leaf hash mismatch: proof leaf %s, receipt leaf %s", name, proof.LeafHash, expectedLeafHash)
+		}
+		proofData, err := json.MarshalIndent(proof, "", "  ")
+		if err != nil {
+			return nil, nil, fmt.Errorf("marshal inclusion proof for %s: %w", name, err)
+		}
+		proofName := transparencyProofEntryName(name)
+		if _, exists := proofs[proofName]; exists {
+			return nil, nil, fmt.Errorf("duplicate transparency proof entry %s", proofName)
+		}
+		proofs[proofName] = proofData
+	}
+
+	return sth, proofs, nil
+}
+
+func receiptTranslogLeafHash(receipt *contracts.Receipt) (string, error) {
+	receiptHashHex, err := contracts.ReceiptChainHash(receipt)
+	if err != nil {
+		return "", err
+	}
+	leafInput, err := hex.DecodeString(receiptHashHex)
+	if err != nil {
+		return "", fmt.Errorf("decode receipt chain hash: %w", err)
+	}
+	leafHash := translog.LeafHash(leafInput)
+	return hex.EncodeToString(leafHash[:]), nil
+}
+
+func transparencyProofEntryName(receiptPath string) string {
+	name := strings.TrimSpace(receiptPath)
+	name = strings.Trim(name, "/")
+	name = strings.TrimSuffix(name, filepath.Ext(name))
+	name = strings.ReplaceAll(name, "\\", "_")
+	name = strings.ReplaceAll(name, "/", "_")
+	name = strings.ReplaceAll(name, "..", "_")
+	if name == "" {
+		name = "receipt"
+	}
+	return "transparency/inclusion/" + name + ".json"
 }
 
 func handlePackVerify(args []string) int {

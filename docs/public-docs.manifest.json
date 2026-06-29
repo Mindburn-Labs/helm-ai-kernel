@@ -14,7 +14,7 @@
       "title": "HELM AI Kernel",
       "section": "helm-ai-kernel",
       "source_path": "docs/index.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel",
+      "docs_origin_hint": "helm.docs.mindburn.org",
       "access": "public",
       "sensitivity": "public"
     },
@@ -32,7 +32,7 @@
       "title": "Developer Journey",
       "section": "start-here",
       "source_path": "docs/DEVELOPER_JOURNEY.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/developer-journey",
+      "docs_origin_hint": "helm.docs.mindburn.org/developer-journey",
       "access": "public",
       "sensitivity": "public"
     },
@@ -41,7 +41,7 @@
       "title": "Community",
       "section": "start-here",
       "source_path": "COMMUNITY.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/community",
+      "docs_origin_hint": "helm.docs.mindburn.org/community",
       "access": "public",
       "sensitivity": "public"
     },
@@ -50,7 +50,7 @@
       "title": "Ecosystem",
       "section": "start-here",
       "source_path": "docs/ECOSYSTEM.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/ecosystem",
+      "docs_origin_hint": "helm.docs.mindburn.org/ecosystem",
       "access": "public",
       "sensitivity": "public"
     },
@@ -59,7 +59,7 @@
       "title": "HELM AI Kernel OSS Traction Plan",
       "section": "start-here",
       "source_path": "docs/TRACTION.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/oss-traction",
+      "docs_origin_hint": "helm.docs.mindburn.org/oss-traction",
       "access": "public",
       "sensitivity": "public"
     },
@@ -68,7 +68,7 @@
       "title": "MCP Tool Quarantine",
       "section": "use-cases",
       "source_path": "docs/use-cases/mcp-execution-firewall.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/use-cases/mcp-execution-firewall",
+      "docs_origin_hint": "helm.docs.mindburn.org/use-cases/mcp-execution-firewall",
       "access": "public",
       "sensitivity": "public"
     },
@@ -77,7 +77,7 @@
       "title": "AI Agent Security",
       "section": "use-cases",
       "source_path": "docs/use-cases/ai-agent-security.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/use-cases/ai-agent-security",
+      "docs_origin_hint": "helm.docs.mindburn.org/use-cases/ai-agent-security",
       "access": "public",
       "sensitivity": "public"
     },
@@ -86,7 +86,7 @@
       "title": "OpenAI-Compatible Execution Boundary",
       "section": "use-cases",
       "source_path": "docs/use-cases/openai-compatible-ai-gateway-policy.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/use-cases/openai-compatible-ai-gateway-policy",
+      "docs_origin_hint": "helm.docs.mindburn.org/use-cases/openai-compatible-ai-gateway-policy",
       "access": "public",
       "sensitivity": "public"
     },
@@ -95,7 +95,7 @@
       "title": "Signed Receipts for AI Agent Actions",
       "section": "use-cases",
       "source_path": "docs/use-cases/llm-audit-receipts.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/use-cases/llm-audit-receipts",
+      "docs_origin_hint": "helm.docs.mindburn.org/use-cases/llm-audit-receipts",
       "access": "public",
       "sensitivity": "public"
     },
@@ -104,7 +104,7 @@
       "title": "AI Agent Side-Effect Governance",
       "section": "use-cases",
       "source_path": "docs/use-cases/agent-tool-call-governance.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/use-cases/agent-tool-call-governance",
+      "docs_origin_hint": "helm.docs.mindburn.org/use-cases/agent-tool-call-governance",
       "access": "public",
       "sensitivity": "public"
     },
@@ -113,7 +113,7 @@
       "title": "Why AI Agents Need an Execution Firewall",
       "section": "posts",
       "source_path": "docs/posts/why-ai-agents-need-an-execution-firewall.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/posts/why-ai-agents-need-an-execution-firewall",
+      "docs_origin_hint": "helm.docs.mindburn.org/posts/why-ai-agents-need-an-execution-firewall",
       "access": "public",
       "sensitivity": "public"
     },
@@ -122,7 +122,7 @@
       "title": "MCP Quarantine Before Tool Dispatch",
       "section": "posts",
       "source_path": "docs/posts/mcp-quarantine-before-tool-dispatch.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/posts/mcp-quarantine-before-tool-dispatch",
+      "docs_origin_hint": "helm.docs.mindburn.org/posts/mcp-quarantine-before-tool-dispatch",
       "access": "public",
       "sensitivity": "public"
     },
@@ -131,7 +131,7 @@
       "title": "Receipts Beat Logs for Agent Audit Trails",
       "section": "posts",
       "source_path": "docs/posts/receipts-beat-logs-for-agent-audit-trails.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/posts/receipts-beat-logs-for-agent-audit-trails",
+      "docs_origin_hint": "helm.docs.mindburn.org/posts/receipts-beat-logs-for-agent-audit-trails",
       "access": "public",
       "sensitivity": "public"
     },
@@ -140,7 +140,7 @@
       "title": "How To Fail Closed on Agent Tool Calls",
       "section": "posts",
       "source_path": "docs/posts/how-to-fail-closed-on-agent-tool-calls.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/posts/how-to-fail-closed-on-agent-tool-calls",
+      "docs_origin_hint": "helm.docs.mindburn.org/posts/how-to-fail-closed-on-agent-tool-calls",
       "access": "public",
       "sensitivity": "public"
     },
@@ -158,7 +158,7 @@
       "title": "Canonical Diagrams",
       "section": "architecture",
       "source_path": "docs/architecture/canonical-diagrams.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/architecture/canonical-diagrams",
+      "docs_origin_hint": "helm.docs.mindburn.org/architecture/canonical-diagrams",
       "access": "public",
       "sensitivity": "public"
     },
@@ -176,7 +176,7 @@
       "title": "Launchpad",
       "section": "start-here",
       "source_path": "docs/LAUNCHPAD.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad",
+      "docs_origin_hint": "helm.docs.mindburn.org/launchpad",
       "access": "public",
       "sensitivity": "public"
     },
@@ -185,7 +185,7 @@
       "title": "Launchpad Conformance",
       "section": "start-here",
       "source_path": "docs/launchpad/CONFORMANCE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad/conformance",
+      "docs_origin_hint": "helm.docs.mindburn.org/launchpad/conformance",
       "access": "public",
       "sensitivity": "public"
     },
@@ -194,7 +194,7 @@
       "title": "Launchpad Clean Install GA",
       "section": "start-here",
       "source_path": "docs/launchpad/CLEAN_INSTALL_GA.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad/clean-install-ga",
+      "docs_origin_hint": "helm.docs.mindburn.org/launchpad/clean-install-ga",
       "access": "public",
       "sensitivity": "public"
     },
@@ -203,7 +203,7 @@
       "title": "OpenClaw on HELM",
       "section": "start-here",
       "source_path": "docs/launchpad/apps/OPENCLAW.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad/apps/openclaw",
+      "docs_origin_hint": "helm.docs.mindburn.org/launchpad/apps/openclaw",
       "access": "public",
       "sensitivity": "public"
     },
@@ -212,7 +212,7 @@
       "title": "Hermes on HELM",
       "section": "start-here",
       "source_path": "docs/launchpad/apps/HERMES.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad/apps/hermes",
+      "docs_origin_hint": "helm.docs.mindburn.org/launchpad/apps/hermes",
       "access": "public",
       "sensitivity": "public"
     },
@@ -221,7 +221,7 @@
       "title": "OpenCode on HELM",
       "section": "start-here",
       "source_path": "docs/launchpad/apps/OPENCODE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad/apps/opencode",
+      "docs_origin_hint": "helm.docs.mindburn.org/launchpad/apps/opencode",
       "access": "public",
       "sensitivity": "public"
     },
@@ -230,7 +230,7 @@
       "title": "Kilo Code on HELM",
       "section": "start-here",
       "source_path": "docs/launchpad/apps/KILOCODE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad/apps/kilocode",
+      "docs_origin_hint": "helm.docs.mindburn.org/launchpad/apps/kilocode",
       "access": "public",
       "sensitivity": "public"
     },
@@ -239,7 +239,7 @@
       "title": "Skill Packs Flow Catalog",
       "section": "interfaces",
       "source_path": "docs/skills/FLOW_CATALOG.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/skills/flow-catalog",
+      "docs_origin_hint": "helm.docs.mindburn.org/skills/flow-catalog",
       "access": "public",
       "sensitivity": "public"
     },
@@ -248,7 +248,7 @@
       "title": "Launchpad Flow Catalog",
       "section": "interfaces",
       "source_path": "docs/launchpad/FLOW_CATALOG.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/launchpad/flow-catalog",
+      "docs_origin_hint": "helm.docs.mindburn.org/launchpad/flow-catalog",
       "access": "public",
       "sensitivity": "public"
     },
@@ -284,7 +284,7 @@
       "title": "HELM AI Kernel Changelog",
       "section": "helm-ai-kernel",
       "source_path": "CHANGELOG.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/changelog",
+      "docs_origin_hint": "helm.docs.mindburn.org/changelog",
       "access": "public",
       "sensitivity": "public"
     },
@@ -419,7 +419,7 @@
       "title": "Developer Surface Map",
       "section": "helm-ai-kernel",
       "source_path": "docs/DEVELOPER_SURFACE_MAP.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/source-map",
+      "docs_origin_hint": "helm.docs.mindburn.org/source-map",
       "access": "public",
       "sensitivity": "public"
     },
@@ -428,7 +428,7 @@
       "title": "Kernel Scope",
       "section": "helm-ai-kernel",
       "source_path": "docs/KERNEL_SCOPE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/kernel-scope",
+      "docs_origin_hint": "helm.docs.mindburn.org/kernel-scope",
       "access": "public",
       "sensitivity": "public"
     },
@@ -437,7 +437,7 @@
       "title": "Deployment and Examples",
       "section": "deployment",
       "source_path": "docs/DEPLOYMENT_AND_EXAMPLES.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/deployment-and-examples",
+      "docs_origin_hint": "helm.docs.mindburn.org/deployment-and-examples",
       "access": "public",
       "sensitivity": "public"
     },
@@ -446,7 +446,7 @@
       "title": "HELM AI Kernel Examples Matrix",
       "section": "deployment",
       "source_path": "docs/EXAMPLES.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/examples",
+      "docs_origin_hint": "helm.docs.mindburn.org/examples",
       "access": "public",
       "sensitivity": "public"
     },
@@ -455,7 +455,7 @@
       "title": "Kubernetes Deployment",
       "section": "deployment",
       "source_path": "docs/KUBERNETES_DEPLOYMENT.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/deployment/kubernetes",
+      "docs_origin_hint": "helm.docs.mindburn.org/deployment/kubernetes",
       "access": "public",
       "sensitivity": "public"
     },
@@ -464,7 +464,7 @@
       "title": "HELM AI Kernel CLI Reference",
       "section": "reference",
       "source_path": "docs/reference/cli.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/reference/cli",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/cli",
       "access": "public",
       "sensitivity": "public"
     },
@@ -473,7 +473,7 @@
       "title": "HELM AI Kernel HTTP API Reference",
       "section": "reference",
       "source_path": "docs/reference/http-api.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/reference/http-api",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/http-api",
       "access": "public",
       "sensitivity": "public"
     },
@@ -482,7 +482,7 @@
       "title": "Execution Boundary Reference",
       "section": "reference",
       "source_path": "docs/reference/execution-boundary.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/reference/execution-boundary",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/execution-boundary",
       "access": "public",
       "sensitivity": "public"
     },
@@ -491,7 +491,7 @@
       "title": "HELM AI Kernel JSON Schema Reference",
       "section": "reference",
       "source_path": "docs/reference/json-schemas.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/reference/json-schemas",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/json-schemas",
       "access": "public",
       "sensitivity": "public"
     },
@@ -500,7 +500,7 @@
       "title": "Protocols and Schemas",
       "section": "reference",
       "source_path": "docs/REFERENCE_PROTOCOLS.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/reference/protocols-and-schemas",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/protocols-and-schemas",
       "access": "public",
       "sensitivity": "public"
     },
@@ -509,7 +509,7 @@
       "title": "Cognitive Firewall Pattern",
       "section": "architecture",
       "source_path": "docs/architecture/cognitive-firewall.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/architecture/cognitive-firewall",
+      "docs_origin_hint": "helm.docs.mindburn.org/architecture/cognitive-firewall",
       "access": "public",
       "sensitivity": "public"
     },
@@ -518,7 +518,7 @@
       "title": "eIDAS QTSP Anchoring",
       "section": "architecture",
       "source_path": "docs/architecture/eidas-qtsp.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/architecture/eidas-qtsp",
+      "docs_origin_hint": "helm.docs.mindburn.org/architecture/eidas-qtsp",
       "access": "public",
       "sensitivity": "public"
     },
@@ -527,7 +527,7 @@
       "title": "Policy Languages",
       "section": "architecture",
       "source_path": "docs/architecture/policy-languages.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/architecture/policy-languages",
+      "docs_origin_hint": "helm.docs.mindburn.org/architecture/policy-languages",
       "access": "public",
       "sensitivity": "public"
     },
@@ -536,7 +536,7 @@
       "title": "ClawGuard Taint Tracking",
       "section": "security",
       "source_path": "docs/security/clawguard-taint-tracking.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/security/clawguard-taint-tracking",
+      "docs_origin_hint": "helm.docs.mindburn.org/security/clawguard-taint-tracking",
       "access": "public",
       "sensitivity": "public"
     },
@@ -545,7 +545,7 @@
       "title": "Session Risk Memory",
       "section": "security",
       "source_path": "docs/security/session-risk-memory.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/security/session-risk-memory",
+      "docs_origin_hint": "helm.docs.mindburn.org/security/session-risk-memory",
       "access": "public",
       "sensitivity": "public"
     },
@@ -554,7 +554,7 @@
       "title": "Release and Security Evidence",
       "section": "security",
       "source_path": "docs/RELEASE_SECURITY.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/helm-ai-kernel/security/release-security",
+      "docs_origin_hint": "helm.docs.mindburn.org/security/release-security",
       "access": "public",
       "sensitivity": "public"
     }

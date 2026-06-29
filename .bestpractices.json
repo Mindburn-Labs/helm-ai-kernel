@@ -1,7 +1,7 @@
 {
   "name": "HELM AI Kernel",
   "description": "Fail-closed execution firewall for AI agent tool calls, MCP gateways, policy enforcement, and signed receipts.",
-  "homepage_url": "https://helm.docs.mindburn.org/helm-ai-kernel",
+  "homepage_url": "https://helm.docs.mindburn.org",
   "repo_url": "https://github.com/Mindburn-Labs/helm-ai-kernel",
   "license": "Apache-2.0",
   "best_practices_url": "https://www.bestpractices.dev/projects/new?repo_url=https%3A%2F%2Fgithub.com%2FMindburn-Labs%2Fhelm-ai-kernel",

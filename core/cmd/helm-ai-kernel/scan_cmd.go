@@ -34,6 +34,7 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 
 	var (
 		rootPath     string
+		receiptsPath string
 		cohort       string
 		saltFile     string
 		envelopePath string
@@ -44,6 +45,7 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 		previews     scanPreviewFlags
 	)
 	cmd.StringVar(&rootPath, "path", ".", "Directory to scan")
+	cmd.StringVar(&receiptsPath, "from-receipts", "", "Project workstation observe/decision receipts from this directory")
 	cmd.StringVar(&cohort, "cohort", string(riskenvelope.CohortUnknown), "Cohort bucket: unknown|1-10repos|11-50repos|51-200repos|201plusrepos")
 	cmd.StringVar(&saltFile, "salt-file", "", "Local-only pseudonym salt file (default: user config dir)")
 	cmd.StringVar(&envelopePath, "risk-envelope", "", "Write anonymized RiskEnvelope JSON")
@@ -72,13 +74,23 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "Error loading scan salt: %v\n", err)
 		return 2
 	}
-	envelope, err := riskscan.Scan(rootPath, riskscan.BuildOptions{
+	opts := riskscan.BuildOptions{
 		Salt:   salt,
 		Cohort: riskenvelope.CohortBucket(cohort),
 		Now:    time.Now().UTC(),
-	})
+	}
+	var envelope riskenvelope.RiskEnvelope
+	if strings.TrimSpace(receiptsPath) != "" {
+		envelope, err = riskscan.ScanReceipts(receiptsPath, opts)
+	} else {
+		envelope, err = riskscan.Scan(rootPath, opts)
+	}
 	if err != nil {
-		fmt.Fprintf(stderr, "Error scanning %q: %v\n", rootPath, err)
+		target := rootPath
+		if strings.TrimSpace(receiptsPath) != "" {
+			target = receiptsPath
+		}
+		fmt.Fprintf(stderr, "Error scanning %q: %v\n", target, err)
 		return 2
 	}
 	body, err := riskscan.EnvelopeJSON(envelope)

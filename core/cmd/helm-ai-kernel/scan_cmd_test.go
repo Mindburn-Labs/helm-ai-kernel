@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -9,7 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/riskenvelope"
 )
 
@@ -105,6 +108,31 @@ func TestScanCommandUploadSendsPrintedBody(t *testing.T) {
 	}
 }
 
+func TestScanCommandFromReceiptsWritesEnvelope(t *testing.T) {
+	receipts := scanReceiptFixtureRoot(t)
+	out := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"helm-ai-kernel", "scan",
+		"--from-receipts", receipts,
+		"--salt-file", filepath.Join(out, "salt.hex"),
+		"--risk-envelope", filepath.Join(out, "risk.json"),
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("scan receipts code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	riskJSON, err := os.ReadFile(filepath.Join(out, "risk.json"))
+	if err != nil {
+		t.Fatalf("read risk envelope: %v", err)
+	}
+	if !bytes.Contains(riskJSON, []byte(`"DIRECT_DISPATCH_SEEN"`)) {
+		t.Fatalf("receipt-derived risk missing from envelope: %s", riskJSON)
+	}
+	if bytes.Contains(riskJSON, []byte("customer/private-game")) || bytes.Contains(riskJSON, []byte("curl https://private.example")) {
+		t.Fatalf("risk envelope leaked raw receipt data: %s", riskJSON)
+	}
+}
+
 func scanFixtureRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -120,6 +148,37 @@ func scanFixtureRoot(t *testing.T) string {
 	}
 	if err := os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(`{"permissionMode":"acceptEdits","project":"customer/private-game"}`), 0o644); err != nil {
 		t.Fatalf("write settings: %v", err)
+	}
+	return root
+}
+
+func scanReceiptFixtureRoot(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	receipt := contracts.WorkstationPolicyDecisionReceipt{
+		ReceiptVersion: "workstation_policy_decision.v1",
+		DecisionID:     "decision-network",
+		Request: contracts.WorkstationDecisionRequest{
+			RequestID:    "network-1",
+			RunID:        "run-private-game",
+			AgentSurface: "codex",
+			ToolID:       "curl",
+			Action:       "curl https://private.example/customer/private-game",
+			EffectType:   contracts.EffectTypeWorkstationNetworkEgress,
+			EffectMode:   contracts.WorkstationEffectModeObserve,
+			Target:       "customer/private-game",
+			OccurredAt:   time.Unix(0, 0).UTC(),
+		},
+		Verdict:      contracts.WorkstationVerdictAllow,
+		ObservedOnly: true,
+		CreatedAt:    time.Unix(0, 0).UTC(),
+	}
+	data, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatalf("marshal receipt: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "decision.json"), append(data, '\n'), 0o644); err != nil {
+		t.Fatalf("write receipt: %v", err)
 	}
 	return root
 }

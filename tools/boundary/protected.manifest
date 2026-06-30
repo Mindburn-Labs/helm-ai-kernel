@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-29T08:13:06Z
-# Commit: c36a6075a0bba665a6075c68a43e3d72a6b454a7
+# Generated: 2026-06-30T15:45:10Z
+# Commit: 22c541284c637608ff9b99cc58be88c914f3dc73
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -651,7 +651,7 @@ b084e586791f8a6ca882cb8ec49cae843a10ee13a3b94f527eeb2af34acf3494  protocols/conf
 35149966be79226039f1cfe611f70da36c2e9f93e2d9e96a91bb995a3bfb2cc9  protocols/conformance/v1/test-vectors.json
 9b81d0320f3dfd15d5f50f031fc41ed1d0bf19f78653f81ac03dac9f0e8cc131  protocols/conformance/workstation/v1/conformance-pack.json
 cabc519027fc1c737db0b8008ccbb7fbe32bd473a407334aee32f5fb1d1e7314  protocols/json-schemas/README.md
-f1dcaaca3e1ca30d969c158c8a7a679f42e5a53153d823208614fe4bffbcde0e  protocols/json-schemas/SCHEMA_INDEX.md
+6cb1e97968066e3d4b1616ecd99cc9a32eb9f54468894fbbc7b5b12fe16b0ac8  protocols/json-schemas/SCHEMA_INDEX.md
 44d2b23e718d7d3e6011c5cabbcf7653553a265b96a24020a9db18e44ce49e9f  protocols/json-schemas/access/OperatorAccessPolicy.v1.json
 341c45c009dafdc7ba58ce07cb1efc851f0d5e7ca867463e82d2bbccd0e68766  protocols/json-schemas/access/PrivilegedAccessReceipt.v1.json
 ca16cb628b8913f291816419eeeaabf663281437f8cf4ef8079b0e4a2773b60f  protocols/json-schemas/access/PrivilegedAccessRequest.v1.json
@@ -796,6 +796,7 @@ cfd8659ebe7ef2f371bd0d58e426ae982d50373608423f8646bc72db213402a7  protocols/json
 c8d86d919e94e7cd801800d2c61a282c32fbc3c3aa85aebe98d0a6922f721710  protocols/json-schemas/receipts/tool_invocation_receipt.v1.schema.json
 b49b5dd398164003f929200e54ff264aa0ea10d1781fb00d19a3641288369984  protocols/json-schemas/registry/compatibility-registry.schema.json
 e45af39c8c47a3f17c758c03f623845cd11df03e5da0f6efad01d48695ea5040  protocols/json-schemas/retention_policy/v1.json
+5e7925c655bb1b29bd5dda06342d4991008e1ecb44351f9a3b78c95ca370c6dd  protocols/json-schemas/risk-envelope/v1.json
 07f0b4931a33992c185ee32b21e7f60c68893f674a9eef35375c4182193f68d4  protocols/json-schemas/safety/controllability_envelope.schema.json
 4280a21b4fc00ea68850c62c3f22ccfc812ff75285d98dcdac853c778c0cdb75  protocols/json-schemas/safety/guardian_switch_event.schema.json
 79ac3a9c336c9bb98b6827b773ce57fb056b90c8d33a8cb7648929069a6b9ba5  protocols/json-schemas/spend/spend_authority_contracts.v1.schema.json

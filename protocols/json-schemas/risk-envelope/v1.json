@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.mindburn.run/risk-envelope/v1.json",
+  "title": "HELM Risk Envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "envelope_id",
+    "cohort_bucket",
+    "source_pack_hash",
+    "findings",
+    "posture",
+    "privacy",
+    "generated_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "risk-envelope/v1" },
+    "envelope_id": { "$ref": "#/$defs/hmac_ref" },
+    "cohort_bucket": {
+      "enum": ["unknown", "1-10repos", "11-50repos", "51-200repos", "201plusrepos"]
+    },
+    "source_pack_hash": { "$ref": "#/$defs/sha256_ref" },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "posture": { "$ref": "#/$defs/posture" },
+    "privacy": { "$ref": "#/$defs/privacy" },
+    "generated_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "hmac_ref": {
+      "type": "string",
+      "pattern": "^hmac:[a-f0-9]{64}$"
+    },
+    "sha256_ref": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_id", "resource_type", "risk_code", "severity", "evidence"],
+      "properties": {
+        "resource_id": { "$ref": "#/$defs/hmac_ref" },
+        "resource_type": {
+          "enum": [
+            "repo",
+            "mcp_server",
+            "workflow",
+            "secret_class",
+            "permission_profile",
+            "environment",
+            "oauth_client",
+            "iam_principal"
+          ]
+        },
+        "risk_code": {
+          "enum": [
+            "AGENT_WRITE_WITHOUT_ENV_APPROVAL",
+            "BROAD_SHELL_ALLOW",
+            "BYPASS_PERMISSIONS_ENABLED",
+            "MCP_WRITE_SCOPE_WITHOUT_APPROVAL",
+            "PROD_ENV_WITHOUT_REVIEWERS",
+            "SECRET_CLASS_AGENT_READABLE",
+            "DIRECT_DISPATCH_SEEN",
+            "NO_MANAGED_SETTINGS",
+            "NO_AUDIT_EXPORT",
+            "NO_BRANCH_PROTECTION",
+            "SCHEMA_PIN_MISSING",
+            "IAM_ADMIN_GRANT_VISIBLE",
+            "OAUTH_HIGH_RISK_SCOPE",
+            "CI_WORKFLOW_WRITE_TOKEN"
+          ]
+        },
+        "severity": { "enum": ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "evidence": { "$ref": "#/$defs/evidence" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "agent_tool": {
+          "enum": [
+            "unknown",
+            "git_push",
+            "git_write",
+            "db_write",
+            "mcp_write",
+            "mcp_read",
+            "deploy_publish",
+            "secret_read",
+            "payment_initiate",
+            "shell_operate",
+            "network_egress",
+            "workflow_dispatch"
+          ]
+        },
+        "permission_mode": {
+          "enum": ["unknown", "plan", "ask", "accept_edits", "bypass_permissions"]
+        },
+        "branch_protection": { "type": "boolean" },
+        "prod_env_reviewers": { "type": "integer", "minimum": 0 },
+        "mcp_write_scopes": { "type": "boolean" },
+        "managed_settings": { "type": "boolean" },
+        "audit_logging": { "type": "boolean" },
+        "schema_pinned": { "type": "boolean" },
+        "direct_dispatch_seen": { "type": "boolean" },
+        "secret_value_accessible": { "type": "boolean" }
+      }
+    },
+    "posture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent_surface",
+        "permission_mode",
+        "managed_settings_present",
+        "mcp_server_count",
+        "oauth_scope_buckets",
+        "iam_grant_buckets",
+        "static_config_files_read",
+        "metadata_api_calls"
+      ],
+      "properties": {
+        "agent_surface": {
+          "enum": ["unknown", "claude_code", "codex", "github_actions", "mcp"]
+        },
+        "permission_mode": {
+          "enum": ["unknown", "plan", "ask", "accept_edits", "bypass_permissions"]
+        },
+        "managed_settings_present": { "type": "boolean" },
+        "mcp_server_count": { "type": "integer", "minimum": 0 },
+        "oauth_scope_buckets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/oauth_scope_bucket_count" }
+        },
+        "iam_grant_buckets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/iam_grant_bucket_count" }
+        },
+        "static_config_files_read": { "type": "integer", "minimum": 0 },
+        "metadata_api_calls": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "oauth_scope_bucket_count": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bucket", "count"],
+      "properties": {
+        "bucket": {
+          "enum": ["none", "read", "write", "admin", "repo", "workflow", "cloud", "db", "unknown"]
+        },
+        "count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "iam_grant_bucket_count": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bucket", "count"],
+      "properties": {
+        "bucket": {
+          "enum": ["none", "read", "write", "admin", "cloud", "deploy", "billing", "unknown"]
+        },
+        "count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_prompts_collected",
+        "source_code_collected",
+        "secret_values_collected",
+        "command_bodies_exported"
+      ],
+      "properties": {
+        "raw_prompts_collected": { "const": false },
+        "source_code_collected": { "const": false },
+        "secret_values_collected": { "const": false },
+        "command_bodies_exported": { "const": false }
+      }
+    }
+  }
+}

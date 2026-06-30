@@ -1,5 +1,7 @@
 package crypto
 
+// quantum_posture: conformance tests for hybrid/PQ receipt verification.
+
 import (
 	"bytes"
 	"crypto/ed25519"

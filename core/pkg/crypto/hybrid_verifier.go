@@ -1,5 +1,7 @@
 package crypto
 
+// quantum_posture: hybrid/PQ receipt verification; fail closed on downgrade.
+
 import (
 	"encoding/hex"
 	"fmt"

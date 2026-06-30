@@ -433,6 +433,15 @@
       "sensitivity": "public"
     },
     {
+      "slug": "reference/agent-risk-scan",
+      "title": "Agent Risk Scan",
+      "section": "reference",
+      "source_path": "docs/reference/agent-risk-scan.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/agent-risk-scan",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "reference/http-api",
       "title": "HELM AI Kernel HTTP API Reference",
       "section": "reference",

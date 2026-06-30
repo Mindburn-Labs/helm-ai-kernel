@@ -229,7 +229,7 @@ func RenderHTML(envelope riskenvelope.RiskEnvelope) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func WriteEvidencePack(path string, envelope riskenvelope.RiskEnvelope, previews map[string][]byte) error {
+func WriteEvidencePack(path string, envelope riskenvelope.RiskEnvelope, previews map[string][]byte) (err error) {
 	if err := envelope.Validate(); err != nil {
 		return err
 	}
@@ -260,9 +260,17 @@ func WriteEvidencePack(path string, envelope riskenvelope.RiskEnvelope, previews
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); err == nil {
+			err = closeErr
+		}
+	}()
 	tw := tar.NewWriter(f)
-	defer tw.Close()
+	defer func() {
+		if closeErr := tw.Close(); err == nil {
+			err = closeErr
+		}
+	}()
 
 	names := make([]string, 0, len(files))
 	for name := range files {

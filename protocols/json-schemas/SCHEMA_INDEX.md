@@ -92,6 +92,12 @@
 | `workstation_policy_decision_receipt.v1.schema.json` | L2        | preview   | Selected-effect workstation policy decision receipt |
 | `scope_audit_report.v1.schema.json`                | L2          | preview   | Agent Scope Audit report over workstation receipts |
 
+### Risk Envelope (`risk-envelope/`)
+
+| Schema     | Conformance | Status  | Description                                               |
+| ---------- | ----------- | ------- | --------------------------------------------------------- |
+| `v1.json`  | L2          | preview | Privacy-by-non-collection upload projection for AI audits |
+
 ### Effects (`effects/`)
 
 | Schema                            | Conformance | Status        | Description                                               |

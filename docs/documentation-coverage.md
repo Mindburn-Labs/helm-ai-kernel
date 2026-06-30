@@ -24,7 +24,7 @@ The machine-readable ledger is `docs/documentation-coverage.csv`. Every active a
 
 ## Current Certification
 
-- Active surfaces covered: 276
+- Active surfaces covered: 380
 - Unresolved documentation gaps: 0
 - Known non-active exceptions must be explicit in `reviewer_notes` and must not appear as undated placeholder status markers.
 

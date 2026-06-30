@@ -199,10 +199,4 @@ func init() {
 		Usage:   "Static scan for shadow-AI: agent SDKs, MCP configs, API keys",
 		RunFn:   runShadowCmd,
 	})
-	Register(Subcommand{
-		Name:    "scan",
-		Aliases: []string{},
-		Usage:   "Boundary audit: grade ungoverned agent execution surface (alias for shadow scan)",
-		RunFn:   runShadowScan,
-	})
 }

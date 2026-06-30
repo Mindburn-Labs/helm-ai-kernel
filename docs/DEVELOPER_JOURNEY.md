@@ -1,6 +1,6 @@
 ---
 title: Developer Journey
-last_reviewed: 2026-06-13
+last_reviewed: 2026-06-30
 ---
 
 # Developer Journey
@@ -64,6 +64,7 @@ flowchart TD
 - `core/cmd/helm-ai-kernel/*`
 - `api/openapi/helm.openapi.yaml`
 - `docs/reference/cli.md`
+- `docs/reference/agent-risk-scan.md`
 - `docs/reference/http-api.md`
 - `docs/reference/execution-boundary.md`
 - `sdk/go`, `sdk/python`, `sdk/ts`, `sdk/rust`, `sdk/java`
@@ -81,6 +82,20 @@ helm-ai-kernel quickstart
 
 This starts the local Kernel and uses backend-owned onboarding APIs to create
 receipts and EvidencePack refs. No hosted account is required.
+
+If you need a no-upload risk surface before installing an in-path boundary, run
+the local scan path:
+
+```bash
+helm-ai-kernel scan \
+  --path . \
+  --risk-envelope out/risk-envelope.json \
+  --preview out/risk-report.md \
+  --evidence-pack out/risk-scan-pack.tar
+```
+
+Use [`Agent Risk Scan`](reference/agent-risk-scan.md) for the full static,
+preview, evidence-pack, upload, and receipt-projection contract.
 
 Pair with a hosted control plane only when you want workspace-scoped Launchpad
 or commercial workflows after the local proof. Paid capabilities remain

@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel
-last_reviewed: 2026-06-13
+last_reviewed: 2026-06-30
 ---
 
 # HELM AI Kernel Developer Portal
@@ -19,6 +19,7 @@ This page is for open-source developers, platform teams, security reviewers, and
 After this page you should know which public HELM AI Kernel surface to use:
 
 - quickstart for a local boundary;
+- agent risk scan for a local, anonymized audit surface;
 - developer journey for end-to-end install, runtime, SDK, deployment, and verification coverage;
 - architecture for the trust and execution model;
 - CLI and SDKs for integration;
@@ -83,11 +84,12 @@ The code, command output, and verification artifacts override marketing language
 ## Start Here
 
 1. Run the local quickstart: [Quickstart](QUICKSTART.md).
-2. Try MCP quarantine with `bash scripts/launch/demo-mcp.sh`.
-3. Verify receipt tamper failure with `bash scripts/launch/demo-proof.sh`.
-3. Use the complete source-backed path: [Developer Journey](DEVELOPER_JOURNEY.md).
-4. Read the execution model: [Architecture](ARCHITECTURE.md).
-5. Pick an integration:
+2. Run the local anonymized audit: [Agent Risk Scan](reference/agent-risk-scan.md).
+3. Try MCP quarantine with `bash scripts/launch/demo-mcp.sh`.
+4. Verify receipt tamper failure with `bash scripts/launch/demo-proof.sh`.
+5. Use the complete source-backed path: [Developer Journey](DEVELOPER_JOURNEY.md).
+6. Read the execution model: [Architecture](ARCHITECTURE.md).
+7. Pick an integration:
    - [OpenAI-compatible proxy](INTEGRATIONS/openai_baseurl.md)
    - [MCP integration](INTEGRATIONS/mcp.md)
    - [Codebase Memory MCP integration](INTEGRATIONS/codebase_memory_mcp.md)
@@ -95,14 +97,15 @@ The code, command output, and verification artifacts override marketing language
    - [Vaultak State Transaction Bridge](INTEGRATIONS/vaultak.md)
    - [BGT Labs Sentinel Authorization Gateway](INTEGRATIONS/sentinel.md)
    - [SDK index](sdks/00_INDEX.md)
-6. Verify an output: [Verification](VERIFICATION.md).
-7. Add conformance checks: [Conformance](CONFORMANCE.md).
+8. Verify an output: [Verification](VERIFICATION.md).
+9. Add conformance checks: [Conformance](CONFORMANCE.md).
 
 ## Interfaces
 
 | Interface | Use When | Public Doc |
 | --- | --- | --- |
 | CLI | You want local serving, policy loading, receipts, or verification commands. | [Quickstart](QUICKSTART.md) |
+| Agent Risk Scan | You want a local anonymized scan before upload or enforcement. | [Agent Risk Scan](reference/agent-risk-scan.md) |
 | OpenAI-compatible proxy | You have an existing OpenAI-style client and want a small integration diff. | [Proxy integration](INTEGRATIONS/openai_baseurl.md) |
 | MCP | You are exposing governed tools to MCP-capable clients. | [MCP integration](INTEGRATIONS/mcp.md) |
 | Codebase Memory MCP | You want local read/query code intelligence before editing HELM source. | [Codebase Memory MCP integration](INTEGRATIONS/codebase_memory_mcp.md) |

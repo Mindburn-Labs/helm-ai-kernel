@@ -13,6 +13,7 @@ Use this file when changing `helm` commands, local server routes, proxy behavior
 - `helm/main.go` wires the primary CLI.
 - `helm/serve_*`, `helm/server_*`, and route files own local API behavior.
 - `helm/proxy_cmd.go` owns OpenAI-compatible proxy entrypoints.
+- `helm/scan_cmd.go` owns the local anonymized agent-risk scan entrypoint.
 - `helm/mcp_*` owns MCP server, bundle, install, and runtime behavior.
 - `helm/verify_cmd.go`, `helm/export_*`, and receipt route files own evidence and verification workflows.
 - `helm/conform.go` owns conformance entrypoints.

@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel JSON Schema Reference
-last_reviewed: 2026-05-21
+last_reviewed: 2026-06-30
 ---
 
 # HELM AI Kernel JSON Schema Reference
@@ -63,6 +63,7 @@ flowchart TD
 | policy | [`protocols/json-schemas/policy`](../../protocols/json-schemas/policy) | policy bundles and rule inputs |
 | receipt / receipts | [`protocols/json-schemas/receipt`](../../protocols/json-schemas/receipt), [`protocols/json-schemas/receipts`](../../protocols/json-schemas/receipts) | native HELM receipt verification |
 | registry | [`protocols/json-schemas/registry`](../../protocols/json-schemas/registry) | module, connector, and pack registries |
+| risk-envelope | [`protocols/json-schemas/risk-envelope`](../../protocols/json-schemas/risk-envelope) | anonymized `helm-ai-kernel scan` exports and previews |
 | safety / verification | [`protocols/json-schemas/safety`](../../protocols/json-schemas/safety), [`protocols/json-schemas/verification`](../../protocols/json-schemas/verification) | fail-closed checks and verifier outputs |
 | telemetry / tooling | [`protocols/json-schemas/telemetry`](../../protocols/json-schemas/telemetry), [`protocols/json-schemas/tooling`](../../protocols/json-schemas/tooling) | OpenTelemetry and tool governance exports |
 | workstation | [`protocols/json-schemas/workstation`](../../protocols/json-schemas/workstation) | workstation receipts, policy decision receipts, and Agent Scope Audit reports |

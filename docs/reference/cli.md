@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel CLI Reference
-last_reviewed: 2026-06-15
+last_reviewed: 2026-06-30
 ---
 
 # HELM AI Kernel CLI Reference
@@ -71,6 +71,7 @@ flowchart TD
 | `helm-ai-kernel server` | Start the default Guardian API and proxy services. | [`main.go`](../../core/cmd/helm-ai-kernel/main.go), [`subsystems.go`](../../core/cmd/helm-ai-kernel/subsystems.go) |
 | `helm-ai-kernel proxy` | Run the OpenAI-compatible governance proxy. | [`proxy_cmd.go`](../../core/cmd/helm-ai-kernel/proxy_cmd.go) |
 | `helm-ai-kernel setup <claude-code\|codex>` | Install local MCP and PreToolUse hook integration for Claude Code or Codex, write autoconfigure draft artifacts, and start the local headless proof path. | [`setup_cmd.go`](../../core/cmd/helm-ai-kernel/setup_cmd.go), [`hook_cmd.go`](../../core/cmd/helm-ai-kernel/hook_cmd.go), [`quickstart_cmd.go`](../../core/cmd/helm-ai-kernel/quickstart_cmd.go) |
+| `helm-ai-kernel scan` | Run a local anonymized AI-agent risk scan, render previews, write a scan evidence pack, optionally upload only the RiskEnvelope, or project workstation receipts with `--from-receipts`. | [`scan_cmd.go`](../../core/cmd/helm-ai-kernel/scan_cmd.go), [`core/pkg/riskscan`](../../core/pkg/riskscan), [`Agent Risk Scan`](agent-risk-scan.md) |
 | `helm-ai-kernel receipts tail` | Tail durable receipt events for a specific agent. | [`receipts_cmd.go`](../../core/cmd/helm-ai-kernel/receipts_cmd.go), [`receipt_routes.go`](../../core/cmd/helm-ai-kernel/receipt_routes.go) |
 | `helm-ai-kernel evidence` | Export evidence envelopes over native EvidencePacks. | [`evidence_cmd.go`](../../core/cmd/helm-ai-kernel/evidence_cmd.go), [`contract_routes.go`](../../core/cmd/helm-ai-kernel/contract_routes.go) |
 | `helm-ai-kernel export` | Export an EvidencePack from local evidence material. | [`export_cmd.go`](../../core/cmd/helm-ai-kernel/export_cmd.go), [`export_pack.go`](../../core/cmd/helm-ai-kernel/export_pack.go) |
@@ -98,6 +99,7 @@ This table documents the public proof-path `helm-ai-kernel` command families and
 | `helm up <app>` | Defaults to `--target local --mode auto`; accepts `--target local|cloud|cloud:helm|cloud:aws|cloud:kubernetes`, `--demo`, `--verify-only`, `--live`, `--resume <run_id>`, `--yes`, and `--json`. `--verify-only` never starts runtime. `--live` never falls back to demo. Cloud targets escalate before paid resources unless provider auth and explicit approval are present. |
 | `helm-ai-kernel setup <claude-code\|codex>` | Defaults to user scope and `~/.helm-ai-kernel`; accepts `--scope user|project`, `--yes`, `--dry-run`, `--json`, and `--data-dir`. `--dry-run` writes nothing. Non-dry-run setup requires `--yes`. The JSON summary includes target, binary path, client config path, hook config path, data dir, Kernel URL, scan grade, draft policy path, and uninstall command. |
 | `helm-ai-kernel setup status <target>` / `setup remove <target>` | `status` checks for the HELM MCP and hook entries. `remove` requires `--yes` unless `--dry-run`; it removes the HELM hook entry and the local MCP entry for the selected target/scope. |
+| `helm-ai-kernel scan` | Defaults to `--path .` and `--cohort unknown`. `--risk-envelope` writes anonymized JSON. Repeatable `--preview` accepts `.md` and `.html`. `--evidence-pack` writes an anonymized tar containing only envelope, schema validation, privacy manifest, source-pack hash, and previews. `--from-receipts <dir>` switches input to workstation receipt projection. `--upload` requires `--upload-url`; without `--yes`, upload is not sent. |
 | `helm-ai-kernel hook pre-tool` | Requires `--client claude-code|codex`; reads hook JSON from stdin. Safe calls emit no output and grant no approval. Denied calls emit client-compatible `hookSpecificOutput.permissionDecision=deny` and write a signed decision receipt under `<data-dir>/receipts/hooks/`. |
 | `helm-ai-kernel workstation verify-decision` | Requires `--receipt <file>` or a single positional receipt path. Returns exit `0` only when the workstation policy decision receipt hash and Ed25519 signature verify. Tampered receipts return exit `1` and print `signature: false`. |
 | `helm-ai-kernel serve --policy <path>` | `--policy` is required. Optional flags are `--addr`, `--port`, `--data-dir`, and `--json`. If the policy does not override bind or port, `serve` uses `127.0.0.1:7714`. |

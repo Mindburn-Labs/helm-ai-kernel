@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-30T16:12:29Z
-# Commit: bf13675db8ab3b462ae59625e7fe52c6240c2b54
+# Generated: 2026-06-30T17:25:21Z
+# Commit: 46fea71e3c880d3e919efb9a8ef57e4aee6b36a7
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -268,7 +268,7 @@ aa5d4ead3026e62b8d34d58f5a727cbe93dd8572d9f3f9c3fc8d909ad1057272  core/pkg/crypt
 a9b60b330f8ce8f4aa558bbda110fb407dcb8f74f8497967cbc8c4d386c3a9cd  core/pkg/crypto/hsm/hsm_test.go
 8acf6d071523adcf4d0ba9ae00c5ff2e3be687f37edd61fc3987a121fdb46fa3  core/pkg/crypto/hybrid_signer.go
 2a0c412965e35af69d3299b1a95a892d3f7789f6e7bce936a6048e2a89f7bc1e  core/pkg/crypto/hybrid_signer_test.go
-7becf3047264dcd18bd9e391dbf1ca41900f65de4c369a82cfe5f3b3932d8e8e  core/pkg/crypto/hybrid_verifier.go
+71a531e53e8d91fc81fca7ffd45813132d0a298be917195248771fe11d9e3061  core/pkg/crypto/hybrid_verifier.go
 f3af5bd442e958b32b5e30d3f8965f92d308abf6273ae05c3d1d2f823709d9be  core/pkg/crypto/keyring.go
 83ca3291457c5fb929e09e979ead5c6501aa34081fca10ee10b0d5f220d96d46  core/pkg/crypto/keyring_fuzz_test.go
 0ddfb885a8a074dbca8314e67fb8d305dd85e0b2641fe1ab70c2f3457960b613  core/pkg/crypto/keyring_test.go
@@ -284,7 +284,7 @@ bb9cccd00a8f5107ccad949e14c50e13b4e6e714fa952e8b7c866798d0e9c9c8  core/pkg/crypt
 6d0889b2a97402f7d0627e2871be096505e733b456862abd5df24bbce9267f71  core/pkg/crypto/mtls/mtls_test.go
 328536be43592bcc25b4bf18a0bbe864c73ff43954dc1923033a537123af679f  core/pkg/crypto/mtls/rotator.go
 a8c4c2ef34613e99ecf4b3a72861c0b34dafa8c10ad3084ff903f72b72ec02b9  core/pkg/crypto/mtls/rotator_core_coverage_test.go
-6b6a50b0c0e5dd4659254c2f305da6ef44d6ff9150c0fec0d8dd1690a22f4af4  core/pkg/crypto/receipt_pq_hybrid_vectors_test.go
+0b6e563eb210352fa91bdbe4bdf6e4d56ea1a361950c82d923b8bdb9650292b7  core/pkg/crypto/receipt_pq_hybrid_vectors_test.go
 f83617b68486e9380a2271b72b51066e188c82f415560bffdc1d8d62452aad69  core/pkg/crypto/sdjwt/sdjwt.go
 d3366d27f1a5e3b4b0b36d66aa78b895f1a6220bfd40172fc789ed7f946bcb06  core/pkg/crypto/sdjwt/sdjwt_test.go
 c05fd979d2cba7ac6decd9766f929b8df7b095e26b07f711354fe32e466cacb7  core/pkg/crypto/shredding/shredding.go

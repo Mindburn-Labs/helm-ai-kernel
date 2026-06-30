@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-06-30T15:45:10Z
-# Commit: 22c541284c637608ff9b99cc58be88c914f3dc73
+# Generated: 2026-06-30T16:12:29Z
+# Commit: bf13675db8ab3b462ae59625e7fe52c6240c2b54
 # Format: SHA256  PATH
 #
 e548051f46925cf89e8a1034415fb60e88bb62b6d1dd80cfbb4b71b8b53dfb3d  core/pkg/kernel/README.md
@@ -796,7 +796,7 @@ cfd8659ebe7ef2f371bd0d58e426ae982d50373608423f8646bc72db213402a7  protocols/json
 c8d86d919e94e7cd801800d2c61a282c32fbc3c3aa85aebe98d0a6922f721710  protocols/json-schemas/receipts/tool_invocation_receipt.v1.schema.json
 b49b5dd398164003f929200e54ff264aa0ea10d1781fb00d19a3641288369984  protocols/json-schemas/registry/compatibility-registry.schema.json
 e45af39c8c47a3f17c758c03f623845cd11df03e5da0f6efad01d48695ea5040  protocols/json-schemas/retention_policy/v1.json
-5e7925c655bb1b29bd5dda06342d4991008e1ecb44351f9a3b78c95ca370c6dd  protocols/json-schemas/risk-envelope/v1.json
+191a483d4562a3b865aaa6ee2353a98c12220e07bd8c80163f9d88dee7c74505  protocols/json-schemas/risk-envelope/v1.json
 07f0b4931a33992c185ee32b21e7f60c68893f674a9eef35375c4182193f68d4  protocols/json-schemas/safety/controllability_envelope.schema.json
 4280a21b4fc00ea68850c62c3f22ccfc812ff75285d98dcdac853c778c0cdb75  protocols/json-schemas/safety/guardian_switch_event.schema.json
 79ac3a9c336c9bb98b6827b773ce57fb056b90c8d33a8cb7648929069a6b9ba5  protocols/json-schemas/spend/spend_authority_contracts.v1.schema.json

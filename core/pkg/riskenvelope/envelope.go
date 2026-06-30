@@ -2,9 +2,12 @@ package riskenvelope
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -13,6 +16,7 @@ import (
 )
 
 const SchemaVersion = "risk-envelope/v1"
+const SaltBytes = 32
 
 var (
 	hmacRefPattern   = regexp.MustCompile(`^hmac:[a-f0-9]{64}$`)
@@ -136,14 +140,15 @@ const (
 )
 
 type RiskEnvelope struct {
-	SchemaVersion  string               `json:"schema_version"`
-	EnvelopeID     string               `json:"envelope_id"`
-	CohortBucket   CohortBucket         `json:"cohort_bucket"`
-	SourcePackHash string               `json:"source_pack_hash"`
-	Findings       []EnvelopeFinding    `json:"findings"`
-	Posture        PostureProbe         `json:"posture"`
-	Privacy        PrivacyNonCollection `json:"privacy"`
-	GeneratedAt    time.Time            `json:"generated_at"`
+	SchemaVersion       string               `json:"schema_version"`
+	EnvelopeID          string               `json:"envelope_id"`
+	EnvelopeContentHash string               `json:"envelope_content_hash"`
+	CohortBucket        CohortBucket         `json:"cohort_bucket"`
+	SourcePackHash      string               `json:"source_pack_hash"`
+	Findings            []EnvelopeFinding    `json:"findings"`
+	Posture             PostureProbe         `json:"posture"`
+	Privacy             PrivacyNonCollection `json:"privacy"`
+	GeneratedAt         time.Time            `json:"generated_at"`
 }
 
 type EnvelopeFinding struct {
@@ -176,6 +181,8 @@ type PostureProbe struct {
 	IAMGrantBuckets        []IAMGrantBucketCount   `json:"iam_grant_buckets"`
 	StaticConfigFilesRead  int                     `json:"static_config_files_read"`
 	MetadataAPICalls       int                     `json:"metadata_api_calls"`
+	SuppressedFindingCount int                     `json:"suppressed_finding_count"`
+	KAnonymityFloor        int                     `json:"k_anonymity_floor"`
 }
 
 type OAuthScopeBucketCount struct {
@@ -195,9 +202,64 @@ type PrivacyNonCollection struct {
 	CommandBodiesExported bool `json:"command_bodies_exported"`
 }
 
+// GenerateSalt returns a local-only CSPRNG salt for HMAC pseudonyms. Store this
+// per customer/workstation and never upload it; low-entropy resource names are
+// dictionary-reversible if the salt is weak or leaked.
+func GenerateSalt() ([]byte, error) {
+	salt := make([]byte, SaltBytes)
+	if _, err := rand.Read(salt); err != nil {
+		return nil, err
+	}
+	return salt, nil
+}
+
+// LoadOrCreateSaltFile loads a hex-encoded local-only salt, or creates one with
+// 0600 permissions. Existing salt files with group/world permissions are
+// rejected because pseudonym privacy depends on salt secrecy.
+func LoadOrCreateSaltFile(path string) ([]byte, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, fmt.Errorf("risk envelope salt file path is required")
+	}
+	info, err := os.Stat(path)
+	if err == nil {
+		if info.Mode().Perm()&0o077 != 0 {
+			return nil, fmt.Errorf("risk envelope salt file must not be group/world-readable: %s", path)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		salt, err := hex.DecodeString(strings.TrimSpace(string(data)))
+		if err != nil {
+			return nil, fmt.Errorf("risk envelope salt file is not hex: %w", err)
+		}
+		if len(salt) != SaltBytes {
+			return nil, fmt.Errorf("risk envelope salt must be %d bytes", SaltBytes)
+		}
+		return salt, nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
+	}
+	salt, err := GenerateSalt()
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(path, []byte(hex.EncodeToString(salt)+"\n"), 0o600); err != nil {
+		return nil, err
+	}
+	return salt, nil
+}
+
+// Pseudonym HMACs a raw local identifier into an upload-safe reference. The raw
+// input can be low entropy; privacy depends on a CSPRNG, per-customer,
+// local-only salt.
 func Pseudonym(salt []byte, rawID string) (string, error) {
-	if len(salt) < 16 {
-		return "", fmt.Errorf("risk envelope pseudonym salt must be at least 16 bytes")
+	if len(salt) < SaltBytes {
+		return "", fmt.Errorf("risk envelope pseudonym salt must be at least %d bytes", SaltBytes)
 	}
 	if strings.TrimSpace(rawID) == "" {
 		return "", fmt.Errorf("risk envelope pseudonym raw id is required")
@@ -227,12 +289,29 @@ func CanonicalSHA256Ref(v any) (string, error) {
 	return "sha256:" + hash, nil
 }
 
+func (e RiskEnvelope) ContentHash() (string, error) {
+	e.EnvelopeContentHash = ""
+	return CanonicalSHA256Ref(e)
+}
+
+func Seal(e RiskEnvelope) (RiskEnvelope, error) {
+	hash, err := e.ContentHash()
+	if err != nil {
+		return e, err
+	}
+	e.EnvelopeContentHash = hash
+	return e, nil
+}
+
 func (e RiskEnvelope) Validate() error {
 	if e.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("schema_version must be %q", SchemaVersion)
 	}
 	if !hmacRefPattern.MatchString(e.EnvelopeID) {
 		return fmt.Errorf("envelope_id must be hmac:<64 lowercase hex>")
+	}
+	if !sha256RefPattern.MatchString(e.EnvelopeContentHash) {
+		return fmt.Errorf("envelope_content_hash must be sha256:<64 lowercase hex>")
 	}
 	if !validCohortBucket(e.CohortBucket) {
 		return fmt.Errorf("invalid cohort_bucket %q", e.CohortBucket)
@@ -256,6 +335,13 @@ func (e RiskEnvelope) Validate() error {
 		if err := finding.validate(); err != nil {
 			return fmt.Errorf("findings[%d]: %w", i, err)
 		}
+	}
+	expectedHash, err := e.ContentHash()
+	if err != nil {
+		return fmt.Errorf("envelope_content_hash: %w", err)
+	}
+	if e.EnvelopeContentHash != expectedHash {
+		return fmt.Errorf("envelope_content_hash does not match canonical envelope body")
 	}
 	return nil
 }
@@ -299,7 +385,7 @@ func (p PostureProbe) validate() error {
 	if !validPermissionMode(p.PermissionMode) {
 		return fmt.Errorf("invalid permission_mode %q", p.PermissionMode)
 	}
-	if p.MCPServerCount < 0 || p.StaticConfigFilesRead < 0 || p.MetadataAPICalls < 0 {
+	if p.MCPServerCount < 0 || p.StaticConfigFilesRead < 0 || p.MetadataAPICalls < 0 || p.SuppressedFindingCount < 0 || p.KAnonymityFloor < 0 {
 		return fmt.Errorf("counts cannot be negative")
 	}
 	if p.OAuthScopeBuckets == nil {

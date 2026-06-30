@@ -7,6 +7,7 @@
   "required": [
     "schema_version",
     "envelope_id",
+    "envelope_content_hash",
     "cohort_bucket",
     "source_pack_hash",
     "findings",
@@ -17,6 +18,7 @@
   "properties": {
     "schema_version": { "const": "risk-envelope/v1" },
     "envelope_id": { "$ref": "#/$defs/hmac_ref" },
+    "envelope_content_hash": { "$ref": "#/$defs/sha256_ref" },
     "cohort_bucket": {
       "enum": ["unknown", "1-10repos", "11-50repos", "51-200repos", "201plusrepos"]
     },
@@ -122,7 +124,9 @@
         "oauth_scope_buckets",
         "iam_grant_buckets",
         "static_config_files_read",
-        "metadata_api_calls"
+        "metadata_api_calls",
+        "suppressed_finding_count",
+        "k_anonymity_floor"
       ],
       "properties": {
         "agent_surface": {
@@ -142,7 +146,9 @@
           "items": { "$ref": "#/$defs/iam_grant_bucket_count" }
         },
         "static_config_files_read": { "type": "integer", "minimum": 0 },
-        "metadata_api_calls": { "type": "integer", "minimum": 0 }
+        "metadata_api_calls": { "type": "integer", "minimum": 0 },
+        "suppressed_finding_count": { "type": "integer", "minimum": 0 },
+        "k_anonymity_floor": { "type": "integer", "minimum": 0 }
       }
     },
     "oauth_scope_bucket_count": {

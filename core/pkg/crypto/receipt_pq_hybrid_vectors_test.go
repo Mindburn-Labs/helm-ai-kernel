@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -243,6 +244,31 @@ func TestReceiptPQHybridProfileConfusion(t *testing.T) {
 	profile, valid, err := VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt)
 	if err != nil || !valid || profile != ReceiptProfileClassical {
 		t.Fatalf("classical receipt must remain valid (profile=%q valid=%v err=%v)", profile, valid, err)
+	}
+
+	profile, valid, err = VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, ReceiptProfileHybrid)
+	if err == nil || valid {
+		t.Fatalf("hybrid-required verification must reject classical receipt (profile=%q valid=%v err=%v)", profile, valid, err)
+	}
+	if profile != ReceiptProfileClassical {
+		t.Fatalf("profile = %q, want classical", profile)
+	}
+	if !strings.Contains(err.Error(), `does not satisfy required profile "hybrid"`) {
+		t.Fatalf("unexpected downgrade error: %v", err)
+	}
+}
+
+func TestReceiptRequiredProfileRejectsUnsupportedProfile(t *testing.T) {
+	fixture := buildPQHybridFixture(t)
+	receipt := pqHybridFixtureReceipt()
+	receipt.Signature = fixture.Vectors[4].Signature // classical_valid
+
+	profile, valid, err := VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, "pqc")
+	if err == nil || valid {
+		t.Fatalf("unsupported required profile must fail closed (profile=%q valid=%v err=%v)", profile, valid, err)
+	}
+	if !strings.Contains(err.Error(), `unsupported required receipt profile "pqc"`) {
+		t.Fatalf("unexpected unsupported-profile error: %v", err)
 	}
 }
 

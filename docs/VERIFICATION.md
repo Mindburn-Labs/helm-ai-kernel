@@ -148,5 +148,6 @@ helm-ai-kernel evidence export \
 helm-ai-kernel verify evidence-pack.tar
 ```
 
-EvidencePacks are portable proof bundles. They are not compliance
-certifications, hosted availability claims, or buyer rollout evidence.
+EvidencePacks are portable proof bundles for local review and offline replay.
+They are not compliance certifications, hosted availability claims, or buyer
+rollout evidence.

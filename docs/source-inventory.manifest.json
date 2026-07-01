@@ -50,8 +50,7 @@
       "public_doc_slugs": [
         "index",
         "reference/cli",
-        "verification",
-        "publication-policy"
+        "verification"
       ],
       "rationale": "Top-level tracked files define install, release, contribution, governance, and security behavior without masking runtime trees behind a repository-wide wildcard.",
       "validation_commands": [
@@ -76,7 +75,7 @@
       "owner_doc_path": ".github/SURFACE.md",
       "public_doc_slugs": [
         "reference/cli",
-        "publication-policy"
+        "troubleshooting"
       ],
       "rationale": "CI and tooling are externally relevant as validation gates and release evidence, but individual workflow files remain source-owned.",
       "validation_commands": [
@@ -490,9 +489,7 @@
         "troubleshooting",
         "reference/cli",
         "reference/http-api",
-        "sdks",
-        "claim-boundaries",
-        "publication-policy"
+        "sdks"
       ],
       "rationale": "Docs files are source material for the public site and are checked through manifest, LLM, search, and source-inventory gates.",
       "validation_commands": [

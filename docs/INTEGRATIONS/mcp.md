@@ -19,7 +19,7 @@ ESCALATE -> block, write receipt, show scoped approval command
 
 ```bash
 helm-ai-kernel mcp wrap \
-  --server-id shell-mcp-server \
+  --server-id helm-demo-shell \
   --upstream-command "npx -y shell-mcp-server" \
   --require-pinned-schema=true \
   --json
@@ -36,35 +36,30 @@ helm-ai-kernel mcp install --client claude-code
 
 ```bash
 helm-ai-kernel mcp authorize-call \
-  --server-id shell-mcp-server \
+  --server-id helm-demo-shell \
   --tool-name pwd
 ```
 
-An unknown or unapproved server returns `ESCALATE`:
+An unknown or unapproved server returns `ESCALATE`. The action is not
+dispatched. Use the approval loop in [Quickstart](/quickstart#see-an-escalation).
 
-```text
-HELM ESCALATE
-decision: mcp-boundary-...
-reason: unknown MCP server requires approval
-receipt: ~/.helm-ai-kernel/receipts/mcp/...
-approve:
-  helm-ai-kernel mcp approve --server-id shell-mcp-server \
-    --tools "pwd" \
-    --ttl 15m \
-    --reason 'read-only repo inspection for local dev'
-```
+## Scan Before Approval
 
-The action is not dispatched. Approval never resumes it automatically.
-
-## Approve A Narrow Scope
+Use the local MCP risk scanner before granting a new server/tool bundle:
 
 ```bash
-helm-ai-kernel mcp approve \
-  --server-id shell-mcp-server \
-  --tools "pwd,ls,cat" \
-  --ttl 15m \
-  --reason "read-only repo inspection for local dev"
+mkdir -p out
+helm-ai-kernel scan \
+  --path . \
+  --risk-envelope out/risk-envelope.json \
+  --preview out/risk-report.md
 ```
+
+For API clients, the same public surface is exposed as
+`POST /api/v1/mcp/scan`. A scan is advisory: it records the detected surface and
+does not dispatch, approve, or resume any tool call.
+
+## Effect Scope
 
 Approvals are local, receipt-backed, TTL-bound, and revocable. HELM rejects
 wildcard tool approvals and overlong side-effect approvals.
@@ -84,7 +79,7 @@ helm-ai-kernel mcp approve \
 
 ```bash
 helm-ai-kernel mcp revoke \
-  --server-id shell-mcp-server \
+  --server-id helm-demo-shell \
   --reason "inspection finished"
 ```
 
@@ -95,7 +90,7 @@ Revoked and expired grants fail closed on the next evaluation.
 ```bash
 helm-ai-kernel mcp pending --json
 helm-ai-kernel mcp receipts --json
-helm-ai-kernel mcp get --server-id shell-mcp-server --json
+helm-ai-kernel mcp get --server-id helm-demo-shell --json
 ```
 
 Run the no-dispatch proof:

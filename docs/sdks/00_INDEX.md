@@ -180,3 +180,4 @@ These helpers do not add vendor framework packages as HELM dependencies and do n
 | SDK drift | rerun generated-type checks and update code plus docs together |
 
 If registry state and source manifests disagree, treat the repository source as buildable code and do not publish an install claim until the registry package can be verified independently.
+SDK helpers are local clients for the Kernel boundary.

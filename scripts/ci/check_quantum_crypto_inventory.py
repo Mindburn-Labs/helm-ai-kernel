@@ -93,6 +93,8 @@ def should_skip(path: pathlib.Path) -> bool:
         return True
     if path.suffix in SKIP_SUFFIXES:
         return True
+    if path.name in {"TypesGen.java", "types.gen.ts", "types_gen.go", "types_gen.py", "types_gen.rs"}:
+        return True
     if path.name.endswith((".gen.go", ".pb.go", ".pb.ts")):
         return True
     return False

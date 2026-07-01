@@ -1,6 +1,6 @@
 # Highflame ZeroID Interoperability Adapter
 
-> Status: integration-certified. This adapter certifies the integration of Highflame ZeroID cryptographic credentials within the HELM AI Kernel Guardian policy engine.
+> Status: source-backed adapter candidate. This page documents the source-owned adapter path for Highflame ZeroID cryptographic credentials within the HELM AI Kernel Guardian policy engine; it is not release or runtime evidence.
 
 HELM integrates with Highflame ZeroID to enforce zero-trust identity authentication at the execution boundary. By validating ZeroID cryptographic tokens and SPIFFE URIs, HELM ensures that all dispatched tool calls and model requests originate from authenticated, policy-authorized principals.
 

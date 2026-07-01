@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel HTTP API Reference
-last_reviewed: 2026-05-05
+last_reviewed: 2026-07-01
 ---
 
 # HELM AI Kernel HTTP API Reference
@@ -78,11 +78,16 @@ The OpenAPI security blocks describe the external contract. `route_auth.go` is t
 | Local onboarding proof | `GET /api/v1/onboarding/state`, `POST /api/v1/onboarding/run-step`, `GET /api/v1/onboarding/export` | [`contract_routes.go`](../../core/cmd/helm-ai-kernel/contract_routes.go) |
 | Evidence | `POST /api/v1/evidence/export`, `POST /api/v1/evidence/verify` | [`contract_routes.go`](../../core/cmd/helm-ai-kernel/contract_routes.go) |
 | Boundary | `GET /api/v1/boundary/status`, `GET /api/v1/boundary/capabilities`, `GET /api/v1/boundary/records`, `GET /api/v1/boundary/records/{record_id}`, `POST /api/v1/boundary/records/{record_id}/verify` | [`contract_routes.go`](../../core/cmd/helm-ai-kernel/contract_routes.go), [`core/pkg/boundary`](../../core/pkg/boundary) |
-| Conformance | `POST /api/v1/conformance/run`, `GET /api/v1/conformance/reports`, `GET /api/v1/conformance/reports/{report_id}`, `GET /api/v1/conformance/vectors`, `GET /api/v1/conformance/negative` | [`contract_routes.go`](../../core/cmd/helm-ai-kernel/contract_routes.go), [`conform.go`](../../core/cmd/helm-ai-kernel/conform.go) |
+| Conformance | `GET /api/v1/conformance/negative` | [`contract_routes.go`](../../core/cmd/helm-ai-kernel/contract_routes.go), [`conform.go`](../../core/cmd/helm-ai-kernel/conform.go) |
 | MCP transport and guarded tools | `GET|POST /mcp`, `GET /mcp/v1/capabilities`, `POST /mcp/v1/execute` | [`mcp_runtime.go`](../../core/cmd/helm-ai-kernel/mcp_runtime.go), [`mcp_cmd.go`](../../core/cmd/helm-ai-kernel/mcp_cmd.go) |
 | MCP registry and authorization | `GET /api/v1/mcp/registry`, `POST /api/v1/mcp/scan`, `POST /api/v1/mcp/authorize-call` | [`contract_routes.go`](../../core/cmd/helm-ai-kernel/contract_routes.go), [`mcp_boundary_cmd.go`](../../core/cmd/helm-ai-kernel/mcp_boundary_cmd.go) |
 
 The public docs site publishes only the route families above. Other runtime routes are implementation, protected, customer-preview, or maintainer-facing surfaces until the public docs policy, source evidence, and route-manifest gates explicitly add them.
+
+Use `helm-ai-kernel conform --level L1 --json`,
+`helm-ai-kernel conform --level L2 --json`, and the maintained conformance
+tests as the public proof path. Runtime conformance run/report endpoints are
+not public proof until they are engine-backed and covered by the same tests.
 
 `helm-ai-kernel server` runs API routes on `HELM_PORT` or `8080` by default. Its health server is separate and uses `HELM_HEALTH_PORT` or `8081` by default; `helm-ai-kernel serve` keeps the local policy boundary default at `127.0.0.1:7714`.
 

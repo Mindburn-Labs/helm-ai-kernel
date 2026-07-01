@@ -84,12 +84,35 @@ artifacts only; approvals remain explicit.
 
 Keep the Kernel terminal open, then ask the local agent to perform a tool action
 that the starter policy denies. The expected result is a blocked action and a
-signed decision receipt.
+signed decision receipt. A known local fixture denies the shell target
+`rm -rf /tmp/helm-risky-cleanup` before dispatch and records
+`OPERATE_PERMISSIONS_EMPTY`.
+
+Expected hook shape:
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "HELM denied shell operation: OPERATE_PERMISSIONS_EMPTY (receipt: ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json)"
+  }
+}
+```
 
 Verify the receipt offline:
 
 ```bash
-helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json
+helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json
+```
+
+Expected verification fields:
+
+```text
+verdict:   DENY
+reason:    OPERATE_PERMISSIONS_EMPTY
+effect:    WORKSTATION_SHELL_COMMAND
+signature: true
 ```
 
 Run the headless API proof path when you do not want to modify a local client:

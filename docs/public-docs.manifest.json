@@ -28,6 +28,33 @@
       "sensitivity": "public"
     },
     {
+      "slug": "guides/protect-local-coding-agents",
+      "title": "Protect Local Coding Agents",
+      "section": "start-here",
+      "source_path": "docs/quickstart/workstation-governance.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/guides/protect-local-coding-agents",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "claim-boundaries",
+      "title": "Claim Boundaries",
+      "section": "supporting-material",
+      "source_path": "docs/CLAIM_BOUNDARIES.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/claim-boundaries",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "publication-policy",
+      "title": "Publication Policy",
+      "section": "supporting-material",
+      "source_path": "docs/PUBLICATION_POLICY.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/publication-policy",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "developer-journey",
       "title": "Developer Journey",
       "section": "start-here",

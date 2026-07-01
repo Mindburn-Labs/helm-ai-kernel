@@ -113,6 +113,11 @@ The `v0.5.18` release is complete only when it attaches these primary assets:
 primary asset, including `SHA256SUMS.txt`, with a matching
 `*.cosign.bundle`.
 
+If a release also attaches `helm-console-web-*` bundle artifacts, treat them as
+release packaging evidence only. They do not imply that Console source code,
+hosted Enterprise availability, or customer production access is published from
+this kernel repo.
+
 ## EvidencePack Contents
 
 An EvidencePack is the portable verification bundle for a HELM-governed run or

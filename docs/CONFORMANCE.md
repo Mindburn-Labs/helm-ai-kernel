@@ -1,6 +1,6 @@
 ---
 title: Conformance
-last_reviewed: 2026-05-05
+last_reviewed: 2026-07-01
 ---
 
 # Conformance
@@ -39,7 +39,7 @@ flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Page["Conformance"]
         C["Profile Material"]
-        D["What L1 and L2 Mean in This Repo"]
+        D["Conformance Status Matrix"]
     end
 
     subgraph Execution["3. Execution & Verdict Plane"]
@@ -70,17 +70,19 @@ HELM keeps a retained conformance profile under `tests/conformance/profile-v1/`.
 ./bin/helm-ai-kernel conform vectors --json
 ```
 
-The public API exposes the same negative gates at
-`GET /api/v1/conformance/negative` and `GET /api/v1/conformance/vectors`.
-Reports can be created and read through `POST /api/v1/conformance/run`,
-`GET /api/v1/conformance/reports`, and
-`GET /api/v1/conformance/reports/{report_id}`.
+Use the CLI commands above as the public proof path. `L1` and `L2` are the
+only public level shortcuts accepted by `helm-ai-kernel conform --level`.
 
-## Run the Conformance Test Suite
+The public API exposes negative vectors at
+`GET /api/v1/conformance/negative`. Runtime conformance report routes are
+admin/runtime status surfaces, not public conformance proof, until they are
+backed by the same engine and tests as the CLI.
+
+## Run the Maintained Conformance Tests
 
 ```bash
-cd tests/conformance
-go test ./...
+go test ./core/cmd/helm-ai-kernel -run TestConformLevelAliasesSeedBaselineEvidence -count=1
+go test ./core/pkg/conformance -run 'TestCoreSuiteRegistrationAndRun|TestOWASP_LLM_Top10' -count=1
 ```
 
 ## Profile Material
@@ -91,12 +93,21 @@ The profile directory contains:
 - `profile_test.go` for profile assertions
 - `README.md` for the human-readable profile summary
 
-## What L1 and L2 Mean in This Repo
+## Conformance Status Matrix
 
-- `L1` covers core structural correctness such as canonicalization, schema handling, receipt shape, offline verification, and checkpoint roots.
-- `L2` adds MCP execution-firewall behavior: quarantine, tool-list/call consistency, OAuth resource and scope checks, schema pinning, direct-bypass denial, and deny-path receipt emission.
-- `L3` covers sandbox grants, ReBAC snapshots, approval ceremonies, budget ceilings, stale tuple/model mismatch denial, and backend outage denial.
-- `L4` covers non-authoritative telemetry/coexistence exports, evidence envelope wrappers, framework middleware, and checkpoint inclusion verification.
+- `L1` is implemented as a public CLI shortcut. It covers the baseline OSS
+  proof path: canonical inputs, schema handling, receipt shape, offline
+  verification, and checkpoint roots.
+- `L2` is implemented as a public CLI shortcut. It adds the MCP
+  execution-firewall gates: quarantine, tool-list/call consistency, OAuth
+  resource and scope checks, schema pinning, direct-bypass denial, and deny-path
+  receipt emission.
+- `L3` exists as source/test conformance coverage, not as a public
+  `--level L3` shortcut. Treat it as maintainer-facing until the CLI and public
+  docs publish an engine-backed proof path.
+- Higher levels are not a public claim in this repo. Do not publish them as
+  supported conformance until the level constants, CLI wiring, fixtures, and
+  tests all exist.
 
 The exact checks are defined by the code and checklist in `tests/conformance/`, not by this page.
 

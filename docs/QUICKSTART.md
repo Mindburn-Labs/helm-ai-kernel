@@ -1,45 +1,18 @@
 ---
 title: Quickstart
-last_reviewed: 2026-06-29
+last_reviewed: 2026-07-01
 ---
 
 # Quickstart
 
-This is the shortest public HELM AI Kernel proof path: install or build the
-CLI, attach it to Claude Code or Codex, trigger a blocked local tool call, and
-verify the signed evidence offline. No account, hosted service, live model key,
-Docker daemon, or private endpoint is required.
+Install HELM AI Kernel, protect a local coding agent, and verify the signed
+receipt for a blocked action. This path is local-first: no hosted account, live
+model key, production credential, Docker daemon, or private endpoint is required
+for the first proof.
 
-## Audience
+## 1. Install HELM
 
-Developers, security reviewers, and integration owners who need one local proof
-that HELM sits between an agent request and a side effect.
-
-## Outcome
-
-After this page you should have:
-
-- a local Claude Code or Codex MCP entry;
-- a PreToolUse hook where the client supports it;
-- draft policy artifacts under `~/.helm-ai-kernel`;
-- a local Kernel on `127.0.0.1:7714`;
-- a signed `DENY` receipt for a blocked local tool call;
-- offline-verifiable receipt or EvidencePack material.
-
-## Source Truth
-
-- `core/cmd/helm-ai-kernel/setup_cmd.go`
-- `core/cmd/helm-ai-kernel/hook_cmd.go`
-- `core/cmd/helm-ai-kernel/quickstart_cmd.go`
-- `core/cmd/helm-ai-kernel/local_first_run_routes.go`
-- `core/cmd/helm-ai-kernel/server_cmd.go`
-- `core/cmd/helm-ai-kernel/receipts_cmd.go`
-- `core/cmd/helm-ai-kernel/verify_cmd.go`
-- `release.high_risk.v3.toml`
-
-## 1. Install Or Build
-
-Use the published macOS CLI when evaluating the current release:
+Published macOS CLI:
 
 ```bash
 brew tap mindburn-labs/tap
@@ -48,7 +21,7 @@ brew install helm-ai-kernel
 helm-ai-kernel --version
 ```
 
-Use a source build when proving the current checkout:
+Source build:
 
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
@@ -57,13 +30,10 @@ make build
 ./bin/helm-ai-kernel --version
 ```
 
-## 2. Attach To A Local Coding Agent
+Use `./bin/helm-ai-kernel` for source builds and `helm-ai-kernel` for installed
+CLI examples.
 
-For Claude Code:
-
-```bash
-helm-ai-kernel setup claude-code --yes
-```
+## 2. Protect Codex Or Claude Code
 
 For Codex:
 
@@ -71,95 +41,102 @@ For Codex:
 helm-ai-kernel setup codex --yes
 ```
 
-Inspect the exact file writes before changing local client config:
+For Claude Code:
+
+```bash
+helm-ai-kernel setup claude-code --yes
+```
+
+The setup command defaults to user scope and `~/.helm-ai-kernel`. Project scope
+is explicit:
+
+```bash
+helm-ai-kernel setup codex --scope project --yes
+```
+
+Inspect before writing:
 
 ```bash
 helm-ai-kernel setup codex --dry-run --json
 ```
 
-Setup never approves detected tools. It writes draft policy and quarantine
-artifacts only; approvals remain explicit.
-
-## 3. Prove Fail-Closed Behavior
-
-Keep the Kernel terminal open, then ask the local agent to perform a tool action
-that the starter policy denies. The expected result is a blocked action and a
-signed decision receipt. A known local fixture denies the shell target
-`rm -rf /tmp/helm-risky-cleanup` before dispatch and records
-`OPERATE_PERMISSIONS_EMPTY`.
-
-Expected hook shape:
-
-```json
-{
-  "hookSpecificOutput": {
-    "hookEventName": "PreToolUse",
-    "permissionDecision": "deny",
-    "permissionDecisionReason": "HELM denied shell operation: OPERATE_PERMISSIONS_EMPTY (receipt: ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json)"
-  }
-}
-```
-
-Verify the receipt offline:
+Check or remove the integration:
 
 ```bash
-helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json
+helm-ai-kernel setup status codex
+helm-ai-kernel setup remove codex --yes
 ```
 
-Expected verification fields:
+Setup writes draft policy and quarantine artifacts only. It does not approve
+detected tools.
+
+## 3. Trigger A Denial
+
+Use the protected client and attempt a high-risk tool action such as destructive
+shell cleanup. HELM should deny or escalate instead of silently dispatching the
+effect.
+
+Hook denials write signed workstation decision receipts under:
 
 ```text
-verdict:   DENY
-reason:    OPERATE_PERMISSIONS_EMPTY
-effect:    WORKSTATION_SHELL_COMMAND
-signature: true
+~/.helm-ai-kernel/receipts/hooks/
 ```
 
-Run the headless API proof path when you do not want to modify a local client:
+## 4. Verify The Receipt
+
+```bash
+helm-ai-kernel workstation verify-decision \
+  --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json
+```
+
+The verifier exits `0` only when the decision receipt hash and Ed25519 signature
+verify. Tampered receipts return a non-zero exit.
+
+## 5. Run The Headless Local Proof
+
+Use this when you want the local Kernel API proof path without changing an
+agent client config:
+
+```bash
+helm-ai-kernel quickstart
+```
+
+Machine-readable startup state:
 
 ```bash
 helm-ai-kernel quickstart --json
 ```
 
-The local onboarding API proves health, policy load, signed allow, signed deny,
-MCP quarantine, tamper rejection, and EvidencePack export metadata.
+Useful flags:
 
-## 4. Inspect Receipts
-
-List local receipts while the boundary is running:
-
-```bash
-curl 'http://127.0.0.1:7714/api/v1/receipts?limit=20'
-```
-
-Tail a receipt stream:
-
-```bash
-helm-ai-kernel receipts tail --agent agent.demo.exec --server http://127.0.0.1:7714
-```
-
-## 5. Verify Evidence
-
-Verify an exported EvidencePack without network access:
-
-```bash
-helm-ai-kernel verify --bundle <pack>
-```
-
-Use the `v0.5.18` release `evidence-pack.tar` only when validating the
-published release artifact set. Local quickstart proof can use a locally
-exported pack from the current checkout instead.
-
-Tampering with a receipt or EvidencePack must fail verification.
-
-## Troubleshooting
-
-| Symptom | First check |
+| Flag | Purpose |
 | --- | --- |
-| Setup cannot find the client | Run `helm-ai-kernel setup <client> --dry-run --json` and check the reported config path. |
-| The local API is unreachable | Confirm the Kernel is listening on `127.0.0.1:7714`. |
-| No receipt appears | Check the hook was installed and the attempted tool action crossed the configured policy. |
-| Verification fails | Re-export the receipt or EvidencePack and verify the original file before editing it. |
+| `--addr 127.0.0.1` | Loopback bind address. Non-loopback binds are rejected. |
+| `--port 7714` | Local Kernel port. |
+| `--data-dir <dir>` | SQLite, keys, policy, receipts, and EvidencePack location. |
+| `--reset` | Remove the quickstart data directory before initialization. |
+| `--profile claude|codex|mcp|openai-compatible` | Label the onboarding path. |
+| `--dry-run --json` | Prepare startup state without serving. |
 
-Do not paste provider keys, private prompts, private endpoints, or unredacted
-receipts into public issues.
+## Next Steps
+
+- [Agent Risk Scan](reference/agent-risk-scan.md)
+- [Codex integration](INTEGRATIONS/codex.md)
+- [Claude Code integration](INTEGRATIONS/claude-code.md)
+- [MCP integration](INTEGRATIONS/mcp.md)
+- [OpenAI-compatible proxy](INTEGRATIONS/openai_baseurl.md)
+- [Verification](VERIFICATION.md)
+- [Troubleshooting](TROUBLESHOOTING.md)
+
+## Source Truth
+
+- `core/cmd/helm-ai-kernel/setup_cmd.go`
+- `core/cmd/helm-ai-kernel/hook_cmd.go`
+- `core/cmd/helm-ai-kernel/quickstart_cmd.go`
+- `core/cmd/helm-ai-kernel/local_first_run_routes.go`
+- `core/cmd/helm-ai-kernel/workstation_m3_cmd.go`
+- `core/cmd/helm-ai-kernel/receipts_cmd.go`
+- `core/cmd/helm-ai-kernel/verify_cmd.go`
+- `api/openapi/helm.openapi.yaml`
+- `scripts/launch/demo-mcp.sh`
+- `scripts/launch/demo-openai-proxy.sh`

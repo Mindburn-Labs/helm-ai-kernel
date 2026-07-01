@@ -24,6 +24,7 @@ EXPECTED_GATE_IDS = {
     "go-race",
     "tcb-imports",
     "boundary-manifest",
+    "quantum-crypto-inventory",
     "codegen-drift",
     "proto-breaking",
     "json-schemas",

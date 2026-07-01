@@ -172,6 +172,12 @@ type daytonaExecResp struct {
 }
 
 func (a *Adapter) Exec(ctx context.Context, id string, req *actuators.ExecRequest) (*actuators.ExecResult, error) {
+	spec := a.specs[id]
+	req, err := actuators.PrepareExecRequest(req, spec)
+	if err != nil {
+		return nil, err
+	}
+
 	cmd := ""
 	for i, c := range req.Command {
 		if i > 0 {
@@ -197,15 +203,7 @@ func (a *Adapter) Exec(ctx context.Context, id string, req *actuators.ExecReques
 	stdout := []byte(resp.Output)
 	stderr := []byte(resp.Errors)
 	now := a.clock()
-
-	return &actuators.ExecResult{
-		ExitCode: resp.ExitCode,
-		Stdout:   stdout,
-		Stderr:   stderr,
-		Duration: time.Duration(resp.DurationMs) * time.Millisecond,
-		TimedOut: resp.TimedOut,
-		Receipt:  actuators.ComputeReceiptFragment(req, stdout, stderr, "daytona", now, a.specs[id], actuators.EffectExecShell),
-	}, nil
+	return actuators.BuildExecResult(req, stdout, stderr, resp.ExitCode, time.Duration(resp.DurationMs)*time.Millisecond, false, resp.TimedOut, "daytona", now, spec, actuators.EffectExecShell), nil
 }
 
 // ── Filesystem ──────────────────────────────────────────────────

@@ -187,6 +187,12 @@ type e2bExecResp struct {
 }
 
 func (a *Adapter) Exec(ctx context.Context, id string, req *actuators.ExecRequest) (*actuators.ExecResult, error) {
+	spec := a.specs[id]
+	req, err := actuators.PrepareExecRequest(req, spec)
+	if err != nil {
+		return nil, err
+	}
+
 	// E2B takes a string command, not an array.
 	cmd := ""
 	for i, c := range req.Command {
@@ -215,15 +221,7 @@ func (a *Adapter) Exec(ctx context.Context, id string, req *actuators.ExecReques
 	now := a.clock()
 
 	timedOut := resp.Error == "timeout"
-
-	return &actuators.ExecResult{
-		ExitCode: resp.ExitCode,
-		Stdout:   stdout,
-		Stderr:   stderr,
-		Duration: time.Duration(resp.DurationMs) * time.Millisecond,
-		TimedOut: timedOut,
-		Receipt:  actuators.ComputeReceiptFragment(req, stdout, stderr, "e2b", now, a.specs[id], actuators.EffectExecShell),
-	}, nil
+	return actuators.BuildExecResult(req, stdout, stderr, resp.ExitCode, time.Duration(resp.DurationMs)*time.Millisecond, false, timedOut, "e2b", now, spec, actuators.EffectExecShell), nil
 }
 
 // ── Filesystem ──────────────────────────────────────────────────

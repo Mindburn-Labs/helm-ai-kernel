@@ -216,6 +216,12 @@ type execResponse struct {
 }
 
 func (a *Adapter) Exec(ctx context.Context, id string, req *actuators.ExecRequest) (*actuators.ExecResult, error) {
+	spec := a.specs[id]
+	req, err := actuators.PrepareExecRequest(req, spec)
+	if err != nil {
+		return nil, err
+	}
+
 	apiReq := execRequest{
 		Command: req.Command,
 		Env:     req.Env,
@@ -236,16 +242,7 @@ func (a *Adapter) Exec(ctx context.Context, id string, req *actuators.ExecReques
 	stdout := []byte(resp.Stdout)
 	stderr := []byte(resp.Stderr)
 	now := a.clock()
-
-	return &actuators.ExecResult{
-		ExitCode:  resp.ExitCode,
-		Stdout:    stdout,
-		Stderr:    stderr,
-		Duration:  time.Duration(resp.DurationMs) * time.Millisecond,
-		OOMKilled: resp.OOMKilled,
-		TimedOut:  resp.TimedOut,
-		Receipt:   actuators.ComputeReceiptFragment(req, stdout, stderr, "opensandbox", now, a.specs[id], actuators.EffectExecShell),
-	}, nil
+	return actuators.BuildExecResult(req, stdout, stderr, resp.ExitCode, time.Duration(resp.DurationMs)*time.Millisecond, resp.OOMKilled, resp.TimedOut, "opensandbox", now, spec, actuators.EffectExecShell), nil
 }
 
 // ── Filesystem ──────────────────────────────────────────────────

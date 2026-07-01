@@ -101,11 +101,24 @@ type Result struct {
 	Duration  time.Duration `json:"duration"`
 	OOMKilled bool          `json:"oom_killed"`
 	TimedOut  bool          `json:"timed_out"`
+	Cleanup   CleanupStatus `json:"cleanup,omitempty"`
 }
 
 // Success returns true if the execution completed with exit code 0.
 func (r *Result) Success() bool {
-	return r.ExitCode == 0 && !r.OOMKilled && !r.TimedOut
+	return r.ExitCode == 0 && !r.OOMKilled && !r.TimedOut && r.Cleanup.OK()
+}
+
+// CleanupStatus captures post-execution cleanup health for revocation and
+// lease lifecycle operations that happen after the workload exits.
+type CleanupStatus struct {
+	Status string   `json:"status,omitempty"` // ok, degraded, unknown, error
+	Errors []string `json:"errors,omitempty"`
+}
+
+// OK reports whether cleanup completed without known problems.
+func (s CleanupStatus) OK() bool {
+	return s.Status == "" || s.Status == "ok"
 }
 
 // ExecutionReceipt is a signed record of a sandbox execution.

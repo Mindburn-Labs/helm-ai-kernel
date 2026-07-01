@@ -150,15 +150,3 @@ helm-ai-kernel verify evidence-pack.tar
 
 EvidencePacks are portable proof bundles. They are not compliance
 certifications, hosted availability claims, or buyer rollout evidence.
-
-## Release Evidence
-
-Current source release target: `v0.5.18`.
-
-The `v0.5.18` release is complete when the GitHub release and local verification
-artifacts agree:
-
-- release: `https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.18`
-- v0.5.18 Asset Contract
-- `v0.5.18.openvex.json`
-- `v0.5.18.json`

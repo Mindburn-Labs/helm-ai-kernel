@@ -127,6 +127,15 @@
       "sensitivity": "public"
     },
     {
+      "slug": "quantum-posture",
+      "title": "Quantum Posture",
+      "section": "verify",
+      "source_path": "docs/security/quantum-posture.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/quantum-posture",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "conformance",
       "title": "Conformance",
       "section": "verify",

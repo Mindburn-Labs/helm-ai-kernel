@@ -52,10 +52,10 @@ helm-ai-kernel workstation verify-decision \
 
 ## MCP Configuration
 
-For lower-level MCP configuration, print the Claude Code config:
+For lower-level MCP configuration, install the Claude Code MCP server:
 
 ```bash
-helm-ai-kernel mcp print-config --client claude-code
+helm-ai-kernel mcp install --client claude-code
 ```
 
 Claude Desktop bundle output is separate:
@@ -64,7 +64,7 @@ Claude Desktop bundle output is separate:
 helm-ai-kernel mcp pack --client claude-desktop --out helm-ai-kernel.mcpb
 ```
 
-## Source Truth
+## Implementation
 
 - `core/cmd/helm-ai-kernel/setup_cmd.go`
 - `core/cmd/helm-ai-kernel/hook_cmd.go`

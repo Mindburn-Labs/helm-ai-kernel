@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: CLI dispatch/front-door wiring only; cryptographic controls
+// live in core/pkg/crypto and related verifier packages.
+
 import (
 	"context"
 	"crypto/ed25519"
@@ -62,8 +65,7 @@ type serverOptions struct {
 // Run is the entrypoint for testing
 func Run(args []string, stdout, stderr io.Writer) int {
 	if len(args) < 2 {
-		// Default to server
-		startServer()
+		printFrontDoor(stdout)
 		return 0
 	}
 
@@ -103,8 +105,15 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "  MCP Bundle Schema:      1\n")
 		fmt.Fprintf(stdout, "  Build Time:             %s\n", displayBuildTime())
 		return 0
-	case "help", "--help", "-h":
-		printUsage(stdout)
+	case "help":
+		if len(args) > 2 && args[2] == "--all" {
+			printUsageAll(stdout)
+			return 0
+		}
+		printFrontDoor(stdout)
+		return 0
+	case "--help", "-h":
+		printFrontDoor(stdout)
 		return 0
 	default:
 		if args[1][0] == '-' {

@@ -30,10 +30,14 @@ make build
 | Surface | Public proof |
 | --- | --- |
 | Install | `brew install helm-ai-kernel` or `make build` |
+| CLI chooser | `helm-ai-kernel` or `helm-ai-kernel setup` |
 | Local proof | `helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs` |
 | Codex setup | `helm-ai-kernel setup codex --dry-run --json` |
 | Claude Code setup | `helm-ai-kernel setup claude-code --dry-run --json` |
-| OpenClaw / Hermes adapters | `helm-agent-integrations` wrapper helpers |
+| Cursor / Windsurf / VS Code config | `helm-ai-kernel setup --client cursor --print-config` |
+| OpenClaw / Hermes adapters | [tool runtime adapters](INTEGRATIONS/tool-runtime-adapters.md) |
+| Framework adapters | [framework adapters](INTEGRATIONS/framework-adapters.md) |
+| Skill Packs | `helm-ai-kernel skills search --json` |
 | Agent risk scan | `helm-ai-kernel scan --path . --risk-envelope out/risk-envelope.json --preview out/risk-report.md` |
 | MCP approval loop | `mcp authorize-call`, `mcp approve`, `mcp revoke`, `mcp pending`, `mcp receipts` |
 | OpenAI proxy | `helm-ai-kernel proxy --port 9090` |
@@ -120,6 +124,12 @@ helm-ai-kernel mcp revoke \
 
 ## Connect A Local Agent
 
+See the supported matrix:
+
+```bash
+helm-ai-kernel setup --json
+```
+
 For Claude Code:
 
 ```bash
@@ -136,6 +146,7 @@ Preview writes first:
 
 ```bash
 helm-ai-kernel setup codex --dry-run --json
+helm-ai-kernel setup --client cursor --print-config
 ```
 
 Setup writes local config and draft policy artifacts. It does not approve

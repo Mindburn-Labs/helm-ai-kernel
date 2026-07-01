@@ -47,7 +47,26 @@ func TestRun_Help(t *testing.T) {
 	exitCode := Run(args, &stdout, &stderr)
 
 	assert.Equal(t, 0, exitCode)
-	assert.Contains(t, stdout.String(), "helm-ai-kernel <command> [options]")
+	assert.Contains(t, stdout.String(), "Protect an agent:")
+	assert.Contains(t, stdout.String(), "helm-ai-kernel help --all")
+}
+
+func TestRunNoArgsPrintsFrontDoor(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	exitCode := Run([]string{"helm"}, &stdout, &stderr)
+
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, stdout.String(), "helm-ai-kernel setup claude-code --yes")
+	assert.Empty(t, stderr.String())
+}
+
+func TestRunHelpAllPrintsFullCommandList(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	exitCode := Run([]string{"helm", "help", "--all"}, &stdout, &stderr)
+
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, stdout.String(), "Usage: helm-ai-kernel <command> [options]")
+	assert.Contains(t, stdout.String(), "Commands:")
 }
 
 func TestRun_HelpOmitsRemovedUICommands(t *testing.T) {
@@ -62,6 +81,7 @@ func TestRun_HelpOmitsRemovedUICommands(t *testing.T) {
 
 	assert.Equal(t, 0, exitCode)
 	help := stdout.String()
+	assert.NotContains(t, help, "Launchpad")
 	removedCommands := []string{
 		"control" + "-" + "room",
 		"dash" + "board",

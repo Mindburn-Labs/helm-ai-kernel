@@ -35,7 +35,7 @@ npm run build
 ```ts
 import { HelmClient } from "@mindburn/helm-ai-kernel";
 
-const client = new HelmClient({ baseUrl: "http://127.0.0.1:7715" });
+const client = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
 const decision = await client.evaluateDecision({
   principal: "example-agent",
   action: "read-ticket",

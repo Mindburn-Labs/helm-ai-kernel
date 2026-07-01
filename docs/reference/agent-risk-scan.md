@@ -27,28 +27,19 @@ After running `scan`, you can show:
 - a local preview generated only from the envelope;
 - an evidence pack containing only anonymized scan artifacts.
 
-## Source Truth
-
-- CLI: [`core/cmd/helm-ai-kernel/scan_cmd.go`](../../core/cmd/helm-ai-kernel/scan_cmd.go)
-- Static projector: [`core/pkg/riskscan/scan.go`](../../core/pkg/riskscan/scan.go)
-- Receipt projector: [`core/pkg/riskscan/receipts.go`](../../core/pkg/riskscan/receipts.go)
-- Envelope contract: [`core/pkg/riskenvelope/envelope.go`](../../core/pkg/riskenvelope/envelope.go)
-- JSON Schema: [`protocols/json-schemas/risk-envelope/v1.json`](../../protocols/json-schemas/risk-envelope/v1.json)
-- Tests: [`core/pkg/riskscan/scan_test.go`](../../core/pkg/riskscan/scan_test.go), [`core/cmd/helm-ai-kernel/scan_cmd_test.go`](../../core/cmd/helm-ai-kernel/scan_cmd_test.go)
-
 ## Capability Matrix
 
-| Capability | Command or artifact | Source |
-| --- | --- | --- |
-| Static local scan | `helm-ai-kernel scan --path .` | `riskscan.Scan` |
-| RiskEnvelope JSON | `--risk-envelope out.json` | `riskscan.EnvelopeJSON` |
-| Markdown preview | `--preview out.md` | `riskscan.RenderMarkdown` |
-| HTML preview | `--preview out.html` | `html/template` in `riskscan.RenderHTML` |
-| Evidence pack tar | `--evidence-pack pack.tar` | `riskscan.WriteEvidencePack` |
-| Explicit upload | `--upload --upload-url <url> --yes` | `riskscan.UploadEnvelope` |
-| Receipt projection | `--from-receipts <dir>` | `riskscan.ScanReceipts` |
-| Local salt | `--salt-file <path>` | `riskenvelope.LoadOrCreateSaltFile` |
-| Content hash | `envelope_content_hash` | `riskenvelope.Seal` |
+| Capability | Command or artifact |
+| --- | --- |
+| Static local scan | `helm-ai-kernel scan --path .` |
+| RiskEnvelope JSON | `--risk-envelope out.json` |
+| Markdown preview | `--preview out.md` |
+| HTML preview | `--preview out.html` |
+| Evidence pack tar | `--evidence-pack pack.tar` |
+| Explicit upload | `--upload --upload-url <url> --yes` |
+| Receipt projection | `--from-receipts <dir>` |
+| Local salt | `--salt-file <path>` |
+| Content hash | `envelope_content_hash` |
 
 ## Static Scan
 

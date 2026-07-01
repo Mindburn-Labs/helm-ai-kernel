@@ -4,11 +4,111 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestSetupNoArgsPrintsChooser(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "setup"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("setup no args exit = %d stderr = %s", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"helm-ai-kernel setup claude-code --yes",
+		"helm-ai-kernel setup codex --yes",
+		"helm-ai-kernel setup --client cursor --print-config",
+		"No config is written without --yes.",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("setup chooser missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestSetupJSONSupportMatrix(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "setup", "--json"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("setup --json exit = %d stderr = %s", code, stderr.String())
+	}
+	var matrix cliSupportMatrix
+	if err := json.Unmarshal(stdout.Bytes(), &matrix); err != nil {
+		t.Fatalf("support matrix JSON: %v\n%s", err, stdout.String())
+	}
+	for _, want := range []string{"claude-code", "codex"} {
+		if !containsSetupString(matrix.DirectSetup, want) {
+			t.Fatalf("direct setup missing %q: %#v", want, matrix.DirectSetup)
+		}
+	}
+	for _, want := range []string{"cursor", "windsurf", "vscode"} {
+		if !containsSetupString(matrix.ConfigPrint, want) {
+			t.Fatalf("config print missing %q: %#v", want, matrix.ConfigPrint)
+		}
+	}
+	for _, want := range []string{"openclaw", "hermes", "mastra", "browser-use", "tinyfish", "e2b", "composio"} {
+		if !containsSetupString(matrix.WrapperExamples, want) {
+			t.Fatalf("wrapper examples missing %q: %#v", want, matrix.WrapperExamples)
+		}
+	}
+	for _, want := range []string{"LangGraph", "LangChain", "CrewAI", "OpenAI Agents SDK", "AutoGen/AG2", "Semantic Kernel", "PydanticAI", "LlamaIndex", "LiteLLM", "n8n", "Zapier", "raw MCP"} {
+		if !containsSetupString(matrix.FrameworkAdapters, want) {
+			t.Fatalf("framework adapters missing %q: %#v", want, matrix.FrameworkAdapters)
+		}
+	}
+}
+
+func TestSetupPrintConfigDelegatesSupportedClients(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "setup", "--client", "cursor", "--print-config"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("setup print-config exit = %d stderr = %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "# Cursor MCP Configuration") {
+		t.Fatalf("cursor config missing:\n%s", stdout.String())
+	}
+}
+
+func TestPublicExamplesAvoidStaleCLIStrings(t *testing.T) {
+	root, err := filepath.Abs("../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	banned := []string{
+		"mcp print-config --client " + "claude-code",
+		"127.0.0.1:" + "7715",
+	}
+	for _, dir := range []string{filepath.Join(root, "docs"), filepath.Join(root, "core", "cmd", "helm-ai-kernel"), filepath.Join(root, "sdk")} {
+		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			switch filepath.Ext(path) {
+			case ".go", ".md", ".json", ".toml":
+			default:
+				return nil
+			}
+			raw, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
+			}
+			text := string(raw)
+			for _, term := range banned {
+				if strings.Contains(text, term) {
+					t.Fatalf("%s contains stale public CLI term %q", path, term)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 func TestSetupDryRunJSONSummary(t *testing.T) {
 	tmp := t.TempDir()
@@ -188,4 +288,13 @@ func stubSetupSideEffects(t *testing.T) *setupStubState {
 		setupRunQuickstart = oldQuickstart
 	})
 	return state
+}
+
+func containsSetupString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

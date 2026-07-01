@@ -38,9 +38,9 @@ var initProfiles = map[string]initProfile{
 	"claude": {
 		Name:         "claude",
 		ProviderHint: "claude",
-		EnvTemplate:  "# Claude integrations are MCP-first.\n# Use `helm-ai-kernel mcp print-config --client claude-code` or `helm-ai-kernel mcp pack --client claude-desktop`.\n",
+		EnvTemplate:  "# Claude integrations are MCP-first.\n# Use `helm-ai-kernel setup claude-code --yes` or `helm-ai-kernel mcp pack --client claude-desktop`.\n",
 		NextSteps: []string{
-			"helm-ai-kernel mcp print-config --client claude-code",
+			"helm-ai-kernel setup claude-code --yes",
 			"helm-ai-kernel mcp pack --client claude-desktop --out helm-ai-kernel.mcpb",
 		},
 	},

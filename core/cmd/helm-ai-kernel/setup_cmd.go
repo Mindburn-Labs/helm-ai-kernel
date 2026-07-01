@@ -59,8 +59,11 @@ func init() {
 
 func runSetupCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		printSetupUsage(stderr)
-		return 2
+		printSetupUsage(stdout)
+		return 0
+	}
+	if strings.HasPrefix(args[0], "-") {
+		return runSetupFrontDoorFlags(args, stdout, stderr)
 	}
 	switch args[0] {
 	case "status":
@@ -73,6 +76,33 @@ func runSetupCmd(args []string, stdout, stderr io.Writer) int {
 	default:
 		return runSetupInstallCmd(args, stdout, stderr)
 	}
+}
+
+func runSetupFrontDoorFlags(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	client := fs.String("client", "", "Client to print config for")
+	printConfig := fs.Bool("print-config", false, "Print config for --client")
+	jsonOut := fs.Bool("json", false, "Print machine-readable support matrix")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintf(stderr, "setup: unexpected argument %q\n", fs.Arg(0))
+		return 2
+	}
+	if *jsonOut {
+		return writeSupportMatrixJSON(stdout)
+	}
+	if *printConfig {
+		if *client == "" {
+			fmt.Fprintln(stderr, "setup: --print-config requires --client")
+			return 2
+		}
+		return runMCPPrintConfig([]string{"--client", *client}, stdout, stderr)
+	}
+	printSetupUsage(stdout)
+	return 0
 }
 
 func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
@@ -178,10 +208,22 @@ func runSetupRemoveCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func printSetupUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  helm-ai-kernel setup <claude-code|codex> [--scope user|project] [--yes] [--dry-run] [--json] [--data-dir DIR]")
+	fmt.Fprintln(w, "Protect an agent:")
+	fmt.Fprintln(w, "  helm-ai-kernel setup claude-code --yes")
+	fmt.Fprintln(w, "  helm-ai-kernel setup codex --yes")
+	fmt.Fprintln(w, "  helm-ai-kernel setup --client cursor --print-config")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Inspect first:")
+	fmt.Fprintln(w, "  helm-ai-kernel setup claude-code --dry-run --json")
+	fmt.Fprintln(w, "  helm-ai-kernel setup --json")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Manage:")
 	fmt.Fprintln(w, "  helm-ai-kernel setup status <claude-code|codex> [--scope user|project] [--json] [--data-dir DIR]")
 	fmt.Fprintln(w, "  helm-ai-kernel setup remove <claude-code|codex> [--scope user|project] [--yes] [--dry-run] [--json] [--data-dir DIR]")
+	fmt.Fprintln(w, "")
+	printSupportMatrix(w)
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "No config is written without --yes.")
 }
 
 func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) {

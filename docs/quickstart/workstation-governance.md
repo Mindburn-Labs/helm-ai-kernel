@@ -26,6 +26,22 @@ helm-ai-kernel setup claude-code --yes
 Setup writes draft policy and quarantine artifacts. It does not approve tools
 or grant broad operating permissions.
 
+## Scan The Agent Surface
+
+Before installing an in-path hook, run the local risk scanner against the repo
+and agent config files:
+
+```bash
+mkdir -p out
+helm-ai-kernel scan \
+  --path . \
+  --risk-envelope out/risk-envelope.json \
+  --preview out/risk-report.md
+```
+
+The scan emits an anonymized local envelope and preview. It does not change
+runtime dispatch, approve tools, or upload anything.
+
 ## Prove A Denial
 
 Ask the local agent to attempt an action the starter policy denies, such as a

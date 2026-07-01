@@ -43,6 +43,22 @@ helm-ai-kernel mcp authorize-call \
 An unknown or unapproved server returns `ESCALATE`. The action is not
 dispatched. Use the approval loop in [Quickstart](/quickstart#see-an-escalation).
 
+## Scan Before Approval
+
+Use the local MCP risk scanner before granting a new server/tool bundle:
+
+```bash
+mkdir -p out
+helm-ai-kernel scan \
+  --path . \
+  --risk-envelope out/risk-envelope.json \
+  --preview out/risk-report.md
+```
+
+For API clients, the same public surface is exposed as
+`POST /api/v1/mcp/scan`. A scan is advisory: it records the detected surface and
+does not dispatch, approve, or resume any tool call.
+
 ## Effect Scope
 
 Approvals are local, receipt-backed, TTL-bound, and revocable. HELM rejects

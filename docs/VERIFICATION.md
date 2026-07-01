@@ -90,6 +90,8 @@ EvidencePacks are portable proof bundles for local review and offline replay.
 
 Current source release target: `v0.5.18`.
 
+The `v0.5.18` release is complete for the listed local verification assets.
+
 Check the GitHub release and local verification artifacts together:
 
 - release: `https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.18`

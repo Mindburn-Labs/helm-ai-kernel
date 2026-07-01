@@ -1337,7 +1337,7 @@ type AccountEntitlements struct {
 	TenantId             *string                  `json:"tenant_id,omitempty"`
 	WorkspaceId          *string                  `json:"workspace_id,omitempty"`
 	Plan                 interface{}              `json:"plan,omitempty"`
-	PlanAlias            *string                  `json:"plan_alias,omitempty"`
+	PlanId               *string                  `json:"plan_id,omitempty"`
 	Capabilities         *EntitlementCapabilities `json:"capabilities,omitempty"`
 	Limits               *EntitlementLimits       `json:"limits,omitempty"`
 	Source               *string                  `json:"source,omitempty"`
@@ -1493,36 +1493,36 @@ func (o *AccountEntitlements) SetPlan(v interface{}) {
 	o.Plan = v
 }
 
-// GetPlanAlias returns the PlanAlias field value if set, zero value otherwise.
-func (o *AccountEntitlements) GetPlanAlias() string {
-	if o == nil || IsNil(o.PlanAlias) {
+// GetPlanId returns the PlanId field value if set, zero value otherwise.
+func (o *AccountEntitlements) GetPlanId() string {
+	if o == nil || IsNil(o.PlanId) {
 		var ret string
 		return ret
 	}
-	return *o.PlanAlias
+	return *o.PlanId
 }
 
-// GetPlanAliasOk returns a tuple with the PlanAlias field value if set, nil otherwise
+// GetPlanIdOk returns a tuple with the PlanId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *AccountEntitlements) GetPlanAliasOk() (*string, bool) {
-	if o == nil || IsNil(o.PlanAlias) {
+func (o *AccountEntitlements) GetPlanIdOk() (*string, bool) {
+	if o == nil || IsNil(o.PlanId) {
 		return nil, false
 	}
-	return o.PlanAlias, true
+	return o.PlanId, true
 }
 
-// HasPlanAlias returns a boolean if a field has been set.
-func (o *AccountEntitlements) HasPlanAlias() bool {
-	if o != nil && !IsNil(o.PlanAlias) {
+// HasPlanId returns a boolean if a field has been set.
+func (o *AccountEntitlements) HasPlanId() bool {
+	if o != nil && !IsNil(o.PlanId) {
 		return true
 	}
 
 	return false
 }
 
-// SetPlanAlias gets a reference to the given string and assigns it to the PlanAlias field.
-func (o *AccountEntitlements) SetPlanAlias(v string) {
-	o.PlanAlias = &v
+// SetPlanId gets a reference to the given string and assigns it to the PlanId field.
+func (o *AccountEntitlements) SetPlanId(v string) {
+	o.PlanId = &v
 }
 
 // GetCapabilities returns the Capabilities field value if set, zero value otherwise.
@@ -1675,8 +1675,8 @@ func (o AccountEntitlements) ToMap() (map[string]interface{}, error) {
 	if o.Plan != nil {
 		toSerialize["plan"] = o.Plan
 	}
-	if !IsNil(o.PlanAlias) {
-		toSerialize["plan_alias"] = o.PlanAlias
+	if !IsNil(o.PlanId) {
+		toSerialize["plan_id"] = o.PlanId
 	}
 	if !IsNil(o.Capabilities) {
 		toSerialize["capabilities"] = o.Capabilities
@@ -1716,7 +1716,7 @@ func (o *AccountEntitlements) UnmarshalJSON(data []byte) (err error) {
 		delete(additionalProperties, "tenant_id")
 		delete(additionalProperties, "workspace_id")
 		delete(additionalProperties, "plan")
-		delete(additionalProperties, "plan_alias")
+		delete(additionalProperties, "plan_id")
 		delete(additionalProperties, "capabilities")
 		delete(additionalProperties, "limits")
 		delete(additionalProperties, "source")
@@ -1783,7 +1783,7 @@ type AccountSession struct {
 	TenantId             *string     `json:"tenant_id,omitempty"`
 	WorkspaceId          *string     `json:"workspace_id,omitempty"`
 	Plan                 interface{} `json:"plan,omitempty"`
-	PlanAlias            *string     `json:"plan_alias,omitempty"`
+	PlanId               *string     `json:"plan_id,omitempty"`
 	Edition              *string     `json:"edition,omitempty"`
 	DeploymentMode       *string     `json:"deployment_mode,omitempty"`
 	AccountLifecycle     *string     `json:"account_lifecycle,omitempty"`
@@ -1973,36 +1973,36 @@ func (o *AccountSession) SetPlan(v interface{}) {
 	o.Plan = v
 }
 
-// GetPlanAlias returns the PlanAlias field value if set, zero value otherwise.
-func (o *AccountSession) GetPlanAlias() string {
-	if o == nil || IsNil(o.PlanAlias) {
+// GetPlanId returns the PlanId field value if set, zero value otherwise.
+func (o *AccountSession) GetPlanId() string {
+	if o == nil || IsNil(o.PlanId) {
 		var ret string
 		return ret
 	}
-	return *o.PlanAlias
+	return *o.PlanId
 }
 
-// GetPlanAliasOk returns a tuple with the PlanAlias field value if set, nil otherwise
+// GetPlanIdOk returns a tuple with the PlanId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *AccountSession) GetPlanAliasOk() (*string, bool) {
-	if o == nil || IsNil(o.PlanAlias) {
+func (o *AccountSession) GetPlanIdOk() (*string, bool) {
+	if o == nil || IsNil(o.PlanId) {
 		return nil, false
 	}
-	return o.PlanAlias, true
+	return o.PlanId, true
 }
 
-// HasPlanAlias returns a boolean if a field has been set.
-func (o *AccountSession) HasPlanAlias() bool {
-	if o != nil && !IsNil(o.PlanAlias) {
+// HasPlanId returns a boolean if a field has been set.
+func (o *AccountSession) HasPlanId() bool {
+	if o != nil && !IsNil(o.PlanId) {
 		return true
 	}
 
 	return false
 }
 
-// SetPlanAlias gets a reference to the given string and assigns it to the PlanAlias field.
-func (o *AccountSession) SetPlanAlias(v string) {
-	o.PlanAlias = &v
+// SetPlanId gets a reference to the given string and assigns it to the PlanId field.
+func (o *AccountSession) SetPlanId(v string) {
+	o.PlanId = &v
 }
 
 // GetEdition returns the Edition field value if set, zero value otherwise.
@@ -2222,8 +2222,8 @@ func (o AccountSession) ToMap() (map[string]interface{}, error) {
 	if o.Plan != nil {
 		toSerialize["plan"] = o.Plan
 	}
-	if !IsNil(o.PlanAlias) {
-		toSerialize["plan_alias"] = o.PlanAlias
+	if !IsNil(o.PlanId) {
+		toSerialize["plan_id"] = o.PlanId
 	}
 	if !IsNil(o.Edition) {
 		toSerialize["edition"] = o.Edition
@@ -2270,7 +2270,7 @@ func (o *AccountSession) UnmarshalJSON(data []byte) (err error) {
 		delete(additionalProperties, "tenant_id")
 		delete(additionalProperties, "workspace_id")
 		delete(additionalProperties, "plan")
-		delete(additionalProperties, "plan_alias")
+		delete(additionalProperties, "plan_id")
 		delete(additionalProperties, "edition")
 		delete(additionalProperties, "deployment_mode")
 		delete(additionalProperties, "account_lifecycle")

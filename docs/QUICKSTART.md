@@ -66,7 +66,7 @@ Verify the generated EvidencePack offline:
 helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/<run-id> --profile dev-local --json
 ```
 
-Use the `v0.5.18` release `evidence-pack.tar` from the GitHub release for
+Use the `v0.5.19` release `evidence-pack.tar` from the GitHub release for
 release verification instead of a local proof bundle.
 
 ## See An Escalation

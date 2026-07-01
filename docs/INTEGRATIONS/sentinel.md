@@ -1,6 +1,8 @@
 # BGT Labs Sentinel Interoperability Adapter
 
-> Status: integration-certified. This adapter certifies the integration of BGT Labs Sentinel universal auth proposals within the HELM AI Kernel gateway.
+<!-- quantum_posture: this page references signed receipts but does not implement cryptographic controls. -->
+
+> Status: source-backed adapter candidate. This page documents the source-owned adapter path for BGT Labs Sentinel universal auth proposals within the HELM AI Kernel gateway; it is not release or runtime evidence.
 
 HELM integrates with BGT Labs Sentinel via the `SentinelConnector` to ingest external execution proposals and yield offline-verifiable cryptographic execution receipts. By serving as an authorization gateway, HELM bridges universal intent formats with fine-grained local Cedar policy enforcement.
 

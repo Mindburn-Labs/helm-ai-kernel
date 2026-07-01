@@ -1,6 +1,6 @@
 ---
 title: Quantum Posture
-last_reviewed: 2026-07-02
+last_reviewed: 2026-07-01
 ---
 
 # Quantum Posture
@@ -49,9 +49,9 @@ surface is public-key signing and key agreement, not SHA-256 receipt hashes.
 ## Public Web Boundary
 
 The public Mindburn/HELM web properties are not evidence that every transport,
-identity, origin, and external-service edge is post-quantum protected. On
-2026-07-02, `mindburn.org` and `helm.docs.mindburn.org` both negotiated the
-TLS 1.3 group
+identity, origin, and external-service edge is post-quantum protected. In a
+late 2026-07-01 UTC check, `mindburn.org` and `helm.docs.mindburn.org` both
+negotiated the TLS 1.3 group
 `X25519MLKEM768` when tested with an OpenSSL 3.6 client that offered that
 group. That proves PQ-hybrid visitor-to-Cloudflare key agreement for clients
 that support it.

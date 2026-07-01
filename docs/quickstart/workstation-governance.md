@@ -1,6 +1,55 @@
-# Workstation Governance Quickstart
+# Protect Local Coding Agents
 
-This quickstart shows the local workstation adapter path for Codex or Claude Code-style runs. It uses manifest artifacts and wrapper decisions; it does not require private vendor APIs.
+This guide shows the local HELM path for Codex or Claude Code-style runs. It
+uses local client setup, hook decisions, manifest artifacts, and wrapper
+receipts. It does not require private vendor APIs, a hosted account, or a model
+provider key.
+
+HELM is not a competing coding agent. It governs selected effects around a
+local agent workflow and leaves an offline-verifiable receipt trail.
+
+## Install a local hook
+
+Inspect the writes first:
+
+```bash
+helm-ai-kernel setup codex --dry-run --json
+helm-ai-kernel setup claude-code --dry-run --json
+```
+
+Install the local integration:
+
+```bash
+helm-ai-kernel setup codex --yes
+helm-ai-kernel setup claude-code --yes
+```
+
+Setup writes draft policy and quarantine artifacts. It does not approve tools
+or grant operate permissions.
+
+## Prove a denied action
+
+Ask the local agent to perform an action the starter policy denies. The
+reference transcript denies the shell target `rm -rf /tmp/helm-risky-cleanup`
+before dispatch and writes a signed workstation policy decision receipt.
+
+Verify the receipt:
+
+```bash
+helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json
+```
+
+Expected fields:
+
+```text
+verdict:   DENY
+reason:    OPERATE_PERMISSIONS_EMPTY
+effect:    WORKSTATION_SHELL_COMMAND
+signature: true
+```
+
+Use the imported-artifact flow below when you want to test workstation
+receipts without modifying local client configuration.
 
 ## Import a run
 

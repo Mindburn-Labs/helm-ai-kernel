@@ -36,7 +36,13 @@ if [ ! -f "$SBOM" ]; then
     echo "::warning::sbom.json missing — run 'make sbom' first; emitting empty VEX"
 fi
 
-TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+if [ -n "${SOURCE_DATE_EPOCH:-}" ]; then
+    if ! TIMESTAMP=$(date -u -r "$SOURCE_DATE_EPOCH" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null); then
+        TIMESTAMP=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y-%m-%dT%H:%M:%SZ)
+    fi
+else
+    TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+fi
 DOC_ID="https://mindburn.org/vex/helm-ai-kernel/v${RAW_VERSION}"
 
 # Note: This baseline VEX intentionally enumerates zero statements. The

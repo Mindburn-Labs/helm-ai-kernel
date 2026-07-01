@@ -208,12 +208,12 @@ def validate_sdk_freshness_docs(failures: list[str]) -> None:
         ROOT / 'docs' / 'sdks' / '00_INDEX.md',
         ROOT / 'docs' / 'EXAMPLES.md',
     ]
-    stale_patterns = {
-        'source manifest currently declares `0.5.1`': 'stale SDK source manifest version',
-        'io.github.mindburnlabs:helm-sdk:0.5.2': 'stale Java Maven coordinate',
-        'artifact is source-backed but not registry-backed': 'contradictory Java registry status',
-        'avoid claiming Maven Central availability': 'contradictory Java Maven Central guidance',
-    }
+    stale_patterns = [
+        (re.compile(r'source manifest currently declares `0\.5\.1`'), 'stale SDK source manifest version'),
+        (re.compile(r'io\.github\.mindburnlabs:helm-sdk:0\.5\.2(?![0-9])'), 'stale Java Maven coordinate'),
+        (re.compile(r'artifact is source-backed but not registry-backed'), 'contradictory Java registry status'),
+        (re.compile(r'avoid claiming Maven Central availability'), 'contradictory Java Maven Central guidance'),
+    ]
     sdk_version_claims = [
         (
             'Java Maven coordinate',
@@ -246,9 +246,10 @@ def validate_sdk_freshness_docs(failures: list[str]) -> None:
             failures.append(f'{path.relative_to(ROOT)} is missing from SDK freshness docs check')
             continue
         text = read_text(path)
-        for pattern, detail in stale_patterns.items():
-            if pattern in text:
-                failures.append(f'{path.relative_to(ROOT)} contains {detail}: {pattern!r}')
+        for pattern, detail in stale_patterns:
+            match = pattern.search(text)
+            if match:
+                failures.append(f'{path.relative_to(ROOT)} contains {detail}: {match.group(0)!r}')
         for claim_name, claim_pattern in sdk_version_claims:
             for match in claim_pattern.finditer(text):
                 found_version = match.group('version')

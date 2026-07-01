@@ -83,7 +83,7 @@ bin/helm-ai-kernel setup claude-code --yes
 
 ## Project
 
-| Current release | SDK pointers |
+| Release target | SDK pointers after publication |
 | --- | --- |
 | `v0.5.20` | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.5.20` |
 | `v0.5.20` | `io.github.mindburnlabs:helm-sdk:0.5.20` |

@@ -46,5 +46,4 @@ go test ./pkg/conformance -run 'TestCoreSuiteRegistrationAndRun|TestOWASP_LLM_To
 | Revocation or expiry | Approval receipt, revocation receipt, and TTL |
 | EvidencePack | Indexed file hashes and receipt bytes |
 
-Conformance is local proof. It does not claim provider certification, hosted
-deployment status, or broad platform control.
+Conformance is local proof for the public Kernel contract above.

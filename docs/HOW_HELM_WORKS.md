@@ -53,6 +53,5 @@ export them, or include them in an EvidencePack for offline verification.
 ## Boundaries
 
 HELM governs effects that cross a HELM adapter, hook, wrapper, proxy, or API
-route. The public Kernel docs do not claim full operating-system control,
-hosted Enterprise automation, provider-level model control, or buyer rollout
-status.
+route. Anything outside those configured paths is outside the public Kernel
+contract.

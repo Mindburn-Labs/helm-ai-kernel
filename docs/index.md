@@ -20,6 +20,9 @@ agent/tool requests action
 Run the local proof:
 
 ```bash
+brew tap mindburn-labs/tap
+brew install helm-ai-kernel
+helm-ai-kernel --version
 helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs
 ```
 

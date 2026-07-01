@@ -26,7 +26,10 @@ helm-ai-kernel setup codex --dry-run --json
 Setup writes local client configuration and draft policy artifacts. It does not
 approve tools.
 
-## MCP Approval Loop
+## MCP Approval Commands
+
+Quickstart owns the full approval loop and rerun rule. Use these commands when
+you need the reference form:
 
 | Command | Purpose |
 | --- | --- |
@@ -38,14 +41,8 @@ approve tools.
 | `helm-ai-kernel mcp receipts --json` | List local MCP boundary records. |
 | `helm-ai-kernel mcp get --server-id <id> --json` | Inspect one MCP server record. |
 
-Approval rules:
-
-- `--server-id`, `--tools`, `--ttl`, and `--reason` are required.
-- `--effects` defaults to read-only.
-- Wildcard tools are rejected.
-- Default TTL is `15m`; max TTL is `24h`.
-- Side-effect approvals max out at `15m`.
-- Approval never resumes a blocked action. Rerun the original action.
+See [Quickstart](/quickstart#see-an-escalation) for the expected terminal
+message and revoke flow.
 
 ## Boundary Inspection
 

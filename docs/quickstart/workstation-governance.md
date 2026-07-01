@@ -54,41 +54,18 @@ pause as `ESCALATE`:
 
 ```bash
 helm-ai-kernel mcp authorize-call \
-  --server-id shell-mcp-server \
+  --server-id helm-demo-shell \
   --tool-name pwd
 ```
 
-Expected output:
-
-```text
-HELM ESCALATE
-decision: dec_...
-reason: unknown MCP server requires approval
-receipt: ~/.helm-ai-kernel/receipts/...
-approve:
-  helm-ai-kernel mcp approve --server-id shell-mcp-server \
-    --tools "pwd" \
-    --ttl 15m \
-    --reason "read-only repo inspection for local dev"
-```
-
-Approve the exact scope only when it is safe:
-
-```bash
-helm-ai-kernel mcp approve \
-  --server-id shell-mcp-server \
-  --tools "pwd,ls,cat" \
-  --ttl 15m \
-  --reason "read-only repo inspection for local dev"
-```
-
-Then rerun the original action. Approval never resumes it automatically.
+Use the approval loop in [Quickstart](/quickstart#see-an-escalation). Then
+rerun the original action. Approval never resumes it automatically.
 
 ## Revoke Access
 
 ```bash
 helm-ai-kernel mcp revoke \
-  --server-id shell-mcp-server \
+  --server-id helm-demo-shell \
   --reason "repo inspection finished"
 ```
 
@@ -103,5 +80,4 @@ helm-ai-kernel mcp receipts --json
 helm-ai-kernel boundary records --json
 ```
 
-The report is receipt-scoped. It does not claim full desktop, browser, OS, or
-hosted-agent control.
+The report is receipt-scoped and covers only configured hooks and adapters.

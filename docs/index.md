@@ -15,6 +15,7 @@ and keep a signed receipt that can be verified later.
 | --- | --- |
 | Protect a local coding agent | [Quickstart](QUICKSTART.md) |
 | Scan an agent before enforcement | [Agent Risk Scan](reference/agent-risk-scan.md) |
+| Understand the model | [How HELM works](HOW_HELM_WORKS.md) |
 | Install the CLI | [Installation](DEVELOPER_JOURNEY.md#install) |
 | Call the HTTP API | [API introduction](reference/http-api.md) |
 | Use an SDK | [SDKs](sdks/00_INDEX.md) |
@@ -40,6 +41,10 @@ receipts for blocked actions.
 ## Main Paths
 
 - [Quickstart](QUICKSTART.md) - first local denial and receipt verification.
+- [How HELM works](HOW_HELM_WORKS.md) - local decision path, receipts, and
+  verification boundary.
+- [Local coding agents](quickstart/workstation-governance.md) - add HELM to a
+  developer workstation.
 - [Agent Risk Scan](reference/agent-risk-scan.md) - local-first scan,
   anonymized risk envelope, and EvidencePack path.
 - [Developer journey](DEVELOPER_JOURNEY.md) - choose the next path after the
@@ -71,10 +76,18 @@ receipts for blocked actions.
 
 - [CLI reference](reference/cli.md)
 - [HTTP API reference](reference/http-api.md)
+- [SDKs](sdks/00_INDEX.md)
 - [JSON schemas](reference/json-schemas.md)
 - [Protocols and schemas](reference/protocols-and-schemas.md)
+- [Conformance](CONFORMANCE.md)
 - [Compatibility](COMPATIBILITY.md)
 - [Publishing](PUBLISHING.md)
+
+## Public Boundary
+
+The public docs describe HELM AI Kernel only. They do not claim hosted
+Enterprise availability, buyer rollout, regulatory certification, paid account
+activation, or broad operating-system control.
 
 ## Source Truth
 

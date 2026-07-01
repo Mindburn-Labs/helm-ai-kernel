@@ -55,6 +55,15 @@
       "sensitivity": "public"
     },
     {
+      "slug": "how-helm-works",
+      "title": "How HELM Works",
+      "section": "concepts",
+      "source_path": "docs/HOW_HELM_WORKS.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/how-helm-works",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "developer-journey",
       "title": "Developer Journey",
       "section": "start-here",

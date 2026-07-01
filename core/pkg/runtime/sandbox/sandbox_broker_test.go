@@ -2,6 +2,7 @@ package sandbox_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -54,6 +55,14 @@ func (m *mockRunner) Validate(spec *pkg_sandbox.SandboxSpec) error {
 type errMock string
 
 func (e errMock) Error() string { return string(e) }
+
+type failingCompleteLeaseManager struct {
+	*lease.InMemoryLeaseManager
+}
+
+func (m failingCompleteLeaseManager) Complete(context.Context, string) error {
+	return fmt.Errorf("complete failed")
+}
 
 func setupBroker() (*sandbox_runtime.SandboxBroker, *lease.InMemoryLeaseManager, *mockRunner) {
 	resetClock()
@@ -200,5 +209,61 @@ func TestPrepareExecution_NilVerdict(t *testing.T) {
 	_, err := broker.PrepareExecution(ctx, l, nil)
 	if err == nil {
 		t.Fatal("expected error for nil verdict")
+	}
+}
+
+func TestExecute_RevocationFailureIsRecorded(t *testing.T) {
+	broker, lm, _ := setupBroker()
+	l := acquireLease(t, lm)
+	prepared, err := broker.PrepareExecution(ctx, l, testVerdict())
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared.TokenIDs = append(prepared.TokenIDs, "missing-token")
+
+	result, receipt, err := broker.Execute(ctx, prepared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Cleanup.Status != "degraded" {
+		t.Fatalf("cleanup status = %#v, want degraded", result.Cleanup)
+	}
+	if result.Success() {
+		t.Fatal("cleanup degradation must make the result non-success")
+	}
+	if receipt == nil || receipt.Result.Cleanup.Status != "degraded" {
+		t.Fatalf("receipt cleanup = %#v, want degraded", receipt)
+	}
+}
+
+func TestExecute_LeaseCompletionFailureIsRecorded(t *testing.T) {
+	resetClock()
+	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)
+	baseManager := lease.NewInMemoryLeaseManager().WithClock(clock)
+	broker := sandbox_runtime.NewSandboxBroker(credBroker, failingCompleteLeaseManager{InMemoryLeaseManager: baseManager}).WithClock(clock)
+	runner := &mockRunner{}
+	broker.RegisterRunner("docker", runner)
+
+	l := acquireLease(t, baseManager)
+	prepared, err := broker.PrepareExecution(ctx, l, testVerdict())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, receipt, err := broker.Execute(ctx, prepared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !runner.runCalled {
+		t.Fatal("expected runner.Run to be called")
+	}
+	if result.Cleanup.Status != "unknown" {
+		t.Fatalf("cleanup status = %#v, want unknown", result.Cleanup)
+	}
+	if result.Success() {
+		t.Fatal("unknown cleanup state must make the result non-success")
+	}
+	if receipt == nil || receipt.Result.Cleanup.Status != "unknown" {
+		t.Fatalf("receipt cleanup = %#v, want unknown", receipt)
 	}
 }

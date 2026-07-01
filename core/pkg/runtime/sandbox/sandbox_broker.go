@@ -174,7 +174,8 @@ func (b *SandboxBroker) Execute(
 	result, receipt, err := runner.Run(prepared.Spec)
 
 	// Always clean up regardless of outcome.
-	b.cleanup(ctx, prepared)
+	cleanup := b.cleanup(ctx, prepared)
+	applyCleanupStatus(result, receipt, cleanup)
 
 	if err != nil {
 		return result, receipt, fmt.Errorf("sandbox execution: %w", err)
@@ -183,11 +184,13 @@ func (b *SandboxBroker) Execute(
 }
 
 // cleanup revokes tokens and completes the lease.
-// Errors are logged but not returned — cleanup is best-effort.
-func (b *SandboxBroker) cleanup(ctx context.Context, prepared *PreparedExecution) {
+func (b *SandboxBroker) cleanup(ctx context.Context, prepared *PreparedExecution) pkg_sandbox.CleanupStatus {
+	var revokeErrors []string
+
 	// Revoke all issued tokens.
 	for _, tokenID := range prepared.TokenIDs {
 		if err := b.credBroker.RevokeToken(tokenID); err != nil {
+			revokeErrors = append(revokeErrors, fmt.Sprintf("revoke token %s: %v", tokenID, err))
 			slog.Warn("failed to revoke scoped token during cleanup",
 				"token_id", tokenID,
 				"lease_id", prepared.Lease.LeaseID,
@@ -197,11 +200,41 @@ func (b *SandboxBroker) cleanup(ctx context.Context, prepared *PreparedExecution
 	}
 
 	// Complete the lease.
-	if err := b.leases.Complete(ctx, prepared.Lease.LeaseID); err != nil {
+	completeErr := b.leases.Complete(ctx, prepared.Lease.LeaseID)
+	if completeErr != nil {
 		slog.Warn("failed to complete lease during cleanup",
 			"lease_id", prepared.Lease.LeaseID,
-			"error", err,
+			"error", completeErr,
 		)
+	}
+
+	switch {
+	case completeErr != nil && len(revokeErrors) > 0:
+		return pkg_sandbox.CleanupStatus{
+			Status: "error",
+			Errors: append(revokeErrors, fmt.Sprintf("complete lease %s: %v", prepared.Lease.LeaseID, completeErr)),
+		}
+	case completeErr != nil:
+		return pkg_sandbox.CleanupStatus{
+			Status: "unknown",
+			Errors: []string{fmt.Sprintf("complete lease %s: %v", prepared.Lease.LeaseID, completeErr)},
+		}
+	case len(revokeErrors) > 0:
+		return pkg_sandbox.CleanupStatus{
+			Status: "degraded",
+			Errors: revokeErrors,
+		}
+	default:
+		return pkg_sandbox.CleanupStatus{Status: "ok"}
+	}
+}
+
+func applyCleanupStatus(result *pkg_sandbox.Result, receipt *pkg_sandbox.ExecutionReceipt, cleanup pkg_sandbox.CleanupStatus) {
+	if result != nil {
+		result.Cleanup = cleanup
+	}
+	if receipt != nil {
+		receipt.Result.Cleanup = cleanup
 	}
 }
 

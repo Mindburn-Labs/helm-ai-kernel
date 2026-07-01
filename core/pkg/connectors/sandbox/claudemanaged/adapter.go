@@ -306,8 +306,9 @@ func (a *Adapter) Exec(ctx context.Context, id string, req *actuators.ExecReques
 	if err != nil {
 		return nil, err
 	}
-	if req == nil || len(req.Command) == 0 {
-		return nil, fmt.Errorf("claude managed agents: command is required")
+	req, err = actuators.PrepareExecRequest(req, state.spec)
+	if err != nil {
+		return nil, err
 	}
 
 	runnerReq := *req
@@ -330,16 +331,8 @@ func (a *Adapter) Exec(ctx context.Context, id string, req *actuators.ExecReques
 		return nil, fmt.Errorf("claude managed agents: runner returned nil result")
 	}
 
-	result := &actuators.ExecResult{
-		ExitCode:  run.ExitCode,
-		Stdout:    run.Stdout,
-		Stderr:    run.Stderr,
-		Duration:  run.Duration,
-		OOMKilled: run.OOMKilled,
-		TimedOut:  run.TimedOut,
-		Receipt:   actuators.ComputeReceiptFragment(req, run.Stdout, run.Stderr, ProviderID, start, state.spec, actuators.EffectExecShell),
-	}
-	a.appendLogs(id, start, run.Stdout, run.Stderr)
+	result := actuators.BuildExecResult(req, run.Stdout, run.Stderr, run.ExitCode, run.Duration, run.OOMKilled, run.TimedOut, ProviderID, start, state.spec, actuators.EffectExecShell)
+	a.appendLogs(id, start, result.Stdout, result.Stderr)
 	return result, nil
 }
 

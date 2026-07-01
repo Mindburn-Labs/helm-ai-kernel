@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ type mockE2B struct {
 	mu        sync.Mutex
 	sandboxes map[string]*mockSBX
 	nextID    int
+	lastExec  e2bExecReq
 }
 
 type mockSBX struct {
@@ -82,12 +84,18 @@ func newMockServer() (*httptest.Server, *mockE2B) {
 	mux.HandleFunc("POST /sandboxes/{id}/process", func(w http.ResponseWriter, r *http.Request) {
 		var req e2bExecReq
 		json.NewDecoder(r.Body).Decode(&req)
+		mock.mu.Lock()
+		mock.lastExec = req
+		mock.mu.Unlock()
 
 		stdout := ""
 		timedOut := ""
 		// Simulate echo.
 		if len(req.Cmd) > 5 && req.Cmd[:5] == "echo " {
 			stdout = req.Cmd[5:] + "\n"
+		}
+		if req.Cmd == "large-output" {
+			stdout = strings.Repeat("a", 300*1024)
 		}
 		// Simulate timeout.
 		if len(req.Cmd) > 6 && req.Cmd[:6] == "sleep " && req.Timeout > 0 {
@@ -253,4 +261,29 @@ func TestE2B_PauseResumeSupported(t *testing.T) {
 	assert.Equal(t, actuators.StatusRunning, resumed.Status)
 
 	require.NoError(t, adapter.Terminate(ctx, handle.ID))
+}
+
+func TestE2B_ExecAppliesGuardrails(t *testing.T) {
+	server, mock := newMockServer()
+	defer server.Close()
+	adapter := newTestAdapter(server)
+
+	ctx := t.Context()
+	handle, err := adapter.Create(ctx, &actuators.SandboxSpec{
+		Runtime:   "default",
+		Resources: actuators.ResourceSpec{MemoryMB: 256, Timeout: 45 * time.Second},
+	})
+	require.NoError(t, err)
+
+	result, err := adapter.Exec(ctx, handle.ID, &actuators.ExecRequest{Command: []string{"large-output"}})
+	require.NoError(t, err)
+	assert.Equal(t, 45, mock.lastExec.Timeout, "missing exec timeout should use the sandbox cap")
+	assert.Len(t, result.Stdout, 256*1024, "stdout should be capped locally")
+	assert.True(t, result.StdoutTruncated, "stdout truncation should be observable")
+
+	_, err = adapter.Exec(ctx, handle.ID, &actuators.ExecRequest{
+		Command: []string{"echo", "nope"},
+		Env:     map[string]string{"OPENAI_API_KEY": "secret"},
+	})
+	require.ErrorContains(t, err, "secret-bearing env var")
 }

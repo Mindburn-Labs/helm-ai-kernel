@@ -301,3 +301,22 @@ func TestOpenSandbox_ExecReceiptDeterminism(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, ok, "receipt hashes must be identical for identical commands")
 }
+
+func TestOpenSandbox_ExecRejectsSecretEnv(t *testing.T) {
+	server, _ := newMockServer()
+	defer server.Close()
+	adapter := newTestAdapter(server)
+
+	ctx := t.Context()
+	handle, err := adapter.Create(ctx, &actuators.SandboxSpec{
+		Runtime:   "test",
+		Resources: actuators.ResourceSpec{MemoryMB: 128, Timeout: 30 * time.Second},
+	})
+	require.NoError(t, err)
+
+	_, err = adapter.Exec(ctx, handle.ID, &actuators.ExecRequest{
+		Command: []string{"echo", "nope"},
+		Env:     map[string]string{"OPENAI_API_KEY": "secret"},
+	})
+	require.ErrorContains(t, err, "secret-bearing env var")
+}

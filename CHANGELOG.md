@@ -39,7 +39,9 @@ flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Page["HELM AI Kernel Changelog"]
         A["[Unreleased]"]
-        B["[0.5.10] - 2026-06-04"]
+        B["[0.5.19] - 2026-07-01"]
+        B1["[0.5.16] - 2026-06-18"]
+        B2["[0.5.10] - 2026-06-04"]
         C["[0.5.9] - 2026-06-03"]
         D["[0.5.4] - 2026-05-20"]
         E["[0.5.3] - 2026-05-19"]
@@ -53,7 +55,9 @@ flowchart TD
     %% Operational Flow Edges
     Page --> A
     A --> B
-    B --> C
+    B --> B1
+    B1 --> B2
+    B2 --> C
     C --> D
     D --> E
     E --> F
@@ -74,6 +78,25 @@ No public feature claim is active in this section. Keep research scaffolds and
 hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
+
+## [0.5.19] - 2026-07-01
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.19>.
+
+- Hardened hosted sandbox execution guardrails by centralizing timeout caps,
+  output caps, secret-bearing environment variable denial, and cleanup
+  degradation reporting across sandbox adapters and broker receipts.
+- Aligned account session and entitlement SDK contract fields on `plan_id`,
+  expanded public plan enums to `free`, `developer`, `team`, `scale`, and
+  `enterprise`, and regenerated Go, Java, Python, Rust, and TypeScript SDK
+  types from OpenAPI.
+- Updated the Java SDK Jackson dependency to `2.22.0`.
+- Shipped developer-first integration docs for Codex, Claude Code, MCP,
+  OpenAI-compatible proxy use, EvidencePack verification, signed receipts, and
+  policy bundles without expanding cloud, GA, connector certification, or
+  checkout claims.
+- Updated release version-surface automation for the rewritten Developer
+  Journey and Quickstart docs so future patch bumps remain tool-driven.
 
 ## [0.5.16] - 2026-06-18
 

@@ -50,13 +50,13 @@ docker compose up -d
 ```
 
 Java SDK consumers can use the current Maven coordinate:
-`io.github.mindburnlabs:helm-sdk:0.5.18`.
+`io.github.mindburnlabs:helm-sdk:0.5.19`.
 
 ```xml
 <dependency>
   <groupId>io.github.mindburnlabs</groupId>
   <artifactId>helm-sdk</artifactId>
-  <version>0.5.18</version>
+  <version>0.5.19</version>
 </dependency>
 ```
 

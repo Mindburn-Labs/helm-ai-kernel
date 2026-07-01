@@ -1,189 +1,72 @@
 ---
-title: Policy Languages — CEL, Rego, Cedar
-last_reviewed: 2026-05-05
+title: Write Policies
+last_reviewed: 2026-07-01
 ---
 
-# Policy Languages — CEL, Rego, Cedar
+# Write Policies
 
-## Audience
+Policies decide whether a proposed action becomes `ALLOW`, `DENY`, or
+`ESCALATE`. Public HELM supports CEL, Rego, and Cedar inputs through one
+normalized decision boundary.
 
-Policy authors and runtime maintainers comparing supported policy-language inputs with current enforcement behavior.
+## Choose A Language
 
-## Outcome
+| Use case | Start with |
+| --- | --- |
+| Small attribute rules | CEL |
+| Existing OPA/Rego practice | Rego |
+| Entity and role relationships | Cedar |
 
-After this page you should know what this surface is for, which source files own the behavior, which public route or adjacent page to use next, and which validation command to run before changing the claim.
+All three paths must produce the same kind of verdict envelope.
 
-## Source Truth
-
-- Public route: `architecture/policy-languages`
-- Source document: `helm-ai-kernel/docs/architecture/policy-languages.md`
-- Public manifest: `helm-ai-kernel/docs/public-docs.manifest.json`
-- Source inventory: `helm-ai-kernel/docs/source-inventory.manifest.json`
-- Validation: `make docs-coverage`, `make docs-truth`, and `npm run coverage:inventory` from `docs-platform`
-
-Do not expand this page with unsupported product, SDK, deployment, compliance, or integration claims unless the inventory manifest points to code, schemas, tests, examples, or an owner doc that proves the claim.
-
-helm-ai-kernel accepts policy sources written in three languages and routes
-them through one enforcement boundary. The kernel never branches on
-language at decision time; only the multi-language registry in
-[`core/pkg/policybundles/registry.go`](../../core/pkg/policybundles/registry.go)
-does, and only at compile/load.
-
-## CEL — historical baseline
-
-[Common Expression Language](https://github.com/google/cel-spec). Single
-expression returning a verdict envelope. Carried via the existing
-`core/pkg/celcheck/` and `core/pkg/policybundles/builtin.go` pipeline.
-
-- Inputs: `request.action`, `request.principal.roles`, `request.context`.
-- Strengths: fastest evaluation, smallest dependency footprint, best
-  fit for attribute-mostly rules.
-- Weaknesses: limited control flow; nested ternaries get unwieldy.
-- Example: [`examples/policies/cel/example.cel`](../../examples/policies/cel/example.cel).
-
-## OPA / Rego — procurement standard
-
-[Rego](https://www.openpolicyagent.org/docs/latest/policy-language/) via
-[`core/pkg/policybundles/rego/`](../../core/pkg/policybundles/rego/).
-
-- Inputs: top-level `input` document.
-- Strengths: rich set semantics, partial evaluation, mature ecosystem.
-- Determinism guard:
-  [`core/pkg/policybundles/rego/capabilities.json`](../../core/pkg/policybundles/rego/capabilities.json)
-  forbids `http.send`, `time.now_ns`, `rand.intn`, and
-  `crypto.x509.parse_certificates`.
-- Example: [`examples/policies/rego/example.rego`](../../examples/policies/rego/example.rego).
-
-## Cedar — entity-shape model
-
-[Cedar](https://docs.cedarpolicy.com) via
-[`core/pkg/policybundles/cedar/`](../../core/pkg/policybundles/cedar/).
-
-- Inputs: principal/action/resource as `EntityUID` (`Type::"id"`); an
-  optional entities document declares parent chains for the `in`
-  operator.
-- Strengths: explicit entity types, native role/group reasoning, AWS
-  Verified Permissions interop.
-- Example:
-  [`examples/policies/cedar/example.cedar`](../../examples/policies/cedar/example.cedar)
-  with companion entities at
-  [`examples/policies/cedar/entities.json`](../../examples/policies/cedar/entities.json).
-
-## Side-by-side: same logical rule
-
-*Anyone may view; only admins may delete; default deny.*
+## CEL
 
 ```cel
 request.action == "view"
   ? {"verdict": "ALLOW"}
-  : (request.action == "delete" && ("admin" in request.principal.roles)
-       ? {"verdict": "ALLOW"}
-       : {"verdict": "DENY"})
+  : {"verdict": "DENY"}
 ```
+
+CEL is the smallest path for attribute checks. Keep rules direct; avoid nested
+policy logic that is hard to review.
+
+## Rego
 
 ```rego
 package helm.policy
 import rego.v1
 
 default decision := {"verdict": "DENY"}
-decision := {"verdict": "ALLOW"} if { input.action == "view" }
 decision := {"verdict": "ALLOW"} if {
-  input.action == "delete"
-  "admin" in input.principal.roles
+  input.action == "view"
 }
 ```
 
+Rego is useful when your team already uses OPA or set-based rules. HELM uses a
+restricted capability set for deterministic evaluation.
+
+## Cedar
+
 ```cedar
 permit(principal, action == Action::"view", resource);
-permit(principal, action == Action::"delete", resource)
-when { principal in Role::"admin" };
 ```
 
-A regression test under `tests/conformance/policy-langs/` (Workstream
-F1) will assert byte-identical decisions across all three on a
-50-policy reference suite.
+Cedar is useful for entity-shaped authorization where principals, actions, and
+resources have explicit types.
 
-## Edge-case behavior
+## Determinism Rules
 
-| Edge case | CEL | Rego | Cedar |
-| --- | --- | --- | --- |
-| Negation of undefined | undefined propagates | `not` is well-defined | requires explicit guards |
-| Set membership on missing list | error / `false` | empty set | `in` returns `false` |
-| Numeric overflow | int64 wraps | bignum-correct | int64 wraps |
-| Role / group reasoning | flat `in roles` | set semantics + virtual docs | parent-chain via entities |
-| Time predicates | `request.now()` injected | `time.now_ns` forbidden; use `input.now` | supply `context.now` |
-| Recursion | not allowed | partial-eval supported | not allowed |
+Policy evaluation does not read the network, filesystem, environment, random
+numbers, or system clock directly. The kernel injects request data and time so
+the same input can be verified later.
 
-## Non-determinism rules (uniform)
+## Build And Test
 
-Across all three languages, helm-ai-kernel enforces:
-
-- No network I/O during evaluation.
-- No random number generation.
-- No system clock reads; the kernel injects `now`.
-- No filesystem reads.
-- No environment-variable reads.
-
-Rego uses OPA's capabilities file. CEL uses the curated function set in
-`core/pkg/celcheck/`. Cedar's spec excludes these operations natively.
-
-## Choose your lane
-
-| You want | Pick |
-| --- | --- |
-| Smallest footprint, fastest eval, attribute-mostly rules | **CEL** |
-| Procurement-team-already-on-OPA, rich set semantics | **Rego** |
-| Entity-rich auth, AWS Verified Permissions interop | **Cedar** |
-
-Bundle manifests carry `language: cel | rego | cedar`. The kernel loads
-+ dispatches via
-[`core/pkg/policybundles/registry.go`](../../core/pkg/policybundles/registry.go).
-The `helm-ai-kernel bundle build` subcommand auto-detects from file extension when
-`--language` is omitted.
-
-## See also
-
-- [`core/pkg/policybundles/registry.go`](../../core/pkg/policybundles/registry.go) — language dispatch
-- [Conformance Profile v1](../CONFORMANCE.md) — required behavior across implementations
-- [Verification](../VERIFICATION.md) — verifying a built bundle's hash
-
-## Troubleshooting
-
-| Symptom | First check |
-| --- | --- |
-| Published output is stale or incomplete | Run `npm run helm-public:accuracy` in `docs-platform`, then check the source path and public manifest row for this page. |
-| A claim needs implementation backing | Check the Source Truth files above and update the implementation, manifest, source inventory, or page in the same change. |
-
-## Diagram
-
-```mermaid
-flowchart TD
-    subgraph Ingestion["1. Ingestion & Context Plane"]
-        cel["CEL"]
-        rego["Rego"]
-        cedar["Cedar"]
-    end
-
-    subgraph Evaluation["2. Evaluation & Policy Plane"]
-        input["Canonical policy input"]
-        decision["Normalized decision"]
-    end
-
-    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
-        receipt["Signed receipt"]
-    end
-
-    %% Operational Flow Edges
-    input --> cel
-    input --> rego
-    input --> cedar
-    cel --> decision
-    rego --> decision
-    cedar --> decision
-    decision --> receipt
-
-    %% Premium Styling Rules
-    style input fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
-    style decision fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
-    style receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+```bash
+helm-ai-kernel bundle build --policy ./policy.cel --out ./policy.bundle
+helm-ai-kernel evaluate --bundle ./policy.bundle --input ./request.json
+helm-ai-kernel conform --level L1 --json
 ```
+
+Use `DENY` for unsafe or mismatched actions. Use `ESCALATE` only when a
+developer can resolve the block with a local scoped approval.

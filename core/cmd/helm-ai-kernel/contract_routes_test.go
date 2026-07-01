@@ -128,7 +128,7 @@ func TestBoundaryContractRoutesExposeNewControlSurfaces(t *testing.T) {
 		t.Fatalf("discover status=%d body=%s", discoverRec.Code, discoverRec.Body.String())
 	}
 
-	approveReq := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/registry/approve", strings.NewReader(`{"server_id":"srv-1","approver_id":"user:alice","approval_receipt_id":"approval-r1"}`))
+	approveReq := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/registry/approve", strings.NewReader(`{"server_id":"srv-1","approver_id":"user:alice","approval_receipt_id":"approval-r1","reason":"reviewed","tool_names":["local.echo"]}`))
 	authorizeTestRequest(approveReq)
 	approveRec := httptest.NewRecorder()
 	mux.ServeHTTP(approveRec, approveReq)
@@ -218,7 +218,7 @@ func TestMCPAuthorizeCallAPIFailClosedAndPinnedAllow(t *testing.T) {
 		t.Fatalf("discover status=%d body=%s", discoverRec.Code, discoverRec.Body.String())
 	}
 
-	approveReq := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/registry/api-fixture/approve", strings.NewReader(`{"approver_id":"user:alice","approval_receipt_id":"approval-r1"}`))
+	approveReq := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/registry/api-fixture/approve", strings.NewReader(`{"approver_id":"user:alice","approval_receipt_id":"approval-r1","reason":"reviewed","tool_names":["local.echo"]}`))
 	authorizeTestRequest(approveReq)
 	approveRec := httptest.NewRecorder()
 	mux.ServeHTTP(approveRec, approveReq)

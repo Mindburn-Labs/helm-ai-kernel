@@ -29,6 +29,8 @@ func TestExecutionFirewallFiltersToolsByQuarantineAndScope(t *testing.T) {
 		ServerID:          "srv-1",
 		ApproverID:        "user:alice",
 		ApprovalReceiptID: "approval-r1",
+		Reason:            "reviewed",
+		ToolNames:         []string{"read", "write"},
 	}); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
@@ -41,7 +43,7 @@ func TestExecutionFirewallFiltersToolsByQuarantineAndScope(t *testing.T) {
 	}
 }
 
-func TestExecutionFirewallDeniesUnknownToolBeforeDispatch(t *testing.T) {
+func TestExecutionFirewallEscalatesUnknownToolBeforeDispatch(t *testing.T) {
 	ctx := context.Background()
 	firewall := approvedFirewall(t)
 	record, err := firewall.AuthorizeToolCall(ctx, ToolCallAuthorization{
@@ -52,8 +54,8 @@ func TestExecutionFirewallDeniesUnknownToolBeforeDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
-	if record.Verdict != contracts.VerdictDeny {
-		t.Fatalf("verdict = %s, want DENY", record.Verdict)
+	if record.Verdict != contracts.VerdictEscalate {
+		t.Fatalf("verdict = %s, want ESCALATE", record.Verdict)
 	}
 	if record.ReasonCode != contracts.ReasonSchemaViolation {
 		t.Fatalf("reason = %s, want schema violation", record.ReasonCode)
@@ -63,7 +65,7 @@ func TestExecutionFirewallDeniesUnknownToolBeforeDispatch(t *testing.T) {
 	}
 }
 
-func TestExecutionFirewallDeniesUnknownServerBeforeDispatch(t *testing.T) {
+func TestExecutionFirewallEscalatesUnknownServerBeforeDispatch(t *testing.T) {
 	ctx := context.Background()
 	catalog := NewToolCatalog()
 	tool := ToolRef{Name: "local.echo", ServerID: "srv-unknown", Schema: map[string]any{"type": "object"}}
@@ -85,8 +87,8 @@ func TestExecutionFirewallDeniesUnknownServerBeforeDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
-	if record.Verdict != contracts.VerdictDeny {
-		t.Fatalf("verdict = %s, want DENY", record.Verdict)
+	if record.Verdict != contracts.VerdictEscalate {
+		t.Fatalf("verdict = %s, want ESCALATE", record.Verdict)
 	}
 	if record.ReasonCode != contracts.ReasonApprovalRequired {
 		t.Fatalf("reason = %s, want approval required", record.ReasonCode)
@@ -140,8 +142,8 @@ func TestExecutionFirewallDeniesMissingSchemaPin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
-	if record.Verdict != contracts.VerdictDeny || record.ReasonCode != contracts.ReasonSchemaViolation {
-		t.Fatalf("expected missing pin denial, got %s/%s", record.Verdict, record.ReasonCode)
+	if record.Verdict != contracts.VerdictEscalate || record.ReasonCode != contracts.ReasonSchemaViolation {
+		t.Fatalf("expected missing pin escalation, got %s/%s", record.Verdict, record.ReasonCode)
 	}
 }
 
@@ -234,6 +236,8 @@ func approvedFirewall(t *testing.T) *ExecutionFirewall {
 		ServerID:          "srv-1",
 		ApproverID:        "user:alice",
 		ApprovalReceiptID: "approval-r1",
+		Reason:            "reviewed",
+		ToolNames:         []string{"read", "write", "local.echo", "missing"},
 	}); err != nil {
 		t.Fatalf("approve: %v", err)
 	}

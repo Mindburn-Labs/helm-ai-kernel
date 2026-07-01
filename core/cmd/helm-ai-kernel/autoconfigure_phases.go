@@ -115,6 +115,8 @@ func runBlastRadius(ctx context.Context, inv AutoconfigureInventory) (BlastRadiu
 		ServerID:          simApprovedServer,
 		ApproverID:        "sim-harness",
 		ApprovalReceiptID: "sim-approval-fixture",
+		Reason:            "simulation fixture",
+		ToolNames:         []string{simApprovedTool},
 	}); err != nil {
 		return report, nil, fmt.Errorf("approve fixture: %w", err)
 	}

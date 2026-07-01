@@ -1,14 +1,13 @@
 # Protect Local Coding Agents
 
-This guide shows the local HELM path for Codex or Claude Code-style runs. It
-uses local client setup, hook decisions, manifest artifacts, and wrapper
-receipts. It does not require private vendor APIs, a hosted account, or a model
-provider key.
+HELM can sit around Codex, Claude Code, and similar local agent workflows. The
+goal is narrow: selected effects cross a HELM boundary before dispatch, and
+each decision leaves a local receipt.
 
-HELM is not a competing coding agent. It governs selected effects around a
-local agent workflow and leaves an offline-verifiable receipt trail.
+HELM is not a competing coding agent. It evaluates the actions your agent wants
+to take.
 
-## Install a local hook
+## Install A Local Hook
 
 Inspect the writes first:
 
@@ -25,103 +24,84 @@ helm-ai-kernel setup claude-code --yes
 ```
 
 Setup writes draft policy and quarantine artifacts. It does not approve tools
-or grant operate permissions.
+or grant broad operating permissions.
 
-## Prove a denied action
+## Prove A Denial
 
-Ask the local agent to perform an action the starter policy denies. The
-reference transcript denies the shell target `rm -rf /tmp/helm-risky-cleanup`
-before dispatch and writes a signed workstation policy decision receipt.
+Ask the local agent to attempt an action the starter policy denies, such as a
+risky shell cleanup. HELM should block before dispatch and write a receipt.
 
 Verify the receipt:
 
 ```bash
-helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json
+helm-ai-kernel workstation verify-decision \
+  --receipt ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json
 ```
 
 Expected fields:
 
 ```text
-verdict:   DENY
-reason:    OPERATE_PERMISSIONS_EMPTY
-effect:    WORKSTATION_SHELL_COMMAND
+verdict: DENY
+reason: OPERATE_PERMISSIONS_EMPTY
+effect: WORKSTATION_SHELL_COMMAND
 signature: true
 ```
 
-Use the imported-artifact flow below when you want to test workstation
-receipts without modifying local client configuration.
+## Prove An Escalation
 
-## Import a run
-
-```bash
-cd helm-ai-kernel/core
-go run ./cmd/helm-ai-kernel workstation import \
-  --artifacts ../fixtures/workstation/allowed-draft \
-  --out /tmp/helm-workstation-run.json
-```
-
-View the receipt without reading raw chat history:
+For MCP-backed local tools, unknown servers and missing scoped approvals should
+pause as `ESCALATE`:
 
 ```bash
-go run ./cmd/helm-ai-kernel workstation view \
-  --receipt /tmp/helm-workstation-run.json
+helm-ai-kernel mcp authorize-call \
+  --server-id shell-mcp-server \
+  --tool-name pwd
 ```
 
-## Enforce a selected effect
+Expected output:
 
-Network egress fails closed under `workstation.observe_draft.v1` because the default allowlist is empty:
+```text
+HELM ESCALATE
+decision: dec_...
+reason: unknown MCP server requires approval
+receipt: ~/.helm-ai-kernel/receipts/...
+approve:
+  helm-ai-kernel mcp approve --server-id shell-mcp-server \
+    --tools "pwd" \
+    --ttl 15m \
+    --reason "read-only repo inspection for local dev"
+```
+
+Approve the exact scope only when it is safe:
 
 ```bash
-go run ./cmd/helm-ai-kernel workstation enforce \
-  --class network \
-  --target https://forbidden.example \
-  --out /tmp/helm-workstation-network-deny.json
+helm-ai-kernel mcp approve \
+  --server-id shell-mcp-server \
+  --tools "pwd,ls,cat" \
+  --ttl 15m \
+  --reason "read-only repo inspection for local dev"
 ```
 
-The command exits `126` and writes a signed policy decision receipt. Draft workspace edits remain separately allowed:
+Then rerun the original action. Approval never resumes it automatically.
+
+## Revoke Access
 
 ```bash
-go run ./cmd/helm-ai-kernel workstation decide \
-  --class file \
-  --target docs/example.md \
-  --out /tmp/helm-workstation-draft-allow.json
+helm-ai-kernel mcp revoke \
+  --server-id shell-mcp-server \
+  --reason "repo inspection finished"
 ```
 
-## Operator views
+The next evaluation must fail closed when the approval is revoked, expired, or
+outside its server, tool, or effect scope.
+
+## Inspect Receipts
 
 ```bash
-go run ./cmd/helm-ai-kernel workstation denied --input /tmp/helm-workstation-network-deny.json
-go run ./cmd/helm-ai-kernel workstation memory --input ../fixtures/workstation/reference/receipts
-go run ./cmd/helm-ai-kernel workstation loops --input ../fixtures/workstation/reference/receipts
+helm-ai-kernel mcp pending --json
+helm-ai-kernel mcp receipts --json
+helm-ai-kernel boundary records --json
 ```
 
-## Agent scope audit
-
-Generate one audit report across MCP tools, filesystem, network, memory, secrets, deploys, payments, loops, and shell:
-
-```bash
-go run ./cmd/helm-ai-kernel audit scope \
-  --input ../fixtures/workstation/reference/receipts \
-  --json
-
-go run ./cmd/helm-ai-kernel audit scope \
-  --input /tmp/helm-workstation-run.json,/tmp/helm-workstation-network-deny.json \
-  --out /tmp/helm-scope-audit \
-  --evidence-pack
-```
-
-The report is receipt-scoped. It never claims full desktop, browser, OS, or proprietary hosted-agent control.
-
-## EvidencePack and certification
-
-```bash
-go run ./cmd/helm-ai-kernel workstation evidence \
-  --receipt /tmp/helm-workstation-run.json \
-  --out /tmp/helm-workstation-evidencepack
-
-go run ./cmd/helm-ai-kernel workstation certify \
-  --fixtures ../fixtures/workstation \
-  --mode high-risk-effect-capable
-```
-
-Expected result: deterministic import, signed receipts, denied operate effects, memory effects with TTL/sensitivity, recurring loops with schedule/max runtime/tool scope/expiration, and a sample EvidencePack that can be inspected offline.
+The report is receipt-scoped. It does not claim full desktop, browser, OS, or
+hosted-agent control.

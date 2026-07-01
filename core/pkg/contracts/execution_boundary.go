@@ -95,24 +95,27 @@ const EnforcementModeShadow = "shadow"
 // policy, MCP auth, sandbox grants, relationship snapshots, and allow/deny
 // decisions before an actuator can dispatch.
 type ExecutionBoundaryRecord struct {
-	RecordID           string     `json:"record_id"`
-	Verdict            Verdict    `json:"verdict"`
-	ReasonCode         ReasonCode `json:"reason_code,omitempty"`
-	ToolName           string     `json:"tool_name,omitempty"`
-	ArgsHash           string     `json:"args_hash,omitempty"`
-	PolicyEpoch        string     `json:"policy_epoch"`
-	MCPServerID        string     `json:"mcp_server_id,omitempty"`
-	OAuthResource      string     `json:"oauth_resource,omitempty"`
-	OAuthScopes        []string   `json:"oauth_scopes,omitempty"`
-	SandboxGrantHash   string     `json:"sandbox_grant_hash,omitempty"`
-	AuthzSnapshotHash  string     `json:"authz_snapshot_hash,omitempty"`
-	ReceiptID          string     `json:"receipt_id,omitempty"`
-	ApprovalReceiptID  string     `json:"approval_receipt_id,omitempty"`
-	DirectDispatchSeen bool       `json:"direct_dispatch_seen,omitempty"`
-	EnforcementMode    string     `json:"enforcement_mode,omitempty"`
-	ObserveGrantID     string     `json:"observe_grant_id,omitempty"`
-	CreatedAt          time.Time  `json:"created_at"`
-	RecordHash         string     `json:"record_hash,omitempty"`
+	RecordID            string     `json:"record_id"`
+	Verdict             Verdict    `json:"verdict"`
+	ReasonCode          ReasonCode `json:"reason_code,omitempty"`
+	ToolName            string     `json:"tool_name,omitempty"`
+	ToolEffect          string     `json:"tool_effect,omitempty"`
+	ArgsHash            string     `json:"args_hash,omitempty"`
+	PolicyEpoch         string     `json:"policy_epoch"`
+	MCPServerID         string     `json:"mcp_server_id,omitempty"`
+	OAuthResource       string     `json:"oauth_resource,omitempty"`
+	OAuthScopes         []string   `json:"oauth_scopes,omitempty"`
+	SandboxGrantHash    string     `json:"sandbox_grant_hash,omitempty"`
+	AuthzSnapshotHash   string     `json:"authz_snapshot_hash,omitempty"`
+	ReceiptID           string     `json:"receipt_id,omitempty"`
+	DecisionReceiptPath string     `json:"decision_receipt_path,omitempty"`
+	ApprovalCommand     string     `json:"approval_command,omitempty"`
+	ApprovalReceiptID   string     `json:"approval_receipt_id,omitempty"`
+	DirectDispatchSeen  bool       `json:"direct_dispatch_seen,omitempty"`
+	EnforcementMode     string     `json:"enforcement_mode,omitempty"`
+	ObserveGrantID      string     `json:"observe_grant_id,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
+	RecordHash          string     `json:"record_hash,omitempty"`
 }
 
 // EvidenceEnvelopeManifest records a non-authoritative export wrapper over a

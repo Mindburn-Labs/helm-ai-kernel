@@ -1,170 +1,85 @@
 ---
-title: HELM AI Kernel CLI Reference
-last_reviewed: 2026-06-30
+title: CLI
+last_reviewed: 2026-07-01
 ---
 
-# HELM AI Kernel CLI Reference
+# CLI
 
-The `helm-ai-kernel` binary is wired in [`core/cmd/helm-ai-kernel`](../../core/cmd/helm-ai-kernel). Command registration is centralized in [`registry.go`](../../core/cmd/helm-ai-kernel/registry.go), with startup handling in [`main.go`](../../core/cmd/helm-ai-kernel/main.go) and `helm-ai-kernel serve` flag parsing in [`server_cmd.go`](../../core/cmd/helm-ai-kernel/server_cmd.go).
+Use `helm-ai-kernel` to run the local proof path, connect agent clients, and
+inspect receipts.
 
-## Audience
-
-Use this page if you run the HELM AI Kernel binary, copy CLI snippets into automation, or update command docs after changing `core/cmd/helm-ai-kernel`.
-
-## Outcome
-
-After this page you should know the supported top-level command families, the source file that owns each command, the flag contracts that public docs may claim, and the tests that must pass after command changes.
-
-## Source Truth
-
-This page is generated from the active CLI implementation and must stay aligned with [`core/cmd/helm-ai-kernel`](../../core/cmd/helm-ai-kernel), [`core/cmd/README.md`](../../core/cmd/README.md), the command tests in [`core/cmd/helm-ai-kernel`](../../core/cmd/helm-ai-kernel), and the public manifest row for `reference/cli`.
-
-## Runtime Map
-
-```mermaid
-flowchart TD
-    subgraph Ingestion["1. Ingestion & Context Plane"]
-        User["operator or client"]
-        CLI["helm-ai-kernel command"]
-        Registry["command registry"]
-        Server["serve / server"]
-        Proxy["proxy"]
-        API["HTTP API"]
-        Upstream["OpenAI-compatible upstream"]
-        State["boundary surface registry"]
-    end
-
-    subgraph Execution["3. Execution & Verdict Plane"]
-        Boundary["boundary / mcp"]
-    end
-
-    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
-        Evidence["receipts / evidence / verify"]
-        Pack["EvidencePack or receipt stream"]
-    end
-
-    %% Operational Flow Edges
-    User --> CLI
-    CLI --> Registry
-    Registry --> Server
-    Registry --> Proxy
-    Registry --> Boundary
-    Registry --> Evidence
-    Server --> API
-    Proxy --> Upstream
-    Boundary --> State
-    Evidence --> Pack
-
-    %% Premium Styling Rules
-    style Boundary fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
-    style Evidence fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
-    style Pack fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
-```
-
-
-## Primary Commands
-
-| Command | Purpose | Source truth |
-| --- | --- | --- |
-| `helm up <app>` / `helm-ai-kernel up <app>` | Run a supported local AppSpec through environment preflight, supply-chain checks, policy/CPI compile, MCP quarantine, receipts, EvidencePack export, offline verify command, and CLI inspection command. | [`up_cmd.go`](../../core/cmd/helm-ai-kernel/up_cmd.go), [`core/pkg/launchkit`](../../core/pkg/launchkit) |
-| `helm-ai-kernel serve` | Start the local execution boundary from a policy file. | [`server_cmd.go`](../../core/cmd/helm-ai-kernel/server_cmd.go), [`serve_policy.go`](../../core/cmd/helm-ai-kernel/serve_policy.go) |
-| `helm-ai-kernel server` | Start the default Guardian API and proxy services. | [`main.go`](../../core/cmd/helm-ai-kernel/main.go), [`subsystems.go`](../../core/cmd/helm-ai-kernel/subsystems.go) |
-| `helm-ai-kernel proxy` | Run the OpenAI-compatible governance proxy. | [`proxy_cmd.go`](../../core/cmd/helm-ai-kernel/proxy_cmd.go) |
-| `helm-ai-kernel setup <claude-code\|codex>` | Install local MCP and PreToolUse hook integration for Claude Code or Codex, write autoconfigure draft artifacts, and start the local headless proof path. | [`setup_cmd.go`](../../core/cmd/helm-ai-kernel/setup_cmd.go), [`hook_cmd.go`](../../core/cmd/helm-ai-kernel/hook_cmd.go), [`quickstart_cmd.go`](../../core/cmd/helm-ai-kernel/quickstart_cmd.go) |
-| `helm-ai-kernel scan` | Run a local anonymized AI-agent risk scan, render previews, write a scan evidence pack, optionally upload only the RiskEnvelope, or project workstation receipts with `--from-receipts`. | [`scan_cmd.go`](../../core/cmd/helm-ai-kernel/scan_cmd.go), [`core/pkg/riskscan`](../../core/pkg/riskscan), [`Agent Risk Scan`](agent-risk-scan.md) |
-| `helm-ai-kernel receipts tail` | Tail durable receipt events for a specific agent. | [`receipts_cmd.go`](../../core/cmd/helm-ai-kernel/receipts_cmd.go), [`receipt_routes.go`](../../core/cmd/helm-ai-kernel/receipt_routes.go) |
-| `helm-ai-kernel evidence` | Export evidence envelopes over native EvidencePacks. | [`evidence_cmd.go`](../../core/cmd/helm-ai-kernel/evidence_cmd.go), [`contract_routes.go`](../../core/cmd/helm-ai-kernel/contract_routes.go) |
-| `helm-ai-kernel export` | Export an EvidencePack from local evidence material. | [`export_cmd.go`](../../core/cmd/helm-ai-kernel/export_cmd.go), [`export_pack.go`](../../core/cmd/helm-ai-kernel/export_pack.go) |
-| `helm-ai-kernel export aat` | Export audit entries as an IETF draft-sharif-agent-audit-trail (AAT) conformant JSON Lines hash chain (`--in`, `--agent-id`, optional `--sign-key`), or verify an existing chain (`--verify`). | [`export_aat_cmd.go`](../../core/cmd/helm-ai-kernel/export_aat_cmd.go), [`core/pkg/audit`](../../core/pkg/audit) |
-| `helm-ai-kernel verify` | Verify an EvidencePack directory or archive offline, with optional online proof checks. Use `--entry <path> --proof <file>` for privacy-preserving single-entry verification — confirm one manifest entry belongs to a pack via a Merkle inclusion path without possessing the other entries (see `evidence prove-entry` and evidence-pack-v1.md Section 14). | [`verify_cmd.go`](../../core/cmd/helm-ai-kernel/verify_cmd.go), [`verify_entry_cmd.go`](../../core/cmd/helm-ai-kernel/verify_entry_cmd.go), [`core/pkg/verifier`](../../core/pkg/verifier) |
-| `helm-ai-kernel bundle` | List, inspect, verify, or build policy bundles. | [`bundle_cmd.go`](../../core/cmd/helm-ai-kernel/bundle_cmd.go), [`core/pkg/policybundles`](../../core/pkg/policybundles) |
-| `helm-ai-kernel conform` | Run conformance gates and list negative boundary vectors. | [`conform.go`](../../core/cmd/helm-ai-kernel/conform.go), [`core/pkg/conformance`](../../core/pkg/conformance) |
-| `helm-ai-kernel mcp` | Serve, package, scan, quarantine, approve, and authorize MCP surfaces. | [`mcp_cmd.go`](../../core/cmd/helm-ai-kernel/mcp_cmd.go), [`mcp_boundary_cmd.go`](../../core/cmd/helm-ai-kernel/mcp_boundary_cmd.go), [`mcp_runtime.go`](../../core/cmd/helm-ai-kernel/mcp_runtime.go) |
-| `helm-ai-kernel hook pre-tool` | Local client hook handler. It reads Claude Code or Codex PreToolUse JSON on stdin, emits hook denial JSON for selected high-risk effects, and writes signed workstation policy decision receipts. | [`hook_cmd.go`](../../core/cmd/helm-ai-kernel/hook_cmd.go), [`workstation_m3_cmd.go`](../../core/cmd/helm-ai-kernel/workstation_m3_cmd.go) |
-| `helm-ai-kernel boundary` | Inspect execution-boundary status, capabilities, records, verification, and checkpoints. | [`boundary_surface_cmd.go`](../../core/cmd/helm-ai-kernel/boundary_surface_cmd.go), [`core/pkg/boundary`](../../core/pkg/boundary) |
-| `helm-ai-kernel policy` | Work with local policy tests used by the public proof path. | [`policy_cmd.go`](../../core/cmd/helm-ai-kernel/policy_cmd.go) |
-| `helm-ai-kernel test` | Run local HELM smoke checks exposed by the CLI. | [`test_cmd.go`](../../core/cmd/helm-ai-kernel/test_cmd.go) |
-| `helm-ai-kernel workstation verify-decision` | Verify a signed workstation policy decision receipt, including hook DENY receipts. | [`workstation_m3_cmd.go`](../../core/cmd/helm-ai-kernel/workstation_m3_cmd.go), [`core/pkg/workstation`](../../core/pkg/workstation) |
-| `helm-ai-kernel doctor`, `helm-ai-kernel init`, `helm-ai-kernel onboard`, `helm-ai-kernel demo` | Initialize, diagnose, and run local demonstration flows. | [`doctor_cmd.go`](../../core/cmd/helm-ai-kernel/doctor_cmd.go), [`doctor_init_trust.go`](../../core/cmd/helm-ai-kernel/doctor_init_trust.go), [`onboard_cmd.go`](../../core/cmd/helm-ai-kernel/onboard_cmd.go), [`demo_cmd.go`](../../core/cmd/helm-ai-kernel/demo_cmd.go) |
-| `helm-ai-kernel health`, `helm-ai-kernel version`, `helm-ai-kernel help` | Global utility commands for local health checks, version reporting, and usage output. | [`main.go`](../../core/cmd/helm-ai-kernel/main.go), [`registry.go`](../../core/cmd/helm-ai-kernel/registry.go) |
-
-Auxiliary binaries under `core/cmd/bootstrap`, `core/cmd/channel_gateway`, `core/cmd/pack_verify`, `core/cmd/skill_lint`, and `core/cmd/skill_pack` are source-owned helpers. They are not top-level `helm-ai-kernel` subcommands unless wired through `core/cmd/helm-ai-kernel`.
-
-This table documents the public proof-path `helm-ai-kernel` command families and global utility commands. Additional registered commands remain source-owned until the public docs policy and evidence gates explicitly add them.
-
-## Key Flag Contracts
-
-| Command | Contract |
-| --- | --- |
-| `helm up <app>` | Defaults to `--target local --mode auto`; accepts `--target local|cloud|cloud:helm|cloud:aws|cloud:kubernetes`, `--demo`, `--verify-only`, `--live`, `--resume <run_id>`, `--yes`, and `--json`. `--verify-only` never starts runtime. `--live` never falls back to demo. Cloud targets escalate before paid resources unless provider auth and explicit approval are present. |
-| `helm-ai-kernel setup <claude-code\|codex>` | Defaults to user scope and `~/.helm-ai-kernel`; accepts `--scope user|project`, `--yes`, `--dry-run`, `--json`, and `--data-dir`. `--dry-run` writes nothing. Non-dry-run setup requires `--yes`. The JSON summary includes target, binary path, client config path, hook config path, data dir, Kernel URL, scan grade, draft policy path, and uninstall command. |
-| `helm-ai-kernel setup status <target>` / `setup remove <target>` | `status` checks for the HELM MCP and hook entries. `remove` requires `--yes` unless `--dry-run`; it removes the HELM hook entry and the local MCP entry for the selected target/scope. |
-| `helm-ai-kernel scan` | Defaults to `--path .` and `--cohort unknown`. `--risk-envelope` writes anonymized JSON. Repeatable `--preview` accepts `.md` and `.html`. `--evidence-pack` writes an anonymized tar containing only envelope, schema validation, privacy manifest, source-pack hash, and previews. `--from-receipts <dir>` switches input to workstation receipt projection. `--upload` requires `--upload-url`; without `--yes`, upload is not sent. |
-| `helm-ai-kernel hook pre-tool` | Requires `--client claude-code|codex`; reads hook JSON from stdin. Safe calls emit no output and grant no approval. Denied calls emit client-compatible `hookSpecificOutput.permissionDecision=deny` and write a signed decision receipt under `<data-dir>/receipts/hooks/`. |
-| `helm-ai-kernel workstation verify-decision` | Requires `--receipt <file>` or a single positional receipt path. Returns exit `0` only when the workstation policy decision receipt hash and configured receipt signature verify. Tampered receipts return exit `1` and print `signature: false`. |
-| `helm-ai-kernel serve --policy <path>` | `--policy` is required. Optional flags are `--addr`, `--port`, `--data-dir`, and `--json`. If the policy does not override bind or port, `serve` uses `127.0.0.1:7714`. |
-| `helm-ai-kernel server` | Starts without `--policy` and defaults to `127.0.0.1:8080` unless flags, env, or config override it. `HELM_BIND_ADDR` overrides the bind address when no explicit flag is set. `HELM_PORT` overrides the API port when no explicit flag is set. The separate health server uses `HELM_HEALTH_PORT` and defaults to `8081`. |
-| `helm-ai-kernel proxy` | Defaults to `--upstream https://api.openai.com/v1`, `--port 9090`, and `--receipts-dir ./helm-receipts`. `--websocket` is explicitly unsupported in the OSS proxy runtime. |
-| `helm-ai-kernel health` | Checks `http://localhost:$HELM_HEALTH_PORT/healthz`; if `HELM_HEALTH_PORT` is unset, it checks `http://localhost:8081/healthz`. |
-| `helm-ai-kernel receipts tail` | Requires `--agent <id>`. `--server` defaults from `HELM_URL` or `http://127.0.0.1:7714`. |
-| `helm-ai-kernel bundle build` | Takes the policy source as the positional argument: `helm-ai-kernel bundle build [--language=cel|rego|cedar] [--entities=path] <source>`. There is no `--policy` flag for this subcommand. |
-| `helm-ai-kernel bundle verify` | Requires `--file <bundle.yaml>` and `--hash <expected-hash>`. |
-| `helm-ai-kernel verify` | Accepts a positional EvidencePack path or `--bundle`. `--online` only adds public proof-ledger verification after offline checks pass. Passing `--entry`/`--proof` switches to single-entry inclusion-proof verification (offline, no network, no sibling entries required). |
-| `helm-ai-kernel evidence prove-entry` | Requires `--manifest <manifest.json>` and `--entry <path>`; writes a self-contained inclusion proof to `--out` (default stdout) for redacted single-entry verification. |
-| `helm-ai-kernel boundary` | Uses `status`, `capabilities`, `records`, `get`, `verify`, and `checkpoint` subcommands. |
-
-## Receipt And Verification Output
-
-`helm-ai-kernel receipts tail --agent <id>` is the live operator view over
-durable boundary events. The command is useful when proving that Claude, Cursor,
-LangGraph, or a custom runtime crossed HELM instead of calling a tool or model
-endpoint directly.
-
-Read the output as:
-
-| Output field | Meaning |
-| --- | --- |
-| `receipt_id` | Stable handle for the governed request; cite this in issues, reviews, and EvidencePacks |
-| `decision_id` | Policy decision that produced the receipt |
-| `verdict` / `status` | Boundary result such as `ALLOW`, `DENY`, `ESCALATE`, `APPROVED`, or `DENIED` |
-| `reason_code` | Machine-readable reason for the decision |
-| `effect_id` | Proposed or denied side effect when the runtime records one |
-| `output_hash` | Hash of the governed response, denial body, or completion |
-| `signature` | Receipt signature material; required before treating the event as audit evidence |
-
-`helm-ai-kernel verify evidence-pack.tar` is the offline archive verifier. A
-successful run means the verifier accepted the archive/index shape, checked the
-indexed content hashes, found required receipt/proof material, and verified the
-available seal/signature material. If the output says `anchor offline`, no
-external anchor was embedded; the local pack can still pass hash and signature
-checks, but customer/high-assurance review should add the trusted signer,
-external anchor, and storage receipt inputs.
-
-## Boundary And API References
-
-- [HTTP API Reference](http-api.md) covers the route registry, auth classes, OpenAPI contract, and local API behavior.
-- [Execution Boundary Reference](execution-boundary.md) covers boundary records, checkpoints, fail-closed cases, and native evidence authority.
-
-## Validation
-
-Run CLI-focused validation after changing command flags or public examples:
+## First Proof
 
 ```bash
-cd core
-go test ./cmd/helm-ai-kernel -count=1
+helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs
+helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/<run-id> --profile dev-local --json
 ```
 
-Then run the documentation gates from the repository root:
+## Local Agent Setup
 
 ```bash
-make docs-coverage
-make docs-truth
+helm-ai-kernel setup claude-code --yes
+helm-ai-kernel setup codex --yes
+helm-ai-kernel setup codex --dry-run --json
 ```
 
-## Troubleshooting
+Setup writes local client configuration and draft policy artifacts. It does not
+approve tools.
 
-| Symptom | First check |
+## MCP Approval Loop
+
+| Command | Purpose |
 | --- | --- |
-| A command snippet fails with an unknown flag | Compare the snippet with `core/cmd/helm-ai-kernel/*_cmd.go`; for example, `helm-ai-kernel bundle build` takes the policy source positionally, not through `--policy`. |
-| A helper binary appears in public docs as a `helm-ai-kernel` subcommand | Keep helper binaries source-owned unless they are registered in `core/cmd/helm-ai-kernel/registry.go`. |
-| CLI docs and tests disagree | Update the source command, the command test, and this reference in the same change. |
+| `helm-ai-kernel mcp authorize-call --server-id <id> --tool-name <tool>` | Evaluate one MCP tool call before dispatch. |
+| `helm-ai-kernel mcp approve --server-id <id> --tools <csv> --ttl 15m --reason <text>` | Approve an exact local server/tool scope. |
+| `helm-ai-kernel mcp approve --server-id <id> --tools <csv> --effects side_effect --ttl 15m --reason <text>` | Approve a side-effect tool scope. |
+| `helm-ai-kernel mcp revoke --server-id <id> --reason <text>` | Revoke a local approval. |
+| `helm-ai-kernel mcp pending --json` | List servers or tools still awaiting approval. |
+| `helm-ai-kernel mcp receipts --json` | List local MCP boundary records. |
+| `helm-ai-kernel mcp get --server-id <id> --json` | Inspect one MCP server record. |
+
+Approval rules:
+
+- `--server-id`, `--tools`, `--ttl`, and `--reason` are required.
+- `--effects` defaults to read-only.
+- Wildcard tools are rejected.
+- Default TTL is `15m`; max TTL is `24h`.
+- Side-effect approvals max out at `15m`.
+- Approval never resumes a blocked action. Rerun the original action.
+
+## Boundary Inspection
+
+```bash
+helm-ai-kernel boundary status --json
+helm-ai-kernel boundary records --verdict ESCALATE --json
+helm-ai-kernel boundary verify --record-id <record-id> --json
+```
+
+## Receipts
+
+```bash
+helm-ai-kernel receipts tail --agent <agent-id>
+helm-ai-kernel workstation verify-decision --receipt <receipt.json>
+```
+
+`ALLOW`, `DENY`, and `ESCALATE` records include a reason code. `DENY` and
+`ESCALATE` do not dispatch in enforce mode.
+
+## OpenAI-Compatible Proxy
+
+```bash
+helm-ai-kernel proxy \
+  --upstream https://api.openai.com/v1 \
+  --port 9090 \
+  --receipts-dir ./helm-receipts
+```
+
+Point an OpenAI-compatible client at `http://127.0.0.1:9090/v1`.
+
+## Help
+
+```bash
+helm-ai-kernel help
+helm-ai-kernel mcp --help
+helm-ai-kernel verify --help
+```

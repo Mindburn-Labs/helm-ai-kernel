@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-01T14:59:31Z
-# Commit: 1356d0b5e9f7eb3cbc0f99231362384b456f3909
+# Generated: 2026-07-01T16:52:36Z
+# Commit: d66452d3f3c6398e19cad4e5e9690f1478316ecf
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -191,7 +191,7 @@ e0ae0eb682c07e6b3930c057a22a476292ab270ef7f88d7ab24f095d83396451  core/pkg/contr
 d29fe1bb678b79cb4e7e1f7531396c71354389fa10fd4ce024fafe3196fb30c3  core/pkg/contracts/evidence_eu_ai_act_test.go
 b2f4075709b2d09edb2b245e5d8cd1097bbb63fdc4291c37522eb5b69ed6b507  core/pkg/contracts/evidence_pack_single_source_test.go
 4f436de6d176339bedbe736e71343e0df2e9403e7f7fb30124cf3d6f808cce75  core/pkg/contracts/evidence_security_finding_test.go
-b73247596b31e34f593de62e5a59a1d31887ab307572fed66e477298a5134f20  core/pkg/contracts/execution_boundary.go
+8b7a4da9bc25ce4493c098bd16a1194fcfef7e67b461b84507a3d4f2bc13b9f5  core/pkg/contracts/execution_boundary.go
 1dd110c768d83d94b4c9e1805911595a9acd0ed7ae9e20633a5866e0790ff483  core/pkg/contracts/execution_boundary_test.go
 18f026d4224115c4eba1c4d17f2cec94d3d1fe3a0ce24255e2c66d39917fb4b7  core/pkg/contracts/extended2_test.go
 5cc87c7e53683f74a29cb325a1eea166e2b44c69e65e0b8757e180849d6b4d7b  core/pkg/contracts/external_decision_receipt.go

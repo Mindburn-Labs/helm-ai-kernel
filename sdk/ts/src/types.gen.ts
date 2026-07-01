@@ -524,7 +524,6 @@ export interface AccountEntitlements {
  */
 export const AccountEntitlementsPlanEnum = {
     Free: 'free',
-    Individual: 'individual',
     Developer: 'developer',
     Team: 'team',
     Scale: 'scale',
@@ -680,7 +679,6 @@ export interface AccountSession {
  */
 export const AccountSessionPlanEnum = {
     Free: 'free',
-    Individual: 'individual',
     Developer: 'developer',
     Team: 'team',
     Scale: 'scale',

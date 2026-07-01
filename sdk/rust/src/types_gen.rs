@@ -224,8 +224,6 @@ impl AccountEntitlements {
 pub enum AccountEntitlementsPlan {
     #[serde(rename = "free")]
     Free,
-    #[serde(rename = "individual")]
-    Individual,
     #[serde(rename = "developer")]
     Developer,
     #[serde(rename = "team")]
@@ -304,8 +302,6 @@ impl AccountSession {
 pub enum AccountSessionPlan {
     #[serde(rename = "free")]
     Free,
-    #[serde(rename = "individual")]
-    Individual,
     #[serde(rename = "developer")]
     Developer,
     #[serde(rename = "team")]

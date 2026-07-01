@@ -17,36 +17,29 @@ agent/tool requests action
 -> ESCALATE: action is blocked and a decision receipt is written
 ```
 
-Run the local proof:
+Install and open the CLI front door:
 
 ```bash
 brew tap mindburn-labs/tap
 brew install helm-ai-kernel
-helm-ai-kernel --version
-helm-ai-kernel mcp proof \
-  --json \
-  --out ~/.helm-ai-kernel/proofs
+helm-ai-kernel
 ```
 
-The proof writes a local EvidencePack with no dispatched side effects. It
-includes quarantined MCP servers, schema drift, missing approval receipts, and
-replay attempts.
+Then choose one path.
 
 ## Start
 
 - [Quickstart](QUICKSTART.md)
 - [Protect local coding agents](quickstart/workstation-governance.md)
+- [Scan agent risk](reference/agent-risk-scan.md)
 - [OpenAI proxy](INTEGRATIONS/openai_baseurl.md)
+- [Verify receipts](VERIFICATION.md)
+
+## More
+
 - [MCP](INTEGRATIONS/mcp.md)
-
-## Verify
-
-- [Receipts and EvidencePacks](VERIFICATION.md)
 - [Conformance](CONFORMANCE.md)
 - [Troubleshooting](TROUBLESHOOTING.md)
-
-## Reference
-
 - [CLI](reference/cli.md)
 - [HTTP API](reference/http-api.md)
 - [SDKs](sdks/00_INDEX.md)

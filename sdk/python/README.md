@@ -30,7 +30,7 @@ been run.
 ```python
 from helm_sdk import HelmClient
 
-client = HelmClient(base_url="http://127.0.0.1:7715")
+client = HelmClient(base_url="http://127.0.0.1:7714")
 decision = client.evaluate_decision({
     "principal": "example-agent",
     "action": "read-ticket",

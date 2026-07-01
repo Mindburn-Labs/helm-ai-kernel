@@ -82,6 +82,33 @@
       "sensitivity": "public"
     },
     {
+      "slug": "integrations/agent-clients",
+      "title": "Agent Clients",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/agent-clients.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/integrations/agent-clients",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "integrations/framework-adapters",
+      "title": "Framework Adapters",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/framework-adapters.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/integrations/framework-adapters",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "integrations/tool-runtime-adapters",
+      "title": "Tool Runtime Adapters",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/tool-runtime-adapters.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/integrations/tool-runtime-adapters",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "guides/write-policies",
       "title": "Write Policies",
       "section": "guide",
@@ -123,6 +150,24 @@
       "section": "reference",
       "source_path": "docs/reference/cli.md",
       "docs_origin_hint": "helm.docs.mindburn.org/reference/cli",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "reference/agent-risk-scan",
+      "title": "Agent Risk Scan",
+      "section": "reference",
+      "source_path": "docs/reference/agent-risk-scan.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/agent-risk-scan",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "reference/skill-packs",
+      "title": "Skill Packs",
+      "section": "reference",
+      "source_path": "docs/reference/skill-packs.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/skill-packs",
       "access": "public",
       "sensitivity": "public"
     },

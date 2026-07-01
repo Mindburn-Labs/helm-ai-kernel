@@ -18,9 +18,13 @@ helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/<run-id> --prof
 ## Local Agent Setup
 
 ```bash
+helm-ai-kernel
+helm-ai-kernel setup
+helm-ai-kernel setup --json
 helm-ai-kernel setup claude-code --yes
 helm-ai-kernel setup codex --yes
 helm-ai-kernel setup codex --dry-run --json
+helm-ai-kernel setup --client cursor --print-config
 ```
 
 Setup writes local client configuration and draft policy artifacts. It does not
@@ -77,6 +81,7 @@ Point an OpenAI-compatible client at `http://127.0.0.1:9090/v1`.
 
 ```bash
 helm-ai-kernel help
+helm-ai-kernel help --all
 helm-ai-kernel mcp --help
 helm-ai-kernel verify --help
 ```

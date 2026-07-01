@@ -36,6 +36,10 @@ func Dispatch(name string, args []string, stdout, stderr io.Writer) (int, bool) 
 }
 
 func printUsage(out io.Writer) {
+	printFrontDoor(out)
+}
+
+func printUsageAll(out io.Writer) {
 	fmt.Fprintf(out, "%sHELM AI Kernel%s: Canonical Execution Verifier (Version %s, Commit %s)\n\n", ColorBold, ColorReset, displayVersion(), displayCommit())
 	fmt.Fprintln(out, "Usage: helm-ai-kernel <command> [options]")
 	fmt.Fprintln(out, "\nCommands:")

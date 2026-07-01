@@ -103,7 +103,13 @@ func TestMCP20260728AuthorizationSEPVectors(t *testing.T) {
 	if _, err := registry.Discover(ctx, DiscoverServerRequest{ServerID: "srv-rc"}); err != nil {
 		t.Fatalf("discover: %v", err)
 	}
-	if _, err := registry.Approve(ctx, ApprovalDecision{ServerID: "srv-rc", ApproverID: "user:reviewer", ApprovalReceiptID: "approval-rc"}); err != nil {
+	approvedTools := make([]string, 0)
+	for _, vector := range file.Vectors {
+		if vector.Kind == "tool_call" {
+			approvedTools = append(approvedTools, "rc."+vector.ID)
+		}
+	}
+	if _, err := registry.Approve(ctx, ApprovalDecision{ServerID: "srv-rc", ApproverID: "user:reviewer", ApprovalReceiptID: "approval-rc", Reason: "authz vector fixture", ToolNames: approvedTools}); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
 

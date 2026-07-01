@@ -8,6 +8,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -32,6 +34,37 @@ func writeSurfaceJSON(w io.Writer, value any) int {
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(value)
 	return 0
+}
+
+func writeLocalMCPReceipt(id, kind string, value any) string {
+	path := localMCPReceiptPath(id)
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return ""
+	}
+	payload := map[string]any{
+		"schema_version": "helm.mcp.local_receipt/v1",
+		"kind":           kind,
+		"receipt_id":     sanitizeReceiptPart(id),
+		"created_at":     time.Now().UTC().Format(time.RFC3339),
+		"record":         value,
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return ""
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+		return ""
+	}
+	return path
+}
+
+func localMCPReceiptPath(id string) string {
+	id = sanitizeReceiptPart(id)
+	if id == "" {
+		id = "unknown"
+	}
+	return filepath.Join(normalizedDataDir(""), "receipts", "mcp", id+".json")
 }
 
 func runBoundarySurfaceCmd(args []string, stdout, stderr io.Writer) int {
@@ -769,6 +802,52 @@ func runMCPGet(args []string, stdout, stderr io.Writer) int {
 	return 1
 }
 
+func runMCPPending(args []string, stdout, stderr io.Writer) int {
+	cmd := flag.NewFlagSet("mcp pending", flag.ContinueOnError)
+	cmd.SetOutput(stderr)
+	jsonOutput := cmd.Bool("json", false, "Output as JSON")
+	if err := cmd.Parse(args); err != nil {
+		return 2
+	}
+	var pending []mcppkg.ServerQuarantineRecord
+	for _, record := range newLocalSurfaceRegistry().ListMCPServers() {
+		if record.State != mcppkg.QuarantineApproved {
+			pending = append(pending, record)
+		}
+	}
+	if *jsonOutput {
+		return writeSurfaceJSON(stdout, pending)
+	}
+	for _, record := range pending {
+		fmt.Fprintf(stdout, "%s  state=%s reason=%s\n", record.ServerID, record.State, record.Reason)
+	}
+	return 0
+}
+
+func runMCPReceipts(args []string, stdout, stderr io.Writer) int {
+	cmd := flag.NewFlagSet("mcp receipts", flag.ContinueOnError)
+	cmd.SetOutput(stderr)
+	jsonOutput := cmd.Bool("json", false, "Output as JSON")
+	limit := cmd.Int("limit", 50, "Maximum records to return")
+	if err := cmd.Parse(args); err != nil {
+		return 2
+	}
+	records := newLocalSurfaceRegistry().ListRecords(contracts.BoundarySearchRequest{Limit: *limit})
+	var mcpRecords []contracts.ExecutionBoundaryRecord
+	for _, record := range records {
+		if record.MCPServerID != "" {
+			mcpRecords = append(mcpRecords, record)
+		}
+	}
+	if *jsonOutput {
+		return writeSurfaceJSON(stdout, mcpRecords)
+	}
+	for _, record := range mcpRecords {
+		fmt.Fprintf(stdout, "%s  %s  reason=%s receipt=%s\n", record.RecordID, record.Verdict, record.ReasonCode, record.DecisionReceiptPath)
+	}
+	return 0
+}
+
 func runMCPRevoke(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("mcp revoke", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
@@ -782,6 +861,10 @@ func runMCPRevoke(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Error: --server-id is required")
 		return 2
 	}
+	if strings.TrimSpace(*reason) == "" {
+		fmt.Fprintln(stderr, "Error: --reason is required")
+		return 2
+	}
 	surfaces := newLocalSurfaceRegistry()
 	registry := mcppkg.NewQuarantineRegistry()
 	hydrateMCPQuarantine(context.Background(), registry, surfaces.ListMCPServers())
@@ -793,6 +876,7 @@ func runMCPRevoke(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
+	record.RevocationReceiptPath = writeLocalMCPReceipt("rcp_mcp_revoke_"+record.ServerID, "revocation", record)
 	if _, err := surfaces.PutMCPServer(record); err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
@@ -908,6 +992,7 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 	toolSchemaJSON := cmd.String("tool-schema-json", "", "JSON Schema for a discovered server-local tool")
 	outputSchemaJSON := cmd.String("output-schema-json", "", "Output JSON Schema for a discovered server-local tool")
 	oauthResource := cmd.String("oauth-resource", "https://helm.local/mcp", "OAuth resource indicator")
+	effect := cmd.String("effect", "read", "Tool effect: read or side_effect")
 	approved := cmd.Bool("approved", false, "Seed an approved local server before authorization")
 	receiptID := cmd.String("receipt-id", "", "Receipt id to bind")
 	jsonOutput := cmd.Bool("json", false, "Output as JSON")
@@ -951,7 +1036,17 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 		_, _ = quarantine.Discover(context.Background(), mcppkg.DiscoverServerRequest{ServerID: *serverID, ToolNames: []string{*toolName}})
 	}
 	if *approved {
-		record, _ := quarantine.Approve(context.Background(), mcppkg.ApprovalDecision{ServerID: *serverID, ApproverID: "user:local-admin", ApprovalReceiptID: "receipt-local-mcp-approval"})
+		now := time.Now().UTC()
+		record, _ := quarantine.Approve(context.Background(), mcppkg.ApprovalDecision{
+			ServerID:          *serverID,
+			ApproverID:        "user:local-admin",
+			ApprovalReceiptID: "receipt-local-mcp-approval",
+			ApprovedAt:        now,
+			ExpiresAt:         now.Add(15 * time.Minute),
+			Reason:            "local authorize-call test approval",
+			ToolNames:         []string{*toolName},
+			Effects:           []string{*effect},
+		})
 		_, _ = surfaces.PutMCPServer(record)
 	}
 	firewall := mcppkg.NewExecutionFirewall(catalog, quarantine, "local-cli")
@@ -959,6 +1054,7 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 	record, err := firewall.AuthorizeToolCall(context.Background(), mcppkg.ToolCallAuthorization{
 		ServerID:         *serverID,
 		ToolName:         *toolName,
+		Effect:           *effect,
 		ArgsHash:         *argsHash,
 		GrantedScopes:    splitCSV(*scopes),
 		PinnedSchemaHash: *pinnedSchema,
@@ -969,9 +1065,21 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
-	if _, err := surfaces.PutRecord(record); err != nil {
+	if record.Verdict == contracts.VerdictEscalate {
+		record.DecisionReceiptPath = localMCPReceiptPath(record.RecordID)
+		if record.ReasonCode == contracts.ReasonApprovalRequired {
+			record.ApprovalCommand = mcpApprovalCommand(*serverID, *toolName, *effect)
+		}
+	}
+	sealed, err := surfaces.PutRecord(record)
+	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
+	}
+	record = sealed
+	if record.Verdict == contracts.VerdictEscalate {
+		record.DecisionReceiptPath = writeLocalMCPReceipt(record.RecordID, "decision", record)
+		_, _ = surfaces.PutRecord(record)
 	}
 	exitCode := 0
 	if record.Verdict != contracts.VerdictAllow {
@@ -981,8 +1089,61 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 		_ = writeSurfaceJSON(stdout, record)
 		return exitCode
 	}
+	if record.Verdict == contracts.VerdictEscalate {
+		fmt.Fprintln(stdout, "HELM ESCALATE")
+		fmt.Fprintf(stdout, "decision: %s\n", record.RecordID)
+		fmt.Fprintf(stdout, "reason: %s\n", mcpEscalationReason(record))
+		fmt.Fprintf(stdout, "receipt: %s\n", record.DecisionReceiptPath)
+		if record.ApprovalCommand != "" {
+			fmt.Fprintln(stdout, "approve:")
+			fmt.Fprintf(stdout, "  %s\n", record.ApprovalCommand)
+		}
+		return exitCode
+	}
 	fmt.Fprintf(stdout, "MCP authorization verdict=%s reason=%s record=%s\n", record.Verdict, record.ReasonCode, record.RecordID)
 	return exitCode
+}
+
+func mcpApprovalCommand(serverID, toolName, effect string) string {
+	parts := []string{
+		"helm-ai-kernel mcp approve",
+		"--server-id " + shellToken(serverID),
+		"--tools " + shellDoubleQuote(toolName),
+		"--ttl 15m",
+		"--reason " + shellQuote("read-only repo inspection for local dev"),
+	}
+	if effect != "" && effect != "read" {
+		parts = append(parts[:3], append([]string{"--effects " + shellToken(effect)}, parts[3:]...)...)
+	}
+	return strings.Join(parts, " ")
+}
+
+func shellToken(value string) string {
+	if value == "" || strings.ContainsAny(value, " \t\n'\"\\$&|;()<>*?[]{}!") {
+		return shellQuote(value)
+	}
+	return value
+}
+
+func shellDoubleQuote(value string) string {
+	escaped := strings.ReplaceAll(value, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+	escaped = strings.ReplaceAll(escaped, `$`, `\$`)
+	escaped = strings.ReplaceAll(escaped, "`", "\\`")
+	return `"` + escaped + `"`
+}
+
+func mcpEscalationReason(record contracts.ExecutionBoundaryRecord) string {
+	if record.ReasonCode == contracts.ReasonApprovalRequired {
+		return "unknown MCP server requires approval"
+	}
+	if record.ReasonCode == contracts.ReasonSchemaViolation {
+		return "MCP tool schema requires approval or pinning"
+	}
+	if record.ReasonCode != "" {
+		return string(record.ReasonCode)
+	}
+	return "MCP action requires approval"
 }
 
 func runSandboxProfiles(args []string, stdout, stderr io.Writer) int {

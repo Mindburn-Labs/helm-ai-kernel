@@ -68,6 +68,8 @@ func TestRunMCPApproveJSON(t *testing.T) {
 		"--server-id", "srv-1",
 		"--approver", "user:alice",
 		"--receipt-id", "approval-r1",
+		"--tools", "file_read",
+		"--reason", "test approval",
 		"--json",
 	}, &stdout, &stderr)
 	if code != 0 {
@@ -82,6 +84,19 @@ func TestRunMCPApproveJSON(t *testing.T) {
 	}
 	if record["approval_receipt_id"] != "approval-r1" {
 		t.Fatalf("approval receipt = %v", record["approval_receipt_id"])
+	}
+}
+
+func TestRunMCPApproveRejectsUnsafeScopes(t *testing.T) {
+	for _, args := range [][]string{
+		{"--server-id", "srv-wildcard", "--tools", "*", "--reason", "too broad"},
+		{"--server-id", "srv-write", "--tools", "deploy", "--effects", "side_effect", "--ttl", "1h", "--reason", "too long"},
+	} {
+		var stdout, stderr bytes.Buffer
+		code := runMCPApprove(args, &stdout, &stderr)
+		if code != 2 {
+			t.Fatalf("args %v exit code = %d stdout=%s stderr=%s", args, code, stdout.String(), stderr.String())
+		}
 	}
 }
 
@@ -152,7 +167,7 @@ func TestRunBoundaryStatusJSON(t *testing.T) {
 	}
 }
 
-func TestRunMCPAuthorizeCallDenyJSON(t *testing.T) {
+func TestRunMCPAuthorizeCallEscalateJSON(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runMCPAuthorizeCall([]string{
 		"--server-id", "srv-1",
@@ -166,15 +181,45 @@ func TestRunMCPAuthorizeCallDenyJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &record); err != nil {
 		t.Fatalf("parse json: %v\n%s", err, stdout.String())
 	}
-	if record["verdict"] != "DENY" {
+	if record["verdict"] != "ESCALATE" {
 		t.Fatalf("verdict = %v", record["verdict"])
+	}
+	if record["approval_command"] == "" {
+		t.Fatal("approval_command missing")
+	}
+	if record["decision_receipt_path"] == "" {
+		t.Fatal("decision_receipt_path missing")
 	}
 	if record["record_hash"] == "" {
 		t.Fatal("record_hash missing")
 	}
 }
 
-func TestRunMCPAuthorizeCallUnknownToolDenyJSON(t *testing.T) {
+func TestRunMCPAuthorizeCallEscalateHumanMessage(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runMCPAuthorizeCall([]string{
+		"--server-id", "shell-mcp-server",
+		"--tool-name", "pwd",
+	}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d stderr=%s", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"HELM ESCALATE",
+		"decision: mcp-boundary-",
+		"reason: unknown MCP server requires approval",
+		"receipt:",
+		"approve:",
+		"helm-ai-kernel mcp approve --server-id shell-mcp-server --tools \"pwd\" --ttl 15m --reason 'read-only repo inspection for local dev'",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestRunMCPAuthorizeCallUnknownToolEscalateJSON(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runMCPAuthorizeCall([]string{
 		"--server-id", "srv-cli-unknown-tool",
@@ -189,12 +234,12 @@ func TestRunMCPAuthorizeCallUnknownToolDenyJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &record); err != nil {
 		t.Fatalf("parse json: %v\n%s", err, stdout.String())
 	}
-	if record["verdict"] != "DENY" {
+	if record["verdict"] != "ESCALATE" {
 		t.Fatalf("verdict = %v", record["verdict"])
 	}
 }
 
-func TestRunMCPAuthorizeCallMissingSchemaPinDenyJSON(t *testing.T) {
+func TestRunMCPAuthorizeCallMissingSchemaPinEscalateJSON(t *testing.T) {
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -218,7 +263,7 @@ func TestRunMCPAuthorizeCallMissingSchemaPinDenyJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &record); err != nil {
 		t.Fatalf("parse json: %v\n%s", err, stdout.String())
 	}
-	if record["verdict"] != "DENY" {
+	if record["verdict"] != "ESCALATE" {
 		t.Fatalf("verdict = %v", record["verdict"])
 	}
 }

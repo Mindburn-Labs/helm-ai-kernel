@@ -49,9 +49,9 @@
       "owner_doc_path": "README.md",
       "public_doc_slugs": [
         "index",
-        "source-map",
-        "security/release-security",
-        "changelog"
+        "reference/cli",
+        "verification",
+        "publication-policy"
       ],
       "rationale": "Top-level tracked files define install, release, contribution, governance, and security behavior without masking runtime trees behind a repository-wide wildcard.",
       "validation_commands": [
@@ -75,8 +75,8 @@
       ],
       "owner_doc_path": ".github/SURFACE.md",
       "public_doc_slugs": [
-        "source-map",
-        "security/release-security"
+        "reference/cli",
+        "publication-policy"
       ],
       "rationale": "CI and tooling are externally relevant as validation gates and release evidence, but individual workflow files remain source-owned.",
       "validation_commands": [
@@ -96,7 +96,7 @@
       "owner_doc_path": "api/openapi/README.md",
       "public_doc_slugs": [
         "reference/http-api",
-        "reference/execution-boundary"
+        "how-helm-works"
       ],
       "rationale": "The OpenAPI contract is a direct public reference surface and must stay tied to route parity tests and the HTTP API page.",
       "validation_commands": [
@@ -128,17 +128,10 @@
       ],
       "owner_doc_path": "protocols/README.md",
       "public_doc_slugs": [
-        "reference/protocols-and-schemas",
-        "reference/json-schemas",
+        "reference/http-api",
         "conformance",
-        "reference/execution-boundary",
-        "launchpad",
-        "launchpad/apps/openclaw",
-        "launchpad/apps/hermes",
-        "launchpad/apps/opencode",
-        "launchpad/apps/kilocode",
-        "launchpad/flow-catalog",
-        "skills/flow-catalog"
+        "verification",
+        "how-helm-works"
       ],
       "rationale": "Protocol and schema truth must be public and agent-readable, with detailed source ownership kept in protocol README files.",
       "validation_commands": [
@@ -163,7 +156,7 @@
       "owner_doc_path": "core/README.md",
       "public_doc_slugs": [
         "reference/cli",
-        "architecture"
+        "how-helm-works"
       ],
       "rationale": "Core build and benchmark files are runtime evidence, but they are not allowed to stand in for command, API, or package source ownership.",
       "validation_commands": [
@@ -183,7 +176,7 @@
       "owner_doc_path": "core/cmd/README.md",
       "public_doc_slugs": [
         "reference/cli",
-        "developer-journey",
+        "quickstart",
         "troubleshooting"
       ],
       "rationale": "The CLI is a first-class public runtime surface; flags and subcommands must be source-linked to the CLI reference rather than hidden behind core/**.",
@@ -231,7 +224,7 @@
       "owner_doc_path": "core/cmd/README.md",
       "public_doc_slugs": [
         "reference/http-api",
-        "reference/execution-boundary"
+        "how-helm-works"
       ],
       "rationale": "HTTP route behavior is enforceable at file-level granularity through the route registry, auth wrapper, handler files, and OpenAPI/SDK contract checks.",
       "validation_commands": [
@@ -260,7 +253,7 @@
       ],
       "owner_doc_path": "core/pkg/README.md",
       "public_doc_slugs": [
-        "reference/execution-boundary",
+        "how-helm-works",
         "reference/http-api",
         "conformance",
         "verification",
@@ -302,10 +295,9 @@
       ],
       "owner_doc_path": "core/pkg/README.md",
       "public_doc_slugs": [
-        "architecture",
-        "execution-security-model",
-        "reference/execution-boundary",
-        "reference/protocols-and-schemas"
+        "how-helm-works",
+        "guides/write-policies",
+        "reference/http-api"
       ],
       "rationale": "Kernel and policy packages back public runtime guarantees, but public docs should describe supported behavior through architecture, execution-boundary, and protocol references.",
       "validation_commands": [
@@ -359,8 +351,7 @@
       ],
       "owner_doc_path": "core/pkg/README.md",
       "public_doc_slugs": [
-        "architecture",
-        "source-map"
+        "how-helm-works"
       ],
       "rationale": "Remaining runtime libraries stay documented through owner docs and architecture/source-map pages without diluting the direct CLI/API/boundary rows.",
       "validation_commands": [
@@ -386,13 +377,9 @@
       ],
       "owner_doc_path": "examples/README.md",
       "public_doc_slugs": [
-        "developer-journey",
-        "deployment-and-examples",
-        "examples",
-        "deployment/kubernetes",
+        "quickstart",
         "sdks",
         "integrations/openai-compatible-proxy",
-        "integrations/codebase-memory-mcp",
         "integrations/mcp"
       ],
       "rationale": "Developers need install, SDK, framework, and deployment paths from the public docs, with examples and package docs as executable proof.",
@@ -413,9 +400,9 @@
       ],
       "owner_doc_path": "adapters/README.md",
       "public_doc_slugs": [
-        "developer-journey",
-        "deployment-and-examples",
-        "source-map"
+        "guides/protect-local-coding-agents",
+        "integrations/openai-compatible-proxy",
+        "integrations/mcp"
       ],
       "rationale": "Adapter code is integration proof material for external runtimes and must remain classified without promoting every adapter as a first-class runtime surface.",
       "validation_commands": [
@@ -453,9 +440,7 @@
       "owner_doc_path": "tests/conformance/README.md",
       "public_doc_slugs": [
         "conformance",
-        "verification",
-        "publishing",
-        "security/release-security"
+        "verification"
       ],
       "rationale": "Evidence and conformance material is public proof material; generated artifacts are linked through verification and publishing docs rather than duplicated.",
       "validation_commands": [
@@ -474,8 +459,7 @@
       ],
       "owner_doc_path": "docs/skills/FLOW_CATALOG.md",
       "public_doc_slugs": [
-        "skills/flow-catalog",
-        "compatibility"
+        "guides/write-policies"
       ],
       "rationale": "Skill packs are source-backed procedural guidance. Public docs expose the flow catalog and authority boundary while registry internals remain source-owned.",
       "validation_commands": [
@@ -495,34 +479,20 @@
       "owner_doc_path": "docs/README.md",
       "public_doc_slugs": [
         "index",
-        "community",
-        "ecosystem",
-        "source-map",
         "quickstart",
-        "compatibility",
-        "use-cases/mcp-execution-firewall",
-        "use-cases/ai-agent-security",
-        "use-cases/openai-compatible-ai-gateway-policy",
-        "use-cases/llm-audit-receipts",
-        "use-cases/agent-tool-call-governance",
-        "posts/why-ai-agents-need-an-execution-firewall",
-        "posts/mcp-quarantine-before-tool-dispatch",
-        "posts/receipts-beat-logs-for-agent-audit-trails",
-        "posts/how-to-fail-closed-on-agent-tool-calls",
-        "owasp-mcp-threat-mapping",
-        "integrations/microsoft-agent-governance-toolkit",
-        "security/owasp-agentic-top10-mapping",
-        "security/prompt-injection-watchlist-2026-04",
-        "compliance/nist-ai-agent-critical-infrastructure",
-        "compliance/eu-ai-act-high-risk-pack",
-        "compliance/nist-ai-rmf-iso-42001-crosswalk",
-        "kernel-scope",
-        "architecture/cognitive-firewall",
-        "architecture/eidas-qtsp",
-        "architecture/policy-languages",
-        "security/clawguard-taint-tracking",
-        "security/session-risk-memory",
-        "architecture/canonical-diagrams"
+        "guides/protect-local-coding-agents",
+        "how-helm-works",
+        "integrations/openai-compatible-proxy",
+        "integrations/mcp",
+        "guides/write-policies",
+        "verification",
+        "conformance",
+        "troubleshooting",
+        "reference/cli",
+        "reference/http-api",
+        "sdks",
+        "claim-boundaries",
+        "publication-policy"
       ],
       "rationale": "Docs files are source material for the public site and are checked through manifest, LLM, search, and source-inventory gates.",
       "validation_commands": [

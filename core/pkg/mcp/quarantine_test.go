@@ -34,6 +34,8 @@ func TestQuarantineRegistryApprovalRequiresReceipt(t *testing.T) {
 	_, err := registry.Approve(context.Background(), ApprovalDecision{
 		ServerID:   "srv-1",
 		ApproverID: "user:alice",
+		Reason:     "reviewed",
+		ToolNames:  []string{"read_file"},
 	})
 	if err == nil {
 		t.Fatal("approval without receipt should fail")
@@ -52,6 +54,9 @@ func TestQuarantineRegistryApprovedServerPassesUntilExpiry(t *testing.T) {
 		ApprovalReceiptID: "approval-r1",
 		ApprovedAt:        now,
 		ExpiresAt:         now.Add(time.Hour),
+		Reason:            "reviewed",
+		ToolNames:         []string{"read_file"},
+		Effects:           []string{"read"},
 	})
 	if err != nil {
 		t.Fatalf("approve: %v", err)
@@ -61,6 +66,12 @@ func TestQuarantineRegistryApprovedServerPassesUntilExpiry(t *testing.T) {
 	}
 	if err := registry.RequireApproved(context.Background(), "srv-1", now.Add(time.Minute)); err != nil {
 		t.Fatalf("approved server denied: %v", err)
+	}
+	if err := registry.RequireApprovedTool(context.Background(), "srv-1", "read_file", "read", now.Add(time.Minute)); err != nil {
+		t.Fatalf("approved tool denied: %v", err)
+	}
+	if err := registry.RequireApprovedTool(context.Background(), "srv-1", "write_file", "read", now.Add(time.Minute)); err == nil {
+		t.Fatal("unapproved tool should fail closed")
 	}
 	if err := registry.RequireApproved(context.Background(), "srv-1", now.Add(2*time.Hour)); err == nil {
 		t.Fatal("expired approval should fail closed")
@@ -83,6 +94,8 @@ func TestQuarantineRegistryRevokedServerDenied(t *testing.T) {
 		ServerID:          "srv-1",
 		ApproverID:        "user:alice",
 		ApprovalReceiptID: "approval-r1",
+		Reason:            "reviewed",
+		ToolNames:         []string{"read_file"},
 	}); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
@@ -158,6 +171,7 @@ func TestQuarantineRegistryLifecycleEdges(t *testing.T) {
 		ApprovalReceiptID: "receipt-a",
 		ApprovedAt:        now,
 		Reason:            "reviewed",
+		ToolNames:         []string{"read"},
 	})
 	if err != nil {
 		t.Fatalf("approve srv-a: %v", err)
@@ -200,6 +214,8 @@ func TestQuarantineRegistryLifecycleEdges(t *testing.T) {
 		ServerID:          "srv-b",
 		ApproverID:        "user:alice",
 		ApprovalReceiptID: "receipt-b",
+		Reason:            "reviewed",
+		ToolNames:         []string{"read"},
 	}); err == nil {
 		t.Fatal("revoked server should not be approvable")
 	}

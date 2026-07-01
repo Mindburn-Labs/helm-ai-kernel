@@ -15,6 +15,7 @@
         "verify-fixtures",
         "tcb-imports",
         "boundary-manifest",
+        "quantum-crypto-inventory",
         "python-sdk",
         "ts-sdk",
         "rust-sdk",
@@ -35,6 +36,7 @@
         "verify-fixtures",
         "tcb-imports",
         "boundary-manifest",
+        "quantum-crypto-inventory",
         "crucible",
         "go-race",
         "go-sdk",
@@ -66,6 +68,7 @@
         "verify-fixtures",
         "tcb-imports",
         "boundary-manifest",
+        "quantum-crypto-inventory",
         "crucible",
         "go-sdk",
         "python-sdk",
@@ -125,6 +128,7 @@
         "docker-smoke-hardening",
         "helm-smoke-hardening",
         "tla-tools-hardening",
+        "quantum-crypto-inventory",
         "secrets",
         "vuln-audit",
         "sbom",
@@ -318,6 +322,22 @@
         "protocols/**",
         "schemas/**",
         "tools/boundary/**"
+      ]
+    },
+    {
+      "id": "quantum-crypto-inventory",
+      "title": "Quantum crypto posture annotations",
+      "description": "quantum_posture: CI guard registration only; not a cryptographic control.",
+      "command": "make quantum-crypto-inventory",
+      "timeout_seconds": 120,
+      "paths": [
+        ".github/**",
+        "Makefile",
+        "core/**",
+        "deploy/**",
+        "protocols/**",
+        "scripts/**",
+        "sdk/**"
       ]
     },
     {

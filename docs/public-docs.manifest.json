@@ -64,6 +64,24 @@
       "sensitivity": "public"
     },
     {
+      "slug": "integrations/openclaw",
+      "title": "OpenClaw",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/openclaw.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/integrations/openclaw",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "integrations/hermes",
+      "title": "Hermes",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/hermes.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/integrations/hermes",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "guides/write-policies",
       "title": "Write Policies",
       "section": "guide",

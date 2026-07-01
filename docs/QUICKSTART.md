@@ -33,6 +33,7 @@ make build
 | Local proof | `helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs` |
 | Codex setup | `helm-ai-kernel setup codex --dry-run --json` |
 | Claude Code setup | `helm-ai-kernel setup claude-code --dry-run --json` |
+| OpenClaw / Hermes adapters | `helm-agent-integrations` wrapper helpers |
 | Agent risk scan | `helm-ai-kernel scan --path . --risk-envelope out/risk-envelope.json --preview out/risk-report.md` |
 | MCP approval loop | `mcp authorize-call`, `mcp approve`, `mcp revoke`, `mcp pending`, `mcp receipts` |
 | OpenAI proxy | `helm-ai-kernel proxy --port 9090` |

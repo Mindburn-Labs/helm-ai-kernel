@@ -7,6 +7,14 @@ each decision leaves a local receipt.
 HELM is not a competing coding agent. It evaluates the actions your agent wants
 to take.
 
+## Agent Adapters
+
+Codex and Claude Code use local setup hooks. OpenClaw and Hermes use adapter
+helpers from `helm-agent-integrations`:
+
+- [OpenClaw](/integrations/openclaw) normalizes skill calls before dispatch.
+- [Hermes](/integrations/hermes) normalizes tool proposals before dispatch.
+
 ## Install A Local Hook
 
 Inspect the writes first:

@@ -1,143 +1,39 @@
 ---
 title: HELM AI Kernel
-last_reviewed: 2026-06-30
+last_reviewed: 2026-07-01
 ---
 
-# HELM AI Kernel Developer Portal
+# HELM AI Kernel
 
-HELM AI Kernel is the open-source execution firewall for MCP and AI agents. The
-CLI gives developers a local kernel, policy bundle loader,
-OpenAI-compatible proxy path, MCP firewall, receipts, EvidencePacks, and
-offline verification.
-
-## Audience
-
-This page is for open-source developers, platform teams, security reviewers, and framework authors who need to integrate or inspect the HELM AI Kernel kernel directly.
-
-## Outcome
-
-After this page you should know which public HELM AI Kernel surface to use:
-
-- quickstart for a local boundary;
-- agent risk scan for a local, anonymized audit surface;
-- developer journey for end-to-end install, runtime, SDK, deployment, and verification coverage;
-- architecture for the trust and execution model;
-- CLI and SDKs for integration;
-- MCP and OpenAI-compatible proxy for agent frameworks;
-- conformance and verification for CI and audits;
-- compatibility docs for release consumers.
-
-## OSS Boundary Map
-
-```mermaid
-flowchart TD
-    subgraph Ingestion["1. Ingestion & Context Plane"]
-        Dev["Developer app"]
-        Proxy["OpenAI-compatible proxy"]
-        Agent["MCP or agent client"]
-        MCP["MCP integration"]
-        Kernel["HELM AI Kernel kernel"]
-    end
-
-    subgraph Evaluation["2. Evaluation & Policy Plane"]
-        Policy["Policy bundle"]
-    end
-
-    subgraph Ledger["4. Tamper-Evident Ledger Plane"]
-        Receipt["Receipt and evidence pack"]
-        Verify["Offline verifier"]
-    end
-
-    %% Operational Flow Edges
-    Dev --> Proxy
-    Agent --> MCP
-    Proxy --> Kernel
-    MCP --> Kernel
-    Kernel --> Policy
-    Kernel --> Receipt
-    Receipt --> Verify
-    Policy --> Verify
-
-    %% Premium Styling Rules
-    style Policy fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
-    style Receipt fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
-    style Verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
-```
-
-
-## Source Truth
-
-This portal is assembled from source-owned docs:
-
-- `docs/QUICKSTART.md`
-- `docs/DEVELOPER_JOURNEY.md`
-- `docs/ARCHITECTURE.md`
-- `docs/CONFORMANCE.md`
-- `docs/VERIFICATION.md`
-- `docs/COMPATIBILITY.md`
-- `docs/INTEGRATIONS/`
-- `docs/security/`
-- `docs/compliance/`
-
-The code, command output, and verification artifacts override marketing language. If a doc claim cannot be mapped to a source file, command, or artifact, remove or qualify it.
+HELM is a local execution firewall for AI agents. Start with a denied-action
+proof, then choose an integration or reference path.
 
 ## Start Here
 
-1. Run the local quickstart: [Quickstart](QUICKSTART.md).
-2. Run the local anonymized audit: [Agent Risk Scan](reference/agent-risk-scan.md).
-3. Try MCP quarantine with `bash scripts/launch/demo-mcp.sh`.
-4. Verify receipt tamper failure with `bash scripts/launch/demo-proof.sh`.
-5. Use the complete source-backed path: [Developer Journey](DEVELOPER_JOURNEY.md).
-6. Read the execution model: [Architecture](ARCHITECTURE.md).
-7. Pick an integration:
-   - [OpenAI-compatible proxy](INTEGRATIONS/openai_baseurl.md)
-   - [MCP integration](INTEGRATIONS/mcp.md)
-   - [Codebase Memory MCP integration](INTEGRATIONS/codebase_memory_mcp.md)
-   - [Highflame ZeroID Integration](INTEGRATIONS/zeroid.md)
-   - [Vaultak State Transaction Bridge](INTEGRATIONS/vaultak.md)
-   - [BGT Labs Sentinel Authorization Gateway](INTEGRATIONS/sentinel.md)
-   - [SDK index](sdks/00_INDEX.md)
-8. Verify an output: [Verification](VERIFICATION.md).
-9. Add conformance checks: [Conformance](CONFORMANCE.md).
+1. Run [Quickstart](QUICKSTART.md) for the local proof path.
+2. Add HELM to [local coding agents](quickstart/workstation-governance.md).
+3. Read [How HELM works](HOW_HELM_WORKS.md).
 
-## Interfaces
+## Use HELM
 
-| Interface | Use When | Public Doc |
-| --- | --- | --- |
-| CLI | You want local serving, policy loading, receipts, or verification commands. | [Quickstart](QUICKSTART.md) |
-| Agent Risk Scan | You want a local anonymized scan before upload or enforcement. | [Agent Risk Scan](reference/agent-risk-scan.md) |
-| OpenAI-compatible proxy | You have an existing OpenAI-style client and want a small integration diff. | [Proxy integration](INTEGRATIONS/openai_baseurl.md) |
-| MCP | You are exposing governed tools to MCP-capable clients. | [MCP integration](INTEGRATIONS/mcp.md) |
-| Codebase Memory MCP | You want local read/query code intelligence before editing HELM source. | [Codebase Memory MCP integration](INTEGRATIONS/codebase_memory_mcp.md) |
-| SDKs | You need typed wrappers or generated examples. | [SDK index](sdks/00_INDEX.md) |
-| Verifier | You need replayable evidence independent of the model provider. | [Verification](VERIFICATION.md) |
+- [OpenAI-compatible proxy](INTEGRATIONS/openai_baseurl.md)
+- [MCP integration](INTEGRATIONS/mcp.md)
+- [Policy examples](architecture/policy-languages.md)
 
-## Trust and Compliance
+## Verify
 
-HELM AI Kernel docs separate implementation security from compliance mapping:
+- [Verification](VERIFICATION.md)
+- [Conformance](CONFORMANCE.md)
+- [Troubleshooting](TROUBLESHOOTING.md)
 
-- [Execution Security Model](EXECUTION_SECURITY_MODEL.md) describes containment, policy evaluation, receipts, and evidence.
-- [OWASP MCP Threat Mapping](OWASP_MCP_THREAT_MAPPING.md) maps MCP-specific risks to HELM controls.
-- [OWASP Agentic Top 10 Mapping](security/owasp-agentic-top10-coverage.md) maps agentic failure modes to boundary controls.
-- [NIST AI RMF to ISO 42001 Crosswalk](compliance/nist-ai-rmf-iso-42001-crosswalk.md) explains how reference packs can support operator evidence without claiming certification.
+## Reference
 
-## Compatibility and Publishing
+- [CLI reference](reference/cli.md)
+- [HTTP API reference](reference/http-api.md)
+- [SDKs](sdks/00_INDEX.md)
 
-Use [Compatibility](COMPATIBILITY.md) before relying on a public surface. The
-docs intentionally distinguish retained compatibility paths from preferred paths
-so agents and humans can choose the least surprising integration.
+## Public Boundary
 
-## Troubleshooting
-
-| Problem | Where to Go |
-| --- | --- |
-| Local proxy starts but receipts are missing | [Troubleshooting](TROUBLESHOOTING.md) and [Proxy integration](INTEGRATIONS/openai_baseurl.md) |
-| A bundle does not verify | [Verification](VERIFICATION.md) |
-| A framework adapter behaves differently from direct CLI use | [Compatibility](COMPATIBILITY.md) |
-| A security reviewer asks what is in the trust boundary | [Execution Security Model](EXECUTION_SECURITY_MODEL.md) |
-
-## Support Path
-
-For bugs, include the HELM version, policy bundle hash, command used, receipt ID
-or bundle path, and verifier output. Do not include provider keys, private
-prompts, private endpoints, or unredacted sensitive receipts.
+The public docs describe HELM AI Kernel only. They do not claim hosted
+Enterprise availability, buyer rollout, regulatory certification, paid account
+activation, or broad operating-system control.

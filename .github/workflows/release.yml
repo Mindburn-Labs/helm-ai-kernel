@@ -1,5 +1,8 @@
 name: Release
 
+# quantum_posture: release workflow orchestrates existing signature and
+# attestation publication; it does not implement cryptographic controls.
+
 on:
   push:
     tags: ["v*"]

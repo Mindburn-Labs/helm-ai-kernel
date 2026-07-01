@@ -1,5 +1,8 @@
 # Release Tooling
 
+<!-- quantum_posture: release tooling docs mention signatures and bundles but
+do not implement cryptographic controls. -->
+
 Release scripts are local helpers used by Makefile targets and GitHub Actions.
 They are source truth for what the repository can generate, not proof that a
 specific GitHub release attached a matching asset.

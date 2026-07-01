@@ -1,6 +1,6 @@
 ---
 title: Quantum Posture
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-02
 ---
 
 # Quantum Posture
@@ -45,6 +45,24 @@ separate checks:
 
 Hashing and symmetric encryption are separate primitives. The urgent migration
 surface is public-key signing and key agreement, not SHA-256 receipt hashes.
+
+## Public Web Boundary
+
+The public Mindburn/HELM web properties are not evidence that every transport,
+identity, origin, and external-service edge is post-quantum protected. On
+2026-07-02, `mindburn.org` and `helm.docs.mindburn.org` both negotiated the
+TLS 1.3 group
+`X25519MLKEM768` when tested with an OpenSSL 3.6 client that offered that
+group. That proves PQ-hybrid visitor-to-Cloudflare key agreement for clients
+that support it.
+
+The same test showed classical ECDSA certificate authentication
+(`ecdsa_secp256r1_sha256`). Cloudflare's dashboard also did not show a Custom
+Origin Trust Store entry or uploaded Authenticated Origin Pulls certificate for
+the zone. Do not describe the public website, docs host, or origin path as
+having post-quantum authentication until Cloudflare visitor-edge authentication
+or origin ML-DSA COTS/AOP is configured and verified fail-closed against
+classical downgrade.
 
 ## Verify The Claim
 

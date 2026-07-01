@@ -166,7 +166,7 @@ func VerifyReceiptRequiredProfile(edPubHex, mldsaPubHex string, r *contracts.Rec
 	}
 
 	profile = ReceiptSignatureProfile(r.Signature)
-	if profile != required {
+	if required == ReceiptProfileHybrid && profile != ReceiptProfileHybrid {
 		return profile, false, fmt.Errorf("receipt profile %q does not satisfy required profile %q", profile, required)
 	}
 	return VerifyReceiptProfile(edPubHex, mldsaPubHex, r)

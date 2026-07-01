@@ -37,6 +37,7 @@ PROTECTED_DIRS=(
   echo "# Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "# Commit: $(git rev-parse HEAD)"
   echo "# Format: SHA256  PATH"
+  echo "# quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control."
   echo "#"
   for dir in "${PROTECTED_DIRS[@]}"; do
     if [ -d "$dir" ]; then

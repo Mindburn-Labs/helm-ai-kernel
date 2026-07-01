@@ -240,10 +240,15 @@ func TestReceiptPQHybridProfileConfusion(t *testing.T) {
 		t.Fatalf("hybrid receipt without PQ key must fail closed (valid=%v err=%v)", valid, err)
 	}
 
+	profile, valid, err := VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, ReceiptProfileClassical)
+	if err != nil || !valid || profile != ReceiptProfileHybrid {
+		t.Fatalf("classical-required verification should accept valid hybrid receipt (profile=%q valid=%v err=%v)", profile, valid, err)
+	}
+
 	// Classical receipt presented where hybrid components exist stays valid
 	// under the classical profile (no retroactive invalidation).
 	receipt.Signature = fixture.Vectors[4].Signature // classical_valid
-	profile, valid, err := VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt)
+	profile, valid, err = VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt)
 	if err != nil || !valid || profile != ReceiptProfileClassical {
 		t.Fatalf("classical receipt must remain valid (profile=%q valid=%v err=%v)", profile, valid, err)
 	}

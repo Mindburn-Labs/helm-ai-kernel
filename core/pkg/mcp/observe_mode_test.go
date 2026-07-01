@@ -25,8 +25,8 @@ func TestObserveGrantLabelsRecordAndPermitsShadowDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
-	if record.Verdict != contracts.VerdictDeny {
-		t.Fatalf("verdict = %s, want DENY (shadow mode must not change verdicts)", record.Verdict)
+	if record.Verdict != contracts.VerdictEscalate {
+		t.Fatalf("verdict = %s, want ESCALATE (shadow mode must not change verdicts)", record.Verdict)
 	}
 	if record.EnforcementMode != contracts.EnforcementModeShadow {
 		t.Fatalf("enforcement mode = %q, want shadow", record.EnforcementMode)
@@ -38,7 +38,7 @@ func TestObserveGrantLabelsRecordAndPermitsShadowDispatch(t *testing.T) {
 		t.Fatal("shadow records must still be sealed")
 	}
 	if !ShouldDispatch(record) {
-		t.Fatal("labeled shadow DENY record should permit dispatch")
+		t.Fatal("labeled shadow ESCALATE record should permit dispatch")
 	}
 }
 
@@ -63,7 +63,7 @@ func TestExpiredObserveGrantRestoresEnforcement(t *testing.T) {
 		t.Fatalf("enforcement mode = %q, want empty after expiry", record.EnforcementMode)
 	}
 	if ShouldDispatch(record) {
-		t.Fatal("expired grant must not permit DENY dispatch")
+		t.Fatal("expired grant must not permit ESCALATE dispatch")
 	}
 }
 

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "repo": "helm-ai-kernel",
   "local_repo_path": "helm-ai-kernel",
-  "display_name": "HELM AI Kernel",
+  "display_name": "HELM AI Kernel Public Docs",
   "docs_origin": {
     "canonical_host": "helm.docs.mindburn.org",
     "source_repo": "Mindburn-Labs/helm-ai-kernel",
@@ -11,8 +11,8 @@
   "documents": [
     {
       "slug": "index",
-      "title": "HELM AI Kernel",
-      "section": "helm-ai-kernel",
+      "title": "HELM documentation",
+      "section": "guide",
       "source_path": "docs/index.md",
       "docs_origin_hint": "helm.docs.mindburn.org",
       "access": "public",
@@ -21,18 +21,108 @@
     {
       "slug": "quickstart",
       "title": "Quickstart",
-      "section": "start-here",
+      "section": "guide",
       "source_path": "docs/QUICKSTART.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
+      "docs_origin_hint": "helm.docs.mindburn.org/quickstart",
       "access": "public",
       "sensitivity": "public"
     },
     {
       "slug": "guides/protect-local-coding-agents",
       "title": "Protect Local Coding Agents",
-      "section": "start-here",
+      "section": "guide",
       "source_path": "docs/quickstart/workstation-governance.md",
       "docs_origin_hint": "helm.docs.mindburn.org/guides/protect-local-coding-agents",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "how-helm-works",
+      "title": "How HELM Works",
+      "section": "guide",
+      "source_path": "docs/HOW_HELM_WORKS.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/how-helm-works",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "integrations/openai-compatible-proxy",
+      "title": "OpenAI Proxy",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/openai_baseurl.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/integrations/openai-compatible-proxy",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "integrations/mcp",
+      "title": "MCP",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/mcp.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/integrations/mcp",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "guides/write-policies",
+      "title": "Write Policies",
+      "section": "guide",
+      "source_path": "docs/architecture/policy-languages.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/guides/write-policies",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "verification",
+      "title": "Receipts",
+      "section": "verify",
+      "source_path": "docs/VERIFICATION.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/verification",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "conformance",
+      "title": "Conformance",
+      "section": "verify",
+      "source_path": "docs/CONFORMANCE.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/conformance",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "troubleshooting",
+      "title": "Troubleshooting",
+      "section": "verify",
+      "source_path": "docs/TROUBLESHOOTING.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/troubleshooting",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "reference/cli",
+      "title": "CLI",
+      "section": "reference",
+      "source_path": "docs/reference/cli.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/cli",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "reference/http-api",
+      "title": "HTTP API",
+      "section": "reference",
+      "source_path": "docs/reference/http-api.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/reference/http-api",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "sdks",
+      "title": "SDKs",
+      "section": "reference",
+      "source_path": "docs/sdks/00_INDEX.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/sdks",
       "access": "public",
       "sensitivity": "public"
     },
@@ -51,618 +141,6 @@
       "section": "supporting-material",
       "source_path": "docs/PUBLICATION_POLICY.md",
       "docs_origin_hint": "helm.docs.mindburn.org/publication-policy",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "how-helm-works",
-      "title": "How HELM Works",
-      "section": "concepts",
-      "source_path": "docs/HOW_HELM_WORKS.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/how-helm-works",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "developer-journey",
-      "title": "Developer Journey",
-      "section": "start-here",
-      "source_path": "docs/DEVELOPER_JOURNEY.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/developer-journey",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "guides/govern-mcp-tools",
-      "title": "Govern MCP Tools",
-      "section": "guides",
-      "source_path": "docs/guides/govern-mcp-tools.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/guides/govern-mcp-tools",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "guides/use-openai-compatible-proxy",
-      "title": "Use The OpenAI-Compatible Proxy",
-      "section": "guides",
-      "source_path": "docs/guides/use-openai-compatible-proxy.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/guides/use-openai-compatible-proxy",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "guides/export-verify-evidencepacks",
-      "title": "Export And Verify EvidencePacks",
-      "section": "guides",
-      "source_path": "docs/guides/export-verify-evidencepacks.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/guides/export-verify-evidencepacks",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "capabilities/signed-receipts",
-      "title": "Signed Receipts",
-      "section": "capabilities",
-      "source_path": "docs/capabilities/signed-receipts.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/capabilities/signed-receipts",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "capabilities/evidencepack-verification",
-      "title": "EvidencePack Verification",
-      "section": "capabilities",
-      "source_path": "docs/capabilities/evidencepack-verification.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/capabilities/evidencepack-verification",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "capabilities/policy-bundles",
-      "title": "Policy Bundles",
-      "section": "capabilities",
-      "source_path": "docs/capabilities/policy-bundles.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/capabilities/policy-bundles",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "community",
-      "title": "Community",
-      "section": "start-here",
-      "source_path": "COMMUNITY.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/community",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "ecosystem",
-      "title": "Ecosystem",
-      "section": "start-here",
-      "source_path": "docs/ECOSYSTEM.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/ecosystem",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "use-cases/mcp-execution-firewall",
-      "title": "MCP Tool Quarantine",
-      "section": "use-cases",
-      "source_path": "docs/use-cases/mcp-execution-firewall.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/use-cases/mcp-execution-firewall",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "use-cases/ai-agent-security",
-      "title": "AI Agent Security",
-      "section": "use-cases",
-      "source_path": "docs/use-cases/ai-agent-security.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/use-cases/ai-agent-security",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "use-cases/openai-compatible-ai-gateway-policy",
-      "title": "OpenAI-Compatible Execution Boundary",
-      "section": "use-cases",
-      "source_path": "docs/use-cases/openai-compatible-ai-gateway-policy.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/use-cases/openai-compatible-ai-gateway-policy",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "use-cases/llm-audit-receipts",
-      "title": "Signed Receipts for AI Agent Actions",
-      "section": "use-cases",
-      "source_path": "docs/use-cases/llm-audit-receipts.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/use-cases/llm-audit-receipts",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "use-cases/agent-tool-call-governance",
-      "title": "AI Agent Side-Effect Governance",
-      "section": "use-cases",
-      "source_path": "docs/use-cases/agent-tool-call-governance.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/use-cases/agent-tool-call-governance",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "posts/why-ai-agents-need-an-execution-firewall",
-      "title": "Why AI Agents Need an Execution Firewall",
-      "section": "posts",
-      "source_path": "docs/posts/why-ai-agents-need-an-execution-firewall.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/posts/why-ai-agents-need-an-execution-firewall",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "posts/mcp-quarantine-before-tool-dispatch",
-      "title": "MCP Quarantine Before Tool Dispatch",
-      "section": "posts",
-      "source_path": "docs/posts/mcp-quarantine-before-tool-dispatch.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/posts/mcp-quarantine-before-tool-dispatch",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "posts/receipts-beat-logs-for-agent-audit-trails",
-      "title": "Receipts Beat Logs for Agent Audit Trails",
-      "section": "posts",
-      "source_path": "docs/posts/receipts-beat-logs-for-agent-audit-trails.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/posts/receipts-beat-logs-for-agent-audit-trails",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "posts/how-to-fail-closed-on-agent-tool-calls",
-      "title": "How To Fail Closed on Agent Tool Calls",
-      "section": "posts",
-      "source_path": "docs/posts/how-to-fail-closed-on-agent-tool-calls.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/posts/how-to-fail-closed-on-agent-tool-calls",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "architecture",
-      "title": "Architecture",
-      "section": "start-here",
-      "source_path": "docs/ARCHITECTURE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "architecture/canonical-diagrams",
-      "title": "Canonical Diagrams",
-      "section": "architecture",
-      "source_path": "docs/architecture/canonical-diagrams.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/architecture/canonical-diagrams",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "conformance",
-      "title": "Conformance",
-      "section": "start-here",
-      "source_path": "docs/CONFORMANCE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "launchpad",
-      "title": "Launchpad",
-      "section": "start-here",
-      "source_path": "docs/LAUNCHPAD.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/launchpad",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "launchpad/apps/openclaw",
-      "title": "OpenClaw on HELM",
-      "section": "start-here",
-      "source_path": "docs/launchpad/apps/OPENCLAW.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/launchpad/apps/openclaw",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "launchpad/apps/hermes",
-      "title": "Hermes on HELM",
-      "section": "start-here",
-      "source_path": "docs/launchpad/apps/HERMES.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/launchpad/apps/hermes",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "launchpad/apps/opencode",
-      "title": "OpenCode on HELM",
-      "section": "start-here",
-      "source_path": "docs/launchpad/apps/OPENCODE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/launchpad/apps/opencode",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "launchpad/apps/kilocode",
-      "title": "Kilo Code on HELM",
-      "section": "start-here",
-      "source_path": "docs/launchpad/apps/KILOCODE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/launchpad/apps/kilocode",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "skills/flow-catalog",
-      "title": "Skill Packs Flow Catalog",
-      "section": "interfaces",
-      "source_path": "docs/skills/FLOW_CATALOG.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/skills/flow-catalog",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "launchpad/flow-catalog",
-      "title": "Launchpad Flow Catalog",
-      "section": "interfaces",
-      "source_path": "docs/launchpad/FLOW_CATALOG.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/launchpad/flow-catalog",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "verification",
-      "title": "Verification",
-      "section": "start-here",
-      "source_path": "docs/VERIFICATION.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "compatibility",
-      "title": "Compatibility",
-      "section": "start-here",
-      "source_path": "docs/COMPATIBILITY.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "publishing",
-      "title": "Publishing",
-      "section": "start-here",
-      "source_path": "docs/PUBLISHING.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "changelog",
-      "title": "HELM AI Kernel Changelog",
-      "section": "helm-ai-kernel",
-      "source_path": "CHANGELOG.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/changelog",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "execution-security-model",
-      "title": "Execution Security Model",
-      "section": "interfaces",
-      "source_path": "docs/EXECUTION_SECURITY_MODEL.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "owasp-mcp-threat-mapping",
-      "title": "OWASP MCP Threat Mapping",
-      "section": "interfaces",
-      "source_path": "docs/OWASP_MCP_THREAT_MAPPING.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "sdks",
-      "title": "SDK Index",
-      "section": "interfaces",
-      "source_path": "docs/sdks/00_INDEX.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "troubleshooting",
-      "title": "Troubleshooting",
-      "section": "supporting-material",
-      "source_path": "docs/TROUBLESHOOTING.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "integrations/openai-compatible-proxy",
-      "title": "OpenAI-Compatible Proxy Integration",
-      "section": "integrations",
-      "source_path": "docs/INTEGRATIONS/openai_baseurl.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "integrations/claude-code",
-      "title": "Claude Code Integration",
-      "section": "integrations",
-      "source_path": "docs/INTEGRATIONS/claude-code.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/integrations/claude-code",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "integrations/codex",
-      "title": "Codex Integration",
-      "section": "integrations",
-      "source_path": "docs/INTEGRATIONS/codex.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/integrations/codex",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "integrations/cursor",
-      "title": "Cursor Integration",
-      "section": "integrations",
-      "source_path": "docs/INTEGRATIONS/cursor.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/integrations/cursor",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "integrations/vscode",
-      "title": "VS Code Integration",
-      "section": "integrations",
-      "source_path": "docs/INTEGRATIONS/vscode.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/integrations/vscode",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "integrations/windsurf",
-      "title": "Windsurf Integration",
-      "section": "integrations",
-      "source_path": "docs/INTEGRATIONS/windsurf.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/integrations/windsurf",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "integrations/mcp",
-      "title": "MCP Integration",
-      "section": "integrations",
-      "source_path": "docs/INTEGRATIONS/mcp.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "integrations/codebase-memory-mcp",
-      "title": "Codebase Memory MCP Integration",
-      "section": "integrations",
-      "source_path": "docs/INTEGRATIONS/codebase_memory_mcp.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "integrations/microsoft-agent-governance-toolkit",
-      "title": "Microsoft Agent Governance Toolkit Coexistence",
-      "section": "integrations",
-      "source_path": "docs/INTEGRATIONS/microsoft_agent_governance_toolkit.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "security/owasp-agentic-top10-mapping",
-      "title": "OWASP Agentic Top 10 Mapping",
-      "section": "security",
-      "source_path": "docs/security/owasp-agentic-top10-coverage.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "security/prompt-injection-watchlist-2026-04",
-      "title": "Prompt Injection Watchlist - April 2026",
-      "section": "security",
-      "source_path": "docs/security/prompt-injection-watchlist-2026-04.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "compliance/nist-ai-agent-critical-infrastructure",
-      "title": "NIST AI Agent Critical Infrastructure Alignment",
-      "section": "compliance",
-      "source_path": "docs/compliance/nist-ai-agent-critical-infrastructure.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "compliance/eu-ai-act-high-risk-pack",
-      "title": "EU AI Act High-Risk Pack",
-      "section": "compliance",
-      "source_path": "docs/compliance/eu-ai-act-high-risk-pack.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "compliance/nist-ai-rmf-iso-42001-crosswalk",
-      "title": "NIST AI RMF to ISO 42001 Crosswalk",
-      "section": "compliance",
-      "source_path": "docs/compliance/nist-ai-rmf-iso-42001-crosswalk.md",
-      "docs_origin_hint": "helm.docs.mindburn.org",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "source-map",
-      "title": "Developer Surface Map",
-      "section": "helm-ai-kernel",
-      "source_path": "docs/DEVELOPER_SURFACE_MAP.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/source-map",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "kernel-scope",
-      "title": "Kernel Scope",
-      "section": "helm-ai-kernel",
-      "source_path": "docs/KERNEL_SCOPE.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/kernel-scope",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "deployment-and-examples",
-      "title": "Deployment and Examples",
-      "section": "deployment",
-      "source_path": "docs/DEPLOYMENT_AND_EXAMPLES.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/deployment-and-examples",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "examples",
-      "title": "HELM AI Kernel Examples Matrix",
-      "section": "deployment",
-      "source_path": "docs/EXAMPLES.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/examples",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "deployment/kubernetes",
-      "title": "Kubernetes Deployment",
-      "section": "deployment",
-      "source_path": "docs/KUBERNETES_DEPLOYMENT.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/deployment/kubernetes",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "reference/cli",
-      "title": "HELM AI Kernel CLI Reference",
-      "section": "reference",
-      "source_path": "docs/reference/cli.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/reference/cli",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "reference/agent-risk-scan",
-      "title": "Agent Risk Scan",
-      "section": "reference",
-      "source_path": "docs/reference/agent-risk-scan.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/reference/agent-risk-scan",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "reference/http-api",
-      "title": "HELM AI Kernel HTTP API Reference",
-      "section": "reference",
-      "source_path": "docs/reference/http-api.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/reference/http-api",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "reference/execution-boundary",
-      "title": "Execution Boundary Reference",
-      "section": "reference",
-      "source_path": "docs/reference/execution-boundary.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/reference/execution-boundary",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "reference/json-schemas",
-      "title": "HELM AI Kernel JSON Schema Reference",
-      "section": "reference",
-      "source_path": "docs/reference/json-schemas.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/reference/json-schemas",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "reference/protocols-and-schemas",
-      "title": "Protocols and Schemas",
-      "section": "reference",
-      "source_path": "docs/REFERENCE_PROTOCOLS.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/reference/protocols-and-schemas",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "architecture/cognitive-firewall",
-      "title": "Cognitive Firewall Pattern",
-      "section": "architecture",
-      "source_path": "docs/architecture/cognitive-firewall.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/architecture/cognitive-firewall",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "architecture/eidas-qtsp",
-      "title": "eIDAS QTSP Anchoring",
-      "section": "architecture",
-      "source_path": "docs/architecture/eidas-qtsp.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/architecture/eidas-qtsp",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "architecture/policy-languages",
-      "title": "Policy Languages",
-      "section": "architecture",
-      "source_path": "docs/architecture/policy-languages.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/architecture/policy-languages",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "security/clawguard-taint-tracking",
-      "title": "ClawGuard Taint Tracking",
-      "section": "security",
-      "source_path": "docs/security/clawguard-taint-tracking.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/security/clawguard-taint-tracking",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "security/session-risk-memory",
-      "title": "Session Risk Memory",
-      "section": "security",
-      "source_path": "docs/security/session-risk-memory.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/security/session-risk-memory",
-      "access": "public",
-      "sensitivity": "public"
-    },
-    {
-      "slug": "security/release-security",
-      "title": "Release and Security Evidence",
-      "section": "security",
-      "source_path": "docs/RELEASE_SECURITY.md",
-      "docs_origin_hint": "helm.docs.mindburn.org/security/release-security",
       "access": "public",
       "sensitivity": "public"
     }

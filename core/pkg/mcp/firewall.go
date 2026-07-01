@@ -43,6 +43,7 @@ func (g *ObserveGrant) Active(now time.Time) bool {
 type ToolCallAuthorization struct {
 	ServerID         string
 	ToolName         string
+	Effect           string
 	ArgsHash         string
 	GrantedScopes    []string
 	PinnedSchemaHash string
@@ -86,9 +87,14 @@ func (f *ExecutionFirewall) FilterVisibleTools(ctx context.Context, serverID str
 }
 
 func (f *ExecutionFirewall) AuthorizeToolCall(ctx context.Context, req ToolCallAuthorization) (contracts.ExecutionBoundaryRecord, error) {
+	effect := req.Effect
+	if effect == "" {
+		effect = "read"
+	}
 	record := contracts.ExecutionBoundaryRecord{
 		RecordID:      fmt.Sprintf("mcp-boundary-%d", f.now().UnixNano()),
 		ToolName:      req.ToolName,
+		ToolEffect:    effect,
 		ArgsHash:      req.ArgsHash,
 		PolicyEpoch:   f.PolicyEpoch,
 		MCPServerID:   req.ServerID,
@@ -102,7 +108,19 @@ func (f *ExecutionFirewall) AuthorizeToolCall(ctx context.Context, req ToolCallA
 		record.ObserveGrantID = f.Observe.GrantID
 	}
 
-	if err := f.Quarantine.RequireApproved(ctx, req.ServerID, f.now()); err != nil {
+	now := f.now()
+	if err := f.Quarantine.RequireApproved(ctx, req.ServerID, now); err != nil {
+		record.Verdict = contracts.VerdictEscalate
+		record.ReasonCode = contracts.ReasonApprovalRequired
+		if existing, ok := f.Quarantine.Get(ctx, req.ServerID); ok {
+			if existing.State == QuarantineRevoked || existing.State == QuarantineExpired || (!existing.ExpiresAt.IsZero() && now.After(existing.ExpiresAt)) {
+				record.Verdict = contracts.VerdictDeny
+				record.ReasonCode = contracts.ReasonApprovalTimeout
+			}
+		}
+		return record.Seal()
+	}
+	if err := f.Quarantine.RequireApprovedTool(ctx, req.ServerID, req.ToolName, effect, now); err != nil {
 		record.Verdict = contracts.VerdictDeny
 		record.ReasonCode = contracts.ReasonApprovalRequired
 		return record.Seal()
@@ -110,7 +128,7 @@ func (f *ExecutionFirewall) AuthorizeToolCall(ctx context.Context, req ToolCallA
 
 	tool, ok := f.Catalog.Lookup(req.ToolName)
 	if !ok || (tool.ServerID != "" && tool.ServerID != req.ServerID) {
-		record.Verdict = contracts.VerdictDeny
+		record.Verdict = contracts.VerdictEscalate
 		record.ReasonCode = contracts.ReasonSchemaViolation
 		return record.Seal()
 	}
@@ -128,7 +146,7 @@ func (f *ExecutionFirewall) AuthorizeToolCall(ctx context.Context, req ToolCallA
 		return record.Seal()
 	}
 	if f.RequirePinnedSchema && req.PinnedSchemaHash == "" {
-		record.Verdict = contracts.VerdictDeny
+		record.Verdict = contracts.VerdictEscalate
 		record.ReasonCode = contracts.ReasonSchemaViolation
 		return record.Seal()
 	}

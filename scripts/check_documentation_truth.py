@@ -47,7 +47,7 @@ FORBIDDEN_SOURCE_INVENTORY_PATTERNS = {'*', 'core/**', 'api/**'}
 REQUIRED_RUNTIME_REFERENCE_SLUGS = {
     'reference/cli',
     'reference/http-api',
-    'reference/execution-boundary',
+    'how-helm-works',
 }
 CANONICAL_REPO_RENAMES = {
     'helm' + '-oss': 'helm-ai-kernel',

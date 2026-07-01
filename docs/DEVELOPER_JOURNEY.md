@@ -60,6 +60,15 @@ Java SDK consumers can use the current Maven coordinate:
 </dependency>
 ```
 
+Current source release target: `v0.5.18`.
+Release assets are attached at
+`https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.18`,
+including `v0.5.18.openvex.json` and `v0.5.18.json`.
+
+Go SDK consumers can pin
+`github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.5.18`; the source subdir tag
+is `sdk/go/v0.5.18`.
+
 ## Local Boundary
 
 ```bash

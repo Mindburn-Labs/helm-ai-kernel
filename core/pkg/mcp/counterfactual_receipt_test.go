@@ -29,8 +29,8 @@ func TestObserveModeEmitsCounterfactualReceipt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
-	if record.Verdict != contracts.VerdictDeny {
-		t.Fatalf("verdict = %s, want DENY", record.Verdict)
+	if record.Verdict != contracts.VerdictEscalate {
+		t.Fatalf("verdict = %s, want ESCALATE", record.Verdict)
 	}
 
 	cf, err := firewall.CounterfactualReceiptFor(record)
@@ -40,8 +40,8 @@ func TestObserveModeEmitsCounterfactualReceipt(t *testing.T) {
 	if cf.Enforcement != contracts.EnforcementCounterfactual {
 		t.Fatalf("enforcement = %q, want counterfactual", cf.Enforcement)
 	}
-	if cf.WouldHaveVerdict != contracts.VerdictDeny {
-		t.Fatalf("would-have verdict = %q, want DENY", cf.WouldHaveVerdict)
+	if cf.WouldHaveVerdict != contracts.VerdictEscalate {
+		t.Fatalf("would-have verdict = %q, want ESCALATE", cf.WouldHaveVerdict)
 	}
 	if cf.ReasonCode != record.ReasonCode {
 		t.Fatalf("reason code = %q, want %q", cf.ReasonCode, record.ReasonCode)

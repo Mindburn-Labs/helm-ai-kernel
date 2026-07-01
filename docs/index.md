@@ -1,98 +1,47 @@
 ---
-title: HELM AI Kernel
+title: HELM documentation
 last_reviewed: 2026-07-01
 ---
 
-# HELM AI Kernel
+# HELM documentation
 
-HELM AI Kernel is a local execution firewall for AI agents. Start with a
-denied-action proof, then choose an integration or reference path. A governed
-action returns `ALLOW`, `DENY`, or `ESCALATE` and leaves signed evidence that
-can be verified later.
+Block unsafe AI-agent actions before they run.
+
+HELM sits between an agent and a tool call:
+
+```text
+agent/tool requests action
+-> HELM evaluates before dispatch
+-> ALLOW: action runs
+-> DENY: action is blocked
+-> ESCALATE: action is blocked and a decision receipt is written
+```
+
+Run the local proof:
+
+```bash
+helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs
+```
+
+The proof writes a local EvidencePack with no dispatched side effects. It
+includes quarantined MCP servers, schema drift, missing approval receipts, and
+replay attempts.
 
 ## Start
 
-| Goal | Start here |
-| --- | --- |
-| Protect a local coding agent | [Quickstart](QUICKSTART.md) |
-| Understand the local proof path | [How HELM works](HOW_HELM_WORKS.md) |
-| Scan an agent before enforcement | [Agent Risk Scan](reference/agent-risk-scan.md) |
-| Install the CLI | [Installation](DEVELOPER_JOURNEY.md#install) |
-| Call the HTTP API | [API introduction](reference/http-api.md) |
-| Use an SDK | [SDKs](sdks/00_INDEX.md) |
-| Route MCP tools | [MCP integration](INTEGRATIONS/mcp.md) |
-| Use an OpenAI-compatible base URL | [OpenAI-compatible proxy](INTEGRATIONS/openai_baseurl.md) |
+- [Quickstart](QUICKSTART.md)
+- [Protect local coding agents](quickstart/workstation-governance.md)
+- [OpenAI proxy](INTEGRATIONS/openai_baseurl.md)
+- [MCP](INTEGRATIONS/mcp.md)
 
-## First Command
+## Verify
 
-```bash
-helm-ai-kernel setup codex --yes
-```
-
-For Claude Code:
-
-```bash
-helm-ai-kernel setup claude-code --yes
-```
-
-Both commands keep the proof local. They write draft policy material, configure
-the supported client integration, start the local Kernel path, and leave signed
-receipts for blocked actions.
-
-## Main Paths
-
-- [Quickstart](QUICKSTART.md) - first local denial and receipt verification.
-- [How HELM works](HOW_HELM_WORKS.md) - local decision path, receipts, and
-  verification boundary.
-- [Local coding agents](quickstart/workstation-governance.md) - add HELM to a
-  developer workstation.
-- [Agent Risk Scan](reference/agent-risk-scan.md) - local-first scan,
-  anonymized risk envelope, and EvidencePack path.
-- [Developer journey](DEVELOPER_JOURNEY.md) - choose the next path after the
-  first proof.
-- [Claude Code](INTEGRATIONS/claude-code.md) - one-command setup, status,
-  remove, and receipt verification.
-- [Codex](INTEGRATIONS/codex.md) - user or project-scoped setup for Codex.
-- [MCP tools](INTEGRATIONS/mcp.md) - wrap, quarantine, approve, and inspect MCP
-  tool calls.
-- [OpenAI-compatible proxy](INTEGRATIONS/openai_baseurl.md) - keep an
-  OpenAI-shaped client while moving enforcement into HELM.
-- [Verification](VERIFICATION.md) - verify receipts and EvidencePacks offline.
-- [Troubleshooting](TROUBLESHOOTING.md) - diagnose setup, ports, receipts, and
-  policy behavior.
-
-## Capabilities
-
-| Capability | What to read |
-| --- | --- |
-| Fail-closed execution | [Execution security model](EXECUTION_SECURITY_MODEL.md) |
-| MCP quarantine | [MCP tool quarantine](use-cases/mcp-execution-firewall.md) |
-| Signed receipts | [Signed receipts](capabilities/signed-receipts.md) |
-| EvidencePack verification | [EvidencePack verification](capabilities/evidencepack-verification.md) |
-| Agent Risk Scan | [Agent Risk Scan](reference/agent-risk-scan.md) |
-| Policy bundles | [Policy bundles](capabilities/policy-bundles.md) |
-| OpenAI-compatible proxy | [Proxy integration](INTEGRATIONS/openai_baseurl.md) |
+- [Receipts and EvidencePacks](VERIFICATION.md)
+- [Conformance](CONFORMANCE.md)
+- [Troubleshooting](TROUBLESHOOTING.md)
 
 ## Reference
 
-- [CLI reference](reference/cli.md)
-- [HTTP API reference](reference/http-api.md)
+- [CLI](reference/cli.md)
+- [HTTP API](reference/http-api.md)
 - [SDKs](sdks/00_INDEX.md)
-- [JSON schemas](reference/json-schemas.md)
-- [Protocols and schemas](reference/protocols-and-schemas.md)
-- [Conformance](CONFORMANCE.md)
-- [Compatibility](COMPATIBILITY.md)
-- [Publishing](PUBLISHING.md)
-
-## Public Boundary
-
-The public docs describe HELM AI Kernel only. They do not claim hosted
-Enterprise availability, buyer rollout, regulatory certification, paid account
-activation, or broad operating-system control.
-
-## Source Truth
-
-This site is built from source-owned docs in this repository. Runtime behavior
-is owned by `core/`, `api/openapi/helm.openapi.yaml`, SDK README files,
-examples, and verification tests. If a public claim cannot be tied to those
-sources, remove it or qualify it.

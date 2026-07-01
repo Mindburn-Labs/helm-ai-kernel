@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -32,20 +33,24 @@ const (
 // server. Unknown servers are not executable until an approval ceremony emits a
 // receipt and the registry transitions the record to approved.
 type ServerQuarantineRecord struct {
-	ServerID          string          `json:"server_id"`
-	Name              string          `json:"name,omitempty"`
-	Transport         string          `json:"transport,omitempty"`
-	Endpoint          string          `json:"endpoint,omitempty"`
-	ToolNames         []string        `json:"tool_names,omitempty"`
-	Risk              ServerRisk      `json:"risk"`
-	State             QuarantineState `json:"state"`
-	DiscoveredAt      time.Time       `json:"discovered_at"`
-	ApprovedAt        time.Time       `json:"approved_at,omitempty"`
-	ApprovedBy        string          `json:"approved_by,omitempty"`
-	ApprovalReceiptID string          `json:"approval_receipt_id,omitempty"`
-	RevokedAt         time.Time       `json:"revoked_at,omitempty"`
-	ExpiresAt         time.Time       `json:"expires_at,omitempty"`
-	Reason            string          `json:"reason,omitempty"`
+	ServerID              string          `json:"server_id"`
+	Name                  string          `json:"name,omitempty"`
+	Transport             string          `json:"transport,omitempty"`
+	Endpoint              string          `json:"endpoint,omitempty"`
+	ToolNames             []string        `json:"tool_names,omitempty"`
+	ApprovedToolNames     []string        `json:"approved_tool_names,omitempty"`
+	ApprovedEffects       []string        `json:"approved_effects,omitempty"`
+	Risk                  ServerRisk      `json:"risk"`
+	State                 QuarantineState `json:"state"`
+	DiscoveredAt          time.Time       `json:"discovered_at"`
+	ApprovedAt            time.Time       `json:"approved_at,omitempty"`
+	ApprovedBy            string          `json:"approved_by,omitempty"`
+	ApprovalReceiptID     string          `json:"approval_receipt_id,omitempty"`
+	ApprovalReceiptPath   string          `json:"approval_receipt_path,omitempty"`
+	RevokedAt             time.Time       `json:"revoked_at,omitempty"`
+	RevocationReceiptPath string          `json:"revocation_receipt_path,omitempty"`
+	ExpiresAt             time.Time       `json:"expires_at,omitempty"`
+	Reason                string          `json:"reason,omitempty"`
 }
 
 type DiscoverServerRequest struct {
@@ -67,6 +72,8 @@ type ApprovalDecision struct {
 	ApprovedAt        time.Time
 	ExpiresAt         time.Time
 	Reason            string
+	ToolNames         []string
+	Effects           []string
 }
 
 type QuarantineRegistry struct {
@@ -133,6 +140,20 @@ func (r *QuarantineRegistry) Approve(ctx context.Context, decision ApprovalDecis
 	if decision.ApprovalReceiptID == "" {
 		return ServerQuarantineRecord{}, fmt.Errorf("approval receipt id is required")
 	}
+	tools, err := normalizeApprovalScope(decision.ToolNames, "tool")
+	if err != nil {
+		return ServerQuarantineRecord{}, err
+	}
+	effects, err := normalizeApprovalScope(decision.Effects, "effect")
+	if err != nil {
+		return ServerQuarantineRecord{}, err
+	}
+	if len(effects) == 0 {
+		effects = []string{"read"}
+	}
+	if decision.Reason == "" {
+		return ServerQuarantineRecord{}, fmt.Errorf("approval reason is required")
+	}
 	now := decision.ApprovedAt
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -153,6 +174,8 @@ func (r *QuarantineRegistry) Approve(ctx context.Context, decision ApprovalDecis
 	record.ApprovalReceiptID = decision.ApprovalReceiptID
 	record.ExpiresAt = decision.ExpiresAt
 	record.Reason = decision.Reason
+	record.ApprovedToolNames = tools
+	record.ApprovedEffects = effects
 	r.records[decision.ServerID] = record
 	return record, nil
 }
@@ -198,6 +221,10 @@ func (r *QuarantineRegistry) List(ctx context.Context) []ServerQuarantineRecord 
 }
 
 func (r *QuarantineRegistry) RequireApproved(ctx context.Context, serverID string, now time.Time) error {
+	return r.RequireApprovedTool(ctx, serverID, "", "", now)
+}
+
+func (r *QuarantineRegistry) RequireApprovedTool(ctx context.Context, serverID, toolName, effect string, now time.Time) error {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -216,5 +243,44 @@ func (r *QuarantineRegistry) RequireApproved(ctx context.Context, serverID strin
 	if record.State != QuarantineApproved {
 		return fmt.Errorf("server %q is %s", serverID, record.State)
 	}
+	if toolName != "" && !scopeAllows(record.ApprovedToolNames, toolName) {
+		return fmt.Errorf("server %q approval does not include tool %q", serverID, toolName)
+	}
+	if effect != "" && !scopeAllows(record.ApprovedEffects, effect) {
+		return fmt.Errorf("server %q approval does not include effect %q", serverID, effect)
+	}
 	return nil
+}
+
+func normalizeApprovalScope(values []string, label string) ([]string, error) {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if value == "*" {
+			return nil, fmt.Errorf("%s wildcard approval is not allowed", label)
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	if label == "tool" && len(out) == 0 {
+		return nil, fmt.Errorf("approval tools are required")
+	}
+	return out, nil
+}
+
+func scopeAllows(allowed []string, value string) bool {
+	for _, item := range allowed {
+		if item == value {
+			return true
+		}
+	}
+	return false
 }

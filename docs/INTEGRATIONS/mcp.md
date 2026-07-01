@@ -1,22 +1,21 @@
 ---
-title: MCP Integration
-last_reviewed: 2026-06-29
+title: MCP
+last_reviewed: 2026-07-01
 ---
 
-# MCP Integration
+# MCP
 
-Route MCP tool calls through HELM so unknown servers, unknown tools, and
-unpinned schemas are quarantined before dispatch.
+Use HELM as a pre-dispatch firewall for MCP tool calls.
 
-## Quick Setup
-
-Start the local boundary:
-
-```bash
-helm-ai-kernel serve --policy ./release.high_risk.v3.toml
+```text
+tools/list -> visible tools are filtered
+tools/call -> HELM evaluates before dispatch
+ALLOW -> call upstream
+DENY -> block
+ESCALATE -> block, write receipt, show scoped approval command
 ```
 
-Wrap an upstream shell MCP server:
+## Wrap A Server
 
 ```bash
 helm-ai-kernel mcp wrap \
@@ -26,82 +25,88 @@ helm-ai-kernel mcp wrap \
   --json
 ```
 
-Print configuration for a client:
+Print or install client config:
 
 ```bash
 helm-ai-kernel mcp print-config --client codex
-```
-
-Claude Code has a direct installer:
-
-```bash
 helm-ai-kernel mcp install --client claude-code
 ```
 
-## Run The Maintained Demo
+## Authorize Before Dispatch
 
 ```bash
-./scripts/launch/demo-mcp.sh
+helm-ai-kernel mcp authorize-call \
+  --server-id shell-mcp-server \
+  --tool-name pwd
 ```
 
-The demo checks that unknown servers, unknown tools, and missing schema pins
-return `DENY` or `ESCALATE`; they do not dispatch to the fixture server.
+An unknown or unapproved server returns `ESCALATE`:
 
-## Receipt Inspection
+```text
+HELM ESCALATE
+decision: mcp-boundary-...
+reason: unknown MCP server requires approval
+receipt: ~/.helm-ai-kernel/receipts/mcp/...
+approve:
+  helm-ai-kernel mcp approve --server-id shell-mcp-server \
+    --tools "pwd" \
+    --ttl 15m \
+    --reason 'read-only repo inspection for local dev'
+```
+
+The action is not dispatched. Approval never resumes it automatically.
+
+## Approve A Narrow Scope
 
 ```bash
-helm-ai-kernel receipts tail --agent mcp-demo-agent --server http://127.0.0.1:7714
+helm-ai-kernel mcp approve \
+  --server-id shell-mcp-server \
+  --tools "pwd,ls,cat" \
+  --ttl 15m \
+  --reason "read-only repo inspection for local dev"
 ```
 
-Use the receipt ID or decision ID in support reports. Do not include provider
-keys, private prompts, or production tenant data.
+Approvals are local, receipt-backed, TTL-bound, and revocable. HELM rejects
+wildcard tool approvals and overlong side-effect approvals.
 
-## Policy Fixture
+For side-effect tools, approve the effect explicitly:
 
-The minimal shell fixture is
-`examples/launch/policies/shell_mcp_server_boundary.json`.
+```bash
+helm-ai-kernel mcp approve \
+  --server-id deploy-tools \
+  --tools deploy.preview \
+  --effects side_effect \
+  --ttl 15m \
+  --reason "preview deploy for local validation"
+```
 
-| Command class | Verdict | Reason |
-| --- | --- | --- |
-| `ls` | `ALLOW` | Read-only directory listing |
-| `pwd` | `ALLOW` | Read-only current-directory inspection |
-| `cat <path>` | `ALLOW` | Read-only file inspection |
-| `git status` | `ALLOW` | Read-only worktree status |
-| `rm -rf` and equivalent recursive force delete patterns | `DENY` | Destructive deletion |
-| `dd`, `mkfs`, and raw-device write patterns | `DENY` | Disk or filesystem destruction |
-| `git clean -f`, `git clean -fd`, `git clean -fdx`, `git clean --force` | `DENY` | Destructive worktree cleanup |
+## Revoke
 
-## OAuth Mode
+```bash
+helm-ai-kernel mcp revoke \
+  --server-id shell-mcp-server \
+  --reason "inspection finished"
+```
 
-`helm-ai-kernel mcp serve --auth oauth` supports production JWKS validation and
-the dev-only `HELM_OAUTH_BEARER_TOKEN` fallback.
+Revoked and expired grants fail closed on the next evaluation.
 
-| Variable | Purpose |
-| --- | --- |
-| `HELM_OAUTH_JWKS_URL` | JWKS endpoint used to verify bearer-token signatures |
-| `HELM_OAUTH_ISSUER` | Required `iss` claim |
-| `HELM_OAUTH_AUDIENCE` | Required `aud` claim |
-| `HELM_OAUTH_RESOURCE` | Required RFC 8707 resource indicator; defaults to `<base-url>/mcp` |
-| `HELM_OAUTH_SCOPES` | Scopes required before gateway entry |
+## Inspect
 
-Tool definitions can declare `required_scopes`. HELM surfaces them as
-`requiredScopes` in `tools/list` and enforces them again at execution time.
+```bash
+helm-ai-kernel mcp pending --json
+helm-ai-kernel mcp receipts --json
+helm-ai-kernel mcp get --server-id shell-mcp-server --json
+```
 
-## Debug
+Run the no-dispatch proof:
 
-| Symptom | First check |
-| --- | --- |
-| Client cannot see the MCP server | Re-run `helm-ai-kernel mcp print-config --client <client>` and compare the installed config. |
-| Tool is stuck quarantined | Inspect the server ID, schema hash, and approval receipt. |
-| Receipts are missing | Confirm the boundary is running on `127.0.0.1:7714` and tail receipts for the expected agent ID. |
-| OAuth calls fail | Check issuer, audience, resource, scopes, and token expiry. |
+```bash
+helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs
+```
 
-## Source Truth
+## What Still Blocks
 
-- `core/cmd/helm-ai-kernel/mcp_cmd.go`
-- `core/cmd/helm-ai-kernel/mcp_runtime.go`
-- `core/cmd/helm-ai-kernel/mcp_boundary_cmd.go`
-- `core/cmd/helm-ai-kernel/receipt_routes.go`
-- `scripts/launch/demo-mcp.sh`
-- `examples/launch/policies/shell_mcp_server_boundary.json`
-- `docs/use-cases/mcp-execution-firewall.md`
+HELM denies mismatched scopes, expired or revoked approvals, schema drift,
+side-effect scope mismatch, and policy-forbidden actions. Missing approval or
+unknown tool/server state escalates only when a developer can resolve it with a
+local scoped approval or schema review.

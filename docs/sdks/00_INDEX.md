@@ -39,7 +39,6 @@ flowchart TD
     style Verify fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
 ```
 
-
 ## Source Truth
 
 - `api/openapi/helm.openapi.yaml`

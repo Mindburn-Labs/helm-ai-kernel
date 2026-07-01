@@ -724,10 +724,12 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		var req struct {
-			ServerID          string `json:"server_id"`
-			ApproverID        string `json:"approver_id"`
-			ApprovalReceiptID string `json:"approval_receipt_id"`
-			Reason            string `json:"reason"`
+			ServerID          string   `json:"server_id"`
+			ApproverID        string   `json:"approver_id"`
+			ApprovalReceiptID string   `json:"approval_receipt_id"`
+			Reason            string   `json:"reason"`
+			ToolNames         []string `json:"tool_names"`
+			Effects           []string `json:"effects"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			api.WriteBadRequest(w, "Invalid MCP approval request")
@@ -739,6 +741,8 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			ApprovalReceiptID: req.ApprovalReceiptID,
 			ApprovedAt:        time.Now().UTC(),
 			Reason:            req.Reason,
+			ToolNames:         req.ToolNames,
+			Effects:           req.Effects,
 		})
 		if err != nil {
 			api.WriteBadRequest(w, err.Error())
@@ -773,9 +777,11 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			writeContractJSON(w, http.StatusOK, record)
 		case action == "approve" && r.Method == http.MethodPost:
 			var req struct {
-				ApproverID        string `json:"approver_id"`
-				ApprovalReceiptID string `json:"approval_receipt_id"`
-				Reason            string `json:"reason"`
+				ApproverID        string   `json:"approver_id"`
+				ApprovalReceiptID string   `json:"approval_receipt_id"`
+				Reason            string   `json:"reason"`
+				ToolNames         []string `json:"tool_names"`
+				Effects           []string `json:"effects"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				api.WriteBadRequest(w, "Invalid MCP approval request")
@@ -787,6 +793,8 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				ApprovalReceiptID: req.ApprovalReceiptID,
 				ApprovedAt:        time.Now().UTC(),
 				Reason:            req.Reason,
+				ToolNames:         req.ToolNames,
+				Effects:           req.Effects,
 			})
 			if err != nil {
 				api.WriteBadRequest(w, err.Error())
@@ -1362,6 +1370,8 @@ func hydrateMCPQuarantine(ctx context.Context, registry *mcppkg.QuarantineRegist
 					ApprovedAt:        record.ApprovedAt,
 					ExpiresAt:         record.ExpiresAt,
 					Reason:            record.Reason,
+					ToolNames:         record.ApprovedToolNames,
+					Effects:           record.ApprovedEffects,
 				})
 			}
 		case mcppkg.QuarantineRevoked:

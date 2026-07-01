@@ -2,7 +2,7 @@ openapi: "3.1.0"
 # quantum_posture: schema documents signature-related fields; crypto behavior lives in kernel implementation.
 info:
   title: HELM Kernel API
-  version: "0.5.19"
+  version: "0.5.20"
   description: |
     Deterministic execution kernel for AI tool calls.
     Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
@@ -4945,7 +4945,7 @@ components:
         workspace_id: { type: string }
         plan:
           type: string
-          enum: [free, individual, developer, team, scale, enterprise]
+          enum: [free, developer, team, scale, enterprise]
         plan_id: { type: string }
         edition: { type: string }
         deployment_mode: { type: string }
@@ -4963,7 +4963,7 @@ components:
         workspace_id: { type: string }
         plan:
           type: string
-          enum: [free, individual, developer, team, scale, enterprise]
+          enum: [free, developer, team, scale, enterprise]
         plan_id: { type: string }
         capabilities:
           $ref: '#/components/schemas/EntitlementCapabilities'

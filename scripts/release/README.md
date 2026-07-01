@@ -1,5 +1,8 @@
 # Release Tooling
 
+<!-- quantum_posture: release tooling docs mention signatures and bundles but
+do not implement cryptographic controls. -->
+
 Release scripts are local helpers used by Makefile targets and GitHub Actions.
 They are source truth for what the repository can generate, not proof that a
 specific GitHub release attached a matching asset.
@@ -21,13 +24,14 @@ specific GitHub release attached a matching asset.
 ## Validation
 
 ```bash
-make release-binaries-reproducible
-make sbom
-make vex
+make quality-merge
+make quality-release
+make release-readiness
 make release-assets
 bash scripts/release/verify_cosign.sh ./downloaded-release
 python3 scripts/release/check_version_drift_test.py
 make docs-coverage docs-truth
+make version-drift-published
 ```
 
 On tag builds, the Makefile derives `VERSION` from `GITHUB_REF_NAME` so the

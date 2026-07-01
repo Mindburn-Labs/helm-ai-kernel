@@ -39,7 +39,10 @@ flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Page["HELM AI Kernel Changelog"]
         A["[Unreleased]"]
-        B["[0.5.10] - 2026-06-04"]
+        B["[0.5.20] - 2026-07-01"]
+        B0["[0.5.19] - 2026-07-01"]
+        B1["[0.5.16] - 2026-06-18"]
+        B2["[0.5.10] - 2026-06-04"]
         C["[0.5.9] - 2026-06-03"]
         D["[0.5.4] - 2026-05-20"]
         E["[0.5.3] - 2026-05-19"]
@@ -53,7 +56,10 @@ flowchart TD
     %% Operational Flow Edges
     Page --> A
     A --> B
-    B --> C
+    B --> B0
+    B0 --> B1
+    B1 --> B2
+    B2 --> C
     C --> D
     D --> E
     E --> F
@@ -74,6 +80,48 @@ No public feature claim is active in this section. Keep research scaffolds and
 hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
+
+## [0.5.20] - 2026-07-01
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.20>.
+
+<!-- quantum_posture: v0.5.20 release notes mention existing cosign release verification only; this release adds no post-quantum cryptographic control. -->
+
+- Cut a corrective lockstep release after the `v0.5.19` tag exposed release
+  evidence and SDK contract drift, without adding product, cloud, GA, connector
+  certification, or checkout scope.
+- Completed the account session and entitlement SDK contract alignment on
+  `plan_id`, with public plan enums limited to `free`, `developer`, `team`,
+  `scale`, and `enterprise` across OpenAPI and generated Go, Java, Python,
+  Rust, and TypeScript SDK types.
+- Added exact `v0.5.19` and `v0.5.20` OpenVEX source files and made OpenVEX
+  generation reproducible under `SOURCE_DATE_EPOCH`.
+- Moved Go SDK subdirectory tag publication into the tag-driven release
+  workflow with immutable-tag checks and published-channel drift coverage.
+- Replaced stale release-document command lists with the maintained gates:
+  `quality-merge`, `quality-release`, `release-readiness`, `release-assets`,
+  and `version-drift-published`.
+
+## [0.5.19] - 2026-07-01
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.19>.
+
+<!-- quantum_posture: v0.5.19 release notes mention existing cosign release verification only; this release adds no post-quantum cryptographic control. -->
+
+- Hardened hosted sandbox execution guardrails by centralizing timeout caps,
+  output caps, secret-bearing environment variable denial, and cleanup
+  degradation reporting across sandbox adapters and broker receipts.
+- Aligned account session and entitlement SDK contract fields on `plan_id`,
+  expanded public plan enums to `free`, `developer`, `team`, `scale`, and
+  `enterprise`, and regenerated Go, Java, Python, Rust, and TypeScript SDK
+  types from OpenAPI.
+- Updated the Java SDK Jackson dependency to `2.22.0`.
+- Shipped developer-first integration docs for Codex, Claude Code, MCP,
+  OpenAI-compatible proxy use, EvidencePack verification, signed receipts, and
+  policy bundles without expanding cloud, GA, connector certification, or
+  checkout claims.
+- Updated release version-surface automation for the rewritten Developer
+  Journey and Quickstart docs so future patch bumps remain tool-driven.
 
 ## [0.5.16] - 2026-06-18
 

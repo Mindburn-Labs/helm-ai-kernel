@@ -2,6 +2,11 @@
 set -e
 
 # HELM Distribution Script
+# Legacy/manual helper only. The maintained lockstep release path is the
+# tag-triggered `.github/workflows/release.yml` workflow. Do not use this script
+# as release proof or as a substitute for `make quality-release`,
+# `make release-assets`, GitHub Release publication, Homebrew fanout, downstream
+# fanout, and `make version-drift-published`.
 # Usage: ./scripts/release/distribute.sh [version]
 # Example: ./scripts/release/distribute.sh 0.1.0
 
@@ -17,6 +22,7 @@ if [ -z "$VERSION" ]; then
     exit 1
 fi
 
+echo "⚠️  Legacy/manual helper: tag-triggered release.yml is the maintained lockstep release path."
 echo "Distributing HELM $VERSION across all ecosystems..."
 
 # 1. Go (via Git Tags)

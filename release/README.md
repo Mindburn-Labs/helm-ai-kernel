@@ -14,10 +14,10 @@ files. It is not a complete copy of any GitHub release.
 
 ## Current Release Target
 
-The current source release target is `v0.5.19`. Its expected visible release
+The current source release target is `v0.5.20`. Its expected visible release
 assets are platform binaries for Darwin, Linux, and Windows,
 `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `SHA256SUMS.txt`, `sbom.json`,
-`v0.5.19.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
+`v0.5.20.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
 `helm-ai-kernel-launchpad-data.tar`, and matching `*.cosign.bundle` files for
 every primary asset.
@@ -25,16 +25,16 @@ every primary asset.
 There is no public GitHub Release object for `v0.4.1`; the actual public
 baseline for the `v0.5.0` delta is `v0.4.0`.
 
-## v0.5.19 Asset Contract
+## v0.5.20 Asset Contract
 
-`make release-assets` stages the `v0.5.19` asset set under
+`make release-assets` stages the `v0.5.20` asset set under
 `dist/release-assets/`, and the release workflow must attach that set to the
 GitHub release before publication is claimed:
 
 - five CLI binaries
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.5.19.openvex.json`
+- `v0.5.20.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
@@ -53,12 +53,13 @@ and are not installed by Homebrew.
 ## Validation
 
 ```bash
-make release-binaries-reproducible
-make sbom
-make vex
+make quality-merge
+make quality-release
+make release-readiness
 make release-assets
 bash scripts/release/verify_cosign.sh ./downloaded-release
 make docs-coverage docs-truth
+make version-drift-published
 ```
 
 For tag-triggered release jobs, `make release-assets` uses the tag version,

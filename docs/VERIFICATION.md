@@ -84,15 +84,15 @@ helm-ai-kernel evidence export \
 helm-ai-kernel verify evidence-pack.tar
 ```
 
-EvidencePacks are portable proof bundles. They are not compliance
-certifications, hosted availability claims, or buyer rollout evidence.
+EvidencePacks are portable proof bundles for local review and offline replay.
 
 ## Release Evidence
 
 Current source release target: `v0.5.18`.
 
-The `v0.5.18` release is complete when the GitHub release and local verification
-artifacts agree:
+The `v0.5.18` release is complete for the listed local verification assets.
+
+Check the GitHub release and local verification artifacts together:
 
 - release: `https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.18`
 - v0.5.18 Asset Contract

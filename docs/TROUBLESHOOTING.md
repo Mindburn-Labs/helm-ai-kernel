@@ -55,13 +55,7 @@ helm-ai-kernel mcp pending --json
 exact server, tool, effect, TTL, and reason you intend to allow, then rerun the
 original action.
 
-```bash
-helm-ai-kernel mcp approve \
-  --server-id shell-mcp-server \
-  --tools "pwd,ls,cat" \
-  --ttl 15m \
-  --reason "read-only repo inspection for local dev"
-```
+Use the approval loop in [Quickstart](/quickstart#see-an-escalation).
 
 ## Approval Did Not Work
 

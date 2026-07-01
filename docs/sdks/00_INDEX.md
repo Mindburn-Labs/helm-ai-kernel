@@ -92,5 +92,4 @@ HelmClient client = new HelmClient("http://127.0.0.1:7714");
 | `ESCALATE` | Show the approval hint; do not continue automatically |
 | Missing receipt | Confirm the app called HELM instead of the upstream directly |
 
-SDK helpers do not add vendor framework certification or hosted availability
-claims. They are local clients for the Kernel boundary.
+SDK helpers are local clients for the Kernel boundary.

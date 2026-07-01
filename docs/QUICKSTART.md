@@ -6,7 +6,7 @@ last_reviewed: 2026-07-01
 # Quickstart
 
 Run HELM locally and prove the boundary before connecting it to a real agent.
-No account, hosted service, model key, or private endpoint is required.
+No account or model key is required.
 
 ## Install
 
@@ -24,6 +24,21 @@ cd helm-ai-kernel
 make build
 ./bin/helm-ai-kernel --version
 ```
+
+## Supported Today
+
+| Surface | Public proof |
+| --- | --- |
+| Install | `brew install helm-ai-kernel` or `make build` |
+| Local proof | `helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs` |
+| Codex setup | `helm-ai-kernel setup codex --dry-run --json` |
+| Claude Code setup | `helm-ai-kernel setup claude-code --dry-run --json` |
+| Agent risk scan | `helm-ai-kernel scan --path . --risk-envelope out/risk-envelope.json --preview out/risk-report.md` |
+| MCP approval loop | `mcp authorize-call`, `mcp approve`, `mcp revoke`, `mcp pending`, `mcp receipts` |
+| OpenAI proxy | `helm-ai-kernel proxy --port 9090` |
+| Receipts | `helm-ai-kernel mcp receipts --json` and `helm-ai-kernel boundary records --json` |
+| Conformance | `helm-ai-kernel conform --level L1 --json` and `--level L2` |
+| SDKs | source clients under `sdk/` with local test targets |
 
 ## Prove The Boundary
 
@@ -59,7 +74,7 @@ Ask HELM to authorize a local MCP action before dispatch:
 
 ```bash
 helm-ai-kernel mcp authorize-call \
-  --server-id shell-mcp-server \
+  --server-id helm-demo-shell \
   --tool-name pwd
 ```
 
@@ -71,7 +86,7 @@ decision: mcp-boundary-...
 reason: unknown MCP server requires approval
 receipt: ~/.helm-ai-kernel/receipts/mcp/...
 approve:
-  helm-ai-kernel mcp approve --server-id shell-mcp-server \
+  helm-ai-kernel mcp approve --server-id helm-demo-shell \
     --tools "pwd" \
     --ttl 15m \
     --reason 'read-only repo inspection for local dev'
@@ -84,7 +99,7 @@ Approve a narrow read-only grant:
 
 ```bash
 helm-ai-kernel mcp approve \
-  --server-id shell-mcp-server \
+  --server-id helm-demo-shell \
   --tools "pwd,ls,cat" \
   --ttl 15m \
   --reason "read-only repo inspection for local dev"
@@ -98,7 +113,7 @@ Revoke the grant:
 
 ```bash
 helm-ai-kernel mcp revoke \
-  --server-id shell-mcp-server \
+  --server-id helm-demo-shell \
   --reason "inspection finished"
 ```
 
@@ -133,5 +148,5 @@ helm-ai-kernel mcp receipts --json
 helm-ai-kernel boundary records --verdict ESCALATE --json
 ```
 
-Keep private prompts, provider keys, private endpoints, and unredacted receipts
-out of public issues.
+Keep sensitive prompts, provider keys, endpoints, and unredacted receipts out of
+public issues.

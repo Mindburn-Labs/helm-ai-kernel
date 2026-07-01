@@ -92,6 +92,9 @@ helm-ai-kernel workstation verify-decision \
 The verifier exits `0` only when the decision receipt hash and Ed25519 signature
 verify. Tampered receipts return a non-zero exit.
 
+Use the `v0.5.18` release `evidence-pack.tar` when verifying release-bundle
+evidence instead of local quickstart receipts.
+
 ## 5. Run The Headless Local Proof
 
 Use this when you want the local Kernel API proof path without changing an

@@ -1,5 +1,7 @@
 package crypto
 
+// quantum_posture: hybrid/PQ receipt verification; fail closed on downgrade.
+
 import (
 	"encoding/hex"
 	"fmt"
@@ -145,6 +147,29 @@ func VerifyReceiptProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt) (p
 		ok, vErr := Verify(edPubHex, r.Signature, []byte(payload))
 		return profile, ok, vErr
 	}
+}
+
+// VerifyReceiptRequiredProfile verifies a receipt and fails closed when the
+// detected signature profile is below the caller's required profile.
+func VerifyReceiptRequiredProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt, requiredProfile string) (profile string, valid bool, err error) {
+	if r == nil || r.Signature == "" {
+		return VerifyReceiptProfile(edPubHex, mldsaPubHex, r)
+	}
+
+	required := strings.ToLower(strings.TrimSpace(requiredProfile))
+	switch required {
+	case "":
+		return VerifyReceiptProfile(edPubHex, mldsaPubHex, r)
+	case ReceiptProfileClassical, ReceiptProfileHybrid:
+	default:
+		return "", false, fmt.Errorf("unsupported required receipt profile %q", requiredProfile)
+	}
+
+	profile = ReceiptSignatureProfile(r.Signature)
+	if required == ReceiptProfileHybrid && profile != ReceiptProfileHybrid {
+		return profile, false, fmt.Errorf("receipt profile %q does not satisfy required profile %q", profile, required)
+	}
+	return VerifyReceiptProfile(edPubHex, mldsaPubHex, r)
 }
 
 // Compile-time interface check: HybridVerifier must implement Verifier.

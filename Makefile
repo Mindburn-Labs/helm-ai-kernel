@@ -8,6 +8,7 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME)
 QUALITY := python3 scripts/ci/quality.py
+PYTHON ?= python3
 
 build:
 	cd core && go build -ldflags "$(LDFLAGS)" -o ../bin/helm-ai-kernel ./cmd/helm-ai-kernel/
@@ -166,6 +167,10 @@ quality-contracts:
 
 quality-security:
 	$(QUALITY) run security
+
+# quantum_posture: this target runs a source annotation guard only.
+quantum-crypto-inventory:
+	$(PYTHON) scripts/ci/check_quantum_crypto_inventory.py
 
 quality-runbooks:
 	$(QUALITY) run runbooks

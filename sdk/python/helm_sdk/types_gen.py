@@ -402,13 +402,13 @@ class AccountEntitlements(BaseModel):
     tenant_id: Optional[StrictStr] = None
     workspace_id: Optional[StrictStr] = None
     plan: Optional[Any] = None
-    plan_alias: Optional[StrictStr] = None
+    plan_id: Optional[StrictStr] = None
     capabilities: Optional[EntitlementCapabilities] = None
     limits: Optional[EntitlementLimits] = None
     source: Optional[StrictStr] = None
     updated_at: Optional[datetime] = None
     additional_properties: Dict[str, Any] = {}
-    __properties: ClassVar[List[str]] = ["principal_id", "tenant_id", "workspace_id", "plan", "plan_alias", "capabilities", "limits", "source", "updated_at"]
+    __properties: ClassVar[List[str]] = ["principal_id", "tenant_id", "workspace_id", "plan", "plan_id", "capabilities", "limits", "source", "updated_at"]
 
     @field_validator('plan')
     @classmethod
@@ -417,8 +417,8 @@ class AccountEntitlements(BaseModel):
         if value is None:
             return value
 
-        if value not in set(['free', 'individual', 'enterprise']):
-            raise ValueError("must be one of enum values ('free', 'individual', 'enterprise')")
+        if value not in set(['free', 'individual', 'developer', 'team', 'scale', 'enterprise']):
+            raise ValueError("must be one of enum values ('free', 'individual', 'developer', 'team', 'scale', 'enterprise')")
         return value
 
     model_config = ConfigDict(
@@ -494,7 +494,7 @@ class AccountEntitlements(BaseModel):
             "tenant_id": obj.get("tenant_id"),
             "workspace_id": obj.get("workspace_id"),
             "plan": obj.get("plan"),
-            "plan_alias": obj.get("plan_alias"),
+            "plan_id": obj.get("plan_id"),
             "capabilities": EntitlementCapabilities.from_dict(obj["capabilities"]) if obj.get("capabilities") is not None else None,
             "limits": EntitlementLimits.from_dict(obj["limits"]) if obj.get("limits") is not None else None,
             "source": obj.get("source"),
@@ -532,7 +532,7 @@ class AccountSession(BaseModel):
     tenant_id: Optional[StrictStr] = None
     workspace_id: Optional[StrictStr] = None
     plan: Optional[Any] = None
-    plan_alias: Optional[StrictStr] = None
+    plan_id: Optional[StrictStr] = None
     edition: Optional[StrictStr] = None
     deployment_mode: Optional[StrictStr] = None
     account_lifecycle: Optional[StrictStr] = None
@@ -540,7 +540,7 @@ class AccountSession(BaseModel):
     source: Optional[StrictStr] = None
     expires_at: Optional[datetime] = None
     additional_properties: Dict[str, Any] = {}
-    __properties: ClassVar[List[str]] = ["session_id", "principal_id", "tenant_id", "workspace_id", "plan", "plan_alias", "edition", "deployment_mode", "account_lifecycle", "offer_code", "source", "expires_at"]
+    __properties: ClassVar[List[str]] = ["session_id", "principal_id", "tenant_id", "workspace_id", "plan", "plan_id", "edition", "deployment_mode", "account_lifecycle", "offer_code", "source", "expires_at"]
 
     @field_validator('plan')
     @classmethod
@@ -549,8 +549,8 @@ class AccountSession(BaseModel):
         if value is None:
             return value
 
-        if value not in set(['free', 'individual', 'enterprise']):
-            raise ValueError("must be one of enum values ('free', 'individual', 'enterprise')")
+        if value not in set(['free', 'individual', 'developer', 'team', 'scale', 'enterprise']):
+            raise ValueError("must be one of enum values ('free', 'individual', 'developer', 'team', 'scale', 'enterprise')")
         return value
 
     model_config = ConfigDict(
@@ -621,7 +621,7 @@ class AccountSession(BaseModel):
             "tenant_id": obj.get("tenant_id"),
             "workspace_id": obj.get("workspace_id"),
             "plan": obj.get("plan"),
-            "plan_alias": obj.get("plan_alias"),
+            "plan_id": obj.get("plan_id"),
             "edition": obj.get("edition"),
             "deployment_mode": obj.get("deployment_mode"),
             "account_lifecycle": obj.get("account_lifecycle"),

@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-01T16:52:36Z
-# Commit: d66452d3f3c6398e19cad4e5e9690f1478316ecf
+# Generated: 2026-07-01T20:17:14Z
+# Commit: 04951d977efa3d54413dac26750141b197593a4a
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -912,7 +912,7 @@ b5b0ad4ea4a936f16ab4bd82e6cfed5e8b52c3c1a9eb2ce30d5043f0c1939aa3  protocols/spec
 7495bc08d4567893585e139996edd9b6f7dbc9bb43dab7a4a5637ba1b1a5bb22  protocols/specs/commit/commit_token.v1.schema.json
 bb7362eb5130500f5751ea9dc761ce762cc8ad4bdcdcb1d9aa11e847dc44e88e  protocols/specs/context-capsule/context_capsule.v1.schema.json
 c64f6ab6e62d47460908d412efaf38c0a628065a6417c4e0f38e03778ed25c8f  protocols/specs/decision-record/decision_record.v1.schema.json
-c3ef14f67177009bb1f1ad4c4ba2286c350417a66899cd2b311bd8ca93b1fdf1  protocols/specs/effects/openapi.yaml
+10ece1daf0018a76f7e53185f1424065f4be1b52ee2da7cd2ecc756d8f6b1b18  protocols/specs/effects/openapi.yaml
 eaf47ea80329b55ea5a4c4f6e24c94e71d02c9331f804a91e614d296febad91f  protocols/specs/effects/taxonomy.md
 de0c086ae6fc3f8eaadeabc5cbea9bd3574ed06299e31c191ac149f23e2a97b8  protocols/specs/observations/observation_artifact.v1.schema.json
 131014dcb8960299ae69210a86799d1f2dbae6e6d2000ed708d71699a6120aec  protocols/specs/receipts/HELM_RECEIPT_SPEC_v1.0.md

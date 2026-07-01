@@ -34,6 +34,7 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PROJECT_ROOT:/work" -w /work "$G
 if [ -d "$PROJECT_ROOT/.gen_tmp/ts/models" ]; then
     cat > "$PROJECT_ROOT/sdk/ts/src/types.gen.ts" <<'HEADER'
 // AUTO-GENERATED from api/openapi/helm.openapi.yaml — DO NOT EDIT
+// quantum_posture: generated SDK types mirror OpenAPI crypto fields; not a cryptographic control.
 // Regenerate: bash scripts/sdk/gen.sh
 
 HEADER
@@ -163,6 +164,7 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PROJECT_ROOT:/work" -w /work "$G
 if [ -d "$PROJECT_ROOT/.gen_tmp/python/helm_sdk/models" ]; then
     cat > "$PROJECT_ROOT/sdk/python/helm_sdk/types_gen.py" <<'HEADER'
 # AUTO-GENERATED from api/openapi/helm.openapi.yaml — DO NOT EDIT
+# quantum_posture: generated SDK types mirror OpenAPI crypto fields; not a cryptographic control.
 # Regenerate: bash scripts/sdk/gen.sh
 
 from __future__ import annotations
@@ -226,6 +228,7 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PROJECT_ROOT:/work" -w /work "$G
 if [ -d "$PROJECT_ROOT/.gen_tmp/go" ]; then
     cat > "$PROJECT_ROOT/sdk/go/client/types_gen.go" <<'HEADER'
 // AUTO-GENERATED from api/openapi/helm.openapi.yaml — DO NOT EDIT
+// quantum_posture: generated SDK types mirror OpenAPI crypto fields; not a cryptographic control.
 // Regenerate: bash scripts/sdk/gen.sh
 
 package client
@@ -309,6 +312,7 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PROJECT_ROOT:/work" -w /work "$G
 if [ -d "$PROJECT_ROOT/.gen_tmp/rust/src/models" ]; then
     cat > "$PROJECT_ROOT/sdk/rust/src/types_gen.rs" <<'HEADER'
 // AUTO-GENERATED from api/openapi/helm.openapi.yaml — DO NOT EDIT
+// quantum_posture: generated SDK types mirror OpenAPI crypto fields; not a cryptographic control.
 // Regenerate: bash scripts/sdk/gen.sh
 
 use serde::{Deserialize, Serialize};
@@ -433,6 +437,7 @@ if [ -d "$PROJECT_ROOT/.gen_tmp/java/src/main/java" ]; then
     mkdir -p "$JAVA_OUT"
     cat > "$JAVA_OUT/TypesGen.java" <<'HEADER'
 // AUTO-GENERATED from api/openapi/helm.openapi.yaml — DO NOT EDIT
+// quantum_posture: generated SDK types mirror OpenAPI crypto fields; not a cryptographic control.
 // Regenerate: bash scripts/sdk/gen.sh
 
 package labs.mindburn.helm;

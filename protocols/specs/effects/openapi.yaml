@@ -1,4 +1,5 @@
 openapi: "3.1.0"
+# quantum_posture: EffectBoundary spec retains the existing Ed25519 receipt field only; no post-quantum control is added here.
 info:
   title: HELM EffectBoundary REST API
   description: |
@@ -6,7 +7,7 @@ info:
     the same semantics as the gRPC EffectBoundaryService defined in
     `protocols/proto/helm/kernel/v1/helm.proto`, but using JSON over HTTP for
     non-gRPC consumers.
-  version: "0.5.18"
+  version: "0.5.19"
   contact:
     name: HELM Core Team
     url: https://github.com/Mindburn-Labs/helm-ai-kernel

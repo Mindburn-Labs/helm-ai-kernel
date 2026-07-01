@@ -291,7 +291,7 @@ release-binaries-reproducible:
 
 # Generate OpenVEX statements for every CVE listed in the current SBOM.
 vex:
-	@HELM_VERSION=$(VERSION) bash scripts/release/generate_vex.sh
+	@HELM_VERSION=$(VERSION) SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) bash scripts/release/generate_vex.sh
 
 # Verify the cosign signature of a local artifact tree (smoke / docs example).
 verify-cosign:

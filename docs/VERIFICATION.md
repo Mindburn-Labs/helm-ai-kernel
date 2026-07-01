@@ -9,6 +9,8 @@ Every governed action should leave a local record. For public HELM, that record
 is the proof path: show what was proposed, what HELM decided, why it decided
 that, and where the receipt was written.
 
+<!-- quantum_posture: verification docs mention existing Ed25519 and cosign checks only; this page adds no post-quantum cryptographic control. -->
+
 ## What Gets Written
 
 For MCP and boundary decisions, HELM records:
@@ -40,7 +42,71 @@ helm-ai-kernel workstation verify-decision \
   --receipt ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json
 ```
 
-For an EvidencePack:
+Current source release target: `v0.5.19`:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.19>. The
+release is complete only when the page attaches platform binaries,
+`SHA256SUMS.txt`, `sbom.json`, `v0.5.19.openvex.json`,
+`release-attestation.json`, `evidence-pack.tar`,
+`release.high_risk.v3.toml`, `sample-policy-material.tar`,
+`helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`,
+`helm-ai-kernel.rb`, `v0.5.19.json`, `version-status.json`, and matching
+`*.cosign.bundle` files for each primary asset.
+
+There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
+actual baseline when auditing the `v0.5.0` delta.
+
+## v0.5.19 Asset Contract
+
+The `v0.5.19` release is complete only when it attaches these primary assets:
+
+- `helm-ai-kernel-darwin-amd64`
+- `helm-ai-kernel-darwin-arm64`
+- `helm-ai-kernel-linux-amd64`
+- `helm-ai-kernel-linux-arm64`
+- `helm-ai-kernel-windows-amd64.exe`
+- `SHA256SUMS.txt`
+- `sbom.json`
+- `v0.5.19.openvex.json`
+- `release-attestation.json`
+- `evidence-pack.tar`
+- `release.high_risk.v3.toml`
+- `sample-policy-material.tar`
+- `helm-ai-kernel-launchpad-data.tar`
+- `helm-ai-kernel.mcpb`
+- `helm-ai-kernel.rb`
+
+`sample-policy-material.tar` must include both
+`release.high_risk.v3.toml` and
+`reference_packs/eu_ai_act_high_risk.v1.json`. The release workflow signs each
+primary asset, including `SHA256SUMS.txt`, with a matching
+`*.cosign.bundle`.
+
+If a release also attaches `helm-console-web-*` bundle artifacts, treat them as
+release packaging evidence only. They do not imply that Console source code,
+hosted Enterprise availability, or customer production access is published from
+this kernel repo.
+
+## EvidencePack Contents
+
+An EvidencePack is the portable verification bundle for a HELM-governed run or
+release path. A complete pack includes the indexed records needed to verify the
+decision chain without trusting the process that produced it:
+
+- prompts or request metadata when the surface records them for the run;
+- MCP tool calls, OpenAI-compatible proxy requests, policy decisions, and
+  outcomes that crossed the HELM boundary;
+- receipt bytes, receipt IDs, decision IDs, output hashes, and reason codes;
+- ProofGraph or boundary record roots that bind the decision path;
+- signature material and native seal metadata when the pack has been sealed;
+- optional external anchor and storage receipts for customer or
+  high-assurance profiles.
+
+The verifier checks the archive or directory shape, the indexed file hashes,
+the receipt material, root hashes, and available signatures. A demo receipt is
+not automatically a complete EvidencePack; use a pack produced by export,
+LaunchKit, release artifacts, or an operator-controlled evidence workflow.
+
+## Offline Verification
 
 ```bash
 helm-ai-kernel verify evidence-pack.tar
@@ -85,16 +151,5 @@ helm-ai-kernel verify evidence-pack.tar
 ```
 
 EvidencePacks are portable proof bundles for local review and offline replay.
-
-## Release Evidence
-
-Current source release target: `v0.5.18`.
-
-The `v0.5.18` release is complete for the listed local verification assets.
-
-Check the GitHub release and local verification artifacts together:
-
-- release: `https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.18`
-- v0.5.18 Asset Contract
-- `v0.5.18.openvex.json`
-- `v0.5.18.json`
+They are not compliance certifications, hosted availability claims, or buyer
+rollout evidence.

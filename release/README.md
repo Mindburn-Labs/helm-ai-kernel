@@ -3,6 +3,8 @@
 The `release/` directory stores retained release evidence inputs and policy
 files. It is not a complete copy of any GitHub release.
 
+<!-- quantum_posture: release evidence docs mention existing cosign release bundles only; this page adds no post-quantum cryptographic control. -->
+
 ## Files
 
 | Path | Purpose |
@@ -12,10 +14,10 @@ files. It is not a complete copy of any GitHub release.
 
 ## Current Release Target
 
-The current source release target is `v0.5.18`. Its
+The current source release target is `v0.5.19`. Its
 visible release assets are platform binaries for Darwin, Linux, and Windows,
 `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `SHA256SUMS.txt`, `sbom.json`,
-`v0.5.18.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
+`v0.5.19.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
 `helm-ai-kernel-launchpad-data.tar`, and matching `*.cosign.bundle` files for
 every primary asset.
@@ -23,16 +25,16 @@ every primary asset.
 There is no public GitHub Release object for `v0.4.1`; the actual public
 baseline for the `v0.5.0` delta is `v0.4.0`.
 
-## v0.5.18 Asset Contract
+## v0.5.19 Asset Contract
 
-`make release-assets` stages the `v0.5.18` asset set under
-`dist/release-assets/`, and the release workflow attached that set to the
-GitHub release:
+`make release-assets` stages the `v0.5.19` asset set under
+`dist/release-assets/`, and the release workflow attaches that set to the
+GitHub release for the tag:
 
 - five CLI binaries
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.5.18.openvex.json`
+- `v0.5.19.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`

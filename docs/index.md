@@ -5,17 +5,18 @@ last_reviewed: 2026-07-01
 
 # HELM AI Kernel
 
-HELM AI Kernel is a local execution firewall for AI agents. Put it between an
-agent and side-effecting tools, get an `ALLOW`, `DENY`, or `ESCALATE` decision,
-and keep a signed receipt that can be verified later.
+HELM AI Kernel is a local execution firewall for AI agents. Start with a
+denied-action proof, then choose an integration or reference path. A governed
+action returns `ALLOW`, `DENY`, or `ESCALATE` and leaves signed evidence that
+can be verified later.
 
 ## Start
 
 | Goal | Start here |
 | --- | --- |
 | Protect a local coding agent | [Quickstart](QUICKSTART.md) |
+| Understand the local proof path | [How HELM works](HOW_HELM_WORKS.md) |
 | Scan an agent before enforcement | [Agent Risk Scan](reference/agent-risk-scan.md) |
-| Understand the model | [How HELM works](HOW_HELM_WORKS.md) |
 | Install the CLI | [Installation](DEVELOPER_JOURNEY.md#install) |
 | Call the HTTP API | [API introduction](reference/http-api.md) |
 | Use an SDK | [SDKs](sdks/00_INDEX.md) |

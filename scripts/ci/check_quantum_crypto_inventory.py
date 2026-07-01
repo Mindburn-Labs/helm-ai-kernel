@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import pathlib
 import re
+import os
 import subprocess
 import sys
 
@@ -44,14 +45,47 @@ SKIP_SUFFIXES = {
 }
 
 
-def changed_files(base: str) -> list[pathlib.Path]:
+def git_changed_files(args: list[str]) -> list[pathlib.Path] | None:
     proc = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMRTUXB", f"{base}...HEAD"],
-        check=True,
+        args,
         text=True,
+        stderr=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
     )
+    if proc.returncode != 0:
+        return None
     return [pathlib.Path(line) for line in proc.stdout.splitlines() if line.strip()]
+
+
+def changed_files(base: str) -> list[pathlib.Path]:
+    refspecs: list[str] = []
+    if base:
+        refspecs.append(f"{base}...HEAD")
+
+    github_base = os.environ.get("GITHUB_BASE_REF", "").strip()
+    if github_base:
+        refspecs.extend([f"origin/{github_base}...HEAD", f"{github_base}...HEAD"])
+    refspecs.extend(["origin/main...HEAD", "main...HEAD", "HEAD~1...HEAD"])
+
+    seen: set[str] = set()
+    for refspec in refspecs:
+        if refspec in seen:
+            continue
+        seen.add(refspec)
+        paths = git_changed_files(["git", "diff", "--name-only", "--diff-filter=ACMRTUXB", refspec])
+        if paths is not None:
+            return paths
+
+    local: list[pathlib.Path] = []
+    for args in (
+        ["git", "diff", "--name-only", "--diff-filter=ACMRTUXB"],
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMRTUXB"],
+        ["git", "ls-files", "--others", "--exclude-standard"],
+    ):
+        paths = git_changed_files(args)
+        if paths:
+            local.extend(paths)
+    return local
 
 
 def should_skip(path: pathlib.Path) -> bool:

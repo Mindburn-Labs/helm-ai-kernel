@@ -23,7 +23,9 @@ Run the local proof:
 brew tap mindburn-labs/tap
 brew install helm-ai-kernel
 helm-ai-kernel --version
-helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs
+helm-ai-kernel mcp proof \
+  --json \
+  --out ~/.helm-ai-kernel/proofs
 ```
 
 The proof writes a local EvidencePack with no dispatched side effects. It

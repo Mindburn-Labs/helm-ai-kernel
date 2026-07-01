@@ -1563,7 +1563,7 @@ public static class A2AAgentCardSkillsInner {
   AccountEntitlements.JSON_PROPERTY_TENANT_ID,
   AccountEntitlements.JSON_PROPERTY_WORKSPACE_ID,
   AccountEntitlements.JSON_PROPERTY_PLAN,
-  AccountEntitlements.JSON_PROPERTY_PLAN_ALIAS,
+  AccountEntitlements.JSON_PROPERTY_PLAN_ID,
   AccountEntitlements.JSON_PROPERTY_CAPABILITIES,
   AccountEntitlements.JSON_PROPERTY_LIMITS,
   AccountEntitlements.JSON_PROPERTY_SOURCE,
@@ -1587,6 +1587,12 @@ public static class AccountEntitlements {
     FREE("free"),
 
     INDIVIDUAL("individual"),
+
+    DEVELOPER("developer"),
+
+    TEAM("team"),
+
+    SCALE("scale"),
 
     ENTERPRISE("enterprise");
 
@@ -1620,8 +1626,8 @@ public static class AccountEntitlements {
   public static final String JSON_PROPERTY_PLAN = "plan";
   private JsonNullable<PlanEnum> plan = JsonNullable.<PlanEnum>of(null);
 
-  public static final String JSON_PROPERTY_PLAN_ALIAS = "plan_alias";
-  private String planAlias;
+  public static final String JSON_PROPERTY_PLAN_ID = "plan_id";
+  private String planId;
 
   public static final String JSON_PROPERTY_CAPABILITIES = "capabilities";
   private EntitlementCapabilities capabilities;
@@ -1746,28 +1752,28 @@ public static class AccountEntitlements {
   }
 
 
-  public AccountEntitlements planAlias(String planAlias) {
-    this.planAlias = planAlias;
+  public AccountEntitlements planId(String planId) {
+    this.planId = planId;
     return this;
   }
 
    /**
-   * Get planAlias
-   * @return planAlias
+   * Get planId
+   * @return planId
   **/
   @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_PLAN_ALIAS)
+  @JsonProperty(JSON_PROPERTY_PLAN_ID)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
-  public String getPlanAlias() {
-    return planAlias;
+  public String getPlanId() {
+    return planId;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_PLAN_ALIAS)
+  @JsonProperty(JSON_PROPERTY_PLAN_ID)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setPlanAlias(String planAlias) {
-    this.planAlias = planAlias;
+  public void setPlanId(String planId) {
+    this.planId = planId;
   }
 
 
@@ -1887,7 +1893,7 @@ public static class AccountEntitlements {
         Objects.equals(this.tenantId, accountEntitlements.tenantId) &&
         Objects.equals(this.workspaceId, accountEntitlements.workspaceId) &&
         equalsNullable(this.plan, accountEntitlements.plan) &&
-        Objects.equals(this.planAlias, accountEntitlements.planAlias) &&
+        Objects.equals(this.planId, accountEntitlements.planId) &&
         Objects.equals(this.capabilities, accountEntitlements.capabilities) &&
         Objects.equals(this.limits, accountEntitlements.limits) &&
         Objects.equals(this.source, accountEntitlements.source) &&
@@ -1900,7 +1906,7 @@ public static class AccountEntitlements {
 
   @Override
   public int hashCode() {
-    return Objects.hash(principalId, tenantId, workspaceId, hashCodeNullable(plan), planAlias, capabilities, limits, source, updatedAt);
+    return Objects.hash(principalId, tenantId, workspaceId, hashCodeNullable(plan), planId, capabilities, limits, source, updatedAt);
   }
 
   private static <T> int hashCodeNullable(JsonNullable<T> a) {
@@ -1918,7 +1924,7 @@ public static class AccountEntitlements {
     sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
     sb.append("    workspaceId: ").append(toIndentedString(workspaceId)).append("\n");
     sb.append("    plan: ").append(toIndentedString(plan)).append("\n");
-    sb.append("    planAlias: ").append(toIndentedString(planAlias)).append("\n");
+    sb.append("    planId: ").append(toIndentedString(planId)).append("\n");
     sb.append("    capabilities: ").append(toIndentedString(capabilities)).append("\n");
     sb.append("    limits: ").append(toIndentedString(limits)).append("\n");
     sb.append("    source: ").append(toIndentedString(source)).append("\n");
@@ -1990,9 +1996,9 @@ public static class AccountEntitlements {
       joiner.add(String.format("%splan%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPlan()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
-    // add `plan_alias` to the URL query string
-    if (getPlanAlias() != null) {
-      joiner.add(String.format("%splan_alias%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPlanAlias()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    // add `plan_id` to the URL query string
+    if (getPlanId() != null) {
+      joiner.add(String.format("%splan_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPlanId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `capabilities` to the URL query string
@@ -2044,7 +2050,7 @@ public static class AccountEntitlements {
   AccountSession.JSON_PROPERTY_TENANT_ID,
   AccountSession.JSON_PROPERTY_WORKSPACE_ID,
   AccountSession.JSON_PROPERTY_PLAN,
-  AccountSession.JSON_PROPERTY_PLAN_ALIAS,
+  AccountSession.JSON_PROPERTY_PLAN_ID,
   AccountSession.JSON_PROPERTY_EDITION,
   AccountSession.JSON_PROPERTY_DEPLOYMENT_MODE,
   AccountSession.JSON_PROPERTY_ACCOUNT_LIFECYCLE,
@@ -2073,6 +2079,12 @@ public static class AccountSession {
     FREE("free"),
 
     INDIVIDUAL("individual"),
+
+    DEVELOPER("developer"),
+
+    TEAM("team"),
+
+    SCALE("scale"),
 
     ENTERPRISE("enterprise");
 
@@ -2106,8 +2118,8 @@ public static class AccountSession {
   public static final String JSON_PROPERTY_PLAN = "plan";
   private JsonNullable<PlanEnum> plan = JsonNullable.<PlanEnum>of(null);
 
-  public static final String JSON_PROPERTY_PLAN_ALIAS = "plan_alias";
-  private String planAlias;
+  public static final String JSON_PROPERTY_PLAN_ID = "plan_id";
+  private String planId;
 
   public static final String JSON_PROPERTY_EDITION = "edition";
   private String edition;
@@ -2263,28 +2275,28 @@ public static class AccountSession {
   }
 
 
-  public AccountSession planAlias(String planAlias) {
-    this.planAlias = planAlias;
+  public AccountSession planId(String planId) {
+    this.planId = planId;
     return this;
   }
 
    /**
-   * Get planAlias
-   * @return planAlias
+   * Get planId
+   * @return planId
   **/
   @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_PLAN_ALIAS)
+  @JsonProperty(JSON_PROPERTY_PLAN_ID)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
-  public String getPlanAlias() {
-    return planAlias;
+  public String getPlanId() {
+    return planId;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_PLAN_ALIAS)
+  @JsonProperty(JSON_PROPERTY_PLAN_ID)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setPlanAlias(String planAlias) {
-    this.planAlias = planAlias;
+  public void setPlanId(String planId) {
+    this.planId = planId;
   }
 
 
@@ -2455,7 +2467,7 @@ public static class AccountSession {
         Objects.equals(this.tenantId, accountSession.tenantId) &&
         Objects.equals(this.workspaceId, accountSession.workspaceId) &&
         equalsNullable(this.plan, accountSession.plan) &&
-        Objects.equals(this.planAlias, accountSession.planAlias) &&
+        Objects.equals(this.planId, accountSession.planId) &&
         Objects.equals(this.edition, accountSession.edition) &&
         Objects.equals(this.deploymentMode, accountSession.deploymentMode) &&
         Objects.equals(this.accountLifecycle, accountSession.accountLifecycle) &&
@@ -2470,7 +2482,7 @@ public static class AccountSession {
 
   @Override
   public int hashCode() {
-    return Objects.hash(sessionId, principalId, tenantId, workspaceId, hashCodeNullable(plan), planAlias, edition, deploymentMode, accountLifecycle, offerCode, source, expiresAt);
+    return Objects.hash(sessionId, principalId, tenantId, workspaceId, hashCodeNullable(plan), planId, edition, deploymentMode, accountLifecycle, offerCode, source, expiresAt);
   }
 
   private static <T> int hashCodeNullable(JsonNullable<T> a) {
@@ -2489,7 +2501,7 @@ public static class AccountSession {
     sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
     sb.append("    workspaceId: ").append(toIndentedString(workspaceId)).append("\n");
     sb.append("    plan: ").append(toIndentedString(plan)).append("\n");
-    sb.append("    planAlias: ").append(toIndentedString(planAlias)).append("\n");
+    sb.append("    planId: ").append(toIndentedString(planId)).append("\n");
     sb.append("    edition: ").append(toIndentedString(edition)).append("\n");
     sb.append("    deploymentMode: ").append(toIndentedString(deploymentMode)).append("\n");
     sb.append("    accountLifecycle: ").append(toIndentedString(accountLifecycle)).append("\n");
@@ -2568,9 +2580,9 @@ public static class AccountSession {
       joiner.add(String.format("%splan%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPlan()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
-    // add `plan_alias` to the URL query string
-    if (getPlanAlias() != null) {
-      joiner.add(String.format("%splan_alias%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPlanAlias()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    // add `plan_id` to the URL query string
+    if (getPlanId() != null) {
+      joiner.add(String.format("%splan_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPlanId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `edition` to the URL query string

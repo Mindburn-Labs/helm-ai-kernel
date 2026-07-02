@@ -47,14 +47,14 @@ separate checks:
 Hashing and symmetric encryption are separate primitives. The urgent migration
 surface is public-key signing and key agreement, not SHA-256 receipt hashes.
 
-## Enterprise Tenant KMS
+## Tenant KMS
 
-HELM Enterprise tenant KMS keys are still classical Ed25519 key material. PR
-#168 added key-epoch posture metadata and policy-aware verification helpers so a
-caller that requires hybrid or PQ verification is rejected instead of silently
+Tenant KMS keys are still classical Ed25519 key material. PR #168 added
+key-epoch posture metadata and policy-aware verification helpers so a caller
+that requires hybrid or PQ verification is rejected instead of silently
 accepting the classical tenant key. That is downgrade resistance, not
-post-quantum tenant key material. Tenant KMS should be described as
-`classical` until an ML-DSA/PQ-backed provider exists and is verified.
+post-quantum tenant key material. Tenant KMS should be described as `classical`
+until an ML-DSA/PQ-backed provider exists and is verified.
 
 ## Public Web Boundary
 

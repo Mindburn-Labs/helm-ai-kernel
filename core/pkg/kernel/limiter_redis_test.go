@@ -18,7 +18,7 @@ func TestRedisLimiterStore_Integration(t *testing.T) {
 	}
 
 	policy := BackpressurePolicy{RPM: 60, Burst: 1} // 1 token/sec
-	actor := "test-redis-actor"
+	actor := "test-redis-actor-" + time.Now().Format("20060102150405.000000000")
 
 	// 1. Allow
 	allowed, err := store.Allow(ctx, actor, policy, 1)

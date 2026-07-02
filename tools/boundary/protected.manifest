@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-02T18:42:36Z
-# Commit: ae7548d37d29120a0d0a43878dba4247053f4607
+# Generated: 2026-07-02T18:43:19Z
+# Commit: 85d8e04a7db0d0fd45d5f11eb0f80b010de834cb
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #

@@ -1,6 +1,7 @@
 ---
 title: Quantum Posture
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-02
+quantum_posture: hybrid_when_configured
 ---
 
 # Quantum Posture
@@ -57,12 +58,14 @@ group. That proves PQ-hybrid visitor-to-Cloudflare key agreement for clients
 that support it.
 
 The same test showed classical ECDSA certificate authentication
-(`ecdsa_secp256r1_sha256`). Cloudflare's dashboard also did not show a Custom
-Origin Trust Store entry or uploaded Authenticated Origin Pulls certificate for
-the zone. Do not describe the public website, docs host, or origin path as
-having post-quantum authentication until Cloudflare visitor-edge authentication
-or origin ML-DSA COTS/AOP is configured and verified fail-closed against
-classical downgrade.
+(`ecdsa_secp256r1_sha256`). A 2026-07-02 in-app browser check of the
+`mindburn.org` Cloudflare dashboard showed SSL/TLS `Full (strict)`, standard
+Edge Certificates controls, global Authenticated Origin Pulls off, zone-level
+Authenticated Origin Pulls on, and no uploaded zone-level or per-hostname custom
+TLS client certificates. Do not describe the public website, docs host, or
+origin path as having post-quantum authentication until Cloudflare visitor-edge
+authentication or origin ML-DSA COTS/AOP is configured and verified fail-closed
+against classical downgrade.
 
 ## Verify The Claim
 

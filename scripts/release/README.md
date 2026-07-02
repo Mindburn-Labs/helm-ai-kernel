@@ -41,6 +41,14 @@ matching OpenVEX file, generates a non-seeded release EvidencePack from release
 build inputs, verifies `evidence-pack.tar`, and writes the final checksum
 manifest.
 
+The Makefile uses `SOURCE_DATE_EPOCH` for reproducible binary builds, defaulting
+to the current `HEAD` commit timestamp unless overridden. For `make vex`, an
+explicit `SOURCE_DATE_EPOCH` override still wins; otherwise the Makefile reuses
+the timestamp already checked into `release/vex/v$(VERSION).openvex.json` and
+falls back to `HEAD` only when that exact VEX file does not exist yet. That
+keeps squash-merged release commits from rewriting tracked OpenVEX timestamps
+while preserving intentional artifact reproduction overrides.
+
 `verify_cosign.sh` verifies every bundle it finds. A run with zero
 `*.cosign.bundle` files proves no signature coverage; check that bundle files
 exist before treating Cosign as part of a release evidence set. If a release has

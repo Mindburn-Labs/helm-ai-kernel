@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-02T14:46:49Z
-# Commit: 18cbfd0f813cca9496e29f8e7a6c08337087df9b
+# Generated: 2026-07-02T18:42:36Z
+# Commit: ae7548d37d29120a0d0a43878dba4247053f4607
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -82,7 +82,7 @@ baa84e947fb05c23c72a8805dcc502632f88d6700d2762d46fccdf25b2fa5c13  core/pkg/kerne
 469a7cf1cac67b51ceb5dbc2a8b734ac6c556172a87cc576c603b138dd350e0f  core/pkg/kernel/kernel_test.go
 6a2446a7acf88faf88ff1e6b11cbaa4dbc008fa669499a49ea1ab79073cfa40f  core/pkg/kernel/limiter.go
 132d0e4936b387541f735c40219b7fb34a930c60caa7ad59a328328209398721  core/pkg/kernel/limiter_redis.go
-7442e465921083900093c8835fc450eb60ee874c74cf59657e1fd605f9e35a8d  core/pkg/kernel/limiter_redis_test.go
+aefde19ffb99224a6de5c7584245cb83d1536207db921a85b7fac943d65faabd  core/pkg/kernel/limiter_redis_test.go
 fbecb9191cadbf90ce4ad3cd0e2603cef4f1c700c948ce4d482428ccc7002647  core/pkg/kernel/memory_integrity.go
 f3abb13e9181d2c917d393bf8f55f3b185f403eaeeb6d6c978bcfc80de80529b  core/pkg/kernel/memory_integrity_test.go
 667cac33f98fb0d455b5ecf12cf45001b2f2004c63f6d9440f06fcf3b18a28b7  core/pkg/kernel/memory_trust.go

@@ -2,6 +2,9 @@ package contracts
 
 import "time"
 
+// quantum_posture: approval receipts expose explicit classical/hybrid signature
+// metadata; public_key is the registry-authoritative verification key envelope.
+
 // ApprovalReceipt represents a cryptographic approval signed by a human operator.
 // This is the HITL (Human-in-the-Loop) bridge contract that binds a human's
 // cryptographic identity to an execution intent.
@@ -35,9 +38,12 @@ type ApprovalReceipt struct {
 	// Ed25519 signature; hybrid receipts use hybrid:<ed25519_hex>:<mldsa65_hex>.
 	Signature string `json:"signature"`
 
-	SignatureProfile   string            `json:"signature_profile,omitempty"`
-	SignatureAlgorithm string            `json:"signature_algorithm,omitempty"`
-	KeyID              string            `json:"key_id,omitempty"`
+	SignatureProfile   string `json:"signature_profile,omitempty"`
+	SignatureAlgorithm string `json:"signature_algorithm,omitempty"`
+	KeyID              string `json:"key_id,omitempty"`
+
+	// PublicKeySet exposes component keys for display/interoperability. The
+	// public_key envelope remains authoritative for registry authorization.
 	PublicKeySet       map[string]string `json:"public_key_set,omitempty"`
 	VerificationPolicy string            `json:"verification_policy,omitempty"`
 	DowngradeRejected  bool              `json:"downgrade_rejected,omitempty"`

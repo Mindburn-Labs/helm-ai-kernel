@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-02T14:46:49Z
-# Commit: 18cbfd0f813cca9496e29f8e7a6c08337087df9b
+# Generated: 2026-07-02T18:46:33Z
+# Commit: 270bdd1a31aa265e573a480de6d26d6ddc801022
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -121,7 +121,7 @@ bb43d171471ec8a458f26b44374e116becb05fb1a99476d1c0ef30f033ebe98d  core/pkg/contr
 892b16853d3fb6bba0abed14a4e22dc813f4501e31c375cf0e5bc2720323fa9f  core/pkg/contracts/actuators/sandbox_test.go
 72ae12f46595d86bc220f1c0862e9bc22340724587fa5d0e4100be9e623d531a  core/pkg/contracts/agent.go
 3b6ad36ecd7e4eb74fc82fd57106282292bad4792e88db91a5f7d0321df2195b  core/pkg/contracts/agent_run_receipt.go
-9edddf5ac19b5e700c4e9bafea1dfe4c093a69eea9daeef202949e3513b75887  core/pkg/contracts/approval.go
+fb8ca705da6f96643da254a1c9cd61a9c15d78bd8517eee57b0e93299a0935d1  core/pkg/contracts/approval.go
 84f49d46862d49f31dac979e691fd9bda9f09a3ff59c3ffe0399616047c53a49  core/pkg/contracts/approval_binding.go
 b8b80ba2979df721f2bca2d7d38551a1d120f5403b2e2c74d2e9f3322556441b  core/pkg/contracts/approval_binding_test.go
 d6d0443f145537c187fe1dd6010632541a1139a589a394060ba42a66591036c0  core/pkg/contracts/attestation.proto
@@ -532,8 +532,8 @@ eb6ba1a95e78c9018b7817488067321246cd34c4959fb80e921b69119a33fbaa  core/pkg/api/a
 a92153ec046ae87617e919491cb0754d8180307db013e2be0128dcd75befa575  core/pkg/api/apidoc_drift_test.go
 1242b1847b71faaee102866d2152fe6fc6141d91fd783e36ae47bfb62d5bd117  core/pkg/api/apierror.go
 f7779991fbd5bf082e51beac146520bdae7054f419df711652f400e43f06b1c4  core/pkg/api/apierror_test.go
-517e9671291ec6de73b68161b6054437ca90de9d042548c320ef4f23f971cfd3  core/pkg/api/approve_handler.go
-b0849c44801c1a3751e3b7c1cb6884ed14baff53b059701da41a8f8aef55830a  core/pkg/api/approve_handler_hardening_test.go
+8f9366a1e5519b5d5a4eb58e080e1ec9c6396f64fffcc978259b626bfae23cd8  core/pkg/api/approve_handler.go
+139b634fe29968c81293429146853e9b4fed7c113fa90388b0dc9f91f28d9f3c  core/pkg/api/approve_handler_hardening_test.go
 3700337026ad0979b101b5873c90e4e161f5074ffa9e251ed8131d21498a8130  core/pkg/api/autonomy_decision_handler_test.go
 0c4838fba74d4179fdebb2f7bd90b0f6364072153e342ab28cfdd60780ef6ebd  core/pkg/api/autonomy_handler.go
 7324c5963a3fbfdf3a176758912963003a78134c0be8280d080977d96512461f  core/pkg/api/contract_test.go

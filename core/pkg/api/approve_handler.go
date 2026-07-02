@@ -22,6 +22,9 @@ const (
 	approvalPolicyPQCRequired         = "pqc-required"
 )
 
+// quantum_posture: approval receipts remain legacy Ed25519-compatible and
+// fail closed for hybrid-required Ed25519+ML-DSA-65 verification.
+
 // ApproveHandler handles POST /api/v1/kernel/approve
 // This is the backend half of the HITL bridge. The frontend uses WebCrypto API
 // to sign the intent hash, and this handler verifies the signature cryptographically.
@@ -29,7 +32,7 @@ type ApproveHandler struct {
 	mu sync.RWMutex
 	// pendingApprovals maps intent_hash → ApprovalRequest
 	pendingApprovals map[string]*contracts.ApprovalRequest
-	// allowedKeys is the set of authorized Ed25519 public keys (hex-encoded)
+	// allowedKeys is the set of authorized approver public key envelopes.
 	allowedKeys map[string]struct{}
 	// clock provides the current time (injected for deterministic testing)
 	clock func() time.Time
@@ -308,15 +311,9 @@ func enforceApprovalVerificationPolicy(receipt contracts.ApprovalReceipt, profil
 }
 
 func approvalHybridPublicKeys(receipt contracts.ApprovalReceipt) (edPub, mldsaPub string, err error) {
-	if receipt.PublicKeySet != nil {
-		edPub = firstNonEmpty(receipt.PublicKeySet[receipt.KeyID+":ed25519"], receipt.PublicKeySet["ed25519"])
-		mldsaPub = firstNonEmpty(receipt.PublicKeySet[receipt.KeyID+":ml-dsa-65"], receipt.PublicKeySet["ml-dsa-65"])
-	}
-	if edPub == "" || mldsaPub == "" {
-		edPub, mldsaPub, err = approvalHybridEnvelopeParts(receipt.PublicKey)
-		if err != nil {
-			return "", "", err
-		}
+	edPub, mldsaPub, err = approvalHybridEnvelopeParts(receipt.PublicKey)
+	if err != nil {
+		return "", "", err
 	}
 	return edPub, mldsaPub, nil
 }
@@ -346,13 +343,4 @@ func normalizeApprovalAlgorithm(algorithm string) string {
 	default:
 		return strings.ToLower(strings.TrimSpace(algorithm))
 	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
 }

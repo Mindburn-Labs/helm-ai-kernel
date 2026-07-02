@@ -17,6 +17,9 @@ import (
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
+// quantum_posture: approval hardening tests cover classical allowlists,
+// hybrid Ed25519+ML-DSA-65 verification, and downgrade/key substitution denial.
+
 // TestApproveHandler_UnregisteredKey_Rejected verifies DRIFT-3:
 // Approval requests with public keys not in the AllowedApproverKeys set
 // must be rejected with 403, even if the signature is cryptographically valid.
@@ -161,6 +164,70 @@ func TestApproveHandler_HybridRegisteredKey_Accepted(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 for registered hybrid key, got %d (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+func TestApproveHandler_HybridRejectsPublicKeySetOverride(t *testing.T) {
+	registeredSigner, err := helmcrypto.NewHybridSigner("approval-hybrid-registered")
+	if err != nil {
+		t.Fatalf("registered hybrid key generation failed: %v", err)
+	}
+	attackerSigner, err := helmcrypto.NewHybridSigner("approval-hybrid-attacker")
+	if err != nil {
+		t.Fatalf("attacker hybrid key generation failed: %v", err)
+	}
+	registeredPublicKey := registeredSigner.PublicKey()
+	handler := NewApproveHandler([]string{registeredPublicKey})
+
+	intentHash := "sha256:hybrid-key-substitution"
+	handler.pendingApprovals[intentHash] = &contracts.ApprovalRequest{
+		IntentHash: intentHash,
+		RiskLevel:  "HIGH",
+		Status:     contracts.ApprovalPending,
+		CreatedAt:  time.Now(),
+		ExpiresAt:  time.Now().Add(5 * time.Minute),
+	}
+
+	planHash := "sha256:plan-key-substitution"
+	policyHash := "sha256:policy-key-substitution"
+	nonce := "hybrid-nonce-substitution"
+	message := fmt.Sprintf("HELM/Approval/v1:%s:%s:%s:%s", planHash, policyHash, intentHash, nonce)
+	signature, err := attackerSigner.Sign([]byte(message))
+	if err != nil {
+		t.Fatalf("attacker hybrid sign failed: %v", err)
+	}
+
+	body, err := json.Marshal(contracts.ApprovalReceipt{
+		IntentHash:         intentHash,
+		PlanHash:           planHash,
+		PolicyHash:         policyHash,
+		Nonce:              nonce,
+		PublicKey:          registeredPublicKey,
+		Signature:          signature,
+		SignatureProfile:   helmcrypto.ReceiptProfileHybrid,
+		SignatureAlgorithm: approvalSignatureAlgorithmHybrid,
+		KeyID:              "approval-hybrid-registered",
+		PublicKeySet: map[string]string{
+			"approval-hybrid-registered:ed25519":   attackerSigner.Ed25519Signer().PublicKey(),
+			"approval-hybrid-registered:ml-dsa-65": attackerSigner.MLDSASigner().PublicKey(),
+			"ed25519":                              attackerSigner.Ed25519Signer().PublicKey(),
+			"ml-dsa-65":                            attackerSigner.MLDSASigner().PublicKey(),
+		},
+		VerificationPolicy: approvalPolicyHybridRequired,
+		DowngradeRejected:  true,
+		AcceptedAlgorithms: []string{approvalSignatureAlgorithmHybrid},
+	})
+	if err != nil {
+		t.Fatalf("marshal receipt: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/kernel/approve", strings.NewReader(string(body)))
+	w := httptest.NewRecorder()
+
+	handler.HandleApprove(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for attacker-controlled public_key_set, got %d (body: %s)", w.Code, w.Body.String())
 	}
 }
 

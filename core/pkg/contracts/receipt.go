@@ -4,17 +4,21 @@ import "time"
 
 // Receipt represents a proof of effect execution, linked to a decision.
 type Receipt struct {
-	ReceiptID           string         `json:"receipt_id"`
-	DecisionID          string         `json:"decision_id"`
-	EffectID            string         `json:"effect_id"`
-	ExternalReferenceID string         `json:"external_reference_id"`
-	Status              string         `json:"status"`
-	BlobHash            string         `json:"blob_hash,omitempty"`   // Link to Input Snapshot CAS
-	OutputHash          string         `json:"output_hash,omitempty"` // Link to Tool Output CAS
-	Timestamp           time.Time      `json:"timestamp"`
-	ExecutorID          string         `json:"executor_id,omitempty"`
-	Metadata            map[string]any `json:"metadata,omitempty"`
-	Signature           string         `json:"signature,omitempty"` // Cryptographic proof of execution
+	ReceiptID           string            `json:"receipt_id"`
+	DecisionID          string            `json:"decision_id"`
+	EffectID            string            `json:"effect_id"`
+	ExternalReferenceID string            `json:"external_reference_id"`
+	Status              string            `json:"status"`
+	BlobHash            string            `json:"blob_hash,omitempty"`   // Link to Input Snapshot CAS
+	OutputHash          string            `json:"output_hash,omitempty"` // Link to Tool Output CAS
+	Timestamp           time.Time         `json:"timestamp"`
+	ExecutorID          string            `json:"executor_id,omitempty"`
+	Metadata            map[string]any    `json:"metadata,omitempty"`
+	Signature           string            `json:"signature,omitempty"` // Cryptographic proof of execution
+	SignatureProfile    string            `json:"signature_profile,omitempty"`
+	SignatureAlgorithm  string            `json:"signature_algorithm,omitempty"`
+	KeyID               string            `json:"key_id,omitempty"`
+	PublicKeySet        map[string]string `json:"public_key_set,omitempty"`
 	// V2: Tamper-Evidence
 	MerkleRoot        string             `json:"merkle_root,omitempty"`
 	WitnessSignatures []WitnessSignature `json:"witness_signatures,omitempty"`

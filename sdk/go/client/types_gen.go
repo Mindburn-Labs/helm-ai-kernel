@@ -38230,16 +38230,24 @@ var _ MappedNullable = &Receipt{}
 
 // Receipt struct for Receipt
 type Receipt struct {
-	ReceiptId    *string                `json:"receipt_id,omitempty"`
-	DecisionId   *string                `json:"decision_id,omitempty"`
-	EffectId     *string                `json:"effect_id,omitempty"`
-	Status       *string                `json:"status,omitempty"`
-	ReasonCode   *string                `json:"reason_code,omitempty"`
-	OutputHash   *string                `json:"output_hash,omitempty"`
-	BlobHash     *string                `json:"blob_hash,omitempty"`
-	PrevHash     *string                `json:"prev_hash,omitempty"`
-	LamportClock *int32                 `json:"lamport_clock,omitempty"`
-	Signature    *string                `json:"signature,omitempty"`
+	ReceiptId    *string `json:"receipt_id,omitempty"`
+	DecisionId   *string `json:"decision_id,omitempty"`
+	EffectId     *string `json:"effect_id,omitempty"`
+	Status       *string `json:"status,omitempty"`
+	ReasonCode   *string `json:"reason_code,omitempty"`
+	OutputHash   *string `json:"output_hash,omitempty"`
+	BlobHash     *string `json:"blob_hash,omitempty"`
+	PrevHash     *string `json:"prev_hash,omitempty"`
+	LamportClock *int32  `json:"lamport_clock,omitempty"`
+	Signature    *string `json:"signature,omitempty"`
+	// Receipt signature profile emitted by the signer. Classical is Ed25519-only; hybrid is Ed25519 plus ML-DSA-65.
+	SignatureProfile *string `json:"signature_profile,omitempty"`
+	// Signature algorithm or composite algorithm used for this receipt, such as ed25519, Hybrid-Ed25519-MLDSA65, or ml-dsa-65.
+	SignatureAlgorithm *string `json:"signature_algorithm,omitempty"`
+	// Active signer key identifier used for the receipt signature.
+	KeyId *string `json:"key_id,omitempty"`
+	// Public verification keys keyed by algorithm for the emitted receipt signature.
+	PublicKeySet map[string]string      `json:"public_key_set,omitempty"`
 	Timestamp    *time.Time             `json:"timestamp,omitempty"`
 	Principal    *string                `json:"principal,omitempty"`
 	ExecutorId   *string                `json:"executor_id,omitempty"`
@@ -38584,6 +38592,134 @@ func (o *Receipt) SetSignature(v string) {
 	o.Signature = &v
 }
 
+// GetSignatureProfile returns the SignatureProfile field value if set, zero value otherwise.
+func (o *Receipt) GetSignatureProfile() string {
+	if o == nil || IsNil(o.SignatureProfile) {
+		var ret string
+		return ret
+	}
+	return *o.SignatureProfile
+}
+
+// GetSignatureProfileOk returns a tuple with the SignatureProfile field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Receipt) GetSignatureProfileOk() (*string, bool) {
+	if o == nil || IsNil(o.SignatureProfile) {
+		return nil, false
+	}
+	return o.SignatureProfile, true
+}
+
+// HasSignatureProfile returns a boolean if a field has been set.
+func (o *Receipt) HasSignatureProfile() bool {
+	if o != nil && !IsNil(o.SignatureProfile) {
+		return true
+	}
+
+	return false
+}
+
+// SetSignatureProfile gets a reference to the given string and assigns it to the SignatureProfile field.
+func (o *Receipt) SetSignatureProfile(v string) {
+	o.SignatureProfile = &v
+}
+
+// GetSignatureAlgorithm returns the SignatureAlgorithm field value if set, zero value otherwise.
+func (o *Receipt) GetSignatureAlgorithm() string {
+	if o == nil || IsNil(o.SignatureAlgorithm) {
+		var ret string
+		return ret
+	}
+	return *o.SignatureAlgorithm
+}
+
+// GetSignatureAlgorithmOk returns a tuple with the SignatureAlgorithm field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Receipt) GetSignatureAlgorithmOk() (*string, bool) {
+	if o == nil || IsNil(o.SignatureAlgorithm) {
+		return nil, false
+	}
+	return o.SignatureAlgorithm, true
+}
+
+// HasSignatureAlgorithm returns a boolean if a field has been set.
+func (o *Receipt) HasSignatureAlgorithm() bool {
+	if o != nil && !IsNil(o.SignatureAlgorithm) {
+		return true
+	}
+
+	return false
+}
+
+// SetSignatureAlgorithm gets a reference to the given string and assigns it to the SignatureAlgorithm field.
+func (o *Receipt) SetSignatureAlgorithm(v string) {
+	o.SignatureAlgorithm = &v
+}
+
+// GetKeyId returns the KeyId field value if set, zero value otherwise.
+func (o *Receipt) GetKeyId() string {
+	if o == nil || IsNil(o.KeyId) {
+		var ret string
+		return ret
+	}
+	return *o.KeyId
+}
+
+// GetKeyIdOk returns a tuple with the KeyId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Receipt) GetKeyIdOk() (*string, bool) {
+	if o == nil || IsNil(o.KeyId) {
+		return nil, false
+	}
+	return o.KeyId, true
+}
+
+// HasKeyId returns a boolean if a field has been set.
+func (o *Receipt) HasKeyId() bool {
+	if o != nil && !IsNil(o.KeyId) {
+		return true
+	}
+
+	return false
+}
+
+// SetKeyId gets a reference to the given string and assigns it to the KeyId field.
+func (o *Receipt) SetKeyId(v string) {
+	o.KeyId = &v
+}
+
+// GetPublicKeySet returns the PublicKeySet field value if set, zero value otherwise.
+func (o *Receipt) GetPublicKeySet() map[string]string {
+	if o == nil || IsNil(o.PublicKeySet) {
+		var ret map[string]string
+		return ret
+	}
+	return o.PublicKeySet
+}
+
+// GetPublicKeySetOk returns a tuple with the PublicKeySet field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Receipt) GetPublicKeySetOk() (map[string]string, bool) {
+	if o == nil || IsNil(o.PublicKeySet) {
+		return map[string]string{}, false
+	}
+	return o.PublicKeySet, true
+}
+
+// HasPublicKeySet returns a boolean if a field has been set.
+func (o *Receipt) HasPublicKeySet() bool {
+	if o != nil && !IsNil(o.PublicKeySet) {
+		return true
+	}
+
+	return false
+}
+
+// SetPublicKeySet gets a reference to the given map[string]string and assigns it to the PublicKeySet field.
+func (o *Receipt) SetPublicKeySet(v map[string]string) {
+	o.PublicKeySet = v
+}
+
 // GetTimestamp returns the Timestamp field value if set, zero value otherwise.
 func (o *Receipt) GetTimestamp() time.Time {
 	if o == nil || IsNil(o.Timestamp) {
@@ -38783,6 +38919,18 @@ func (o Receipt) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Signature) {
 		toSerialize["signature"] = o.Signature
+	}
+	if !IsNil(o.SignatureProfile) {
+		toSerialize["signature_profile"] = o.SignatureProfile
+	}
+	if !IsNil(o.SignatureAlgorithm) {
+		toSerialize["signature_algorithm"] = o.SignatureAlgorithm
+	}
+	if !IsNil(o.KeyId) {
+		toSerialize["key_id"] = o.KeyId
+	}
+	if !IsNil(o.PublicKeySet) {
+		toSerialize["public_key_set"] = o.PublicKeySet
 	}
 	if !IsNil(o.Timestamp) {
 		toSerialize["timestamp"] = o.Timestamp

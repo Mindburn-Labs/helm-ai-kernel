@@ -52786,6 +52786,10 @@ public static class PreflightLaunchpadImport202Response {
   Receipt.JSON_PROPERTY_PREV_HASH,
   Receipt.JSON_PROPERTY_LAMPORT_CLOCK,
   Receipt.JSON_PROPERTY_SIGNATURE,
+  Receipt.JSON_PROPERTY_SIGNATURE_PROFILE,
+  Receipt.JSON_PROPERTY_SIGNATURE_ALGORITHM,
+  Receipt.JSON_PROPERTY_KEY_ID,
+  Receipt.JSON_PROPERTY_PUBLIC_KEY_SET,
   Receipt.JSON_PROPERTY_TIMESTAMP,
   Receipt.JSON_PROPERTY_PRINCIPAL,
   Receipt.JSON_PROPERTY_EXECUTOR_ID,
@@ -52823,6 +52827,55 @@ public static class Receipt {
 
   public static final String JSON_PROPERTY_SIGNATURE = "signature";
   private String signature;
+
+  /**
+   * Receipt signature profile emitted by the signer. Classical is Ed25519-only; hybrid is Ed25519 plus ML-DSA-65.
+   */
+  public enum SignatureProfileEnum {
+    CLASSICAL("classical"),
+
+    HYBRID("hybrid"),
+
+    PQC("pqc");
+
+    private String value;
+
+    SignatureProfileEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static SignatureProfileEnum fromValue(String value) {
+      for (SignatureProfileEnum b : SignatureProfileEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_SIGNATURE_PROFILE = "signature_profile";
+  private SignatureProfileEnum signatureProfile;
+
+  public static final String JSON_PROPERTY_SIGNATURE_ALGORITHM = "signature_algorithm";
+  private String signatureAlgorithm;
+
+  public static final String JSON_PROPERTY_KEY_ID = "key_id";
+  private String keyId;
+
+  public static final String JSON_PROPERTY_PUBLIC_KEY_SET = "public_key_set";
+  private Map<String, String> publicKeySet = new HashMap<>();
 
   public static final String JSON_PROPERTY_TIMESTAMP = "timestamp";
   private OffsetDateTime timestamp;
@@ -53092,6 +53145,106 @@ public static class Receipt {
   }
 
 
+  public Receipt signatureProfile(SignatureProfileEnum signatureProfile) {
+    this.signatureProfile = signatureProfile;
+    return this;
+  }
+
+   /**
+   * Receipt signature profile emitted by the signer. Classical is Ed25519-only; hybrid is Ed25519 plus ML-DSA-65.
+   * @return signatureProfile
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_PROFILE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public SignatureProfileEnum getSignatureProfile() {
+    return signatureProfile;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_PROFILE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSignatureProfile(SignatureProfileEnum signatureProfile) {
+    this.signatureProfile = signatureProfile;
+  }
+
+
+  public Receipt signatureAlgorithm(String signatureAlgorithm) {
+    this.signatureAlgorithm = signatureAlgorithm;
+    return this;
+  }
+
+   /**
+   * Signature algorithm or composite algorithm used for this receipt, such as ed25519, Hybrid-Ed25519-MLDSA65, or ml-dsa-65.
+   * @return signatureAlgorithm
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_ALGORITHM)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSignatureAlgorithm() {
+    return signatureAlgorithm;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_ALGORITHM)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSignatureAlgorithm(String signatureAlgorithm) {
+    this.signatureAlgorithm = signatureAlgorithm;
+  }
+
+
+  public Receipt keyId(String keyId) {
+    this.keyId = keyId;
+    return this;
+  }
+
+   /**
+   * Active signer key identifier used for the receipt signature.
+   * @return keyId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_KEY_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getKeyId() {
+    return keyId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_KEY_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setKeyId(String keyId) {
+    this.keyId = keyId;
+  }
+
+
+  public Receipt publicKeySet(Map<String, String> publicKeySet) {
+    this.publicKeySet = publicKeySet;
+    return this;
+  }
+
+   /**
+   * Public verification keys keyed by algorithm for the emitted receipt signature.
+   * @return publicKeySet
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PUBLIC_KEY_SET)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, String> getPublicKeySet() {
+    return publicKeySet;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PUBLIC_KEY_SET)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPublicKeySet(Map<String, String> publicKeySet) {
+    this.publicKeySet = publicKeySet;
+  }
+
+
   public Receipt timestamp(OffsetDateTime timestamp) {
     this.timestamp = timestamp;
     return this;
@@ -53247,6 +53400,10 @@ public static class Receipt {
         Objects.equals(this.prevHash, receipt.prevHash) &&
         Objects.equals(this.lamportClock, receipt.lamportClock) &&
         Objects.equals(this.signature, receipt.signature) &&
+        Objects.equals(this.signatureProfile, receipt.signatureProfile) &&
+        Objects.equals(this.signatureAlgorithm, receipt.signatureAlgorithm) &&
+        Objects.equals(this.keyId, receipt.keyId) &&
+        Objects.equals(this.publicKeySet, receipt.publicKeySet) &&
         Objects.equals(this.timestamp, receipt.timestamp) &&
         Objects.equals(this.principal, receipt.principal) &&
         Objects.equals(this.executorId, receipt.executorId) &&
@@ -53256,7 +53413,7 @@ public static class Receipt {
 
   @Override
   public int hashCode() {
-    return Objects.hash(receiptId, decisionId, effectId, status, reasonCode, outputHash, blobHash, prevHash, lamportClock, signature, timestamp, principal, executorId, argsHash, metadata);
+    return Objects.hash(receiptId, decisionId, effectId, status, reasonCode, outputHash, blobHash, prevHash, lamportClock, signature, signatureProfile, signatureAlgorithm, keyId, publicKeySet, timestamp, principal, executorId, argsHash, metadata);
   }
 
   @Override
@@ -53273,6 +53430,10 @@ public static class Receipt {
     sb.append("    prevHash: ").append(toIndentedString(prevHash)).append("\n");
     sb.append("    lamportClock: ").append(toIndentedString(lamportClock)).append("\n");
     sb.append("    signature: ").append(toIndentedString(signature)).append("\n");
+    sb.append("    signatureProfile: ").append(toIndentedString(signatureProfile)).append("\n");
+    sb.append("    signatureAlgorithm: ").append(toIndentedString(signatureAlgorithm)).append("\n");
+    sb.append("    keyId: ").append(toIndentedString(keyId)).append("\n");
+    sb.append("    publicKeySet: ").append(toIndentedString(publicKeySet)).append("\n");
     sb.append("    timestamp: ").append(toIndentedString(timestamp)).append("\n");
     sb.append("    principal: ").append(toIndentedString(principal)).append("\n");
     sb.append("    executorId: ").append(toIndentedString(executorId)).append("\n");
@@ -53373,6 +53534,26 @@ public static class Receipt {
     // add `signature` to the URL query string
     if (getSignature() != null) {
       joiner.add(String.format("%ssignature%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignature()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signature_profile` to the URL query string
+    if (getSignatureProfile() != null) {
+      joiner.add(String.format("%ssignature_profile%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignatureProfile()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signature_algorithm` to the URL query string
+    if (getSignatureAlgorithm() != null) {
+      joiner.add(String.format("%ssignature_algorithm%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignatureAlgorithm()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `key_id` to the URL query string
+    if (getKeyId() != null) {
+      joiner.add(String.format("%skey_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getKeyId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `public_key_set` to the URL query string
+    if (getPublicKeySet() != null) {
+      joiner.add(String.format("%spublic_key_set%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPublicKeySet()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `timestamp` to the URL query string

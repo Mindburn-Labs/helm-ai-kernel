@@ -2,6 +2,9 @@ package crypto
 
 import (
 	"testing"
+	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 func TestCanonicalHasher_Hash(t *testing.T) {
@@ -51,6 +54,40 @@ func TestEd25519Signer_SignVerify(t *testing.T) {
 	valid, _ = Verify(pubKey, sig, []byte("hello world modified"))
 	if valid {
 		t.Error("Tampered data should not verify")
+	}
+}
+
+func TestEd25519Signer_SignReceiptSetsProfileMetadata(t *testing.T) {
+	signer, err := NewEd25519Signer("key-1")
+	if err != nil {
+		t.Fatalf("Failed to create signer: %v", err)
+	}
+
+	receipt := &contracts.Receipt{
+		ReceiptID:    "rcpt-ed-001",
+		DecisionID:   "dec-ed-001",
+		EffectID:     "eff-ed-001",
+		Status:       "EXECUTED",
+		OutputHash:   "sha256:out",
+		PrevHash:     "sha256:prev",
+		LamportClock: 1,
+		ArgsHash:     "sha256:args",
+		Timestamp:    time.Now(),
+	}
+	if err := signer.SignReceipt(receipt); err != nil {
+		t.Fatalf("SignReceipt failed: %v", err)
+	}
+	if receipt.SignatureProfile != ReceiptProfileClassical {
+		t.Fatalf("signature_profile = %q", receipt.SignatureProfile)
+	}
+	if receipt.SignatureAlgorithm != SigPrefixEd25519 {
+		t.Fatalf("signature_algorithm = %q", receipt.SignatureAlgorithm)
+	}
+	if receipt.KeyID != "key-1" {
+		t.Fatalf("key_id = %q", receipt.KeyID)
+	}
+	if receipt.PublicKeySet[SigPrefixEd25519] != signer.PublicKey() {
+		t.Fatalf("public_key_set = %#v", receipt.PublicKeySet)
 	}
 }
 

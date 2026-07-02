@@ -6750,6 +6750,18 @@ pub struct Receipt {
     pub lamport_clock: Option<i32>,
     #[serde(rename = "signature", skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+    /// Receipt signature profile emitted by the signer. Classical is Ed25519-only; hybrid is Ed25519 plus ML-DSA-65.
+    #[serde(rename = "signature_profile", skip_serializing_if = "Option::is_none")]
+    pub signature_profile: Option<ReceiptSignatureProfile>,
+    /// Signature algorithm or composite algorithm used for this receipt, such as ed25519, Hybrid-Ed25519-MLDSA65, or ml-dsa-65.
+    #[serde(rename = "signature_algorithm", skip_serializing_if = "Option::is_none")]
+    pub signature_algorithm: Option<String>,
+    /// Active signer key identifier used for the receipt signature.
+    #[serde(rename = "key_id", skip_serializing_if = "Option::is_none")]
+    pub key_id: Option<String>,
+    /// Public verification keys keyed by algorithm for the emitted receipt signature.
+    #[serde(rename = "public_key_set", skip_serializing_if = "Option::is_none")]
+    pub public_key_set: Option<std::collections::HashMap<String, String>>,
     #[serde(rename = "timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<String>,
     #[serde(rename = "principal", skip_serializing_if = "Option::is_none")]
@@ -6775,12 +6787,32 @@ impl Receipt {
             prev_hash: None,
             lamport_clock: None,
             signature: None,
+            signature_profile: None,
+            signature_algorithm: None,
+            key_id: None,
+            public_key_set: None,
             timestamp: None,
             principal: None,
             executor_id: None,
             args_hash: None,
             metadata: None,
         }
+    }
+}
+/// Receipt signature profile emitted by the signer. Classical is Ed25519-only; hybrid is Ed25519 plus ML-DSA-65.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum ReceiptSignatureProfile {
+    #[serde(rename = "classical")]
+    Classical,
+    #[serde(rename = "hybrid")]
+    Hybrid,
+    #[serde(rename = "pqc")]
+    Pqc,
+}
+
+impl Default for ReceiptSignatureProfile {
+    fn default() -> ReceiptSignatureProfile {
+        Self::Classical
     }
 }
 

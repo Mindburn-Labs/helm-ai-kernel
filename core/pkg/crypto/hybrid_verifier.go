@@ -15,11 +15,13 @@ import (
 const (
 	ReceiptProfileClassical = "classical"
 	ReceiptProfileHybrid    = "hybrid"
+	ReceiptProfilePQC       = "pqc"
 )
 
 // ReceiptSignatureProfile detects the signature profile of a receipt
 // signature envelope. A composite "hybrid:<ed25519_hex>:<mldsa_hex>"
-// envelope is the hybrid profile; anything else is the classical profile.
+// envelope is the hybrid profile; raw signatures default to classical unless
+// receipt metadata declares a stricter profile.
 func ReceiptSignatureProfile(signature string) string {
 	if strings.HasPrefix(signature, HybridSigPrefix+HybridSigSeparator) {
 		return ReceiptProfileHybrid
@@ -121,7 +123,51 @@ func VerifyReceiptProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt) (p
 	if r.Signature == "" {
 		return "", false, fmt.Errorf("missing signature")
 	}
-	profile = ReceiptSignatureProfile(r.Signature)
+	detectedProfile := ReceiptSignatureProfile(r.Signature)
+	profile = detectedProfile
+	declaredProfile := strings.ToLower(strings.TrimSpace(r.SignatureProfile))
+	switch declaredProfile {
+	case "":
+	case ReceiptProfileClassical:
+		if detectedProfile != ReceiptProfileClassical {
+			return declaredProfile, false, fmt.Errorf("receipt signature profile %q does not match signature envelope profile %q", declaredProfile, detectedProfile)
+		}
+		profile = declaredProfile
+	case ReceiptProfileHybrid:
+		if detectedProfile != ReceiptProfileHybrid {
+			return declaredProfile, false, fmt.Errorf("receipt signature profile %q does not match signature envelope profile %q", declaredProfile, detectedProfile)
+		}
+		profile = declaredProfile
+	case ReceiptProfilePQC:
+		if detectedProfile == ReceiptProfileHybrid {
+			return declaredProfile, false, fmt.Errorf("receipt signature profile %q does not match signature envelope profile %q", declaredProfile, detectedProfile)
+		}
+		profile = declaredProfile
+	default:
+		return "", false, fmt.Errorf("unsupported receipt signature profile %q", r.SignatureProfile)
+	}
+	algorithm := strings.ToLower(strings.TrimSpace(r.SignatureAlgorithm))
+	switch algorithm {
+	case "":
+	case strings.ToLower(SigPrefixEd25519):
+		if profile != ReceiptProfileClassical {
+			return profile, false, fmt.Errorf("receipt signature algorithm %q does not match profile %q", r.SignatureAlgorithm, profile)
+		}
+	case strings.ToLower(SigPrefixHybrid):
+		if profile != ReceiptProfileHybrid {
+			return profile, false, fmt.Errorf("receipt signature algorithm %q does not match profile %q", r.SignatureAlgorithm, profile)
+		}
+	case strings.ToLower(SigPrefixMLDSA65):
+		if declaredProfile != "" && declaredProfile != ReceiptProfilePQC {
+			return profile, false, fmt.Errorf("receipt signature algorithm %q does not match profile %q", r.SignatureAlgorithm, declaredProfile)
+		}
+		if detectedProfile == ReceiptProfileHybrid {
+			return profile, false, fmt.Errorf("receipt signature algorithm %q does not match signature envelope profile %q", r.SignatureAlgorithm, detectedProfile)
+		}
+		profile = ReceiptProfilePQC
+	default:
+		return profile, false, fmt.Errorf("unsupported receipt signature algorithm %q", r.SignatureAlgorithm)
+	}
 	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
 
 	switch profile {
@@ -143,6 +189,12 @@ func VerifyReceiptProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt) (p
 		}
 		ok, vErr := hv.verifyEnvelope([]byte(payload), r.Signature)
 		return profile, ok, vErr
+	case ReceiptProfilePQC:
+		if mldsaPubHex == "" {
+			return profile, false, fmt.Errorf("pqc receipt requires ml-dsa-65 public key")
+		}
+		ok, vErr := VerifyMLDSA65(mldsaPubHex, r.Signature, []byte(payload))
+		return profile, ok, vErr
 	default:
 		ok, vErr := Verify(edPubHex, r.Signature, []byte(payload))
 		return profile, ok, vErr
@@ -150,26 +202,23 @@ func VerifyReceiptProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt) (p
 }
 
 // VerifyReceiptRequiredProfile verifies a receipt and fails closed when the
-// detected signature profile is below the caller's required profile.
+// verified receipt profile does not satisfy the caller's required profile.
 func VerifyReceiptRequiredProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt, requiredProfile string) (profile string, valid bool, err error) {
-	if r == nil || r.Signature == "" {
-		return VerifyReceiptProfile(edPubHex, mldsaPubHex, r)
-	}
-
 	required := strings.ToLower(strings.TrimSpace(requiredProfile))
 	switch required {
-	case "":
-		return VerifyReceiptProfile(edPubHex, mldsaPubHex, r)
-	case ReceiptProfileClassical, ReceiptProfileHybrid:
+	case "", ReceiptProfileClassical, ReceiptProfileHybrid, ReceiptProfilePQC:
 	default:
 		return "", false, fmt.Errorf("unsupported required receipt profile %q", requiredProfile)
 	}
 
-	profile = ReceiptSignatureProfile(r.Signature)
-	if required == ReceiptProfileHybrid && profile != ReceiptProfileHybrid {
+	profile, valid, err = VerifyReceiptProfile(edPubHex, mldsaPubHex, r)
+	if err != nil || !valid || required == "" || required == ReceiptProfileClassical {
+		return profile, valid, err
+	}
+	if profile != required {
 		return profile, false, fmt.Errorf("receipt profile %q does not satisfy required profile %q", profile, required)
 	}
-	return VerifyReceiptProfile(edPubHex, mldsaPubHex, r)
+	return profile, valid, nil
 }
 
 // Compile-time interface check: HybridVerifier must implement Verifier.

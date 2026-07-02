@@ -1,5 +1,7 @@
 package crypto
 
+// quantum_posture: hybrid receipt signing metadata; not a certification claim.
+
 import (
 	"encoding/hex"
 	"fmt"
@@ -129,6 +131,13 @@ func (h *HybridSigner) SignReceipt(r *contracts.Receipt) error {
 		return err
 	}
 	r.Signature = sig
+	r.SignatureProfile = ReceiptProfileHybrid
+	r.SignatureAlgorithm = SigPrefixHybrid
+	r.KeyID = h.keyID
+	r.PublicKeySet = map[string]string{
+		SigPrefixEd25519: h.ed25519.PublicKey(),
+		SigPrefixMLDSA65: h.mldsa.PublicKey(),
+	}
 	return nil
 }
 

@@ -197,6 +197,37 @@ class VersionDriftMonitorTests(unittest.TestCase):
         self.assertEqual(result.actual["missing"], ["io.github.mindburnlabs:helm-sdk:0.5.10"])
         self.assertEqual(result.actual["rejected_found"], ["io.github.mindburnlabs:helm-sdk:0.5.2"])
 
+    def test_http_contains_does_not_reject_version_prefix_matches(self) -> None:
+        original = drift.request_text
+        drift.request_text = lambda _url: (
+            "current docs mention version-status.json, "
+            "io.github.mindburnlabs:helm-sdk:0.5.20, "
+            "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.5.20, "
+            "and sdk/go/v0.5.20"
+        )
+        try:
+            surface = {
+                "id": "docs-site-sdk-index",
+                "kind": "http_contains",
+                "url": "https://example.test/sdk",
+                "contains": [
+                    "io.github.mindburnlabs:helm-sdk:{version}",
+                    "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v{version}",
+                    "sdk/go/v{version}",
+                    "version-status.json",
+                ],
+                "rejects": [
+                    "io.github.mindburnlabs:helm-sdk:0.5.2",
+                    "sdk/go@main",
+                ],
+            }
+            result = drift.check_http_contains(surface, "0.5.20")
+        finally:
+            drift.request_text = original
+
+        self.assertEqual(result.status, "pass")
+        self.assertEqual(result.actual["rejected_found"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

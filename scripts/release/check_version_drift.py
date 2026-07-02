@@ -22,6 +22,7 @@ DEFAULT_CONTRACT = ROOT / "release" / "version-surfaces.yaml"
 REQUEST_TIMEOUT_SECONDS = 30.0
 SEMVER_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 SEMVER_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
+REJECT_TOKEN_SUFFIX_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.+-"
 
 
 @dataclass
@@ -289,13 +290,18 @@ def check_http_contains(surface: dict[str, Any], version: str) -> SurfaceResult:
     text = request_text(url)
     expected = [fmt(str(token), version) for token in surface.get("contains", ["{version}"])]
     missing = [token for token in expected if token not in text]
-    rejected = [fmt(str(token), version) for token in surface.get("rejects", []) if fmt(str(token), version) in text]
+    rejected = [fmt(str(token), version) for token in surface.get("rejects", []) if rejected_token_present(text, fmt(str(token), version))]
     actual = {
         "found": [token for token in expected if token not in missing],
         "missing": missing,
         "rejected_found": rejected,
     }
     return SurfaceResult(surface["id"], "pass" if not missing and not rejected else "fail", expected, actual, url=fmt(surface.get("human_url", url), version), blocking=is_blocking(surface))
+
+
+def rejected_token_present(text: str, token: str) -> bool:
+    pattern = re.escape(token) + f"(?![{re.escape(REJECT_TOKEN_SUFFIX_CHARS)}])"
+    return re.search(pattern, text) is not None
 
 
 def check_go_proxy_module(surface: dict[str, Any], version: str) -> SurfaceResult:

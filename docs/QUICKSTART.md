@@ -70,9 +70,8 @@ Verify the generated EvidencePack offline:
 helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<run-id> --profile dev-local --json
 ```
 
-When a GitHub Release publishes an `evidence-pack.tar`, use that release asset
-for release verification instead of a local proof bundle. Until then, the local
-proof bundle above is the verifiable path.
+Use the `v0.6.0` release `evidence-pack.tar` from the GitHub release for
+release verification instead of a local proof bundle.
 
 For the full public flow, see [HELM Proof Loop](PROOF_LOOP.md).
 

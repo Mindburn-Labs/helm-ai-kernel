@@ -30,6 +30,7 @@ Then choose one path.
 ## Start
 
 - [Quickstart](QUICKSTART.md)
+- [HELM proof loop](PROOF_LOOP.md)
 - [Protect local coding agents](quickstart/workstation-governance.md)
 - [Scan agent risk](reference/agent-risk-scan.md)
 - [OpenAI proxy](INTEGRATIONS/openai_baseurl.md)
@@ -37,6 +38,7 @@ Then choose one path.
 
 ## More
 
+- [AI security categories](AI_SECURITY_CATEGORIES.md)
 - [MCP](INTEGRATIONS/mcp.md)
 - [Conformance](CONFORMANCE.md)
 - [Troubleshooting](TROUBLESHOOTING.md)

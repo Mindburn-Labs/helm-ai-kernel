@@ -28,6 +28,15 @@
       "sensitivity": "public"
     },
     {
+      "slug": "proof-loop",
+      "title": "HELM Proof Loop",
+      "section": "guide",
+      "source_path": "docs/PROOF_LOOP.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/proof-loop",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "guides/protect-local-coding-agents",
       "title": "Protect Local Coding Agents",
       "section": "guide",
@@ -42,6 +51,15 @@
       "section": "guide",
       "source_path": "docs/HOW_HELM_WORKS.md",
       "docs_origin_hint": "helm.docs.mindburn.org/how-helm-works",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "ai-security-categories",
+      "title": "AI Security Categories",
+      "section": "guide",
+      "source_path": "docs/AI_SECURITY_CATEGORIES.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/ai-security-categories",
       "access": "public",
       "sensitivity": "public"
     },
@@ -123,6 +141,15 @@
       "section": "verify",
       "source_path": "docs/VERIFICATION.md",
       "docs_origin_hint": "helm.docs.mindburn.org/verification",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "guides/export-verify-evidencepacks",
+      "title": "Export And Verify EvidencePacks",
+      "section": "verify",
+      "source_path": "docs/guides/export-verify-evidencepacks.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/guides/export-verify-evidencepacks",
       "access": "public",
       "sensitivity": "public"
     },

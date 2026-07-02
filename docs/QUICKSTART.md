@@ -73,6 +73,8 @@ helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/<run-id> --prof
 Use the `v0.5.20` release `evidence-pack.tar` from the GitHub release for
 release verification instead of a local proof bundle.
 
+For the full public flow, see [HELM Proof Loop](PROOF_LOOP.md).
+
 ## See An Escalation
 
 Ask HELM to authorize a local MCP action before dispatch:

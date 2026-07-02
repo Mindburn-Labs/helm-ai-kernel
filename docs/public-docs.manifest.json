@@ -145,6 +145,15 @@
       "sensitivity": "public"
     },
     {
+      "slug": "guides/export-verify-evidencepacks",
+      "title": "Export And Verify EvidencePacks",
+      "section": "verify",
+      "source_path": "docs/guides/export-verify-evidencepacks.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/guides/export-verify-evidencepacks",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "quantum-posture",
       "title": "Quantum Posture",
       "section": "verify",

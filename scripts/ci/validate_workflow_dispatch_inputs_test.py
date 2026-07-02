@@ -18,6 +18,14 @@ class WorkflowDispatchInputValidationTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validator.validate_version(value)
 
+    def test_publish_release_tag_must_match_version(self) -> None:
+        self.assertIsNone(validator.validate_optional_publish_tag("", version="1.2.3"))
+        self.assertEqual(validator.validate_optional_publish_tag("v1.2.3", version="1.2.3"), "v1.2.3")
+        for tag in ["v1.2.4", "1.2.3", "v1.2.3;echo pwned"]:
+            with self.subTest(tag=tag):
+                with self.assertRaises(ValueError):
+                    validator.validate_optional_publish_tag(tag, version="1.2.3")
+
     def test_bool_is_strict(self) -> None:
         self.assertTrue(validator.validate_bool("true", field="dry_run"))
         self.assertFalse(validator.validate_bool("false", field="dry_run"))

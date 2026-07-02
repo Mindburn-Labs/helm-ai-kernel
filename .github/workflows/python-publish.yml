@@ -12,6 +12,11 @@ on:
         required: false
         default: false
         type: boolean
+      release_tag:
+        description: Optional v<version> tag to publish with the current workflow.
+        required: false
+        default: ""
+        type: string
 
 permissions: read-all
 
@@ -36,7 +41,13 @@ jobs:
         run: |
           python3 scripts/ci/validate_workflow_dispatch_inputs.py publish \
             --version "${{ inputs.version }}" \
-            --dry-run "${{ inputs.dry_run }}"
+            --dry-run "${{ inputs.dry_run }}" \
+            --release-tag "${{ inputs.release_tag }}"
+      - name: Check out requested release tag
+        if: inputs.release_tag != ''
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ inputs.release_tag }}
       - name: Version checks
         working-directory: sdk/python
         run: |

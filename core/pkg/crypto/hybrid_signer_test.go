@@ -1,5 +1,7 @@
 package crypto
 
+// quantum_posture: test coverage for hybrid receipt signing metadata.
+
 import (
 	"fmt"
 	"strings"
@@ -215,6 +217,11 @@ func TestHybridSigner_SignReceiptRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, strings.HasPrefix(receipt.Signature, HybridSigPrefix+HybridSigSeparator))
+	assert.Equal(t, ReceiptProfileHybrid, receipt.SignatureProfile)
+	assert.Equal(t, SigPrefixHybrid, receipt.SignatureAlgorithm)
+	assert.Equal(t, "hybrid-key-3", receipt.KeyID)
+	assert.Equal(t, signer.Ed25519Signer().PublicKey(), receipt.PublicKeySet[SigPrefixEd25519])
+	assert.Equal(t, signer.MLDSASigner().PublicKey(), receipt.PublicKeySet[SigPrefixMLDSA65])
 
 	// Verify round-trip
 	payload := CanonicalizeReceipt(receipt.ReceiptID, receipt.DecisionID, receipt.EffectID, receipt.Status, receipt.OutputHash, receipt.PrevHash, receipt.LamportClock, receipt.ArgsHash)

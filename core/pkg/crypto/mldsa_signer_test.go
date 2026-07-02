@@ -1,5 +1,7 @@
 package crypto
 
+// quantum_posture: test coverage for ML-DSA receipt signing metadata.
+
 import (
 	"encoding/hex"
 	"strings"
@@ -177,6 +179,18 @@ func TestMLDSASigner_SignReceipt(t *testing.T) {
 	if receipt.Signature == "" {
 		t.Error("Signature empty after signing receipt")
 	}
+	if receipt.SignatureProfile != ReceiptProfilePQC {
+		t.Fatalf("SignatureProfile = %q", receipt.SignatureProfile)
+	}
+	if receipt.SignatureAlgorithm != SigPrefixMLDSA65 {
+		t.Fatalf("SignatureAlgorithm = %q", receipt.SignatureAlgorithm)
+	}
+	if receipt.KeyID != "pq-key-3" {
+		t.Fatalf("KeyID = %q", receipt.KeyID)
+	}
+	if receipt.PublicKeySet[SigPrefixMLDSA65] != signer.PublicKey() {
+		t.Fatalf("PublicKeySet = %#v", receipt.PublicKeySet)
+	}
 
 	valid, err := signer.VerifyReceipt(receipt)
 	if err != nil {
@@ -184,6 +198,24 @@ func TestMLDSASigner_SignReceipt(t *testing.T) {
 	}
 	if !valid {
 		t.Error("VerifyReceipt returned false for valid receipt")
+	}
+	profile, valid, err := VerifyReceiptProfile("", signer.PublicKey(), receipt)
+	if err != nil {
+		t.Fatalf("VerifyReceiptProfile failed: %v", err)
+	}
+	if profile != ReceiptProfilePQC || !valid {
+		t.Fatalf("VerifyReceiptProfile = (%q, %v), want (%q, true)", profile, valid, ReceiptProfilePQC)
+	}
+	profile, valid, err = VerifyReceiptRequiredProfile("", signer.PublicKey(), receipt, ReceiptProfilePQC)
+	if err != nil {
+		t.Fatalf("VerifyReceiptRequiredProfile failed: %v", err)
+	}
+	if profile != ReceiptProfilePQC || !valid {
+		t.Fatalf("VerifyReceiptRequiredProfile = (%q, %v), want (%q, true)", profile, valid, ReceiptProfilePQC)
+	}
+	profile, valid, err = VerifyReceiptProfile("", "", receipt)
+	if err == nil || valid || profile != ReceiptProfilePQC {
+		t.Fatalf("VerifyReceiptProfile without PQ key = (%q, %v, %v), want pqc false error", profile, valid, err)
 	}
 
 	// Tamper

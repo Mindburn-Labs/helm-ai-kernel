@@ -9,7 +9,7 @@ The hot path is: `Guardian.EvaluateDecision → crypto.SignReceipt → store.App
 | Scenario | Description | In JSON report |
 |----------|-------------|:-:|
 | `baseline_no_helm` | Mock tool call with no governance — JSON marshal only | ✓ |
-| `helm_allow` | Full governed allow: Guardian eval + Ed25519 sign + SQLite persist | ✓ |
+| `helm_allow` | Full governed allow: Guardian eval + default receipt sign + SQLite persist | ✓ |
 | `helm_deny` | Undeclared tool → Guardian fail-closed deny evaluation | ✓ |
 | `helm_allow_parallel` | Same as allow under goroutine concurrency | benchmark only |
 

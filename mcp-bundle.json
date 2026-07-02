@@ -2,7 +2,7 @@
   "manifest_version": "1.0",
   "name": "helm-governance",
   "version": "0.4.0",
-  "description": "HELM Execution Authority — fail-closed AI governance firewall with policy enforcement, Ed25519-signed receipts, and tamper-evident EvidencePack audit trail.",
+  "description": "HELM Execution Authority — fail-closed AI governance firewall with policy enforcement, profile-aware signed receipts, and tamper-evident EvidencePack audit trail.",
   "author": {
     "name": "Mindburn Labs",
     "url": "https://github.com/Mindburn-Labs/helm-ai-kernel",
@@ -126,7 +126,7 @@
     "model": "fail-closed",
     "features": [
       "guardian-6-gate-pipeline",
-      "ed25519-signed-receipts",
+      "profile-aware-signed-receipts",
       "schema-pep-validation",
       "proofgraph-audit-trail",
       "rug-pull-detection",

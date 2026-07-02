@@ -240,6 +240,12 @@ func TestReceiptPQHybridProfileConfusion(t *testing.T) {
 		t.Fatalf("hybrid receipt without PQ key must fail closed (valid=%v err=%v)", valid, err)
 	}
 
+	receipt.SignatureProfile = ReceiptProfileClassical
+	if _, valid, err := VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt); err == nil || valid {
+		t.Fatalf("hybrid envelope declared classical must fail closed (valid=%v err=%v)", valid, err)
+	}
+
+	receipt.SignatureProfile = ReceiptProfileHybrid
 	profile, valid, err := VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, ReceiptProfileClassical)
 	if err != nil || !valid || profile != ReceiptProfileHybrid {
 		t.Fatalf("classical-required verification should accept valid hybrid receipt (profile=%q valid=%v err=%v)", profile, valid, err)
@@ -248,10 +254,17 @@ func TestReceiptPQHybridProfileConfusion(t *testing.T) {
 	// Classical receipt presented where hybrid components exist stays valid
 	// under the classical profile (no retroactive invalidation).
 	receipt.Signature = fixture.Vectors[4].Signature // classical_valid
+	receipt.SignatureProfile = ""
 	profile, valid, err = VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt)
 	if err != nil || !valid || profile != ReceiptProfileClassical {
 		t.Fatalf("classical receipt must remain valid (profile=%q valid=%v err=%v)", profile, valid, err)
 	}
+
+	receipt.SignatureProfile = ReceiptProfileHybrid
+	if _, valid, err := VerifyReceiptProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt); err == nil || valid {
+		t.Fatalf("classical envelope declared hybrid must fail closed (valid=%v err=%v)", valid, err)
+	}
+	receipt.SignatureProfile = ""
 
 	profile, valid, err = VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, ReceiptProfileHybrid)
 	if err == nil || valid {
@@ -270,11 +283,19 @@ func TestReceiptRequiredProfileRejectsUnsupportedProfile(t *testing.T) {
 	receipt := pqHybridFixtureReceipt()
 	receipt.Signature = fixture.Vectors[4].Signature // classical_valid
 
-	profile, valid, err := VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, "pqc")
+	profile, valid, err := VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, ReceiptProfilePQC)
+	if err == nil || valid {
+		t.Fatalf("pqc-required verification must reject classical receipt (profile=%q valid=%v err=%v)", profile, valid, err)
+	}
+	if !strings.Contains(err.Error(), `does not satisfy required profile "pqc"`) {
+		t.Fatalf("unexpected pqc-required error: %v", err)
+	}
+
+	profile, valid, err = VerifyReceiptRequiredProfile(fixture.Ed25519PublicKey, fixture.MLDSA65PublicKey, &receipt, "quantum-only")
 	if err == nil || valid {
 		t.Fatalf("unsupported required profile must fail closed (profile=%q valid=%v err=%v)", profile, valid, err)
 	}
-	if !strings.Contains(err.Error(), `unsupported required receipt profile "pqc"`) {
+	if !strings.Contains(err.Error(), `unsupported required receipt profile "quantum-only"`) {
 		t.Fatalf("unexpected unsupported-profile error: %v", err)
 	}
 }

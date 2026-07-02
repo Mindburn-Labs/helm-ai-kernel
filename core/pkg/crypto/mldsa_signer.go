@@ -1,5 +1,7 @@
 package crypto
 
+// quantum_posture: ML-DSA receipt signing metadata; PQ posture is opt-in.
+
 import (
 	"encoding/hex"
 	"fmt"
@@ -107,6 +109,10 @@ func (s *MLDSASigner) SignReceipt(r *contracts.Receipt) error {
 		return err
 	}
 	r.Signature = sig
+	r.SignatureProfile = ReceiptProfilePQC
+	r.SignatureAlgorithm = SigPrefixMLDSA65
+	r.KeyID = s.keyID
+	r.PublicKeySet = map[string]string{SigPrefixMLDSA65: s.PublicKey()}
 	return nil
 }
 

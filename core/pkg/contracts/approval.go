@@ -8,7 +8,7 @@ import "time"
 //
 // Security Properties:
 //   - IntentHash links to the exact execution intent being approved
-//   - Signature is Ed25519 over IntentHash (produced by WebCrypto API in browser)
+//   - Signature is profile-aware over the approval context
 //   - BiometricTier indicates the authentication strength
 //   - Timestamp enables temporal ordering of approvals
 type ApprovalReceipt struct {
@@ -27,11 +27,21 @@ type ApprovalReceipt struct {
 	// ApproverID identifies the human operator
 	ApproverID string `json:"approver_id"`
 
-	// PublicKey is the Ed25519 public key of the approver (hex-encoded)
+	// PublicKey is the approver public key. Classical receipts use an Ed25519
+	// hex key; hybrid receipts use a hybrid:<ed25519_hex>:<mldsa65_hex> envelope.
 	PublicKey string `json:"public_key"`
 
-	// Signature is the Ed25519 signature over IntentHash (hex-encoded)
+	// Signature is the approval signature. Classical receipts use a hex
+	// Ed25519 signature; hybrid receipts use hybrid:<ed25519_hex>:<mldsa65_hex>.
 	Signature string `json:"signature"`
+
+	SignatureProfile   string            `json:"signature_profile,omitempty"`
+	SignatureAlgorithm string            `json:"signature_algorithm,omitempty"`
+	KeyID              string            `json:"key_id,omitempty"`
+	PublicKeySet       map[string]string `json:"public_key_set,omitempty"`
+	VerificationPolicy string            `json:"verification_policy,omitempty"`
+	DowngradeRejected  bool              `json:"downgrade_rejected,omitempty"`
+	AcceptedAlgorithms []string          `json:"accepted_algorithms,omitempty"`
 
 	// Timestamp of when the approval was signed
 	Timestamp time.Time `json:"timestamp"`

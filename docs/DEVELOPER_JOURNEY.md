@@ -50,24 +50,24 @@ docker compose up -d
 ```
 
 Java SDK consumers can use the current Maven coordinate:
-`io.github.mindburnlabs:helm-sdk:0.5.20`.
+`io.github.mindburnlabs:helm-sdk:0.6.0`.
 
 ```xml
 <dependency>
   <groupId>io.github.mindburnlabs</groupId>
   <artifactId>helm-sdk</artifactId>
-  <version>0.5.20</version>
+  <version>0.6.0</version>
 </dependency>
 ```
 
-Current source release target: `v0.5.20`.
+Current source release target: `v0.6.0`.
 Release assets are attached at
-`https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.5.20`,
-including `v0.5.20.openvex.json` and `v0.5.20.json`.
+`https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.6.0`,
+including `v0.6.0.openvex.json` and `v0.6.0.json`.
 
 Go SDK consumers can pin
-`github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.5.20`; the source subdir tag
-is `sdk/go/v0.5.20`.
+`github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.6.0`; the source subdir tag
+is `sdk/go/v0.6.0`.
 
 ## Local Boundary
 

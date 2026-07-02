@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-02T18:56:09Z
-# Commit: 5ca55507b79bc25cfb97a1600cd11cd92ad894d3
+# Generated: 2026-07-02T21:09:45Z
+# Commit: a0d1bacdee9aef96787fd7014158528e349afc1a
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -532,8 +532,8 @@ eb6ba1a95e78c9018b7817488067321246cd34c4959fb80e921b69119a33fbaa  core/pkg/api/a
 a92153ec046ae87617e919491cb0754d8180307db013e2be0128dcd75befa575  core/pkg/api/apidoc_drift_test.go
 1242b1847b71faaee102866d2152fe6fc6141d91fd783e36ae47bfb62d5bd117  core/pkg/api/apierror.go
 f7779991fbd5bf082e51beac146520bdae7054f419df711652f400e43f06b1c4  core/pkg/api/apierror_test.go
-8f9366a1e5519b5d5a4eb58e080e1ec9c6396f64fffcc978259b626bfae23cd8  core/pkg/api/approve_handler.go
-139b634fe29968c81293429146853e9b4fed7c113fa90388b0dc9f91f28d9f3c  core/pkg/api/approve_handler_hardening_test.go
+0ade2e2f484513e1ccbf164795d06cb6d01e2112edbb45d8fc552898d0d87d6c  core/pkg/api/approve_handler.go
+36959f4da46448882a1d034cb4d8a13f1ed7ec338eebfe43fc766065528aaa05  core/pkg/api/approve_handler_hardening_test.go
 3700337026ad0979b101b5873c90e4e161f5074ffa9e251ed8131d21498a8130  core/pkg/api/autonomy_decision_handler_test.go
 0c4838fba74d4179fdebb2f7bd90b0f6364072153e342ab28cfdd60780ef6ebd  core/pkg/api/autonomy_handler.go
 7324c5963a3fbfdf3a176758912963003a78134c0be8280d080977d96512461f  core/pkg/api/contract_test.go

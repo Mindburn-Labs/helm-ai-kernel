@@ -299,15 +299,33 @@ func enforceApprovalVerificationPolicy(receipt contracts.ApprovalReceipt, profil
 	default:
 		return fmt.Errorf("unsupported approval verification policy %q", receipt.VerificationPolicy)
 	}
+	expectedAlgorithm, err := expectedApprovalAlgorithm(profile)
+	if err != nil {
+		return err
+	}
+	if normalizeApprovalAlgorithm(algorithm) != expectedAlgorithm {
+		return fmt.Errorf("approval signature algorithm %q does not match profile %q", algorithm, profile)
+	}
 	if len(receipt.AcceptedAlgorithms) == 0 {
 		return nil
 	}
 	for _, accepted := range receipt.AcceptedAlgorithms {
-		if normalizeApprovalAlgorithm(accepted) == normalizeApprovalAlgorithm(algorithm) {
+		if normalizeApprovalAlgorithm(accepted) == expectedAlgorithm {
 			return nil
 		}
 	}
 	return fmt.Errorf("approval signature algorithm %q not accepted", algorithm)
+}
+
+func expectedApprovalAlgorithm(profile string) (string, error) {
+	switch profile {
+	case helmcrypto.ReceiptProfileClassical:
+		return approvalSignatureAlgorithmEd25519, nil
+	case helmcrypto.ReceiptProfileHybrid:
+		return approvalSignatureAlgorithmHybrid, nil
+	default:
+		return "", fmt.Errorf("unsupported signature profile %q", profile)
+	}
 }
 
 func approvalHybridPublicKeys(receipt contracts.ApprovalReceipt) (edPub, mldsaPub string, err error) {

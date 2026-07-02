@@ -332,3 +332,24 @@ func TestApproveHandler_HybridRequiredRejectsClassicalSignature(t *testing.T) {
 		t.Fatalf("expected 403 for hybrid-required downgrade, got %d (body: %s)", w.Code, w.Body.String())
 	}
 }
+
+func TestApprovalVerificationPolicyRejectsAlgorithmProfileMismatch(t *testing.T) {
+	t.Run("classical_profile_cannot_claim_hybrid_algorithm", func(t *testing.T) {
+		err := enforceApprovalVerificationPolicy(contracts.ApprovalReceipt{
+			VerificationPolicy: approvalPolicyClassicalRequired,
+		}, helmcrypto.ReceiptProfileClassical, approvalSignatureAlgorithmHybrid)
+		if err == nil {
+			t.Fatal("expected classical profile with hybrid algorithm metadata to fail")
+		}
+	})
+
+	t.Run("hybrid_profile_cannot_claim_classical_algorithm", func(t *testing.T) {
+		err := enforceApprovalVerificationPolicy(contracts.ApprovalReceipt{
+			VerificationPolicy: approvalPolicyHybridRequired,
+			DowngradeRejected:  true,
+		}, helmcrypto.ReceiptProfileHybrid, approvalSignatureAlgorithmEd25519)
+		if err == nil {
+			t.Fatal("expected hybrid profile with classical algorithm metadata to fail")
+		}
+	})
+}

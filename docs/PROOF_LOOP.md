@@ -27,7 +27,7 @@ Install the kernel, run the local proof, then verify the bundle:
 brew tap mindburn-labs/tap
 brew install helm-ai-kernel
 helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs
-helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/<run-id> --profile dev-local --json
+helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<run-id> --profile dev-local --json
 ```
 
 For one workstation receipt:

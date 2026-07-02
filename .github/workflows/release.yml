@@ -654,6 +654,7 @@ jobs:
         with:
           packages-dir: sdk/python/dist/
           skip-existing: true
+          password: ${{ secrets.PYPI_TOKEN }}
       - name: Skip already published package
         if: steps.package.outputs.published == 'true'
         run: echo "helm-sdk@${{ steps.package.outputs.version }} is already published"

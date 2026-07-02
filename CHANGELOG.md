@@ -39,6 +39,7 @@ flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Page["HELM AI Kernel Changelog"]
         A["[Unreleased]"]
+        A1["[0.6.0] - 2026-07-02"]
         B["[0.5.20] - 2026-07-01"]
         B0["[0.5.19] - 2026-07-01"]
         B1["[0.5.16] - 2026-06-18"]
@@ -55,7 +56,8 @@ flowchart TD
 
     %% Operational Flow Edges
     Page --> A
-    A --> B
+    A --> A1
+    A1 --> B
     B --> B0
     B0 --> B1
     B1 --> B2
@@ -80,6 +82,27 @@ No public feature claim is active in this section. Keep research scaffolds and
 hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
+
+## [0.6.0] - 2026-07-02
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.6.0>.
+
+<!-- quantum_posture: v0.6.0 release notes mention existing cosign release verification only; this release adds no post-quantum cryptographic control. -->
+
+- Cut a release-infrastructure hardening release after the `v0.5.20` tag
+  exposed manual publish recovery gaps, without adding product, cloud, GA,
+  connector certification, or checkout scope.
+- Restored token-based PyPI publication as the fallback path when Trusted
+  Publishing is unavailable, and added manual Python SDK publish dispatch from
+  an immutable release tag so recovery can publish the tagged source version
+  after `main` advances.
+- Fixed published-version drift matching so rejected shorter versions such as
+  `0.5.2` cannot satisfy a later valid version such as `0.5.20`.
+- Routed docs truth through the public org reusable workflow and pinned that
+  reusable workflow's docs-truth runner checkout so `MINDBURN_ORG_READ_TOKEN`
+  is not paired with floating runner code.
+- Clarified public-web post-quantum wording so release documentation does not
+  imply an added post-quantum cryptographic control.
 
 ## [0.5.20] - 2026-07-01
 

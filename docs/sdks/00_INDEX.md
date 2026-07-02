@@ -32,20 +32,20 @@ Use `version-status.json` or `make version-drift-published` before making a
 pinned package claim.
 
 Current source identity includes the Java coordinate
-`io.github.mindburnlabs:helm-sdk:0.5.20`; verify registry availability before
+`io.github.mindburnlabs:helm-sdk:0.6.0`; verify registry availability before
 presenting it as an install path.
 
-Source version claims are tied to the repository `VERSION` (`0.5.20` for this release). Current source package coordinates include:
+Source version claims are tied to the repository `VERSION` (`0.6.0` for this release). Current source package coordinates include:
 
-- Go module: `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.5.20`
-- Go subdirectory tag: `sdk/go/v0.5.20`
+- Go module: `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.6.0`
+- Go subdirectory tag: `sdk/go/v0.6.0`
 - Java dependency:
 
 ```xml
 <dependency>
   <groupId>io.github.mindburnlabs</groupId>
   <artifactId>helm-sdk</artifactId>
-  <version>0.5.20</version>
+  <version>0.6.0</version>
 </dependency>
 ```
 

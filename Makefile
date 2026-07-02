@@ -269,7 +269,10 @@ release-all: release-assets
 # --- Reproducibility & Cosign & VEX (Workstream E) -----------------------
 # SOURCE_DATE_EPOCH defaults to the HEAD commit timestamp so local devs and
 # CI produce byte-identical artifacts when invoked at the same revision.
+SOURCE_DATE_EPOCH_ORIGIN := $(origin SOURCE_DATE_EPOCH)
 SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date -u +%s)
+VEX_FILE := release/vex/v$(VERSION).openvex.json
+VEX_SOURCE_DATE_EPOCH := $(if $(filter undefined,$(SOURCE_DATE_EPOCH_ORIGIN)),$(shell python3 -c 'import datetime,json,sys; data=json.load(open(sys.argv[1])); print(int(datetime.datetime.fromisoformat(data["timestamp"].replace("Z","+00:00")).timestamp()))' "$(VEX_FILE)" 2>/dev/null || printf '%s' "$(SOURCE_DATE_EPOCH)"),$(SOURCE_DATE_EPOCH))
 REPRO_BUILD_TIME := $(shell { date -u -r $(SOURCE_DATE_EPOCH) +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$(SOURCE_DATE_EPOCH)" +%Y-%m-%dT%H:%M:%SZ; })
 REPRO_LDFLAGS := -s -w -buildid= -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(REPRO_BUILD_TIME)
 REPRO_GOFLAGS := -trimpath -buildvcs=false
@@ -291,7 +294,7 @@ release-binaries-reproducible:
 
 # Generate OpenVEX statements for every CVE listed in the current SBOM.
 vex:
-	@SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) HELM_VERSION=$(VERSION) bash scripts/release/generate_vex.sh
+	@SOURCE_DATE_EPOCH=$(VEX_SOURCE_DATE_EPOCH) HELM_VERSION=$(VERSION) bash scripts/release/generate_vex.sh
 
 # Verify the cosign signature of a local artifact tree (smoke / docs example).
 verify-cosign:

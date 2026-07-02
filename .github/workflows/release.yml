@@ -652,7 +652,6 @@ jobs:
         if: steps.package.outputs.published != 'true'
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         with:
-          password: ${{ secrets.PYPI_TOKEN }}
           packages-dir: sdk/python/dist/
           skip-existing: true
       - name: Skip already published package

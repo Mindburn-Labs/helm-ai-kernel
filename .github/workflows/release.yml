@@ -334,7 +334,7 @@ jobs:
           mkdir -p tap/Formula
           cp Formula/helm-ai-kernel.rb tap/Formula/helm-ai-kernel.rb
           cd tap
-          if git diff --quiet -- Formula/helm-ai-kernel.rb; then
+          if [ -z "$(git status --porcelain -- Formula/helm-ai-kernel.rb)" ]; then
             echo "Homebrew formula already matches ${GITHUB_REF_NAME}."
             exit 0
           fi

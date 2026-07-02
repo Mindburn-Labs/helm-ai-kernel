@@ -40,6 +40,15 @@ def validate_release_tag(value: str) -> str:
     return value
 
 
+def validate_optional_publish_tag(value: str | None, *, version: str) -> str | None:
+    if value is None or value.strip() == "":
+        return None
+    tag = validate_release_tag(value)
+    if tag != f"v{version}":
+        raise ValueError("release_tag must match v<version>")
+    return tag
+
+
 def validate_artifact_run_id(value: str) -> str:
     value = (value or "").strip()
     if not RUN_ID_RE.fullmatch(value):
@@ -54,6 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     publish = sub.add_parser("publish")
     publish.add_argument("--version", required=True)
     publish.add_argument("--dry-run", default=None)
+    publish.add_argument("--release-tag", default=None)
 
     clean_install = sub.add_parser("clean-install")
     clean_install.add_argument("--release-tag", required=True)
@@ -66,8 +76,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "publish":
-            validate_version(args.version)
+            version = validate_version(args.version)
             validate_bool(args.dry_run, field="dry_run")
+            validate_optional_publish_tag(args.release_tag, version=version)
         elif args.command == "clean-install":
             validate_release_tag(args.release_tag)
             validate_artifact_run_id(args.artifact_run_id)

@@ -74,3 +74,4 @@ jobs:
         with:
           packages-dir: sdk/python/dist/
           skip-existing: true
+          password: ${{ secrets.PYPI_TOKEN }}

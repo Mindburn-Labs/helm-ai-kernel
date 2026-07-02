@@ -13,5 +13,6 @@ on:
 jobs:
   docs-truth:
     name: docs-truth
-    uses: Mindburn-Labs/dev-orchestration/.github/workflows/docs-truth.yml@84f503d75b1ffa9006aca8cd272d4d4683b8c12a
-    secrets: inherit
+    uses: Mindburn-Labs/dev-orchestration/.github/workflows/docs-truth.yml@34c72eb5e6243c902e77403b21ea65f9f0279316
+    secrets:
+      MINDBURN_ORG_READ_TOKEN: ${{ secrets.MINDBURN_ORG_READ_TOKEN }}

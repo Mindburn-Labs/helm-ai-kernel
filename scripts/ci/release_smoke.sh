@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Release-surface smoke: reproducible binaries, SBOM, OpenVEX, and optional
 # cosign bundle verification for a local artifact tree.
+# quantum_posture: this smoke only checks release artifact plumbing; it does not
+# certify signature algorithms or hybrid/PQ posture.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

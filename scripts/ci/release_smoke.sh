@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Release-surface smoke: reproducible binaries, SBOM, OpenVEX, and optional
 # cosign bundle verification for a local artifact tree.
+# quantum_posture: this smoke only checks release artifact plumbing; it does not
+# certify signature algorithms or hybrid/PQ posture.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -8,9 +10,11 @@ SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1714000000}"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/helm-ai-kernel-release-smoke.XXXXXX")"
 COSIGN_DIR="${COSIGN_ARTIFACT_DIR:-dist}"
 REQUIRE_COSIGN="${REQUIRE_COSIGN_BUNDLES:-0}"
+SMOKE_VEX_VERSION="release-smoke"
 
 cleanup() {
     rm -rf "$TMP_DIR"
+    rm -f "$ROOT/release/vex/v${SMOKE_VEX_VERSION}.openvex.json"
 }
 trap cleanup EXIT
 
@@ -44,7 +48,7 @@ diff "$TMP_DIR/build1.sha256" "$TMP_DIR/build2.sha256" >/dev/null || {
 
 echo "release smoke: SBOM and VEX"
 make sbom >/dev/null
-make vex >/dev/null
+SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" HELM_VERSION="$SMOKE_VEX_VERSION" bash scripts/release/generate_vex.sh >/dev/null
 python3 - "$ROOT/sbom.json" <<'PY'
 import json, sys
 payload = json.load(open(sys.argv[1]))

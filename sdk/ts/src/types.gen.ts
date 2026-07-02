@@ -15715,6 +15715,30 @@ export interface Receipt {
      */
     signature?: string;
     /**
+     * Receipt signature profile emitted by the signer. Classical is Ed25519-only; hybrid is Ed25519 plus ML-DSA-65.
+     * @type {string}
+     * @memberof Receipt
+     */
+    signature_profile?: ReceiptSignatureProfileEnum;
+    /**
+     * Signature algorithm or composite algorithm used for this receipt, such as ed25519, Hybrid-Ed25519-MLDSA65, or ml-dsa-65.
+     * @type {string}
+     * @memberof Receipt
+     */
+    signature_algorithm?: string;
+    /**
+     * Active signer key identifier used for the receipt signature.
+     * @type {string}
+     * @memberof Receipt
+     */
+    key_id?: string;
+    /**
+     * Public verification keys keyed by algorithm for the emitted receipt signature.
+     * @type {{ [key: string]: string; }}
+     * @memberof Receipt
+     */
+    public_key_set?: { [key: string]: string; };
+    /**
      *
      * @type {Date}
      * @memberof Receipt
@@ -15746,6 +15770,18 @@ export interface Receipt {
     metadata?: { [key: string]: any; };
 }
 
+
+/**
+ * @export
+ */
+export const ReceiptSignatureProfileEnum = {
+    Classical: 'classical',
+    Hybrid: 'hybrid',
+    Pqc: 'pqc'
+} as const;
+export type ReceiptSignatureProfileEnum = typeof ReceiptSignatureProfileEnum[keyof typeof ReceiptSignatureProfileEnum];
+
+
 /**
  * Check if a given object implements the Receipt interface.
  */
@@ -15773,6 +15809,10 @@ export function ReceiptFromJSONTyped(json: any, ignoreDiscriminator: boolean): R
         'prev_hash': json['prev_hash'] == null ? undefined : json['prev_hash'],
         'lamport_clock': json['lamport_clock'] == null ? undefined : json['lamport_clock'],
         'signature': json['signature'] == null ? undefined : json['signature'],
+        'signature_profile': json['signature_profile'] == null ? undefined : json['signature_profile'],
+        'signature_algorithm': json['signature_algorithm'] == null ? undefined : json['signature_algorithm'],
+        'key_id': json['key_id'] == null ? undefined : json['key_id'],
+        'public_key_set': json['public_key_set'] == null ? undefined : json['public_key_set'],
         'timestamp': json['timestamp'] == null ? undefined : (new Date(json['timestamp'])),
         'principal': json['principal'] == null ? undefined : json['principal'],
         'executor_id': json['executor_id'] == null ? undefined : json['executor_id'],
@@ -15797,6 +15837,10 @@ export function ReceiptToJSON(value?: Receipt | null): any {
         'prev_hash': value['prev_hash'],
         'lamport_clock': value['lamport_clock'],
         'signature': value['signature'],
+        'signature_profile': value['signature_profile'],
+        'signature_algorithm': value['signature_algorithm'],
+        'key_id': value['key_id'],
+        'public_key_set': value['public_key_set'],
         'timestamp': value['timestamp'] == null ? undefined : ((value['timestamp']).toISOString()),
         'principal': value['principal'],
         'executor_id': value['executor_id'],

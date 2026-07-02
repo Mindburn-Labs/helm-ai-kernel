@@ -1,5 +1,7 @@
 package crypto
 
+// quantum_posture: classical receipt signing metadata for profile comparison.
+
 import (
 	"crypto/ed25519"
 	"crypto/rand"
@@ -144,6 +146,10 @@ func (s *Ed25519Signer) SignReceipt(r *contracts.Receipt) error {
 		return err
 	}
 	r.Signature = sig
+	r.SignatureProfile = ReceiptProfileClassical
+	r.SignatureAlgorithm = SigPrefixEd25519
+	r.KeyID = s.KeyID
+	r.PublicKeySet = map[string]string{SigPrefixEd25519: s.PublicKey()}
 	return nil
 }
 

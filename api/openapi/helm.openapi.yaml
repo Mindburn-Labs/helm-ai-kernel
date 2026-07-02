@@ -4138,6 +4138,21 @@ components:
         prev_hash: { type: string }
         lamport_clock: { type: integer }
         signature: { type: string }
+        signature_profile:
+          type: string
+          enum: [classical, hybrid, pqc]
+          description: Receipt signature profile emitted by the signer. Classical is Ed25519-only; hybrid is Ed25519 plus ML-DSA-65.
+        signature_algorithm:
+          type: string
+          description: Signature algorithm or composite algorithm used for this receipt, such as ed25519, Hybrid-Ed25519-MLDSA65, or ml-dsa-65.
+        key_id:
+          type: string
+          description: Active signer key identifier used for the receipt signature.
+        public_key_set:
+          type: object
+          additionalProperties:
+            type: string
+          description: Public verification keys keyed by algorithm for the emitted receipt signature.
         timestamp: { type: string, format: date-time }
         principal: { type: string }
         executor_id: { type: string }

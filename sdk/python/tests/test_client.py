@@ -2,6 +2,9 @@
 
 Tests for HelmClient, HelmApiError, and generated types.
 Uses unittest.mock to mock httpx.Client.
+
+quantum_posture: SDK tests exercise receipt signing metadata round-trips only;
+they do not implement cryptographic controls.
 """
 
 from __future__ import annotations
@@ -245,6 +248,25 @@ class TestGeneratedTypes:
         payload = r.to_dict()
         assert r.receipt_id == "r1"
         assert payload["status"] == "APPROVED"
+
+    def test_receipt_from_dict_preserves_public_key_set(self) -> None:
+        receipt = Receipt.from_dict({
+            **RECEIPT_DATA,
+            "signature_profile": "hybrid",
+            "signature_algorithm": "Hybrid-Ed25519-MLDSA65",
+            "key_id": "hybrid:test",
+            "public_key_set": {
+                "ed25519": "ed-pub",
+                "ml-dsa-65": "mldsa-pub",
+            },
+        })
+
+        assert receipt is not None
+        assert receipt.public_key_set == {
+            "ed25519": "ed-pub",
+            "ml-dsa-65": "mldsa-pub",
+        }
+        assert receipt.to_dict()["public_key_set"]["ml-dsa-65"] == "mldsa-pub"
 
     def test_conformance_request_defaults(self) -> None:
         req = ConformanceRequest(level="L1")

@@ -194,6 +194,7 @@ classmethod_validators = {
     "OnboardingRunStepRequest": {"step_id_validate_enum"},
     "OnboardingState": {"mode_validate_enum", "entitlements_validate_enum"},
     "OnboardingStep": {"id_validate_enum", "status_validate_enum", "verdict_validate_enum"},
+    "Receipt": {"signature_profile_validate_enum"},
 }
 lines = s.splitlines()
 out = []
@@ -208,6 +209,20 @@ for i, line in enumerate(lines):
         if method_name in classmethod_validators[current_class]:
             out.append(f"{line[:len(line) - len(line.lstrip())]}@classmethod")
 s = "\n".join(out)
+
+receipt_public_key_set = (
+    '            "signature_algorithm": obj.get("signature_algorithm"),\n'
+    '            "key_id": obj.get("key_id"),\n'
+    '            "timestamp": obj.get("timestamp"),'
+)
+if '"public_key_set": obj.get("public_key_set")' not in s:
+    s = s.replace(
+        receipt_public_key_set,
+        '            "signature_algorithm": obj.get("signature_algorithm"),\n'
+        '            "key_id": obj.get("key_id"),\n'
+        '            "public_key_set": obj.get("public_key_set"),\n'
+        '            "timestamp": obj.get("timestamp"),'
+    )
 
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY
@@ -313,28 +328,37 @@ if [ -d "$PROJECT_ROOT/.gen_tmp/rust/src/models" ]; then
 
 use serde::{Deserialize, Serialize};
 HEADER
-    for f in "$PROJECT_ROOT/.gen_tmp/rust/src/models/"*.rs; do
-        [ -f "$f" ] && python3 - "$f" >> "$PROJECT_ROOT/sdk/rust/src/types_gen.rs" <<'PY' || true
+    python3 - "$PROJECT_ROOT/sdk/rust/src/types_gen.rs" "$PROJECT_ROOT/.gen_tmp/rust/src/models" <<'PY'
 from pathlib import Path
 import re
 import sys
 
-path = Path(sys.argv[1])
-s = "\n".join(
-    line
-    for line in path.read_text().splitlines()
-    if not (line.startswith("use ") or line.startswith("pub mod") or line.startswith("mod "))
-)
-struct_match = re.search(r"\bpub struct ([A-Za-z0-9_]+)\b", s)
-if struct_match:
-    struct_name = struct_match.group(1)
-    enum_names = list(dict.fromkeys(re.findall(r"\bpub enum ([A-Za-z0-9_]+)\b", s)))
-    for enum_name in enum_names:
-        renamed = f"{struct_name}{enum_name}"
-        s = re.sub(rf"\b{re.escape(enum_name)}\b", renamed, s)
-print(s)
+out_path = Path(sys.argv[1])
+models_dir = Path(sys.argv[2])
+
+def render(path: Path) -> tuple[str, str]:
+    s = "\n".join(
+        line
+        for line in path.read_text().splitlines()
+        if not (line.startswith("use ") or line.startswith("pub mod") or line.startswith("mod "))
+    )
+    struct_match = re.search(r"\bpub struct ([A-Za-z0-9_]+)\b", s)
+    if struct_match:
+        struct_name = struct_match.group(1)
+        enum_names = list(dict.fromkeys(re.findall(r"\bpub enum ([A-Za-z0-9_]+)\b", s)))
+        for enum_name in enum_names:
+            renamed = f"{struct_name}{enum_name}"
+            s = re.sub(rf"\b{re.escape(enum_name)}\b", renamed, s)
+        return struct_name, s
+    symbol_match = re.search(r"\bpub enum ([A-Za-z0-9_]+)\b", s)
+    return (symbol_match.group(1) if symbol_match else path.stem), s
+
+snippets = [render(path) for path in models_dir.glob("*.rs")]
+with out_path.open("a", encoding="utf-8") as out:
+    for _, s in sorted(snippets, key=lambda item: item[0]):
+        out.write(s)
+        out.write("\n")
 PY
-    done
     python3 - "$PROJECT_ROOT/sdk/rust/src/types_gen.rs" <<'PY'
 from pathlib import Path
 import re

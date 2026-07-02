@@ -14404,12 +14404,27 @@ class Receipt(BaseModel):
     prev_hash: Optional[StrictStr] = None
     lamport_clock: Optional[StrictInt] = None
     signature: Optional[StrictStr] = None
+    signature_profile: Optional[StrictStr] = Field(default=None, description="Receipt signature profile emitted by the signer. Classical is Ed25519-only; hybrid is Ed25519 plus ML-DSA-65.")
+    signature_algorithm: Optional[StrictStr] = Field(default=None, description="Signature algorithm or composite algorithm used for this receipt, such as ed25519, Hybrid-Ed25519-MLDSA65, or ml-dsa-65.")
+    key_id: Optional[StrictStr] = Field(default=None, description="Active signer key identifier used for the receipt signature.")
+    public_key_set: Optional[Dict[str, StrictStr]] = Field(default=None, description="Public verification keys keyed by algorithm for the emitted receipt signature.")
     timestamp: Optional[datetime] = None
     principal: Optional[StrictStr] = None
     executor_id: Optional[StrictStr] = None
     args_hash: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["receipt_id", "decision_id", "effect_id", "status", "reason_code", "output_hash", "blob_hash", "prev_hash", "lamport_clock", "signature", "timestamp", "principal", "executor_id", "args_hash", "metadata"]
+    __properties: ClassVar[List[str]] = ["receipt_id", "decision_id", "effect_id", "status", "reason_code", "output_hash", "blob_hash", "prev_hash", "lamport_clock", "signature", "signature_profile", "signature_algorithm", "key_id", "public_key_set", "timestamp", "principal", "executor_id", "args_hash", "metadata"]
+
+    @field_validator('signature_profile')
+    @classmethod
+    def signature_profile_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['classical', 'hybrid', 'pqc']):
+            raise ValueError("must be one of enum values ('classical', 'hybrid', 'pqc')")
+        return value
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -14472,6 +14487,10 @@ class Receipt(BaseModel):
             "prev_hash": obj.get("prev_hash"),
             "lamport_clock": obj.get("lamport_clock"),
             "signature": obj.get("signature"),
+            "signature_profile": obj.get("signature_profile"),
+            "signature_algorithm": obj.get("signature_algorithm"),
+            "key_id": obj.get("key_id"),
+            "public_key_set": obj.get("public_key_set"),
             "timestamp": obj.get("timestamp"),
             "principal": obj.get("principal"),
             "executor_id": obj.get("executor_id"),

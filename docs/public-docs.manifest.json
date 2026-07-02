@@ -37,6 +37,15 @@
       "sensitivity": "public"
     },
     {
+      "slug": "guides/export-verify-evidencepacks",
+      "title": "Export and Verify EvidencePacks",
+      "section": "guide",
+      "source_path": "docs/guides/export-verify-evidencepacks.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/guides/export-verify-evidencepacks",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "guides/protect-local-coding-agents",
       "title": "Protect Local Coding Agents",
       "section": "guide",

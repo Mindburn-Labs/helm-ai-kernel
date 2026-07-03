@@ -1,6 +1,6 @@
 ---
 title: Quantum Posture
-last_reviewed: 2026-07-02
+last_reviewed: 2026-07-03
 quantum_posture: hybrid_when_configured
 ---
 
@@ -69,6 +69,18 @@ enrolled `public_key` envelope as the authority instead of trusting a supplied
 That makes operator approval verification hybrid-capable when the enrolled
 operator key and receipt are hybrid. It does not make existing Ed25519 operator
 keys post-quantum, and PQ-only operator approval policy is still unsupported.
+
+## Console Receipt Display
+
+Control-plane GeneratedSpec receipt tests prove hybrid receipts are stored and
+verified with `signature_profile=hybrid`, `signature_algorithm=hybrid-ed25519-mldsa65-sha256`,
+`verification_policy=hybrid-required`, and `downgrade_rejected=true`. The
+Console has fixture-backed contract coverage for that same receipt shape and
+displays the hybrid-required posture in receipt activity.
+
+That is display compatibility, not a claim that an authenticated live workspace
+flow has shown a production receipt end to end. Treat authenticated production
+console receipt smoke as a separate remaining gate.
 
 ## Public Web Boundary
 

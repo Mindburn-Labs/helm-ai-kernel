@@ -56,6 +56,20 @@ accepting the classical tenant key. That is downgrade resistance, not
 post-quantum tenant key material. Tenant KMS should be described as `classical`
 until an ML-DSA/PQ-backed provider exists and is verified.
 
+## Operator Approvals
+
+Enterprise operator approvals are profile-aware. Classical approvals verify an
+Ed25519 public key and signature. Hybrid approvals verify an enrolled
+`hybrid:<ed25519_hex>:<mldsa65_hex>` public-key envelope and require both the
+Ed25519 and ML-DSA-65 signatures to verify. Hybrid-required policy rejects an
+Ed25519-only receipt, rejects missing downgrade rejection, and treats the
+enrolled `public_key` envelope as the authority instead of trusting a supplied
+`public_key_set`.
+
+That makes operator approval verification hybrid-capable when the enrolled
+operator key and receipt are hybrid. It does not make existing Ed25519 operator
+keys post-quantum, and PQ-only operator approval policy is still unsupported.
+
 ## Public Web Boundary
 
 The public Mindburn/HELM web properties are not evidence that every transport,
@@ -69,12 +83,15 @@ that support it.
 The same test showed classical ECDSA certificate authentication
 (`ecdsa_secp256r1_sha256`). A 2026-07-02 in-app browser check of the
 `mindburn.org` Cloudflare dashboard showed SSL/TLS `Full (strict)`, standard
-Edge Certificates controls, global Authenticated Origin Pulls off, zone-level
-Authenticated Origin Pulls on, and no uploaded zone-level or per-hostname custom
-TLS client certificates. Do not describe the public website, docs host, or
-origin path as having post-quantum authentication until Cloudflare visitor-edge
-authentication or origin ML-DSA COTS/AOP is configured and verified fail-closed
-against classical downgrade.
+Edge Certificates controls, and no visible visitor-edge PQ authentication
+control. Origin Server showed Cloudflare Origin CA certificates for
+`*.mindburn.org`, `helm.docs.mindburn.org`, and `mindburn.org`; Custom Origin
+Trust Store showed no custom trust stores; Authenticated Origin Pulls showed
+global AOP off, zone-level AOP on, and no uploaded zone-level or per-hostname
+custom TLS client certificates. Do not describe the public website, docs host,
+or origin path as having post-quantum authentication until Cloudflare
+visitor-edge authentication or origin ML-DSA COTS/AOP is configured and
+verified fail-closed against classical downgrade.
 
 ## Verify The Claim
 

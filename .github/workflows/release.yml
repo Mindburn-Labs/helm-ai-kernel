@@ -319,7 +319,7 @@ jobs:
         run: |
           mkdir -p Formula
           cp release-assets/helm-ai-kernel.rb Formula/helm-ai-kernel.rb
-      - name: Push formula to Mindburn-Labs/homebrew-tap
+      - name: Publish formula PR to Mindburn-Labs/homebrew-tap
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
@@ -330,12 +330,41 @@ jobs:
           git config --global user.name "mindburn-release-bot"
           git config --global user.email "release@mindburn.org"
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/Mindburn-Labs/homebrew-tap.git" tap
+          branch="release/helm-ai-kernel-${GITHUB_REF_NAME}"
           mkdir -p tap/Formula
           cp Formula/helm-ai-kernel.rb tap/Formula/helm-ai-kernel.rb
           cd tap
+          if [ -z "$(git status --porcelain -- Formula/helm-ai-kernel.rb)" ]; then
+            echo "Homebrew formula already matches ${GITHUB_REF_NAME}."
+            exit 0
+          fi
+          git checkout -B "$branch"
           git add Formula/helm-ai-kernel.rb
-          git commit -m "Update helm-ai-kernel formula to ${GITHUB_REF_NAME}" || exit 0
-          git push origin HEAD:main
+          git commit -m "Update helm-ai-kernel formula to ${GITHUB_REF_NAME}"
+          git push --force-with-lease origin "$branch"
+
+          export GH_TOKEN="$HOMEBREW_TAP_TOKEN"
+          pr="$(gh pr list \
+            --repo Mindburn-Labs/homebrew-tap \
+            --head "$branch" \
+            --base main \
+            --state open \
+            --json number \
+            --jq '.[0].number // ""')"
+          if [ -z "$pr" ]; then
+            pr_url="$(gh pr create \
+              --repo Mindburn-Labs/homebrew-tap \
+              --base main \
+              --head "$branch" \
+              --title "Update helm-ai-kernel formula to ${GITHUB_REF_NAME}" \
+              --body "Automated Homebrew formula update for helm-ai-kernel ${GITHUB_REF_NAME} from the signed release asset.")"
+            pr="${pr_url##*/}"
+          fi
+          gh pr merge "$pr" \
+            --repo Mindburn-Labs/homebrew-tap \
+            --squash \
+            --admin \
+            --delete-branch
 
   downstream-fanout:
     # After a tag release, open auto-PRs that pull the released kernel surface

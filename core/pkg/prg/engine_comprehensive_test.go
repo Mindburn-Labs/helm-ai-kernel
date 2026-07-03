@@ -1,6 +1,7 @@
 package prg
 
 import (
+	"encoding/hex"
 	"strings"
 	"testing"
 
@@ -800,6 +801,33 @@ func TestRequirementSet_Hash_NotEmpty(t *testing.T) {
 	h := rs.Hash()
 	if h == "" {
 		t.Fatal("expected non-empty hash")
+	}
+}
+
+func TestRequirementSet_Hash_IsFixedWidthDigest(t *testing.T) {
+	// The hash is bound into DecisionRecord.RequirementSetHash; it must be a
+	// real content-addressed digest (sha256:<64 hex>), not a hex dump of the
+	// raw, unbounded content string.
+	rs := RequirementSet{
+		ID:    "rs-1",
+		Logic: AND,
+		Requirements: []Requirement{
+			{ID: "r1", Expression: "input.action == 'deploy' && size(input.artifacts) > 0"},
+			{ID: "r2", ArtifactType: "attestation"},
+		},
+		Children: []RequirementSet{{ID: "child", Logic: OR}},
+	}
+	h := rs.Hash()
+	const prefix = "sha256:"
+	if !strings.HasPrefix(h, prefix) {
+		t.Fatalf("expected %q prefix, got %q", prefix, h)
+	}
+	hexPart := strings.TrimPrefix(h, prefix)
+	if len(hexPart) != 64 {
+		t.Fatalf("expected 64 hex chars (32-byte digest), got %d: %q", len(hexPart), hexPart)
+	}
+	if _, err := hex.DecodeString(hexPart); err != nil {
+		t.Fatalf("digest is not valid hex: %v", err)
 	}
 }
 

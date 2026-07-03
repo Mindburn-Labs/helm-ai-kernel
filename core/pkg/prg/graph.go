@@ -59,9 +59,11 @@ type Node struct {
 	Req Requirement
 }
 
-// Hash computes a deterministic hash.
+// Hash computes a deterministic content-addressed digest of the requirement
+// set. The result (sha256:<hex>) is bound into DecisionRecord.RequirementSetHash,
+// so it must be a fixed-width, collision-resistant digest rather than a hex
+// dump of the raw content string.
 func (rs *RequirementSet) Hash() string {
-	// Simplified recursive hash
 	content := fmt.Sprintf("id=%s:logic=%s:", rs.ID, rs.Logic)
 	for _, req := range rs.Requirements {
 		content += fmt.Sprintf("req=%s:%s:%s;", req.ID, req.ArtifactType, req.Expression)
@@ -69,7 +71,8 @@ func (rs *RequirementSet) Hash() string {
 	for _, child := range rs.Children {
 		content += "child=" + child.Hash() + ";"
 	}
-	return fmt.Sprintf("hash:%x", content)
+	sum := sha256.Sum256([]byte(content))
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 // Graph maps an ActionID to its RequirementSet (Policy).

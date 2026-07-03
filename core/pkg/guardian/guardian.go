@@ -1085,7 +1085,11 @@ func taintedEgressDenied(ctx map[string]interface{}, labels []string) bool {
 	if len(labels) == 0 || ctx == nil {
 		return false
 	}
-	if approved, ok := ctx["allow_tainted_egress"].(bool); ok && approved {
+	// The egress override is a security decision: honor it only when the
+	// context was bound by a trusted transport/adapter boundary, never from
+	// caller-supplied arguments (otherwise any agent can self-approve
+	// PII/credential/secret egress).
+	if approved, ok := ctx["allow_tainted_egress"].(bool); ok && approved && trustedSecurityContext(ctx) {
 		return false
 	}
 	destination, _ := ctx["destination"].(string)

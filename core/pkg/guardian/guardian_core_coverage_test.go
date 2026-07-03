@@ -229,8 +229,11 @@ func TestCoverageGuardianPureHelpers(t *testing.T) {
 	if taintedEgressDenied(nil, []string{contracts.TaintPII}) {
 		t.Fatal("nil context should not deny tainted egress")
 	}
-	if taintedEgressDenied(map[string]interface{}{"destination": "https://example.com", "allow_tainted_egress": true}, []string{contracts.TaintSecret}) {
-		t.Fatal("explicitly approved tainted egress should not deny")
+	if !taintedEgressDenied(map[string]interface{}{"destination": "https://example.com", "allow_tainted_egress": true}, []string{contracts.TaintSecret}) {
+		t.Fatal("caller-set approval without trusted security context must still deny")
+	}
+	if taintedEgressDenied(map[string]interface{}{"destination": "https://example.com", "allow_tainted_egress": true, ContextSecurityTrusted: true}, []string{contracts.TaintSecret}) {
+		t.Fatal("explicitly approved tainted egress from trusted context should not deny")
 	}
 	if taintedEgressDenied(map[string]interface{}{"destination": "   "}, []string{contracts.TaintCredential}) {
 		t.Fatal("missing destination should not deny")

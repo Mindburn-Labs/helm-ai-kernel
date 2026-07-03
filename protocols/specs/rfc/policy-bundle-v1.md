@@ -37,7 +37,7 @@ my-bundle/
 │   └── budget-limits.yaml
 ├── schemas/               # Optional: custom schemas
 │   └── custom-effect.schema.json
-└── SIGNATURE              # Ed25519 detached signature
+└── SIGNATURE              # Detached bundle signature
 ```
 
 ## 4. Manifest Format
@@ -69,7 +69,8 @@ spec:
     - path: schemas/custom-effect.schema.json
   trust:
     signer_key_id: "key-corporate-2026"
-    signature_algorithm: Ed25519
+    signature_profile: classical
+    signature_algorithm: ed25519-sha256
 ```
 
 ## 5. Policy File Format
@@ -96,7 +97,14 @@ spec:
 
 ### 6.1 Signing
 
-Bundles MUST be signed with Ed25519:
+<!-- quantum_posture: policy bundle signing is profile-aware; classical
+Ed25519 is legacy-compatible, while hybrid deployments must require the hybrid
+profile and reject classical-only bundle signatures. -->
+
+Bundles MUST declare a signature profile and algorithm. The `classical`
+profile is Ed25519-compatible and not post-quantum. Deployments that require
+post-quantum durability MUST require a hybrid profile and reject
+classical-only bundle signatures as a downgrade.
 
 ```bash
 helm-ai-kernel bundle sign --key /path/to/private.key ./my-bundle/
@@ -104,6 +112,11 @@ helm-ai-kernel bundle sign --key /path/to/private.key ./my-bundle/
 
 This produces a `SIGNATURE` file containing the signature over the
 bundle's content hash (SHA-256 of the manifest + all policy files).
+
+Current profile names:
+
+- `classical` with `ed25519-sha256`
+- `hybrid` with `hybrid-ed25519-mldsa65-sha256`
 
 ### 6.2 Verification
 
@@ -191,7 +204,7 @@ Active bundle metadata MUST appear in the EvidencePack:
 A bundle loader is conformant if:
 
 1. It validates the manifest schema
-2. It verifies the Ed25519 signature before loading
+2. It verifies the declared signature profile and algorithm before loading
 3. It rejects bundles with unknown `apiVersion`
 4. It fails closed if signature verification fails
 5. It records loaded bundles in the EvidencePack

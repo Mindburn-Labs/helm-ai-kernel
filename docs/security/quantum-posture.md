@@ -72,11 +72,14 @@ keys post-quantum, and PQ-only operator approval policy is still unsupported.
 
 ## Console Receipt Display
 
-Control-plane GeneratedSpec receipt tests prove hybrid receipts are stored and
-verified with `signature_profile=hybrid`, `signature_algorithm=hybrid-ed25519-mldsa65-sha256`,
+Raw Kernel `contracts.Receipt` hybrid signing emits
+`signature_algorithm=Hybrid-Ed25519-MLDSA65`. The control-plane/console event
+projection is a separate display contract: GeneratedSpec and approval-derived
+receipt metadata can carry `signature_profile=hybrid`, normalized
+`signature_algorithm=hybrid-ed25519-mldsa65-sha256`,
 `verification_policy=hybrid-required`, and `downgrade_rejected=true`. The
-Console has fixture-backed contract coverage for that same receipt shape and
-displays the hybrid-required posture in receipt activity.
+Console has fixture-backed contract coverage for that projected receipt shape
+and displays the hybrid-required posture in receipt activity.
 
 That is display compatibility, not a claim that an authenticated live workspace
 flow has shown a production receipt end to end. Treat authenticated production

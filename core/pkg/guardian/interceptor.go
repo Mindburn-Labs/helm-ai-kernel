@@ -398,8 +398,6 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 				return decision, nil
 			}
 
-			p.g.delegationStore.MarkNonceUsed(session.SessionNonce)
-
 			if evalCtx.Request.Resource != "" && !session.IsToolAllowed(evalCtx.Request.Resource) {
 				decision := &contracts.DecisionRecord{
 					ID:         newDecisionID(),
@@ -437,6 +435,12 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 					return decision, nil
 				}
 			}
+
+			// Burn the single-use nonce only once every delegation check has
+			// passed. Consuming it earlier would let a scope-denied (or
+			// otherwise rejected) attempt invalidate the session, blocking the
+			// legitimate corrected retry as a false replay.
+			p.g.delegationStore.MarkNonceUsed(session.SessionNonce)
 
 			if evalCtx.Request.Context == nil {
 				evalCtx.Request.Context = make(map[string]interface{})

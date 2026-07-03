@@ -298,6 +298,68 @@ func TestGuardian_SignDecision(t *testing.T) {
 	})
 }
 
+// consumeFailBudgetTracker allows the pre-policy Check to pass but fails the
+// post-policy Consume, modelling budget exhausted between check and consume.
+type consumeFailBudgetTracker struct {
+	consumeCalls int
+}
+
+func (c *consumeFailBudgetTracker) Check(string, BudgetCost) (bool, error) { return true, nil }
+func (c *consumeFailBudgetTracker) Consume(string, BudgetCost) error {
+	c.consumeCalls++
+	return errors.New("budget backend unavailable")
+}
+
+func TestGuardian_BudgetNotConsumedOnPolicyDeny(t *testing.T) {
+	registry := pkg_artifact.NewRegistry(NewMockStore(), nil)
+	ruleGraph := prg.NewGraph()
+	// Rule exists but never passes, so PRG denies with MISSING_REQUIREMENT.
+	_ = ruleGraph.AddRule("gated_tool", prg.RequirementSet{
+		ID:           "always-fail",
+		Logic:        prg.AND,
+		Requirements: []prg.Requirement{{ID: "never", Expression: "false"}},
+	})
+
+	tracker := newMockBudgetTracker(100)
+	g := NewGuardian(&MockSigner{}, ruleGraph, registry, WithBudgetTracker(tracker))
+
+	decision := &contracts.DecisionRecord{ID: "dec-deny"}
+	effect := &contracts.Effect{
+		EffectType: "tool_call",
+		EffectID:   "eff-deny",
+		Params:     map[string]any{"tool_name": "gated_tool", "budget_id": "b1"},
+	}
+	require.NoError(t, g.SignDecision(context.Background(), decision, effect, nil, nil))
+	assert.Equal(t, string(contracts.VerdictDeny), decision.Verdict)
+	assert.Equal(t, string(contracts.ReasonMissingRequirement), decision.ReasonCode)
+
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	assert.Equal(t, int64(0), tracker.consumed,
+		"a policy-denied request must not draw down budget")
+}
+
+func TestGuardian_BudgetConsumeFailureFailsClosed(t *testing.T) {
+	registry := pkg_artifact.NewRegistry(NewMockStore(), nil)
+	ruleGraph := prg.NewGraph()
+	_ = ruleGraph.AddRule("safe_tool", prg.RequirementSet{ID: "allow-all"})
+
+	tracker := &consumeFailBudgetTracker{}
+	g := NewGuardian(&MockSigner{}, ruleGraph, registry, WithBudgetTracker(tracker))
+
+	decision := &contracts.DecisionRecord{ID: "dec-consume-fail"}
+	effect := &contracts.Effect{
+		EffectType: "tool_call",
+		EffectID:   "eff-consume-fail",
+		Params:     map[string]any{"tool_name": "safe_tool", "budget_id": "b1"},
+	}
+	require.NoError(t, g.SignDecision(context.Background(), decision, effect, nil, nil))
+	assert.Equal(t, string(contracts.VerdictDeny), decision.Verdict,
+		"a failed budget consume must fail closed, not allow")
+	assert.Equal(t, string(contracts.ReasonBudgetError), decision.ReasonCode)
+	assert.Equal(t, 1, tracker.consumeCalls)
+}
+
 func TestGuardian_BudgetEnforcement(t *testing.T) {
 	// 1. Setup Dependencies
 	mockStore := NewMockStore()

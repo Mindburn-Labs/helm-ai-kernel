@@ -1010,10 +1010,12 @@ func TestCoverageGuardianDecisionEdges(t *testing.T) {
 	consumeErrorGuardian := NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithBudgetTracker(guardianCoverageBudgetGate{allowed: true, consumeErr: errors.New("consume failed")}))
 	consumeDecision := &contracts.DecisionRecord{ID: "dec-consume", SubjectID: "agent"}
 	if err := consumeErrorGuardian.signDecisionWithGraph(ctx, consumeDecision, &contracts.Effect{EffectID: "effect-consume", EffectType: "EXECUTE_TOOL", Params: map[string]any{"budget_id": "budget-1"}}, nil, nil, allowGraphFor("EXECUTE_TOOL")); err != nil {
-		t.Fatalf("consume warning path should continue: %v", err)
+		t.Fatalf("consume error path should still sign: %v", err)
 	}
-	if consumeDecision.Verdict != string(contracts.VerdictAllow) {
-		t.Fatalf("consume error should not block allow decision: %+v", consumeDecision)
+	// A budget consume failure must fail closed: the effect is denied rather
+	// than allowed on an unrecorded consumption.
+	if consumeDecision.Verdict != string(contracts.VerdictDeny) || consumeDecision.ReasonCode != string(contracts.ReasonBudgetError) {
+		t.Fatalf("consume error should fail closed with BUDGET_ERROR, got %+v", consumeDecision)
 	}
 
 	nilGraphDecision := &contracts.DecisionRecord{ID: "dec-nil-graph", SubjectID: "agent"}

@@ -400,9 +400,11 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 		// defaulting to recording it.
 	}
 
-	// 3.5 Budget Check (Finance Gate)
+	// 3.5 Budget Check (Finance Gate).
+	// Only a fast pre-policy ceiling check runs here; the actual draw-down
+	// (Consume) is deferred until after PRG passes so a request that policy
+	// later denies never consumes budget.
 	if g.tracker != nil {
-		// Attempt to resolve Budget ID from params
 		if budgetID, ok := effect.Params["budget_id"].(string); ok && budgetID != "" {
 			cost := BudgetCost{Requests: 1}
 
@@ -418,11 +420,6 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 				decision.ReasonCode = string(contracts.ReasonBudgetExceeded)
 				decision.Reason = string(contracts.ReasonBudgetExceeded)
 				return g.signer.SignDecision(decision)
-			}
-
-			if consumeErr := g.tracker.Consume(budgetID, cost); consumeErr != nil {
-				// Log but don't fail — the Check already passed.
-				slog.Warn("guardian: budget consume failed", "budget_id", budgetID, "error", consumeErr)
 			}
 		}
 	}
@@ -472,6 +469,22 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 		decision.Reason = string(contracts.ReasonMissingRequirement)
 		g.recordBehavioralEvent(decision.SubjectID, trust.EventPolicyViolate, "PRG requirement not met")
 		return g.signer.SignDecision(decision)
+	}
+
+	// 4.5 Budget draw-down. The action has passed policy, so consume budget
+	// now. Consume re-validates the ceiling and fails closed: if it cannot
+	// record the draw (e.g. the budget was exhausted between Check and here,
+	// or the backend is unavailable) the effect is denied rather than allowed
+	// on an unrecorded consumption.
+	if g.tracker != nil {
+		if budgetID, ok := effect.Params["budget_id"].(string); ok && budgetID != "" {
+			if consumeErr := g.tracker.Consume(budgetID, BudgetCost{Requests: 1}); consumeErr != nil {
+				decision.Verdict = string(contracts.VerdictDeny)
+				decision.ReasonCode = string(contracts.ReasonBudgetError)
+				decision.Reason = fmt.Sprintf("Budget consume failed: %v", consumeErr)
+				return g.signer.SignDecision(decision)
+			}
+		}
 	}
 
 	// 5. Pass -> Sign

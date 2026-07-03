@@ -956,7 +956,12 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 
 		if eCtx.PDPBackend != "" {
 			decision.PolicyBackend = eCtx.PDPBackend
-			decision.PolicyContentHash = eCtx.PDPHash
+			// PDPHash is empty when the PDP came from an installed snapshot;
+			// the snapshot's PolicyHash (bound above) must survive so that
+			// IssueExecutionIntent can verify the policy epoch binding.
+			if eCtx.PDPHash != "" {
+				decision.PolicyContentHash = eCtx.PDPHash
+			}
 			decision.PolicyDecisionHash = eCtx.PDPDecisionHash
 		}
 
